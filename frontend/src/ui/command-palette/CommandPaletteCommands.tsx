@@ -609,12 +609,6 @@ export function useCommandPaletteCommands() {
             selectedKubeconfigs,
             setSelectedKubeconfigs,
             setActiveKubeconfig,
-            setViewType: viewState.setViewType,
-            setActiveClusterView: viewState.setActiveClusterView,
-            setActiveNamespaceTab: viewState.setActiveNamespaceTab,
-            setSelectedNamespace: namespace.setSelectedNamespace,
-            onNamespaceSelect: viewState.onNamespaceSelect,
-            setSidebarSelection: viewState.setSidebarSelection,
             setPendingFavorite,
           });
         },
@@ -625,8 +619,6 @@ export function useCommandPaletteCommands() {
       selectedKubeconfigs,
       setSelectedKubeconfigs,
       setActiveKubeconfig,
-      viewState,
-      namespace,
       setPendingFavorite,
     ]
   );

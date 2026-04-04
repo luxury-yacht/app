@@ -16,24 +16,21 @@ import type { Favorite } from '@/core/persistence/favorites';
 // ---------------------------------------------------------------------------
 
 const mockFavorites: Favorite[] = [];
-const mockUpdateFavorite = vi.fn().mockResolvedValue(undefined);
-const mockDeleteFavorite = vi.fn().mockResolvedValue(undefined);
 const mockReorderFavorites = vi.fn().mockResolvedValue(undefined);
-const mockAddFavorite = vi.fn().mockResolvedValue(undefined);
+const mockSetPendingFavorite = vi.fn();
 
 vi.mock('@core/contexts/FavoritesContext', () => ({
   useFavorites: () => ({
     favorites: mockFavorites,
-    addFavorite: mockAddFavorite,
-    updateFavorite: mockUpdateFavorite,
-    deleteFavorite: mockDeleteFavorite,
+    addFavorite: vi.fn().mockResolvedValue(undefined),
+    updateFavorite: vi.fn().mockResolvedValue(undefined),
+    deleteFavorite: vi.fn().mockResolvedValue(undefined),
     reorderFavorites: mockReorderFavorites,
     pendingFavorite: null,
     setPendingFavorite: mockSetPendingFavorite,
   }),
 }));
 
-const mockSetPendingFavorite = vi.fn();
 const mockSetSelectedKubeconfigs = vi.fn().mockResolvedValue(undefined);
 const mockSetActiveKubeconfig = vi.fn();
 
@@ -54,25 +51,19 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   }),
 }));
 
-const mockSetViewType = vi.fn();
-const mockSetActiveClusterView = vi.fn();
-const mockSetActiveNamespaceTab = vi.fn();
-const mockOnNamespaceSelect = vi.fn();
-const mockSetSidebarSelection = vi.fn();
-
 vi.mock('@core/contexts/ViewStateContext', () => ({
   useViewState: () => ({
     viewType: 'namespace',
     previousView: 'overview',
     activeNamespaceTab: 'workloads',
     activeClusterTab: null,
-    setViewType: mockSetViewType,
+    setViewType: vi.fn(),
     setPreviousView: vi.fn(),
-    setActiveNamespaceTab: mockSetActiveNamespaceTab,
-    setActiveClusterView: mockSetActiveClusterView,
+    setActiveNamespaceTab: vi.fn(),
+    setActiveClusterView: vi.fn(),
     navigateToClusterView: vi.fn(),
     navigateToNamespace: vi.fn(),
-    onNamespaceSelect: mockOnNamespaceSelect,
+    onNamespaceSelect: vi.fn(),
     onClusterObjectsClick: vi.fn(),
     getClusterNavigationState: vi.fn(),
     // sidebar state
@@ -83,7 +74,7 @@ vi.mock('@core/contexts/ViewStateContext', () => ({
     toggleSidebar: vi.fn(),
     setSidebarWidth: vi.fn(),
     setIsResizing: vi.fn(),
-    setSidebarSelection: mockSetSidebarSelection,
+    setSidebarSelection: vi.fn(),
     // object panel state
     showObjectPanel: false,
     objectPanelState: null,
@@ -102,8 +93,6 @@ vi.mock('@core/contexts/ViewStateContext', () => ({
     setIsAboutOpen: vi.fn(),
   }),
 }));
-
-const mockSetSelectedNamespace = vi.fn();
 
 vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
   useNamespace: () => ({
@@ -132,7 +121,7 @@ vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
     selectedNamespace: 'default',
     namespaceLoading: false,
     namespaceRefreshing: false,
-    setSelectedNamespace: mockSetSelectedNamespace,
+    setSelectedNamespace: vi.fn(),
     loadNamespaces: vi.fn().mockResolvedValue(undefined),
     refreshNamespaces: vi.fn().mockResolvedValue(undefined),
     getClusterNamespace: vi.fn(),
@@ -194,15 +183,8 @@ describe('FavMenuDropdown', () => {
   beforeEach(() => {
     // Reset favorites to empty by default; individual tests override via splice.
     mockFavorites.length = 0;
-    mockUpdateFavorite.mockClear();
-    mockDeleteFavorite.mockClear();
     mockReorderFavorites.mockClear();
-    mockSetViewType.mockClear();
-    mockSetActiveClusterView.mockClear();
-    mockSetActiveNamespaceTab.mockClear();
-    mockOnNamespaceSelect.mockClear();
-    mockSetSidebarSelection.mockClear();
-    mockSetSelectedNamespace.mockClear();
+    mockSetPendingFavorite.mockClear();
     mockSetSelectedKubeconfigs.mockClear();
     mockSetActiveKubeconfig.mockClear();
 

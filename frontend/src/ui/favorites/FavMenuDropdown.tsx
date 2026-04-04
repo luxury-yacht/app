@@ -14,7 +14,6 @@ import {
 } from '@shared/components/icons/MenuIcons';
 import { useFavorites } from '@core/contexts/FavoritesContext';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import { useViewState } from '@core/contexts/ViewStateContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import { isAllNamespaces } from '@modules/namespace/constants';
 import type { Favorite } from '@/core/persistence/favorites';
@@ -74,7 +73,6 @@ const FavMenuDropdown: React.FC = () => {
 
   const { favorites, reorderFavorites, setPendingFavorite } = useFavorites();
   const kubeconfigCtx = useKubeconfig();
-  const viewState = useViewState();
   const namespaceCtx = useNamespace();
 
   // Close the dropdown when clicking outside.
@@ -126,18 +124,12 @@ const FavMenuDropdown: React.FC = () => {
           selectedKubeconfigs: kubeconfigCtx.selectedKubeconfigs,
           setSelectedKubeconfigs: kubeconfigCtx.setSelectedKubeconfigs,
           setActiveKubeconfig: kubeconfigCtx.setActiveKubeconfig,
-          setViewType: viewState.setViewType,
-          setActiveClusterView: viewState.setActiveClusterView,
-          setActiveNamespaceTab: viewState.setActiveNamespaceTab,
-          setSelectedNamespace: namespaceCtx.setSelectedNamespace,
-          onNamespaceSelect: viewState.onNamespaceSelect,
-          setSidebarSelection: viewState.setSidebarSelection,
           setPendingFavorite,
         },
         closeDropdown
       );
     },
-    [kubeconfigCtx, viewState, namespaceCtx, closeDropdown, setPendingFavorite]
+    [kubeconfigCtx, closeDropdown, setPendingFavorite]
   );
 
   // Determine whether a generic favorite's namespace exists on the active cluster.

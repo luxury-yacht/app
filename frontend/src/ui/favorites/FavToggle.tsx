@@ -281,7 +281,6 @@ export function useFavToggle(state: FavToggleState): {
         onClose={() => setModalOpen(false)}
         existingFavorite={currentFavoriteMatch}
         defaultName={defaultName}
-        clusterName={selectedClusterName}
         kubeconfigSelection={selectedKubeconfig}
         viewType={viewType}
         viewLabel={viewLabel}

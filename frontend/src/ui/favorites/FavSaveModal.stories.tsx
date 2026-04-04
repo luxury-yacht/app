@@ -92,7 +92,6 @@ const meta: Meta<typeof FavSaveModal> = {
     onClose: () => {},
     existingFavorite: null,
     defaultName: 'prod-cluster / default / Pods',
-    clusterName: 'prod-cluster',
     kubeconfigSelection: '/Users/john/.kube/config:prod-cluster',
     viewType: 'namespace',
     viewLabel: 'Pods',

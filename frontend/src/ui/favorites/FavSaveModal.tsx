@@ -75,8 +75,6 @@ export interface FavSaveModalProps {
   existingFavorite: Favorite | null;
   /** Auto-generated default name for a new favorite. */
   defaultName: string;
-  /** Current cluster context name. */
-  clusterName: string;
   /** Current kubeconfig selection string (used as clusterSelection for cluster-specific). */
   kubeconfigSelection: string;
   /** "cluster" or "namespace". */
@@ -163,7 +161,6 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
   onClose,
   existingFavorite,
   defaultName,
-  clusterName: _clusterName,
   kubeconfigSelection,
   viewType,
   viewLabel,
