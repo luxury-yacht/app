@@ -59,7 +59,7 @@ These are the areas where vulnerabilities have real impact in this codebase:
 - `backend/app_refresh_setup.go` — HTTP server on loopback
 - `backend/refresh/resourcestream/` — resource streaming
 
-**Watch for:** endpoints accessible without auth, missing CORS restrictions, data from one cluster leaking to another.
+**Watch for:** endpoints accessible beyond loopback, data from one cluster leaking to another.
 
 ### Frontend-Backend Boundary
 - All Wails bindings (public methods on `App` struct)
@@ -91,6 +91,10 @@ These are the areas where vulnerabilities have real impact in this codebase:
 - Code style preferences
 - Theoretical issues that require unlikely preconditions
 - Things that are inherent to the desktop app model (e.g., no TLS on localhost)
+- Browser security patterns (CORS, CSP, cookie flags, etc.) — this is a Wails desktop
+  app. The loopback HTTP server is consumed by a native webview, not a browser. There
+  is no cross-origin attack surface. The security boundary is loopback binding + the
+  random port, not HTTP headers.
 - Performance concerns (unless they enable DoS)
 
 ## Output Format
