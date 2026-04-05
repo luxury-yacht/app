@@ -570,6 +570,8 @@ export const queryKindPermissions = (
     name: '',
   }));
 
+  const feature = namespace ? 'Namespace custom resources' : 'Cluster custom resources';
+
   // Register pending specs so the permission map immediately contains
   // pending entries. This lets the context menu show "Awaiting permissions"
   // on the first open rather than an empty action list.
@@ -577,7 +579,7 @@ export const queryKindPermissions = (
     queryKey,
     verbs.map((verb) => ({
       spec: { kind, verb },
-      feature: '',
+      feature,
       clusterId: cid,
       namespace: namespace,
     }))
@@ -600,7 +602,7 @@ export const queryKindPermissions = (
             namespace: r.namespace || null,
             subresource: r.subresource || null,
           },
-          feature: undefined,
+          feature,
         });
       }
     })
