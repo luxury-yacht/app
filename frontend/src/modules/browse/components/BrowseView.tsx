@@ -17,13 +17,19 @@
  * This keeps Browse stable without modifying the shared GridTable component.
  */
 
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import './BrowseView.css';
 import GridTable, { GRIDTABLE_VIRTUALIZATION_DEFAULT } from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
+import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
+import RollbackModal from '@shared/components/modals/RollbackModal';
 import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
+import { getPermissionKey, useUserPermissions } from '@/core/capabilities';
+import { DeleteResource, RestartWorkload } from '@wailsjs/go/backend/App';
+import { errorHandler } from '@utils/errorHandler';
+import type { CatalogItem } from '@/core/refresh/types';
 import { useTableSort } from '@/hooks/useTableSort';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useShortNames } from '@/hooks/useShortNames';
@@ -76,6 +82,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
   const { selectedClusterId } = useKubeconfig();
   const useShortResourceNames = useShortNames();
   const { openWithObject } = useObjectPanel();
+  const permissionMap = useUserPermissions();
   const namespaceContext = useNamespace();
   const viewState = useViewState();
 
@@ -141,10 +148,72 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     [openWithObject]
   );
 
+  // --- Action state for context menu handlers ---
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    show: boolean;
+    item: CatalogItem | null;
+  }>({ show: false, item: null });
+
+  const [restartConfirm, setRestartConfirm] = useState<{
+    show: boolean;
+    item: CatalogItem | null;
+  }>({ show: false, item: null });
+
+  // Rollback target: tracks which item the rollback modal is open for.
+  const [rollbackTarget, setRollbackTarget] = useState<CatalogItem | null>(null);
+
+  const handleDeleteConfirm = useCallback(async () => {
+    if (!deleteConfirm.item) return;
+    const item = deleteConfirm.item;
+
+    try {
+      await DeleteResource(item.clusterId ?? '', item.kind, item.namespace ?? '', item.name);
+    } catch (err) {
+      errorHandler.handle(err, {
+        action: 'delete',
+        kind: item.kind,
+        name: item.name,
+      });
+    } finally {
+      setDeleteConfirm({ show: false, item: null });
+    }
+  }, [deleteConfirm.item]);
+
+  const handleRestartConfirm = useCallback(async () => {
+    if (!restartConfirm.item) return;
+    const item = restartConfirm.item;
+
+    try {
+      await RestartWorkload(item.clusterId ?? '', item.namespace ?? '', item.name, item.kind);
+    } catch (err) {
+      errorHandler.handle(err, {
+        action: 'restart',
+        kind: item.kind,
+        name: item.name,
+      });
+    } finally {
+      setRestartConfirm({ show: false, item: null });
+    }
+  }, [restartConfirm.item]);
+
   // Context menu items builder
   const getContextMenuItems = useCallback(
-    (row: BrowseTableRow): ContextMenuItem[] =>
-      buildObjectActionItems({
+    (row: BrowseTableRow): ContextMenuItem[] => {
+      const kind = row.item.kind;
+      const ns = row.item.namespace ?? null;
+      const cid = row.item.clusterId ?? undefined;
+      const normalizedKind = kind;
+
+      const deleteStatus =
+        permissionMap.get(getPermissionKey(kind, 'delete', ns, null, cid)) ?? null;
+      const restartStatus =
+        permissionMap.get(getPermissionKey(normalizedKind, 'patch', ns, null, cid)) ?? null;
+      const scaleStatus =
+        permissionMap.get(getPermissionKey(normalizedKind, 'update', ns, 'scale', cid)) ?? null;
+      const portForwardStatus =
+        permissionMap.get(getPermissionKey('Pod', 'create', ns, 'portforward', cid)) ?? null;
+
+      return buildObjectActionItems({
         object: {
           kind: row.item.kind,
           name: row.item.name,
@@ -155,10 +224,20 @@ const BrowseView: React.FC<BrowseViewProps> = ({
         context: 'gridtable',
         handlers: {
           onOpen: () => handleOpen(row),
+          onDelete: () => setDeleteConfirm({ show: true, item: row.item }),
+          onRestart: () => setRestartConfirm({ show: true, item: row.item }),
+          onRollback: () => setRollbackTarget(row.item),
         },
-        permissions: {},
-      }),
-    [handleOpen]
+        permissions: {
+          restart: restartStatus,
+          rollback: restartStatus,
+          scale: scaleStatus,
+          delete: deleteStatus,
+          portForward: portForwardStatus,
+        },
+      });
+    },
+    [handleOpen, permissionMap]
   );
 
   // Get columns based on scope
@@ -376,6 +455,37 @@ const BrowseView: React.FC<BrowseViewProps> = ({
           loadingOverlay={loadingOverlay}
         />
       </ResourceLoadingBoundary>
+      <ConfirmationModal
+        isOpen={deleteConfirm.show}
+        title={`Delete ${deleteConfirm.item?.kind || 'Resource'}`}
+        message={`Are you sure you want to delete ${deleteConfirm.item?.kind?.toLowerCase() ?? 'resource'} "${deleteConfirm.item?.name}"?\n\nThis action cannot be undone.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        confirmButtonClass="danger"
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => setDeleteConfirm({ show: false, item: null })}
+      />
+
+      <ConfirmationModal
+        isOpen={restartConfirm.show}
+        title={`Restart ${restartConfirm.item?.kind || 'Workload'}`}
+        message={`Are you sure you want to restart ${restartConfirm.item?.kind?.toLowerCase() ?? 'workload'} "${restartConfirm.item?.name}"?\n\nThis will perform a rolling restart of all pods.`}
+        confirmText="Restart"
+        cancelText="Cancel"
+        confirmButtonClass="danger"
+        onConfirm={handleRestartConfirm}
+        onCancel={() => setRestartConfirm({ show: false, item: null })}
+      />
+
+      <RollbackModal
+        isOpen={rollbackTarget !== null}
+        onClose={() => setRollbackTarget(null)}
+        clusterId={rollbackTarget?.clusterId ?? ''}
+        namespace={rollbackTarget?.namespace ?? ''}
+        name={rollbackTarget?.name ?? ''}
+        kind={rollbackTarget?.kind ?? ''}
+      />
+
       {favModal}
     </>
   );
