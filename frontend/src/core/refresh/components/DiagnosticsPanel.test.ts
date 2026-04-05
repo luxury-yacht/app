@@ -1292,8 +1292,9 @@ describe('DiagnosticsPanel component', () => {
     expect(batchCells[6].textContent?.trim()).toBe('Error');
     expect(batchCells[9].textContent).toContain('Denied by policy');
     // Descriptors are rendered in grouped format: "resource: verb(s)".
-    expect(batchCells[10].textContent).toContain('deployments:');
-    expect(batchCells[10].textContent).toContain('pods:');
+    // Indices shifted by 4 due to SSRR columns (Method, Incomplete, Rules, SSAR Fallback).
+    expect(batchCells[14].textContent).toContain('deployments:');
+    expect(batchCells[14].textContent).toContain('pods:');
 
     await act(async () => {
       tabButtons[3].click();

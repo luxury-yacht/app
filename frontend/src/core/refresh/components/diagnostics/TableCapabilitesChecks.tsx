@@ -77,6 +77,10 @@ const CapabilityRow: React.FC<{
     <td>{row.consecutiveFailureCount}</td>
     <td>{row.totalChecks}</td>
     <td className="diagnostics-permission-reason">{row.lastError ?? '—'}</td>
+    <td>{row.method ?? '—'}</td>
+    <td>{row.ssrrIncomplete != null ? (row.ssrrIncomplete ? 'Yes' : 'No') : '—'}</td>
+    <td>{row.ssrrRuleCount ?? '—'}</td>
+    <td>{row.ssarFallbackCount ?? '—'}</td>
     <td>
       {row.descriptorSummary ? (
         <span
@@ -119,7 +123,7 @@ const CapabilityRow: React.FC<{
   </tr>
 );
 
-const COLUMN_COUNT = 12;
+const COLUMN_COUNT = 16;
 
 export const CapabilityChecksTable: React.FC<CapabilityChecksTableProps> = ({
   currentRows,
@@ -164,6 +168,10 @@ export const CapabilityChecksTable: React.FC<CapabilityChecksTableProps> = ({
               <th>Failures</th>
               <th>Checks</th>
               <th>Error</th>
+              <th>Method</th>
+              <th>Incomplete</th>
+              <th>Rules</th>
+              <th>SSAR Fallback</th>
               <th>Descriptors</th>
               <th>Features</th>
             </tr>

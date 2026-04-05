@@ -111,6 +111,10 @@ export interface CapabilityBatchRow {
   consecutiveFailureCount: number;
   descriptorSummary: string | null;
   featureSummary: string | null;
+  method: string | null;
+  ssrrIncomplete: boolean | null;
+  ssrrRuleCount: number | null;
+  ssarFallbackCount: number | null;
 }
 
 export interface PermissionRow {
