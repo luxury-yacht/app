@@ -36,6 +36,12 @@ export const WORKLOAD_PERMISSIONS: PermissionSpecList = {
     { kind: 'Job', verb: 'delete' },
     { kind: 'CronJob', verb: 'list' },
     { kind: 'CronJob', verb: 'delete' },
+  ],
+};
+
+export const POD_PERMISSIONS: PermissionSpecList = {
+  feature: 'Namespace pods',
+  specs: [
     { kind: 'Pod', verb: 'list' },
     { kind: 'Pod', verb: 'delete' },
     { kind: 'Pod', verb: 'get', subresource: 'log' },
@@ -115,6 +121,7 @@ export const EVENT_PERMISSIONS: PermissionSpecList = {
 /** All namespace-scoped permission spec lists combined. */
 export const ALL_NAMESPACE_PERMISSIONS: PermissionSpecList[] = [
   WORKLOAD_PERMISSIONS,
+  POD_PERMISSIONS,
   CONFIG_PERMISSIONS,
   NETWORK_PERMISSIONS,
   RBAC_PERMISSIONS,

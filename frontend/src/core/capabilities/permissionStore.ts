@@ -333,12 +333,26 @@ const applyResults = (results: QueryResponseResult[], batchItems: QueryBatchItem
  * Query permissions for a namespace's full spec set.
  * Called from NamespaceContext, NsResourcesContext, and ObjectPanel.
  */
-export const queryNamespacePermissions = (namespace: string, clusterId: string | null): void => {
+export const queryNamespacePermissions = (
+  namespace: string,
+  clusterId: string | null,
+  options?: { force?: boolean }
+): void => {
   const cid = clusterId || currentClusterId;
   if (!cid || !namespace) return;
 
   const queryKey = `${cid}|${namespace.toLowerCase()}`;
   if (inFlightQueries.has(queryKey)) return;
+
+  // Skip if we already have fresh results within the TTL window,
+  // unless force is set. This prevents redundant re-queries when
+  // the All Namespaces effect runs on every data update.
+  if (!options?.force) {
+    const lastQuery = lastQueryTimestamps.get(queryKey);
+    if (lastQuery && Date.now() - lastQuery < PERMISSION_REFRESH_INTERVAL_MS) {
+      return;
+    }
+  }
 
   const batch = buildBatch(ALL_NAMESPACE_PERMISSIONS, namespace, cid);
   if (batch.length === 0) return;
@@ -647,27 +661,46 @@ const recordQueryTimestamp = (queryKey: string): void => {
   lastQueryTimestamps.set(queryKey, Date.now());
 };
 
+/** Stagger interval between namespace refreshes in All Namespaces sessions. */
+const STAGGER_INTERVAL_MS = 500;
+
 /**
  * Periodic refresh loop. Re-queries any (clusterId|namespace) pair
- * whose last query is older than the refresh interval. The backend's
- * stale-while-revalidate cache serves stale results immediately while
- * the re-fetch runs, so the UI never flashes to pending.
+ * whose last query is older than the refresh interval. Namespace
+ * refreshes are staggered by 500ms to avoid thundering herd when
+ * many namespaces expire at once (common in All Namespaces sessions
+ * where all namespaces were queried near-simultaneously).
  */
 const refreshExpiredQueries = (): void => {
   const now = Date.now();
+  const expired: Array<{ clusterId: string; namespace: string }> = [];
+
   for (const [queryKey, timestamp] of lastQueryTimestamps) {
     if (now - timestamp < PERMISSION_REFRESH_INTERVAL_MS) continue;
 
-    // Parse the query key to determine namespace vs cluster.
     const pipeIdx = queryKey.indexOf('|');
     if (pipeIdx < 0) continue;
     const clusterId = queryKey.slice(0, pipeIdx);
     const namespace = queryKey.slice(pipeIdx + 1);
+    expired.push({ clusterId, namespace });
+  }
 
+  // Cluster-scoped refreshes fire immediately (small batch, no stagger).
+  // Namespace-scoped refreshes are staggered.
+  let staggerDelay = 0;
+  for (const { clusterId, namespace } of expired) {
     if (namespace === '__cluster__') {
       queryClusterPermissions(clusterId);
     } else {
-      queryNamespacePermissions(namespace, clusterId);
+      if (staggerDelay === 0) {
+        queryNamespacePermissions(namespace, clusterId, { force: true });
+      } else {
+        setTimeout(
+          () => queryNamespacePermissions(namespace, clusterId, { force: true }),
+          staggerDelay
+        );
+      }
+      staggerDelay += STAGGER_INTERVAL_MS;
     }
   }
 };

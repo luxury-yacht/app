@@ -879,10 +879,11 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
   }, [currentNamespace, namespaceClusterId]);
 
   // All Namespaces: collect distinct (clusterId, namespace) pairs from
-  // loaded domain data and query permissions for each. This is the fix
-  // for the broken All Namespaces permission-gated context menus.
+  // loaded domain data and query permissions for each. queryNamespacePermissions
+  // skips namespaces that already have fresh results within TTL, so this
+  // effect can fire on every data update without causing redundant queries.
+  // Only genuinely new namespaces trigger an actual QueryPermissions call.
   useEffect(() => {
-    // Only run when All Namespaces is active.
     if (getCapabilityNamespace(currentNamespace) !== null) {
       return;
     }
@@ -900,7 +901,6 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
       events.data,
     ];
 
-    // Collect distinct (clusterId|namespace) pairs from all loaded objects.
     const seen = new Set<string>();
     for (const domainList of allDomainData) {
       if (!Array.isArray(domainList)) continue;
@@ -913,8 +913,6 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
       }
     }
 
-    // Query permissions for each unique pair. The backend deduplicates
-    // via singleflight and caches results, so redundant calls are cheap.
     for (const key of seen) {
       const [cid, ns] = key.split('|');
       queryNamespacePermissions(ns, cid);

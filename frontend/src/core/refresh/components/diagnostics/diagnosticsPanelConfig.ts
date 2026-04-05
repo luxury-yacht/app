@@ -20,18 +20,18 @@ export const CLUSTER_SCOPE = '__cluster__';
 const OVERVIEW_FEATURES = ['Cluster overview'] as const;
 
 const CLUSTER_FEATURE_MAP: Record<ClusterViewType, readonly string[]> = {
-  nodes: ['Nodes table', 'Node actions (cordon/drain)', 'Node actions', 'Namespace workloads'],
+  nodes: ['Nodes table', 'Node actions (cordon/drain)', 'Node actions'],
   rbac: ['Cluster RBAC'],
   storage: ['Storage view', 'Storage actions'],
   config: ['Cluster config'],
   crds: ['Cluster CRDs'],
   custom: ['Cluster custom resources'],
   events: ['Cluster events'],
-  browse: ['Browse catalog'],
+  browse: [], // Empty = show all cluster-scoped permissions (browse spans all resource types).
 };
 
 const NAMESPACE_FEATURE_MAP: Record<NamespaceViewType, readonly string[]> = {
-  browse: ['Namespace browse catalog'],
+  browse: [], // Empty = show all namespace-scoped permissions (browse spans all resource types).
   pods: ['Namespace pods'],
   workloads: ['Namespace workloads'],
   config: ['Namespace config'],
@@ -40,8 +40,8 @@ const NAMESPACE_FEATURE_MAP: Record<NamespaceViewType, readonly string[]> = {
   storage: ['Namespace storage'],
   autoscaling: ['Namespace autoscaling'],
   quotas: ['Namespace quotas'],
-  custom: [],
-  helm: [],
+  custom: ['Namespace custom resources'],
+  helm: ['Namespace helm'],
   events: ['Namespace events'],
 };
 

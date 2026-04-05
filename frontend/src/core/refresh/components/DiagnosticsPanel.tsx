@@ -1571,7 +1571,13 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       ? null
       : new Set(getScopedFeaturesForView(viewType, activeClusterTab ?? null, activeNamespaceTab));
     const hasFeatureFilters = scopedFeatures != null && scopedFeatures.size > 0;
-    const selectedNamespaceKey = selectedNamespace?.toLowerCase() ?? null;
+    // Treat the "All Namespaces" synthetic scope as "no filter" — show all
+    // namespace-scoped permission rows rather than matching against the literal
+    // 'namespace:all' string (which would match nothing).
+    const selectedNamespaceKey =
+      selectedNamespace && !selectedNamespace.endsWith(':all')
+        ? selectedNamespace.toLowerCase()
+        : null;
 
     const allPermissionRows = Array.from(permissionMap.values()).map((status) => {
       const scope = status.descriptor.namespace ? status.descriptor.namespace : 'Cluster';
