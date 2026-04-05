@@ -430,6 +430,8 @@ export const queryNamespacePermissions = (namespace: string, clusterId: string |
  * PermissionSpecList[] so it's passed directly to buildBatch.
  */
 export const queryClusterPermissions = (clusterId: string): void => {
+  if (!clusterId) return;
+
   const queryKey = `${clusterId}|__cluster__`;
   if (inFlightQueries.has(queryKey)) return;
 
