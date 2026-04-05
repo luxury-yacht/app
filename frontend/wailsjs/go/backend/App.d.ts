@@ -12,11 +12,15 @@ export function ApplyObjectYaml(arg1:string,arg2:backend.ObjectYAMLMutationReque
 
 export function ApplyTheme(arg1:string):Promise<void>;
 
+export function ClearAllSSRRCaches():Promise<void>;
+
 export function ClearAppState():Promise<void>;
 
 export function ClearGridTablePersistence():Promise<number>;
 
 export function ClearLogs():Promise<void>;
+
+export function ClearSSRRCache(arg1:string):Promise<void>;
 
 export function CloseShellSession(arg1:string):Promise<void>;
 
@@ -191,6 +195,8 @@ export function LogFrontend(arg1:string,arg2:string,arg3:string):Promise<void>;
 export function MatchThemeForCluster(arg1:string):Promise<types.Theme>;
 
 export function OpenKubeconfigSearchPathDialog():Promise<string>;
+
+export function QueryPermissions(arg1:Array<capabilities.PermissionQuery>):Promise<capabilities.QueryPermissionsResponse>;
 
 export function ReorderThemes(arg1:Array<string>):Promise<void>;
 

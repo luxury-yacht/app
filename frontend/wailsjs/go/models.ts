@@ -554,6 +554,120 @@ export namespace capabilities {
 	        this.error = source["error"];
 	    }
 	}
+	export class NamespaceDiagnostics {
+	    key: string;
+	    clusterId: string;
+	    namespace?: string;
+	    method: string;
+	    ssrrIncomplete: boolean;
+	    ssrrRuleCount: number;
+	    ssarFallbackCount: number;
+	    checkCount: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new NamespaceDiagnostics(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.key = source["key"];
+	        this.clusterId = source["clusterId"];
+	        this.namespace = source["namespace"];
+	        this.method = source["method"];
+	        this.ssrrIncomplete = source["ssrrIncomplete"];
+	        this.ssrrRuleCount = source["ssrrRuleCount"];
+	        this.ssarFallbackCount = source["ssarFallbackCount"];
+	        this.checkCount = source["checkCount"];
+	    }
+	}
+	export class PermissionQuery {
+	    id: string;
+	    clusterId: string;
+	    resourceKind: string;
+	    verb: string;
+	    namespace?: string;
+	    subresource?: string;
+	    name?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new PermissionQuery(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.clusterId = source["clusterId"];
+	        this.resourceKind = source["resourceKind"];
+	        this.verb = source["verb"];
+	        this.namespace = source["namespace"];
+	        this.subresource = source["subresource"];
+	        this.name = source["name"];
+	    }
+	}
+	export class PermissionResult {
+	    id: string;
+	    clusterId: string;
+	    resourceKind: string;
+	    verb: string;
+	    namespace?: string;
+	    subresource?: string;
+	    name?: string;
+	    allowed: boolean;
+	    source: string;
+	    reason?: string;
+	    error?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new PermissionResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.clusterId = source["clusterId"];
+	        this.resourceKind = source["resourceKind"];
+	        this.verb = source["verb"];
+	        this.namespace = source["namespace"];
+	        this.subresource = source["subresource"];
+	        this.name = source["name"];
+	        this.allowed = source["allowed"];
+	        this.source = source["source"];
+	        this.reason = source["reason"];
+	        this.error = source["error"];
+	    }
+	}
+	export class QueryPermissionsResponse {
+	    results: PermissionResult[];
+	    diagnostics: NamespaceDiagnostics[];
+	
+	    static createFrom(source: any = {}) {
+	        return new QueryPermissionsResponse(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.results = this.convertValues(source["results"], PermissionResult);
+	        this.diagnostics = this.convertValues(source["diagnostics"], NamespaceDiagnostics);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 
 }
 

@@ -14,6 +14,10 @@ export function ApplyTheme(arg1) {
   return window['go']['backend']['App']['ApplyTheme'](arg1);
 }
 
+export function ClearAllSSRRCaches() {
+  return window['go']['backend']['App']['ClearAllSSRRCaches']();
+}
+
 export function ClearAppState() {
   return window['go']['backend']['App']['ClearAppState']();
 }
@@ -24,6 +28,10 @@ export function ClearGridTablePersistence() {
 
 export function ClearLogs() {
   return window['go']['backend']['App']['ClearLogs']();
+}
+
+export function ClearSSRRCache(arg1) {
+  return window['go']['backend']['App']['ClearSSRRCache'](arg1);
 }
 
 export function CloseShellSession(arg1) {
@@ -372,6 +380,10 @@ export function MatchThemeForCluster(arg1) {
 
 export function OpenKubeconfigSearchPathDialog() {
   return window['go']['backend']['App']['OpenKubeconfigSearchPathDialog']();
+}
+
+export function QueryPermissions(arg1) {
+  return window['go']['backend']['App']['QueryPermissions'](arg1);
 }
 
 export function ReorderThemes(arg1) {
