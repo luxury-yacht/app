@@ -1528,6 +1528,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
 
         return {
           key: entry.key,
+          clusterId: entry.clusterId ?? '',
           namespace,
           pendingCount: entry.pendingCount,
           inFlightCount: entry.inFlightCount,
@@ -1595,6 +1596,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       const age = activity?.age ?? { display: '—', tooltip: '—' };
 
       return {
+        clusterId: status.descriptor.clusterId,
         scope: namespaceLabel,
         descriptorLabel,
         resource: status.descriptor.resourceKind,
@@ -1619,6 +1621,12 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     });
 
     const scopedRows = allPermissionRows.filter((row) => {
+      // Always filter to the active cluster — never show permissions
+      // from other clusters.
+      if (selectedClusterId && row.clusterId && row.clusterId !== selectedClusterId) {
+        return false;
+      }
+
       if (showAllPermissions) {
         return true;
       }
@@ -1682,6 +1690,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     activeClusterTab,
     activeNamespaceTab,
     selectedNamespace,
+    selectedClusterId,
   ]);
 
   const telemetryMetrics = telemetrySummary?.metrics;
@@ -2002,6 +2011,10 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     const activeNamespaceKey = selectedNamespace?.toLowerCase() ?? null;
 
     for (const row of capabilityBatchRows) {
+      // Filter to active cluster only.
+      if (selectedClusterId && row.clusterId && row.clusterId !== selectedClusterId) {
+        continue;
+      }
       const isCurrent =
         row.namespace === 'Cluster' ||
         row.pendingCount > 0 ||
@@ -2014,15 +2027,15 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       }
     }
     return { currentCapabilityRows: current, previousCapabilityRows: previous };
-  }, [capabilityBatchRows, selectedNamespace]);
+  }, [capabilityBatchRows, selectedNamespace, selectedClusterId]);
 
   // Capabilities Checks tab content.
   const capabilityChecksContent = (
     <CapabilityChecksTable
       currentRows={currentCapabilityRows}
       previousRows={previousCapabilityRows}
-      summary={`${capabilityBatchRows.length} namespace${
-        capabilityBatchRows.length === 1 ? '' : 's'
+      summary={`${currentCapabilityRows.length + previousCapabilityRows.length} namespace${
+        currentCapabilityRows.length + previousCapabilityRows.length === 1 ? '' : 's'
       }`}
     />
   );

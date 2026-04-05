@@ -98,6 +98,7 @@ export interface CapabilityDescriptorActivityDetails {
 
 export interface CapabilityBatchRow {
   key: string;
+  clusterId: string;
   namespace: string;
   pendingCount: number;
   inFlightCount: number;
@@ -118,6 +119,7 @@ export interface CapabilityBatchRow {
 }
 
 export interface PermissionRow {
+  clusterId: string;
   scope: string;
   descriptorLabel: string;
   resource: string;
