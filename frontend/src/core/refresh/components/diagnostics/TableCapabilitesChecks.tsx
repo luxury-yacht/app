@@ -8,49 +8,6 @@
 import React, { useCallback, useState } from 'react';
 import type { CapabilityBatchRow } from './diagnosticsPanelTypes';
 
-/** Split a comma-separated summary string into sorted individual items. */
-const splitAndSort = (summary: string): string[] =>
-  summary
-    .split(', ')
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .sort((a, b) => a.localeCompare(b));
-
-/**
- * Group descriptors by resource type, consolidating verbs.
- * Input format: "pods/list, pods/delete, deployments/get, pods/list (status)"
- * Output: [{ resource: "deployments", verbs: "get" }, { resource: "pods", verbs: "delete, list, list (status)" }]
- */
-const groupDescriptors = (summary: string): { resource: string; verbs: string }[] => {
-  const items = summary
-    .split(', ')
-    .map((s) => s.trim())
-    .filter(Boolean);
-  const groups = new Map<string, string[]>();
-
-  for (const item of items) {
-    const slashIdx = item.indexOf('/');
-    if (slashIdx === -1) {
-      // Unexpected format — keep as-is under its own key.
-      groups.set(item, []);
-      continue;
-    }
-    const resource = item.substring(0, slashIdx);
-    const verb = item.substring(slashIdx + 1);
-    if (!groups.has(resource)) {
-      groups.set(resource, []);
-    }
-    groups.get(resource)!.push(verb);
-  }
-
-  return Array.from(groups.entries())
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([resource, verbs]) => ({
-      resource,
-      verbs: verbs.length === 0 ? '' : [...verbs].sort((a, b) => a.localeCompare(b)).join(', '),
-    }));
-};
-
 interface CapabilityChecksTableProps {
   currentRows: CapabilityBatchRow[];
   previousRows: CapabilityBatchRow[];
@@ -66,6 +23,8 @@ const CapabilityRow: React.FC<{
   <tr
     key={row.key}
     className={row.consecutiveFailureCount > 1 ? 'diagnostics-permission-denied' : undefined}
+    onClick={() => onToggle(row.key)}
+    style={{ cursor: 'pointer' }}
   >
     <td>{row.scope}</td>
     <td>{row.inFlightCount ? row.inFlightCount : '—'}</td>
@@ -81,19 +40,23 @@ const CapabilityRow: React.FC<{
     <td>{row.ssrrRuleCount ?? '—'}</td>
     <td>{row.ssarFallbackCount ?? '—'}</td>
     <td>
-      {row.descriptorSummary ? (
+      {row.descriptorsByFeature && row.descriptorsByFeature.length > 0 ? (
         <span
           className={
             `diagnostics-table-descriptor` +
             (!isCollapsed ? ' diagnostics-table-cell-expanded' : '')
           }
-          title={!isCollapsed ? undefined : row.descriptorSummary}
           onClick={() => onToggle(row.key)}
         >
           {!isCollapsed
-            ? groupDescriptors(row.descriptorSummary).map(({ resource, verbs }) => (
-                <div key={resource}>
-                  <span className="diagnostics-descriptor-resource">{resource}:</span> {verbs}
+            ? row.descriptorsByFeature.map(({ feature, resources }) => (
+                <div key={feature} className="diagnostics-checks-group">
+                  {resources.map((r, i) => (
+                    <div key={r} className="diagnostics-checks-row">
+                      <span className="diagnostics-checks-feature">{i === 0 ? feature : ''}</span>
+                      <span className="diagnostics-checks-resource">{r}</span>
+                    </div>
+                  ))}
                 </div>
               ))
             : 'Click to expand'}
@@ -102,38 +65,21 @@ const CapabilityRow: React.FC<{
         <span className="diagnostics-table-descriptor">—</span>
       )}
     </td>
-    <td>
-      {row.featureSummary ? (
-        <span
-          className={
-            `diagnostics-table-feature` + (!isCollapsed ? ' diagnostics-table-cell-expanded' : '')
-          }
-          title={!isCollapsed ? undefined : row.featureSummary}
-          onClick={() => onToggle(row.key)}
-        >
-          {!isCollapsed
-            ? splitAndSort(row.featureSummary).map((item) => <div key={item}>{item}</div>)
-            : 'Click to expand'}
-        </span>
-      ) : (
-        <span className="diagnostics-table-feature">—</span>
-      )}
-    </td>
   </tr>
 );
 
-const COLUMN_COUNT = 15;
+const COLUMN_COUNT = 14;
 
 export const CapabilityChecksTable: React.FC<CapabilityChecksTableProps> = ({
   currentRows,
   previousRows,
   summary,
 }) => {
-  // Track which rows have their descriptor/feature columns collapsed (expanded by default).
-  const [collapsedRows, setCollapsedRows] = useState<Set<string>>(new Set());
+  // Track which rows are expanded (collapsed by default).
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
   const toggleRowExpanded = useCallback((key: string) => {
-    setCollapsedRows((prev) => {
+    setExpandedRows((prev) => {
       const next = new Set(prev);
       if (next.has(key)) {
         next.delete(key);
@@ -170,8 +116,7 @@ export const CapabilityChecksTable: React.FC<CapabilityChecksTableProps> = ({
               <th>Incomplete</th>
               <th>Rules</th>
               <th>SSAR Fallback</th>
-              <th>Descriptors</th>
-              <th>Features</th>
+              <th>Checks</th>
             </tr>
           </thead>
           {totalRows === 0 ? (
@@ -196,7 +141,7 @@ export const CapabilityChecksTable: React.FC<CapabilityChecksTableProps> = ({
                     <CapabilityRow
                       key={row.key}
                       row={row}
-                      isCollapsed={collapsedRows.has(row.key)}
+                      isCollapsed={!expandedRows.has(row.key)}
                       onToggle={toggleRowExpanded}
                     />
                   ))
@@ -212,7 +157,7 @@ export const CapabilityChecksTable: React.FC<CapabilityChecksTableProps> = ({
                     <CapabilityRow
                       key={row.key}
                       row={row}
-                      isCollapsed={collapsedRows.has(row.key)}
+                      isCollapsed={!expandedRows.has(row.key)}
                       onToggle={toggleRowExpanded}
                     />
                   ))}

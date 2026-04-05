@@ -20,7 +20,7 @@ export const CLUSTER_SCOPE = '__cluster__';
 const OVERVIEW_FEATURES = ['Cluster overview'] as const;
 
 const CLUSTER_FEATURE_MAP: Record<ClusterViewType, readonly string[]> = {
-  nodes: ['Nodes table', 'Node actions (cordon/drain)', 'Node actions'],
+  nodes: ['Nodes table', 'Node actions'],
   rbac: ['Cluster RBAC'],
   storage: ['Storage view', 'Storage actions'],
   config: ['Cluster config'],

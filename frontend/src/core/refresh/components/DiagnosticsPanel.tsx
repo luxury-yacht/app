@@ -1479,19 +1479,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         const descriptorCount = entry.lastDescriptors.length;
         const totalChecks =
           entry.totalChecks && entry.totalChecks > 0 ? entry.totalChecks : descriptorCount;
-        const descriptorSummary =
-          entry.lastDescriptors.length > 0
-            ? entry.lastDescriptors
-                .map(
-                  (descriptor) =>
-                    `${descriptor.resourceKind}/${descriptor.verb}${
-                      descriptor.subresource ? ` (${descriptor.subresource})` : ''
-                    }`
-                )
-                .join(', ')
-            : null;
-
-        const featureSet = new Set<string>();
+        // Group descriptors by feature for a combined summary.
+        const featureDescriptors = new Map<string, Map<string, string[]>>();
         entry.lastDescriptors.forEach((descriptor) => {
           const key = getPermissionKey(
             descriptor.resourceKind,
@@ -1501,9 +1490,26 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
             entry.clusterId ?? null
           );
           const status = permissionMap.get(key);
-          if (status?.feature) {
-            featureSet.add(status.feature);
+          const feature = status?.feature ?? 'Other';
+
+          let resources = featureDescriptors.get(feature);
+          if (!resources) {
+            resources = new Map<string, string[]>();
+            featureDescriptors.set(feature, resources);
           }
+          const resource = descriptor.resourceKind;
+          let verbs = resources.get(resource);
+          if (!verbs) {
+            verbs = [];
+            resources.set(resource, verbs);
+          }
+          const verbLabel = descriptor.subresource
+            ? `${descriptor.verb}/${descriptor.subresource}`
+            : descriptor.verb;
+          if (!verbs.includes(verbLabel)) {
+            verbs.push(verbLabel);
+          }
+
           const descriptorLabel = descriptor.subresource
             ? `${descriptor.resourceKind}/${descriptor.subresource} (${descriptor.verb})`
             : `${descriptor.resourceKind} (${descriptor.verb})`;
@@ -1524,7 +1530,17 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
             lastError: entry.lastError ?? null,
           });
         });
-        const featureSummary = featureSet.size > 0 ? Array.from(featureSet).join(', ') : null;
+
+        // Build structured summary: feature name + resource lines.
+        const descriptorsByFeature =
+          featureDescriptors.size > 0
+            ? Array.from(featureDescriptors.entries()).map(([feature, resources]) => ({
+                feature,
+                resources: Array.from(resources.entries()).map(
+                  ([resource, verbs]) => `${resource} (${verbs.join(', ')})`
+                ),
+              }))
+            : null;
 
         return {
           key: entry.key,
@@ -1540,8 +1556,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
           lastError: entry.lastError ?? null,
           totalChecks,
           consecutiveFailureCount: entry.consecutiveFailureCount,
-          descriptorSummary,
-          featureSummary,
+          descriptorsByFeature,
           // SSRR-specific diagnostics from the backend.
           method: entry.method ?? null,
           ssrrIncomplete: entry.ssrrIncomplete ?? null,

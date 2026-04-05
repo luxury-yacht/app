@@ -161,11 +161,8 @@ export const CLUSTER_PERMISSIONS: PermissionSpecList[] = [
     specs: [
       { kind: 'Node', verb: 'update' },
       { kind: 'Node', verb: 'delete' },
+      { kind: 'Node', verb: 'patch' },
     ],
-  },
-  {
-    feature: 'Node actions (cordon/drain)',
-    specs: [{ kind: 'Node', verb: 'patch' }],
   },
   {
     feature: 'Storage view',

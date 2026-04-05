@@ -1293,8 +1293,14 @@ describe('DiagnosticsPanel component', () => {
     expect(batchCells[2].textContent?.trim()).toMatch(/s$/); // Runtime
     expect(batchCells[5].textContent?.trim()).toBe('Error'); // Result
     expect(batchCells[8].textContent).toContain('Denied by policy'); // Error
-    // Descriptors cell (index 13) contains grouped format: "resource: verb(s)".
-    expect(batchCells[13].textContent).toContain('deployments:');
+    // Checks cell is collapsed by default — click the row to expand.
+    expect(batchCells[13].textContent).toContain('Click to expand');
+    await act(async () => {
+      batchRows[2].click();
+      await Promise.resolve();
+    });
+    const expandedCells = batchRows[2].querySelectorAll<HTMLTableCellElement>('td');
+    expect(expandedCells[13].textContent).toContain('deployments');
 
     await act(async () => {
       tabButtons[3].click();

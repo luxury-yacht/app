@@ -293,6 +293,29 @@
   cursor: pointer;
 }
 
+.diagnostics-checks-group {
+  margin-bottom: 0.15rem;
+}
+
+.diagnostics-checks-group:last-child {
+  margin-bottom: 0;
+}
+
+.diagnostics-checks-row {
+  display: flex;
+}
+
+.diagnostics-checks-feature {
+  width: 10rem;
+  flex-shrink: 0;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.diagnostics-checks-resource {
+  flex: 1;
+}
+
 /* Expanded state shows each item on its own line. */
 .diagnostics-table-cell-expanded {
   overflow: visible;

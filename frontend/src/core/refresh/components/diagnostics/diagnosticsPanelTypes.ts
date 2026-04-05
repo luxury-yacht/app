@@ -110,8 +110,7 @@ export interface CapabilityBatchRow {
   lastError: string | null;
   totalChecks: number;
   consecutiveFailureCount: number;
-  descriptorSummary: string | null;
-  featureSummary: string | null;
+  descriptorsByFeature: Array<{ feature: string; resources: string[] }> | null;
   method: string | null;
   ssrrIncomplete: boolean | null;
   ssrrRuleCount: number | null;
