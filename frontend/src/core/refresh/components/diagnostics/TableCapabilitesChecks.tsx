@@ -72,7 +72,7 @@ const CapabilityRow: React.FC<{
     <td>{row.inFlightCount}</td>
     <td title={row.runtimeMs ? `${row.runtimeMs}ms elapsed` : ''}>{row.runtimeDisplay}</td>
     <td>{row.lastDurationDisplay}</td>
-    <td title={row.lastCompleted.tooltip}>{row.lastCompleted.display}</td>
+    <td title={row.age.tooltip}>{row.age.display}</td>
     <td>{row.lastResult}</td>
     <td>{row.consecutiveFailureCount}</td>
     <td>{row.totalChecks}</td>
@@ -163,7 +163,7 @@ export const CapabilityChecksTable: React.FC<CapabilityChecksTableProps> = ({
               <th>In Flight</th>
               <th>Runtime</th>
               <th>Duration</th>
-              <th>Completed</th>
+              <th>Age</th>
               <th>Result</th>
               <th>Failures</th>
               <th>Checks</th>

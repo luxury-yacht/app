@@ -356,18 +356,14 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       return;
     }
 
-    const hasInFlight = capabilityDiagnostics.some((entry) => entry.inFlightCount > 0);
-    if (!hasInFlight) {
-      setDiagnosticsClock(Date.now());
-      return;
-    }
-
+    // Tick every second so age columns stay current.
+    setDiagnosticsClock(Date.now());
     const intervalId = window.setInterval(() => {
       setDiagnosticsClock(Date.now());
     }, 1000);
 
     return () => window.clearInterval(intervalId);
-  }, [capabilityDiagnostics, isOpen]);
+  }, [isOpen]);
 
   const domainScopedStates = useMemo(
     () =>
@@ -1475,7 +1471,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
           entry.inFlightCount > 0 && entry.inFlightStartedAt
             ? Math.max(0, diagnosticsClock - entry.inFlightStartedAt)
             : null;
-        const lastCompleted = formatLastUpdated(entry.lastRunCompletedAt);
+        const age = formatLastUpdated(entry.lastRunCompletedAt);
         const lastDurationDisplay = formatDurationMs(entry.lastRunDurationMs);
         const runtimeDisplay = formatDurationMs(runtimeMs);
         const lastResultLabel =
@@ -1521,7 +1517,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
             inFlightCount: entry.inFlightCount,
             runtimeDisplay,
             lastDurationDisplay,
-            lastCompleted,
+            age,
             lastResult: lastResultLabel,
             consecutiveFailureCount: entry.consecutiveFailureCount,
             totalChecks,
@@ -1538,7 +1534,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
           runtimeDisplay,
           runtimeMs,
           lastDurationDisplay,
-          lastCompleted,
+          age,
           lastResult: lastResultLabel,
           lastError: entry.lastError ?? null,
           totalChecks,
@@ -1596,7 +1592,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         activity?.namespace ??
         status.descriptor.namespace ??
         (scope === 'Cluster' ? 'Cluster' : scope);
-      const lastCompleted = activity?.lastCompleted ?? { display: '—', tooltip: '—' };
+      const age = activity?.age ?? { display: '—', tooltip: '—' };
 
       return {
         scope,
@@ -1614,7 +1610,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         inFlightCount: activity?.inFlightCount ?? null,
         runtimeDisplay: activity?.runtimeDisplay ?? '—',
         lastDurationDisplay: activity?.lastDurationDisplay ?? '—',
-        lastCompleted,
+        age,
         lastResult: activity?.lastResult ?? '—',
         consecutiveFailureCount: activity?.consecutiveFailureCount ?? 0,
         totalChecks: activity?.totalChecks ?? null,

@@ -89,7 +89,7 @@ export interface CapabilityDescriptorActivityDetails {
   inFlightCount: number;
   runtimeDisplay: string;
   lastDurationDisplay: string;
-  lastCompleted: { display: string; tooltip: string };
+  age: { display: string; tooltip: string };
   lastResult: string;
   consecutiveFailureCount: number;
   totalChecks: number;
@@ -104,7 +104,7 @@ export interface CapabilityBatchRow {
   runtimeDisplay: string;
   runtimeMs: number | null;
   lastDurationDisplay: string;
-  lastCompleted: { display: string; tooltip: string };
+  age: { display: string; tooltip: string };
   lastResult: string;
   lastError: string | null;
   totalChecks: number;
@@ -133,7 +133,7 @@ export interface PermissionRow {
   inFlightCount: number | null;
   runtimeDisplay: string;
   lastDurationDisplay: string;
-  lastCompleted: { display: string; tooltip: string };
+  age: { display: string; tooltip: string };
   lastResult: string;
   consecutiveFailureCount: number;
   totalChecks: number | null;

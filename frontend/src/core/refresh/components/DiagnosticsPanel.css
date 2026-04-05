@@ -301,8 +301,17 @@
 
 .diagnostics-permission-reason {
   max-width: 320px;
-  white-space: normal;
   color: var(--color-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+tr.diagnostics-row-expanded .diagnostics-permission-reason {
+  white-space: normal;
+  word-wrap: break-word;
+  overflow: visible;
+  text-overflow: unset;
 }
 
 .diagnostics-tabs {
