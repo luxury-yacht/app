@@ -50,7 +50,7 @@ const {
 const mockClosePanel = vi.fn();
 const mockUseCapabilities = vi.fn();
 const mockUseUserPermission = vi.fn();
-const mockEvaluateNamespacePermissions = vi.fn();
+const mockQueryNamespacePermissions = vi.fn();
 const mockUseRefreshScopedDomain = vi.fn();
 const mockUseRefreshWatcher = vi.fn();
 const mockUseShortcut = vi.fn();
@@ -208,8 +208,7 @@ vi.mock('@/core/refresh', () => ({
 vi.mock('@/core/capabilities', () => ({
   useCapabilities: (...args: unknown[]) => mockUseCapabilities(...(args as [])),
   useUserPermission: (...args: unknown[]) => mockUseUserPermission(...(args as [])),
-  evaluateNamespacePermissions: (...args: unknown[]) =>
-    mockEvaluateNamespacePermissions(...(args as [])),
+  queryNamespacePermissions: (...args: unknown[]) => mockQueryNamespacePermissions(...(args as [])),
 }));
 
 vi.mock('@ui/shortcuts', () => ({
@@ -746,9 +745,7 @@ describe('ObjectPanel tab availability', () => {
       namespace: ' Team-A ',
     });
 
-    expect(mockEvaluateNamespacePermissions).toHaveBeenCalledWith('Team-A', {
-      clusterId: defaultClusterId,
-    });
+    expect(mockQueryNamespacePermissions).toHaveBeenCalledWith('Team-A', defaultClusterId);
   });
 
   it('skips namespace evaluation when the object has no namespace', async () => {
@@ -758,7 +755,7 @@ describe('ObjectPanel tab availability', () => {
       namespace: undefined,
     });
 
-    expect(mockEvaluateNamespacePermissions).not.toHaveBeenCalled();
+    expect(mockQueryNamespacePermissions).not.toHaveBeenCalled();
   });
 
   it('ignores scale clicks without an explicit replica count', async () => {

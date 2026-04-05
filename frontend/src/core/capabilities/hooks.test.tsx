@@ -12,11 +12,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
-import type { CapabilityDescriptor, CapabilityNamespaceDiagnostics } from './types';
+import type { CapabilityDescriptor } from './types';
+import type { PermissionQueryDiagnostics } from './permissionTypes';
 import type { PermissionStatus } from './bootstrap';
 import { useCapabilities, type UseCapabilitiesOptions, useCapabilityDiagnostics } from './hooks';
-import { registerAdHocCapabilities, getPermissionKey } from './bootstrap';
-import { ensureCapabilityEntries, requestCapabilities } from './store';
 
 const permissionStore: { map: Map<string, PermissionStatus> } = { map: new Map() };
 const setPermissionMap = (map: Map<string, PermissionStatus>) => {
@@ -24,8 +23,8 @@ const setPermissionMap = (map: Map<string, PermissionStatus>) => {
 };
 
 const diagnosticListeners = new Set<() => void>();
-let diagnosticsSnapshot: CapabilityNamespaceDiagnostics[] = [];
-const setDiagnosticsSnapshot = (next: CapabilityNamespaceDiagnostics[]) => {
+let diagnosticsSnapshot: PermissionQueryDiagnostics[] = [];
+const setDiagnosticsSnapshot = (next: PermissionQueryDiagnostics[]) => {
   diagnosticsSnapshot = next;
 };
 const emitDiagnosticsUpdate = () => {
@@ -33,8 +32,6 @@ const emitDiagnosticsUpdate = () => {
 };
 
 vi.mock('./bootstrap', () => {
-  const registerAdHocCapabilities = vi.fn();
-
   const getPermissionKey = (
     resourceKind: string,
     verb: string,
@@ -52,28 +49,38 @@ vi.mock('./bootstrap', () => {
 
   return {
     __esModule: true,
-    registerAdHocCapabilities,
     useUserPermissions,
     getPermissionKey,
   };
 });
 
-vi.mock('./store', () => {
-  const ensureCapabilityEntries = vi.fn();
-  const requestCapabilities = vi.fn();
+vi.mock('./permissionStore', () => {
   const subscribeDiagnostics = vi.fn((listener: () => void) => {
     diagnosticListeners.add(listener);
     return () => {
       diagnosticListeners.delete(listener);
     };
   });
-  const getCapabilityDiagnosticsSnapshot = vi.fn(() => diagnosticsSnapshot);
+  const getPermissionQueryDiagnosticsSnapshot = vi.fn(() => diagnosticsSnapshot);
+
+  const getPermissionKey = (
+    resourceKind: string,
+    verb: string,
+    namespace?: string | null,
+    subresource?: string | null
+  ) => {
+    const kind = resourceKind.toLowerCase();
+    const action = verb.toLowerCase();
+    const ns = namespace ? namespace.toLowerCase() : 'cluster';
+    const sub = subresource ? subresource.toLowerCase() : '';
+    return `${kind}|${action}|${ns}|${sub}`;
+  };
+
   return {
     __esModule: true,
-    ensureCapabilityEntries,
-    requestCapabilities,
     subscribeDiagnostics,
-    getCapabilityDiagnosticsSnapshot,
+    getPermissionQueryDiagnosticsSnapshot,
+    getPermissionKey,
   };
 });
 
@@ -139,7 +146,7 @@ const renderDiagnosticsHook = async () => {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = ReactDOM.createRoot(container);
-  const result: { current: CapabilityNamespaceDiagnostics[] | null } = { current: null };
+  const result: { current: PermissionQueryDiagnostics[] | null } = { current: null };
 
   const HookConsumer: React.FC = () => {
     result.current = useCapabilityDiagnostics();
@@ -185,56 +192,58 @@ describe('useCapabilities', () => {
     vi.clearAllMocks();
   });
 
-  it('registers and requests capability descriptors when enabled', async () => {
-    const registerAdHocMock = vi.mocked(registerAdHocCapabilities);
-    const ensureEntriesMock = vi.mocked(ensureCapabilityEntries);
-    const requestCapabilitiesMock = vi.mocked(requestCapabilities);
-
+  it('returns idle state for descriptors not yet in the permission map', async () => {
     const hook = await renderCapabilitiesHook(
       [
         {
-          id: ' namespace:pods:get:default ',
-          resourceKind: ' Pod ',
-          verb: ' get ',
-          namespace: ' default ',
-        },
-        {
-          id: '',
-          resourceKind: 'Deployment',
-          verb: 'patch',
+          id: 'namespace:pods:get:default',
+          resourceKind: 'Pod',
+          verb: 'get',
+          namespace: 'default',
         },
       ],
       { ttlMs: 15000 }
     );
 
-    expect(registerAdHocMock).toHaveBeenCalledTimes(1);
-    const [registeredDescriptors] = registerAdHocMock.mock.calls[0];
-    expect(registeredDescriptors).toHaveLength(1);
-    expect(registeredDescriptors[0]).toMatchObject({
-      id: 'namespace:pods:get:default',
-      resourceKind: 'Pod',
-      verb: 'get',
-      namespace: 'default',
-    });
-
-    expect(ensureEntriesMock).toHaveBeenCalledWith(registeredDescriptors);
-    expect(requestCapabilitiesMock).toHaveBeenCalledWith(registeredDescriptors, {
-      ttlMs: 15000,
-      force: undefined,
-    });
-
+    // Unnamed descriptor not in the map => idle/pending state.
     expect(hook.current.loading).toBe(true);
     expect(hook.current.ready).toBe(false);
     expect(hook.current.isAllowed('namespace:pods:get:default')).toBe(false);
+    expect(hook.current.getState('namespace:pods:get:default')).toMatchObject({
+      allowed: false,
+      pending: true,
+      status: 'idle',
+    });
+
+    await hook.unmount();
+  });
+
+  it('filters out invalid descriptors (empty id or missing verb/resourceKind)', async () => {
+    const hook = await renderCapabilitiesHook([
+      {
+        id: ' namespace:pods:get:default ',
+        resourceKind: ' Pod ',
+        verb: ' get ',
+        namespace: ' default ',
+      },
+      {
+        id: '',
+        resourceKind: 'Deployment',
+        verb: 'patch',
+      },
+    ]);
+
+    // The second descriptor has an empty id after normalization, so it should be filtered out.
+    // Only the first descriptor should produce a state entry.
+    expect(hook.current.getState('namespace:pods:get:default')).toMatchObject({
+      pending: true,
+      status: 'idle',
+    });
 
     await hook.unmount();
   });
 
   it('does nothing when disabled', async () => {
-    const registerAdHocMock = vi.mocked(registerAdHocCapabilities);
-    const ensureEntriesMock = vi.mocked(ensureCapabilityEntries);
-    const requestCapabilitiesMock = vi.mocked(requestCapabilities);
-
     const hook = await renderCapabilitiesHook(
       [
         {
@@ -246,9 +255,6 @@ describe('useCapabilities', () => {
       { enabled: false }
     );
 
-    expect(registerAdHocMock).not.toHaveBeenCalled();
-    expect(ensureEntriesMock).not.toHaveBeenCalled();
-    expect(requestCapabilitiesMock).not.toHaveBeenCalled();
     expect(hook.current.loading).toBe(false);
     expect(hook.current.ready).toBe(false);
     expect(hook.current.getState('cluster:nodes:list')).toMatchObject({
@@ -276,21 +282,18 @@ describe('useCapabilities', () => {
       allowed: true,
       pending: false,
       descriptor: {
-        id: 'cluster:nodes:list',
+        clusterId: 'default',
         resourceKind: 'Node',
         verb: 'list',
+        namespace: null,
+        subresource: null,
       },
       entry: {
-        key: 'node|list|cluster|',
-        request: {
-          id: 'cluster:nodes:list',
-          resourceKind: 'Node',
-          verb: 'list',
-        },
         status: 'ready',
       },
-      reason: undefined,
+      reason: null,
       error: null,
+      source: 'ssrr',
       feature: undefined,
     };
 
@@ -299,30 +302,26 @@ describe('useCapabilities', () => {
       allowed: false,
       pending: true,
       descriptor: {
-        id: 'namespace:pods:delete:alpha',
+        clusterId: 'default',
         resourceKind: 'Pod',
         verb: 'delete',
         namespace: 'alpha',
+        subresource: null,
       },
       entry: {
-        key: 'pod|delete|alpha|',
-        request: {
-          id: 'namespace:pods:delete:alpha',
-          resourceKind: 'Pod',
-          verb: 'delete',
-          namespace: 'alpha',
-        },
         status: 'loading',
       },
-      reason: undefined,
+      reason: null,
       error: null,
+      source: null,
       feature: undefined,
     };
 
+    // The getPermissionKey mock uses kind|verb|ns|sub format.
     setPermissionMap(
       new Map([
-        [getPermissionKey('Node', 'list', null, null), allowedStatus],
-        [getPermissionKey('Pod', 'delete', 'alpha', null), pendingStatus],
+        ['node|list|cluster|', allowedStatus],
+        ['pod|delete|alpha|', pendingStatus],
       ])
     );
 
@@ -342,16 +341,14 @@ describe('useCapabilities', () => {
       error: 'denied',
       descriptor: pendingStatus.descriptor,
       entry: {
-        ...pendingStatus.entry,
         status: 'error',
-        error: 'denied',
       },
     };
 
     setPermissionMap(
       new Map([
-        [getPermissionKey('Node', 'list', null, null), allowedStatus],
-        [getPermissionKey('Pod', 'delete', 'alpha', null), deniedStatus],
+        ['node|list|cluster|', allowedStatus],
+        ['pod|delete|alpha|', deniedStatus],
       ])
     );
 
@@ -368,35 +365,63 @@ describe('useCapabilities', () => {
     await hook.unmount();
   });
 
-  it('re-requests capabilities when force, ttl, or refreshKey change', async () => {
-    const requestCapabilitiesMock = vi.mocked(requestCapabilities);
+  it('queries named-resource descriptors via QueryPermissions RPC', async () => {
+    // Set up the window.go.backend.App.QueryPermissions mock.
+    const mockQueryPermissions = vi.fn().mockResolvedValue({
+      results: [
+        {
+          id: 'named:pods:get:default:my-pod',
+          clusterId: '',
+          resourceKind: 'Pod',
+          verb: 'get',
+          namespace: 'default',
+          subresource: '',
+          name: 'my-pod',
+          allowed: true,
+          source: 'ssar',
+          reason: '',
+          error: '',
+        },
+      ],
+    });
 
-    const descriptor: CapabilityDescriptor = {
-      id: 'namespace:configmaps:list:team',
-      resourceKind: 'ConfigMap',
-      verb: 'list',
-      namespace: 'team',
+    (globalThis as any).window = globalThis.window ?? {};
+    (window as any).go = {
+      backend: {
+        App: {
+          QueryPermissions: mockQueryPermissions,
+        },
+      },
     };
 
-    const hook = await renderCapabilitiesHook([descriptor], {
-      ttlMs: 1000,
-      force: false,
-      refreshKey: 0,
+    const hook = await renderCapabilitiesHook([
+      {
+        id: 'named:pods:get:default:my-pod',
+        resourceKind: 'Pod',
+        verb: 'get',
+        namespace: 'default',
+        name: 'my-pod',
+      },
+    ]);
+
+    // Wait for the async QueryPermissions call to resolve.
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
     });
 
-    expect(requestCapabilitiesMock).toHaveBeenCalledTimes(1);
-
-    requestCapabilitiesMock.mockClear();
-    await hook.rerender({
-      options: { ttlMs: 2500, force: true, refreshKey: 1 },
-    });
-
-    expect(requestCapabilitiesMock).toHaveBeenCalledWith(expect.any(Array), {
-      ttlMs: 2500,
-      force: true,
+    expect(mockQueryPermissions).toHaveBeenCalledTimes(1);
+    expect(hook.current.isAllowed('named:pods:get:default:my-pod')).toBe(true);
+    expect(hook.current.getState('named:pods:get:default:my-pod')).toMatchObject({
+      allowed: true,
+      pending: false,
+      status: 'ready',
     });
 
     await hook.unmount();
+
+    // Clean up.
+    delete (window as any).go;
   });
 });
 
@@ -415,9 +440,11 @@ describe('useCapabilityDiagnostics', () => {
       {
         key: 'namespace:alpha',
         namespace: 'alpha',
+        method: 'ssrr',
         pendingCount: 1,
         inFlightCount: 0,
         consecutiveFailureCount: 0,
+        totalChecks: 0,
         lastDescriptors: [],
       },
     ]);
@@ -430,9 +457,11 @@ describe('useCapabilityDiagnostics', () => {
       {
         key: 'namespace:beta',
         namespace: 'beta',
+        method: 'ssrr',
         pendingCount: 0,
         inFlightCount: 1,
         consecutiveFailureCount: 2,
+        totalChecks: 0,
         lastDescriptors: [],
       },
     ]);

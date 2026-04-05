@@ -27,11 +27,7 @@ import type {
   NamespaceHelmSummary,
   NamespaceCustomSummary,
 } from '@/core/refresh/types';
-import {
-  DEFAULT_CAPABILITY_TTL_MS,
-  evaluateNamespacePermissions,
-  registerNamespaceCapabilityDefinitions,
-} from '@/core/capabilities';
+import { queryNamespacePermissions } from '@/core/capabilities';
 import {
   refreshOrchestrator,
   useRefreshScopedDomain,
@@ -41,7 +37,6 @@ import type { NamespaceRefresherKey } from '@/core/refresh/refresherTypes';
 import type { RefreshDomain } from '@/core/refresh/types';
 import type { NamespaceViewType } from '@/types/navigation/views';
 import { useViewState } from '@/core/contexts/ViewStateContext';
-import type { CapabilityDefinition } from '@/core/capabilities/catalog';
 import type { PodSnapshotEntry, PodMetricsInfo } from '@/core/refresh/types';
 import { resetScopedDomainState } from '@/core/refresh/store';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
@@ -106,229 +101,6 @@ const filterByClusterId = <T extends { clusterId?: string | null }>(
   return items.filter((item) => item.clusterId === clusterId);
 };
 
-type NamespaceCapabilitySpec = {
-  id: string;
-  resourceKind: string;
-  verbs: string[];
-  feature: string;
-  subresource?: string;
-};
-
-const NAMESPACE_CAPABILITY_SPECS: Partial<
-  Record<NamespaceRefresherKey, NamespaceCapabilitySpec[]>
-> = {
-  workloads: [
-    {
-      id: 'namespace:workloads',
-      resourceKind: 'Deployment',
-      verbs: ['list', 'patch', 'update', 'delete'],
-      feature: 'Namespace workloads',
-    },
-    // Scale subresource permissions for scalable workload kinds.
-    {
-      id: 'namespace:deployments:scale',
-      resourceKind: 'Deployment',
-      verbs: ['update'],
-      subresource: 'scale',
-      feature: 'Namespace workloads',
-    },
-    {
-      id: 'namespace:statefulsets',
-      resourceKind: 'StatefulSet',
-      verbs: ['list', 'patch', 'update', 'delete'],
-      feature: 'Namespace workloads',
-    },
-    {
-      id: 'namespace:statefulsets:scale',
-      resourceKind: 'StatefulSet',
-      verbs: ['update'],
-      subresource: 'scale',
-      feature: 'Namespace workloads',
-    },
-    {
-      id: 'namespace:replicasets:scale',
-      resourceKind: 'ReplicaSet',
-      verbs: ['update'],
-      subresource: 'scale',
-      feature: 'Namespace workloads',
-    },
-    {
-      id: 'namespace:daemonsets',
-      resourceKind: 'DaemonSet',
-      verbs: ['list', 'patch', 'update', 'delete'],
-      feature: 'Namespace workloads',
-    },
-    {
-      id: 'namespace:jobs',
-      resourceKind: 'Job',
-      verbs: ['list', 'update', 'delete'],
-      feature: 'Namespace workloads',
-    },
-    {
-      id: 'namespace:cronjobs',
-      resourceKind: 'CronJob',
-      verbs: ['list', 'update', 'delete'],
-      feature: 'Namespace workloads',
-    },
-    {
-      id: 'namespace:pods',
-      resourceKind: 'Pod',
-      verbs: ['list', 'update', 'delete'],
-      feature: 'Namespace workloads',
-    },
-    {
-      id: 'namespace:pods:log',
-      resourceKind: 'Pod',
-      verbs: ['get'],
-      subresource: 'log',
-      feature: 'Namespace workloads',
-    },
-    {
-      id: 'namespace:pods:portforward',
-      resourceKind: 'Pod',
-      verbs: ['create'],
-      subresource: 'portforward',
-      feature: 'Namespace workloads',
-    },
-  ],
-  config: [
-    {
-      id: 'namespace:configmaps',
-      resourceKind: 'ConfigMap',
-      verbs: ['list', 'update', 'delete'],
-      feature: 'Namespace config',
-    },
-    {
-      id: 'namespace:secrets',
-      resourceKind: 'Secret',
-      verbs: ['list', 'update', 'delete'],
-      feature: 'Namespace config',
-    },
-  ],
-  network: [
-    {
-      id: 'namespace:services',
-      resourceKind: 'Service',
-      verbs: ['list', 'update', 'delete'],
-      feature: 'Namespace network',
-    },
-    {
-      id: 'namespace:ingresses',
-      resourceKind: 'Ingress',
-      verbs: ['list', 'update', 'delete'],
-      feature: 'Namespace network',
-    },
-    {
-      id: 'namespace:networkpolicies',
-      resourceKind: 'NetworkPolicy',
-      verbs: ['list', 'update', 'delete'],
-      feature: 'Namespace network',
-    },
-    {
-      id: 'namespace:endpointslices',
-      resourceKind: 'EndpointSlice',
-      verbs: ['list', 'delete'],
-      feature: 'Namespace network',
-    },
-    {
-      // Port forward for Services (requires Pod portforward permission)
-      id: 'namespace:pods:portforward',
-      resourceKind: 'Pod',
-      verbs: ['create'],
-      subresource: 'portforward',
-      feature: 'Namespace network',
-    },
-  ],
-  rbac: [
-    {
-      id: 'namespace:role',
-      resourceKind: 'Role',
-      verbs: ['list', 'update', 'delete'],
-      feature: 'Namespace RBAC',
-    },
-    {
-      id: 'namespace:rolebinding',
-      resourceKind: 'RoleBinding',
-      verbs: ['list', 'update', 'delete'],
-      feature: 'Namespace RBAC',
-    },
-    {
-      id: 'namespace:serviceaccounts',
-      resourceKind: 'ServiceAccount',
-      verbs: ['list', 'update', 'delete'],
-      feature: 'Namespace RBAC',
-    },
-  ],
-  storage: [
-    {
-      id: 'namespace:persistentvolumeclaims',
-      resourceKind: 'PersistentVolumeClaim',
-      verbs: ['list', 'update', 'delete'],
-      feature: 'Namespace storage',
-    },
-  ],
-  autoscaling: [
-    {
-      id: 'namespace:horizontalpodautoscalers',
-      resourceKind: 'HorizontalPodAutoscaler',
-      verbs: ['list', 'update', 'delete'],
-      feature: 'Namespace autoscaling',
-    },
-  ],
-  quotas: [
-    {
-      id: 'namespace:resourcequotas',
-      resourceKind: 'ResourceQuota',
-      verbs: ['list', 'update', 'delete'],
-      feature: 'Namespace quotas',
-    },
-    {
-      id: 'namespace:limitranges',
-      resourceKind: 'LimitRange',
-      verbs: ['list', 'update', 'delete'],
-      feature: 'Namespace quotas',
-    },
-    {
-      // Include PDBs so the quotas view can surface disruption policies.
-      id: 'namespace:poddisruptionbudgets',
-      resourceKind: 'PodDisruptionBudget',
-      verbs: ['list', 'update', 'delete'],
-      feature: 'Namespace quotas',
-    },
-  ],
-  events: [
-    {
-      id: 'namespace:events',
-      resourceKind: 'Event',
-      verbs: ['list'],
-      feature: 'Namespace events',
-    },
-  ],
-};
-
-const PODS_CAPABILITY_SPECS: NamespaceCapabilitySpec[] = [
-  {
-    id: 'namespace:pods',
-    resourceKind: 'Pod',
-    verbs: ['list', 'update', 'delete'],
-    feature: 'Namespace workloads',
-  },
-  {
-    id: 'namespace:pods:log',
-    resourceKind: 'Pod',
-    verbs: ['get'],
-    subresource: 'log',
-    feature: 'Namespace workloads',
-  },
-  {
-    id: 'namespace:pods:portforward',
-    resourceKind: 'Pod',
-    verbs: ['create'],
-    subresource: 'portforward',
-    feature: 'Namespace workloads',
-  },
-];
-
 const parseAutoscalingTarget = (
   target?: string | null
 ): { kind: string; name: string } | undefined => {
@@ -346,28 +118,6 @@ const parseAutoscalingTarget = (
     name: nameParts.join('/'),
   };
 };
-
-const buildCapabilityDefinitionsForNamespace = (
-  namespace: string,
-  specs: NamespaceCapabilitySpec[]
-): CapabilityDefinition[] =>
-  specs.flatMap((spec) =>
-    spec.verbs.map((verb) => {
-      const descriptorId = `${spec.id}:${verb}:${namespace}`;
-      return {
-        id: descriptorId,
-        scope: 'namespace' as const,
-        feature: spec.feature,
-        descriptor: {
-          id: descriptorId,
-          verb,
-          resourceKind: spec.resourceKind,
-          namespace,
-          subresource: spec.subresource,
-        },
-      } satisfies CapabilityDefinition;
-    })
-  );
 
 const normalizeNamespaceScope = (
   value?: string | null,
@@ -408,7 +158,6 @@ const useNamespacePodsResource = (
     () => normalizeNamespaceScope(namespace, clusterId),
     [clusterId, namespace]
   );
-  const capabilityNamespace = useMemo(() => getCapabilityNamespace(namespace), [namespace]);
 
   const scopedStates = useRefreshScopedDomainStates('pods');
   const domainState = scope ? scopedStates[scope] : undefined;
@@ -417,38 +166,15 @@ const useNamespacePodsResource = (
     if (!enabled || !scope) {
       return;
     }
-    if (capabilityNamespace) {
-      const definitions = buildCapabilityDefinitionsForNamespace(
-        capabilityNamespace,
-        PODS_CAPABILITY_SPECS
-      );
-      registerNamespaceCapabilityDefinitions(capabilityNamespace, definitions, {
-        force: false,
-        ttlMs: DEFAULT_CAPABILITY_TTL_MS,
-        clusterId,
-      });
-      evaluateNamespacePermissions(capabilityNamespace, { clusterId });
-    }
     await refreshOrchestrator.fetchScopedDomain('pods', scope, { isManual: true });
-  }, [capabilityNamespace, clusterId, enabled, scope]);
+  }, [enabled, scope]);
 
   const refresh = useCallback(async () => {
     if (!enabled || !scope) {
       return;
     }
-    if (capabilityNamespace) {
-      const definitions = buildCapabilityDefinitionsForNamespace(
-        capabilityNamespace,
-        PODS_CAPABILITY_SPECS
-      );
-      registerNamespaceCapabilityDefinitions(capabilityNamespace, definitions, {
-        force: true,
-        ttlMs: DEFAULT_CAPABILITY_TTL_MS,
-        clusterId,
-      });
-    }
     await refreshOrchestrator.fetchScopedDomain('pods', scope, { isManual: true });
-  }, [capabilityNamespace, clusterId, enabled, scope]);
+  }, [enabled, scope]);
 
   const reset = useCallback(() => {
     if (!scope) {
@@ -529,29 +255,11 @@ function useRefreshBackedResource<T>(
   );
   const domainState = useRefreshScopedDomain(domain, namespaceScope ?? '');
   const domainData = domainState.data;
-  const capabilitySpecs = useMemo(
-    () => NAMESPACE_CAPABILITY_SPECS[resourceKey] ?? [],
-    [resourceKey]
-  );
-  const capabilityNamespace = useMemo(() => getCapabilityNamespace(namespace), [namespace]);
 
   const load = useCallback(
     async (_showSpinner: boolean = true) => {
       if (!enabled || !namespaceScope) {
         return;
-      }
-
-      if (capabilityNamespace && capabilitySpecs.length > 0) {
-        const definitions = buildCapabilityDefinitionsForNamespace(
-          capabilityNamespace,
-          capabilitySpecs
-        );
-        registerNamespaceCapabilityDefinitions(capabilityNamespace, definitions, {
-          force: false,
-          ttlMs: DEFAULT_CAPABILITY_TTL_MS,
-          clusterId,
-        });
-        evaluateNamespacePermissions(capabilityNamespace, { clusterId });
       }
 
       try {
@@ -562,24 +270,12 @@ function useRefreshBackedResource<T>(
         });
       }
     },
-    [capabilityNamespace, capabilitySpecs, clusterId, domain, enabled, namespaceScope, resourceKey]
+    [domain, enabled, namespaceScope, resourceKey]
   );
 
   const refresh = useCallback(async () => {
     if (!enabled || !namespaceScope) {
       return;
-    }
-
-    if (capabilityNamespace && capabilitySpecs.length > 0) {
-      const definitions = buildCapabilityDefinitionsForNamespace(
-        capabilityNamespace,
-        capabilitySpecs
-      );
-      registerNamespaceCapabilityDefinitions(capabilityNamespace, definitions, {
-        force: true,
-        ttlMs: DEFAULT_CAPABILITY_TTL_MS,
-        clusterId,
-      });
     }
 
     try {
@@ -589,15 +285,7 @@ function useRefreshBackedResource<T>(
         source: `namespace-resource-refresh-${resourceKey}`,
       });
     }
-  }, [
-    capabilityNamespace,
-    capabilitySpecs,
-    clusterId,
-    domain,
-    enabled,
-    namespaceScope,
-    resourceKey,
-  ]);
+  }, [domain, enabled, namespaceScope, resourceKey]);
 
   const reset = useCallback(() => {
     if (namespaceScope) {
@@ -1181,26 +869,68 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     ]
   );
 
+  // Single-namespace permission query.
   useEffect(() => {
     const capabilityNamespace = getCapabilityNamespace(currentNamespace);
     if (!capabilityNamespace) {
       return;
     }
-    // Register capability definitions for all resource types when namespace changes.
-    // This ensures permissions are available for context menus before data is loaded,
-    // since workload data may arrive via streaming before load() is explicitly called.
-    const allSpecs = Object.values(NAMESPACE_CAPABILITY_SPECS).flat();
-    if (allSpecs.length > 0) {
-      const definitions = buildCapabilityDefinitionsForNamespace(capabilityNamespace, allSpecs);
-      registerNamespaceCapabilityDefinitions(capabilityNamespace, definitions, {
-        force: false,
-        ttlMs: DEFAULT_CAPABILITY_TTL_MS,
-        clusterId: namespaceClusterId,
-      });
-    }
-    // Evaluate namespace permissions against the active cluster context.
-    evaluateNamespacePermissions(capabilityNamespace, { clusterId: namespaceClusterId });
+    queryNamespacePermissions(capabilityNamespace, namespaceClusterId ?? null);
   }, [currentNamespace, namespaceClusterId]);
+
+  // All Namespaces: collect distinct (clusterId, namespace) pairs from
+  // loaded domain data and query permissions for each. queryNamespacePermissions
+  // skips namespaces that already have fresh results within TTL, so this
+  // effect can fire on every data update without causing redundant queries.
+  // Only genuinely new namespaces trigger an actual QueryPermissions call.
+  useEffect(() => {
+    if (getCapabilityNamespace(currentNamespace) !== null) {
+      return;
+    }
+
+    const allDomainData = [
+      workloads.data,
+      pods.data,
+      config.data,
+      network.data,
+      rbac.data,
+      storage.data,
+      autoscaling.data,
+      quotas.data,
+      custom.data,
+      events.data,
+    ];
+
+    const seen = new Set<string>();
+    for (const domainList of allDomainData) {
+      if (!Array.isArray(domainList)) continue;
+      for (const obj of domainList) {
+        const ns = obj?.namespace;
+        const cid = obj?.clusterId ?? namespaceClusterId;
+        if (ns && cid) {
+          seen.add(`${cid}|${ns}`);
+        }
+      }
+    }
+
+    for (const key of seen) {
+      const [cid, ns] = key.split('|');
+      queryNamespacePermissions(ns, cid);
+    }
+  }, [
+    currentNamespace,
+    namespaceClusterId,
+    workloads.data,
+    pods.data,
+    config.data,
+    network.data,
+    rbac.data,
+    storage.data,
+    autoscaling.data,
+    quotas.data,
+    custom.data,
+    events.data,
+  ]);
 
   return (
     <NamespaceResourcesContext.Provider value={contextValue}>

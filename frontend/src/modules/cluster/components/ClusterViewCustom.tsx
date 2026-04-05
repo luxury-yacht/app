@@ -8,7 +8,7 @@
 import './ClusterViewCustom.css';
 import { DeleteResource } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
-import { getPermissionKey, useUserPermissions } from '@/core/capabilities';
+import { getPermissionKey, queryKindPermissions, useUserPermissions } from '@/core/capabilities';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
@@ -220,6 +220,11 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
           permissionMap.get(
             getPermissionKey(resource.kind, 'delete', null, null, resource.clusterId)
           ) ?? null;
+
+        // Lazy-load permissions for CRD kinds not in the static spec lists.
+        if (!deleteStatus) {
+          queryKindPermissions(resource.kind, null, resource.clusterId ?? null);
+        }
 
         return buildObjectActionItems({
           object: {

@@ -1,15 +1,22 @@
 # Permissions system
 
-This document explains how Luxury Yacht checks Kubernetes RBAC permissions at startup and at runtime, how domains degrade gracefully when a user has partial access, and what to watch out for when adding or modifying domains.
+This document explains how Luxury Yacht checks Kubernetes RBAC permissions, how domains degrade gracefully when a user has partial access, and what to watch out for when adding or modifying domains.
 
 ## Overview
 
-The permissions system operates at two stages:
+There are two independent permission systems:
 
-1. **Startup (registration time)** -- Before any user request arrives, the refresh subsystem probes the Kubernetes API to discover which resources the current identity can access. Domains that fail all permission checks are registered as permission-denied placeholders.
-2. **Runtime (per-request)** -- On every snapshot request, `ensurePermissions()` re-validates the caller's access so that RBAC revocations are detected without restarting the app.
+1. **Refresh subsystem permissions (backend)** -- Gates which refresh domains are active. Uses SSAR (SelfSubjectAccessReview) via `permissions.Checker`. Determines whether the backend should watch/list a resource type at all. Operates at startup (registration) and runtime (per-snapshot). Unchanged from the original architecture.
 
-Both stages rely on `SelfSubjectAccessReview` (SSAR) calls issued through the `permissions.Checker`.
+2. **UI permission map (frontend ↔ backend)** -- Gates context menu actions (Delete, Restart, Scale, Rollback, Port Forward) in the UI. Uses SSRR (SelfSubjectRulesReview) for namespace-scoped resources and SSAR for cluster-scoped resources, via the `QueryPermissions` Wails endpoint. One SSRR call per namespace returns all rules; the backend matches permissions locally against cached rules.
+
+These systems are independent. The refresh subsystem's `permissions.Checker` and the UI's `QueryPermissions` endpoint have separate caches, separate TTLs, and separate code paths. Changing one does not affect the other.
+
+---
+
+# Refresh subsystem permissions (SSAR)
+
+This section covers the backend refresh subsystem's permission checking, which gates domain registration and runtime access.
 
 ## Key files
 
@@ -41,7 +48,7 @@ Concurrent SSAR calls for the same cache key are deduplicated via `singleflight`
 
 ### Why stale-while-revalidate matters
 
-Without it, every snapshot request hitting an expired cache entry blocks on an SSAR call. When the namespace changes, `evaluateNamespacePermissions` fires ~70 SSAR calls through the same rate limiter. If domain permission checks also need to block on SSAR calls simultaneously, the combined load causes 5+ second delays. Stale-while-revalidate lets domain requests proceed with the last-known-good decision while the refresh happens in the background.
+Without it, every snapshot request hitting an expired cache entry blocks on an SSAR call. When multiple domains need permission re-validation simultaneously (e.g., after a namespace switch triggers new domain registrations), the combined SSAR load can cause multi-second delays. Stale-while-revalidate lets domain requests proceed with the last-known-good decision while the refresh happens in the background.
 
 ## Startup registration flow
 
@@ -185,3 +192,127 @@ Use `requireAll` in `permission_checks.go` and `directRegistration` in `registra
 | `PermissionCheckTimeout`          | 5 sec   | Timeout for individual SSAR calls                       |
 | `PermissionPrimeTimeout`          | 10 sec  | Timeout for pre-warming the permission cache at startup |
 | `PermissionPreflightTimeout`      | 15 sec  | Timeout for the full preflight permission check phase   |
+
+---
+
+# UI permission map (SSRR + SSAR)
+
+This section covers the frontend permission system that gates context menu actions. It is completely independent of the refresh subsystem permissions above.
+
+## Architecture
+
+The UI permission system replaces per-check SSAR calls with per-namespace SSRR (SelfSubjectRulesReview) calls. One SSRR API call returns all RBAC rules for the current user in a given namespace. The backend matches permission queries locally against the cached rules.
+
+Cluster-scoped resources (Nodes, PVs, StorageClasses, ClusterRoles, etc.) are routed to SSAR because namespace-scoped SSRR responses can contain false positives from namespace RoleBindings referencing ClusterRoles.
+
+### Key files
+
+| File                                                | Role                                                                                                   |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `backend/capabilities/query.go`                     | `PermissionQuery`, `PermissionResult`, `NamespaceDiagnostics`, `QueryPermissionsResponse` types        |
+| `backend/capabilities/rules.go`                     | SSRR cache (TTL + stale grace, singleflight), SSRR fetch, rule matching engine                         |
+| `backend/app_permissions.go`                        | `QueryPermissions` Wails endpoint — GVR scope detection, SSRR matching, SSAR fallback                  |
+| `backend/internal/config/config.go`                 | `SSRRFetchTimeout` constant                                                                            |
+| `frontend/src/core/capabilities/permissionStore.ts` | Frontend permission store — calls `QueryPermissions`, caches results, periodic refresh                 |
+| `frontend/src/core/capabilities/permissionSpecs.ts` | Static permission spec lists (`WORKLOAD_PERMISSIONS`, `CLUSTER_PERMISSIONS`, etc.)                     |
+| `frontend/src/core/capabilities/permissionTypes.ts` | `PermissionSpec`, `PermissionEntry`, `PermissionStatus`, `PermissionQueryDiagnostics`                  |
+| `frontend/src/core/capabilities/hooks.ts`           | `useCapabilities()` hook (ad-hoc queries), `useCapabilityDiagnostics()` hook                           |
+| `frontend/src/core/capabilities/bootstrap.ts`       | Thin delegation layer — `initializeUserPermissionsBootstrap`, `useUserPermissions`, `getPermissionKey` |
+
+### How `QueryPermissions` works
+
+For each permission check in a batch:
+
+1. Resolve `resourceKind` → `(apiGroup, pluralResource)` via the GVR discovery cache.
+2. If the resource is non-namespaced (cluster-scoped), route directly to SSAR.
+3. If namespaced, look up cached SSRR rules for `(clusterId, namespace)`. Fetch SSRR if not cached.
+4. Match against the SSRR rules (apiGroup, resource, verb, subresource, resourceNames — with wildcard handling).
+5. If matched → `allowed: true, source: "ssrr"`.
+6. If not matched and SSRR `incomplete` is false → `allowed: false, source: "denied"`.
+7. If not matched and SSRR `incomplete` is true → fire individual SSAR, return with `source: "ssar"`.
+
+Error handling is per-item — a single failing namespace never takes down the entire batch.
+
+### SSRR cache
+
+The SSRR cache mirrors the refresh subsystem's SSAR cache policy:
+
+| State                | Condition                  | Behavior                                                                         |
+| -------------------- | -------------------------- | -------------------------------------------------------------------------------- |
+| Fresh                | Within TTL (2 min)         | Serve cached rules                                                               |
+| Stale (within grace) | Past TTL, within TTL + 30s | Serve stale, background re-fetch                                                 |
+| Expired (past grace) | Past TTL + 30s             | Discard stale, synchronous fetch. If fetch fails, fall through to per-check SSAR |
+| Absent               | No entry                   | Synchronous fetch                                                                |
+
+Singleflight deduplicates concurrent SSRR fetches for the same `(clusterId, namespace)`.
+
+### Rule matching
+
+The rule matcher follows Kubernetes RBAC `ResourceMatches` semantics (`pkg/apis/rbac/helpers.go`):
+
+- `"*"` in apiGroups/resources/verbs matches everything
+- Exact string match for `resource/subresource`
+- `"*/subresource"` matches any resource with that subresource
+- `"resource/*"` is NOT valid K8s RBAC — the matcher rejects it
+- `resourceNames` restricts matching to specific object names; empty means all names match; a generic (unnamed) query does NOT match a name-restricted rule
+
+### Cluster-scoped safety
+
+Namespace SSRR responses include rules from namespace RoleBindings that reference ClusterRoles. A RoleBinding in `"default"` referencing a ClusterRole with Node rules would make those rules appear in the SSRR response, but the RoleBinding does not grant cluster-wide access. To prevent false positives, `QueryPermissions` detects non-namespaced resources via GVR resolution and routes them to SSAR, never SSRR matching.
+
+### Frontend query flow
+
+**Single namespace** — When a namespace is selected, `queryNamespacePermissions` sends all namespace permission specs in one `QueryPermissions` batch. Results are cached by the store and reused until the 2-minute refresh interval.
+
+**Cluster connect** — `queryClusterPermissions` sends all cluster permission specs. The backend routes them to SSAR (cluster-scoped resources).
+
+**All Namespaces** — An effect collects distinct `(clusterId, namespace)` pairs from loaded domain data and calls `queryNamespacePermissions` for each. `queryNamespacePermissions` skips namespaces that already have fresh results within TTL, so only genuinely new namespaces trigger backend calls.
+
+**CRD custom resources** — Lazy-loaded on first context menu open via `queryKindPermissions`. Queries delete/patch permissions for the specific CRD kind. Results are cached for subsequent opens. Feature tagged as `'Namespace custom resources'` or `'Cluster custom resources'` for diagnostics filtering.
+
+**Periodic refresh** — A 2-minute `setInterval` re-queries any `(clusterId, namespace)` pair whose last query is older than the interval. Namespace refreshes are staggered by 500ms to avoid thundering herd.
+
+### Frontend types
+
+- `PermissionSpec` — Static descriptor: `{ kind, verb, subresource? }`. Grouped into `PermissionSpecList` with a `feature` string for diagnostics filtering.
+- `PermissionEntry` — Stored result from the backend: `{ allowed, source, reason, descriptor, feature }`.
+- `PermissionStatus` — Public type from `useUserPermissions()`: `{ id, allowed, pending, reason, error, source, descriptor, feature, entry: { status } }`. The `entry.status` field (`'loading' | 'ready' | 'error'`) is used by `ClusterResourcesContext` and `ClusterResourcesManager` to distinguish definitive denials from transient errors.
+
+### Permission key format
+
+All permission lookups use `getPermissionKey()` which produces:
+
+```
+${clusterId}|${resourceKind}|${verb}|${namespace_or_'cluster'}|${subresource_or_''}
+```
+
+All fields lowercased. Null namespace becomes the literal string `'cluster'`. Empty subresource becomes `''`.
+
+### Diagnostics
+
+The Diagnostics panel has two permission-related tabs:
+
+- **Capabilities Checks** — Per-namespace batch diagnostics showing SSRR method, incomplete flag, rule count, SSAR fallback count, duration, and error state.
+- **Effective Permissions** — Per-permission rows showing allowed/denied status, source, reason, and error. Filtered by active cluster and feature-scoped by view type.
+
+Both tabs filter to the active cluster only — permissions from other clusters are never shown.
+
+### Timing constants
+
+| Constant                                    | Default | Purpose                                                               |
+| ------------------------------------------- | ------- | --------------------------------------------------------------------- |
+| `SSRRFetchTimeout`                          | 5 sec   | Timeout for individual SSRR API calls                                 |
+| `PermissionCacheTTL`                        | 2 min   | SSRR cache TTL (reuses the refresh subsystem constant)                |
+| `PermissionCacheStaleGracePeriod`           | 30 sec  | Stale grace window beyond TTL (reuses the refresh subsystem constant) |
+| `PERMISSION_REFRESH_INTERVAL_MS` (frontend) | 2 min   | Frontend periodic re-query interval                                   |
+| `STAGGER_INTERVAL_MS` (frontend)            | 500 ms  | Delay between namespace refreshes in All Namespaces sessions          |
+
+### Guidelines for the UI permission system
+
+**Adding permissions for a new resource kind** — Add a `PermissionSpec` entry to the appropriate list in `permissionSpecs.ts`. The backend resolves the kind via GVR discovery, so CRDs work automatically.
+
+**Adding a new view that needs permissions** — If the view uses `useUserPermissions()` and `getPermissionKey()`, no changes are needed beyond adding the permission specs. If the view needs CRD kind permissions, use `queryKindPermissions` for lazy loading.
+
+**Feature strings for diagnostics** — The `feature` field on each `PermissionSpecList` must match the corresponding entry in `diagnosticsPanelConfig.ts` (`CLUSTER_FEATURE_MAP` / `NAMESPACE_FEATURE_MAP`). Mismatches cause the Effective Permissions tab to show empty for that view.
+
+**Named-resource checks** — `useCapabilities()` supports `name` on descriptors for per-object permission checks (e.g., `NodeMaintenanceTab` checking if a specific node can be cordoned). Named results are stored in a hook-local `namedResults` map and do not overwrite name-free results in the public permission map.

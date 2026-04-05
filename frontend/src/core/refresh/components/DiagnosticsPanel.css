@@ -244,25 +244,34 @@
 
 .diagnostics-table {
   width: 100%;
-  border-collapse: collapse;
-  font-size: 0.78rem;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.75rem;
 }
 
 .diagnostics-table th,
+.diagnostics-table thead,
 .diagnostics-table td {
-  padding: 0.35rem 0.45rem;
-  border-bottom: 1px solid var(--color-table-border);
+  background-clip: padding-box;
+  padding: 0.3rem 0.4rem;
   text-align: left;
   white-space: nowrap;
   vertical-align: top;
 }
 
-.diagnostics-table th {
+.diagnostics-table th,
+.diagnostics-table thead {
   background: var(--color-bg-secondary);
   color: var(--color-text-secondary);
-  font-size: 0.68rem;
-  font-weight: 600;
   text-transform: uppercase;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.diagnostics-table td {
+  border-bottom: 1px solid var(--color-table-border);
+  line-height: 1.5;
 }
 
 .diagnostics-table-descriptor {
@@ -284,6 +293,29 @@
   cursor: pointer;
 }
 
+.diagnostics-checks-group {
+  margin-bottom: 0.15rem;
+}
+
+.diagnostics-checks-group:last-child {
+  margin-bottom: 0;
+}
+
+.diagnostics-checks-row {
+  display: flex;
+}
+
+.diagnostics-checks-feature {
+  width: 10rem;
+  flex-shrink: 0;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.diagnostics-checks-resource {
+  flex: 1;
+}
+
 /* Expanded state shows each item on its own line. */
 .diagnostics-table-cell-expanded {
   overflow: visible;
@@ -301,12 +333,20 @@
 
 .diagnostics-permission-reason {
   max-width: 320px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+tr.diagnostics-row-expanded .diagnostics-permission-reason {
   white-space: normal;
-  color: var(--color-text-secondary);
+  word-wrap: break-word;
+  overflow: visible;
+  text-overflow: unset;
 }
 
 .diagnostics-tabs {
-  padding: 0.35rem 0.5rem 0;
+  padding: 0.3rem 0.5rem 0;
 }
 
 .diagnostics-tabs .tab-item {

@@ -15,7 +15,6 @@ import type { ViewType } from '@/types/navigation/views';
 import type { TelemetrySummary } from '../types';
 import type {
   CapabilityNamespaceDiagnostics,
-  CapabilityEntry,
   NormalizedCapabilityDescriptor,
 } from '@/core/capabilities/types';
 import type { PermissionStatus } from '@/core/capabilities/bootstrap';
@@ -1193,16 +1192,12 @@ describe('DiagnosticsPanel component', () => {
       },
     ];
 
-    const createEntry = (
-      descriptor: NormalizedCapabilityDescriptor,
-      overrides: Partial<CapabilityEntry> = {}
-    ): CapabilityEntry => ({
-      key: `entry-${descriptor.id}`,
-      request: descriptor,
-      status: overrides.status ?? 'ready',
-      result: overrides.result,
-      error: overrides.error,
-      lastFetched: overrides.lastFetched ?? now - 1000,
+    const toDescriptor = (d: NormalizedCapabilityDescriptor): PermissionStatus['descriptor'] => ({
+      clusterId: d.clusterId ?? 'test-cluster',
+      resourceKind: d.resourceKind,
+      verb: d.verb,
+      namespace: d.namespace ?? null,
+      subresource: d.subresource ?? null,
     });
 
     const permissionStatuses: PermissionStatus[] = [
@@ -1212,55 +1207,42 @@ describe('DiagnosticsPanel component', () => {
         pending: false,
         reason: 'Forbidden',
         error: 'Denied by policy',
-        descriptor: descriptorDefault,
-        entry: createEntry(descriptorDefault, {
-          result: {
-            id: descriptorDefault.id,
-            verb: descriptorDefault.verb,
-            resourceKind: descriptorDefault.resourceKind,
-            namespace: descriptorDefault.namespace,
-            allowed: false,
-          },
-        }),
+        source: 'denied',
+        descriptor: toDescriptor(descriptorDefault),
+        entry: { status: 'ready' },
         feature: 'Namespace workloads',
       },
       {
         id: 'perm-exec',
         allowed: false,
         pending: true,
-        descriptor: descriptorExec,
-        entry: createEntry(descriptorExec, { status: 'loading' }),
+        reason: null,
+        error: null,
+        source: null,
+        descriptor: toDescriptor(descriptorExec),
+        entry: { status: 'loading' },
         feature: 'Namespace workloads',
       },
       {
         id: 'perm-cluster',
         allowed: true,
         pending: false,
-        descriptor: descriptorCluster,
-        entry: createEntry(descriptorCluster, {
-          result: {
-            id: descriptorCluster.id,
-            verb: descriptorCluster.verb,
-            resourceKind: descriptorCluster.resourceKind,
-            allowed: true,
-          },
-        }),
+        reason: null,
+        error: null,
+        source: 'ssrr',
+        descriptor: toDescriptor(descriptorCluster),
+        entry: { status: 'ready' },
         feature: 'Cluster RBAC',
       },
       {
         id: 'perm-other',
         allowed: true,
         pending: false,
-        descriptor: descriptorOther,
-        entry: createEntry(descriptorOther, {
-          result: {
-            id: descriptorOther.id,
-            verb: descriptorOther.verb,
-            resourceKind: descriptorOther.resourceKind,
-            namespace: descriptorOther.namespace,
-            allowed: true,
-          },
-        }),
+        reason: null,
+        error: null,
+        source: 'ssrr',
+        descriptor: toDescriptor(descriptorOther),
+        entry: { status: 'ready' },
         feature: 'Namespace workloads',
       },
     ];
@@ -1303,15 +1285,22 @@ describe('DiagnosticsPanel component', () => {
     expect(batchRows[1].textContent).toContain('Cluster');
     expect(batchRows[2].className).toContain('diagnostics-permission-denied');
     const batchCells = batchRows[2].querySelectorAll<HTMLTableCellElement>('td');
+    // Column order (15 cols): Namespace(0), InFlight(1), Runtime(2), Duration(3),
+    // Age(4), Result(5), Failures(6), Checks(7), Error(8), Method(9),
+    // Incomplete(10), Rules(11), SSARFallback(12), Descriptors(13), Features(14).
     expect(batchCells[0].textContent?.trim()).toBe('default');
-    expect(batchCells[1].textContent?.trim()).toBe('2');
-    expect(batchCells[2].textContent?.trim()).toBe('1');
-    expect(batchCells[3].textContent?.trim()).toMatch(/s$/);
-    expect(batchCells[6].textContent?.trim()).toBe('Error');
-    expect(batchCells[9].textContent).toContain('Denied by policy');
-    // Descriptors are rendered in grouped format: "resource: verb(s)".
-    expect(batchCells[10].textContent).toContain('deployments:');
-    expect(batchCells[10].textContent).toContain('pods:');
+    expect(batchCells[1].textContent?.trim()).toBe('1'); // In Flight
+    expect(batchCells[2].textContent?.trim()).toMatch(/s$/); // Runtime
+    expect(batchCells[5].textContent?.trim()).toBe('Error'); // Result
+    expect(batchCells[8].textContent).toContain('Denied by policy'); // Error
+    // Checks cell is collapsed by default — click the row to expand.
+    expect(batchCells[13].textContent).toContain('Click to expand');
+    await act(async () => {
+      batchRows[2].click();
+      await Promise.resolve();
+    });
+    const expandedCells = batchRows[2].querySelectorAll<HTMLTableCellElement>('td');
+    expect(expandedCells[13].textContent).toContain('deployments');
 
     await act(async () => {
       tabButtons[3].click();

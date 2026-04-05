@@ -7,6 +7,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/luxury-yacht/app/backend/capabilities"
 	"github.com/luxury-yacht/app/backend/internal/versioning"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/system"
@@ -29,10 +30,10 @@ type App struct {
 	logger               *Logger
 	versionCache         *versioning.Cache
 	// responseCache stores short-lived detail/YAML/helm GET responses.
-	responseCache              *responseCache
-	sidebarVisible             bool
-	diagnosticsPanelVisible    bool
-	logsPanelVisible bool
+	responseCache           *responseCache
+	sidebarVisible          bool
+	diagnosticsPanelVisible bool
+	logsPanelVisible        bool
 
 	refreshManager               *refresh.Manager
 	refreshHTTPServer            *http.Server
@@ -97,6 +98,10 @@ type App struct {
 	// recovery scheduling without affecting other clusters.
 	clusterAuthRecoveryMu        sync.Mutex
 	clusterAuthRecoveryScheduled map[string]bool
+
+	// ssrrCaches holds per-cluster SSRR rule caches for QueryPermissions.
+	ssrrCachesMu sync.Mutex
+	ssrrCaches   map[string]*capabilities.SSRRCache
 
 	// Per-cluster transport failure tracking.
 	// Tracks transport failures per-cluster, allowing isolated

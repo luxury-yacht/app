@@ -26,7 +26,7 @@ import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { DeleteResource } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
-import { getPermissionKey, useUserPermissions } from '@/core/capabilities';
+import { getPermissionKey, queryKindPermissions, useUserPermissions } from '@/core/capabilities';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 import { useFavToggle } from '@ui/favorites/FavToggle';
 
@@ -249,6 +249,11 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
           permissionMap.get(
             getPermissionKey(kind, 'delete', resource.namespace, null, resource.clusterId)
           ) ?? null;
+
+        // Lazy-load permissions for CRD kinds not in the static spec lists.
+        if (!deleteStatus) {
+          queryKindPermissions(kind, resource.namespace, resource.clusterId ?? null);
+        }
 
         return buildObjectActionItems({
           object: {

@@ -356,18 +356,14 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       return;
     }
 
-    const hasInFlight = capabilityDiagnostics.some((entry) => entry.inFlightCount > 0);
-    if (!hasInFlight) {
-      setDiagnosticsClock(Date.now());
-      return;
-    }
-
+    // Tick every second so age columns stay current.
+    setDiagnosticsClock(Date.now());
     const intervalId = window.setInterval(() => {
       setDiagnosticsClock(Date.now());
     }, 1000);
 
     return () => window.clearInterval(intervalId);
-  }, [capabilityDiagnostics, isOpen]);
+  }, [isOpen]);
 
   const domainScopedStates = useMemo(
     () =>
@@ -1470,12 +1466,12 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
           return null;
         }
 
-        const namespace = entry.namespace ?? 'Cluster';
+        const scope = entry.namespace ?? 'Cluster';
         const runtimeMs =
           entry.inFlightCount > 0 && entry.inFlightStartedAt
             ? Math.max(0, diagnosticsClock - entry.inFlightStartedAt)
             : null;
-        const lastCompleted = formatLastUpdated(entry.lastRunCompletedAt);
+        const age = formatLastUpdated(entry.lastRunCompletedAt);
         const lastDurationDisplay = formatDurationMs(entry.lastRunDurationMs);
         const runtimeDisplay = formatDurationMs(runtimeMs);
         const lastResultLabel =
@@ -1483,35 +1479,42 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         const descriptorCount = entry.lastDescriptors.length;
         const totalChecks =
           entry.totalChecks && entry.totalChecks > 0 ? entry.totalChecks : descriptorCount;
-        const descriptorSummary =
-          entry.lastDescriptors.length > 0
-            ? entry.lastDescriptors
-                .map(
-                  (descriptor) =>
-                    `${descriptor.resourceKind}/${descriptor.verb}${
-                      descriptor.subresource ? ` (${descriptor.subresource})` : ''
-                    }`
-                )
-                .join(', ')
-            : null;
-
-        const featureSet = new Set<string>();
+        // Group descriptors by feature for a combined summary.
+        const featureDescriptors = new Map<string, Map<string, string[]>>();
         entry.lastDescriptors.forEach((descriptor) => {
           const key = getPermissionKey(
             descriptor.resourceKind,
             descriptor.verb,
             descriptor.namespace ?? null,
-            descriptor.subresource ?? null
+            descriptor.subresource ?? null,
+            entry.clusterId ?? null
           );
           const status = permissionMap.get(key);
-          if (status?.feature) {
-            featureSet.add(status.feature);
+          const feature = status?.feature ?? 'Other';
+
+          let resources = featureDescriptors.get(feature);
+          if (!resources) {
+            resources = new Map<string, string[]>();
+            featureDescriptors.set(feature, resources);
           }
+          const resource = descriptor.resourceKind;
+          let verbs = resources.get(resource);
+          if (!verbs) {
+            verbs = [];
+            resources.set(resource, verbs);
+          }
+          const verbLabel = descriptor.subresource
+            ? `${descriptor.verb}/${descriptor.subresource}`
+            : descriptor.verb;
+          if (!verbs.includes(verbLabel)) {
+            verbs.push(verbLabel);
+          }
+
           const descriptorLabel = descriptor.subresource
             ? `${descriptor.resourceKind}/${descriptor.subresource} (${descriptor.verb})`
             : `${descriptor.resourceKind} (${descriptor.verb})`;
           descriptorIndex.set(key, {
-            namespace,
+            scope,
             descriptorLabel,
             resourceKind: descriptor.resourceKind,
             verb: descriptor.verb,
@@ -1520,41 +1523,56 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
             inFlightCount: entry.inFlightCount,
             runtimeDisplay,
             lastDurationDisplay,
-            lastCompleted,
+            age,
             lastResult: lastResultLabel,
             consecutiveFailureCount: entry.consecutiveFailureCount,
             totalChecks,
             lastError: entry.lastError ?? null,
           });
         });
-        const featureSummary = featureSet.size > 0 ? Array.from(featureSet).join(', ') : null;
+
+        // Build structured summary: feature name + resource lines.
+        const descriptorsByFeature =
+          featureDescriptors.size > 0
+            ? Array.from(featureDescriptors.entries()).map(([feature, resources]) => ({
+                feature,
+                resources: Array.from(resources.entries()).map(
+                  ([resource, verbs]) => `${resource} (${verbs.join(', ')})`
+                ),
+              }))
+            : null;
 
         return {
           key: entry.key,
-          namespace,
+          clusterId: entry.clusterId ?? '',
+          scope,
           pendingCount: entry.pendingCount,
           inFlightCount: entry.inFlightCount,
           runtimeDisplay,
           runtimeMs,
           lastDurationDisplay,
-          lastCompleted,
+          age,
           lastResult: lastResultLabel,
           lastError: entry.lastError ?? null,
           totalChecks,
           consecutiveFailureCount: entry.consecutiveFailureCount,
-          descriptorSummary,
-          featureSummary,
+          descriptorsByFeature,
+          // SSRR-specific diagnostics from the backend.
+          method: entry.method ?? null,
+          ssrrIncomplete: entry.ssrrIncomplete ?? null,
+          ssrrRuleCount: entry.ssrrRuleCount ?? null,
+          ssarFallbackCount: entry.ssarFallbackCount ?? null,
         };
       })
       .filter((row): row is NonNullable<typeof row> => row !== null)
       .sort((a, b) => {
-        if (a.namespace === 'Cluster' && b.namespace !== 'Cluster') {
+        if (a.scope === 'Cluster' && b.scope !== 'Cluster') {
           return -1;
         }
-        if (b.namespace === 'Cluster' && a.namespace !== 'Cluster') {
+        if (b.scope === 'Cluster' && a.scope !== 'Cluster') {
           return 1;
         }
-        return a.namespace.localeCompare(b.namespace);
+        return a.scope.localeCompare(b.scope);
       });
 
     return { capabilityBatchRows: batchRows, capabilityDescriptorIndex: descriptorIndex };
@@ -1565,33 +1583,34 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       ? null
       : new Set(getScopedFeaturesForView(viewType, activeClusterTab ?? null, activeNamespaceTab));
     const hasFeatureFilters = scopedFeatures != null && scopedFeatures.size > 0;
-    const selectedNamespaceKey = selectedNamespace?.toLowerCase() ?? null;
+    // Treat the "All Namespaces" synthetic scope as "no filter" — show all
+    // namespace-scoped permission rows rather than matching against the literal
+    // 'namespace:all' string (which would match nothing).
+    const selectedNamespaceKey =
+      selectedNamespace && !selectedNamespace.endsWith(':all')
+        ? selectedNamespace.toLowerCase()
+        : null;
 
     const allPermissionRows = Array.from(permissionMap.values()).map((status) => {
       const scope = status.descriptor.namespace ? status.descriptor.namespace : 'Cluster';
-      const allowedLabel = status.pending ? 'Pending' : status.allowed ? 'Allowed' : 'Denied';
+      const allowedLabel = status.pending ? 'Pending' : status.allowed ? 'True' : 'False';
       const reason = status.reason ?? status.error ?? undefined;
-      const descriptorKey = getPermissionKey(
-        status.descriptor.resourceKind,
-        status.descriptor.verb,
-        status.descriptor.namespace ?? null,
-        status.descriptor.subresource ?? null
-      );
+      // Use status.id directly — it's already the full cluster-qualified
+      // permission key, avoiding multi-cluster collisions.
+      const descriptorKey = status.id;
       const activity = capabilityDescriptorIndex.get(descriptorKey);
       const descriptorLabel =
         activity?.descriptorLabel ??
         (status.descriptor.subresource
           ? `${status.descriptor.resourceKind}/${status.descriptor.subresource} (${status.descriptor.verb})`
           : `${status.descriptor.resourceKind} (${status.descriptor.verb})`);
-      const namespaceLabel =
-        activity?.namespace ??
-        status.descriptor.namespace ??
-        (scope === 'Cluster' ? 'Cluster' : scope);
-      const lastCompleted = activity?.lastCompleted ?? { display: '—', tooltip: '—' };
+      const scopeLabel =
+        activity?.scope ?? status.descriptor.namespace ?? (scope === 'Cluster' ? 'Cluster' : scope);
+      const age = activity?.age ?? { display: '—', tooltip: '—' };
 
       return {
-        scope,
-        namespace: namespaceLabel,
+        clusterId: status.descriptor.clusterId,
+        scope: scopeLabel,
         descriptorLabel,
         resource: status.descriptor.resourceKind,
         verb: status.descriptor.verb,
@@ -1605,7 +1624,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         inFlightCount: activity?.inFlightCount ?? null,
         runtimeDisplay: activity?.runtimeDisplay ?? '—',
         lastDurationDisplay: activity?.lastDurationDisplay ?? '—',
-        lastCompleted,
+        age,
         lastResult: activity?.lastResult ?? '—',
         consecutiveFailureCount: activity?.consecutiveFailureCount ?? 0,
         totalChecks: activity?.totalChecks ?? null,
@@ -1615,6 +1634,12 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     });
 
     const scopedRows = allPermissionRows.filter((row) => {
+      // Always filter to the active cluster — never show permissions
+      // from other clusters.
+      if (selectedClusterId && row.clusterId && row.clusterId !== selectedClusterId) {
+        return false;
+      }
+
       if (showAllPermissions) {
         return true;
       }
@@ -1650,25 +1675,25 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     });
 
     return scopedRows.sort((a, b) => {
-      const namespaceA = a.namespace ?? a.scope;
-      const namespaceB = b.namespace ?? b.scope;
+      const scopeA = a.scope;
+      const scopeB = b.scope;
 
-      if (namespaceA === namespaceB) {
+      if (scopeA === scopeB) {
         if (a.descriptorLabel === b.descriptorLabel) {
           return a.verb.localeCompare(b.verb);
         }
         return a.descriptorLabel.localeCompare(b.descriptorLabel);
       }
 
-      if (namespaceA === 'Cluster') {
+      if (scopeA === 'Cluster') {
         return -1;
       }
 
-      if (namespaceB === 'Cluster') {
+      if (scopeB === 'Cluster') {
         return 1;
       }
 
-      return namespaceA.localeCompare(namespaceB);
+      return scopeA.localeCompare(scopeB);
     });
   }, [
     permissionMap,
@@ -1678,6 +1703,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     activeClusterTab,
     activeNamespaceTab,
     selectedNamespace,
+    selectedClusterId,
   ]);
 
   const telemetryMetrics = telemetrySummary?.metrics;
@@ -1998,11 +2024,15 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     const activeNamespaceKey = selectedNamespace?.toLowerCase() ?? null;
 
     for (const row of capabilityBatchRows) {
+      // Filter to active cluster only.
+      if (selectedClusterId && row.clusterId && row.clusterId !== selectedClusterId) {
+        continue;
+      }
       const isCurrent =
-        row.namespace === 'Cluster' ||
+        row.scope === 'Cluster' ||
         row.pendingCount > 0 ||
         row.inFlightCount > 0 ||
-        (activeNamespaceKey != null && row.namespace.toLowerCase() === activeNamespaceKey);
+        (activeNamespaceKey != null && row.scope.toLowerCase() === activeNamespaceKey);
       if (isCurrent) {
         current.push(row);
       } else {
@@ -2010,15 +2040,15 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       }
     }
     return { currentCapabilityRows: current, previousCapabilityRows: previous };
-  }, [capabilityBatchRows, selectedNamespace]);
+  }, [capabilityBatchRows, selectedNamespace, selectedClusterId]);
 
   // Capabilities Checks tab content.
   const capabilityChecksContent = (
     <CapabilityChecksTable
       currentRows={currentCapabilityRows}
       previousRows={previousCapabilityRows}
-      summary={`${capabilityBatchRows.length} namespace${
-        capabilityBatchRows.length === 1 ? '' : 's'
+      summary={`${currentCapabilityRows.length + previousCapabilityRows.length} namespace${
+        currentCapabilityRows.length + previousCapabilityRows.length === 1 ? '' : 's'
       }`}
     />
   );
@@ -2110,7 +2140,6 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       title="Diagnostics"
       isOpen={isOpen}
       defaultPosition="bottom"
-      defaultSize={{ width: 840, height: 320 }}
       allowMaximize
       maximizeTargetSelector=".content-body"
       onClose={onClose}

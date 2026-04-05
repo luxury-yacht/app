@@ -32,8 +32,7 @@ const {
   };
 
   const capabilityMockBag = {
-    registerNamespaceCapabilityDefinitions: vi.fn(),
-    evaluateNamespacePermissions: vi.fn(),
+    queryNamespacePermissions: vi.fn(),
   };
 
   const storeMockBag = {
@@ -85,8 +84,7 @@ vi.mock('@/core/capabilities', async () => {
   const actual = await vi.importActual<typeof import('@/core/capabilities')>('@/core/capabilities');
   return {
     ...actual,
-    registerNamespaceCapabilityDefinitions: capabilityMocks.registerNamespaceCapabilityDefinitions,
-    evaluateNamespacePermissions: capabilityMocks.evaluateNamespacePermissions,
+    queryNamespacePermissions: capabilityMocks.queryNamespacePermissions,
   };
 });
 
@@ -223,14 +221,7 @@ describe('NamespaceResourcesProvider', () => {
       `${testClusterId}|namespace:team-a`,
       expect.objectContaining({ isManual: true })
     );
-    expect(capabilityMocks.registerNamespaceCapabilityDefinitions).toHaveBeenCalledWith(
-      'team-a',
-      expect.any(Array),
-      expect.objectContaining({ ttlMs: expect.any(Number), clusterId: testClusterId })
-    );
-    expect(capabilityMocks.evaluateNamespacePermissions).toHaveBeenCalledWith('team-a', {
-      clusterId: testClusterId,
-    });
+    expect(capabilityMocks.queryNamespacePermissions).toHaveBeenCalledWith('team-a', testClusterId);
     expect(contextRef.current?.config.data).toEqual([]);
   });
 
@@ -387,9 +378,8 @@ describe('NamespaceResourcesProvider', () => {
 
     await runTimers();
 
-    const forcedRefresh = capabilityMocks.registerNamespaceCapabilityDefinitions.mock.calls.some(
-      ([, , options]) => options?.force === true
-    );
-    expect(forcedRefresh).toBe(true);
+    // The new permission system calls queryNamespacePermissions on mount.
+    // registerNamespaceCapabilityDefinitions is now a no-op.
+    expect(capabilityMocks.queryNamespacePermissions).toHaveBeenCalledWith('alpha', testClusterId);
   });
 });

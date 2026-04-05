@@ -52,6 +52,9 @@ const (
 	// PermissionCheckTimeout bounds SelfSubjectAccessReview calls.
 	PermissionCheckTimeout = 5 * time.Second
 
+	// SSRRFetchTimeout bounds SelfSubjectRulesReview calls.
+	SSRRFetchTimeout = 5 * time.Second
+
 	// PermissionPrimeTimeout bounds permission priming calls before informer registration.
 	PermissionPrimeTimeout = 10 * time.Second
 

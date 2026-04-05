@@ -12,7 +12,6 @@ import {
   DEFAULT_CAPABILITY_TTL_MS,
   computeCapabilityState,
   ensureCapabilityEntries,
-  ensureNamespaceActionCapabilities,
   evaluateNamespacePermissions,
   getCapabilityDiagnosticsSnapshot,
   getPermissionKey,
@@ -25,7 +24,7 @@ import {
   resetCapabilityStore,
   snapshotEntries,
   subscribeCapabilities,
-  subscribeDiagnostics,
+  subscribeOldDiagnostics,
   subscribeUserPermissions,
   useCapabilities,
   useCapabilityDiagnostics,
@@ -51,7 +50,6 @@ import {
   useCapabilities as rawUseCapabilities,
   useCapabilityDiagnostics as rawUseCapabilityDiagnostics,
 } from './hooks';
-import { ensureNamespaceActionCapabilities as rawEnsureNamespaceActionCapabilities } from './actionPlanner';
 import {
   ensureCapabilityEntries as rawEnsureEntries,
   requestCapabilities as rawRequestCapabilities,
@@ -86,12 +84,11 @@ describe('core/capabilities index exports', () => {
   });
 
   it('re-exports planner, store, and util helpers', () => {
-    expect(ensureNamespaceActionCapabilities).toBe(rawEnsureNamespaceActionCapabilities);
     expect(ensureCapabilityEntries).toBe(rawEnsureEntries);
     expect(requestCapabilities).toBe(rawRequestCapabilities);
     expect(snapshotEntries).toBe(rawSnapshotEntries);
     expect(subscribeCapabilities).toBe(rawSubscribe);
-    expect(subscribeDiagnostics).toBe(rawSubscribeDiagnostics);
+    expect(subscribeOldDiagnostics).toBe(rawSubscribeDiagnostics);
     expect(getCapabilityDiagnosticsSnapshot).toBe(rawGetDiagnosticsSnapshot);
     expect(resetCapabilityStore).toBe(rawResetStore);
     expect(computeCapabilityState).toBe(rawComputeCapabilityState);
