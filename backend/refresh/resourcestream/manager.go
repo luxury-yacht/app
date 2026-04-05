@@ -1829,7 +1829,10 @@ func (m *Manager) prepareBroadcast(domain, scope string, update Update) (Update,
 	scopedUpdate := update
 	scopedUpdate.Scope = scope
 
-	scopeSubs := m.subscribers[domain][scope]
+	var scopeSubs map[uint64]*subscription
+	if domainSubs, ok := m.subscribers[domain]; ok {
+		scopeSubs = domainSubs[scope]
+	}
 	key := bufferKey(domain, scope)
 	_, bufferExists := m.buffers[key]
 	if len(scopeSubs) > 0 || bufferExists {
@@ -1893,17 +1896,24 @@ func (m *Manager) dropSubscriber(domain, scope string, id uint64, sub *subscript
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	scopeSubs := m.subscribers[domain][scope]
+	domainSubs, ok := m.subscribers[domain]
+	if !ok {
+		return
+	}
+	scopeSubs, ok := domainSubs[scope]
+	if !ok {
+		return
+	}
 	current, exists := scopeSubs[id]
 	if !exists || current != sub {
 		return
 	}
 	delete(scopeSubs, id)
 	if len(scopeSubs) == 0 {
-		delete(m.subscribers[domain], scope)
+		delete(domainSubs, scope)
 		m.clearScopeStateLocked(domain, scope)
 	}
-	if len(m.subscribers[domain]) == 0 {
+	if len(domainSubs) == 0 {
 		delete(m.subscribers, domain)
 	}
 	sub.close(reason)

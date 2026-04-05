@@ -273,3 +273,134 @@ func TestNextBackoff(t *testing.T) {
 		t.Fatalf("expected max backoff cap %v, got %v", config.LogStreamBackoffMax, next)
 	}
 }
+
+func TestListPodsForCronJobBatched(t *testing.T) {
+	// Two Jobs owned by the same CronJob, each with one pod.
+	job1 := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace:       "default",
+			Name:            "cron-abc",
+			OwnerReferences: []metav1.OwnerReference{{Kind: "CronJob", Name: "cron"}},
+		},
+	}
+	job2 := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace:       "default",
+			Name:            "cron-def",
+			OwnerReferences: []metav1.OwnerReference{{Kind: "CronJob", Name: "cron"}},
+		},
+	}
+	pod1 := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "default",
+			Name:      "pod-abc",
+			Labels:    map[string]string{"job-name": "cron-abc"},
+		},
+	}
+	pod2 := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "default",
+			Name:      "pod-def",
+			Labels:    map[string]string{"job-name": "cron-def"},
+		},
+	}
+	// Unrelated pod in same namespace should not be returned.
+	unrelated := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "default",
+			Name:      "other-pod",
+			Labels:    map[string]string{"job-name": "unrelated-job"},
+		},
+	}
+
+	client := fake.NewClientset(job1, job2, pod1, pod2, unrelated)
+
+	// Count pod list calls to verify batching.
+	podListCalls := 0
+	client.PrependReactor("list", "pods", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		podListCalls++
+		return false, nil, nil // pass through to default handler
+	})
+
+	streamer := NewStreamer(client, nil, nil)
+	ctx := context.Background()
+	pods, selector, err := streamer.listPods(ctx, Options{
+		Kind:      "cronjob",
+		Namespace: "default",
+		Name:      "cron",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should return both pods in a single batched call.
+	if podListCalls != 1 {
+		t.Fatalf("expected 1 pod list call (batched), got %d", podListCalls)
+	}
+	if len(pods) != 2 {
+		t.Fatalf("expected 2 pods, got %d", len(pods))
+	}
+	names := map[string]bool{}
+	for _, p := range pods {
+		names[p.Name] = true
+	}
+	if !names["pod-abc"] || !names["pod-def"] {
+		t.Fatalf("expected pod-abc and pod-def, got %v", names)
+	}
+
+	// Selector must be empty so the watch sees pods from future Jobs.
+	if selector != "" {
+		t.Fatalf("expected empty selector for CronJob watch, got %q", selector)
+	}
+}
+
+func TestCronJobWatchPicksUpFutureJob(t *testing.T) {
+	// A new Job appears after the stream starts. The watch (empty selector)
+	// should deliver it, and consumeWatch should accept it via podBelongsToCronJob.
+	futureJob := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace:       "default",
+			Name:            "cron-ghi",
+			OwnerReferences: []metav1.OwnerReference{{Kind: "CronJob", Name: "cron"}},
+		},
+	}
+	client := fake.NewClientset(futureJob)
+	streamer := NewStreamer(client, nil, nil)
+
+	futurePod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "default",
+			Name:      "pod-ghi",
+			Labels:    map[string]string{"job-name": "cron-ghi"},
+		},
+	}
+
+	fw := &fakeWatch{ch: make(chan watch.Event, 1)}
+	var started []string
+	startPod := func(pod *corev1.Pod) { started = append(started, pod.Name) }
+	stopPod := func(string) {}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	resultCh := make(chan error, 1)
+	go func() {
+		resultCh <- streamer.consumeWatch(ctx, fw, Options{Kind: "cronjob", Namespace: "default", Name: "cron"}, map[string]bool{}, startPod, stopPod)
+	}()
+
+	// Deliver a pod from the future Job via the watch.
+	fw.ch <- watch.Event{Type: watch.Added, Object: futurePod}
+
+	// Close the watch to let consumeWatch return.
+	close(fw.ch)
+
+	select {
+	case <-resultCh:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for consumeWatch")
+	}
+
+	if len(started) != 1 || started[0] != "pod-ghi" {
+		t.Fatalf("expected future pod to be started, got %v", started)
+	}
+}

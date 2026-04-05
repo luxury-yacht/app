@@ -29,9 +29,9 @@ const (
 
 // NamespaceNetworkPermissions indicates which resources should be included in the domain.
 type NamespaceNetworkPermissions struct {
-	IncludeServices       bool
-	IncludeEndpointSlices bool
-	IncludeIngresses      bool
+	IncludeServices        bool
+	IncludeEndpointSlices  bool
+	IncludeIngresses       bool
 	IncludeNetworkPolicies bool
 }
 
@@ -190,11 +190,11 @@ func (b *NamespaceNetworkBuilder) buildSnapshot(
 		}
 		summary := NetworkSummary{
 			ClusterMeta: meta,
-			Kind:      "Service",
-			Name:      svc.Name,
-			Namespace: svc.Namespace,
-			Details:   describeService(svc, slicesByService[svc.Name]),
-			Age:       formatAge(svc.CreationTimestamp.Time),
+			Kind:        "Service",
+			Name:        svc.Name,
+			Namespace:   svc.Namespace,
+			Details:     describeService(svc, slicesByService[svc.Name]),
+			Age:         formatAge(svc.CreationTimestamp.Time),
 		}
 		resources = append(resources, summary)
 		if v := resourceVersionOrTimestamp(svc); v > version {
@@ -208,11 +208,11 @@ func (b *NamespaceNetworkBuilder) buildSnapshot(
 		}
 		summary := NetworkSummary{
 			ClusterMeta: meta,
-			Kind:      "Ingress",
-			Name:      ing.Name,
-			Namespace: ing.Namespace,
-			Details:   describeIngress(ing),
-			Age:       formatAge(ing.CreationTimestamp.Time),
+			Kind:        "Ingress",
+			Name:        ing.Name,
+			Namespace:   ing.Namespace,
+			Details:     describeIngress(ing),
+			Age:         formatAge(ing.CreationTimestamp.Time),
 		}
 		resources = append(resources, summary)
 		if v := resourceVersionOrTimestamp(ing); v > version {
@@ -226,11 +226,11 @@ func (b *NamespaceNetworkBuilder) buildSnapshot(
 		}
 		summary := NetworkSummary{
 			ClusterMeta: meta,
-			Kind:      "NetworkPolicy",
-			Name:      policy.Name,
-			Namespace: policy.Namespace,
-			Details:   describeNetworkPolicy(policy),
-			Age:       formatAge(policy.CreationTimestamp.Time),
+			Kind:        "NetworkPolicy",
+			Name:        policy.Name,
+			Namespace:   policy.Namespace,
+			Details:     describeNetworkPolicy(policy),
+			Age:         formatAge(policy.CreationTimestamp.Time),
 		}
 		resources = append(resources, summary)
 		if v := resourceVersionOrTimestamp(policy); v > version {
@@ -245,11 +245,11 @@ func (b *NamespaceNetworkBuilder) buildSnapshot(
 		namespace := svcSlices[0].Namespace
 		summary := NetworkSummary{
 			ClusterMeta: meta,
-			Kind:      "EndpointSlice",
-			Name:      svc,
-			Namespace: namespace,
-			Details:   describeEndpointSlices(svcSlices),
-			Age:       formatAge(earliestSliceCreation(svcSlices)),
+			Kind:        "EndpointSlice",
+			Name:        svc,
+			Namespace:   namespace,
+			Details:     describeEndpointSlices(svcSlices),
+			Age:         formatAge(earliestSliceCreation(svcSlices)),
 		}
 		resources = append(resources, summary)
 		for _, slice := range svcSlices {
@@ -306,7 +306,7 @@ func describeService(svc *corev1.Service, slices []*discoveryv1.EndpointSlice) s
 		}
 		parts = append(parts, fmt.Sprintf("Ports: %s", strings.Join(portStrings, ",")))
 	}
-	if ready := countReadyAddressesFromSlices(slices); ready > 0 {
+	if ready, _ := countAddressesFromSlices(slices); ready > 0 {
 		parts = append(parts, fmt.Sprintf("Addresses: %d", ready))
 	}
 	return strings.Join(parts, ", ")
@@ -357,46 +357,33 @@ func describeEndpointSlices(slices []*discoveryv1.EndpointSlice) string {
 		return "No endpoint slices"
 	}
 	parts := []string{fmt.Sprintf("Slices: %d", len(slices))}
-	ready := countReadyAddressesFromSlices(slices)
+	ready, notReady := countAddressesFromSlices(slices)
 	if ready > 0 {
 		parts = append(parts, fmt.Sprintf("Ready addresses: %d", ready))
 	}
-	if notReady := countNotReadyAddressesFromSlices(slices); notReady > 0 {
+	if notReady > 0 {
 		parts = append(parts, fmt.Sprintf("Not Ready: %d", notReady))
 	}
 	return strings.Join(parts, ", ")
 }
 
-func countReadyAddressesFromSlices(slices []*discoveryv1.EndpointSlice) int {
-	count := 0
+func countAddressesFromSlices(slices []*discoveryv1.EndpointSlice) (ready, notReady int) {
 	for _, slice := range slices {
 		if slice == nil {
 			continue
 		}
 		for _, ep := range slice.Endpoints {
-			if len(ep.Addresses) == 0 || !endpointReady(ep) {
+			if len(ep.Addresses) == 0 {
 				continue
 			}
-			count += len(ep.Addresses)
-		}
-	}
-	return count
-}
-
-func countNotReadyAddressesFromSlices(slices []*discoveryv1.EndpointSlice) int {
-	count := 0
-	for _, slice := range slices {
-		if slice == nil {
-			continue
-		}
-		for _, ep := range slice.Endpoints {
-			if len(ep.Addresses) == 0 || endpointReady(ep) {
-				continue
+			if endpointReady(ep) {
+				ready += len(ep.Addresses)
+			} else {
+				notReady += len(ep.Addresses)
 			}
-			count += len(ep.Addresses)
 		}
 	}
-	return count
+	return ready, notReady
 }
 
 func earliestSliceCreation(slices []*discoveryv1.EndpointSlice) time.Time {
