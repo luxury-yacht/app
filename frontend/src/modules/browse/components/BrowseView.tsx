@@ -26,7 +26,7 @@ import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import RollbackModal from '@shared/components/modals/RollbackModal';
 import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
-import { getPermissionKey, useUserPermissions } from '@/core/capabilities';
+import { getPermissionKey, queryKindPermissions, useUserPermissions } from '@/core/capabilities';
 import { DeleteResource, RestartWorkload } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
 import type { CatalogItem } from '@/core/refresh/types';
@@ -204,14 +204,20 @@ const BrowseView: React.FC<BrowseViewProps> = ({
       const cid = row.item.clusterId ?? undefined;
       const normalizedKind = kind;
 
-      const deleteStatus =
-        permissionMap.get(getPermissionKey(kind, 'delete', ns, null, cid)) ?? null;
+      const deleteKey = getPermissionKey(kind, 'delete', ns, null, cid);
+      const deleteStatus = permissionMap.get(deleteKey) ?? null;
       const restartStatus =
         permissionMap.get(getPermissionKey(normalizedKind, 'patch', ns, null, cid)) ?? null;
       const scaleStatus =
         permissionMap.get(getPermissionKey(normalizedKind, 'update', ns, 'scale', cid)) ?? null;
       const portForwardStatus =
         permissionMap.get(getPermissionKey('Pod', 'create', ns, 'portforward', cid)) ?? null;
+
+      // Lazy-load permissions for CRD kinds not in the static spec lists.
+      // First right-click fires the query; results are cached for subsequent opens.
+      if (!deleteStatus) {
+        queryKindPermissions(kind, ns, cid ?? null);
+      }
 
       return buildObjectActionItems({
         object: {

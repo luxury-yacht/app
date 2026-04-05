@@ -49,6 +49,7 @@ export {
 export {
   queryNamespacePermissions,
   queryClusterPermissions,
+  queryKindPermissions,
   initializePermissionStore,
   resetPermissionStore,
 } from './permissionStore';

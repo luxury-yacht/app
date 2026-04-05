@@ -100,6 +100,16 @@ vi.mock('@wailsjs/go/backend/App', () => ({
   DeleteResource: vi.fn(),
 }));
 
+// queryKindPermissions calls window.go.backend.App.QueryPermissions directly.
+(globalThis as unknown as Record<string, unknown>).window = {
+  ...((globalThis as unknown as Record<string, unknown>).window as Record<string, unknown>),
+  go: {
+    backend: {
+      App: { QueryPermissions: vi.fn().mockResolvedValue({ results: [], diagnostics: [] }) },
+    },
+  },
+};
+
 const baseCustom = {
   kind: 'Widget',
   name: 'gizmo',

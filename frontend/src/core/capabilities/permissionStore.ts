@@ -530,6 +530,91 @@ export const queryClusterPermissions = (clusterId: string): void => {
     });
 };
 
+/**
+ * Lazy-query permissions for a specific resource kind. Used for CRD custom
+ * objects whose kinds aren't in the static permission spec lists. Queries
+ * delete and patch verbs for the given kind. Results are cached under the
+ * standard permission key format and reused by all objects of the same kind
+ * in the same namespace.
+ *
+ * Designed for lazy/on-demand use (e.g., first context menu open on a CRD
+ * object). The first call fires the query; subsequent calls for the same
+ * kind+namespace within TTL are no-ops.
+ */
+export const queryKindPermissions = (
+  kind: string,
+  namespace: string | null,
+  clusterId: string | null
+): void => {
+  const cid = clusterId || currentClusterId;
+  if (!cid || !kind) return;
+
+  // Use a kind-specific query key so TTL-skip works per kind, not per namespace batch.
+  const ns = namespace ?? '';
+  const queryKey = `${cid}|${ns}|kind:${kind.toLowerCase()}`;
+  if (inFlightQueries.has(queryKey)) return;
+
+  const lastQuery = lastQueryTimestamps.get(queryKey);
+  if (lastQuery && Date.now() - lastQuery < PERMISSION_REFRESH_INTERVAL_MS) {
+    return;
+  }
+
+  const verbs = ['delete', 'patch'];
+  const payload = verbs.map((verb) => ({
+    id: getPermissionKey(kind, verb, namespace, null, cid),
+    clusterId: cid,
+    resourceKind: kind,
+    verb,
+    namespace: ns,
+    subresource: '',
+    name: '',
+  }));
+
+  // Register pending specs so the permission map immediately contains
+  // pending entries. This lets the context menu show "Awaiting permissions"
+  // on the first open rather than an empty action list.
+  pendingSpecs.set(
+    queryKey,
+    verbs.map((verb) => ({
+      spec: { kind, verb },
+      feature: '',
+      clusterId: cid,
+      namespace: namespace,
+    }))
+  );
+  notify();
+
+  inFlightQueries.add(queryKey);
+
+  QueryPermissions(payload)
+    .then((response) => {
+      for (const r of response.results) {
+        permissionResults.set(r.id, {
+          allowed: r.allowed,
+          source: r.source || 'error',
+          reason: r.reason || r.error || null,
+          descriptor: {
+            clusterId: r.clusterId,
+            resourceKind: r.resourceKind,
+            verb: r.verb,
+            namespace: r.namespace || null,
+            subresource: r.subresource || null,
+          },
+          feature: undefined,
+        });
+      }
+    })
+    .catch(() => {
+      // Silently fail — the permission just won't appear in the context menu.
+    })
+    .finally(() => {
+      inFlightQueries.delete(queryKey);
+      pendingSpecs.delete(queryKey);
+      recordQueryTimestamp(queryKey);
+      notify();
+    });
+};
+
 // ---------------------------------------------------------------------------
 // Public API for React hooks (useSyncExternalStore)
 // ---------------------------------------------------------------------------
