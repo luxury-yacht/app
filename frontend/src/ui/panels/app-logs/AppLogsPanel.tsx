@@ -503,7 +503,6 @@ function AppLogsPanel() {
       title="Application Logs"
       isOpen={panelState.isOpen}
       defaultPosition="bottom"
-      defaultSize={{ width: 1030, height: 400 }}
       allowMaximize
       maximizeTargetSelector=".content-body"
       onClose={() => panelState.setOpen(false)}
