@@ -1285,16 +1285,16 @@ describe('DiagnosticsPanel component', () => {
     expect(batchRows[1].textContent).toContain('Cluster');
     expect(batchRows[2].className).toContain('diagnostics-permission-denied');
     const batchCells = batchRows[2].querySelectorAll<HTMLTableCellElement>('td');
+    // Column order (15 cols): Namespace(0), InFlight(1), Runtime(2), Duration(3),
+    // Age(4), Result(5), Failures(6), Checks(7), Error(8), Method(9),
+    // Incomplete(10), Rules(11), SSARFallback(12), Descriptors(13), Features(14).
     expect(batchCells[0].textContent?.trim()).toBe('default');
-    expect(batchCells[1].textContent?.trim()).toBe('2');
-    expect(batchCells[2].textContent?.trim()).toBe('1');
-    expect(batchCells[3].textContent?.trim()).toMatch(/s$/);
-    expect(batchCells[6].textContent?.trim()).toBe('Error');
-    expect(batchCells[9].textContent).toContain('Denied by policy');
-    // Descriptors are rendered in grouped format: "resource: verb(s)".
-    // Indices shifted by 4 due to SSRR columns (Method, Incomplete, Rules, SSAR Fallback).
-    expect(batchCells[14].textContent).toContain('deployments:');
-    expect(batchCells[14].textContent).toContain('pods:');
+    expect(batchCells[1].textContent?.trim()).toBe('1'); // In Flight
+    expect(batchCells[2].textContent?.trim()).toMatch(/s$/); // Runtime
+    expect(batchCells[5].textContent?.trim()).toBe('Error'); // Result
+    expect(batchCells[8].textContent).toContain('Denied by policy'); // Error
+    // Descriptors cell (index 13) contains grouped format: "resource: verb(s)".
+    expect(batchCells[13].textContent).toContain('deployments:');
 
     await act(async () => {
       tabButtons[3].click();

@@ -244,24 +244,25 @@
 
 .diagnostics-table {
   width: 100%;
-  border-collapse: collapse;
-  font-size: 0.78rem;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.75rem;
 }
 
 .diagnostics-table th,
+.diagnostics-table thead,
 .diagnostics-table td {
+  background-clip: padding-box;
   padding: 0.3rem 0.4rem;
-  border-bottom: 1px solid var(--color-table-border);
   text-align: left;
   white-space: nowrap;
   vertical-align: top;
 }
 
-.diagnostics-table th {
+.diagnostics-table th,
+.diagnostics-table thead {
   background: var(--color-bg-secondary);
   color: var(--color-text-secondary);
-  font-size: 0.75rem;
-  font-weight: 600;
   text-transform: uppercase;
   position: sticky;
   top: 0;
@@ -269,6 +270,7 @@
 }
 
 .diagnostics-table td {
+  border-bottom: 1px solid var(--color-table-border);
   line-height: 1.5;
 }
 
@@ -321,7 +323,7 @@ tr.diagnostics-row-expanded .diagnostics-permission-reason {
 }
 
 .diagnostics-tabs {
-  padding: 0.35rem 0.5rem 0;
+  padding: 0.3rem 0.5rem 0;
 }
 
 .diagnostics-tabs .tab-item {

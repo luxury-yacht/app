@@ -68,8 +68,7 @@ const CapabilityRow: React.FC<{
     className={row.consecutiveFailureCount > 1 ? 'diagnostics-permission-denied' : undefined}
   >
     <td>{row.namespace}</td>
-    <td>{row.pendingCount}</td>
-    <td>{row.inFlightCount}</td>
+    <td>{row.inFlightCount ? row.inFlightCount : '—'}</td>
     <td title={row.runtimeMs ? `${row.runtimeMs}ms elapsed` : ''}>{row.runtimeDisplay}</td>
     <td>{row.lastDurationDisplay}</td>
     <td title={row.age.tooltip}>{row.age.display}</td>
@@ -123,7 +122,7 @@ const CapabilityRow: React.FC<{
   </tr>
 );
 
-const COLUMN_COUNT = 16;
+const COLUMN_COUNT = 15;
 
 export const CapabilityChecksTable: React.FC<CapabilityChecksTableProps> = ({
   currentRows,
@@ -159,7 +158,6 @@ export const CapabilityChecksTable: React.FC<CapabilityChecksTableProps> = ({
           <thead>
             <tr>
               <th>Namespace</th>
-              <th>Pending</th>
               <th>In Flight</th>
               <th>Runtime</th>
               <th>Duration</th>
