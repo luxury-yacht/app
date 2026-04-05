@@ -53,15 +53,13 @@ export const EffectivePermissionsTable: React.FC<PermissionsTableProps> = ({
         <table className="diagnostics-table">
           <thead>
             <tr>
-              <th>Namespace</th>
+              <th>Scope</th>
               <th>Descriptor</th>
               <th>Feature</th>
               <th>In Flight</th>
               <th>Duration</th>
               <th>Age</th>
-              <th>Result</th>
               <th>Failures</th>
-              <th>Checks</th>
               <th>Allowed</th>
               <th>Error</th>
               <th>Reason</th>
@@ -70,7 +68,7 @@ export const EffectivePermissionsTable: React.FC<PermissionsTableProps> = ({
           <tbody>
             {rows.length === 0 ? (
               <tr className="diagnostics-empty">
-                <td colSpan={12}>No capability data available yet.</td>
+                <td colSpan={10}>No capability data available yet.</td>
               </tr>
             ) : (
               rows.map((row) => (
@@ -87,7 +85,7 @@ export const EffectivePermissionsTable: React.FC<PermissionsTableProps> = ({
                   onClick={() => toggleRow(row.id)}
                   style={{ cursor: 'pointer' }}
                 >
-                  <td>{row.namespace}</td>
+                  <td>{row.scope}</td>
                   <td>{row.descriptorLabel}</td>
                   <td>
                     <span className="diagnostics-table-feature" title={row.feature ?? undefined}>
@@ -97,9 +95,7 @@ export const EffectivePermissionsTable: React.FC<PermissionsTableProps> = ({
                   <td>{row.inFlightCount ? row.inFlightCount : '—'}</td>
                   <td>{row.lastDurationDisplay}</td>
                   <td title={row.age.tooltip}>{row.age.display}</td>
-                  <td>{row.lastResult}</td>
                   <td>{row.consecutiveFailureCount}</td>
-                  <td>{row.totalChecks != null ? row.totalChecks : '—'}</td>
                   <td>{row.allowed}</td>
                   <td className="diagnostics-permission-reason">{row.lastError ?? '—'}</td>
                   <td className="diagnostics-permission-reason">{row.reason ?? '—'}</td>

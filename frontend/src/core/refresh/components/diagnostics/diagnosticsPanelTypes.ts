@@ -119,7 +119,6 @@ export interface CapabilityBatchRow {
 
 export interface PermissionRow {
   scope: string;
-  namespace: string;
   descriptorLabel: string;
   resource: string;
   verb: string;

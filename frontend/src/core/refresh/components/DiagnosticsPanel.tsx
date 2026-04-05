@@ -1577,7 +1577,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
 
     const allPermissionRows = Array.from(permissionMap.values()).map((status) => {
       const scope = status.descriptor.namespace ? status.descriptor.namespace : 'Cluster';
-      const allowedLabel = status.pending ? 'Pending' : status.allowed ? 'Allowed' : 'Denied';
+      const allowedLabel = status.pending ? 'Pending' : status.allowed ? 'True' : 'False';
       const reason = status.reason ?? status.error ?? undefined;
       // Use status.id directly — it's already the full cluster-qualified
       // permission key, avoiding multi-cluster collisions.
@@ -1595,8 +1595,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       const age = activity?.age ?? { display: '—', tooltip: '—' };
 
       return {
-        scope,
-        namespace: namespaceLabel,
+        scope: namespaceLabel,
         descriptorLabel,
         resource: status.descriptor.resourceKind,
         verb: status.descriptor.verb,
@@ -1655,25 +1654,25 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     });
 
     return scopedRows.sort((a, b) => {
-      const namespaceA = a.namespace ?? a.scope;
-      const namespaceB = b.namespace ?? b.scope;
+      const scopeA = a.scope;
+      const scopeB = b.scope;
 
-      if (namespaceA === namespaceB) {
+      if (scopeA === scopeB) {
         if (a.descriptorLabel === b.descriptorLabel) {
           return a.verb.localeCompare(b.verb);
         }
         return a.descriptorLabel.localeCompare(b.descriptorLabel);
       }
 
-      if (namespaceA === 'Cluster') {
+      if (scopeA === 'Cluster') {
         return -1;
       }
 
-      if (namespaceB === 'Cluster') {
+      if (scopeB === 'Cluster') {
         return 1;
       }
 
-      return namespaceA.localeCompare(namespaceB);
+      return scopeA.localeCompare(scopeB);
     });
   }, [
     permissionMap,
