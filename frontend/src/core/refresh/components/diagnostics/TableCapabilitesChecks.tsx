@@ -67,7 +67,7 @@ const CapabilityRow: React.FC<{
     key={row.key}
     className={row.consecutiveFailureCount > 1 ? 'diagnostics-permission-denied' : undefined}
   >
-    <td>{row.namespace}</td>
+    <td>{row.scope}</td>
     <td>{row.inFlightCount ? row.inFlightCount : '—'}</td>
     <td title={row.runtimeMs ? `${row.runtimeMs}ms elapsed` : ''}>{row.runtimeDisplay}</td>
     <td>{row.lastDurationDisplay}</td>
@@ -157,7 +157,7 @@ export const CapabilityChecksTable: React.FC<CapabilityChecksTableProps> = ({
         <table className="diagnostics-table">
           <thead>
             <tr>
-              <th>Namespace</th>
+              <th>Scope</th>
               <th>In Flight</th>
               <th>Runtime</th>
               <th>Duration</th>

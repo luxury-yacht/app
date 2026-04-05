@@ -80,7 +80,7 @@ export interface DiagnosticsStreamRow {
 }
 
 export interface CapabilityDescriptorActivityDetails {
-  namespace: string;
+  scope: string;
   descriptorLabel: string;
   resourceKind: string;
   verb: string;
@@ -99,7 +99,7 @@ export interface CapabilityDescriptorActivityDetails {
 export interface CapabilityBatchRow {
   key: string;
   clusterId: string;
-  namespace: string;
+  scope: string;
   pendingCount: number;
   inFlightCount: number;
   runtimeDisplay: string;

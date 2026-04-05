@@ -1466,7 +1466,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
           return null;
         }
 
-        const namespace = entry.namespace ?? 'Cluster';
+        const scope = entry.namespace ?? 'Cluster';
         const runtimeMs =
           entry.inFlightCount > 0 && entry.inFlightStartedAt
             ? Math.max(0, diagnosticsClock - entry.inFlightStartedAt)
@@ -1508,7 +1508,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
             ? `${descriptor.resourceKind}/${descriptor.subresource} (${descriptor.verb})`
             : `${descriptor.resourceKind} (${descriptor.verb})`;
           descriptorIndex.set(key, {
-            namespace,
+            scope,
             descriptorLabel,
             resourceKind: descriptor.resourceKind,
             verb: descriptor.verb,
@@ -1529,7 +1529,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         return {
           key: entry.key,
           clusterId: entry.clusterId ?? '',
-          namespace,
+          scope,
           pendingCount: entry.pendingCount,
           inFlightCount: entry.inFlightCount,
           runtimeDisplay,
@@ -1551,13 +1551,13 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       })
       .filter((row): row is NonNullable<typeof row> => row !== null)
       .sort((a, b) => {
-        if (a.namespace === 'Cluster' && b.namespace !== 'Cluster') {
+        if (a.scope === 'Cluster' && b.scope !== 'Cluster') {
           return -1;
         }
-        if (b.namespace === 'Cluster' && a.namespace !== 'Cluster') {
+        if (b.scope === 'Cluster' && a.scope !== 'Cluster') {
           return 1;
         }
-        return a.namespace.localeCompare(b.namespace);
+        return a.scope.localeCompare(b.scope);
       });
 
     return { capabilityBatchRows: batchRows, capabilityDescriptorIndex: descriptorIndex };
@@ -1589,15 +1589,13 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         (status.descriptor.subresource
           ? `${status.descriptor.resourceKind}/${status.descriptor.subresource} (${status.descriptor.verb})`
           : `${status.descriptor.resourceKind} (${status.descriptor.verb})`);
-      const namespaceLabel =
-        activity?.namespace ??
-        status.descriptor.namespace ??
-        (scope === 'Cluster' ? 'Cluster' : scope);
+      const scopeLabel =
+        activity?.scope ?? status.descriptor.namespace ?? (scope === 'Cluster' ? 'Cluster' : scope);
       const age = activity?.age ?? { display: '—', tooltip: '—' };
 
       return {
         clusterId: status.descriptor.clusterId,
-        scope: namespaceLabel,
+        scope: scopeLabel,
         descriptorLabel,
         resource: status.descriptor.resourceKind,
         verb: status.descriptor.verb,
@@ -2016,10 +2014,10 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         continue;
       }
       const isCurrent =
-        row.namespace === 'Cluster' ||
+        row.scope === 'Cluster' ||
         row.pendingCount > 0 ||
         row.inFlightCount > 0 ||
-        (activeNamespaceKey != null && row.namespace.toLowerCase() === activeNamespaceKey);
+        (activeNamespaceKey != null && row.scope.toLowerCase() === activeNamespaceKey);
       if (isCurrent) {
         current.push(row);
       } else {
