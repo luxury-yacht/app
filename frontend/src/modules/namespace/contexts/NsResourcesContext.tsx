@@ -869,6 +869,7 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     ]
   );
 
+  // Single-namespace permission query.
   useEffect(() => {
     const capabilityNamespace = getCapabilityNamespace(currentNamespace);
     if (!capabilityNamespace) {
@@ -876,6 +877,62 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     }
     queryNamespacePermissions(capabilityNamespace, namespaceClusterId ?? null);
   }, [currentNamespace, namespaceClusterId]);
+
+  // All Namespaces: collect distinct (clusterId, namespace) pairs from
+  // loaded domain data and query permissions for each. This is the fix
+  // for the broken All Namespaces permission-gated context menus.
+  useEffect(() => {
+    // Only run when All Namespaces is active.
+    if (getCapabilityNamespace(currentNamespace) !== null) {
+      return;
+    }
+
+    const allDomainData = [
+      workloads.data,
+      pods.data,
+      config.data,
+      network.data,
+      rbac.data,
+      storage.data,
+      autoscaling.data,
+      quotas.data,
+      custom.data,
+      events.data,
+    ];
+
+    // Collect distinct (clusterId|namespace) pairs from all loaded objects.
+    const seen = new Set<string>();
+    for (const domainList of allDomainData) {
+      if (!Array.isArray(domainList)) continue;
+      for (const obj of domainList) {
+        const ns = obj?.namespace;
+        const cid = obj?.clusterId ?? namespaceClusterId;
+        if (ns && cid) {
+          seen.add(`${cid}|${ns}`);
+        }
+      }
+    }
+
+    // Query permissions for each unique pair. The backend deduplicates
+    // via singleflight and caches results, so redundant calls are cheap.
+    for (const key of seen) {
+      const [cid, ns] = key.split('|');
+      queryNamespacePermissions(ns, cid);
+    }
+  }, [
+    currentNamespace,
+    namespaceClusterId,
+    workloads.data,
+    pods.data,
+    config.data,
+    network.data,
+    rbac.data,
+    storage.data,
+    autoscaling.data,
+    quotas.data,
+    custom.data,
+    events.data,
+  ]);
 
   return (
     <NamespaceResourcesContext.Provider value={contextValue}>
