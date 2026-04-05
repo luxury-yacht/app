@@ -25,7 +25,7 @@ export interface PermissionEntry {
     subresource: string | null;
   };
   /** Which permission list produced this query (e.g., "workloads", "cluster") */
-  feature: string | null;
+  feature?: string;
 }
 
 /** The public permission status exposed via useUserPermissions(). */
@@ -43,7 +43,7 @@ export interface PermissionStatus {
     namespace: string | null;
     subresource: string | null;
   };
-  feature: string | null;
+  feature?: string;
   entry: {
     status: 'loading' | 'ready' | 'error';
   };
@@ -67,7 +67,13 @@ export interface PermissionQueryDiagnostics {
   ssrrIncomplete?: boolean;
   ssrrRuleCount?: number;
   ssarFallbackCount?: number;
-  lastDescriptors: PermissionSpec[];
+  /** Descriptors in the last query batch. Uses the shape DiagnosticsPanel expects. */
+  lastDescriptors: Array<{
+    resourceKind: string;
+    verb: string;
+    namespace?: string;
+    subresource?: string;
+  }>;
 }
 
 export type PermissionKey = string;

@@ -1501,7 +1501,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
             descriptor.resourceKind,
             descriptor.verb,
             descriptor.namespace ?? null,
-            descriptor.subresource ?? null
+            descriptor.subresource ?? null,
+            entry.clusterId ?? null
           );
           const status = permissionMap.get(key);
           if (status?.feature) {
@@ -1544,6 +1545,11 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
           consecutiveFailureCount: entry.consecutiveFailureCount,
           descriptorSummary,
           featureSummary,
+          // SSRR-specific diagnostics from the backend.
+          method: entry.method ?? null,
+          ssrrIncomplete: entry.ssrrIncomplete ?? null,
+          ssrrRuleCount: entry.ssrrRuleCount ?? null,
+          ssarFallbackCount: entry.ssarFallbackCount ?? null,
         };
       })
       .filter((row): row is NonNullable<typeof row> => row !== null)
@@ -1571,12 +1577,9 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       const scope = status.descriptor.namespace ? status.descriptor.namespace : 'Cluster';
       const allowedLabel = status.pending ? 'Pending' : status.allowed ? 'Allowed' : 'Denied';
       const reason = status.reason ?? status.error ?? undefined;
-      const descriptorKey = getPermissionKey(
-        status.descriptor.resourceKind,
-        status.descriptor.verb,
-        status.descriptor.namespace ?? null,
-        status.descriptor.subresource ?? null
-      );
+      // Use status.id directly — it's already the full cluster-qualified
+      // permission key, avoiding multi-cluster collisions.
+      const descriptorKey = status.id;
       const activity = capabilityDescriptorIndex.get(descriptorKey);
       const descriptorLabel =
         activity?.descriptorLabel ??

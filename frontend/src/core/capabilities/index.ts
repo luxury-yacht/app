@@ -63,12 +63,7 @@ export {
 // Old catalog — kept for any direct consumers during migration.
 export { CLUSTER_CAPABILITIES } from './catalog';
 
-// Old action planner — kept until Plan 3 removes it.
-export {
-  ensureNamespaceActionCapabilities,
-  type CapabilityActionId,
-  type RestartableOwnerKind,
-} from './actionPlanner';
+// actionPlanner.ts removed — was dead code (never called from components).
 
 // Old store — kept for any direct consumers during migration.
 export {

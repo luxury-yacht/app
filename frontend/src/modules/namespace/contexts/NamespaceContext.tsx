@@ -20,7 +20,7 @@ import React, {
 import { formatAge } from '@utils/ageFormatter';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { errorHandler } from '@utils/errorHandler';
-import { evaluateNamespacePermissions } from '@/core/capabilities';
+import { queryNamespacePermissions } from '@/core/capabilities';
 import { refreshOrchestrator, useRefreshScopedDomain } from '@/core/refresh';
 import { buildClusterScopeList } from '@/core/refresh/clusterScope';
 import { eventBus } from '@/core/events';
@@ -319,7 +319,7 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
     lastEvaluatedNamespaceRef.current = evaluationKey;
     // Scope namespace permission checks to the active cluster.
     const clusterId = selectedNamespaceClusterId ?? selectedClusterId;
-    evaluateNamespacePermissions(namespaceToEvaluate, { clusterId });
+    queryNamespacePermissions(namespaceToEvaluate, clusterId ?? null);
   }, [selectedNamespace, selectedClusterId, selectedNamespaceClusterId]);
 
   useEffect(() => {

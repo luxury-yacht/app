@@ -15,7 +15,6 @@ import type { ViewType } from '@/types/navigation/views';
 import type { TelemetrySummary } from '../types';
 import type {
   CapabilityNamespaceDiagnostics,
-  CapabilityEntry,
   NormalizedCapabilityDescriptor,
 } from '@/core/capabilities/types';
 import type { PermissionStatus } from '@/core/capabilities/bootstrap';
@@ -1193,16 +1192,12 @@ describe('DiagnosticsPanel component', () => {
       },
     ];
 
-    const createEntry = (
-      descriptor: NormalizedCapabilityDescriptor,
-      overrides: Partial<CapabilityEntry> = {}
-    ): CapabilityEntry => ({
-      key: `entry-${descriptor.id}`,
-      request: descriptor,
-      status: overrides.status ?? 'ready',
-      result: overrides.result,
-      error: overrides.error,
-      lastFetched: overrides.lastFetched ?? now - 1000,
+    const toDescriptor = (d: NormalizedCapabilityDescriptor): PermissionStatus['descriptor'] => ({
+      clusterId: d.clusterId ?? 'default',
+      resourceKind: d.resourceKind,
+      verb: d.verb,
+      namespace: d.namespace ?? null,
+      subresource: d.subresource ?? null,
     });
 
     const permissionStatuses: PermissionStatus[] = [
@@ -1212,55 +1207,42 @@ describe('DiagnosticsPanel component', () => {
         pending: false,
         reason: 'Forbidden',
         error: 'Denied by policy',
-        descriptor: descriptorDefault,
-        entry: createEntry(descriptorDefault, {
-          result: {
-            id: descriptorDefault.id,
-            verb: descriptorDefault.verb,
-            resourceKind: descriptorDefault.resourceKind,
-            namespace: descriptorDefault.namespace,
-            allowed: false,
-          },
-        }),
+        source: 'denied',
+        descriptor: toDescriptor(descriptorDefault),
+        entry: { status: 'ready' },
         feature: 'Namespace workloads',
       },
       {
         id: 'perm-exec',
         allowed: false,
         pending: true,
-        descriptor: descriptorExec,
-        entry: createEntry(descriptorExec, { status: 'loading' }),
+        reason: null,
+        error: null,
+        source: null,
+        descriptor: toDescriptor(descriptorExec),
+        entry: { status: 'loading' },
         feature: 'Namespace workloads',
       },
       {
         id: 'perm-cluster',
         allowed: true,
         pending: false,
-        descriptor: descriptorCluster,
-        entry: createEntry(descriptorCluster, {
-          result: {
-            id: descriptorCluster.id,
-            verb: descriptorCluster.verb,
-            resourceKind: descriptorCluster.resourceKind,
-            allowed: true,
-          },
-        }),
+        reason: null,
+        error: null,
+        source: 'ssrr',
+        descriptor: toDescriptor(descriptorCluster),
+        entry: { status: 'ready' },
         feature: 'Cluster RBAC',
       },
       {
         id: 'perm-other',
         allowed: true,
         pending: false,
-        descriptor: descriptorOther,
-        entry: createEntry(descriptorOther, {
-          result: {
-            id: descriptorOther.id,
-            verb: descriptorOther.verb,
-            resourceKind: descriptorOther.resourceKind,
-            namespace: descriptorOther.namespace,
-            allowed: true,
-          },
-        }),
+        reason: null,
+        error: null,
+        source: 'ssrr',
+        descriptor: toDescriptor(descriptorOther),
+        entry: { status: 'ready' },
         feature: 'Namespace workloads',
       },
     ];

@@ -72,7 +72,6 @@ interface QueryPermissionsResponse {
   diagnostics: QueryResponseDiagnostics[];
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 declare const window: {
   go: Record<string, Record<string, Record<string, (...args: any[]) => any>>>;
 };
@@ -168,7 +167,7 @@ export const makePermissionStatus = (
     error: isError ? entry.reason : null,
     source: entry.source as PermissionStatus['source'],
     descriptor: { ...entry.descriptor },
-    feature: entry.feature,
+    feature: entry.feature ?? undefined,
     entry: {
       status: isError ? 'error' : 'ready',
     },
@@ -190,7 +189,7 @@ const makePendingStatus = (
   error: null,
   source: null,
   descriptor: { ...descriptor },
-  feature,
+  feature: feature ?? undefined,
   entry: { status: 'loading' },
 });
 
@@ -312,7 +311,7 @@ const applyResults = (results: QueryResponseResult[], batchItems: QueryBatchItem
 
   for (const r of results) {
     const key = r.id;
-    const feature = featureByKey.get(key) ?? null;
+    const feature = featureByKey.get(key);
     const entry: PermissionEntry = {
       allowed: r.allowed,
       source: r.source || 'error',
@@ -571,7 +570,12 @@ const beginQueryDiagnostics = (
   diag.inFlightCount += checkCount;
   diag.inFlightStartedAt = diag.inFlightStartedAt ?? Date.now();
   diag.totalChecks = checkCount;
-  diag.lastDescriptors = specs;
+  diag.lastDescriptors = specs.map((s) => ({
+    resourceKind: s.kind,
+    verb: s.verb,
+    namespace: namespace ?? undefined,
+    subresource: s.subresource,
+  }));
   diag.method = method;
   notifyDiagnostics();
 };
@@ -633,11 +637,9 @@ export const getPermissionQueryDiagnosticsSnapshot = (): PermissionQueryDiagnost
 /** Match the backend permission cache TTL. */
 const PERMISSION_REFRESH_INTERVAL_MS = 2 * 60 * 1000; // 2 minutes
 
-/** Tracks when each (clusterId|namespace) pair was last queried. */
-const lastQueryTimestamps = new Map<string, number>();
-
 /**
  * Called in .finally() of each query to record the timestamp.
+ * Uses the module-level lastQueryTimestamps map declared above.
  */
 const recordQueryTimestamp = (queryKey: string): void => {
   lastQueryTimestamps.set(queryKey, Date.now());

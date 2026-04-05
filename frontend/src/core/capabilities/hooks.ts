@@ -53,7 +53,6 @@ interface QueryPermissionsResponse {
   results: QueryResponseResult[];
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 declare const window: {
   go: Record<string, Record<string, Record<string, (...args: any[]) => any>>>;
 };
@@ -188,7 +187,6 @@ export const useCapabilities = (
         namedResultsRef.current = nextMap;
         setNamedResultsVersion((v) => v + 1);
       });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, force, namedDescriptors, ttlMs, refreshKey]);
 
   // Build the unified state map from both sources.

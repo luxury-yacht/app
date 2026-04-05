@@ -17,7 +17,7 @@ import { getDefaultObjectPanelPosition } from '@core/settings/appPreferences';
 import { errorHandler } from '@utils/errorHandler';
 import { CurrentObjectPanelContext } from '@modules/object-panel/hooks/useObjectPanel';
 import { useObjectPanelState } from '@/core/contexts/ObjectPanelStateContext';
-import { evaluateNamespacePermissions } from '@/core/capabilities';
+import { queryNamespacePermissions } from '@/core/capabilities';
 import {
   clearRequestedObjectPanelTab,
   getRequestedObjectPanelTab,
@@ -236,7 +236,7 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
     }
 
     lastEvaluatedNamespaceRef.current = normalized;
-    evaluateNamespacePermissions(namespace, { clusterId: objectData?.clusterId ?? null });
+    queryNamespacePermissions(namespace, objectData?.clusterId ?? null);
   }, [objectData?.clusterId, objectData?.namespace]);
 
   const featureSupport = useObjectPanelFeatureSupport(objectKind, RESOURCE_CAPABILITIES);

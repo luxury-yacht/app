@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -64,13 +65,18 @@ func TestSSRRCache_FreshEntry(t *testing.T) {
 }
 
 func TestSSRRCache_StaleWithinGrace(t *testing.T) {
+	var mu sync.Mutex
 	now := time.Now()
-	clock := func() time.Time { return now }
+	clock := func() time.Time {
+		mu.Lock()
+		defer mu.Unlock()
+		return now
+	}
 	status := makeRulesStatus(false, podListRule())
 
-	fetchCount := 0
+	var fetchCount atomic.Int32
 	fetch := func(ctx context.Context, namespace string) (*authorizationv1.SubjectRulesReviewStatus, error) {
-		fetchCount++
+		fetchCount.Add(1)
 		return status, nil
 	}
 
@@ -78,12 +84,14 @@ func TestSSRRCache_StaleWithinGrace(t *testing.T) {
 
 	// Seed cache.
 	cache.GetRules(context.Background(), "default")
-	if fetchCount != 1 {
-		t.Fatalf("expected 1 fetch, got %d", fetchCount)
+	if fetchCount.Load() != 1 {
+		t.Fatalf("expected 1 fetch, got %d", fetchCount.Load())
 	}
 
 	// Advance past TTL but within grace.
+	mu.Lock()
 	now = now.Add(2*time.Minute + 15*time.Second)
+	mu.Unlock()
 
 	got, err := cache.GetRules(context.Background(), "default")
 	if err != nil {
@@ -93,11 +101,16 @@ func TestSSRRCache_StaleWithinGrace(t *testing.T) {
 	if got.Incomplete {
 		t.Error("expected stale result with incomplete=false")
 	}
-	// Background refresh should have triggered (fetch count may be 2).
-	// Give background goroutine a moment.
-	time.Sleep(10 * time.Millisecond)
-	if fetchCount < 2 {
-		t.Errorf("expected background fetch, got count %d", fetchCount)
+	// Background refresh should have triggered.
+	// Poll briefly rather than relying on a fixed sleep.
+	for range 50 {
+		if fetchCount.Load() >= 2 {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if fetchCount.Load() < 2 {
+		t.Errorf("expected background fetch, got count %d", fetchCount.Load())
 	}
 }
 
