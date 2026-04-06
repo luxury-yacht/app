@@ -185,14 +185,25 @@ const computeCapabilityDescriptors = (
   if (featureSupport.shell) {
     add(
       {
-        id: 'shell-exec',
+        id: 'shell-exec-get',
+        verb: 'get',
+        resourceKind,
+        namespace,
+        name: resourceName,
+        subresource: 'exec',
+      },
+      'shellExecGet'
+    );
+    add(
+      {
+        id: 'shell-exec-create',
         verb: 'create',
         resourceKind,
         namespace,
         name: resourceName,
         subresource: 'exec',
       },
-      'shell'
+      'shellExecCreate'
     );
   }
 
@@ -291,6 +302,12 @@ export const useObjectPanelCapabilities = ({
     if (!capabilitiesEnabled) {
       return createDefaultCapabilityStates();
     }
+    const shellExecGet = getCapabilityState(capabilityDescriptorInfo.idMap.shellExecGet);
+    const shellExecCreate = getCapabilityState(capabilityDescriptorInfo.idMap.shellExecCreate);
+    const shellAllowed = shellExecGet.allowed || shellExecCreate.allowed;
+    const shellPending = shellExecGet.pending || shellExecCreate.pending;
+    const shellReason =
+      shellAllowed ? undefined : shellExecGet.reason ?? shellExecCreate.reason ?? undefined;
     return {
       viewYaml: getCapabilityState(capabilityDescriptorInfo.idMap.viewYaml),
       editYaml: getCapabilityState(capabilityDescriptorInfo.idMap.editYaml),
@@ -299,7 +316,11 @@ export const useObjectPanelCapabilities = ({
       delete: getCapabilityState(capabilityDescriptorInfo.idMap.delete),
       restart: getCapabilityState(capabilityDescriptorInfo.idMap.restart),
       scale: getCapabilityState(capabilityDescriptorInfo.idMap.scale),
-      shell: getCapabilityState(capabilityDescriptorInfo.idMap.shell),
+      shell: createCapabilityState({
+        allowed: shellAllowed,
+        pending: shellPending,
+        reason: shellReason,
+      }),
       debug: getCapabilityState(capabilityDescriptorInfo.idMap.debug),
     };
   }, [capabilityDescriptorInfo.idMap, capabilitiesEnabled, getCapabilityState]);
@@ -333,19 +354,25 @@ export const useObjectPanelCapabilities = ({
 
   const capabilityReasons = useMemo<CapabilityReasons>(
     () => ({
-      delete: capabilityStates.delete.reason,
-      restart: capabilityStates.restart.reason,
-      scale: capabilityStates.scale.reason,
-      editYaml: capabilityStates.editYaml.reason,
-      shell: capabilityStates.shell.reason,
-      debug: capabilityStates.debug.reason,
+      delete: capabilityStates.delete.allowed ? undefined : capabilityStates.delete.reason,
+      restart: capabilityStates.restart.allowed ? undefined : capabilityStates.restart.reason,
+      scale: capabilityStates.scale.allowed ? undefined : capabilityStates.scale.reason,
+      editYaml: capabilityStates.editYaml.allowed ? undefined : capabilityStates.editYaml.reason,
+      shell: capabilityStates.shell.allowed ? undefined : capabilityStates.shell.reason,
+      debug: capabilityStates.debug.allowed ? undefined : capabilityStates.debug.reason,
     }),
     [
+      capabilityStates.delete.allowed,
       capabilityStates.delete.reason,
+      capabilityStates.debug.allowed,
       capabilityStates.debug.reason,
+      capabilityStates.editYaml.allowed,
       capabilityStates.editYaml.reason,
+      capabilityStates.restart.allowed,
       capabilityStates.restart.reason,
+      capabilityStates.scale.allowed,
       capabilityStates.scale.reason,
+      capabilityStates.shell.allowed,
       capabilityStates.shell.reason,
     ]
   );

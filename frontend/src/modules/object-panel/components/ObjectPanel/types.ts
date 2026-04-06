@@ -63,6 +63,8 @@ export type CapabilityIdMap = {
   restart?: string;
   scale?: string;
   shell?: string;
+  shellExecGet?: string;
+  shellExecCreate?: string;
   debug?: string;
 };
 
@@ -103,6 +105,8 @@ export const createEmptyCapabilityIdMap = (): CapabilityIdMap => ({
   restart: undefined,
   scale: undefined,
   shell: undefined,
+  shellExecGet: undefined,
+  shellExecCreate: undefined,
   debug: undefined,
 });
 
