@@ -7,6 +7,7 @@
  */
 
 import { eventBus, type UnsubscribeFn } from '@/core/events';
+import { resolveBuiltinGroupVersion } from '@/shared/constants/builtinGroupVersions';
 import type {
   PermissionEntry,
   PermissionKey,
@@ -20,6 +21,35 @@ import {
   CLUSTER_PERMISSIONS,
   type PermissionSpecList,
 } from './permissionSpecs';
+
+/**
+ * Resolve GVK for a permission lookup. When the caller supplied explicit
+ * group/version they win (CRD callers must pass explicit values so two
+ * CRDs sharing a Kind don't collide). Otherwise fall back to the
+ * builtin lookup table so the spec-emit path and the lookup path agree
+ * on the same key for built-in kinds without every caller having to
+ * spell out group/version. See docs/plans/kind-only-objects.md and
+ * frontend/src/shared/constants/builtinGroupVersions.ts.
+ */
+const resolvePermissionGVK = (
+  resourceKind: string,
+  group?: string | null,
+  version?: string | null
+): { group: string; version: string } => {
+  const g = (group ?? '').trim();
+  const ver = (version ?? '').trim();
+  if (ver) {
+    // Caller supplied a version — honour it verbatim (including empty
+    // group for core/v1 resources). Required for CRDs and any caller
+    // that wants to disambiguate a colliding Kind.
+    return { group: g, version: ver };
+  }
+  const builtin = resolveBuiltinGroupVersion(resourceKind);
+  if (builtin.version) {
+    return { group: builtin.group ?? '', version: builtin.version };
+  }
+  return { group: g, version: ver };
+};
 
 // ---------------------------------------------------------------------------
 // QueryPermissions RPC
@@ -115,8 +145,12 @@ export const getPermissionKey = (
   version?: string | null
 ): PermissionKey => {
   const cid = (clusterId || currentClusterId || '').toLowerCase();
-  const g = (group ?? '').trim();
-  const ver = (version ?? '').trim();
+  // Auto-resolve built-in GVK when the caller didn't specify one, so
+  // the key shape matches on both the spec-emit path (buildBatch) and
+  // the lookup path (useUserPermission, getUserPermission) without
+  // every caller having to pass `resolveBuiltinGroupVersion(kind)`
+  // explicitly. CRD callers still win when they supply group/version.
+  const { group: g, version: ver } = resolvePermissionGVK(resourceKind, group, version);
   const rk = resourceKind.toLowerCase();
   const v = verb.toLowerCase();
   const ns = namespace ? namespace.toLowerCase() : 'cluster';
@@ -306,8 +340,12 @@ const buildBatch = (
   const items: QueryBatchItem[] = [];
   for (const list of specLists) {
     for (const spec of list.specs) {
-      const group = spec.group ?? '';
-      const version = spec.version ?? '';
+      // Resolve GVK at batch-build time so the backend receives a
+      // non-empty apiVersion (app_permissions.go now rejects queries
+      // with missing Version). Built-in kinds fall through to
+      // resolveBuiltinGroupVersion; CRD specs supply explicit
+      // group/version. See docs/plans/kind-only-objects.md.
+      const { group, version } = resolvePermissionGVK(spec.kind, spec.group, spec.version);
       const key = getPermissionKey(
         spec.kind,
         spec.verb,
@@ -601,8 +639,11 @@ export const queryKindPermissions = (
   const cid = clusterId || currentClusterId;
   if (!cid || !kind) return;
 
-  const groupVal = (group ?? '').trim();
-  const versionVal = (version ?? '').trim();
+  // Resolve GVK once: honour caller-supplied group/version (required for
+  // CRDs) or fall back to the built-in lookup. The backend rejects
+  // queries with missing Version, so every payload item must carry a
+  // resolved version before we fire the RPC.
+  const { group: groupVal, version: versionVal } = resolvePermissionGVK(kind, group, version);
 
   // Include group/version in the query key so per-CRD TTL skip works.
   // Two DBInstance CRDs from different groups must NOT share a query key.
