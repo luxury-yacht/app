@@ -176,17 +176,17 @@ func (b *ClusterCustomBuilder) Build(ctx context.Context, scope string) (*refres
 				if item.GetNamespace() != "" {
 					continue
 				}
-				localSummaries = append(localSummaries, ClusterCustomSummary{
-					ClusterMeta: meta,
-					Kind:        resourceKind(item, crdCopy.Spec.Names.Kind),
-					Name:        item.GetName(),
-					APIGroup:    gvr.Group,
-					APIVersion:  gvr.Version,
-					Age:         formatAge(item.GetCreationTimestamp().Time),
-					// Include metadata so the cluster custom view can surface labels/annotations.
-					Labels:      item.GetLabels(),
-					Annotations: item.GetAnnotations(),
-				})
+				// Delegate to the shared row builder so the full-snapshot
+				// path and the streaming/incremental update path emit
+				// identical row shapes. See BuildClusterCustomSummary in
+				// streaming_helpers.go.
+				localSummaries = append(localSummaries, BuildClusterCustomSummary(
+					meta,
+					item,
+					gvr.Group,
+					gvr.Version,
+					crdCopy.Spec.Names.Kind,
+				))
 				if v := resourceVersionOrTimestamp(item); v > localVersion {
 					localVersion = v
 				}

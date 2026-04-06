@@ -716,7 +716,10 @@ func (m *Manager) handleCustomResource(obj interface{}, updateType MessageType, 
 		if domain == domainClusterCustom {
 			update.Row = snapshot.BuildClusterCustomSummary(m.clusterMeta, resource, info.gvr.Group, info.gvr.Version, info.kind)
 		} else {
-			update.Row = snapshot.BuildNamespaceCustomSummary(m.clusterMeta, resource, info.gvr.Group, info.gvr.Version, info.kind)
+			// The streaming path has no parent scope concept — fall back
+			// to the resource's own namespace (which is almost always
+			// set for anything that reaches an informer).
+			update.Row = snapshot.BuildNamespaceCustomSummary(m.clusterMeta, resource, info.gvr.Group, info.gvr.Version, info.kind, resource.GetNamespace())
 		}
 	}
 

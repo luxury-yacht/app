@@ -91,19 +91,15 @@ func (b *ClusterRBACBuilder) Build(ctx context.Context, scope string) (*refresh.
 	entries := make([]ClusterRBACEntry, 0, len(roles)+len(bindings))
 	var version uint64
 
+	// Delegate to the shared row builders so the full-snapshot path and
+	// the streaming/incremental update path emit identical row shapes.
+	// See BuildClusterRoleSummary / BuildClusterRoleBindingSummary in
+	// streaming_helpers.go.
 	for _, role := range roles {
 		if role == nil {
 			continue
 		}
-		entry := ClusterRBACEntry{
-			ClusterMeta: meta,
-			Kind:      "ClusterRole",
-			Name:      role.Name,
-			Details:   describeClusterRole(role),
-			Age:       formatAge(role.CreationTimestamp.Time),
-			TypeAlias: "CR",
-		}
-		entries = append(entries, entry)
+		entries = append(entries, BuildClusterRoleSummary(meta, role))
 		if v := resourceVersionOrTimestamp(role); v > version {
 			version = v
 		}
@@ -113,15 +109,7 @@ func (b *ClusterRBACBuilder) Build(ctx context.Context, scope string) (*refresh.
 		if binding == nil {
 			continue
 		}
-		entry := ClusterRBACEntry{
-			ClusterMeta: meta,
-			Kind:      "ClusterRoleBinding",
-			Name:      binding.Name,
-			Details:   describeClusterRoleBinding(binding),
-			Age:       formatAge(binding.CreationTimestamp.Time),
-			TypeAlias: "CRB",
-		}
-		entries = append(entries, entry)
+		entries = append(entries, BuildClusterRoleBindingSummary(meta, binding))
 		if v := resourceVersionOrTimestamp(binding); v > version {
 			version = v
 		}

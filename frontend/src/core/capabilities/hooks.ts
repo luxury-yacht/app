@@ -145,7 +145,6 @@ export const useCapabilities = (
     const payload: QueryPayloadItem[] = [];
     for (const d of namedDescriptors) {
       if (!d.clusterId) {
-        // eslint-disable-next-line no-console
         console.warn(
           `capabilities: dropping named permission query for ${d.resourceKind}/${d.name ?? ''} — clusterId is missing`,
           d

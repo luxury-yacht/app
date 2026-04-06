@@ -146,16 +146,10 @@ func (b *NamespaceConfigBuilder) buildSnapshot(
 		if cm == nil {
 			continue
 		}
-		summary := ConfigSummary{
-			ClusterMeta: meta,
-			Kind:      "ConfigMap",
-			TypeAlias: "CM",
-			Name:      cm.Name,
-			Namespace: cm.Namespace,
-			Data:      len(cm.Data) + len(cm.BinaryData),
-			Age:       formatAge(cm.CreationTimestamp.Time),
-		}
-		resources = append(resources, summary)
+		// Delegate to the shared row builder so the full-snapshot path
+		// and the streaming/incremental update path emit identical row
+		// shapes. See BuildConfigMapSummary in streaming_helpers.go.
+		resources = append(resources, BuildConfigMapSummary(meta, cm))
 		if v := resourceVersionOrTimestamp(cm); v > version {
 			version = v
 		}
@@ -165,16 +159,7 @@ func (b *NamespaceConfigBuilder) buildSnapshot(
 		if secret == nil {
 			continue
 		}
-		summary := ConfigSummary{
-			ClusterMeta: meta,
-			Kind:      "Secret",
-			TypeAlias: secretTypeAlias(secret),
-			Name:      secret.Name,
-			Namespace: secret.Namespace,
-			Data:      len(secret.Data) + len(secret.StringData),
-			Age:       formatAge(secret.CreationTimestamp.Time),
-		}
-		resources = append(resources, summary)
+		resources = append(resources, BuildSecretSummary(meta, secret))
 		if v := resourceVersionOrTimestamp(secret); v > version {
 			version = v
 		}

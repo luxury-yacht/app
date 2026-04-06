@@ -138,19 +138,10 @@ func (b *NamespaceAutoscalingBuilder) buildSnapshot(
 		if hpa == nil {
 			continue
 		}
-		summary := AutoscalingSummary{
-			ClusterMeta:      meta,
-			Kind:             "HorizontalPodAutoscaler",
-			Name:             hpa.Name,
-			Namespace:        hpa.Namespace,
-			Target:           describeHPATarget(hpa),
-			TargetAPIVersion: hpa.Spec.ScaleTargetRef.APIVersion,
-			Min:              minReplicas(hpa),
-			Max:              hpa.Spec.MaxReplicas,
-			Current:          hpa.Status.CurrentReplicas,
-			Age:              formatAge(hpa.CreationTimestamp.Time),
-		}
-		resources = append(resources, summary)
+		// Delegate to the shared row builder so the full-snapshot path
+		// and the streaming/incremental update path emit identical row
+		// shapes. See BuildHPASummary in streaming_helpers.go.
+		resources = append(resources, BuildHPASummary(meta, hpa))
 		if v := resourceVersionOrTimestamp(hpa); v > version {
 			version = v
 		}

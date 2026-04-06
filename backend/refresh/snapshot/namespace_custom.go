@@ -200,22 +200,19 @@ func (b *NamespaceCustomBuilder) Build(ctx context.Context, scope string) (*refr
 			var snapshotVersion uint64
 			for i := range resourceList.Items {
 				item := &resourceList.Items[i]
-				itemNamespace := item.GetNamespace()
-				if itemNamespace == "" {
-					itemNamespace = namespace
-				}
-				items = append(items, NamespaceCustomSummary{
-					ClusterMeta: meta,
-					Kind:        resourceKind(item, crdCopy.Spec.Names.Kind),
-					Name:        item.GetName(),
-					APIGroup:    gvr.Group,
-					APIVersion:  gvr.Version,
-					Namespace:   itemNamespace,
-					Age:         formatAge(item.GetCreationTimestamp().Time),
-					// Include metadata so the custom view can surface labels/annotations.
-					Labels:      item.GetLabels(),
-					Annotations: item.GetAnnotations(),
-				})
+				// Delegate to the shared row builder so the full-snapshot
+				// path and the streaming/incremental update path emit
+				// identical row shapes. See BuildNamespaceCustomSummary in
+				// streaming_helpers.go. `namespace` is the scope fallback
+				// for items that don't carry their own.
+				items = append(items, BuildNamespaceCustomSummary(
+					meta,
+					item,
+					gvr.Group,
+					gvr.Version,
+					crdCopy.Spec.Names.Kind,
+					namespace,
+				))
 				if v := resourceVersionOrTimestamp(item); v > snapshotVersion {
 					snapshotVersion = v
 				}

@@ -70,22 +70,14 @@ func (b *ClusterStorageBuilder) Build(ctx context.Context, scope string) (*refre
 	}
 	entries := make([]ClusterStorageEntry, 0, len(pvs))
 	var version uint64
+	// Delegate to the shared row builder so the full-snapshot path and
+	// the streaming/incremental update path emit identical row shapes.
+	// See BuildClusterStorageSummary in streaming_helpers.go.
 	for _, pv := range pvs {
 		if pv == nil {
 			continue
 		}
-		entry := ClusterStorageEntry{
-			ClusterMeta: meta,
-			Kind:         "PersistentVolume",
-			Name:         pv.Name,
-			StorageClass: pv.Spec.StorageClassName,
-			Capacity:     formatStorageCapacity(pv),
-			AccessModes:  formatAccessModes(pv.Spec.AccessModes),
-			Status:       string(pv.Status.Phase),
-			Claim:        formatClaimRef(pv.Spec.ClaimRef),
-			Age:          formatAge(pv.CreationTimestamp.Time),
-		}
-		entries = append(entries, entry)
+		entries = append(entries, BuildClusterStorageSummary(meta, pv))
 		if v := resourceVersionOrTimestamp(pv); v > version {
 			version = v
 		}

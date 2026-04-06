@@ -160,13 +160,28 @@ func BuildNetworkPolicySummary(meta ClusterMeta, policy *networkingv1.NetworkPol
 	}
 }
 
-// BuildNamespaceCustomSummary builds a custom resource row payload that matches snapshot formatting.
+// BuildNamespaceCustomSummary builds a custom resource row payload that
+// matches snapshot formatting. This is the **single source of truth** for
+// namespace-scoped custom resource row construction — the full-snapshot
+// builder in namespace_custom.go calls this helper rather than inlining
+// its own construction, so the two paths cannot drift.
+//
+// defaultNamespace is used when the unstructured resource itself carries
+// an empty namespace (rare but possible for newly-created items or
+// malformed objects returned from list-with-all-namespaces queries). The
+// snapshot path passes its scope namespace; the streaming path passes
+// the resource's own namespace (so the fallback is a no-op for it unless
+// the resource is pathologically empty). See
+// docs/plans/kind-only-objects.md.
+//
+// Any new field added to NamespaceCustomSummary MUST be populated here.
 func BuildNamespaceCustomSummary(
 	meta ClusterMeta,
 	resource *unstructured.Unstructured,
 	apiGroup string,
 	apiVersion string,
 	kindFallback string,
+	defaultNamespace string,
 ) NamespaceCustomSummary {
 	if resource == nil {
 		return NamespaceCustomSummary{ClusterMeta: meta, Kind: kindFallback, APIGroup: apiGroup, APIVersion: apiVersion}
@@ -175,13 +190,17 @@ func BuildNamespaceCustomSummary(
 	if kind == "" {
 		kind = kindFallback
 	}
+	namespace := resource.GetNamespace()
+	if namespace == "" {
+		namespace = defaultNamespace
+	}
 	return NamespaceCustomSummary{
 		ClusterMeta: meta,
 		Kind:        kind,
 		Name:        resource.GetName(),
 		APIGroup:    apiGroup,
 		APIVersion:  apiVersion,
-		Namespace:   resource.GetNamespace(),
+		Namespace:   namespace,
 		Age:         formatAge(resource.GetCreationTimestamp().Time),
 		Labels:      resource.GetLabels(),
 		Annotations: resource.GetAnnotations(),
@@ -370,21 +389,37 @@ func BuildEndpointSliceSummary(
 	}
 }
 
-// BuildHPASummary builds an HPA row payload that matches snapshot formatting.
+// BuildHPASummary builds an HPA row payload that matches snapshot
+// formatting. This is the **single source of truth** for HPA row
+// construction — the full-snapshot builder in namespace_autoscaling.go
+// calls this helper rather than inlining its own construction, so the
+// two paths cannot drift.
+//
+// TargetAPIVersion is the wire-form apiVersion of the scale target,
+// threaded verbatim from hpa.Spec.ScaleTargetRef.APIVersion. It is what
+// lets the frontend open CRD scale targets (Argo Rollout, KEDA, custom
+// workload operators) in the object panel with a fully-qualified GVK. A
+// previous bug had this path dropping the field on streaming updates
+// (which HPAs receive constantly as Status.CurrentReplicas changes),
+// which silently re-introduced the kind-only-objects bug for CRD scale
+// targets. See docs/plans/kind-only-objects.md.
+//
+// Any new field added to AutoscalingSummary MUST be populated here.
 func BuildHPASummary(meta ClusterMeta, hpa *autoscalingv1.HorizontalPodAutoscaler) AutoscalingSummary {
 	if hpa == nil {
 		return AutoscalingSummary{ClusterMeta: meta, Kind: "HorizontalPodAutoscaler"}
 	}
 	return AutoscalingSummary{
-		ClusterMeta: meta,
-		Kind:        "HorizontalPodAutoscaler",
-		Name:        hpa.Name,
-		Namespace:   hpa.Namespace,
-		Target:      describeHPATarget(hpa),
-		Min:         minReplicas(hpa),
-		Max:         hpa.Spec.MaxReplicas,
-		Current:     hpa.Status.CurrentReplicas,
-		Age:         formatAge(hpa.CreationTimestamp.Time),
+		ClusterMeta:      meta,
+		Kind:             "HorizontalPodAutoscaler",
+		Name:             hpa.Name,
+		Namespace:        hpa.Namespace,
+		Target:           describeHPATarget(hpa),
+		TargetAPIVersion: hpa.Spec.ScaleTargetRef.APIVersion,
+		Min:              minReplicas(hpa),
+		Max:              hpa.Spec.MaxReplicas,
+		Current:          hpa.Status.CurrentReplicas,
+		Age:              formatAge(hpa.CreationTimestamp.Time),
 	}
 }
 

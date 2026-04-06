@@ -110,21 +110,14 @@ func (b *NamespaceStorageBuilder) buildSnapshot(
 	resources := make([]StorageSummary, 0, len(pvcs))
 	var version uint64
 
+	// Delegate to the shared row builder so the full-snapshot path and
+	// the streaming/incremental update path emit identical row shapes.
+	// See BuildPVCStorageSummary in streaming_helpers.go.
 	for _, pvc := range pvcs {
 		if pvc == nil {
 			continue
 		}
-		summary := StorageSummary{
-			ClusterMeta: meta,
-			Kind:         "PersistentVolumeClaim",
-			Name:         pvc.Name,
-			Namespace:    pvc.Namespace,
-			Capacity:     pvcCapacity(pvc),
-			Status:       string(pvc.Status.Phase),
-			StorageClass: storageClassName(pvc),
-			Age:          formatAge(pvc.CreationTimestamp.Time),
-		}
-		resources = append(resources, summary)
+		resources = append(resources, BuildPVCStorageSummary(meta, pvc))
 		if v := resourceVersionOrTimestamp(pvc); v > version {
 			version = v
 		}

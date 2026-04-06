@@ -184,19 +184,15 @@ func (b *NamespaceNetworkBuilder) buildSnapshot(
 	resources := make([]NetworkSummary, 0, len(services)+len(slicesByService)+len(ingresses)+len(policies))
 	var version uint64
 
+	// Delegate to the shared row builders so the full-snapshot path and
+	// the streaming/incremental update path emit identical row shapes.
+	// See Build*NetworkSummary / BuildEndpointSliceSummary in
+	// streaming_helpers.go.
 	for _, svc := range services {
 		if svc == nil {
 			continue
 		}
-		summary := NetworkSummary{
-			ClusterMeta: meta,
-			Kind:        "Service",
-			Name:        svc.Name,
-			Namespace:   svc.Namespace,
-			Details:     describeService(svc, slicesByService[svc.Name]),
-			Age:         formatAge(svc.CreationTimestamp.Time),
-		}
-		resources = append(resources, summary)
+		resources = append(resources, BuildServiceNetworkSummary(meta, svc, slicesByService[svc.Name]))
 		if v := resourceVersionOrTimestamp(svc); v > version {
 			version = v
 		}
@@ -206,15 +202,7 @@ func (b *NamespaceNetworkBuilder) buildSnapshot(
 		if ing == nil {
 			continue
 		}
-		summary := NetworkSummary{
-			ClusterMeta: meta,
-			Kind:        "Ingress",
-			Name:        ing.Name,
-			Namespace:   ing.Namespace,
-			Details:     describeIngress(ing),
-			Age:         formatAge(ing.CreationTimestamp.Time),
-		}
-		resources = append(resources, summary)
+		resources = append(resources, BuildIngressNetworkSummary(meta, ing))
 		if v := resourceVersionOrTimestamp(ing); v > version {
 			version = v
 		}
@@ -224,15 +212,7 @@ func (b *NamespaceNetworkBuilder) buildSnapshot(
 		if policy == nil {
 			continue
 		}
-		summary := NetworkSummary{
-			ClusterMeta: meta,
-			Kind:        "NetworkPolicy",
-			Name:        policy.Name,
-			Namespace:   policy.Namespace,
-			Details:     describeNetworkPolicy(policy),
-			Age:         formatAge(policy.CreationTimestamp.Time),
-		}
-		resources = append(resources, summary)
+		resources = append(resources, BuildNetworkPolicySummary(meta, policy))
 		if v := resourceVersionOrTimestamp(policy); v > version {
 			version = v
 		}
@@ -242,16 +222,7 @@ func (b *NamespaceNetworkBuilder) buildSnapshot(
 		if len(svcSlices) == 0 {
 			continue
 		}
-		namespace := svcSlices[0].Namespace
-		summary := NetworkSummary{
-			ClusterMeta: meta,
-			Kind:        "EndpointSlice",
-			Name:        svc,
-			Namespace:   namespace,
-			Details:     describeEndpointSlices(svcSlices),
-			Age:         formatAge(earliestSliceCreation(svcSlices)),
-		}
-		resources = append(resources, summary)
+		resources = append(resources, BuildEndpointSliceSummary(meta, svcSlices[0].Namespace, svc, svcSlices))
 		for _, slice := range svcSlices {
 			if slice == nil {
 				continue
