@@ -8,6 +8,7 @@ import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
+import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
 import './EndpointsOverview.css';
 
 interface EndpointSliceOverviewProps {
@@ -91,6 +92,7 @@ export const EndpointSliceOverview: React.FC<EndpointSliceOverviewProps> = ({
                                             className="address-target"
                                             objectRef={{
                                               kind: parsed.kind,
+                                              ...resolveBuiltinGroupVersion(parsed.kind),
                                               name: parsed.name,
                                               namespace,
                                               ...clusterMeta,
@@ -111,6 +113,7 @@ export const EndpointSliceOverview: React.FC<EndpointSliceOverviewProps> = ({
                                         className="address-node"
                                         objectRef={{
                                           kind: 'Node',
+                                          ...resolveBuiltinGroupVersion('Node'),
                                           name: addr.nodeName!,
                                           ...clusterMeta,
                                         }}
@@ -149,6 +152,7 @@ export const EndpointSliceOverview: React.FC<EndpointSliceOverviewProps> = ({
                                             className="address-target"
                                             objectRef={{
                                               kind: parsed.kind,
+                                              ...resolveBuiltinGroupVersion(parsed.kind),
                                               name: parsed.name,
                                               namespace,
                                               ...clusterMeta,
@@ -169,6 +173,7 @@ export const EndpointSliceOverview: React.FC<EndpointSliceOverviewProps> = ({
                                         className="address-node"
                                         objectRef={{
                                           kind: 'Node',
+                                          ...resolveBuiltinGroupVersion('Node'),
                                           name: addr.nodeName!,
                                           ...clusterMeta,
                                         }}

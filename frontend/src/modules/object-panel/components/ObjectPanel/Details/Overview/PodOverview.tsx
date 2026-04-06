@@ -9,6 +9,7 @@ import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceStatus } from '@shared/components/kubernetes/ResourceStatus';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
+import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
 
 interface PodOverviewProps {
   name: string;
@@ -82,6 +83,7 @@ export const PodOverview: React.FC<PodOverviewProps> = ({
               <ObjectPanelLink
                 objectRef={{
                   kind: owner.kind.toLowerCase(),
+                  ...resolveBuiltinGroupVersion(owner.kind),
                   name: owner.name,
                   namespace: namespace,
                   ...clusterMeta,
@@ -100,7 +102,12 @@ export const PodOverview: React.FC<PodOverviewProps> = ({
           label="Node"
           value={
             <ObjectPanelLink
-              objectRef={{ kind: 'node', name: node, ...clusterMeta }}
+              objectRef={{
+                kind: 'node',
+                ...resolveBuiltinGroupVersion('Node'),
+                name: node,
+                ...clusterMeta,
+              }}
               title="Click to view node"
             >
               {node}
@@ -137,6 +144,7 @@ export const PodOverview: React.FC<PodOverviewProps> = ({
             <ObjectPanelLink
               objectRef={{
                 kind: 'serviceaccount',
+                ...resolveBuiltinGroupVersion('ServiceAccount'),
                 name: serviceAccount,
                 namespace: namespace,
                 ...clusterMeta,

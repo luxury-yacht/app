@@ -9,6 +9,7 @@ import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
+import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
 
 interface SecretOverviewProps {
   secretDetails: types.SecretDetails | null;
@@ -77,6 +78,7 @@ export const SecretOverview: React.FC<SecretOverviewProps> = ({ secretDetails })
                     <ObjectPanelLink
                       objectRef={{
                         kind: 'pod',
+                        ...resolveBuiltinGroupVersion('Pod'),
                         name: podName,
                         namespace: secretDetails.namespace,
                         ...clusterMeta,

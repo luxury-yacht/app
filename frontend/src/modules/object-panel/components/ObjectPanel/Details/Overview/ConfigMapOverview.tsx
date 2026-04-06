@@ -9,6 +9,7 @@ import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
+import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
 
 interface ConfigMapOverviewProps {
   configMapDetails: types.ConfigMapDetails | null;
@@ -61,6 +62,7 @@ export const ConfigMapOverview: React.FC<ConfigMapOverviewProps> = ({ configMapD
                     <ObjectPanelLink
                       objectRef={{
                         kind: 'pod',
+                        ...resolveBuiltinGroupVersion('Pod'),
                         name: podName,
                         namespace: configMapDetails.namespace,
                         ...clusterMeta,

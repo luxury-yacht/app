@@ -8,6 +8,10 @@ import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
+import {
+  parseApiVersion,
+  resolveBuiltinGroupVersion,
+} from '@shared/constants/builtinGroupVersions';
 import { types } from '@wailsjs/go/models';
 import './PolicyOverview.css';
 
@@ -296,6 +300,12 @@ export const PolicyOverview: React.FC<PolicyOverviewProps> = (props) => {
                 <ObjectPanelLink
                   objectRef={{
                     kind: props.scaleTargetRef.kind,
+                    // Prefer the apiVersion the HPA explicitly references
+                    // (correct for any kind, including CRDs); fall back to
+                    // the built-in lookup when the HPA spec lacks one.
+                    ...(props.scaleTargetRef.apiVersion
+                      ? parseApiVersion(props.scaleTargetRef.apiVersion)
+                      : resolveBuiltinGroupVersion(props.scaleTargetRef.kind)),
                     name: props.scaleTargetRef.name,
                     namespace,
                     ...clusterMeta,

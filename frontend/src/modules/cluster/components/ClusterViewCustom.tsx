@@ -238,14 +238,28 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
     // Get context menu items
     const getContextMenuItems = useCallback(
       (resource: ClusterCustomData): ContextMenuItem[] => {
+        const group = resource.apiGroup ?? null;
+        const version = resource.apiVersion ?? null;
+        // Permission lookup carries group/version so two cluster-scoped
+        // CRDs sharing a Kind don't share a cache slot. ClusterCustomData
+        // provides both fields from the catalog. Mirrors the namespaced
+        // fix in NsViewCustom. See docs/plans/kind-only-objects.md.
         const deleteStatus =
           permissionMap.get(
-            getPermissionKey(resource.kind, 'delete', null, null, resource.clusterId)
+            getPermissionKey(
+              resource.kind,
+              'delete',
+              null,
+              null,
+              resource.clusterId,
+              group,
+              version
+            )
           ) ?? null;
 
         // Lazy-load permissions for CRD kinds not in the static spec lists.
         if (!deleteStatus) {
-          queryKindPermissions(resource.kind, null, resource.clusterId ?? null);
+          queryKindPermissions(resource.kind, null, resource.clusterId ?? null, group, version);
         }
 
         return buildObjectActionItems({

@@ -1,25 +1,37 @@
 /**
  * frontend/src/modules/object-panel/hooks/openWithObjectAudit.test.ts
  *
- * Guardrail test for the kind-only-objects bug.
+ * Guardrail tests for the kind-only-objects bug.
  *
  * Walks every .ts/.tsx file under frontend/src and finds every literal
- * call site of the form `openWithObject({ ... })` (or
- * `openWithObjectRef.current({ ... })`). For each literal, asserts that
- * the object expression includes BOTH a `group:` and a `version:` key,
- * OR spreads `...resolveBuiltinGroupVersion(...)`.
+ * `KubernetesObjectReference` that ends up feeding the object panel via
+ * one of two entry points:
+ *
+ *   1. `openWithObject({ ... })` (or `openWithObjectRef.current({ ... })`) —
+ *      direct call into useObjectPanel from view files and command-palette
+ *      handlers.
+ *   2. `<ObjectPanelLink objectRef={{ ... }}>` — JSX prop on the shared
+ *      panel-link component, used by the Overview details to render
+ *      clickable inline references (Owner, Node, Service, ServiceAccount,
+ *      HPA scale target, Helm release resources, Endpoints targetRefs, …).
+ *      ObjectPanelLink forwards `objectRef` straight to `openWithObject`
+ *      so the same group/version invariant applies.
+ *
+ * For each literal, asserts the object expression includes BOTH a `group:`
+ * and a `version:` key, OR spreads `...resolveBuiltinGroupVersion(...)`,
+ * OR spreads `...parseApiVersion(...)`.
  *
  * Why: built-in Kinds are unique, but custom resources can share a Kind
  * across multiple groups (e.g. documentdb.services.k8s.aws/DBInstance vs
  * rds.services.k8s.aws/DBInstance). Without group/version on the
  * KubernetesObjectReference, the panel cannot disambiguate, and the
- * backend's legacy kind-only resolver picks the first match — landing
- * on the wrong CRD. See docs/plans/kind-only-objects.md.
+ * backend's strict GVK resolver hard-errors on missing apiVersion. See
+ * docs/plans/kind-only-objects.md.
  *
- * If a new openWithObject call site fails this test, the fix is to add
- * the missing fields rather than to add an exemption. Exemptions exist
- * only for synthetic kinds that never resolve to a real Kubernetes
- * GVK (e.g. Helm releases).
+ * If a new call site fails this test, the fix is to add the missing
+ * fields rather than to add an exemption. Exemptions exist only for
+ * synthetic kinds that never resolve to a real Kubernetes GVK (e.g.
+ * Helm releases).
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -77,19 +89,22 @@ function* walkSourceFiles(root: string): Generator<string> {
   }
 }
 
-// Extract every `openWithObject(...)` (or `openWithObjectRef.current(...)`)
-// literal call site, where the first argument is an object literal. Uses
-// brace-depth counting (with simple string-literal awareness) so we can
-// span multiple lines and handle nested objects/spreads.
-function findOpenWithObjectLiterals(source: string): Array<{ start: number; body: string }> {
+// Extract every object literal that follows a regex match in the source.
+// `pattern` must end at (or just before) the opening `{` of the literal so
+// the brace counter has the right starting point. Used by both the
+// openWithObject(...) walker and the <ObjectPanelLink objectRef={{...}}>
+// walker — both consume the same shape (a `KubernetesObjectReference`
+// literal) and need the same group/version invariant.
+function findObjectLiteralsAfter(
+  source: string,
+  pattern: RegExp,
+  patternName: string
+): Array<{ start: number; body: string }> {
   const results: Array<{ start: number; body: string }> = [];
-  // Match `openWithObject(` or `openWithObjectRef.current(` at any
-  // position. Trailing whitespace and an opening `{` mark the literal.
-  const pattern = /openWithObject(?:Ref\.current)?\s*\(\s*\{/g;
-  let match: RegExpExecArray | null;
-  while ((match = pattern.exec(source)) !== null) {
+  for (const match of source.matchAll(pattern)) {
+    const matchIndex = match.index ?? 0;
     // Position of the opening `{` (last char of the regex match).
-    const openBrace = match.index + match[0].length - 1;
+    const openBrace = matchIndex + match[0].length - 1;
     let depth = 0;
     let i = openBrace;
     let inString: '"' | "'" | '`' | null = null;
@@ -111,6 +126,24 @@ function findOpenWithObjectLiterals(source: string): Array<{ start: number; body
         }
         continue;
       }
+      // Skip comments BEFORE checking for string quotes — apostrophes inside
+      // comments (e.g. "didn't") would otherwise enter string mode and
+      // unbalance the brace counter.
+      if (ch === '/' && i + 1 < source.length) {
+        const next = source[i + 1];
+        if (next === '/') {
+          // Line comment: skip to newline.
+          const nl = source.indexOf('\n', i + 2);
+          i = nl === -1 ? source.length - 1 : nl;
+          continue;
+        }
+        if (next === '*') {
+          // Block comment: skip to */.
+          const end = source.indexOf('*/', i + 2);
+          i = end === -1 ? source.length - 1 : end + 1;
+          continue;
+        }
+      }
       if (ch === '"' || ch === "'" || ch === '`') {
         inString = ch;
         continue;
@@ -126,14 +159,33 @@ function findOpenWithObjectLiterals(source: string): Array<{ start: number; body
       }
     }
     if (closeBrace === -1) {
-      throw new Error(`Unterminated openWithObject literal starting at offset ${match.index}`);
+      throw new Error(`Unterminated ${patternName} literal starting at offset ${matchIndex}`);
     }
     results.push({
-      start: match.index,
+      start: matchIndex,
       body: source.slice(openBrace, closeBrace + 1),
     });
   }
   return results;
+}
+
+// Extract every `openWithObject(...)` (or `openWithObjectRef.current(...)`)
+// literal call site, where the first argument is an object literal.
+function findOpenWithObjectLiterals(source: string): Array<{ start: number; body: string }> {
+  // Match `openWithObject(` or `openWithObjectRef.current(` at any
+  // position. Trailing whitespace and an opening `{` mark the literal.
+  return findObjectLiteralsAfter(
+    source,
+    /openWithObject(?:Ref\.current)?\s*\(\s*\{/g,
+    'openWithObject'
+  );
+}
+
+// Extract every `<ObjectPanelLink ... objectRef={{...}}>` literal where the
+// objectRef prop is an inline object literal. The opening `{{` distinguishes
+// JSX-expression-containing-an-object-literal from `objectRef={someVar}`.
+function findObjectPanelLinkLiterals(source: string): Array<{ start: number; body: string }> {
+  return findObjectLiteralsAfter(source, /objectRef\s*=\s*\{\s*\{/g, 'objectRef={{...}}');
 }
 
 function lineNumberAtOffset(source: string, offset: number): number {
@@ -144,26 +196,49 @@ function lineNumberAtOffset(source: string, offset: number): number {
   return line;
 }
 
-function gatherViolations(): CallSite[] {
+// Audits an object literal body for the group/version invariant. Returns
+// true if any of:
+//   - the body declares both `group:` and `version:` keys directly, OR
+//   - the body invokes `resolveBuiltinGroupVersion(...)` (anywhere), OR
+//   - the body invokes `parseApiVersion(...)` (anywhere).
+//
+// The helper-call check is loose on purpose: it accepts both direct spreads
+// (`...resolveBuiltinGroupVersion(kind)`) and conditional spreads
+// (`...(cond ? parseApiVersion(av) : resolveBuiltinGroupVersion(kind))`),
+// and any future shape that funnels through one of the two canonical
+// helpers. We strip comments first so a `// group: ...` comment doesn't
+// accidentally pass.
+function literalSatisfiesInvariant(body: string): boolean {
+  const stripped = body.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+  const hasGroupKey = /(^|[\s,{])group\s*:/.test(stripped);
+  const hasVersionKey = /(^|[\s,{])version\s*:/.test(stripped);
+  const hasResolveBuiltinHelper = /resolveBuiltinGroupVersion\s*\(/.test(stripped);
+  const hasParseApiVersionHelper = /parseApiVersion\s*\(/.test(stripped);
+  return hasResolveBuiltinHelper || hasParseApiVersionHelper || (hasGroupKey && hasVersionKey);
+}
+
+interface AuditConfig {
+  // Substring prefilter — files that don't include this string are skipped
+  // before the (more expensive) literal walker runs.
+  sourceMarker: string;
+  // Walker that pulls every relevant object literal out of a source file.
+  finder: (source: string) => Array<{ start: number; body: string }>;
+}
+
+function gatherViolations(config: AuditConfig): CallSite[] {
   const frontendSrc = path.resolve(__dirname, '../../..');
   const violations: CallSite[] = [];
   for (const file of walkSourceFiles(frontendSrc)) {
     const source = fs.readFileSync(file, 'utf8');
-    if (!source.includes('openWithObject')) continue;
-    const literals = findOpenWithObjectLiterals(source);
+    if (!source.includes(config.sourceMarker)) continue;
+    const literals = config.finder(source);
     if (literals.length === 0) continue;
 
     const relative = path.relative(path.resolve(frontendSrc, '..'), file);
     const allowed = ALLOWED_LEGACY_FILES.has(relative);
 
     for (const literal of literals) {
-      // Strip line comments so // group: foo doesn't accidentally pass.
-      const stripped = literal.body.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
-      const hasGroupKey = /(^|[\s,{])group\s*:/.test(stripped);
-      const hasVersionKey = /(^|[\s,{])version\s*:/.test(stripped);
-      const hasResolveSpread = /\.\.\.resolveBuiltinGroupVersion\s*\(/.test(stripped);
-      const ok = hasResolveSpread || (hasGroupKey && hasVersionKey);
-      if (ok) continue;
+      if (literalSatisfiesInvariant(literal.body)) continue;
       if (allowed) continue;
       violations.push({
         file: relative,
@@ -175,20 +250,35 @@ function gatherViolations(): CallSite[] {
   return violations;
 }
 
+const OPEN_WITH_OBJECT_AUDIT: AuditConfig = {
+  sourceMarker: 'openWithObject',
+  finder: findOpenWithObjectLiterals,
+};
+
+const OBJECT_PANEL_LINK_AUDIT: AuditConfig = {
+  sourceMarker: 'ObjectPanelLink',
+  finder: findObjectPanelLinkLiterals,
+};
+
+function formatViolationError(callSiteName: string, violations: CallSite[]): string {
+  const message = violations
+    .map((v) => `  ${v.file}:${v.line}\n${v.text.replace(/^/gm, '    ')}`)
+    .join('\n\n');
+  return (
+    `Found ${violations.length} ${callSiteName} site(s) missing group/version.\n\n` +
+    message +
+    '\n\nFix: add `group:` and `version:` keys to the literal, or spread ' +
+    '`...resolveBuiltinGroupVersion(kind)` for a built-in (or ' +
+    '`...parseApiVersion(apiVersion)` when the source carries a wire-form ' +
+    'apiVersion). See docs/plans/kind-only-objects.md.'
+  );
+}
+
 describe('openWithObject audit (kind-only-objects guardrail)', () => {
   it('every openWithObject literal carries group + version (or spreads resolveBuiltinGroupVersion)', () => {
-    const violations = gatherViolations();
+    const violations = gatherViolations(OPEN_WITH_OBJECT_AUDIT);
     if (violations.length > 0) {
-      const message = violations
-        .map((v) => `  ${v.file}:${v.line}\n${v.text.replace(/^/gm, '    ')}`)
-        .join('\n\n');
-      throw new Error(
-        `Found ${violations.length} openWithObject call site(s) missing group/version.\n\n` +
-          message +
-          '\n\nFix: add `group:` and `version:` keys to the literal, or spread ' +
-          '`...resolveBuiltinGroupVersion(kind)` for a built-in. See ' +
-          'docs/plans/kind-only-objects.md.'
-      );
+      throw new Error(formatViolationError('openWithObject call', violations));
     }
     expect(violations).toEqual([]);
   });
@@ -204,5 +294,26 @@ describe('openWithObject audit (kind-only-objects guardrail)', () => {
       total += findOpenWithObjectLiterals(source).length;
     }
     expect(total).toBeGreaterThan(10);
+  });
+});
+
+describe('ObjectPanelLink audit (kind-only-objects guardrail)', () => {
+  it('every <ObjectPanelLink objectRef={{...}}> literal carries group + version', () => {
+    const violations = gatherViolations(OBJECT_PANEL_LINK_AUDIT);
+    if (violations.length > 0) {
+      throw new Error(formatViolationError('<ObjectPanelLink objectRef={{...}}>', violations));
+    }
+    expect(violations).toEqual([]);
+  });
+
+  it('discovers at least one ObjectPanelLink literal so the walker is wired up', () => {
+    const frontendSrc = path.resolve(__dirname, '../../..');
+    let total = 0;
+    for (const file of walkSourceFiles(frontendSrc)) {
+      const source = fs.readFileSync(file, 'utf8');
+      if (!source.includes('ObjectPanelLink')) continue;
+      total += findObjectPanelLinkLiterals(source).length;
+    }
+    expect(total).toBeGreaterThan(5);
   });
 });
