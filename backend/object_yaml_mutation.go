@@ -550,9 +550,15 @@ func getGVRForGVKWithDependencies(
 	// wrong-group hit. If validation fails, return the original strict
 	// error so the caller sees an actionable failure rather than a
 	// misleading kind-only success.
+	//
+	// Group/version comparison is case-sensitive (==) to match the strict
+	// resolver in common.ResolveGVRForGVK — Kubernetes API group and
+	// version names are RFC 1123 DNS labels, never case-insensitive. This
+	// guard's whole purpose is to prevent silent wrong-group hits, so it
+	// must be at least as strict as the primary resolver.
 	if fallbackGVR, fallbackNamespaced, fallbackErr := common.DiscoverGVRByKind(ctx, deps, gvk.Kind); fallbackErr == nil {
-		if (gvk.Group == "" || strings.EqualFold(fallbackGVR.Group, gvk.Group)) &&
-			(gvk.Version == "" || strings.EqualFold(fallbackGVR.Version, gvk.Version)) {
+		if (gvk.Group == "" || fallbackGVR.Group == gvk.Group) &&
+			(gvk.Version == "" || fallbackGVR.Version == gvk.Version) {
 			return fallbackGVR, fallbackNamespaced, nil
 		}
 	}

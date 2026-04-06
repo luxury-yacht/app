@@ -15,7 +15,6 @@ const {
   gridTablePropsRef,
   confirmationPropsRef,
   openWithObjectMock,
-  deleteResourceMock,
   deleteResourceByGVKMock,
   permissionState,
   errorHandlerMock,
@@ -23,7 +22,6 @@ const {
   gridTablePropsRef: { current: null as any },
   confirmationPropsRef: { current: null as any },
   openWithObjectMock: vi.fn(),
-  deleteResourceMock: vi.fn().mockResolvedValue(undefined),
   deleteResourceByGVKMock: vi.fn().mockResolvedValue(undefined),
   permissionState: new Map<
     string,
@@ -94,7 +92,6 @@ vi.mock('@shared/components/modals/ConfirmationModal', () => ({
 }));
 
 vi.mock('@wailsjs/go/backend/App', () => ({
-  DeleteResource: (...args: unknown[]) => deleteResourceMock(...args),
   DeleteResourceByGVK: (...args: unknown[]) => deleteResourceByGVKMock(...args),
 }));
 
@@ -159,7 +156,6 @@ describe('NsViewQuotas', () => {
     gridTablePropsRef.current = null;
     confirmationPropsRef.current = null;
     openWithObjectMock.mockReset();
-    deleteResourceMock.mockReset();
     deleteResourceByGVKMock.mockReset();
     deleteResourceByGVKMock.mockResolvedValue(undefined);
     permissionState.clear();

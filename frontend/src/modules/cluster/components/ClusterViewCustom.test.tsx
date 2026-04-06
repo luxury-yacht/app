@@ -35,7 +35,6 @@ vi.mock('@ui/favorites/FavToggle', () => ({
 
 const gridTablePropsRef: { current: any } = { current: null };
 const openWithObjectMock = vi.fn();
-const deleteResourceMock = vi.fn();
 const deleteResourceByGVKMock = vi.fn();
 const modalProps: { current: any } = { current: null };
 
@@ -100,7 +99,6 @@ vi.mock('@/hooks/useShortNames', () => ({
 }));
 
 vi.mock('@wailsjs/go/backend/App', () => ({
-  DeleteResource: (...args: unknown[]) => deleteResourceMock(...args),
   DeleteResourceByGVK: (...args: unknown[]) => deleteResourceByGVKMock(...args),
 }));
 
@@ -158,7 +156,6 @@ describe('ClusterViewCustom', () => {
     gridTablePropsRef.current = null;
     modalProps.current = null;
     openWithObjectMock.mockReset();
-    deleteResourceMock.mockReset();
     deleteResourceByGVKMock.mockReset();
   });
 
@@ -283,6 +280,5 @@ describe('ClusterViewCustom', () => {
       '',
       'shared-pg'
     );
-    expect(deleteResourceMock).not.toHaveBeenCalled();
   });
 });

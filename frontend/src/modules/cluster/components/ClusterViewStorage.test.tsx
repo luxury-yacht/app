@@ -94,7 +94,7 @@ vi.mock('@/hooks/useShortNames', () => ({
 }));
 
 vi.mock('@wailsjs/go/backend/App', () => ({
-  DeleteResource: vi.fn(),
+  DeleteResourceByGVK: vi.fn(),
 }));
 
 const basePV = {

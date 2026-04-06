@@ -11,19 +11,13 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 
 import NsViewRBAC, { type RBACData } from '@modules/namespace/components/NsViewRBAC';
 
-const {
-  gridTablePropsRef,
-  confirmationPropsRef,
-  openWithObjectMock,
-  deleteResourceMock,
-  deleteResourceByGVKMock,
-} = vi.hoisted(() => ({
-  gridTablePropsRef: { current: null as any },
-  confirmationPropsRef: { current: null as any },
-  openWithObjectMock: vi.fn(),
-  deleteResourceMock: vi.fn().mockResolvedValue(undefined),
-  deleteResourceByGVKMock: vi.fn().mockResolvedValue(undefined),
-}));
+const { gridTablePropsRef, confirmationPropsRef, openWithObjectMock, deleteResourceByGVKMock } =
+  vi.hoisted(() => ({
+    gridTablePropsRef: { current: null as any },
+    confirmationPropsRef: { current: null as any },
+    openWithObjectMock: vi.fn(),
+    deleteResourceByGVKMock: vi.fn().mockResolvedValue(undefined),
+  }));
 
 vi.mock('@core/contexts/FavoritesContext', () => ({
   useFavorites: () => ({
@@ -87,7 +81,6 @@ vi.mock('@shared/components/modals/ConfirmationModal', () => ({
 }));
 
 vi.mock('@wailsjs/go/backend/App', () => ({
-  DeleteResource: (...args: unknown[]) => deleteResourceMock(...args),
   DeleteResourceByGVK: (...args: unknown[]) => deleteResourceByGVKMock(...args),
 }));
 
@@ -152,7 +145,6 @@ describe('NsViewRBAC', () => {
     gridTablePropsRef.current = null;
     confirmationPropsRef.current = null;
     openWithObjectMock.mockReset();
-    deleteResourceMock.mockReset();
     deleteResourceByGVKMock.mockReset();
     deleteResourceByGVKMock.mockResolvedValue(undefined);
   });

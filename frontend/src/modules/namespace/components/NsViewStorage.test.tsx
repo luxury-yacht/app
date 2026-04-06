@@ -16,14 +16,12 @@ const {
   gridTablePropsRef,
   confirmationPropsRef,
   openWithObjectMock,
-  deleteResourceMock,
   deleteResourceByGVKMock,
   errorHandlerMock,
 } = vi.hoisted(() => ({
   gridTablePropsRef: { current: null as any },
   confirmationPropsRef: { current: null as any },
   openWithObjectMock: vi.fn(),
-  deleteResourceMock: vi.fn().mockResolvedValue(undefined),
   deleteResourceByGVKMock: vi.fn().mockResolvedValue(undefined),
   errorHandlerMock: { handle: vi.fn() },
 }));
@@ -103,7 +101,6 @@ vi.mock('@shared/components/modals/ConfirmationModal', () => ({
 }));
 
 vi.mock('@wailsjs/go/backend/App', () => ({
-  DeleteResource: (...args: unknown[]) => deleteResourceMock(...args),
   DeleteResourceByGVK: (...args: unknown[]) => deleteResourceByGVKMock(...args),
 }));
 
@@ -171,7 +168,6 @@ describe('NsViewStorage', () => {
     gridTablePropsRef.current = null;
     confirmationPropsRef.current = null;
     openWithObjectMock.mockReset();
-    deleteResourceMock.mockReset();
     deleteResourceByGVKMock.mockReset();
     deleteResourceByGVKMock.mockResolvedValue(undefined);
     errorHandlerMock.handle.mockClear();

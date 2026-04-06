@@ -28,7 +28,6 @@ const permissionMapMock = vi.hoisted(() => ({
 }));
 
 const deleteResourceMock = vi.hoisted(() => ({
-  DeleteResource: vi.fn(),
   DeleteResourceByGVK: vi.fn(),
 }));
 
@@ -135,7 +134,6 @@ vi.mock('@shared/components/modals/ConfirmationModal', () => ({
 }));
 
 vi.mock('@wailsjs/go/backend/App', () => ({
-  DeleteResource: deleteResourceMock.DeleteResource,
   DeleteResourceByGVK: deleteResourceMock.DeleteResourceByGVK,
 }));
 
@@ -196,7 +194,6 @@ describe('NsViewConfig ConfigViewGrid', () => {
     sortHookMock.handleSort.mockClear();
     shortNamesMock.useShortNames.mockReturnValue(false);
     permissionMapMock.map = new Map();
-    deleteResourceMock.DeleteResource.mockReset();
     deleteResourceMock.DeleteResourceByGVK.mockReset();
     getPermissionKeyMock.getPermissionKey.mockClear();
     gridTablePropsRef.current = null;

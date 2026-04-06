@@ -21,7 +21,7 @@ vi.mock('@wailsjs/go/backend/App', () => ({
   RestartWorkload: (...args: unknown[]) => restartMock(...args),
   DeletePod: (...args: unknown[]) => deletePodMock(...args),
   DeleteHelmRelease: (...args: unknown[]) => deleteHelmMock(...args),
-  DeleteResource: (...args: unknown[]) => deleteResourceMock(...args),
+  DeleteResourceByGVK: (...args: unknown[]) => deleteResourceMock(...args),
   ScaleWorkload: (...args: unknown[]) => scaleMock(...args),
 }));
 

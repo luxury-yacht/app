@@ -311,17 +311,12 @@ func (p *objectDetailProvider) resolveDetailContext(ctx context.Context) resolve
 
 // FetchObjectYAML retrieves the YAML representation of a Kubernetes object.
 //
-// The gvk parameter tells us which identity the caller wants. There are
-// two modes:
-//
-//  1. Fully-qualified (gvk.Group and gvk.Version both set, e.g. from a
-//     new-format scope "namespace:group/version:kind:name"): resolve
-//     strictly via the shared common.ResolveGVRForGVK helper so colliding
-//     kinds from different groups disambiguate correctly.
-//
-//  2. Kind-only (only gvk.Kind set, from a legacy "namespace:kind:name"
-//     scope): fall back to the existing kind-only path so existing
-//     clusters and built-in resources keep working exactly as before.
+// The caller MUST supply a fully-qualified GVK (group, version, and kind).
+// Resolution goes through the shared common.ResolveGVRForGVK helper so
+// colliding kinds from different groups disambiguate correctly. The
+// kind-only fallback that used to live here was the source of the
+// kind-only-objects bug — see the hard-error guard below and
+// docs/plans/kind-only-objects.md.
 func (p *objectDetailProvider) FetchObjectYAML(ctx context.Context, gvk schema.GroupVersionKind, namespace, name string) (string, error) {
 	resolved := p.resolveDetailContext(ctx)
 	if !resolved.scoped {

@@ -9,12 +9,13 @@ package capabilities
 
 // PermissionQuery is a single permission check request from the frontend.
 //
-// Group and Version together carry a fully-qualified GroupVersionKind when
-// the caller wants strict GVR resolution — this is what lets the RBAC gate
-// distinguish between two CRDs that share a Kind (e.g. DBInstance under
-// different operators). When Group and Version are both empty the backend
-// falls back to the legacy kind-only resolver for backwards compatibility.
-// See docs/plans/kind-only-objects.md step 4.
+// Group and Version together MUST carry a fully-qualified GroupVersionKind
+// — this is what lets the RBAC gate distinguish between two CRDs that
+// share a Kind (e.g. DBInstance under different operators). The backend
+// rejects queries with an empty Version: the legacy kind-only resolver
+// was first-match-wins across colliding CRDs and has been retired. See
+// docs/plans/kind-only-objects.md step 4 and resolveGVRForPermissionQuery
+// in backend/app_permissions.go.
 type PermissionQuery struct {
 	ID           string `json:"id"`
 	ClusterId    string `json:"clusterId"`
