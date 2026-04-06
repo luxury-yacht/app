@@ -714,9 +714,9 @@ func (m *Manager) handleCustomResource(obj interface{}, updateType MessageType, 
 	}
 	if updateType != MessageTypeDeleted {
 		if domain == domainClusterCustom {
-			update.Row = snapshot.BuildClusterCustomSummary(m.clusterMeta, resource, info.gvr.Group, info.kind)
+			update.Row = snapshot.BuildClusterCustomSummary(m.clusterMeta, resource, info.gvr.Group, info.gvr.Version, info.kind)
 		} else {
-			update.Row = snapshot.BuildNamespaceCustomSummary(m.clusterMeta, resource, info.gvr.Group, info.kind)
+			update.Row = snapshot.BuildNamespaceCustomSummary(m.clusterMeta, resource, info.gvr.Group, info.gvr.Version, info.kind)
 		}
 	}
 

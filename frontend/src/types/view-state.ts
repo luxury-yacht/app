@@ -37,9 +37,23 @@ export interface KubernetesObjectReference {
   clusterId?: string | null;
   clusterName?: string | null;
 
+  /**
+   * API group for the object's kind (e.g. "apps", "rds.services.k8s.aws").
+   * Empty string for core/v1 kinds. Callers that build refs from the
+   * catalog should populate this so downstream code can disambiguate
+   * colliding CRDs. See docs/plans/kind-only-objects.md.
+   */
+  group?: string | null;
+  /** API version for the object's kind (e.g. "v1", "v1alpha1"). */
+  version?: string | null;
+  /** Plural resource name (e.g. "dbinstances"), propagated from the catalog. */
+  resource?: string | null;
+
   // Raw Kubernetes API format (metadata object)
   metadata?: KubernetesMetadata;
 
-  // Allow additional properties from various resource types
+  // Allow additional properties from various resource types.
+  // Kept for backwards compatibility — new callers should prefer the typed
+  // fields above.
   [key: string]: unknown;
 }

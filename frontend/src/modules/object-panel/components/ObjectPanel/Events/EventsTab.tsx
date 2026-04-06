@@ -23,7 +23,7 @@ import { useRefreshWatcher } from '@/core/refresh/hooks/useRefreshWatcher';
 import type { ObjectEventsRefresherName } from '@/core/refresh/refresherTypes';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
-import { buildClusterScope } from '@/core/refresh/clusterScope';
+import { buildClusterScope, buildObjectScope } from '@/core/refresh/clusterScope';
 import type { PanelObjectData } from '../types';
 import { CLUSTER_SCOPE, INACTIVE_SCOPE } from '../constants';
 import './EventsTab.css';
@@ -83,9 +83,26 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive }) => {
       objectData.namespace && objectData.namespace.length > 0
         ? objectData.namespace
         : CLUSTER_SCOPE;
-    const rawScope = `${namespace}:${objectData.kind}:${objectData.name}`;
+    // Emit the GVK scope form when PanelObjectData carries group/version
+    // so the backend object-events domain can disambiguate colliding
+    // kinds. Falls back to the legacy namespace:kind:name format for refs
+    // that haven't been migrated yet. See docs/plans/kind-only-objects.md.
+    const rawScope = buildObjectScope({
+      namespace,
+      group: objectData?.group,
+      version: objectData?.version,
+      kind: objectData.kind,
+      name: objectData.name,
+    });
     return buildClusterScope(objectData?.clusterId ?? undefined, rawScope);
-  }, [objectData?.clusterId, objectData?.kind, objectData?.name, objectData?.namespace]);
+  }, [
+    objectData?.clusterId,
+    objectData?.group,
+    objectData?.kind,
+    objectData?.name,
+    objectData?.namespace,
+    objectData?.version,
+  ]);
 
   const eventsSnapshot = useRefreshScopedDomain('object-events', eventsScope ?? INACTIVE_SCOPE);
 

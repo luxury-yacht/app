@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	"k8s.io/apimachinery/pkg/runtime/schema"
+
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 )
@@ -15,9 +17,14 @@ const (
 	objectHelmValuesDomain   = "object-helm-values"
 )
 
-// ObjectYAMLProvider supplies rendered YAML for an object scope.
+// ObjectYAMLProvider supplies rendered YAML for an object scope. The
+// GroupVersionKind carries the caller-requested identity. For
+// backwards-compatible legacy scopes (namespace:kind:name) the GVK will
+// have only Kind set; for new-format scopes the GVK is fully populated
+// and the concrete provider must honor the group/version to disambiguate
+// colliding kinds (see docs/plans/kind-only-objects.md).
 type ObjectYAMLProvider interface {
-	FetchObjectYAML(ctx context.Context, kind, namespace, name string) (string, error)
+	FetchObjectYAML(ctx context.Context, gvk schema.GroupVersionKind, namespace, name string) (string, error)
 }
 
 // HelmContentProvider supplies Helm manifest/values for a release.
@@ -88,13 +95,13 @@ type ObjectYAMLBuilder struct {
 }
 
 func (b *ObjectYAMLBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-	namespace, kind, name, err := parseObjectScope(scope)
+	identity, err := parseObjectScope(scope)
 	if err != nil {
 		return nil, err
 	}
 	meta := ClusterMetaFromContext(ctx)
 
-	yaml, err := b.provider.FetchObjectYAML(ctx, kind, namespace, name)
+	yaml, err := b.provider.FetchObjectYAML(ctx, identity.GVK, identity.Namespace, identity.Name)
 	if err != nil {
 		return nil, err
 	}

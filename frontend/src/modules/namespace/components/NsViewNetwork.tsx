@@ -24,6 +24,7 @@ import GridTable, {
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
+import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { DeleteResource } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
@@ -69,10 +70,12 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
 
     const handleResourceClick = useCallback(
       (resource: NetworkData) => {
+        const resolvedKind = resource.kind || resource.kindAlias;
         openWithObject({
-          kind: resource.kind || resource.kindAlias,
+          kind: resolvedKind,
           name: resource.name,
           namespace: resource.namespace,
+          ...resolveBuiltinGroupVersion(resolvedKind),
           clusterId: resource.clusterId ?? undefined,
           clusterName: resource.clusterName ?? undefined,
         });

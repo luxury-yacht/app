@@ -117,6 +117,50 @@ export const parseClusterScopeList = (
   return { clusterIds, scope, isMultiCluster: true };
 };
 
+/**
+ * buildObjectScope encodes an object identity into the scope tail format
+ * expected by the backend refresh-domain parseObjectScope parser. The
+ * returned string does NOT include the cluster prefix — wrap it with
+ * buildClusterScope when feeding it into a scoped refresh domain.
+ *
+ * Two formats are supported, matching the backend parser:
+ *
+ *   - Legacy:  "namespace:kind:name"                     (when group and
+ *                                                         version are both
+ *                                                         empty/absent)
+ *   - GVK:     "namespace:group/version:kind:name"       (when version is
+ *                                                         set, even if
+ *                                                         group is empty
+ *                                                         for core types)
+ *
+ * The cluster-scope sentinel "__cluster__" should be passed for the
+ * namespace when the object is cluster-scoped (matches the backend's
+ * clusterScopeToken constant).
+ *
+ * An empty group with a non-empty version encodes as "/v1:kind:name" —
+ * the leading slash is load-bearing: it signals "core API" to the backend
+ * parser without introducing another format. See docs/plans/kind-only-objects.md.
+ */
+export const buildObjectScope = (args: {
+  namespace: string;
+  group?: string | null;
+  version?: string | null;
+  kind: string;
+  name: string;
+}): string => {
+  const namespace = args.namespace.trim();
+  const version = (args.version ?? '').trim();
+  const kind = args.kind.trim();
+  const name = args.name.trim();
+
+  if (!version) {
+    return `${namespace}:${kind}:${name}`;
+  }
+
+  const group = (args.group ?? '').trim();
+  return `${namespace}:${group}/${version}:${kind}:${name}`;
+};
+
 // buildClusterScopeList prefixes scope with a list of cluster IDs for multi-cluster refreshes.
 export const buildClusterScopeList = (
   clusterIds: Array<string | null | undefined>,

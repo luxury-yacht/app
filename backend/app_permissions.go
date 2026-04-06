@@ -13,10 +13,34 @@ import (
 	"fmt"
 	"strings"
 
+	authorizationv1 "k8s.io/api/authorization/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+
 	"github.com/luxury-yacht/app/backend/capabilities"
 	"github.com/luxury-yacht/app/backend/internal/config"
-	authorizationv1 "k8s.io/api/authorization/v1"
+	"github.com/luxury-yacht/app/backend/resources/common"
 )
+
+// resolveGVRForPermissionQuery picks the right GVR resolver for a permission
+// query. When the caller supplied a fully-qualified Group+Version, we route
+// through the strict common.ResolveGVRForGVK helper so colliding kinds
+// disambiguate correctly. Otherwise we fall back to the legacy kind-only
+// resolver on *App, which preserves existing behavior for every caller
+// that hasn't been migrated yet (see docs/plans/kind-only-objects.md step 4).
+func (a *App) resolveGVRForPermissionQuery(ctx context.Context, q capabilities.PermissionQuery) (schema.GroupVersionResource, bool, error) {
+	if q.Version != "" {
+		deps, _, err := a.resolveClusterDependencies(q.ClusterId)
+		if err != nil {
+			return schema.GroupVersionResource{}, false, err
+		}
+		return common.ResolveGVRForGVK(ctx, deps, schema.GroupVersionKind{
+			Group:   q.Group,
+			Version: q.Version,
+			Kind:    q.ResourceKind,
+		})
+	}
+	return a.getGVR(q.ClusterId, q.ResourceKind)
+}
 
 // ssarItem tracks a single check that needs SSAR fallback evaluation.
 type ssarItem struct {
@@ -50,6 +74,8 @@ func (a *App) QueryPermissions(queries []capabilities.PermissionQuery) (*capabil
 		// Normalize input fields.
 		q.ID = strings.TrimSpace(q.ID)
 		q.ClusterId = strings.TrimSpace(q.ClusterId)
+		q.Group = strings.TrimSpace(q.Group)
+		q.Version = strings.TrimSpace(q.Version)
 		q.ResourceKind = strings.TrimSpace(q.ResourceKind)
 		q.Verb = strings.ToLower(strings.TrimSpace(q.Verb))
 		q.Namespace = strings.TrimSpace(q.Namespace)
@@ -68,7 +94,10 @@ func (a *App) QueryPermissions(queries []capabilities.PermissionQuery) (*capabil
 		}
 
 		// Resolve the GVR to get API group, resource name, and scope.
-		gvr, isNamespaced, err := a.getGVR(q.ClusterId, q.ResourceKind)
+		// When the caller provided Group+Version, routes through the strict
+		// GVK resolver in resources/common so colliding kinds disambiguate;
+		// otherwise falls back to the legacy kind-only resolver.
+		gvr, isNamespaced, err := a.resolveGVRForPermissionQuery(ctx, q)
 		if err != nil {
 			results[i].Source = "error"
 			results[i].Error = fmt.Sprintf("failed to resolve resource kind %q: %v", q.ResourceKind, err)

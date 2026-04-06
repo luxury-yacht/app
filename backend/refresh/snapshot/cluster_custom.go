@@ -33,11 +33,17 @@ type ClusterCustomBuilder struct {
 }
 
 // ClusterCustomSummary captures key cluster custom resource fields.
+//
+// APIGroup and APIVersion together identify the owning CRD's GroupVersion
+// so the frontend can disambiguate colliding Kinds across API groups.
+// See the NamespaceCustomSummary comment and
+// docs/plans/kind-only-objects.md for details.
 type ClusterCustomSummary struct {
 	ClusterMeta
 	Kind        string            `json:"kind"`
 	Name        string            `json:"name"`
 	APIGroup    string            `json:"apiGroup"`
+	APIVersion  string            `json:"apiVersion"`
 	Age         string            `json:"age"`
 	Labels      map[string]string `json:"labels,omitempty"`
 	Annotations map[string]string `json:"annotations,omitempty"`
@@ -175,6 +181,7 @@ func (b *ClusterCustomBuilder) Build(ctx context.Context, scope string) (*refres
 					Kind:        resourceKind(item, crdCopy.Spec.Names.Kind),
 					Name:        item.GetName(),
 					APIGroup:    gvr.Group,
+					APIVersion:  gvr.Version,
 					Age:         formatAge(item.GetCreationTimestamp().Time),
 					// Include metadata so the cluster custom view can surface labels/annotations.
 					Labels:      item.GetLabels(),

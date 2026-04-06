@@ -27,6 +27,7 @@ import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import GridTable from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
+import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
 import type { PodMetricsInfo } from '@/core/refresh/types';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import useWorkloadTableColumns from '@modules/namespace/components/useWorkloadTableColumns';
@@ -120,6 +121,7 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
           kind: workload.kind,
           name: workload.name,
           namespace: workload.namespace,
+          ...resolveBuiltinGroupVersion(workload.kind),
           clusterId: workload.clusterId ?? undefined,
           clusterName: workload.clusterName ?? undefined,
         });

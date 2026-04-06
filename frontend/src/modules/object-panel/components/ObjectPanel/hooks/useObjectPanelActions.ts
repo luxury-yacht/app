@@ -154,7 +154,20 @@ export const useObjectPanelActions = ({
               await app.DeleteHelmRelease(clusterId, namespace, name);
             } else {
               const resourceKind = objectData.kind || objectKind;
-              await app.DeleteResource(clusterId, resourceKind, namespace, name);
+              // Route through the GVK-aware wrapper when PanelObjectData
+              // carries a version so colliding CRDs (e.g. two DBInstance
+              // kinds from different operators) delete the correct object.
+              // Falls back to the legacy kind-only path for any caller
+              // that hasn't been migrated yet. See
+              // docs/plans/kind-only-objects.md step 5.
+              if (objectData.version) {
+                const apiVersion = objectData.group
+                  ? `${objectData.group}/${objectData.version}`
+                  : objectData.version;
+                await app.DeleteResourceByGVK(clusterId, apiVersion, resourceKind, namespace, name);
+              } else {
+                await app.DeleteResource(clusterId, resourceKind, namespace, name);
+              }
             }
             dispatch({ type: 'SET_RESOURCE_DELETED', payload: { deleted: true, name } });
             close();

@@ -6,7 +6,7 @@
  * Also indicates if the object is a Helm release or an event.
  */
 import type { PanelObjectData } from '../types';
-import { buildClusterScope } from '@/core/refresh/clusterScope';
+import { buildClusterScope, buildObjectScope } from '@/core/refresh/clusterScope';
 
 export interface UseObjectPanelKindOptions {
   clusterScope?: string;
@@ -41,7 +41,16 @@ export const getObjectPanelKind = (
   const detailScope =
     !objectData?.name || !objectKind
       ? null
-      : buildClusterScope(clusterId, `${scopeNamespace}:${objectKind}:${objectData.name}`);
+      : buildClusterScope(
+          clusterId,
+          buildObjectScope({
+            namespace: scopeNamespace,
+            group: objectData?.group,
+            version: objectData?.version,
+            kind: objectKind,
+            name: objectData.name,
+          })
+        );
 
   const helmScope =
     objectKind !== 'helmrelease' || !objectData?.name

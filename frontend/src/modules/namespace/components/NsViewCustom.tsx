@@ -93,11 +93,18 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
     const handleResourceClick = useCallback(
       (resource: CustomResourceData) => {
         // Preserve metadata and age so the object panel shows labels/annotations and Age.
+        // CRITICAL: pass apiGroup/apiVersion so downstream scope/capability
+        // resolution can disambiguate colliding Kinds (e.g. two DBInstance
+        // CRDs from different operators). Without these, the object panel
+        // falls back to first-match-wins discovery and opens the wrong
+        // resource. See docs/plans/kind-only-objects.md step 1.
         openWithObject({
           kind: resource.kind || resource.kindAlias || 'CustomResource',
           kindAlias: resource.kindAlias,
           name: resource.name,
           namespace: resource.namespace,
+          group: resource.apiGroup,
+          version: resource.apiVersion,
           age: resource.age,
           labels: resource.labels,
           annotations: resource.annotations,

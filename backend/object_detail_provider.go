@@ -28,6 +28,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/rbac"
 	"github.com/luxury-yacht/app/backend/resources/storage"
 	"github.com/luxury-yacht/app/backend/resources/workloads"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 type objectDetailProvider struct {
@@ -309,15 +310,37 @@ func (p *objectDetailProvider) resolveDetailContext(ctx context.Context) resolve
 }
 
 // FetchObjectYAML retrieves the YAML representation of a Kubernetes object.
-func (p *objectDetailProvider) FetchObjectYAML(ctx context.Context, kind, namespace, name string) (string, error) {
+//
+// The gvk parameter tells us which identity the caller wants. There are
+// two modes:
+//
+//  1. Fully-qualified (gvk.Group and gvk.Version both set, e.g. from a
+//     new-format scope "namespace:group/version:kind:name"): resolve
+//     strictly via the shared common.ResolveGVRForGVK helper so colliding
+//     kinds from different groups disambiguate correctly.
+//
+//  2. Kind-only (only gvk.Kind set, from a legacy "namespace:kind:name"
+//     scope): fall back to the existing kind-only path so existing
+//     clusters and built-in resources keep working exactly as before.
+func (p *objectDetailProvider) FetchObjectYAML(ctx context.Context, gvk schema.GroupVersionKind, namespace, name string) (string, error) {
 	resolved := p.resolveDetailContext(ctx)
 	if !resolved.scoped {
 		return "", fmt.Errorf("cluster scope is required")
 	}
-	if p == nil || p.app == nil {
-		return getObjectYAMLWithDependencies(resolved.deps, resolved.selectionKey, kind, namespace, name)
+
+	// Fully-qualified GVK → strict resolver path.
+	if gvk.Group != "" || gvk.Version != "" {
+		if gvk.Version == "" {
+			return "", fmt.Errorf("version is required when group is specified (got %q)", gvk.String())
+		}
+		return fetchObjectYAMLByGVK(ctx, resolved.deps, gvk, namespace, name)
 	}
-	return p.app.getObjectYAMLWithCache(resolved.deps, resolved.selectionKey, kind, namespace, name)
+
+	// Legacy kind-only path.
+	if p == nil || p.app == nil {
+		return getObjectYAMLWithDependencies(resolved.deps, resolved.selectionKey, gvk.Kind, namespace, name)
+	}
+	return p.app.getObjectYAMLWithCache(resolved.deps, resolved.selectionKey, gvk.Kind, namespace, name)
 }
 
 // FetchHelmManifest retrieves the manifest for a Helm release.

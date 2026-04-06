@@ -26,6 +26,7 @@ import GridTable, {
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
+import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
 import {
   calculateCpuOvercommitted,
   calculateMemoryOvercommitted,
@@ -72,6 +73,7 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
         openWithObject({
           kind: 'Node',
           name: node.name,
+          ...resolveBuiltinGroupVersion('Node'),
           clusterId: node.clusterId ?? undefined,
           clusterName: node.clusterName ?? undefined,
         });

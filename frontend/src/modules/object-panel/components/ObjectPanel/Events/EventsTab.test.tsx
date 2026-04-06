@@ -25,6 +25,23 @@ vi.mock('@shared/hooks/useNavigateToView', () => ({
 
 vi.mock('@/core/refresh/clusterScope', () => ({
   buildClusterScope: (_clusterId: string | undefined, scope: string) => `scoped:${scope}`,
+  // Minimal stub matching the real signature. Tests that care about the
+  // GVK form assert on the scope string they get back; the legacy
+  // kind-only tests are agnostic.
+  buildObjectScope: (args: {
+    namespace: string;
+    group?: string | null;
+    version?: string | null;
+    kind: string;
+    name: string;
+  }) => {
+    const version = (args.version ?? '').trim();
+    if (!version) {
+      return `${args.namespace}:${args.kind}:${args.name}`;
+    }
+    const group = (args.group ?? '').trim();
+    return `${args.namespace}:${group}/${version}:${args.kind}:${args.name}`;
+  },
 }));
 
 const hoistedSnapshot = vi.hoisted(() => ({

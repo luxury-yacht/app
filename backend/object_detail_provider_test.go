@@ -309,13 +309,69 @@ func TestObjectDetailProviderFetchObjectYAML(t *testing.T) {
 		ClusterID:   clusterID,
 		ClusterName: "ctx",
 	})
-	yamlStr, err := provider.FetchObjectYAML(ctx, "ConfigMap", "default", "cm")
+	// Legacy kind-only path: empty group/version is the backwards-compatible
+	// signal that the caller does not know the full GVK and wants the
+	// existing kind-only resolver.
+	yamlStr, err := provider.FetchObjectYAML(ctx, schema.GroupVersionKind{Kind: "ConfigMap"}, "default", "cm")
 	if err != nil {
 		t.Fatalf("FetchObjectYAML returned error: %v", err)
 	}
 	if !strings.Contains(yamlStr, "name: cm") {
 		t.Fatalf("expected YAML output to contain object name, got %q", yamlStr)
 	}
+}
+
+// TestObjectDetailProviderFetchObjectYAMLByGVKDisambiguates is the refresh-domain
+// acceptance test for step 3 of the kind-only-objects fix. It proves that
+// the primary panel YAML load path (ObjectYAMLBuilder.Build → provider.FetchObjectYAML)
+// now honors group/version when the caller supplies a fully-qualified GVK.
+//
+// The fixture seeds two colliding DBInstance CRDs in the test cluster:
+//   - rds.services.k8s.aws/v1alpha1.DBInstance  (ACK)
+//   - kinda.rocks/v1beta1.DbInstance            (db-operator)
+//
+// With the old kind-only path, a single bare-kind request would resolve to
+// whichever entry discovery yielded first — that's the bug. With the new
+// GVK-aware path, each GVK resolves strictly to its own object.
+func TestObjectDetailProviderFetchObjectYAMLByGVKDisambiguates(t *testing.T) {
+	const clusterID = "collision-provider"
+	app := newCollidingDBInstanceCluster(t, clusterID)
+
+	provider := app.objectDetailProvider().(*objectDetailProvider)
+	ctx := snapshot.WithClusterMeta(context.Background(), snapshot.ClusterMeta{
+		ClusterID:   clusterID,
+		ClusterName: "ctx",
+	})
+
+	t.Run("ACK DBInstance", func(t *testing.T) {
+		yamlStr, err := provider.FetchObjectYAML(ctx, schema.GroupVersionKind{
+			Group: "rds.services.k8s.aws", Version: "v1alpha1", Kind: "DBInstance",
+		}, "default", "my-db")
+		if err != nil {
+			t.Fatalf("FetchObjectYAML returned error for ACK: %v", err)
+		}
+		if !strings.Contains(yamlStr, "source: ack-rds") {
+			t.Fatalf("expected ACK YAML to contain 'source: ack-rds', got:\n%s", yamlStr)
+		}
+		if strings.Contains(yamlStr, "source: db-operator") {
+			t.Fatalf("ACK lookup returned db-operator object by mistake:\n%s", yamlStr)
+		}
+	})
+
+	t.Run("kinda.rocks DbInstance", func(t *testing.T) {
+		yamlStr, err := provider.FetchObjectYAML(ctx, schema.GroupVersionKind{
+			Group: "kinda.rocks", Version: "v1beta1", Kind: "DbInstance",
+		}, "default", "my-db")
+		if err != nil {
+			t.Fatalf("FetchObjectYAML returned error for kinda.rocks: %v", err)
+		}
+		if !strings.Contains(yamlStr, "source: db-operator") {
+			t.Fatalf("expected kinda.rocks YAML to contain 'source: db-operator', got:\n%s", yamlStr)
+		}
+		if strings.Contains(yamlStr, "source: ack-rds") {
+			t.Fatalf("kinda.rocks lookup returned ack-rds object by mistake:\n%s", yamlStr)
+		}
+	})
 }
 
 func TestObjectDetailProviderHelmErrorsWhenClientMissing(t *testing.T) {

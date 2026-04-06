@@ -26,6 +26,7 @@ import GridTable, {
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
+import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 import { useFavToggle } from '@ui/favorites/FavToggle';
 
@@ -73,6 +74,7 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
         openWithObject({
           kind: 'PersistentVolume',
           name: pv.name,
+          ...resolveBuiltinGroupVersion('PersistentVolume'),
           clusterId: pv.clusterId ?? undefined,
           clusterName: pv.clusterName ?? undefined,
         });
@@ -101,6 +103,7 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
           kind: 'PersistentVolumeClaim',
           namespace: target.namespace,
           name: target.name,
+          ...resolveBuiltinGroupVersion('PersistentVolumeClaim'),
           clusterId: pv.clusterId ?? undefined,
           clusterName: pv.clusterName ?? undefined,
         });
@@ -161,6 +164,7 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
               openWithObject({
                 kind: 'StorageClass',
                 name: pv.storageClass,
+                ...resolveBuiltinGroupVersion('StorageClass'),
                 clusterId: pv.clusterId ?? undefined,
                 clusterName: pv.clusterName ?? undefined,
               });

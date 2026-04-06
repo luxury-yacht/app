@@ -27,7 +27,7 @@ import RollbackModal from '@shared/components/modals/RollbackModal';
 import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 import { getPermissionKey, queryKindPermissions, useUserPermissions } from '@/core/capabilities';
-import { DeleteResource, RestartWorkload } from '@wailsjs/go/backend/App';
+import { DeleteResource, DeleteResourceByGVK, RestartWorkload } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
 import type { CatalogItem } from '@/core/refresh/types';
 import { useTableSort } from '@/hooks/useTableSort';
@@ -167,7 +167,24 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     const item = deleteConfirm.item;
 
     try {
-      await DeleteResource(item.clusterId ?? '', item.kind, item.namespace ?? '', item.name);
+      // CatalogItem already carries full group/version, so route through
+      // the GVK-aware DeleteResourceByGVK to avoid the first-match-wins
+      // ambiguity for colliding CRDs (e.g. two DBInstance kinds from
+      // different operators). Fall back to the legacy DeleteResource for
+      // the unlikely case where the catalog row is missing a version.
+      // See docs/plans/kind-only-objects.md step 5.
+      if (item.version) {
+        const apiVersion = item.group ? `${item.group}/${item.version}` : item.version;
+        await DeleteResourceByGVK(
+          item.clusterId ?? '',
+          apiVersion,
+          item.kind,
+          item.namespace ?? '',
+          item.name
+        );
+      } else {
+        await DeleteResource(item.clusterId ?? '', item.kind, item.namespace ?? '', item.name);
+      }
     } catch (err) {
       errorHandler.handle(err, {
         action: 'delete',

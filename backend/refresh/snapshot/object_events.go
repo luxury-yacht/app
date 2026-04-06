@@ -82,10 +82,13 @@ func RegisterObjectEventsDomain(
 }
 
 func (b *ObjectEventsBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-	namespace, kind, name, err := parseObjectScope(scope)
+	identity, err := parseObjectScope(scope)
 	if err != nil {
 		return nil, err
 	}
+	namespace := identity.Namespace
+	kind := identity.GVK.Kind
+	name := identity.Name
 	meta := ClusterMetaFromContext(ctx)
 
 	// Prefer informer cache once synced; fall back to API list to preserve pre-sync/error behavior.

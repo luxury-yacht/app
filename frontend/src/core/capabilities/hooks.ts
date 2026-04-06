@@ -28,6 +28,15 @@ import type { PermissionQueryDiagnostics } from './permissionTypes';
 interface QueryPayloadItem {
   id: string;
   clusterId: string;
+  /**
+   * API group for the target kind. Optional: when present alongside
+   * `version`, the backend routes through the strict GVK resolver. When
+   * absent, it falls back to kind-only resolution. See
+   * docs/plans/kind-only-objects.md step 4.
+   */
+  group?: string;
+  /** API version paired with `group`. */
+  version?: string;
   resourceKind: string;
   verb: string;
   namespace: string;
@@ -38,6 +47,8 @@ interface QueryPayloadItem {
 interface QueryResponseResult {
   id: string;
   clusterId: string;
+  group?: string;
+  version?: string;
   resourceKind: string;
   verb: string;
   namespace: string;
@@ -130,6 +141,8 @@ export const useCapabilities = (
     const payload: QueryPayloadItem[] = namedDescriptors.map((d) => ({
       id: d.id,
       clusterId: d.clusterId ?? '',
+      group: d.group,
+      version: d.version,
       resourceKind: d.resourceKind,
       verb: d.verb,
       namespace: d.namespace ?? '',

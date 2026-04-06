@@ -14,11 +14,22 @@ import (
 	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 )
+
+// scopeObjectIdentity groups the fields parseObjectScope pulls out of a
+// refresh-domain scope string. The GroupVersionKind is only fully populated
+// for new-format scopes (namespace:group/version:kind:name); legacy
+// namespace:kind:name scopes return a GVK with only Kind set.
+type scopeObjectIdentity struct {
+	Namespace string
+	GVK       schema.GroupVersionKind
+	Name      string
+}
 
 const (
 	objectDetailsDomain = "object-details"
@@ -70,10 +81,13 @@ func RegisterObjectDetailsDomain(
 }
 
 func (b *ObjectDetailsBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-	namespace, kind, name, err := parseObjectScope(scope)
+	identity, err := parseObjectScope(scope)
 	if err != nil {
 		return nil, err
 	}
+	namespace := identity.Namespace
+	kind := identity.GVK.Kind
+	name := identity.Name
 
 	if b.provider != nil {
 		if details, resourceVersion, err := b.provider.FetchObjectDetails(ctx, kind, namespace, name); err == nil {
@@ -122,32 +136,76 @@ func (b *ObjectDetailsBuilder) buildSnapshot(ctx context.Context, scope string, 
 	}
 }
 
-func parseObjectScope(scope string) (string, string, string, error) {
+// parseObjectScope parses a refresh-domain scope string into a
+// scopeObjectIdentity. It accepts two formats for backwards compatibility:
+//
+//  1. Legacy:  "namespace:kind:name"                     (GVK has only Kind)
+//  2. GVK:     "namespace:group/version:kind:name"        (GVK fully populated)
+//
+// The cluster-scope sentinel "__cluster__" in the namespace slot maps to
+// an empty namespace. For the GVK form, a core-api resource uses an empty
+// group — the caller should encode it as "/version" (leading slash) so
+// strings.SplitN still yields the group/version segment.
+func parseObjectScope(scope string) (scopeObjectIdentity, error) {
 	if strings.TrimSpace(scope) == "" {
-		return "", "", "", fmt.Errorf("object scope is required")
+		return scopeObjectIdentity{}, fmt.Errorf("object scope is required")
 	}
 
 	_, trimmed := refresh.SplitClusterScope(scope)
-	parts := strings.SplitN(trimmed, ":", 3)
-	if len(parts) != 3 {
-		return "", "", "", fmt.Errorf("invalid object scope %q", trimmed)
+
+	// Peek at the second segment to decide legacy vs GVK form. The GVK
+	// form's second segment contains a "/" (group/version); the legacy
+	// form's second segment is a bare kind. SplitN with n=4 gives us
+	// enough slots to distinguish without losing tail content from the
+	// name field.
+	peek := strings.SplitN(trimmed, ":", 4)
+	if len(peek) < 3 {
+		return scopeObjectIdentity{}, fmt.Errorf("invalid object scope %q", trimmed)
 	}
 
-	namespace := parts[0]
+	var (
+		namespace string
+		gvk       schema.GroupVersionKind
+		name      string
+	)
+
+	if len(peek) == 4 && strings.Contains(peek[1], "/") {
+		// GVK form: namespace:group/version:kind:name
+		namespace = peek[0]
+		groupVersion := peek[1]
+		gv, err := schema.ParseGroupVersion(groupVersion)
+		if err != nil {
+			return scopeObjectIdentity{}, fmt.Errorf("invalid group/version %q in scope %q: %w", groupVersion, scope, err)
+		}
+		gvk = gv.WithKind(strings.TrimSpace(peek[2]))
+		name = peek[3]
+	} else {
+		// Legacy form: namespace:kind:name — the name may itself contain
+		// ":" (unlikely, but SplitN limit=3 preserves the tail).
+		parts := strings.SplitN(trimmed, ":", 3)
+		if len(parts) != 3 {
+			return scopeObjectIdentity{}, fmt.Errorf("invalid object scope %q", trimmed)
+		}
+		namespace = parts[0]
+		gvk = schema.GroupVersionKind{Kind: strings.TrimSpace(parts[1])}
+		name = parts[2]
+	}
+
 	if namespace == clusterScopeToken {
 		namespace = ""
 	}
-
-	kind := strings.TrimSpace(parts[1])
-	name := parts[2]
-	if kind == "" {
-		return "", "", "", fmt.Errorf("object kind missing in scope %q", scope)
+	if gvk.Kind == "" {
+		return scopeObjectIdentity{}, fmt.Errorf("object kind missing in scope %q", scope)
 	}
 	if name == "" {
-		return "", "", "", fmt.Errorf("object name missing in scope %q", scope)
+		return scopeObjectIdentity{}, fmt.Errorf("object name missing in scope %q", scope)
 	}
 
-	return namespace, kind, name, nil
+	return scopeObjectIdentity{
+		Namespace: namespace,
+		GVK:       gvk,
+		Name:      name,
+	}, nil
 }
 
 func parseVersion(rv string) uint64 {

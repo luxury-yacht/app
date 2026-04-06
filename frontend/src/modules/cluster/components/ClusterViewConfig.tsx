@@ -26,6 +26,7 @@ import GridTable, {
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
+import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 import { useFavToggle } from '@ui/favorites/FavToggle';
 
@@ -68,6 +69,7 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
         openWithObject({
           kind: resource.kind,
           name: resource.name,
+          ...resolveBuiltinGroupVersion(resource.kind),
           clusterId: resource.clusterId ?? undefined,
           clusterName: resource.clusterName ?? undefined,
         });

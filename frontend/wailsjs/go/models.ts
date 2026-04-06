@@ -583,6 +583,8 @@ export namespace capabilities {
 	export class PermissionQuery {
 	    id: string;
 	    clusterId: string;
+	    group?: string;
+	    version?: string;
 	    resourceKind: string;
 	    verb: string;
 	    namespace?: string;
@@ -597,6 +599,8 @@ export namespace capabilities {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
 	        this.clusterId = source["clusterId"];
+	        this.group = source["group"];
+	        this.version = source["version"];
 	        this.resourceKind = source["resourceKind"];
 	        this.verb = source["verb"];
 	        this.namespace = source["namespace"];
@@ -607,6 +611,8 @@ export namespace capabilities {
 	export class PermissionResult {
 	    id: string;
 	    clusterId: string;
+	    group?: string;
+	    version?: string;
 	    resourceKind: string;
 	    verb: string;
 	    namespace?: string;
@@ -625,6 +631,8 @@ export namespace capabilities {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
 	        this.clusterId = source["clusterId"];
+	        this.group = source["group"];
+	        this.version = source["version"];
 	        this.resourceKind = source["resourceKind"];
 	        this.verb = source["verb"];
 	        this.namespace = source["namespace"];

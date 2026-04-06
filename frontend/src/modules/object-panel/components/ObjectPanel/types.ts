@@ -8,6 +8,25 @@
 export type PanelObjectData = {
   kind?: string | null;
   kindAlias?: string | null;
+  /**
+   * API group for the object's kind (e.g. "apps", "rds.services.k8s.aws").
+   * Empty string for core/v1 kinds. Optional because legacy code paths and
+   * some fixtures don't yet thread GVK through; when absent, scope and
+   * capability resolution falls back to kind-only behavior (see
+   * docs/plans/kind-only-objects.md).
+   */
+  group?: string | null;
+  /**
+   * API version for the object's kind (e.g. "v1", "v1alpha1"). Optional
+   * for the same reason as `group`.
+   */
+  version?: string | null;
+  /**
+   * Plural resource name (e.g. "deployments", "dbinstances"). Carried
+   * alongside group/version from the catalog so the frontend doesn't have
+   * to pluralize on its own.
+   */
+  resource?: string | null;
   name?: string | null;
   namespace?: string | null;
   clusterId?: string | null;

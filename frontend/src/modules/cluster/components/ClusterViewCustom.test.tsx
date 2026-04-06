@@ -165,4 +165,50 @@ describe('ClusterViewCustom', () => {
       })
     );
   });
+
+  // Regression test mirroring NsViewCustom's colliding-CRD guardrail. See
+  // docs/plans/kind-only-objects.md. The cluster-scoped custom view has
+  // the same bug potential: if handleResourceClick drops apiGroup/apiVersion,
+  // a cluster-scoped custom resource whose Kind collides with another CRD
+  // group would open against the wrong GVR.
+  it('forwards apiGroup and apiVersion into openWithObject for colliding CRDs', async () => {
+    const clusterScopedCR = {
+      kind: 'DBCluster',
+      name: 'shared-pg',
+      apiGroup: 'postgresql.cnpg.io',
+      apiVersion: 'v1',
+      age: '3d',
+      clusterId: 'alpha:ctx',
+      clusterName: 'alpha',
+      labels: {},
+      annotations: {},
+    };
+
+    await act(async () => {
+      root.render(<ClusterViewCustom data={[clusterScopedCR]} loaded={true} />);
+      await Promise.resolve();
+    });
+
+    const props = gridTablePropsRef.current;
+    expect(props).toBeTruthy();
+
+    props.getCustomContextMenuItems(clusterScopedCR, 'kind')[0].onClick();
+
+    expect(openWithObjectMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'DBCluster',
+        name: 'shared-pg',
+        clusterId: 'alpha:ctx',
+        group: 'postgresql.cnpg.io',
+        version: 'v1',
+      })
+    );
+
+    const callArg = openWithObjectMock.mock.calls.find(
+      ([arg]) => (arg as { name?: string }).name === 'shared-pg'
+    )?.[0] as Record<string, unknown>;
+    expect(callArg).toBeDefined();
+    expect(callArg.group).toBe('postgresql.cnpg.io');
+    expect(callArg.version).toBe('v1');
+  });
 });

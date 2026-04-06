@@ -5,6 +5,7 @@
  * Handles rendering and interactions for the namespace feature.
  */
 
+import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
 import { getPodStatusSeverity } from '@/utils/podStatusSeverity';
 import { getPermissionKey, useUserPermissions } from '@/core/capabilities';
@@ -120,6 +121,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
           kind: 'Pod',
           name: pod.name,
           namespace: pod.namespace,
+          ...resolveBuiltinGroupVersion('Pod'),
           clusterId: pod.clusterId ?? undefined,
           clusterName: pod.clusterName ?? undefined,
         });
@@ -136,6 +138,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
           kind: pod.ownerKind,
           name: pod.ownerName,
           namespace: pod.namespace,
+          ...resolveBuiltinGroupVersion(pod.ownerKind),
           clusterId: pod.clusterId ?? undefined,
           clusterName: pod.clusterName ?? undefined,
         });
@@ -151,6 +154,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
         openWithObject({
           kind: 'Node',
           name: pod.node,
+          ...resolveBuiltinGroupVersion('Node'),
           clusterId: pod.clusterId ?? undefined,
           clusterName: pod.clusterName ?? undefined,
         });

@@ -29,6 +29,7 @@ import { useViewState } from '@core/contexts/ViewStateContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import '../shared.css';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
+import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
 
 // Row type for the jobs table, combining job info with cluster context.
 interface JobRow {
@@ -138,6 +139,7 @@ export const JobsTab: React.FC<JobsTabProps> = ({
             kind: 'Job',
             name: job.name,
             namespace: job.namespace,
+            ...resolveBuiltinGroupVersion('Job'),
             ...getJobClusterMeta(job),
           }),
         onAltClick: (job) =>
@@ -156,6 +158,7 @@ export const JobsTab: React.FC<JobsTabProps> = ({
             kind: 'Job',
             name: job.name,
             namespace: job.namespace,
+            ...resolveBuiltinGroupVersion('Job'),
             ...getJobClusterMeta(job),
           }),
         onAltClick: (job) =>
@@ -256,6 +259,7 @@ export const JobsTab: React.FC<JobsTabProps> = ({
                 kind: 'Job',
                 name: job.name,
                 namespace: job.namespace,
+                ...resolveBuiltinGroupVersion('Job'),
                 ...getJobClusterMeta(job),
               })
             }
@@ -275,6 +279,7 @@ export const JobsTab: React.FC<JobsTabProps> = ({
                       kind: 'Job',
                       name: job.name,
                       namespace: job.namespace,
+                      ...resolveBuiltinGroupVersion('Job'),
                       ...getJobClusterMeta(job),
                     }),
                 },

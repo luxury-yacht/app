@@ -26,6 +26,7 @@ import GridTable, {
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
+import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 import { useFavToggle } from '@ui/favorites/FavToggle';
 
@@ -69,6 +70,7 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
         openWithObject({
           kind: 'CustomResourceDefinition',
           name: crd.name,
+          ...resolveBuiltinGroupVersion('CustomResourceDefinition'),
           clusterId: crd.clusterId ?? undefined,
           clusterName: crd.clusterName ?? undefined,
         });

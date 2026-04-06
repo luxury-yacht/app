@@ -12,13 +12,36 @@ import { clearPanelState } from '@ui/dockable/useDockablePanelState';
 
 /**
  * Generate a stable, unique panel ID from a Kubernetes object reference.
- * Format: obj:{clusterId}:{kind}:{namespace}:{name}
+ *
+ * When the ref carries group and version (new, GVK-aware path), the id
+ * format is:
+ *   obj:{clusterId}:{group}/{version}/{kind}:{namespace}:{name}
+ *
+ * When the ref is kind-only (legacy path, no group/version), the id
+ * format is:
+ *   obj:{clusterId}:{kind}:{namespace}:{name}
+ *
+ * The split format is deliberate: two DBInstance objects from different
+ * CRD groups now get different panel ids and can coexist, but built-in
+ * resources and any caller that hasn't been migrated to pass group/version
+ * still produces the exact same id as before so persisted panel state and
+ * focus tracking are unaffected. See docs/plans/kind-only-objects.md.
  */
 export function objectPanelId(ref: KubernetesObjectReference): string {
   const c = ref.clusterId?.trim() ?? '';
   const k = (ref.kind ?? '').toLowerCase();
   const ns = ref.namespace?.trim() ?? '_';
   const n = ref.name?.trim() ?? '';
+  const group = ref.group?.trim() ?? '';
+  const version = ref.version?.trim() ?? '';
+
+  // Only include the GVK segment when the caller supplied a version — we
+  // treat "has version" as the signal that the ref is GVK-aware. An empty
+  // group with a version (e.g. core/v1) still gets the GVK form, encoded
+  // as "/v1/" so the id is still parseable.
+  if (version) {
+    return `obj:${c}:${group}/${version}/${k}:${ns}:${n}`;
+  }
   return `obj:${c}:${k}:${ns}:${n}`;
 }
 

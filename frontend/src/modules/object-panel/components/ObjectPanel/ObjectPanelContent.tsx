@@ -6,7 +6,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { refreshOrchestrator } from '@/core/refresh';
-import { buildClusterScope } from '@/core/refresh/clusterScope';
+import { buildClusterScope, buildObjectScope } from '@/core/refresh/clusterScope';
 import DetailsTab from '@modules/object-panel/components/ObjectPanel/Details/DetailsTab';
 import type { DetailsTabProps } from '@modules/object-panel/components/ObjectPanel/Details/DetailsTab';
 import LogViewer from '@modules/object-panel/components/ObjectPanel/Logs/LogViewer';
@@ -94,13 +94,30 @@ export function ObjectPanelContent({
   }, [objectData?.namespace]);
 
   // Events scope uses original-case kind (matches EventsTab convention).
+  // Emits the GVK scope form when objectData carries group/version so the
+  // events domain can disambiguate colliding kinds; falls back to the
+  // legacy "namespace:kind:name" format otherwise. See
+  // docs/plans/kind-only-objects.md step 2.
   const eventsScope = useMemo(() => {
     if (!objectData?.name || !objectData?.kind) {
       return null;
     }
-    const rawScope = `${scopeNamespace}:${objectData.kind}:${objectData.name}`;
+    const rawScope = buildObjectScope({
+      namespace: scopeNamespace,
+      group: objectData?.group,
+      version: objectData?.version,
+      kind: objectData.kind,
+      name: objectData.name,
+    });
     return buildClusterScope(objectData.clusterId ?? undefined, rawScope);
-  }, [objectData?.clusterId, objectData?.kind, objectData?.name, scopeNamespace]);
+  }, [
+    objectData?.clusterId,
+    objectData?.group,
+    objectData?.kind,
+    objectData?.name,
+    objectData?.version,
+    scopeNamespace,
+  ]);
 
   // Logs scope uses lowercase kind (matches LogViewer convention).
   const logScope = useMemo(() => {

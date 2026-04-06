@@ -15,7 +15,7 @@ import { useShortcut, useSearchShortcutTarget } from '@ui/shortcuts';
 import { errorHandler } from '@utils/errorHandler';
 import { refreshOrchestrator } from '@/core/refresh';
 import { useRefreshScopedDomain } from '@/core/refresh/store';
-import { GetObjectYAML } from '@wailsjs/go/backend/App';
+import { GetObjectYAML, GetObjectYAMLByGVK } from '@wailsjs/go/backend/App';
 import './YamlTab.css';
 import { parseObjectIdentity, validateYamlDraft, type ObjectIdentity } from './yamlValidation';
 import { computeLineDiff, type DiffResult } from './yamlDiff';
@@ -338,12 +338,28 @@ const YamlTab: React.FC<YamlTabProps> = ({
 
   const hydrateLatestObject = useCallback(
     async (identity: ObjectIdentity) => {
-      const latestYamlRaw = await GetObjectYAML(
-        resolvedClusterId,
-        identity.kind,
-        identity.namespace ?? '',
-        identity.name
-      );
+      // Prefer the GVK-aware fetch when the caller has a full apiVersion.
+      // This avoids the first-match-wins ambiguity that bites colliding
+      // CRDs (e.g. two different DBInstance kinds). ObjectIdentity is
+      // parsed directly out of the edited YAML's apiVersion/kind fields
+      // by yamlValidation.parseObjectIdentity, so apiVersion is almost
+      // always present here — but we keep the legacy GetObjectYAML path
+      // as a fallback for any edge case where parsing didn't yield one.
+      // See docs/plans/kind-only-objects.md step 3.
+      const latestYamlRaw = identity.apiVersion
+        ? await GetObjectYAMLByGVK(
+            resolvedClusterId,
+            identity.apiVersion,
+            identity.kind,
+            identity.namespace ?? '',
+            identity.name
+          )
+        : await GetObjectYAML(
+            resolvedClusterId,
+            identity.kind,
+            identity.namespace ?? '',
+            identity.name
+          );
       const normalizedYaml = normalizeYamlString(latestYamlRaw);
       const parsedIdentity = parseObjectIdentity(normalizedYaml);
       const resolvedIdentity: ObjectIdentity = parsedIdentity

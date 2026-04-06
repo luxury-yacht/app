@@ -40,14 +40,23 @@ type NamespaceCustomSnapshot struct {
 }
 
 // NamespaceCustomSummary captures key CR instance fields.
+//
+// APIGroup and APIVersion together identify the owning CRD's GroupVersion
+// so the frontend can route downstream operations (view YAML, delete,
+// capability checks) through GVK-aware backend paths instead of the
+// first-match-wins kind-only resolver. Without APIVersion, two CRDs that
+// share a Kind (e.g. DBInstance.rds.services.k8s.aws vs
+// DBInstance.documentdb.services.k8s.aws) would be indistinguishable on
+// the frontend. See docs/plans/kind-only-objects.md.
 type NamespaceCustomSummary struct {
 	ClusterMeta
-	Kind      string `json:"kind"`
-	Name      string `json:"name"`
-	APIGroup  string `json:"apiGroup"`
-	Namespace string `json:"namespace"`
-	Age       string `json:"age"`
-	Labels    map[string]string `json:"labels,omitempty"`
+	Kind        string            `json:"kind"`
+	Name        string            `json:"name"`
+	APIGroup    string            `json:"apiGroup"`
+	APIVersion  string            `json:"apiVersion"`
+	Namespace   string            `json:"namespace"`
+	Age         string            `json:"age"`
+	Labels      map[string]string `json:"labels,omitempty"`
 	Annotations map[string]string `json:"annotations,omitempty"`
 }
 
@@ -200,6 +209,7 @@ func (b *NamespaceCustomBuilder) Build(ctx context.Context, scope string) (*refr
 					Kind:        resourceKind(item, crdCopy.Spec.Names.Kind),
 					Name:        item.GetName(),
 					APIGroup:    gvr.Group,
+					APIVersion:  gvr.Version,
 					Namespace:   itemNamespace,
 					Age:         formatAge(item.GetCreationTimestamp().Time),
 					// Include metadata so the custom view can surface labels/annotations.

@@ -30,6 +30,7 @@ import { useViewState } from '@core/contexts/ViewStateContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import '../shared.css';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
+import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
 
 interface PodsTabProps {
   pods: PodSnapshotEntry[];
@@ -107,6 +108,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
             kind: 'Pod',
             name: pod.name,
             namespace: pod.namespace,
+            ...resolveBuiltinGroupVersion('Pod'),
             ...getPodClusterMeta(pod),
           }),
         onAltClick: (pod) =>
@@ -125,6 +127,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
             kind: 'Pod',
             name: pod.name,
             namespace: pod.namespace,
+            ...resolveBuiltinGroupVersion('Pod'),
             ...getPodClusterMeta(pod),
           }),
         onAltClick: (pod) =>
@@ -300,6 +303,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
                 kind: 'Pod',
                 name: pod.name,
                 namespace: pod.namespace,
+                ...resolveBuiltinGroupVersion('Pod'),
                 ...getPodClusterMeta(pod),
               })
             }
@@ -319,6 +323,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
                       kind: 'Pod',
                       name: pod.name,
                       namespace: pod.namespace,
+                      ...resolveBuiltinGroupVersion('Pod'),
                       ...getPodClusterMeta(pod),
                     }),
                 },

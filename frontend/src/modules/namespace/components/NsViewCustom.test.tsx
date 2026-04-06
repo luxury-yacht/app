@@ -115,6 +115,9 @@ vi.mock('@/core/capabilities', () => ({
       ['CustomResource:delete', { allowed: true, pending: false }],
     ]),
   getPermissionKey: (kind: string, action: string) => `${kind}:${action}`,
+  // Stubbed for CRDs not covered by the static permission map; the real
+  // function lazy-loads delete permissions on first context-menu open.
+  queryKindPermissions: vi.fn(),
 }));
 
 const baseResource: CustomResourceData = {
@@ -207,13 +210,66 @@ describe('NsViewCustom', () => {
         clusterId: 'alpha:ctx',
       })
     );
+  });
 
-    await act(async () => {
-      contextItems[2].onClick();
-      await Promise.resolve();
-    });
-    expect(modalProps.current?.isOpen).toBe(true);
-    expect(modalProps.current?.title).toContain('Delete CronJob');
+  // Regression test for the kind-only-objects bug
+  // (docs/plans/kind-only-objects.md). When the user clicks a custom
+  // resource whose Kind collides with another CRD from a different API
+  // group (e.g. DBInstance from rds.services.k8s.aws vs DBInstance from
+  // documentdb.services.k8s.aws), handleResourceClick MUST forward both
+  // apiGroup and apiVersion into openWithObject. Without them, the panel
+  // state has no group/version to emit in the refresh-domain scope, the
+  // backend falls back to first-match-wins kind-only GVR resolution, and
+  // the user sees the wrong DBInstance's YAML.
+  //
+  // Before the fix at NsViewCustom.tsx handleResourceClick, this test
+  // would have failed with:
+  //   Expected: objectContaining({ group: 'documentdb.services.k8s.aws', version: 'v1alpha1' })
+  //   Received: { kind: 'DBInstance', name: 'db-dc-test-1-v4', ... } // no group/version
+  //
+  // Keeping this as a permanent regression guardrail so we don't
+  // silently drop these fields again in a future refactor.
+  it('forwards apiGroup and apiVersion into openWithObject for colliding CRDs', async () => {
+    const dbInstance: CustomResourceData = {
+      kind: 'DBInstance',
+      name: 'db-dc-test-1-v4',
+      namespace: 'team-a',
+      clusterId: 'alpha:ctx',
+      clusterName: 'alpha',
+      apiGroup: 'documentdb.services.k8s.aws',
+      apiVersion: 'v1alpha1',
+      age: '2h',
+      labels: {},
+      annotations: {},
+    };
+
+    await renderComponent({ data: [dbInstance], loaded: true, showNamespaceColumn: true });
+
+    const gridProps = gridTableMock.mock.calls[0][0];
+    const contextItems = gridProps.getCustomContextMenuItems(dbInstance, 'kind');
+    expect(contextItems[0].label).toBe('Open');
+    contextItems[0].onClick();
+
+    expect(openWithObjectMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'DBInstance',
+        name: 'db-dc-test-1-v4',
+        namespace: 'team-a',
+        clusterId: 'alpha:ctx',
+        group: 'documentdb.services.k8s.aws',
+        version: 'v1alpha1',
+      })
+    );
+
+    // Also assert the openWithObject payload that downstream code receives
+    // has group/version as actual OWN properties of the object (not lost
+    // through a spread), since any spread-loss would defeat the purpose.
+    const callArg = openWithObjectMock.mock.calls.find(
+      ([arg]) => (arg as { name?: string }).name === 'db-dc-test-1-v4'
+    )?.[0] as Record<string, unknown>;
+    expect(callArg).toBeDefined();
+    expect(callArg.group).toBe('documentdb.services.k8s.aws');
+    expect(callArg.version).toBe('v1alpha1');
   });
 
   it('confirms deletion and calls DeleteResource with resolved data', async () => {

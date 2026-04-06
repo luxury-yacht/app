@@ -238,6 +238,9 @@ export interface ClusterCustomEntry extends ClusterMeta {
   kind: string;
   name: string;
   apiGroup: string;
+  /** API version paired with apiGroup for GVK-aware resolution of the
+   * owning CRD. See docs/plans/kind-only-objects.md. */
+  apiVersion: string;
   age: string;
   labels?: Record<string, string>;
   annotations?: Record<string, string>;
@@ -540,6 +543,9 @@ export interface NamespaceCustomSummary extends ClusterMeta {
   kind: string;
   name: string;
   apiGroup: string;
+  /** API version paired with apiGroup for GVK-aware resolution of the
+   * owning CRD. See docs/plans/kind-only-objects.md. */
+  apiVersion: string;
   namespace: string;
   age: string;
   labels?: Record<string, string>;

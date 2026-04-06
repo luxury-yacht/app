@@ -20,8 +20,11 @@ package backend
 import (
 	"context"
 	"strings"
+	"sync"
 	"testing"
 
+	"github.com/luxury-yacht/app/backend/capabilities"
+	authorizationv1 "k8s.io/api/authorization/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextensionsfake "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -31,6 +34,7 @@ import (
 	fakediscovery "k8s.io/client-go/discovery/fake"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	kubernetesfake "k8s.io/client-go/kubernetes/fake"
+	cgotesting "k8s.io/client-go/testing"
 )
 
 // ackDBInstanceGVK is the GVK for the AWS Controllers for Kubernetes RDS DBInstance.
@@ -332,6 +336,208 @@ func TestGetObjectYAMLByGVKDisambiguatesCollidingDBInstances(t *testing.T) {
 		}
 		if strings.Contains(yamlStr, "source: ack-rds") {
 			t.Fatalf("kinda.rocks lookup returned ack-rds object by mistake:\n%s", yamlStr)
+		}
+	})
+}
+
+// TestQueryPermissionsDisambiguatesCollidingDBInstances is the step-4
+// acceptance test. It exercises App.QueryPermissions with two
+// PermissionQuery items that differ ONLY in Group/Version and asserts
+// that the SSAR call for each query lands against the correct API
+// group. Before step 4, QueryPermissions resolved the GVR with a
+// kind-only first-match-wins walk and could gate the same verb on the
+// wrong operator's DBInstance.
+//
+// Shape of the test:
+//  1. Install the colliding DBInstance fixture via newCollidingDBInstanceCluster.
+//  2. Install a selfsubjectrulesreview reactor that returns Incomplete=true
+//     so every query falls through SSRR cache matching into the SSAR
+//     fallback path (where we can inspect the outgoing attributes).
+//  3. Install a selfsubjectaccessreviews reactor that records the
+//     ResourceAttributes for every SSAR call and returns Allowed=true.
+//  4. Call QueryPermissions with one query per colliding GVK.
+//  5. Assert both queries succeeded AND that the SSAR reactor saw each
+//     Group (rds.services.k8s.aws and kinda.rocks) exactly once, each
+//     paired with the expected plural resource "dbinstances".
+func TestQueryPermissionsDisambiguatesCollidingDBInstances(t *testing.T) {
+	const clusterID = "collision-capabilities"
+	app := newCollidingDBInstanceCluster(t, clusterID)
+
+	kubeClient := app.clusterClients[clusterID].client.(*kubernetesfake.Clientset)
+
+	// Force SSAR fallback for every query: SSRR returns Incomplete so no
+	// query matches a cached rule, and Incomplete=true routes through SSAR.
+	kubeClient.Fake.PrependReactor("create", "selfsubjectrulesreviews", func(action cgotesting.Action) (bool, runtime.Object, error) {
+		createAction := action.(cgotesting.CreateAction)
+		review := createAction.GetObject().(*authorizationv1.SelfSubjectRulesReview)
+		review.Status = authorizationv1.SubjectRulesReviewStatus{
+			Incomplete:    true,
+			ResourceRules: []authorizationv1.ResourceRule{},
+		}
+		return true, review, nil
+	})
+
+	// Capture every SSAR call's ResourceAttributes and return Allowed=true.
+	var (
+		recordedMu sync.Mutex
+		recorded   []authorizationv1.ResourceAttributes
+	)
+	kubeClient.Fake.PrependReactor("create", "selfsubjectaccessreviews", func(action cgotesting.Action) (bool, runtime.Object, error) {
+		createAction := action.(cgotesting.CreateAction)
+		review := createAction.GetObject().(*authorizationv1.SelfSubjectAccessReview)
+		if review.Spec.ResourceAttributes != nil {
+			recordedMu.Lock()
+			recorded = append(recorded, *review.Spec.ResourceAttributes)
+			recordedMu.Unlock()
+		}
+		review.Status = authorizationv1.SubjectAccessReviewStatus{Allowed: true}
+		return true, review, nil
+	})
+
+	queries := []capabilities.PermissionQuery{
+		{
+			ID:           "view-ack",
+			ClusterId:    clusterID,
+			Group:        "rds.services.k8s.aws",
+			Version:      "v1alpha1",
+			ResourceKind: "DBInstance",
+			Verb:         "get",
+			Namespace:    "default",
+			Name:         "my-db",
+		},
+		{
+			ID:           "view-kinda-rocks",
+			ClusterId:    clusterID,
+			Group:        "kinda.rocks",
+			Version:      "v1beta1",
+			ResourceKind: "DbInstance",
+			Verb:         "get",
+			Namespace:    "default",
+			Name:         "my-db",
+		},
+	}
+
+	resp, err := app.QueryPermissions(queries)
+	if err != nil {
+		t.Fatalf("QueryPermissions returned error: %v", err)
+	}
+	if len(resp.Results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(resp.Results))
+	}
+	for _, r := range resp.Results {
+		if r.Source == "error" {
+			t.Fatalf("query %q unexpectedly errored: %s", r.ID, r.Error)
+		}
+		if !r.Allowed {
+			t.Fatalf("query %q expected Allowed=true from reactor, got Allowed=false (source=%s reason=%s)", r.ID, r.Source, r.Reason)
+		}
+	}
+
+	recordedMu.Lock()
+	snapshot := append([]authorizationv1.ResourceAttributes(nil), recorded...)
+	recordedMu.Unlock()
+
+	if len(snapshot) < 2 {
+		t.Fatalf("expected at least 2 SSAR calls, got %d: %+v", len(snapshot), snapshot)
+	}
+
+	// Count groups seen. Each colliding DBInstance should produce exactly
+	// one SSAR call against its own group — the bug before step 4 would
+	// either send both to whichever group discovery yielded first or send
+	// both to the same group.
+	groupCounts := map[string]int{}
+	for _, attrs := range snapshot {
+		groupCounts[attrs.Group]++
+		if attrs.Resource != "dbinstances" {
+			t.Errorf("unexpected resource %q in SSAR call (attrs=%+v)", attrs.Resource, attrs)
+		}
+		if attrs.Verb != "get" {
+			t.Errorf("unexpected verb %q in SSAR call (attrs=%+v)", attrs.Verb, attrs)
+		}
+	}
+
+	if groupCounts["rds.services.k8s.aws"] != 1 {
+		t.Errorf("expected exactly 1 SSAR against rds.services.k8s.aws, got %d (all groups seen: %+v)", groupCounts["rds.services.k8s.aws"], groupCounts)
+	}
+	if groupCounts["kinda.rocks"] != 1 {
+		t.Errorf("expected exactly 1 SSAR against kinda.rocks, got %d (all groups seen: %+v)", groupCounts["kinda.rocks"], groupCounts)
+	}
+}
+
+// TestDeleteResourceByGVKDisambiguatesCollidingDBInstances is the
+// step-5 wrapper acceptance test. It exercises the *App-level
+// DeleteResourceByGVK Wails entry point (not the lower-level
+// generic.Service.DeleteByGVK already covered by
+// TestServiceDeleteByGVKDisambiguatesCollidingDBInstances in the
+// generic package).
+//
+// This wrapper is what the Wails-bound frontend actually calls. The
+// test verifies the full path: the apiVersion string is parsed into a
+// GVK, dependencies are resolved for the cluster, and generic.Service's
+// DeleteByGVK is invoked with the right GVK. The net effect is that
+// each colliding DBInstance object can be deleted independently, and
+// deleting one leaves the other untouched.
+func TestDeleteResourceByGVKDisambiguatesCollidingDBInstances(t *testing.T) {
+	t.Run("ACK DBInstance", func(t *testing.T) {
+		const clusterID = "collision-delete-ack"
+		app := newCollidingDBInstanceCluster(t, clusterID)
+		dynamicClient := app.clusterClients[clusterID].dynamicClient.(*dynamicfake.FakeDynamicClient)
+
+		if err := app.DeleteResourceByGVK(clusterID, "rds.services.k8s.aws/v1alpha1", "DBInstance", "default", "my-db"); err != nil {
+			t.Fatalf("DeleteResourceByGVK returned error for ACK: %v", err)
+		}
+
+		ackGVR := schema.GroupVersionResource{
+			Group: "rds.services.k8s.aws", Version: "v1alpha1", Resource: "dbinstances",
+		}
+		kindaRocksGVR := schema.GroupVersionResource{
+			Group: "kinda.rocks", Version: "v1beta1", Resource: "dbinstances",
+		}
+
+		if _, err := dynamicClient.Resource(ackGVR).Namespace("default").Get(context.Background(), "my-db", metav1.GetOptions{}); err == nil {
+			t.Fatalf("expected ACK DBInstance to be deleted, but it still exists")
+		}
+		// The db-operator object must survive.
+		if _, err := dynamicClient.Resource(kindaRocksGVR).Namespace("default").Get(context.Background(), "my-db", metav1.GetOptions{}); err != nil {
+			t.Fatalf("kinda.rocks DbInstance should still exist after ACK delete, got err=%v", err)
+		}
+	})
+
+	t.Run("kinda.rocks DbInstance", func(t *testing.T) {
+		const clusterID = "collision-delete-kinda-rocks"
+		app := newCollidingDBInstanceCluster(t, clusterID)
+		dynamicClient := app.clusterClients[clusterID].dynamicClient.(*dynamicfake.FakeDynamicClient)
+
+		if err := app.DeleteResourceByGVK(clusterID, "kinda.rocks/v1beta1", "DbInstance", "default", "my-db"); err != nil {
+			t.Fatalf("DeleteResourceByGVK returned error for kinda.rocks: %v", err)
+		}
+
+		ackGVR := schema.GroupVersionResource{
+			Group: "rds.services.k8s.aws", Version: "v1alpha1", Resource: "dbinstances",
+		}
+		kindaRocksGVR := schema.GroupVersionResource{
+			Group: "kinda.rocks", Version: "v1beta1", Resource: "dbinstances",
+		}
+
+		if _, err := dynamicClient.Resource(kindaRocksGVR).Namespace("default").Get(context.Background(), "my-db", metav1.GetOptions{}); err == nil {
+			t.Fatalf("expected kinda.rocks DbInstance to be deleted, but it still exists")
+		}
+		// The ACK object must survive.
+		if _, err := dynamicClient.Resource(ackGVR).Namespace("default").Get(context.Background(), "my-db", metav1.GetOptions{}); err != nil {
+			t.Fatalf("ACK DBInstance should still exist after kinda.rocks delete, got err=%v", err)
+		}
+	})
+
+	t.Run("missing apiVersion returns error", func(t *testing.T) {
+		const clusterID = "collision-delete-missing-version"
+		app := newCollidingDBInstanceCluster(t, clusterID)
+
+		err := app.DeleteResourceByGVK(clusterID, "", "DBInstance", "default", "my-db")
+		if err == nil {
+			t.Fatal("expected error when apiVersion is empty")
+		}
+		if !strings.Contains(err.Error(), "apiVersion") {
+			t.Errorf("expected error to mention apiVersion, got %v", err)
 		}
 	})
 }

@@ -542,6 +542,7 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
           name: item.name,
           namespace: item.namespace,
           apiGroup: item.apiGroup,
+          apiVersion: item.apiVersion,
           age: item.age,
           // Multi-cluster identity — required for stable row keys and panel actions.
           clusterId: item.clusterId,

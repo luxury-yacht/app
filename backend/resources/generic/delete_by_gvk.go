@@ -1,27 +1,15 @@
 /*
  * backend/resources/generic/delete_by_gvk.go
  *
- * Stub for the GVK-aware generic delete. Part of the kind-only-objects fix
- * (see docs/plans/kind-only-objects.md, step 5).
+ * GVK-aware generic delete. Part of the kind-only-objects fix (see
+ * docs/plans/kind-only-objects.md, step 5).
  *
- * This file exists ONLY to make the RED regression test in
- * generic_collision_test.go compile. The real implementation will depend on
- * which option from plan step 5 is chosen:
- *
- *  - Option (a), RECOMMENDED: the `backend` caller resolves the GVR via
- *    getGVRForGVKWithDependencies before invoking the generic service. In
- *    that world, DeleteByGVK becomes a simple wrapper that takes an
- *    already-resolved GVR (or is removed in favor of a new
- *    DeleteResourceGVR primitive) and this stub is replaced accordingly.
- *
- *  - Option (b): the GVK resolver is moved to a shared package so both
- *    `backend` and `generic` can call it. Then DeleteByGVK would resolve
- *    the GVR here directly.
- *
- * Either way, once the real implementation lands:
- *   1. Replace the body of DeleteByGVK below with the real delete.
- *   2. Delete this header comment.
- *   3. Confirm TestServiceDeleteByGVKDisambiguatesCollidingDBInstances turns GREEN.
+ * Unlike Service.Delete, which accepts a bare kind string and uses a
+ * first-match-wins discovery walk to resolve the GVR, DeleteByGVK takes a
+ * fully-qualified GroupVersionKind and resolves strictly through the
+ * shared common.ResolveGVRForGVK helper. That avoids the package-cycle
+ * problem: the resolver lives in backend/resources/common, which both
+ * this package and the backend package already import.
  */
 
 package generic
@@ -29,10 +17,57 @@ package generic
 import (
 	"fmt"
 
+	"github.com/luxury-yacht/app/backend/resources/common"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// DeleteByGVK is a stub. See the header comment above.
+// DeleteByGVK removes a Kubernetes resource identified by its
+// GroupVersionKind, namespace, and name. The group/version is honored
+// strictly: if two CRDs share a Kind, the caller picks which one is
+// targeted. Returns an error if the resource cannot be resolved, if the
+// dynamic client is unavailable, or if the delete call itself fails.
 func (s *Service) DeleteByGVK(gvk schema.GroupVersionKind, namespace, name string) error {
-	return fmt.Errorf("DeleteByGVK not implemented (stub; see docs/plans/kind-only-objects.md step 5)")
+	if gvk.Kind == "" {
+		return fmt.Errorf("kind is required")
+	}
+	if gvk.Version == "" {
+		return fmt.Errorf("version is required")
+	}
+
+	gvr, isNamespaced, err := common.ResolveGVRForGVK(s.context(), s.deps, gvk)
+	if err != nil {
+		s.logError(fmt.Sprintf("Failed to resolve GVR for %s: %v", gvk.String(), err))
+		return fmt.Errorf("failed to resolve %s: %w", gvk.String(), err)
+	}
+
+	dynamicClient, err := s.dynamicClient()
+	if err != nil {
+		s.logError(fmt.Sprintf("Failed to create dynamic client: %v", err))
+		return fmt.Errorf("failed to create dynamic client: %w", err)
+	}
+
+	ctx := s.context()
+
+	var deleteErr error
+	if isNamespaced {
+		if namespace == "" {
+			return fmt.Errorf("namespaced resource %s requires a namespace", gvr.String())
+		}
+		deleteErr = dynamicClient.Resource(gvr).Namespace(namespace).Delete(ctx, name, metav1.DeleteOptions{})
+	} else {
+		deleteErr = dynamicClient.Resource(gvr).Delete(ctx, name, metav1.DeleteOptions{})
+	}
+
+	if deleteErr != nil {
+		s.logError(fmt.Sprintf("Failed to delete %s %s/%s: %v", gvk.String(), namespace, name, deleteErr))
+		return fmt.Errorf("failed to delete %s: %w", gvk.String(), deleteErr)
+	}
+
+	if namespace == "" {
+		s.logInfo(fmt.Sprintf("Deleted %s %s", gvk.String(), name))
+	} else {
+		s.logInfo(fmt.Sprintf("Deleted %s %s/%s", gvk.String(), namespace, name))
+	}
+	return nil
 }

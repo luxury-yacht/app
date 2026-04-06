@@ -38,6 +38,10 @@ interface ClusterCustomData {
   clusterId?: string;
   clusterName?: string;
   apiGroup?: string;
+  /** API version for the owning CRD. Paired with apiGroup so the object
+   * panel can disambiguate colliding Kinds across API groups. See
+   * docs/plans/kind-only-objects.md. */
+  apiVersion?: string;
   age?: string;
   labels?: Record<string, string>;
   annotations?: Record<string, string>;
@@ -70,9 +74,14 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
     const handleResourceClick = useCallback(
       (resource: ClusterCustomData) => {
         // Preserve metadata and age so the object panel shows labels/annotations and Age.
+        // CRITICAL: pass apiGroup/apiVersion so downstream scope/capability
+        // resolution can disambiguate colliding Kinds. See
+        // docs/plans/kind-only-objects.md step 1.
         openWithObject({
           kind: resource.kind,
           name: resource.name,
+          group: resource.apiGroup,
+          version: resource.apiVersion,
           age: resource.age,
           labels: resource.labels,
           annotations: resource.annotations,

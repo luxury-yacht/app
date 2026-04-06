@@ -165,10 +165,11 @@ func BuildNamespaceCustomSummary(
 	meta ClusterMeta,
 	resource *unstructured.Unstructured,
 	apiGroup string,
+	apiVersion string,
 	kindFallback string,
 ) NamespaceCustomSummary {
 	if resource == nil {
-		return NamespaceCustomSummary{ClusterMeta: meta, Kind: kindFallback, APIGroup: apiGroup}
+		return NamespaceCustomSummary{ClusterMeta: meta, Kind: kindFallback, APIGroup: apiGroup, APIVersion: apiVersion}
 	}
 	kind := resource.GetKind()
 	if kind == "" {
@@ -179,6 +180,7 @@ func BuildNamespaceCustomSummary(
 		Kind:        kind,
 		Name:        resource.GetName(),
 		APIGroup:    apiGroup,
+		APIVersion:  apiVersion,
 		Namespace:   resource.GetNamespace(),
 		Age:         formatAge(resource.GetCreationTimestamp().Time),
 		Labels:      resource.GetLabels(),
@@ -320,10 +322,11 @@ func BuildClusterCustomSummary(
 	meta ClusterMeta,
 	resource *unstructured.Unstructured,
 	apiGroup string,
+	apiVersion string,
 	kindFallback string,
 ) ClusterCustomSummary {
 	if resource == nil {
-		return ClusterCustomSummary{ClusterMeta: meta, Kind: kindFallback, APIGroup: apiGroup}
+		return ClusterCustomSummary{ClusterMeta: meta, Kind: kindFallback, APIGroup: apiGroup, APIVersion: apiVersion}
 	}
 	kind := resourceKind(resource, kindFallback)
 	return ClusterCustomSummary{
@@ -331,6 +334,7 @@ func BuildClusterCustomSummary(
 		Kind:        kind,
 		Name:        resource.GetName(),
 		APIGroup:    apiGroup,
+		APIVersion:  apiVersion,
 		Age:         formatAge(resource.GetCreationTimestamp().Time),
 		Labels:      resource.GetLabels(),
 		Annotations: resource.GetAnnotations(),
