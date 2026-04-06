@@ -142,7 +142,9 @@
   border: none;
   color: var(--color-text-secondary, #999);
   cursor: pointer;
-  transition: all 0.2s;
+  transition:
+    background-color 0.2s,
+    color 0.2s;
 }
 
 .dockable-panel__control-btn:hover {
@@ -544,7 +546,9 @@ body.dockable-panel-resizing-sw * {
   border: none;
   background: var(--color-bg-secondary);
   cursor: pointer;
-  transition: all 0.2s;
+  transition:
+    background-color 0.2s,
+    color 0.2s;
 }
 
 .dockable-tab-bar__overflow-icon {

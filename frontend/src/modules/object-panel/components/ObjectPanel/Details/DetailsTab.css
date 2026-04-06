@@ -156,8 +156,8 @@
 
 .action-error {
   padding: 0.5rem 1rem;
-  background-color: var(--error-bg);
-  color: var(--error-color);
+  background-color: var(--color-error-bg);
+  color: var(--color-error-text);
   border-bottom: 1px solid var(--color-border);
 }
 
@@ -170,9 +170,9 @@
 .error-message {
   padding: 0.5rem 1rem;
   margin-bottom: 1rem;
-  background-color: var(--error-bg);
-  color: var(--error-color);
-  border-radius: var(--border-radius);
+  background-color: var(--color-error-bg);
+  color: var(--color-error-text);
+  border-radius: var(--border-radius-sm);
 }
 
 .object-panel-section {
@@ -217,7 +217,10 @@
   gap: 0.5rem;
   position: relative;
   min-height: 100px;
-  transition: all 0.3s ease-out;
+  transition:
+    height 0.3s ease-out,
+    transform 0.3s ease-out,
+    opacity 0.3s ease-out;
   transform-origin: top;
   will-change: height;
 }
