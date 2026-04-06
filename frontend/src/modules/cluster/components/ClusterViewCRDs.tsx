@@ -42,8 +42,31 @@ interface CRDsData {
   clusterName?: string;
   group: string;
   scope: string;
+  /**
+   * Storage version name (the version etcd persists). Rendered in the
+   * Version column. Threaded from the backend's
+   * ClusterCRDEntry.storageVersion. See docs/plans/kind-only-objects.md.
+   */
+  storageVersion?: string;
+  /** Count of additional served versions beyond the storage version. */
+  extraServedVersionCount?: number;
   age?: string;
 }
+
+/**
+ * Format the CRD's version cell. Single-version CRDs show just the
+ * storage version (e.g. "v1"); multi-version CRDs append a `(+N)` count
+ * of additional served versions (e.g. "v1 (+2)" for a CRD that also
+ * serves v1beta1 and v1alpha1).
+ */
+const formatCRDVersionCell = (crd: CRDsData): string => {
+  const storage = crd.storageVersion?.trim();
+  if (!storage) {
+    return '-';
+  }
+  const extra = crd.extraServedVersionCount ?? 0;
+  return extra > 0 ? `${storage} (+${extra})` : storage;
+};
 
 // Define props for CRDsViewGrid component
 interface CRDsViewProps {
@@ -118,6 +141,20 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
           getClassName: () => 'object-panel-link',
         }),
         cf.createTextColumn('group', 'Group', (crd) => crd.group || '-'),
+        (() => {
+          // Version column renders storage version with `(+N)` suffix for
+          // multi-version CRDs. Sort uses bare storageVersion so that
+          // sibling CRDs with the same storage version cluster together
+          // regardless of whether they have additional served versions.
+          // See docs/plans/kind-only-objects.md.
+          const versionColumn = cf.createTextColumn<CRDsData>(
+            'version',
+            'Version',
+            formatCRDVersionCell
+          );
+          versionColumn.sortValue = (crd) => crd.storageVersion ?? '';
+          return versionColumn;
+        })(),
         cf.createTextColumn('scope', 'Scope', (crd) => crd.scope || '-'),
         cf.createAgeColumn(),
       ];
@@ -126,6 +163,7 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
         kind: { autoWidth: true },
         name: { autoWidth: true },
         group: { autoWidth: true },
+        version: { autoWidth: true },
         scope: { autoWidth: true },
         age: { autoWidth: true },
       };

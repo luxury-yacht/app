@@ -300,20 +300,32 @@ func BuildClusterMutatingWebhookSummary(
 	}
 }
 
-// BuildClusterCRDSummary builds a CRD row payload that matches snapshot formatting.
+// BuildClusterCRDSummary builds a CRD row payload that matches snapshot
+// formatting. This is the **single source of truth** for CRD row
+// construction — the full-snapshot builder in cluster_crds.go calls this
+// helper rather than inlining its own construction, so the two paths
+// cannot drift. A previous bug had the streaming/incremental update path
+// emitting rows without StorageVersion / ExtraServedVersionCount, which
+// caused the Version column to "disappear" for rows that received a
+// streaming update. The convergence here is the structural fix.
+//
+// Any new field added to ClusterCRDEntry MUST be populated here.
 func BuildClusterCRDSummary(meta ClusterMeta, crd *apiextensionsv1.CustomResourceDefinition) ClusterCRDEntry {
 	if crd == nil {
 		return ClusterCRDEntry{ClusterMeta: meta, Kind: "CustomResourceDefinition"}
 	}
+	storageVersion, extraServed := crdVersionSummary(crd)
 	return ClusterCRDEntry{
-		ClusterMeta: meta,
-		Kind:        "CustomResourceDefinition",
-		Name:        crd.Name,
-		Group:       crd.Spec.Group,
-		Scope:       string(crd.Spec.Scope),
-		Details:     describeCRDVersions(crd),
-		Age:         formatAge(crd.CreationTimestamp.Time),
-		TypeAlias:   "CRD",
+		ClusterMeta:             meta,
+		Kind:                    "CustomResourceDefinition",
+		Name:                    crd.Name,
+		Group:                   crd.Spec.Group,
+		Scope:                   string(crd.Spec.Scope),
+		Details:                 describeCRDVersions(crd),
+		StorageVersion:          storageVersion,
+		ExtraServedVersionCount: extraServed,
+		Age:                     formatAge(crd.CreationTimestamp.Time),
+		TypeAlias:               "CRD",
 	}
 }
 

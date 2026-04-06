@@ -242,6 +242,20 @@ export interface ClusterCRDEntry extends ClusterMeta {
   group: string;
   scope: string;
   details: string;
+  /**
+   * Name of the CRD's storage version (the version etcd persists). When
+   * a CRD serves multiple versions, exactly one is the storage version
+   * and the API server converts to/from it. The Version column in the
+   * cluster CRDs view renders this as `storageVersion` for single-version
+   * CRDs and `storageVersion (+N)` for multi-version CRDs. See
+   * docs/plans/kind-only-objects.md.
+   */
+  storageVersion?: string;
+  /**
+   * Number of *additional* served versions beyond the storage version.
+   * Zero for single-version CRDs.
+   */
+  extraServedVersionCount?: number;
   age: string;
   typeAlias?: string;
 }
