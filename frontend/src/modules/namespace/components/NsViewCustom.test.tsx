@@ -459,4 +459,107 @@ describe('NsViewCustom', () => {
     } as CustomResourceData);
     expect(generatedKey).toBe('alpha:ctx|tools/CR/svc');
   });
+
+  // CRD column: each row gets a clickable cell that opens the owning
+  // CustomResourceDefinition in the object panel. The CRD itself is a
+  // built-in (apiextensions.k8s.io/v1) so its GVK comes from the
+  // built-in lookup table, not from the row data.
+  //
+  // The column factory bakes the click handler into the rendered React
+  // element rather than exposing it on the column object, so these
+  // tests drive the behavior by inspecting / calling the rendered
+  // element's `onClick` prop directly.
+  describe('CRD column', () => {
+    const findColumn = (props: any, key: string) =>
+      props.columns.find((col: any) => col.key === key);
+
+    it('adds a CRD column that renders the row crdName', async () => {
+      const resource: CustomResourceData = {
+        ...baseResource,
+        apiGroup: 'rds.services.k8s.aws',
+        apiVersion: 'v1alpha1',
+        kind: 'DBInstance',
+        crdName: 'dbinstances.rds.services.k8s.aws',
+      };
+
+      await renderComponent({ data: [resource], loaded: true });
+
+      const gridProps = gridTableMock.mock.calls[0][0];
+      const crdCol = findColumn(gridProps, 'crd');
+      expect(crdCol).toBeTruthy();
+      expect(crdCol.header).toBe('CRD');
+
+      // Interactive cells render as a `<span role="button">` with the
+      // CRD name as their child text.
+      const rendered = crdCol.render(resource) as React.ReactElement<any>;
+      expect(rendered).toBeTruthy();
+      expect((rendered as any).type).toBe('span');
+      expect((rendered as any).props.role).toBe('button');
+      expect((rendered as any).props.children).toBe('dbinstances.rds.services.k8s.aws');
+      expect((rendered as any).props.title).toBe('Open dbinstances.rds.services.k8s.aws');
+    });
+
+    it('opens the CRD in the object panel when the CRD cell is clicked', async () => {
+      const resource: CustomResourceData = {
+        ...baseResource,
+        apiGroup: 'rds.services.k8s.aws',
+        apiVersion: 'v1alpha1',
+        kind: 'DBInstance',
+        crdName: 'dbinstances.rds.services.k8s.aws',
+      };
+
+      await renderComponent({ data: [resource], loaded: true });
+
+      const gridProps = gridTableMock.mock.calls[0][0];
+      const crdCol = findColumn(gridProps, 'crd');
+      const rendered = crdCol.render(resource) as React.ReactElement<any>;
+
+      // The rendered span carries the click handler. Drive it directly
+      // with a synthetic event that doesn't have altKey set (so the
+      // primary onClick fires, not onAltClick).
+      openWithObjectMock.mockClear();
+      const onClick = (rendered as any).props.onClick as (e: any) => void;
+      expect(onClick).toBeTypeOf('function');
+      onClick({ altKey: false, preventDefault: () => {}, stopPropagation: () => {} });
+
+      expect(openWithObjectMock).toHaveBeenCalledTimes(1);
+      const callArg = openWithObjectMock.mock.calls[0][0] as Record<string, unknown>;
+      expect(callArg.kind).toBe('CustomResourceDefinition');
+      expect(callArg.name).toBe('dbinstances.rds.services.k8s.aws');
+      // The CRD is a built-in — its GVK comes from resolveBuiltinGroupVersion,
+      // which returns apiextensions.k8s.io/v1.
+      expect(callArg.group).toBe('apiextensions.k8s.io');
+      expect(callArg.version).toBe('v1');
+      // CRDs are cluster-scoped — namespace must NOT be set on the ref.
+      expect(callArg.namespace).toBeUndefined();
+      // ClusterId/clusterName threaded through for multi-cluster routing.
+      expect(callArg.clusterId).toBe('alpha:ctx');
+      expect(callArg.clusterName).toBe('alpha');
+    });
+
+    it('renders the CRD cell as inert text when crdName is missing', async () => {
+      // Defensive: a row from a legacy snapshot or a synthetic source
+      // might not carry crdName. The cell should not be clickable, must
+      // not throw, and must not call openWithObject. The column factory
+      // returns the placeholder string '-' for accessor === undefined
+      // when the cell is non-interactive.
+      const resource: CustomResourceData = {
+        ...baseResource,
+        apiGroup: 'batch',
+        apiVersion: 'v1',
+        kind: 'CronJob',
+        // crdName intentionally omitted
+      };
+
+      await renderComponent({ data: [resource], loaded: true });
+
+      const gridProps = gridTableMock.mock.calls[0][0];
+      const crdCol = findColumn(gridProps, 'crd');
+      const rendered = crdCol.render(resource);
+
+      // Non-interactive accessor-undefined path returns the string '-'
+      // directly (no wrapping span, no role="button", no onClick).
+      expect(rendered).toBe('-');
+    });
+  });
 });

@@ -29,6 +29,7 @@ import { errorHandler } from '@utils/errorHandler';
 import { getPermissionKey, queryKindPermissions, useUserPermissions } from '@/core/capabilities';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 import { useFavToggle } from '@ui/favorites/FavToggle';
+import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
 
 // Data interface for custom resources
 export interface CustomResourceData {
@@ -41,6 +42,13 @@ export interface CustomResourceData {
   clusterName?: string;
   apiGroup?: string;
   apiVersion?: string;
+  /**
+   * Canonical CRD name (`<plural>.<group>`) for the CustomResourceDefinition
+   * that defines this resource's Kind. Threaded from the backend
+   * NamespaceCustomSummary so the CRD column can render a clickable cell
+   * that opens the owning CRD in the object panel.
+   */
+  crdName?: string;
   labels?: Record<string, string>;
   annotations?: Record<string, string>;
   spec?: {
@@ -115,6 +123,26 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
       [openWithObject]
     );
 
+    // Click handler for the CRD column. Opens the owning
+    // CustomResourceDefinition in the object panel — the CRD itself is
+    // a built-in (apiextensions.k8s.io/v1) so its GVK comes from the
+    // built-in lookup table, not from row data.
+    const handleCRDClick = useCallback(
+      (resource: CustomResourceData) => {
+        if (!resource.crdName) {
+          return;
+        }
+        openWithObject({
+          kind: 'CustomResourceDefinition',
+          ...resolveBuiltinGroupVersion('CustomResourceDefinition'),
+          name: resource.crdName,
+          clusterId: resource.clusterId ?? undefined,
+          clusterName: resource.clusterName ?? undefined,
+        });
+      },
+      [openWithObject]
+    );
+
     const keyExtractor = useCallback(
       (resource: CustomResourceData) =>
         buildClusterScopedKey(
@@ -155,12 +183,40 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
             }),
           getClassName: () => 'object-panel-link',
         }),
+        // CRD column: each cell is a clickable link back to the CRD
+        // that defines the row's Kind. The cell hides itself (renders
+        // as the column factory's default placeholder) for rows that
+        // happen to have no `crdName` — e.g. legacy snapshots from
+        // before the field was added.
+        cf.createTextColumn<CustomResourceData>(
+          'crd',
+          'CRD',
+          (resource) => resource.crdName ?? undefined,
+          {
+            onClick: handleCRDClick,
+            onAltClick: (resource) => {
+              if (!resource.crdName) {
+                return;
+              }
+              navigateToView({
+                kind: 'CustomResourceDefinition',
+                name: resource.crdName,
+                clusterId: resource.clusterId,
+                clusterName: resource.clusterName,
+              });
+            },
+            isInteractive: (resource) => Boolean(resource.crdName),
+            getClassName: (resource) => (resource.crdName ? 'object-panel-link' : undefined),
+            getTitle: (resource) => (resource.crdName ? `Open ${resource.crdName}` : undefined),
+          }
+        ),
         cf.createAgeColumn(),
       ];
 
       const sizing: cf.ColumnSizingMap = {
         kind: { autoWidth: true },
         name: { autoWidth: true },
+        crd: { autoWidth: true },
         namespace: { autoWidth: true },
         age: { autoWidth: true },
       };
@@ -174,7 +230,13 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
       }
 
       return baseColumns;
-    }, [handleResourceClick, navigateToView, showNamespaceColumn, useShortResourceNames]);
+    }, [
+      handleResourceClick,
+      handleCRDClick,
+      navigateToView,
+      showNamespaceColumn,
+      useShortResourceNames,
+    ]);
 
     const showNamespaceFilter = namespace === ALL_NAMESPACES_SCOPE;
 

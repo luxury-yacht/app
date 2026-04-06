@@ -549,6 +549,9 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
           namespace: item.namespace,
           apiGroup: item.apiGroup,
           apiVersion: item.apiVersion,
+          // CRD name (e.g. "dbinstances.rds.services.k8s.aws") for the
+          // CRD column's clickable cell. See NsViewCustom.
+          crdName: item.crdName,
           age: item.age,
           // Multi-cluster identity — required for stable row keys and panel actions.
           clusterId: item.clusterId,

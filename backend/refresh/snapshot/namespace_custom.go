@@ -50,10 +50,17 @@ type NamespaceCustomSnapshot struct {
 // the frontend. See docs/plans/kind-only-objects.md.
 type NamespaceCustomSummary struct {
 	ClusterMeta
-	Kind        string            `json:"kind"`
-	Name        string            `json:"name"`
-	APIGroup    string            `json:"apiGroup"`
-	APIVersion  string            `json:"apiVersion"`
+	Kind       string `json:"kind"`
+	Name       string `json:"name"`
+	APIGroup   string `json:"apiGroup"`
+	APIVersion string `json:"apiVersion"`
+	// CRDName is the name of the CustomResourceDefinition that defines
+	// this resource's Kind, in the canonical Kubernetes form
+	// `<plural>.<group>` (e.g. "dbinstances.rds.services.k8s.aws"). The
+	// frontend uses it to render a clickable cell that opens the owning
+	// CRD in the object panel. Always set for CRD-backed resources;
+	// omitted (empty) for any synthetic/non-CRD case.
+	CRDName     string            `json:"crdName,omitempty"`
 	Namespace   string            `json:"namespace"`
 	Age         string            `json:"age"`
 	Labels      map[string]string `json:"labels,omitempty"`
@@ -204,13 +211,16 @@ func (b *NamespaceCustomBuilder) Build(ctx context.Context, scope string) (*refr
 				// path and the streaming/incremental update path emit
 				// identical row shapes. See BuildNamespaceCustomSummary in
 				// streaming_helpers.go. `namespace` is the scope fallback
-				// for items that don't carry their own.
+				// for items that don't carry their own. `crdCopy.Name` is
+				// the canonical CRD name (`<plural>.<group>`) used to
+				// open the owning CRD from the row.
 				items = append(items, BuildNamespaceCustomSummary(
 					meta,
 					item,
 					gvr.Group,
 					gvr.Version,
 					crdCopy.Spec.Names.Kind,
+					crdCopy.Name,
 					namespace,
 				))
 				if v := resourceVersionOrTimestamp(item); v > snapshotVersion {

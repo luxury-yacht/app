@@ -166,6 +166,13 @@ func BuildNetworkPolicySummary(meta ClusterMeta, policy *networkingv1.NetworkPol
 // builder in namespace_custom.go calls this helper rather than inlining
 // its own construction, so the two paths cannot drift.
 //
+// crdName is the canonical Kubernetes CRD name (`<plural>.<group>`,
+// e.g. "dbinstances.rds.services.k8s.aws"). The snapshot path passes
+// `crd.Name` directly from the apiextensions object; the streaming path
+// computes it from the GVR (`gvr.Resource + "." + gvr.Group`). Used by
+// the frontend's CRD column to render a clickable cell that opens the
+// owning CRD in the object panel.
+//
 // defaultNamespace is used when the unstructured resource itself carries
 // an empty namespace (rare but possible for newly-created items or
 // malformed objects returned from list-with-all-namespaces queries). The
@@ -181,10 +188,17 @@ func BuildNamespaceCustomSummary(
 	apiGroup string,
 	apiVersion string,
 	kindFallback string,
+	crdName string,
 	defaultNamespace string,
 ) NamespaceCustomSummary {
 	if resource == nil {
-		return NamespaceCustomSummary{ClusterMeta: meta, Kind: kindFallback, APIGroup: apiGroup, APIVersion: apiVersion}
+		return NamespaceCustomSummary{
+			ClusterMeta: meta,
+			Kind:        kindFallback,
+			APIGroup:    apiGroup,
+			APIVersion:  apiVersion,
+			CRDName:     crdName,
+		}
 	}
 	kind := resource.GetKind()
 	if kind == "" {
@@ -200,6 +214,7 @@ func BuildNamespaceCustomSummary(
 		Name:        resource.GetName(),
 		APIGroup:    apiGroup,
 		APIVersion:  apiVersion,
+		CRDName:     crdName,
 		Namespace:   namespace,
 		Age:         formatAge(resource.GetCreationTimestamp().Time),
 		Labels:      resource.GetLabels(),

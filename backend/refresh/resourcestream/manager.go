@@ -718,8 +718,11 @@ func (m *Manager) handleCustomResource(obj interface{}, updateType MessageType, 
 		} else {
 			// The streaming path has no parent scope concept — fall back
 			// to the resource's own namespace (which is almost always
-			// set for anything that reaches an informer).
-			update.Row = snapshot.BuildNamespaceCustomSummary(m.clusterMeta, resource, info.gvr.Group, info.gvr.Version, info.kind, resource.GetNamespace())
+			// set for anything that reaches an informer). The CRD name
+			// is the canonical Kubernetes form `<plural>.<group>`,
+			// computable from the GVR we're already watching.
+			crdName := info.gvr.Resource + "." + info.gvr.Group
+			update.Row = snapshot.BuildNamespaceCustomSummary(m.clusterMeta, resource, info.gvr.Group, info.gvr.Version, info.kind, crdName, resource.GetNamespace())
 		}
 	}
 

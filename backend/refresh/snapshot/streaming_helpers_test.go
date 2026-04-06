@@ -255,9 +255,11 @@ func TestBuildNamespaceCustomSummaryFallsBackToDefaultNamespace(t *testing.T) {
 		"example.com",
 		"v1",
 		"Foo",
+		"foos.example.com",
 		"fallback-ns",
 	)
 	require.Equal(t, "team-a", row.Namespace, "resource's own namespace wins over fallback")
+	require.Equal(t, "foos.example.com", row.CRDName, "CRDName threads through verbatim")
 
 	resourceWithoutNamespace := &unstructured.Unstructured{}
 	resourceWithoutNamespace.SetAPIVersion("example.com/v1")
@@ -270,6 +272,7 @@ func TestBuildNamespaceCustomSummaryFallsBackToDefaultNamespace(t *testing.T) {
 		"example.com",
 		"v1",
 		"Foo",
+		"foos.example.com",
 		"fallback-ns",
 	)
 	require.Equal(t, "fallback-ns", row.Namespace, "empty namespace falls back to default")
@@ -284,10 +287,38 @@ func TestBuildNamespaceCustomSummaryNilResourceIsSafe(t *testing.T) {
 		"example.com",
 		"v1",
 		"Foo",
+		"foos.example.com",
 		"fallback-ns",
 	)
 	require.Equal(t, "c1", row.ClusterID)
 	require.Equal(t, "Foo", row.Kind)
 	require.Equal(t, "example.com", row.APIGroup)
 	require.Equal(t, "v1", row.APIVersion)
+	require.Equal(t, "foos.example.com", row.CRDName)
+}
+
+// TestBuildNamespaceCustomSummaryThreadsCRDName regression-guards the
+// new CRDName field. The frontend's CRD column relies on this being
+// populated by both the snapshot path (which passes `crd.Name`) and the
+// streaming path (which passes `gvr.Resource + "." + gvr.Group`).
+// Without it the column would silently render as "-" for any row that
+// went through a streaming update — same dual-path drift pattern as the
+// HPA TargetAPIVersion bug.
+func TestBuildNamespaceCustomSummaryThreadsCRDName(t *testing.T) {
+	resource := &unstructured.Unstructured{}
+	resource.SetAPIVersion("rds.services.k8s.aws/v1alpha1")
+	resource.SetKind("DBInstance")
+	resource.SetName("primary")
+	resource.SetNamespace("data")
+
+	row := BuildNamespaceCustomSummary(
+		ClusterMeta{ClusterID: "c1"},
+		resource,
+		"rds.services.k8s.aws",
+		"v1alpha1",
+		"DBInstance",
+		"dbinstances.rds.services.k8s.aws",
+		"data",
+	)
+	require.Equal(t, "dbinstances.rds.services.k8s.aws", row.CRDName)
 }
