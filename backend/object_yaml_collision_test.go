@@ -1,0 +1,337 @@
+/*
+ * backend/object_yaml_collision_test.go
+ *
+ * Regression tests for the kind-only object identification bug.
+ * See docs/plans/kind-only-objects.md for the full context.
+ *
+ * Scenario: a cluster has two CRDs whose lowercased kind collapses to
+ * "dbinstance" but which come from different API groups:
+ *   - AWS Controllers for Kubernetes (ACK) RDS: rds.services.k8s.aws/v1alpha1, kind DBInstance
+ *   - db-operator:                               kinda.rocks/v1beta1,           kind DbInstance
+ *
+ * Both are real CRDs shipped by upstream operators, verified against their
+ * public CRD YAMLs. Their plural path is "dbinstances" in both cases, and
+ * their kind names differ only in case — strings.EqualFold treats them as
+ * identical.
+ */
+
+package backend
+
+import (
+	"context"
+	"strings"
+	"testing"
+
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apiextensionsfake "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	fakediscovery "k8s.io/client-go/discovery/fake"
+	dynamicfake "k8s.io/client-go/dynamic/fake"
+	kubernetesfake "k8s.io/client-go/kubernetes/fake"
+)
+
+// ackDBInstanceGVK is the GVK for the AWS Controllers for Kubernetes RDS DBInstance.
+var ackDBInstanceGVK = schema.GroupVersionKind{
+	Group:   "rds.services.k8s.aws",
+	Version: "v1alpha1",
+	Kind:    "DBInstance",
+}
+
+// kindaRocksDBInstanceGVK is the GVK for the db-operator DbInstance.
+// Note the case difference: "DbInstance" vs "DBInstance". strings.EqualFold
+// treats them as matching, which is the core of the collision.
+var kindaRocksDBInstanceGVK = schema.GroupVersionKind{
+	Group:   "kinda.rocks",
+	Version: "v1beta1",
+	Kind:    "DbInstance",
+}
+
+// collidingDBInstanceCRDs returns the two upstream CRDs that collide on the
+// lowercased kind "dbinstance". Used by both the object_yaml and resources/generic
+// collision tests.
+func collidingDBInstanceCRDs() (*apiextensionsv1.CustomResourceDefinition, *apiextensionsv1.CustomResourceDefinition) {
+	ack := &apiextensionsv1.CustomResourceDefinition{
+		ObjectMeta: metav1.ObjectMeta{Name: "dbinstances.rds.services.k8s.aws"},
+		Spec: apiextensionsv1.CustomResourceDefinitionSpec{
+			Group: "rds.services.k8s.aws",
+			Scope: apiextensionsv1.NamespaceScoped,
+			Names: apiextensionsv1.CustomResourceDefinitionNames{
+				Plural:   "dbinstances",
+				Singular: "dbinstance",
+				Kind:     "DBInstance",
+			},
+			Versions: []apiextensionsv1.CustomResourceDefinitionVersion{{
+				Name: "v1alpha1", Served: true, Storage: true,
+			}},
+		},
+	}
+	kindaRocks := &apiextensionsv1.CustomResourceDefinition{
+		ObjectMeta: metav1.ObjectMeta{Name: "dbinstances.kinda.rocks"},
+		Spec: apiextensionsv1.CustomResourceDefinitionSpec{
+			Group: "kinda.rocks",
+			Scope: apiextensionsv1.NamespaceScoped,
+			Names: apiextensionsv1.CustomResourceDefinitionNames{
+				Plural:   "dbinstances",
+				Singular: "dbinstance",
+				Kind:     "DbInstance",
+			},
+			Versions: []apiextensionsv1.CustomResourceDefinitionVersion{{
+				Name: "v1beta1", Served: true, Storage: true,
+			}},
+		},
+	}
+	return ack, kindaRocks
+}
+
+// collidingDBInstanceDiscoveryLists returns the two APIResourceList entries
+// that a fake discovery client should publish to simulate both CRDs being
+// registered in the cluster. The ACK entry is listed first; tests that
+// depend on ordering should document the assumption.
+func collidingDBInstanceDiscoveryLists() []*metav1.APIResourceList {
+	ack := &metav1.APIResourceList{
+		GroupVersion: "rds.services.k8s.aws/v1alpha1",
+		APIResources: []metav1.APIResource{{
+			Name:         "dbinstances",
+			SingularName: "dbinstance",
+			Namespaced:   true,
+			Kind:         "DBInstance",
+			Verbs:        metav1.Verbs{"get", "list", "watch", "create", "update", "delete"},
+		}},
+	}
+	kindaRocks := &metav1.APIResourceList{
+		GroupVersion: "kinda.rocks/v1beta1",
+		APIResources: []metav1.APIResource{{
+			Name:         "dbinstances",
+			SingularName: "dbinstance",
+			Namespaced:   true,
+			Kind:         "DbInstance",
+			Verbs:        metav1.Verbs{"get", "list", "watch", "create", "update", "delete"},
+		}},
+	}
+	return []*metav1.APIResourceList{ack, kindaRocks}
+}
+
+// newCollidingDBInstanceCluster wires a test cluster with a fake kubernetes
+// client whose discovery publishes both colliding DBInstance kinds, a fake
+// apiextensions client that holds both CRDs, and a fake dynamic client seeded
+// with one object of each kind. Both objects share namespace "default" and
+// name "my-db" so they can only be disambiguated by apiVersion.
+//
+// The dynamic-client objects carry a distinguishing spec.source field so tests
+// can tell which one came back.
+func newCollidingDBInstanceCluster(t *testing.T, clusterID string) *App {
+	t.Helper()
+	resetGVRCache()
+
+	app := newTestAppWithDefaults(t)
+	app.Ctx = context.Background()
+
+	kubeClient := kubernetesfake.NewClientset()
+	discoveryClient := kubeClient.Discovery().(*fakediscovery.FakeDiscovery)
+	discoveryClient.Resources = collidingDBInstanceDiscoveryLists()
+
+	ackCRD, kindaRocksCRD := collidingDBInstanceCRDs()
+	apiExtClient := apiextensionsfake.NewClientset(ackCRD, kindaRocksCRD)
+
+	ackObj := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "rds.services.k8s.aws/v1alpha1",
+		"kind":       "DBInstance",
+		"metadata": map[string]any{
+			"name":            "my-db",
+			"namespace":       "default",
+			"resourceVersion": "100",
+		},
+		"spec": map[string]any{
+			"source": "ack-rds",
+		},
+	}}
+	ackObj.SetGroupVersionKind(ackDBInstanceGVK)
+
+	kindaRocksObj := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "kinda.rocks/v1beta1",
+		"kind":       "DbInstance",
+		"metadata": map[string]any{
+			"name":            "my-db",
+			"namespace":       "default",
+			"resourceVersion": "200",
+		},
+		"spec": map[string]any{
+			"source": "db-operator",
+		},
+	}}
+	kindaRocksObj.SetGroupVersionKind(kindaRocksDBInstanceGVK)
+
+	dynamicClient := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme(), ackObj, kindaRocksObj)
+
+	registerTestClusterWithClients(app, clusterID, &clusterClients{
+		meta:                ClusterMeta{ID: clusterID, Name: "ctx"},
+		kubeconfigPath:      "/path",
+		kubeconfigContext:   "ctx",
+		client:              kubeClient,
+		dynamicClient:       dynamicClient,
+		apiextensionsClient: apiExtClient,
+	})
+	return app
+}
+
+// TestGetGVRForGVKDisambiguatesCollidingDBInstanceCRDs is a GREEN guardrail
+// regression test. It locks in that the existing getGVRForGVKWithDependencies
+// helper — the reference resolver we plan to route read/delete/capability
+// callers through — correctly disambiguates two CRDs that share a kind.
+//
+// This test should PASS immediately. If it ever starts failing, the exact-GVK
+// helper has regressed and the entire kind-only-objects fix is at risk.
+func TestGetGVRForGVKDisambiguatesCollidingDBInstanceCRDs(t *testing.T) {
+	const clusterID = "collision-gvk"
+	app := newCollidingDBInstanceCluster(t, clusterID)
+
+	deps, _, err := app.resolveClusterDependencies(clusterID)
+	if err != nil {
+		t.Fatalf("resolveClusterDependencies: %v", err)
+	}
+
+	t.Run("ACK DBInstance", func(t *testing.T) {
+		gvr, namespaced, err := getGVRForGVKWithDependencies(context.Background(), deps, clusterID, ackDBInstanceGVK)
+		if err != nil {
+			t.Fatalf("getGVRForGVKWithDependencies returned error for ACK GVK: %v", err)
+		}
+		want := schema.GroupVersionResource{
+			Group: "rds.services.k8s.aws", Version: "v1alpha1", Resource: "dbinstances",
+		}
+		if gvr != want {
+			t.Fatalf("wrong GVR for ACK DBInstance: got %v, want %v", gvr, want)
+		}
+		if !namespaced {
+			t.Fatalf("expected ACK DBInstance to be namespaced")
+		}
+	})
+
+	t.Run("db-operator DbInstance", func(t *testing.T) {
+		gvr, namespaced, err := getGVRForGVKWithDependencies(context.Background(), deps, clusterID, kindaRocksDBInstanceGVK)
+		if err != nil {
+			t.Fatalf("getGVRForGVKWithDependencies returned error for kinda.rocks GVK: %v", err)
+		}
+		want := schema.GroupVersionResource{
+			Group: "kinda.rocks", Version: "v1beta1", Resource: "dbinstances",
+		}
+		if gvr != want {
+			t.Fatalf("wrong GVR for kinda.rocks DbInstance: got %v, want %v", gvr, want)
+		}
+		if !namespaced {
+			t.Fatalf("expected kinda.rocks DbInstance to be namespaced")
+		}
+	})
+}
+
+// TestGetGVRForDependenciesCollidingDBInstanceReturnsArbitraryMatch is a
+// characterization test that documents the bug at the level of observable
+// behavior. The kind-only resolver walks discovery results and returns
+// whichever colliding CRD happens to come first in iteration order. The
+// caller has no way to influence which one is chosen — that's the bug.
+//
+// We deliberately do not assert *which* GVR wins, only that:
+//  1. the resolver returns one of the two colliding GVRs without error
+//  2. the result is namespaced (both colliding CRDs are)
+//  3. the result plural is "dbinstances" (shared by both)
+//
+// Why this shape: in this test the fake client-go discovery actually returns
+// the kinda.rocks entry before ACK, which is the opposite of the insertion
+// order in collidingDBInstanceDiscoveryLists. That means the iteration order
+// is an implementation detail of the fake (and the real discovery client
+// reorders based on "preferred" heuristics on the server side), so pinning
+// the test to a specific group would be brittle and would not actually track
+// the bug. What matters is that the caller cannot pick — a single bare-kind
+// request can resolve to either colliding CRD depending on cluster state.
+//
+// After the fix:
+//   - Kind-only callers (capabilities fallback) retain this arbitrary
+//     first-match behavior and this test continues to pass as a guardrail.
+//   - New GVK-aware callers route through getGVRForGVKWithDependencies and
+//     get deterministic resolution (see the test above).
+func TestGetGVRForDependenciesCollidingDBInstanceReturnsArbitraryMatch(t *testing.T) {
+	const clusterID = "collision-kind-only"
+	app := newCollidingDBInstanceCluster(t, clusterID)
+
+	deps, selectionKey, err := app.resolveClusterDependencies(clusterID)
+	if err != nil {
+		t.Fatalf("resolveClusterDependencies: %v", err)
+	}
+
+	gvr, namespaced, err := getGVRForDependencies(deps, selectionKey, "DBInstance")
+	if err != nil {
+		t.Fatalf("getGVRForDependencies returned error: %v", err)
+	}
+
+	ack := schema.GroupVersionResource{
+		Group: "rds.services.k8s.aws", Version: "v1alpha1", Resource: "dbinstances",
+	}
+	kindaRocks := schema.GroupVersionResource{
+		Group: "kinda.rocks", Version: "v1beta1", Resource: "dbinstances",
+	}
+
+	switch gvr {
+	case ack, kindaRocks:
+		// Either is acceptable. What's NOT acceptable is that production
+		// code treats this ambiguous result as authoritative.
+	default:
+		t.Fatalf("expected one of the colliding DBInstance GVRs, got %v", gvr)
+	}
+	if !namespaced {
+		t.Fatalf("expected colliding DBInstance match to be namespaced, got namespaced=%v for %v", namespaced, gvr)
+	}
+	if gvr.Resource != "dbinstances" {
+		t.Fatalf("expected plural resource 'dbinstances', got %q", gvr.Resource)
+	}
+	t.Logf("first-match characterization: caller asked for bare kind 'DBInstance' and got %v — this is the ambiguity the fix eliminates for callers that pass a full GVK", gvr)
+}
+
+// TestGetObjectYAMLByGVKDisambiguatesCollidingDBInstances is the RED test
+// that drives step 3 of the kind-only-objects fix. It exercises the
+// not-yet-implemented GVK-aware entry point on *App via a temporary stub.
+//
+// Expected state right now:
+//   - The call compiles against the stub in object_yaml_by_gvk.go.
+//   - The stub returns an "not implemented" error, so the test fails.
+//
+// Expected state after the fix lands:
+//   - The stub is replaced with a real implementation that routes through
+//     getGVRForGVKWithDependencies and the dynamic client.
+//   - Each subtest returns the YAML bytes for its own colliding object,
+//     identifiable by the "source" field seeded on the fixture.
+//
+// The objects were seeded with distinct spec.source values ("ack-rds" and
+// "db-operator") specifically so the assertions below cannot pass if the
+// implementation routes to the wrong GVR.
+func TestGetObjectYAMLByGVKDisambiguatesCollidingDBInstances(t *testing.T) {
+	const clusterID = "collision-by-gvk"
+	app := newCollidingDBInstanceCluster(t, clusterID)
+
+	t.Run("ACK DBInstance returns ack-rds YAML", func(t *testing.T) {
+		yamlStr, err := app.GetObjectYAMLByGVK(clusterID, "rds.services.k8s.aws/v1alpha1", "DBInstance", "default", "my-db")
+		if err != nil {
+			t.Fatalf("GetObjectYAMLByGVK returned error for ACK: %v", err)
+		}
+		if !strings.Contains(yamlStr, "source: ack-rds") {
+			t.Fatalf("expected ACK object YAML to contain 'source: ack-rds', got:\n%s", yamlStr)
+		}
+		if strings.Contains(yamlStr, "source: db-operator") {
+			t.Fatalf("ACK lookup returned db-operator object by mistake:\n%s", yamlStr)
+		}
+	})
+
+	t.Run("kinda.rocks DbInstance returns db-operator YAML", func(t *testing.T) {
+		yamlStr, err := app.GetObjectYAMLByGVK(clusterID, "kinda.rocks/v1beta1", "DbInstance", "default", "my-db")
+		if err != nil {
+			t.Fatalf("GetObjectYAMLByGVK returned error for kinda.rocks: %v", err)
+		}
+		if !strings.Contains(yamlStr, "source: db-operator") {
+			t.Fatalf("expected kinda.rocks object YAML to contain 'source: db-operator', got:\n%s", yamlStr)
+		}
+		if strings.Contains(yamlStr, "source: ack-rds") {
+			t.Fatalf("kinda.rocks lookup returned ack-rds object by mistake:\n%s", yamlStr)
+		}
+	})
+}
