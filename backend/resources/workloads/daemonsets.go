@@ -88,7 +88,7 @@ func (s *DaemonSetService) buildDaemonSetDetails(
 	podMetrics map[string]*metricsv1beta1.PodMetrics,
 ) *restypes.DaemonSetDetails {
 	avgCPURequest, avgCPULimit, avgMemRequest, avgMemLimit, avgCPUUsage, avgMemUsage := aggregatePodAverages(podsList, podMetrics)
-	podInfos := buildPodSummaries("DaemonSet", daemonSet.Name, podsList, podMetrics)
+	podInfos := buildPodSummaries("DaemonSet", daemonSet.Name, "apps/v1", podsList, podMetrics)
 	podSummary, _ := summarizePodMetrics(podsList, podMetrics)
 
 	details := &restypes.DaemonSetDetails{

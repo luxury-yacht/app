@@ -1129,6 +1129,7 @@ export namespace types {
 	    memUsage: string;
 	    ownerKind: string;
 	    ownerName: string;
+	    ownerApiVersion?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new PodSimpleInfo(source);
@@ -1151,6 +1152,7 @@ export namespace types {
 	        this.memUsage = source["memUsage"];
 	        this.ownerKind = source["ownerKind"];
 	        this.ownerName = source["ownerName"];
+	        this.ownerApiVersion = source["ownerApiVersion"];
 	    }
 	}
 	export class PodDetailInfoContainer {
@@ -3278,6 +3280,7 @@ export namespace types {
 	    memUsage: string;
 	    ownerKind: string;
 	    ownerName: string;
+	    ownerApiVersion?: string;
 	    node: string;
 	    nodeIP?: string;
 	    podIP?: string;
@@ -3322,6 +3325,7 @@ export namespace types {
 	        this.memUsage = source["memUsage"];
 	        this.ownerKind = source["ownerKind"];
 	        this.ownerName = source["ownerName"];
+	        this.ownerApiVersion = source["ownerApiVersion"];
 	        this.node = source["node"];
 	        this.nodeIP = source["nodeIP"];
 	        this.podIP = source["podIP"];

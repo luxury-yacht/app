@@ -144,6 +144,7 @@ func TestPodBuilderNodeScope(t *testing.T) {
 	require.Equal(t, "pod-a", first.Name)
 	require.Equal(t, "Deployment", first.OwnerKind)
 	require.Equal(t, "deploy-a", first.OwnerName)
+	require.Equal(t, "apps/v1", first.OwnerAPIVersion, "ReplicaSet→Deployment collapse must produce apps/v1")
 	require.Equal(t, "150m", first.CPUUsage)
 	require.Equal(t, "196 MB", first.MemUsage)
 	require.True(t, strings.HasPrefix(first.Ready, "1/"))
@@ -205,6 +206,78 @@ func TestPodBuilderWorkloadScope(t *testing.T) {
 	require.Equal(t, "pod-workload", payload.Pods[0].Name)
 	require.Equal(t, "Deployment", payload.Pods[0].OwnerKind)
 	require.Equal(t, "orders", payload.Pods[0].OwnerName)
+	require.Equal(t, "apps/v1", payload.Pods[0].OwnerAPIVersion)
+}
+
+// TestResolvePodOwnerThreadsCRDOwnerAPIVersion verifies that the snapshot
+// pod resolver passes through owner.APIVersion verbatim for CRD-as-Pod-
+// owner targets (Argo Rollout, KubeVirt VirtualMachineInstance, Tekton
+// TaskRun, Spark SparkApplication, etc). Without this the panel cannot
+// open the owner with a fully-qualified GVK and the strict object-YAML
+// path hard-fails. See docs/plans/kind-only-objects.md.
+func TestResolvePodOwnerThreadsCRDOwnerAPIVersion(t *testing.T) {
+	owner := boolPtr(true)
+
+	t.Run("Argo Rollout owner", func(t *testing.T) {
+		pod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				OwnerReferences: []metav1.OwnerReference{{
+					APIVersion: "argoproj.io/v1alpha1",
+					Kind:       "Rollout",
+					Name:       "canary",
+					Controller: owner,
+				}},
+			},
+		}
+		kind, name, apiVersion := resolvePodOwner(pod, map[string]string{})
+		require.Equal(t, "Rollout", kind)
+		require.Equal(t, "canary", name)
+		require.Equal(t, "argoproj.io/v1alpha1", apiVersion)
+	})
+
+	t.Run("KubeVirt VirtualMachineInstance owner", func(t *testing.T) {
+		pod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				OwnerReferences: []metav1.OwnerReference{{
+					APIVersion: "kubevirt.io/v1",
+					Kind:       "VirtualMachineInstance",
+					Name:       "vmi-test",
+					Controller: owner,
+				}},
+			},
+		}
+		kind, name, apiVersion := resolvePodOwner(pod, map[string]string{})
+		require.Equal(t, "VirtualMachineInstance", kind)
+		require.Equal(t, "vmi-test", name)
+		require.Equal(t, "kubevirt.io/v1", apiVersion)
+	})
+
+	t.Run("ReplicaSet collapse hardcodes apps/v1", func(t *testing.T) {
+		// Even when the OwnerReference happens to omit APIVersion (or
+		// somehow carries a wrong one), the ReplicaSet→Deployment collapse
+		// must produce apps/v1 because Deployments are always apps/v1.
+		pod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				OwnerReferences: []metav1.OwnerReference{{
+					Kind:       "ReplicaSet",
+					Name:       "demo-rs",
+					Controller: owner,
+				}},
+			},
+		}
+		kind, name, apiVersion := resolvePodOwner(pod, map[string]string{"demo-rs": "demo-deploy"})
+		require.Equal(t, "Deployment", kind)
+		require.Equal(t, "demo-deploy", name)
+		require.Equal(t, "apps/v1", apiVersion)
+	})
+
+	t.Run("ownerless pod returns empty apiVersion", func(t *testing.T) {
+		pod := &corev1.Pod{}
+		kind, name, apiVersion := resolvePodOwner(pod, map[string]string{})
+		require.Equal(t, "None", kind)
+		require.Equal(t, "None", name)
+		require.Empty(t, apiVersion)
+	})
 }
 
 func TestPodBuilderNamespaceScope(t *testing.T) {

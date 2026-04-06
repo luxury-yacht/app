@@ -99,7 +99,7 @@ func (s *DeploymentService) buildDeploymentDetails(
 ) *restypes.DeploymentDetails {
 	avgCPURequest, avgCPULimit, avgMemRequest, avgMemLimit, avgCPUUsage, avgMemUsage := aggregatePodAverages(podsList, podMetrics)
 
-	podInfos := buildPodSummaries("Deployment", deployment.Name, podsList, podMetrics)
+	podInfos := buildPodSummaries("Deployment", deployment.Name, "apps/v1", podsList, podMetrics)
 	podSummary, _ := summarizePodMetrics(podsList, podMetrics)
 
 	rsNames, currentRevision := summarizeReplicaSets(deployment, replicaSets)

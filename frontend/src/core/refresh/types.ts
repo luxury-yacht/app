@@ -362,6 +362,14 @@ export interface PodSnapshotEntry extends ClusterMeta {
   age: string;
   ownerKind: string;
   ownerName: string;
+  /**
+   * Wire-form apiVersion of the controlling owner (e.g. "apps/v1",
+   * "argoproj.io/v1alpha1"). Threaded from
+   * pod.OwnerReferences[*].APIVersion so the panel can open
+   * CRD-as-Pod-owner targets correctly. See
+   * docs/plans/kind-only-objects.md.
+   */
+  ownerApiVersion?: string;
   cpuRequest: string;
   cpuLimit: string;
   cpuUsage: string;

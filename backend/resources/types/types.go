@@ -317,6 +317,14 @@ type PodSimpleInfo struct {
 	MemUsage   string `json:"memUsage"`   // Current memory usage from metrics
 	OwnerKind  string `json:"ownerKind"`  // Kind of the owner (Deployment, StatefulSet, etc)
 	OwnerName  string `json:"ownerName"`  // Name of the owner resource
+	// OwnerAPIVersion is the wire-form apiVersion of the owner (e.g.
+	// "apps/v1", "argoproj.io/v1alpha1", "kubevirt.io/v1"). Threaded from
+	// pod.OwnerReferences[*].APIVersion (or hardcoded apps/v1 for the
+	// ReplicaSet→Deployment collapse) so the frontend can open
+	// CRD-as-Pod-owner targets in the object panel with a fully-qualified
+	// GVK. Required for Argo Rollouts, KubeVirt VMI, Tekton TaskRun,
+	// Spark SparkApplication, etc. See docs/plans/kind-only-objects.md.
+	OwnerAPIVersion string `json:"ownerApiVersion,omitempty"`
 }
 
 // NsRBACInfo represents basic RBAC resource information (Roles, RoleBindings, ServiceAccounts)
@@ -503,6 +511,10 @@ type PodDetailInfo struct {
 	// Ownership information
 	OwnerKind string `json:"ownerKind"`
 	OwnerName string `json:"ownerName"`
+	// OwnerAPIVersion carries the wire-form apiVersion of the controlling
+	// owner so the panel can open CRD-as-Pod-owner targets correctly. See
+	// docs/plans/kind-only-objects.md and PodSimpleInfo.OwnerAPIVersion.
+	OwnerAPIVersion string `json:"ownerApiVersion,omitempty"`
 
 	// Additional details for object panel
 	Node            string                   `json:"node"`
