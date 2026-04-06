@@ -537,6 +537,33 @@ describe('NsViewCustom', () => {
       expect(callArg.clusterName).toBe('alpha');
     });
 
+    it('exposes a sortValue extractor so the column sorts by crdName', async () => {
+      // Regression guard: the column key is "crd" but the data field is
+      // "crdName", so without an explicit sortValue the default sort
+      // (row[column.key]) reads undefined for every row and the column
+      // silently doesn't sort. The column factory only wires sortValue
+      // if we set it on the returned column object — verify that happened.
+      const resource: CustomResourceData = {
+        ...baseResource,
+        crdName: 'dbinstances.rds.services.k8s.aws',
+      };
+
+      await renderComponent({ data: [resource], loaded: true });
+
+      const gridProps = gridTableMock.mock.calls[0][0];
+      const crdCol = findColumn(gridProps, 'crd');
+      expect(crdCol.sortValue).toBeTypeOf('function');
+
+      // The extractor should return a comparable string that useTableSort
+      // can feed into localeCompare. We lowercase for case-insensitive sort.
+      expect(crdCol.sortValue(resource)).toBe('dbinstances.rds.services.k8s.aws');
+
+      // Rows without a crdName sort as empty string (they cluster at the
+      // top or bottom depending on direction, not scattered randomly).
+      const noCRD: CustomResourceData = { ...baseResource };
+      expect(crdCol.sortValue(noCRD)).toBe('');
+    });
+
     it('renders the CRD cell as inert text when crdName is missing', async () => {
       // Defensive: a row from a legacy snapshot or a synthetic source
       // might not carry crdName. The cell should not be clickable, must

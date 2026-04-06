@@ -297,6 +297,54 @@ func TestBuildNamespaceCustomSummaryNilResourceIsSafe(t *testing.T) {
 	require.Equal(t, "foos.example.com", row.CRDName)
 }
 
+// TestBuildClusterCustomSummaryThreadsCRDName is the cluster-scoped
+// twin of the namespace-scoped regression test below. Same shape of bug
+// to guard against: the frontend's CRD column in ClusterViewCustom
+// relies on this being populated by both the snapshot path (which
+// passes `crd.Name`) and the streaming path (which passes
+// `gvr.Resource + "." + gvr.Group`).
+//
+// Any new field added to ClusterCustomSummary MUST be asserted here.
+func TestBuildClusterCustomSummaryThreadsCRDName(t *testing.T) {
+	resource := &unstructured.Unstructured{}
+	resource.SetAPIVersion("rds.services.k8s.aws/v1alpha1")
+	resource.SetKind("DBCluster")
+	resource.SetName("primary")
+
+	row := BuildClusterCustomSummary(
+		ClusterMeta{ClusterID: "c1"},
+		resource,
+		"rds.services.k8s.aws",
+		"v1alpha1",
+		"DBCluster",
+		"dbclusters.rds.services.k8s.aws",
+	)
+	require.Equal(t, "c1", row.ClusterID)
+	require.Equal(t, "DBCluster", row.Kind)
+	require.Equal(t, "primary", row.Name)
+	require.Equal(t, "rds.services.k8s.aws", row.APIGroup)
+	require.Equal(t, "v1alpha1", row.APIVersion)
+	require.Equal(t, "dbclusters.rds.services.k8s.aws", row.CRDName)
+}
+
+// TestBuildClusterCustomSummaryNilResourceIsSafe ensures the streaming
+// path doesn't panic on a nil resource.
+func TestBuildClusterCustomSummaryNilResourceIsSafe(t *testing.T) {
+	row := BuildClusterCustomSummary(
+		ClusterMeta{ClusterID: "c1"},
+		nil,
+		"rds.services.k8s.aws",
+		"v1alpha1",
+		"DBCluster",
+		"dbclusters.rds.services.k8s.aws",
+	)
+	require.Equal(t, "c1", row.ClusterID)
+	require.Equal(t, "DBCluster", row.Kind)
+	require.Equal(t, "rds.services.k8s.aws", row.APIGroup)
+	require.Equal(t, "v1alpha1", row.APIVersion)
+	require.Equal(t, "dbclusters.rds.services.k8s.aws", row.CRDName)
+}
+
 // TestBuildNamespaceCustomSummaryThreadsCRDName regression-guards the
 // new CRDName field. The frontend's CRD column relies on this being
 // populated by both the snapshot path (which passes `crd.Name`) and the

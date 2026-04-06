@@ -271,6 +271,15 @@ export interface ClusterCustomEntry extends ClusterMeta {
   /** API version paired with apiGroup for GVK-aware resolution of the
    * owning CRD. See docs/plans/kind-only-objects.md. */
   apiVersion: string;
+  /**
+   * Canonical Kubernetes name of the CustomResourceDefinition that
+   * defines this resource's Kind, in the form `<plural>.<group>` (e.g.
+   * `dbclusters.rds.services.k8s.aws`). Used by ClusterViewCustom's
+   * CRD column to render a clickable cell that opens the owning CRD
+   * in the object panel. Same-shape field as
+   * `NamespaceCustomSummary.crdName`.
+   */
+  crdName?: string;
   age: string;
   labels?: Record<string, string>;
   annotations?: Record<string, string>;

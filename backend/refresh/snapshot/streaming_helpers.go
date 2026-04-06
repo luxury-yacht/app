@@ -363,16 +363,37 @@ func BuildClusterCRDSummary(meta ClusterMeta, crd *apiextensionsv1.CustomResourc
 	}
 }
 
-// BuildClusterCustomSummary builds a cluster custom resource row payload that matches snapshot formatting.
+// BuildClusterCustomSummary builds a cluster custom resource row payload
+// that matches snapshot formatting. This is the **single source of truth**
+// for cluster-scoped custom resource row construction — the full-snapshot
+// builder in cluster_custom.go calls this helper rather than inlining its
+// own construction, so the two paths cannot drift.
+//
+// crdName is the canonical Kubernetes CRD name (`<plural>.<group>`,
+// e.g. "dbclusters.rds.services.k8s.aws"). The snapshot path passes
+// `crd.Name` directly from the apiextensions object; the streaming path
+// computes it from the GVR (`gvr.Resource + "." + gvr.Group`). Used by
+// the frontend's CRD column to render a clickable cell that opens the
+// owning CRD in the object panel. See NamespaceCustomSummary for the
+// same-shape field on the namespace-scoped variant.
+//
+// Any new field added to ClusterCustomSummary MUST be populated here.
 func BuildClusterCustomSummary(
 	meta ClusterMeta,
 	resource *unstructured.Unstructured,
 	apiGroup string,
 	apiVersion string,
 	kindFallback string,
+	crdName string,
 ) ClusterCustomSummary {
 	if resource == nil {
-		return ClusterCustomSummary{ClusterMeta: meta, Kind: kindFallback, APIGroup: apiGroup, APIVersion: apiVersion}
+		return ClusterCustomSummary{
+			ClusterMeta: meta,
+			Kind:        kindFallback,
+			APIGroup:    apiGroup,
+			APIVersion:  apiVersion,
+			CRDName:     crdName,
+		}
 	}
 	kind := resourceKind(resource, kindFallback)
 	return ClusterCustomSummary{
@@ -381,6 +402,7 @@ func BuildClusterCustomSummary(
 		Name:        resource.GetName(),
 		APIGroup:    apiGroup,
 		APIVersion:  apiVersion,
+		CRDName:     crdName,
 		Age:         formatAge(resource.GetCreationTimestamp().Time),
 		Labels:      resource.GetLabels(),
 		Annotations: resource.GetAnnotations(),

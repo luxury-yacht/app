@@ -188,28 +188,38 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
         // as the column factory's default placeholder) for rows that
         // happen to have no `crdName` — e.g. legacy snapshots from
         // before the field was added.
-        cf.createTextColumn<CustomResourceData>(
-          'crd',
-          'CRD',
-          (resource) => resource.crdName ?? undefined,
-          {
-            onClick: handleCRDClick,
-            onAltClick: (resource) => {
-              if (!resource.crdName) {
-                return;
-              }
-              navigateToView({
-                kind: 'CustomResourceDefinition',
-                name: resource.crdName,
-                clusterId: resource.clusterId,
-                clusterName: resource.clusterName,
-              });
-            },
-            isInteractive: (resource) => Boolean(resource.crdName),
-            getClassName: (resource) => (resource.crdName ? 'object-panel-link' : undefined),
-            getTitle: (resource) => (resource.crdName ? `Open ${resource.crdName}` : undefined),
-          }
-        ),
+        //
+        // The column key is "crd" but the field on CustomResourceData
+        // is "crdName", so we attach an explicit `sortValue` accessor.
+        // Without it, useTableSort falls back to `row[column.key]`
+        // (i.e. `resource['crd']`), gets undefined for every row, and
+        // the column silently doesn't sort at all.
+        (() => {
+          const crdColumn = cf.createTextColumn<CustomResourceData>(
+            'crd',
+            'CRD',
+            (resource) => resource.crdName ?? undefined,
+            {
+              onClick: handleCRDClick,
+              onAltClick: (resource) => {
+                if (!resource.crdName) {
+                  return;
+                }
+                navigateToView({
+                  kind: 'CustomResourceDefinition',
+                  name: resource.crdName,
+                  clusterId: resource.clusterId,
+                  clusterName: resource.clusterName,
+                });
+              },
+              isInteractive: (resource) => Boolean(resource.crdName),
+              getClassName: (resource) => (resource.crdName ? 'object-panel-link' : undefined),
+              getTitle: (resource) => (resource.crdName ? `Open ${resource.crdName}` : undefined),
+            }
+          );
+          crdColumn.sortValue = (resource) => (resource.crdName ?? '').toLowerCase();
+          return crdColumn;
+        })(),
         cf.createAgeColumn(),
       ];
 

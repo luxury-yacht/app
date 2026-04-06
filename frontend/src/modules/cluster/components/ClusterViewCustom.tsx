@@ -29,6 +29,7 @@ import GridTable, {
 } from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import { useFavToggle } from '@ui/favorites/FavToggle';
+import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
 
 // Define the data structure for cluster custom resources
 interface ClusterCustomData {
@@ -42,6 +43,13 @@ interface ClusterCustomData {
    * panel can disambiguate colliding Kinds across API groups. See
    * docs/plans/kind-only-objects.md. */
   apiVersion?: string;
+  /**
+   * Canonical CRD name (`<plural>.<group>`) for the CustomResourceDefinition
+   * that defines this resource's Kind. Threaded from the backend
+   * ClusterCustomSummary so the CRD column can render a clickable cell
+   * that opens the owning CRD in the object panel.
+   */
+  crdName?: string;
   age?: string;
   labels?: Record<string, string>;
   annotations?: Record<string, string>;
@@ -92,6 +100,26 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
       [openWithObject]
     );
 
+    // Click handler for the CRD column. Opens the owning
+    // CustomResourceDefinition in the object panel — the CRD itself is
+    // a built-in (apiextensions.k8s.io/v1) so its GVK comes from the
+    // built-in lookup table, not from row data. Mirrors NsViewCustom.
+    const handleCRDClick = useCallback(
+      (resource: ClusterCustomData) => {
+        if (!resource.crdName) {
+          return;
+        }
+        openWithObject({
+          kind: 'CustomResourceDefinition',
+          ...resolveBuiltinGroupVersion('CustomResourceDefinition'),
+          name: resource.crdName,
+          clusterId: resource.clusterId ?? undefined,
+          clusterName: resource.clusterName ?? undefined,
+        });
+      },
+      [openWithObject]
+    );
+
     const keyExtractor = useCallback(
       (resource: ClusterCustomData) =>
         buildClusterScopedKey(
@@ -130,27 +158,54 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
             }),
           getClassName: () => 'object-panel-link',
         }),
-        cf.createTextColumn<ClusterCustomData>(
-          'apiGroup',
-          'API Group',
-          (resource) => resource.apiGroup || '-',
-          {
-            getClassName: () => 'api-group',
-          }
-        ),
+        // CRD column: each cell is a clickable link back to the CRD
+        // that defines the row's Kind. Replaces the previous API Group
+        // column — `<plural>.<group>` is a strict superset of the group
+        // alone (the group is the right-hand side of the dot), and the
+        // clickable link adds a navigation path the old column lacked.
+        // The column key is "crd" but the data field is "crdName", so
+        // we attach an explicit `sortValue` — without it, useTableSort
+        // would fall back to `row["crd"]` (undefined) and silently
+        // fail to sort. Matches NsViewCustom's CRD column exactly.
+        (() => {
+          const crdColumn = cf.createTextColumn<ClusterCustomData>(
+            'crd',
+            'CRD',
+            (resource) => resource.crdName ?? undefined,
+            {
+              onClick: handleCRDClick,
+              onAltClick: (resource) => {
+                if (!resource.crdName) {
+                  return;
+                }
+                navigateToView({
+                  kind: 'CustomResourceDefinition',
+                  name: resource.crdName,
+                  clusterId: resource.clusterId,
+                  clusterName: resource.clusterName,
+                });
+              },
+              isInteractive: (resource) => Boolean(resource.crdName),
+              getClassName: (resource) => (resource.crdName ? 'object-panel-link' : undefined),
+              getTitle: (resource) => (resource.crdName ? `Open ${resource.crdName}` : undefined),
+            }
+          );
+          crdColumn.sortValue = (resource) => (resource.crdName ?? '').toLowerCase();
+          return crdColumn;
+        })(),
         cf.createAgeColumn(),
       ];
 
       const sizing: cf.ColumnSizingMap = {
         kind: { autoWidth: true },
         name: { autoWidth: true },
-        apiGroup: { autoWidth: true },
+        crd: { autoWidth: true },
         age: { autoWidth: true },
       };
       cf.applyColumnSizing(baseColumns, sizing);
 
       return baseColumns;
-    }, [handleResourceClick, navigateToView, useShortResourceNames]);
+    }, [handleResourceClick, handleCRDClick, navigateToView, useShortResourceNames]);
 
     // Set up grid table persistence
     const {

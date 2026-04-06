@@ -281,4 +281,107 @@ describe('ClusterViewCustom', () => {
       'shared-pg'
     );
   });
+
+  // CRD column: each row gets a clickable cell that opens the owning
+  // CustomResourceDefinition in the object panel. Replaces the previous
+  // "API Group" column — `<plural>.<group>` is a strict superset of the
+  // group alone, and the click-through adds a navigation path the old
+  // column lacked. Mirrors NsViewCustom's CRD column tests.
+  describe('CRD column', () => {
+    const findColumn = (props: any, key: string) =>
+      props.columns.find((col: any) => col.key === key);
+
+    const resourceWithCRD = {
+      ...baseCustom,
+      kind: 'DBCluster',
+      name: 'shared-pg',
+      apiGroup: 'postgresql.cnpg.io',
+      apiVersion: 'v1',
+      crdName: 'dbclusters.postgresql.cnpg.io',
+    };
+
+    const renderWith = async (rows: any[]) => {
+      await act(async () => {
+        root.render(<ClusterViewCustom data={rows} loaded={true} />);
+        await Promise.resolve();
+      });
+    };
+
+    it('replaces the API Group column with a CRD column', async () => {
+      await renderWith([resourceWithCRD]);
+
+      const props = gridTablePropsRef.current;
+      // Old column is gone…
+      expect(findColumn(props, 'apiGroup')).toBeUndefined();
+      // …replaced with the new CRD column.
+      const crdCol = findColumn(props, 'crd');
+      expect(crdCol).toBeTruthy();
+      expect(crdCol.header).toBe('CRD');
+    });
+
+    it('renders the CRD cell with the row crdName as a clickable link', async () => {
+      await renderWith([resourceWithCRD]);
+
+      const props = gridTablePropsRef.current;
+      const crdCol = findColumn(props, 'crd');
+      const rendered = crdCol.render(resourceWithCRD) as React.ReactElement<any>;
+
+      expect((rendered as any).type).toBe('span');
+      expect((rendered as any).props.role).toBe('button');
+      expect((rendered as any).props.children).toBe('dbclusters.postgresql.cnpg.io');
+      expect((rendered as any).props.title).toBe('Open dbclusters.postgresql.cnpg.io');
+    });
+
+    it('opens the CRD in the object panel when the CRD cell is clicked', async () => {
+      await renderWith([resourceWithCRD]);
+
+      const props = gridTablePropsRef.current;
+      const crdCol = findColumn(props, 'crd');
+      const rendered = crdCol.render(resourceWithCRD) as React.ReactElement<any>;
+
+      openWithObjectMock.mockClear();
+      const onClick = (rendered as any).props.onClick as (e: any) => void;
+      onClick({ altKey: false, preventDefault: () => {}, stopPropagation: () => {} });
+
+      expect(openWithObjectMock).toHaveBeenCalledTimes(1);
+      const callArg = openWithObjectMock.mock.calls[0][0] as Record<string, unknown>;
+      expect(callArg.kind).toBe('CustomResourceDefinition');
+      expect(callArg.name).toBe('dbclusters.postgresql.cnpg.io');
+      // The CRD is a built-in — apiextensions.k8s.io/v1.
+      expect(callArg.group).toBe('apiextensions.k8s.io');
+      expect(callArg.version).toBe('v1');
+      // CRDs are cluster-scoped — no namespace on the ref.
+      expect(callArg.namespace).toBeUndefined();
+      expect(callArg.clusterId).toBe('alpha:ctx');
+      expect(callArg.clusterName).toBe('alpha');
+    });
+
+    it('exposes a sortValue extractor so the column sorts by crdName', async () => {
+      // Regression guard: column key "crd" vs field "crdName" mismatch
+      // would silently break sorting without an explicit sortValue. See
+      // useTableSort.ts:124.
+      await renderWith([resourceWithCRD]);
+
+      const props = gridTablePropsRef.current;
+      const crdCol = findColumn(props, 'crd');
+      expect(crdCol.sortValue).toBeTypeOf('function');
+      expect(crdCol.sortValue(resourceWithCRD)).toBe('dbclusters.postgresql.cnpg.io');
+
+      const noCRD = { ...baseCustom };
+      expect(crdCol.sortValue(noCRD)).toBe('');
+    });
+
+    it('renders the CRD cell as inert text when crdName is missing', async () => {
+      // Defensive: a row from a legacy snapshot that pre-dates the
+      // CRDName field. Cell should render the bare "-" placeholder
+      // with no click handler and no openWithObject call.
+      const noCRD = { ...baseCustom };
+      await renderWith([noCRD]);
+
+      const props = gridTablePropsRef.current;
+      const crdCol = findColumn(props, 'crd');
+      const rendered = crdCol.render(noCRD);
+      expect(rendered).toBe('-');
+    });
+  });
 });
