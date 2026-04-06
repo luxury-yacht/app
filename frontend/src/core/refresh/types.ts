@@ -508,7 +508,16 @@ export interface NamespaceAutoscalingSummary extends ClusterMeta {
   kind: string;
   name: string;
   namespace: string;
+  /** Display string "Kind/Name" for the table column. */
   target: string;
+  /**
+   * Wire-form apiVersion of the scale target (e.g. "apps/v1",
+   * "documentdb.services.k8s.aws/v1alpha1"). Threaded from
+   * `hpa.Spec.ScaleTargetRef.APIVersion` so the panel can open the target
+   * with a fully-qualified GVK — required for CRDs that share a Kind. See
+   * docs/plans/kind-only-objects.md.
+   */
+  targetApiVersion?: string;
   min: number;
   max: number;
   current: number;

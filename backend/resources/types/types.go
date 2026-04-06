@@ -447,11 +447,19 @@ type HelmRevision struct {
 	Description string `json:"description,omitempty"`
 }
 
-// HelmResource represents a Kubernetes resource managed by a Helm release
+// HelmResource represents a Kubernetes resource managed by a Helm release.
+//
+// APIVersion carries the manifest's apiVersion verbatim (e.g. "apps/v1",
+// "v1", "documentdb.services.k8s.aws/v1alpha1") so the frontend can open
+// the target in the object panel with a fully-qualified GVK. Required for
+// CRDs that share a Kind across operator groups — without it the strict
+// object-YAML path hard-fails on Helm-managed custom resources. See
+// docs/plans/kind-only-objects.md.
 type HelmResource struct {
-	Kind      string `json:"kind"`
-	Name      string `json:"name"`
-	Namespace string `json:"namespace"`
+	Kind       string `json:"kind"`
+	APIVersion string `json:"apiVersion,omitempty"`
+	Name       string `json:"name"`
+	Namespace  string `json:"namespace"`
 }
 
 // PodDetailInfoContainer represents detailed container information within a pod

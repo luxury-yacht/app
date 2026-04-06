@@ -10,7 +10,10 @@ import { ResourceStatus } from '@shared/components/kubernetes/ResourceStatus';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
-import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
+import {
+  parseApiVersion,
+  resolveBuiltinGroupVersion,
+} from '@shared/constants/builtinGroupVersions';
 import './shared/LabelsAndAnnotations.css';
 import './HelmOverview.css';
 
@@ -125,14 +128,12 @@ export const HelmOverview: React.FC<HelmOverviewProps> = ({
                     className="metadata-value"
                     objectRef={{
                       kind: resource.kind.toLowerCase(),
-                      // HelmResource (Wails) currently lacks apiVersion;
-                      // fall back to the built-in lookup. Helm releases
-                      // typically deploy built-in workload kinds so this
-                      // covers the common case. CRDs targeted by Helm
-                      // would still hit the kind-only-objects bug — fix
-                      // requires extending the backend HelmResource type
-                      // to carry apiVersion.
-                      ...resolveBuiltinGroupVersion(resource.kind),
+                      // Prefer the apiVersion the Helm manifest explicitly
+                      // declared (correct for CRDs); fall back to the
+                      // built-in lookup if older releases somehow lack one.
+                      ...(resource.apiVersion
+                        ? parseApiVersion(resource.apiVersion)
+                        : resolveBuiltinGroupVersion(resource.kind)),
                       name: resource.name,
                       namespace: resource.namespace,
                       ...clusterMeta,

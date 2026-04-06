@@ -1863,6 +1863,7 @@ export namespace types {
 	
 	export class HelmResource {
 	    kind: string;
+	    apiVersion?: string;
 	    name: string;
 	    namespace: string;
 	
@@ -1873,6 +1874,7 @@ export namespace types {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.kind = source["kind"];
+	        this.apiVersion = source["apiVersion"];
 	        this.name = source["name"];
 	        this.namespace = source["namespace"];
 	    }

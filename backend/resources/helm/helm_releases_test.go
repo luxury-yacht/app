@@ -110,9 +110,9 @@ items:
 	resources := service.extractResourcesFromManifest(manifest, "default")
 
 	require.Equal(t, []types.HelmResource{
-		{Kind: "ConfigMap", Name: "app-config", Namespace: "default"},
-		{Kind: "Deployment", Name: "web", Namespace: "staging"},
-		{Kind: "Service", Name: "web", Namespace: "prod"},
+		{Kind: "ConfigMap", APIVersion: "v1", Name: "app-config", Namespace: "default"},
+		{Kind: "Deployment", APIVersion: "apps/v1", Name: "web", Namespace: "staging"},
+		{Kind: "Service", APIVersion: "v1", Name: "web", Namespace: "prod"},
 	}, resources)
 }
 
@@ -150,8 +150,45 @@ items:
 	resources := service.extractResourcesFromManifest(manifest, "team-default")
 
 	require.Equal(t, []types.HelmResource{
-		{Kind: "Secret", Name: "credentials", Namespace: "team-a"},
-		{Kind: "Service", Name: "svc", Namespace: "other"},
+		{Kind: "Secret", APIVersion: "v1", Name: "credentials", Namespace: "team-a"},
+		{Kind: "Service", APIVersion: "v1", Name: "svc", Namespace: "other"},
+	}, resources)
+}
+
+// TestExtractResourcesFromManifestDisambiguatesCollidingCRDs verifies that
+// two CRDs sharing a Kind across different operator groups in the same
+// Helm release each appear with their own apiVersion. Without this fix
+// they would dedupe under a Kind+namespace+name key and the frontend
+// could not open the right one in the object panel. See
+// docs/plans/kind-only-objects.md.
+func TestExtractResourcesFromManifestDisambiguatesCollidingCRDs(t *testing.T) {
+	t.Helper()
+
+	// Two DBCluster CRDs sharing kind/name/namespace but from different
+	// groups. A naive Kind+name+namespace dedupe key would collapse these
+	// into one entry; the GVK-aware key keeps them distinct.
+	manifest := `
+---
+apiVersion: rds.services.k8s.aws/v1alpha1
+kind: DBCluster
+metadata:
+  name: primary
+  namespace: data
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: DBCluster
+metadata:
+  name: primary
+  namespace: data
+---
+`
+
+	service := &Service{}
+	resources := service.extractResourcesFromManifest(manifest, "default")
+
+	require.Equal(t, []types.HelmResource{
+		{Kind: "DBCluster", APIVersion: "rds.services.k8s.aws/v1alpha1", Name: "primary", Namespace: "data"},
+		{Kind: "DBCluster", APIVersion: "postgresql.cnpg.io/v1", Name: "primary", Namespace: "data"},
 	}, resources)
 }
 

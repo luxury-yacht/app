@@ -26,6 +26,7 @@ import GridTable, {
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import {
   formatBuiltinApiVersion,
+  parseApiVersion,
   resolveBuiltinGroupVersion,
 } from '@shared/constants/builtinGroupVersions';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
@@ -47,6 +48,13 @@ export interface AutoscalingData {
   scaleTargetRef?: {
     kind: string;
     name: string;
+    /**
+     * Wire-form apiVersion of the scale target. Threaded from the
+     * backend via NamespaceAutoscalingSummary.targetApiVersion so the
+     * panel can open CRD scale targets correctly. See
+     * docs/plans/kind-only-objects.md.
+     */
+    apiVersion?: string;
   };
   target?: string;
   min?: number;
@@ -175,11 +183,17 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
               if (!resource.scaleTargetRef) {
                 return;
               }
+              // Prefer the apiVersion the HPA explicitly references (correct
+              // for any kind, including CRDs with a scale subresource); fall
+              // back to the built-in lookup when the backend snapshot lacks
+              // one (legacy data, or HPA with malformed scaleTargetRef).
               openWithObject({
                 kind: resource.scaleTargetRef.kind,
                 name: resource.scaleTargetRef.name,
                 namespace: resource.namespace,
-                ...resolveBuiltinGroupVersion(resource.scaleTargetRef.kind),
+                ...(resource.scaleTargetRef.apiVersion
+                  ? parseApiVersion(resource.scaleTargetRef.apiVersion)
+                  : resolveBuiltinGroupVersion(resource.scaleTargetRef.kind)),
                 clusterId: resource.clusterId ?? undefined,
                 clusterName: resource.clusterName ?? undefined,
               });

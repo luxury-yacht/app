@@ -102,8 +102,9 @@ const filterByClusterId = <T extends { clusterId?: string | null }>(
 };
 
 const parseAutoscalingTarget = (
-  target?: string | null
-): { kind: string; name: string } | undefined => {
+  target?: string | null,
+  apiVersion?: string | null
+): { kind: string; name: string; apiVersion?: string } | undefined => {
   if (!target) {
     return undefined;
   }
@@ -113,9 +114,14 @@ const parseAutoscalingTarget = (
     return undefined;
   }
 
+  // apiVersion is the wire-form "group/version" sourced from the
+  // backend's HPA snapshot (NamespaceAutoscalingSummary.targetApiVersion).
+  // Threaded so the object panel can open CRD scale targets with a
+  // fully-qualified GVK. See docs/plans/kind-only-objects.md.
   return {
     kind: kindPart,
     name: nameParts.join('/'),
+    apiVersion: apiVersion ?? undefined,
   };
 };
 
@@ -480,7 +486,7 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     (payload?: NamespaceAutoscalingSnapshotPayload) =>
       filterByClusterId(payload?.resources, namespaceClusterId).map(
         (item: NamespaceAutoscalingSummary) => {
-          const scaleTargetRef = parseAutoscalingTarget(item.target);
+          const scaleTargetRef = parseAutoscalingTarget(item.target, item.targetApiVersion);
           return {
             kind: item.kind,
             kindAlias: item.kind,
