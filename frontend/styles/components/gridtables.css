@@ -430,7 +430,7 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
 }
 
 .gridtable-empty-filter-hint__link {
-  color: var(--accent-color, #4a9eff);
+  color: var(--color-accent);
   text-decoration: none;
   cursor: pointer;
 }
