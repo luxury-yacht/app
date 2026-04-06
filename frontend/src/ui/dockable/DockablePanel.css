@@ -505,7 +505,7 @@ body.dockable-panel-resizing-sw * {
     0 9px 24px rgb(0 0 0 / 35%),
     0 0 0 1px color-mix(in srgb, var(--color-accent, #3b82f6) 30%, transparent);
   pointer-events: none;
-  z-index: 10000;
+  z-index: var(--z-index-topmost);
   white-space: nowrap;
 }
 

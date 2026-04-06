@@ -133,7 +133,7 @@
   box-shadow: var(--dropdown-menu-shadow);
   overflow-y: auto;
   margin-top: 2px;
-  z-index: 9999;
+  z-index: var(--z-index-overlay);
   animation: dropdownSlide 0.15s ease-out;
 }
 
