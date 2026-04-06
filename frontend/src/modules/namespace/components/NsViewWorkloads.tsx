@@ -240,12 +240,12 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
       }
 
       try {
-        await RestartWorkload(
-          workload.clusterId ?? '',
-          workload.namespace,
-          workload.name,
-          workload.kind
-        );
+        // Multi-cluster rule (AGENTS.md): every backend command must
+        // carry a resolved clusterId.
+        if (!workload.clusterId) {
+          throw new Error(`Cannot restart ${workload.kind}/${workload.name}: clusterId is missing`);
+        }
+        await RestartWorkload(workload.clusterId, workload.namespace, workload.name, workload.kind);
       } catch (err) {
         errorHandler.handle(err, {
           action: 'restart',
@@ -303,7 +303,12 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
       const cronjob = triggerConfirm.cronjob;
 
       try {
-        await TriggerCronJob(cronjob.clusterId ?? '', cronjob.namespace, cronjob.name);
+        // Multi-cluster rule (AGENTS.md): every backend command must
+        // carry a resolved clusterId.
+        if (!cronjob.clusterId) {
+          throw new Error(`Cannot trigger CronJob/${cronjob.name}: clusterId is missing`);
+        }
+        await TriggerCronJob(cronjob.clusterId, cronjob.namespace, cronjob.name);
       } catch (err) {
         errorHandler.handle(err, {
           action: 'trigger',
@@ -318,12 +323,14 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
     const handleSuspendToggle = useCallback(async (workload: WorkloadData) => {
       const isSuspended = workload.status === 'Suspended';
       try {
-        await SuspendCronJob(
-          workload.clusterId ?? '',
-          workload.namespace,
-          workload.name,
-          !isSuspended
-        );
+        // Multi-cluster rule (AGENTS.md): every backend command must
+        // carry a resolved clusterId.
+        if (!workload.clusterId) {
+          throw new Error(
+            `Cannot ${isSuspended ? 'resume' : 'suspend'} ${workload.kind}/${workload.name}: clusterId is missing`
+          );
+        }
+        await SuspendCronJob(workload.clusterId, workload.namespace, workload.name, !isSuspended);
       } catch (err) {
         errorHandler.handle(err, {
           action: isSuspended ? 'resume' : 'suspend',
@@ -365,8 +372,15 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
       setScaleLoading(true);
       setScaleError(null);
       try {
+        // Multi-cluster rule (AGENTS.md): every backend command must
+        // carry a resolved clusterId.
+        if (!scaleState.workload.clusterId) {
+          throw new Error(
+            `Cannot scale ${scaleState.workload.kind}/${scaleState.workload.name}: clusterId is missing`
+          );
+        }
         await ScaleWorkload(
-          scaleState.workload.clusterId ?? '',
+          scaleState.workload.clusterId,
           scaleState.workload.namespace,
           scaleState.workload.name,
           scaleState.workload.kind,
@@ -430,11 +444,22 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
             onScale: () => openScaleModal(row),
             onDelete: () => setDeleteConfirm({ show: true, workload: row }),
             onPortForward: () => {
+              // Multi-cluster rule (AGENTS.md): port-forward is a backend
+              // command and must carry a resolved clusterId.
+              if (!row.clusterId) {
+                errorHandler.handle(
+                  new Error(
+                    `Cannot open port-forward for ${row.kind}/${row.name}: clusterId is missing`
+                  ),
+                  { action: 'portForward', kind: row.kind, name: row.name }
+                );
+                return;
+              }
               setPortForwardTarget({
                 kind: row.kind,
                 name: row.name,
                 namespace: row.namespace,
-                clusterId: row.clusterId ?? '',
+                clusterId: row.clusterId,
                 clusterName: row.clusterName ?? '',
                 ports: [],
               });
@@ -571,15 +596,20 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
 
         <PortForwardModal target={portForwardTarget} onClose={() => setPortForwardTarget(null)} />
 
-        {/* Rollback modal: opens when a rollback action is triggered from the context menu */}
-        <RollbackModal
-          isOpen={rollbackTarget !== null}
-          onClose={() => setRollbackTarget(null)}
-          clusterId={rollbackTarget?.clusterId ?? ''}
-          namespace={rollbackTarget?.namespace ?? ''}
-          name={rollbackTarget?.name ?? ''}
-          kind={rollbackTarget?.kind ?? ''}
-        />
+        {/* Rollback modal: opens when a rollback action is triggered from the context menu.
+            Only mounted when rollbackTarget has a resolved clusterId — the modal's
+            confirm button issues a backend command, and per the multi-cluster
+            rule (AGENTS.md) every command must carry a cluster identity. */}
+        {rollbackTarget !== null && rollbackTarget.clusterId && (
+          <RollbackModal
+            isOpen={true}
+            onClose={() => setRollbackTarget(null)}
+            clusterId={rollbackTarget.clusterId}
+            namespace={rollbackTarget.namespace}
+            name={rollbackTarget.name}
+            kind={rollbackTarget.kind}
+          />
+        )}
         {favModal}
       </>
     );

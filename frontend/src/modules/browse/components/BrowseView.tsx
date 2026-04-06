@@ -205,7 +205,12 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     const item = restartConfirm.item;
 
     try {
-      await RestartWorkload(item.clusterId ?? '', item.namespace ?? '', item.name, item.kind);
+      // Multi-cluster rule (AGENTS.md): every backend command must
+      // carry a resolved clusterId.
+      if (!item.clusterId) {
+        throw new Error(`Cannot restart ${item.kind}/${item.name}: clusterId is missing`);
+      }
+      await RestartWorkload(item.clusterId, item.namespace ?? '', item.name, item.kind);
     } catch (err) {
       errorHandler.handle(err, {
         action: 'restart',
@@ -515,14 +520,23 @@ const BrowseView: React.FC<BrowseViewProps> = ({
         onCancel={() => setRestartConfirm({ show: false, item: null })}
       />
 
-      <RollbackModal
-        isOpen={rollbackTarget !== null}
-        onClose={() => setRollbackTarget(null)}
-        clusterId={rollbackTarget?.clusterId ?? ''}
-        namespace={rollbackTarget?.namespace ?? ''}
-        name={rollbackTarget?.name ?? ''}
-        kind={rollbackTarget?.kind ?? ''}
-      />
+      {/* Rollback Modal — only mounted when we have a full identity including
+          clusterId, per the multi-cluster rule (AGENTS.md). The modal's confirm
+          button issues a backend command. */}
+      {rollbackTarget !== null &&
+        rollbackTarget.clusterId &&
+        rollbackTarget.namespace &&
+        rollbackTarget.name &&
+        rollbackTarget.kind && (
+          <RollbackModal
+            isOpen={true}
+            onClose={() => setRollbackTarget(null)}
+            clusterId={rollbackTarget.clusterId}
+            namespace={rollbackTarget.namespace}
+            name={rollbackTarget.name}
+            kind={rollbackTarget.kind}
+          />
+        )}
 
       {favModal}
     </>

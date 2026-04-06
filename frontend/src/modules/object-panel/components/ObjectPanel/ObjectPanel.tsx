@@ -346,7 +346,12 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
     if (!objectData?.name || !objectData?.namespace) return;
     dispatch({ type: 'SET_ACTION_LOADING', payload: true });
     try {
-      await TriggerCronJob(objectData.clusterId ?? '', objectData.namespace, objectData.name);
+      // Multi-cluster rule (AGENTS.md): every backend command must
+      // carry a resolved clusterId.
+      if (!objectData.clusterId) {
+        throw new Error(`Cannot trigger CronJob/${objectData.name}: clusterId is missing`);
+      }
+      await TriggerCronJob(objectData.clusterId, objectData.namespace, objectData.name);
     } catch (err) {
       errorHandler.handle(err, { action: 'trigger', kind: 'CronJob', name: objectData.name });
     } finally {
@@ -361,8 +366,15 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
     const isSuspended = cronJobDetails?.suspend ?? false;
     dispatch({ type: 'SET_ACTION_LOADING', payload: true });
     try {
+      // Multi-cluster rule (AGENTS.md): every backend command must
+      // carry a resolved clusterId.
+      if (!objectData.clusterId) {
+        throw new Error(
+          `Cannot ${isSuspended ? 'resume' : 'suspend'} CronJob/${objectData.name}: clusterId is missing`
+        );
+      }
       await SuspendCronJob(
-        objectData.clusterId ?? '',
+        objectData.clusterId,
         objectData.namespace,
         objectData.name,
         !isSuspended
@@ -746,15 +758,24 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
         onCancel={closeDeleteConfirm}
       />
 
-      {/* Rollback Modal — opens the revision history picker for rollbackable workloads */}
-      <RollbackModal
-        isOpen={state.showRollbackModal}
-        onClose={closeRollbackModal}
-        clusterId={objectData?.clusterId ?? ''}
-        namespace={objectData?.namespace ?? ''}
-        name={objectData?.name ?? ''}
-        kind={objectData?.kind ?? ''}
-      />
+      {/* Rollback Modal — opens the revision history picker for rollbackable workloads.
+          Only mounted when objectData has a resolved clusterId + kind + name + namespace —
+          the modal's confirm button issues a backend command and per the multi-cluster
+          rule (AGENTS.md) every command must carry a cluster identity. */}
+      {state.showRollbackModal &&
+        objectData?.clusterId &&
+        objectData.kind &&
+        objectData.name &&
+        objectData.namespace && (
+          <RollbackModal
+            isOpen={true}
+            onClose={closeRollbackModal}
+            clusterId={objectData.clusterId}
+            namespace={objectData.namespace}
+            name={objectData.name}
+            kind={objectData.kind}
+          />
+        )}
     </CurrentObjectPanelContext.Provider>
   );
 }

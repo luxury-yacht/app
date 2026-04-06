@@ -266,11 +266,22 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
           handlers: {
             onOpen: () => handleResourceClick(resource),
             onPortForward: () => {
+              // Multi-cluster rule (AGENTS.md): port-forward is a backend
+              // command and must carry a resolved clusterId.
+              if (!resource.clusterId) {
+                errorHandler.handle(
+                  new Error(
+                    `Cannot open port-forward for ${resource.kind}/${resource.name}: clusterId is missing`
+                  ),
+                  { action: 'portForward', kind: resource.kind, name: resource.name }
+                );
+                return;
+              }
               setPortForwardTarget({
                 kind: resource.kind,
                 name: resource.name,
                 namespace: resource.namespace,
-                clusterId: resource.clusterId ?? '',
+                clusterId: resource.clusterId,
                 clusterName: resource.clusterName ?? '',
                 ports: [],
               });

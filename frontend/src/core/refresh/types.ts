@@ -30,8 +30,24 @@ export interface PermissionDeniedStatus {
   code?: number;
 }
 
+// ClusterMeta identifies a cluster on every snapshot payload. The Go
+// backend at backend/refresh/snapshot/cluster_meta.go declares
+// ClusterID as a non-optional string and stamps it on every snapshot
+// via WithClusterMeta, so this type matches the wire contract —
+// required on the frontend side.
+//
+// Making this required is load-bearing for the multi-cluster rule in
+// AGENTS.md: downstream merge-key and command-dispatch logic can
+// trust that clusterId is present without sprinkling `?? ''`
+// fallbacks that would silently degrade to cross-cluster collisions.
+//
+// Descendant types (NamespaceSummary, PodSnapshotEntry,
+// ClusterNodeSnapshotEntry, etc.) still declare clusterId as
+// optional because each of those is a separate cascade to tighten —
+// this refactor is bounded to ClusterMeta and its direct descendants
+// (snapshot payload wrappers).
 export interface ClusterMeta {
-  clusterId?: string;
+  clusterId: string;
   clusterName?: string;
 }
 

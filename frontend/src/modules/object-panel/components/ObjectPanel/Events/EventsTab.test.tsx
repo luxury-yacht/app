@@ -93,6 +93,7 @@ const EVENT_CLUSTER_NAME = 'Event Cluster';
 /** Build a minimal ObjectEventSummary for testing. */
 function makeEvent(overrides: Partial<ObjectEventSummary> = {}): ObjectEventSummary {
   return {
+    clusterId: PARENT_CLUSTER_ID,
     kind: 'Event',
     eventType: 'Normal',
     reason: 'Created',

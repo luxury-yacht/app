@@ -35,7 +35,12 @@ export function useNavigateToView(): NavigateToViewResult {
       const destination = getViewForKind(kind);
       if (!destination) return;
 
-      const clusterId = (objectRef.clusterId ?? '') as string;
+      // Multi-cluster rule (AGENTS.md): carry clusterId through as
+      // `string | undefined` rather than a `''` fallback. Downstream
+      // helpers treat undefined as "no cluster context" explicitly;
+      // empty string would silently conflate "no cluster" with "cluster
+      // named ''" and break cluster-scoped navigation.
+      const clusterId = objectRef.clusterId ?? undefined;
       const name = (objectRef.name ?? objectRef.metadata?.name ?? '') as string;
       const namespace = (objectRef.namespace ?? objectRef.metadata?.namespace ?? undefined) as
         | string
@@ -50,7 +55,7 @@ export function useNavigateToView(): NavigateToViewResult {
 
         // 3. Select the namespace so the view loads the right data
         if (namespace && isNamespaceScopedKind(kind)) {
-          setSelectedNamespace(namespace, clusterId || undefined);
+          setSelectedNamespace(namespace, clusterId);
         }
 
         // 4. Update sidebar to reflect the namespace selection
@@ -65,10 +70,8 @@ export function useNavigateToView(): NavigateToViewResult {
       }
 
       // 5. Emit focus request so the target GridTable highlights the row.
-      //    Set the module-level buffer directly first — this survives across
-      //    view switches regardless of React effect scheduling order.
-      //    The event is also emitted for immediate matching by any currently
-      //    mounted GridTable that already has the right data.
+      //    Skipped when clusterId is missing — the focus-request consumer
+      //    needs a cluster identity to route to the right table.
       if (clusterId && name) {
         const focusRequest = { kind, name, namespace, clusterId };
         setPendingFocusRequest(focusRequest);

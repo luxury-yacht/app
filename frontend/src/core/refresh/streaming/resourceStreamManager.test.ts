@@ -197,6 +197,7 @@ describe('resourceStreamManager helpers', () => {
 
   it('preserves pod metrics when requested', () => {
     const existing = {
+      clusterId: 'test-cluster',
       name: 'pod-a',
       namespace: 'default',
       node: 'node-a',
@@ -221,6 +222,7 @@ describe('resourceStreamManager helpers', () => {
 
   it('merges workload metrics when requested', () => {
     const existing = {
+      clusterId: 'test-cluster',
       kind: 'Deployment',
       name: 'web',
       namespace: 'default',
@@ -239,6 +241,7 @@ describe('resourceStreamManager helpers', () => {
 
   it('merges node metrics when requested', () => {
     const existing = {
+      clusterId: 'test-cluster',
       name: 'node-a',
       status: 'Ready',
       roles: 'worker',
@@ -336,7 +339,7 @@ describe('ResourceStreamManager', () => {
 
     setScopedDomainState('pods', storeScope, () => ({
       status: 'ready',
-      data: { pods: [existing] },
+      data: { pods: [existing], clusterId: 'test-cluster' },
       stats: null,
       error: null,
       droppedAutoRefreshes: 0,
@@ -376,7 +379,7 @@ describe('ResourceStreamManager', () => {
 
     setScopedDomainState('namespace-config', storeScope, () => ({
       status: 'ready',
-      data: { resources: [] },
+      data: { resources: [], clusterId: 'test-cluster' },
       stats: null,
       error: null,
       droppedAutoRefreshes: 0,
@@ -424,7 +427,7 @@ describe('ResourceStreamManager', () => {
 
     setScopedDomainState('namespace-config', storeScope, () => ({
       status: 'ready',
-      data: { resources: [] },
+      data: { resources: [], clusterId: 'test-cluster' },
       stats: null,
       error: null,
       droppedAutoRefreshes: 0,
@@ -473,7 +476,7 @@ describe('ResourceStreamManager', () => {
 
     setScopedDomainState('namespace-config', storeScope, () => ({
       status: 'ready',
-      data: { resources: [] },
+      data: { resources: [], clusterId: 'test-cluster' },
       stats: null,
       error: null,
       droppedAutoRefreshes: 0,
@@ -521,7 +524,7 @@ describe('ResourceStreamManager', () => {
 
     setScopedDomainState('namespace-network', storeScope, () => ({
       status: 'ready',
-      data: { resources: [] },
+      data: { resources: [], clusterId: 'test-cluster' },
       stats: null,
       error: null,
       droppedAutoRefreshes: 0,
@@ -568,7 +571,7 @@ describe('ResourceStreamManager', () => {
 
     setScopedDomainState('namespace-rbac', storeScope, () => ({
       status: 'ready',
-      data: { resources: [] },
+      data: { resources: [], clusterId: 'test-cluster' },
       stats: null,
       error: null,
       droppedAutoRefreshes: 0,
@@ -615,7 +618,7 @@ describe('ResourceStreamManager', () => {
 
     setScopedDomainState('namespace-custom', storeScope, () => ({
       status: 'ready',
-      data: { resources: [] },
+      data: { resources: [], clusterId: 'test-cluster' },
       stats: null,
       error: null,
       droppedAutoRefreshes: 0,
@@ -663,7 +666,7 @@ describe('ResourceStreamManager', () => {
 
     setScopedDomainState('namespace-helm', storeScope, () => ({
       status: 'ready',
-      data: { releases: [] },
+      data: { releases: [], clusterId: 'test-cluster' },
       stats: null,
       error: null,
       droppedAutoRefreshes: 0,
@@ -713,7 +716,7 @@ describe('ResourceStreamManager', () => {
 
     setScopedDomainState('namespace-autoscaling', storeScope, () => ({
       status: 'ready',
-      data: { resources: [] },
+      data: { resources: [], clusterId: 'test-cluster' },
       stats: null,
       error: null,
       droppedAutoRefreshes: 0,
@@ -763,7 +766,7 @@ describe('ResourceStreamManager', () => {
 
     setScopedDomainState('namespace-quotas', storeScope, () => ({
       status: 'ready',
-      data: { resources: [] },
+      data: { resources: [], clusterId: 'test-cluster' },
       stats: null,
       error: null,
       droppedAutoRefreshes: 0,
@@ -810,7 +813,7 @@ describe('ResourceStreamManager', () => {
 
     setScopedDomainState('namespace-storage', storeScope, () => ({
       status: 'ready',
-      data: { resources: [] },
+      data: { resources: [], clusterId: 'test-cluster' },
       stats: null,
       error: null,
       droppedAutoRefreshes: 0,
@@ -859,7 +862,7 @@ describe('ResourceStreamManager', () => {
 
     setScopedDomainState('cluster-rbac', storeScope, () => ({
       status: 'ready',
-      data: { resources: [] },
+      data: { resources: [], clusterId: 'test-cluster' },
       stats: null,
       error: null,
       droppedAutoRefreshes: 0,
@@ -905,7 +908,7 @@ describe('ResourceStreamManager', () => {
 
     setScopedDomainState('cluster-storage', storeScope, () => ({
       status: 'ready',
-      data: { volumes: [] },
+      data: { volumes: [], clusterId: 'test-cluster' },
       stats: null,
       error: null,
       droppedAutoRefreshes: 0,
@@ -953,7 +956,7 @@ describe('ResourceStreamManager', () => {
 
     setScopedDomainState('cluster-config', storeScope, () => ({
       status: 'ready',
-      data: { resources: [] },
+      data: { resources: [], clusterId: 'test-cluster' },
       stats: null,
       error: null,
       droppedAutoRefreshes: 0,
@@ -999,7 +1002,7 @@ describe('ResourceStreamManager', () => {
 
     setScopedDomainState('cluster-crds', storeScope, () => ({
       status: 'ready',
-      data: { definitions: [] },
+      data: { definitions: [], clusterId: 'test-cluster' },
       stats: null,
       error: null,
       droppedAutoRefreshes: 0,
@@ -1047,7 +1050,7 @@ describe('ResourceStreamManager', () => {
 
     setScopedDomainState('cluster-custom', storeScope, () => ({
       status: 'ready',
-      data: { resources: [] },
+      data: { resources: [], clusterId: 'test-cluster' },
       stats: null,
       error: null,
       droppedAutoRefreshes: 0,
@@ -1092,7 +1095,7 @@ describe('ResourceStreamManager', () => {
 
     setScopedDomainState('nodes', storeScope, () => ({
       status: 'ready',
-      data: { nodes: [] },
+      data: { nodes: [], clusterId: 'test-cluster' },
       stats: null,
       error: null,
       droppedAutoRefreshes: 0,
@@ -1570,7 +1573,7 @@ describe('ResourceStreamManager', () => {
 
     setScopedDomainState('pods', storeScope, () => ({
       status: 'ready',
-      data: { pods: [] },
+      data: { pods: [], clusterId: 'test-cluster' },
       stats: null,
       error: null,
       droppedAutoRefreshes: 0,

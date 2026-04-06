@@ -398,7 +398,7 @@ describe('refreshOrchestrator', () => {
     setScopedDomainState('namespaces', scope, (prev) => ({
       ...prev,
       status: 'ready',
-      data: { namespaces: [cachedNamespace, changedNamespace] },
+      data: { namespaces: [cachedNamespace, changedNamespace], clusterId: 'test-cluster' },
       stats: { itemCount: 2, buildDurationMs: 0 },
     }));
 
@@ -411,6 +411,7 @@ describe('refreshOrchestrator', () => {
         sequence: 2,
         payload: {
           namespaces: [{ ...cachedNamespace }, { ...changedNamespace, phase: 'Terminating' }],
+          clusterId: 'test-cluster',
         },
         stats: { itemCount: 2, buildDurationMs: 0 },
       },
@@ -475,7 +476,7 @@ describe('refreshOrchestrator', () => {
     setScopedDomainState('object-maintenance', scope, (prev) => ({
       ...prev,
       status: 'ready',
-      data: { drains: [cachedDrain, changedDrain] },
+      data: { drains: [cachedDrain, changedDrain], clusterId: 'test-cluster' },
       stats: { itemCount: 2, buildDurationMs: 0 },
     }));
 
@@ -491,6 +492,7 @@ describe('refreshOrchestrator', () => {
             { ...cachedDrain, options: sharedOptions, events: sharedEvents },
             { ...changedDrain, status: 'succeeded' as const },
           ],
+          clusterId: 'test-cluster',
         },
         stats: { itemCount: 2, buildDurationMs: 0 },
       },
@@ -540,6 +542,7 @@ describe('refreshOrchestrator', () => {
       ...prev,
       status: 'ready',
       data: {
+        clusterId: 'cluster-a',
         items: [cachedItem, changedItem],
         total: 2,
         resourceCount: 2,
@@ -559,6 +562,7 @@ describe('refreshOrchestrator', () => {
         generatedAt: Date.now(),
         sequence: 2,
         payload: {
+          clusterId: 'cluster-a',
           items: [{ ...cachedItem }, { ...changedItem, resourceVersion: '6' }],
           total: 2,
           resourceCount: 2,
@@ -1375,6 +1379,7 @@ describe('refreshOrchestrator', () => {
       ...previous,
       status: 'ready',
       data: {
+        clusterId: 'cluster-a',
         events: [
           {
             kind: 'Event',
@@ -1539,6 +1544,7 @@ describe('refreshOrchestrator', () => {
     setScopedDomainState('pods', reportScope, () => ({
       status: 'ready',
       data: {
+        clusterId: 'cluster-a',
         pods: [
           {
             clusterId: 'cluster-a',
@@ -1700,6 +1706,7 @@ describe('refreshOrchestrator', () => {
     setScopedDomainState('nodes', scope, () => ({
       status: 'ready',
       data: {
+        clusterId: 'test-cluster',
         nodes: [existingNode],
         metrics: { stale: false, successCount: 1, failureCount: 0 },
       },
@@ -1779,6 +1786,7 @@ describe('refreshOrchestrator', () => {
     setScopedDomainState('namespace-workloads', scope, () => ({
       status: 'ready',
       data: {
+        clusterId: 'test-cluster',
         workloads: [existingWorkload],
       },
       stats: null,
@@ -1840,8 +1848,15 @@ describe('refreshOrchestrator', () => {
     setScopedDomainState('cluster-config', scope, () => ({
       status: 'ready',
       data: {
+        clusterId: 'test-cluster',
         resources: [
-          { kind: 'ConfigMap', name: 'settings', details: 'cluster defaults', age: '5m' },
+          {
+            kind: 'ConfigMap',
+            name: 'settings',
+            details: 'cluster defaults',
+            age: '5m',
+            clusterId: 'test-cluster',
+          },
         ],
       },
       stats: null,

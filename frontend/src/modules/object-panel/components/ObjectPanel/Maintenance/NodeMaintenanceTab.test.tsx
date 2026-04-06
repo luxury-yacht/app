@@ -236,8 +236,10 @@ describe('NodeMaintenanceTab', () => {
   it('renders drain history entries from the refresh domain', () => {
     mockUseRefreshScopedDomain.mockReturnValue(
       createDomainState({
+        clusterId: 'test-cluster',
         drains: [
           {
+            clusterId: 'test-cluster',
             id: 'job-1',
             nodeName: 'node-1',
             status: 'succeeded',

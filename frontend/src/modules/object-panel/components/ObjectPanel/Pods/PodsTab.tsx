@@ -253,7 +253,12 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
   } = useGridTablePersistence<PodSnapshotEntry>({
     viewId: 'object-panel-pods',
     // Use the panel-scoped cluster ID, not the global sidebar selection.
+    // Multi-cluster rule (AGENTS.md): persistence is keyed per cluster
+    // so column widths/sort don't bleed between clusters. Disable
+    // persistence when clusterId is missing rather than falling through
+    // to a global storage bucket.
     clusterIdentity: objectData?.clusterId ?? '',
+    enabled: Boolean(objectData?.clusterId),
     namespace: null,
     isNamespaceScoped: false,
     columns,

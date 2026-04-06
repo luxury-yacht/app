@@ -376,19 +376,21 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       if (!deleteConfirm.pod) {
         return;
       }
+      const pod = deleteConfirm.pod;
 
       try {
-        await DeletePod(
-          deleteConfirm.pod.clusterId ?? '',
-          deleteConfirm.pod.namespace,
-          deleteConfirm.pod.name
-        );
+        // Multi-cluster rule (AGENTS.md): every backend command must
+        // carry a resolved clusterId.
+        if (!pod.clusterId) {
+          throw new Error(`Cannot delete Pod/${pod.name}: clusterId is missing`);
+        }
+        await DeletePod(pod.clusterId, pod.namespace, pod.name);
         setDeleteConfirm({ show: false, pod: null });
       } catch (err) {
         errorHandler.handle(err, {
           action: 'delete',
           kind: 'Pod',
-          name: deleteConfirm.pod.name,
+          name: pod.name,
         });
         setDeleteConfirm({ show: false, pod: null });
       }
@@ -488,11 +490,20 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
           handlers: {
             onOpen: () => handlePodOpen(pod),
             onPortForward: () => {
+              // Multi-cluster rule (AGENTS.md): port-forward is a backend
+              // command and must carry a resolved clusterId.
+              if (!pod.clusterId) {
+                errorHandler.handle(
+                  new Error(`Cannot open port-forward for Pod/${pod.name}: clusterId is missing`),
+                  { action: 'portForward', kind: 'Pod', name: pod.name }
+                );
+                return;
+              }
               setPortForwardTarget({
                 kind: 'Pod',
                 name: pod.name,
                 namespace: pod.namespace,
-                clusterId: pod.clusterId ?? '',
+                clusterId: pod.clusterId,
                 clusterName: pod.clusterName ?? '',
                 ports: [],
               });

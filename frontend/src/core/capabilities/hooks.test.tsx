@@ -401,6 +401,7 @@ describe('useCapabilities', () => {
     const hook = await renderCapabilitiesHook([
       {
         id: 'named:pods:get:default:my-pod',
+        clusterId: 'test-cluster',
         resourceKind: 'Pod',
         verb: 'get',
         namespace: 'default',
