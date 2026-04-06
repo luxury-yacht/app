@@ -80,7 +80,6 @@ const yamlErrorsMocks = vi.hoisted(() => ({
 const wailsMocks = vi.hoisted(() => ({
   ValidateObjectYaml: vi.fn(),
   ApplyObjectYaml: vi.fn(),
-  GetObjectYAML: vi.fn(),
   GetObjectYAMLByGVK: vi.fn(),
 }));
 
@@ -207,7 +206,6 @@ vi.mock('@utils/errorHandler', () => ({
 vi.mock('@wailsjs/go/backend/App', () => ({
   ValidateObjectYaml: wailsMocks.ValidateObjectYaml,
   ApplyObjectYaml: wailsMocks.ApplyObjectYaml,
-  GetObjectYAML: wailsMocks.GetObjectYAML,
   GetObjectYAMLByGVK: wailsMocks.GetObjectYAMLByGVK,
 }));
 
@@ -323,7 +321,6 @@ describe('YamlTab', () => {
     searchModuleMocks.closeSearchPanel.mockClear();
     wailsMocks.ValidateObjectYaml.mockReset();
     wailsMocks.ApplyObjectYaml.mockReset();
-    wailsMocks.GetObjectYAML.mockReset();
     wailsMocks.GetObjectYAMLByGVK.mockReset();
     yamlErrorsMocks.parseObjectYamlError.mockReset();
     yamlErrorsMocks.coerceDiffResult.mockClear();

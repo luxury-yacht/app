@@ -16,21 +16,6 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/generic"
 )
 
-// DeleteResource removes a Kubernetes object identified only by its kind.
-// Kind-only resolution is subject to the first-match-wins ambiguity
-// described in docs/plans/kind-only-objects.md. Prefer DeleteResourceByGVK
-// for any caller that knows the full apiVersion (e.g. object panel delete
-// or a catalog row delete) — this legacy method remains for built-in
-// kinds and backwards compatibility.
-func (a *App) DeleteResource(clusterID, resourceKind, namespace, name string) error {
-	deps, _, err := a.resolveClusterDependencies(clusterID)
-	if err != nil {
-		return err
-	}
-	service := generic.NewService(deps)
-	return service.Delete(resourceKind, namespace, name)
-}
-
 // DeleteResourceByGVK removes a Kubernetes object identified by its
 // fully-qualified apiVersion + kind. apiVersion must be in the standard
 // Kubernetes "group/version" form (or just "version" for core resources

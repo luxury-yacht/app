@@ -30,7 +30,6 @@ import './LogViewer.css';
 import { refreshOrchestrator } from '@/core/refresh/orchestrator';
 import { setScopedDomainState, useRefreshScopedDomain } from '@/core/refresh/store';
 import type { ObjectLogEntry } from '@/core/refresh/types';
-import { buildClusterScope } from '@/core/refresh/clusterScope';
 import type { types } from '@wailsjs/go/models';
 import {
   ALL_CONTAINERS,
@@ -38,12 +37,19 @@ import {
   initialLogViewerState,
   type ParsedLogEntry,
 } from './logViewerReducer';
-import { CLUSTER_SCOPE, INACTIVE_SCOPE } from '../constants';
+import { INACTIVE_SCOPE } from '../constants';
 
 interface LogViewerProps {
   namespace: string;
   resourceName: string;
   resourceKind: string;
+  /**
+   * Refresh-domain scope string for the object-logs producer. Owned by
+   * ObjectPanel via getObjectPanelKind so this component and the panel-
+   * level cleanup effect in ObjectPanelContent consume the same value.
+   * They used to compute it independently and could drift apart.
+   */
+  logScope: string | null;
   isActive?: boolean;
   activePodNames?: string[] | null;
   clusterId?: string | null;
@@ -92,6 +98,7 @@ const LogViewer: React.FC<LogViewerProps> = ({
   namespace,
   resourceName,
   resourceKind: resourceKind,
+  logScope,
   isActive = false,
   activePodNames = null,
   clusterId,
@@ -148,15 +155,6 @@ const LogViewer: React.FC<LogViewerProps> = ({
   const isWorkload = resourceKindKey !== 'pod';
   const supportsPreviousLogs = resourceKindKey === 'pod';
   const podName = !isWorkload ? resourceName : '';
-  const scopeNamespace = namespace && namespace.length > 0 ? namespace : CLUSTER_SCOPE;
-
-  const logScope = useMemo(() => {
-    if (!resourceName || !resourceKindKey) {
-      return null;
-    }
-    const rawScope = `${scopeNamespace}:${resourceKindKey}:${resourceName}`;
-    return buildClusterScope(clusterId ?? undefined, rawScope);
-  }, [clusterId, resourceName, resourceKindKey, scopeNamespace]);
 
   // Reset state when scope changes - do this during render, not in an effect,
   // to avoid causing a re-render that would interrupt streaming startup

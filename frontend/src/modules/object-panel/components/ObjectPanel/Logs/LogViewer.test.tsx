@@ -221,6 +221,11 @@ describe('LogViewer active pod synchronisation', () => {
       isActive = true,
       activePodNames = null,
       clusterId = testClusterId,
+      // logScope is normally produced by getObjectPanelKind in
+      // ObjectPanel and threaded down. The default here mirrors what
+      // seedLogSnapshot wrote to so existing scope-keyed assertions
+      // keep working without per-test plumbing.
+      logScope = activeScope,
     } = overrides;
 
     await act(async () => {
@@ -229,6 +234,7 @@ describe('LogViewer active pod synchronisation', () => {
           namespace={namespace}
           resourceName={resourceName}
           resourceKind={resourceKind}
+          logScope={logScope}
           isActive={isActive}
           activePodNames={activePodNames}
           clusterId={clusterId}
@@ -657,7 +663,17 @@ describe('LogViewer active pod synchronisation', () => {
   });
 
   it('renders loading state when resource metadata is missing', async () => {
-    await renderViewer({ resourceName: '', resourceKind: '', namespace: '', activePodNames: null });
+    // Mirror what getObjectPanelKind would produce upstream when the
+    // panel is in its empty state: a null logScope. The component
+    // gates its loading-vs-rendered path on logScope, not on
+    // resourceName/resourceKind directly.
+    await renderViewer({
+      resourceName: '',
+      resourceKind: '',
+      namespace: '',
+      activePodNames: null,
+      logScope: null,
+    });
 
     expect(container.textContent).toContain('Loading logs');
   });

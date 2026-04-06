@@ -24,7 +24,7 @@ import GridTable, {
 } from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
-import { DeleteResource } from '@wailsjs/go/backend/App';
+import { DeleteResourceByGVK } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
 import { getPermissionKey, queryKindPermissions, useUserPermissions } from '@/core/capabilities';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
@@ -230,20 +230,41 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
 
     const handleDeleteConfirm = useCallback(async () => {
       if (!deleteConfirm.resource) return;
+      const resource = deleteConfirm.resource;
+      const resolvedKind = resource.kind || resource.kindAlias || 'CustomResource';
 
       try {
-        await DeleteResource(
-          deleteConfirm.resource.clusterId ?? '',
-          deleteConfirm.resource.kind || deleteConfirm.resource.kindAlias || 'CustomResource',
-          deleteConfirm.resource.namespace,
-          deleteConfirm.resource.name
+        // Multi-cluster rule (AGENTS.md): every backend command must
+        // carry a resolved clusterId.
+        if (!resource.clusterId) {
+          throw new Error(`Cannot delete ${resolvedKind}/${resource.name}: clusterId is missing`);
+        }
+        // CustomResourceData always carries apiGroup/apiVersion from the
+        // catalog. A missing apiVersion here means the upstream data source
+        // dropped it — fail loud rather than fall back to the retired
+        // kind-only resolver (which is first-match-wins across colliding
+        // CRDs). See docs/plans/kind-only-objects.md.
+        if (!resource.apiVersion) {
+          throw new Error(
+            `Cannot delete ${resolvedKind}/${resource.name}: apiVersion missing on custom resource row`
+          );
+        }
+        const apiVersion = resource.apiGroup
+          ? `${resource.apiGroup}/${resource.apiVersion}`
+          : resource.apiVersion;
+        await DeleteResourceByGVK(
+          resource.clusterId,
+          apiVersion,
+          resolvedKind,
+          resource.namespace,
+          resource.name
         );
         setDeleteConfirm({ show: false, resource: null });
       } catch (error) {
         errorHandler.handle(error, {
           action: 'delete',
-          kind: deleteConfirm.resource.kind,
-          name: deleteConfirm.resource.name,
+          kind: resource.kind,
+          name: resource.name,
         });
         setDeleteConfirm({ show: false, resource: null });
       }
@@ -252,14 +273,33 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
     const getContextMenuItems = useCallback(
       (resource: CustomResourceData): ContextMenuItem[] => {
         const kind = resource.kind || resource.kindAlias || 'CustomResource';
+        const group = resource.apiGroup ?? null;
+        const version = resource.apiVersion ?? null;
+        // Permission lookup carries group/version so two CRDs sharing a
+        // Kind don't share a cache slot. CustomResourceData provides both
+        // fields. See docs/plans/kind-only-objects.md.
         const deleteStatus =
           permissionMap.get(
-            getPermissionKey(kind, 'delete', resource.namespace, null, resource.clusterId)
+            getPermissionKey(
+              kind,
+              'delete',
+              resource.namespace,
+              null,
+              resource.clusterId,
+              group,
+              version
+            )
           ) ?? null;
 
         // Lazy-load permissions for CRD kinds not in the static spec lists.
         if (!deleteStatus) {
-          queryKindPermissions(kind, resource.namespace, resource.clusterId ?? null);
+          queryKindPermissions(
+            kind,
+            resource.namespace,
+            resource.clusterId ?? null,
+            group,
+            version
+          );
         }
 
         return buildObjectActionItems({

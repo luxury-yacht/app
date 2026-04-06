@@ -44,8 +44,6 @@ export function DeleteNode(arg1:string,arg2:string):Promise<void>;
 
 export function DeletePod(arg1:string,arg2:string,arg3:string):Promise<void>;
 
-export function DeleteResource(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
-
 export function DeleteResourceByGVK(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<void>;
 
 export function DeleteTheme(arg1:string):Promise<void>;
@@ -123,8 +121,6 @@ export function GetNamespace(arg1:string,arg2:string):Promise<types.NamespaceDet
 export function GetNetworkPolicy(arg1:string,arg2:string,arg3:string):Promise<types.NetworkPolicyDetails>;
 
 export function GetNode(arg1:string,arg2:string):Promise<types.NodeDetails>;
-
-export function GetObjectYAML(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
 
 export function GetObjectYAMLByGVK(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<string>;
 

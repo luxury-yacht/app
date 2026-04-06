@@ -15,7 +15,7 @@ import { useShortcut, useSearchShortcutTarget } from '@ui/shortcuts';
 import { errorHandler } from '@utils/errorHandler';
 import { refreshOrchestrator } from '@/core/refresh';
 import { useRefreshScopedDomain } from '@/core/refresh/store';
-import { GetObjectYAML, GetObjectYAMLByGVK } from '@wailsjs/go/backend/App';
+import { GetObjectYAMLByGVK } from '@wailsjs/go/backend/App';
 import './YamlTab.css';
 import { parseObjectIdentity, validateYamlDraft, type ObjectIdentity } from './yamlValidation';
 import { computeLineDiff, type DiffResult } from './yamlDiff';
@@ -338,28 +338,24 @@ const YamlTab: React.FC<YamlTabProps> = ({
 
   const hydrateLatestObject = useCallback(
     async (identity: ObjectIdentity) => {
-      // Prefer the GVK-aware fetch when the caller has a full apiVersion.
-      // This avoids the first-match-wins ambiguity that bites colliding
-      // CRDs (e.g. two different DBInstance kinds). ObjectIdentity is
-      // parsed directly out of the edited YAML's apiVersion/kind fields
-      // by yamlValidation.parseObjectIdentity, so apiVersion is almost
-      // always present here — but we keep the legacy GetObjectYAML path
-      // as a fallback for any edge case where parsing didn't yield one.
-      // See docs/plans/kind-only-objects.md step 3.
-      const latestYamlRaw = identity.apiVersion
-        ? await GetObjectYAMLByGVK(
-            resolvedClusterId,
-            identity.apiVersion,
-            identity.kind,
-            identity.namespace ?? '',
-            identity.name
-          )
-        : await GetObjectYAML(
-            resolvedClusterId,
-            identity.kind,
-            identity.namespace ?? '',
-            identity.name
-          );
+      // Always go through the GVK-aware fetch. parseObjectIdentity (the
+      // sole producer of ObjectIdentity in this component) refuses to
+      // return an identity without an apiVersion, so the kind-only
+      // fallback that used to live here was unreachable. Removing it
+      // closes the last frontend caller of the legacy first-match-wins
+      // resolver. See docs/plans/kind-only-objects.md step 3.
+      if (!identity.apiVersion) {
+        throw new Error(
+          `Cannot fetch latest YAML for ${identity.kind}/${identity.name}: apiVersion missing`
+        );
+      }
+      const latestYamlRaw = await GetObjectYAMLByGVK(
+        resolvedClusterId,
+        identity.apiVersion,
+        identity.kind,
+        identity.namespace ?? '',
+        identity.name
+      );
       const normalizedYaml = normalizeYamlString(latestYamlRaw);
       const parsedIdentity = parseObjectIdentity(normalizedYaml);
       const resolvedIdentity: ObjectIdentity = parsedIdentity

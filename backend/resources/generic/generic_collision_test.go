@@ -92,71 +92,12 @@ var (
 	}
 )
 
-// TestServiceDeleteCollidingDBInstanceIsAmbiguous is a characterization
-// test that documents the bug at the delete-path level. With two colliding
-// DBInstance CRDs registered in discovery and two real objects (one per
-// group, same name/namespace), the caller passes only the bare kind and
-// the generic service picks whichever GVR discovery yields first. The
-// caller has no way to express which one it actually wants to delete.
-//
-// After the fix, kind-only callers (used for built-in resources, no
-// collisions) keep this arbitrary behavior and this test continues to
-// pass. New callers that supply a GVK go through a different path (see
-// the RED test below).
-//
-// We deliberately do not assert *which* object wins — the iteration order
-// is a property of the fake client-go discovery, not a production
-// invariant. What we lock in is:
-//  1. Delete returns no error even though the request is ambiguous.
-//  2. Exactly one of the two colliding objects was deleted.
-//  3. The other remains.
-func TestServiceDeleteCollidingDBInstanceIsAmbiguous(t *testing.T) {
-	kubeClient := fake.NewClientset()
-	seedCollidingDBInstanceDiscovery(t, kubeClient)
-
-	ack, kindaRocks := collidingDBInstanceObjects()
-	dynamicClient := testsupport.NewDynamicClient(t, nil, ack, kindaRocks)
-
-	deps := testsupport.NewResourceDependencies(
-		testsupport.WithDepsContext(context.Background()),
-		testsupport.WithDepsKubeClient(kubeClient),
-		testsupport.WithDepsDynamicClient(dynamicClient),
-	)
-	service := NewService(deps)
-
-	if err := service.Delete("DBInstance", "default", "my-db"); err != nil {
-		t.Fatalf("Delete returned error: %v", err)
-	}
-
-	ackExists := true
-	if _, err := dynamicClient.Resource(ackGVR).Namespace("default").Get(context.Background(), "my-db", metav1.GetOptions{}); apierrors.IsNotFound(err) {
-		ackExists = false
-	} else if err != nil {
-		t.Fatalf("unexpected error getting ACK object: %v", err)
-	}
-
-	kindaRocksExists := true
-	if _, err := dynamicClient.Resource(kindaRocksGVR).Namespace("default").Get(context.Background(), "my-db", metav1.GetOptions{}); apierrors.IsNotFound(err) {
-		kindaRocksExists = false
-	} else if err != nil {
-		t.Fatalf("unexpected error getting kinda.rocks object: %v", err)
-	}
-
-	switch {
-	case ackExists && kindaRocksExists:
-		t.Fatalf("no object was deleted; expected exactly one of the colliding DBInstance objects to be gone")
-	case !ackExists && !kindaRocksExists:
-		t.Fatalf("both objects were deleted; expected exactly one of the colliding DBInstance objects to remain")
-	}
-	// Log which side won so a human reviewing CI output can see the
-	// ambiguity in action.
-	switch {
-	case !ackExists:
-		t.Logf("bare-kind delete hit ack-rds DBInstance; kinda.rocks DbInstance survived — the caller had no way to choose")
-	case !kindaRocksExists:
-		t.Logf("bare-kind delete hit kinda.rocks DbInstance; ack-rds DBInstance survived — the caller had no way to choose")
-	}
-}
+// TestServiceDeleteCollidingDBInstanceIsAmbiguous (removed) used to
+// characterize the first-match-wins behavior of the legacy
+// Service.Delete kind-only primitive. That method was deleted as part of
+// the kind-only-objects fix — there is no longer a kind-only delete path
+// to characterize. The strict GVK primitive is covered by
+// TestServiceDeleteByGVKDisambiguatesCollidingDBInstances below.
 
 // TestServiceDeleteByGVKDisambiguatesCollidingDBInstances is the RED test
 // that drives step 5 of the kind-only-objects fix. It exercises a new

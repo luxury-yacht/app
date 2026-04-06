@@ -100,7 +100,6 @@ func (a *App) teardownRefreshSubsystem() {
 	a.sharedInformerFactory = nil
 	a.apiExtensionsInformerFactory = nil
 	a.refreshBaseURL = ""
-	clearGVRCache()
 }
 
 func (a *App) stopRefreshPermissionRevalidation(clusterID string) {

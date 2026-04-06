@@ -18,10 +18,10 @@ import (
 )
 
 const (
-	helmReleaseSecretType              = "helm.sh/release.v1"
-	helmReleaseNamePrefix              = "sh.helm.release.v1."
-	helmReleaseOwnerLabel              = "owner"
-	helmReleaseOwnerValue              = "helm"
+	helmReleaseSecretType = "helm.sh/release.v1"
+	helmReleaseNamePrefix = "sh.helm.release.v1."
+	helmReleaseOwnerLabel = "owner"
+	helmReleaseOwnerValue = "helm"
 )
 
 var responseCacheInvalidationSkipKinds = map[string]struct{}{
@@ -216,18 +216,11 @@ func (a *App) registerAPIExtensionsInvalidation(shared apiextensionsinformers.Sh
 	}
 	informer := shared.Apiextensions().V1().CustomResourceDefinitions().Informer()
 	a.addResponseCacheInvalidationHandler(informer, selectionKey, "CustomResourceDefinition", guard)
-	// Clear cached discovery data whenever CRDs change to avoid stale GVR lookups.
-	informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj interface{}) {
-			clearGVRCache()
-		},
-		UpdateFunc: func(_, newObj interface{}) {
-			clearGVRCache()
-		},
-		DeleteFunc: func(obj interface{}) {
-			clearGVRCache()
-		},
-	})
+	// The backend no longer caches GVR discovery lookups — the strict GVK
+	// resolver (common.ResolveGVRForGVK) hits discovery on every call,
+	// and discovery clients cache their own results against the API
+	// server. Nothing to invalidate here on CRD changes. See
+	// docs/plans/kind-only-objects.md.
 }
 
 // addResponseCacheInvalidationHandler evicts cached responses when an informer update arrives.
@@ -302,10 +295,11 @@ func (a *App) invalidateResponseCacheForResource(selectionKey, kind, namespace, 
 	a.invalidateResponseCache(selectionKey, kind, namespace, name)
 }
 
-// invalidateResponseCache drops the cached detail and YAML entries for the resource.
+// invalidateResponseCache drops the cached detail entry for the resource.
+// (The legacy YAML response-cache entry was retired with App.GetObjectYAML —
+// the GVK-aware fetch path doesn't write to the response cache.)
 func (a *App) invalidateResponseCache(selectionKey, kind, namespace, name string) {
 	a.responseCacheDelete(selectionKey, objectDetailCacheKey(kind, namespace, name))
-	a.responseCacheDelete(selectionKey, objectYAMLCacheKey(kind, namespace, name))
 }
 
 // invalidateHelmCacheIfNeeded evicts Helm release cache entries when a release secret/configmap changes.

@@ -21,25 +21,31 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/common"
 )
 
-// resolveGVRForPermissionQuery picks the right GVR resolver for a permission
-// query. When the caller supplied a fully-qualified Group+Version, we route
-// through the strict common.ResolveGVRForGVK helper so colliding kinds
-// disambiguate correctly. Otherwise we fall back to the legacy kind-only
-// resolver on *App, which preserves existing behavior for every caller
-// that hasn't been migrated yet (see docs/plans/kind-only-objects.md step 4).
+// resolveGVRForPermissionQuery routes a permission query through the
+// strict common.ResolveGVRForGVK helper. Every frontend caller now
+// populates PermissionQuery.Group/Version (see
+// frontend/src/core/capabilities/permissionStore.ts and
+// core/capabilities/store.ts after the kind-only-objects fix), so a
+// missing Version here is a programming bug — we fail loud rather than
+// falling back to the retired kind-only resolver, which was
+// first-match-wins across colliding CRDs. See
+// docs/plans/kind-only-objects.md.
 func (a *App) resolveGVRForPermissionQuery(ctx context.Context, q capabilities.PermissionQuery) (schema.GroupVersionResource, bool, error) {
-	if q.Version != "" {
-		deps, _, err := a.resolveClusterDependencies(q.ClusterId)
-		if err != nil {
-			return schema.GroupVersionResource{}, false, err
-		}
-		return common.ResolveGVRForGVK(ctx, deps, schema.GroupVersionKind{
-			Group:   q.Group,
-			Version: q.Version,
-			Kind:    q.ResourceKind,
-		})
+	if q.Version == "" {
+		return schema.GroupVersionResource{}, false, fmt.Errorf(
+			"permission query for kind %q requires apiVersion (group+version); kind-only resolution was retired to fix the kind-only-objects bug",
+			q.ResourceKind,
+		)
 	}
-	return a.getGVR(q.ClusterId, q.ResourceKind)
+	deps, _, err := a.resolveClusterDependencies(q.ClusterId)
+	if err != nil {
+		return schema.GroupVersionResource{}, false, err
+	}
+	return common.ResolveGVRForGVK(ctx, deps, schema.GroupVersionKind{
+		Group:   q.Group,
+		Version: q.Version,
+		Kind:    q.ResourceKind,
+	})
 }
 
 // ssarItem tracks a single check that needs SSAR fallback evaluation.

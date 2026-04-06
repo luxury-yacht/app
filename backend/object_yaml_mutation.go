@@ -11,15 +11,12 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	yamlutil "k8s.io/apimachinery/pkg/util/yaml"
-	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/rest"
 	"sigs.k8s.io/yaml"
 )
 
@@ -518,113 +515,47 @@ func (a *App) getGVRForGVK(ctx context.Context, clusterID string, gvk schema.Gro
 	return getGVRForGVKWithDependencies(ctx, deps, selectionKey, gvk)
 }
 
+// getGVRForGVKWithDependencies is the YAML mutation path's GVK resolver.
+// As of step 7 of the kind-only-objects fix it delegates the strict
+// group/version/kind walk to the shared common.ResolveGVRForGVK helper —
+// the canonical resolver that lives in backend/resources/common so both
+// the backend and generic packages can call it without a package cycle.
+//
+// This wrapper still exists (rather than the mutation path calling
+// common.ResolveGVRForGVK directly) because it adds one mutation-specific
+// behaviour: a kind-only fallback through common.DiscoverGVRByKind for
+// the rare case where strict discovery fails (partial API server
+// responses, stale caches). The fallback's result is validated against
+// the requested GVK before being returned, so it can never silently
+// target a wrong-group CRD — if discovery yields a different group
+// than what the caller asked for, the mismatch surfaces as an error.
+//
+// The selectionKey parameter used to drive a legacy response-cache
+// lookup that has since been retired; it is kept in the signature for
+// source-compatibility with existing callers.
 func getGVRForGVKWithDependencies(
 	ctx context.Context,
 	deps common.Dependencies,
-	selectionKey string,
+	_ string,
 	gvk schema.GroupVersionKind,
 ) (schema.GroupVersionResource, bool, error) {
-	if deps.KubernetesClient == nil {
-		return schema.GroupVersionResource{}, false, fmt.Errorf("kubernetes client not initialized")
+	gvr, namespaced, err := common.ResolveGVRForGVK(ctx, deps, gvk)
+	if err == nil {
+		return gvr, namespaced, nil
 	}
 
-	if ctx == nil {
-		ctx = deps.Context
-		if ctx == nil {
-			ctx = context.Background()
-		}
-	}
-
-	discoveryClient := deps.KubernetesClient.Discovery()
-	if deps.RestConfig != nil {
-		timeout := mutationRequestTimeout
-		if deadline, ok := ctx.Deadline(); ok {
-			if remaining := time.Until(deadline); remaining > 0 && remaining < timeout {
-				timeout = remaining
-			}
-		}
-		cfg := rest.CopyConfig(deps.RestConfig)
-		cfg.Timeout = timeout
-		if dc, err := discovery.NewDiscoveryClientForConfig(cfg); err == nil {
-			discoveryClient = dc
-		} else if deps.Logger != nil {
-			deps.Logger.Debug(fmt.Sprintf("Discovery client fallback for YAML mutation: %v", err), "ObjectYAML")
-		}
-	}
-
-	apiResourceLists, err := discoveryClient.ServerPreferredResources()
-	if err != nil && deps.Logger != nil {
-		// Partial discovery failures are common with aggregated APIs; continue with what we have.
-		deps.Logger.Debug(fmt.Sprintf("ServerPreferredResources returned error: %v", err), "ObjectYAML")
-	}
-
-	for _, apiResourceList := range apiResourceLists {
-		gv, parseErr := schema.ParseGroupVersion(apiResourceList.GroupVersion)
-		if parseErr != nil {
-			continue
-		}
-		if gv.Group != gvk.Group || gv.Version != gvk.Version {
-			continue
-		}
-
-		for _, apiResource := range apiResourceList.APIResources {
-			if strings.Contains(apiResource.Name, "/") {
-				continue
-			}
-			if strings.EqualFold(apiResource.Kind, gvk.Kind) || strings.EqualFold(apiResource.SingularName, gvk.Kind) {
-				gvr := schema.GroupVersionResource{
-					Group:    gv.Group,
-					Version:  gv.Version,
-					Resource: apiResource.Name,
-				}
-				return gvr, apiResource.Namespaced, nil
-			}
-		}
-	}
-
-	if deps.APIExtensionsClient != nil {
-		crds, listErr := deps.APIExtensionsClient.ApiextensionsV1().CustomResourceDefinitions().List(ctx, metav1.ListOptions{})
-		if listErr == nil {
-			for _, crd := range crds.Items {
-				if !strings.EqualFold(crd.Spec.Names.Kind, gvk.Kind) {
-					continue
-				}
-				if crd.Spec.Group != gvk.Group {
-					continue
-				}
-
-				var versionMatch *apiextensionsv1.CustomResourceDefinitionVersion
-				for idx, version := range crd.Spec.Versions {
-					if version.Name == gvk.Version {
-						versionMatch = &crd.Spec.Versions[idx]
-						break
-					}
-				}
-
-				if versionMatch == nil {
-					continue
-				}
-
-				return schema.GroupVersionResource{
-						Group:    crd.Spec.Group,
-						Version:  versionMatch.Name,
-						Resource: crd.Spec.Names.Plural,
-					},
-					crd.Spec.Scope == apiextensionsv1.NamespaceScoped,
-					nil
-			}
-		} else if deps.Logger != nil {
-			deps.Logger.Debug(fmt.Sprintf("CRD discovery failed: %v", listErr), "ObjectYAML")
-		}
-	}
-
-	// Fallback to legacy GVR resolution by Kind if group/version-specific lookup fails.
-	if fallbackGVR, namespaced, err := getGVRForDependencies(deps, selectionKey, gvk.Kind); err == nil {
+	// Strict resolver could not find the GVK. Try the canonical kind-only
+	// discovery walk as a partial-discovery safety net, then validate the
+	// result against the requested group/version so we never accept a
+	// wrong-group hit. If validation fails, return the original strict
+	// error so the caller sees an actionable failure rather than a
+	// misleading kind-only success.
+	if fallbackGVR, fallbackNamespaced, fallbackErr := common.DiscoverGVRByKind(ctx, deps, gvk.Kind); fallbackErr == nil {
 		if (gvk.Group == "" || strings.EqualFold(fallbackGVR.Group, gvk.Group)) &&
 			(gvk.Version == "" || strings.EqualFold(fallbackGVR.Version, gvk.Version)) {
-			return fallbackGVR, namespaced, nil
+			return fallbackGVR, fallbackNamespaced, nil
 		}
 	}
 
-	return schema.GroupVersionResource{}, false, fmt.Errorf("unable to resolve resource for %s", gvk.String())
+	return schema.GroupVersionResource{}, false, err
 }

@@ -9,7 +9,6 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 
 import { useObjectPanelActions } from './useObjectPanelActions';
 import type { PanelState, PanelObjectData } from '../types';
-import { WORKLOAD_KIND_API_NAMES } from '../constants';
 
 const restartMock = vi.fn();
 const deletePodMock = vi.fn();
@@ -69,7 +68,6 @@ describe('useObjectPanelActions', () => {
         dispatch: dispatchMock,
         close: closeMock,
         fetchResourceDetails: fetchDetailsMock,
-        workloadKindApiNames: WORKLOAD_KIND_API_NAMES,
         ...override,
       },
     };

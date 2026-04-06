@@ -35,6 +35,9 @@ vi.mock('@ui/favorites/FavToggle', () => ({
 
 const gridTablePropsRef: { current: any } = { current: null };
 const openWithObjectMock = vi.fn();
+const deleteResourceMock = vi.fn();
+const deleteResourceByGVKMock = vi.fn();
+const modalProps: { current: any } = { current: null };
 
 vi.mock('@shared/components/tables/GridTable', async () => {
   const actual = await vi.importActual<typeof import('@shared/components/tables/GridTable')>(
@@ -97,7 +100,26 @@ vi.mock('@/hooks/useShortNames', () => ({
 }));
 
 vi.mock('@wailsjs/go/backend/App', () => ({
-  DeleteResource: vi.fn(),
+  DeleteResource: (...args: unknown[]) => deleteResourceMock(...args),
+  DeleteResourceByGVK: (...args: unknown[]) => deleteResourceByGVKMock(...args),
+}));
+
+vi.mock('@shared/components/modals/ConfirmationModal', () => ({
+  __esModule: true,
+  default: (props: any) => {
+    modalProps.current = props;
+    return <div data-testid="confirmation-modal" />;
+  },
+}));
+
+vi.mock('@/core/capabilities', () => ({
+  useUserPermissions: () =>
+    new Map([
+      ['Widget:delete', { allowed: true, pending: false }],
+      ['DBCluster:delete', { allowed: true, pending: false }],
+    ]),
+  getPermissionKey: (kind: string, action: string) => `${kind}:${action}`,
+  queryKindPermissions: vi.fn(),
 }));
 
 // queryKindPermissions calls window.go.backend.App.QueryPermissions directly.
@@ -134,7 +156,10 @@ describe('ClusterViewCustom', () => {
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
     gridTablePropsRef.current = null;
+    modalProps.current = null;
     openWithObjectMock.mockReset();
+    deleteResourceMock.mockReset();
+    deleteResourceByGVKMock.mockReset();
   });
 
   afterEach(() => {
@@ -210,5 +235,54 @@ describe('ClusterViewCustom', () => {
     expect(callArg).toBeDefined();
     expect(callArg.group).toBe('postgresql.cnpg.io');
     expect(callArg.version).toBe('v1');
+  });
+
+  // Regression test for the delete-path leg of the kind-only-objects bug
+  // (docs/plans/kind-only-objects.md "I Should Have Done This Without Having
+  // To Be Asked" item 2). Mirrors NsViewCustom's delete guardrail for the
+  // cluster-scoped custom view.
+  it('routes delete through DeleteResourceByGVK when apiGroup/apiVersion are present', async () => {
+    deleteResourceByGVKMock.mockResolvedValue(undefined);
+
+    const clusterScopedCR = {
+      kind: 'DBCluster',
+      name: 'shared-pg',
+      apiGroup: 'postgresql.cnpg.io',
+      apiVersion: 'v1',
+      age: '3d',
+      clusterId: 'alpha:ctx',
+      clusterName: 'alpha',
+      labels: {},
+      annotations: {},
+    };
+
+    await act(async () => {
+      root.render(<ClusterViewCustom data={[clusterScopedCR]} loaded={true} />);
+      await Promise.resolve();
+    });
+
+    const props = gridTablePropsRef.current;
+    expect(props).toBeTruthy();
+
+    // The Delete context menu item is at index 2 (Open, View YAML, Delete).
+    const contextItems = props.getCustomContextMenuItems(clusterScopedCR, 'kind');
+    await act(async () => {
+      contextItems[2].onClick();
+      await Promise.resolve();
+    });
+    expect(modalProps.current?.isOpen).toBe(true);
+
+    await act(async () => {
+      await modalProps.current.onConfirm();
+    });
+
+    expect(deleteResourceByGVKMock).toHaveBeenCalledWith(
+      'alpha:ctx',
+      'postgresql.cnpg.io/v1',
+      'DBCluster',
+      '',
+      'shared-pg'
+    );
+    expect(deleteResourceMock).not.toHaveBeenCalled();
   });
 });

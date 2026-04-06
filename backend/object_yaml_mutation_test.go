@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strings"
 	"testing"
-	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -107,30 +106,9 @@ func setupYAMLTestApp(t *testing.T) (*App, *dynamicfake.FakeDynamicClient, strin
 		},
 	}
 
-	// Scope the GVR cache to the test cluster selection.
-	cacheKey := gvrCacheKey(clusterID, "Deployment")
-	gvrCacheMutex.Lock()
-	original, hadOriginal := gvrCache[cacheKey]
-	gvrCache[cacheKey] = gvrCacheEntry{
-		gvr: schema.GroupVersionResource{
-			Group:    "apps",
-			Version:  "v1",
-			Resource: "deployments",
-		},
-		namespaced: true,
-		cachedAt:   time.Now(),
-	}
-	gvrCacheMutex.Unlock()
-
-	t.Cleanup(func() {
-		gvrCacheMutex.Lock()
-		defer gvrCacheMutex.Unlock()
-		if hadOriginal {
-			gvrCache[cacheKey] = original
-		} else {
-			delete(gvrCache, cacheKey)
-		}
-	})
+	// discovery.Resources above advertises apps/v1 Deployment so
+	// getGVRForGVKWithDependencies (via common.ResolveGVRForGVK) can
+	// resolve the GVR without needing a GVR cache to seed.
 
 	return app, dynamicClient, clusterID
 }

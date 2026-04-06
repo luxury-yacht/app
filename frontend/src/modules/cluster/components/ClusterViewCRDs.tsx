@@ -5,7 +5,7 @@
  * Handles rendering and interactions for the cluster feature.
  */
 
-import { DeleteResource } from '@wailsjs/go/backend/App';
+import { DeleteResourceByGVK } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 import { getPermissionKey, useUserPermissions } from '@/core/capabilities';
@@ -26,7 +26,10 @@ import GridTable, {
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
-import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
+import {
+  formatBuiltinApiVersion,
+  resolveBuiltinGroupVersion,
+} from '@shared/constants/builtinGroupVersions';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 import { useFavToggle } from '@ui/favorites/FavToggle';
 
@@ -183,9 +186,25 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
       if (!deleteConfirm.resource) return;
 
       try {
-        const clusterId = deleteConfirm.resource.clusterId ?? selectedClusterId ?? '';
-        await DeleteResource(
+        // Multi-cluster rule (AGENTS.md): every backend command must
+        // carry a resolved clusterId.
+        const clusterId = deleteConfirm.resource.clusterId ?? selectedClusterId ?? null;
+        if (!clusterId) {
+          throw new Error(
+            `Cannot delete CustomResourceDefinition/${deleteConfirm.resource.name}: clusterId is missing`
+          );
+        }
+        // CRD itself is a built-in (apiextensions.k8s.io/v1) and always
+        // resolves via the lookup table. See docs/plans/kind-only-objects.md.
+        const apiVersion = formatBuiltinApiVersion('CustomResourceDefinition');
+        if (!apiVersion) {
+          throw new Error(
+            `Cannot delete CustomResourceDefinition/${deleteConfirm.resource.name}: lookup table missing entry`
+          );
+        }
+        await DeleteResourceByGVK(
           clusterId,
+          apiVersion,
           'CustomResourceDefinition',
           '',
           deleteConfirm.resource.name

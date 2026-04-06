@@ -27,7 +27,10 @@ import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import GridTable from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
-import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
+import {
+  formatBuiltinApiVersion,
+  resolveBuiltinGroupVersion,
+} from '@shared/constants/builtinGroupVersions';
 import type { PodMetricsInfo } from '@/core/refresh/types';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import useWorkloadTableColumns from '@modules/namespace/components/useWorkloadTableColumns';
@@ -40,7 +43,7 @@ import {
 } from '@modules/namespace/components/NsViewWorkloads.helpers';
 import {
   RestartWorkload,
-  DeleteResource,
+  DeleteResourceByGVK,
   ScaleWorkload,
   TriggerCronJob,
   SuspendCronJob,
@@ -263,8 +266,23 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
       }
 
       try {
-        await DeleteResource(
-          workload.clusterId ?? '',
+        // Multi-cluster rule (AGENTS.md): every backend command must
+        // carry a resolved clusterId.
+        if (!workload.clusterId) {
+          throw new Error(`Cannot delete ${workload.kind}/${workload.name}: clusterId is missing`);
+        }
+        // Built-in workloads (Deployment/StatefulSet/DaemonSet/Job/CronJob)
+        // resolve via the lookup table. A miss means a non-built-in kind
+        // slipped in — fail loud. See docs/plans/kind-only-objects.md.
+        const apiVersion = formatBuiltinApiVersion(workload.kind);
+        if (!apiVersion) {
+          throw new Error(
+            `Cannot delete ${workload.kind}/${workload.name}: not a known built-in kind`
+          );
+        }
+        await DeleteResourceByGVK(
+          workload.clusterId,
+          apiVersion,
           workload.kind,
           workload.namespace,
           workload.name

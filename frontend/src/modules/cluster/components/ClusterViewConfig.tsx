@@ -5,7 +5,7 @@
  * Ingress Classes, and Admission Control resources.
  */
 
-import { DeleteResource } from '@wailsjs/go/backend/App';
+import { DeleteResourceByGVK } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 import { getPermissionKey, useUserPermissions } from '@/core/capabilities';
@@ -26,7 +26,10 @@ import GridTable, {
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
-import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
+import {
+  formatBuiltinApiVersion,
+  resolveBuiltinGroupVersion,
+} from '@shared/constants/builtinGroupVersions';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 import { useFavToggle } from '@ui/favorites/FavToggle';
 
@@ -178,15 +181,25 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
     // Handle delete confirmation
     const handleDeleteConfirm = useCallback(async () => {
       if (!deleteConfirm.resource) return;
+      const resource = deleteConfirm.resource;
 
       try {
-        const clusterId = deleteConfirm.resource.clusterId ?? selectedClusterId ?? '';
-        await DeleteResource(
-          clusterId,
-          deleteConfirm.resource.kind,
-          '',
-          deleteConfirm.resource.name
-        );
+        // Multi-cluster rule (AGENTS.md): every backend command must
+        // carry a resolved clusterId.
+        const clusterId = resource.clusterId ?? selectedClusterId ?? null;
+        if (!clusterId) {
+          throw new Error(`Cannot delete ${resource.kind}/${resource.name}: clusterId is missing`);
+        }
+        // Built-in admission/storage/etc. kinds resolve via the lookup table.
+        // A miss means a non-built-in kind slipped in — fail loud.
+        // See docs/plans/kind-only-objects.md.
+        const apiVersion = formatBuiltinApiVersion(resource.kind);
+        if (!apiVersion) {
+          throw new Error(
+            `Cannot delete ${resource.kind}/${resource.name}: not a known built-in kind`
+          );
+        }
+        await DeleteResourceByGVK(clusterId, apiVersion, resource.kind, '', resource.name);
       } catch (err) {
         errorHandler.handle(err, {
           action: 'delete',

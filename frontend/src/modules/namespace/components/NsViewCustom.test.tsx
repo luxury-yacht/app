@@ -22,7 +22,7 @@ const openWithObjectMock = vi.fn();
 const sortHandlerMock = vi.fn();
 const useTableSortMock = vi.fn();
 const useShortNamesMock = vi.fn();
-const deleteResourceMock = vi.fn();
+const deleteResourceByGVKMock = vi.fn();
 
 vi.mock('@core/contexts/FavoritesContext', () => ({
   useFavorites: () => ({
@@ -101,7 +101,7 @@ vi.mock('@/hooks/useShortNames', () => ({
 }));
 
 vi.mock('@wailsjs/go/backend/App', () => ({
-  DeleteResource: (...args: unknown[]) => deleteResourceMock(...args),
+  DeleteResourceByGVK: (...args: unknown[]) => deleteResourceByGVKMock(...args),
 }));
 
 vi.mock('@utils/errorHandler', () => ({
@@ -113,6 +113,7 @@ vi.mock('@/core/capabilities', () => ({
     new Map([
       ['CronJob:delete', { allowed: true, pending: false }],
       ['CustomResource:delete', { allowed: true, pending: false }],
+      ['DBInstance:delete', { allowed: true, pending: false }],
     ]),
   getPermissionKey: (kind: string, action: string) => `${kind}:${action}`,
   // Stubbed for CRDs not covered by the static permission map; the real
@@ -139,7 +140,7 @@ describe('NsViewCustom', () => {
     gridTableMock.mockReset();
     openWithObjectMock.mockReset();
     sortHandlerMock.mockReset();
-    deleteResourceMock.mockReset();
+    deleteResourceByGVKMock.mockReset();
     modalProps.current = null;
     useTableSortMock.mockImplementation((data: CustomResourceData[]) => ({
       sortedData: data,
@@ -272,13 +273,26 @@ describe('NsViewCustom', () => {
     expect(callArg.version).toBe('v1alpha1');
   });
 
-  it('confirms deletion and calls DeleteResource with resolved data', async () => {
-    deleteResourceMock.mockResolvedValue(undefined);
+  it('confirms deletion and calls DeleteResourceByGVK with resolved data', async () => {
+    deleteResourceByGVKMock.mockResolvedValue(undefined);
 
-    await renderComponent({ data: [baseResource], loaded: true, showNamespaceColumn: true });
+    // Every custom resource row the backend catalog produces carries
+    // apiGroup/apiVersion — the delete path is GVK-only after the
+    // kind-only-objects fix.
+    const resourceWithGVK: CustomResourceData = {
+      ...baseResource,
+      apiGroup: 'batch',
+      apiVersion: 'v1',
+    };
+
+    await renderComponent({
+      data: [resourceWithGVK],
+      loaded: true,
+      showNamespaceColumn: true,
+    });
 
     const gridProps = gridTableMock.mock.calls[0][0];
-    const contextItems = gridProps.getCustomContextMenuItems(baseResource, 'kind');
+    const contextItems = gridProps.getCustomContextMenuItems(resourceWithGVK, 'kind');
     await act(async () => {
       contextItems[2].onClick();
       await Promise.resolve();
@@ -289,8 +303,9 @@ describe('NsViewCustom', () => {
       await modalProps.current.onConfirm();
     });
 
-    expect(deleteResourceMock).toHaveBeenCalledWith(
+    expect(deleteResourceByGVKMock).toHaveBeenCalledWith(
       'alpha:ctx',
+      'batch/v1',
       'CronJob',
       'ops',
       'nightly-cleanup'
@@ -299,14 +314,73 @@ describe('NsViewCustom', () => {
     expect(modalProps.current?.isOpen).toBe(false);
   });
 
-  it('handles delete failure with errorHandler and reverts modal state', async () => {
-    deleteResourceMock.mockRejectedValue(new Error('failure'));
+  // Regression test for the delete-path leg of the kind-only-objects bug
+  // (docs/plans/kind-only-objects.md "I Should Have Done This Without Having
+  // To Be Asked" item 1). When the user confirms deletion of a custom
+  // resource whose Kind collides with another CRD from a different API
+  // group (e.g. two DBInstance CRDs), handleDeleteConfirm MUST route
+  // through DeleteResourceByGVK so the strict GVR is targeted. The legacy
+  // DeleteResource path uses first-match-wins discovery and could
+  // silently delete the wrong object.
+  it('routes delete through DeleteResourceByGVK when apiGroup/apiVersion are present', async () => {
+    deleteResourceByGVKMock.mockResolvedValue(undefined);
 
+    const dbInstance: CustomResourceData = {
+      kind: 'DBInstance',
+      name: 'db-dc-test-1-v4',
+      namespace: 'team-a',
+      clusterId: 'alpha:ctx',
+      clusterName: 'alpha',
+      apiGroup: 'documentdb.services.k8s.aws',
+      apiVersion: 'v1alpha1',
+      age: '2h',
+      labels: {},
+      annotations: {},
+    };
+
+    await renderComponent({ data: [dbInstance], loaded: true, showNamespaceColumn: true });
+
+    const gridProps = gridTableMock.mock.calls[0][0];
+    const contextItems = gridProps.getCustomContextMenuItems(dbInstance, 'kind');
+    await act(async () => {
+      contextItems[2].onClick();
+      await Promise.resolve();
+    });
+    expect(modalProps.current?.isOpen).toBe(true);
+
+    await act(async () => {
+      await modalProps.current.onConfirm();
+    });
+
+    // The strict GVK delete must be invoked, with apiVersion built as
+    // "group/version" so the backend's schema.FromAPIVersionAndKind parses
+    // it correctly.
+    expect(deleteResourceByGVKMock).toHaveBeenCalledWith(
+      'alpha:ctx',
+      'documentdb.services.k8s.aws/v1alpha1',
+      'DBInstance',
+      'team-a',
+      'db-dc-test-1-v4'
+    );
+    // The legacy kind-only path has been retired entirely. This assertion
+    // used to check that it wasn't hit; now it's gone from the app surface.
+
+    await flush();
+    expect(modalProps.current?.isOpen).toBe(false);
+  });
+
+  // Characterization of the post-fix contract: after the kind-only-objects
+  // cleanup, CustomResourceData is required to carry apiGroup/apiVersion.
+  // A row that's missing apiVersion is a programming bug, and handleDelete
+  // must fail loud rather than silently fall back to first-match-wins
+  // discovery. The errorHandler should see the thrown error.
+  it('throws instead of falling back when apiGroup/apiVersion are missing', async () => {
     await renderComponent({ data: [baseResource], loaded: true, showNamespaceColumn: true });
 
     const gridProps = gridTableMock.mock.calls[0][0];
+    const contextItems = gridProps.getCustomContextMenuItems(baseResource, 'kind');
     await act(async () => {
-      gridProps.getCustomContextMenuItems(baseResource, 'kind')[2].onClick();
+      contextItems[2].onClick();
       await Promise.resolve();
     });
 
@@ -314,7 +388,42 @@ describe('NsViewCustom', () => {
       await modalProps.current.onConfirm();
     });
 
-    expect(deleteResourceMock).toHaveBeenCalled();
+    expect(deleteResourceByGVKMock).not.toHaveBeenCalled();
+    expect(errorHandlerMock.handle).toHaveBeenCalledWith(
+      expect.objectContaining({ message: expect.stringContaining('apiVersion missing') }),
+      { action: 'delete', kind: 'CronJob', name: 'nightly-cleanup' }
+    );
+
+    await flush();
+    expect(modalProps.current?.isOpen).toBe(false);
+  });
+
+  it('handles delete failure with errorHandler and reverts modal state', async () => {
+    deleteResourceByGVKMock.mockRejectedValue(new Error('failure'));
+
+    const resourceWithGVK: CustomResourceData = {
+      ...baseResource,
+      apiGroup: 'batch',
+      apiVersion: 'v1',
+    };
+
+    await renderComponent({
+      data: [resourceWithGVK],
+      loaded: true,
+      showNamespaceColumn: true,
+    });
+
+    const gridProps = gridTableMock.mock.calls[0][0];
+    await act(async () => {
+      gridProps.getCustomContextMenuItems(resourceWithGVK, 'kind')[2].onClick();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      await modalProps.current.onConfirm();
+    });
+
+    expect(deleteResourceByGVKMock).toHaveBeenCalled();
     expect(errorHandlerMock.handle).toHaveBeenCalledWith(expect.any(Error), {
       action: 'delete',
       kind: 'CronJob',

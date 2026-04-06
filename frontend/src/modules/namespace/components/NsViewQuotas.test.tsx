@@ -16,6 +16,7 @@ const {
   confirmationPropsRef,
   openWithObjectMock,
   deleteResourceMock,
+  deleteResourceByGVKMock,
   permissionState,
   errorHandlerMock,
 } = vi.hoisted(() => ({
@@ -23,6 +24,7 @@ const {
   confirmationPropsRef: { current: null as any },
   openWithObjectMock: vi.fn(),
   deleteResourceMock: vi.fn().mockResolvedValue(undefined),
+  deleteResourceByGVKMock: vi.fn().mockResolvedValue(undefined),
   permissionState: new Map<
     string,
     { allowed: boolean; pending: boolean; reason?: string; error?: string }
@@ -93,6 +95,7 @@ vi.mock('@shared/components/modals/ConfirmationModal', () => ({
 
 vi.mock('@wailsjs/go/backend/App', () => ({
   DeleteResource: (...args: unknown[]) => deleteResourceMock(...args),
+  DeleteResourceByGVK: (...args: unknown[]) => deleteResourceByGVKMock(...args),
 }));
 
 vi.mock('@/hooks/useTableSort', () => ({
@@ -157,6 +160,8 @@ describe('NsViewQuotas', () => {
     confirmationPropsRef.current = null;
     openWithObjectMock.mockReset();
     deleteResourceMock.mockReset();
+    deleteResourceByGVKMock.mockReset();
+    deleteResourceByGVKMock.mockResolvedValue(undefined);
     permissionState.clear();
     errorHandlerMock.handle.mockClear();
   });
@@ -256,8 +261,10 @@ describe('NsViewQuotas', () => {
     await act(async () => {
       await confirmationPropsRef.current?.onConfirm?.();
     });
-    expect(deleteResourceMock).toHaveBeenCalledWith(
+    // ResourceQuota is core/v1, resolved through formatBuiltinApiVersion.
+    expect(deleteResourceByGVKMock).toHaveBeenCalledWith(
       'alpha:ctx',
+      'v1',
       'ResourceQuota',
       'team-a',
       'rq-default'
@@ -265,7 +272,7 @@ describe('NsViewQuotas', () => {
   });
 
   it('handles delete failure with errorHandler', async () => {
-    deleteResourceMock.mockRejectedValueOnce(new Error('boom'));
+    deleteResourceByGVKMock.mockRejectedValueOnce(new Error('boom'));
     permissionState.set('ResourceQuota:delete:team-a', { allowed: true, pending: false });
 
     const entry = baseQuota();

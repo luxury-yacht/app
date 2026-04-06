@@ -1194,6 +1194,8 @@ describe('DiagnosticsPanel component', () => {
 
     const toDescriptor = (d: NormalizedCapabilityDescriptor): PermissionStatus['descriptor'] => ({
       clusterId: d.clusterId ?? 'test-cluster',
+      group: d.group ?? null,
+      version: d.version ?? null,
       resourceKind: d.resourceKind,
       verb: d.verb,
       namespace: d.namespace ?? null,

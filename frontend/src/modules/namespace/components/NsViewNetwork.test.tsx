@@ -17,6 +17,7 @@ const {
   confirmationPropsRef,
   openWithObjectMock,
   deleteResourceMock,
+  deleteResourceByGVKMock,
   permissionState,
   errorHandlerMock,
 } = vi.hoisted(() => ({
@@ -24,6 +25,7 @@ const {
   confirmationPropsRef: { current: null as any },
   openWithObjectMock: vi.fn(),
   deleteResourceMock: vi.fn().mockResolvedValue(undefined),
+  deleteResourceByGVKMock: vi.fn().mockResolvedValue(undefined),
   permissionState: new Map<string, { allowed: boolean; pending: boolean }>(),
   errorHandlerMock: { handle: vi.fn() },
 }));
@@ -104,6 +106,7 @@ vi.mock('@shared/components/modals/ConfirmationModal', () => ({
 
 vi.mock('@wailsjs/go/backend/App', () => ({
   DeleteResource: (...args: unknown[]) => deleteResourceMock(...args),
+  DeleteResourceByGVK: (...args: unknown[]) => deleteResourceByGVKMock(...args),
 }));
 
 vi.mock('@/hooks/useTableSort', () => ({
@@ -176,6 +179,8 @@ describe('NsViewNetwork', () => {
     confirmationPropsRef.current = null;
     openWithObjectMock.mockReset();
     deleteResourceMock.mockReset();
+    deleteResourceByGVKMock.mockReset();
+    deleteResourceByGVKMock.mockResolvedValue(undefined);
     permissionState.clear();
     errorHandlerMock.handle.mockClear();
   });
@@ -262,8 +267,10 @@ describe('NsViewNetwork', () => {
       await confirmationPropsRef.current?.onConfirm?.();
     });
 
-    expect(deleteResourceMock).toHaveBeenCalledWith(
+    // Ingress is networking.k8s.io/v1, resolved through formatBuiltinApiVersion.
+    expect(deleteResourceByGVKMock).toHaveBeenCalledWith(
       'alpha:ctx',
+      'networking.k8s.io/v1',
       'Ingress',
       'team-a',
       'web-gateway'
@@ -300,7 +307,7 @@ describe('NsViewNetwork', () => {
   });
 
   it('handles delete failure with errorHandler', async () => {
-    deleteResourceMock.mockRejectedValueOnce(new Error('boom'));
+    deleteResourceByGVKMock.mockRejectedValueOnce(new Error('boom'));
     permissionState.set('Ingress:delete:team-a', { allowed: true, pending: false });
     const entry = baseNetwork();
     const props = await renderNetworkView([entry]);

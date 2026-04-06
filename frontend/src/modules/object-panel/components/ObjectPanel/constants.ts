@@ -8,12 +8,11 @@ import type { ObjectDetailsRefresherName } from '@/core/refresh/refresherTypes';
 export const CLUSTER_SCOPE = '__cluster__';
 export const INACTIVE_SCOPE = '__inactive__';
 
-export const WORKLOAD_KIND_API_NAMES: Record<string, string> = {
-  deployment: 'Deployment',
-  daemonset: 'DaemonSet',
-  statefulset: 'StatefulSet',
-  replicaset: 'ReplicaSet',
-};
+// WORKLOAD_KIND_API_NAMES was retired as part of the kind-only-objects fix
+// (item 10). PanelObjectData.kind now consistently carries the original-case
+// Kind from the data source, so consumers can read it directly instead of
+// going through a lowercase → PascalCase alias map. See
+// docs/plans/kind-only-objects.md.
 
 export const RESOURCE_CAPABILITIES: Record<string, ResourceCapability> = {
   // Workloads

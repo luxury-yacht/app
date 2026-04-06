@@ -21,18 +21,12 @@ func TestInvalidateResponseCacheForObjectEvictsDetailAndYAML(t *testing.T) {
 	}
 
 	detailKey := objectDetailCacheKey("ConfigMap", "default", "demo")
-	yamlKey := objectYAMLCacheKey("ConfigMap", "default", "demo")
-
 	app.responseCacheStore(selectionKey, detailKey, "detail")
-	app.responseCacheStore(selectionKey, yamlKey, "yaml")
 
 	app.invalidateResponseCacheForObject(selectionKey, "ConfigMap", configMap)
 
 	if _, ok := app.responseCacheLookup(selectionKey, detailKey); ok {
 		t.Fatalf("expected detail cache entry to be evicted")
-	}
-	if _, ok := app.responseCacheLookup(selectionKey, yamlKey); ok {
-		t.Fatalf("expected yaml cache entry to be evicted")
 	}
 }
 
@@ -85,10 +79,7 @@ func TestInvalidateResponseCacheSkipsWarmupAddsForOldObjects(t *testing.T) {
 	}
 
 	detailKey := objectDetailCacheKey("ConfigMap", "default", "demo")
-	yamlKey := objectYAMLCacheKey("ConfigMap", "default", "demo")
-
 	app.responseCacheStore(selectionKey, detailKey, "detail")
-	app.responseCacheStore(selectionKey, yamlKey, "yaml")
 
 	guard := responseCacheInvalidationGuard{
 		hasSynced: func() bool { return false },
@@ -105,9 +96,6 @@ func TestInvalidateResponseCacheSkipsWarmupAddsForOldObjects(t *testing.T) {
 	if _, ok := app.responseCacheLookup(selectionKey, detailKey); !ok {
 		t.Fatalf("expected detail cache entry to remain during warm-up add")
 	}
-	if _, ok := app.responseCacheLookup(selectionKey, yamlKey); !ok {
-		t.Fatalf("expected yaml cache entry to remain during warm-up add")
-	}
 }
 
 func TestInvalidateResponseCacheSkipsKindsOnUpdate(t *testing.T) {
@@ -123,10 +111,7 @@ func TestInvalidateResponseCacheSkipsKindsOnUpdate(t *testing.T) {
 	}
 
 	detailKey := objectDetailCacheKey("Pod", "default", "demo")
-	yamlKey := objectYAMLCacheKey("Pod", "default", "demo")
-
 	app.responseCacheStore(selectionKey, detailKey, "detail")
-	app.responseCacheStore(selectionKey, yamlKey, "yaml")
 
 	guard := responseCacheInvalidationGuard{
 		hasSynced: func() bool { return true },
@@ -142,8 +127,5 @@ func TestInvalidateResponseCacheSkipsKindsOnUpdate(t *testing.T) {
 
 	if _, ok := app.responseCacheLookup(selectionKey, detailKey); !ok {
 		t.Fatalf("expected detail cache entry to remain for skipped kinds")
-	}
-	if _, ok := app.responseCacheLookup(selectionKey, yamlKey); !ok {
-		t.Fatalf("expected yaml cache entry to remain for skipped kinds")
 	}
 }

@@ -20,12 +20,23 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 )
 
-func TestServiceDeleteCoreResource(t *testing.T) {
+func TestServiceDeleteByGVKCoreResource(t *testing.T) {
 	scheme := testsupport.NewScheme(t, corev1.AddToScheme)
 	pod := testsupport.PodFixture("default", "web-0")
 
 	dynamicClient := testsupport.NewDynamicClient(t, scheme, pod.DeepCopyObject())
 	kubeClient := fake.NewClientset(pod.DeepCopy())
+
+	// DeleteByGVK goes through common.ResolveGVRForGVK which hits discovery
+	// to learn the resource plural name and namespace scope, so the fake
+	// needs to advertise Pod.
+	testsupport.SeedAPIResources(t, kubeClient, testsupport.NewAPIResourceList("v1", metav1.APIResource{
+		Name:         "pods",
+		SingularName: "pod",
+		Namespaced:   true,
+		Kind:         "Pod",
+		Verbs:        metav1.Verbs{"get", "list", "watch", "delete"},
+	}))
 
 	deps := testsupport.NewResourceDependencies(
 		testsupport.WithDepsContext(context.Background()),
@@ -34,8 +45,9 @@ func TestServiceDeleteCoreResource(t *testing.T) {
 	)
 	service := NewService(deps)
 
-	if err := service.Delete("Pod", "default", "web-0"); err != nil {
-		t.Fatalf("Delete returned error: %v", err)
+	gvk := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}
+	if err := service.DeleteByGVK(gvk, "default", "web-0"); err != nil {
+		t.Fatalf("DeleteByGVK returned error: %v", err)
 	}
 
 	gvr := schema.GroupVersionResource{Group: "", Version: "v1", Resource: "pods"}
@@ -45,7 +57,7 @@ func TestServiceDeleteCoreResource(t *testing.T) {
 	}
 }
 
-func TestServiceDeleteCustomResource(t *testing.T) {
+func TestServiceDeleteByGVKCustomResource(t *testing.T) {
 	kubeClient := fake.NewClientset()
 	testsupport.SeedAPIResources(t, kubeClient, testsupport.NewAPIResourceList("example.com/v1", metav1.APIResource{
 		Name:         "widgets",
@@ -76,8 +88,9 @@ func TestServiceDeleteCustomResource(t *testing.T) {
 	)
 	service := NewService(deps)
 
-	if err := service.Delete("Widget", "default", "sample"); err != nil {
-		t.Fatalf("Delete returned error: %v", err)
+	gvk := schema.GroupVersionKind{Group: "example.com", Version: "v1", Kind: "Widget"}
+	if err := service.DeleteByGVK(gvk, "default", "sample"); err != nil {
+		t.Fatalf("DeleteByGVK returned error: %v", err)
 	}
 
 	gvr := schema.GroupVersionResource{Group: "example.com", Version: "v1", Resource: "widgets"}

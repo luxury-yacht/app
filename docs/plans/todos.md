@@ -1,5 +1,9 @@
 # TODO
 
+- Browse view and Custom views should have a column for API version for disambiguation
+
+- In CRD details, show the versions instead of just `n version(s)`
+
 - Resource creation
   - starter templates for common resource types
   - reuse the existing code editor

@@ -14,19 +14,45 @@ import type { PermissionEntry } from './permissionTypes';
 // ---------------------------------------------------------------------------
 
 describe('getPermissionKey', () => {
-  it('builds a pipe-delimited lowercase key', () => {
+  it('builds a pipe-delimited lowercase key with empty group/version segment for kind-only callers', () => {
     const key = getPermissionKey('Deployment', 'delete', 'default', null, 'cluster-1');
-    expect(key).toBe('cluster-1|deployment|delete|default|');
+    expect(key).toBe('cluster-1|/|deployment|delete|default|');
   });
 
   it('uses "cluster" for null namespace', () => {
     const key = getPermissionKey('Node', 'list', null, null, 'cluster-1');
-    expect(key).toBe('cluster-1|node|list|cluster|');
+    expect(key).toBe('cluster-1|/|node|list|cluster|');
   });
 
   it('includes subresource in the key', () => {
     const key = getPermissionKey('Deployment', 'update', 'default', 'scale', 'cluster-1');
-    expect(key).toBe('cluster-1|deployment|update|default|scale');
+    expect(key).toBe('cluster-1|/|deployment|update|default|scale');
+  });
+
+  it('includes group and version when supplied so colliding kinds get distinct keys', () => {
+    const ack = getPermissionKey(
+      'DBInstance',
+      'get',
+      'default',
+      null,
+      'cluster-1',
+      'rds.services.k8s.aws',
+      'v1alpha1'
+    );
+    const documentdb = getPermissionKey(
+      'DBInstance',
+      'get',
+      'default',
+      null,
+      'cluster-1',
+      'documentdb.services.k8s.aws',
+      'v1alpha1'
+    );
+    expect(ack).toBe('cluster-1|rds.services.k8s.aws/v1alpha1|dbinstance|get|default|');
+    expect(documentdb).toBe(
+      'cluster-1|documentdb.services.k8s.aws/v1alpha1|dbinstance|get|default|'
+    );
+    expect(ack).not.toBe(documentdb);
   });
 });
 
@@ -42,6 +68,8 @@ describe('makePermissionStatus', () => {
       reason: null,
       descriptor: {
         clusterId: 'cluster-1',
+        group: 'apps',
+        version: 'v1',
         resourceKind: 'Deployment',
         verb: 'get',
         namespace: 'default',
@@ -66,6 +94,8 @@ describe('makePermissionStatus', () => {
       reason: 'cluster unreachable',
       descriptor: {
         clusterId: 'cluster-1',
+        group: null,
+        version: null,
         resourceKind: 'Pod',
         verb: 'list',
         namespace: 'kube-system',

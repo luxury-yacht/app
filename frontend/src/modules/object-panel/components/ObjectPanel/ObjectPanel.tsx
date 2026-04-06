@@ -38,7 +38,6 @@ import { ObjectPanelContent } from '@modules/object-panel/components/ObjectPanel
 import {
   CLUSTER_SCOPE,
   RESOURCE_CAPABILITIES,
-  WORKLOAD_KIND_API_NAMES,
 } from '@modules/object-panel/components/ObjectPanel/constants';
 import type {
   PanelAction,
@@ -216,12 +215,10 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
   // Use reducer for state management
   const [state, dispatch] = useReducer(panelReducer, INITIAL_PANEL_STATE);
 
-  const { objectKind, detailScope, helmScope, isHelmRelease, isEvent } = getObjectPanelKind(
-    objectData,
-    {
+  const { objectKind, detailScope, eventsScope, logScope, helmScope, isHelmRelease, isEvent } =
+    getObjectPanelKind(objectData, {
       clusterScope: CLUSTER_SCOPE,
-    }
-  );
+    });
 
   const lastEvaluatedNamespaceRef = useRef<string | null>(null);
   useEffect(() => {
@@ -246,7 +243,6 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
     objectKind,
     detailScope,
     featureSupport,
-    workloadKindApiNames: WORKLOAD_KIND_API_NAMES,
   });
 
   // Only poll when this tab is active in its group (Step 8: active-tab-only polling).
@@ -343,7 +339,6 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
     dispatch,
     close,
     fetchResourceDetails,
-    workloadKindApiNames: WORKLOAD_KIND_API_NAMES,
   });
 
   // CronJob trigger handler
@@ -715,6 +710,8 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
           capabilities={capabilities}
           capabilityReasons={capabilityReasons}
           detailScope={detailScope}
+          eventsScope={eventsScope}
+          logScope={logScope}
           helmScope={helmScope}
           objectData={objectData}
           objectKind={objectKind}

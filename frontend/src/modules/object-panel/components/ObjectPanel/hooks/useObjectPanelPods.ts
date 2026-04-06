@@ -10,7 +10,7 @@ import { refreshOrchestrator } from '@/core/refresh/orchestrator';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { useRefreshScopedDomain } from '@/core/refresh/store';
 import type { PodSnapshotEntry, PodMetricsInfo } from '@/core/refresh/types';
-import { INACTIVE_SCOPE, WORKLOAD_KIND_API_NAMES } from '../constants';
+import { INACTIVE_SCOPE } from '../constants';
 import type { PanelObjectData, ViewType } from '../types';
 
 type PodsScope =
@@ -49,8 +49,11 @@ export function useObjectPanelPods({
       return { scope: `node:${objectData.name}`, kind: 'node' };
     }
     const workloadNamespace = objectData.namespace?.trim();
-    const workloadKindSegment =
-      WORKLOAD_KIND_API_NAMES[normalizedKind] ?? objectData.kind ?? normalizedKind;
+    // Prefer the original-case Kind from PanelObjectData; fall back to the
+    // lowercased objectKind only if the data source didn't provide one.
+    // Previously routed through WORKLOAD_KIND_API_NAMES as a casing safety
+    // net; that map is retired (see docs/plans/kind-only-objects.md item 10).
+    const workloadKindSegment = objectData.kind ?? normalizedKind;
     const workloadKinds = ['deployment', 'daemonset', 'statefulset', 'job', 'replicaset'];
     if (workloadNamespace && workloadKinds.includes(normalizedKind)) {
       return {

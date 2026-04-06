@@ -128,7 +128,6 @@ func collidingDBInstanceDiscoveryLists() []*metav1.APIResourceList {
 // can tell which one came back.
 func newCollidingDBInstanceCluster(t *testing.T, clusterID string) *App {
 	t.Helper()
-	resetGVRCache()
 
 	app := newTestAppWithDefaults(t)
 	app.Ctx = context.Background()
@@ -230,67 +229,15 @@ func TestGetGVRForGVKDisambiguatesCollidingDBInstanceCRDs(t *testing.T) {
 	})
 }
 
-// TestGetGVRForDependenciesCollidingDBInstanceReturnsArbitraryMatch is a
-// characterization test that documents the bug at the level of observable
-// behavior. The kind-only resolver walks discovery results and returns
-// whichever colliding CRD happens to come first in iteration order. The
-// caller has no way to influence which one is chosen — that's the bug.
-//
-// We deliberately do not assert *which* GVR wins, only that:
-//  1. the resolver returns one of the two colliding GVRs without error
-//  2. the result is namespaced (both colliding CRDs are)
-//  3. the result plural is "dbinstances" (shared by both)
-//
-// Why this shape: in this test the fake client-go discovery actually returns
-// the kinda.rocks entry before ACK, which is the opposite of the insertion
-// order in collidingDBInstanceDiscoveryLists. That means the iteration order
-// is an implementation detail of the fake (and the real discovery client
-// reorders based on "preferred" heuristics on the server side), so pinning
-// the test to a specific group would be brittle and would not actually track
-// the bug. What matters is that the caller cannot pick — a single bare-kind
-// request can resolve to either colliding CRD depending on cluster state.
-//
-// After the fix:
-//   - Kind-only callers (capabilities fallback) retain this arbitrary
-//     first-match behavior and this test continues to pass as a guardrail.
-//   - New GVK-aware callers route through getGVRForGVKWithDependencies and
-//     get deterministic resolution (see the test above).
-func TestGetGVRForDependenciesCollidingDBInstanceReturnsArbitraryMatch(t *testing.T) {
-	const clusterID = "collision-kind-only"
-	app := newCollidingDBInstanceCluster(t, clusterID)
-
-	deps, selectionKey, err := app.resolveClusterDependencies(clusterID)
-	if err != nil {
-		t.Fatalf("resolveClusterDependencies: %v", err)
-	}
-
-	gvr, namespaced, err := getGVRForDependencies(deps, selectionKey, "DBInstance")
-	if err != nil {
-		t.Fatalf("getGVRForDependencies returned error: %v", err)
-	}
-
-	ack := schema.GroupVersionResource{
-		Group: "rds.services.k8s.aws", Version: "v1alpha1", Resource: "dbinstances",
-	}
-	kindaRocks := schema.GroupVersionResource{
-		Group: "kinda.rocks", Version: "v1beta1", Resource: "dbinstances",
-	}
-
-	switch gvr {
-	case ack, kindaRocks:
-		// Either is acceptable. What's NOT acceptable is that production
-		// code treats this ambiguous result as authoritative.
-	default:
-		t.Fatalf("expected one of the colliding DBInstance GVRs, got %v", gvr)
-	}
-	if !namespaced {
-		t.Fatalf("expected colliding DBInstance match to be namespaced, got namespaced=%v for %v", namespaced, gvr)
-	}
-	if gvr.Resource != "dbinstances" {
-		t.Fatalf("expected plural resource 'dbinstances', got %q", gvr.Resource)
-	}
-	t.Logf("first-match characterization: caller asked for bare kind 'DBInstance' and got %v — this is the ambiguity the fix eliminates for callers that pass a full GVK", gvr)
-}
+// TestGetGVRForDependenciesCollidingDBInstanceReturnsArbitraryMatch
+// (removed) used to characterize the first-match-wins behavior of the
+// legacy getGVRForDependencies resolver. That resolver was deleted as
+// part of the kind-only-objects fix — every production caller now
+// routes through common.ResolveGVRForGVK (strict) or
+// common.DiscoverGVRByKind (explicitly documented as non-deterministic
+// for colliding kinds, used only as a partial-discovery safety net in
+// the mutation path). The GVK-aware disambiguation is covered by
+// TestGetGVRForGVKDisambiguatesCollidingDBInstanceCRDs above.
 
 // TestGetObjectYAMLByGVKDisambiguatesCollidingDBInstances is the RED test
 // that drives step 3 of the kind-only-objects fix. It exercises the

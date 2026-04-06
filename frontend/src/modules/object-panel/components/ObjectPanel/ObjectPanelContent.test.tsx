@@ -161,6 +161,8 @@ describe('ObjectPanelContent', () => {
     },
     capabilityReasons: {},
     detailScope: 'team-a:deployment:api',
+    eventsScope: 'team-a:Deployment:api',
+    logScope: 'team-a:deployment:api',
     helmScope: 'team-a:api',
     objectData: { kind: 'Deployment', name: 'api', namespace: 'team-a' },
     objectKind: 'deployment',

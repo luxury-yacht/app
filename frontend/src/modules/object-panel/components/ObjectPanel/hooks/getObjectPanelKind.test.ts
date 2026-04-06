@@ -79,4 +79,66 @@ describe('getObjectPanelKind', () => {
 
     expect(result.detailScope).toBe('team-a:/v1:pod:api');
   });
+
+  it('builds eventsScope from the original-case kind so a single source of truth feeds both consumers', () => {
+    // The events refresh-domain producer expects the kind in its
+    // original case (matches how the backend events fetcher keys its
+    // dispatch). detailScope uses the lowercased form. ObjectPanelContent
+    // and EventsTab both consume eventsScope and MUST agree on the same
+    // string — keep the computation in one place.
+    const result = getObjectPanelKind({
+      kind: 'Deployment',
+      name: 'api',
+      namespace: 'team-a',
+      clusterId: 'cluster-1',
+    });
+
+    // detailScope is lowercase; eventsScope keeps the original case.
+    expect(result.detailScope).toBe('cluster-1|team-a:deployment:api');
+    expect(result.eventsScope).toBe('cluster-1|team-a:Deployment:api');
+  });
+
+  it('threads group/version into eventsScope when PanelObjectData carries them', () => {
+    const result = getObjectPanelKind({
+      kind: 'DBInstance',
+      name: 'orders',
+      namespace: 'team-a',
+      group: 'documentdb.services.k8s.aws',
+      version: 'v1alpha1',
+      clusterId: 'cluster-1',
+    });
+
+    expect(result.eventsScope).toBe(
+      'cluster-1|team-a:documentdb.services.k8s.aws/v1alpha1:DBInstance:orders'
+    );
+  });
+
+  it('returns null eventsScope when objectData is incomplete', () => {
+    expect(getObjectPanelKind(null).eventsScope).toBeNull();
+    expect(getObjectPanelKind({ kind: 'Pod' }).eventsScope).toBeNull();
+    expect(getObjectPanelKind({ name: 'api' }).eventsScope).toBeNull();
+  });
+
+  it('builds logScope using the lowercased kind so ObjectPanelContent and LogViewer agree', () => {
+    // logScope is consumed by ObjectPanelContent (full-cleanup lifecycle
+    // when the panel closes) AND by LogViewer (the actual streaming
+    // start/stop). The two consumers used to compute their own scope
+    // strings independently — same drift bug as eventsScope. The log
+    // domain producer expects the lowercased kind (matches LogViewer's
+    // historical convention), distinct from eventsScope's original case.
+    const result = getObjectPanelKind({
+      kind: 'Deployment',
+      name: 'api',
+      namespace: 'team-a',
+      clusterId: 'cluster-1',
+    });
+
+    expect(result.logScope).toBe('cluster-1|team-a:deployment:api');
+  });
+
+  it('returns null logScope when objectData is incomplete', () => {
+    expect(getObjectPanelKind(null).logScope).toBeNull();
+    expect(getObjectPanelKind({ kind: 'Pod' }).logScope).toBeNull();
+    expect(getObjectPanelKind({ name: 'api' }).logScope).toBeNull();
+  });
 });

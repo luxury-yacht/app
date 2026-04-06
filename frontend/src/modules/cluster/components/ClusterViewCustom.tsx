@@ -6,7 +6,7 @@
  */
 
 import './ClusterViewCustom.css';
-import { DeleteResource } from '@wailsjs/go/backend/App';
+import { DeleteResourceByGVK } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
 import { getPermissionKey, queryKindPermissions, useUserPermissions } from '@/core/capabilities';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
@@ -202,20 +202,33 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
     // Handle delete confirmation
     const handleDeleteConfirm = useCallback(async () => {
       if (!deleteConfirm.resource) return;
+      const resource = deleteConfirm.resource;
 
       try {
-        const clusterId = deleteConfirm.resource.clusterId ?? selectedClusterId ?? '';
-        await DeleteResource(
-          clusterId,
-          deleteConfirm.resource.kind,
-          '',
-          deleteConfirm.resource.name
-        );
+        // Multi-cluster rule (AGENTS.md): every backend command must
+        // carry a resolved clusterId.
+        const clusterId = resource.clusterId ?? selectedClusterId ?? null;
+        if (!clusterId) {
+          throw new Error(`Cannot delete ${resource.kind}/${resource.name}: clusterId is missing`);
+        }
+        // ClusterCustomData always carries apiGroup/apiVersion from the
+        // catalog. A missing apiVersion here means the upstream data source
+        // dropped it — fail loud rather than fall back to the retired
+        // kind-only resolver. See docs/plans/kind-only-objects.md.
+        if (!resource.apiVersion) {
+          throw new Error(
+            `Cannot delete ${resource.kind}/${resource.name}: apiVersion missing on custom resource row`
+          );
+        }
+        const apiVersion = resource.apiGroup
+          ? `${resource.apiGroup}/${resource.apiVersion}`
+          : resource.apiVersion;
+        await DeleteResourceByGVK(clusterId, apiVersion, resource.kind, '', resource.name);
       } catch (err) {
         errorHandler.handle(err, {
           action: 'delete',
-          kind: deleteConfirm.resource.kind,
-          name: deleteConfirm.resource.name,
+          kind: resource.kind,
+          name: resource.name,
         });
       } finally {
         setDeleteConfirm({ show: false, resource: null });

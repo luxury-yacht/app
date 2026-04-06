@@ -4,7 +4,6 @@ import (
 	"context"
 	"strings"
 	"testing"
-	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
@@ -18,9 +17,7 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextensionsfake "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	dynamicfake "k8s.io/client-go/dynamic/fake"
 	"k8s.io/client-go/kubernetes/fake"
 
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
@@ -268,56 +265,38 @@ func TestObjectDetailProviderCoversAdditionalKinds(t *testing.T) {
 	}
 }
 
-func TestObjectDetailProviderFetchObjectYAML(t *testing.T) {
-	scheme := runtime.NewScheme()
-	if err := corev1.AddToScheme(scheme); err != nil {
-		t.Fatalf("failed to add corev1 scheme: %v", err)
-	}
-	cm := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{Name: "cm", Namespace: "default"},
-	}
-
+// TestObjectDetailProviderFetchObjectYAMLRejectsKindOnly proves the legacy
+// kind-only fallback is no longer reachable. The frontend scope-string
+// producers now emit the GVK form (group/version embedded), so a caller
+// reaching FetchObjectYAML with an empty Version is a programming bug
+// rather than an old cache entry — fail loud instead of silently
+// resolving to whichever colliding CRD discovery returns first.
+func TestObjectDetailProviderFetchObjectYAMLRejectsKindOnly(t *testing.T) {
 	app := NewApp()
 	app.Ctx = context.Background()
 	app.logger = NewLogger(10)
-	// Per-cluster clients are stored in clusterClients, not in global fields.
-	fakeClient := fake.NewClientset(cm)
-	dynamicClient := dynamicfake.NewSimpleDynamicClient(scheme, cm)
+
 	clusterID := "config:ctx"
 	app.clusterClients = map[string]*clusterClients{
 		clusterID: {
 			meta:              ClusterMeta{ID: clusterID, Name: "ctx"},
 			kubeconfigPath:    "/path",
 			kubeconfigContext: "ctx",
-			client:            fakeClient,
-			dynamicClient:     dynamicClient,
 		},
 	}
-
-	gvrCacheMutex.Lock()
-	gvrCache = map[string]gvrCacheEntry{
-		gvrCacheKey(clusterID, "ConfigMap"): {
-			gvr:        schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"},
-			namespaced: true,
-			cachedAt:   time.Now(),
-		},
-	}
-	gvrCacheMutex.Unlock()
 
 	provider := app.objectDetailProvider().(*objectDetailProvider)
 	ctx := snapshot.WithClusterMeta(context.Background(), snapshot.ClusterMeta{
 		ClusterID:   clusterID,
 		ClusterName: "ctx",
 	})
-	// Legacy kind-only path: empty group/version is the backwards-compatible
-	// signal that the caller does not know the full GVK and wants the
-	// existing kind-only resolver.
-	yamlStr, err := provider.FetchObjectYAML(ctx, schema.GroupVersionKind{Kind: "ConfigMap"}, "default", "cm")
-	if err != nil {
-		t.Fatalf("FetchObjectYAML returned error: %v", err)
+
+	_, err := provider.FetchObjectYAML(ctx, schema.GroupVersionKind{Kind: "ConfigMap"}, "default", "cm")
+	if err == nil {
+		t.Fatalf("expected FetchObjectYAML to reject kind-only GVK")
 	}
-	if !strings.Contains(yamlStr, "name: cm") {
-		t.Fatalf("expected YAML output to contain object name, got %q", yamlStr)
+	if !strings.Contains(err.Error(), "apiVersion") {
+		t.Fatalf("error should mention apiVersion requirement, got: %v", err)
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"github.com/luxury-yacht/app/backend/capabilities"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	authorizationv1 "k8s.io/api/authorization/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 // EvaluateCapabilities returns capability information for the supplied checks.
@@ -36,6 +37,8 @@ func (a *App) EvaluateCapabilities(checks []capabilities.CheckRequest) ([]capabi
 		base := capabilities.CheckResult{
 			ID:           strings.TrimSpace(check.ID),
 			ClusterID:    strings.TrimSpace(check.ClusterID),
+			Group:        strings.TrimSpace(check.Group),
+			Version:      strings.TrimSpace(check.Version),
 			Verb:         strings.ToLower(strings.TrimSpace(check.Verb)),
 			ResourceKind: strings.TrimSpace(check.ResourceKind),
 			Namespace:    strings.TrimSpace(check.Namespace),
@@ -78,7 +81,24 @@ func (a *App) EvaluateCapabilities(checks []capabilities.CheckRequest) ([]capabi
 			continue
 		}
 
-		gvr, _, err := getGVRForDependencies(batch.deps, batch.selectionKey, base.ResourceKind)
+		// Every frontend caller populates group/version via the descriptor
+		// (built-ins via resolveBuiltinGroupVersion, custom resources via
+		// the catalog data source). A missing Version here is a
+		// programming bug — fail loud rather than fall back to the
+		// retired kind-only resolver. See docs/plans/kind-only-objects.md.
+		if base.Version == "" {
+			base.Error = fmt.Sprintf(
+				"capability check for kind %q requires apiVersion (group+version); kind-only resolution was retired",
+				base.ResourceKind,
+			)
+			results = append(results, base)
+			continue
+		}
+		gvr, _, err := common.ResolveGVRForGVK(batch.deps.Context, batch.deps, schema.GroupVersionKind{
+			Group:   base.Group,
+			Version: base.Version,
+			Kind:    base.ResourceKind,
+		})
 		if err != nil {
 			base.Error = fmt.Sprintf("failed to resolve resource kind %s: %v", base.ResourceKind, err)
 			results = append(results, base)

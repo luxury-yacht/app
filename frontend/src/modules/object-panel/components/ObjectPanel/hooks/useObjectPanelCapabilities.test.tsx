@@ -54,11 +54,6 @@ describe('useObjectPanelCapabilities', () => {
     suspend: false,
   };
 
-  const workloadKindApiNames = {
-    deployment: 'Deployment',
-    daemonset: 'DaemonSet',
-  };
-
   beforeAll(() => {
     (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
   });
@@ -110,7 +105,6 @@ describe('useObjectPanelCapabilities', () => {
       objectKind: 'deployment',
       detailScope: 'team-a:deployment:api',
       featureSupport: baseFeatureSupport,
-      workloadKindApiNames,
     });
 
     expect(mockUseCapabilities).toHaveBeenCalledTimes(1);
@@ -137,7 +131,6 @@ describe('useObjectPanelCapabilities', () => {
       objectKind: 'deployment',
       detailScope: 'team-a:deployment:api',
       featureSupport: baseFeatureSupport,
-      workloadKindApiNames,
     });
 
     expect(result.capabilities.hasLogs).toBe(false);
@@ -166,7 +159,6 @@ describe('useObjectPanelCapabilities', () => {
         trigger: false,
         suspend: false,
       },
-      workloadKindApiNames,
     });
 
     expect(result.capabilities).toEqual({
@@ -206,7 +198,6 @@ describe('useObjectPanelCapabilities', () => {
       objectKind: 'pod',
       detailScope: 'team-a:pod:api-123',
       featureSupport: { ...baseFeatureSupport, shell: true },
-      workloadKindApiNames,
     });
 
     expect(result.capabilities.hasShell).toBe(true);
@@ -235,7 +226,6 @@ describe('useObjectPanelCapabilities', () => {
       objectKind: 'pod',
       detailScope: 'team-a:pod:api-123',
       featureSupport: { ...baseFeatureSupport, shell: true },
-      workloadKindApiNames,
     });
 
     expect(result.capabilities.hasShell).toBe(true);
@@ -270,7 +260,6 @@ describe('useObjectPanelCapabilities', () => {
       objectKind: 'pod',
       detailScope: 'team-a:pod:api-123',
       featureSupport: { ...baseFeatureSupport, shell: true },
-      workloadKindApiNames,
     });
 
     expect(result.capabilities.hasShell).toBe(false);
@@ -299,7 +288,6 @@ describe('useObjectPanelCapabilities', () => {
       objectKind: 'pod',
       detailScope: 'team-a:pod:demo',
       featureSupport: { ...baseFeatureSupport, shell: true, debug: true },
-      workloadKindApiNames,
     });
 
     expect(result.capabilityStates.debug.allowed).toBe(false);
@@ -321,7 +309,6 @@ describe('useObjectPanelCapabilities', () => {
       objectKind: 'pod',
       detailScope: 'team-a:pod:demo',
       featureSupport: { ...baseFeatureSupport, shell: true, debug: true },
-      workloadKindApiNames,
     });
 
     expect(result.capabilityStates.debug.allowed).toBe(true);
@@ -350,7 +337,6 @@ describe('useObjectPanelCapabilities', () => {
       objectKind: 'pod',
       detailScope: 'team-a:pod:demo',
       featureSupport: { ...baseFeatureSupport, shell: true, debug: true },
-      workloadKindApiNames,
     });
 
     expect(result.capabilityStates.debug.allowed).toBe(true);

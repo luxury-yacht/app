@@ -34,18 +34,19 @@ type ObjectEventsBuilder struct {
 // ObjectEventSummary captures the fields the frontend needs for object events.
 type ObjectEventSummary struct {
 	ClusterMeta
-	Kind                    string    `json:"kind"`
-	EventType               string    `json:"eventType"`
-	Reason                  string    `json:"reason"`
-	Message                 string    `json:"message"`
-	Count                   int32     `json:"count"`
-	FirstTimestamp          time.Time `json:"firstTimestamp"`
-	LastTimestamp           time.Time `json:"lastTimestamp"`
-	Source                  string    `json:"source"`
-	InvolvedObjectName      string    `json:"involvedObjectName"`
-	InvolvedObjectKind      string    `json:"involvedObjectKind"`
-	InvolvedObjectNamespace string    `json:"involvedObjectNamespace"`
-	Namespace               string    `json:"namespace"`
+	Kind                     string    `json:"kind"`
+	EventType                string    `json:"eventType"`
+	Reason                   string    `json:"reason"`
+	Message                  string    `json:"message"`
+	Count                    int32     `json:"count"`
+	FirstTimestamp           time.Time `json:"firstTimestamp"`
+	LastTimestamp            time.Time `json:"lastTimestamp"`
+	Source                   string    `json:"source"`
+	InvolvedObjectName       string    `json:"involvedObjectName"`
+	InvolvedObjectKind       string    `json:"involvedObjectKind"`
+	InvolvedObjectNamespace  string    `json:"involvedObjectNamespace"`
+	InvolvedObjectAPIVersion string    `json:"involvedObjectApiVersion"`
+	Namespace                string    `json:"namespace"`
 }
 
 // ObjectEventsSnapshotPayload contains the events list for the object.
@@ -294,19 +295,20 @@ func convertObjectEvent(meta ClusterMeta, evt corev1.Event) ObjectEventSummary {
 	source := formatObjectEventSource(evt)
 
 	return ObjectEventSummary{
-		ClusterMeta:             meta,
-		Kind:                    "event",
-		EventType:               evt.Type,
-		Reason:                  evt.Reason,
-		Message:                 evt.Message,
-		Count:                   evt.Count,
-		FirstTimestamp:          first,
-		LastTimestamp:           last,
-		Source:                  source,
-		InvolvedObjectName:      evt.InvolvedObject.Name,
-		InvolvedObjectKind:      evt.InvolvedObject.Kind,
-		InvolvedObjectNamespace: evt.InvolvedObject.Namespace,
-		Namespace:               evt.Namespace,
+		ClusterMeta:              meta,
+		Kind:                     "event",
+		EventType:                evt.Type,
+		Reason:                   evt.Reason,
+		Message:                  evt.Message,
+		Count:                    evt.Count,
+		FirstTimestamp:           first,
+		LastTimestamp:            last,
+		Source:                   source,
+		InvolvedObjectName:       evt.InvolvedObject.Name,
+		InvolvedObjectKind:       evt.InvolvedObject.Kind,
+		InvolvedObjectNamespace:  evt.InvolvedObject.Namespace,
+		InvolvedObjectAPIVersion: evt.InvolvedObject.APIVersion,
+		Namespace:                evt.Namespace,
 	}
 }
 

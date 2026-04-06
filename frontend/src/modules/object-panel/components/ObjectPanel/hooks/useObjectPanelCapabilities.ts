@@ -25,7 +25,6 @@ interface UseObjectPanelCapabilitiesOptions {
   objectKind: string | null;
   detailScope: string | null;
   featureSupport: FeatureSupport;
-  workloadKindApiNames: Record<string, string>;
 }
 
 export interface ObjectPanelCapabilitiesResult {
@@ -56,8 +55,7 @@ const createDefaultCapabilityStates = (): CapabilityStates => ({
 const computeCapabilityDescriptors = (
   objectData: PanelObjectData | null,
   objectKind: string | null,
-  featureSupport: FeatureSupport,
-  workloadKindApiNames: Record<string, string>
+  featureSupport: FeatureSupport
 ) => {
   if (!objectData || !objectKind) {
     return {
@@ -149,14 +147,19 @@ const computeCapabilityDescriptors = (
   }
 
   if (featureSupport.restart) {
-    const restartResourceKind = workloadKindApiNames[objectKind] ?? resourceKind;
+    // resourceKind is the original-case Kind from PanelObjectData (e.g.
+    // "Deployment"). The previous fallback through WORKLOAD_KIND_API_NAMES
+    // existed only as a casing safety net for callers that supplied
+    // lowercase kinds; that map is retired now that every entry point
+    // threads PascalCase kinds via the data source. See
+    // docs/plans/kind-only-objects.md item 10.
     add(
       {
         id: 'restart',
         verb: 'patch',
         group: objectGroup,
         version: objectVersion,
-        resourceKind: restartResourceKind,
+        resourceKind,
         namespace,
         name: resourceName,
       },
@@ -297,12 +300,10 @@ export const useObjectPanelCapabilities = ({
   objectKind,
   detailScope,
   featureSupport,
-  workloadKindApiNames,
 }: UseObjectPanelCapabilitiesOptions): ObjectPanelCapabilitiesResult => {
   const capabilityDescriptorInfo = useMemo(
-    () =>
-      computeCapabilityDescriptors(objectData, objectKind, featureSupport, workloadKindApiNames),
-    [featureSupport, objectData, objectKind, workloadKindApiNames]
+    () => computeCapabilityDescriptors(objectData, objectKind, featureSupport),
+    [featureSupport, objectData, objectKind]
   );
 
   const capabilityRefreshKey = useMemo(() => {

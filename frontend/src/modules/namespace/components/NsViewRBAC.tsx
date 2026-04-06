@@ -23,9 +23,12 @@ import GridTable, {
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
-import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
+import {
+  formatBuiltinApiVersion,
+  resolveBuiltinGroupVersion,
+} from '@shared/constants/builtinGroupVersions';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
-import { DeleteResource } from '@wailsjs/go/backend/App';
+import { DeleteResourceByGVK } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
 import { getPermissionKey, useUserPermissions } from '@/core/capabilities';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
@@ -216,20 +219,36 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
 
     const handleDeleteConfirm = useCallback(async () => {
       if (!deleteConfirm.resource) return;
+      const resource = deleteConfirm.resource;
 
       try {
-        await DeleteResource(
-          deleteConfirm.resource.clusterId ?? '',
-          deleteConfirm.resource.kind,
-          deleteConfirm.resource.namespace,
-          deleteConfirm.resource.name
+        // Multi-cluster rule (AGENTS.md): every backend command must
+        // carry a resolved clusterId.
+        if (!resource.clusterId) {
+          throw new Error(`Cannot delete ${resource.kind}/${resource.name}: clusterId is missing`);
+        }
+        // Built-in RBAC kinds (Role/RoleBinding/ServiceAccount) resolve via
+        // the lookup table. A miss means a non-built-in kind slipped into
+        // this view — fail loud. See docs/plans/kind-only-objects.md.
+        const apiVersion = formatBuiltinApiVersion(resource.kind);
+        if (!apiVersion) {
+          throw new Error(
+            `Cannot delete ${resource.kind}/${resource.name}: not a known built-in kind`
+          );
+        }
+        await DeleteResourceByGVK(
+          resource.clusterId,
+          apiVersion,
+          resource.kind,
+          resource.namespace,
+          resource.name
         );
         setDeleteConfirm({ show: false, resource: null });
       } catch (error) {
         errorHandler.handle(error, {
           action: 'delete',
-          kind: deleteConfirm.resource.kind,
-          name: deleteConfirm.resource.name,
+          kind: resource.kind,
+          name: resource.name,
         });
         setDeleteConfirm({ show: false, resource: null });
       }

@@ -391,6 +391,11 @@ export interface ObjectEventSummary extends ClusterMeta {
   involvedObjectName: string;
   involvedObjectKind: string;
   involvedObjectNamespace?: string;
+  // apiVersion of the event's involvedObject (e.g. "apps/v1", "v1",
+  // "documentdb.services.k8s.aws/v1alpha1"). Required for GVK
+  // disambiguation when opening the related object — see
+  // docs/plans/kind-only-objects.md.
+  involvedObjectApiVersion?: string;
   namespace: string;
 }
 
