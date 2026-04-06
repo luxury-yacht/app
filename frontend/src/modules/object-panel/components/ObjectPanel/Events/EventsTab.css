@@ -28,16 +28,6 @@
   color: var(--color-error);
 }
 
-/* Event type badges */
-.event-type {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: var(--font-size-small);
-  font-weight: 500;
-  text-transform: uppercase;
-}
-
 /* Event message */
 .event-message {
   display: block;

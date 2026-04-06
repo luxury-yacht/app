@@ -471,7 +471,7 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
   min-height: auto;
 }
 
-/* Dark backdrop for the entire container */
+/* Theme-aware backdrop for the entire container */
 .gridtable-container.is-loading::after {
   content: "";
   position: absolute;
@@ -479,7 +479,7 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(0, 0, 0, 0.6);
+  background-color: var(--grid-loading-overlay-bg);
   border-radius: 4px;
   z-index: var(--z-index-grid-loading-overlay);
   pointer-events: none;
@@ -577,29 +577,6 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
 .gridtable-link:hover {
   color: var(--color-primary);
   text-decoration: underline;
-}
-
-/* ============================================
-   Event Type Badges (from NsViewEvents.css)
-   ============================================ */
-
-.event-type {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 3px;
-  font-size: 0.875rem;
-  font-weight: 500;
-  text-align: center;
-}
-
-/* ============================================
-   Object Reference (from NsViewEvents.css)
-   ============================================ */
-
-.object-ref {
-  color: var(--text-secondary, #6c757d);
-  font-family: monospace;
-  font-size: 0.9rem;
 }
 
 /* ============================================

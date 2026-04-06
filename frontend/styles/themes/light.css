@@ -260,6 +260,7 @@
 
   /* Modal overlays */
   --modal-overlay-bg: rgba(15, 23, 42, 0.4);
+  --grid-loading-overlay-bg: rgba(15, 23, 42, 0.15);
   --modal-container-shadow:
     0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.08),
     0 0 0 1px rgba(0, 0, 0, 0.03);

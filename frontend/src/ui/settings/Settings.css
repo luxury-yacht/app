@@ -124,12 +124,8 @@
 
 .object-panel-defaults .opd-warning {
   font-size: var(--font-size-small);
-  color: #92600a;
+  color: var(--status-warning-text);
   padding-top: var(--spacing-sm);
-}
-
-[data-theme="dark"] .object-panel-defaults .opd-warning {
-  color: var(--color-warning, #f59e0b);
 }
 
 .object-panel-defaults .opd-warning p {
