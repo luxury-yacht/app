@@ -66,7 +66,12 @@ const Overview: React.FC<OverviewProps> = (props) => {
     return overviewRegistry.renderComponent(props);
   };
 
-  // Build object data for ActionsMenu
+  // Build object data for ActionsMenu. Group/version come from the panel's
+  // objectData (the source of truth) so CRD permission lookups in
+  // useObjectActions key off the same GVK as the spec-emit side; without
+  // them the Delete action silently disappears for CRDs.
+  const objectGroup = objectData?.group ?? undefined;
+  const objectVersion = objectData?.version ?? undefined;
   const actionObject: ObjectActionData | null = useMemo(
     () => ({
       kind: props.kind,
@@ -74,9 +79,21 @@ const Overview: React.FC<OverviewProps> = (props) => {
       namespace: props.namespace,
       clusterId,
       clusterName,
+      group: objectGroup ?? undefined,
+      version: objectVersion ?? undefined,
       status: props.suspend ? 'Suspended' : props.status,
     }),
-    [props.kind, props.name, props.namespace, props.suspend, props.status, clusterId, clusterName]
+    [
+      props.kind,
+      props.name,
+      props.namespace,
+      props.suspend,
+      props.status,
+      clusterId,
+      clusterName,
+      objectGroup,
+      objectVersion,
+    ]
   );
 
   return (

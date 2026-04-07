@@ -13,7 +13,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ActionsMenu } from './ActionsMenu';
 import type { ObjectActionData } from '@shared/hooks/useObjectActions';
 
-// Mock the capabilities hook to control permissions in tests
+// Spy-backed permission mock so tests can assert that getPermissionKey is
+// called with the full GVK (regression: PR #139 made the backend reject
+// queries without apiVersion, and CRD lookups in useObjectActions silently
+// missed the permission map when group/version weren't threaded through).
+const getPermissionKeySpy = vi.fn(
+  (
+    kind: string,
+    verb: string,
+    namespace?: string | null,
+    subresource?: string | null,
+    _clusterId?: string | null,
+    group?: string | null,
+    version?: string | null
+  ) => `${group ?? ''}/${version ?? ''}|${kind}:${verb}:${namespace ?? ''}:${subresource ?? ''}`
+);
+
 vi.mock('@/core/capabilities', () => ({
   useUserPermissions: () => {
     // Return a map that grants all permissions by default
@@ -21,8 +36,8 @@ vi.mock('@/core/capabilities', () => ({
     map.get = () => ({ allowed: true, pending: false });
     return map;
   },
-  getPermissionKey: (kind: string, verb: string, namespace?: string, subresource?: string) =>
-    `${kind}:${verb}:${namespace || ''}:${subresource || ''}`,
+  getPermissionKey: (...args: Parameters<typeof getPermissionKeySpy>) =>
+    getPermissionKeySpy(...args),
 }));
 
 // Mock keyboard shortcuts for ConfirmationModal
@@ -66,6 +81,7 @@ describe('ActionsMenu', () => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
+    getPermissionKeySpy.mockClear();
   });
 
   afterEach(() => {
@@ -78,6 +94,41 @@ describe('ActionsMenu', () => {
   it('does not render when object is null', async () => {
     await renderMenu({ object: null });
     expect(container.innerHTML).toBe('');
+  });
+
+  it('threads group/version into the delete permission lookup for CRDs', async () => {
+    // Regression: PR #139 made permission keys include group/version. CRD
+    // kinds aren't in the auto-resolve table, so the hook MUST forward
+    // group/version on the descriptor or the lookup key won't match the
+    // spec-emit key from queryKindPermissions and the Delete menu item
+    // silently disappears for CRDs.
+    await renderMenu({
+      object: makeObject('DBInstance', {
+        group: 'rds.services.k8s.aws',
+        version: 'v1alpha1',
+      }),
+      onDelete: vi.fn(),
+    });
+
+    const deleteCalls = getPermissionKeySpy.mock.calls.filter(
+      (call) => call[0] === 'DBInstance' && call[1] === 'delete'
+    );
+    expect(deleteCalls.length).toBeGreaterThan(0);
+    for (const call of deleteCalls) {
+      // 6th and 7th positional args are group and version.
+      expect(call[5]).toBe('rds.services.k8s.aws');
+      expect(call[6]).toBe('v1alpha1');
+    }
+
+    // Sanity check: the Pod portforward lookup is hardcoded to core/v1
+    // regardless of the surrounding object's GVK.
+    const portForwardCalls = getPermissionKeySpy.mock.calls.filter(
+      (call) => call[0] === 'Pod' && call[3] === 'portforward'
+    );
+    for (const call of portForwardCalls) {
+      expect(call[5]).toBe('');
+      expect(call[6]).toBe('v1');
+    }
   });
 
   it('shows restart and delete actions for Deployment and invokes handlers', async () => {
