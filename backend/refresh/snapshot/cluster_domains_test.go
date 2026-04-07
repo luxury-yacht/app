@@ -186,5 +186,92 @@ func TestClusterCRDBuilder(t *testing.T) {
 	require.Equal(t, crd.Spec.Group, entry.Group)
 	require.Equal(t, string(crd.Spec.Scope), entry.Scope)
 	require.Contains(t, entry.Details, "v1*")
+	// Multi-version CRD: v1 is the storage version, v1alpha1 and v1beta1
+	// are additional served versions. Frontend renders this as "v1 (+2)".
+	require.Equal(t, "v1", entry.StorageVersion)
+	require.Equal(t, 2, entry.ExtraServedVersionCount)
 	require.NotEmpty(t, entry.Age)
+}
+
+// TestCRDVersionSummary covers the storage-version + extra-served-count
+// helper that drives the Version column in the CRDs view.
+func TestCRDVersionSummary(t *testing.T) {
+	makeCRD := func(versions ...apiextensionsv1.CustomResourceDefinitionVersion) *apiextensionsv1.CustomResourceDefinition {
+		return &apiextensionsv1.CustomResourceDefinition{
+			Spec: apiextensionsv1.CustomResourceDefinitionSpec{Versions: versions},
+		}
+	}
+
+	t.Run("nil CRD returns zero values", func(t *testing.T) {
+		storage, extra := crdVersionSummary(nil)
+		require.Equal(t, "", storage)
+		require.Equal(t, 0, extra)
+	})
+
+	t.Run("empty versions returns zero values", func(t *testing.T) {
+		storage, extra := crdVersionSummary(makeCRD())
+		require.Equal(t, "", storage)
+		require.Equal(t, 0, extra)
+	})
+
+	t.Run("single served+storage version returns version with no extras", func(t *testing.T) {
+		storage, extra := crdVersionSummary(makeCRD(
+			apiextensionsv1.CustomResourceDefinitionVersion{Name: "v1", Served: true, Storage: true},
+		))
+		require.Equal(t, "v1", storage)
+		require.Equal(t, 0, extra)
+	})
+
+	t.Run("multi-version with v1 as storage counts the other served versions", func(t *testing.T) {
+		// Mirrors the cert-manager-style historical setup where multiple
+		// alpha/beta versions are served alongside the stable storage version.
+		storage, extra := crdVersionSummary(makeCRD(
+			apiextensionsv1.CustomResourceDefinitionVersion{Name: "v1alpha1", Served: true, Storage: false},
+			apiextensionsv1.CustomResourceDefinitionVersion{Name: "v1beta1", Served: true, Storage: false},
+			apiextensionsv1.CustomResourceDefinitionVersion{Name: "v1", Served: true, Storage: true},
+		))
+		require.Equal(t, "v1", storage)
+		require.Equal(t, 2, extra)
+	})
+
+	t.Run("storage version not served counts all served as extras", func(t *testing.T) {
+		// Rare/transient: storage version is being deprecated and is no
+		// longer served, but still where data is persisted.
+		storage, extra := crdVersionSummary(makeCRD(
+			apiextensionsv1.CustomResourceDefinitionVersion{Name: "v1alpha1", Served: false, Storage: true},
+			apiextensionsv1.CustomResourceDefinitionVersion{Name: "v1", Served: true, Storage: false},
+		))
+		require.Equal(t, "v1alpha1", storage)
+		require.Equal(t, 1, extra)
+	})
+
+	t.Run("non-served versions are ignored in the extras count", func(t *testing.T) {
+		storage, extra := crdVersionSummary(makeCRD(
+			apiextensionsv1.CustomResourceDefinitionVersion{Name: "v1", Served: true, Storage: true},
+			apiextensionsv1.CustomResourceDefinitionVersion{Name: "v1alpha1", Served: false, Storage: false},
+		))
+		require.Equal(t, "v1", storage)
+		require.Equal(t, 0, extra, "served=false versions must not contribute to the extra count")
+	})
+
+	t.Run("falls back to first served version when no storage flag", func(t *testing.T) {
+		// Defensive: malformed CRD with no Storage flag at all.
+		storage, extra := crdVersionSummary(makeCRD(
+			apiextensionsv1.CustomResourceDefinitionVersion{Name: "v1alpha1", Served: false, Storage: false},
+			apiextensionsv1.CustomResourceDefinitionVersion{Name: "v1beta1", Served: true, Storage: false},
+			apiextensionsv1.CustomResourceDefinitionVersion{Name: "v1", Served: true, Storage: false},
+		))
+		require.Equal(t, "v1beta1", storage, "fall back to first served version")
+		require.Equal(t, 1, extra, "v1 is also served but is not the chosen storage version")
+	})
+
+	t.Run("falls back to first version when nothing is served", func(t *testing.T) {
+		// Pathological: nothing served, no storage flag. Show something
+		// rather than blank.
+		storage, extra := crdVersionSummary(makeCRD(
+			apiextensionsv1.CustomResourceDefinitionVersion{Name: "v1alpha1", Served: false, Storage: false},
+		))
+		require.Equal(t, "v1alpha1", storage)
+		require.Equal(t, 0, extra)
+	})
 }

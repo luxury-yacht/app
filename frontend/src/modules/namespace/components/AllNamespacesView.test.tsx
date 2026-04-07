@@ -146,6 +146,7 @@ describe('AllNamespacesView', () => {
   it('renders pods view using namespace resources provider with metrics', async () => {
     const samplePods = [
       {
+        clusterId: 'test-cluster',
         name: 'api-123',
         namespace: 'team-a',
         status: 'Running',

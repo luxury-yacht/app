@@ -40,21 +40,25 @@ type PodSnapshot struct {
 // PodSummary captures essential pod information for UI tables.
 type PodSummary struct {
 	ClusterMeta
-	Name       string `json:"name"`
-	Namespace  string `json:"namespace"`
-	Node       string `json:"node"`
-	Status     string `json:"status"`
-	Ready      string `json:"ready"`
-	Restarts   int32  `json:"restarts"`
-	Age        string `json:"age"`
-	OwnerKind  string `json:"ownerKind"`
-	OwnerName  string `json:"ownerName"`
-	CPURequest string `json:"cpuRequest"`
-	CPULimit   string `json:"cpuLimit"`
-	CPUUsage   string `json:"cpuUsage"`
-	MemRequest string `json:"memRequest"`
-	MemLimit   string `json:"memLimit"`
-	MemUsage   string `json:"memUsage"`
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
+	Node      string `json:"node"`
+	Status    string `json:"status"`
+	Ready     string `json:"ready"`
+	Restarts  int32  `json:"restarts"`
+	Age       string `json:"age"`
+	OwnerKind string `json:"ownerKind"`
+	OwnerName string `json:"ownerName"`
+	// OwnerAPIVersion is the wire-form apiVersion of the controlling owner
+	// (e.g. "apps/v1", "argoproj.io/v1alpha1"). Threaded so the panel can
+	// open CRD-as-Pod-owner targets correctly. See PodSimpleInfo.
+	OwnerAPIVersion string `json:"ownerApiVersion,omitempty"`
+	CPURequest      string `json:"cpuRequest"`
+	CPULimit        string `json:"cpuLimit"`
+	CPUUsage        string `json:"cpuUsage"`
+	MemRequest      string `json:"memRequest"`
+	MemLimit        string `json:"memLimit"`
+	MemUsage        string `json:"memUsage"`
 }
 
 // PodMetricsInfo mirrors metrics poller metadata for pods.
@@ -336,28 +340,29 @@ func buildPodSummary(
 ) PodSummary {
 	ready, total, restarts := podReadiness(pod)
 	status := derivePodStatus(pod)
-	ownerKind, ownerName := resolvePodOwner(pod, rsMap)
+	ownerKind, ownerName, ownerAPIVersion := resolvePodOwner(pod, rsMap)
 	cpuReq, cpuLim, memReq, memLim := computeResourceTotals(pod)
 	metricKey := fmt.Sprintf("%s/%s", pod.Namespace, pod.Name)
 	metricsUsage := usage[metricKey]
 
 	return PodSummary{
-		ClusterMeta: meta,
-		Name:       pod.Name,
-		Namespace:  pod.Namespace,
-		Node:       pod.Spec.NodeName,
-		Status:     status,
-		Ready:      fmt.Sprintf("%d/%d", ready, total),
-		Restarts:   restarts,
-		Age:        formatAge(pod.CreationTimestamp.Time),
-		OwnerKind:  ownerKind,
-		OwnerName:  ownerName,
-		CPURequest: formatCPUMilli(cpuReq),
-		CPULimit:   formatCPUMilli(cpuLim),
-		CPUUsage:   formatCPUMilli(metricsUsage.CPUUsageMilli),
-		MemRequest: formatMemoryBytes(memReq),
-		MemLimit:   formatMemoryBytes(memLim),
-		MemUsage:   formatMemoryBytes(metricsUsage.MemoryUsageBytes),
+		ClusterMeta:     meta,
+		Name:            pod.Name,
+		Namespace:       pod.Namespace,
+		Node:            pod.Spec.NodeName,
+		Status:          status,
+		Ready:           fmt.Sprintf("%d/%d", ready, total),
+		Restarts:        restarts,
+		Age:             formatAge(pod.CreationTimestamp.Time),
+		OwnerKind:       ownerKind,
+		OwnerName:       ownerName,
+		OwnerAPIVersion: ownerAPIVersion,
+		CPURequest:      formatCPUMilli(cpuReq),
+		CPULimit:        formatCPUMilli(cpuLim),
+		CPUUsage:        formatCPUMilli(metricsUsage.CPUUsageMilli),
+		MemRequest:      formatMemoryBytes(memReq),
+		MemLimit:        formatMemoryBytes(memLim),
+		MemUsage:        formatMemoryBytes(metricsUsage.MemoryUsageBytes),
 	}
 }
 
@@ -385,22 +390,28 @@ func derivePodStatus(pod *corev1.Pod) string {
 	return status
 }
 
-func resolvePodOwner(pod *corev1.Pod, rsMap map[string]string) (string, string) {
+// resolvePodOwner returns (kind, name, apiVersion) for the controlling
+// owner of a pod, collapsing ReplicaSets into their parent Deployment.
+// apiVersion is "apps/v1" for the ReplicaSet→Deployment collapse and
+// owner.APIVersion verbatim otherwise.
+func resolvePodOwner(pod *corev1.Pod, rsMap map[string]string) (string, string, string) {
 	for _, owner := range pod.OwnerReferences {
 		if owner.Controller == nil || !*owner.Controller {
 			continue
 		}
 		kind := owner.Kind
 		name := owner.Name
+		apiVersion := owner.APIVersion
 		if owner.Kind == "ReplicaSet" {
 			if deployment, ok := rsMap[owner.Name]; ok {
 				kind = "Deployment"
 				name = deployment
+				apiVersion = "apps/v1"
 			}
 		}
-		return kind, name
+		return kind, name, apiVersion
 	}
-	return "None", "None"
+	return "None", "None", ""
 }
 
 func parsePodResourceVersion(pod *corev1.Pod) uint64 {

@@ -32,8 +32,11 @@ export const getPermissionKey = (
   verb: string,
   namespace?: string | null,
   subresource?: string | null,
-  clusterId?: string | null
-): PermissionKey => storeGetPermissionKey(resourceKind, verb, namespace, subresource, clusterId);
+  clusterId?: string | null,
+  group?: string | null,
+  version?: string | null
+): PermissionKey =>
+  storeGetPermissionKey(resourceKind, verb, namespace, subresource, clusterId, group, version);
 
 export { subscribeUserPermissions, getUserPermissionMap };
 
@@ -45,10 +48,20 @@ export const useUserPermission = (
   verb: string,
   namespace?: string | null,
   subresource?: string | null,
-  clusterId?: string | null
+  clusterId?: string | null,
+  group?: string | null,
+  version?: string | null
 ): PermissionStatus | undefined => {
   const map = useUserPermissions();
-  const key = getPermissionKey(resourceKind, verb, namespace, subresource, clusterId);
+  const key = getPermissionKey(
+    resourceKind,
+    verb,
+    namespace,
+    subresource,
+    clusterId,
+    group,
+    version
+  );
   return map.get(key);
 };
 
@@ -57,9 +70,19 @@ export const getUserPermission = (
   verb: string,
   namespace?: string | null,
   subresource?: string | null,
-  clusterId?: string | null
+  clusterId?: string | null,
+  group?: string | null,
+  version?: string | null
 ): PermissionStatus | undefined => {
-  const key = getPermissionKey(resourceKind, verb, namespace, subresource, clusterId);
+  const key = getPermissionKey(
+    resourceKind,
+    verb,
+    namespace,
+    subresource,
+    clusterId,
+    group,
+    version
+  );
   return getUserPermissionMap().get(key);
 };
 

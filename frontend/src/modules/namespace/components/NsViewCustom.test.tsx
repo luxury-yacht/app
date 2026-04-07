@@ -22,7 +22,7 @@ const openWithObjectMock = vi.fn();
 const sortHandlerMock = vi.fn();
 const useTableSortMock = vi.fn();
 const useShortNamesMock = vi.fn();
-const deleteResourceMock = vi.fn();
+const deleteResourceByGVKMock = vi.fn();
 
 vi.mock('@core/contexts/FavoritesContext', () => ({
   useFavorites: () => ({
@@ -101,7 +101,7 @@ vi.mock('@/hooks/useShortNames', () => ({
 }));
 
 vi.mock('@wailsjs/go/backend/App', () => ({
-  DeleteResource: (...args: unknown[]) => deleteResourceMock(...args),
+  DeleteResourceByGVK: (...args: unknown[]) => deleteResourceByGVKMock(...args),
 }));
 
 vi.mock('@utils/errorHandler', () => ({
@@ -113,8 +113,12 @@ vi.mock('@/core/capabilities', () => ({
     new Map([
       ['CronJob:delete', { allowed: true, pending: false }],
       ['CustomResource:delete', { allowed: true, pending: false }],
+      ['DBInstance:delete', { allowed: true, pending: false }],
     ]),
   getPermissionKey: (kind: string, action: string) => `${kind}:${action}`,
+  // Stubbed for CRDs not covered by the static permission map; the real
+  // function lazy-loads delete permissions on first context-menu open.
+  queryKindPermissions: vi.fn(),
 }));
 
 const baseResource: CustomResourceData = {
@@ -136,7 +140,7 @@ describe('NsViewCustom', () => {
     gridTableMock.mockReset();
     openWithObjectMock.mockReset();
     sortHandlerMock.mockReset();
-    deleteResourceMock.mockReset();
+    deleteResourceByGVKMock.mockReset();
     modalProps.current = null;
     useTableSortMock.mockImplementation((data: CustomResourceData[]) => ({
       sortedData: data,
@@ -207,22 +211,87 @@ describe('NsViewCustom', () => {
         clusterId: 'alpha:ctx',
       })
     );
-
-    await act(async () => {
-      contextItems[2].onClick();
-      await Promise.resolve();
-    });
-    expect(modalProps.current?.isOpen).toBe(true);
-    expect(modalProps.current?.title).toContain('Delete CronJob');
   });
 
-  it('confirms deletion and calls DeleteResource with resolved data', async () => {
-    deleteResourceMock.mockResolvedValue(undefined);
+  // Regression test for the kind-only-objects bug. When the user clicks a custom
+  // resource whose Kind collides with another CRD from a different API
+  // group (e.g. DBInstance from rds.services.k8s.aws vs DBInstance from
+  // documentdb.services.k8s.aws), handleResourceClick MUST forward both
+  // apiGroup and apiVersion into openWithObject. Without them, the panel
+  // state has no group/version to emit in the refresh-domain scope, the
+  // backend falls back to first-match-wins kind-only GVR resolution, and
+  // the user sees the wrong DBInstance's YAML.
+  //
+  // Before the fix at NsViewCustom.tsx handleResourceClick, this test
+  // would have failed with:
+  //   Expected: objectContaining({ group: 'documentdb.services.k8s.aws', version: 'v1alpha1' })
+  //   Received: { kind: 'DBInstance', name: 'db-dc-test-1-v4', ... } // no group/version
+  //
+  // Keeping this as a permanent regression guardrail so we don't
+  // silently drop these fields again in a future refactor.
+  it('forwards apiGroup and apiVersion into openWithObject for colliding CRDs', async () => {
+    const dbInstance: CustomResourceData = {
+      kind: 'DBInstance',
+      name: 'db-dc-test-1-v4',
+      namespace: 'team-a',
+      clusterId: 'alpha:ctx',
+      clusterName: 'alpha',
+      apiGroup: 'documentdb.services.k8s.aws',
+      apiVersion: 'v1alpha1',
+      age: '2h',
+      labels: {},
+      annotations: {},
+    };
 
-    await renderComponent({ data: [baseResource], loaded: true, showNamespaceColumn: true });
+    await renderComponent({ data: [dbInstance], loaded: true, showNamespaceColumn: true });
 
     const gridProps = gridTableMock.mock.calls[0][0];
-    const contextItems = gridProps.getCustomContextMenuItems(baseResource, 'kind');
+    const contextItems = gridProps.getCustomContextMenuItems(dbInstance, 'kind');
+    expect(contextItems[0].label).toBe('Open');
+    contextItems[0].onClick();
+
+    expect(openWithObjectMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'DBInstance',
+        name: 'db-dc-test-1-v4',
+        namespace: 'team-a',
+        clusterId: 'alpha:ctx',
+        group: 'documentdb.services.k8s.aws',
+        version: 'v1alpha1',
+      })
+    );
+
+    // Also assert the openWithObject payload that downstream code receives
+    // has group/version as actual OWN properties of the object (not lost
+    // through a spread), since any spread-loss would defeat the purpose.
+    const callArg = openWithObjectMock.mock.calls.find(
+      ([arg]) => (arg as { name?: string }).name === 'db-dc-test-1-v4'
+    )?.[0] as Record<string, unknown>;
+    expect(callArg).toBeDefined();
+    expect(callArg.group).toBe('documentdb.services.k8s.aws');
+    expect(callArg.version).toBe('v1alpha1');
+  });
+
+  it('confirms deletion and calls DeleteResourceByGVK with resolved data', async () => {
+    deleteResourceByGVKMock.mockResolvedValue(undefined);
+
+    // Every custom resource row the backend catalog produces carries
+    // apiGroup/apiVersion — the delete path is GVK-only after the
+    // kind-only-objects fix.
+    const resourceWithGVK: CustomResourceData = {
+      ...baseResource,
+      apiGroup: 'batch',
+      apiVersion: 'v1',
+    };
+
+    await renderComponent({
+      data: [resourceWithGVK],
+      loaded: true,
+      showNamespaceColumn: true,
+    });
+
+    const gridProps = gridTableMock.mock.calls[0][0];
+    const contextItems = gridProps.getCustomContextMenuItems(resourceWithGVK, 'kind');
     await act(async () => {
       contextItems[2].onClick();
       await Promise.resolve();
@@ -233,8 +302,9 @@ describe('NsViewCustom', () => {
       await modalProps.current.onConfirm();
     });
 
-    expect(deleteResourceMock).toHaveBeenCalledWith(
+    expect(deleteResourceByGVKMock).toHaveBeenCalledWith(
       'alpha:ctx',
+      'batch/v1',
       'CronJob',
       'ops',
       'nightly-cleanup'
@@ -243,14 +313,72 @@ describe('NsViewCustom', () => {
     expect(modalProps.current?.isOpen).toBe(false);
   });
 
-  it('handles delete failure with errorHandler and reverts modal state', async () => {
-    deleteResourceMock.mockRejectedValue(new Error('failure'));
+  // Regression test for the delete-path leg of the kind-only-objects bug.
+  // When the user confirms deletion of a custom
+  // resource whose Kind collides with another CRD from a different API
+  // group (e.g. two DBInstance CRDs), handleDeleteConfirm MUST route
+  // through DeleteResourceByGVK so the strict GVR is targeted. The legacy
+  // DeleteResource path uses first-match-wins discovery and could
+  // silently delete the wrong object.
+  it('routes delete through DeleteResourceByGVK when apiGroup/apiVersion are present', async () => {
+    deleteResourceByGVKMock.mockResolvedValue(undefined);
 
+    const dbInstance: CustomResourceData = {
+      kind: 'DBInstance',
+      name: 'db-dc-test-1-v4',
+      namespace: 'team-a',
+      clusterId: 'alpha:ctx',
+      clusterName: 'alpha',
+      apiGroup: 'documentdb.services.k8s.aws',
+      apiVersion: 'v1alpha1',
+      age: '2h',
+      labels: {},
+      annotations: {},
+    };
+
+    await renderComponent({ data: [dbInstance], loaded: true, showNamespaceColumn: true });
+
+    const gridProps = gridTableMock.mock.calls[0][0];
+    const contextItems = gridProps.getCustomContextMenuItems(dbInstance, 'kind');
+    await act(async () => {
+      contextItems[2].onClick();
+      await Promise.resolve();
+    });
+    expect(modalProps.current?.isOpen).toBe(true);
+
+    await act(async () => {
+      await modalProps.current.onConfirm();
+    });
+
+    // The strict GVK delete must be invoked, with apiVersion built as
+    // "group/version" so the backend's schema.FromAPIVersionAndKind parses
+    // it correctly.
+    expect(deleteResourceByGVKMock).toHaveBeenCalledWith(
+      'alpha:ctx',
+      'documentdb.services.k8s.aws/v1alpha1',
+      'DBInstance',
+      'team-a',
+      'db-dc-test-1-v4'
+    );
+    // The legacy kind-only path has been retired entirely. This assertion
+    // used to check that it wasn't hit; now it's gone from the app surface.
+
+    await flush();
+    expect(modalProps.current?.isOpen).toBe(false);
+  });
+
+  // Characterization of the post-fix contract: after the kind-only-objects
+  // cleanup, CustomResourceData is required to carry apiGroup/apiVersion.
+  // A row that's missing apiVersion is a programming bug, and handleDelete
+  // must fail loud rather than silently fall back to first-match-wins
+  // discovery. The errorHandler should see the thrown error.
+  it('throws instead of falling back when apiGroup/apiVersion are missing', async () => {
     await renderComponent({ data: [baseResource], loaded: true, showNamespaceColumn: true });
 
     const gridProps = gridTableMock.mock.calls[0][0];
+    const contextItems = gridProps.getCustomContextMenuItems(baseResource, 'kind');
     await act(async () => {
-      gridProps.getCustomContextMenuItems(baseResource, 'kind')[2].onClick();
+      contextItems[2].onClick();
       await Promise.resolve();
     });
 
@@ -258,7 +386,42 @@ describe('NsViewCustom', () => {
       await modalProps.current.onConfirm();
     });
 
-    expect(deleteResourceMock).toHaveBeenCalled();
+    expect(deleteResourceByGVKMock).not.toHaveBeenCalled();
+    expect(errorHandlerMock.handle).toHaveBeenCalledWith(
+      expect.objectContaining({ message: expect.stringContaining('apiVersion missing') }),
+      { action: 'delete', kind: 'CronJob', name: 'nightly-cleanup' }
+    );
+
+    await flush();
+    expect(modalProps.current?.isOpen).toBe(false);
+  });
+
+  it('handles delete failure with errorHandler and reverts modal state', async () => {
+    deleteResourceByGVKMock.mockRejectedValue(new Error('failure'));
+
+    const resourceWithGVK: CustomResourceData = {
+      ...baseResource,
+      apiGroup: 'batch',
+      apiVersion: 'v1',
+    };
+
+    await renderComponent({
+      data: [resourceWithGVK],
+      loaded: true,
+      showNamespaceColumn: true,
+    });
+
+    const gridProps = gridTableMock.mock.calls[0][0];
+    await act(async () => {
+      gridProps.getCustomContextMenuItems(resourceWithGVK, 'kind')[2].onClick();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      await modalProps.current.onConfirm();
+    });
+
+    expect(deleteResourceByGVKMock).toHaveBeenCalled();
     expect(errorHandlerMock.handle).toHaveBeenCalledWith(expect.any(Error), {
       action: 'delete',
       kind: 'CronJob',
@@ -293,5 +456,135 @@ describe('NsViewCustom', () => {
       clusterId: 'alpha:ctx',
     } as CustomResourceData);
     expect(generatedKey).toBe('alpha:ctx|tools/CR/svc');
+  });
+
+  // CRD column: each row gets a clickable cell that opens the owning
+  // CustomResourceDefinition in the object panel. The CRD itself is a
+  // built-in (apiextensions.k8s.io/v1) so its GVK comes from the
+  // built-in lookup table, not from the row data.
+  //
+  // The column factory bakes the click handler into the rendered React
+  // element rather than exposing it on the column object, so these
+  // tests drive the behavior by inspecting / calling the rendered
+  // element's `onClick` prop directly.
+  describe('CRD column', () => {
+    const findColumn = (props: any, key: string) =>
+      props.columns.find((col: any) => col.key === key);
+
+    it('adds a CRD column that renders the row crdName', async () => {
+      const resource: CustomResourceData = {
+        ...baseResource,
+        apiGroup: 'rds.services.k8s.aws',
+        apiVersion: 'v1alpha1',
+        kind: 'DBInstance',
+        crdName: 'dbinstances.rds.services.k8s.aws',
+      };
+
+      await renderComponent({ data: [resource], loaded: true });
+
+      const gridProps = gridTableMock.mock.calls[0][0];
+      const crdCol = findColumn(gridProps, 'crd');
+      expect(crdCol).toBeTruthy();
+      expect(crdCol.header).toBe('CRD');
+
+      // Interactive cells render as a `<span role="button">` with the
+      // CRD name as their child text.
+      const rendered = crdCol.render(resource) as React.ReactElement<any>;
+      expect(rendered).toBeTruthy();
+      expect((rendered as any).type).toBe('span');
+      expect((rendered as any).props.role).toBe('button');
+      expect((rendered as any).props.children).toBe('dbinstances.rds.services.k8s.aws');
+      expect((rendered as any).props.title).toBe('Open dbinstances.rds.services.k8s.aws');
+    });
+
+    it('opens the CRD in the object panel when the CRD cell is clicked', async () => {
+      const resource: CustomResourceData = {
+        ...baseResource,
+        apiGroup: 'rds.services.k8s.aws',
+        apiVersion: 'v1alpha1',
+        kind: 'DBInstance',
+        crdName: 'dbinstances.rds.services.k8s.aws',
+      };
+
+      await renderComponent({ data: [resource], loaded: true });
+
+      const gridProps = gridTableMock.mock.calls[0][0];
+      const crdCol = findColumn(gridProps, 'crd');
+      const rendered = crdCol.render(resource) as React.ReactElement<any>;
+
+      // The rendered span carries the click handler. Drive it directly
+      // with a synthetic event that doesn't have altKey set (so the
+      // primary onClick fires, not onAltClick).
+      openWithObjectMock.mockClear();
+      const onClick = (rendered as any).props.onClick as (e: any) => void;
+      expect(onClick).toBeTypeOf('function');
+      onClick({ altKey: false, preventDefault: () => {}, stopPropagation: () => {} });
+
+      expect(openWithObjectMock).toHaveBeenCalledTimes(1);
+      const callArg = openWithObjectMock.mock.calls[0][0] as Record<string, unknown>;
+      expect(callArg.kind).toBe('CustomResourceDefinition');
+      expect(callArg.name).toBe('dbinstances.rds.services.k8s.aws');
+      // The CRD is a built-in — its GVK comes from resolveBuiltinGroupVersion,
+      // which returns apiextensions.k8s.io/v1.
+      expect(callArg.group).toBe('apiextensions.k8s.io');
+      expect(callArg.version).toBe('v1');
+      // CRDs are cluster-scoped — namespace must NOT be set on the ref.
+      expect(callArg.namespace).toBeUndefined();
+      // ClusterId/clusterName threaded through for multi-cluster routing.
+      expect(callArg.clusterId).toBe('alpha:ctx');
+      expect(callArg.clusterName).toBe('alpha');
+    });
+
+    it('exposes a sortValue extractor so the column sorts by crdName', async () => {
+      // Regression guard: the column key is "crd" but the data field is
+      // "crdName", so without an explicit sortValue the default sort
+      // (row[column.key]) reads undefined for every row and the column
+      // silently doesn't sort. The column factory only wires sortValue
+      // if we set it on the returned column object — verify that happened.
+      const resource: CustomResourceData = {
+        ...baseResource,
+        crdName: 'dbinstances.rds.services.k8s.aws',
+      };
+
+      await renderComponent({ data: [resource], loaded: true });
+
+      const gridProps = gridTableMock.mock.calls[0][0];
+      const crdCol = findColumn(gridProps, 'crd');
+      expect(crdCol.sortValue).toBeTypeOf('function');
+
+      // The extractor should return a comparable string that useTableSort
+      // can feed into localeCompare. We lowercase for case-insensitive sort.
+      expect(crdCol.sortValue(resource)).toBe('dbinstances.rds.services.k8s.aws');
+
+      // Rows without a crdName sort as empty string (they cluster at the
+      // top or bottom depending on direction, not scattered randomly).
+      const noCRD: CustomResourceData = { ...baseResource };
+      expect(crdCol.sortValue(noCRD)).toBe('');
+    });
+
+    it('renders the CRD cell as inert text when crdName is missing', async () => {
+      // Defensive: a row from a legacy snapshot or a synthetic source
+      // might not carry crdName. The cell should not be clickable, must
+      // not throw, and must not call openWithObject. The column factory
+      // returns the placeholder string '-' for accessor === undefined
+      // when the cell is non-interactive.
+      const resource: CustomResourceData = {
+        ...baseResource,
+        apiGroup: 'batch',
+        apiVersion: 'v1',
+        kind: 'CronJob',
+        // crdName intentionally omitted
+      };
+
+      await renderComponent({ data: [resource], loaded: true });
+
+      const gridProps = gridTableMock.mock.calls[0][0];
+      const crdCol = findColumn(gridProps, 'crd');
+      const rendered = crdCol.render(resource);
+
+      // Non-interactive accessor-undefined path returns the string '-'
+      // directly (no wrapping span, no role="button", no onClick).
+      expect(rendered).toBe('-');
+    });
   });
 });

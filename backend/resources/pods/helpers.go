@@ -156,19 +156,26 @@ func (s *Service) buildReplicaSetToDeploymentMap(namespace string) map[string]st
 	return rsToDeployment
 }
 
-// getPodOwnerWithMap gets pod owner using pre-fetched ReplicaSet map
-func getPodOwnerWithMap(pod corev1.Pod, rsToDeployment map[string]string) (string, string) {
+// getPodOwnerWithMap gets pod owner using pre-fetched ReplicaSet map.
+// Returns (kind, name, apiVersion). When the controlling owner is a
+// ReplicaSet that maps to a Deployment, the result is collapsed to the
+// Deployment with apiVersion "apps/v1" (Deployments are always apps/v1).
+// For all other owners apiVersion comes from owner.APIVersion verbatim,
+// which is what lets the panel open CRD-as-Pod-owner targets like
+// argoproj.io Rollout or kubevirt.io VirtualMachineInstance with a
+// fully-qualified GVK.
+func getPodOwnerWithMap(pod corev1.Pod, rsToDeployment map[string]string) (string, string, string) {
 	for _, owner := range pod.OwnerReferences {
 		if owner.Controller != nil && *owner.Controller {
 			if owner.Kind == "ReplicaSet" {
 				if deploymentName, ok := rsToDeployment[owner.Name]; ok {
-					return "Deployment", deploymentName
+					return "Deployment", deploymentName, "apps/v1"
 				}
 			}
-			return owner.Kind, owner.Name
+			return owner.Kind, owner.Name, owner.APIVersion
 		}
 	}
-	return "None", "None"
+	return "None", "None", ""
 }
 
 // getNodeIP retrieves the internal IP address for the given node, returning an empty
@@ -203,7 +210,7 @@ func (s *Service) buildPodDetailInfo(pod corev1.Pod, podMetrics map[string]*metr
 	cpuUsage, memUsage := getPodUsageFromMetrics(pod.Name, podMetrics)
 
 	// Get owner
-	ownerKind, ownerName := getPodOwnerWithMap(pod, rsToDeployment)
+	ownerKind, ownerName, ownerAPIVersion := getPodOwnerWithMap(pod, rsToDeployment)
 
 	// Get status
 	status := getPodStatus(pod)
@@ -224,8 +231,9 @@ func (s *Service) buildPodDetailInfo(pod corev1.Pod, podMetrics map[string]*metr
 		MemUsage:   common.FormatMemory(memUsage),
 
 		// Ownership
-		OwnerKind: ownerKind,
-		OwnerName: ownerName,
+		OwnerKind:       ownerKind,
+		OwnerName:       ownerName,
+		OwnerAPIVersion: ownerAPIVersion,
 
 		// Node info
 		Node:  pod.Spec.NodeName,
@@ -838,42 +846,47 @@ func (s *Service) NodeIP(nodeName string) string {
 }
 
 // SummarizePod converts a pod object and optional metrics into a PodSimpleInfo for list views.
-func SummarizePod(pod corev1.Pod, metrics map[string]*metricsv1beta1.PodMetrics, ownerKind, ownerName string) types.PodSimpleInfo {
+func SummarizePod(pod corev1.Pod, metrics map[string]*metricsv1beta1.PodMetrics, ownerKind, ownerName, ownerAPIVersion string) types.PodSimpleInfo {
 	cpuRequest, cpuLimit, memRequest, memLimit := CalculatePodResources(pod)
 	cpuUsage, memUsage := PodUsageFromMetrics(pod.Name, metrics)
 
 	return types.PodSimpleInfo{
-		Kind:       "Pod",
-		Name:       pod.Name,
-		Namespace:  pod.Namespace,
-		Status:     PodStatus(pod),
-		Ready:      PodReadyStatus(pod),
-		Restarts:   PodRestartCount(pod),
-		Age:        common.FormatAge(pod.CreationTimestamp.Time),
-		CPURequest: formatCPUQuantity(cpuRequest),
-		CPULimit:   formatCPUQuantity(cpuLimit),
-		CPUUsage:   formatCPUQuantity(cpuUsage),
-		MemRequest: formatMemoryQuantity(memRequest),
-		MemLimit:   formatMemoryQuantity(memLimit),
-		MemUsage:   formatMemoryQuantity(memUsage),
-		OwnerKind:  ownerKind,
-		OwnerName:  ownerName,
+		Kind:            "Pod",
+		Name:            pod.Name,
+		Namespace:       pod.Namespace,
+		Status:          PodStatus(pod),
+		Ready:           PodReadyStatus(pod),
+		Restarts:        PodRestartCount(pod),
+		Age:             common.FormatAge(pod.CreationTimestamp.Time),
+		CPURequest:      formatCPUQuantity(cpuRequest),
+		CPULimit:        formatCPUQuantity(cpuLimit),
+		CPUUsage:        formatCPUQuantity(cpuUsage),
+		MemRequest:      formatMemoryQuantity(memRequest),
+		MemLimit:        formatMemoryQuantity(memLimit),
+		MemUsage:        formatMemoryQuantity(memUsage),
+		OwnerKind:       ownerKind,
+		OwnerName:       ownerName,
+		OwnerAPIVersion: ownerAPIVersion,
 	}
 }
 
-// ResolveOwner determines the high-level owner for a pod, collapsing ReplicaSets into Deployments.
-func ResolveOwner(pod corev1.Pod, rsToDeployment map[string]string) (string, string) {
+// ResolveOwner determines the high-level owner for a pod, collapsing
+// ReplicaSets into Deployments. Returns (kind, name, apiVersion). The
+// apiVersion is "apps/v1" for the ReplicaSet→Deployment collapse and
+// owner.APIVersion verbatim otherwise — required so the panel can open
+// CRD-as-Pod-owner targets correctly.
+func ResolveOwner(pod corev1.Pod, rsToDeployment map[string]string) (string, string, string) {
 	for _, owner := range pod.OwnerReferences {
 		if owner.Controller != nil && *owner.Controller {
 			if owner.Kind == "ReplicaSet" {
 				if deploymentName, ok := rsToDeployment[owner.Name]; ok {
-					return "Deployment", deploymentName
+					return "Deployment", deploymentName, "apps/v1"
 				}
 			}
-			return owner.Kind, owner.Name
+			return owner.Kind, owner.Name, owner.APIVersion
 		}
 	}
-	return "None", "None"
+	return "None", "None", ""
 }
 
 func formatCPUQuantity(q *resource.Quantity) string {

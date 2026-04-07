@@ -30,8 +30,24 @@ export interface PermissionDeniedStatus {
   code?: number;
 }
 
+// ClusterMeta identifies a cluster on every snapshot payload. The Go
+// backend at backend/refresh/snapshot/cluster_meta.go declares
+// ClusterID as a non-optional string and stamps it on every snapshot
+// via WithClusterMeta, so this type matches the wire contract —
+// required on the frontend side.
+//
+// Making this required is load-bearing for the multi-cluster rule in
+// AGENTS.md: downstream merge-key and command-dispatch logic can
+// trust that clusterId is present without sprinkling `?? ''`
+// fallbacks that would silently degrade to cross-cluster collisions.
+//
+// Descendant types (NamespaceSummary, PodSnapshotEntry,
+// ClusterNodeSnapshotEntry, etc.) still declare clusterId as
+// optional because each of those is a separate cascade to tighten —
+// this refactor is bounded to ClusterMeta and its direct descendants
+// (snapshot payload wrappers).
 export interface ClusterMeta {
-  clusterId?: string;
+  clusterId: string;
   clusterName?: string;
 }
 
@@ -226,6 +242,20 @@ export interface ClusterCRDEntry extends ClusterMeta {
   group: string;
   scope: string;
   details: string;
+  /**
+   * Name of the CRD's storage version (the version etcd persists). When
+   * a CRD serves multiple versions, exactly one is the storage version
+   * and the API server converts to/from it. The Version column in the
+   * cluster CRDs view renders this as `storageVersion` for single-version
+   * CRDs and `storageVersion (+N)` for multi-version CRDs. See
+   * .
+   */
+  storageVersion?: string;
+  /**
+   * Number of *additional* served versions beyond the storage version.
+   * Zero for single-version CRDs.
+   */
+  extraServedVersionCount?: number;
   age: string;
   typeAlias?: string;
 }
@@ -238,6 +268,18 @@ export interface ClusterCustomEntry extends ClusterMeta {
   kind: string;
   name: string;
   apiGroup: string;
+  /** API version paired with apiGroup for GVK-aware resolution of the
+   * owning CRD. */
+  apiVersion: string;
+  /**
+   * Canonical Kubernetes name of the CustomResourceDefinition that
+   * defines this resource's Kind, in the form `<plural>.<group>` (e.g.
+   * `dbclusters.rds.services.k8s.aws`). Used by ClusterViewCustom's
+   * CRD column to render a clickable cell that opens the owning CRD
+   * in the object panel. Same-shape field as
+   * `NamespaceCustomSummary.crdName`.
+   */
+  crdName?: string;
   age: string;
   labels?: Record<string, string>;
   annotations?: Record<string, string>;
@@ -343,6 +385,14 @@ export interface PodSnapshotEntry extends ClusterMeta {
   age: string;
   ownerKind: string;
   ownerName: string;
+  /**
+   * Wire-form apiVersion of the controlling owner (e.g. "apps/v1",
+   * "argoproj.io/v1alpha1"). Threaded from
+   * pod.OwnerReferences[*].APIVersion so the panel can open
+   * CRD-as-Pod-owner targets correctly. See
+   * .
+   */
+  ownerApiVersion?: string;
   cpuRequest: string;
   cpuLimit: string;
   cpuUsage: string;
@@ -388,6 +438,11 @@ export interface ObjectEventSummary extends ClusterMeta {
   involvedObjectName: string;
   involvedObjectKind: string;
   involvedObjectNamespace?: string;
+  // apiVersion of the event's involvedObject (e.g. "apps/v1", "v1",
+  // "documentdb.services.k8s.aws/v1alpha1"). Required for GVK
+  // disambiguation when opening the related object — see
+
+  involvedObjectApiVersion?: string;
   namespace: string;
 }
 
@@ -484,7 +539,16 @@ export interface NamespaceAutoscalingSummary extends ClusterMeta {
   kind: string;
   name: string;
   namespace: string;
+  /** Display string "Kind/Name" for the table column. */
   target: string;
+  /**
+   * Wire-form apiVersion of the scale target (e.g. "apps/v1",
+   * "documentdb.services.k8s.aws/v1alpha1"). Threaded from
+   * `hpa.Spec.ScaleTargetRef.APIVersion` so the panel can open the target
+   * with a fully-qualified GVK — required for CRDs that share a Kind. See
+   * .
+   */
+  targetApiVersion?: string;
   min: number;
   max: number;
   current: number;
@@ -540,6 +604,17 @@ export interface NamespaceCustomSummary extends ClusterMeta {
   kind: string;
   name: string;
   apiGroup: string;
+  /** API version paired with apiGroup for GVK-aware resolution of the
+   * owning CRD. */
+  apiVersion: string;
+  /**
+   * Canonical Kubernetes name of the CustomResourceDefinition that
+   * defines this resource's Kind, in the form `<plural>.<group>` (e.g.
+   * `dbinstances.rds.services.k8s.aws`). Used by NsViewCustom's CRD
+   * column to render a clickable cell that opens the owning CRD in
+   * the object panel.
+   */
+  crdName?: string;
   namespace: string;
   age: string;
   labels?: Record<string, string>;

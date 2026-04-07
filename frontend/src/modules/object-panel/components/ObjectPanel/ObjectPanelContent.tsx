@@ -6,7 +6,6 @@
  */
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { refreshOrchestrator } from '@/core/refresh';
-import { buildClusterScope } from '@/core/refresh/clusterScope';
 import DetailsTab from '@modules/object-panel/components/ObjectPanel/Details/DetailsTab';
 import type { DetailsTabProps } from '@modules/object-panel/components/ObjectPanel/Details/DetailsTab';
 import LogViewer from '@modules/object-panel/components/ObjectPanel/Logs/LogViewer';
@@ -47,6 +46,16 @@ interface ObjectPanelContentProps {
   capabilities: ComputedCapabilities;
   capabilityReasons: CapabilityReasons;
   detailScope: string | null;
+  // eventsScope is computed once in getObjectPanelKind and threaded
+  // here so this component (full-cleanup lifecycle) and EventsTab
+  // (fetch + per-tab enable/disable) consume the same string. Used to
+  // be computed independently in two places, which created a drift bug.
+  eventsScope: string | null;
+  // logScope follows the same pattern as eventsScope: one source of
+  // truth in getObjectPanelKind, consumed by this component (cleanup)
+  // and LogViewer (actual streaming). They used to duplicate the
+  // string builder and could drift apart on kind casing.
+  logScope: string | null;
   helmScope: string | null;
   objectData: PanelObjectData | null;
   objectKind: string | null;
@@ -64,6 +73,8 @@ export function ObjectPanelContent({
   capabilities,
   capabilityReasons,
   detailScope,
+  eventsScope,
+  logScope,
   helmScope,
   objectData,
   objectKind,
@@ -84,32 +95,9 @@ export function ObjectPanelContent({
   const showValues = activeTab === 'values';
   const showMaintenance = activeTab === 'maintenance' && objectKind === 'node';
 
-  // Build scoped domain scopes for object panel tabs.
-  const CLUSTER_SCOPE_SENTINEL = '__cluster__';
-  const scopeNamespace = useMemo(() => {
-    if (!objectData?.namespace || objectData.namespace.length === 0) {
-      return CLUSTER_SCOPE_SENTINEL;
-    }
-    return objectData.namespace;
-  }, [objectData?.namespace]);
-
-  // Events scope uses original-case kind (matches EventsTab convention).
-  const eventsScope = useMemo(() => {
-    if (!objectData?.name || !objectData?.kind) {
-      return null;
-    }
-    const rawScope = `${scopeNamespace}:${objectData.kind}:${objectData.name}`;
-    return buildClusterScope(objectData.clusterId ?? undefined, rawScope);
-  }, [objectData?.clusterId, objectData?.kind, objectData?.name, scopeNamespace]);
-
-  // Logs scope uses lowercase kind (matches LogViewer convention).
-  const logScope = useMemo(() => {
-    if (!objectData?.name || !objectData?.kind) {
-      return null;
-    }
-    const rawScope = `${scopeNamespace}:${objectData.kind.toLowerCase()}:${objectData.name}`;
-    return buildClusterScope(objectData.clusterId ?? undefined, rawScope);
-  }, [objectData?.clusterId, objectData?.kind, objectData?.name, scopeNamespace]);
+  // eventsScope and logScope are produced upstream by getObjectPanelKind
+  // and threaded in via props so the lifecycle effects below and the
+  // tabs that consume them (EventsTab, LogViewer) cannot disagree.
 
   // --- Scoped domain lifecycle for object panel tabs ---
   // Managed here (rather than in each tab) so that switching tabs doesn't
@@ -254,6 +242,7 @@ export function ObjectPanelContent({
             isActive={isPanelOpen && activeTab === 'logs'}
             resourceName={objectData?.name || ''}
             resourceKind={objectKind || 'pod'}
+            logScope={logScope}
             activePodNames={activePodNames}
             clusterId={objectData?.clusterId ?? null}
             initialParsedView={parsedViewRef.current}
@@ -286,7 +275,11 @@ export function ObjectPanelContent({
           resetKeys={[objectData?.name ?? '', objectData?.namespace ?? ''].filter(Boolean)}
           fallback={(_, reset) => <TabErrorFallback tabName="Events" reset={reset} />}
         >
-          <EventsTab objectData={objectData} isActive={isPanelOpen && activeTab === 'events'} />
+          <EventsTab
+            objectData={objectData}
+            isActive={isPanelOpen && activeTab === 'events'}
+            eventsScope={eventsScope}
+          />
         </ErrorBoundary>
       )}
 

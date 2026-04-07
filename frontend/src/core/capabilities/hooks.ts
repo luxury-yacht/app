@@ -28,6 +28,14 @@ import type { PermissionQueryDiagnostics } from './permissionTypes';
 interface QueryPayloadItem {
   id: string;
   clusterId: string;
+  /**
+   * API group for the target kind. Optional: when present alongside
+   * `version`, the backend routes through the strict GVK resolver. When
+   * absent, it falls back to kind-only resolution.
+   */
+  group?: string;
+  /** API version paired with `group`. */
+  version?: string;
   resourceKind: string;
   verb: string;
   namespace: string;
@@ -38,6 +46,8 @@ interface QueryPayloadItem {
 interface QueryResponseResult {
   id: string;
   clusterId: string;
+  group?: string;
+  version?: string;
   resourceKind: string;
   verb: string;
   namespace: string;
@@ -127,15 +137,34 @@ export const useCapabilities = (
       return;
     }
 
-    const payload: QueryPayloadItem[] = namedDescriptors.map((d) => ({
-      id: d.id,
-      clusterId: d.clusterId ?? '',
-      resourceKind: d.resourceKind,
-      verb: d.verb,
-      namespace: d.namespace ?? '',
-      subresource: d.subresource ?? '',
-      name: d.name ?? '',
-    }));
+    // Multi-cluster rule (AGENTS.md): every backend permission query
+    // must carry a resolved clusterId. Drop descriptors that lack one
+    // and warn so the upstream producer surfaces the bug, rather than
+    // sending a garbage RPC the backend would reject anyway.
+    const payload: QueryPayloadItem[] = [];
+    for (const d of namedDescriptors) {
+      if (!d.clusterId) {
+        console.warn(
+          `capabilities: dropping named permission query for ${d.resourceKind}/${d.name ?? ''} — clusterId is missing`,
+          d
+        );
+        continue;
+      }
+      payload.push({
+        id: d.id,
+        clusterId: d.clusterId,
+        group: d.group,
+        version: d.version,
+        resourceKind: d.resourceKind,
+        verb: d.verb,
+        namespace: d.namespace ?? '',
+        subresource: d.subresource ?? '',
+        name: d.name ?? '',
+      });
+    }
+    if (payload.length === 0) {
+      return;
+    }
 
     // Mark named descriptors as pending while the query is in-flight.
     const nextPending = new Map(namedResultsRef.current);

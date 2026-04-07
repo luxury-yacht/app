@@ -26,4 +26,6 @@
   --z-index-grid-loading-overlay: 90;
   --z-index-grid-loading-spinner: 100;
   --z-index-context-menu: 3500;
+  --z-index-overlay: 4000;
+  --z-index-topmost: 5000;
 }

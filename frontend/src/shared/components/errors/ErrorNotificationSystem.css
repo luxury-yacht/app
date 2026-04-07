@@ -10,7 +10,7 @@
   position: fixed;
   bottom: 20px;
   right: 20px;
-  z-index: 9999;
+  z-index: var(--z-index-overlay);
   width: min(500px, calc(100% - 32px));
   max-height: 80vh;
   overflow-y: visible;

@@ -1523,7 +1523,9 @@ class RefreshOrchestrator {
         return payload;
       }
       const incoming = payload as NamespaceSnapshotPayload;
-      const fallbackClusterId = incoming.clusterId ?? '';
+      // incoming.clusterId is now a required field on ClusterMeta-derived
+      // payloads, so the merge-key fallback doesn't need a `?? ''` guard.
+      const fallbackClusterId = incoming.clusterId;
       const merged = mergeListByKey(
         incoming.namespaces ?? [],
         previous.namespaces ?? [],
@@ -1545,7 +1547,7 @@ class RefreshOrchestrator {
         return payload;
       }
       const incoming = payload as NodeMaintenanceSnapshotPayload;
-      const fallbackClusterId = incoming.clusterId ?? '';
+      const fallbackClusterId = incoming.clusterId;
       const merged = mergeListByKey(
         incoming.drains ?? [],
         previous.drains ?? [],
@@ -1567,7 +1569,7 @@ class RefreshOrchestrator {
         return payload;
       }
       const incoming = payload as CatalogSnapshotPayload;
-      const fallbackClusterId = incoming.clusterId ?? '';
+      const fallbackClusterId = incoming.clusterId;
       const merged = mergeListByKey(incoming.items ?? [], previous.items ?? [], (entry) => {
         const clusterId = entry.clusterId ?? fallbackClusterId;
         if (entry.uid) {
@@ -1595,7 +1597,9 @@ class RefreshOrchestrator {
     const now = Date.now();
     const resolvedScope = scope ?? snapshot.scope ?? '';
     const parsedScope = parseClusterScope(resolvedScope);
-    const clusterId = parsedScope.clusterId ?? '';
+    // parseClusterScope always returns a string clusterId (empty when the
+    // scope carries no cluster prefix); no fallback needed.
+    const clusterId = parsedScope.clusterId;
 
     const updateStats = (stats: SnapshotStats | null, count: number): SnapshotStats | null => {
       if (!stats) {

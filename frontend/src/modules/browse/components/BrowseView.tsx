@@ -27,7 +27,7 @@ import RollbackModal from '@shared/components/modals/RollbackModal';
 import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 import { getPermissionKey, queryKindPermissions, useUserPermissions } from '@/core/capabilities';
-import { DeleteResource, RestartWorkload } from '@wailsjs/go/backend/App';
+import { DeleteResourceByGVK, RestartWorkload } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
 import type { CatalogItem } from '@/core/refresh/types';
 import { useTableSort } from '@/hooks/useTableSort';
@@ -167,7 +167,28 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     const item = deleteConfirm.item;
 
     try {
-      await DeleteResource(item.clusterId ?? '', item.kind, item.namespace ?? '', item.name);
+      // Multi-cluster rule (AGENTS.md): every backend command must
+      // carry a resolved clusterId.
+      if (!item.clusterId) {
+        throw new Error(`Cannot delete ${item.kind}/${item.name}: clusterId is missing`);
+      }
+      // CatalogItem always carries group/version from the backend catalog.
+      // A missing version here means the upstream data source dropped it —
+      // fail loud rather than fall back to the retired kind-only resolver.
+      // See  step 5.
+      if (!item.version) {
+        throw new Error(
+          `Cannot delete ${item.kind}/${item.name}: apiVersion missing on catalog row`
+        );
+      }
+      const apiVersion = item.group ? `${item.group}/${item.version}` : item.version;
+      await DeleteResourceByGVK(
+        item.clusterId,
+        apiVersion,
+        item.kind,
+        item.namespace ?? '',
+        item.name
+      );
     } catch (err) {
       errorHandler.handle(err, {
         action: 'delete',
@@ -184,7 +205,12 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     const item = restartConfirm.item;
 
     try {
-      await RestartWorkload(item.clusterId ?? '', item.namespace ?? '', item.name, item.kind);
+      // Multi-cluster rule (AGENTS.md): every backend command must
+      // carry a resolved clusterId.
+      if (!item.clusterId) {
+        throw new Error(`Cannot restart ${item.kind}/${item.name}: clusterId is missing`);
+      }
+      await RestartWorkload(item.clusterId, item.namespace ?? '', item.name, item.kind);
     } catch (err) {
       errorHandler.handle(err, {
         action: 'restart',
@@ -202,21 +228,32 @@ const BrowseView: React.FC<BrowseViewProps> = ({
       const kind = row.item.kind;
       const ns = row.item.namespace ?? null;
       const cid = row.item.clusterId ?? undefined;
+      const group = row.item.group ?? null;
+      const version = row.item.version ?? null;
       const normalizedKind = kind;
 
-      const deleteKey = getPermissionKey(kind, 'delete', ns, null, cid);
+      // Permission keys carry group/version so colliding-CRD entries
+      // don't share a cache slot. CatalogItem provides both fields, so
+      // BrowseView always passes the GVK form. See
+
+      const deleteKey = getPermissionKey(kind, 'delete', ns, null, cid, group, version);
       const deleteStatus = permissionMap.get(deleteKey) ?? null;
       const restartStatus =
-        permissionMap.get(getPermissionKey(normalizedKind, 'patch', ns, null, cid)) ?? null;
+        permissionMap.get(
+          getPermissionKey(normalizedKind, 'patch', ns, null, cid, group, version)
+        ) ?? null;
       const scaleStatus =
-        permissionMap.get(getPermissionKey(normalizedKind, 'update', ns, 'scale', cid)) ?? null;
+        permissionMap.get(
+          getPermissionKey(normalizedKind, 'update', ns, 'scale', cid, group, version)
+        ) ?? null;
       const portForwardStatus =
-        permissionMap.get(getPermissionKey('Pod', 'create', ns, 'portforward', cid)) ?? null;
+        permissionMap.get(getPermissionKey('Pod', 'create', ns, 'portforward', cid, '', 'v1')) ??
+        null;
 
       // Lazy-load permissions for CRD kinds not in the static spec lists.
       // First right-click fires the query; results are cached for subsequent opens.
       if (!deleteStatus) {
-        queryKindPermissions(kind, ns, cid ?? null);
+        queryKindPermissions(kind, ns, cid ?? null, group, version);
       }
 
       return buildObjectActionItems({
@@ -483,14 +520,23 @@ const BrowseView: React.FC<BrowseViewProps> = ({
         onCancel={() => setRestartConfirm({ show: false, item: null })}
       />
 
-      <RollbackModal
-        isOpen={rollbackTarget !== null}
-        onClose={() => setRollbackTarget(null)}
-        clusterId={rollbackTarget?.clusterId ?? ''}
-        namespace={rollbackTarget?.namespace ?? ''}
-        name={rollbackTarget?.name ?? ''}
-        kind={rollbackTarget?.kind ?? ''}
-      />
+      {/* Rollback Modal — only mounted when we have a full identity including
+          clusterId, per the multi-cluster rule (AGENTS.md). The modal's confirm
+          button issues a backend command. */}
+      {rollbackTarget !== null &&
+        rollbackTarget.clusterId &&
+        rollbackTarget.namespace &&
+        rollbackTarget.name &&
+        rollbackTarget.kind && (
+          <RollbackModal
+            isOpen={true}
+            onClose={() => setRollbackTarget(null)}
+            clusterId={rollbackTarget.clusterId}
+            namespace={rollbackTarget.namespace}
+            name={rollbackTarget.name}
+            kind={rollbackTarget.kind}
+          />
+        )}
 
       {favModal}
     </>

@@ -367,6 +367,94 @@ describe('NamespaceResourcesProvider', () => {
     expect(invokedDomains).toContain('namespace-config');
   });
 
+  it('cancels pending load timer when namespace changes rapidly', async () => {
+    vi.useFakeTimers();
+
+    scopedStates[`${testClusterId}|namespace:ns-1`] = {
+      status: 'idle',
+      data: null,
+      error: null,
+      lastUpdated: null,
+    };
+
+    await render(
+      <NamespaceResourcesProvider namespace="ns-1" activeView="workloads">
+        <TestConsumer />
+      </NamespaceResourcesProvider>
+    );
+
+    orchestrator.fetchScopedDomain.mockClear();
+
+    // Switch namespace before the 100ms timer fires
+    scopedStates[`${testClusterId}|namespace:ns-2`] = {
+      status: 'idle',
+      data: null,
+      error: null,
+      lastUpdated: null,
+    };
+
+    await render(
+      <NamespaceResourcesProvider namespace="ns-2" activeView="workloads">
+        <TestConsumer />
+      </NamespaceResourcesProvider>
+    );
+
+    // Advance past both timers
+    await act(async () => {
+      vi.advanceTimersByTime(200);
+      await Promise.resolve();
+    });
+
+    // Only ns-2 should have been loaded — ns-1's timer should have been cancelled
+    const fetchedScopes = orchestrator.fetchScopedDomain.mock.calls.map(
+      (call: unknown[]) => call[1]
+    );
+    expect(fetchedScopes).not.toContain(`${testClusterId}|namespace:ns-1`);
+    expect(fetchedScopes).toContain(`${testClusterId}|namespace:ns-2`);
+  });
+
+  it('cancels pending load timer on unmount', async () => {
+    vi.useFakeTimers();
+
+    scopedStates[`${testClusterId}|namespace:ephemeral`] = {
+      status: 'idle',
+      data: null,
+      error: null,
+      lastUpdated: null,
+    };
+
+    await render(
+      <NamespaceResourcesProvider namespace="ephemeral" activeView="config">
+        <TestConsumer />
+      </NamespaceResourcesProvider>
+    );
+
+    orchestrator.fetchScopedDomain.mockClear();
+
+    // Unmount before the 100ms timer fires
+    await act(async () => {
+      root.unmount();
+      await Promise.resolve();
+    });
+
+    // Advance past the timer
+    await act(async () => {
+      vi.advanceTimersByTime(200);
+      await Promise.resolve();
+    });
+
+    // No fetch should have fired for the unmounted namespace
+    const fetchedScopes = orchestrator.fetchScopedDomain.mock.calls.map(
+      (call: unknown[]) => call[1]
+    );
+    expect(fetchedScopes).not.toContain(`${testClusterId}|namespace:ephemeral`);
+
+    // Re-create root for afterEach cleanup
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = ReactDOM.createRoot(container);
+  });
+
   it('forces capability refresh when a resource refresh is invoked', async () => {
     vi.useFakeTimers();
 

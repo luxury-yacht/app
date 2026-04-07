@@ -24,6 +24,13 @@ const trimmedOrUndefined = (value?: string) => {
 
 /**
  * Normalises a descriptor so casing/whitespace are consistent across cache keys.
+ *
+ * Note on group normalization: group identifiers (e.g.
+ * "rds.services.k8s.aws") are case-sensitive in Kubernetes, so we preserve
+ * the caller's casing and only trim whitespace. Version is likewise trimmed
+ * but not case-folded. Only kind/verb/namespace/name/subresource are lowercased
+ * because those are the fields that already used case-insensitive matching
+ * before step 4.
  */
 export const normalizeDescriptor = (
   descriptor: CapabilityDescriptor
@@ -31,6 +38,8 @@ export const normalizeDescriptor = (
   id: descriptor.id.trim(),
   clusterId: trimmedOrUndefined(descriptor.clusterId),
   verb: descriptor.verb.trim().toLowerCase(),
+  group: trimmedOrUndefined(descriptor.group),
+  version: trimmedOrUndefined(descriptor.version),
   resourceKind: descriptor.resourceKind.trim(),
   namespace: trimmedOrUndefined(descriptor.namespace),
   name: trimmedOrUndefined(descriptor.name),
@@ -39,17 +48,24 @@ export const normalizeDescriptor = (
 
 /**
  * Builds the cache key used to deduplicate capability lookups.
+ *
+ * Group and version are included so two descriptors that differ only by
+ * their API group (e.g. DBInstance.rds.services.k8s.aws vs
+ * DBInstance.kinda.rocks) produce distinct keys and don't silently
+ * clobber each other in the cache.
  */
 export const createCapabilityKey = (
   descriptor: NormalizedCapabilityDescriptor | CapabilityResult
 ): string => {
   const clusterId = lowerOrEmpty(descriptor.clusterId);
+  const group = (descriptor.group ?? '').trim();
+  const version = (descriptor.version ?? '').trim();
   const resourceKind = lowerOrEmpty(descriptor.resourceKind);
   const verb = lowerOrEmpty(descriptor.verb);
   const namespace = lowerOrEmpty(descriptor.namespace);
   const name = lowerOrEmpty(descriptor.name);
   const subresource = lowerOrEmpty(descriptor.subresource);
-  return `${clusterId}|${resourceKind}|${verb}|${namespace}|${name}|${subresource}|${descriptor.id}`;
+  return `${clusterId}|${group}/${version}|${resourceKind}|${verb}|${namespace}|${name}|${subresource}|${descriptor.id}`;
 };
 
 /**
@@ -77,6 +93,8 @@ export const descriptorsMatch = (
   a.id === b.id &&
   (a.clusterId ?? '') === (b.clusterId ?? '') &&
   a.verb === b.verb &&
+  (a.group ?? '') === (b.group ?? '') &&
+  (a.version ?? '') === (b.version ?? '') &&
   a.resourceKind === b.resourceKind &&
   (a.namespace ?? '') === (b.namespace ?? '') &&
   (a.name ?? '') === (b.name ?? '') &&

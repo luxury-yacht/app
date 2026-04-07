@@ -39,6 +39,7 @@
   --color-text-inverse: var(--color-base-900);
   --color-success-bg: rgba(34, 197, 94, 0.15);
   --color-warning-bg: rgba(245, 158, 11, 0.18);
+  --color-warning-border: rgba(245, 158, 11, 0.4);
   --color-info-bg: rgba(14, 165, 233, 0.18);
 
   /* Grid table resize handle */
@@ -262,6 +263,7 @@
 
   /* Modal overlays */
   --modal-overlay-bg: rgba(20, 20, 20, 0.85);
+  --grid-loading-overlay-bg: rgba(0, 0, 0, 0.6);
   --modal-container-shadow:
     0 25px 50px -12px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.05),
     0 0 80px -20px rgba(245, 158, 11, 0.15);

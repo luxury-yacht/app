@@ -2,11 +2,21 @@
  * Types for the SSRR permission system.
  */
 
-/** A lightweight permission check descriptor. Static data — no store state. */
+/** A lightweight permission check descriptor. Static data — no store state.
+ *
+ * `group` and `version` are optional and identify the API group/version
+ * for the kind. Static permission spec lists for built-in resources can
+ * leave them undefined — the backend resolves built-in kinds correctly
+ * because they don't collide. CRD-targeted spec entries (or lazy
+ * `queryKindPermissions` calls) MUST populate them so the backend can
+ * disambiguate colliding kinds.
+ */
 export interface PermissionSpec {
   kind: string;
   verb: string;
   subresource?: string;
+  group?: string;
+  version?: string;
 }
 
 /** A stored permission check result from the backend. */
@@ -19,6 +29,8 @@ export interface PermissionEntry {
   /** Query metadata — needed to populate PermissionStatus for consumers */
   descriptor: {
     clusterId: string;
+    group: string | null;
+    version: string | null;
     resourceKind: string;
     verb: string;
     namespace: string | null;
@@ -38,6 +50,8 @@ export interface PermissionStatus {
   source: 'ssrr' | 'ssar' | 'denied' | 'error' | null;
   descriptor: {
     clusterId: string;
+    group: string | null;
+    version: string | null;
     resourceKind: string;
     verb: string;
     namespace: string | null;

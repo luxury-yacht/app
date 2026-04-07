@@ -34,18 +34,19 @@ type ObjectEventsBuilder struct {
 // ObjectEventSummary captures the fields the frontend needs for object events.
 type ObjectEventSummary struct {
 	ClusterMeta
-	Kind                    string    `json:"kind"`
-	EventType               string    `json:"eventType"`
-	Reason                  string    `json:"reason"`
-	Message                 string    `json:"message"`
-	Count                   int32     `json:"count"`
-	FirstTimestamp          time.Time `json:"firstTimestamp"`
-	LastTimestamp           time.Time `json:"lastTimestamp"`
-	Source                  string    `json:"source"`
-	InvolvedObjectName      string    `json:"involvedObjectName"`
-	InvolvedObjectKind      string    `json:"involvedObjectKind"`
-	InvolvedObjectNamespace string    `json:"involvedObjectNamespace"`
-	Namespace               string    `json:"namespace"`
+	Kind                     string    `json:"kind"`
+	EventType                string    `json:"eventType"`
+	Reason                   string    `json:"reason"`
+	Message                  string    `json:"message"`
+	Count                    int32     `json:"count"`
+	FirstTimestamp           time.Time `json:"firstTimestamp"`
+	LastTimestamp            time.Time `json:"lastTimestamp"`
+	Source                   string    `json:"source"`
+	InvolvedObjectName       string    `json:"involvedObjectName"`
+	InvolvedObjectKind       string    `json:"involvedObjectKind"`
+	InvolvedObjectNamespace  string    `json:"involvedObjectNamespace"`
+	InvolvedObjectAPIVersion string    `json:"involvedObjectApiVersion"`
+	Namespace                string    `json:"namespace"`
 }
 
 // ObjectEventsSnapshotPayload contains the events list for the object.
@@ -82,21 +83,30 @@ func RegisterObjectEventsDomain(
 }
 
 func (b *ObjectEventsBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-	namespace, kind, name, err := parseObjectScope(scope)
+	identity, err := parseObjectScope(scope)
 	if err != nil {
 		return nil, err
 	}
+	namespace := identity.Namespace
+	kind := identity.GVK.Kind
+	name := identity.Name
+	// apiVersion is the wire-form "group/version" (or just "version" for
+	// core resources). When the scope omits Group/Version (legacy callers),
+	// this is the empty string and the disambiguation filter below is a
+	// no-op — preserving pre-fix behavior. When the scope is in the new
+	// GVK form, two CRDs sharing a Kind get distinct event lists.
+	apiVersion := identity.GVK.GroupVersion().String()
 	meta := ClusterMetaFromContext(ctx)
 
 	// Prefer informer cache once synced; fall back to API list to preserve pre-sync/error behavior.
 	if b.eventLister != nil && b.eventSynced != nil && b.eventSynced() {
-		events, version, cacheErr := b.listEventsFromCache(namespace, kind, name)
+		events, version, cacheErr := b.listEventsFromCache(namespace, apiVersion, kind, name)
 		if cacheErr == nil {
 			return b.buildSnapshot(meta, scope, events, version), nil
 		}
 	}
 
-	events, version, err := b.listEventsFromAPI(ctx, namespace, kind, name)
+	events, version, err := b.listEventsFromAPI(ctx, namespace, apiVersion, kind, name)
 	if err != nil {
 		return nil, err
 	}
@@ -104,16 +114,16 @@ func (b *ObjectEventsBuilder) Build(ctx context.Context, scope string) (*refresh
 	return b.buildSnapshot(meta, scope, events, version), nil
 }
 
-func (b *ObjectEventsBuilder) listEventsFromCache(namespace, kind, name string) ([]*corev1.Event, uint64, error) {
+func (b *ObjectEventsBuilder) listEventsFromCache(namespace, apiVersion, kind, name string) ([]*corev1.Event, uint64, error) {
 	if b.eventLister == nil {
 		return nil, 0, fmt.Errorf("event cache not configured")
 	}
-	events, err := b.listEventsByIndex(namespace, kind, name)
+	events, err := b.listEventsByIndex(namespace, apiVersion, kind, name)
 	if err != nil {
 		return nil, 0, err
 	}
 	if events == nil {
-		events, err = b.listEventsByScan(namespace, kind, name)
+		events, err = b.listEventsByScan(namespace, apiVersion, kind, name)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -122,7 +132,7 @@ func (b *ObjectEventsBuilder) listEventsFromCache(namespace, kind, name string) 
 	return events, version, nil
 }
 
-func (b *ObjectEventsBuilder) listEventsFromAPI(ctx context.Context, namespace, kind, name string) ([]*corev1.Event, uint64, error) {
+func (b *ObjectEventsBuilder) listEventsFromAPI(ctx context.Context, namespace, apiVersion, kind, name string) ([]*corev1.Event, uint64, error) {
 	eventNamespace := namespace
 	if namespace == "" {
 		eventNamespace = metav1.NamespaceAll
@@ -135,6 +145,13 @@ func (b *ObjectEventsBuilder) listEventsFromAPI(ctx context.Context, namespace, 
 	}
 	if namespace != "" {
 		selectors = append(selectors, fields.OneTermEqualSelector("involvedObject.namespace", namespace))
+	}
+	// Disambiguate two CRDs sharing a Kind+namespace+name by also filtering
+	// on involvedObject.apiVersion (a supported Event field selector). Only
+	// applied when the scope carried a GVK; legacy kind-only scopes leave
+	// this empty and behave as before.
+	if strings.TrimSpace(apiVersion) != "" {
+		selectors = append(selectors, fields.OneTermEqualSelector("involvedObject.apiVersion", apiVersion))
 	}
 	fieldSelector := fields.AndSelectors(selectors...).String()
 
@@ -156,13 +173,18 @@ func (b *ObjectEventsBuilder) listEventsFromAPI(ctx context.Context, namespace, 
 	return events, version, nil
 }
 
-func (b *ObjectEventsBuilder) listEventsByIndex(namespace, kind, name string) ([]*corev1.Event, error) {
+func (b *ObjectEventsBuilder) listEventsByIndex(namespace, apiVersion, kind, name string) ([]*corev1.Event, error) {
 	if b.eventIndexer == nil {
 		return nil, nil
 	}
 	if _, ok := b.eventIndexer.GetIndexers()[objectEventIndexName]; !ok {
 		return nil, nil
 	}
+	// The index is keyed by namespace|kind|name (apiVersion-agnostic) so
+	// existing index entries are reused unchanged. When the caller supplies
+	// an apiVersion (new GVK-form scopes), we post-filter the index hit to
+	// drop events for sibling CRDs that share kind/name in the same
+	// namespace. apiVersion-less callers see the legacy superset.
 	key := buildObjectEventIndexKey(namespace, kind, name)
 	items, err := b.eventIndexer.ByIndex(objectEventIndexName, key)
 	if err != nil {
@@ -170,14 +192,19 @@ func (b *ObjectEventsBuilder) listEventsByIndex(namespace, kind, name string) ([
 	}
 	events := make([]*corev1.Event, 0, len(items))
 	for _, item := range items {
-		if evt, ok := item.(*corev1.Event); ok && evt != nil {
-			events = append(events, evt)
+		evt, ok := item.(*corev1.Event)
+		if !ok || evt == nil {
+			continue
 		}
+		if !involvedObjectMatchesAPIVersion(evt, apiVersion) {
+			continue
+		}
+		events = append(events, evt)
 	}
 	return events, nil
 }
 
-func (b *ObjectEventsBuilder) listEventsByScan(namespace, kind, name string) ([]*corev1.Event, error) {
+func (b *ObjectEventsBuilder) listEventsByScan(namespace, apiVersion, kind, name string) ([]*corev1.Event, error) {
 	events, err := b.eventLister.List(labels.Everything())
 	if err != nil {
 		return nil, err
@@ -196,9 +223,24 @@ func (b *ObjectEventsBuilder) listEventsByScan(namespace, kind, name string) ([]
 		if kind != "" && !strings.EqualFold(evt.InvolvedObject.Kind, kind) {
 			continue
 		}
+		if !involvedObjectMatchesAPIVersion(evt, apiVersion) {
+			continue
+		}
 		filtered = append(filtered, evt)
 	}
 	return filtered, nil
+}
+
+// involvedObjectMatchesAPIVersion returns true when the event's
+// InvolvedObject.APIVersion matches the requested apiVersion. An empty
+// requested apiVersion is a wildcard (legacy kind-only callers): in that
+// case all events match. API group and version names are case-sensitive
+// per RFC 1123.
+func involvedObjectMatchesAPIVersion(evt *corev1.Event, apiVersion string) bool {
+	if strings.TrimSpace(apiVersion) == "" {
+		return true
+	}
+	return evt.InvolvedObject.APIVersion == apiVersion
 }
 
 func (b *ObjectEventsBuilder) buildSnapshot(meta ClusterMeta, scope string, events []*corev1.Event, version uint64) *refresh.Snapshot {
@@ -291,19 +333,20 @@ func convertObjectEvent(meta ClusterMeta, evt corev1.Event) ObjectEventSummary {
 	source := formatObjectEventSource(evt)
 
 	return ObjectEventSummary{
-		ClusterMeta:             meta,
-		Kind:                    "event",
-		EventType:               evt.Type,
-		Reason:                  evt.Reason,
-		Message:                 evt.Message,
-		Count:                   evt.Count,
-		FirstTimestamp:          first,
-		LastTimestamp:           last,
-		Source:                  source,
-		InvolvedObjectName:      evt.InvolvedObject.Name,
-		InvolvedObjectKind:      evt.InvolvedObject.Kind,
-		InvolvedObjectNamespace: evt.InvolvedObject.Namespace,
-		Namespace:               evt.Namespace,
+		ClusterMeta:              meta,
+		Kind:                     "event",
+		EventType:                evt.Type,
+		Reason:                   evt.Reason,
+		Message:                  evt.Message,
+		Count:                    evt.Count,
+		FirstTimestamp:           first,
+		LastTimestamp:            last,
+		Source:                   source,
+		InvolvedObjectName:       evt.InvolvedObject.Name,
+		InvolvedObjectKind:       evt.InvolvedObject.Kind,
+		InvolvedObjectNamespace:  evt.InvolvedObject.Namespace,
+		InvolvedObjectAPIVersion: evt.InvolvedObject.APIVersion,
+		Namespace:                evt.Namespace,
 	}
 }
 

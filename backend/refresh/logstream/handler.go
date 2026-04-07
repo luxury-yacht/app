@@ -19,6 +19,7 @@ import (
 
 const (
 	defaultTailLines = 1000
+	maxTailLines     = 10000
 	batchMaxSize     = 64
 )
 
@@ -342,7 +343,7 @@ func parseOptions(r *http.Request) (Options, error) {
 	tail := defaultTailLines
 	if rawTail := strings.TrimSpace(r.URL.Query().Get("tailLines")); rawTail != "" {
 		if parsed, err := strconv.Atoi(rawTail); err == nil && parsed > 0 {
-			tail = parsed
+			tail = min(parsed, maxTailLines)
 		}
 	}
 	return Options{

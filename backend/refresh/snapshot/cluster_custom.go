@@ -33,11 +33,23 @@ type ClusterCustomBuilder struct {
 }
 
 // ClusterCustomSummary captures key cluster custom resource fields.
+//
+// APIGroup and APIVersion together identify the owning CRD's GroupVersion
+// so the frontend can disambiguate colliding Kinds across API groups.
+// See the NamespaceCustomSummary comment for details.
 type ClusterCustomSummary struct {
 	ClusterMeta
-	Kind        string            `json:"kind"`
-	Name        string            `json:"name"`
-	APIGroup    string            `json:"apiGroup"`
+	Kind       string `json:"kind"`
+	Name       string `json:"name"`
+	APIGroup   string `json:"apiGroup"`
+	APIVersion string `json:"apiVersion"`
+	// CRDName is the name of the CustomResourceDefinition that defines
+	// this resource's Kind, in the canonical Kubernetes form
+	// `<plural>.<group>` (e.g. "dbclusters.rds.services.k8s.aws"). The
+	// frontend's CRD column renders it as a clickable cell that opens
+	// the owning CRD in the object panel. See NamespaceCustomSummary
+	// for the same-shape field on the namespace-scoped variant.
+	CRDName     string            `json:"crdName,omitempty"`
 	Age         string            `json:"age"`
 	Labels      map[string]string `json:"labels,omitempty"`
 	Annotations map[string]string `json:"annotations,omitempty"`
@@ -170,16 +182,20 @@ func (b *ClusterCustomBuilder) Build(ctx context.Context, scope string) (*refres
 				if item.GetNamespace() != "" {
 					continue
 				}
-				localSummaries = append(localSummaries, ClusterCustomSummary{
-					ClusterMeta: meta,
-					Kind:        resourceKind(item, crdCopy.Spec.Names.Kind),
-					Name:        item.GetName(),
-					APIGroup:    gvr.Group,
-					Age:         formatAge(item.GetCreationTimestamp().Time),
-					// Include metadata so the cluster custom view can surface labels/annotations.
-					Labels:      item.GetLabels(),
-					Annotations: item.GetAnnotations(),
-				})
+				// Delegate to the shared row builder so the full-snapshot
+				// path and the streaming/incremental update path emit
+				// identical row shapes. See BuildClusterCustomSummary in
+				// streaming_helpers.go. `crdCopy.Name` is the canonical
+				// CRD name (`<plural>.<group>`) used to open the owning
+				// CRD from the row.
+				localSummaries = append(localSummaries, BuildClusterCustomSummary(
+					meta,
+					item,
+					gvr.Group,
+					gvr.Version,
+					crdCopy.Spec.Names.Kind,
+					crdCopy.Name,
+				))
 				if v := resourceVersionOrTimestamp(item); v > localVersion {
 					localVersion = v
 				}

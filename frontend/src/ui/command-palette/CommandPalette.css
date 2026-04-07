@@ -16,7 +16,7 @@
   border-radius: var(--border-radius-lg, 12px);
   display: flex;
   flex-direction: column;
-  z-index: 9999;
+  z-index: var(--z-index-overlay);
   animation: commandPaletteIn 200ms var(--ease-out, ease-out);
 }
 

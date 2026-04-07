@@ -44,6 +44,12 @@ func TestParseOptions(t *testing.T) {
 			tail:  200,
 		},
 		{
+			name:  "tail capped at max",
+			query: url.Values{"scope": []string{"default:pod:nginx"}, "tailLines": []string{"99999"}},
+			kind:  "pod",
+			tail:  maxTailLines,
+		},
+		{
 			name:        "missing scope",
 			query:       url.Values{},
 			expectError: true,

@@ -107,7 +107,14 @@ export function useOverviewData(params: UseOverviewDataParams): OverviewData | n
         podIP: podDetails.podIP || undefined,
         owner:
           podDetails.ownerKind && podDetails.ownerName && podDetails.ownerKind !== 'None'
-            ? { kind: podDetails.ownerKind, name: podDetails.ownerName }
+            ? {
+                kind: podDetails.ownerKind,
+                name: podDetails.ownerName,
+                // Threaded so the Owner link in PodOverview can open
+                // CRD-as-Pod-owner targets (Argo Rollout, KubeVirt VMI,
+                // Tekton TaskRun, etc.) with a fully-qualified GVK.
+                apiVersion: podDetails.ownerApiVersion ?? undefined,
+              }
             : undefined,
         namespace: objectData.namespace,
         status: podDetails.status,

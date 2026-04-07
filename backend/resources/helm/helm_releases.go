@@ -217,12 +217,21 @@ func (s *Service) extractResourcesFromManifest(manifest, defaultNamespace string
 		if !ok || kind == "" {
 			continue
 		}
+		// apiVersion is the wire-form "group/version" (or just "version"
+		// for core resources). Captured here so the frontend can open
+		// Helm-managed CRDs in the object panel with a fully-qualified
+		// GVK. Optional in YAML in theory, but every real Kubernetes
+		// manifest carries it.
+		apiVersion, _ := obj["apiVersion"].(string)
 
 		if strings.HasSuffix(kind, "List") {
 			items, ok := obj["items"].([]interface{})
 			if !ok {
 				continue
 			}
+			// Items in a List inherit the List's apiVersion only if they
+			// don't carry their own. Real lists from kubectl always set
+			// items[*].apiVersion, but check both for safety.
 			for _, item := range items {
 				itemMap, ok := toStringMap(item)
 				if !ok {
@@ -232,16 +241,25 @@ func (s *Service) extractResourcesFromManifest(manifest, defaultNamespace string
 				if !ok || itemKind == "" {
 					continue
 				}
+				itemAPIVersion, _ := itemMap["apiVersion"].(string)
+				if itemAPIVersion == "" {
+					itemAPIVersion = apiVersion
+				}
 				name, namespace := extractNameNamespace(itemMap, defaultNamespace)
 				if name == "" {
 					continue
 				}
-				key := fmt.Sprintf("%s/%s/%s", itemKind, namespace, name)
+				key := fmt.Sprintf("%s/%s/%s/%s", itemAPIVersion, itemKind, namespace, name)
 				if resourceMap[key] {
 					continue
 				}
 				resourceMap[key] = true
-				resources = append(resources, types.HelmResource{Kind: itemKind, Name: name, Namespace: namespace})
+				resources = append(resources, types.HelmResource{
+					Kind:       itemKind,
+					APIVersion: itemAPIVersion,
+					Name:       name,
+					Namespace:  namespace,
+				})
 			}
 			continue
 		}
@@ -251,12 +269,17 @@ func (s *Service) extractResourcesFromManifest(manifest, defaultNamespace string
 			continue
 		}
 
-		key := fmt.Sprintf("%s/%s/%s", kind, namespace, name)
+		key := fmt.Sprintf("%s/%s/%s/%s", apiVersion, kind, namespace, name)
 		if resourceMap[key] {
 			continue
 		}
 		resourceMap[key] = true
-		resources = append(resources, types.HelmResource{Kind: kind, Name: name, Namespace: namespace})
+		resources = append(resources, types.HelmResource{
+			Kind:       kind,
+			APIVersion: apiVersion,
+			Name:       name,
+			Namespace:  namespace,
+		})
 	}
 
 	return resources

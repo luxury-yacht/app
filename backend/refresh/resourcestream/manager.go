@@ -713,10 +713,17 @@ func (m *Manager) handleCustomResource(obj interface{}, updateType MessageType, 
 		Kind:            kind,
 	}
 	if updateType != MessageTypeDeleted {
+		// The CRD name is the canonical Kubernetes form `<plural>.<group>`,
+		// computable from the GVR we're already watching. Same derivation
+		// for both the cluster-scoped and namespace-scoped paths.
+		crdName := info.gvr.Resource + "." + info.gvr.Group
 		if domain == domainClusterCustom {
-			update.Row = snapshot.BuildClusterCustomSummary(m.clusterMeta, resource, info.gvr.Group, info.kind)
+			update.Row = snapshot.BuildClusterCustomSummary(m.clusterMeta, resource, info.gvr.Group, info.gvr.Version, info.kind, crdName)
 		} else {
-			update.Row = snapshot.BuildNamespaceCustomSummary(m.clusterMeta, resource, info.gvr.Group, info.kind)
+			// The streaming path has no parent scope concept — fall back
+			// to the resource's own namespace (which is almost always
+			// set for anything that reaches an informer).
+			update.Row = snapshot.BuildNamespaceCustomSummary(m.clusterMeta, resource, info.gvr.Group, info.gvr.Version, info.kind, crdName, resource.GetNamespace())
 		}
 	}
 
@@ -1829,7 +1836,10 @@ func (m *Manager) prepareBroadcast(domain, scope string, update Update) (Update,
 	scopedUpdate := update
 	scopedUpdate.Scope = scope
 
-	scopeSubs := m.subscribers[domain][scope]
+	var scopeSubs map[uint64]*subscription
+	if domainSubs, ok := m.subscribers[domain]; ok {
+		scopeSubs = domainSubs[scope]
+	}
 	key := bufferKey(domain, scope)
 	_, bufferExists := m.buffers[key]
 	if len(scopeSubs) > 0 || bufferExists {
@@ -1893,17 +1903,24 @@ func (m *Manager) dropSubscriber(domain, scope string, id uint64, sub *subscript
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	scopeSubs := m.subscribers[domain][scope]
+	domainSubs, ok := m.subscribers[domain]
+	if !ok {
+		return
+	}
+	scopeSubs, ok := domainSubs[scope]
+	if !ok {
+		return
+	}
 	current, exists := scopeSubs[id]
 	if !exists || current != sub {
 		return
 	}
 	delete(scopeSubs, id)
 	if len(scopeSubs) == 0 {
-		delete(m.subscribers[domain], scope)
+		delete(domainSubs, scope)
 		m.clearScopeStateLocked(domain, scope)
 	}
-	if len(m.subscribers[domain]) == 0 {
+	if len(domainSubs) == 0 {
 		delete(m.subscribers, domain)
 	}
 	sub.close(reason)

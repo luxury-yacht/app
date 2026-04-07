@@ -157,19 +157,15 @@ func buildNamespaceRBACSnapshot(
 	resources := make([]RBACSummary, 0, len(roles)+len(bindings)+len(serviceAccounts))
 	var version uint64
 
+	// Delegate to the shared row builders so the full-snapshot path and
+	// the streaming/incremental update path emit identical row shapes.
+	// See BuildRoleSummary / BuildRoleBindingSummary / BuildServiceAccountSummary
+	// in streaming_helpers.go.
 	for _, role := range roles {
 		if role == nil {
 			continue
 		}
-		summary := RBACSummary{
-			ClusterMeta: meta,
-			Kind:      "Role",
-			Name:      role.Name,
-			Namespace: role.Namespace,
-			Details:   describeRole(role),
-			Age:       formatAge(role.CreationTimestamp.Time),
-		}
-		resources = append(resources, summary)
+		resources = append(resources, BuildRoleSummary(meta, role))
 		if v := resourceVersionOrTimestamp(role); v > version {
 			version = v
 		}
@@ -179,15 +175,7 @@ func buildNamespaceRBACSnapshot(
 		if binding == nil {
 			continue
 		}
-		summary := RBACSummary{
-			ClusterMeta: meta,
-			Kind:      "RoleBinding",
-			Name:      binding.Name,
-			Namespace: binding.Namespace,
-			Details:   describeRoleBinding(binding),
-			Age:       formatAge(binding.CreationTimestamp.Time),
-		}
-		resources = append(resources, summary)
+		resources = append(resources, BuildRoleBindingSummary(meta, binding))
 		if v := resourceVersionOrTimestamp(binding); v > version {
 			version = v
 		}
@@ -197,15 +185,7 @@ func buildNamespaceRBACSnapshot(
 		if sa == nil {
 			continue
 		}
-		summary := RBACSummary{
-			ClusterMeta: meta,
-			Kind:      "ServiceAccount",
-			Name:      sa.Name,
-			Namespace: sa.Namespace,
-			Details:   describeServiceAccount(sa),
-			Age:       formatAge(sa.CreationTimestamp.Time),
-		}
-		resources = append(resources, summary)
+		resources = append(resources, BuildServiceAccountSummary(meta, sa))
 		if v := resourceVersionOrTimestamp(sa); v > version {
 			version = v
 		}

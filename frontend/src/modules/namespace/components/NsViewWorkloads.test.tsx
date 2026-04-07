@@ -125,7 +125,7 @@ const mockSuspendCronJob = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('@wailsjs/go/backend/App', () => ({
   RestartWorkload: vi.fn(),
-  DeleteResource: vi.fn(),
+  DeleteResourceByGVK: vi.fn(),
   ScaleWorkload: vi.fn(),
   TriggerCronJob: (...args: any[]) => mockTriggerCronJob(...args),
   SuspendCronJob: (...args: any[]) => mockSuspendCronJob(...args),

@@ -42,7 +42,7 @@ vi.mock('@/core/refresh', () => ({
 vi.mock('@wailsjs/go/backend/App', () => ({
   ValidateObjectYaml: vi.fn(),
   ApplyObjectYaml: vi.fn(),
-  GetObjectYAML: vi.fn().mockResolvedValue({
+  GetObjectYAMLByGVK: vi.fn().mockResolvedValue({
     yaml: 'apiVersion: v1\nkind: Pod\nmetadata:\n  name: demo',
     resourceVersion: '123',
   }),

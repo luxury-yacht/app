@@ -80,7 +80,7 @@ const yamlErrorsMocks = vi.hoisted(() => ({
 const wailsMocks = vi.hoisted(() => ({
   ValidateObjectYaml: vi.fn(),
   ApplyObjectYaml: vi.fn(),
-  GetObjectYAML: vi.fn(),
+  GetObjectYAMLByGVK: vi.fn(),
 }));
 
 const errorHandlerMock = vi.hoisted(() => ({
@@ -206,7 +206,7 @@ vi.mock('@utils/errorHandler', () => ({
 vi.mock('@wailsjs/go/backend/App', () => ({
   ValidateObjectYaml: wailsMocks.ValidateObjectYaml,
   ApplyObjectYaml: wailsMocks.ApplyObjectYaml,
-  GetObjectYAML: wailsMocks.GetObjectYAML,
+  GetObjectYAMLByGVK: wailsMocks.GetObjectYAMLByGVK,
 }));
 
 const YAML = `
@@ -321,7 +321,7 @@ describe('YamlTab', () => {
     searchModuleMocks.closeSearchPanel.mockClear();
     wailsMocks.ValidateObjectYaml.mockReset();
     wailsMocks.ApplyObjectYaml.mockReset();
-    wailsMocks.GetObjectYAML.mockReset();
+    wailsMocks.GetObjectYAMLByGVK.mockReset();
     yamlErrorsMocks.parseObjectYamlError.mockReset();
     yamlErrorsMocks.coerceDiffResult.mockClear();
     errorHandlerMock.handle.mockClear();
@@ -355,7 +355,9 @@ describe('YamlTab', () => {
   it('saves edited YAML and refreshes the snapshot', async () => {
     wailsMocks.ValidateObjectYaml.mockResolvedValue({ resourceVersion: '456' });
     wailsMocks.ApplyObjectYaml.mockResolvedValue({ resourceVersion: '789' });
-    wailsMocks.GetObjectYAML.mockResolvedValue(UPDATED_YAML);
+    // hydrateLatestObject routes through GetObjectYAMLByGVK now that the
+    // YAML fixture carries apiVersion.
+    wailsMocks.GetObjectYAMLByGVK.mockResolvedValue(UPDATED_YAML);
 
     const { container, unmount } = await renderYamlTab();
 
@@ -407,7 +409,7 @@ describe('YamlTab', () => {
       currentResourceVersion: '999',
     });
     wailsMocks.ValidateObjectYaml.mockRejectedValue(new Error('mismatch'));
-    wailsMocks.GetObjectYAML.mockResolvedValue(UPDATED_YAML);
+    wailsMocks.GetObjectYAMLByGVK.mockResolvedValue(UPDATED_YAML);
 
     const { container, unmount } = await renderYamlTab();
 
@@ -446,7 +448,7 @@ describe('YamlTab', () => {
 
     await waitForUpdates();
 
-    expect(wailsMocks.GetObjectYAML).toHaveBeenCalled();
+    expect(wailsMocks.GetObjectYAMLByGVK).toHaveBeenCalled();
     expect(refreshMocks.fetchScopedDomain).toHaveBeenCalledWith(
       'object-yaml',
       'default:pod:demo',
@@ -463,7 +465,7 @@ describe('YamlTab', () => {
       causes: [],
     });
     wailsMocks.ValidateObjectYaml.mockRejectedValue(new Error('mismatch'));
-    wailsMocks.GetObjectYAML.mockRejectedValue(new Error('reload failed'));
+    wailsMocks.GetObjectYAMLByGVK.mockRejectedValue(new Error('reload failed'));
 
     const { container, unmount } = await renderYamlTab();
 
@@ -736,7 +738,7 @@ describe('YamlTab', () => {
   it('evaluates managed fields and save shortcuts across editing states', async () => {
     wailsMocks.ValidateObjectYaml.mockResolvedValue({ resourceVersion: '456' });
     wailsMocks.ApplyObjectYaml.mockResolvedValue({ resourceVersion: '456' });
-    wailsMocks.GetObjectYAML.mockResolvedValue(UPDATED_YAML);
+    wailsMocks.GetObjectYAMLByGVK.mockResolvedValue(UPDATED_YAML);
 
     const { container, unmount } = await renderYamlTab();
 

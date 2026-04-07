@@ -119,7 +119,7 @@ tr:focus-visible {
   background: var(--color-accent);
   color: var(--color-text-inverse, #fff);
   font-weight: 600;
-  z-index: 10000;
+  z-index: var(--z-index-topmost);
   transition: top 0.2s ease;
 }
 

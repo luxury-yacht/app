@@ -54,11 +54,6 @@ describe('useObjectPanelCapabilities', () => {
     suspend: false,
   };
 
-  const workloadKindApiNames = {
-    deployment: 'Deployment',
-    daemonset: 'DaemonSet',
-  };
-
   beforeAll(() => {
     (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
   });
@@ -110,7 +105,6 @@ describe('useObjectPanelCapabilities', () => {
       objectKind: 'deployment',
       detailScope: 'team-a:deployment:api',
       featureSupport: baseFeatureSupport,
-      workloadKindApiNames,
     });
 
     expect(mockUseCapabilities).toHaveBeenCalledTimes(1);
@@ -137,7 +131,6 @@ describe('useObjectPanelCapabilities', () => {
       objectKind: 'deployment',
       detailScope: 'team-a:deployment:api',
       featureSupport: baseFeatureSupport,
-      workloadKindApiNames,
     });
 
     expect(result.capabilities.hasLogs).toBe(false);
@@ -166,7 +159,6 @@ describe('useObjectPanelCapabilities', () => {
         trigger: false,
         suspend: false,
       },
-      workloadKindApiNames,
     });
 
     expect(result.capabilities).toEqual({
@@ -193,7 +185,7 @@ describe('useObjectPanelCapabilities', () => {
 
   it('enables shell capability when descriptors allow access', async () => {
     const capabilityStateMap: Record<string, { allowed: boolean; pending: boolean }> = {
-      'shell-exec': { allowed: true, pending: false },
+      'shell-exec-create': { allowed: true, pending: false },
     };
 
     mockUseCapabilities.mockImplementation(() => ({
@@ -206,10 +198,72 @@ describe('useObjectPanelCapabilities', () => {
       objectKind: 'pod',
       detailScope: 'team-a:pod:api-123',
       featureSupport: { ...baseFeatureSupport, shell: true },
-      workloadKindApiNames,
     });
 
     expect(result.capabilities.hasShell).toBe(true);
+  });
+
+  it('enables shell capability when websocket exec GET is allowed but create is denied', async () => {
+    const capabilityStateMap: Record<
+      string,
+      { allowed: boolean; pending: boolean; reason?: string }
+    > = {
+      'shell-exec-get': { allowed: true, pending: false },
+      'shell-exec-create': {
+        allowed: false,
+        pending: false,
+        reason: 'EKS Access Policy: denied create pods/exec',
+      },
+    };
+
+    mockUseCapabilities.mockImplementation(() => ({
+      getState: (id: string) => capabilityStateMap[id] ?? { allowed: false, pending: false },
+    }));
+    mockUseUserPermission.mockReturnValue({ allowed: true, pending: false });
+
+    const result = await renderHook({
+      objectData: { kind: 'Pod', name: 'api-123', namespace: 'team-a', clusterId: 'c1' },
+      objectKind: 'pod',
+      detailScope: 'team-a:pod:api-123',
+      featureSupport: { ...baseFeatureSupport, shell: true },
+    });
+
+    expect(result.capabilities.hasShell).toBe(true);
+    expect(result.capabilityStates.shell.allowed).toBe(true);
+    expect(result.capabilityReasons.shell).toBeUndefined();
+  });
+
+  it('surfaces shell denial only when both exec verbs are denied', async () => {
+    const capabilityStateMap: Record<
+      string,
+      { allowed: boolean; pending: boolean; reason?: string }
+    > = {
+      'shell-exec-get': {
+        allowed: false,
+        pending: false,
+        reason: 'Forbidden: get pods/exec',
+      },
+      'shell-exec-create': {
+        allowed: false,
+        pending: false,
+        reason: 'Forbidden: create pods/exec',
+      },
+    };
+
+    mockUseCapabilities.mockImplementation(() => ({
+      getState: (id: string) => capabilityStateMap[id] ?? { allowed: false, pending: false },
+    }));
+    mockUseUserPermission.mockReturnValue({ allowed: true, pending: false });
+
+    const result = await renderHook({
+      objectData: { kind: 'Pod', name: 'api-123', namespace: 'team-a', clusterId: 'c1' },
+      objectKind: 'pod',
+      detailScope: 'team-a:pod:api-123',
+      featureSupport: { ...baseFeatureSupport, shell: true },
+    });
+
+    expect(result.capabilities.hasShell).toBe(false);
+    expect(result.capabilityReasons.shell).toBe('Forbidden: get pods/exec');
   });
 
   it('surfaces debug-denied reason when ephemeralcontainers permission is denied', async () => {
@@ -234,7 +288,6 @@ describe('useObjectPanelCapabilities', () => {
       objectKind: 'pod',
       detailScope: 'team-a:pod:demo',
       featureSupport: { ...baseFeatureSupport, shell: true, debug: true },
-      workloadKindApiNames,
     });
 
     expect(result.capabilityStates.debug.allowed).toBe(false);
@@ -256,7 +309,34 @@ describe('useObjectPanelCapabilities', () => {
       objectKind: 'pod',
       detailScope: 'team-a:pod:demo',
       featureSupport: { ...baseFeatureSupport, shell: true, debug: true },
-      workloadKindApiNames,
+    });
+
+    expect(result.capabilityStates.debug.allowed).toBe(true);
+    expect(result.capabilityReasons.debug).toBeUndefined();
+  });
+
+  it('does not surface a debug disabled reason when permission is allowed with an EKS reason', async () => {
+    const capabilityStateMap: Record<
+      string,
+      { allowed: boolean; pending: boolean; reason?: string }
+    > = {
+      'debug-ephemeral': {
+        allowed: true,
+        pending: false,
+        reason: 'EKS Access Policy: allowed by ClusterRoleBinding "example"',
+      },
+    };
+
+    mockUseCapabilities.mockImplementation(() => ({
+      getState: (id: string) => capabilityStateMap[id] ?? { allowed: false, pending: false },
+    }));
+    mockUseUserPermission.mockReturnValue(null);
+
+    const result = await renderHook({
+      objectData: { kind: 'Pod', name: 'demo', namespace: 'team-a', clusterId: 'c1' },
+      objectKind: 'pod',
+      detailScope: 'team-a:pod:demo',
+      featureSupport: { ...baseFeatureSupport, shell: true, debug: true },
     });
 
     expect(result.capabilityStates.debug.allowed).toBe(true);

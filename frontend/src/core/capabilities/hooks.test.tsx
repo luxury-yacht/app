@@ -283,6 +283,8 @@ describe('useCapabilities', () => {
       pending: false,
       descriptor: {
         clusterId: 'default',
+        group: null,
+        version: null,
         resourceKind: 'Node',
         verb: 'list',
         namespace: null,
@@ -303,6 +305,8 @@ describe('useCapabilities', () => {
       pending: true,
       descriptor: {
         clusterId: 'default',
+        group: null,
+        version: null,
         resourceKind: 'Pod',
         verb: 'delete',
         namespace: 'alpha',
@@ -397,6 +401,7 @@ describe('useCapabilities', () => {
     const hook = await renderCapabilitiesHook([
       {
         id: 'named:pods:get:default:my-pod',
+        clusterId: 'test-cluster',
         resourceKind: 'Pod',
         verb: 'get',
         namespace: 'default',

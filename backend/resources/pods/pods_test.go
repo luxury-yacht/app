@@ -124,6 +124,9 @@ func TestGetPodReturnsDetailedInfo(t *testing.T) {
 	if details.OwnerKind != "Deployment" || details.OwnerName != "demo-deploy" {
 		t.Fatalf("expected pod owner to resolve to Deployment/demo-deploy, got %s/%s", details.OwnerKind, details.OwnerName)
 	}
+	if details.OwnerAPIVersion != "apps/v1" {
+		t.Fatalf("expected OwnerAPIVersion=apps/v1 from ReplicaSet→Deployment collapse, got %q", details.OwnerAPIVersion)
+	}
 	if details.NodeIP != "192.168.10.15" {
 		t.Fatalf("expected node IP to be populated, got %q", details.NodeIP)
 	}
@@ -355,18 +358,35 @@ func TestGetPodOwnerWithMap(t *testing.T) {
 		OwnerReferences: []metav1.OwnerReference{{
 			Kind:       "ReplicaSet",
 			Name:       "demo-rs",
+			APIVersion: "apps/v1",
 			Controller: &controller,
 		}},
 	}}
 	mapping := map[string]string{"demo-rs": "demo-deploy"}
-	kind, name := getPodOwnerWithMap(pod, mapping)
+	kind, name, apiVersion := getPodOwnerWithMap(pod, mapping)
 	require.Equal(t, "Deployment", kind)
 	require.Equal(t, "demo-deploy", name)
+	require.Equal(t, "apps/v1", apiVersion, "ReplicaSet→Deployment collapse must produce apps/v1")
 
-	pod.ObjectMeta.OwnerReferences = []metav1.OwnerReference{{Kind: "Job", Name: "work", Controller: &controller}}
-	kind, name = getPodOwnerWithMap(pod, mapping)
+	pod.ObjectMeta.OwnerReferences = []metav1.OwnerReference{{Kind: "Job", Name: "work", APIVersion: "batch/v1", Controller: &controller}}
+	kind, name, apiVersion = getPodOwnerWithMap(pod, mapping)
 	require.Equal(t, "Job", kind)
 	require.Equal(t, "work", name)
+	require.Equal(t, "batch/v1", apiVersion, "non-collapsed owner must use owner.APIVersion verbatim")
+
+	// CRD-as-Pod-owner case (Argo Rollout / KubeVirt VMI / Tekton TaskRun
+	// shape). The apiVersion must come from the OwnerReference verbatim so
+	// the panel can open the CRD with a fully-qualified GVK.
+	pod.ObjectMeta.OwnerReferences = []metav1.OwnerReference{{
+		Kind:       "Rollout",
+		Name:       "canary",
+		APIVersion: "argoproj.io/v1alpha1",
+		Controller: &controller,
+	}}
+	kind, name, apiVersion = getPodOwnerWithMap(pod, mapping)
+	require.Equal(t, "Rollout", kind)
+	require.Equal(t, "canary", name)
+	require.Equal(t, "argoproj.io/v1alpha1", apiVersion, "CRD-as-Pod-owner must thread owner.APIVersion through")
 }
 
 func TestFetchPodsWithFilter(t *testing.T) {
@@ -644,10 +664,11 @@ func TestSummarizePodUsesMetricsAndOwnership(t *testing.T) {
 		},
 	}
 
-	ownerKind, ownerName := ResolveOwner(pod, rsToDeployment)
-	summary := SummarizePod(pod, metrics, ownerKind, ownerName)
+	ownerKind, ownerName, ownerAPIVersion := ResolveOwner(pod, rsToDeployment)
+	summary := SummarizePod(pod, metrics, ownerKind, ownerName, ownerAPIVersion)
 	require.Equal(t, "Deployment", summary.OwnerKind)
 	require.Equal(t, "demo-deploy", summary.OwnerName)
+	require.Equal(t, "apps/v1", summary.OwnerAPIVersion)
 	require.Equal(t, "150m", summary.CPUUsage)
 	require.Equal(t, "64Mi", summary.MemUsage)
 	require.Equal(t, "1/1", summary.Ready)
@@ -799,9 +820,10 @@ func TestResolveOwnerFallsBackToNone(t *testing.T) {
 		},
 	}
 
-	kind, name := ResolveOwner(pod, map[string]string{})
+	kind, name, apiVersion := ResolveOwner(pod, map[string]string{})
 	require.Equal(t, "None", kind)
 	require.Equal(t, "None", name)
+	require.Empty(t, apiVersion, "ownerless pod produces empty apiVersion")
 }
 
 func TestFormatHelpersHandleEmptyInputs(t *testing.T) {

@@ -584,7 +584,6 @@ func (a *App) clearKubeconfigSelection() error {
 			a.logger.Warn(fmt.Sprintf("Failed to stop port forwards for cleared cluster %s: %v", clusterID, err), "KubeconfigManager")
 		}
 	}
-	clearGVRCache()
 	a.teardownRefreshSubsystem()
 
 	a.settingsMu.Lock()

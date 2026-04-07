@@ -10,11 +10,19 @@ export type CapabilityStatus = 'idle' | 'loading' | 'ready' | 'error';
 /**
  * Descriptor for an individual capability check the UI wants to evaluate.
  * Properties mirror the backend contract with `EvaluateCapabilities`.
+ *
+ * `group` and `version` together form a fully-qualified GroupVersionKind
+ * (when supplied) so the backend can disambiguate between two CRDs that
+ * share a Kind. Both are optional for backwards compatibility — when
+ * absent, the backend falls back to kind-only resolution.
+ * See  step 4.
  */
 export interface CapabilityDescriptor {
   id: string;
   clusterId?: string;
   verb: string;
+  group?: string;
+  version?: string;
   resourceKind: string;
   namespace?: string;
   name?: string;
@@ -28,6 +36,8 @@ export interface NormalizedCapabilityDescriptor {
   id: string;
   clusterId?: string;
   verb: string;
+  group?: string;
+  version?: string;
   resourceKind: string;
   namespace?: string;
   name?: string;
@@ -53,6 +63,8 @@ export interface CapabilityResult {
   id: string;
   clusterId?: string;
   verb: string;
+  group?: string;
+  version?: string;
   resourceKind: string;
   namespace?: string;
   name?: string;

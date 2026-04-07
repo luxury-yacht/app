@@ -7,7 +7,6 @@ import { describe, expect, it } from 'vitest';
 import {
   CLUSTER_SCOPE,
   INACTIVE_SCOPE,
-  WORKLOAD_KIND_API_NAMES,
   RESOURCE_CAPABILITIES,
   getObjectDetailsRefresherName,
 } from './constants';
@@ -21,11 +20,6 @@ describe('ObjectPanel constants', () => {
   it('returns null when no kind is provided', () => {
     expect(getObjectDetailsRefresherName(undefined)).toBeNull();
     expect(getObjectDetailsRefresherName(null)).toBeNull();
-  });
-
-  it('exposes workload kind API aliases for table lookups', () => {
-    expect(WORKLOAD_KIND_API_NAMES.deployment).toBe('Deployment');
-    expect(WORKLOAD_KIND_API_NAMES.statefulset).toBe('StatefulSet');
   });
 
   it('defines capability presets for key resource kinds', () => {

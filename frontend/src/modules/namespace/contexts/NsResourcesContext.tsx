@@ -102,8 +102,9 @@ const filterByClusterId = <T extends { clusterId?: string | null }>(
 };
 
 const parseAutoscalingTarget = (
-  target?: string | null
-): { kind: string; name: string } | undefined => {
+  target?: string | null,
+  apiVersion?: string | null
+): { kind: string; name: string; apiVersion?: string } | undefined => {
   if (!target) {
     return undefined;
   }
@@ -113,9 +114,14 @@ const parseAutoscalingTarget = (
     return undefined;
   }
 
+  // apiVersion is the wire-form "group/version" sourced from the
+  // backend's HPA snapshot (NamespaceAutoscalingSummary.targetApiVersion).
+  // Threaded so the object panel can open CRD scale targets with a
+  // fully-qualified GVK.
   return {
     kind: kindPart,
     name: nameParts.join('/'),
+    apiVersion: apiVersion ?? undefined,
   };
 };
 
@@ -480,7 +486,7 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     (payload?: NamespaceAutoscalingSnapshotPayload) =>
       filterByClusterId(payload?.resources, namespaceClusterId).map(
         (item: NamespaceAutoscalingSummary) => {
-          const scaleTargetRef = parseAutoscalingTarget(item.target);
+          const scaleTargetRef = parseAutoscalingTarget(item.target, item.targetApiVersion);
           return {
             kind: item.kind,
             kindAlias: item.kind,
@@ -542,6 +548,10 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
           name: item.name,
           namespace: item.namespace,
           apiGroup: item.apiGroup,
+          apiVersion: item.apiVersion,
+          // CRD name (e.g. "dbinstances.rds.services.k8s.aws") for the
+          // CRD column's clickable cell. See NsViewCustom.
+          crdName: item.crdName,
           age: item.age,
           // Multi-cluster identity — required for stable row keys and panel actions.
           clusterId: item.clusterId,
@@ -714,6 +724,8 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     // Update the previous namespace
     prevNamespaceRef.current = currentNamespace;
 
+    let timerId: ReturnType<typeof setTimeout> | undefined;
+
     // If we have a namespace, reset and reload
     if (currentNamespace) {
       // Reset all resources immediately when namespace changes
@@ -729,55 +741,58 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
       custom.reset();
       helm.reset();
 
-      if (!isNamespaceView) {
-        return;
-      }
-
-      // Load the active resource type
-      if (activeResourceType) {
-        // Small delay to ensure reset completes before loading
-        setTimeout(() => {
+      if (isNamespaceView && activeResourceType) {
+        // Small delay to ensure reset completes before loading.
+        // Read from resourcesRef so the callback uses the latest handles.
+        timerId = setTimeout(() => {
+          const res = resourcesRef.current;
           switch (activeResourceType) {
             case 'browse':
               // Catalog-backed browse view manages its own refresh cadence.
               break;
             case 'pods':
-              pods.load(true);
+              res.pods.load(true);
               break;
             case 'workloads':
-              workloads.load(true);
+              res.workloads.load(true);
               break;
             case 'config':
-              config.load(true);
+              res.config.load(true);
               break;
             case 'network':
-              network.load(true);
+              res.network.load(true);
               break;
             case 'rbac':
-              rbac.load(true);
+              res.rbac.load(true);
               break;
             case 'storage':
-              storage.load(true);
+              res.storage.load(true);
               break;
             case 'events':
-              events.load(true);
+              res.events.load(true);
               break;
             case 'quotas':
-              quotas.load(true);
+              res.quotas.load(true);
               break;
             case 'autoscaling':
-              autoscaling.load(true);
+              res.autoscaling.load(true);
               break;
             case 'custom':
-              custom.load(true);
+              res.custom.load(true);
               break;
             case 'helm':
-              helm.load(true);
+              res.helm.load(true);
               break;
           }
         }, 100);
       }
     }
+
+    return () => {
+      if (timerId !== undefined) {
+        clearTimeout(timerId);
+      }
+    };
   }, [
     currentNamespace,
     activeResourceType,

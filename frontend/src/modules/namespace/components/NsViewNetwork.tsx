@@ -24,8 +24,12 @@ import GridTable, {
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
+import {
+  formatBuiltinApiVersion,
+  resolveBuiltinGroupVersion,
+} from '@shared/constants/builtinGroupVersions';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
-import { DeleteResource } from '@wailsjs/go/backend/App';
+import { DeleteResourceByGVK } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
 import { PortForwardModal, PortForwardTarget } from '@modules/port-forward';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
@@ -69,10 +73,12 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
 
     const handleResourceClick = useCallback(
       (resource: NetworkData) => {
+        const resolvedKind = resource.kind || resource.kindAlias;
         openWithObject({
-          kind: resource.kind || resource.kindAlias,
+          kind: resolvedKind,
           name: resource.name,
           namespace: resource.namespace,
+          ...resolveBuiltinGroupVersion(resolvedKind),
           clusterId: resource.clusterId ?? undefined,
           clusterName: resource.clusterName ?? undefined,
         });
@@ -202,20 +208,36 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
 
     const handleDeleteConfirm = useCallback(async () => {
       if (!deleteConfirm.resource) return;
+      const resource = deleteConfirm.resource;
 
       try {
-        await DeleteResource(
-          deleteConfirm.resource.clusterId ?? '',
-          deleteConfirm.resource.kind,
-          deleteConfirm.resource.namespace,
-          deleteConfirm.resource.name
+        // Multi-cluster rule (AGENTS.md): every backend command must
+        // carry a resolved clusterId.
+        if (!resource.clusterId) {
+          throw new Error(`Cannot delete ${resource.kind}/${resource.name}: clusterId is missing`);
+        }
+        // Built-in network resources (Service/Ingress/NetworkPolicy/EndpointSlice)
+        // resolve via the lookup table. A miss means a non-built-in kind
+        // slipped into this view — fail loud.
+        const apiVersion = formatBuiltinApiVersion(resource.kind);
+        if (!apiVersion) {
+          throw new Error(
+            `Cannot delete ${resource.kind}/${resource.name}: not a known built-in kind`
+          );
+        }
+        await DeleteResourceByGVK(
+          resource.clusterId,
+          apiVersion,
+          resource.kind,
+          resource.namespace,
+          resource.name
         );
         setDeleteConfirm({ show: false, resource: null });
       } catch (error) {
         errorHandler.handle(error, {
           action: 'delete',
-          kind: deleteConfirm.resource.kind,
-          name: deleteConfirm.resource.name,
+          kind: resource.kind,
+          name: resource.name,
         });
         setDeleteConfirm({ show: false, resource: null });
       }
@@ -244,11 +266,22 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
           handlers: {
             onOpen: () => handleResourceClick(resource),
             onPortForward: () => {
+              // Multi-cluster rule (AGENTS.md): port-forward is a backend
+              // command and must carry a resolved clusterId.
+              if (!resource.clusterId) {
+                errorHandler.handle(
+                  new Error(
+                    `Cannot open port-forward for ${resource.kind}/${resource.name}: clusterId is missing`
+                  ),
+                  { action: 'portForward', kind: resource.kind, name: resource.name }
+                );
+                return;
+              }
               setPortForwardTarget({
                 kind: resource.kind,
                 name: resource.name,
                 namespace: resource.namespace,
-                clusterId: resource.clusterId ?? '',
+                clusterId: resource.clusterId,
                 clusterName: resource.clusterName ?? '',
                 ports: [],
               });

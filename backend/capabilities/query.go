@@ -8,9 +8,17 @@
 package capabilities
 
 // PermissionQuery is a single permission check request from the frontend.
+//
+// Group and Version together MUST carry a fully-qualified GroupVersionKind
+// — this is what lets the RBAC gate distinguish between two CRDs that
+// share a Kind (e.g. DBInstance under different operators). The backend
+// rejects queries with an empty Version: the legacy kind-only resolver
+// was first-match-wins across colliding CRDs and has been retired.
 type PermissionQuery struct {
 	ID           string `json:"id"`
 	ClusterId    string `json:"clusterId"`
+	Group        string `json:"group,omitempty"`
+	Version      string `json:"version,omitempty"`
 	ResourceKind string `json:"resourceKind"`
 	Verb         string `json:"verb"`
 	Namespace    string `json:"namespace,omitempty"`
@@ -22,6 +30,8 @@ type PermissionQuery struct {
 type PermissionResult struct {
 	ID           string `json:"id"`
 	ClusterId    string `json:"clusterId"`
+	Group        string `json:"group,omitempty"`
+	Version      string `json:"version,omitempty"`
 	ResourceKind string `json:"resourceKind"`
 	Verb         string `json:"verb"`
 	Namespace    string `json:"namespace,omitempty"`
@@ -70,6 +80,8 @@ func ResultFromQuery(q PermissionQuery) PermissionResult {
 	return PermissionResult{
 		ID:           q.ID,
 		ClusterId:    q.ClusterId,
+		Group:        q.Group,
+		Version:      q.Version,
 		ResourceKind: q.ResourceKind,
 		Verb:         q.Verb,
 		Namespace:    q.Namespace,

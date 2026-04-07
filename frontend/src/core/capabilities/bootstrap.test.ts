@@ -19,14 +19,18 @@ const mockGetPermissionKey = vi.fn(
     verb: string,
     namespace?: string | null,
     subresource?: string | null,
-    clusterId?: string | null
+    clusterId?: string | null,
+    group?: string | null,
+    version?: string | null
   ) => {
     const cid = (clusterId || '').toLowerCase();
+    const g = (group ?? '').trim();
+    const ver = (version ?? '').trim();
     const rk = resourceKind.toLowerCase();
     const v = verb.toLowerCase();
     const ns = namespace ? namespace.toLowerCase() : 'cluster';
     const sub = subresource ? subresource.toLowerCase() : '';
-    return `${cid}|${rk}|${v}|${ns}|${sub}`;
+    return `${cid}|${g}/${ver}|${rk}|${v}|${ns}|${sub}`;
   }
 );
 
@@ -85,16 +89,18 @@ describe('capabilities bootstrap helpers', () => {
       'patch',
       'default',
       null,
-      'cluster-1'
+      'cluster-1',
+      undefined,
+      undefined
     );
-    expect(key).toBe('cluster-1|deployment|patch|default|');
+    expect(key).toBe('cluster-1|/|deployment|patch|default|');
   });
 
   it('getPermissionKey handles null namespace as "cluster"', async () => {
     const bootstrap = await loadBootstrap();
 
     const key = bootstrap.getPermissionKey('Namespace', 'list', null, null, 'c1');
-    expect(key).toBe('c1|namespace|list|cluster|');
+    expect(key).toBe('c1|/|namespace|list|cluster|');
   });
 
   it('initializeUserPermissionsBootstrap calls setCurrentClusterId and initializePermissionStore', async () => {

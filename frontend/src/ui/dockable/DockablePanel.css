@@ -142,7 +142,9 @@
   border: none;
   color: var(--color-text-secondary, #999);
   cursor: pointer;
-  transition: all 0.2s;
+  transition:
+    background-color 0.2s,
+    color 0.2s;
 }
 
 .dockable-panel__control-btn:hover {
@@ -505,7 +507,7 @@ body.dockable-panel-resizing-sw * {
     0 9px 24px rgb(0 0 0 / 35%),
     0 0 0 1px color-mix(in srgb, var(--color-accent, #3b82f6) 30%, transparent);
   pointer-events: none;
-  z-index: 10000;
+  z-index: var(--z-index-topmost);
   white-space: nowrap;
 }
 
@@ -544,7 +546,9 @@ body.dockable-panel-resizing-sw * {
   border: none;
   background: var(--color-bg-secondary);
   cursor: pointer;
-  transition: all 0.2s;
+  transition:
+    background-color 0.2s,
+    color 0.2s;
 }
 
 .dockable-tab-bar__overflow-icon {

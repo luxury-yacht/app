@@ -105,8 +105,8 @@ func TestResourceWrappersRequireClient(t *testing.T) {
 			_, err := app.GetResourceQuota(clusterID, "ns", "rq")
 			return err
 		}},
-		{"DeleteResource", func() error {
-			return app.DeleteResource(clusterID, "pod", "ns", "name")
+		{"DeleteResourceByGVK", func() error {
+			return app.DeleteResourceByGVK(clusterID, "v1", "Pod", "ns", "name")
 		}},
 		{"HelmReleaseDetails", func() error {
 			_, err := app.GetHelmReleaseDetails(clusterID, "ns", "rel")

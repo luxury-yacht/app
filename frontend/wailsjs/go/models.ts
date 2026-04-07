@@ -501,6 +501,8 @@ export namespace capabilities {
 	export class CheckRequest {
 	    id: string;
 	    clusterId?: string;
+	    group?: string;
+	    version?: string;
 	    verb: string;
 	    resourceKind: string;
 	    namespace?: string;
@@ -515,6 +517,8 @@ export namespace capabilities {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
 	        this.clusterId = source["clusterId"];
+	        this.group = source["group"];
+	        this.version = source["version"];
 	        this.verb = source["verb"];
 	        this.resourceKind = source["resourceKind"];
 	        this.namespace = source["namespace"];
@@ -525,6 +529,8 @@ export namespace capabilities {
 	export class CheckResult {
 	    id: string;
 	    clusterId?: string;
+	    group?: string;
+	    version?: string;
 	    verb: string;
 	    resourceKind: string;
 	    namespace?: string;
@@ -543,6 +549,8 @@ export namespace capabilities {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
 	        this.clusterId = source["clusterId"];
+	        this.group = source["group"];
+	        this.version = source["version"];
 	        this.verb = source["verb"];
 	        this.resourceKind = source["resourceKind"];
 	        this.namespace = source["namespace"];
@@ -583,6 +591,8 @@ export namespace capabilities {
 	export class PermissionQuery {
 	    id: string;
 	    clusterId: string;
+	    group?: string;
+	    version?: string;
 	    resourceKind: string;
 	    verb: string;
 	    namespace?: string;
@@ -597,6 +607,8 @@ export namespace capabilities {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
 	        this.clusterId = source["clusterId"];
+	        this.group = source["group"];
+	        this.version = source["version"];
 	        this.resourceKind = source["resourceKind"];
 	        this.verb = source["verb"];
 	        this.namespace = source["namespace"];
@@ -607,6 +619,8 @@ export namespace capabilities {
 	export class PermissionResult {
 	    id: string;
 	    clusterId: string;
+	    group?: string;
+	    version?: string;
 	    resourceKind: string;
 	    verb: string;
 	    namespace?: string;
@@ -625,6 +639,8 @@ export namespace capabilities {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
 	        this.clusterId = source["clusterId"];
+	        this.group = source["group"];
+	        this.version = source["version"];
 	        this.resourceKind = source["resourceKind"];
 	        this.verb = source["verb"];
 	        this.namespace = source["namespace"];
@@ -1113,6 +1129,7 @@ export namespace types {
 	    memUsage: string;
 	    ownerKind: string;
 	    ownerName: string;
+	    ownerApiVersion?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new PodSimpleInfo(source);
@@ -1135,6 +1152,7 @@ export namespace types {
 	        this.memUsage = source["memUsage"];
 	        this.ownerKind = source["ownerKind"];
 	        this.ownerName = source["ownerName"];
+	        this.ownerApiVersion = source["ownerApiVersion"];
 	    }
 	}
 	export class PodDetailInfoContainer {
@@ -1847,6 +1865,7 @@ export namespace types {
 	
 	export class HelmResource {
 	    kind: string;
+	    apiVersion?: string;
 	    name: string;
 	    namespace: string;
 	
@@ -1857,6 +1876,7 @@ export namespace types {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.kind = source["kind"];
+	        this.apiVersion = source["apiVersion"];
 	        this.name = source["name"];
 	        this.namespace = source["namespace"];
 	    }
@@ -3260,6 +3280,7 @@ export namespace types {
 	    memUsage: string;
 	    ownerKind: string;
 	    ownerName: string;
+	    ownerApiVersion?: string;
 	    node: string;
 	    nodeIP?: string;
 	    podIP?: string;
@@ -3304,6 +3325,7 @@ export namespace types {
 	        this.memUsage = source["memUsage"];
 	        this.ownerKind = source["ownerKind"];
 	        this.ownerName = source["ownerName"];
+	        this.ownerApiVersion = source["ownerApiVersion"];
 	        this.node = source["node"];
 	        this.nodeIP = source["nodeIP"];
 	        this.podIP = source["podIP"];

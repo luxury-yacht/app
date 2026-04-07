@@ -65,6 +65,7 @@ const createSnapshot = () => ({
       resourceVersion: '1',
       creationTimestamp: '2024-01-01T00:00:00Z',
       scope: 'Namespace' as const,
+      clusterId: 'test-cluster',
     },
   ],
   total: 1,
@@ -73,6 +74,7 @@ const createSnapshot = () => ({
   batchSize: 1,
   totalBatches: 1,
   isFinal: true,
+  clusterId: 'test-cluster',
 });
 
 const createEmptySnapshot = () => ({
@@ -83,6 +85,7 @@ const createEmptySnapshot = () => ({
   batchSize: 0,
   totalBatches: 0,
   isFinal: true,
+  clusterId: 'test-cluster',
 });
 
 const createStreamEvent = (overrides: Partial<Record<string, unknown>> = {}) => ({

@@ -121,19 +121,75 @@ func TestObjectDetailsBuilderPropagatesProviderErrors(t *testing.T) {
 }
 
 func TestParseObjectScopeValidClusterScope(t *testing.T) {
-	ns, kind, name, err := parseObjectScope("__cluster__:Node:n1")
+	identity, err := parseObjectScope("__cluster__:Node:n1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if ns != "" || kind != "Node" || name != "n1" {
-		t.Fatalf("unexpected scope output: ns=%q kind=%q name=%q", ns, kind, name)
+	if identity.Namespace != "" || identity.GVK.Kind != "Node" || identity.Name != "n1" {
+		t.Fatalf("unexpected scope output: ns=%q kind=%q name=%q", identity.Namespace, identity.GVK.Kind, identity.Name)
+	}
+	if identity.GVK.Group != "" || identity.GVK.Version != "" {
+		t.Fatalf("legacy scope should not populate group/version, got group=%q version=%q", identity.GVK.Group, identity.GVK.Version)
 	}
 }
 
 func TestParseObjectScopeRejectsEmptyKind(t *testing.T) {
-	if _, _, _, err := parseObjectScope("default::pod-1"); err == nil {
+	if _, err := parseObjectScope("default::pod-1"); err == nil {
 		t.Fatal("expected error for empty kind")
+	}
+}
+
+func TestParseObjectScopeGVKForm(t *testing.T) {
+	identity, err := parseObjectScope("default:rds.services.k8s.aws/v1alpha1:DBInstance:my-db")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if identity.Namespace != "default" {
+		t.Fatalf("expected namespace 'default', got %q", identity.Namespace)
+	}
+	if identity.Name != "my-db" {
+		t.Fatalf("expected name 'my-db', got %q", identity.Name)
+	}
+	if identity.GVK.Group != "rds.services.k8s.aws" {
+		t.Fatalf("expected group 'rds.services.k8s.aws', got %q", identity.GVK.Group)
+	}
+	if identity.GVK.Version != "v1alpha1" {
+		t.Fatalf("expected version 'v1alpha1', got %q", identity.GVK.Version)
+	}
+	if identity.GVK.Kind != "DBInstance" {
+		t.Fatalf("expected kind 'DBInstance', got %q", identity.GVK.Kind)
+	}
+}
+
+func TestParseObjectScopeGVKFormWithClusterScopedNamespace(t *testing.T) {
+	identity, err := parseObjectScope("__cluster__:rbac.authorization.k8s.io/v1:ClusterRole:admin")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if identity.Namespace != "" {
+		t.Fatalf("expected empty namespace for cluster-scoped GVK form, got %q", identity.Namespace)
+	}
+	if identity.GVK.Group != "rbac.authorization.k8s.io" || identity.GVK.Version != "v1" || identity.GVK.Kind != "ClusterRole" {
+		t.Fatalf("unexpected GVK: %v", identity.GVK)
+	}
+	if identity.Name != "admin" {
+		t.Fatalf("expected name 'admin', got %q", identity.Name)
+	}
+}
+
+func TestParseObjectScopeGVKFormCoreResource(t *testing.T) {
+	// Core resources have empty group. Encoded as leading slash so
+	// strings.SplitN still yields four segments.
+	identity, err := parseObjectScope("default:/v1:ConfigMap:app-cm")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if identity.GVK.Group != "" || identity.GVK.Version != "v1" || identity.GVK.Kind != "ConfigMap" {
+		t.Fatalf("unexpected GVK for core resource: %v", identity.GVK)
+	}
+	if identity.Namespace != "default" || identity.Name != "app-cm" {
+		t.Fatalf("unexpected ns/name: ns=%q name=%q", identity.Namespace, identity.Name)
 	}
 }
 

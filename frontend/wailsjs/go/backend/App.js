@@ -78,8 +78,8 @@ export function DeletePod(arg1, arg2, arg3) {
   return window['go']['backend']['App']['DeletePod'](arg1, arg2, arg3);
 }
 
-export function DeleteResource(arg1, arg2, arg3, arg4) {
-  return window['go']['backend']['App']['DeleteResource'](arg1, arg2, arg3, arg4);
+export function DeleteResourceByGVK(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['backend']['App']['DeleteResourceByGVK'](arg1, arg2, arg3, arg4, arg5);
 }
 
 export function DeleteTheme(arg1) {
@@ -234,8 +234,8 @@ export function GetNode(arg1, arg2) {
   return window['go']['backend']['App']['GetNode'](arg1, arg2);
 }
 
-export function GetObjectYAML(arg1, arg2, arg3, arg4) {
-  return window['go']['backend']['App']['GetObjectYAML'](arg1, arg2, arg3, arg4);
+export function GetObjectYAMLByGVK(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['backend']['App']['GetObjectYAMLByGVK'](arg1, arg2, arg3, arg4, arg5);
 }
 
 export function GetPersistentVolume(arg1, arg2) {

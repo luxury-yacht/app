@@ -20,6 +20,8 @@ type PanelTestOptions = {
   name: string;
   namespace?: string;
   clusterId?: string;
+  group?: string;
+  version?: string;
   capabilityOverrides?: Record<string, CapabilityState>;
   logPermission?: { allowed: boolean; pending: boolean };
   scopedDomain?: { data: unknown; status: string; error: string | null };
@@ -77,7 +79,7 @@ const mockApp = {
   RestartWorkload: vi.fn().mockResolvedValue(undefined),
   DeletePod: vi.fn().mockResolvedValue(undefined),
   DeleteHelmRelease: vi.fn().mockResolvedValue(undefined),
-  DeleteResource: vi.fn().mockResolvedValue(undefined),
+  DeleteResourceByGVK: vi.fn().mockResolvedValue(undefined),
   ScaleWorkload: vi.fn().mockResolvedValue(undefined),
 };
 
@@ -271,7 +273,7 @@ describe('ObjectPanel tab availability', () => {
     mockApp.RestartWorkload.mockClear();
     mockApp.DeletePod.mockClear();
     mockApp.DeleteHelmRelease.mockClear();
-    mockApp.DeleteResource.mockClear();
+    mockApp.DeleteResourceByGVK.mockClear();
     mockApp.ScaleWorkload.mockClear();
 
     mockRefreshOrchestrator.fetchScopedDomain.mockResolvedValue(undefined);
@@ -315,6 +317,8 @@ describe('ObjectPanel tab availability', () => {
       namespace: options.namespace,
       kindAlias: options.kind,
       clusterId,
+      group: options.group,
+      version: options.version,
     };
 
     capabilityStateMap = options.capabilityOverrides ?? {};
@@ -565,11 +569,13 @@ describe('ObjectPanel tab availability', () => {
     expect(mockApp.DeleteHelmRelease).toHaveBeenCalledWith('alpha:ctx', 'helm-ns', 'demo');
   });
 
-  it('falls back to DeleteResource for generic kinds', async () => {
+  it('routes generic kind deletes through DeleteResourceByGVK', async () => {
     await renderObjectPanel({
       kind: 'ConfigMap',
       name: 'settings',
       namespace: 'team-a',
+      group: '',
+      version: 'v1',
     });
 
     act(() => {
@@ -579,8 +585,9 @@ describe('ObjectPanel tab availability', () => {
       await deleteModalPropsRef.current.onConfirm();
     });
 
-    expect(mockApp.DeleteResource).toHaveBeenCalledWith(
+    expect(mockApp.DeleteResourceByGVK).toHaveBeenCalledWith(
       'alpha:ctx',
+      'v1',
       'ConfigMap',
       'team-a',
       'settings'

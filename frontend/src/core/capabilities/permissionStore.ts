@@ -7,6 +7,7 @@
  */
 
 import { eventBus, type UnsubscribeFn } from '@/core/events';
+import { resolveBuiltinGroupVersion } from '@/shared/constants/builtinGroupVersions';
 import type {
   PermissionEntry,
   PermissionKey,
@@ -20,6 +21,35 @@ import {
   CLUSTER_PERMISSIONS,
   type PermissionSpecList,
 } from './permissionSpecs';
+
+/**
+ * Resolve GVK for a permission lookup. When the caller supplied explicit
+ * group/version they win (CRD callers must pass explicit values so two
+ * CRDs sharing a Kind don't collide). Otherwise fall back to the
+ * builtin lookup table so the spec-emit path and the lookup path agree
+ * on the same key for built-in kinds without every caller having to
+ * spell out group/version. See  and
+ * frontend/src/shared/constants/builtinGroupVersions.ts.
+ */
+const resolvePermissionGVK = (
+  resourceKind: string,
+  group?: string | null,
+  version?: string | null
+): { group: string; version: string } => {
+  const g = (group ?? '').trim();
+  const ver = (version ?? '').trim();
+  if (ver) {
+    // Caller supplied a version — honour it verbatim (including empty
+    // group for core/v1 resources). Required for CRDs and any caller
+    // that wants to disambiguate a colliding Kind.
+    return { group: g, version: ver };
+  }
+  const builtin = resolveBuiltinGroupVersion(resourceKind);
+  if (builtin.version) {
+    return { group: builtin.group ?? '', version: builtin.version };
+  }
+  return { group: g, version: ver };
+};
 
 // ---------------------------------------------------------------------------
 // QueryPermissions RPC
@@ -35,6 +65,16 @@ import {
 interface QueryPayloadItem {
   id: string;
   clusterId: string;
+  /**
+   * API group for the target kind. Optional: when present alongside
+   * `version`, the backend routes through the strict GVK resolver. When
+   * absent, the backend falls back to kind-only resolution. This is what
+   * lets the permission store disambiguate colliding CRDs (e.g. two
+   * different DBInstance kinds).
+   */
+  group?: string;
+  /** API version paired with `group`. */
+  version?: string;
   resourceKind: string;
   verb: string;
   namespace: string;
@@ -45,6 +85,8 @@ interface QueryPayloadItem {
 interface QueryResponseResult {
   id: string;
   clusterId: string;
+  group?: string;
+  version?: string;
   resourceKind: string;
   verb: string;
   namespace: string;
@@ -86,23 +128,34 @@ function QueryPermissions(queries: QueryPayloadItem[]): Promise<QueryPermissions
 
 /**
  * Builds the canonical permission key. Format:
- *   `${clusterId}|${resourceKind}|${verb}|${namespace_or_'cluster'}|${subresource_or_''}`
- * All fields lowercased. Null namespace becomes literal string 'cluster'.
- * Empty subresource becomes ''.
+ *   `${clusterId}|${group}/${version}|${resourceKind}|${verb}|${namespace_or_'cluster'}|${subresource_or_''}`
+ * All fields lowercased except group (case-sensitive in Kubernetes).
+ * Group/version segment is included so two CRDs sharing a Kind get
+ * distinct keys and don't silently clobber each other in the permission
+ * cache. Null namespace becomes literal string 'cluster'. Empty
+ * subresource becomes ''.
  */
 export const getPermissionKey = (
   resourceKind: string,
   verb: string,
   namespace?: string | null,
   subresource?: string | null,
-  clusterId?: string | null
+  clusterId?: string | null,
+  group?: string | null,
+  version?: string | null
 ): PermissionKey => {
   const cid = (clusterId || currentClusterId || '').toLowerCase();
+  // Auto-resolve built-in GVK when the caller didn't specify one, so
+  // the key shape matches on both the spec-emit path (buildBatch) and
+  // the lookup path (useUserPermission, getUserPermission) without
+  // every caller having to pass `resolveBuiltinGroupVersion(kind)`
+  // explicitly. CRD callers still win when they supply group/version.
+  const { group: g, version: ver } = resolvePermissionGVK(resourceKind, group, version);
   const rk = resourceKind.toLowerCase();
   const v = verb.toLowerCase();
   const ns = namespace ? namespace.toLowerCase() : 'cluster';
   const sub = subresource ? subresource.toLowerCase() : '';
-  return `${cid}|${rk}|${v}|${ns}|${sub}`;
+  return `${cid}|${g}/${ver}|${rk}|${v}|${ns}|${sub}`;
 };
 
 // ---------------------------------------------------------------------------
@@ -216,7 +269,9 @@ const rebuildPermissionMap = (): void => {
         spec.verb,
         namespace,
         spec.subresource ?? null,
-        clusterId
+        clusterId,
+        spec.group ?? null,
+        spec.version ?? null
       );
       if (!newMap.has(key)) {
         newMap.set(
@@ -225,6 +280,8 @@ const rebuildPermissionMap = (): void => {
             key,
             {
               clusterId,
+              group: spec.group ?? null,
+              version: spec.version ?? null,
               resourceKind: spec.kind,
               verb: spec.verb,
               namespace,
@@ -258,6 +315,8 @@ const notify = (): void => {
 interface QueryBatchItem {
   id: string;
   clusterId: string;
+  group: string;
+  version: string;
   resourceKind: string;
   verb: string;
   namespace: string;
@@ -268,7 +327,10 @@ interface QueryBatchItem {
 
 /**
  * Expands permission spec lists into individual query batch items.
- * The feature string is carried from the list onto each item.
+ * The feature string is carried from the list onto each item. Specs
+ * for built-in kinds typically leave group/version undefined; CRD specs
+ * (or lazy queryKindPermissions calls) populate them so the backend can
+ * disambiguate colliding kinds.
  */
 const buildBatch = (
   specLists: PermissionSpecList[],
@@ -278,16 +340,26 @@ const buildBatch = (
   const items: QueryBatchItem[] = [];
   for (const list of specLists) {
     for (const spec of list.specs) {
+      // Resolve GVK at batch-build time so the backend receives a
+      // non-empty apiVersion (app_permissions.go now rejects queries
+      // with missing Version). Built-in kinds fall through to
+      // resolveBuiltinGroupVersion; CRD specs supply explicit
+      // group/version.
+      const { group, version } = resolvePermissionGVK(spec.kind, spec.group, spec.version);
       const key = getPermissionKey(
         spec.kind,
         spec.verb,
         namespace,
         spec.subresource ?? null,
-        clusterId
+        clusterId,
+        group,
+        version
       );
       items.push({
         id: key,
         clusterId,
+        group,
+        version,
         resourceKind: spec.kind,
         verb: spec.verb,
         namespace: namespace ?? '',
@@ -318,6 +390,8 @@ const applyResults = (results: QueryResponseResult[], batchItems: QueryBatchItem
       reason: r.reason || r.error || null,
       descriptor: {
         clusterId: r.clusterId,
+        group: r.group || null,
+        version: r.version || null,
         resourceKind: r.resourceKind,
         verb: r.verb,
         namespace: r.namespace || null,
@@ -386,6 +460,8 @@ export const queryNamespacePermissions = (
   const payload: QueryPayloadItem[] = batch.map((item) => ({
     id: item.id,
     clusterId: item.clusterId,
+    group: item.group || undefined,
+    version: item.version || undefined,
     resourceKind: item.resourceKind,
     verb: item.verb,
     namespace: item.namespace,
@@ -420,6 +496,8 @@ export const queryNamespacePermissions = (
           reason: queryError,
           descriptor: {
             clusterId: item.clusterId,
+            group: item.group || null,
+            version: item.version || null,
             resourceKind: item.resourceKind,
             verb: item.verb,
             namespace: item.namespace || null,
@@ -481,6 +559,8 @@ export const queryClusterPermissions = (clusterId: string): void => {
   const payload: QueryPayloadItem[] = batch.map((item) => ({
     id: item.id,
     clusterId: item.clusterId,
+    group: item.group || undefined,
+    version: item.version || undefined,
     resourceKind: item.resourceKind,
     verb: item.verb,
     namespace: item.namespace,
@@ -512,6 +592,8 @@ export const queryClusterPermissions = (clusterId: string): void => {
           reason: queryError,
           descriptor: {
             clusterId: item.clusterId,
+            group: item.group || null,
+            version: item.version || null,
             resourceKind: item.resourceKind,
             verb: item.verb,
             namespace: null,
@@ -540,18 +622,34 @@ export const queryClusterPermissions = (clusterId: string): void => {
  * Designed for lazy/on-demand use (e.g., first context menu open on a CRD
  * object). The first call fires the query; subsequent calls for the same
  * kind+namespace within TTL are no-ops.
+ *
+ * `group` and `version` MUST be supplied by callers when known so the
+ * backend can disambiguate colliding CRDs (e.g. two `DBInstance` kinds
+ * from different operators). Without them, the backend falls back to its
+ * legacy first-match-wins resolver and would silently check permission
+ * against the wrong CRD.
  */
 export const queryKindPermissions = (
   kind: string,
   namespace: string | null,
-  clusterId: string | null
+  clusterId: string | null,
+  group?: string | null,
+  version?: string | null
 ): void => {
   const cid = clusterId || currentClusterId;
   if (!cid || !kind) return;
 
-  // Use a kind-specific query key so TTL-skip works per kind, not per namespace batch.
+  // Resolve GVK once: honour caller-supplied group/version (required for
+  // CRDs) or fall back to the built-in lookup. The backend rejects
+  // queries with missing Version, so every payload item must carry a
+  // resolved version before we fire the RPC.
+  const { group: groupVal, version: versionVal } = resolvePermissionGVK(kind, group, version);
+
+  // Include group/version in the query key so per-CRD TTL skip works.
+  // Two DBInstance CRDs from different groups must NOT share a query key.
   const ns = namespace ?? '';
-  const queryKey = `${cid}|${ns}|kind:${kind.toLowerCase()}`;
+  const gvSegment = `${groupVal}/${versionVal}`;
+  const queryKey = `${cid}|${ns}|kind:${gvSegment}/${kind.toLowerCase()}`;
   if (inFlightQueries.has(queryKey)) return;
 
   const lastQuery = lastQueryTimestamps.get(queryKey);
@@ -560,9 +658,11 @@ export const queryKindPermissions = (
   }
 
   const verbs = ['delete', 'patch'];
-  const payload = verbs.map((verb) => ({
-    id: getPermissionKey(kind, verb, namespace, null, cid),
+  const payload: QueryPayloadItem[] = verbs.map((verb) => ({
+    id: getPermissionKey(kind, verb, namespace, null, cid, groupVal, versionVal),
     clusterId: cid,
+    group: groupVal || undefined,
+    version: versionVal || undefined,
     resourceKind: kind,
     verb,
     namespace: ns,
@@ -578,7 +678,12 @@ export const queryKindPermissions = (
   pendingSpecs.set(
     queryKey,
     verbs.map((verb) => ({
-      spec: { kind, verb },
+      spec: {
+        kind,
+        verb,
+        group: groupVal || undefined,
+        version: versionVal || undefined,
+      },
       feature,
       clusterId: cid,
       namespace: namespace,
@@ -597,6 +702,8 @@ export const queryKindPermissions = (
           reason: r.reason || r.error || null,
           descriptor: {
             clusterId: r.clusterId,
+            group: r.group || null,
+            version: r.version || null,
             resourceKind: r.resourceKind,
             verb: r.verb,
             namespace: r.namespace || null,

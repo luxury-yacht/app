@@ -142,20 +142,23 @@
   font-size: var(--font-size-normal);
   border-radius: var(--border-radius-round);
   cursor: pointer;
-  transition: all 0.2s;
+  transition:
+    background-color 0.2s,
+    border-color 0.2s,
+    color 0.2s;
   font-weight: 500;
   border: 1px solid;
 }
 
 .pod-logs-control-btn.refresh {
-  background-color: var(--primary-color);
-  color: white;
-  border-color: var(--primary-color);
+  background-color: var(--button-action-bg);
+  color: var(--button-action-text);
+  border-color: var(--button-action-bg);
 }
 
 .pod-logs-control-btn.refresh:hover:not(:disabled) {
-  background-color: var(--primary-hover);
-  border-color: var(--primary-hover);
+  background-color: var(--button-action-hover);
+  border-color: var(--button-action-hover);
 }
 
 .pod-logs-control-btn:disabled {
@@ -176,7 +179,10 @@
   border-radius: var(--border-radius);
   color: var(--color-text-secondary);
   cursor: pointer;
-  transition: all 0.2s;
+  transition:
+    background-color 0.2s,
+    border-color 0.2s,
+    color 0.2s;
   margin-left: auto;
   flex-shrink: 0;
 }
@@ -269,20 +275,20 @@
 .pod-logs-fallback-banner {
   margin: 0.5rem 0.75rem 0;
   padding: 0.5rem 0.75rem;
-  border-radius: var(--border-radius, 4px);
-  border: 1px solid var(--color-warning-border, rgba(255, 193, 7, 0.35));
-  background: var(--color-warning-bg, rgba(255, 193, 7, 0.12));
-  color: var(--color-warning-text, #ffb400);
+  border-radius: var(--border-radius-sm);
+  border: 1px solid var(--color-warning-border);
+  background: var(--color-warning-bg);
+  color: var(--status-warning-text);
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm, 8px);
+  gap: var(--spacing-sm);
   flex-wrap: wrap;
 }
 
 .pod-logs-fallback-banner .pod-logs-fallback-retry {
   padding: 4px 12px;
   border-radius: var(--border-radius-round, 16px);
-  border: 1px solid var(--color-warning-border, rgba(255, 193, 7, 0.35));
+  border: 1px solid var(--color-warning-border);
   background: transparent;
   color: inherit;
   cursor: pointer;

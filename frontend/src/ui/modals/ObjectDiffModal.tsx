@@ -15,7 +15,7 @@ import { useShortcut, useKeyboardContext } from '@ui/shortcuts';
 import { KeyboardContextPriority, KeyboardScopePriority } from '@ui/shortcuts/priorities';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import { buildClusterScope } from '@core/refresh/clusterScope';
+import { buildClusterScope, buildObjectScope } from '@core/refresh/clusterScope';
 import { refreshOrchestrator, useRefreshScopedDomain } from '@core/refresh';
 import type { CatalogItem, CatalogSnapshotPayload } from '@core/refresh/types';
 import {
@@ -235,8 +235,17 @@ const useObjectYamlSnapshot = (selection: CatalogItem | null, enabled: boolean) 
 
     // Use the cluster-scope token when the object has no namespace.
     const namespaceSegment = buildNamespaceScope(selection.namespace);
-    const kindSegment = selection.kind.toLowerCase();
-    const rawScope = `${namespaceSegment}:${kindSegment}:${selection.name}`;
+    // CatalogItem already carries group/version from the backend catalog,
+    // so the diff modal can always emit the GVK scope form. The backend
+    // object-yaml provider will resolve the GVR strictly and avoid the
+    // first-match-wins ambiguity that affects bare-kind scopes.
+    const rawScope = buildObjectScope({
+      namespace: namespaceSegment,
+      group: selection.group,
+      version: selection.version,
+      kind: selection.kind.toLowerCase(),
+      name: selection.name,
+    });
     return buildClusterScope(selection.clusterId, rawScope);
   }, [enabled, selection]);
 

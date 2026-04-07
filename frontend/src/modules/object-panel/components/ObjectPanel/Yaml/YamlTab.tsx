@@ -15,7 +15,7 @@ import { useShortcut, useSearchShortcutTarget } from '@ui/shortcuts';
 import { errorHandler } from '@utils/errorHandler';
 import { refreshOrchestrator } from '@/core/refresh';
 import { useRefreshScopedDomain } from '@/core/refresh/store';
-import { GetObjectYAML } from '@wailsjs/go/backend/App';
+import { GetObjectYAMLByGVK } from '@wailsjs/go/backend/App';
 import './YamlTab.css';
 import { parseObjectIdentity, validateYamlDraft, type ObjectIdentity } from './yamlValidation';
 import { computeLineDiff, type DiffResult } from './yamlDiff';
@@ -338,8 +338,20 @@ const YamlTab: React.FC<YamlTabProps> = ({
 
   const hydrateLatestObject = useCallback(
     async (identity: ObjectIdentity) => {
-      const latestYamlRaw = await GetObjectYAML(
+      // Always go through the GVK-aware fetch. parseObjectIdentity (the
+      // sole producer of ObjectIdentity in this component) refuses to
+      // return an identity without an apiVersion, so the kind-only
+      // fallback that used to live here was unreachable. Removing it
+      // closes the last frontend caller of the legacy first-match-wins
+      // resolver.
+      if (!identity.apiVersion) {
+        throw new Error(
+          `Cannot fetch latest YAML for ${identity.kind}/${identity.name}: apiVersion missing`
+        );
+      }
+      const latestYamlRaw = await GetObjectYAMLByGVK(
         resolvedClusterId,
+        identity.apiVersion,
         identity.kind,
         identity.namespace ?? '',
         identity.name

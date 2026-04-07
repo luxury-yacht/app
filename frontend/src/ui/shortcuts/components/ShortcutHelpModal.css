@@ -55,7 +55,10 @@
   background: var(--shortcut-item-bg);
   border: 1px solid var(--shortcut-item-border);
   border-radius: 8px;
-  transition: all 150ms ease;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease;
 }
 
 .shortcut-key {

@@ -25,7 +25,6 @@ interface UseObjectPanelCapabilitiesOptions {
   objectKind: string | null;
   detailScope: string | null;
   featureSupport: FeatureSupport;
-  workloadKindApiNames: Record<string, string>;
 }
 
 export interface ObjectPanelCapabilitiesResult {
@@ -56,8 +55,7 @@ const createDefaultCapabilityStates = (): CapabilityStates => ({
 const computeCapabilityDescriptors = (
   objectData: PanelObjectData | null,
   objectKind: string | null,
-  featureSupport: FeatureSupport,
-  workloadKindApiNames: Record<string, string>
+  featureSupport: FeatureSupport
 ) => {
   if (!objectData || !objectKind) {
     return {
@@ -81,6 +79,20 @@ const computeCapabilityDescriptors = (
   const resourceName =
     objectData.name && objectData.name.trim().length > 0 ? objectData.name.trim() : undefined;
 
+  // Group/version from the panel's object identity. When populated these
+  // travel through every capability descriptor below so the backend's
+  // permission resolver disambiguates colliding kinds (e.g. two different
+  // DBInstance CRDs). Empty for legacy callers; the backend falls back
+  // to kind-only resolution in that case.
+  const objectGroup = objectData.group?.trim() ?? undefined;
+  const objectVersion = objectData.version?.trim() ?? undefined;
+  // Core/v1 Pod is hardcoded for a few cross-resource checks (log on a
+  // non-pod workload, debug ephemeral containers). Those descriptors
+  // target Pod regardless of what kind the object panel is showing, so
+  // they use this fixed GVK rather than the object's group/version.
+  const corePodGroup = '';
+  const corePodVersion = 'v1';
+
   const descriptors: CapabilityDescriptor[] = [];
   const idMap = createEmptyCapabilityIdMap();
   const clusterId = objectData?.clusterId?.trim() || undefined;
@@ -96,6 +108,8 @@ const computeCapabilityDescriptors = (
     {
       id: 'view-yaml',
       verb: 'get',
+      group: objectGroup,
+      version: objectVersion,
       resourceKind,
       namespace,
       name: resourceName,
@@ -107,6 +121,8 @@ const computeCapabilityDescriptors = (
     {
       id: 'edit-yaml',
       verb: 'update',
+      group: objectGroup,
+      version: objectVersion,
       resourceKind,
       namespace,
       name: resourceName,
@@ -119,6 +135,8 @@ const computeCapabilityDescriptors = (
       {
         id: 'delete',
         verb: 'delete',
+        group: objectGroup,
+        version: objectVersion,
         resourceKind,
         namespace,
         name: resourceName,
@@ -128,12 +146,18 @@ const computeCapabilityDescriptors = (
   }
 
   if (featureSupport.restart) {
-    const restartResourceKind = workloadKindApiNames[objectKind] ?? resourceKind;
+    // resourceKind is the original-case Kind from PanelObjectData (e.g.
+    // "Deployment"). The previous fallback through WORKLOAD_KIND_API_NAMES
+    // existed only as a casing safety net for callers that supplied
+    // lowercase kinds; that map is retired now that every entry point
+    // threads PascalCase kinds via the data source.
     add(
       {
         id: 'restart',
         verb: 'patch',
-        resourceKind: restartResourceKind,
+        group: objectGroup,
+        version: objectVersion,
+        resourceKind,
         namespace,
         name: resourceName,
       },
@@ -146,6 +170,8 @@ const computeCapabilityDescriptors = (
       {
         id: 'scale',
         verb: 'patch',
+        group: objectGroup,
+        version: objectVersion,
         resourceKind,
         namespace,
         name: resourceName,
@@ -161,6 +187,8 @@ const computeCapabilityDescriptors = (
         {
           id: 'view-logs',
           verb: 'get',
+          group: objectGroup,
+          version: objectVersion,
           resourceKind,
           namespace,
           name: resourceName,
@@ -169,10 +197,13 @@ const computeCapabilityDescriptors = (
         'viewLogs'
       );
     } else {
+      // Non-pod workloads get a pod-log check against core/v1 Pod.
       add(
         {
           id: 'view-logs',
           verb: 'get',
+          group: corePodGroup,
+          version: corePodVersion,
           resourceKind: 'Pod',
           namespace,
           subresource: 'log',
@@ -185,22 +216,41 @@ const computeCapabilityDescriptors = (
   if (featureSupport.shell) {
     add(
       {
-        id: 'shell-exec',
-        verb: 'create',
+        id: 'shell-exec-get',
+        verb: 'get',
+        group: objectGroup,
+        version: objectVersion,
         resourceKind,
         namespace,
         name: resourceName,
         subresource: 'exec',
       },
-      'shell'
+      'shellExecGet'
+    );
+    add(
+      {
+        id: 'shell-exec-create',
+        verb: 'create',
+        group: objectGroup,
+        version: objectVersion,
+        resourceKind,
+        namespace,
+        name: resourceName,
+        subresource: 'exec',
+      },
+      'shellExecCreate'
     );
   }
 
   if (featureSupport.debug) {
+    // Debug ephemeral containers always targets core/v1 Pod, regardless
+    // of what kind the panel is displaying.
     add(
       {
         id: 'debug-ephemeral',
         verb: 'update',
+        group: corePodGroup,
+        version: corePodVersion,
         resourceKind: 'Pod',
         namespace,
         name: resourceName,
@@ -215,6 +265,8 @@ const computeCapabilityDescriptors = (
       {
         id: 'view-manifest',
         verb: 'get',
+        group: objectGroup,
+        version: objectVersion,
         resourceKind,
         namespace,
         name: resourceName,
@@ -228,6 +280,8 @@ const computeCapabilityDescriptors = (
       {
         id: 'view-values',
         verb: 'get',
+        group: objectGroup,
+        version: objectVersion,
         resourceKind,
         namespace,
         name: resourceName,
@@ -244,12 +298,10 @@ export const useObjectPanelCapabilities = ({
   objectKind,
   detailScope,
   featureSupport,
-  workloadKindApiNames,
 }: UseObjectPanelCapabilitiesOptions): ObjectPanelCapabilitiesResult => {
   const capabilityDescriptorInfo = useMemo(
-    () =>
-      computeCapabilityDescriptors(objectData, objectKind, featureSupport, workloadKindApiNames),
-    [featureSupport, objectData, objectKind, workloadKindApiNames]
+    () => computeCapabilityDescriptors(objectData, objectKind, featureSupport),
+    [featureSupport, objectData, objectKind]
   );
 
   const capabilityRefreshKey = useMemo(() => {
@@ -291,6 +343,13 @@ export const useObjectPanelCapabilities = ({
     if (!capabilitiesEnabled) {
       return createDefaultCapabilityStates();
     }
+    const shellExecGet = getCapabilityState(capabilityDescriptorInfo.idMap.shellExecGet);
+    const shellExecCreate = getCapabilityState(capabilityDescriptorInfo.idMap.shellExecCreate);
+    const shellAllowed = shellExecGet.allowed || shellExecCreate.allowed;
+    const shellPending = shellExecGet.pending || shellExecCreate.pending;
+    const shellReason = shellAllowed
+      ? undefined
+      : (shellExecGet.reason ?? shellExecCreate.reason ?? undefined);
     return {
       viewYaml: getCapabilityState(capabilityDescriptorInfo.idMap.viewYaml),
       editYaml: getCapabilityState(capabilityDescriptorInfo.idMap.editYaml),
@@ -299,7 +358,11 @@ export const useObjectPanelCapabilities = ({
       delete: getCapabilityState(capabilityDescriptorInfo.idMap.delete),
       restart: getCapabilityState(capabilityDescriptorInfo.idMap.restart),
       scale: getCapabilityState(capabilityDescriptorInfo.idMap.scale),
-      shell: getCapabilityState(capabilityDescriptorInfo.idMap.shell),
+      shell: createCapabilityState({
+        allowed: shellAllowed,
+        pending: shellPending,
+        reason: shellReason,
+      }),
       debug: getCapabilityState(capabilityDescriptorInfo.idMap.debug),
     };
   }, [capabilityDescriptorInfo.idMap, capabilitiesEnabled, getCapabilityState]);
@@ -333,19 +396,25 @@ export const useObjectPanelCapabilities = ({
 
   const capabilityReasons = useMemo<CapabilityReasons>(
     () => ({
-      delete: capabilityStates.delete.reason,
-      restart: capabilityStates.restart.reason,
-      scale: capabilityStates.scale.reason,
-      editYaml: capabilityStates.editYaml.reason,
-      shell: capabilityStates.shell.reason,
-      debug: capabilityStates.debug.reason,
+      delete: capabilityStates.delete.allowed ? undefined : capabilityStates.delete.reason,
+      restart: capabilityStates.restart.allowed ? undefined : capabilityStates.restart.reason,
+      scale: capabilityStates.scale.allowed ? undefined : capabilityStates.scale.reason,
+      editYaml: capabilityStates.editYaml.allowed ? undefined : capabilityStates.editYaml.reason,
+      shell: capabilityStates.shell.allowed ? undefined : capabilityStates.shell.reason,
+      debug: capabilityStates.debug.allowed ? undefined : capabilityStates.debug.reason,
     }),
     [
+      capabilityStates.delete.allowed,
       capabilityStates.delete.reason,
+      capabilityStates.debug.allowed,
       capabilityStates.debug.reason,
+      capabilityStates.editYaml.allowed,
       capabilityStates.editYaml.reason,
+      capabilityStates.restart.allowed,
       capabilityStates.restart.reason,
+      capabilityStates.scale.allowed,
       capabilityStates.scale.reason,
+      capabilityStates.shell.allowed,
       capabilityStates.shell.reason,
     ]
   );

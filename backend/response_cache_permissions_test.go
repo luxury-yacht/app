@@ -22,9 +22,7 @@ func TestCanServeCachedResponseDeniedEvictsCaches(t *testing.T) {
 
 	// Use Helm kinds to avoid GVR discovery in the permission gate.
 	detailKey := objectDetailCacheKey("HelmManifest", "default", "demo")
-	yamlKey := objectYAMLCacheKey("HelmManifest", "default", "demo")
 	app.responseCacheStore(selectionKey, detailKey, "manifest")
-	app.responseCacheStore(selectionKey, yamlKey, "yaml")
 
 	deps := common.Dependencies{Context: context.Background()}
 	if allowed := app.canServeCachedResponse(context.Background(), deps, selectionKey, "HelmManifest", "default", "demo"); allowed {
@@ -32,9 +30,6 @@ func TestCanServeCachedResponseDeniedEvictsCaches(t *testing.T) {
 	}
 	if _, ok := app.responseCacheLookup(selectionKey, detailKey); ok {
 		t.Fatalf("expected detail cache entry to be evicted on permission deny")
-	}
-	if _, ok := app.responseCacheLookup(selectionKey, yamlKey); ok {
-		t.Fatalf("expected yaml cache entry to be evicted on permission deny")
 	}
 }
 
@@ -50,9 +45,7 @@ func TestCanServeCachedResponseAllowedKeepsCaches(t *testing.T) {
 
 	// Use Helm kinds to avoid GVR discovery in the permission gate.
 	detailKey := objectDetailCacheKey("HelmValues", "default", "demo")
-	yamlKey := objectYAMLCacheKey("HelmValues", "default", "demo")
 	app.responseCacheStore(selectionKey, detailKey, "values")
-	app.responseCacheStore(selectionKey, yamlKey, "yaml")
 
 	deps := common.Dependencies{Context: context.Background()}
 	if allowed := app.canServeCachedResponse(context.Background(), deps, selectionKey, "HelmValues", "default", "demo"); !allowed {
@@ -60,8 +53,5 @@ func TestCanServeCachedResponseAllowedKeepsCaches(t *testing.T) {
 	}
 	if _, ok := app.responseCacheLookup(selectionKey, detailKey); !ok {
 		t.Fatalf("expected detail cache entry to remain on allow")
-	}
-	if _, ok := app.responseCacheLookup(selectionKey, yamlKey); !ok {
-		t.Fatalf("expected yaml cache entry to remain on allow")
 	}
 }
