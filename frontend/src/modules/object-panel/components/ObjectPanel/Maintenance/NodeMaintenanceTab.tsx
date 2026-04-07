@@ -177,11 +177,15 @@ export function NodeMaintenanceTab({
       return [];
     }
     const resolvedClusterId = clusterId?.trim() || undefined;
+    // Node is core/v1. Group/version are required since PR #139 retired
+    // kind-only resolution in the backend permission resolver.
     return [
       {
         id: `${CAPABILITY_PREFIX}:cordon:${nodeName}`,
         clusterId: resolvedClusterId,
         verb: 'patch',
+        group: '',
+        version: 'v1',
         resourceKind: 'Node',
         name: nodeName,
       },
@@ -189,6 +193,8 @@ export function NodeMaintenanceTab({
         id: `${CAPABILITY_PREFIX}:drain:${nodeName}`,
         clusterId: resolvedClusterId,
         verb: 'patch',
+        group: '',
+        version: 'v1',
         resourceKind: 'Node',
         name: nodeName,
       },
@@ -196,6 +202,8 @@ export function NodeMaintenanceTab({
         id: `${CAPABILITY_PREFIX}:delete:${nodeName}`,
         clusterId: resolvedClusterId,
         verb: 'delete',
+        group: '',
+        version: 'v1',
         resourceKind: 'Node',
         name: nodeName,
       },

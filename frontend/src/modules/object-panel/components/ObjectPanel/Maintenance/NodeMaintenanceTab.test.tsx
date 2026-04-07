@@ -233,6 +233,37 @@ describe('NodeMaintenanceTab', () => {
     expect(container.textContent).toContain('Delete forbidden');
   });
 
+  it('passes group/version on every Node capability descriptor', () => {
+    // Regression: PR #139 made the backend reject permission queries that
+    // omit apiVersion. Node descriptors must thread group:'' / version:'v1'
+    // (core/v1) or cordon/drain/delete all return errors and the buttons
+    // are stuck disabled.
+    render();
+    const calls = mockUseCapabilities.mock.calls;
+    const callArgs = calls[calls.length - 1];
+    expect(callArgs).toBeTruthy();
+    const descriptors = (callArgs?.[0] ?? []) as Array<{
+      id: string;
+      group?: string;
+      version?: string;
+      resourceKind: string;
+    }>;
+    expect(descriptors.length).toBe(3);
+    for (const d of descriptors) {
+      expect(d.resourceKind).toBe('Node');
+      expect(d.group).toBe('');
+      expect(d.version).toBe('v1');
+    }
+    const ids = descriptors.map((d) => d.id);
+    expect(ids).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining(':cordon:'),
+        expect.stringContaining(':drain:'),
+        expect.stringContaining(':delete:'),
+      ])
+    );
+  });
+
   it('renders drain history entries from the refresh domain', () => {
     mockUseRefreshScopedDomain.mockReturnValue(
       createDomainState({
