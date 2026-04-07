@@ -6,8 +6,7 @@
  * Both the backend package (which holds the Wails app) and the generic
  * package (which implements generic delete) need to turn a fully-qualified
  * GroupVersionKind into a GroupVersionResource without relying on the
- * kind-only first-match-wins discovery walk that causes the collision bug
- * described in docs/plans/kind-only-objects.md.
+ * kind-only first-match-wins discovery walk..
  *
  * This function lives in common because:
  *   - backend/object_yaml_mutation.go already has a very similar helper

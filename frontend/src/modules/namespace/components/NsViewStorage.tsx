@@ -263,7 +263,6 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
         // Built-in PVC resolves via the lookup table. A miss here means a
         // non-built-in kind slipped into this view — fail loud rather than
         // fall back to the retired kind-only resolver.
-        // See docs/plans/kind-only-objects.md.
         const apiVersion = formatBuiltinApiVersion(resource.kind);
         if (!apiVersion) {
           throw new Error(

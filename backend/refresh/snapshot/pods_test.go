@@ -214,7 +214,7 @@ func TestPodBuilderWorkloadScope(t *testing.T) {
 // owner targets (Argo Rollout, KubeVirt VirtualMachineInstance, Tekton
 // TaskRun, Spark SparkApplication, etc). Without this the panel cannot
 // open the owner with a fully-qualified GVK and the strict object-YAML
-// path hard-fails. See docs/plans/kind-only-objects.md.
+// path hard-fails.
 func TestResolvePodOwnerThreadsCRDOwnerAPIVersion(t *testing.T) {
 	owner := boolPtr(true)
 

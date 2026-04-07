@@ -52,7 +52,7 @@ describe('getObjectPanelKind', () => {
     // Two different DBInstance CRDs share the lowercased kind "dbinstance"
     // but come from different API groups. With the GVK form threaded
     // through, the detailScope carries the full group/version so the
-    // backend can disambiguate. See docs/plans/kind-only-objects.md.
+    // backend can disambiguate.
     const result = getObjectPanelKind({
       kind: 'DBInstance',
       name: 'my-db',

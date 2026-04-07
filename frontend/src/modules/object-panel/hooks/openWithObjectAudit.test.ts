@@ -25,8 +25,7 @@
  * across multiple groups (e.g. documentdb.services.k8s.aws/DBInstance vs
  * rds.services.k8s.aws/DBInstance). Without group/version on the
  * KubernetesObjectReference, the panel cannot disambiguate, and the
- * backend's strict GVK resolver hard-errors on missing apiVersion. See
- * docs/plans/kind-only-objects.md.
+ * backend's strict GVK resolver hard-errors on missing apiVersion.
  *
  * If a new call site fails this test, the fix is to add the missing
  * fields rather than to add an exemption. Exemptions exist only for
@@ -270,7 +269,7 @@ function formatViolationError(callSiteName: string, violations: CallSite[]): str
     '\n\nFix: add `group:` and `version:` keys to the literal, or spread ' +
     '`...resolveBuiltinGroupVersion(kind)` for a built-in (or ' +
     '`...parseApiVersion(apiVersion)` when the source carries a wire-form ' +
-    'apiVersion). See docs/plans/kind-only-objects.md.'
+    'apiVersion).'
   );
 }
 

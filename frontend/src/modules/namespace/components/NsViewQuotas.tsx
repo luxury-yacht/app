@@ -224,7 +224,7 @@ const QuotasViewGrid: React.FC<QuotasViewProps> = React.memo(
         // resolve via the lookup table; the GVK form keeps the panel
         // identity, capability cache, and delete path consistent across
         // entry points. A miss means a non-built-in kind slipped in —
-        // fail loud. See docs/plans/kind-only-objects.md.
+        // fail loud.
         const apiVersion = formatBuiltinApiVersion(resource.kind);
         if (!apiVersion) {
           throw new Error(

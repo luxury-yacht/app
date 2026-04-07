@@ -192,7 +192,7 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
         }
         // Built-in admission/storage/etc. kinds resolve via the lookup table.
         // A miss means a non-built-in kind slipped in — fail loud.
-        // See docs/plans/kind-only-objects.md.
+        //
         const apiVersion = formatBuiltinApiVersion(resource.kind);
         if (!apiVersion) {
           throw new Error(

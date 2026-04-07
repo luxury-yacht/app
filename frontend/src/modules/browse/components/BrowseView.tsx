@@ -175,7 +175,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
       // CatalogItem always carries group/version from the backend catalog.
       // A missing version here means the upstream data source dropped it —
       // fail loud rather than fall back to the retired kind-only resolver.
-      // See docs/plans/kind-only-objects.md step 5.
+      // See  step 5.
       if (!item.version) {
         throw new Error(
           `Cannot delete ${item.kind}/${item.name}: apiVersion missing on catalog row`
@@ -235,7 +235,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
       // Permission keys carry group/version so colliding-CRD entries
       // don't share a cache slot. CatalogItem provides both fields, so
       // BrowseView always passes the GVK form. See
-      // docs/plans/kind-only-objects.md.
+
       const deleteKey = getPermissionKey(kind, 'delete', ns, null, cid, group, version);
       const deleteStatus = permissionMap.get(deleteKey) ?? null;
       const restartStatus =

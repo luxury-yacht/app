@@ -194,8 +194,7 @@ func TestClusterCRDBuilder(t *testing.T) {
 }
 
 // TestCRDVersionSummary covers the storage-version + extra-served-count
-// helper that drives the Version column in the CRDs view. See
-// docs/plans/kind-only-objects.md.
+// helper that drives the Version column in the CRDs view.
 func TestCRDVersionSummary(t *testing.T) {
 	makeCRD := func(versions ...apiextensionsv1.CustomResourceDefinitionVersion) *apiextensionsv1.CustomResourceDefinition {
 		return &apiextensionsv1.CustomResourceDefinition{

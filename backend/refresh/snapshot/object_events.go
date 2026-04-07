@@ -94,8 +94,7 @@ func (b *ObjectEventsBuilder) Build(ctx context.Context, scope string) (*refresh
 	// core resources). When the scope omits Group/Version (legacy callers),
 	// this is the empty string and the disambiguation filter below is a
 	// no-op — preserving pre-fix behavior. When the scope is in the new
-	// GVK form, two CRDs sharing a Kind get distinct event lists. See
-	// docs/plans/kind-only-objects.md.
+	// GVK form, two CRDs sharing a Kind get distinct event lists.
 	apiVersion := identity.GVK.GroupVersion().String()
 	meta := ClusterMetaFromContext(ctx)
 

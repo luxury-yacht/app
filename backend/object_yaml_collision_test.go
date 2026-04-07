@@ -2,7 +2,6 @@
  * backend/object_yaml_collision_test.go
  *
  * Regression tests for the kind-only object identification bug.
- * See docs/plans/kind-only-objects.md for the full context.
  *
  * Scenario: a cluster has two CRDs whose lowercased kind collapses to
  * "dbinstance" but which come from different API groups:

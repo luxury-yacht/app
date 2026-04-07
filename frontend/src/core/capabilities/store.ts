@@ -309,7 +309,7 @@ const queueFlush = () => {
           // knows the GVK (built-ins via resolveBuiltinGroupVersion, customs
           // via the data source). The backend uses them to route through the
           // strict GVK resolver and disambiguate colliding kinds. See
-          // docs/plans/kind-only-objects.md.
+
           group: descriptor.group,
           version: descriptor.version,
           verb: descriptor.verb,

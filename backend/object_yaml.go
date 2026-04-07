@@ -15,5 +15,3 @@ package backend
 // falls back to common.DiscoverGVRByKind only as a partial-discovery
 // safety net and validates the result against the requested GVK before
 // accepting it.
-//
-// See docs/plans/kind-only-objects.md for the full migration history.

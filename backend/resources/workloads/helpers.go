@@ -174,7 +174,7 @@ func parseReadyStatus(value string) (ready, total int) {
 // buildPodSummaries builds pod summaries with a hardcoded owner kind/name/apiVersion
 // supplied by the workload caller (Deployment, StatefulSet, DaemonSet, ReplicaSet —
 // all apps/v1). The apiVersion lets the panel open the owner with a fully-qualified
-// GVK; see PodSimpleInfo.OwnerAPIVersion and docs/plans/kind-only-objects.md.
+// GVK; see PodSimpleInfo.OwnerAPIVersion
 func buildPodSummaries(ownerKind, ownerName, ownerAPIVersion string, podsList []corev1.Pod, podMetrics map[string]*metricsv1beta1.PodMetrics) []restypes.PodSimpleInfo {
 	podInfos := make([]restypes.PodSimpleInfo, 0, len(podsList))
 	for _, pod := range podsList {

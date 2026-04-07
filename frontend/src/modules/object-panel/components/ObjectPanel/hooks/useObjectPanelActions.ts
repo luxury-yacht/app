@@ -44,8 +44,7 @@ const getWorkloadKind = (
   // PanelObjectData.kind is the original-case Kind from the data source,
   // so it's preferred whenever present. The previous fallback through
   // WORKLOAD_KIND_API_NAMES existed only as a casing safety net for the
-  // (now defunct) lowercase callers; that map is retired. See
-  // docs/plans/kind-only-objects.md item 10.
+  // (now defunct) lowercase callers; that map is retired.
   if (objectData?.kind) {
     return objectData.kind;
   }
@@ -171,7 +170,7 @@ export const useObjectPanelActions = ({
               // resolveBuiltinGroupVersion) populates group/version. A
               // missing version here is a programming bug; fail loud
               // rather than fall back to the retired kind-only resolver.
-              // See docs/plans/kind-only-objects.md step 5.
+              // See  step 5.
               if (!objectData.version) {
                 throw new Error(
                   `Cannot delete ${resourceKind}/${name}: apiVersion missing on PanelObjectData`

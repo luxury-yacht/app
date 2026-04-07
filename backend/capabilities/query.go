@@ -13,9 +13,7 @@ package capabilities
 // — this is what lets the RBAC gate distinguish between two CRDs that
 // share a Kind (e.g. DBInstance under different operators). The backend
 // rejects queries with an empty Version: the legacy kind-only resolver
-// was first-match-wins across colliding CRDs and has been retired. See
-// docs/plans/kind-only-objects.md step 4 and resolveGVRForPermissionQuery
-// in backend/app_permissions.go.
+// was first-match-wins across colliding CRDs and has been retired.
 type PermissionQuery struct {
 	ID           string `json:"id"`
 	ClusterId    string `json:"clusterId"`

@@ -376,8 +376,7 @@ func TestGetPodOwnerWithMap(t *testing.T) {
 
 	// CRD-as-Pod-owner case (Argo Rollout / KubeVirt VMI / Tekton TaskRun
 	// shape). The apiVersion must come from the OwnerReference verbatim so
-	// the panel can open the CRD with a fully-qualified GVK. See
-	// docs/plans/kind-only-objects.md.
+	// the panel can open the CRD with a fully-qualified GVK.
 	pod.ObjectMeta.OwnerReferences = []metav1.OwnerReference{{
 		Kind:       "Rollout",
 		Name:       "canary",

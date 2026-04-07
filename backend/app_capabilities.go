@@ -85,7 +85,7 @@ func (a *App) EvaluateCapabilities(checks []capabilities.CheckRequest) ([]capabi
 		// (built-ins via resolveBuiltinGroupVersion, custom resources via
 		// the catalog data source). A missing Version here is a
 		// programming bug — fail loud rather than fall back to the
-		// retired kind-only resolver. See docs/plans/kind-only-objects.md.
+		// retired kind-only resolver.
 		if base.Version == "" {
 			base.Error = fmt.Sprintf(
 				"capability check for kind %q requires apiVersion (group+version); kind-only resolution was retired",

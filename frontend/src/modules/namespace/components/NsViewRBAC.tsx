@@ -229,7 +229,7 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
         }
         // Built-in RBAC kinds (Role/RoleBinding/ServiceAccount) resolve via
         // the lookup table. A miss means a non-built-in kind slipped into
-        // this view — fail loud. See docs/plans/kind-only-objects.md.
+        // this view — fail loud.
         const apiVersion = formatBuiltinApiVersion(resource.kind);
         if (!apiVersion) {
           throw new Error(

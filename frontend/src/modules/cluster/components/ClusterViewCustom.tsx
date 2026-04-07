@@ -40,8 +40,8 @@ interface ClusterCustomData {
   clusterName?: string;
   apiGroup?: string;
   /** API version for the owning CRD. Paired with apiGroup so the object
-   * panel can disambiguate colliding Kinds across API groups. See
-   * docs/plans/kind-only-objects.md. */
+   * panel can disambiguate colliding Kinds across API groups.
+   */
   apiVersion?: string;
   /**
    * Canonical CRD name (`<plural>.<group>`) for the CustomResourceDefinition
@@ -84,7 +84,7 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
         // Preserve metadata and age so the object panel shows labels/annotations and Age.
         // CRITICAL: pass apiGroup/apiVersion so downstream scope/capability
         // resolution can disambiguate colliding Kinds. See
-        // docs/plans/kind-only-objects.md step 1.
+        //  step 1.
         openWithObject({
           kind: resource.kind,
           name: resource.name,
@@ -269,7 +269,7 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
         // ClusterCustomData always carries apiGroup/apiVersion from the
         // catalog. A missing apiVersion here means the upstream data source
         // dropped it — fail loud rather than fall back to the retired
-        // kind-only resolver. See docs/plans/kind-only-objects.md.
+        // kind-only resolver.
         if (!resource.apiVersion) {
           throw new Error(
             `Cannot delete ${resource.kind}/${resource.name}: apiVersion missing on custom resource row`
@@ -298,7 +298,7 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
         // Permission lookup carries group/version so two cluster-scoped
         // CRDs sharing a Kind don't share a cache slot. ClusterCustomData
         // provides both fields from the catalog. Mirrors the namespaced
-        // fix in NsViewCustom. See docs/plans/kind-only-objects.md.
+        // fix in NsViewCustom.
         const deleteStatus =
           permissionMap.get(
             getPermissionKey(

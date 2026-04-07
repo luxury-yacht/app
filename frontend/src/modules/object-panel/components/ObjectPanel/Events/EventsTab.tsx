@@ -256,7 +256,7 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
         namespace: resolvedNamespace,
         // group/version come from the event's involvedObject apiVersion
         // (parsed in the events memo above) so the panel can disambiguate
-        // colliding kinds across CRD groups. See docs/plans/kind-only-objects.md.
+        // colliding kinds across CRD groups.
         group: item.objectGroup,
         version: item.objectVersion,
         clusterId: item.clusterId ?? objectData?.clusterId ?? undefined,

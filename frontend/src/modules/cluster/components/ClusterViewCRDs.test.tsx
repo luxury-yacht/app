@@ -156,7 +156,7 @@ describe('ClusterViewCRDs', () => {
   // Version column rendering. The Version column shows the storage
   // version (the version etcd persists) with a `(+N)` suffix when the
   // CRD also serves additional versions. See
-  // docs/plans/kind-only-objects.md.
+
   describe('Version column', () => {
     const findVersionColumn = (props: any) =>
       props.columns.find((col: any) => col.key === 'version');

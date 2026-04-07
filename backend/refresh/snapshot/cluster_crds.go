@@ -35,8 +35,7 @@ type ClusterCRDSnapshot struct {
 // to etcd (the canonical "source of truth" form). ExtraServedVersionCount
 // is the number of *additional* served versions beyond the storage
 // version, used by the frontend to render `v1` for single-version CRDs
-// and `v1 (+2)` for multi-version CRDs. See docs/plans/kind-only-objects.md
-// for the broader GVK story; this is the display surface for it.
+// and `v1 (+2)` for multi-version CRDs.
 type ClusterCRDEntry struct {
 	ClusterMeta
 	Kind                    string `json:"kind"`
@@ -112,7 +111,7 @@ func (b *ClusterCRDBuilder) Build(ctx context.Context, scope string) (*refresh.S
 //
 // Storage version is the canonical persistence form: when a CRD serves
 // multiple versions, exactly one is marked Storage and the API server
-// converts to/from it. See docs/plans/kind-only-objects.md.
+// converts to/from it.
 //
 // Fallback chain when no version is flagged Storage (rare/transient):
 //  1. first served version

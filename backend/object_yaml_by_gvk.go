@@ -1,8 +1,7 @@
 /*
  * backend/object_yaml_by_gvk.go
  *
- * GVK-aware object YAML fetch. Part of the kind-only-objects fix (see
- * docs/plans/kind-only-objects.md, step 3).
+ * GVK-aware object YAML fetch.
  *
  * Unlike the legacy App.GetObjectYAML, this entry point takes a full
  * apiVersion + kind from the caller and resolves through the strict

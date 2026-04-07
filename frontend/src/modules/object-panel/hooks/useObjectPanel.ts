@@ -91,8 +91,7 @@ export function useObjectPanel() {
       // the openWithObjectAudit literal-walker can't see. Throws loudly
       // with a stack trace at the panel's entry point — much earlier than
       // the backend hard-errors at object_detail_provider.go,
-      // app_capabilities.go, and app_permissions.go would surface it. See
-      // docs/plans/kind-only-objects.md.
+      // app_capabilities.go, and app_permissions.go would surface it.
       assertObjectRefHasGVK(enriched);
       const panelId = onRowClick(enriched);
 

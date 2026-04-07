@@ -163,7 +163,7 @@ func (s *Service) buildReplicaSetToDeploymentMap(namespace string) map[string]st
 // For all other owners apiVersion comes from owner.APIVersion verbatim,
 // which is what lets the panel open CRD-as-Pod-owner targets like
 // argoproj.io Rollout or kubevirt.io VirtualMachineInstance with a
-// fully-qualified GVK. See docs/plans/kind-only-objects.md.
+// fully-qualified GVK.
 func getPodOwnerWithMap(pod corev1.Pod, rsToDeployment map[string]string) (string, string, string) {
 	for _, owner := range pod.OwnerReferences {
 		if owner.Controller != nil && *owner.Controller {
@@ -874,7 +874,7 @@ func SummarizePod(pod corev1.Pod, metrics map[string]*metricsv1beta1.PodMetrics,
 // ReplicaSets into Deployments. Returns (kind, name, apiVersion). The
 // apiVersion is "apps/v1" for the ReplicaSet→Deployment collapse and
 // owner.APIVersion verbatim otherwise — required so the panel can open
-// CRD-as-Pod-owner targets correctly. See docs/plans/kind-only-objects.md.
+// CRD-as-Pod-owner targets correctly.
 func ResolveOwner(pod corev1.Pod, rsToDeployment map[string]string) (string, string, string) {
 	for _, owner := range pod.OwnerReferences {
 		if owner.Controller != nil && *owner.Controller {

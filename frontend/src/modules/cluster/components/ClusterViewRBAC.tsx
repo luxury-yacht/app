@@ -191,7 +191,7 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
           throw new Error(`Cannot delete ${resource.kind}/${resource.name}: clusterId is missing`);
         }
         // Built-in cluster RBAC kinds (ClusterRole/ClusterRoleBinding) resolve
-        // via the lookup table. See docs/plans/kind-only-objects.md.
+        // via the lookup table.
         const apiVersion = formatBuiltinApiVersion(resource.kind);
         if (!apiVersion) {
           throw new Error(

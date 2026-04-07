@@ -51,8 +51,7 @@ export interface AutoscalingData {
     /**
      * Wire-form apiVersion of the scale target. Threaded from the
      * backend via NamespaceAutoscalingSummary.targetApiVersion so the
-     * panel can open CRD scale targets correctly. See
-     * docs/plans/kind-only-objects.md.
+     * panel can open CRD scale targets correctly.
      */
     apiVersion?: string;
   };
@@ -360,7 +359,7 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
         }
         // Built-in HPA resolves via the lookup table. A miss means a
         // non-built-in kind slipped into this view — fail loud.
-        // See docs/plans/kind-only-objects.md.
+        //
         const apiVersion = formatBuiltinApiVersion(resource.kind);
         if (!apiVersion) {
           throw new Error(

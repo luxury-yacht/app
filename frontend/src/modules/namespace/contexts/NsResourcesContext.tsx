@@ -117,7 +117,7 @@ const parseAutoscalingTarget = (
   // apiVersion is the wire-form "group/version" sourced from the
   // backend's HPA snapshot (NamespaceAutoscalingSummary.targetApiVersion).
   // Threaded so the object panel can open CRD scale targets with a
-  // fully-qualified GVK. See docs/plans/kind-only-objects.md.
+  // fully-qualified GVK.
   return {
     kind: kindPart,
     name: nameParts.join('/'),

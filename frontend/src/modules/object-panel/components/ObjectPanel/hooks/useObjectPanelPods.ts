@@ -52,7 +52,7 @@ export function useObjectPanelPods({
     // Prefer the original-case Kind from PanelObjectData; fall back to the
     // lowercased objectKind only if the data source didn't provide one.
     // Previously routed through WORKLOAD_KIND_API_NAMES as a casing safety
-    // net; that map is retired (see docs/plans/kind-only-objects.md item 10).
+    // net; that map is retired.
     const workloadKindSegment = objectData.kind ?? normalizedKind;
     const workloadKinds = ['deployment', 'daemonset', 'statefulset', 'job', 'replicaset'];
     if (workloadNamespace && workloadKinds.includes(normalizedKind)) {

@@ -178,8 +178,7 @@ func BuildNetworkPolicySummary(meta ClusterMeta, policy *networkingv1.NetworkPol
 // malformed objects returned from list-with-all-namespaces queries). The
 // snapshot path passes its scope namespace; the streaming path passes
 // the resource's own namespace (so the fallback is a no-op for it unless
-// the resource is pathologically empty). See
-// docs/plans/kind-only-objects.md.
+// the resource is pathologically empty).
 //
 // Any new field added to NamespaceCustomSummary MUST be populated here.
 func BuildNamespaceCustomSummary(
@@ -439,7 +438,7 @@ func BuildEndpointSliceSummary(
 // previous bug had this path dropping the field on streaming updates
 // (which HPAs receive constantly as Status.CurrentReplicas changes),
 // which silently re-introduced the kind-only-objects bug for CRD scale
-// targets. See docs/plans/kind-only-objects.md.
+// targets.
 //
 // Any new field added to AutoscalingSummary MUST be populated here.
 func BuildHPASummary(meta ClusterMeta, hpa *autoscalingv1.HorizontalPodAutoscaler) AutoscalingSummary {

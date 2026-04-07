@@ -356,7 +356,7 @@ describe('YamlTab', () => {
     wailsMocks.ValidateObjectYaml.mockResolvedValue({ resourceVersion: '456' });
     wailsMocks.ApplyObjectYaml.mockResolvedValue({ resourceVersion: '789' });
     // hydrateLatestObject routes through GetObjectYAMLByGVK now that the
-    // YAML fixture carries apiVersion (see docs/plans/kind-only-objects.md step 3).
+    // YAML fixture carries apiVersion.
     wailsMocks.GetObjectYAMLByGVK.mockResolvedValue(UPDATED_YAML);
 
     const { container, unmount } = await renderYamlTab();

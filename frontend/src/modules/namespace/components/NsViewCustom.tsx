@@ -105,7 +105,7 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
         // resolution can disambiguate colliding Kinds (e.g. two DBInstance
         // CRDs from different operators). Without these, the object panel
         // falls back to first-match-wins discovery and opens the wrong
-        // resource. See docs/plans/kind-only-objects.md step 1.
+        // resource.
         openWithObject({
           kind: resource.kind || resource.kindAlias || 'CustomResource',
           kindAlias: resource.kindAlias,
@@ -315,7 +315,7 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
         // catalog. A missing apiVersion here means the upstream data source
         // dropped it — fail loud rather than fall back to the retired
         // kind-only resolver (which is first-match-wins across colliding
-        // CRDs). See docs/plans/kind-only-objects.md.
+        // CRDs).
         if (!resource.apiVersion) {
           throw new Error(
             `Cannot delete ${resolvedKind}/${resource.name}: apiVersion missing on custom resource row`
@@ -349,7 +349,7 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
         const version = resource.apiVersion ?? null;
         // Permission lookup carries group/version so two CRDs sharing a
         // Kind don't share a cache slot. CustomResourceData provides both
-        // fields. See docs/plans/kind-only-objects.md.
+        // fields.
         const deleteStatus =
           permissionMap.get(
             getPermissionKey(

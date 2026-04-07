@@ -213,8 +213,7 @@ describe('NsViewCustom', () => {
     );
   });
 
-  // Regression test for the kind-only-objects bug
-  // (docs/plans/kind-only-objects.md). When the user clicks a custom
+  // Regression test for the kind-only-objects bug. When the user clicks a custom
   // resource whose Kind collides with another CRD from a different API
   // group (e.g. DBInstance from rds.services.k8s.aws vs DBInstance from
   // documentdb.services.k8s.aws), handleResourceClick MUST forward both
@@ -314,9 +313,8 @@ describe('NsViewCustom', () => {
     expect(modalProps.current?.isOpen).toBe(false);
   });
 
-  // Regression test for the delete-path leg of the kind-only-objects bug
-  // (docs/plans/kind-only-objects.md "I Should Have Done This Without Having
-  // To Be Asked" item 1). When the user confirms deletion of a custom
+  // Regression test for the delete-path leg of the kind-only-objects bug.
+  // When the user confirms deletion of a custom
   // resource whose Kind collides with another CRD from a different API
   // group (e.g. two DBInstance CRDs), handleDeleteConfirm MUST route
   // through DeleteResourceByGVK so the strict GVR is targeted. The legacy

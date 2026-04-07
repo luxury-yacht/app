@@ -218,7 +218,7 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
         }
         // Built-in network resources (Service/Ingress/NetworkPolicy/EndpointSlice)
         // resolve via the lookup table. A miss means a non-built-in kind
-        // slipped into this view — fail loud. See docs/plans/kind-only-objects.md.
+        // slipped into this view — fail loud.
         const apiVersion = formatBuiltinApiVersion(resource.kind);
         if (!apiVersion) {
           throw new Error(

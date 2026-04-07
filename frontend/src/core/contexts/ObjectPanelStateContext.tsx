@@ -25,7 +25,7 @@ import { clearPanelState } from '@ui/dockable/useDockablePanelState';
  * CRD groups now get different panel ids and can coexist, but built-in
  * resources and any caller that hasn't been migrated to pass group/version
  * still produces the exact same id as before so persisted panel state and
- * focus tracking are unaffected. See docs/plans/kind-only-objects.md.
+ * focus tracking are unaffected.
  */
 export function objectPanelId(ref: KubernetesObjectReference): string {
   const c = ref.clusterId?.trim() ?? '';

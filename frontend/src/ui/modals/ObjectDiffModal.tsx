@@ -238,8 +238,7 @@ const useObjectYamlSnapshot = (selection: CatalogItem | null, enabled: boolean) 
     // CatalogItem already carries group/version from the backend catalog,
     // so the diff modal can always emit the GVK scope form. The backend
     // object-yaml provider will resolve the GVR strictly and avoid the
-    // first-match-wins ambiguity that affects bare-kind scopes. See
-    // docs/plans/kind-only-objects.md step 2.
+    // first-match-wins ambiguity that affects bare-kind scopes.
     const rawScope = buildObjectScope({
       namespace: namespaceSegment,
       group: selection.group,

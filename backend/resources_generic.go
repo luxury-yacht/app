@@ -22,8 +22,6 @@ import (
 // like "v1"). Unlike DeleteResource, this path resolves the GVR strictly
 // through the shared common.ResolveGVRForGVK helper so two CRDs that
 // share a Kind don't get conflated.
-//
-// See docs/plans/kind-only-objects.md step 5.
 func (a *App) DeleteResourceByGVK(clusterID, apiVersion, kind, namespace, name string) error {
 	gvk := schema.FromAPIVersionAndKind(strings.TrimSpace(apiVersion), strings.TrimSpace(kind))
 	if gvk.Kind == "" {

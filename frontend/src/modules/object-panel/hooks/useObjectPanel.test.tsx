@@ -184,8 +184,7 @@ describe('useObjectPanel', () => {
   // Runtime defense for the kind-only-objects bug. The audit test
   // (openWithObjectAudit.test.ts) covers literal call sites; this guard
   // covers programmatic constructions (helpers, mappers, destructure-and-
-  // rebuild) that the literal walker can't see. See
-  // docs/plans/kind-only-objects.md and assertObjectRefHasGVK in
+  // rebuild) that the literal walker can't see. See assertObjectRefHasGVK in
   // src/types/view-state.ts.
   describe('kind-only-objects runtime guard', () => {
     it('throws when openWithObject receives a ref with kind but no version', () => {

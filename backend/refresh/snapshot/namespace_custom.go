@@ -47,7 +47,7 @@ type NamespaceCustomSnapshot struct {
 // first-match-wins kind-only resolver. Without APIVersion, two CRDs that
 // share a Kind (e.g. DBInstance.rds.services.k8s.aws vs
 // DBInstance.documentdb.services.k8s.aws) would be indistinguishable on
-// the frontend. See docs/plans/kind-only-objects.md.
+// the frontend.
 type NamespaceCustomSummary struct {
 	ClusterMeta
 	Kind       string `json:"kind"`

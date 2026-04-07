@@ -139,7 +139,7 @@ export const parseClusterScopeList = (
  *
  * An empty group with a non-empty version encodes as "/v1:kind:name" —
  * the leading slash is load-bearing: it signals "core API" to the backend
- * parser without introducing another format. See docs/plans/kind-only-objects.md.
+ * parser without introducing another format.
  */
 export const buildObjectScope = (args: {
   namespace: string;

@@ -22,8 +22,6 @@
  *     now accept the GVK form. Feeding them consistent data from every
  *     entry point means we never hit the legacy kind-only fallback for
  *     built-ins and the behavior is uniform.
- *
- * See docs/plans/kind-only-objects.md.
  */
 
 export interface BuiltinGroupVersion {

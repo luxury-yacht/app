@@ -1,8 +1,7 @@
 /*
  * backend/resources/generic/delete_by_gvk.go
  *
- * GVK-aware generic delete. Part of the kind-only-objects fix (see
- * docs/plans/kind-only-objects.md, step 5).
+ * GVK-aware generic delete. Part of the kind-only-objects fix
  *
  * Unlike Service.Delete, which accepts a bare kind string and uses a
  * first-match-wins discovery walk to resolve the GVR, DeleteByGVK takes a

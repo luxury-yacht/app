@@ -323,7 +323,7 @@ type PodSimpleInfo struct {
 	// ReplicaSet→Deployment collapse) so the frontend can open
 	// CRD-as-Pod-owner targets in the object panel with a fully-qualified
 	// GVK. Required for Argo Rollouts, KubeVirt VMI, Tekton TaskRun,
-	// Spark SparkApplication, etc. See docs/plans/kind-only-objects.md.
+	// Spark SparkApplication, etc.
 	OwnerAPIVersion string `json:"ownerApiVersion,omitempty"`
 }
 
@@ -461,8 +461,7 @@ type HelmRevision struct {
 // "v1", "documentdb.services.k8s.aws/v1alpha1") so the frontend can open
 // the target in the object panel with a fully-qualified GVK. Required for
 // CRDs that share a Kind across operator groups — without it the strict
-// object-YAML path hard-fails on Helm-managed custom resources. See
-// docs/plans/kind-only-objects.md.
+// object-YAML path hard-fails on Helm-managed custom resources.
 type HelmResource struct {
 	Kind       string `json:"kind"`
 	APIVersion string `json:"apiVersion,omitempty"`
@@ -513,7 +512,7 @@ type PodDetailInfo struct {
 	OwnerName string `json:"ownerName"`
 	// OwnerAPIVersion carries the wire-form apiVersion of the controlling
 	// owner so the panel can open CRD-as-Pod-owner targets correctly. See
-	// docs/plans/kind-only-objects.md and PodSimpleInfo.OwnerAPIVersion.
+	//  and PodSimpleInfo.OwnerAPIVersion.
 	OwnerAPIVersion string `json:"ownerApiVersion,omitempty"`
 
 	// Additional details for object panel

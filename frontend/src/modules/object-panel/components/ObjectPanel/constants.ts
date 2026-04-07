@@ -11,8 +11,7 @@ export const INACTIVE_SCOPE = '__inactive__';
 // WORKLOAD_KIND_API_NAMES was retired as part of the kind-only-objects fix
 // (item 10). PanelObjectData.kind now consistently carries the original-case
 // Kind from the data source, so consumers can read it directly instead of
-// going through a lowercase → PascalCase alias map. See
-// docs/plans/kind-only-objects.md.
+// going through a lowercase → PascalCase alias map.
 
 export const RESOURCE_CAPABILITIES: Record<string, ResourceCapability> = {
   // Workloads

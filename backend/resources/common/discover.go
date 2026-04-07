@@ -13,8 +13,6 @@
  * removes ~150 lines of duplicated discovery walks across the backend
  * package and the resources/generic package, and ensures behavior stays
  * consistent if the discovery semantics ever need updating.
- *
- * See docs/plans/kind-only-objects.md.
  */
 
 package common

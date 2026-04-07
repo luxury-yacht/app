@@ -1,7 +1,5 @@
 # TODO
 
-- Browse view and Custom views should have a column for API version for disambiguation
-
 - Resource creation
   - starter templates for common resource types
   - reuse the existing code editor

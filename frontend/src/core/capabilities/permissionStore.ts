@@ -28,7 +28,7 @@ import {
  * CRDs sharing a Kind don't collide). Otherwise fall back to the
  * builtin lookup table so the spec-emit path and the lookup path agree
  * on the same key for built-in kinds without every caller having to
- * spell out group/version. See docs/plans/kind-only-objects.md and
+ * spell out group/version. See  and
  * frontend/src/shared/constants/builtinGroupVersions.ts.
  */
 const resolvePermissionGVK = (
@@ -70,7 +70,7 @@ interface QueryPayloadItem {
    * `version`, the backend routes through the strict GVK resolver. When
    * absent, the backend falls back to kind-only resolution. This is what
    * lets the permission store disambiguate colliding CRDs (e.g. two
-   * different DBInstance kinds). See docs/plans/kind-only-objects.md.
+   * different DBInstance kinds).
    */
   group?: string;
   /** API version paired with `group`. */
@@ -133,7 +133,7 @@ function QueryPermissions(queries: QueryPayloadItem[]): Promise<QueryPermissions
  * Group/version segment is included so two CRDs sharing a Kind get
  * distinct keys and don't silently clobber each other in the permission
  * cache. Null namespace becomes literal string 'cluster'. Empty
- * subresource becomes ''. See docs/plans/kind-only-objects.md.
+ * subresource becomes ''.
  */
 export const getPermissionKey = (
   resourceKind: string,
@@ -344,7 +344,7 @@ const buildBatch = (
       // non-empty apiVersion (app_permissions.go now rejects queries
       // with missing Version). Built-in kinds fall through to
       // resolveBuiltinGroupVersion; CRD specs supply explicit
-      // group/version. See docs/plans/kind-only-objects.md.
+      // group/version.
       const { group, version } = resolvePermissionGVK(spec.kind, spec.group, spec.version);
       const key = getPermissionKey(
         spec.kind,
@@ -627,7 +627,7 @@ export const queryClusterPermissions = (clusterId: string): void => {
  * backend can disambiguate colliding CRDs (e.g. two `DBInstance` kinds
  * from different operators). Without them, the backend falls back to its
  * legacy first-match-wins resolver and would silently check permission
- * against the wrong CRD. See docs/plans/kind-only-objects.md.
+ * against the wrong CRD.
  */
 export const queryKindPermissions = (
   kind: string,

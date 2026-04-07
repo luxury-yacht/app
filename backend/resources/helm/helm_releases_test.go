@@ -159,8 +159,7 @@ items:
 // two CRDs sharing a Kind across different operator groups in the same
 // Helm release each appear with their own apiVersion. Without this fix
 // they would dedupe under a Kind+namespace+name key and the frontend
-// could not open the right one in the object panel. See
-// docs/plans/kind-only-objects.md.
+// could not open the right one in the object panel.
 func TestExtractResourcesFromManifestDisambiguatesCollidingCRDs(t *testing.T) {
 	t.Helper()
 

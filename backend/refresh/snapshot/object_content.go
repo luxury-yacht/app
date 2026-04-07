@@ -22,7 +22,7 @@ const (
 // backwards-compatible legacy scopes (namespace:kind:name) the GVK will
 // have only Kind set; for new-format scopes the GVK is fully populated
 // and the concrete provider must honor the group/version to disambiguate
-// colliding kinds (see docs/plans/kind-only-objects.md).
+// colliding kinds.
 type ObjectYAMLProvider interface {
 	FetchObjectYAML(ctx context.Context, gvk schema.GroupVersionKind, namespace, name string) (string, error)
 }

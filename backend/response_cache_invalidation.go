@@ -219,8 +219,8 @@ func (a *App) registerAPIExtensionsInvalidation(shared apiextensionsinformers.Sh
 	// The backend no longer caches GVR discovery lookups — the strict GVK
 	// resolver (common.ResolveGVRForGVK) hits discovery on every call,
 	// and discovery clients cache their own results against the API
-	// server. Nothing to invalidate here on CRD changes. See
-	// docs/plans/kind-only-objects.md.
+	// server. Nothing to invalidate here on CRD changes.
+
 }
 
 // addResponseCacheInvalidationHandler evicts cached responses when an informer update arrives.

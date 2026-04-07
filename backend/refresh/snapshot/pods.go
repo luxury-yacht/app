@@ -51,8 +51,7 @@ type PodSummary struct {
 	OwnerName string `json:"ownerName"`
 	// OwnerAPIVersion is the wire-form apiVersion of the controlling owner
 	// (e.g. "apps/v1", "argoproj.io/v1alpha1"). Threaded so the panel can
-	// open CRD-as-Pod-owner targets correctly. See PodSimpleInfo and
-	// docs/plans/kind-only-objects.md.
+	// open CRD-as-Pod-owner targets correctly. See PodSimpleInfo.
 	OwnerAPIVersion string `json:"ownerApiVersion,omitempty"`
 	CPURequest      string `json:"cpuRequest"`
 	CPULimit        string `json:"cpuLimit"`
@@ -394,7 +393,7 @@ func derivePodStatus(pod *corev1.Pod) string {
 // resolvePodOwner returns (kind, name, apiVersion) for the controlling
 // owner of a pod, collapsing ReplicaSets into their parent Deployment.
 // apiVersion is "apps/v1" for the ReplicaSet→Deployment collapse and
-// owner.APIVersion verbatim otherwise. See docs/plans/kind-only-objects.md.
+// owner.APIVersion verbatim otherwise.
 func resolvePodOwner(pod *corev1.Pod, rsMap map[string]string) (string, string, string) {
 	for _, owner := range pod.OwnerReferences {
 		if owner.Controller == nil || !*owner.Controller {

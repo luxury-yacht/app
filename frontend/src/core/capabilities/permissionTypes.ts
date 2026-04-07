@@ -9,7 +9,7 @@
  * leave them undefined — the backend resolves built-in kinds correctly
  * because they don't collide. CRD-targeted spec entries (or lazy
  * `queryKindPermissions` calls) MUST populate them so the backend can
- * disambiguate colliding kinds. See docs/plans/kind-only-objects.md.
+ * disambiguate colliding kinds.
  */
 export interface PermissionSpec {
   kind: string;

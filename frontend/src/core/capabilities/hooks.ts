@@ -31,8 +31,7 @@ interface QueryPayloadItem {
   /**
    * API group for the target kind. Optional: when present alongside
    * `version`, the backend routes through the strict GVK resolver. When
-   * absent, it falls back to kind-only resolution. See
-   * docs/plans/kind-only-objects.md step 4.
+   * absent, it falls back to kind-only resolution.
    */
   group?: string;
   /** API version paired with `group`. */

@@ -150,8 +150,7 @@ func TestObjectEventsBuilderAPIFallbackFiltersKind(t *testing.T) {
 // distinct event lists when the request scope carries a fully-qualified
 // GVK. Without this fix the API field selector and the cache lookup both
 // keyed on involvedObject.kind alone, so the events for both CRDs were
-// merged. See docs/plans/kind-only-objects.md and the assertion-2
-// follow-up.
+// merged. See the assertion-2 follow-up.
 func TestObjectEventsBuilderDisambiguatesCollidingCRDsByAPIVersion(t *testing.T) {
 	// Two events targeting two different DBInstance CRDs that share the
 	// kind/namespace/name triple. They differ only in InvolvedObject.APIVersion.

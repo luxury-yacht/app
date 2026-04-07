@@ -130,7 +130,7 @@ func ptrInt32(value int32) *int32 {
 // **This test exists to catch future drift.** Any new field added to
 // ClusterCRDEntry must be populated by BuildClusterCRDSummary; assert it
 // here so a missing field surfaces as a test failure rather than an
-// invisible production bug. See docs/plans/kind-only-objects.md.
+// invisible production bug.
 func TestBuildClusterCRDSummaryPopulatesAllFields(t *testing.T) {
 	crd := &apiextensionsv1.CustomResourceDefinition{
 		ObjectMeta: metav1.ObjectMeta{
@@ -190,7 +190,7 @@ func TestBuildClusterCRDSummaryNilCRDIsSafe(t *testing.T) {
 //
 // **Any new field added to AutoscalingSummary MUST be asserted here** so
 // a missing field surfaces as a test failure rather than an invisible
-// production regression. See docs/plans/kind-only-objects.md.
+// production regression.
 func TestBuildHPASummaryPopulatesTargetAPIVersion(t *testing.T) {
 	minReplicasVal := int32(2)
 	hpa := &autoscalingv1.HorizontalPodAutoscaler{

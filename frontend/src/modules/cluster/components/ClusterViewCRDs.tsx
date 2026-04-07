@@ -45,7 +45,7 @@ interface CRDsData {
   /**
    * Storage version name (the version etcd persists). Rendered in the
    * Version column. Threaded from the backend's
-   * ClusterCRDEntry.storageVersion. See docs/plans/kind-only-objects.md.
+   * ClusterCRDEntry.storageVersion.
    */
   storageVersion?: string;
   /** Count of additional served versions beyond the storage version. */
@@ -146,7 +146,7 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
           // multi-version CRDs. Sort uses bare storageVersion so that
           // sibling CRDs with the same storage version cluster together
           // regardless of whether they have additional served versions.
-          // See docs/plans/kind-only-objects.md.
+          //
           const versionColumn = cf.createTextColumn<CRDsData>(
             'version',
             'Version',
@@ -233,7 +233,7 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
           );
         }
         // CRD itself is a built-in (apiextensions.k8s.io/v1) and always
-        // resolves via the lookup table. See docs/plans/kind-only-objects.md.
+        // resolves via the lookup table.
         const apiVersion = formatBuiltinApiVersion('CustomResourceDefinition');
         if (!apiVersion) {
           throw new Error(

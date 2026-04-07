@@ -273,7 +273,7 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
         }
         // Built-in workloads (Deployment/StatefulSet/DaemonSet/Job/CronJob)
         // resolve via the lookup table. A miss means a non-built-in kind
-        // slipped in — fail loud. See docs/plans/kind-only-objects.md.
+        // slipped in — fail loud.
         const apiVersion = formatBuiltinApiVersion(workload.kind);
         if (!apiVersion) {
           throw new Error(

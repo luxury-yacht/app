@@ -41,7 +41,7 @@ type NamespaceAutoscalingSnapshot struct {
 // in the object panel with a fully-qualified GVK — required for CRDs that
 // share a Kind across groups (e.g. two operators each defining a custom
 // scalable resource named DBCluster). Without it the strict object-YAML
-// path hard-fails on CRD HPA targets. See docs/plans/kind-only-objects.md.
+// path hard-fails on CRD HPA targets.
 type AutoscalingSummary struct {
 	ClusterMeta
 	Kind             string `json:"kind"`

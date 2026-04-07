@@ -36,8 +36,7 @@ type ClusterCustomBuilder struct {
 //
 // APIGroup and APIVersion together identify the owning CRD's GroupVersion
 // so the frontend can disambiguate colliding Kinds across API groups.
-// See the NamespaceCustomSummary comment and
-// docs/plans/kind-only-objects.md for details.
+// See the NamespaceCustomSummary comment for details.
 type ClusterCustomSummary struct {
 	ClusterMeta
 	Kind       string `json:"kind"`

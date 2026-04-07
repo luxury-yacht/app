@@ -343,7 +343,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
       // return an identity without an apiVersion, so the kind-only
       // fallback that used to live here was unreachable. Removing it
       // closes the last frontend caller of the legacy first-match-wins
-      // resolver. See docs/plans/kind-only-objects.md step 3.
+      // resolver.
       if (!identity.apiVersion) {
         throw new Error(
           `Cannot fetch latest YAML for ${identity.kind}/${identity.name}: apiVersion missing`

@@ -15,7 +15,7 @@ export type CapabilityStatus = 'idle' | 'loading' | 'ready' | 'error';
  * (when supplied) so the backend can disambiguate between two CRDs that
  * share a Kind. Both are optional for backwards compatibility — when
  * absent, the backend falls back to kind-only resolution.
- * See docs/plans/kind-only-objects.md step 4.
+ * See  step 4.
  */
 export interface CapabilityDescriptor {
   id: string;

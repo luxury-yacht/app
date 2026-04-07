@@ -248,7 +248,7 @@ export interface ClusterCRDEntry extends ClusterMeta {
    * and the API server converts to/from it. The Version column in the
    * cluster CRDs view renders this as `storageVersion` for single-version
    * CRDs and `storageVersion (+N)` for multi-version CRDs. See
-   * docs/plans/kind-only-objects.md.
+   * .
    */
   storageVersion?: string;
   /**
@@ -269,7 +269,7 @@ export interface ClusterCustomEntry extends ClusterMeta {
   name: string;
   apiGroup: string;
   /** API version paired with apiGroup for GVK-aware resolution of the
-   * owning CRD. See docs/plans/kind-only-objects.md. */
+   * owning CRD. */
   apiVersion: string;
   /**
    * Canonical Kubernetes name of the CustomResourceDefinition that
@@ -390,7 +390,7 @@ export interface PodSnapshotEntry extends ClusterMeta {
    * "argoproj.io/v1alpha1"). Threaded from
    * pod.OwnerReferences[*].APIVersion so the panel can open
    * CRD-as-Pod-owner targets correctly. See
-   * docs/plans/kind-only-objects.md.
+   * .
    */
   ownerApiVersion?: string;
   cpuRequest: string;
@@ -441,7 +441,7 @@ export interface ObjectEventSummary extends ClusterMeta {
   // apiVersion of the event's involvedObject (e.g. "apps/v1", "v1",
   // "documentdb.services.k8s.aws/v1alpha1"). Required for GVK
   // disambiguation when opening the related object — see
-  // docs/plans/kind-only-objects.md.
+
   involvedObjectApiVersion?: string;
   namespace: string;
 }
@@ -546,7 +546,7 @@ export interface NamespaceAutoscalingSummary extends ClusterMeta {
    * "documentdb.services.k8s.aws/v1alpha1"). Threaded from
    * `hpa.Spec.ScaleTargetRef.APIVersion` so the panel can open the target
    * with a fully-qualified GVK — required for CRDs that share a Kind. See
-   * docs/plans/kind-only-objects.md.
+   * .
    */
   targetApiVersion?: string;
   min: number;
@@ -605,7 +605,7 @@ export interface NamespaceCustomSummary extends ClusterMeta {
   name: string;
   apiGroup: string;
   /** API version paired with apiGroup for GVK-aware resolution of the
-   * owning CRD. See docs/plans/kind-only-objects.md. */
+   * owning CRD. */
   apiVersion: string;
   /**
    * Canonical Kubernetes name of the CustomResourceDefinition that

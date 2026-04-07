@@ -222,7 +222,7 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
         // Built-in ConfigMap/Secret resolve via the lookup table. Any miss
         // here would mean a non-built-in kind slipped into this view — we
         // want to fail loud rather than fall back to the retired kind-only
-        // resolver. See docs/plans/kind-only-objects.md.
+        // resolver.
         const apiVersion = formatBuiltinApiVersion(resource.kind);
         if (!apiVersion) {
           throw new Error(

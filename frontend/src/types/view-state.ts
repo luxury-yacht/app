@@ -41,7 +41,7 @@ export interface KubernetesObjectReference {
    * API group for the object's kind (e.g. "apps", "rds.services.k8s.aws").
    * Empty string for core/v1 kinds. Callers that build refs from the
    * catalog should populate this so downstream code can disambiguate
-   * colliding CRDs. See docs/plans/kind-only-objects.md.
+   * colliding CRDs.
    */
   group?: string | null;
   /** API version for the object's kind (e.g. "v1", "v1alpha1"). */
@@ -69,7 +69,7 @@ export interface KubernetesObjectReference {
  *
  * Add an entry ONLY if the kind genuinely never resolves through
  * Kubernetes discovery (e.g. Helm releases, which are managed by the
- * Helm CLI, not the Kubernetes API). See docs/plans/kind-only-objects.md.
+ * Helm CLI, not the Kubernetes API).
  */
 const SYNTHETIC_OBJECT_KINDS = new Set<string>(['helmrelease']);
 
@@ -111,8 +111,7 @@ export function assertObjectRefHasGVK(ref: KubernetesObjectReference): void {
         `panel and backend resolvers cannot disambiguate two CRDs sharing ` +
         `a Kind without group+version. Spread ` +
         `\`...resolveBuiltinGroupVersion(kind)\` for built-ins, or thread ` +
-        `the actual apiVersion via \`parseApiVersion(...)\`. See ` +
-        `docs/plans/kind-only-objects.md.`
+        `the actual apiVersion via \`parseApiVersion(...)\.`
     );
   }
 }

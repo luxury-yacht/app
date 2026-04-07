@@ -28,8 +28,7 @@ import (
 // core/capabilities/store.ts after the kind-only-objects fix), so a
 // missing Version here is a programming bug — we fail loud rather than
 // falling back to the retired kind-only resolver, which was
-// first-match-wins across colliding CRDs. See
-// docs/plans/kind-only-objects.md.
+// first-match-wins across colliding CRDs.
 func (a *App) resolveGVRForPermissionQuery(ctx context.Context, q capabilities.PermissionQuery) (schema.GroupVersionResource, bool, error) {
 	if q.Version == "" {
 		return schema.GroupVersionResource{}, false, fmt.Errorf(

@@ -188,8 +188,8 @@ describe('ClusterViewCustom', () => {
     );
   });
 
-  // Regression test mirroring NsViewCustom's colliding-CRD guardrail. See
-  // docs/plans/kind-only-objects.md. The cluster-scoped custom view has
+  // Regression test mirroring NsViewCustom's colliding-CRD guardrail.
+  // The cluster-scoped custom view has
   // the same bug potential: if handleResourceClick drops apiGroup/apiVersion,
   // a cluster-scoped custom resource whose Kind collides with another CRD
   // group would open against the wrong GVR.
@@ -235,7 +235,7 @@ describe('ClusterViewCustom', () => {
   });
 
   // Regression test for the delete-path leg of the kind-only-objects bug
-  // (docs/plans/kind-only-objects.md "I Should Have Done This Without Having
+  // ( "I Should Have Done This Without Having
   // To Be Asked" item 2). Mirrors NsViewCustom's delete guardrail for the
   // cluster-scoped custom view.
   it('routes delete through DeleteResourceByGVK when apiGroup/apiVersion are present', async () => {

@@ -12,8 +12,7 @@ export type PanelObjectData = {
    * API group for the object's kind (e.g. "apps", "rds.services.k8s.aws").
    * Empty string for core/v1 kinds. Optional because legacy code paths and
    * some fixtures don't yet thread GVK through; when absent, scope and
-   * capability resolution falls back to kind-only behavior (see
-   * docs/plans/kind-only-objects.md).
+   * capability resolution falls back to kind-only behavior
    */
   group?: string | null;
   /**

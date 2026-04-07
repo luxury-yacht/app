@@ -83,8 +83,7 @@ const computeCapabilityDescriptors = (
   // travel through every capability descriptor below so the backend's
   // permission resolver disambiguates colliding kinds (e.g. two different
   // DBInstance CRDs). Empty for legacy callers; the backend falls back
-  // to kind-only resolution in that case. See docs/plans/kind-only-objects.md
-  // step 4.
+  // to kind-only resolution in that case.
   const objectGroup = objectData.group?.trim() ?? undefined;
   const objectVersion = objectData.version?.trim() ?? undefined;
   // Core/v1 Pod is hardcoded for a few cross-resource checks (log on a
@@ -151,8 +150,7 @@ const computeCapabilityDescriptors = (
     // "Deployment"). The previous fallback through WORKLOAD_KIND_API_NAMES
     // existed only as a casing safety net for callers that supplied
     // lowercase kinds; that map is retired now that every entry point
-    // threads PascalCase kinds via the data source. See
-    // docs/plans/kind-only-objects.md item 10.
+    // threads PascalCase kinds via the data source.
     add(
       {
         id: 'restart',

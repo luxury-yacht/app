@@ -290,7 +290,7 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
           );
         }
         // PersistentVolume is core/v1 and always resolves via the lookup
-        // table. See docs/plans/kind-only-objects.md.
+        // table.
         const apiVersion = formatBuiltinApiVersion('PersistentVolume');
         if (!apiVersion) {
           throw new Error(

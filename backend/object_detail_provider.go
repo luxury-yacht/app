@@ -315,8 +315,7 @@ func (p *objectDetailProvider) resolveDetailContext(ctx context.Context) resolve
 // Resolution goes through the shared common.ResolveGVRForGVK helper so
 // colliding kinds from different groups disambiguate correctly. The
 // kind-only fallback that used to live here was the source of the
-// kind-only-objects bug — see the hard-error guard below and
-// docs/plans/kind-only-objects.md.
+// kind-only-objects bug — see the hard-error guard below
 func (p *objectDetailProvider) FetchObjectYAML(ctx context.Context, gvk schema.GroupVersionKind, namespace, name string) (string, error) {
 	resolved := p.resolveDetailContext(ctx)
 	if !resolved.scoped {
@@ -331,7 +330,7 @@ func (p *objectDetailProvider) FetchObjectYAML(ctx context.Context, gvk schema.G
 	// frontend/src/modules/object-panel/components/ObjectPanel/hooks/getObjectPanelKind.ts
 	// and the buildObjectScope helper), so reaching this branch with an
 	// empty Version means a producer was missed and we want to fail loud
-	// rather than silently pick a CRD. See docs/plans/kind-only-objects.md.
+	// rather than silently pick a CRD.
 	if gvk.Version == "" {
 		return "", fmt.Errorf(
 			"object YAML fetch requires apiVersion (got kind=%q without group/version); "+

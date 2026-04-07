@@ -112,8 +112,7 @@ export function useOverviewData(params: UseOverviewDataParams): OverviewData | n
                 name: podDetails.ownerName,
                 // Threaded so the Owner link in PodOverview can open
                 // CRD-as-Pod-owner targets (Argo Rollout, KubeVirt VMI,
-                // Tekton TaskRun, etc.) with a fully-qualified GVK. See
-                // docs/plans/kind-only-objects.md.
+                // Tekton TaskRun, etc.) with a fully-qualified GVK.
                 apiVersion: podDetails.ownerApiVersion ?? undefined,
               }
             : undefined,

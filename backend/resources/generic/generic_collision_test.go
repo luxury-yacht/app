@@ -2,8 +2,7 @@
  * backend/resources/generic/generic_collision_test.go
  *
  * Regression tests for the kind-only object identification bug in the
- * generic delete path. See docs/plans/kind-only-objects.md for the full
- * context. Mirrors the backend/object_yaml_collision_test.go tests but for
+ * generic delete path. Mirrors the backend/object_yaml_collision_test.go tests but for
  * the delete-path resolver, which lives in its own package and cannot
  * import the backend package (see step 5 of the plan).
  */

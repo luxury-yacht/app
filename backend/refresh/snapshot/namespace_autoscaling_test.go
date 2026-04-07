@@ -11,8 +11,7 @@ import (
 // snapshot threads hpa.Spec.ScaleTargetRef.APIVersion onto the summary as
 // TargetAPIVersion. The frontend uses this to open the scale target in the
 // object panel with a fully-qualified GVK — required for CRDs that share
-// a Kind across operator groups (e.g. two custom DBCluster types). See
-// docs/plans/kind-only-objects.md.
+// a Kind across operator groups (e.g. two custom DBCluster types).
 func TestBuildSnapshotPopulatesTargetAPIVersion(t *testing.T) {
 	// Two HPAs targeting different-group CRDs that happen to share Kind
 	// and namespace+name. Without TargetAPIVersion the frontend cannot
