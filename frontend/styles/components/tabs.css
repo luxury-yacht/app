@@ -6,12 +6,22 @@
    respective component CSS files.
    ========================================================================== */
 
-/* Tab strip container */
+/* Tab strip container — IS the scrolling element. Overflow indicators are
+   direct children with `position: sticky` so they stick to the left/right
+   edges while tabs scroll past underneath. Matches the live
+   .dockable-tab-bar structure so the visual output is identical. */
 .tab-strip {
   display: flex;
   align-items: stretch;
   background-color: var(--color-bg-secondary);
   border-bottom: 1px solid var(--color-border);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.tab-strip::-webkit-scrollbar {
+  display: none;
 }
 
 /* Individual tab item */
@@ -45,6 +55,20 @@
 .tab-item:hover {
   color: var(--color-text);
   background-color: var(--color-bg-tertiary);
+}
+
+/* Disabled state — set via aria-disabled="true" by the <Tabs> component when
+   a TabDescriptor has `disabled: true`. Lower opacity makes it visually
+   distinct, and the hover overrides keep disabled tabs from picking up the
+   interactive hover background/color. */
+.tab-item[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.tab-item[aria-disabled="true"]:hover {
+  color: var(--color-text-secondary);
+  background-color: transparent;
 }
 
 /* Separator between tabs (hidden adjacent to active or hovered tabs) */
@@ -132,4 +156,114 @@
   flex: 1;
   position: relative;
   min-height: 0;
+}
+
+/* ==========================================================================
+   Sizing modifiers — driven by props on <Tabs>
+   ========================================================================== */
+
+.tab-strip--sizing-fit .tab-item {
+  flex: 0 0 auto;
+  min-width: var(--tab-item-min-width, 0);
+  max-width: var(--tab-item-max-width, 240px);
+}
+
+.tab-strip--sizing-equal .tab-item {
+  flex: 1 1 0;
+  min-width: var(--tab-item-min-width, 80px);
+  max-width: var(--tab-item-max-width, 240px);
+}
+
+/* Closeable tabs in fit mode always need an 80px floor regardless of the
+   consumer's minTabWidth, so the absolutely-positioned close button has
+   room. Specificity (0,2,0) matches the .tab-strip--sizing-fit .tab-item
+   rule above; document order means this rule wins on the closeable
+   subset. Equal mode already has an 80px default floor for all tabs. */
+.tab-strip--sizing-fit .tab-item--closeable {
+  min-width: 80px;
+}
+
+/* Always-on label truncation. The closeable modifier still adds
+   padding-right to reserve space for the absolutely-positioned close
+   button — see existing .tab-item--closeable rules above. */
+.tab-item__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+/* ==========================================================================
+   Text-transform variant — the only legitimate per-system difference
+   ========================================================================== */
+
+.tab-strip--uppercase .tab-item {
+  text-transform: uppercase;
+}
+
+/* ==========================================================================
+   Overflow scroll indicators — sticky-positioned children of .tab-strip
+   (which IS the scrolling element, matching live .dockable-tab-bar).
+   Moved here from DockablePanel.css with selectors renamed
+   .dockable-tab-bar__overflow-* → .tab-strip__overflow-*
+   ========================================================================== */
+
+.tab-strip__overflow-indicator {
+  --tab-strip-overflow-indicator-size: 32px;
+  position: sticky;
+  top: 0;
+  width: var(--tab-strip-overflow-indicator-size);
+  flex: 0 0 var(--tab-strip-overflow-indicator-size);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: stretch;
+  z-index: 3;
+  color: var(--color-text-secondary);
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: var(--color-bg-secondary);
+  cursor: pointer;
+  transition:
+    background-color 0.2s,
+    color 0.2s;
+}
+
+.tab-strip__overflow-icon {
+  width: 16px;
+  height: 16px;
+  display: block;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.tab-strip__overflow-count {
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--color-text-tertiary);
+}
+
+.tab-strip__overflow-indicator:hover {
+  background: var(--color-bg-tertiary, rgb(255 255 255 / 10%));
+  color: var(--color-text, #fff);
+}
+
+.tab-strip__overflow-indicator:hover .tab-strip__overflow-count {
+  color: var(--color-text-secondary);
+}
+
+.tab-strip__overflow-indicator--left {
+  left: 0;
+}
+
+.tab-strip__overflow-indicator--right {
+  margin-left: auto;
+  right: 0;
+}
+
+.tab-strip__overflow-indicator:focus-visible {
+  outline: 1px solid var(--color-accent, #3b82f6);
+  outline-offset: -1px;
 }
