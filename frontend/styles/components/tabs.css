@@ -18,6 +18,12 @@
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
+  /* Establish an offsetParent so tab children's offsetLeft is relative to
+     the strip itself. Without this, scrollToNextTab's coordinate math (which
+     compares tab.offsetLeft against bar.scrollLeft/clientWidth) breaks when
+     the strip is inside unpositioned ancestors. Live .dockable-tab-bar has
+     the same rule, so this is a no-op there. */
+  position: relative;
 }
 
 .tab-strip::-webkit-scrollbar {
@@ -238,19 +244,21 @@
   stroke-linejoin: round;
 }
 
-.tab-strip__overflow-count {
-  font-size: 10px;
-  font-weight: 600;
-  line-height: 1;
-  color: var(--color-text-tertiary);
-}
-
 .tab-strip__overflow-indicator:hover {
   background: var(--color-bg-tertiary, rgb(255 255 255 / 10%));
   color: var(--color-text, #fff);
 }
 
-.tab-strip__overflow-indicator:hover .tab-strip__overflow-count {
+/* At-extreme state — chevron is disabled when the strip can't scroll any
+   further in that direction. Uses the native `disabled` attribute so the
+   click event is suppressed automatically. */
+.tab-strip__overflow-indicator:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.tab-strip__overflow-indicator:disabled:hover {
+  background: var(--color-bg-secondary);
   color: var(--color-text-secondary);
 }
 

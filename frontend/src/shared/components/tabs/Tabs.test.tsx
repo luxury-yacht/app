@@ -832,16 +832,21 @@ describe('Tabs', () => {
     );
     expect(rightButton).toBeTruthy();
 
-    const scrollBySpy = vi.fn();
-    scrollContainer.scrollBy = scrollBySpy as any;
+    const scrollToSpy = vi.fn();
+    scrollContainer.scrollTo = scrollToSpy as any;
 
     act(() => {
       rightButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
-    expect(scrollBySpy).toHaveBeenCalled();
-    const callArg = scrollBySpy.mock.calls[0][0];
-    expect(callArg.left).toBeGreaterThan(0);
+    // With 10 tabs at offsetLeft = 0, 100, 200, ... and clientWidth = 200,
+    // the first tab whose right edge is hidden past the right indicator
+    // (barRight - indicatorSize + 1 = 169) is tab 1 (right edge at 200).
+    // The scroll target is tab1.offsetLeft + tab1.offsetWidth - clientWidth
+    // + indicatorSize = 100 + 100 - 200 + 32 = 32.
+    expect(scrollToSpy).toHaveBeenCalled();
+    const callArg = scrollToSpy.mock.calls[0][0];
+    expect(callArg.left).toBe(32);
     expect(callArg.behavior).toBe('smooth');
 
     (globalThis as any).ResizeObserver = OriginalResizeObserver;
@@ -893,7 +898,7 @@ describe('Tabs', () => {
     HTMLElement.prototype.scrollIntoView = original;
   });
 
-  it('shows the count of hidden tabs in the overflow indicators', () => {
+  it('renders both overflow indicators together once the strip overflows', () => {
     const observers: Array<() => void> = [];
     const OriginalResizeObserver = (globalThis as any).ResizeObserver;
     (globalThis as any).ResizeObserver = class {
@@ -916,29 +921,18 @@ describe('Tabs', () => {
     });
 
     const scrollContainer = container.querySelector<HTMLDivElement>('[role="tablist"]')!;
-    // Mock 3 tabs visible (from index 1 to 3), 1 hidden left, 1 hidden right.
     Object.defineProperty(scrollContainer, 'scrollWidth', { value: 500, configurable: true });
     Object.defineProperty(scrollContainer, 'clientWidth', { value: 300, configurable: true });
-    Object.defineProperty(scrollContainer, 'scrollLeft', { value: 100, configurable: true });
-
-    // Mock per-tab offsets so the measurement loop can compute hidden counts.
-    const buttons = container.querySelectorAll<HTMLButtonElement>('[role="tab"]');
-    buttons.forEach((btn, i) => {
-      Object.defineProperty(btn, 'offsetLeft', { value: i * 100, configurable: true });
-      Object.defineProperty(btn, 'offsetWidth', { value: 100, configurable: true });
-    });
 
     act(() => observers.forEach((cb) => cb()));
 
-    const leftCount = container.querySelector(
-      '.tab-strip__overflow-indicator--left .tab-strip__overflow-count'
-    );
-    const rightCount = container.querySelector(
-      '.tab-strip__overflow-indicator--right .tab-strip__overflow-count'
-    );
-
-    expect(leftCount?.textContent).toBe('1');
-    expect(rightCount?.textContent).toBe('1');
+    // Both indicators render together whenever the strip overflows, even
+    // at scrollLeft = 0. No per-side conditional rendering, no count badge.
+    const leftInd = container.querySelector('.tab-strip__overflow-indicator--left');
+    const rightInd = container.querySelector('.tab-strip__overflow-indicator--right');
+    expect(leftInd).toBeTruthy();
+    expect(rightInd).toBeTruthy();
+    expect(container.querySelector('.tab-strip__overflow-count')).toBeNull();
 
     (globalThis as any).ResizeObserver = OriginalResizeObserver;
   });

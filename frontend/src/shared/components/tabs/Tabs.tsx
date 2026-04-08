@@ -94,12 +94,60 @@ export function Tabs({
   const effectiveMinTabWidth = minTabWidth ?? (tabSizing === 'equal' ? 80 : 0);
   const tabRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [overflowState, setOverflowState] = useState({ left: 0, right: 0 });
+  // Single boolean: once the strip overflows, BOTH indicators render. Not
+  // tracked per-side. Keeping both mounted at the same time guarantees tab
+  // positions are stable across clicks, which makes the scroll math
+  // straightforward (no layout shifts to compensate for).
+  const [hasOverflow, setHasOverflow] = useState(false);
+  // Track whether the strip is scrolled to either extreme so the
+  // corresponding chevron can be greyed out.
+  const [atStart, setAtStart] = useState(true);
+  const [atEnd, setAtEnd] = useState(false);
 
-  const SCROLL_AMOUNT = 200;
+  // Scroll one tab at a time when the user clicks an overflow indicator.
+  // Both indicators are always present when the strip overflows, so the
+  // first tab is always at offsetLeft = indicatorSize and positions never
+  // shift between clicks. Find the first tab clipped on the relevant side
+  // and scroll so it just clears the indicator.
+  const scrollToNextTab = (direction: -1 | 1) => {
+    const bar = scrollRef.current;
+    if (!bar) return;
+    const indicatorSize =
+      parseFloat(getComputedStyle(bar).getPropertyValue('--tab-strip-overflow-indicator-size')) ||
+      32;
 
-  const scrollByPx = (delta: number) => {
-    scrollRef.current?.scrollBy({ left: delta, behavior: 'smooth' });
+    const barLeft = bar.scrollLeft;
+    const barRight = barLeft + bar.clientWidth;
+    let target: HTMLButtonElement | null = null;
+
+    if (direction === 1) {
+      // First tab whose right edge is hidden past the right indicator.
+      for (const tab of tabs) {
+        const btn = tabRefs.current.get(tab.id);
+        if (!btn) continue;
+        if (btn.offsetLeft + btn.offsetWidth > barRight - indicatorSize + 1) {
+          target = btn;
+          break;
+        }
+      }
+    } else {
+      // Last tab whose left edge is hidden before the left indicator.
+      for (let i = tabs.length - 1; i >= 0; i--) {
+        const btn = tabRefs.current.get(tabs[i].id);
+        if (!btn) continue;
+        if (btn.offsetLeft < barLeft + indicatorSize - 1) {
+          target = btn;
+          break;
+        }
+      }
+    }
+    if (!target) return;
+
+    const scrollTarget =
+      direction === 1
+        ? target.offsetLeft + target.offsetWidth - bar.clientWidth + indicatorSize
+        : target.offsetLeft - indicatorSize;
+    bar.scrollTo({ left: Math.max(0, scrollTarget), behavior: 'smooth' });
   };
 
   const focusFirstEnabled = () => {
@@ -163,33 +211,23 @@ export function Tabs({
     }
   };
 
-  // Measure overflow whenever the strip size or contents change.
+  // Measure overflow whenever the strip size or contents change, and
+  // update the at-start/at-end flags on scroll so the chevrons can grey
+  // out at the extremes.
   useEffect(() => {
     if (overflow !== 'scroll' || !scrollRef.current) {
-      setOverflowState({ left: 0, right: 0 });
+      setHasOverflow(false);
+      setAtStart(true);
+      setAtEnd(false);
       return;
     }
 
     const el = scrollRef.current;
     const measure = () => {
-      const overflowAmount = el.scrollWidth - el.clientWidth;
-      if (overflowAmount <= 0) {
-        setOverflowState({ left: 0, right: 0 });
-        return;
-      }
-      const visibleStart = el.scrollLeft;
-      const visibleEnd = el.scrollLeft + el.clientWidth;
-      let leftHidden = 0;
-      let rightHidden = 0;
-      for (const tab of tabs) {
-        const btn = tabRefs.current.get(tab.id);
-        if (!btn) continue;
-        const tabLeft = btn.offsetLeft;
-        const tabRight = btn.offsetLeft + btn.offsetWidth;
-        if (tabRight <= visibleStart) leftHidden++;
-        else if (tabLeft >= visibleEnd) rightHidden++;
-      }
-      setOverflowState({ left: leftHidden, right: rightHidden });
+      const max = el.scrollWidth - el.clientWidth;
+      setHasOverflow(max > 1);
+      setAtStart(el.scrollLeft <= 0);
+      setAtEnd(el.scrollLeft >= max - 1);
     };
 
     measure();
@@ -230,8 +268,7 @@ export function Tabs({
     '--tab-item-max-width': `${maxTabWidth}px`,
   } as CSSProperties;
 
-  const showLeftIndicator = overflow === 'scroll' && overflowState.left > 0;
-  const showRightIndicator = overflow === 'scroll' && overflowState.right > 0;
+  const showIndicators = overflow === 'scroll' && hasOverflow;
 
   return (
     <div
@@ -242,17 +279,15 @@ export function Tabs({
       style={style}
       id={id}
     >
-      {showLeftIndicator && (
+      {showIndicators && (
         <button
           type="button"
           className="tab-strip__overflow-indicator tab-strip__overflow-indicator--left"
-          aria-label={`Scroll tabs left (${overflowState.left} hidden)`}
+          aria-label="Scroll tabs left"
           tabIndex={-1}
-          onClick={() => scrollByPx(-SCROLL_AMOUNT)}
+          disabled={atStart}
+          onClick={() => scrollToNextTab(-1)}
         >
-          {overflowState.left > 0 && (
-            <span className="tab-strip__overflow-count">{overflowState.left}</span>
-          )}
           <svg
             className="tab-strip__overflow-icon"
             viewBox="0 0 12 12"
@@ -312,13 +347,14 @@ export function Tabs({
           </button>
         );
       })}
-      {showRightIndicator && (
+      {showIndicators && (
         <button
           type="button"
           className="tab-strip__overflow-indicator tab-strip__overflow-indicator--right"
-          aria-label={`Scroll tabs right (${overflowState.right} hidden)`}
+          aria-label="Scroll tabs right"
           tabIndex={-1}
-          onClick={() => scrollByPx(SCROLL_AMOUNT)}
+          disabled={atEnd}
+          onClick={() => scrollToNextTab(1)}
         >
           <svg
             className="tab-strip__overflow-icon"
@@ -328,9 +364,6 @@ export function Tabs({
           >
             <path d="M4.5 2.5L7.5 6L4.5 9.5" stroke="currentColor" strokeWidth="1.6" />
           </svg>
-          {overflowState.right > 0 && (
-            <span className="tab-strip__overflow-count">{overflowState.right}</span>
-          )}
         </button>
       )}
     </div>
