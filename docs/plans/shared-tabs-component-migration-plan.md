@@ -1856,28 +1856,15 @@ The provider currently owns five distinct pieces of machinery. Phase 2 deletes t
 
 ## Final cleanup
 
-### Task 11: Delete the preview stories
+### Task 11: Keep the preview stories (superseded)
 
-**Files:**
-- Delete: `frontend/src/shared/components/tabs/ObjectTabsPreview.stories.tsx`
-- Delete: `frontend/src/shared/components/tabs/ObjectPanelTabsPreview.stories.tsx`
-- Delete: `frontend/src/shared/components/tabs/ClusterTabsPreview.stories.tsx`
-- Delete: `frontend/src/shared/components/tabs/stories.css` (if no other file references it)
-- Modify: `frontend/.storybook/preview.ts` — remove preview story entries from the `storySort` order
+**Originally:** delete the three Phase 1 preview stories since the real consumers now demonstrate the same behaviors in-context.
 
-Once all four consumers migrate, the preview stories become redundant — they were built specifically to validate the shared component in isolation and to smoke-test the migration pattern. The real consumers now demonstrate the same behaviors in-context. Keep `Tabs.stories.tsx` (the raw `DisabledTabs` etc. demos) and `TabsWithDrag.stories.tsx` (type-safety and tear-off demos) since those still showcase shared-component-specific features the consumers don't cover individually.
+**Revised:** KEEP `ClusterTabsPreview.stories.tsx`, `ObjectPanelTabsPreview.stories.tsx`, and `ObjectTabsPreview.stories.tsx`. They remain useful for isolated design exploration, regression snapshots, and as reference implementations for future migrations or drag-coordinator refactors. Storybook's `storySort` in `.storybook/preview.ts` still lists them. `stories.css` stays because both the preview stories and `TabsWithDrag.stories.tsx` consume it.
 
-- [x] **Step 1: Delete the three preview story files.**
-- [x] **Step 2: Delete `stories.css`** if nothing else references it. Verify:
-  ```bash
-  grep -rn "stories.css\|tabs-story-" /Volumes/git/luxury-yacht/app/frontend/src
-  ```
-  If only `Tabs.stories.tsx` or `TabsWithDrag.stories.tsx` hits, move the minimum-needed classes back into those files' local styles OR keep `stories.css` around for them. If zero hits, delete.
+No file changes are required for this task. It remains on the plan only as a record that the original Phase 2 cleanup intent was reconsidered.
 
-  Kept `stories.css` — `TabsWithDrag.stories.tsx` still uses `tabs-story-drag-*` classes extensively.
-- [x] **Step 3: Update `.storybook/preview.ts`** — remove the three preview-story ids from the `storySort` order array.
-- [x] **Step 4: Run tests and start storybook** to confirm nothing broke.
-- [x] **Step 5:** Report task complete and wait for user review.
+- [x] **Task 11 superseded — preview stories and their storySort entries are retained.**
 
 ### Task 12: Update the design doc
 

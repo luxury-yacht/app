@@ -602,9 +602,6 @@ frontend/src/shared/components/tabs/
 # DELETED (in Phase 2):
 frontend/src/shared/components/tabs/Tabs/index.tsx   # vestigial useTabStyles() shim
 frontend/src/shared/components/tabs/Tabs/Tabs.css    # empty legacy CSS file
-frontend/src/shared/components/tabs/ClusterTabsPreview.stories.tsx
-frontend/src/shared/components/tabs/ObjectPanelTabsPreview.stories.tsx
-frontend/src/shared/components/tabs/ObjectTabsPreview.stories.tsx
 ```
 
 ```
@@ -744,7 +741,8 @@ Most complex wrapper. Reads `dragPreviewRef` and `movePanel` from `useDockablePa
 - `dragState` state machine, `startTabDrag`/`endTabDrag` methods, `UNDOCK_THRESHOLD` constant, pointermove listener updating `--dockable-tab-drag-x`/`--dockable-tab-drag-y` CSS custom properties — all replaced by the browser-native `event.dataTransfer.setDragImage()` call in each tab's `getDragImage`.
 - `.dockable-tab`, `.dockable-tab__label`, `.dockable-tab--dragging`, `.dockable-tab-bar--drag-active`, `.dockable-tab-bar--drop-target`, `.dockable-tab-bar__drop-indicator`, and all `.dockable-tab-bar__overflow-*` CSS rules — either duplicated the shared `.tab-item` / `.tab-strip__*` rules or were dead after the drag-state machine was removed.
 - `.object-panel .tab-item { text-transform: uppercase }` and `.diagnostics-tabs .tab-item { text-transform: uppercase }` — replaced by the shared component's `textTransform="uppercase"` prop.
-- Phase 1 preview stories (`ClusterTabsPreview.stories.tsx`, `ObjectPanelTabsPreview.stories.tsx`, `ObjectTabsPreview.stories.tsx`) — deleted once the real consumers demonstrated the migration patterns in-context.
+
+The Phase 1 preview stories (`ClusterTabsPreview.stories.tsx`, `ObjectPanelTabsPreview.stories.tsx`, `ObjectTabsPreview.stories.tsx`) are intentionally retained — they remain useful for isolated design exploration and as reference implementations for future drag-coordinator refactors.
 
 ## Open future work
 
