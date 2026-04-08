@@ -1,8 +1,9 @@
 /**
- * frontend/src/components/dockable/DockablePanelProvider.test.tsx
+ * frontend/src/ui/dockable/DockablePanelProvider.test.tsx
  *
  * Test suite for DockablePanelProvider.
- * Covers key behaviors and edge cases for DockablePanelProvider.
+ * Covers tab-group state, panel lifecycle, focus routing, drag adapters,
+ * and the container-level empty-space drop target.
  */
 
 import React from 'react';
@@ -12,6 +13,12 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { DockablePanelProvider, useDockablePanelContext } from './DockablePanelProvider';
 import { DockableTabBar } from './DockableTabBar';
+import { useDockablePanelEmptySpaceDropTarget } from './DockablePanelContentArea';
+import {
+  TabDragProvider,
+  TAB_DRAG_DATA_TYPE,
+  type TabDragPayload,
+} from '@shared/components/tabs/dragCoordinator';
 
 const render = async (element: React.ReactElement) => {
   const container = document.createElement('div');
@@ -19,7 +26,7 @@ const render = async (element: React.ReactElement) => {
   const root = ReactDOM.createRoot(container);
 
   await act(async () => {
-    root.render(element);
+    root.render(<TabDragProvider>{element}</TabDragProvider>);
     await Promise.resolve();
   });
 
@@ -51,6 +58,50 @@ const setRect = (element: Element, left: number, right: number, top = 0, bottom 
   });
 };
 
+/**
+ * Minimal DataTransfer polyfill for jsdom drag simulation.
+ */
+function createDataTransfer(): DataTransfer {
+  const store = new Map<string, string>();
+  return {
+    dropEffect: 'move',
+    effectAllowed: 'move',
+    files: [] as unknown as FileList,
+    items: [] as unknown as DataTransferItemList,
+    types: [] as unknown as readonly string[],
+    setData: (format: string, data: string) => {
+      store.set(format, data);
+    },
+    getData: (format: string) => store.get(format) ?? '',
+    clearData: () => {
+      store.clear();
+    },
+    setDragImage: () => {},
+  } as unknown as DataTransfer;
+}
+
+function dispatchDragEvent(
+  target: EventTarget,
+  type: string,
+  clientX: number,
+  clientY: number,
+  dataTransfer: DataTransfer
+) {
+  const event = new Event(type, { bubbles: true, cancelable: true }) as Event & {
+    clientX: number;
+    clientY: number;
+    dataTransfer: DataTransfer;
+  };
+  Object.defineProperty(event, 'clientX', { value: clientX });
+  Object.defineProperty(event, 'clientY', { value: clientY });
+  Object.defineProperty(event, 'dataTransfer', { value: dataTransfer });
+  target.dispatchEvent(event);
+}
+
+function seedPayload(dataTransfer: DataTransfer, payload: TabDragPayload) {
+  dataTransfer.setData(TAB_DRAG_DATA_TYPE, JSON.stringify(payload));
+}
+
 describe('DockablePanelProvider', () => {
   beforeAll(() => {
     (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
@@ -64,11 +115,9 @@ describe('DockablePanelProvider', () => {
   });
 
   afterEach(() => {
-    // Clean up all children from body
     while (document.body.firstChild) {
       document.body.removeChild(document.body.firstChild);
     }
-    Reflect.deleteProperty(document, 'elementFromPoint');
     document.documentElement.style.removeProperty('--dock-right-offset');
     document.documentElement.style.removeProperty('--dock-bottom-offset');
   });
@@ -88,6 +137,22 @@ describe('DockablePanelProvider', () => {
 
     await unmount();
     expect(document.querySelector('.dockable-panel-layer')).toBeNull();
+  });
+
+  it('mounts the drag preview element permanently', async () => {
+    const { container, unmount } = await render(
+      <DockablePanelProvider>
+        <div />
+      </DockablePanelProvider>
+    );
+
+    // Preview is always in the DOM, even without an active drag.
+    const preview = container.querySelector('.dockable-tab-drag-preview');
+    expect(preview).toBeTruthy();
+    expect(preview?.querySelector('.dockable-tab-drag-preview__label')).toBeTruthy();
+    expect(preview?.querySelector('.dockable-tab-drag-preview__kind')).toBeTruthy();
+
+    await unmount();
   });
 
   it('exposes tabGroups state that reflects explicit group sync actions', async () => {
@@ -193,63 +258,6 @@ describe('DockablePanelProvider', () => {
 
     expect(contextRef.current!.tabGroups.right.tabs).toContain('panel-a');
     expect(contextRef.current!.tabGroups.bottom.tabs).not.toContain('panel-a');
-
-    await unmount();
-  });
-
-  it('renders a cursor-following drag preview while a tab drag is active', async () => {
-    const contextRef: { current: ReturnType<typeof useDockablePanelContext> | null } = {
-      current: null,
-    };
-
-    const Consumer: React.FC = () => {
-      contextRef.current = useDockablePanelContext();
-      return null;
-    };
-
-    const { container, unmount } = await render(
-      <DockablePanelProvider>
-        <Consumer />
-      </DockablePanelProvider>
-    );
-
-    await act(async () => {
-      contextRef.current!.registerPanel({
-        panelId: 'drag-tab',
-        title: 'Drag Tab',
-        position: 'right',
-        tabKindClass: 'pod',
-      });
-      contextRef.current!.startTabDrag('drag-tab', 'right', 100, 80);
-      Object.defineProperty(document, 'elementFromPoint', {
-        configurable: true,
-        value: () => null,
-      });
-      document.dispatchEvent(
-        new MouseEvent('mousemove', { bubbles: true, clientX: 110, clientY: 80 })
-      );
-      await Promise.resolve();
-    });
-
-    const preview = container.querySelector('.dockable-tab-drag-preview') as HTMLDivElement | null;
-    expect(preview).toBeTruthy();
-    expect(preview?.textContent).toContain('Drag Tab');
-    expect(preview?.querySelector('.dockable-tab-drag-preview__kind.pod')).toBeTruthy();
-    expect(document.documentElement.style.getPropertyValue('--dockable-tab-drag-x')).toContain(
-      '124'
-    );
-    expect(document.documentElement.style.getPropertyValue('--dockable-tab-drag-y')).toContain(
-      '96'
-    );
-
-    await act(async () => {
-      document.dispatchEvent(
-        new MouseEvent('mouseup', { bubbles: true, clientX: 110, clientY: 80 })
-      );
-      await Promise.resolve();
-    });
-
-    expect(container.querySelector('.dockable-tab-drag-preview')).toBeNull();
 
     await unmount();
   });
@@ -521,41 +529,17 @@ describe('DockablePanelProvider', () => {
     await unmount();
   });
 
-  it('moves a tab between groups through the provider drag controller', async () => {
+  it('moves a tab between groups via movePanel (cross-group drop)', async () => {
     const contextRef: { current: ReturnType<typeof useDockablePanelContext> | null } = {
       current: null,
     };
 
     const Consumer: React.FC = () => {
-      const ctx = useDockablePanelContext();
-      contextRef.current = ctx;
-      const bottomTabs = ctx.tabGroups.bottom.tabs.map((panelId) => ({
-        panelId,
-        title: ctx.panelRegistrations.get(panelId)?.title ?? panelId,
-      }));
-      const rightTabs = ctx.tabGroups.right.tabs.map((panelId) => ({
-        panelId,
-        title: ctx.panelRegistrations.get(panelId)?.title ?? panelId,
-      }));
-      return (
-        <>
-          <DockableTabBar
-            tabs={bottomTabs}
-            activeTab={ctx.tabGroups.bottom.activeTab}
-            onTabClick={() => {}}
-            groupKey="bottom"
-          />
-          <DockableTabBar
-            tabs={rightTabs}
-            activeTab={ctx.tabGroups.right.activeTab}
-            onTabClick={() => {}}
-            groupKey="right"
-          />
-        </>
-      );
+      contextRef.current = useDockablePanelContext();
+      return null;
     };
 
-    const { container, unmount } = await render(
+    const { unmount } = await render(
       <DockablePanelProvider>
         <Consumer />
       </DockablePanelProvider>
@@ -583,78 +567,158 @@ describe('DockablePanelProvider', () => {
       await Promise.resolve();
     });
 
-    const bars = container.querySelectorAll('.dockable-tab-bar');
-    const bottomBar = bars[0] as HTMLElement;
-    const rightBar = bars[1] as HTMLElement;
-    const bottomTabs = bottomBar.querySelectorAll('.dockable-tab');
-    const rightTabs = rightBar.querySelectorAll('.dockable-tab');
-    const draggedTab = bottomTabs[0] as HTMLElement;
-
-    setRect(bottomBar, 0, 320, 0, 30);
-    setRect(rightBar, 400, 720, 0, 30);
-    setRect(bottomTabs[0], 0, 120, 0, 30);
-    setRect(bottomTabs[1], 120, 240, 0, 30);
-    setRect(rightTabs[0], 400, 520, 0, 30);
-
-    const originalElementFromPoint = (
-      document as Document & {
-        elementFromPoint?: (x: number, y: number) => Element | null;
-      }
-    ).elementFromPoint;
-    Object.defineProperty(document, 'elementFromPoint', {
-      configurable: true,
-      value: (x: number) => (x >= 380 ? rightBar : bottomBar),
-    });
-
+    // Simulate a cross-group drop via the movePanel adapter directly.
     await act(async () => {
-      draggedTab.dispatchEvent(
-        new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: 20, clientY: 12 })
-      );
-      document.dispatchEvent(
-        new MouseEvent('mousemove', { bubbles: true, clientX: 470, clientY: 12 })
-      );
-      document.dispatchEvent(
-        new MouseEvent('mouseup', { bubbles: true, clientX: 470, clientY: 12 })
-      );
+      contextRef.current!.movePanel('bottom-a', 'bottom', 'right', 1);
+      await Promise.resolve();
     });
 
     expect(contextRef.current!.tabGroups.bottom.tabs).toEqual(['bottom-b']);
     expect(contextRef.current!.tabGroups.right.tabs).toEqual(['right-a', 'bottom-a']);
 
-    if (originalElementFromPoint) {
-      Object.defineProperty(document, 'elementFromPoint', {
-        configurable: true,
-        value: originalElementFromPoint,
-      });
-    } else {
-      Reflect.deleteProperty(document, 'elementFromPoint');
-    }
     await unmount();
   });
 
-  it('undocks a tab through the provider drag controller when dropped away from tab bars', async () => {
+  it('reorders tabs within a right-docked group via movePanel (shift compensation)', async () => {
     const contextRef: { current: ReturnType<typeof useDockablePanelContext> | null } = {
       current: null,
     };
 
     const Consumer: React.FC = () => {
-      const ctx = useDockablePanelContext();
-      contextRef.current = ctx;
-      const bottomTabs = ctx.tabGroups.bottom.tabs.map((panelId) => ({
-        panelId,
-        title: ctx.panelRegistrations.get(panelId)?.title ?? panelId,
-      }));
-      return (
-        <DockableTabBar
-          tabs={bottomTabs}
-          activeTab={ctx.tabGroups.bottom.activeTab}
-          onTabClick={() => {}}
-          groupKey="bottom"
-        />
-      );
+      contextRef.current = useDockablePanelContext();
+      return null;
     };
 
-    const { container, unmount } = await render(
+    const { unmount } = await render(
+      <DockablePanelProvider>
+        <Consumer />
+      </DockablePanelProvider>
+    );
+
+    await act(async () => {
+      for (const id of ['a', 'b', 'c', 'd']) {
+        contextRef.current!.registerPanel({
+          panelId: id,
+          title: id.toUpperCase(),
+          position: 'right',
+        });
+        contextRef.current!.syncPanelGroup(id, 'right');
+      }
+      await Promise.resolve();
+    });
+
+    // Source at index 0, drop at insertIndex 3: shift compensation →
+    // adjustedInsert = 2, reorderTab removes 'a' then splices at 2.
+    // Expected: ['b','c','a','d']
+    await act(async () => {
+      contextRef.current!.movePanel('a', 'right', 'right', 3);
+      await Promise.resolve();
+    });
+    expect(contextRef.current!.tabGroups.right.tabs).toEqual(['b', 'c', 'a', 'd']);
+
+    // Drop at end (insertIndex = 4): source 'c' at index 1, sourceIdx <
+    // insertIndex → adjustedInsert = 3. Remove 'c' → ['b','a','d'],
+    // splice at 3 → ['b','a','d','c'].
+    await act(async () => {
+      contextRef.current!.movePanel('c', 'right', 'right', 4);
+      await Promise.resolve();
+    });
+    expect(contextRef.current!.tabGroups.right.tabs).toEqual(['b', 'a', 'd', 'c']);
+
+    // No-op drop onto self.
+    await act(async () => {
+      contextRef.current!.movePanel('a', 'right', 'right', 1);
+      await Promise.resolve();
+    });
+    expect(contextRef.current!.tabGroups.right.tabs).toEqual(['b', 'a', 'd', 'c']);
+
+    await unmount();
+  });
+
+  it('reorders tabs within a floating group via movePanel (getGroupTabs handles floating ids)', async () => {
+    // Regression gate for the asymmetric TabGroupState shape: floating
+    // groups live in state.floating[] and are looked up by groupId, not
+    // as keyed children like state.right / state.bottom. If getGroupTabs
+    // returns [] for a floating group, shift compensation silently
+    // breaks and forward drops land one slot too far right.
+    const contextRef: { current: ReturnType<typeof useDockablePanelContext> | null } = {
+      current: null,
+    };
+
+    const Consumer: React.FC = () => {
+      contextRef.current = useDockablePanelContext();
+      return null;
+    };
+
+    const { unmount } = await render(
+      <DockablePanelProvider>
+        <Consumer />
+      </DockablePanelProvider>
+    );
+
+    // Build a single floating group containing four tabs.
+    await act(async () => {
+      for (const id of ['a', 'b', 'c', 'd']) {
+        contextRef.current!.registerPanel({
+          panelId: id,
+          title: id.toUpperCase(),
+          position: 'floating',
+        });
+        contextRef.current!.syncPanelGroup(id, 'floating');
+      }
+      await Promise.resolve();
+    });
+
+    // Collapse them into one group (floating-1) by moving b, c, d into
+    // floating-1 (the group created by the first call).
+    const floatingId = contextRef.current!.tabGroups.floating[0].groupId;
+    await act(async () => {
+      contextRef.current!.setLastFocusedGroupKey(floatingId);
+      await Promise.resolve();
+    });
+
+    // Move b, c, d into floating-1 via addPanelToFloatingGroup path. Use
+    // movePanelBetweenGroups with the specific floating group id as the
+    // target.
+    await act(async () => {
+      contextRef.current!.movePanelBetweenGroups('b', floatingId);
+      contextRef.current!.movePanelBetweenGroups('c', floatingId);
+      contextRef.current!.movePanelBetweenGroups('d', floatingId);
+      await Promise.resolve();
+    });
+
+    // Now the floating group should contain all four tabs.
+    const group = contextRef.current!.tabGroups.floating.find((g) => g.groupId === floatingId)!;
+    expect(group.tabs).toEqual(['a', 'b', 'c', 'd']);
+
+    // Forward reorder: move 'a' to insertIndex = 2. Shift compensation:
+    // sourceIdx 0 < insertIndex 2 → adjustedInsert = 1. Expected:
+    // ['b','a','c','d']. Without getGroupTabs handling floating ids, the
+    // compensation is skipped and the result would be ['b','c','a','d'].
+    await act(async () => {
+      contextRef.current!.movePanel('a', floatingId, floatingId, 2);
+      await Promise.resolve();
+    });
+
+    const afterReorder = contextRef.current!.tabGroups.floating.find(
+      (g) => g.groupId === floatingId
+    )!;
+    expect(afterReorder.tabs).toEqual(['b', 'a', 'c', 'd']);
+
+    await unmount();
+  });
+
+  it('createFloatingGroupWithPanel moves a panel into a new floating group at the cursor', async () => {
+    const contextRef: { current: ReturnType<typeof useDockablePanelContext> | null } = {
+      current: null,
+    };
+
+    const Consumer: React.FC = () => {
+      contextRef.current = useDockablePanelContext();
+      return null;
+    };
+
+    const { unmount } = await render(
       <DockablePanelProvider>
         <Consumer />
       </DockablePanelProvider>
@@ -670,45 +734,87 @@ describe('DockablePanelProvider', () => {
       await Promise.resolve();
     });
 
-    const bottomBar = container.querySelector('.dockable-tab-bar') as HTMLElement;
-    const draggedTab = container.querySelector('.dockable-tab') as HTMLElement;
-    setRect(bottomBar, 0, 320, 0, 24);
-    setRect(draggedTab, 0, 120, 0, 24);
-
-    const originalElementFromPoint = (
-      document as Document & {
-        elementFromPoint?: (x: number, y: number) => Element | null;
-      }
-    ).elementFromPoint;
-    Object.defineProperty(document, 'elementFromPoint', {
-      configurable: true,
-      value: () => null,
-    });
-
     await act(async () => {
-      draggedTab.dispatchEvent(
-        new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: 20, clientY: 10 })
-      );
-      document.dispatchEvent(
-        new MouseEvent('mousemove', { bubbles: true, clientX: 220, clientY: 220 })
-      );
-      document.dispatchEvent(
-        new MouseEvent('mouseup', { bubbles: true, clientX: 220, clientY: 220 })
-      );
+      contextRef.current!.createFloatingGroupWithPanel('bottom-a', 'bottom', { x: 220, y: 220 });
+      await Promise.resolve();
     });
 
     expect(contextRef.current!.tabGroups.bottom.tabs).toEqual([]);
     expect(contextRef.current!.tabGroups.floating).toHaveLength(1);
     expect(contextRef.current!.tabGroups.floating[0].tabs).toEqual(['bottom-a']);
 
-    if (originalElementFromPoint) {
-      Object.defineProperty(document, 'elementFromPoint', {
-        configurable: true,
-        value: originalElementFromPoint,
+    await unmount();
+  });
+
+  it('empty-space drop target creates a floating group from an existing panel', async () => {
+    // Integration test for Task 9 Step 5: the hook from
+    // DockablePanelContentArea.tsx wires a container-level drop target
+    // that calls createFloatingGroupWithPanel on drop.
+    const contextRef: { current: ReturnType<typeof useDockablePanelContext> | null } = {
+      current: null,
+    };
+
+    const Harness: React.FC = () => {
+      const ctx = useDockablePanelContext();
+      contextRef.current = ctx;
+      const { ref: dropRef } = useDockablePanelEmptySpaceDropTarget();
+      const bottomTabs = ctx.tabGroups.bottom.tabs.map((panelId) => ({
+        panelId,
+        title: ctx.panelRegistrations.get(panelId)?.title ?? panelId,
+      }));
+      return (
+        <div
+          ref={dropRef as (el: HTMLDivElement | null) => void}
+          className="dockable-container-test-harness"
+        >
+          <DockableTabBar
+            tabs={bottomTabs}
+            activeTab={ctx.tabGroups.bottom.activeTab}
+            onTabClick={() => {}}
+            groupKey="bottom"
+          />
+        </div>
+      );
+    };
+
+    const { container, unmount } = await render(
+      <DockablePanelProvider>
+        <Harness />
+      </DockablePanelProvider>
+    );
+
+    await act(async () => {
+      contextRef.current!.registerPanel({
+        panelId: 'bottom-a',
+        title: 'Bottom A',
+        position: 'bottom',
       });
-    } else {
-      Reflect.deleteProperty(document, 'elementFromPoint');
-    }
+      contextRef.current!.syncPanelGroup('bottom-a', 'bottom');
+      await Promise.resolve();
+    });
+
+    const containerEl = container.querySelector('.dockable-container-test-harness') as HTMLElement;
+    setRect(containerEl, 0, 800, 0, 600);
+
+    const dataTransfer = createDataTransfer();
+    seedPayload(dataTransfer, {
+      kind: 'dockable-tab',
+      panelId: 'bottom-a',
+      sourceGroupId: 'bottom',
+    });
+
+    await act(async () => {
+      // Dispatch the drop on the outer container (not on a tab bar) so
+      // it lands on the empty-space drop target, not the bar's target.
+      dispatchDragEvent(containerEl, 'dragover', 400, 300, dataTransfer);
+      dispatchDragEvent(containerEl, 'drop', 400, 300, dataTransfer);
+      await Promise.resolve();
+    });
+
+    expect(contextRef.current!.tabGroups.bottom.tabs).toEqual([]);
+    expect(contextRef.current!.tabGroups.floating).toHaveLength(1);
+    expect(contextRef.current!.tabGroups.floating[0].tabs).toEqual(['bottom-a']);
+
     await unmount();
   });
 });

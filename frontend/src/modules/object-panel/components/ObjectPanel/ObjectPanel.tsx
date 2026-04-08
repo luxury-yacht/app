@@ -24,7 +24,6 @@ import {
   subscribeObjectPanelTabRequests,
 } from '@modules/object-panel/objectPanelTabRequests';
 import './ObjectPanel.css';
-import '@shared/components/tabs/Tabs/Tabs.css';
 import { getObjectPanelKind } from '@modules/object-panel/components/ObjectPanel/hooks/getObjectPanelKind';
 import { useObjectPanelFeatureSupport } from '@modules/object-panel/components/ObjectPanel/hooks/useObjectPanelFeatureSupport';
 import { useObjectPanelCapabilities } from '@modules/object-panel/components/ObjectPanel/hooks/useObjectPanelCapabilities';

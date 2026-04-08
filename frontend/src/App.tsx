@@ -47,6 +47,7 @@ import { ZoomProvider } from '@core/contexts/ZoomContext';
 import { AppLayout } from '@ui/layout/AppLayout';
 import { useAppLogsPanel } from '@ui/panels/app-logs/AppLogsPanel';
 import { DockablePanelProvider } from '@ui/dockable';
+import { TabDragProvider } from '@shared/components/tabs/dragCoordinator';
 
 // Error Boundary
 import { AppErrorBoundary } from '@ui/errors';
@@ -253,9 +254,11 @@ function App() {
                   <KubernetesProvider>
                     <ClusterLifecycleProvider>
                       <FavoritesProvider>
-                        <DockablePanelProvider>
-                          <AppContent />
-                        </DockablePanelProvider>
+                        <TabDragProvider>
+                          <DockablePanelProvider>
+                            <AppContent />
+                          </DockablePanelProvider>
+                        </TabDragProvider>
                       </FavoritesProvider>
                     </ClusterLifecycleProvider>
                   </KubernetesProvider>

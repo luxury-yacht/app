@@ -3,17 +3,6 @@
 
 .cluster-tabs {
   padding: 0 6px;
-  overflow-x: auto;
   grid-column: 1 / -1;
   grid-row: 2;
-  /* --wails-draggable: none; */
-}
-
-/* Drag states */
-.cluster-tab--dragging {
-  opacity: 0.6;
-}
-
-.cluster-tab--drop-target {
-  border-color: var(--color-accent);
 }

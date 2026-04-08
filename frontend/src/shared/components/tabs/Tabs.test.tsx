@@ -748,6 +748,33 @@ describe('Tabs', () => {
     expect(tabs[1].getAttribute('aria-selected')).toBe('false');
   });
 
+  it('forces every tab to tabIndex=-1 when disableRovingTabIndex is set', () => {
+    act(() => {
+      root.render(
+        <Tabs
+          tabs={[
+            { id: 'a', label: 'Alpha' },
+            { id: 'b', label: 'Beta' },
+            { id: 'c', label: 'Gamma' },
+          ]}
+          activeId="b"
+          onActivate={() => {}}
+          aria-label="Test Tabs"
+          disableRovingTabIndex
+        />
+      );
+    });
+
+    const tabs = container.querySelectorAll<HTMLElement>('[role="tab"]');
+    expect(tabs.length).toBe(3);
+    // aria-selected is unchanged (active tab still reports selected).
+    expect(tabs[1].getAttribute('aria-selected')).toBe('true');
+    // But NO tab is a Tab-key stop.
+    expect(tabs[0].tabIndex).toBe(-1);
+    expect(tabs[1].tabIndex).toBe(-1);
+    expect(tabs[2].tabIndex).toBe(-1);
+  });
+
   it('does not render scroll buttons when content fits the container', () => {
     act(() => {
       root.render(
@@ -949,6 +976,43 @@ describe('Tabs', () => {
     expect(callArg.behavior).toBe('smooth');
 
     HTMLElement.prototype.scrollIntoView = original;
+  });
+
+  it('renders a custom closeIcon node when a descriptor provides one', () => {
+    const customIcon = <span data-testid="custom-close">✕</span>;
+    act(() => {
+      root.render(
+        <Tabs
+          tabs={[{ id: 'a', label: 'Alpha', onClose: () => {}, closeIcon: customIcon }]}
+          activeId="a"
+          onActivate={() => {}}
+          aria-label="Test Tabs"
+        />
+      );
+    });
+    const closeButton = container.querySelector('.tab-item__close');
+    expect(closeButton?.querySelector('[data-testid="custom-close"]')).toBeTruthy();
+    // Plain '×' fallback is NOT rendered when a custom icon is provided.
+    expect(closeButton?.textContent).not.toBe('×');
+  });
+
+  it('uses a per-tab closeAriaLabel when provided, falling back to "Close"', () => {
+    act(() => {
+      root.render(
+        <Tabs
+          tabs={[
+            { id: 'a', label: 'Alpha', onClose: () => {}, closeAriaLabel: 'Close Alpha tab' },
+            { id: 'b', label: 'Beta', onClose: () => {} },
+          ]}
+          activeId="a"
+          onActivate={() => {}}
+          aria-label="Test Tabs"
+        />
+      );
+    });
+    const closeButtons = container.querySelectorAll('.tab-item__close');
+    expect(closeButtons[0].getAttribute('aria-label')).toBe('Close Alpha tab');
+    expect(closeButtons[1].getAttribute('aria-label')).toBe('Close');
   });
 
   it('renders both overflow indicators together once the strip overflows', () => {

@@ -7,7 +7,7 @@ import { act, useContext } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { TabDragProvider, TabDragContext } from './TabDragProvider';
-import { useTabDragSource } from './useTabDragSource';
+import { useTabDragSource, useTabDragSourceFactory } from './useTabDragSource';
 import { useTabDropTarget } from './useTabDropTarget';
 import { TAB_DRAG_DATA_TYPE } from './types';
 
@@ -230,6 +230,72 @@ describe('useTabDragSource', () => {
   });
 });
 
+describe('useTabDragSourceFactory', () => {
+  let container: HTMLDivElement;
+  let root: ReactDOM.Root;
+
+  beforeEach(() => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = ReactDOM.createRoot(container);
+  });
+
+  afterEach(() => {
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it('returns a factory usable inside .map() for an unbounded tab list', () => {
+    // Render a component that uses the factory to build drag source props
+    // for an arbitrary number of tabs — more than any reasonable unrolled-hook
+    // workaround would allow.
+    const TAB_COUNT = 40;
+    const dragStartCallbacks: Array<(event: any) => void> = [];
+
+    function Harness() {
+      const makeDragSource = useTabDragSourceFactory();
+      const tabs = Array.from({ length: TAB_COUNT }, (_, i) => ({
+        id: `t${i}`,
+        label: `Tab ${i}`,
+      }));
+      return (
+        <div>
+          {tabs.map((tab) => {
+            const props = makeDragSource({ kind: 'cluster-tab', clusterId: tab.id });
+            if (props.onDragStart) dragStartCallbacks.push(props.onDragStart);
+            return (
+              <div key={tab.id} data-testid={`tab-${tab.id}`} draggable={props.draggable}>
+                {tab.label}
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
+
+    act(() => {
+      root.render(
+        <TabDragProvider>
+          <Harness />
+        </TabDragProvider>
+      );
+    });
+
+    // All 40 tabs should have draggable={true}.
+    const renderedTabs = container.querySelectorAll('[data-testid^="tab-"]');
+    expect(renderedTabs.length).toBe(TAB_COUNT);
+    renderedTabs.forEach((el) => {
+      expect(el.getAttribute('draggable')).toBe('true');
+    });
+
+    // Each tab's onDragStart should be a distinct closure (not the same
+    // function shared across all tabs).
+    expect(new Set(dragStartCallbacks).size).toBe(TAB_COUNT);
+  });
+});
+
 describe('useTabDropTarget', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
@@ -382,6 +448,57 @@ describe('useTabDropTarget', () => {
     });
 
     expect(onDrop).not.toHaveBeenCalled();
+  });
+
+  it('stops drop-event propagation to ancestor drop targets when nested', () => {
+    const outerOnDrop = vi.fn();
+    const innerOnDrop = vi.fn();
+
+    function Harness() {
+      const { ref: outerRef } = useTabDropTarget({
+        accepts: ['cluster-tab'],
+        onDrop: outerOnDrop,
+      });
+      const { ref: innerRef } = useTabDropTarget({
+        accepts: ['cluster-tab'],
+        onDrop: innerOnDrop,
+      });
+      return (
+        <div ref={outerRef as (el: HTMLDivElement | null) => void} data-testid="outer">
+          <div ref={innerRef as (el: HTMLDivElement | null) => void} data-testid="inner">
+            <div role="tab" style={{ width: 100, height: 20 }} />
+          </div>
+        </div>
+      );
+    }
+
+    act(() => {
+      root.render(
+        <TabDragProvider>
+          <Harness />
+        </TabDragProvider>
+      );
+    });
+
+    const inner = container.querySelector('[data-testid="inner"]')!;
+    // Fire a drop carrying an accepted payload on the inner target.
+    const dropEvent = new Event('drop', { bubbles: true, cancelable: true });
+    Object.defineProperty(dropEvent, 'dataTransfer', {
+      value: {
+        getData: () => JSON.stringify({ kind: 'cluster-tab', clusterId: 'x' }),
+        types: [TAB_DRAG_DATA_TYPE],
+      },
+    });
+    Object.defineProperty(dropEvent, 'clientX', { value: 50 });
+
+    act(() => {
+      inner.dispatchEvent(dropEvent);
+    });
+
+    // Inner handler fires once; outer handler does NOT fire because the
+    // inner one stopped propagation after consuming the event.
+    expect(innerOnDrop).toHaveBeenCalledTimes(1);
+    expect(outerOnDrop).not.toHaveBeenCalled();
   });
 
   it('keeps isDragOver=true when the cursor moves between descendant elements', () => {

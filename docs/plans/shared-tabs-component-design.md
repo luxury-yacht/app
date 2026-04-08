@@ -93,6 +93,21 @@ interface TabDescriptor {
    */
   onClose?: () => void;
 
+  /**
+   * Optional custom content for the close button. Default is a plain
+   * `×` text character. Pass a ReactNode (e.g. an SVG icon component)
+   * when the consumer needs its own visual.
+   */
+  closeIcon?: ReactNode;
+
+  /**
+   * Optional aria-label override for the close button. Defaults to
+   * `"Close"`. Per-tab labels like `"Close my-context-name"` are more
+   * informative for screen reader users and should be preferred when
+   * the tab label is user-facing text.
+   */
+  closeAriaLabel?: string;
+
   /** Disabled tabs are skipped by keyboard nav and don't fire onActivate. */
   disabled?: boolean;
 
@@ -187,6 +202,19 @@ interface TabsProps {
    * hook's `dropInsertIndex` return value to wire this up.
    */
   dropInsertIndex?: number | null;
+
+  /**
+   * When true, every tab gets `tabIndex={-1}` regardless of active state
+   * or the fallback focus rule. Use this when the surrounding component
+   * implements its own focus management and does not want the tabs to
+   * participate in the browser's native Tab-key order. Keyboard arrow
+   * navigation and Enter/Space activation still work — they're driven
+   * by the component's own `handleKeyDown`, which moves focus
+   * explicitly via `.focus()` regardless of tabindex.
+   *
+   * Default: false.
+   */
+  disableRovingTabIndex?: boolean;
 }
 ```
 
@@ -216,7 +244,7 @@ Each tab's root element is `<div role="tab">`, NOT `<button role="tab">`. This l
 
 ### Behavior contracts
 
-- **Keyboard (roving tabindex):** WAI-ARIA manual activation pattern. Exactly one tab at a time has `tabIndex=0`; all others have `tabIndex=-1`. Normally that's the active tab. When no tab matches `activeId` (either `activeId === null` or it points to a nonexistent tab), the first non-disabled tab receives `tabIndex=0` as a fallback so the strip remains reachable via Tab. This makes browser Tab key step *into* the strip (focusing the active — or fallback — tab) and step *out* to the next focusable element. Within the strip, Left/Right arrows move focus between tabs without changing the active selection; Home/End jump to first/last; Enter or Space activates the focused tab; Delete or Backspace on the focused tab invokes its `onClose` if set. Disabled tabs are skipped during arrow navigation.
+- **Keyboard (roving tabindex):** WAI-ARIA manual activation pattern. Exactly one tab at a time has `tabIndex=0`; all others have `tabIndex=-1`. Normally that's the active tab. When no tab matches `activeId` (either `activeId === null` or it points to a nonexistent tab), the first non-disabled tab receives `tabIndex=0` as a fallback so the strip remains reachable via Tab. This makes browser Tab key step *into* the strip (focusing the active — or fallback — tab) and step *out* to the next focusable element. Within the strip, Left/Right arrows move focus between tabs without changing the active selection; Home/End jump to first/last; Enter or Space activates the focused tab; Delete or Backspace on the focused tab invokes its `onClose` if set. Disabled tabs are skipped during arrow navigation. Consumers implementing their own focus management — ObjectPanel's custom focus walker, DiagnosticsPanel's custom nav — opt out of roving tabindex by passing `disableRovingTabIndex={true}`; every tab then gets `tabIndex={-1}`. Keyboard arrow nav and Enter/Space activation still work because they're driven by the component's own `handleKeyDown`.
 - **Click:** Activates immediately, calls `onActivate(id)`. Disabled tabs swallow the click.
 - **Overflow:** When `overflow='scroll'` (default), the component measures itself with `ResizeObserver`. When `scrollWidth > clientWidth`, BOTH ◀ ▶ chevrons render together as sticky flex children of the strip. Each chevron is greyed out (via the native `disabled` attribute) when its direction is exhausted — left at `scrollLeft <= 0`, right at `scrollLeft >= maxScrollLeft - 1`. Clicking a chevron scrolls one tab at a time via a manual `requestAnimationFrame` animation (250ms ease-out-cubic); rapid clicks accumulate via `pendingScrollTargetRef` so N clicks always advance N tabs, and the animation is always guaranteed to reach its target (no reliance on browser-level smooth scroll, which is unreliable cross-browser). There is no count badge — the design intentionally keeps both chevrons mounted simultaneously instead of per-side conditional rendering, which guarantees tab positions stay stable across clicks (no layout shifts to compensate for). When `activeId` changes, the active tab is `scrollIntoView({ inline: 'nearest', behavior: 'smooth' })`-ed automatically.
 - **Drop indicator:** When `dropInsertIndex` is a number, a thin accent-colored vertical bar is rendered as a flex child at that position to show the drop landing site during a drag. Used by the `useTabDropTarget` hook's companion return value.
@@ -332,6 +360,29 @@ function TabDragProvider(props: {
 }): JSX.Element;
 ```
 
+### Hook variants for drag sources
+
+Two hooks are exported for building drag-source props; both ultimately delegate to the same pure `createTabDragSourceProps` factory.
+
+| Hook | When to use | `useContext` calls |
+|---|---|---|
+| `useTabDragSource(payload, options)` | A component that renders **one** draggable element (e.g. a single tab instance). The hook is called once per component instance. | 1 per component instance |
+| `useTabDragSourceFactory()` | A component that renders an **unbounded list** of draggable tabs inside `.map()`. Returns a plain factory function that is safe to call inside loops (no hooks inside). Calls `useContext` exactly once per render regardless of tab count. | 1 per render, not per tab |
+
+The factory variant is the correct choice for the Cluster and Dockable consumer migrations (Tasks 7 and 8). Those consumers render a dynamic, user-controlled number of tabs — users routinely open 20+ kubeconfig contexts — and a hardcoded unrolled-hook workaround would silently truncate drag support beyond the cap. Using `useTabDragSourceFactory` removes the cap entirely:
+
+```tsx
+// Inside ClusterTabs or DockableTabBar render:
+const makeDragSource = useTabDragSourceFactory();
+const descriptors = tabs.map((tab) => ({
+  id: tab.id,
+  label: tab.label,
+  extraProps: makeDragSource({ kind: 'cluster-tab', clusterId: tab.id }),
+}));
+```
+
+`createTabDragSourceProps` is also exported directly for unit-testing and for any consumer that manages the context reference itself.
+
 ### Implementation notes
 
 - **HTML5 native under the hood.** The hooks generate the event handlers and the `draggable` boolean; consumers spread them via `extraProps` on each tab descriptor. The browser handles the drag image, cursor, and (eventually) cross-window awareness for free.
@@ -339,6 +390,7 @@ function TabDragProvider(props: {
 - **Provider holds the registry.** A React context with `currentDrag: TabDragPayload | null` plus a Map of target registrations keyed by element ref. The provider updates `currentDrag` on `dragstart`/`dragend` and matches targets against `currentDrag.kind` when `dragenter` fires.
 - **Custom preview via `setDragImage`.** Wrappers that want a styled preview render an offscreen DOM element (positioned `top: -9999px; left: -9999px`) and provide `getDragImage` returning a ref to it. The hook calls `event.dataTransfer.setDragImage(element, offsetX, offsetY)` at dragstart time. Cluster doesn't need this (the browser default — a translucent copy of the source — is appropriate for within-strip reorder). Dockable uses it to preserve its existing drag-preview look.
 - **Tear-off seam.** The provider attaches a global `dragend` listener that checks `event.dataTransfer.dropEffect === 'none'` (no target accepted the drop) AND the cursor coordinates fall outside `window.innerWidth/innerHeight`. If both, it fires `onTearOff` with the payload. Currently no consumer wires this — the seam is reserved for future Wails v3 multi-window work.
+- **Nested drop targets.** When a consumer nests one `useTabDropTarget` inside another (for example, a per-strip drop target inside a container-level empty-space drop target), the inner target consumes the drop and calls `event.stopPropagation()` so the ancestor does not also fire. This is the contract the Dockable migration relies on: a drop on a tab bar routes to the bar's `onDrop` (reorder / cross-strip move) while a drop in empty space between bars routes to the container's `onDrop` (create floating group). The two targets never fire for the same event. The same `stopPropagation` is applied in `handleDragOver` so an ancestor target's hover state does not flicker while the cursor is over the inner target. Rejected drops (payload kind not in the target's `accepts` list) still bubble normally — only drops that are actually consumed stop propagation.
 
 ### How each system uses it
 
@@ -547,9 +599,12 @@ frontend/src/shared/components/tabs/
 ```
 
 ```
-# DELETED:
+# DELETED (in Phase 2):
 frontend/src/shared/components/tabs/Tabs/index.tsx   # vestigial useTabStyles() shim
-frontend/src/shared/components/tabs/Tabs/Tabs.css    # if it exists and is empty/dead
+frontend/src/shared/components/tabs/Tabs/Tabs.css    # empty legacy CSS file
+frontend/src/shared/components/tabs/ClusterTabsPreview.stories.tsx
+frontend/src/shared/components/tabs/ObjectPanelTabsPreview.stories.tsx
+frontend/src/shared/components/tabs/ObjectTabsPreview.stories.tsx
 ```
 
 ```
@@ -659,6 +714,37 @@ Storybook covers interactive validation. Vitest covers regression coverage.
 - `ClusterTabs.test.tsx` — survives. Drag tests rewrite to use the coordinator's testing helpers. Port-forward warning and auto-hide tests stay verbatim.
 - `DockableTabBar.test.tsx` + `DockableTabBar.drag.test.tsx` — survive. Drag tests rewrite to use the coordinator. File renamed to `DockableTabs.test.tsx`.
 - `DockablePanelProvider.test.tsx` — drag-state tests rewritten to use the coordinator. Other panel-layout tests untouched.
+
+## Consumers
+
+All four consumers now render the shared `<Tabs>` component. This section is the authoritative map of which consumer does what and where the wrappers live.
+
+### ObjectPanelTabs (`frontend/src/modules/object-panel/components/ObjectPanel/ObjectPanelTabs.tsx`)
+
+Thinnest wrapper. No drag, no close, no overflow. Simply maps the panel's `(tabs, activeTab, onSelect)` props to `TabDescriptor[]` and renders `<Tabs aria-label="Object Panel Tabs" textTransform="uppercase" disableRovingTabIndex />`. Each descriptor carries `extraProps: { 'data-object-panel-focusable': 'true' }` so the ObjectPanel's custom focus walker (`querySelectorAll('[data-object-panel-focusable="true"]')`) finds every tab. `disableRovingTabIndex` forces every tab to `tabIndex={-1}` so the tab strip stays out of the panel's own focus scope.
+
+### DiagnosticsPanel tabs (`frontend/src/core/refresh/components/DiagnosticsPanel.tsx`)
+
+Inline tab strip inside the larger DiagnosticsPanel component. Four fixed tabs defined as a module-level `DIAGNOSTICS_TAB_DESCRIPTORS: TabDescriptor[]` constant, rendered as `<Tabs aria-label="Diagnostics Panel Tabs" textTransform="uppercase" disableRovingTabIndex />` inside a wrapping `<div className="diagnostics-tabs">` that provides the layout-specific padding. Each descriptor carries `extraProps: { 'data-diagnostics-focusable': 'true' }` for the same custom-focus-walker reason as ObjectPanelTabs. Labels are natural case (`'Refresh Domains'`, etc.) — the uppercase transform is applied via CSS.
+
+### ClusterTabs (`frontend/src/ui/layout/ClusterTabs.tsx`)
+
+First drag-capable wrapper. Owns ordered-tab state, persistence via `setClusterTabOrder`, label-collision fallback, close button with port-forward confirmation modal, and a `ResizeObserver` publishing `--cluster-tabs-height`. Drag source via `useTabDragSourceFactory()` (one `useContext` call, plain factory called per tab inside `.map()`). Drop target via `useTabDropTarget({ accepts: ['cluster-tab'] })` attached to the wrapper div. The `onDrop` handler reorders inline using shift compensation (`sourceIdx < insertIndex ? insertIndex - 1 : insertIndex`) — the legacy `moveTab` helper was deleted because its `(sourceId, targetId)` signature doesn't round-trip with the shared coordinator's `insertIndex`. Each tab's `closeIcon` is the shared `<CloseIcon width={10} height={10} />` and `closeAriaLabel` is `` `Close ${tab.label}` ``.
+
+### DockableTabBar (`frontend/src/ui/dockable/DockableTabBar.tsx`)
+
+Most complex wrapper. Reads `dragPreviewRef` and `movePanel` from `useDockablePanelContext()`. Drag source via `useTabDragSourceFactory()` with a per-tab `getDragImage` that writes the tab's label + kind class into the provider's always-mounted `.dockable-tab-drag-preview` element before returning it to `setDragImage`. Drop target via `useTabDropTarget({ accepts: ['dockable-tab'], onDrop: (payload, _event, insertIndex) => movePanel(payload.panelId, payload.sourceGroupId, groupKey, insertIndex) })` — the adapter in `DockablePanelProvider` dispatches between `reorderTabInGroup` (same group, with shift compensation via `getGroupTabs`) and `movePanelBetweenGroups` (cross group). The `leading` slot renders a `<span className="dockable-tab__kind-indicator kind-badge ${tab.kindClass}" />` for the per-tab kind badge.
+
+**Container-level empty-space drop target** — handled by `useDockablePanelEmptySpaceDropTarget()` at `frontend/src/ui/dockable/DockablePanelContentArea.tsx`. `AppLayout.tsx` calls the hook and merges the returned ref onto its existing `<main>` element (no new wrapper, no `display: contents`). On drop, the hook calls `createFloatingGroupWithPanel`, which wraps the existing `movePanelBetweenGroups(panelId, 'floating')` + `setPanelFloatingPositionById` calls. Native HTML5 drag events bubble, but Task 1a's `event.stopPropagation()` inside `useTabDropTarget` prevents inner bar drops from reaching the container target. This replaces the legacy gesture-based undock trigger (mousemove cursor-distance check) with an explicit drop target per the Compromises section above.
+
+### Dead code removed during Phase 2 migration
+
+- `useTabStyles()` shim at `frontend/src/shared/components/tabs/Tabs/index.tsx` — deleted along with the now-empty `Tabs/` directory.
+- `registerTabBarElement` + `tabBarElementsRef` registry in `DockablePanelProvider` — deleted along with its only reader (the legacy mousemove drag-state machine).
+- `dragState` state machine, `startTabDrag`/`endTabDrag` methods, `UNDOCK_THRESHOLD` constant, pointermove listener updating `--dockable-tab-drag-x`/`--dockable-tab-drag-y` CSS custom properties — all replaced by the browser-native `event.dataTransfer.setDragImage()` call in each tab's `getDragImage`.
+- `.dockable-tab`, `.dockable-tab__label`, `.dockable-tab--dragging`, `.dockable-tab-bar--drag-active`, `.dockable-tab-bar--drop-target`, `.dockable-tab-bar__drop-indicator`, and all `.dockable-tab-bar__overflow-*` CSS rules — either duplicated the shared `.tab-item` / `.tab-strip__*` rules or were dead after the drag-state machine was removed.
+- `.object-panel .tab-item { text-transform: uppercase }` and `.diagnostics-tabs .tab-item { text-transform: uppercase }` — replaced by the shared component's `textTransform="uppercase"` prop.
+- Phase 1 preview stories (`ClusterTabsPreview.stories.tsx`, `ObjectPanelTabsPreview.stories.tsx`, `ObjectTabsPreview.stories.tsx`) — deleted once the real consumers demonstrated the migration patterns in-context.
 
 ## Open future work
 

@@ -300,7 +300,7 @@ The correct fix is to change the hook API so that the `useContext` call happens 
 - Modify: `frontend/src/shared/components/tabs/dragCoordinator/index.ts`
 - Modify: `frontend/src/shared/components/tabs/dragCoordinator/dragCoordinator.test.tsx`
 
-- [ ] **Step 1: Write failing tests.**
+- [x] **Step 1: Write failing tests.**
 
   Add to `dragCoordinator.test.tsx`:
 
@@ -356,13 +356,13 @@ The correct fix is to change the hook API so that the `useContext` call happens 
 
   (Import `useTabDragSourceFactory` and `TabDragProvider` at the top of the test file.)
 
-- [ ] **Step 2: Run test to verify it fails.**
+- [x] **Step 2: Run test to verify it fails.**
 
   Run: `./node_modules/.bin/vitest run src/shared/components/tabs/dragCoordinator/`
 
   Expected: `useTabDragSourceFactory is not defined` or similar.
 
-- [ ] **Step 3: Refactor `useTabDragSource.ts`.**
+- [x] **Step 3: Refactor `useTabDragSource.ts`.**
 
   Replace the file body with:
 
@@ -484,7 +484,7 @@ The correct fix is to change the hook API so that the `useContext` call happens 
   }
   ```
 
-- [ ] **Step 4: Update the barrel export.**
+- [x] **Step 4: Update the barrel export.**
 
   In `frontend/src/shared/components/tabs/dragCoordinator/index.ts`, add exports for the new names:
 
@@ -498,17 +498,17 @@ The correct fix is to change the hook API so that the `useContext` call happens 
   } from './useTabDragSource';
   ```
 
-- [ ] **Step 5: Run the tests.**
+- [x] **Step 5: Run the tests.**
 
   Run: `./node_modules/.bin/vitest run src/shared/components/tabs/dragCoordinator/`
 
   Expected: all existing drag-coordinator tests pass plus the new one.
 
-- [ ] **Step 6: Update the design doc.**
+- [x] **Step 6: Update the design doc.**
 
   In `docs/plans/shared-tabs-component-design.md`, add a note under the drag coordinator section explaining the two hook variants and when to use each. Link the factory variant to the consumer migration sections below.
 
-- [ ] **Step 7:** Report task complete and wait for user review.
+- [x] **Step 7:** Report task complete and wait for user review.
 
 ---
 
@@ -520,7 +520,7 @@ The correct fix is to change the hook API so that the `useContext` call happens 
 - Modify: `frontend/src/shared/components/tabs/Tabs.tsx`
 - Modify: `frontend/src/shared/components/tabs/Tabs.test.tsx`
 
-- [ ] **Step 1: Write the failing tests.**
+- [x] **Step 1: Write the failing tests.**
 
   Add to `Tabs.test.tsx`:
 
@@ -563,13 +563,13 @@ The correct fix is to change the hook API so that the `useContext` call happens 
   });
   ```
 
-- [ ] **Step 2: Run tests to verify they fail.**
+- [x] **Step 2: Run tests to verify they fail.**
 
   Run: `./node_modules/.bin/vitest run src/shared/components/tabs/Tabs.test.tsx -t "closeIcon|closeAriaLabel"`
 
   Expected: both tests fail (fields don't exist yet).
 
-- [ ] **Step 3: Extend `TabDescriptor`.**
+- [x] **Step 3: Extend `TabDescriptor`.**
 
   In `Tabs.tsx`, add two optional fields:
 
@@ -599,7 +599,7 @@ The correct fix is to change the hook API so that the `useContext` call happens 
   }
   ```
 
-- [ ] **Step 4: Use the new fields in the close-button render.**
+- [x] **Step 4: Use the new fields in the close-button render.**
 
   In `Tabs.tsx`, find the existing close-button JSX inside the tab map and replace it:
 
@@ -620,17 +620,17 @@ The correct fix is to change the hook API so that the `useContext` call happens 
   )}
   ```
 
-- [ ] **Step 5: Run the tests.**
+- [x] **Step 5: Run the tests.**
 
   Run: `./node_modules/.bin/vitest run src/shared/components/tabs/`
 
   Expected: `Tests  50 passed (50)`.
 
-- [ ] **Step 6: Update the design doc.**
+- [x] **Step 6: Update the design doc.**
 
   In `docs/plans/shared-tabs-component-design.md`, add `closeIcon?: ReactNode` and `closeAriaLabel?: string` to the `TabDescriptor` block with the same descriptions as above.
 
-- [ ] **Step 7:** Report task complete and wait for user review.
+- [x] **Step 7:** Report task complete and wait for user review.
 
 ---
 
@@ -656,7 +656,7 @@ The provider is fully inert when no consumers use it — it just sets up context
 **Files:**
 - Modify: `frontend/src/App.tsx`
 
-- [ ] **Step 1: Mount the provider around `DockablePanelProvider`.**
+- [x] **Step 1: Mount the provider around `DockablePanelProvider`.**
 
   In `frontend/src/App.tsx` around line 256, add the import and wrap:
 
@@ -675,7 +675,7 @@ The provider is fully inert when no consumers use it — it just sets up context
 
   Place `TabDragProvider` OUTSIDE `DockablePanelProvider` rather than inside. `DockablePanelProvider` doesn't need to read `TabDragContext` itself (only its `DockableTabBar` descendants do in Task 8), and keeping the drag provider as an outer wrapper makes the intent clearer: drag coordination is app-wide infrastructure, not dockable-specific.
 
-- [ ] **Step 2: Run tests.**
+- [x] **Step 2: Run tests.**
 
   ```bash
   cd /Volumes/git/luxury-yacht/app/frontend
@@ -689,7 +689,7 @@ The provider is fully inert when no consumers use it — it just sets up context
 
   Boot the app (`mage run`). Verify nothing visibly changed. Cluster tabs, dockable panels, and object panels should behave exactly as before (all drag still goes through the legacy code paths since no consumer has migrated yet).
 
-- [ ] **Step 4:** Report task complete and wait for user review.
+- [x] **Step 4:** Report task complete and wait for user review.
 
 ---
 
@@ -698,7 +698,7 @@ The provider is fully inert when no consumers use it — it just sets up context
 **Files:**
 - No changes.
 
-- [ ] **Step 1:** Run the full quality gate.
+- [x] **Step 1:** Run the full quality gate.
 
   ```bash
   cd /Volumes/git/luxury-yacht/app && mage qc:prerelease
@@ -706,7 +706,7 @@ The provider is fully inert when no consumers use it — it just sets up context
 
   Expected: clean exit with all tests / typecheck / lint passing.
 
-- [ ] **Step 2:** Report task complete and wait for user review.
+- [x] **Step 2:** Report task complete and wait for user review.
 
 ---
 
@@ -737,11 +737,11 @@ The simplest consumer. `ObjectPanelTabs.tsx` is 38 lines total: a `.map()` over 
 - Modify: `frontend/src/modules/object-panel/components/ObjectPanel/ObjectPanelTabs.tsx`
 - Modify: `frontend/src/modules/object-panel/components/ObjectPanel/ObjectPanelTabs.test.tsx`
 
-- [ ] **Step 1: Read the current tests.**
+- [x] **Step 1: Read the current tests.**
 
   Read `ObjectPanelTabs.test.tsx` in full. Note which behaviors are asserted — you'll either keep the assertions unchanged (they should still pass after the migration, since the shared component preserves the same DOM classes) or update them to match the shared component's output. The goal is to NOT lose any coverage during the migration.
 
-- [ ] **Step 2: Rewrite `ObjectPanelTabs.tsx`.**
+- [x] **Step 2: Rewrite `ObjectPanelTabs.tsx`.**
 
   Replace the entire file with:
 
@@ -805,7 +805,7 @@ The simplest consumer. `ObjectPanelTabs.tsx` is 38 lines total: a `.map()` over 
   import { useMemo, type HTMLAttributes } from 'react';
   ```
 
-- [ ] **Step 3: Update `ObjectPanelTabs.test.tsx`.**
+- [x] **Step 3: Update `ObjectPanelTabs.test.tsx`.**
 
   Walk each existing test. For each:
   - Queries by `.tab-item` continue to work — the shared component renders `.tab-item` on the tab roots.
@@ -816,19 +816,19 @@ The simplest consumer. `ObjectPanelTabs.tsx` is 38 lines total: a `.map()` over 
 
   Fix any that break after the migration. If an assertion no longer makes sense (e.g., it was testing local implementation detail that the shared component now owns), delete it and leave a comment explaining why.
 
-- [ ] **Step 4: Run the tests.**
+- [x] **Step 4: Run the tests.**
 
   Run: `./node_modules/.bin/vitest run src/modules/object-panel/components/ObjectPanel/ObjectPanelTabs.test.tsx`
 
   Expected: all tests pass.
 
-- [ ] **Step 5: Delete dead CSS.**
+- [x] **Step 5: Delete dead CSS.**
 
   In `frontend/src/modules/object-panel/components/ObjectPanel/ObjectPanel.css`, delete the `.object-panel .tab-item, .object-panel-body .tab-item { text-transform: uppercase }` rule — the shared component now handles this via `textTransform="uppercase"` in the JSX.
 
   Keep the `.object-panel-body > .tab-strip { flex-shrink: 0 }` rule — that's a layout override for how the strip sits inside the panel body, not a tab styling override, and the shared component doesn't control parent-context flex behavior.
 
-- [ ] **Step 6: Run the broader ObjectPanel tests to catch regressions.**
+- [x] **Step 6: Run the broader ObjectPanel tests to catch regressions.**
 
   Run: `./node_modules/.bin/vitest run src/modules/object-panel/`
 
@@ -843,7 +843,7 @@ The simplest consumer. `ObjectPanelTabs.tsx` is 38 lines total: a `.map()` over 
   - The object panel's Escape-to-close keyboard shortcut and arrow-key navigation within the panel still work (the custom focus walker still reaches the tabs)
   - The tab strip does NOT become a separate Tab-key stop outside the panel's focus scope
 
-- [ ] **Step 8:** Report task complete and wait for user review.
+- [x] **Step 8:** Report task complete and wait for user review.
 
 ---
 
@@ -872,7 +872,7 @@ DiagnosticsPanel is ALSO the only remaining consumer of the `useTabStyles` backw
 - Modify: `frontend/src/core/refresh/components/DiagnosticsPanel.tsx`
 - Modify: `frontend/src/core/refresh/components/DiagnosticsPanel.css`
 
-- [ ] **Step 1: Remove the `useTabStyles` import and call.**
+- [x] **Step 1: Remove the `useTabStyles` import and call.**
 
   In `DiagnosticsPanel.tsx`:
   - Delete the import `import { useTabStyles } from '@shared/components/tabs/Tabs';` at line 37.
@@ -880,7 +880,7 @@ DiagnosticsPanel is ALSO the only remaining consumer of the `useTabStyles` backw
 
   The tab CSS is already loaded globally via `styles/index.css → components/tabs.css`, so removing the call is a no-op. The shim was only there for consumers that imported from the legacy `Tabs/index.tsx` path; it's no longer needed once no consumer calls the hook.
 
-- [ ] **Step 2: Add the shared `<Tabs>` import.**
+- [x] **Step 2: Add the shared `<Tabs>` import.**
 
   At the top of `DiagnosticsPanel.tsx`, near the other shared imports:
 
@@ -888,7 +888,7 @@ DiagnosticsPanel is ALSO the only remaining consumer of the `useTabStyles` backw
   import { Tabs, type TabDescriptor } from '@shared/components/tabs';
   ```
 
-- [ ] **Step 3: Define the tab descriptors.**
+- [x] **Step 3: Define the tab descriptors.**
 
   Inside the `DiagnosticsPanel` component body, right before the JSX return, add:
 
@@ -932,7 +932,7 @@ DiagnosticsPanel is ALSO the only remaining consumer of the `useTabStyles` backw
 
   Also add `useMemo` to the existing React import at the top of the file if it isn't already imported.
 
-- [ ] **Step 4: Replace the tab JSX.**
+- [x] **Step 4: Replace the tab JSX.**
 
   In `DiagnosticsPanel.tsx` around line 2149, replace:
 
@@ -971,7 +971,7 @@ DiagnosticsPanel is ALSO the only remaining consumer of the `useTabStyles` backw
 
   The wrapping `<div className="diagnostics-tabs">` is kept so the existing `.diagnostics-tabs { padding: 0.3rem 0.5rem 0 }` CSS rule continues to apply. The shared component renders `.tab-strip` as its root inside the wrapper.
 
-- [ ] **Step 5: Delete dead CSS.**
+- [x] **Step 5: Delete dead CSS.**
 
   In `DiagnosticsPanel.css` around line 348, delete the rule:
 
@@ -983,7 +983,7 @@ DiagnosticsPanel is ALSO the only remaining consumer of the `useTabStyles` backw
 
   The shared component applies uppercase via `textTransform="uppercase"` on the JSX, so the per-consumer override is no longer needed. Keep the `.diagnostics-tabs { padding: 0.3rem 0.5rem 0 }` rule above it — that's the wrapper layout, unrelated to tab styling.
 
-- [ ] **Step 6: Run the tests.**
+- [x] **Step 6: Run the tests.**
 
   Run: `./node_modules/.bin/vitest run src/core/refresh/components/DiagnosticsPanel.test.ts`
 
@@ -998,7 +998,7 @@ DiagnosticsPanel is ALSO the only remaining consumer of the `useTabStyles` backw
   - The diagnostics panel's Escape-to-close and arrow-key focus navigation still work
   - The tab strip is NOT a native Tab-key stop
 
-- [ ] **Step 8:** Report task complete and wait for user review.
+- [x] **Step 8:** Report task complete and wait for user review.
 
 ---
 
@@ -1008,13 +1008,13 @@ DiagnosticsPanel is ALSO the only remaining consumer of the `useTabStyles` backw
 - Modify: `frontend/src/shared/components/tabs/Tabs.tsx`
 - Delete: `frontend/src/shared/components/tabs/Tabs/index.tsx` (and the empty `Tabs/` directory)
 
-- [ ] **Step 1: Verify no consumers remain.**
+- [x] **Step 1: Verify no consumers remain.**
 
   Run: `grep -rn "useTabStyles" /Volumes/git/luxury-yacht/app/frontend/src`
 
   Expected: the only hits are inside `frontend/src/shared/components/tabs/Tabs.tsx` (the shim itself) and `frontend/src/shared/components/tabs/Tabs/index.tsx` (the legacy barrel). Zero consumer references.
 
-- [ ] **Step 2: Delete the shim export from `Tabs.tsx`.**
+- [x] **Step 2: Delete the shim export from `Tabs.tsx`.**
 
   At the bottom of `Tabs.tsx`, delete the entire block starting at:
 
@@ -1027,7 +1027,7 @@ DiagnosticsPanel is ALSO the only remaining consumer of the `useTabStyles` backw
   export const useTabStyles = (): boolean => true;
   ```
 
-- [ ] **Step 3: Delete the legacy `Tabs/` directory.**
+- [x] **Step 3: Delete the legacy `Tabs/` directory.**
 
   Delete `frontend/src/shared/components/tabs/Tabs/index.tsx`, then remove the now-empty `Tabs/` directory.
 
@@ -1036,7 +1036,7 @@ DiagnosticsPanel is ALSO the only remaining consumer of the `useTabStyles` backw
   rmdir /Volumes/git/luxury-yacht/app/frontend/src/shared/components/tabs/Tabs
   ```
 
-- [ ] **Step 4: Typecheck and test.**
+- [x] **Step 4: Typecheck and test.**
 
   ```bash
   cd /Volumes/git/luxury-yacht/app/frontend
@@ -1046,7 +1046,7 @@ DiagnosticsPanel is ALSO the only remaining consumer of the `useTabStyles` backw
 
   Expected: clean.
 
-- [ ] **Step 5:** Report task complete and wait for user review.
+- [x] **Step 5:** Report task complete and wait for user review.
 
 ---
 
@@ -1097,7 +1097,7 @@ First drag-capable consumer. `ClusterTabs.tsx` is 347 lines. Responsibilities:
 
 > **Provider scope:** Task 2b already mounted a single app-root `<TabDragProvider>` in `App.tsx` that wraps `DockablePanelProvider`. `ClusterTabs` is rendered inside that subtree (`AppLayout.tsx:182` → inside `DockablePanelProvider` → inside `TabDragProvider`), so its hooks find the context automatically. **Do NOT add a local `<TabDragProvider>` wrapper inside `ClusterTabs.tsx` or around its mount point** — that would create a nested provider scope that shadows the app-root one and silently splits drag state across contexts.
 
-- [ ] **Step 1: Read the existing `ClusterTabs.test.tsx`.**
+- [x] **Step 1: Read the existing `ClusterTabs.test.tsx`.**
 
   Note every assertion — these are the behaviors that must still work post-migration. Key areas:
   - Drag-and-drop reorder persistence
@@ -1105,7 +1105,7 @@ First drag-capable consumer. `ClusterTabs.tsx` is 347 lines. Responsibilities:
   - Conditional rendering (`< 2` tabs → null)
   - Label rendering (with collision fallback)
 
-- [ ] **Step 2: Rewrite the `ClusterTabs` component body.**
+- [x] **Step 2: Rewrite the `ClusterTabs` component body.**
 
   The new component retains almost all of its current logic — state, persistence, label computation, close-with-modal, height observer — but replaces the render body with a `<Tabs>` call wired through the drag coordinator. Here's the target shape (read in full before editing):
 
@@ -1245,7 +1245,7 @@ First drag-capable consumer. `ClusterTabs.tsx` is 347 lines. Responsibilities:
   - Keep the existing `handleCloseTab` / `handleConfirmClose` / port-forward modal logic unchanged.
   - Keep the existing height-observer effect unchanged — it reads `tabsRef.current?.getBoundingClientRect().height`, and `tabsRef` still points to the outer wrapper div.
 
-- [ ] **Step 3: Update `ClusterTabs.css`.**
+- [x] **Step 3: Update `ClusterTabs.css`.**
 
   Current file is 19 lines. The `.cluster-tabs { padding: 0 6px; overflow-x: auto; grid-column: 1/-1; grid-row: 2 }` rule targets the strip element; the grid positioning still applies via the shared component's root element (which gets the `cluster-tabs` class via the new `className` prop). The `overflow-x: auto` is a duplicate — the shared component already handles overflow — but it's harmless to keep.
 
@@ -1264,7 +1264,7 @@ First drag-capable consumer. `ClusterTabs.tsx` is 347 lines. Responsibilities:
   }
   ```
 
-- [ ] **Step 4: Update tests.**
+- [x] **Step 4: Update tests.**
 
   Walk each assertion in `ClusterTabs.test.tsx`:
   - Queries by `<button>` → `[role="tab"]` (shared component uses `<div role="tab">`)
@@ -1273,7 +1273,7 @@ First drag-capable consumer. `ClusterTabs.tsx` is 347 lines. Responsibilities:
   - Close-with-modal assertions unchanged.
   - Conditional-rendering assertion (`< 2` tabs → null) unchanged.
 
-- [ ] **Step 5: Run the tests.**
+- [x] **Step 5: Run the tests.**
 
   Run: `./node_modules/.bin/vitest run src/ui/layout/`
 
@@ -1291,7 +1291,7 @@ First drag-capable consumer. `ClusterTabs.tsx` is 347 lines. Responsibilities:
   - `--cluster-tabs-height` CSS variable is set (check in devtools; dockable panels should still respect the offset)
   - Keyboard: Tab key reaches the active tab, arrow keys move focus between tabs, Enter activates
 
-- [ ] **Step 7:** Report task complete and wait for user review.
+- [x] **Step 7:** Report task complete and wait for user review.
 
 ---
 
@@ -1337,9 +1337,9 @@ The largest and most complex consumer. `DockableTabBar.tsx` is 413 lines. `Docka
 - The `.dockable-tab-drag-preview` element stays in the provider (Task 9), but its cursor-tracking **mechanism changes**. Current live code updates `--dockable-tab-drag-x` / `--dockable-tab-drag-y` CSS custom properties on pointer move and re-renders the element via `transform: translate3d(...)`. Per the design doc, this is **dropped** — the replacement is a single `event.dataTransfer.setDragImage(element, offsetX, offsetY)` call at dragstart, and the browser handles cursor positioning natively from there. The tab bar's `getDragImage` option (passed through `useTabDragSourceFactory`) updates the element's label + kind class synchronously before the browser screenshots it. No more pointermove machinery.
 - Drag-state visuals (`.dockable-tab--dragging`) → the shared component applies `.tab-item` base; the dragging class can be kept via `extraProps` conditionally. OR: accept the visual simplification (no extra opacity for the dragged source — the drag image already provides enough feedback).
 
-- [ ] **Step 1: Read both tests in full.** Note assertions around drag events and overflow chevron behavior — those are behaviors to preserve. Assertions that query by `.dockable-tab` or `data-group-key`, or that call `registerTabBarElement` to set up fixtures, will need to change: the DOM markup moves to `[role="tab"]` and the `data-group-key` attribute + `registerTabBarElement` registry are both deleted as part of this task (see Step 2) and Task 9. Do NOT treat those fixture-setup patterns as behaviors to preserve.
+- [x] **Step 1: Read both tests in full.** Note assertions around drag events and overflow chevron behavior — those are behaviors to preserve. Assertions that query by `.dockable-tab` or `data-group-key`, or that call `registerTabBarElement` to set up fixtures, will need to change: the DOM markup moves to `[role="tab"]` and the `data-group-key` attribute + `registerTabBarElement` registry are both deleted as part of this task (see Step 2) and Task 9. Do NOT treat those fixture-setup patterns as behaviors to preserve.
 
-- [ ] **Step 2: Rewrite the component body.** Replace the current 413-line component with a ~120-line shared-component-backed version. Key structural changes:
+- [x] **Step 2: Rewrite the component body.** Replace the current 413-line component with a ~120-line shared-component-backed version. Key structural changes:
   - Delete the custom overflow measurement effect, `overflowHint` state, `scrollToNextTab`, `scrollLeft`/`scrollRight` click handlers, `updateOverflowHint` — all handled by `<Tabs>`.
   - Delete the `handleBarMouseDown`/`handleOverflowMouseDown` stopPropagation glue — no longer needed (shared component doesn't fire mousedown on drag).
   - Delete the `registerTabBarElement(groupKey, barRef.current)` useEffect. Its only purpose was to feed the legacy provider registry that Task 9 deletes.
@@ -1471,11 +1471,11 @@ The largest and most complex consumer. `DockableTabBar.tsx` is 413 lines. `Docka
   - `useTabDragSourceFactory()` is called ONCE at the top of the component. The factory it returns is a plain function that's legal to call inside `.map()` — one call per tab to produce that tab's drag source props. No rules-of-hooks issue and no upper bound on tab count.
   - The `groupKey` prop is read inside `onDrop` via closure — no DOM attribute is needed to route drops back to the correct group. Cross-strip moves work because the drop handler sees both `groupKey` (the target, from props) and `payload.sourceGroupId` (the source, from the dragged tab's payload) and forwards both to `movePanel`.
 
-- [ ] **Step 3: Update tests.** Drag tests that simulate raw `dragstart`/`drop` events on individual tabs still work — the shared drag coordinator uses the same native HTML5 drag API. Update queries from the old markup (`.dockable-tab`) to the new markup (`[role="tab"]`). Tests that assert on `.dockable-tab-bar__overflow-indicator` classes need to update to `.tab-strip__overflow-indicator`.
+- [x] **Step 3: Update tests.** Drag tests that simulate raw `dragstart`/`drop` events on individual tabs still work — the shared drag coordinator uses the same native HTML5 drag API. Update queries from the old markup (`.dockable-tab`) to the new markup (`[role="tab"]`). Tests that assert on `.dockable-tab-bar__overflow-indicator` classes need to update to `.tab-strip__overflow-indicator`.
 
-- [ ] **Step 4: Run the tests.** `./node_modules/.bin/vitest run src/ui/dockable/DockableTabBar`. Expected: all tests pass.
+- [x] **Step 4: Run the tests.** `./node_modules/.bin/vitest run src/ui/dockable/DockableTabBar`. Expected: all tests pass.
 
-- [ ] **Step 5:** Report task complete and wait for user review.
+- [x] **Step 5:** Report task complete and wait for user review.
 
 ---
 
@@ -1505,9 +1505,9 @@ The provider currently owns five distinct pieces of machinery. Phase 2 deletes t
 - Delete `startTabDrag`, `endTabDrag`, the `dragState` state, the pointermove listener, the mousemove handler at `:599-627` (including its `UNDOCK_THRESHOLD` reference), the `tabBarElementsRef` registry, and `registerTabBarElement` (all dead once the legacy drag-state machine is removed — see Step 7 for the grep-verified zero-consumer proof). The `setDragImage` call inside `getDragImage` is the entire "start the drag visual" mechanism; the browser owns cursor-tracking from there.
 - Existing `reorderTabInGroup`, `movePanelBetweenGroups`, `movePanelBetweenGroupsAndFocus`, and `setPanelFloatingPositionById` stay in the provider unchanged. They're still exposed via context where applicable for non-migration callers (panel lifecycle, close button, etc.).
 
-- [ ] **Step 1: Read the full `DockablePanelProvider.tsx` file** and map current responsibilities.
+- [x] **Step 1: Read the full `DockablePanelProvider.tsx` file** and map current responsibilities.
 
-- [ ] **Step 2: Mount the drag preview element permanently.**
+- [x] **Step 2: Mount the drag preview element permanently.**
 
   `TabDragProvider` is already in scope from Task 2b (it wraps `DockablePanelProvider` at the app root). Do NOT add another `<TabDragProvider>` here — it would create a nested scope that isolates cross-strip drag state inside this provider's subtree. Just mount `.dockable-tab-drag-preview` as an always-in-DOM element (no `dragState` conditional, no provider wrapping):
 
@@ -1535,7 +1535,7 @@ The provider currently owns five distinct pieces of machinery. Phase 2 deletes t
 
   The inner spans are empty placeholders; `DockableTabBar`'s per-tab `getDragImage` callback writes the actual label + kind class into them immediately before calling `setDragImage`. This mirrors the Phase 1 `ObjectTabsPreview` story's pattern exactly.
 
-- [ ] **Step 3: Expose `dragPreviewRef` and `movePanel` via context.**
+- [x] **Step 3: Expose `dragPreviewRef` and `movePanel` via context.**
 
   Add a `useRef<HTMLDivElement | null>(null)` at the top of the provider, ref the drag preview element to it, and include both `dragPreviewRef` and `movePanel` in the context value so `DockableTabBar` can consume them:
 
@@ -1555,7 +1555,7 @@ The provider currently owns five distinct pieces of machinery. Phase 2 deletes t
 
   Update the `DockablePanelContextValue` type to ADD `dragPreviewRef`, `movePanel`, and `createFloatingGroupWithPanel`, and to REMOVE the no-longer-exposed `dragState`, `startTabDrag`, `endTabDrag`, and `registerTabBarElement` fields. The existing `reorderTabInGroup`, `movePanelBetweenGroups`, `movePanelBetweenGroupsAndFocus`, and `setPanelFloatingPositionById` fields stay on the type unchanged — they're still called by non-drag panel-management code (panel lifecycle, close buttons, etc.) and the adapters below delegate to them. Grep for existing context consumers and make sure no caller depends on the removed fields — any that do need to migrate at the same time.
 
-- [ ] **Step 4: Add the `movePanel` adapter.**
+- [x] **Step 4: Add the `movePanel` adapter.**
 
   `DockableTabBar`'s `onDrop` from Task 8 calls `movePanel(panelId, sourceGroupId, targetGroupId, insertIndex)` — a four-argument shape that matches the `useTabDropTarget` callback. The current provider does NOT expose anything with that name; it exposes two separate functions: `reorderTabInGroup(groupKey, panelId, newIndex)` for same-group reorders and `movePanelBetweenGroups(panelId, targetGroupKey, insertIndex?)` for cross-group moves. `movePanel` is a new thin adapter that dispatches between them based on whether source and target groups match. Neither existing function is renamed, reshaped, or wrapped destructively.
 
@@ -1653,7 +1653,7 @@ The provider currently owns five distinct pieces of machinery. Phase 2 deletes t
 
   Export the adapter via the context value in Step 3.
 
-- [ ] **Step 5: Add the `createFloatingGroupWithPanel` adapter and the container-level empty-space drop target.**
+- [x] **Step 5: Add the `createFloatingGroupWithPanel` adapter and the container-level empty-space drop target.**
 
   This is the replacement for the current gesture-based undock behavior (legacy mousemove handler at `DockablePanelProvider.tsx:599-627`). Per `design.md:393-404`, the design requires an explicit container-level `useTabDropTarget` that creates a floating group on drop.
 
@@ -1754,7 +1754,7 @@ The provider currently owns five distinct pieces of machinery. Phase 2 deletes t
 
   Verify this by hand: open 2+ dockable panels. First, drop a tab on the other panel's bar and confirm it moves there (`movePanel` fires, no new floating group is created). Then drop a tab on empty space outside any bar and confirm it becomes a new floating group (`createFloatingGroupWithPanel` fires, no reorder fires). If a single drop ever triggers BOTH behaviors, that's a regression of Task 1a's `stopPropagation` — re-check `useTabDropTarget.ts` for the `event.stopPropagation()` call inside `handleDrop`.
 
-- [ ] **Step 6: Delete the live cursor-tracking machinery, the custom drop-detection state, and the tab-bar registry.**
+- [x] **Step 6: Delete the live cursor-tracking machinery, the custom drop-detection state, and the tab-bar registry.**
 
   With Steps 4 and 5 in place, the legacy drag-state machine now has a complete replacement and can be deleted wholesale. The following code all gets removed:
   - The `dragState` state variable, its setter, and anything that reads it.
@@ -1776,7 +1776,7 @@ The provider currently owns five distinct pieces of machinery. Phase 2 deletes t
 
   **Why no replacement "global dragover listener" is needed:** the entire cursor-tracking effect is now provided by the browser's native drag-image rendering. Each tab's `getDragImage` option is called once at dragstart; it updates the preview element's label + kind class synchronously, then returns `{ element, offsetX, offsetY }` to `useTabDragSourceFactory`'s internal `onDragStart`, which calls `event.dataTransfer.setDragImage(element, offsetX, offsetY)`. The browser takes a snapshot of the element right then and displays that snapshot at the cursor for the rest of the drag. No pointermove listener, no CSS var updates, no per-frame state to maintain.
 
-- [ ] **Step 7: Update the provider tests.**
+- [x] **Step 7: Update the provider tests.**
 
   `DockablePanelProvider.test.tsx` asserts against the drag preview element and against the registered bar elements. Update to match the new flow:
   - Preview element is always mounted (not conditional on `dragState`). Any assertion like `queryByTestId('dockable-tab-drag-preview')` that was scoped to during-drag should now expect the element always, and check its inner `.dockable-tab-drag-preview__label` textContent for the "is a drag in flight" signal instead (the label text is updated by `getDragImage` at dragstart and stays until the next drag overwrites it).
@@ -1786,7 +1786,7 @@ The provider currently owns five distinct pieces of machinery. Phase 2 deletes t
   - Drag-start / drag-end lifecycle assertions that were scoped to `startTabDrag` / `endTabDrag` migrate to checking `useTabDragSourceFactory`-driven events instead — dispatch `dragstart` on a `[role="tab"]` element and verify the label inside `.dockable-tab-drag-preview` updates.
   - **Add** a test for the container-level empty-space drop target: render the provider with two groups, dispatch a `drop` event on the container element (outside any tab bar's drop zone) carrying a `dockable-tab` payload, and assert that the panel moved to a new `floating` group with its position set via `setPanelFloatingPositionById`. This is the automated gate for the design.md:393 requirement; a regression here means the empty-space-to-floating feature silently broke.
 
-- [ ] **Step 8: Run the dockable tests.**
+- [x] **Step 8: Run the dockable tests.**
 
   ```bash
   ./node_modules/.bin/vitest run src/ui/dockable/
@@ -1806,7 +1806,7 @@ The provider currently owns five distinct pieces of machinery. Phase 2 deletes t
   - Clicking a tab still activates it.
   - Close button still works.
 
-- [ ] **Step 10:** Report task complete and wait for user review.
+- [x] **Step 10:** Report task complete and wait for user review.
 
 ---
 
@@ -1815,7 +1815,7 @@ The provider currently owns five distinct pieces of machinery. Phase 2 deletes t
 **Files:**
 - Modify: `frontend/src/ui/dockable/DockablePanel.css`
 
-- [ ] **Step 1: Delete rules the shared component now handles.**
+- [x] **Step 1: Delete rules the shared component now handles.**
 
   In `DockablePanel.css`, delete:
   - `.dockable-tab-bar::-webkit-scrollbar { display: none }` — shared `.tab-strip::-webkit-scrollbar` covers this
@@ -1824,7 +1824,7 @@ The provider currently owns five distinct pieces of machinery. Phase 2 deletes t
   - `.dockable-tab-bar__overflow-indicator` and all `.dockable-tab-bar__overflow-*` rules — shared `.tab-strip__overflow-indicator` covers these
   - `.dockable-tab-bar__drop-indicator` — shared `.tab-strip__drop-indicator` covers it
 
-- [ ] **Step 2: Strip the live cursor-tracking plumbing from `.dockable-tab-drag-preview`.**
+- [x] **Step 2: Strip the live cursor-tracking plumbing from `.dockable-tab-drag-preview`.**
 
   Per `design.md:28` and the Task 9 rewrite, the preview element is now positioned by the browser's native drag-image rendering, not by provider-driven CSS custom properties. In `DockablePanel.css`, modify the `.dockable-tab-drag-preview` rule to:
   - **Delete** the `transform: translate3d(var(--dockable-tab-drag-x, -9999px), var(--dockable-tab-drag-y, -9999px), 0)` declaration — the CSS custom properties no longer exist, and the browser's drag image handles positioning.
@@ -1832,7 +1832,7 @@ The provider currently owns five distinct pieces of machinery. Phase 2 deletes t
   - **Keep** the rest of the `.dockable-tab-drag-preview` rule body (padding, border, background, color, font-size, max-width, border-radius, box-shadow) — that's the visual styling the design doc explicitly says to preserve.
   - **Keep** the `.dockable-tab-drag-preview__kind` and `.dockable-tab-drag-preview__label` child rules unchanged.
 
-- [ ] **Step 3: Review what else to keep vs. delete.**
+- [x] **Step 3: Review what else to keep vs. delete.**
 
   KEEP:
   - `.dockable-tab-bar-shell` container layout (it's still the wrapper around `<Tabs>`)
@@ -1842,7 +1842,7 @@ The provider currently owns five distinct pieces of machinery. Phase 2 deletes t
   - `.dockable-tab-drag-preview` (with the transform/CSS-var rule stripped per Step 2) and all `.dockable-tab-drag-preview__*` rules — the visual styling is preserved, only the cursor-tracking mechanism is gone
   - `.dockable-tab--dragging` — if used for drag-source visual feedback via `extraProps` conditional classNames; otherwise delete
 
-- [ ] **Step 4: Run tests and manual smoke again.**
+- [x] **Step 4: Run tests and manual smoke again.**
 
   ```bash
   ./node_modules/.bin/vitest run src/ui/dockable/
@@ -1850,7 +1850,7 @@ The provider currently owns five distinct pieces of machinery. Phase 2 deletes t
 
   Visually spot-check that no CSS regression occurred during deletion. Pay particular attention to the drag preview: starting a drag should still show a styled preview at the cursor (the static snapshot), and the preview element should not be visible on screen between drags.
 
-- [ ] **Step 5:** Report task complete and wait for user review.
+- [x] **Step 5:** Report task complete and wait for user review.
 
 ---
 
@@ -1867,30 +1867,32 @@ The provider currently owns five distinct pieces of machinery. Phase 2 deletes t
 
 Once all four consumers migrate, the preview stories become redundant — they were built specifically to validate the shared component in isolation and to smoke-test the migration pattern. The real consumers now demonstrate the same behaviors in-context. Keep `Tabs.stories.tsx` (the raw `DisabledTabs` etc. demos) and `TabsWithDrag.stories.tsx` (type-safety and tear-off demos) since those still showcase shared-component-specific features the consumers don't cover individually.
 
-- [ ] **Step 1: Delete the three preview story files.**
-- [ ] **Step 2: Delete `stories.css`** if nothing else references it. Verify:
+- [x] **Step 1: Delete the three preview story files.**
+- [x] **Step 2: Delete `stories.css`** if nothing else references it. Verify:
   ```bash
   grep -rn "stories.css\|tabs-story-" /Volumes/git/luxury-yacht/app/frontend/src
   ```
   If only `Tabs.stories.tsx` or `TabsWithDrag.stories.tsx` hits, move the minimum-needed classes back into those files' local styles OR keep `stories.css` around for them. If zero hits, delete.
-- [ ] **Step 3: Update `.storybook/preview.ts`** — remove the three preview-story ids from the `storySort` order array.
-- [ ] **Step 4: Run tests and start storybook** to confirm nothing broke.
-- [ ] **Step 5:** Report task complete and wait for user review.
+
+  Kept `stories.css` — `TabsWithDrag.stories.tsx` still uses `tabs-story-drag-*` classes extensively.
+- [x] **Step 3: Update `.storybook/preview.ts`** — remove the three preview-story ids from the `storySort` order array.
+- [x] **Step 4: Run tests and start storybook** to confirm nothing broke.
+- [x] **Step 5:** Report task complete and wait for user review.
 
 ### Task 12: Update the design doc
 
 **Files:**
 - Modify: `docs/plans/shared-tabs-component-design.md`
 
-- [ ] **Step 1:** Add a "Consumers" section at the bottom listing all four consumers and their current migration status (now: all migrated). Remove any references to `useTabStyles` or the preview stories from the doc. Confirm the `TabsProps` block lists `disableRovingTabIndex` and that `TabDescriptor` lists `closeIcon` / `closeAriaLabel` (added in Tasks 1 and 2).
-- [ ] **Step 2:** Report task complete and wait for user review.
+- [x] **Step 1:** Add a "Consumers" section at the bottom listing all four consumers and their current migration status (now: all migrated). Remove any references to `useTabStyles` or the preview stories from the doc. Confirm the `TabsProps` block lists `disableRovingTabIndex` and that `TabDescriptor` lists `closeIcon` / `closeAriaLabel` (added in Tasks 1 and 2).
+- [x] **Step 2:** Report task complete and wait for user review.
 
 ### Task 13: Final QC gate
 
 **Files:**
 - No changes.
 
-- [ ] **Step 1: Run the full release check.**
+- [x] **Step 1: Run the full release check.**
 
   ```bash
   cd /Volumes/git/luxury-yacht/app && mage qc:prerelease

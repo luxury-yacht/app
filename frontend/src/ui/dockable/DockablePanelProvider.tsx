@@ -12,12 +12,11 @@ import React, {
   useContext,
   useState,
   useCallback,
-  useEffect,
   useLayoutEffect,
   useRef,
   useMemo,
 } from 'react';
-import type { TabGroupState, TabDragState, GroupKey, PanelRegistration } from './tabGroupTypes';
+import type { TabGroupState, GroupKey, PanelRegistration } from './tabGroupTypes';
 import type { DockPosition } from './useDockablePanelState';
 import {
   focusPanelById,
@@ -80,12 +79,28 @@ interface DockablePanelContextValue {
     focusTargetPanelId?: string
   ) => void;
 
-  // Drag state
-  dragState: TabDragState | null;
-  // Start dragging a tab from a specific group at cursor coordinates.
-  startTabDrag: (panelId: string, sourceGroupKey: string, startX: number, startY: number) => void;
-  // Register/unregister the DOM element for a tab bar group.
-  registerTabBarElement: (groupKey: string, element: HTMLElement | null) => void;
+  // Drag preview ref: the permanently-mounted `.dockable-tab-drag-preview`
+  // element. DockableTabBar's per-tab `getDragImage` callback writes the
+  // dragged tab's label + kind class into the element's inner spans
+  // synchronously before returning it to `setDragImage`, which lets the
+  // browser take a native screenshot of the updated element at dragstart.
+  dragPreviewRef: React.MutableRefObject<HTMLDivElement | null>;
+  // Adapter for drag-drop reorders/moves from DockableTabBar. Dispatches
+  // to `reorderTabInGroup` (same group) or `movePanelBetweenGroups`
+  // (cross group) depending on whether source and target match.
+  movePanel: (
+    panelId: string,
+    sourceGroupId: string,
+    targetGroupId: string,
+    insertIndex: number
+  ) => void;
+  // Adapter for the container-level empty-space drop target. Moves a
+  // panel into a brand-new floating group at the cursor position.
+  createFloatingGroupWithPanel: (
+    panelId: string,
+    sourceGroupId: string,
+    cursorPos: { x: number; y: number }
+  ) => void;
 
   // Content registry -- allows the group leader to render other panels' body content.
   panelContentRefsMap: React.MutableRefObject<Map<string, React.MutableRefObject<React.ReactNode>>>;
@@ -117,50 +132,6 @@ export const useDockablePanelContext = () => {
   }
   return context;
 };
-
-const DRAG_THRESHOLD = 5;
-const UNDOCK_THRESHOLD = 40;
-
-function calculateInsertIndexFromBarElement(
-  barElement: HTMLElement,
-  cursorX: number,
-  draggedPanelId: string | null
-): number {
-  const tabElements = Array.from(barElement.querySelectorAll<HTMLElement>('.dockable-tab'));
-  let insertIndex = tabElements.length;
-
-  for (let i = 0; i < tabElements.length; i++) {
-    const rect = tabElements[i].getBoundingClientRect();
-    const midX = rect.left + rect.width / 2;
-    if (cursorX < midX) {
-      insertIndex = i;
-      break;
-    }
-  }
-
-  if (!draggedPanelId) {
-    return insertIndex;
-  }
-
-  const currentIndex = tabElements.findIndex((tab) => tab.dataset.panelId === draggedPanelId);
-  if (currentIndex !== -1 && insertIndex > currentIndex) {
-    return Math.max(0, insertIndex - 1);
-  }
-  return insertIndex;
-}
-
-function isSameDropTarget(
-  a: TabDragState['dropTarget'] | null,
-  b: TabDragState['dropTarget'] | null
-): boolean {
-  if (a === b) {
-    return true;
-  }
-  if (!a || !b) {
-    return false;
-  }
-  return a.groupKey === b.groupKey && a.insertIndex === b.insertIndex;
-}
 
 /** Resolve the `.content` element that panels are mounted inside. */
 function getContentContainer(): HTMLElement | null {
@@ -210,78 +181,13 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
     Map<string, PanelRegistration>
   >(() => new Map());
 
-  // Drag state for tab dragging (Phase 5).
-  const [dragState, setDragStateState] = useState<TabDragState | null>(null);
-  const dragStateRef = useRef<TabDragState | null>(null);
-  const setDragState = useCallback((state: TabDragState | null) => {
-    dragStateRef.current = state;
-    setDragStateState(state);
-  }, []);
-  const tabBarElementsRef = useRef(new Map<string, HTMLElement>());
-  const dragSessionRef = useRef<{
-    panelId: string;
-    sourceGroupKey: string;
-    startX: number;
-    startY: number;
-    isDragging: boolean;
-  } | null>(null);
-
-  const registerTabBarElement = useCallback((groupKey: string, element: HTMLElement | null) => {
-    const map = tabBarElementsRef.current;
-    if (!element) {
-      map.delete(groupKey);
-      return;
-    }
-    map.set(groupKey, element);
-  }, []);
-
-  const startTabDrag = useCallback(
-    (panelId: string, sourceGroupKey: string, startX: number, startY: number) => {
-      dragSessionRef.current = {
-        panelId,
-        sourceGroupKey,
-        startX,
-        startY,
-        isDragging: false,
-      };
-      // New drag session starts clean.
-      if (dragStateRef.current) {
-        setDragState(null);
-      }
-    },
-    [setDragState]
-  );
-
-  useLayoutEffect(() => {
-    if (typeof document === 'undefined') {
-      return;
-    }
-    const root = document.documentElement;
-    if (!dragState) {
-      root.style.removeProperty('--dockable-tab-drag-x');
-      root.style.removeProperty('--dockable-tab-drag-y');
-      return;
-    }
-    root.style.setProperty(
-      '--dockable-tab-drag-x',
-      `${Math.round(dragState.cursorPosition.x + 14)}px`
-    );
-    root.style.setProperty(
-      '--dockable-tab-drag-y',
-      `${Math.round(dragState.cursorPosition.y + 16)}px`
-    );
-  }, [dragState]);
-
-  useLayoutEffect(() => {
-    if (typeof document === 'undefined') {
-      return;
-    }
-    const root = document.documentElement;
-    return () => {
-      root.style.removeProperty('--dockable-tab-drag-x');
-      root.style.removeProperty('--dockable-tab-drag-y');
-    };
-  }, []);
+  // Ref to the permanently-mounted `.dockable-tab-drag-preview` element.
+  // The element stays in the DOM at all times; DockableTabBar's per-tab
+  // `getDragImage` callback mutates its inner spans synchronously at
+  // dragstart, and the browser screenshots the element once via
+  // `setDragImage`. No live cursor tracking — the browser handles that
+  // natively once the snapshot is taken.
+  const dragPreviewRef = useRef<HTMLDivElement | null>(null);
 
   // Last-focused group -- tracks which panel group the user most recently interacted with.
   // Keep both state (for rendering) and a ref (for same-tick reads in callbacks).
@@ -525,114 +431,60 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
   );
 
   // -----------------------------------------------------------------------
-  // Provider-owned drag controller (Phase 4).
-  // A single global listener pair coordinates all tab drag lifecycles.
+  // movePanel -- adapter called by DockableTabBar's useTabDropTarget onDrop.
+  // Dispatches between the existing `reorderTabInGroup` (same group) and
+  // `movePanelBetweenGroups` (cross group) functions. Applies shift
+  // compensation for same-group reorders so a forward drop lands at the
+  // intended visual position after the source tab is removed first.
+  //
+  // Reads the authoritative tabs list via `tabGroupsRef` (not via state
+  // snapshot in closure) to avoid stale reads when multiple drops fire in
+  // rapid succession. Uses `getGroupTabs` from tabGroupState.ts to handle
+  // the asymmetric TabGroupState shape: `right` and `bottom` are keyed
+  // children, but `floating` is an array keyed by `groupId`.
   // -----------------------------------------------------------------------
-  useEffect(() => {
-    const handleMouseMove = (event: MouseEvent) => {
-      const session = dragSessionRef.current;
-      if (!session) {
-        return;
-      }
-
-      if (!session.isDragging) {
-        const dx = event.clientX - session.startX;
-        const dy = event.clientY - session.startY;
-        if (Math.sqrt(dx * dx + dy * dy) < DRAG_THRESHOLD) {
+  const movePanel = useCallback(
+    (panelId: string, sourceGroupId: string, targetGroupId: string, insertIndex: number) => {
+      if (sourceGroupId === targetGroupId) {
+        const groupTabs = getGroupTabs(tabGroupsRef.current, targetGroupId as GroupKey)?.tabs ?? [];
+        const sourceIdx = groupTabs.indexOf(panelId);
+        const adjustedInsert =
+          sourceIdx >= 0 && sourceIdx < insertIndex ? insertIndex - 1 : insertIndex;
+        if (sourceIdx === adjustedInsert) {
+          // No-op drop onto self (or immediately after self).
           return;
         }
-        session.isDragging = true;
-      }
-
-      const hoveredElement =
-        typeof document.elementFromPoint === 'function'
-          ? document.elementFromPoint(event.clientX, event.clientY)
-          : null;
-      const hoveredBar = hoveredElement?.closest<HTMLElement>('.dockable-tab-bar');
-      const hoveredGroupKey = hoveredBar?.dataset.groupKey ?? null;
-      const dropTarget =
-        hoveredBar && hoveredGroupKey
-          ? {
-              groupKey: hoveredGroupKey,
-              insertIndex: calculateInsertIndexFromBarElement(
-                hoveredBar,
-                event.clientX,
-                hoveredGroupKey === session.sourceGroupKey ? session.panelId : null
-              ),
-            }
-          : null;
-
-      const nextState: TabDragState = {
-        panelId: session.panelId,
-        sourceGroupKey: session.sourceGroupKey,
-        cursorPosition: { x: event.clientX, y: event.clientY },
-        dropTarget,
-      };
-
-      const previous = dragStateRef.current;
-      if (
-        previous &&
-        previous.panelId === nextState.panelId &&
-        previous.sourceGroupKey === nextState.sourceGroupKey &&
-        previous.cursorPosition.x === nextState.cursorPosition.x &&
-        previous.cursorPosition.y === nextState.cursorPosition.y &&
-        isSameDropTarget(previous.dropTarget, nextState.dropTarget)
-      ) {
+        reorderTabInGroup(targetGroupId as GroupKey, panelId, adjustedInsert);
         return;
       }
+      // Cross-group: no shift compensation needed — the source is removed
+      // from a different array than the insert.
+      movePanelBetweenGroups(panelId, targetGroupId as GroupKey, insertIndex);
+    },
+    [reorderTabInGroup, movePanelBetweenGroups]
+  );
 
-      setDragState(nextState);
-    };
-
-    const handleMouseUp = (event: MouseEvent) => {
-      const session = dragSessionRef.current;
-      dragSessionRef.current = null;
-      if (!session) {
-        return;
-      }
-
-      if (!session.isDragging) {
-        setDragState(null);
-        return;
-      }
-
-      const currentDragState = dragStateRef.current;
-      if (currentDragState?.dropTarget) {
-        const { groupKey, insertIndex } = currentDragState.dropTarget;
-        if (groupKey === currentDragState.sourceGroupKey) {
-          reorderTabInGroup(groupKey, currentDragState.panelId, insertIndex);
-        } else {
-          movePanelBetweenGroups(currentDragState.panelId, groupKey, insertIndex);
-        }
-      } else {
-        const sourceBar = tabBarElementsRef.current.get(session.sourceGroupKey);
-        const barRect = sourceBar?.getBoundingClientRect();
-        if (barRect) {
-          const verticalDistance = Math.min(
-            Math.abs(event.clientY - barRect.top),
-            Math.abs(event.clientY - barRect.bottom)
-          );
-          if (verticalDistance > UNDOCK_THRESHOLD) {
-            movePanelBetweenGroups(session.panelId, 'floating');
-            const contentBounds = getContentBounds();
-            setPanelFloatingPositionById(session.panelId, {
-              x: event.clientX - contentBounds.left,
-              y: event.clientY - contentBounds.top,
-            });
-          }
-        }
-      }
-
-      setDragState(null);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [movePanelBetweenGroups, reorderTabInGroup, setDragState]);
+  // -----------------------------------------------------------------------
+  // createFloatingGroupWithPanel -- adapter called by the container-level
+  // empty-space drop target. Wraps the existing movePanelBetweenGroups +
+  // setPanelFloatingPositionById calls so a drop outside any tab bar
+  // spawns a brand-new floating group positioned at the cursor. Preserves
+  // the legacy "undock by dragging away from the source bar" feature,
+  // now keyed on an explicit drop event rather than a cursor-distance
+  // gesture. `_sourceGroupId` is accepted for API symmetry but unused —
+  // `movePanelBetweenGroups` resolves the source internally.
+  // -----------------------------------------------------------------------
+  const createFloatingGroupWithPanel = useCallback(
+    (panelId: string, _sourceGroupId: string, cursorPos: { x: number; y: number }) => {
+      movePanelBetweenGroups(panelId, 'floating');
+      const contentBounds = getContentBounds();
+      setPanelFloatingPositionById(panelId, {
+        x: cursorPos.x - contentBounds.left,
+        y: cursorPos.y - contentBounds.top,
+      });
+    },
+    [movePanelBetweenGroups]
+  );
 
   // -----------------------------------------------------------------------
   // Content registry -- allows the group leader to render other panels' body
@@ -702,9 +554,9 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
       reorderTabInGroup,
       movePanelBetweenGroups,
       movePanelBetweenGroupsAndFocus,
-      dragState,
-      startTabDrag,
-      registerTabBarElement,
+      dragPreviewRef,
+      movePanel,
+      createFloatingGroupWithPanel,
       panelContentRefsMap,
       notifyContentChange,
       subscribeContentChange,
@@ -728,9 +580,8 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
       reorderTabInGroup,
       movePanelBetweenGroups,
       movePanelBetweenGroupsAndFocus,
-      dragState,
-      startTabDrag,
-      registerTabBarElement,
+      movePanel,
+      createFloatingGroupWithPanel,
       notifyContentChange,
       subscribeContentChange,
       updateGridTableHoverSuppression,
@@ -741,12 +592,6 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
       focusPanel,
     ]
   );
-
-  const dragPreviewRegistration = dragState
-    ? panelRegistrationsRef.current.get(dragState.panelId)
-    : null;
-  const dragPreviewTitle = dragPreviewRegistration?.title ?? dragState?.panelId ?? '';
-  const dragPreviewKindClass = dragPreviewRegistration?.tabKindClass;
 
   // -----------------------------------------------------------------------
   // Portal host node -- panels are rendered into this DOM element via portals.
@@ -795,16 +640,16 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
       <DockablePanelContext.Provider value={value}>
         <DockablePanelHostContext.Provider value={hostNode}>
           {children}
-          {dragState ? (
-            <div className="dockable-tab-drag-preview" aria-hidden="true">
-              {dragPreviewKindClass ? (
-                <span
-                  className={`dockable-tab-drag-preview__kind kind-badge ${dragPreviewKindClass}`}
-                />
-              ) : null}
-              <span className="dockable-tab-drag-preview__label">{dragPreviewTitle}</span>
-            </div>
-          ) : null}
+          {/* Permanently mounted drag preview. The browser screenshots
+              this element via setDragImage at dragstart; DockableTabBar's
+              per-tab getDragImage callback writes the dragged tab's
+              label + kind class into the inner spans before handing the
+              element off. Offscreen by default via CSS fallback
+              (`transform: translate3d(var(--dockable-tab-drag-x, -9999px), ...)`). */}
+          <div ref={dragPreviewRef} className="dockable-tab-drag-preview" aria-hidden="true">
+            <span className="dockable-tab-drag-preview__kind kind-badge" aria-hidden="true" />
+            <span className="dockable-tab-drag-preview__label" />
+          </div>
         </DockablePanelHostContext.Provider>
       </DockablePanelContext.Provider>
     </PanelLayoutStoreContext.Provider>

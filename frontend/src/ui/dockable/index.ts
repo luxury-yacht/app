@@ -22,4 +22,4 @@ export {
 export { DockablePanelProvider, useDockablePanelContext } from './DockablePanelProvider';
 export { DockableTabBar } from './DockableTabBar';
 export type { TabInfo } from './DockableTabBar';
-export type { PanelRegistration, TabGroupState, GroupKey, TabDragState } from './tabGroupTypes';
+export type { PanelRegistration, TabGroupState, GroupKey } from './tabGroupTypes';

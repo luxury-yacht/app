@@ -6,7 +6,11 @@
 export { TabDragProvider, TabDragContext } from './TabDragProvider';
 export type { TabDragProviderProps, DropTargetRegistration } from './TabDragProvider';
 
-export { useTabDragSource } from './useTabDragSource';
+export {
+  useTabDragSource,
+  useTabDragSourceFactory,
+  createTabDragSourceProps,
+} from './useTabDragSource';
 export type { TabDragSourceProps, UseTabDragSourceOptions } from './useTabDragSource';
 
 export { useTabDropTarget } from './useTabDropTarget';

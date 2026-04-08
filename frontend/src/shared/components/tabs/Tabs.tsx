@@ -24,6 +24,19 @@ export interface TabDescriptor {
   label: ReactNode;
   leading?: ReactNode;
   onClose?: () => void;
+  /**
+   * Optional custom content for the close button. Default is a plain
+   * `×` text character. Pass a ReactNode (e.g. an SVG icon component)
+   * when the consumer needs its own visual.
+   */
+  closeIcon?: ReactNode;
+  /**
+   * Optional aria-label override for the close button. Defaults to
+   * `"Close"`. Per-tab labels like `"Close my-context-name"` are more
+   * informative for screen reader users and should be preferred when
+   * the tab label is user-facing text.
+   */
+  closeAriaLabel?: string;
   disabled?: boolean;
   ariaControls?: string;
   ariaLabel?: string;
@@ -82,6 +95,18 @@ export interface TabsProps {
    * wrappers to show where a dragged tab will land if released.
    */
   dropInsertIndex?: number | null;
+  /**
+   * When true, every tab gets `tabIndex={-1}` regardless of active state
+   * or the fallback focus rule. Use this when the surrounding component
+   * implements its own focus management and does not want the tabs to
+   * participate in the browser's native Tab-key order. Keyboard arrow
+   * navigation and Enter/Space activation still work — they're driven
+   * by the component's own `handleKeyDown`, which moves focus
+   * explicitly via `.focus()` regardless of tabindex.
+   *
+   * Default: false.
+   */
+  disableRovingTabIndex?: boolean;
 }
 
 export function Tabs({
@@ -97,6 +122,7 @@ export function Tabs({
   className: classNameProp,
   id,
   dropInsertIndex = null,
+  disableRovingTabIndex = false,
 }: TabsProps) {
   // Mode-specific default for minTabWidth: 'fit' should size to content
   // (no floor) so short labels like "YAML" don't get bloated; 'equal' needs
@@ -408,7 +434,7 @@ export function Tabs({
               aria-controls={tab.ariaControls}
               aria-disabled={tab.disabled || undefined}
               aria-label={tab.ariaLabel}
-              tabIndex={isFocusStop ? 0 : -1}
+              tabIndex={disableRovingTabIndex ? -1 : isFocusStop ? 0 : -1}
               className={`tab-item${isActive ? ' tab-item--active' : ''}${isCloseable ? ' tab-item--closeable' : ''}`}
               onClick={() => {
                 if (!tab.disabled) {
@@ -423,14 +449,14 @@ export function Tabs({
                 <button
                   type="button"
                   className="tab-item__close"
-                  aria-label="Close"
+                  aria-label={tab.closeAriaLabel ?? 'Close'}
                   tabIndex={-1}
                   onClick={(event) => {
                     event.stopPropagation();
                     tab.onClose?.();
                   }}
                 >
-                  ×
+                  {tab.closeIcon ?? '×'}
                 </button>
               )}
             </div>
@@ -462,13 +488,3 @@ export function Tabs({
     </div>
   );
 }
-
-/**
- * Backward-compat shim. The previous shared tabs module exposed a no-op
- * `useTabStyles` hook (see `frontend/src/shared/components/tabs/Tabs/index.tsx`).
- * Creating this `Tabs.tsx` shadowed the old `Tabs/index.tsx` directory in
- * module resolution, so any consumer importing `useTabStyles` from
- * `@shared/components/tabs/Tabs` ends up here. Re-export the no-op so the
- * old consumers compile until Phase 2 migrates them off the legacy import.
- */
-export const useTabStyles = (): boolean => true;

@@ -348,7 +348,3 @@ tr.diagnostics-row-expanded .diagnostics-permission-reason {
 .diagnostics-tabs {
   padding: 0.3rem 0.5rem 0;
 }
-
-.diagnostics-tabs .tab-item {
-  text-transform: uppercase;
-}

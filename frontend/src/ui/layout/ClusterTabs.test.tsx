@@ -13,6 +13,7 @@ import {
   resetClusterTabOrderCacheForTesting,
   setClusterTabOrder,
 } from '@core/persistence/clusterTabOrder';
+import { TabDragProvider } from '@shared/components/tabs/dragCoordinator';
 
 const backendMocks = vi.hoisted(() => ({
   GetClusterPortForwardCount: vi.fn().mockResolvedValue(0),
@@ -74,7 +75,11 @@ describe('ClusterTabs', () => {
 
   const renderTabs = async () => {
     await act(async () => {
-      root.render(<ClusterTabs />);
+      root.render(
+        <TabDragProvider>
+          <ClusterTabs />
+        </TabDragProvider>
+      );
     });
   };
 
@@ -115,9 +120,9 @@ describe('ClusterTabs', () => {
     mockState.selectedKubeconfig = 'a';
     await renderTabs();
 
-    const buttons = Array.from(container.querySelectorAll('.tab-item'));
-    const target = buttons.find((button) => button.textContent?.trim().startsWith('b')) as
-      | HTMLButtonElement
+    const tabs = Array.from(container.querySelectorAll('[role="tab"]'));
+    const target = tabs.find((tab) => tab.textContent?.trim().startsWith('b')) as
+      | HTMLElement
       | undefined;
     expect(target).toBeTruthy();
 
@@ -133,7 +138,7 @@ describe('ClusterTabs', () => {
     mockState.selectedKubeconfig = 'a';
     await renderTabs();
 
-    const tabs = Array.from(container.querySelectorAll('.tab-item'));
+    const tabs = Array.from(container.querySelectorAll('[role="tab"]'));
     const targetTab = tabs.find((tab) =>
       tab.querySelector('.tab-item__label')?.textContent?.includes('b')
     );

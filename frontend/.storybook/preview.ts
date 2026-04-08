@@ -21,7 +21,7 @@ const runtimeProxy = new Proxy(
     get(target: Record<string, unknown>, prop: string) {
       return target[prop] ?? noOp;
     },
-  },
+  }
 );
 
 // Overrides for specific Go backend methods. Stories populate this via
@@ -42,17 +42,19 @@ const runtimeProxy = new Proxy(
   RetryClusterAuth: () => Promise.resolve(),
   ListShellSessions: () => Promise.resolve([]),
   ListPortForwards: () => Promise.resolve([]),
-  GetAppSettings: () => Promise.resolve({
-    theme: 'dark',
-    useShortResourceNames: false,
-    autoRefreshEnabled: false,
-    refreshBackgroundClustersEnabled: false,
-    metricsRefreshIntervalMs: 30000,
-    gridTablePersistenceMode: 'shared',
-    defaultObjectPanelPosition: 'right',
-  }),
+  GetAppSettings: () =>
+    Promise.resolve({
+      theme: 'dark',
+      useShortResourceNames: false,
+      autoRefreshEnabled: false,
+      refreshBackgroundClustersEnabled: false,
+      metricsRefreshIntervalMs: 30000,
+      gridTablePersistenceMode: 'shared',
+      defaultObjectPanelPosition: 'right',
+    }),
   GetFavorites: () => Promise.resolve([]),
-  AddFavorite: (fav: unknown) => Promise.resolve({ ...(fav as Record<string, unknown>), id: String(Date.now()) }),
+  AddFavorite: (fav: unknown) =>
+    Promise.resolve({ ...(fav as Record<string, unknown>), id: String(Date.now()) }),
   UpdateFavorite: () => Promise.resolve(),
   DeleteFavorite: () => Promise.resolve(),
   SetFavoriteOrder: () => Promise.resolve(),
@@ -80,13 +82,13 @@ const goProxy = new Proxy(
                   }
                   return noOpAsync;
                 },
-              },
+              }
             );
           },
-        },
+        }
       );
     },
-  },
+  }
 );
 
 (window as any).runtime = runtimeProxy;

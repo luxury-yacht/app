@@ -99,6 +99,7 @@ export function useTabDropTarget<K extends TabDragPayload['kind']>(
     const payload = readPayload(event);
     if (!payload || !acceptsRef.current.includes(payload.kind as K)) return;
     event.preventDefault();
+    event.stopPropagation();
     if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
     const el = elementRef.current;
     if (el) {
@@ -122,6 +123,7 @@ export function useTabDropTarget<K extends TabDragPayload['kind']>(
     const payload = readPayload(event);
     if (!payload || !acceptsRef.current.includes(payload.kind as K)) return;
     event.preventDefault();
+    event.stopPropagation();
     const el = elementRef.current;
     const insertIndex = el ? computeDropInsertIndex(el, event.clientX) : 0;
     setIsDragOver(false);
