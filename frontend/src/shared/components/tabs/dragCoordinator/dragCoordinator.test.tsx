@@ -399,6 +399,104 @@ describe('useTabDropTarget', () => {
     expect((payload as any).clusterId).toBe('c1');
   });
 
+  it('calls preventDefault on dragover under HTML5 "protected mode" semantics', () => {
+    // Regression test for a spec-compliance bug: during dragenter/dragover,
+    // the drag data store is in protected mode and getData() returns an
+    // empty string for custom MIME types in every real browser. The hook
+    // must not rely on getData() there — if it does, preventDefault never
+    // runs and the browser silently refuses to fire the subsequent drop,
+    // making drag-and-drop look "broken" in production with no error.
+    //
+    // This test simulates protected mode by having getData() return "" on
+    // dragenter/dragover (matching real browser behaviour) and the full
+    // payload only at drop time. The hook must still mark the event as
+    // accepted by calling preventDefault on dragenter AND dragover, and
+    // must still fire onDrop with the correct payload at drop time.
+    const onDrop = vi.fn();
+
+    function Probe() {
+      const { ref } = useTabDropTarget({
+        accepts: ['cluster-tab'],
+        onDrop,
+      });
+      return (
+        <div ref={ref} data-testid="target">
+          target
+        </div>
+      );
+    }
+
+    let beginDragRef: ((p: any) => void) | null = null;
+    function Capture() {
+      const ctx = useContext(TabDragContext);
+      beginDragRef = ctx.beginDrag;
+      return null;
+    }
+
+    act(() => {
+      root.render(
+        <TabDragProvider>
+          <Capture />
+          <Probe />
+        </TabDragProvider>
+      );
+    });
+
+    act(() => {
+      beginDragRef!({ kind: 'cluster-tab', clusterId: 'c1' });
+    });
+
+    // Protected-mode data transfer: types readable, getData returns ''.
+    const protectedGetData = vi.fn(() => '');
+    const protectedDataTransfer = {
+      getData: protectedGetData,
+      types: [TAB_DRAG_DATA_TYPE],
+      dropEffect: 'move',
+    };
+    const dragEnter = new Event('dragenter', {
+      bubbles: true,
+      cancelable: true,
+    }) as any;
+    dragEnter.dataTransfer = protectedDataTransfer;
+    const dragOver = new Event('dragover', {
+      bubbles: true,
+      cancelable: true,
+    }) as any;
+    dragOver.dataTransfer = protectedDataTransfer;
+
+    const target = container.querySelector<HTMLElement>('[data-testid="target"]')!;
+    act(() => {
+      target.dispatchEvent(dragEnter);
+      target.dispatchEvent(dragOver);
+    });
+
+    // preventDefault should be called on BOTH events — if it isn't, the
+    // browser will refuse to fire drop and drag-and-drop is silently broken.
+    expect(dragEnter.defaultPrevented).toBe(true);
+    expect(dragOver.defaultPrevented).toBe(true);
+
+    // At drop time the store is in read-only mode; simulate getData() now
+    // returning the real payload.
+    const readOnlyDataTransfer = {
+      getData: vi.fn(() => JSON.stringify({ kind: 'cluster-tab', clusterId: 'c1' })),
+      types: [TAB_DRAG_DATA_TYPE],
+      dropEffect: 'move',
+    };
+    const dropEvent = new Event('drop', {
+      bubbles: true,
+      cancelable: true,
+    }) as any;
+    dropEvent.dataTransfer = readOnlyDataTransfer;
+    act(() => {
+      target.dispatchEvent(dropEvent);
+    });
+
+    expect(onDrop).toHaveBeenCalledTimes(1);
+    const [payload] = onDrop.mock.calls[0];
+    expect(payload.kind).toBe('cluster-tab');
+    expect((payload as any).clusterId).toBe('c1');
+  });
+
   it('does not fire onDrop when the payload kind is not in accepts', () => {
     const onDrop = vi.fn();
 

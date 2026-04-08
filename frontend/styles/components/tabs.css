@@ -109,7 +109,18 @@
   justify-content: center;
   width: 16px;
   height: 16px;
+  /* Reset native <button> defaults. The shared component renders a real
+     <button> (so the close affordance is keyboard-reachable and
+     semantically correct), but <button> has browser-applied padding,
+     font, line-height, and radius that squish the SVG and shift its
+     centre. Previously the close button was a <span role="button">
+     which had no such defaults. */
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  line-height: 0;
   border: none;
+  border-radius: 0;
   background: var(--color-bg-tertiary);
   color: var(--color-text-tertiary);
   cursor: pointer;
