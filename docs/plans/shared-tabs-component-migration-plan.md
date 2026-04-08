@@ -176,6 +176,342 @@ This prop lets those consumers opt OUT of roving tabindex, forcing every tab to 
 
 ---
 
+### Task 1a: Teach `useTabDropTarget` to stop drop-event propagation
+
+**Why:** `useTabDropTarget`'s internal `handleDrop` currently calls `event.preventDefault()` before invoking `onDrop`, but it does NOT call `event.stopPropagation()`. Native HTML5 `drop` events bubble up the DOM just like regular events, so if a consumer nests one drop target inside another — for example, a per-bar drop target inside a container-level empty-space drop target — a single drop fires BOTH the inner and outer handlers. For the Dockable migration, that means a normal tab reorder would also be interpreted as an empty-space drop and would spawn a spurious new floating group. We need an opt-in mode that calls `stopPropagation` after a successful handled drop so nested targets are not triggered.
+
+`preventDefault` and `stopPropagation` are distinct: `preventDefault` tells the browser "don't do the default drop behavior" (navigate to a file, etc.); `stopPropagation` tells the browser "don't let this event bubble to ancestors." Both are needed for nested drop targets to work the way the Dockable migration needs.
+
+**Files:**
+- Modify: `frontend/src/shared/components/tabs/dragCoordinator/useTabDropTarget.ts`
+- Modify: `frontend/src/shared/components/tabs/dragCoordinator/dragCoordinator.test.tsx`
+
+- [ ] **Step 1: Write the failing test.**
+
+  Add to `dragCoordinator.test.tsx`:
+
+  ```tsx
+  it('stops drop-event propagation to ancestor drop targets when nested', () => {
+    const outerOnDrop = vi.fn();
+    const innerOnDrop = vi.fn();
+
+    function Harness() {
+      const { ref: outerRef } = useTabDropTarget({
+        accepts: ['cluster-tab'],
+        onDrop: outerOnDrop,
+      });
+      const { ref: innerRef } = useTabDropTarget({
+        accepts: ['cluster-tab'],
+        onDrop: innerOnDrop,
+      });
+      return (
+        <div ref={outerRef as (el: HTMLDivElement | null) => void} data-testid="outer">
+          <div ref={innerRef as (el: HTMLDivElement | null) => void} data-testid="inner">
+            <div role="tab" style={{ width: 100, height: 20 }} />
+          </div>
+        </div>
+      );
+    }
+
+    act(() => {
+      root.render(
+        <TabDragProvider>
+          <Harness />
+        </TabDragProvider>
+      );
+    });
+
+    const inner = container.querySelector('[data-testid="inner"]')!;
+    // Fire a drop carrying an accepted payload on the inner target.
+    const dropEvent = new Event('drop', { bubbles: true, cancelable: true });
+    Object.defineProperty(dropEvent, 'dataTransfer', {
+      value: {
+        getData: () => JSON.stringify({ kind: 'cluster-tab', clusterId: 'x' }),
+        types: [TAB_DRAG_DATA_TYPE],
+      },
+    });
+    Object.defineProperty(dropEvent, 'clientX', { value: 50 });
+
+    act(() => {
+      inner.dispatchEvent(dropEvent);
+    });
+
+    // Inner handler fires once; outer handler does NOT fire because the
+    // inner one stopped propagation after consuming the event.
+    expect(innerOnDrop).toHaveBeenCalledTimes(1);
+    expect(outerOnDrop).not.toHaveBeenCalled();
+  });
+  ```
+
+- [ ] **Step 2: Run test to verify it fails.**
+
+  Run: `./node_modules/.bin/vitest run src/shared/components/tabs/dragCoordinator/`
+
+  Expected: the new test fails because `outerOnDrop` is called via bubbling — the inner handler doesn't currently stop propagation.
+
+- [ ] **Step 3: Update `handleDrop` in `useTabDropTarget.ts`.**
+
+  Find the `handleDrop` callback (around line 121 of `useTabDropTarget.ts`). Add a `stopPropagation()` call immediately after the `preventDefault()`:
+
+  ```tsx
+  const handleDrop = useCallback((event: DragEvent) => {
+    const payload = readPayload(event);
+    if (!payload || !acceptsRef.current.includes(payload.kind as K)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const el = elementRef.current;
+    const insertIndex = el ? computeDropInsertIndex(el, event.clientX) : 0;
+    setIsDragOver(false);
+    setDropInsertIndex(null);
+    onDropRef.current(payload as Extract<TabDragPayload, { kind: K }>, event, insertIndex);
+  }, []);
+  ```
+
+  Placement matters: `stopPropagation` comes BEFORE `onDrop` is invoked so that if the consumer's `onDrop` throws for any reason, the event is already marked as consumed and the ancestor still doesn't fire. (This is defensive — consumer callbacks shouldn't throw, but the defensive ordering costs nothing.)
+
+  **Note on rejected drops:** if the payload isn't in `acceptsRef`, the early `return` fires and neither `preventDefault` nor `stopPropagation` is called, so the event bubbles normally and an ancestor target with a broader accepts list can still handle it. That's the intended behavior — only targets that actually consume the drop should block propagation.
+
+  Also add `event.stopPropagation()` to `handleDragOver` (the hover-time handler) for symmetry — otherwise the ancestor target's `dragover` handler fires too, flickering its `isDragOver` state on/off as the cursor moves over the inner target. Place it after `preventDefault()` in that handler too.
+
+- [ ] **Step 4: Run the tests.**
+
+  Run: `./node_modules/.bin/vitest run src/shared/components/tabs/dragCoordinator/`
+
+  Expected: new nested-target test passes; all existing drag coordinator tests still pass (stopping propagation is additive and doesn't affect single-target behavior).
+
+- [ ] **Step 5: Update the design doc.**
+
+  In `docs/plans/shared-tabs-component-design.md`, add a note under the drag coordinator / `useTabDropTarget` section explaining that drop events stop propagating at the first consuming target. Reference the Dockable migration's container-level empty-space target as the primary use case.
+
+- [ ] **Step 6:** Report task complete and wait for user review.
+
+---
+
+### Task 1b: Add `useTabDragSourceFactory` hook
+
+**Why:** The existing `useTabDragSource` hook calls `useContext(TabDragContext)` internally, which means consumers with a dynamic-length tab list can't call it inside `.map()` — that would violate the rules of hooks. The Phase 1 preview stories worked around this by unrolling N hook calls at the top level of their component bodies, capped at a small constant (5 tabs per strip).
+
+Carrying that cap into production is a regression — the current `ClusterTabs` and `DockableTabBar` implementations have no upper limit on draggable tab count. Users routinely open 20+ kubeconfig contexts and can legitimately end up with large numbers of dockable panels in a single strip. A hardcoded cap of 16 (or any other number) silently truncates drag support beyond that point, which is exactly the kind of incomplete shortcut AGENTS.md forbids.
+
+The correct fix is to change the hook API so that the `useContext` call happens **once per consumer**, and the per-tab drag-source props are produced by a plain factory function that's legal to call inside `.map()`. This supports any number of tabs without unrolling and without rules-of-hooks workarounds.
+
+**Files:**
+- Modify: `frontend/src/shared/components/tabs/dragCoordinator/useTabDragSource.ts`
+- Modify: `frontend/src/shared/components/tabs/dragCoordinator/index.ts`
+- Modify: `frontend/src/shared/components/tabs/dragCoordinator/dragCoordinator.test.tsx`
+
+- [ ] **Step 1: Write failing tests.**
+
+  Add to `dragCoordinator.test.tsx`:
+
+  ```tsx
+  it('useTabDragSourceFactory returns a stable-per-render factory usable in .map()', () => {
+    // Render a component that uses the factory to build drag source props
+    // for an arbitrary number of tabs — more than any reasonable unrolled-hook
+    // workaround would allow.
+    const TAB_COUNT = 40;
+    const dragStartCallbacks: Array<(event: any) => void> = [];
+
+    function Harness() {
+      const makeDragSource = useTabDragSourceFactory();
+      const tabs = Array.from({ length: TAB_COUNT }, (_, i) => ({
+        id: `t${i}`,
+        label: `Tab ${i}`,
+      }));
+      return (
+        <div>
+          {tabs.map((tab) => {
+            const props = makeDragSource({ kind: 'cluster-tab', clusterId: tab.id });
+            if (props.onDragStart) dragStartCallbacks.push(props.onDragStart);
+            return (
+              <div key={tab.id} data-testid={`tab-${tab.id}`} draggable={props.draggable}>
+                {tab.label}
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
+
+    act(() => {
+      root.render(
+        <TabDragProvider>
+          <Harness />
+        </TabDragProvider>
+      );
+    });
+
+    // All 40 tabs should have draggable={true}.
+    const renderedTabs = container.querySelectorAll('[data-testid^="tab-"]');
+    expect(renderedTabs.length).toBe(TAB_COUNT);
+    renderedTabs.forEach((el) => {
+      expect(el.getAttribute('draggable')).toBe('true');
+    });
+
+    // Each tab's onDragStart should be a distinct closure (not the same
+    // function shared across all tabs).
+    expect(new Set(dragStartCallbacks).size).toBe(TAB_COUNT);
+  });
+  ```
+
+  (Import `useTabDragSourceFactory` and `TabDragProvider` at the top of the test file.)
+
+- [ ] **Step 2: Run test to verify it fails.**
+
+  Run: `./node_modules/.bin/vitest run src/shared/components/tabs/dragCoordinator/`
+
+  Expected: `useTabDragSourceFactory is not defined` or similar.
+
+- [ ] **Step 3: Refactor `useTabDragSource.ts`.**
+
+  Replace the file body with:
+
+  ```tsx
+  /**
+   * frontend/src/shared/components/tabs/dragCoordinator/useTabDragSource.ts
+   *
+   * Source-side drag API. Two entry points:
+   *
+   *   • useTabDragSource(payload, options)  — hook API for the simple
+   *     case where a component declares a single draggable element.
+   *     Calls useContext internally.
+   *
+   *   • useTabDragSourceFactory()           — hook API for consumers
+   *     that build per-tab drag props inside `.map()` over a
+   *     dynamic-length tabs array. Returns a plain factory function;
+   *     the factory is safe to call inside loops because it contains
+   *     no hook calls. Calls useContext exactly ONCE per consumer
+   *     render regardless of tab count.
+   *
+   * Both entry points ultimately delegate to the same
+   * `createTabDragSourceProps` pure factory, which is also exported
+   * for unit-testing and for consumers that prefer to manage the
+   * context themselves.
+   */
+  import { useContext, type DragEventHandler } from 'react';
+
+  import { TabDragContext } from './TabDragProvider';
+  import { TAB_DRAG_DATA_TYPE, type TabDragPayload } from './types';
+
+  export interface UseTabDragSourceOptions {
+    /**
+     * Optional custom drag preview. Invoked synchronously at dragstart.
+     * Return the element + cursor offset to use as the drag image, or
+     * null to fall back to the browser's default (a translucent copy of
+     * the source element).
+     *
+     * The element MUST already be in the DOM when this is called — the
+     * browser screenshots it once and never re-reads it.
+     */
+    getDragImage?: () => { element: HTMLElement; offsetX: number; offsetY: number } | null;
+  }
+
+  export interface TabDragSourceProps {
+    draggable: boolean;
+    onDragStart?: DragEventHandler<HTMLElement>;
+    onDragEnd?: DragEventHandler<HTMLElement>;
+  }
+
+  /**
+   * Pure factory — builds the drag-source event handlers for one tab
+   * given an already-resolved TabDragContext. No hooks inside, so this
+   * can be called anywhere (including inside loops).
+   */
+  export function createTabDragSourceProps(
+    payload: TabDragPayload | null,
+    beginDrag: (payload: TabDragPayload) => void,
+    endDrag: () => void,
+    options?: UseTabDragSourceOptions
+  ): TabDragSourceProps {
+    if (!payload) {
+      return { draggable: false };
+    }
+    return {
+      draggable: true,
+      onDragStart: (event) => {
+        event.dataTransfer.setData(TAB_DRAG_DATA_TYPE, JSON.stringify(payload));
+        event.dataTransfer.effectAllowed = 'move';
+        if (options?.getDragImage) {
+          const result = options.getDragImage();
+          if (result) {
+            event.dataTransfer.setDragImage(result.element, result.offsetX, result.offsetY);
+          }
+        }
+        beginDrag(payload);
+      },
+      onDragEnd: () => {
+        endDrag();
+      },
+    };
+  }
+
+  /**
+   * Hook variant for single-source consumers (one draggable element per
+   * component). Calls useContext internally. For dynamic-length tab
+   * lists, use `useTabDragSourceFactory` instead.
+   */
+  export function useTabDragSource(
+    payload: TabDragPayload | null,
+    options?: UseTabDragSourceOptions
+  ): TabDragSourceProps {
+    const { beginDrag, endDrag } = useContext(TabDragContext);
+    return createTabDragSourceProps(payload, beginDrag, endDrag, options);
+  }
+
+  /**
+   * Hook variant for consumers that render an unbounded number of
+   * draggable tabs. Calls useContext exactly once, then returns a plain
+   * factory the consumer calls per tab during render. The returned
+   * factory closes over the current context values, so it's safe to
+   * call inside `.map()` without violating the rules of hooks.
+   *
+   * Typical usage:
+   *
+   *   const makeDragSource = useTabDragSourceFactory();
+   *   const tabDescriptors = tabs.map((tab) => ({
+   *     id: tab.id,
+   *     label: tab.label,
+   *     extraProps: makeDragSource({ kind: 'cluster-tab', clusterId: tab.id }),
+   *   }));
+   */
+  export function useTabDragSourceFactory(): (
+    payload: TabDragPayload | null,
+    options?: UseTabDragSourceOptions
+  ) => TabDragSourceProps {
+    const { beginDrag, endDrag } = useContext(TabDragContext);
+    return (payload, options) =>
+      createTabDragSourceProps(payload, beginDrag, endDrag, options);
+  }
+  ```
+
+- [ ] **Step 4: Update the barrel export.**
+
+  In `frontend/src/shared/components/tabs/dragCoordinator/index.ts`, add exports for the new names:
+
+  ```tsx
+  export {
+    useTabDragSource,
+    useTabDragSourceFactory,
+    createTabDragSourceProps,
+    type UseTabDragSourceOptions,
+    type TabDragSourceProps,
+  } from './useTabDragSource';
+  ```
+
+- [ ] **Step 5: Run the tests.**
+
+  Run: `./node_modules/.bin/vitest run src/shared/components/tabs/dragCoordinator/`
+
+  Expected: all existing drag-coordinator tests pass plus the new one.
+
+- [ ] **Step 6: Update the design doc.**
+
+  In `docs/plans/shared-tabs-component-design.md`, add a note under the drag coordinator section explaining the two hook variants and when to use each. Link the factory variant to the consumer migration sections below.
+
+- [ ] **Step 7:** Report task complete and wait for user review.
+
+---
+
 ### Task 2: Add `closeIcon` and `closeAriaLabel` to `TabDescriptor`
 
 **Why:** Cluster tabs and dockable tabs both render a close button with a small SVG close icon (`<CloseIcon width={10} height={10} />`) plus a per-tab aria label like `"Close ${tabLabel}"`. The shared `<Tabs>` currently hardcodes a plain `×` text character and `aria-label="Close"`. Migrating without these additions would downgrade both the visual and the screen-reader experience. Both fields are per-tab options on `TabDescriptor`.
@@ -295,6 +631,65 @@ This prop lets those consumers opt OUT of roving tabindex, forcing every tab to 
   In `docs/plans/shared-tabs-component-design.md`, add `closeIcon?: ReactNode` and `closeAriaLabel?: string` to the `TabDescriptor` block with the same descriptions as above.
 
 - [ ] **Step 7:** Report task complete and wait for user review.
+
+---
+
+### Task 2b: Mount `TabDragProvider` at the app root
+
+**Why:** Both drag-capable consumers (`ClusterTabs` and `DockableTabBar`) need to call `useTabDragSourceFactory` and `useTabDropTarget`, which read from `TabDragContext`. That context is supplied by `<TabDragProvider>`. Today the app tree has:
+
+```
+<DockablePanelProvider>        (App.tsx:256)
+  <AppContent>
+    <AppLayout>
+      <ClusterTabs />           (AppLayout.tsx:182)
+      <main>...dockable panels...</main>
+    </AppLayout>
+  </AppContent>
+</DockablePanelProvider>
+```
+
+`ClusterTabs` is rendered INSIDE the `DockablePanelProvider` subtree, not outside it. That means a single `TabDragProvider` placed high enough in `App.tsx` covers both consumers — there's no need for either consumer to wrap its own local scope. Doing so would create nested providers (inner one shadowing the outer) and pointlessly split the drag state into isolated coordinator scopes.
+
+The provider is fully inert when no consumers use it — it just sets up context state (useState, useRef, useCallback) and does not attach any document listeners unless an `onTearOff` prop is passed. Mounting it early in the migration is safe: it does nothing until Tasks 7 and 8 actually call the hooks.
+
+**Files:**
+- Modify: `frontend/src/App.tsx`
+
+- [ ] **Step 1: Mount the provider around `DockablePanelProvider`.**
+
+  In `frontend/src/App.tsx` around line 256, add the import and wrap:
+
+  ```tsx
+  import { TabDragProvider } from '@shared/components/tabs/dragCoordinator';
+
+  // ... inside the provider tree ...
+  <FavoritesProvider>
+    <TabDragProvider>
+      <DockablePanelProvider>
+        <AppContent />
+      </DockablePanelProvider>
+    </TabDragProvider>
+  </FavoritesProvider>
+  ```
+
+  Place `TabDragProvider` OUTSIDE `DockablePanelProvider` rather than inside. `DockablePanelProvider` doesn't need to read `TabDragContext` itself (only its `DockableTabBar` descendants do in Task 8), and keeping the drag provider as an outer wrapper makes the intent clearer: drag coordination is app-wide infrastructure, not dockable-specific.
+
+- [ ] **Step 2: Run tests.**
+
+  ```bash
+  cd /Volumes/git/luxury-yacht/app/frontend
+  ./node_modules/.bin/tsc --noEmit --project .
+  ./node_modules/.bin/vitest run
+  ```
+
+  Expected: clean. The new provider is inert — nothing should regress.
+
+- [ ] **Step 3: Manual smoke test.**
+
+  Boot the app (`mage run`). Verify nothing visibly changed. Cluster tabs, dockable panels, and object panels should behave exactly as before (all drag still goes through the legacy code paths since no consumer has migrated yet).
+
+- [ ] **Step 4:** Report task complete and wait for user review.
 
 ---
 
@@ -699,32 +1094,10 @@ First drag-capable consumer. `ClusterTabs.tsx` is 347 lines. Responsibilities:
 - Modify: `frontend/src/ui/layout/ClusterTabs.tsx`
 - Modify: `frontend/src/ui/layout/ClusterTabs.css`
 - Modify: `frontend/src/ui/layout/ClusterTabs.test.tsx`
-- Modify: top-level layout where `ClusterTabs` is mounted (add `TabDragProvider` scope)
 
-- [ ] **Step 1: Locate the `ClusterTabs` mount point and confirm the `TabDragProvider` is in scope.**
+> **Provider scope:** Task 2b already mounted a single app-root `<TabDragProvider>` in `App.tsx` that wraps `DockablePanelProvider`. `ClusterTabs` is rendered inside that subtree (`AppLayout.tsx:182` → inside `DockablePanelProvider` → inside `TabDragProvider`), so its hooks find the context automatically. **Do NOT add a local `<TabDragProvider>` wrapper inside `ClusterTabs.tsx` or around its mount point** — that would create a nested provider scope that shadows the app-root one and silently splits drag state across contexts.
 
-  The shared drag coordinator requires a `TabDragProvider` context. `DockablePanelProvider` already supplies its own — but `ClusterTabs` sits OUTSIDE the dockable panel layer in the layout hierarchy. It needs its own provider.
-
-  Find where `<ClusterTabs />` is rendered (likely `frontend/src/ui/layout/MainLayout.tsx` or similar). Grep:
-
-  ```bash
-  grep -rn "ClusterTabs" /Volumes/git/luxury-yacht/app/frontend/src --include="*.tsx" | grep -v ClusterTabs.test
-  ```
-
-  In the parent component that renders `<ClusterTabs />`, wrap it:
-
-  ```tsx
-  import { TabDragProvider } from '@shared/components/tabs/dragCoordinator';
-
-  // ... inside the layout JSX ...
-  <TabDragProvider>
-    <ClusterTabs />
-  </TabDragProvider>
-  ```
-
-  Note: once the Dockable migration happens (Consumer 4), the top-level app will need a single `TabDragProvider` that wraps everything. For now, the Cluster and Dockable providers are separate scopes. This is acceptable because the discriminated payload types prevent cross-scope drops by construction.
-
-- [ ] **Step 2: Read the existing `ClusterTabs.test.tsx`.**
+- [ ] **Step 1: Read the existing `ClusterTabs.test.tsx`.**
 
   Note every assertion — these are the behaviors that must still work post-migration. Key areas:
   - Drag-and-drop reorder persistence
@@ -732,7 +1105,7 @@ First drag-capable consumer. `ClusterTabs.tsx` is 347 lines. Responsibilities:
   - Conditional rendering (`< 2` tabs → null)
   - Label rendering (with collision fallback)
 
-- [ ] **Step 3: Rewrite the `ClusterTabs` component body.**
+- [ ] **Step 2: Rewrite the `ClusterTabs` component body.**
 
   The new component retains almost all of its current logic — state, persistence, label computation, close-with-modal, height observer — but replaces the render body with a `<Tabs>` call wired through the drag coordinator. Here's the target shape (read in full before editing):
 
@@ -754,13 +1127,18 @@ First drag-capable consumer. `ClusterTabs.tsx` is 347 lines. Responsibilities:
   import { CloseIcon } from '@shared/components/icons/MenuIcons';
   import { Tabs, type TabDescriptor } from '@shared/components/tabs';
   import {
-    useTabDragSource,
+    useTabDragSourceFactory,
     useTabDropTarget,
   } from '@shared/components/tabs/dragCoordinator';
   import './ClusterTabs.css';
 
   // ... ordersMatch helper stays unchanged ...
-  // ... moveTab helper stays unchanged ...
+  // NOTE: the legacy `moveTab(order, sourceId, targetId)` helper is
+  // DELETED as part of this migration. The shared drop target gives us
+  // an `insertIndex`, not a target id, and the two don't round-trip
+  // correctly (moveTab splices at target's ORIGINAL index in the
+  // reduced array, which shifts source one position too far for forward
+  // drags). The onDrop handler below does the reorder directly.
 
   type ClusterTab = {
     id: string;
@@ -768,65 +1146,56 @@ First drag-capable consumer. `ClusterTabs.tsx` is 347 lines. Responsibilities:
     selection: string;
   };
 
-  // Max slots to unroll — the rules of hooks forbid calling hooks inside
-  // .map(), so we unroll a fixed number of useTabDragSource calls. 16 is
-  // generous enough for typical usage (no user opens more than 16
-  // kubeconfig contexts at once); the overflow chevrons handle the rare
-  // case of more.
-  const MAX_CLUSTER_TAB_SLOTS = 16;
-
   const ClusterTabs: React.FC = () => {
     // ... existing state / refs / effects unchanged through `orderedTabs` ...
 
-    // Replace the old drag handlers with the shared drag coordinator.
-    // Each slot binds to the CURRENT tab at that index so payloads stay
-    // in sync after reorders. Unused slots pass null (safely disabled).
-    const dragSlots: (TabDescriptor['extraProps'] | undefined)[] = [];
-    for (let i = 0; i < MAX_CLUSTER_TAB_SLOTS; i += 1) {
-      const tab = orderedTabs[i];
-      // eslint-disable-next-line react-hooks/rules-of-hooks
-      const slotProps = useTabDragSource(
-        tab ? { kind: 'cluster-tab', clusterId: tab.id } : null
-      );
-      dragSlots.push(slotProps);
-    }
+    // One useContext call for the entire drag coordinator, regardless
+    // of how many tabs are rendered. The returned factory is a plain
+    // function that's legal to call inside `.map()` — no rules-of-hooks
+    // workaround and no upper bound on the number of draggable tabs.
+    const makeDragSource = useTabDragSourceFactory();
 
     const { ref: dropRef, dropInsertIndex } = useTabDropTarget({
       accepts: ['cluster-tab'],
       onDrop: (payload, _event, insertIndex) => {
-        // Reuse the existing moveTab() helper to compute the next order.
-        // moveTab takes (order, sourceId, targetId) — but our new onDrop
-        // gives us an insert index, not a target id. Convert: the target
-        // id is the one CURRENTLY at `insertIndex` in mergedOrder. Fall
-        // back to the last id when inserting at the end.
-        const sourceId = payload.clusterId;
-        const targetId =
-          mergedOrder[Math.min(insertIndex, mergedOrder.length - 1)] ?? sourceId;
-        if (sourceId === targetId) return;
-        const nextOrder = moveTab(mergedOrder, sourceId, targetId);
+        // Reorder directly against insertIndex. DO NOT try to reuse the
+        // legacy `moveTab(sourceId, targetId)` helper — it takes a target
+        // id and splices at the target's ORIGINAL index in the reduced
+        // array, which produces off-by-one results for forward drags
+        // (source always lands one position past the intended spot
+        // because removing source shifts subsequent elements left).
+        //
+        // The shift compensation below is the only subtlety: when source
+        // is before the insert index, removing it bumps every later
+        // position down by 1, so the effective destination is
+        // insertIndex - 1. When source is at or after the insert index,
+        // no shift is needed.
+        const sourceIdx = mergedOrder.indexOf(payload.clusterId);
+        if (sourceIdx < 0) return;
+        const adjustedInsert = sourceIdx < insertIndex ? insertIndex - 1 : insertIndex;
+        if (adjustedInsert === sourceIdx) return; // no-op drop onto itself
+        const nextOrder = [...mergedOrder];
+        nextOrder.splice(sourceIdx, 1);
+        nextOrder.splice(adjustedInsert, 0, payload.clusterId);
         if (!ordersMatch(nextOrder, mergedOrder)) {
           setClusterTabOrder(nextOrder);
         }
       },
     });
 
-    const tabDescriptors: TabDescriptor[] = useMemo(
-      () =>
-        orderedTabs.map((tab, i) => ({
-          id: tab.id,
-          label: tab.label,
-          closeIcon: <CloseIcon width={10} height={10} />,
-          closeAriaLabel: `Close ${tab.label}`,
-          onClose: () => {
-            void handleCloseTab(tab.selection);
-          },
-          extraProps: {
-            title: tab.label, // tooltip for full text when truncated
-            ...dragSlots[i],
-          } as HTMLAttributes<HTMLElement>,
-        })),
-      [orderedTabs, dragSlots, handleCloseTab]
-    );
+    const tabDescriptors: TabDescriptor[] = orderedTabs.map((tab) => ({
+      id: tab.id,
+      label: tab.label,
+      closeIcon: <CloseIcon width={10} height={10} />,
+      closeAriaLabel: `Close ${tab.label}`,
+      onClose: () => {
+        void handleCloseTab(tab.selection);
+      },
+      extraProps: {
+        title: tab.label, // tooltip for full text when truncated
+        ...makeDragSource({ kind: 'cluster-tab', clusterId: tab.id }),
+      } as HTMLAttributes<HTMLElement>,
+    }));
 
     // ... existing height-observer effect unchanged ...
 
@@ -870,13 +1239,13 @@ First drag-capable consumer. `ClusterTabs.tsx` is 347 lines. Responsibilities:
   ```
 
   **Critical notes for the implementer:**
-  - The `useTabDragSource` loop at `MAX_CLUSTER_TAB_SLOTS` fixed iterations is a rules-of-hooks workaround. The ESLint disable comment is intentional — the loop iteration count is a compile-time constant, so hook order is stable across renders. This pattern mirrors the Phase 1 preview stories.
-  - `moveTab` takes `(order, sourceId, targetId)` — the shared drop target gives us an `insertIndex`. Convert by looking up `mergedOrder[insertIndex]` to get the target id, as shown above.
+  - **`useTabDragSourceFactory` is the only supported pattern** for building per-tab drag props on a dynamic-length tab list. Do NOT unroll `useTabDragSource` calls for a fixed number of slots — that artificially caps the number of draggable tabs, which is a production regression. The factory returns a plain function the consumer calls inside `.map()`; one `useContext` call serves any number of tabs.
+  - **Delete** the legacy `moveTab(order, sourceId, targetId)` helper entirely. Do NOT try to convert `insertIndex` back into a `targetId` and call it — the semantics don't round-trip (source lands one position too far right for forward drags because `moveTab` splices at the target's original index in the reduced array). The onDrop handler above does the reorder directly with a shift-compensation (`sourceIdx < insertIndex ? insertIndex - 1 : insertIndex`) that is correct for every source / insert index combination.
   - The `cluster-tabs-wrapper` class is a new wrapper div; the `.cluster-tabs` class now sits on the shared component's root via `className`. Check existing CSS rules below.
   - Keep the existing `handleCloseTab` / `handleConfirmClose` / port-forward modal logic unchanged.
   - Keep the existing height-observer effect unchanged — it reads `tabsRef.current?.getBoundingClientRect().height`, and `tabsRef` still points to the outer wrapper div.
 
-- [ ] **Step 4: Update `ClusterTabs.css`.**
+- [ ] **Step 3: Update `ClusterTabs.css`.**
 
   Current file is 19 lines. The `.cluster-tabs { padding: 0 6px; overflow-x: auto; grid-column: 1/-1; grid-row: 2 }` rule targets the strip element; the grid positioning still applies via the shared component's root element (which gets the `cluster-tabs` class via the new `className` prop). The `overflow-x: auto` is a duplicate — the shared component already handles overflow — but it's harmless to keep.
 
@@ -895,7 +1264,7 @@ First drag-capable consumer. `ClusterTabs.tsx` is 347 lines. Responsibilities:
   }
   ```
 
-- [ ] **Step 5: Update tests.**
+- [ ] **Step 4: Update tests.**
 
   Walk each assertion in `ClusterTabs.test.tsx`:
   - Queries by `<button>` → `[role="tab"]` (shared component uses `<div role="tab">`)
@@ -904,13 +1273,13 @@ First drag-capable consumer. `ClusterTabs.tsx` is 347 lines. Responsibilities:
   - Close-with-modal assertions unchanged.
   - Conditional-rendering assertion (`< 2` tabs → null) unchanged.
 
-- [ ] **Step 6: Run the tests.**
+- [ ] **Step 5: Run the tests.**
 
   Run: `./node_modules/.bin/vitest run src/ui/layout/`
 
   Expected: all tests pass.
 
-- [ ] **Step 7: Manual smoke test.**
+- [ ] **Step 6: Manual smoke test.**
 
   Open the app with 3+ kubeconfigs selected. Verify:
   - Strip appears only when ≥ 2 contexts are open
@@ -922,19 +1291,19 @@ First drag-capable consumer. `ClusterTabs.tsx` is 347 lines. Responsibilities:
   - `--cluster-tabs-height` CSS variable is set (check in devtools; dockable panels should still respect the offset)
   - Keyboard: Tab key reaches the active tab, arrow keys move focus between tabs, Enter activates
 
-- [ ] **Step 8:** Report task complete and wait for user review.
+- [ ] **Step 7:** Report task complete and wait for user review.
 
 ---
 
 ## Consumer 4: DockableTabBar
 
-The largest and most complex consumer. `DockableTabBar.tsx` is 413 lines. `DockablePanelProvider.tsx` is 812 lines and owns the floating drag-preview element that tracks the cursor during a dockable tab drag.
+The largest and most complex consumer. `DockableTabBar.tsx` is 413 lines. `DockablePanelProvider.tsx` is 812 lines and — in the current pre-migration code — owns a custom floating drag-preview element that tracks the cursor via pointermove-updated CSS custom properties. **Per `design.md:28` (Compromises taken), the live cursor-following preview is explicitly dropped as part of Phase 2.** The replacement is a static `event.dataTransfer.setDragImage()` snapshot taken once at dragstart — identical in visual styling but positioned by the browser's native drag-image rendering, not by the provider. The Phase 1 `ObjectTabsPreview` story already demonstrates this approach end-to-end and is the implementation reference for Task 9.
 
 **Migration is split into three sub-tasks** because this consumer has three distinct responsibilities:
 
 1. **Task 8** — `DockableTabBar.tsx` renders the tab strip. Migrate rendering (shared `<Tabs>`), drag reorder within strip, overflow scrolling. Delete dead `.dockable-tab-bar__overflow-*` CSS.
-2. **Task 9** — `DockablePanelProvider.tsx` owns cross-strip drag coordination and the floating drag preview. Migrate to use `TabDragProvider` + the shared drop target for cross-strip moves. Keep the floating-preview element since it tracks the cursor via CSS vars (distinct from the shared `setDragImage` approach).
-3. **Task 10** — Delete dead CSS from `DockablePanel.css`. Update the Phase 1 preview stories to import from the real file locations (they already do). Clean up `registerTabBarElement` if it's no longer needed.
+2. **Task 9** — `DockablePanelProvider.tsx` owns cross-strip drag coordination and the floating-group undock feature. Add two thin adapter methods on the context value: `movePanel(panelId, sourceGroupId, targetGroupId, insertIndex)` (dispatches between the existing `reorderTabInGroup` and `movePanelBetweenGroups` based on whether source and target match), and `createFloatingGroupWithPanel(panelId, sourceGroupId, cursorPos)` (wraps the existing `movePanelBetweenGroups(panelId, 'floating')` + `setPanelFloatingPositionById(...)` calls). Add a container-level `useTabDropTarget` that calls `createFloatingGroupWithPanel` on drop — this is the explicit empty-space-to-floating-group target required by `design.md:393`, replacing the legacy gesture-based undock. **Delete** the live cursor-following preview machinery (`startTabDrag`, pointermove listeners, `--dockable-tab-drag-x` / `--dockable-tab-drag-y` CSS vars), the legacy mousemove drag handler, the `dragState` machine, the `tabBarElementsRef` registry, and the `UNDOCK_THRESHOLD` constant. Mount a static preview element always in the DOM (offscreen by default), have `DockableTabBar`'s `getDragImage` write per-tab content into it before handing it to `setDragImage`, and let the browser render it at the cursor during drag. `TabDragProvider` is already in scope from Task 2b — Task 9 does NOT add another provider wrapper inside `DockablePanelProvider`.
+3. **Task 10** — Delete dead CSS from `DockablePanel.css`, including the `--dockable-tab-drag-x` / `--dockable-tab-drag-y` custom properties and the `transform: translate3d(var(...), var(...), 0)` rule that relied on them. (The `tabBarElementsRef` / `registerTabBarElement` registry is deleted in Task 9 Step 4, not here — by the time Task 10 runs there are no references left to clean up.)
 
 **Files to read before starting:**
 - `frontend/src/ui/dockable/DockableTabBar.tsx` (full — 413 lines)
@@ -958,37 +1327,38 @@ The largest and most complex consumer. `DockableTabBar.tsx` is 413 lines. `Docka
 - Overflow scrolling with the per-tab navigation algorithm (already in shared component)
 - Within-strip drag reorder
 - Cross-strip drop target (via `useTabDropTarget`, payload = `dockable-tab`)
-- `registerTabBarElement(groupKey, element)` provider registration (provider still needs to know which bar maps to which group for some reveal-on-activation logic — check by grepping `registerTabBarElement` usage)
-- `data-group-key` attribute on the bar (used by the provider for drag-over detection at the bar level)
 - Active tab reveal: when `activeTab` changes, scroll it into view (already in shared component via auto-scroll effect)
 
+**Behaviors DELETED (do NOT preserve):**
+- `registerTabBarElement(groupKey, barRef.current)` useEffect registration. The provider's `tabBarElementsRef` registry has exactly one reader — the mousemove-based undock detection inside the legacy drag-state machine at `DockablePanelProvider.tsx:608`. Task 9 deletes that legacy machine (along with `dragState`, `startTabDrag`, the mousemove listener, and the undock-threshold logic). Once Task 9 runs, the registry has zero readers and `registerTabBarElement` becomes dead code. Task 8 MUST delete the useEffect from `DockableTabBar.tsx:56-61` as part of this migration — preserving it would leave a dangling write to a registry nothing ever reads and would couple the new tab-bar component to soon-to-be-deleted provider infrastructure.
+- `data-group-key` attribute on the bar root. Its only consumer today is the same legacy mousemove handler that reads `tabBarElementsRef` to figure out which group the cursor is hovering. `useTabDropTarget` handles drop detection via native HTML5 drag events, which don't need a `data-group-key` lookup — the `onDrop` handler in the template below forwards the event directly to `movePanel(payload.panelId, payload.sourceGroupId, groupKey, insertIndex)` using the `groupKey` prop, closing over it via closure. No DOM attribute needed.
+
 **Behaviors that change:**
-- The floating `.dockable-tab-drag-preview` element stays in the provider (Task 9), but the tab bar's `getDragImage` calls into it. In the shared coordinator, `useTabDragSource` accepts a `getDragImage` option — that's how we hand off to the provider's preview element.
+- The `.dockable-tab-drag-preview` element stays in the provider (Task 9), but its cursor-tracking **mechanism changes**. Current live code updates `--dockable-tab-drag-x` / `--dockable-tab-drag-y` CSS custom properties on pointer move and re-renders the element via `transform: translate3d(...)`. Per the design doc, this is **dropped** — the replacement is a single `event.dataTransfer.setDragImage(element, offsetX, offsetY)` call at dragstart, and the browser handles cursor positioning natively from there. The tab bar's `getDragImage` option (passed through `useTabDragSourceFactory`) updates the element's label + kind class synchronously before the browser screenshots it. No more pointermove machinery.
 - Drag-state visuals (`.dockable-tab--dragging`) → the shared component applies `.tab-item` base; the dragging class can be kept via `extraProps` conditionally. OR: accept the visual simplification (no extra opacity for the dragged source — the drag image already provides enough feedback).
 
-- [ ] **Step 1: Read both tests in full.** Note assertions around drag events, overflow chevron behavior, and the `data-group-key` attribute. Every assertion is a behavior to preserve.
+- [ ] **Step 1: Read both tests in full.** Note assertions around drag events and overflow chevron behavior — those are behaviors to preserve. Assertions that query by `.dockable-tab` or `data-group-key`, or that call `registerTabBarElement` to set up fixtures, will need to change: the DOM markup moves to `[role="tab"]` and the `data-group-key` attribute + `registerTabBarElement` registry are both deleted as part of this task (see Step 2) and Task 9. Do NOT treat those fixture-setup patterns as behaviors to preserve.
 
-- [ ] **Step 2: Rewrite the component body.** Replace the current 413-line component with a ~150-line shared-component-backed version. Key structural changes:
+- [ ] **Step 2: Rewrite the component body.** Replace the current 413-line component with a ~120-line shared-component-backed version. Key structural changes:
   - Delete the custom overflow measurement effect, `overflowHint` state, `scrollToNextTab`, `scrollLeft`/`scrollRight` click handlers, `updateOverflowHint` — all handled by `<Tabs>`.
   - Delete the `handleBarMouseDown`/`handleOverflowMouseDown` stopPropagation glue — no longer needed (shared component doesn't fire mousedown on drag).
+  - Delete the `registerTabBarElement(groupKey, barRef.current)` useEffect. Its only purpose was to feed the legacy provider registry that Task 9 deletes.
+  - Delete the `data-group-key` attribute on the bar root. Its only reader was the same legacy registry. The `groupKey` prop is still available via closure in the `onDrop` handler below, so drop routing works without any DOM-attribute lookup.
   - Replace the per-tab `<div role="tab">` JSX with a `TabDescriptor[]` built via `tabs.map(...)` and passed to `<Tabs>`.
-  - Replace the per-tab `onDragStart/onDragEnd/onDragEnter/onDragOver/onDrop` handlers with `useTabDragSource` (per slot, unrolled like in `ObjectTabsPreview.stories.tsx`).
+  - Replace the per-tab `onDragStart/onDragEnd/onDragEnter/onDragOver/onDrop` handlers with a single `useTabDragSourceFactory()` call at the top of the component, then invoke the returned factory inside the tab `.map()` to produce each tab's drag source props. No unrolling, no tab-count cap.
   - Replace the per-tab drop target with `useTabDropTarget` at the bar level.
-  - Keep `registerTabBarElement(groupKey, barRef.current)` call — it's needed by the provider for its own tracking.
-  - Keep the `data-group-key` attribute on the bar root via `className` or via a ref-callback that sets the attribute post-mount. Actually: the shared `<Tabs>` supports `className` but not arbitrary root-level data attributes. **Add a `rootExtraProps?: HTMLAttributes<HTMLDivElement>` prop to `<Tabs>` if needed** — OR, the simpler path, wrap the shared `<Tabs>` in a `<div className="dockable-tab-bar-shell" data-group-key={groupKey}>` and let the provider's query selectors target the wrapper. The wrapper pattern is cleaner.
 
   **Template** (read fully, then adapt):
 
   ```tsx
-  import React, { useCallback, useMemo, useRef } from 'react';
+  import React from 'react';
   import { Tabs, type TabDescriptor } from '@shared/components/tabs';
-  import { useTabDragSource, useTabDropTarget } from '@shared/components/tabs/dragCoordinator';
+  import {
+    useTabDragSourceFactory,
+    useTabDropTarget,
+  } from '@shared/components/tabs/dragCoordinator';
   import { CloseIcon } from '@shared/components/icons/MenuIcons';
   import { useDockablePanelContext } from './DockablePanelContext';
-
-  // 16-tab max per bar — more than any realistic user scenario. The rest
-  // scroll via the shared overflow chevrons.
-  const MAX_DOCKABLE_TAB_SLOTS = 16;
 
   interface DockableTab {
     panelId: string;
@@ -1011,36 +1381,39 @@ The largest and most complex consumer. `DockableTabBar.tsx` is 413 lines. `Docka
     onTabClick,
     closeTab,
   }) => {
-    const { registerTabBarElement, dragPreviewRef } = useDockablePanelContext();
-    const shellRef = useRef<HTMLDivElement | null>(null);
+    // Only `dragPreviewRef` (for getDragImage) and `movePanel` (for
+    // onDrop) are read from the provider. `registerTabBarElement` is
+    // intentionally NOT destructured here — Task 9 deletes it along with
+    // the legacy drag-state machine that was its only reader.
+    const { dragPreviewRef, movePanel } = useDockablePanelContext();
 
-    // Register/unregister the bar with the provider so cross-strip drag
-    // detection can find it by groupKey.
-    const assignShellRef = useCallback(
-      (el: HTMLDivElement | null) => {
-        shellRef.current = el;
-        registerTabBarElement(groupKey, el);
+    // One useContext call for the whole bar, regardless of tab count.
+    // The returned factory is a plain function called per tab inside
+    // .map() — no rules-of-hooks workaround, no upper limit on tabs.
+    const makeDragSource = useTabDragSourceFactory();
+
+    const { ref: dropRef, dropInsertIndex } = useTabDropTarget({
+      accepts: ['dockable-tab'],
+      onDrop: (payload, _event, insertIndex) => {
+        // Forward to the provider's `movePanel` adapter (added in Task 9
+        // Step 4). The adapter dispatches internally between the
+        // existing `reorderTabInGroup` and `movePanelBetweenGroups`
+        // functions based on whether source and target groups match, so
+        // this single call handles BOTH within-strip reorder and
+        // cross-strip moves.
+        movePanel(payload.panelId, payload.sourceGroupId, groupKey, insertIndex);
       },
-      [groupKey, registerTabBarElement]
-    );
+    });
 
-    // Unrolled drag sources. Each slot's getDragImage hands off to the
-    // provider's floating preview element (which tracks the cursor via
-    // CSS vars updated by the provider during drag).
-    const dragSlots: (TabDescriptor['extraProps'] | undefined)[] = [];
-    for (let i = 0; i < MAX_DOCKABLE_TAB_SLOTS; i += 1) {
-      const tab = tabs[i];
-      // eslint-disable-next-line react-hooks/rules-of-hooks
-      const slotProps = useTabDragSource(
-        tab
-          ? { kind: 'dockable-tab', panelId: tab.panelId, sourceGroupId: groupKey }
-          : null,
+    const tabDescriptors: TabDescriptor[] = tabs.map((tab) => {
+      // Build a per-tab drag source via the factory. getDragImage writes
+      // the tab's label + kind class into the provider's floating
+      // preview element BEFORE setDragImage takes the screenshot.
+      const dragProps = makeDragSource(
+        { kind: 'dockable-tab', panelId: tab.panelId, sourceGroupId: groupKey },
         {
           getDragImage: () => {
-            if (!tab || !dragPreviewRef.current) return null;
-            // Update the preview element's label span and kind class
-            // BEFORE setDragImage is called. See DockablePanelProvider
-            // for how the element is rendered.
+            if (!dragPreviewRef.current) return null;
             const labelEl = dragPreviewRef.current.querySelector<HTMLSpanElement>(
               '.dockable-tab-drag-preview__label'
             );
@@ -1048,59 +1421,36 @@ The largest and most complex consumer. `DockableTabBar.tsx` is 413 lines. `Docka
             const kindEl = dragPreviewRef.current.querySelector<HTMLSpanElement>(
               '.dockable-tab-drag-preview__kind'
             );
-            if (kindEl && tab.kindClass) {
-              kindEl.className = `dockable-tab-drag-preview__kind kind-badge ${tab.kindClass}`;
+            if (kindEl) {
+              kindEl.className = `dockable-tab-drag-preview__kind kind-badge${
+                tab.kindClass ? ` ${tab.kindClass}` : ''
+              }`;
             }
             return { element: dragPreviewRef.current, offsetX: 14, offsetY: 16 };
           },
         }
       );
-      dragSlots.push(slotProps);
-    }
-
-    const { ref: dropRef, dropInsertIndex } = useTabDropTarget({
-      accepts: ['dockable-tab'],
-      onDrop: (payload, _event, insertIndex) => {
-        // Delegate to the provider's cross-strip move handler — see the
-        // `movePanel` method it exposes via context. Handles BOTH
-        // within-strip reorder (source === target) and cross-strip moves.
-        // The provider owns the state, so the bar just forwards the intent.
-        const { movePanel } = useDockablePanelContext();
-        movePanel(payload.panelId, payload.sourceGroupId, groupKey, insertIndex);
-      },
+      return {
+        id: tab.panelId,
+        label: tab.title,
+        leading: tab.kindClass ? (
+          <span
+            className={`dockable-tab__kind-indicator kind-badge ${tab.kindClass}`}
+            aria-hidden="true"
+          />
+        ) : undefined,
+        closeIcon: <CloseIcon width={10} height={10} />,
+        closeAriaLabel: `Close ${tab.title}`,
+        onClose: () => closeTab(tab.panelId),
+        extraProps: {
+          'data-panel-id': tab.panelId,
+          ...dragProps,
+        } as HTMLAttributes<HTMLElement>,
+      };
     });
 
-    const tabDescriptors: TabDescriptor[] = useMemo(
-      () =>
-        tabs.map((tab, i) => ({
-          id: tab.panelId,
-          label: tab.title,
-          leading: tab.kindClass ? (
-            <span
-              className={`dockable-tab__kind-indicator kind-badge ${tab.kindClass}`}
-              aria-hidden="true"
-            />
-          ) : undefined,
-          closeIcon: <CloseIcon width={10} height={10} />,
-          closeAriaLabel: `Close ${tab.title}`,
-          onClose: () => closeTab(tab.panelId),
-          extraProps: {
-            'data-panel-id': tab.panelId,
-            ...dragSlots[i],
-          } as HTMLAttributes<HTMLElement>,
-        })),
-      [tabs, dragSlots, closeTab]
-    );
-
     return (
-      <div
-        ref={(el) => {
-          assignShellRef(el);
-          dropRef(el);
-        }}
-        className="dockable-tab-bar-shell"
-        data-group-key={groupKey}
-      >
+      <div ref={dropRef as (el: HTMLDivElement | null) => void} className="dockable-tab-bar-shell">
         <Tabs
           aria-label="Object Tabs"
           tabs={tabDescriptors}
@@ -1117,15 +1467,9 @@ The largest and most complex consumer. `DockableTabBar.tsx` is 413 lines. `Docka
   ```
 
   **Gotchas for the implementer:**
-  - `useDockablePanelContext` is the hook that currently gives `registerTabBarElement`. Verify its current shape by reading `DockablePanelProvider.tsx`. If `movePanel` and `dragPreviewRef` aren't already exposed, add them in Task 9 BEFORE running Task 8's tests — the two tasks are interdependent.
-  - The example above CALLS `useDockablePanelContext()` inside `onDrop`, which is a rules-of-hooks violation (hooks inside callbacks). Fix by hoisting the context destructure:
-
-    ```tsx
-    const { registerTabBarElement, dragPreviewRef, movePanel } = useDockablePanelContext();
-    ```
-
-    at the top of the component, and reference `movePanel` from the closure.
-  - `registerTabBarElement` currently registers the BAR element (`barRef.current`), but here we register the SHELL element. Check whether the provider's consumers of the registered element care about the distinction (they probably use it for `bar.querySelector('[role="tab"]')` which works on either).
+  - `useDockablePanelContext` currently exposes `registerTabBarElement`, `dragState`, `startTabDrag`, etc. The Task 8 template only reads `dragPreviewRef` and `movePanel` — those two fields must exist on the context value. Task 9 adds `dragPreviewRef` and ensures `movePanel` stays exposed; the two tasks are interdependent, so do Task 9's Step 3 (extend the context type) BEFORE running Task 8's tests, OR run Tasks 8 and 9 as a single atomic commit.
+  - `useTabDragSourceFactory()` is called ONCE at the top of the component. The factory it returns is a plain function that's legal to call inside `.map()` — one call per tab to produce that tab's drag source props. No rules-of-hooks issue and no upper bound on tab count.
+  - The `groupKey` prop is read inside `onDrop` via closure — no DOM attribute is needed to route drops back to the correct group. Cross-strip moves work because the drop handler sees both `groupKey` (the target, from props) and `payload.sourceGroupId` (the source, from the dragged tab's payload) and forwards both to `movePanel`.
 
 - [ ] **Step 3: Update tests.** Drag tests that simulate raw `dragstart`/`drop` events on individual tabs still work — the shared drag coordinator uses the same native HTML5 drag API. Update queries from the old markup (`.dockable-tab`) to the new markup (`[role="tab"]`). Tests that assert on `.dockable-tab-bar__overflow-indicator` classes need to update to `.tab-strip__overflow-indicator`.
 
@@ -1142,121 +1486,307 @@ The largest and most complex consumer. `DockableTabBar.tsx` is 413 lines. `Docka
 - Modify: `frontend/src/ui/dockable/DockablePanelProvider.test.tsx`
 
 **What needs to happen:**
-The provider currently owns:
-1. A `dragState` state machine for cross-strip drag detection (bars registered via `registerTabBarElement`, cursor position tracked via pointer move)
-2. A floating `<div className="dockable-tab-drag-preview">` element that follows the cursor via CSS custom properties `--dockable-tab-drag-x` / `--dockable-tab-drag-y` updated on pointer move
-3. A `movePanel(panelId, sourceGroupId, targetGroupId, toIndex)` method (or equivalent)
-4. The `registerTabBarElement` registry so the provider knows which DOM element maps to which group
+The provider currently owns five distinct pieces of machinery. Phase 2 deletes two outright, transforms one, and adds two small adapters on top of the existing (preserved) state-mutation functions:
+
+1. A `dragState` state machine for cross-strip drag detection (bars registered via `registerTabBarElement`, cursor position tracked via pointer move) — **DELETED.** The shared `useTabDropTarget` handles drop detection via native HTML5 drag events, no custom hit-testing needed.
+2. A floating `<div className="dockable-tab-drag-preview">` element that follows the cursor via CSS custom properties `--dockable-tab-drag-x` / `--dockable-tab-drag-y` updated on pointer move — **live-tracking machinery DELETED** per `design.md:28`. The element itself STAYS (same markup, same inner spans, same visual styling) but becomes a static `setDragImage` snapshot source: mounted permanently in the DOM, positioned offscreen via default styling, updated by `getDragImage` callbacks immediately before the browser screenshots it at dragstart, and then positioned by the browser's native drag-image rendering during the drag. The `startTabDrag` / `endTabDrag` methods, the pointermove listener, and the CSS custom properties are all deleted.
+3. The **existing** panel-state mutation functions `reorderTabInGroup(groupKey, panelId, newIndex)` (at `DockablePanelProvider.tsx:483`), `movePanelBetweenGroups(panelId, targetGroupKey, insertIndex?)` (at `:489`), and `movePanelBetweenGroupsAndFocus(...)` are **ALL KEPT unchanged.** These are the authoritative panel-state mutators and the migration preserves them byte-for-byte. Task 9 adds a new thin **adapter** method on the context value — `movePanel(panelId, sourceGroupId, targetGroupId, insertIndex)` — that matches the `useTabDropTarget` `onDrop` callback shape (four args including the source group id from the drag payload) and internally dispatches to the appropriate existing function: same-group → `reorderTabInGroup`, cross-group → `movePanelBetweenGroups`. The adapter is the only new thing on the panel-state mutation side; no existing function is renamed or reshaped. The live code today has no `movePanel` field — the name is a clean slate.
+4. The `registerTabBarElement` registry (`tabBarElementsRef` + the `registerTabBarElement` setter) — **DELETED.** Its one reader (the mousemove handler at `DockablePanelProvider.tsx:608`) is part of the drag-state machine being removed in item 1. The current code has no non-drag consumers; `grep -rn "tabBarElementsRef\|registerTabBarElement" frontend/src` returns only writes in `DockableTabBar.tsx:56-61` (deleted by Task 8) and the reader in the about-to-be-deleted mousemove handler. No conditional — the registry is dead infrastructure and is removed outright.
+5. The **undock-to-floating-group** behavior currently implemented by the mousemove handler at `DockablePanelProvider.tsx:599-627` (which reads the source bar rect, checks if the cursor moved more than `UNDOCK_THRESHOLD` pixels away vertically, and then calls `movePanelBetweenGroups(panelId, 'floating')` + `setPanelFloatingPositionById(...)`) — the **gesture-based trigger is DELETED**, but the **feature is preserved and reimplemented** as an explicit empty-space drop target per `design.md:393`. Task 9 adds a second new adapter — `createFloatingGroupWithPanel(panelId, sourceGroupId, cursorPos)` — that wraps the existing `movePanelBetweenGroups(panelId, 'floating')` + `setPanelFloatingPositionById(panelId, { x, y })` calls into a single function, and a new container-level `useTabDropTarget` (acceptance list `['dockable-tab']`) that calls this adapter on drop. Native HTML5 drag events bubble, so a drop that lands inside a tab bar's drop target is handled there first; only drops that fall through to empty space reach the container target. The container target attaches to whatever DOM element currently wraps the dockable panel content area — see Step 5 below for identifying and instrumenting it.
+
+**Reference:** The Phase 1 preview story `ObjectTabsPreview.stories.tsx` already implements exactly the static-preview + factory-per-tab + empty-space drop zone shape — a permanently-mounted `.dockable-tab-drag-preview` element with a `getDragImage` that updates the label + kind class inside it, then returns it to `setDragImage`; and a `NewStripDropZone` that accepts dockable-tab drops outside the strip drop targets and spawns a new group. No CSS vars, no pointermove listener, no transform tracking. The story works correctly in every browser and demonstrates every piece of the target shape at once. Use it as the implementation template.
 
 **Migration strategy:**
-- Wrap the provider's children tree in `<TabDragProvider>` so `useTabDragSource` and `useTabDropTarget` inside `DockableTabBar` have a context.
-- KEEP the floating preview element — it provides cursor-tracking visual feedback that the shared `setDragImage` snapshot approach cannot (setDragImage takes a screenshot once at dragstart; it doesn't animate). The floating element is rendered independently and positioned via CSS vars on pointermove.
-- Expose `dragPreviewRef` via context so `DockableTabBar` can pass it to `setDragImage` at dragstart (the browser screenshots it there; between dragstart and drop the provider continues to update the CSS vars for the live "attached to cursor" effect).
-- Delete the old custom drag-state machine and `registerTabBarElement`-driven hit testing — the shared `useTabDropTarget` handles drop detection now.
-- `movePanel` stays in the provider, still exposed via context. `DockableTabBar`'s `onDrop` calls it.
-- `registerTabBarElement` can be removed IF nothing else uses it. Check with grep before deleting.
+- `TabDragProvider` is already in scope from Task 2b (mounted around `DockablePanelProvider` at the app root in `App.tsx`). Do NOT add another provider wrapper inside `DockablePanelProvider` — the existing one from Task 2b covers every `DockableTabBar` descendant and every `ClusterTabs` descendant in the same single context scope, which is what we want.
+- Mount the `.dockable-tab-drag-preview` element **permanently** (not conditionally on `dragState` — there's no `dragState` anymore). The element's CSS handles keeping it offscreen until it's screenshotted by the browser.
+- Expose `dragPreviewRef` via context so `DockableTabBar`'s per-tab `getDragImage` can write the tab's label + kind class into the element's inner spans before handing the element to `setDragImage`.
+- Add the `movePanel(panelId, sourceGroupId, targetGroupId, insertIndex)` adapter to the context value. It is NOT renaming or reshaping the existing `movePanelBetweenGroups` — it's a new thin wrapper that dispatches to the existing same-group (`reorderTabInGroup`) and cross-group (`movePanelBetweenGroups`) functions based on whether `sourceGroupId === targetGroupId`.
+- Add the `createFloatingGroupWithPanel(panelId, sourceGroupId, cursorPos)` adapter and a container-level empty-space drop target that calls it on drop. This preserves the undock-to-floating-group feature that the legacy mousemove handler provided, now keyed on an actual drop event on a container element rather than a cursor-distance gesture.
+- Delete `startTabDrag`, `endTabDrag`, the `dragState` state, the pointermove listener, the mousemove handler at `:599-627` (including its `UNDOCK_THRESHOLD` reference), the `tabBarElementsRef` registry, and `registerTabBarElement` (all dead once the legacy drag-state machine is removed — see Step 7 for the grep-verified zero-consumer proof). The `setDragImage` call inside `getDragImage` is the entire "start the drag visual" mechanism; the browser owns cursor-tracking from there.
+- Existing `reorderTabInGroup`, `movePanelBetweenGroups`, `movePanelBetweenGroupsAndFocus`, and `setPanelFloatingPositionById` stay in the provider unchanged. They're still exposed via context where applicable for non-migration callers (panel lifecycle, close button, etc.).
 
 - [ ] **Step 1: Read the full `DockablePanelProvider.tsx` file** and map current responsibilities.
 
-- [ ] **Step 2: Add `TabDragProvider` wrapping the rendered children.**
+- [ ] **Step 2: Mount the drag preview element permanently.**
 
-  Wrap the provider's returned JSX in `<TabDragProvider>`:
+  `TabDragProvider` is already in scope from Task 2b (it wraps `DockablePanelProvider` at the app root). Do NOT add another `<TabDragProvider>` here — it would create a nested scope that isolates cross-strip drag state inside this provider's subtree. Just mount `.dockable-tab-drag-preview` as an always-in-DOM element (no `dragState` conditional, no provider wrapping):
 
   ```tsx
-  import { TabDragProvider } from '@shared/components/tabs/dragCoordinator';
-
-  // ... inside the provider's return ...
+  // ... inside the provider's return, replacing the old conditional preview JSX ...
   return (
     <PanelLayoutStoreContext.Provider value={layoutStore}>
       <DockablePanelContext.Provider value={value}>
-        <TabDragProvider>
-          <DockablePanelHostContext.Provider value={hostNode}>
-            {children}
-            {dragState ? (
-              <div className="dockable-tab-drag-preview" aria-hidden="true">
-                {/* ... preview contents ... */}
-              </div>
-            ) : null}
-          </DockablePanelHostContext.Provider>
-        </TabDragProvider>
+        <DockablePanelHostContext.Provider value={hostNode}>
+          {children}
+          {/* Always mounted — the browser screenshots this element via
+              setDragImage at dragstart. Offscreen by default via CSS. */}
+          <div ref={dragPreviewRef} className="dockable-tab-drag-preview" aria-hidden="true">
+            <span
+              className="dockable-tab-drag-preview__kind kind-badge"
+              aria-hidden="true"
+            />
+            <span className="dockable-tab-drag-preview__label" />
+          </div>
+        </DockablePanelHostContext.Provider>
       </DockablePanelContext.Provider>
     </PanelLayoutStoreContext.Provider>
   );
   ```
 
-- [ ] **Step 3: Expose `dragPreviewRef` via context.**
+  The inner spans are empty placeholders; `DockableTabBar`'s per-tab `getDragImage` callback writes the actual label + kind class into them immediately before calling `setDragImage`. This mirrors the Phase 1 `ObjectTabsPreview` story's pattern exactly.
 
-  Add a `useRef<HTMLDivElement | null>(null)` at the top of the provider, ref the floating preview element to it, and include `dragPreviewRef` in the context value:
+- [ ] **Step 3: Expose `dragPreviewRef` and `movePanel` via context.**
+
+  Add a `useRef<HTMLDivElement | null>(null)` at the top of the provider, ref the drag preview element to it, and include both `dragPreviewRef` and `movePanel` in the context value so `DockableTabBar` can consume them:
 
   ```tsx
   const dragPreviewRef = useRef<HTMLDivElement | null>(null);
   // ...
   const value = useMemo<DockablePanelContextValue>(
     () => ({
-      // ... existing fields ...
+      // ... existing fields MINUS any dragState / startTabDrag / endTabDrag ...
       dragPreviewRef,
-      movePanel, // if not already exposed
+      movePanel,
+      createFloatingGroupWithPanel,
     }),
     [/* existing deps */]
   );
-  // ...
-  <div ref={dragPreviewRef} className="dockable-tab-drag-preview" aria-hidden="true">
   ```
 
-  **Important:** the preview element must ALWAYS be mounted (not conditionally rendered on `dragState`), because `DockableTabBar`'s `getDragImage` needs to hand the browser a DOM element at dragstart. The element's CSS default `transform: translate3d(var(--dockable-tab-drag-x, -9999px), var(--dockable-tab-drag-y, -9999px), 0)` keeps it offscreen when no drag is in flight. The provider updates those CSS vars during drag to make it follow the cursor visually.
+  Update the `DockablePanelContextValue` type to ADD `dragPreviewRef`, `movePanel`, and `createFloatingGroupWithPanel`, and to REMOVE the no-longer-exposed `dragState`, `startTabDrag`, `endTabDrag`, and `registerTabBarElement` fields. The existing `reorderTabInGroup`, `movePanelBetweenGroups`, `movePanelBetweenGroupsAndFocus`, and `setPanelFloatingPositionById` fields stay on the type unchanged — they're still called by non-drag panel-management code (panel lifecycle, close buttons, etc.) and the adapters below delegate to them. Grep for existing context consumers and make sure no caller depends on the removed fields — any that do need to migrate at the same time.
 
-  Update the DockablePanelContextValue type accordingly and grep for context consumers to make sure nothing breaks.
+- [ ] **Step 4: Add the `movePanel` adapter.**
 
-- [ ] **Step 4: Delete the custom drag-state machine.**
+  `DockableTabBar`'s `onDrop` from Task 8 calls `movePanel(panelId, sourceGroupId, targetGroupId, insertIndex)` — a four-argument shape that matches the `useTabDropTarget` callback. The current provider does NOT expose anything with that name; it exposes two separate functions: `reorderTabInGroup(groupKey, panelId, newIndex)` for same-group reorders and `movePanelBetweenGroups(panelId, targetGroupKey, insertIndex?)` for cross-group moves. `movePanel` is a new thin adapter that dispatches between them based on whether source and target groups match. Neither existing function is renamed, reshaped, or wrapped destructively.
 
-  The existing `dragState`, `startTabDrag`, `endTabDrag`, dropTarget computation, and the `registerTabBarElement`-based hit testing are all subsumed by the shared drag coordinator. Delete:
-  - The `dragState` state and setter
-  - `startTabDrag` / `endTabDrag` methods (if present)
-  - Any pointermove listener that computed `dropTarget` by walking registered bars
-  - The `registerTabBarElement` registry if no other consumer uses it (grep to confirm — it may be used by the panel shell for something else)
+  Add to the provider (near the other panel-state callbacks, around `DockablePanelProvider.tsx:489`).
 
-  KEEP:
-  - The CSS-var-updating pointermove listener that sets `--dockable-tab-drag-x` / `--dockable-tab-drag-y` on the preview element. This is what gives the floating preview its cursor tracking, and it's orthogonal to the drop-target logic.
-  - The `movePanel` method — still called by `DockableTabBar`'s onDrop.
+  **First, a group-tab lookup helper** that handles the asymmetric shape of `TabGroupState`. The type (see `frontend/src/ui/dockable/tabGroupTypes.ts:38-42`) exposes `right` and `bottom` as keyed children (`{ tabs: string[]; activeTab: string | null }`) but `floating` as an ARRAY of `FloatingTabGroup` objects, each with its own `{ groupId, tabs, activeTab }`. A floating group's id is a runtime-generated string like `'floating-abc123'`, NOT a key on the root `TabGroupState` object. Naive property access like `state[targetGroupId]` returns `undefined` for any floating group id and silently skips the shift compensation, re-introducing the forward-drop-by-one bug on floating strips.
 
-- [ ] **Step 5: Add a global `dragstart` / `dragend` listener** that sets/unsets the CSS vars for the preview element's positioning. Move this logic out of the old `startTabDrag`/`endTabDrag` methods:
+  Write a helper that distinguishes the three cases:
 
   ```tsx
-  useEffect(() => {
-    const preview = dragPreviewRef.current;
-    if (!preview) return;
-
-    const handleDragOver = (e: DragEvent) => {
-      // Only update when a tab drag is in flight (check dataTransfer types).
-      if (!e.dataTransfer?.types.includes('application/x-tab-drag')) return;
-      preview.style.setProperty('--dockable-tab-drag-x', `${e.clientX}px`);
-      preview.style.setProperty('--dockable-tab-drag-y', `${e.clientY}px`);
-    };
-    const handleDragEnd = () => {
-      preview.style.removeProperty('--dockable-tab-drag-x');
-      preview.style.removeProperty('--dockable-tab-drag-y');
-    };
-
-    document.addEventListener('dragover', handleDragOver);
-    document.addEventListener('dragend', handleDragEnd);
-    document.addEventListener('drop', handleDragEnd);
-    return () => {
-      document.removeEventListener('dragover', handleDragOver);
-      document.removeEventListener('dragend', handleDragEnd);
-      document.removeEventListener('drop', handleDragEnd);
-    };
-  }, []);
+  // Helper (colocated with the adapter, or moved into tabGroupState.ts
+  // if other call sites want it). Returns an empty array if the group
+  // doesn't exist.
+  function getGroupTabs(state: TabGroupState, groupKey: GroupKey): string[] {
+    if (groupKey === 'right') return state.right.tabs;
+    if (groupKey === 'bottom') return state.bottom.tabs;
+    return state.floating.find((g) => g.groupId === groupKey)?.tabs ?? [];
+  }
   ```
 
-  **Check `frontend/src/shared/components/tabs/dragCoordinator/types.ts`** for the MIME type string used by `useTabDragSource` (currently `TAB_DRAG_DATA_TYPE`). Import and use that constant instead of hardcoding `'application/x-tab-drag'`.
+  Then the adapter:
 
-- [ ] **Step 6: Update the provider tests.** `DockablePanelProvider.test.tsx` asserts against the drag preview element and the registered bar elements. Update to match the new flow:
-  - Preview element is always mounted (not conditional on `dragState`).
-  - Drag events on `[role="tab"]` elements trigger `useTabDragSource`'s internal handlers, which set CSS vars via the global listener.
-  - `movePanel` is still exposed and still callable from test helpers.
-  - `registerTabBarElement`-based assertions are DELETED if the registry was removed.
+  ```tsx
+  const movePanel = useCallback(
+    (
+      panelId: string,
+      sourceGroupId: string,
+      targetGroupId: string,
+      insertIndex: number
+    ) => {
+      if (sourceGroupId === targetGroupId) {
+        // Same group → reorder within that group. reorderTabInGroup
+        // eventually calls reorderTab() in tabGroupState.ts, which
+        // removes the source tab first and then splices it back in at
+        // the given index. When the source is BEFORE the insert index
+        // in the original order, removing it shifts every later
+        // position left by one, so the destination that the shared
+        // drop coordinator reported (based on the pre-removal tab
+        // layout) is now one slot too far right. Compensate here the
+        // same way the Cluster migration does.
+        //
+        // Resolve the source's current position in the target group
+        // via the authoritative tabGroups ref (not via the state
+        // snapshot in closure — that may be stale if two drops fire in
+        // rapid succession), AND via the getGroupTabs helper (not via
+        // direct property access — that returns undefined for floating
+        // group ids because floating groups live in an array, not as
+        // keys on TabGroupState).
+        const groupTabs = getGroupTabs(tabGroupsRef.current, targetGroupId as GroupKey);
+        const sourceIdx = groupTabs.indexOf(panelId);
+        const adjustedInsert =
+          sourceIdx >= 0 && sourceIdx < insertIndex ? insertIndex - 1 : insertIndex;
+        if (sourceIdx === adjustedInsert) return; // no-op drop onto self
+        reorderTabInGroup(targetGroupId as GroupKey, panelId, adjustedInsert);
+      } else {
+        // Cross group → moveBetweenGroups takes (panelId, targetGroupKey,
+        // insertIndex). The source is determined internally by walking
+        // the current tabGroups state to find where `panelId` lives. No
+        // shift compensation needed: cross-group moves remove the
+        // source from a DIFFERENT array than the insert, so index math
+        // in the target isn't affected by the removal.
+        movePanelBetweenGroups(panelId, targetGroupId as GroupKey, insertIndex);
+      }
+    },
+    [reorderTabInGroup, movePanelBetweenGroups]
+  );
+  ```
 
-- [ ] **Step 7: Run the dockable tests.**
+  **Why `tabGroupsRef` and not the state snapshot:** the provider already maintains a ref mirror of `tabGroups` state for stale-closure-free reads (check the current file for the exact name — it may be `tabGroupsRef` or similar). The adapter must read the latest tab order because `reorderTabInGroup` is called synchronously and the React state snapshot in closure may be stale if two drops fire in rapid succession.
+
+  **Why the helper, not direct property access:** `TabGroupState` is an asymmetric shape. `state.right.tabs` and `state.bottom.tabs` work because those group keys are literal property names on the state object. Floating groups, however, live inside `state.floating: FloatingTabGroup[]` and are looked up by walking that array for a matching `groupId`. Without the helper, the adapter would silently skip the shift compensation for every floating-group reorder and forward drops on floating strips would land one slot too far right — the exact bug the Cluster migration and this Dockable migration both fix. If other call sites in `DockablePanelProvider.tsx` already have an equivalent helper (e.g. `findGroupByKey` or similar), reuse it instead of defining `getGroupTabs` inline; grep the current file before adding a duplicate. If no helper exists, prefer to add `getGroupTabs` to `tabGroupState.ts` as an exported utility rather than colocating it in the provider — other future callers (tests, adapters) are likely to need the same lookup.
+
+  **Trace verification** for a 4-tab group `['a','b','c','d']`, source `'a'` (sourceIdx=0):
+  - `insertIndex=0` (drop on self at start): `sourceIdx < insertIndex` false, `adjustedInsert = 0`, `sourceIdx === adjustedInsert` → no-op ✓
+  - `insertIndex=1` (drop right after self): `sourceIdx < insertIndex` true, `adjustedInsert = 0`, `sourceIdx === adjustedInsert` → no-op ✓
+  - `insertIndex=2` (drop between b and c): `adjustedInsert = 1`, reorderTab removes 'a' → `['b','c','d']`, splices at 1 → `['b','a','c','d']` ✓
+  - `insertIndex=3` (drop between c and d): `adjustedInsert = 2`, reorderTab removes 'a' → `['b','c','d']`, splices at 2 → `['b','c','a','d']` ✓
+  - `insertIndex=4` (drop at end): `adjustedInsert = 3`, reorderTab removes 'a' → `['b','c','d']`, splices at 3 → `['b','c','d','a']` ✓
+
+  For source `'c'` (sourceIdx=2):
+  - `insertIndex=0`: `sourceIdx < insertIndex` false, `adjustedInsert = 0`, reorderTab removes 'c' → `['a','b','d']`, splices at 0 → `['c','a','b','d']` ✓
+  - `insertIndex=2` (drop on self): `sourceIdx < insertIndex` false, `adjustedInsert = 2`, `sourceIdx === adjustedInsert` → no-op ✓
+  - `insertIndex=3`: `sourceIdx < insertIndex` true, `adjustedInsert = 2`, `sourceIdx === adjustedInsert` → no-op ✓ (drop right after self is no-op)
+  - `insertIndex=4`: `sourceIdx < insertIndex` true, `adjustedInsert = 3`, reorderTab removes 'c' → `['a','b','d']`, splices at 3 → `['a','b','d','c']` ✓
+
+  **Floating-group verification** — the same traces must hold for a floating strip. Exercise a reorder within a group whose `groupId` is a runtime id like `'floating-xyz'`:
+  - Seed `tabGroupsRef.current` with `{ right: {tabs: [], ...}, bottom: {tabs: [], ...}, floating: [{ groupId: 'floating-xyz', tabs: ['a','b','c','d'], activeTab: 'a' }] }`.
+  - Call `movePanel('a', 'floating-xyz', 'floating-xyz', 2)`.
+  - `getGroupTabs(state, 'floating-xyz')` must return `['a','b','c','d']` (NOT `[]`), so `sourceIdx = 0`, `adjustedInsert = 1`, and `reorderTabInGroup('floating-xyz', 'a', 1)` lands `'a'` between `'b'` and `'c'`. Final: `['b','a','c','d']`.
+  - If `getGroupTabs` returns `[]` for a floating group, `sourceIdx` is `-1`, the compensation is skipped, and `reorderTabInGroup('floating-xyz', 'a', 2)` runs with the un-adjusted index → result `['b','c','a','d']` (one slot too far right). That wrong result is the exact signature of the floating-group bug; spotting it in a test is how you verify the helper works for all three branches (`right` / `bottom` / floating).
+
+  **Add an automated test** for this specifically: render the provider with one floating group containing 4 tabs, dispatch a drop event on the floating strip's `[role="tab"]` elements to trigger a forward reorder, and assert the resulting tab order matches the intended visual position. This is the regression gate for `getGroupTabs`; without it a future refactor can silently break floating-group reorders and the bug only shows up in manual smoke tests.
+
+  Every case lands at the intended visual position. Same correction the Cluster migration already applies; documented here because the Dockable path has its own state-mutation helper that exhibits the same source-removal-first semantics AND its state container has an asymmetric shape where floating groups live in an array keyed by `groupId` rather than as direct properties on `TabGroupState`.
+
+  Export the adapter via the context value in Step 3.
+
+- [ ] **Step 5: Add the `createFloatingGroupWithPanel` adapter and the container-level empty-space drop target.**
+
+  This is the replacement for the current gesture-based undock behavior (legacy mousemove handler at `DockablePanelProvider.tsx:599-627`). Per `design.md:393-404`, the design requires an explicit container-level `useTabDropTarget` that creates a floating group on drop.
+
+  **Step 5a. Add the adapter function.** Near `movePanel`, add:
+
+  ```tsx
+  const createFloatingGroupWithPanel = useCallback(
+    (panelId: string, _sourceGroupId: string, cursorPos: { x: number; y: number }) => {
+      // Route the panel into the 'floating' group. movePanelBetweenGroups
+      // generates a new floating group id internally when targetGroupKey
+      // is 'floating', and pendingFocusPanelIdRef handles activation.
+      movePanelBetweenGroups(panelId, 'floating');
+
+      // Position the floating panel at the cursor, relative to the
+      // content bounds. This mirrors the exact logic the legacy
+      // mousemove handler at lines 617-621 of DockablePanelProvider.tsx
+      // used, so the undock UX is visually preserved.
+      const contentBounds = getContentBounds();
+      setPanelFloatingPositionById(panelId, {
+        x: cursorPos.x - contentBounds.left,
+        y: cursorPos.y - contentBounds.top,
+      });
+    },
+    [movePanelBetweenGroups, setPanelFloatingPositionById, getContentBounds]
+  );
+  ```
+
+  Note `_sourceGroupId` is accepted for API symmetry (matches the `onDrop` callback shape) but unused — the existing `movePanelBetweenGroups` finds the source internally.
+
+  **Step 5b. Identify the container target element.** The container-level drop target needs a DOM element that (a) wraps or sits behind the dockable panels so drops in empty space land on it, AND (b) actually receives pointer events. The `.dockable-panel-layer` element (`DockablePanelProvider.tsx:765`, CSS at `DockablePanel.css:3-8`) is **NOT a valid target** — it's declared `pointer-events: none` (line 6) specifically so drops fall through to the app content underneath, and only its `.dockable-panel` children opt back in via `pointer-events: auto` (line 11). If you attach `useTabDropTarget` to the layer directly, the browser will not route drop events to it; the drops will pass through to whatever is below.
+
+  The two viable options are:
+
+  1. **Attach the drop target to the existing app-content element (recommended).** Expose a small `useDockablePanelEmptySpaceDropTarget()` hook from `frontend/src/ui/dockable/DockablePanelContentArea.tsx` (or similar) that reads `createFloatingGroupWithPanel` from `useDockablePanelContext()`, calls `useTabDropTarget`, and returns the ref. Consumers merge the returned ref directly onto an **existing** DOM element in their layout — typically `AppLayout.tsx`'s main content area element. **Do NOT introduce a new wrapper element**; the drop target needs a real bounding rect for hit-testing, and every new nesting level is a risk of breaking unrelated CSS selectors. Example:
+
+     ```tsx
+     // New file: frontend/src/ui/dockable/DockablePanelContentArea.tsx
+     export function useDockablePanelEmptySpaceDropTarget() {
+       const { createFloatingGroupWithPanel } = useDockablePanelContext();
+       return useTabDropTarget({
+         accepts: ['dockable-tab'],
+         onDrop: (payload, event) => {
+           createFloatingGroupWithPanel(payload.panelId, payload.sourceGroupId, {
+             x: event.clientX,
+             y: event.clientY,
+           });
+         },
+       });
+     }
+     ```
+
+     Then in `AppLayout.tsx` (around the existing `<main className="app-main">` at the approximate mount point for dockable panels), merge the ref onto the existing element:
+
+     ```tsx
+     const { ref: emptySpaceDropRef } = useDockablePanelEmptySpaceDropTarget();
+
+     return (
+       <div className="app-container">
+         <AppHeader ... />
+         <ClusterTabs />
+         <main
+           ref={emptySpaceDropRef as (el: HTMLElement | null) => void}
+           className={`app-main ${hasActiveClusters ? '' : 'app-main-inactive'}`}
+         >
+           <Sidebar />
+           {/* existing dockable panel content */}
+         </main>
+       </div>
+     );
+     ```
+
+     The `<main>` element already has a real layout box (`display: flex` or similar — inherited from existing styles), so the browser can hit-test drops against its bounding rect. No new nesting, no new CSS, no `display: contents`, no ghost wrappers. The drop target's hit area is exactly the existing main content region.
+
+     **Why a new wrapper component would be wrong.** A purely structural wrapper (`<DockablePanelContentArea><main>...</main></DockablePanelContentArea>`) is NOT safe even if it "just inherits" the parent's layout. Either the wrapper has a real layout box (which changes the nesting depth for any CSS selector like `.app > main`, `.app-container > main`, `[data-testid="app-main"] + *`, etc.) OR you reach for `display: contents` to flatten it — and `display: contents` **deletes the element's hit area entirely**. An element with `display: contents` has no bounding rect and no surface for drop hit-testing; empty space within the "logical" wrapper region falls through to whatever is behind, and the empty-space drop target that the wrapper was supposed to provide simply doesn't work. **Never put `display: contents` on a drop-target element.** The only safe pattern is the one above: merge the ref onto an existing real box that already has the layout role you need.
+
+  2. **Hoist the drop target onto `hostNode` with a pointer-events override.** If option 1 requires layout surgery that bleeds into unrelated code, the fallback is to give the `.dockable-panel-layer` element targeted pointer-events back. Add a new child element inside the layer (or modify the layer's CSS) that covers the layer area with `pointer-events: auto` **only for drag events**. Native HTML5 drag events DO fire on elements with `pointer-events: none` in some browsers but behavior is inconsistent, so the safe path is a new child element:
+
+     ```css
+     .dockable-panel-layer__drop-catcher {
+       position: absolute;
+       inset: 0;
+       pointer-events: auto;
+       z-index: 0; /* below .dockable-panel children */
+     }
+     ```
+
+     The `.dockable-panel-layer > .dockable-panel` children sit at a higher z-index and with their own `pointer-events: auto`, so they still receive clicks normally. The drop-catcher element only catches drops that fall through the panels into empty space. This is more invasive (changes the layer's hit-testing model for any drag event, even non-tab drags that happen to pass over the layer) and should only be chosen if option 1 is impractical.
+
+  **Do NOT attach the drop target directly to `.dockable-panel-layer` itself** — the `pointer-events: none` on line 6 of `DockablePanel.css` will prevent the browser from ever routing drag/drop events to it, and the implementer will spend hours debugging why their drop target never fires.
+
+  **Step 5c. Wire the drop target.** If you chose option 1 in Step 5b (the recommended path), the `useTabDropTarget` call lives inside the `useDockablePanelEmptySpaceDropTarget` hook defined in the new `DockablePanelContentArea.tsx` file — NOT inside `DockablePanelProvider` — because the provider doesn't own a DOM element that matches the "content area" scope. The hook reads `createFloatingGroupWithPanel` from `useDockablePanelContext()` and returns the drop target ref; `AppLayout.tsx` calls the hook and merges the returned ref onto its existing `<main>` element (no new nesting, no new wrapper component, no `display: contents` — just a ref merge onto a real DOM element that already has a layout box). The provider's only Step 5 responsibility in that case is (a) exposing `createFloatingGroupWithPanel` on the context value (already done in Step 3).
+
+  If you chose option 2 (the drop-catcher child element), the `useTabDropTarget` call goes inside the provider at the top level alongside the other hook calls, and the returned ref attaches to a new `<div className="dockable-panel-layer__drop-catcher">` that's rendered as the first child of the layer node.
+
+  **Update `Task 9` Files:** if you chose option 1, add `Create: frontend/src/ui/dockable/DockablePanelContentArea.tsx` to Task 9's Files list and `Modify: frontend/src/ui/layout/AppLayout.tsx` for the ref merge. If you chose option 2, add `Modify: frontend/src/ui/dockable/DockablePanel.css` for the `.dockable-panel-layer__drop-catcher` rule and modify `DockablePanelProvider.tsx` to render the drop-catcher inside the layer host node.
+
+  **Step 5d. Verify nested drop-target isolation works.** Native HTML5 drag-and-drop events BUBBLE by default — `preventDefault` alone is not enough to stop propagation. Task 1a added an `event.stopPropagation()` call to `useTabDropTarget`'s internal drop handler specifically so that consuming targets don't leak drops to ancestor targets. Without Task 1a, a drop inside a `DockableTabBar`'s drop target would fire the bar's `onDrop` first AND then bubble up to the container-level `useTabDropTarget` on the layer, which would misinterpret the reorder as an empty-space drop and spawn a spurious floating group. With Task 1a in place, the inner bar target's `onDrop` calls `stopPropagation` after consuming the event, and the container target never sees it.
+
+  Verify this by hand: open 2+ dockable panels. First, drop a tab on the other panel's bar and confirm it moves there (`movePanel` fires, no new floating group is created). Then drop a tab on empty space outside any bar and confirm it becomes a new floating group (`createFloatingGroupWithPanel` fires, no reorder fires). If a single drop ever triggers BOTH behaviors, that's a regression of Task 1a's `stopPropagation` — re-check `useTabDropTarget.ts` for the `event.stopPropagation()` call inside `handleDrop`.
+
+- [ ] **Step 6: Delete the live cursor-tracking machinery, the custom drop-detection state, and the tab-bar registry.**
+
+  With Steps 4 and 5 in place, the legacy drag-state machine now has a complete replacement and can be deleted wholesale. The following code all gets removed:
+  - The `dragState` state variable, its setter, and anything that reads it.
+  - `startTabDrag` / `endTabDrag` methods on the context value and their implementations.
+  - The document-level `mousemove` / `mouseup` handler at `DockablePanelProvider.tsx:599-627` (approx) that computed drop targets, read the `tabBarElementsRef` registry for undock detection, called `reorderTabInGroup` / `movePanelBetweenGroups`, and cleared `dragState`. Drop detection is now handled by `useTabDropTarget` inside `DockableTabBar` (which dispatches to `movePanel` from Step 4 via the context) and by the container-level `useTabDropTarget` in Step 5 (which dispatches to `createFloatingGroupWithPanel`).
+  - The `UNDOCK_THRESHOLD` constant. It was read exclusively by the mousemove handler being deleted above, and the feature it gated (undock-to-floating) is now handled by the Step 5 empty-space drop target. Nothing else in the codebase references it — grep before deleting to confirm.
+  - The `tabBarElementsRef = useRef(new Map<string, HTMLElement>())` declaration and the `registerTabBarElement` callback that writes to it. The grep (`grep -rn "tabBarElementsRef\|registerTabBarElement" frontend/src`) against the current live code returns **three sites**: the field + setter at `DockablePanelProvider.tsx:88,220,229`, the one reader at `DockablePanelProvider.tsx:608` (the mousemove handler being deleted above), and one consumer-side useEffect at `DockableTabBar.tsx:56-61`. Task 8 already deletes the consumer-side useEffect, and this step deletes the reader + the field + the setter. Zero remaining usages → full removal.
+  - `registerTabBarElement` as an exposed field on `DockablePanelContextValue`. Remove it from the type, from the `useMemo` context value, and from the dev-time `useContext` return shape.
+  - The pointermove (or dragover) listener that sets `--dockable-tab-drag-x` / `--dockable-tab-drag-y` CSS custom properties on the preview element. The live cursor-tracking effect is dropped per `design.md:28`; the browser handles drag-image positioning natively via the `setDragImage(element, offsetX, offsetY)` call in each tab's `getDragImage`.
+  - The `--dockable-tab-drag-x` / `--dockable-tab-drag-y` CSS custom properties themselves, and the `transform: translate3d(var(...), var(...), 0)` rule on `.dockable-tab-drag-preview` that consumed them. These get deleted from `DockablePanel.css` in Task 10 — don't forget to do both sides.
+
+  **KEEP:**
+  - `reorderTabInGroup`, `movePanelBetweenGroups`, `movePanelBetweenGroupsAndFocus`, `setPanelFloatingPositionById`, and `getContentBounds` — all unchanged. The new adapters from Steps 4 and 5 delegate to them; other non-drag code paths (panel lifecycle, close buttons, layout persistence) still call them directly.
+  - `movePanel` and `createFloatingGroupWithPanel` — added in Steps 4 and 5 respectively, exposed on the context value.
+  - The always-mounted `.dockable-tab-drag-preview` element and its `dragPreviewRef`.
+  - Any panel-management code unrelated to drag (panel creation, close, collapse, layout persistence, etc.).
+
+  **Verification:** after deleting, run `grep -rn "tabBarElementsRef\|registerTabBarElement\|startTabDrag\|endTabDrag\|dragState\|UNDOCK_THRESHOLD" frontend/src` — expected: **zero** hits. If any remain, they're dangling references to the removed infrastructure and need to be deleted too (or the test suite will fail at import time).
+
+  **Why no replacement "global dragover listener" is needed:** the entire cursor-tracking effect is now provided by the browser's native drag-image rendering. Each tab's `getDragImage` option is called once at dragstart; it updates the preview element's label + kind class synchronously, then returns `{ element, offsetX, offsetY }` to `useTabDragSourceFactory`'s internal `onDragStart`, which calls `event.dataTransfer.setDragImage(element, offsetX, offsetY)`. The browser takes a snapshot of the element right then and displays that snapshot at the cursor for the rest of the drag. No pointermove listener, no CSS var updates, no per-frame state to maintain.
+
+- [ ] **Step 7: Update the provider tests.**
+
+  `DockablePanelProvider.test.tsx` asserts against the drag preview element and against the registered bar elements. Update to match the new flow:
+  - Preview element is always mounted (not conditional on `dragState`). Any assertion like `queryByTestId('dockable-tab-drag-preview')` that was scoped to during-drag should now expect the element always, and check its inner `.dockable-tab-drag-preview__label` textContent for the "is a drag in flight" signal instead (the label text is updated by `getDragImage` at dragstart and stays until the next drag overwrites it).
+  - No more assertions on `--dockable-tab-drag-x` / `--dockable-tab-drag-y` CSS custom properties being set during drag. Those don't exist anymore.
+  - `movePanel` and `createFloatingGroupWithPanel` are exposed on the context value and callable from test helpers.
+  - Delete every `registerTabBarElement` assertion — the registry is gone. Tests that set up fixtures via `registerTabBarElement(groupKey, domNode)` need to be rewritten to dispatch drop events directly on the rendered `[role="tab"]` elements and assert the resulting `movePanel` / state change.
+  - Drag-start / drag-end lifecycle assertions that were scoped to `startTabDrag` / `endTabDrag` migrate to checking `useTabDragSourceFactory`-driven events instead — dispatch `dragstart` on a `[role="tab"]` element and verify the label inside `.dockable-tab-drag-preview` updates.
+  - **Add** a test for the container-level empty-space drop target: render the provider with two groups, dispatch a `drop` event on the container element (outside any tab bar's drop zone) carrying a `dockable-tab` payload, and assert that the panel moved to a new `floating` group with its position set via `setPanelFloatingPositionById`. This is the automated gate for the design.md:393 requirement; a regression here means the empty-space-to-floating feature silently broke.
+
+- [ ] **Step 8: Run the dockable tests.**
 
   ```bash
   ./node_modules/.bin/vitest run src/ui/dockable/
@@ -1264,19 +1794,19 @@ The provider currently owns:
 
   Expected: all tests pass.
 
-- [ ] **Step 8: Manual smoke test.**
+- [ ] **Step 9: Manual smoke test.**
 
   Open the app. Open 4+ dockable panels. Verify:
-  - Within-strip reorder works (drag a tab left/right within the same bar)
-  - Cross-strip moves work (drag from one bar to another)
-  - The floating drag preview follows the cursor
-  - The drop-position indicator bar appears inside the target strip
-  - Dropping in an empty area creates a new strip (if the current codebase supports it — confirm with the user)
-  - Overflow chevrons appear and scroll correctly when many tabs are open
-  - Clicking a tab still activates it
-  - Close button still works
+  - Within-strip reorder works (drag a tab left/right within the same bar).
+  - Cross-strip moves work (drag from one bar to another).
+  - The drag preview appears under the cursor as soon as the drag begins and carries the correct tab label + kind badge. (It's a static browser-rendered snapshot — no live CSS-var updates, no per-frame tracking. The visual looks identical to pre-migration behavior because the CSS styling of `.dockable-tab-drag-preview` is unchanged; only the cursor-tracking mechanism moves from provider-owned pointermove updates to browser-native drag-image rendering.)
+  - The drop-position indicator bar appears inside the target strip.
+  - **Empty-space drop creates a floating panel (REQUIRED):** drag a tab away from its current bar and drop it on empty space within the dockable content area (a gap between panels, or the layer background with no panels at all). The panel should detach into a new floating group positioned at the cursor. This replaces the legacy "drag far away from the source bar" gesture trigger with an explicit drop target, but the end result — a new floating panel at the cursor — is identical to pre-migration behavior. If this doesn't work, the container-level `useTabDropTarget` from Step 5 isn't wired correctly; check the ref assignment and the element it's attached to.
+  - Overflow chevrons appear and scroll correctly when many tabs are open.
+  - Clicking a tab still activates it.
+  - Close button still works.
 
-- [ ] **Step 9:** Report task complete and wait for user review.
+- [ ] **Step 10:** Report task complete and wait for user review.
 
 ---
 
@@ -1294,23 +1824,33 @@ The provider currently owns:
   - `.dockable-tab-bar__overflow-indicator` and all `.dockable-tab-bar__overflow-*` rules — shared `.tab-strip__overflow-indicator` covers these
   - `.dockable-tab-bar__drop-indicator` — shared `.tab-strip__drop-indicator` covers it
 
+- [ ] **Step 2: Strip the live cursor-tracking plumbing from `.dockable-tab-drag-preview`.**
+
+  Per `design.md:28` and the Task 9 rewrite, the preview element is now positioned by the browser's native drag-image rendering, not by provider-driven CSS custom properties. In `DockablePanel.css`, modify the `.dockable-tab-drag-preview` rule to:
+  - **Delete** the `transform: translate3d(var(--dockable-tab-drag-x, -9999px), var(--dockable-tab-drag-y, -9999px), 0)` declaration — the CSS custom properties no longer exist, and the browser's drag image handles positioning.
+  - **Replace** it with an offscreen-by-default rule that keeps the element out of sight when no drag is in flight (e.g., `position: fixed; top: -9999px; left: -9999px;`) so the element doesn't visually pollute the app between drags. `setDragImage` screenshots the element at its current computed styles, so offscreen positioning is fine.
+  - **Keep** the rest of the `.dockable-tab-drag-preview` rule body (padding, border, background, color, font-size, max-width, border-radius, box-shadow) — that's the visual styling the design doc explicitly says to preserve.
+  - **Keep** the `.dockable-tab-drag-preview__kind` and `.dockable-tab-drag-preview__label` child rules unchanged.
+
+- [ ] **Step 3: Review what else to keep vs. delete.**
+
   KEEP:
   - `.dockable-tab-bar-shell` container layout (it's still the wrapper around `<Tabs>`)
   - `.dockable-tab-bar` layout rules (`height: 100%`, `flex: 1`, etc.) — applied via `className="dockable-tab-bar"` on the shared component's root
   - `.dockable-tab-bar--drag-active` / `.dockable-tab-bar--drop-target` — if still used anywhere; otherwise delete
   - `.dockable-tab__kind-indicator.kind-badge` override — this is the leading-slot visual, still needed
-  - `.dockable-tab-drag-preview` and all `.dockable-tab-drag-preview__*` rules — still the custom cursor-following preview element
+  - `.dockable-tab-drag-preview` (with the transform/CSS-var rule stripped per Step 2) and all `.dockable-tab-drag-preview__*` rules — the visual styling is preserved, only the cursor-tracking mechanism is gone
   - `.dockable-tab--dragging` — if used for drag-source visual feedback via `extraProps` conditional classNames; otherwise delete
 
-- [ ] **Step 2: Run tests and manual smoke again.**
+- [ ] **Step 4: Run tests and manual smoke again.**
 
   ```bash
   ./node_modules/.bin/vitest run src/ui/dockable/
   ```
 
-  Visually spot-check that no CSS regression occurred during deletion.
+  Visually spot-check that no CSS regression occurred during deletion. Pay particular attention to the drag preview: starting a drag should still show a styled preview at the cursor (the static snapshot), and the preview element should not be visible on screen between drags.
 
-- [ ] **Step 3:** Report task complete and wait for user review.
+- [ ] **Step 5:** Report task complete and wait for user review.
 
 ---
 
@@ -1367,7 +1907,7 @@ Once all four consumers migrate, the preview stories become redundant — they w
   - Object Panel tabs: click through, uppercase labels, focus behavior
   - Diagnostics Panel tabs: click through, uppercase labels, focus behavior
   - Cluster Tabs: reorder via drag, close with port-forward modal, `--cluster-tabs-height` CSS var
-  - Dockable tab bars: within-strip reorder, cross-strip move, empty-space new strip, overflow chevrons, custom drag preview
+  - Dockable tab bars: within-strip reorder (drag a tab left/right within the same bar), cross-strip move (drag a tab from one bar to another), **empty-space undock-to-floating-group (drop a tab on empty space between or around panels → new floating group at the cursor)**, overflow chevrons, custom drag preview. All five behaviors must work — the empty-space drop in particular is a required migration target per `design.md:393` and was previously provided by the now-deleted legacy mousemove handler, so regressing it is a silent ship-blocker.
 
 - [ ] **Step 4:** Report Phase 2 complete.
 
@@ -1375,17 +1915,17 @@ Once all four consumers migrate, the preview stories become redundant — they w
 
 ## Risks and mitigations
 
-**Risk: `DockablePanelProvider` migration breaks cross-strip drag.**
-Mitigation: Task 9 has the largest surface area and the most code to delete. Approach: start by wrapping in `TabDragProvider` and verifying within-strip reorder still works (just replaces the old intra-bar handlers with the shared ones). Only AFTER that's green, delete the old cross-strip detection code. Iterate in small commits so regressions are easy to bisect.
+**Risk: `DockablePanelProvider` migration breaks cross-strip drag or the undock-to-floating feature.**
+Mitigation: Task 9 has the largest surface area and the most code to delete. Since Task 2b already mounted `TabDragProvider` at the app root, the recommended sequencing is: (1) mount the always-in-DOM preview element (Step 2), (2) expose `dragPreviewRef` + add both adapters (`movePanel` in Step 4, `createFloatingGroupWithPanel` in Step 5), (3) wire up the container-level empty-space drop target (Step 5), (4) verify within-strip reorder, cross-strip moves, AND empty-space undock-to-floating all work via the new shared-coordinator paths before deleting ANY legacy code. Only AFTER all three behaviors are green against the new paths, delete the `dragState` / `startTabDrag` / mousemove / registry / `UNDOCK_THRESHOLD` machinery (Step 6). This order means the old and new systems coexist briefly — both the legacy mousemove undock AND the new container drop target will handle undock until Step 6 deletes the legacy path, but the result is the same (both call into `movePanelBetweenGroups(panelId, 'floating')`), so no conflict. Iterate in small commits so regressions are easy to bisect.
 
 **Risk: The custom focus-management systems in ObjectPanel / Diagnostics regress.**
 Mitigation: the `disableRovingTabIndex` prop is explicitly designed to preserve those systems' invariants. The `data-*-focusable` attributes pass through cleanly via `extraProps`. If any manual smoke test fails, the focus walker is probably not finding the shared component's output — verify the attribute made it onto the rendered DOM.
 
-**Risk: The `useTabDragSource` unrolled-hook pattern is fragile at the upper limit of `MAX_*_TAB_SLOTS`.**
-Mitigation: 16 slots is well above any realistic usage. If a user genuinely opens 17+ clusters or 17+ dockable panels in one strip, only the first 16 would be draggable — acceptable edge case. The overflow chevrons still handle the visual scrolling.
+**Risk: `useTabDragSourceFactory` creates new function identities on every render.**
+Mitigation: the factory call inside `.map()` produces a fresh `{ onDragStart, onDragEnd }` closure per render per tab. These closures are attached to the DOM via prop spreading, so React re-attaches event listeners on each render of the consumer. The perf cost is negligible for realistic tab counts (tens, not thousands), and correctness is unaffected because the closures capture the latest `payload` and `options`. If this ever shows up in a profile, the fix is to memoize the descriptors array with `useMemo` keyed on `[tabs, makeDragSource]` — the factory identity is stable across renders when the context values are stable, so the memoization works as expected.
 
-**Risk: The floating `dockable-tab-drag-preview` element loses cursor tracking after migration.**
-Mitigation: The CSS-var-driven positioning is orthogonal to the shared drag coordinator. Task 9 explicitly preserves the pointermove listener and the offscreen-by-default CSS. Verify with devtools: during a drag, the element should reposition on every mousemove via inline `style` updates to the CSS vars.
+**Risk: The `.dockable-tab-drag-preview` visual regresses after the live cursor-tracking machinery is removed.**
+Mitigation: The element's visual styling (padding, border, background, badge + label layout) is preserved byte-for-byte in Task 10 — only the `transform: translate3d(var(...), var(...), 0)` rule and its CSS custom properties are removed. Cursor positioning is handed off to the browser's native drag-image rendering via `event.dataTransfer.setDragImage(element, 14, 16)`. The Phase 1 `ObjectTabsPreview` story already demonstrates this approach works correctly in Safari and Firefox — if the visual doesn't match after migration, diff the computed styles of `.dockable-tab-drag-preview` in devtools against the Phase 1 story's rendering to find the drift. The brainstorming explicitly accepted the "static snapshot instead of live follow" tradeoff in `design.md:28`; reintroducing pointermove tracking to "fix" any perceived snappiness regression would reopen that compromise and is not allowed by the plan.
 
 **Risk: Drag tests in existing consumer test files break because they use the old native drag event shapes.**
 Mitigation: The shared drag coordinator ALSO uses native HTML5 drag events, so existing tests that simulate `dragstart` / `drop` on tab elements should continue to work with minor query updates (`.dockable-tab` → `[role="tab"]`). Tests that mock module-level state (`useTabDragSource`) will need rewriting, but the simpler end-to-end approach (dispatch real events, assert on persistence/state-change side effects) is preferred.
@@ -1401,6 +1941,14 @@ Phase 2 is complete when:
 - [ ] The legacy `Tabs/index.tsx` barrel is deleted
 - [ ] Per-consumer tab markup and tab-specific CSS duplication is removed (the diff should show net deletion in every consumer file)
 - [ ] `mage qc:prerelease` passes
-- [ ] All existing behaviors are preserved (manual smoke tests checked off in each task)
-- [ ] The design doc reflects the final API surface (including `disableRovingTabIndex`, `closeIcon`, `closeAriaLabel`)
+- [ ] All pre-migration behaviors are preserved end-to-end:
+  - Within-strip reorder (Cluster and Dockable)
+  - Cross-strip moves (Dockable)
+  - **Empty-space undock-to-floating-group (Dockable)** — previously provided by the legacy mousemove `UNDOCK_THRESHOLD` handler, now provided by the container-level `useTabDropTarget` from Task 9 Step 5. Regressing this is explicitly a ship-blocker per `design.md:393`.
+  - Port-forward close confirmation modal (Cluster)
+  - Custom focus management in Object Panel and Diagnostics (via `disableRovingTabIndex`)
+  - Overflow chevrons (Cluster and Dockable)
+  - Static drag preview (Dockable, via `setDragImage`)
+- [ ] The design doc reflects the final API surface (including `disableRovingTabIndex`, `closeIcon`, `closeAriaLabel`, `useTabDragSourceFactory`)
 - [ ] The preview stories are deleted
+- [ ] `grep -rn "tabBarElementsRef\|registerTabBarElement\|startTabDrag\|endTabDrag\|dragState\|UNDOCK_THRESHOLD\|useTabStyles\|dockable-tab-drag-x\|dockable-tab-drag-y" frontend/src` returns zero hits — all legacy drag-state / live-preview infrastructure and the back-compat shim are fully removed
