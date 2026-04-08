@@ -695,7 +695,7 @@ describe('Tabs', () => {
     expect(tablist?.querySelectorAll('[role="tab"]').length).toBe(0);
   });
 
-  it('does not crash and marks no tab active when activeId does not match any tab', () => {
+  it('keeps the strip keyboard-reachable when activeId does not match any tab', () => {
     act(() => {
       root.render(
         <Tabs
@@ -710,12 +710,42 @@ describe('Tabs', () => {
       );
     });
 
-    const tabs = container.querySelectorAll<HTMLButtonElement>('[role="tab"]');
+    const tabs = container.querySelectorAll<HTMLElement>('[role="tab"]');
     expect(tabs.length).toBe(2);
+    // No tab should be aria-selected since activeId doesn't match.
     expect(tabs[0].getAttribute('aria-selected')).toBe('false');
     expect(tabs[1].getAttribute('aria-selected')).toBe('false');
-    expect(tabs[0].tabIndex).toBe(-1);
+    // Roving-tabindex fallback: the first non-disabled tab receives
+    // tabIndex=0 so the strip remains reachable via Tab key.
+    expect(tabs[0].tabIndex).toBe(0);
     expect(tabs[1].tabIndex).toBe(-1);
+  });
+
+  it('falls back to the first non-disabled tab when activeId is null', () => {
+    act(() => {
+      root.render(
+        <Tabs
+          tabs={[
+            { id: 'a', label: 'Alpha', disabled: true },
+            { id: 'b', label: 'Beta' },
+            { id: 'c', label: 'Gamma' },
+          ]}
+          activeId={null}
+          onActivate={() => {}}
+          aria-label="Test Tabs"
+        />
+      );
+    });
+
+    const tabs = container.querySelectorAll<HTMLElement>('[role="tab"]');
+    expect(tabs.length).toBe(3);
+    // Disabled tab 'a' is skipped; 'b' is the first non-disabled, so it
+    // gets the focus stop.
+    expect(tabs[0].tabIndex).toBe(-1);
+    expect(tabs[1].tabIndex).toBe(0);
+    expect(tabs[2].tabIndex).toBe(-1);
+    // None is aria-selected.
+    expect(tabs[1].getAttribute('aria-selected')).toBe('false');
   });
 
   it('does not render scroll buttons when content fits the container', () => {

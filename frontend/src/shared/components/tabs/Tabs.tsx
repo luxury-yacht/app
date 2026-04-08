@@ -27,7 +27,13 @@ export interface TabDescriptor {
   disabled?: boolean;
   ariaControls?: string;
   ariaLabel?: string;
-  extraProps?: HTMLAttributes<HTMLButtonElement>;
+  /**
+   * Freeform pass-through props merged onto the tab's root element. The
+   * root is a `<div role="tab">`, so this accepts any HTMLElement
+   * attribute. Used primarily by drag sources (draggable, onDragStart,
+   * onDragEnd).
+   */
+  extraProps?: HTMLAttributes<HTMLElement>;
 }
 
 // Keys owned by the base Tabs component. Wrappers must not override these via
@@ -46,10 +52,7 @@ const RESERVED_TAB_KEYS = new Set([
   'onKeyDown',
 ]);
 
-function warnReservedKeys(
-  tabId: string,
-  extraProps: HTMLAttributes<HTMLButtonElement> | undefined
-) {
+function warnReservedKeys(tabId: string, extraProps: HTMLAttributes<HTMLElement> | undefined) {
   if (process.env.NODE_ENV === 'production' || !extraProps) return;
   for (const key of Object.keys(extraProps)) {
     if (RESERVED_TAB_KEYS.has(key)) {
@@ -101,7 +104,7 @@ export function Tabs({
   // Closeable tabs in 'fit' mode get their own 80px floor via tabs.css to
   // ensure room for the close button overlay.
   const effectiveMinTabWidth = minTabWidth ?? (tabSizing === 'equal' ? 80 : 0);
-  const tabRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+  const tabRefs = useRef<Map<string, HTMLElement>>(new Map());
   const scrollRef = useRef<HTMLDivElement>(null);
   // Single boolean: once the strip overflows, BOTH indicators render. Not
   // tracked per-side. Keeping both mounted at the same time guarantees tab
@@ -145,7 +148,7 @@ export function Tabs({
         ? Math.max(0, Math.min(maxScrollLeft, pendingScrollTargetRef.current))
         : bar.scrollLeft;
     const barRight = barLeft + bar.clientWidth;
-    let target: HTMLButtonElement | null = null;
+    let target: HTMLElement | null = null;
 
     if (direction === 1) {
       // First tab whose right edge is hidden past the right indicator.
@@ -244,7 +247,7 @@ export function Tabs({
     }
   };
 
-  const handleKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>, currentIndex: number) => {
+  const handleKeyDown = (event: ReactKeyboardEvent<HTMLElement>, currentIndex: number) => {
     switch (event.key) {
       case 'ArrowRight':
         event.preventDefault();
@@ -342,6 +345,14 @@ export function Tabs({
 
   const showIndicators = overflow === 'scroll' && hasOverflow;
 
+  // Roving-tabindex fallback: when there's no matching active tab (either
+  // activeId is null or points to a tab that doesn't exist), give
+  // tabIndex=0 to the first non-disabled tab so the strip remains
+  // reachable via Tab key. Without this fallback the entire strip would
+  // be a keyboard dead zone, violating the accessibility contract.
+  const hasActiveTab = activeId !== null && tabs.some((t) => t.id === activeId);
+  const fallbackFocusIndex = hasActiveTab ? -1 : tabs.findIndex((t) => !t.disabled);
+
   return (
     <div
       role="tablist"
@@ -373,13 +384,17 @@ export function Tabs({
       {tabs.map((tab, index) => {
         const isActive = tab.id === activeId;
         const isCloseable = Boolean(tab.onClose);
+        const isFocusStop = hasActiveTab ? isActive : index === fallbackFocusIndex;
         warnReservedKeys(tab.id, tab.extraProps);
         return (
           <Fragment key={tab.id}>
             {dropInsertIndex === index && (
               <div className="tab-strip__drop-indicator" data-testid="tab-strip-drop-indicator" />
             )}
-            <button
+            {/* Outer element is a <div role="tab"> rather than <button> so
+                the close affordance inside can be a real <button> without
+                violating HTML's ban on interactive-in-interactive nesting. */}
+            <div
               ref={(el) => {
                 if (el) {
                   tabRefs.current.set(tab.id, el);
@@ -388,13 +403,12 @@ export function Tabs({
                 }
               }}
               {...tab.extraProps}
-              type="button"
               role="tab"
               aria-selected={isActive}
               aria-controls={tab.ariaControls}
               aria-disabled={tab.disabled || undefined}
               aria-label={tab.ariaLabel}
-              tabIndex={isActive ? 0 : -1}
+              tabIndex={isFocusStop ? 0 : -1}
               className={`tab-item${isActive ? ' tab-item--active' : ''}${isCloseable ? ' tab-item--closeable' : ''}`}
               onClick={() => {
                 if (!tab.disabled) {
@@ -406,9 +420,9 @@ export function Tabs({
               {tab.leading}
               <span className="tab-item__label">{tab.label}</span>
               {tab.onClose && (
-                <span
+                <button
+                  type="button"
                   className="tab-item__close"
-                  role="button"
                   aria-label="Close"
                   tabIndex={-1}
                   onClick={(event) => {
@@ -417,9 +431,9 @@ export function Tabs({
                   }}
                 >
                   ×
-                </span>
+                </button>
               )}
-            </button>
+            </div>
           </Fragment>
         );
       })}

@@ -16,6 +16,22 @@
 
 ---
 
+## ⚠️ Post-prototype revisions (do NOT re-implement the superseded tasks)
+
+Several tasks in this plan specified behaviors that were revised during the prototype review. The design doc is authoritative; this plan is historical. The following tasks are **superseded** and their original test/code snippets should NOT be used:
+
+- **Task 17 (Edge cases — invalid `activeId`):** The original test asserted every tab has `tabIndex=-1` when `activeId` doesn't match. This was a keyboard-reachability bug — it stranded the entire strip. The corrected contract is a roving-tabindex fallback: when no tab matches `activeId`, the first non-disabled tab gets `tabIndex=0` so the strip remains reachable via Tab. See `design.md` → "Behavior contracts → Keyboard".
+- **Task 18 (Overflow — per-side independent chevron rendering):** The original spec rendered the left chevron only when tabs were hidden on the left and the right chevron only when tabs were hidden on the right, each conditionally. This was replaced with a single `hasOverflow: boolean` that mounts **both** chevrons together whenever the strip overflows, and each chevron is greyed out via the native `disabled` attribute at its exhausted extreme. The simpler model guarantees tab positions stay stable across clicks (no layout shifts when an indicator appears/disappears), which is what makes the scroll math work.
+- **Task 19 (Overflow scroll button click action — fixed-pixel scrollBy):** The original spec used `scrollBy({ left: ±200, behavior: 'smooth' })`. This was replaced by a per-tab navigation algorithm that finds the first clipped tab on the relevant side and computes an exact scroll target, animated manually via `requestAnimationFrame` (250ms ease-out-cubic). Manual rAF replaces `scrollTo({ behavior: 'smooth' })` because Firefox's smooth scroll is unreliable under rapid consecutive interruption.
+- **Task 21 (Overflow count badge):** Dropped entirely. There is no count badge on either chevron and no `.tab-strip__overflow-count` rule in `tabs.css`. Rationale: once the model is "both chevrons always mounted together", there's no per-side state to display a count for, and the chevron itself is sufficient signal. The test for this task was rewritten as "renders both overflow indicators together once the strip overflows".
+- **`minTabWidth` default:** The plan/design originally said "default 80px". The corrected default is mode-specific — `0` in `fit` mode (so short labels don't get bloated), `80px` in `equal` mode (so tabs sharing a strip don't collapse). Closeable tabs in `fit` mode additionally get an 80px floor via CSS to reserve room for the close button overlay.
+- **Tab root element:** The plan/design described each tab as a `<button role="tab">`. This was revised to `<div role="tab">` so the close affordance can be a real nested `<button type="button">` without violating HTML's ban on interactive content inside `<button>`. The `<div>` gets keyboard focusability via roving `tabIndex`, and Enter/Space activation is handled explicitly in `handleKeyDown`.
+- **Drop indicator prop (new, not in original plan):** A `dropInsertIndex?: number | null` prop was added to render a thin accent-colored vertical bar at a given flex position to show the drop landing site during a drag. `useTabDropTarget` tracks the index on `dragover` and exposes it alongside `isDragOver`, and passes it into `onDrop` as a third argument.
+
+If you are implementing Phase 2 against this plan, refer to `design.md` for the current contracts and use the implementation in `frontend/src/shared/components/tabs/` as the source of truth.
+
+---
+
 ## File Structure
 
 **New files (11):**

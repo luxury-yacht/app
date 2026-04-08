@@ -107,18 +107,19 @@ interface TabDescriptor {
    * Override the accessible name. By default the tab's accessible name
    * is its text content (label), which is what every text-labeled tab
    * gets for free. Only set this when label contains no text — e.g. an
-   * icon-only tab. Becomes aria-label on the underlying <button>.
+   * icon-only tab. Becomes aria-label on the tab's root element.
    */
   ariaLabel?: string;
 
   /**
    * Escape hatch for wrapper components (ClusterTabs, DockableTabs) to
    * attach drag handlers, custom data attributes, etc. Spread onto each
-   * tab's <button> element BEFORE the base props, so reserved keys can't
-   * be silently overridden. The base warns in dev mode if extraProps
-   * contains a reserved key — see "Reserved keys" below.
+   * tab's root element (a `<div role="tab">`) BEFORE the base props, so
+   * reserved keys can't be silently overridden. The base warns in dev
+   * mode if extraProps contains a reserved key — see "Reserved keys"
+   * below.
    */
-  extraProps?: HTMLAttributes<HTMLButtonElement>;
+  extraProps?: HTMLAttributes<HTMLElement>;
 }
 
 interface TabsProps {
@@ -131,9 +132,13 @@ interface TabsProps {
 
   /**
    * Overflow behavior. Default 'scroll'. When 'scroll', the strip
-   * measures itself and renders ◀ ▶ scroll buttons + an overflow-count
-   * badge when content exceeds the container width. The active tab is
-   * auto-scrolled into view on activation. Set to 'none' to disable.
+   * measures itself and, when content exceeds the container width,
+   * renders BOTH ◀ ▶ scroll chevrons together (sticky children of the
+   * strip). Each chevron greys out via the native `disabled` attribute
+   * when its direction is exhausted (scrollLeft at 0 or max). Clicking
+   * advances one tab at a time via a manual requestAnimationFrame
+   * animation (250ms ease-out-cubic). The active tab is auto-scrolled
+   * into view on activation. Set to 'none' to disable overflow entirely.
    */
   overflow?: 'scroll' | 'none';
 
@@ -146,7 +151,15 @@ interface TabsProps {
    */
   tabSizing?: 'fit' | 'equal';
 
-  /** Default 80px. Ensures readable click targets for short labels. */
+  /**
+   * Floor for tab width. Mode-specific default:
+   * - `'fit'` mode: defaults to `0` so short labels like "YAML" size
+   *   tightly to their content without being bloated to a floor.
+   * - `'equal'` mode: defaults to `80px` so tabs sharing a strip don't
+   *   collapse below a readable width.
+   * Closeable tabs in `'fit'` mode additionally get an 80px floor
+   * enforced by CSS so the overlay close button has room.
+   */
   minTabWidth?: number;
 
   /** Default 240px. Labels longer than this truncate with ellipsis. */
@@ -164,6 +177,16 @@ interface TabsProps {
 
   /** Optional id for the root tablist element. */
   id?: string;
+
+  /**
+   * When set to an integer in `[0, tabs.length]`, a thin vertical drop
+   * indicator bar is rendered at that flex position inside the strip:
+   * `0` places it before the first tab, `tabs.length` after the last.
+   * Used by drag-and-drop wrappers (see `useTabDropTarget`) to show
+   * where a dragged tab will land if released. Pair with the companion
+   * hook's `dropInsertIndex` return value to wire this up.
+   */
+  dropInsertIndex?: number | null;
 }
 ```
 
@@ -178,26 +201,31 @@ interface TabsProps {
 
 ### Reserved keys
 
-`extraProps` is a freeform `HTMLAttributes<HTMLButtonElement>` pass-through, but the base reserves these keys for itself:
+`extraProps` is a freeform `HTMLAttributes<HTMLElement>` pass-through merged onto each tab's root element (a `<div role="tab">`). The base reserves these keys for itself:
 
 ```
-role, aria-selected, aria-controls, aria-disabled, tabIndex, id,
-onClick, onKeyDown
+role, aria-selected, aria-controls, aria-disabled, aria-label,
+tabIndex, id, onClick, onKeyDown
 ```
 
 In dev mode (`process.env.NODE_ENV !== 'production'`), the base warns when `extraProps` contains any reserved key. Production builds skip the check entirely (zero runtime cost). The base spreads `extraProps` *first*, then its own reserved props on top, so even if a wrapper accidentally sets `tabIndex`, the base's tabIndex wins at the DOM level — the warning fires but ARIA stays correct (defense in depth).
 
+### DOM structure
+
+Each tab's root element is `<div role="tab">`, NOT `<button role="tab">`. This lets the close affordance be a real nested `<button type="button">` without violating HTML's ban on interactive content inside a `<button>`. The roving tabindex below gives the `<div>` keyboard focusability; the explicit `handleKeyDown` implements Enter/Space activation that a `<div>` would otherwise lack. The close `<button>` is reached by pointer only (hover/focus-visible reveals it via CSS) or by pressing Delete/Backspace on the focused tab; it has `tabIndex={-1}` so it isn't a separate Tab stop.
+
 ### Behavior contracts
 
-- **Keyboard:** WAI-ARIA manual activation pattern. Only the active tab has `tabIndex=0`; inactive tabs have `tabIndex=-1`. This makes browser Tab key step *into* the strip (focusing the active tab) and step *out* to the next focusable element. Within the strip, Left/Right arrows move focus between tabs without changing the active selection; Home/End jump to first/last; Enter or Space activates the focused tab; Delete or Backspace on the focused tab invokes its `onClose` if set. Disabled tabs are skipped during arrow navigation.
+- **Keyboard (roving tabindex):** WAI-ARIA manual activation pattern. Exactly one tab at a time has `tabIndex=0`; all others have `tabIndex=-1`. Normally that's the active tab. When no tab matches `activeId` (either `activeId === null` or it points to a nonexistent tab), the first non-disabled tab receives `tabIndex=0` as a fallback so the strip remains reachable via Tab. This makes browser Tab key step *into* the strip (focusing the active — or fallback — tab) and step *out* to the next focusable element. Within the strip, Left/Right arrows move focus between tabs without changing the active selection; Home/End jump to first/last; Enter or Space activates the focused tab; Delete or Backspace on the focused tab invokes its `onClose` if set. Disabled tabs are skipped during arrow navigation.
 - **Click:** Activates immediately, calls `onActivate(id)`. Disabled tabs swallow the click.
-- **Overflow:** When `overflow='scroll'` (default), the component measures itself with `ResizeObserver`. When `scrollWidth > clientWidth`, ◀ ▶ buttons appear at the edges and an overflow-count badge shows how many tabs are off-screen. When `activeId` changes, the active tab is `scrollIntoView({ inline: 'nearest', behavior: 'smooth' })`-ed automatically.
+- **Overflow:** When `overflow='scroll'` (default), the component measures itself with `ResizeObserver`. When `scrollWidth > clientWidth`, BOTH ◀ ▶ chevrons render together as sticky flex children of the strip. Each chevron is greyed out (via the native `disabled` attribute) when its direction is exhausted — left at `scrollLeft <= 0`, right at `scrollLeft >= maxScrollLeft - 1`. Clicking a chevron scrolls one tab at a time via a manual `requestAnimationFrame` animation (250ms ease-out-cubic); rapid clicks accumulate via `pendingScrollTargetRef` so N clicks always advance N tabs, and the animation is always guaranteed to reach its target (no reliance on browser-level smooth scroll, which is unreliable cross-browser). There is no count badge — the design intentionally keeps both chevrons mounted simultaneously instead of per-side conditional rendering, which guarantees tab positions stay stable across clicks (no layout shifts to compensate for). When `activeId` changes, the active tab is `scrollIntoView({ inline: 'nearest', behavior: 'smooth' })`-ed automatically.
+- **Drop indicator:** When `dropInsertIndex` is a number, a thin accent-colored vertical bar is rendered as a flex child at that position to show the drop landing site during a drag. Used by the `useTabDropTarget` hook's companion return value.
 - **Empty `tabs`:** Renders the container, no tabs inside. No crash.
-- **Invalid `activeId`:** If `activeId` doesn't match any tab, no tab gets `aria-selected={true}`, no tab gets `tabIndex=0`. Tab key still flows through normally; arrow nav focuses the first non-disabled tab.
+- **Invalid `activeId`:** If `activeId` doesn't match any tab, no tab gets `aria-selected={true}` and the roving-tabindex fallback described above keeps the strip reachable. Arrow nav focuses the next non-disabled tab from whichever tab currently holds the focus stop.
 
 ### Layout model
 
-The tab is a flex container internally. The min/max width applies to the entire `<button>`, not the label.
+The tab is a flex container internally. The min/max width applies to the entire `<div role="tab">` root element, not the label.
 
 ```
                 ┌─ position: absolute, hover/focus-within: opacity 1 ─┐
@@ -467,7 +495,7 @@ The base component in isolation. Each story renders `<Tabs>` with controlled sta
 - **Long labels — fit sizing** — labels long enough to truncate at `maxTabWidth: 240`, demonstrating ellipsis.
 - **Long labels — equal sizing** — `tabSizing="equal"` so all tabs share the strip width equally, with truncation.
 - **Narrow / wide width clamps** — explicit `minTabWidth` and `maxTabWidth` overrides, e.g., `minTabWidth: 50`, `maxTabWidth: 120`.
-- **Overflow with many tabs** — 20+ tabs in a fixed-width container, forcing the scroll buttons + count badge. Demonstrates auto-scroll-into-view: clicking a tab via external controls (not the strip) scrolls it into view.
+- **Overflow with many tabs** — 20+ tabs in a fixed-width container, forcing both scroll chevrons to render. Demonstrates auto-scroll-into-view: clicking a tab via external controls (not the strip) scrolls it into view. Verifies that each chevron greys out at its extreme via the native `disabled` attribute.
 - **Disabled tabs** — interleaved disabled tabs that arrow nav skips and clicks/keyboard activation ignore.
 - **Empty tabs array** — renders the empty container without crashing.
 - **Invalid `activeId`** — `activeId` set to a non-existent id; demonstrates that no tab gets the active state and arrow nav still focuses the first tab.
