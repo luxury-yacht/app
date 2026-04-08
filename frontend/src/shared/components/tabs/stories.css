@@ -11,20 +11,30 @@
    mirrors how consumers will actually style their container chrome.
    ========================================================================== */
 
-/* Preview viewport — fixed-width wrapper used by ObjectTabsPreview,
-   ObjectPanelTabsPreview, and ClusterTabsPreview so each strip renders in
-   a realistic container width instead of stretching to fill the Storybook
-   canvas. */
+/* Preview viewport — fixed-width wrapper used by ObjectPanelTabsPreview
+   and ClusterTabsPreview so each strip renders in a realistic container
+   width instead of stretching to fill the Storybook canvas. */
 .tabs-story-viewport {
   width: 600px;
 }
 
+/* Wider harness used by multi-strip demos (ObjectTabsPreview) where
+   several strips sit side by side. Caps the overall width so each strip
+   keeps a realistic "real panel" footprint without stretching the full
+   Storybook canvas. */
+.tabs-story-drag-harness {
+  max-width: 1280px;
+}
+
 /* Cross-strip drag demo container — a single strip in a multi-strip
    layout. Draws a subtle outline so the drop target is obviously a box,
-   and flexes with its siblings. The `--drag-over` modifier swaps the
-   solid outline for a dashed accent outline while a drag is hovering. */
+   and flexes with its siblings. Capped at 400px so the tabs inside
+   reliably overflow and the story exercises the chevron scroll path.
+   The `--drag-over` modifier swaps the solid outline for a dashed
+   accent outline while a drag is hovering. */
 .tabs-story-drag-strip {
-  flex: 1;
+  flex: 1 1 400px;
+  max-width: 600px;
   outline: 1px solid #334155;
   padding: 6px;
   border-radius: 4px;

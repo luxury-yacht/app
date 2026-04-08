@@ -100,6 +100,30 @@ const preview: Preview = {
         date: /Date$/i,
       },
     },
+    options: {
+      // Explicit story ordering for the `Shared/Tabs` group. Storybook
+      // v7+ serializes this function and re-evaluates it in a sandboxed
+      // context where closed-over variables do NOT exist, so the order
+      // list must be declared INSIDE the function body — no outer
+      // references. Stories whose id isn't in the list fall through to
+      // Storybook's default alphabetical sort.
+      storySort: (a, b) => {
+        const order = [
+          'shared-tabs--cluster-tabs',
+          'shared-tabs--object-tabs',
+          'shared-tabs--object-panel-tabs',
+          'shared-tabs--disabled-tabs',
+          'shared-tabs--type-safety-demo',
+          'shared-tabs--tear-off-seam',
+        ];
+        const ai = order.indexOf(a.id);
+        const bi = order.indexOf(b.id);
+        if (ai !== -1 && bi !== -1) return ai - bi;
+        if (ai !== -1) return -1;
+        if (bi !== -1) return 1;
+        return a.id.localeCompare(b.id, undefined, { numeric: true });
+      },
+    },
   },
 };
 
