@@ -103,6 +103,17 @@ export function Tabs({
   // corresponding chevron can be greyed out.
   const [atStart, setAtStart] = useState(true);
   const [atEnd, setAtEnd] = useState(false);
+  // Pending scroll target: while an animation is in flight, hold its
+  // destination so rapid clicks can compute the next target from where
+  // we're *going* rather than from the intermediate scrollLeft. Cleared
+  // by the animation callback itself when the animation finishes.
+  const pendingScrollTargetRef = useRef<number | null>(null);
+  // Manual rAF animation frame id. We animate scrollLeft ourselves
+  // instead of using `scrollTo({ behavior: 'smooth' })` because Firefox's
+  // smooth scroll can leave the animation incomplete when interrupted by
+  // rapid subsequent calls, stranding scrollLeft at an intermediate
+  // value. Manual rAF gives consistent cross-browser behavior.
+  const animationFrameRef = useRef<number | null>(null);
 
   // Scroll one tab at a time when the user clicks an overflow indicator.
   // Both indicators are always present when the strip overflows, so the
@@ -116,7 +127,14 @@ export function Tabs({
       parseFloat(getComputedStyle(bar).getPropertyValue('--tab-strip-overflow-indicator-size')) ||
       32;
 
-    const barLeft = bar.scrollLeft;
+    // If a smooth scroll is already in flight, compute the next target
+    // from its destination instead of the intermediate scrollLeft. That
+    // makes rapid clicks cumulative: N clicks always advance N tabs.
+    const maxScrollLeft = Math.max(0, bar.scrollWidth - bar.clientWidth);
+    const barLeft =
+      pendingScrollTargetRef.current !== null
+        ? Math.max(0, Math.min(maxScrollLeft, pendingScrollTargetRef.current))
+        : bar.scrollLeft;
     const barRight = barLeft + bar.clientWidth;
     let target: HTMLButtonElement | null = null;
 
@@ -143,11 +161,52 @@ export function Tabs({
     }
     if (!target) return;
 
-    const scrollTarget =
+    const rawTarget =
       direction === 1
         ? target.offsetLeft + target.offsetWidth - bar.clientWidth + indicatorSize
         : target.offsetLeft - indicatorSize;
-    bar.scrollTo({ left: Math.max(0, scrollTarget), behavior: 'smooth' });
+    const scrollTarget = Math.max(0, Math.min(maxScrollLeft, rawTarget));
+    pendingScrollTargetRef.current = scrollTarget;
+    animateScrollTo(scrollTarget);
+  };
+
+  // Manually animate bar.scrollLeft to `target` over ~250ms using rAF and
+  // an ease-out-cubic curve. If called again mid-animation, the existing
+  // frame is cancelled and a fresh animation starts from the current
+  // scrollLeft to the new target. Clears pendingScrollTargetRef when the
+  // animation finishes so subsequent clicks compute fresh from the live
+  // scrollLeft.
+  const animateScrollTo = (target: number) => {
+    const bar = scrollRef.current;
+    if (!bar) return;
+
+    if (animationFrameRef.current !== null) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+
+    const DURATION_MS = 250;
+    const startTime = performance.now();
+    const startScroll = bar.scrollLeft;
+    const delta = target - startScroll;
+    if (Math.abs(delta) < 0.5) {
+      pendingScrollTargetRef.current = null;
+      return;
+    }
+
+    const step = (now: number) => {
+      const progress = Math.min(1, (now - startTime) / DURATION_MS);
+      // easeOutCubic
+      const eased = 1 - Math.pow(1 - progress, 3);
+      bar.scrollLeft = startScroll + delta * eased;
+      if (progress < 1) {
+        animationFrameRef.current = requestAnimationFrame(step);
+      } else {
+        animationFrameRef.current = null;
+        pendingScrollTargetRef.current = null;
+      }
+    };
+    animationFrameRef.current = requestAnimationFrame(step);
   };
 
   const focusFirstEnabled = () => {
@@ -240,6 +299,10 @@ export function Tabs({
     return () => {
       observer?.disconnect();
       el.removeEventListener('scroll', measure);
+      if (animationFrameRef.current !== null) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
     };
   }, [overflow, tabs]);
 

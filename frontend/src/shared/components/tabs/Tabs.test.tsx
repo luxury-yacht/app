@@ -803,6 +803,14 @@ describe('Tabs', () => {
       disconnect() {}
     };
 
+    // Spy on requestAnimationFrame so we can drive the manual scroll
+    // animation synchronously from the test.
+    const rafCallbacks: FrameRequestCallback[] = [];
+    const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
+      rafCallbacks.push(cb);
+      return rafCallbacks.length;
+    });
+
     act(() => {
       root.render(
         <Tabs
@@ -817,8 +825,17 @@ describe('Tabs', () => {
     const scrollContainer = container.querySelector<HTMLDivElement>('[role="tablist"]')!;
     Object.defineProperty(scrollContainer, 'scrollWidth', { value: 1000, configurable: true });
     Object.defineProperty(scrollContainer, 'clientWidth', { value: 200, configurable: true });
+    // Make scrollLeft writable so the manual animation can set it.
+    let scrollLeftValue = 0;
+    Object.defineProperty(scrollContainer, 'scrollLeft', {
+      get: () => scrollLeftValue,
+      set: (v: number) => {
+        scrollLeftValue = v;
+      },
+      configurable: true,
+    });
 
-    // Mock per-tab offsets so the measurement loop computes hidden counts.
+    // Mock per-tab offsets so the target-finding loop has something to work with.
     const tabButtons = container.querySelectorAll<HTMLButtonElement>('[role="tab"]');
     tabButtons.forEach((btn, i) => {
       Object.defineProperty(btn, 'offsetLeft', { value: i * 100, configurable: true });
@@ -832,23 +849,29 @@ describe('Tabs', () => {
     );
     expect(rightButton).toBeTruthy();
 
-    const scrollToSpy = vi.fn();
-    scrollContainer.scrollTo = scrollToSpy as any;
-
     act(() => {
       rightButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    // Click should have scheduled a rAF to start the manual scroll animation.
+    expect(rafSpy).toHaveBeenCalled();
+
+    // Drive the animation forward to completion by calling the rAF
+    // callback with a time far beyond DURATION_MS so progress = 1.
+    const firstStep = rafCallbacks[0];
+    expect(firstStep).toBeDefined();
+    act(() => {
+      firstStep(performance.now() + 10_000);
     });
 
     // With 10 tabs at offsetLeft = 0, 100, 200, ... and clientWidth = 200,
     // the first tab whose right edge is hidden past the right indicator
     // (barRight - indicatorSize + 1 = 169) is tab 1 (right edge at 200).
-    // The scroll target is tab1.offsetLeft + tab1.offsetWidth - clientWidth
-    // + indicatorSize = 100 + 100 - 200 + 32 = 32.
-    expect(scrollToSpy).toHaveBeenCalled();
-    const callArg = scrollToSpy.mock.calls[0][0];
-    expect(callArg.left).toBe(32);
-    expect(callArg.behavior).toBe('smooth');
+    // The animation target is tab1.offsetLeft + tab1.offsetWidth -
+    // clientWidth + indicatorSize = 100 + 100 - 200 + 32 = 32.
+    expect(scrollContainer.scrollLeft).toBe(32);
 
+    rafSpy.mockRestore();
     (globalThis as any).ResizeObserver = OriginalResizeObserver;
   });
 
