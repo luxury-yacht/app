@@ -1,0 +1,70 @@
+/* ==========================================================================
+   Tabs story scaffolding
+   ==========================================================================
+   Classes used by Storybook stories for the shared <Tabs> component.
+   These are story-only — they do NOT exist in production, and nothing in
+   `src/` outside this directory imports them. Class names are all
+   prefixed with `tabs-story-` so they can't collide with anything real.
+
+   The point of this file is that stories use real CSS classes instead of
+   inline styles, so the validation path for the shared <Tabs> component
+   mirrors how consumers will actually style their container chrome.
+   ========================================================================== */
+
+/* Preview viewport — fixed-width wrapper used by ObjectTabsPreview,
+   ObjectPanelTabsPreview, and ClusterTabsPreview so each strip renders in
+   a realistic container width instead of stretching to fill the Storybook
+   canvas. */
+.tabs-story-viewport {
+  width: 600px;
+}
+
+/* Cross-strip drag demo container — a single strip in a multi-strip
+   layout. Draws a subtle outline so the drop target is obviously a box,
+   and flexes with its siblings. The `--drag-over` modifier swaps the
+   solid outline for a dashed accent outline while a drag is hovering. */
+.tabs-story-drag-strip {
+  flex: 1;
+  outline: 1px solid #334155;
+  padding: 6px;
+  border-radius: 4px;
+}
+
+.tabs-story-drag-strip--drag-over {
+  outline: 1px dashed #3b82f6;
+}
+
+.tabs-story-drag-strip__label {
+  font-size: 0.7rem;
+  opacity: 0.7;
+  margin-bottom: 4px;
+}
+
+/* Parent flex container for the cross-strip demos — two strips side by
+   side with a gap. */
+.tabs-story-drag-row {
+  display: flex;
+  gap: 24px;
+}
+
+/* Modifier for a drag-row that appears below an earlier row (e.g. the
+   dynamically-created third strip in DropOnEmptySpaceCreatesNewStrip). */
+.tabs-story-drag-row--below {
+  margin-top: 24px;
+}
+
+/* New-strip drop zone — the dashed empty-space target that creates a
+   new strip on drop. */
+.tabs-story-drop-zone {
+  margin-top: 24px;
+  padding: 24px;
+  border: 2px dashed #64748b;
+  border-radius: 6px;
+  text-align: center;
+  font-size: 0.8rem;
+  opacity: 0.8;
+}
+
+.tabs-story-drop-zone--drag-over {
+  border-color: #3b82f6;
+}

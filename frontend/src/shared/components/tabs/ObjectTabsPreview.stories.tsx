@@ -16,10 +16,17 @@
  * uppercase transform, unlike the Object Panel preview).
  */
 
-import { useState, type CSSProperties } from 'react';
+import { useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
 import { Tabs, type TabDescriptor, type TabsProps } from './';
 import { ThemeProviderDecorator } from '../../../../.storybook/decorators/ThemeProviderDecorator';
+// Import the real dockable panel CSS so the preview renders each tab's
+// kind indicator via the production `.dockable-tab__kind-indicator.kind-badge`
+// rules (which turn a `.kind-badge` into a 10x10 colored dot). That way
+// this preview story exercises the same styling path the live app uses
+// post-migration, rather than inline-styled spans.
+import '../../../ui/dockable/DockablePanel.css';
+import './stories.css';
 
 // Lightweight action logger. The project doesn't install @storybook/addon-actions,
 // so we log to the browser console instead — same pattern as Tabs.stories.tsx
@@ -32,98 +39,92 @@ const logAction =
 
 /**
  * Small wrapper that owns `activeId` state so the story can render the
- * fully-controlled <Tabs> without boilerplate. Mirrors the TabsHarness
- * pattern used in ObjectPanelTabsPreview.stories.tsx.
+ * fully-controlled <Tabs> without boilerplate. Wraps the strip in a
+ * fixed-width viewport via the `tabs-story-viewport` class defined in
+ * `stories.css` (the preview uses a real CSS class rather than an inline
+ * style so the styling path matches production).
  */
 interface TabsHarnessProps extends Omit<TabsProps, 'activeId' | 'onActivate'> {
   initialActiveId: string | null;
-  wrapperStyle?: CSSProperties;
 }
 
-function TabsHarness({ initialActiveId, wrapperStyle, tabs, ...rest }: TabsHarnessProps) {
+function TabsHarness({ initialActiveId, tabs, ...rest }: TabsHarnessProps) {
   const [activeId, setActiveId] = useState<string | null>(initialActiveId);
   const handleActivate = (id: string) => {
     logAction('onActivate')(id);
     setActiveId(id);
   };
-  const content = <Tabs {...rest} tabs={tabs} activeId={activeId} onActivate={handleActivate} />;
-  return wrapperStyle ? <div style={wrapperStyle}>{content}</div> : content;
+  return (
+    <div className="tabs-story-viewport">
+      <Tabs {...rest} tabs={tabs} activeId={activeId} onActivate={handleActivate} />
+    </div>
+  );
 }
 
-// Constrain the width to roughly a real Dockable column so the strip renders
-// in context instead of stretching to fill the Storybook canvas. The strip
-// brings its own background and bottom border via tabs.css; we don't add any
-// chrome of our own.
-const panelWrapperStyle: CSSProperties = {
-  width: 600,
-};
-
-// Dockable uses a small colored dot in the `leading` slot to indicate the
-// kind of resource each panel represents. For the preview we use plain
-// inline-styled spans so the story doesn't depend on any kind-badge CSS.
-const kindDot = (color: string) => (
-  <span
-    style={{
-      display: 'inline-block',
-      width: 10,
-      height: 10,
-      borderRadius: '50%',
-      background: color,
-      flexShrink: 0,
-    }}
-  />
+// Dockable renders a small colored kind indicator in the `leading` slot
+// for each resource tab. The indicator markup mirrors the live
+// DockableTabBar exactly: a `<span>` with classes
+// `dockable-tab__kind-indicator kind-badge <kind>` and `aria-hidden`. The
+// `dockable-tab__kind-indicator.kind-badge` override in DockablePanel.css
+// turns the badge into a 10x10 colored dot (via currentColor), and the
+// kind-specific color class (e.g. `.kind-badge.deployment`) drives the
+// final color from `styles/components/badges.css`. Tabs without a k8s
+// kind (logs, diagnostics) omit the leading slot entirely, matching how
+// the live DockableTabBar conditionally renders the indicator.
+const kindIndicator = (kindClass: string) => (
+  <span className={`dockable-tab__kind-indicator kind-badge ${kindClass}`} aria-hidden="true" />
 );
 
 // Tab descriptors using realistic Kubernetes resource paths so the preview
-// reflects what Dockable labels actually look like in the real app. Mix of
-// kinds (deployment, pod, configmap, logs, diagnostics) with distinct
-// colors so the variety is visible at a glance.
+// reflects what Dockable labels actually look like in the real app. Each
+// tab uses the production kind class for its leading indicator (colors
+// come from `.kind-badge.<kind>` rules in `badges.css`). Tabs that aren't
+// tied to a k8s kind (logs, diagnostics) omit the leading slot, matching
+// the live DockableTabBar's conditional rendering of the indicator.
 const DEPLOYMENT_TAB: TabDescriptor = {
   id: 'panel-deployment-nginx',
   label: 'deployment/nginx-frontend',
-  leading: kindDot('#3b82f6'),
+  leading: kindIndicator('deployment'),
   onClose: () => logAction('onClose')('panel-deployment-nginx'),
 };
 const POD_TAB: TabDescriptor = {
   id: 'panel-pod-api',
   label: 'pod/api-server-7d4f5b8c9-xkvm2',
-  leading: kindDot('#10b981'),
+  leading: kindIndicator('pod'),
   onClose: () => logAction('onClose')('panel-pod-api'),
 };
 const CONFIGMAP_TAB: TabDescriptor = {
   id: 'panel-configmap',
   label: 'configmap/app-config',
-  leading: kindDot('#f59e0b'),
+  leading: kindIndicator('configmap'),
   onClose: () => logAction('onClose')('panel-configmap'),
 };
 const LOGS_TAB: TabDescriptor = {
   id: 'panel-logs-api',
   label: 'logs: api-server',
-  leading: kindDot('#8b5cf6'),
   onClose: () => logAction('onClose')('panel-logs-api'),
 };
 const DIAGNOSTICS_TAB: TabDescriptor = {
   id: 'panel-diagnostics',
   label: 'diagnostics',
-  leading: kindDot('#6b7280'),
   onClose: () => logAction('onClose')('panel-diagnostics'),
 };
 const SERVICE_TAB: TabDescriptor = {
   id: 'panel-service-api',
   label: 'service/api-server',
-  leading: kindDot('#ec4899'),
+  leading: kindIndicator('service'),
   onClose: () => logAction('onClose')('panel-service-api'),
 };
 const SECRET_TAB: TabDescriptor = {
   id: 'panel-secret-tls',
   label: 'secret/ingress-tls-cert',
-  leading: kindDot('#ef4444'),
+  leading: kindIndicator('secret'),
   onClose: () => logAction('onClose')('panel-secret-tls'),
 };
 const INGRESS_TAB: TabDescriptor = {
   id: 'panel-ingress',
   label: 'ingress/public-gateway',
-  leading: kindDot('#14b8a6'),
+  leading: kindIndicator('ingress'),
   onClose: () => logAction('onClose')('panel-ingress'),
 };
 
@@ -161,6 +162,5 @@ export const ObjectTabs: Story = {
       SECRET_TAB,
       INGRESS_TAB,
     ],
-    wrapperStyle: panelWrapperStyle,
   },
 };

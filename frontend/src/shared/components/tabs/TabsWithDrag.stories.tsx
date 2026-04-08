@@ -12,13 +12,19 @@
  * repetitive but fully compliant with the rules of hooks.
  */
 
-import { useCallback, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
 
 import { Tabs, type TabDescriptor } from './Tabs';
 import { TabDragProvider, useTabDragSource, useTabDropTarget } from './dragCoordinator';
 import type { TabDragPayload } from './dragCoordinator';
 import { ThemeProviderDecorator } from '../../../../.storybook/decorators/ThemeProviderDecorator';
+// Pull in the real dockable-panel CSS so the custom drag-preview story
+// exercises the production `.dockable-tab-drag-preview` class (not an
+// inline-styled div). This mirrors the styling path consumers will take
+// when Phase 2 migrates DockableTabBar to the shared <Tabs> component.
+import '../../../ui/dockable/DockablePanel.css';
+import './stories.css';
 
 // Lightweight action logger — mirrors Tabs.stories.tsx since the project
 // does not install @storybook/addon-actions. Console output is still
@@ -109,59 +115,42 @@ function DockableReorderStrip() {
   const [activeId, setActiveId] = useState<string | null>('a');
 
   const previewRef = useRef<HTMLDivElement | null>(null);
+  const previewLabelRef = useRef<HTMLSpanElement | null>(null);
 
-  // Unrolled hook calls with per-slot getDragImage. Each slot binds to the
-  // CURRENT tab at that index so payloads and drag images stay in sync
-  // after reorders. Empty slots pass null to disable drag.
+  // Shared factory for per-slot getDragImage callbacks. Bound to the
+  // CURRENT tab at each slot index, writes the tab label into the
+  // preview's label span (NOT the outer element, because the outer
+  // element also holds a kind-indicator span we don't want to wipe).
+  // Returns the real `.dockable-tab-drag-preview` element as the drag
+  // image, with the same cursor offsets the live dockable uses.
+  const makeGetDragImage = (slotIndex: number) => () => {
+    const tab = tabs[slotIndex];
+    if (!previewRef.current || !previewLabelRef.current || !tab) return null;
+    previewLabelRef.current.textContent = String(tab.label);
+    return { element: previewRef.current, offsetX: 14, offsetY: 16 };
+  };
+
+  // Unrolled hook calls — one per slot so hook order stays stable across
+  // reorders. Empty slots pass null to disable drag.
   const drag0 = useTabDragSource(
     tabs[0] ? { kind: 'dockable-tab', panelId: tabs[0].id, sourceGroupId: 'main' } : null,
-    {
-      getDragImage: () => {
-        if (!previewRef.current || !tabs[0]) return null;
-        previewRef.current.textContent = String(tabs[0].label);
-        return { element: previewRef.current, offsetX: 14, offsetY: 16 };
-      },
-    }
+    { getDragImage: makeGetDragImage(0) }
   );
   const drag1 = useTabDragSource(
     tabs[1] ? { kind: 'dockable-tab', panelId: tabs[1].id, sourceGroupId: 'main' } : null,
-    {
-      getDragImage: () => {
-        if (!previewRef.current || !tabs[1]) return null;
-        previewRef.current.textContent = String(tabs[1].label);
-        return { element: previewRef.current, offsetX: 14, offsetY: 16 };
-      },
-    }
+    { getDragImage: makeGetDragImage(1) }
   );
   const drag2 = useTabDragSource(
     tabs[2] ? { kind: 'dockable-tab', panelId: tabs[2].id, sourceGroupId: 'main' } : null,
-    {
-      getDragImage: () => {
-        if (!previewRef.current || !tabs[2]) return null;
-        previewRef.current.textContent = String(tabs[2].label);
-        return { element: previewRef.current, offsetX: 14, offsetY: 16 };
-      },
-    }
+    { getDragImage: makeGetDragImage(2) }
   );
   const drag3 = useTabDragSource(
     tabs[3] ? { kind: 'dockable-tab', panelId: tabs[3].id, sourceGroupId: 'main' } : null,
-    {
-      getDragImage: () => {
-        if (!previewRef.current || !tabs[3]) return null;
-        previewRef.current.textContent = String(tabs[3].label);
-        return { element: previewRef.current, offsetX: 14, offsetY: 16 };
-      },
-    }
+    { getDragImage: makeGetDragImage(3) }
   );
   const drag4 = useTabDragSource(
     tabs[4] ? { kind: 'dockable-tab', panelId: tabs[4].id, sourceGroupId: 'main' } : null,
-    {
-      getDragImage: () => {
-        if (!previewRef.current || !tabs[4]) return null;
-        previewRef.current.textContent = String(tabs[4].label);
-        return { element: previewRef.current, offsetX: 14, offsetY: 16 };
-      },
-    }
+    { getDragImage: makeGetDragImage(4) }
   );
   const dragProps = [drag0, drag1, drag2, drag3, drag4];
 
@@ -192,24 +181,21 @@ function DockableReorderStrip() {
           dropInsertIndex={dropInsertIndex}
         />
       </div>
-      {/* Offscreen preview element — must be in the DOM when dragstart fires. */}
-      <div
-        ref={previewRef}
-        style={{
-          position: 'fixed',
-          top: -9999,
-          left: -9999,
-          padding: '0.4rem 0.55rem',
-          borderRadius: 6,
-          border: '1px solid #3b82f6',
-          background: '#1e293b',
-          color: '#fff',
-          fontSize: '0.74rem',
-          whiteSpace: 'nowrap',
-        }}
-        aria-hidden="true"
-      >
-        Drag preview
+      {/* Custom drag preview element — must be in the DOM when dragstart
+          fires. Uses the real `.dockable-tab-drag-preview` classes from
+          DockablePanel.css so the styling path matches the live dockable
+          panel provider. The class's default `transform: translate3d(var(
+          --dockable-tab-drag-x, -9999px), var(--dockable-tab-drag-y,
+          -9999px), 0)` keeps it offscreen until the browser screenshots
+          it at dragstart. The kind-indicator span is fixed to
+          `deployment` here (the story isn't about showing kind variety);
+          the label span's text content is updated per-slot in
+          `makeGetDragImage`. */}
+      <div ref={previewRef} className="dockable-tab-drag-preview" aria-hidden="true">
+        <span className="dockable-tab-drag-preview__kind kind-badge deployment" />
+        <span ref={previewLabelRef} className="dockable-tab-drag-preview__label">
+          Drag preview
+        </span>
       </div>
     </>
   );
@@ -277,14 +263,9 @@ function CrossStrip({ label, groupId, tabs, activeId, onActivate, onMove }: Cros
   return (
     <div
       ref={dropRef as (el: HTMLDivElement | null) => void}
-      style={{
-        flex: 1,
-        outline: isDragOver ? '1px dashed #3b82f6' : '1px solid #334155',
-        padding: 6,
-        borderRadius: 4,
-      }}
+      className={`tabs-story-drag-strip${isDragOver ? ' tabs-story-drag-strip--drag-over' : ''}`}
     >
-      <div style={{ fontSize: '0.7rem', opacity: 0.7, marginBottom: 4 }}>{label}</div>
+      <div className="tabs-story-drag-strip__label">{label}</div>
       <Tabs
         aria-label={`${label} Tabs`}
         tabs={tabsWithDrag}
@@ -349,7 +330,7 @@ function CrossStripHarness() {
   );
 
   return (
-    <div style={{ display: 'flex', gap: 24 }}>
+    <div className="tabs-story-drag-row">
       <CrossStrip
         label="Left strip"
         groupId="left"
@@ -436,14 +417,9 @@ function EmptySpaceStrip({
   return (
     <div
       ref={dropRef as (el: HTMLDivElement | null) => void}
-      style={{
-        flex: 1,
-        outline: isDragOver ? '1px dashed #3b82f6' : '1px solid #334155',
-        padding: 6,
-        borderRadius: 4,
-      }}
+      className={`tabs-story-drag-strip${isDragOver ? ' tabs-story-drag-strip--drag-over' : ''}`}
     >
-      <div style={{ fontSize: '0.7rem', opacity: 0.7, marginBottom: 4 }}>{label}</div>
+      <div className="tabs-story-drag-strip__label">{label}</div>
       <Tabs
         aria-label={`${label} Tabs`}
         tabs={tabsWithDrag}
@@ -470,15 +446,7 @@ function NewStripDropZone({ onCreate }: NewStripDropZoneProps) {
   return (
     <div
       ref={ref}
-      style={{
-        marginTop: 24,
-        padding: 24,
-        border: `2px dashed ${isDragOver ? '#3b82f6' : '#64748b'}`,
-        borderRadius: 6,
-        textAlign: 'center',
-        fontSize: '0.8rem',
-        opacity: 0.8,
-      }}
+      className={`tabs-story-drop-zone${isDragOver ? ' tabs-story-drop-zone--drag-over' : ''}`}
     >
       Drop a tab here to create a new strip
     </div>
@@ -587,7 +555,7 @@ function EmptySpaceHarness() {
 
   return (
     <div>
-      <div style={{ display: 'flex', gap: 24 }}>
+      <div className="tabs-story-drag-row">
         <EmptySpaceStrip
           label="Strip A"
           groupId="a"
@@ -612,7 +580,7 @@ function EmptySpaceHarness() {
         />
       </div>
       {thirdTabs ? (
-        <div style={{ marginTop: 24 }}>
+        <div className="tabs-story-drag-row tabs-story-drag-row--below">
           <EmptySpaceStrip
             label="Strip C (new)"
             groupId="c"
@@ -673,16 +641,9 @@ function ClusterOnlyStrip() {
   return (
     <div
       ref={dropRef as (el: HTMLDivElement | null) => void}
-      style={{
-        flex: 1,
-        outline: isDragOver ? '1px dashed #3b82f6' : '1px solid #334155',
-        padding: 6,
-        borderRadius: 4,
-      }}
+      className={`tabs-story-drag-strip${isDragOver ? ' tabs-story-drag-strip--drag-over' : ''}`}
     >
-      <div style={{ fontSize: '0.7rem', opacity: 0.7, marginBottom: 4 }}>
-        Cluster strip (accepts cluster-tab only)
-      </div>
+      <div className="tabs-story-drag-strip__label">Cluster strip (accepts cluster-tab only)</div>
       <Tabs
         aria-label="Cluster-only Strip"
         tabs={tabsWithDrag}
@@ -742,16 +703,9 @@ function DockableOnlyStrip() {
   return (
     <div
       ref={dropRef as (el: HTMLDivElement | null) => void}
-      style={{
-        flex: 1,
-        outline: isDragOver ? '1px dashed #3b82f6' : '1px solid #334155',
-        padding: 6,
-        borderRadius: 4,
-      }}
+      className={`tabs-story-drag-strip${isDragOver ? ' tabs-story-drag-strip--drag-over' : ''}`}
     >
-      <div style={{ fontSize: '0.7rem', opacity: 0.7, marginBottom: 4 }}>
-        Dockable strip (accepts dockable-tab only)
-      </div>
+      <div className="tabs-story-drag-strip__label">Dockable strip (accepts dockable-tab only)</div>
       <Tabs
         aria-label="Dockable-only Strip"
         tabs={tabsWithDrag}
@@ -768,7 +722,7 @@ function DockableOnlyStrip() {
 
 function TypeSafetyHarness() {
   return (
-    <div style={{ display: 'flex', gap: 24 }}>
+    <div className="tabs-story-drag-row">
       <ClusterOnlyStrip />
       <DockableOnlyStrip />
     </div>
@@ -840,13 +794,11 @@ function TearOffStrip() {
  */
 interface ProviderWrapperProps {
   children: React.ReactNode;
-  wrapperStyle?: CSSProperties;
   onTearOff?: (payload: TabDragPayload, cursor: { x: number; y: number }) => void;
 }
 
-function ProviderWrapper({ children, wrapperStyle, onTearOff }: ProviderWrapperProps) {
-  const content = <TabDragProvider onTearOff={onTearOff}>{children}</TabDragProvider>;
-  return wrapperStyle ? <div style={wrapperStyle}>{content}</div> : content;
+function ProviderWrapper({ children, onTearOff }: ProviderWrapperProps) {
+  return <TabDragProvider onTearOff={onTearOff}>{children}</TabDragProvider>;
 }
 
 const meta: Meta<typeof ProviderWrapper> = {

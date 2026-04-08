@@ -18,10 +18,11 @@
  * labels.
  */
 
-import { useState, type CSSProperties } from 'react';
+import { useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
 import { Tabs, type TabDescriptor, type TabsProps } from './';
 import { ThemeProviderDecorator } from '../../../../.storybook/decorators/ThemeProviderDecorator';
+import './stories.css';
 
 // Lightweight action logger. The project doesn't install @storybook/addon-actions,
 // so we log to the browser console instead — same pattern as Tabs.stories.tsx
@@ -34,30 +35,27 @@ const logAction =
 
 /**
  * Small wrapper that owns `activeId` state so the story can render the
- * fully-controlled <Tabs> without boilerplate. Mirrors the TabsHarness
- * pattern used in ObjectPanelTabsPreview.stories.tsx.
+ * fully-controlled <Tabs> without boilerplate. Wraps the strip in a
+ * fixed-width viewport via the `tabs-story-viewport` class (see
+ * `stories.css`) so the styling path mirrors how a real container would
+ * constrain the strip rather than an inline style.
  */
 interface TabsHarnessProps extends Omit<TabsProps, 'activeId' | 'onActivate'> {
   initialActiveId: string | null;
-  wrapperStyle?: CSSProperties;
 }
 
-function TabsHarness({ initialActiveId, wrapperStyle, tabs, ...rest }: TabsHarnessProps) {
+function TabsHarness({ initialActiveId, tabs, ...rest }: TabsHarnessProps) {
   const [activeId, setActiveId] = useState<string | null>(initialActiveId);
   const handleActivate = (id: string) => {
     logAction('onActivate')(id);
     setActiveId(id);
   };
-  const content = <Tabs {...rest} tabs={tabs} activeId={activeId} onActivate={handleActivate} />;
-  return wrapperStyle ? <div style={wrapperStyle}>{content}</div> : content;
+  return (
+    <div className="tabs-story-viewport">
+      <Tabs {...rest} tabs={tabs} activeId={activeId} onActivate={handleActivate} />
+    </div>
+  );
 }
-
-// Constrain the width so the strip renders in context instead of stretching
-// to fill the Storybook canvas. The strip brings its own background and
-// bottom border via tabs.css; we don't add any chrome of our own.
-const panelWrapperStyle: CSSProperties = {
-  width: 600,
-};
 
 // Tab descriptors using realistic kubeconfig context names so the preview
 // reflects what Cluster labels actually look like in the real app. The
@@ -139,6 +137,5 @@ export const ClusterTabs: Story = {
       AKS_DEV_TAB,
       KIND_LOCAL_TAB,
     ],
-    wrapperStyle: panelWrapperStyle,
   },
 };

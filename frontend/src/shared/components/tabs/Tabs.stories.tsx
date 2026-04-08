@@ -7,7 +7,7 @@
  * separate TabsWithDrag.stories.tsx file.
  */
 
-import { useState, type CSSProperties } from 'react';
+import { useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
 import { Tabs, type TabsProps } from './';
 import { ThemeProviderDecorator } from '../../../../.storybook/decorators/ThemeProviderDecorator';
@@ -24,21 +24,22 @@ const logAction =
 /**
  * Small wrapper that owns `activeId` state so every story can render the
  * fully-controlled <Tabs> without boilerplate. Accepts a caller-provided
- * initial id plus any <Tabs> prop overrides.
+ * initial id plus any <Tabs> prop overrides. No wrapper chrome — these
+ * stories exercise the shared base component in isolation; preview
+ * stories that need a fixed viewport width live in their own files and
+ * use the `tabs-story-viewport` class from `stories.css`.
  */
 interface TabsHarnessProps extends Omit<TabsProps, 'activeId' | 'onActivate'> {
   initialActiveId: string | null;
-  wrapperStyle?: CSSProperties;
 }
 
-function TabsHarness({ initialActiveId, wrapperStyle, tabs, ...rest }: TabsHarnessProps) {
+function TabsHarness({ initialActiveId, tabs, ...rest }: TabsHarnessProps) {
   const [activeId, setActiveId] = useState<string | null>(initialActiveId);
   const handleActivate = (id: string) => {
     logAction('onActivate')(id);
     setActiveId(id);
   };
-  const content = <Tabs {...rest} tabs={tabs} activeId={activeId} onActivate={handleActivate} />;
-  return wrapperStyle ? <div style={wrapperStyle}>{content}</div> : content;
+  return <Tabs {...rest} tabs={tabs} activeId={activeId} onActivate={handleActivate} />;
 }
 
 const meta: Meta<typeof TabsHarness> = {
