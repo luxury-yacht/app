@@ -13,7 +13,16 @@ import { TAB_DRAG_DATA_TYPE, type TabDragPayload } from './types';
 
 export interface UseTabDropTargetOptions<K extends TabDragPayload['kind']> {
   accepts: K[];
-  onDrop: (payload: Extract<TabDragPayload, { kind: K }>, event: DragEvent) => void;
+  /**
+   * Fires when a drag of an accepted kind is dropped on the target. The
+   * third argument is the computed insert index in `[0, tabCount]` — use
+   * it to place the dropped tab without having to re-measure the DOM.
+   */
+  onDrop: (
+    payload: Extract<TabDragPayload, { kind: K }>,
+    event: DragEvent,
+    insertIndex: number
+  ) => void;
   onDragEnter?: (payload: Extract<TabDragPayload, { kind: K }>) => void;
   onDragLeave?: () => void;
 }
@@ -21,6 +30,29 @@ export interface UseTabDropTargetOptions<K extends TabDragPayload['kind']> {
 export interface UseTabDropTargetResult {
   ref: RefCallback<HTMLElement>;
   isDragOver: boolean;
+  /**
+   * Index in `[0, tabCount]` where the dragged tab would be inserted if
+   * dropped right now. `null` when no drag is hovering. Computed from the
+   * horizontal midpoint of each `[role="tab"]` button inside the drop
+   * zone: cursor left of midpoint inserts before that tab; right of
+   * midpoint inserts after. Pass this straight to `<Tabs dropInsertIndex>`
+   * to render the drop position indicator.
+   */
+  dropInsertIndex: number | null;
+}
+
+/**
+ * Compute the insert index for a drop at `clientX` relative to the tab
+ * buttons found inside `container`. Uses each button's midpoint — cursor
+ * left of midpoint inserts before that tab, right inserts after.
+ */
+function computeDropInsertIndex(container: HTMLElement, clientX: number): number {
+  const buttons = container.querySelectorAll<HTMLElement>('[role="tab"]');
+  for (let i = 0; i < buttons.length; i += 1) {
+    const rect = buttons[i].getBoundingClientRect();
+    if (clientX < rect.left + rect.width / 2) return i;
+  }
+  return buttons.length;
 }
 
 let nextTargetId = 0;
@@ -42,6 +74,7 @@ export function useTabDropTarget<K extends TabDragPayload['kind']>(
   const { accepts, onDrop, onDragEnter, onDragLeave } = opts;
   const { registerTarget, unregisterTarget } = useContext(TabDragContext);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [dropInsertIndex, setDropInsertIndex] = useState<number | null>(null);
   const elementRef = useRef<HTMLElement | null>(null);
   const idRef = useRef<number>(nextTargetId++);
 
@@ -67,6 +100,11 @@ export function useTabDropTarget<K extends TabDragPayload['kind']>(
     if (!payload || !acceptsRef.current.includes(payload.kind as K)) return;
     event.preventDefault();
     if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+    const el = elementRef.current;
+    if (el) {
+      const nextIndex = computeDropInsertIndex(el, event.clientX);
+      setDropInsertIndex((prev) => (prev === nextIndex ? prev : nextIndex));
+    }
   }, []);
 
   const handleDragLeave = useCallback((event: DragEvent) => {
@@ -76,6 +114,7 @@ export function useTabDropTarget<K extends TabDragPayload['kind']>(
       return;
     }
     setIsDragOver(false);
+    setDropInsertIndex(null);
     onDragLeaveRef.current?.();
   }, []);
 
@@ -83,8 +122,11 @@ export function useTabDropTarget<K extends TabDragPayload['kind']>(
     const payload = readPayload(event);
     if (!payload || !acceptsRef.current.includes(payload.kind as K)) return;
     event.preventDefault();
+    const el = elementRef.current;
+    const insertIndex = el ? computeDropInsertIndex(el, event.clientX) : 0;
     setIsDragOver(false);
-    onDropRef.current(payload as Extract<TabDragPayload, { kind: K }>, event);
+    setDropInsertIndex(null);
+    onDropRef.current(payload as Extract<TabDragPayload, { kind: K }>, event, insertIndex);
   }, []);
 
   const ref = useCallback<RefCallback<HTMLElement>>(
@@ -138,5 +180,5 @@ export function useTabDropTarget<K extends TabDragPayload['kind']>(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return { ref, isDragOver };
+  return { ref, isDragOver, dropInsertIndex };
 }

@@ -29,23 +29,6 @@ const logAction =
     console.log(`[TabsWithDrag story] ${name}`, ...args);
   };
 
-/**
- * Given a horizontal drop event and a list of tab button elements, return
- * the index the dragged tab should be inserted at. Uses each button's
- * midpoint: cursor left-of-midpoint inserts before that tab, right-of
- * inserts after. Tabs not present in the DOM (e.g. during initial render)
- * are skipped.
- */
-function computeDropIndex(stripElement: HTMLElement, clientX: number): number {
-  const buttons = Array.from(stripElement.querySelectorAll<HTMLElement>('[role="tab"]'));
-  for (let i = 0; i < buttons.length; i += 1) {
-    const rect = buttons[i].getBoundingClientRect();
-    const midpoint = rect.left + rect.width / 2;
-    if (clientX < midpoint) return i;
-  }
-  return buttons.length;
-}
-
 /** Reorder: move `fromId` to position `toIndex` in the tab list. */
 function reorder(tabs: TabDescriptor[], fromId: string, toIndex: number): TabDescriptor[] {
   const fromIndex = tabs.findIndex((t) => t.id === fromId);
@@ -82,23 +65,13 @@ function ClusterReorderStrip() {
   const drag4 = useTabDragSource(tabs[4] ? { kind: 'cluster-tab', clusterId: tabs[4].id } : null);
   const dragProps = [drag0, drag1, drag2, drag3, drag4];
 
-  const stripRef = useRef<HTMLDivElement | null>(null);
-  const { ref: dropRef, isDragOver } = useTabDropTarget({
+  const { ref: dropRef, dropInsertIndex } = useTabDropTarget({
     accepts: ['cluster-tab'],
-    onDrop: (payload, event) => {
-      logAction('onDrop[cluster]')(payload);
-      const strip = stripRef.current;
-      if (!strip) return;
-      const toIndex = computeDropIndex(strip, event.clientX);
-      setTabs((prev) => reorder(prev, payload.clusterId, toIndex));
+    onDrop: (payload, _event, insertIndex) => {
+      logAction('onDrop[cluster]')(payload, insertIndex);
+      setTabs((prev) => reorder(prev, payload.clusterId, insertIndex));
     },
   });
-
-  // Compose a ref that assigns to both the local stripRef and the drop target.
-  const assignRef = (el: HTMLDivElement | null) => {
-    stripRef.current = el;
-    dropRef(el);
-  };
 
   const tabsWithDrag: TabDescriptor[] = tabs.map((tab, i) => ({
     ...tab,
@@ -106,10 +79,7 @@ function ClusterReorderStrip() {
   }));
 
   return (
-    <div
-      ref={assignRef}
-      style={{ outline: isDragOver ? '2px dashed #3b82f6' : 'none', padding: 4 }}
-    >
+    <div ref={dropRef as (el: HTMLDivElement | null) => void}>
       <Tabs
         aria-label="Cluster Drag Demo Tabs"
         tabs={tabsWithDrag}
@@ -118,6 +88,7 @@ function ClusterReorderStrip() {
           logAction('onActivate[cluster]')(id);
           setActiveId(id);
         }}
+        dropInsertIndex={dropInsertIndex}
       />
     </div>
   );
@@ -194,22 +165,13 @@ function DockableReorderStrip() {
   );
   const dragProps = [drag0, drag1, drag2, drag3, drag4];
 
-  const stripRef = useRef<HTMLDivElement | null>(null);
-  const { ref: dropRef, isDragOver } = useTabDropTarget({
+  const { ref: dropRef, dropInsertIndex } = useTabDropTarget({
     accepts: ['dockable-tab'],
-    onDrop: (payload, event) => {
-      logAction('onDrop[dockable]')(payload);
-      const strip = stripRef.current;
-      if (!strip) return;
-      const toIndex = computeDropIndex(strip, event.clientX);
-      setTabs((prev) => reorder(prev, payload.panelId, toIndex));
+    onDrop: (payload, _event, insertIndex) => {
+      logAction('onDrop[dockable]')(payload, insertIndex);
+      setTabs((prev) => reorder(prev, payload.panelId, insertIndex));
     },
   });
-
-  const assignRef = (el: HTMLDivElement | null) => {
-    stripRef.current = el;
-    dropRef(el);
-  };
 
   const tabsWithDrag: TabDescriptor[] = tabs.map((tab, i) => ({
     ...tab,
@@ -218,10 +180,7 @@ function DockableReorderStrip() {
 
   return (
     <>
-      <div
-        ref={assignRef}
-        style={{ outline: isDragOver ? '2px dashed #3b82f6' : 'none', padding: 4 }}
-      >
+      <div ref={dropRef as (el: HTMLDivElement | null) => void}>
         <Tabs
           aria-label="Dockable Drag Demo Tabs"
           tabs={tabsWithDrag}
@@ -230,6 +189,7 @@ function DockableReorderStrip() {
             logAction('onActivate[dockable]')(id);
             setActiveId(id);
           }}
+          dropInsertIndex={dropInsertIndex}
         />
       </div>
       {/* Offscreen preview element — must be in the DOM when dragstart fires. */}
@@ -297,22 +257,17 @@ function CrossStrip({ label, groupId, tabs, activeId, onActivate, onMove }: Cros
   );
   const dragProps = [drag0, drag1, drag2, drag3];
 
-  const stripRef = useRef<HTMLDivElement | null>(null);
-  const { ref: dropRef, isDragOver } = useTabDropTarget({
+  const {
+    ref: dropRef,
+    isDragOver,
+    dropInsertIndex,
+  } = useTabDropTarget({
     accepts: ['dockable-tab'],
-    onDrop: (payload, event) => {
-      logAction(`onDrop[${groupId}]`)(payload);
-      const strip = stripRef.current;
-      if (!strip) return;
-      const toIndex = computeDropIndex(strip, event.clientX);
-      onMove(payload.panelId, payload.sourceGroupId, groupId, toIndex);
+    onDrop: (payload, _event, insertIndex) => {
+      logAction(`onDrop[${groupId}]`)(payload, insertIndex);
+      onMove(payload.panelId, payload.sourceGroupId, groupId, insertIndex);
     },
   });
-
-  const assignRef = (el: HTMLDivElement | null) => {
-    stripRef.current = el;
-    dropRef(el);
-  };
 
   const tabsWithDrag: TabDescriptor[] = tabs.map((tab, i) => ({
     ...tab,
@@ -321,10 +276,10 @@ function CrossStrip({ label, groupId, tabs, activeId, onActivate, onMove }: Cros
 
   return (
     <div
-      ref={assignRef}
+      ref={dropRef as (el: HTMLDivElement | null) => void}
       style={{
         flex: 1,
-        outline: isDragOver ? '2px dashed #3b82f6' : '1px solid #334155',
+        outline: isDragOver ? '1px dashed #3b82f6' : '1px solid #334155',
         padding: 6,
         borderRadius: 4,
       }}
@@ -335,6 +290,7 @@ function CrossStrip({ label, groupId, tabs, activeId, onActivate, onMove }: Cros
         tabs={tabsWithDrag}
         activeId={activeId}
         onActivate={onActivate}
+        dropInsertIndex={dropInsertIndex}
       />
     </div>
   );
@@ -460,22 +416,17 @@ function EmptySpaceStrip({
   );
   const dragProps = [drag0, drag1, drag2];
 
-  const stripRef = useRef<HTMLDivElement | null>(null);
-  const { ref: dropRef, isDragOver } = useTabDropTarget({
+  const {
+    ref: dropRef,
+    isDragOver,
+    dropInsertIndex,
+  } = useTabDropTarget({
     accepts: ['dockable-tab'],
-    onDrop: (payload, event) => {
-      logAction(`onDrop[${groupId}]`)(payload);
-      const strip = stripRef.current;
-      if (!strip) return;
-      const toIndex = computeDropIndex(strip, event.clientX);
-      onMove(payload.panelId, payload.sourceGroupId, groupId, toIndex);
+    onDrop: (payload, _event, insertIndex) => {
+      logAction(`onDrop[${groupId}]`)(payload, insertIndex);
+      onMove(payload.panelId, payload.sourceGroupId, groupId, insertIndex);
     },
   });
-
-  const assignRef = (el: HTMLDivElement | null) => {
-    stripRef.current = el;
-    dropRef(el);
-  };
 
   const tabsWithDrag: TabDescriptor[] = tabs.map((tab, i) => ({
     ...tab,
@@ -484,10 +435,10 @@ function EmptySpaceStrip({
 
   return (
     <div
-      ref={assignRef}
+      ref={dropRef as (el: HTMLDivElement | null) => void}
       style={{
         flex: 1,
-        outline: isDragOver ? '2px dashed #3b82f6' : '1px solid #334155',
+        outline: isDragOver ? '1px dashed #3b82f6' : '1px solid #334155',
         padding: 6,
         borderRadius: 4,
       }}
@@ -498,6 +449,7 @@ function EmptySpaceStrip({
         tabs={tabsWithDrag}
         activeId={activeId}
         onActivate={onActivate}
+        dropInsertIndex={dropInsertIndex}
       />
     </div>
   );
@@ -701,22 +653,17 @@ function ClusterOnlyStrip() {
   const drag3 = useTabDragSource(tabs[3] ? { kind: 'cluster-tab', clusterId: tabs[3].id } : null);
   const dragProps = [drag0, drag1, drag2, drag3];
 
-  const stripRef = useRef<HTMLDivElement | null>(null);
-  const { ref: dropRef, isDragOver } = useTabDropTarget({
+  const {
+    ref: dropRef,
+    isDragOver,
+    dropInsertIndex,
+  } = useTabDropTarget({
     accepts: ['cluster-tab'],
-    onDrop: (payload, event) => {
-      logAction('onDrop[cluster-only]')(payload);
-      const strip = stripRef.current;
-      if (!strip) return;
-      const toIndex = computeDropIndex(strip, event.clientX);
-      setTabs((prev) => reorder(prev, payload.clusterId, toIndex));
+    onDrop: (payload, _event, insertIndex) => {
+      logAction('onDrop[cluster-only]')(payload, insertIndex);
+      setTabs((prev) => reorder(prev, payload.clusterId, insertIndex));
     },
   });
-
-  const assignRef = (el: HTMLDivElement | null) => {
-    stripRef.current = el;
-    dropRef(el);
-  };
 
   const tabsWithDrag: TabDescriptor[] = tabs.map((tab, i) => ({
     ...tab,
@@ -725,10 +672,10 @@ function ClusterOnlyStrip() {
 
   return (
     <div
-      ref={assignRef}
+      ref={dropRef as (el: HTMLDivElement | null) => void}
       style={{
         flex: 1,
-        outline: isDragOver ? '2px dashed #3b82f6' : '1px solid #334155',
+        outline: isDragOver ? '1px dashed #3b82f6' : '1px solid #334155',
         padding: 6,
         borderRadius: 4,
       }}
@@ -744,6 +691,7 @@ function ClusterOnlyStrip() {
           logAction('onActivate[cluster-only]')(id);
           setActiveId(id);
         }}
+        dropInsertIndex={dropInsertIndex}
       />
     </div>
   );
@@ -774,22 +722,17 @@ function DockableOnlyStrip() {
   );
   const dragProps = [drag0, drag1, drag2, drag3];
 
-  const stripRef = useRef<HTMLDivElement | null>(null);
-  const { ref: dropRef, isDragOver } = useTabDropTarget({
+  const {
+    ref: dropRef,
+    isDragOver,
+    dropInsertIndex,
+  } = useTabDropTarget({
     accepts: ['dockable-tab'],
-    onDrop: (payload, event) => {
-      logAction('onDrop[dockable-only]')(payload);
-      const strip = stripRef.current;
-      if (!strip) return;
-      const toIndex = computeDropIndex(strip, event.clientX);
-      setTabs((prev) => reorder(prev, payload.panelId, toIndex));
+    onDrop: (payload, _event, insertIndex) => {
+      logAction('onDrop[dockable-only]')(payload, insertIndex);
+      setTabs((prev) => reorder(prev, payload.panelId, insertIndex));
     },
   });
-
-  const assignRef = (el: HTMLDivElement | null) => {
-    stripRef.current = el;
-    dropRef(el);
-  };
 
   const tabsWithDrag: TabDescriptor[] = tabs.map((tab, i) => ({
     ...tab,
@@ -798,10 +741,10 @@ function DockableOnlyStrip() {
 
   return (
     <div
-      ref={assignRef}
+      ref={dropRef as (el: HTMLDivElement | null) => void}
       style={{
         flex: 1,
-        outline: isDragOver ? '2px dashed #3b82f6' : '1px solid #334155',
+        outline: isDragOver ? '1px dashed #3b82f6' : '1px solid #334155',
         padding: 6,
         borderRadius: 4,
       }}
@@ -817,6 +760,7 @@ function DockableOnlyStrip() {
           logAction('onActivate[dockable-only]')(id);
           setActiveId(id);
         }}
+        dropInsertIndex={dropInsertIndex}
       />
     </div>
   );
@@ -856,22 +800,13 @@ function TearOffStrip() {
   );
   const dragProps = [drag0, drag1, drag2];
 
-  const stripRef = useRef<HTMLDivElement | null>(null);
-  const { ref: dropRef, isDragOver } = useTabDropTarget({
+  const { ref: dropRef, dropInsertIndex } = useTabDropTarget({
     accepts: ['dockable-tab'],
-    onDrop: (payload, event) => {
-      logAction('onDrop[tear-off]')(payload);
-      const strip = stripRef.current;
-      if (!strip) return;
-      const toIndex = computeDropIndex(strip, event.clientX);
-      setTabs((prev) => reorder(prev, payload.panelId, toIndex));
+    onDrop: (payload, _event, insertIndex) => {
+      logAction('onDrop[tear-off]')(payload, insertIndex);
+      setTabs((prev) => reorder(prev, payload.panelId, insertIndex));
     },
   });
-
-  const assignRef = (el: HTMLDivElement | null) => {
-    stripRef.current = el;
-    dropRef(el);
-  };
 
   const tabsWithDrag: TabDescriptor[] = tabs.map((tab, i) => ({
     ...tab,
@@ -879,10 +814,7 @@ function TearOffStrip() {
   }));
 
   return (
-    <div
-      ref={assignRef}
-      style={{ outline: isDragOver ? '2px dashed #3b82f6' : 'none', padding: 4 }}
-    >
+    <div ref={dropRef as (el: HTMLDivElement | null) => void}>
       <Tabs
         aria-label="Tear-off Demo Tabs"
         tabs={tabsWithDrag}
@@ -891,6 +823,7 @@ function TearOffStrip() {
           logAction('onActivate[tear-off]')(id);
           setActiveId(id);
         }}
+        dropInsertIndex={dropInsertIndex}
       />
     </div>
   );

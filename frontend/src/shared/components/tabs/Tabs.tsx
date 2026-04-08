@@ -9,6 +9,7 @@
  * See docs/plans/shared-tabs-component-design.md for the full design.
  */
 import {
+  Fragment,
   useEffect,
   useRef,
   useState,
@@ -71,6 +72,13 @@ export interface TabsProps {
   overflow?: 'scroll' | 'none';
   className?: string;
   id?: string;
+  /**
+   * When set to a number in `[0, tabs.length]`, a vertical drop indicator
+   * bar is rendered at that flex position. `0` places it before the first
+   * tab, `tabs.length` places it after the last. Used by drop-target
+   * wrappers to show where a dragged tab will land if released.
+   */
+  dropInsertIndex?: number | null;
 }
 
 export function Tabs({
@@ -85,6 +93,7 @@ export function Tabs({
   overflow = 'scroll',
   className: classNameProp,
   id,
+  dropInsertIndex = null,
 }: TabsProps) {
   // Mode-specific default for minTabWidth: 'fit' should size to content
   // (no floor) so short labels like "YAML" don't get bloated; 'equal' needs
@@ -366,50 +375,57 @@ export function Tabs({
         const isCloseable = Boolean(tab.onClose);
         warnReservedKeys(tab.id, tab.extraProps);
         return (
-          <button
-            key={tab.id}
-            ref={(el) => {
-              if (el) {
-                tabRefs.current.set(tab.id, el);
-              } else {
-                tabRefs.current.delete(tab.id);
-              }
-            }}
-            {...tab.extraProps}
-            type="button"
-            role="tab"
-            aria-selected={isActive}
-            aria-controls={tab.ariaControls}
-            aria-disabled={tab.disabled || undefined}
-            aria-label={tab.ariaLabel}
-            tabIndex={isActive ? 0 : -1}
-            className={`tab-item${isActive ? ' tab-item--active' : ''}${isCloseable ? ' tab-item--closeable' : ''}`}
-            onClick={() => {
-              if (!tab.disabled) {
-                onActivate(tab.id);
-              }
-            }}
-            onKeyDown={(event) => handleKeyDown(event, index)}
-          >
-            {tab.leading}
-            <span className="tab-item__label">{tab.label}</span>
-            {tab.onClose && (
-              <span
-                className="tab-item__close"
-                role="button"
-                aria-label="Close"
-                tabIndex={-1}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  tab.onClose?.();
-                }}
-              >
-                ×
-              </span>
+          <Fragment key={tab.id}>
+            {dropInsertIndex === index && (
+              <div className="tab-strip__drop-indicator" data-testid="tab-strip-drop-indicator" />
             )}
-          </button>
+            <button
+              ref={(el) => {
+                if (el) {
+                  tabRefs.current.set(tab.id, el);
+                } else {
+                  tabRefs.current.delete(tab.id);
+                }
+              }}
+              {...tab.extraProps}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              aria-controls={tab.ariaControls}
+              aria-disabled={tab.disabled || undefined}
+              aria-label={tab.ariaLabel}
+              tabIndex={isActive ? 0 : -1}
+              className={`tab-item${isActive ? ' tab-item--active' : ''}${isCloseable ? ' tab-item--closeable' : ''}`}
+              onClick={() => {
+                if (!tab.disabled) {
+                  onActivate(tab.id);
+                }
+              }}
+              onKeyDown={(event) => handleKeyDown(event, index)}
+            >
+              {tab.leading}
+              <span className="tab-item__label">{tab.label}</span>
+              {tab.onClose && (
+                <span
+                  className="tab-item__close"
+                  role="button"
+                  aria-label="Close"
+                  tabIndex={-1}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    tab.onClose?.();
+                  }}
+                >
+                  ×
+                </span>
+              )}
+            </button>
+          </Fragment>
         );
       })}
+      {dropInsertIndex === tabs.length && (
+        <div className="tab-strip__drop-indicator" data-testid="tab-strip-drop-indicator" />
+      )}
       {showIndicators && (
         <button
           type="button"
