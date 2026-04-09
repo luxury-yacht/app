@@ -1219,6 +1219,10 @@ const LogViewer: React.FC<LogViewerProps> = ({
                 className="parsed-logs-table"
                 tableClassName="gridtable-parsed-logs"
                 virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}
+                // Parsed logs use row-expansion to show the full cell
+                // contents; the native hover tooltip would duplicate that
+                // affordance and also race with the custom expand UX.
+                disableCellNativeTitle
               />
             </div>
           ) : (

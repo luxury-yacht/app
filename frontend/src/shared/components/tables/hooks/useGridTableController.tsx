@@ -195,6 +195,7 @@ export function useGridTableController<T>({
   loadingOverlay,
   filters,
   allowHorizontalOverflow = true,
+  disableCellNativeTitle = false,
 }: GridTableProps<T>): GridTableControllerResult<T> {
   const sourceData = useMemo<T[]>(
     () => (Array.isArray(inputData) ? inputData : ([] as T[])),
@@ -922,6 +923,7 @@ export function useGridTableController<T>({
     handleContextMenu: handleCellContextMenu,
     getCachedCellContent,
     measureRowRef,
+    disableCellNativeTitle,
   });
 
   const { loadMoreSentinelRef, handleManualLoadMore, paginationStatus } = useGridTablePagination({
