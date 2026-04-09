@@ -118,7 +118,15 @@ export function useLogStreamFallback({
 
     if (fallbackActive) {
       if (fallbackRecoveringRef.current) {
-        refreshOrchestrator.setScopedDomainEnabled(LOG_DOMAIN, logScope, true);
+        // preserveState on enable: the orchestrator's streaming branch
+        // resets the cached snapshot on enable unless told otherwise.
+        // Without this, every cluster-switch round-trip wipes the
+        // buffered log entries the moment the LogViewer remounts and
+        // re-enables the scope, which negates Tier 1 of the
+        // responsiveness fix.
+        refreshOrchestrator.setScopedDomainEnabled(LOG_DOMAIN, logScope, true, {
+          preserveState: true,
+        });
         return () => {
           if (!fallbackRecoveringRef.current) {
             refreshOrchestrator.setScopedDomainEnabled(LOG_DOMAIN, logScope, false, {
@@ -139,7 +147,14 @@ export function useLogStreamFallback({
     }
 
     fallbackRecoveringRef.current = false;
-    refreshOrchestrator.setScopedDomainEnabled(LOG_DOMAIN, logScope, true);
+    // preserveState on enable: see the rationale in the fallbackActive
+    // branch above. Without this option, remounting the LogViewer (e.g.
+    // after a cluster-switch round-trip) wipes the cached entries and
+    // forces a fresh reload — Tier 1 of the responsiveness fix becomes
+    // a no-op for streaming domains otherwise.
+    refreshOrchestrator.setScopedDomainEnabled(LOG_DOMAIN, logScope, true, {
+      preserveState: true,
+    });
     return () => {
       refreshOrchestrator.stopStreamingDomain(LOG_DOMAIN, logScope, { reset: false });
       refreshOrchestrator.setScopedDomainEnabled(LOG_DOMAIN, logScope, false, {
@@ -256,7 +271,13 @@ export function useLogStreamFallback({
       }));
       dispatch({ type: 'SET_FALLBACK_ERROR', payload: null });
 
-      refreshOrchestrator.setScopedDomainEnabled(LOG_DOMAIN, logScope, true);
+      // preserveState on enable: see the comment in the main lifecycle
+      // effect above — without it, the orchestrator wipes the cached
+      // entries before scheduling the new stream, undoing the buffered
+      // log content the user was looking at moments ago.
+      refreshOrchestrator.setScopedDomainEnabled(LOG_DOMAIN, logScope, true, {
+        preserveState: true,
+      });
 
       try {
         await refreshOrchestrator.restartStreamingDomain(LOG_DOMAIN, logScope);
