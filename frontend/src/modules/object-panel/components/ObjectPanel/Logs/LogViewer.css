@@ -65,6 +65,18 @@
   gap: var(--spacing-sm);
 }
 
+/* "42 of 100" counter rendered immediately after the IconBar in the
+   controls row. Uses tabular-nums so the value doesn't jitter as
+   entries stream in, and the secondary text color so it reads as
+   metadata rather than a primary control. */
+.pod-logs-count {
+  font-size: var(--font-size-small, 0.75rem);
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  user-select: none;
+}
+
 .pod-logs-control-group label {
   font-size: var(--font-size-normal);
   color: var(--color-text-secondary);

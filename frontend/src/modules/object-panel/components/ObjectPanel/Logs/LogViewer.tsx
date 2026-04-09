@@ -240,6 +240,10 @@ const LogViewer: React.FC<LogViewerProps> = ({
   // sequence 1 = connected event, sequence >= 2 = initial logs received (may be empty)
   const snapshotSequence = logScope ? (logSnapshot.data?.sequence ?? 0) : 0;
   const hasReceivedInitialLogs = snapshotSequence >= 2;
+  // True once LogStreamManager has had to drop the front of the buffer
+  // to stay under MAX_BUFFER_SIZE. Exposed via the buildStats wrapper on
+  // the scoped snapshot.
+  const bufferLimitReached = Boolean(logSnapshot.stats?.truncated);
 
   const displayError = snapshotError && !isLogDataUnavailable(snapshotError) ? snapshotError : null;
   const fallbackDisplayError =
@@ -1151,6 +1155,24 @@ const LogViewer: React.FC<LogViewerProps> = ({
                 ] satisfies IconBarItem[]
               }
             />
+
+            <span
+              className="pod-logs-count"
+              title={
+                bufferLimitReached
+                  ? filteredEntries.length === logEntries.length
+                    ? `${logEntries.length} logs (buffer limit reached — older entries dropped)`
+                    : `${filteredEntries.length} of ${logEntries.length} logs (buffer limit reached — older entries dropped)`
+                  : filteredEntries.length === logEntries.length
+                    ? `${logEntries.length} logs`
+                    : `${filteredEntries.length} of ${logEntries.length} logs`
+              }
+            >
+              {filteredEntries.length === logEntries.length
+                ? `${logEntries.length} logs`
+                : `${filteredEntries.length} of ${logEntries.length} logs`}
+              {bufferLimitReached ? ' (max)' : ''}
+            </span>
           </div>
         </div>
 
