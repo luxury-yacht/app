@@ -17,7 +17,6 @@ import { useLogFiltering } from './hooks/useLogFiltering';
 import { useLogStreamFallback, isLogDataUnavailable } from './hooks/useLogStreamFallback';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import {
-  AutoScrollIcon,
   AutoRefreshIcon,
   PreviousLogsIcon,
   TimestampIcon,
@@ -106,7 +105,7 @@ const formatParsedValue = (value: unknown): string => {
 const formatContainerLabel = (container: string, isInit: boolean): string =>
   isInit ? `${container}:init` : container;
 
-const LogViewer: React.FC<LogViewerProps> = ({
+const LogViewerInner: React.FC<LogViewerProps> = ({
   namespace,
   resourceName,
   resourceKind: resourceKind,
@@ -134,7 +133,6 @@ const LogViewer: React.FC<LogViewerProps> = ({
     availablePods,
     availableContainers,
     selectedFilter,
-    autoScroll,
     autoRefresh,
     showTimestamps,
     wrapText,
@@ -166,7 +164,6 @@ const LogViewer: React.FC<LogViewerProps> = ({
     panelId,
     state.selectedContainer,
     state.selectedFilter,
-    state.autoScroll,
     state.autoRefresh,
     state.showTimestamps,
     state.wrapText,
@@ -184,7 +181,6 @@ const LogViewer: React.FC<LogViewerProps> = ({
 
   // Refs
   const logsContentRef = useRef<HTMLDivElement>(null);
-  const previousLogCountRef = useRef<number>(0);
   const filterInputRef = useRef<HTMLInputElement>(null);
   const seqCounterRef = useRef(0);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -217,35 +213,15 @@ const LogViewer: React.FC<LogViewerProps> = ({
   const payloadEntries = logScope ? logSnapshot.data?.entries : undefined;
   const rawLogEntries: ObjectLogEntry[] = useMemo(() => payloadEntries ?? [], [payloadEntries]);
 
-  // When autoScroll is off the user is reading in place. Buffer truncation
-  // in LogStreamManager removes entries from the front, which would shift
-  // the content and cause the viewport to jump. Prevent this by keeping a
-  // stable list that only grows (appends) while autoScroll is off.
-  const stableEntriesRef = useRef<ObjectLogEntry[]>([]);
-  const logEntries: ObjectLogEntry[] = useMemo(() => {
-    if (autoScroll) {
-      stableEntriesRef.current = rawLogEntries;
-      return rawLogEntries;
-    }
-
-    const stable = stableEntriesRef.current;
-    if (stable.length === 0 || rawLogEntries.length === 0) {
-      stableEntriesRef.current = rawLogEntries;
-      return rawLogEntries;
-    }
-
-    // Find entries newer than the last one in our stable list.
-    const lastStableSeq = stable[stable.length - 1]._seq ?? 0;
-    const newEntries = rawLogEntries.filter((e) => (e._seq ?? 0) > lastStableSeq);
-
-    if (newEntries.length === 0) {
-      return stable;
-    }
-
-    const merged = [...stable, ...newEntries];
-    stableEntriesRef.current = merged;
-    return merged;
-  }, [autoScroll, rawLogEntries]);
+  // LogStreamManager already caps rawLogEntries at the user-configured
+  // buffer size, so we can use it directly. The old stable-list merge
+  // logic existed to keep the viewport anchored while reading in place
+  // with autoScroll off, but now that tail-following is derived from
+  // scroll position (see the smart auto-scroll effect below), the
+  // stable list is unnecessary — new entries arrive at the bottom,
+  // buffer rotation drops the oldest, and the smart-scroll effect only
+  // tail-follows when the user is already at the bottom anyway.
+  const logEntries: ObjectLogEntry[] = rawLogEntries;
   const snapshotStatus = logScope ? logSnapshot.status : 'idle';
   const snapshotError = logScope ? logSnapshot.error : null;
   // sequence 1 = connected event, sequence >= 2 = initial logs received (may be empty)
@@ -499,7 +475,6 @@ const LogViewer: React.FC<LogViewerProps> = ({
     });
 
     hasPrimedScopeRef.current = filteredEntries.length > 0;
-    previousLogCountRef.current = filteredEntries.length;
     previousActivePodsRef.current = normalizedActivePods;
   }, [isWorkload, logEntries, logScope, normalizedActivePods, showPreviousLogs]);
 
@@ -566,7 +541,6 @@ const LogViewer: React.FC<LogViewerProps> = ({
   useLogKeyboardShortcuts({
     isActive,
     isParsedView,
-    autoScroll,
     dispatch,
     supportsPreviousLogs,
     canParseLogs,
@@ -778,93 +752,50 @@ const LogViewer: React.FC<LogViewerProps> = ({
     };
   }, [namespace, podName, isWorkload, resolvedClusterId]);
 
-  // Track previous view to detect view switches
-  const previousIsParsedViewRef = useRef(isParsedView);
-
-  // Auto-scroll effect - only scroll when there are new logs or view changes
-  useEffect(() => {
-    if (autoScroll && logsContentRef.current) {
-      const currentLogCount = isParsedView ? parsedLogs.length : logEntries.length;
-      const hasNewLogs = currentLogCount > previousLogCountRef.current;
-      const isViewChange = previousIsParsedViewRef.current !== isParsedView;
-      const isInitialLoad = previousLogCountRef.current === 0;
-
-      // Update refs for next comparison
-      previousLogCountRef.current = currentLogCount;
-      previousIsParsedViewRef.current = isParsedView;
-
-      // Only scroll if there are new logs, view switch, or initial load
-      if (!hasNewLogs && !isViewChange && !isInitialLoad) {
-        return;
-      }
-
-      const scrollToBottom = () => {
-        if (!logsContentRef.current) return;
-
-        if (isParsedView) {
-          // For parsed view with virtualization, find the gridtable-wrapper and scroll it
-          const wrapper = logsContentRef.current.querySelector('.gridtable-wrapper');
-          if (wrapper) {
-            wrapper.scrollTop = wrapper.scrollHeight;
-          }
-        } else {
-          // For raw view, scroll the container to bottom
-          logsContentRef.current.scrollTop = logsContentRef.current.scrollHeight;
-        }
-      };
-
-      let rafId: number | undefined;
-
-      if (isParsedView && parsedLogs.length > 0) {
-        // For parsed view, wait for the gridtable-wrapper to be rendered
-        let attempts = 0;
-        const maxAttempts = 20; // About 333ms at 60fps
-
-        const checkAndScroll = () => {
-          const wrapper = logsContentRef.current?.querySelector('.gridtable-wrapper');
-          if (wrapper && wrapper.scrollHeight > 0) {
-            rafId = requestAnimationFrame(scrollToBottom);
-          } else if (attempts < maxAttempts) {
-            attempts++;
-            rafId = requestAnimationFrame(checkAndScroll);
-          }
-        };
-
-        rafId = requestAnimationFrame(checkAndScroll);
-      } else if (!isParsedView && displayLogs) {
-        // For raw view, scroll immediately after next frame
-        rafId = requestAnimationFrame(scrollToBottom);
-      }
-
-      return () => {
-        if (rafId !== undefined) cancelAnimationFrame(rafId);
-      };
-    }
-  }, [autoScroll, displayLogs, isParsedView, logEntries.length, parsedLogs.length]);
-
-  // --- Scroll position persistence ---
+  // --- Scroll position and tail-follow ---
   //
-  // On tab/cluster switch the LogViewer unmounts and a fresh instance
-  // mounts when the user comes back. Without any restoration the DOM
-  // resets to scrollTop=0, losing the user's reading position and
-  // showing the oldest cached entries instead of where they left off.
+  // Four concerns, all reading from the same scroll container:
   //
-  // Strategy:
-  //   1. While the view is live, listen for scroll events on the active
-  //      scroll container (pod-logs-content for raw view, the nested
-  //      .gridtable-wrapper for parsed view) and write the current
-  //      scrollTop to the panel-scoped cache.
-  //   2. On mount, once entries have been rendered, restore the saved
-  //      scrollTop (if any). Fall back to scrolling to the bottom —
-  //      newest logs — when nothing was saved.
+  //   1. getScrollContainer — returns the element that actually
+  //      scrolls for the current view mode. Raw view is
+  //      pod-logs-content itself; parsed view is the GridTable's
+  //      virtualization wrapper inside it.
   //
-  // The restoration runs exactly once per mount: the scrollRestoredRef
-  // flag guards against re-running on subsequent re-renders caused by
-  // incoming stream events.
+  //   2. Scroll listener — on every scroll event, saves the current
+  //      scrollTop to the panel-scoped prefs cache (so it survives
+  //      a tab-switch remount) and refreshes wasAtBottomRef so the
+  //      tail-follow effect knows whether the user is currently
+  //      pinned to the tail. Gated on scrollRestoredRef for the
+  //      writeback path to ignore the synthetic scroll events the
+  //      restoration effect itself triggers.
+  //
+  //   3. Restoration effect — on (re)mount, once entries have
+  //      rendered, scrolls to the saved position from the prefs
+  //      cache (clamped to the current maxScrollTop). Falls back to
+  //      the bottom (newest entries) when nothing was saved. Runs
+  //      exactly once per mount via scrollRestoredRef.
+  //
+  //   4. Smart tail-follow — derives the follow-the-tail intent
+  //      from the user's current scroll position:
+  //
+  //        - If the viewport was at (or very near) the bottom just
+  //          before React committed the new entries, scroll to the
+  //          new bottom after commit so new entries come into view.
+  //        - Otherwise leave scrollTop alone; when the user scrolls
+  //          back down to the bottom they automatically resume
+  //          tail-following on the next entry.
+  //
+  //      wasAtBottomRef is updated by the scroll listener above,
+  //      not by a per-render useLayoutEffect — measuring in render
+  //      forces a synchronous reflow on every unrelated parent
+  //      re-render (e.g. ObjectPanel drag/resize), which tanks
+  //      drag performance. Scroll events are the only thing that
+  //      can change at-bottom status between log appends, so the
+  //      ref is always fresh when the tail-follow effect reads it.
 
-  // Returns the element that actually scrolls for the current view
-  // mode. For raw view that's pod-logs-content itself; for parsed view
-  // it's the GridTable's virtualization wrapper inside.
+  const AT_BOTTOM_THRESHOLD_PX = 16;
+  const wasAtBottomRef = useRef<boolean>(true);
+
   const getScrollContainer = useCallback((): HTMLElement | null => {
     const root = logsContentRef.current;
     if (!root) return null;
@@ -874,18 +805,31 @@ const LogViewer: React.FC<LogViewerProps> = ({
     return root;
   }, [isParsedView]);
 
-  // Scroll-write listener — attached to whichever container is active
-  // for the current view mode. Re-runs when isParsedView changes so the
-  // listener always points at the right element.
+  // Scroll listener — writes scrollTop to the cache and refreshes
+  // wasAtBottomRef so the tail-follow effect has an up-to-date
+  // "was the user at the bottom?" signal without having to measure
+  // on every render. Attaches to whichever container is active for
+  // the current view mode; re-runs when isParsedView changes.
+  //
+  // Measuring here (instead of in a depless useLayoutEffect) keeps
+  // draggable parents fast: unrelated parent re-renders no longer
+  // trigger forced reflows inside LogViewer. Scroll events are the
+  // only thing that can change at-bottom status between log
+  // appends — programmatic scrollTop writes fire one too, so the
+  // restoration effect and the tail-follow scroll both keep this
+  // ref in sync automatically.
   useEffect(() => {
     const scrollEl = getScrollContainer();
     if (!scrollEl) return;
 
     const handler = () => {
-      // Skip writeback until the initial restore has completed — the
-      // browser fires scroll events as we restore scrollTop, and we
-      // don't want those synthetic events to overwrite the saved value
-      // with 0 before the restoration runs.
+      wasAtBottomRef.current =
+        scrollEl.scrollTop + scrollEl.clientHeight >=
+        scrollEl.scrollHeight - AT_BOTTOM_THRESHOLD_PX;
+      // Skip writeback until the initial restore has completed —
+      // the browser fires scroll events as we restore scrollTop,
+      // and we don't want those synthetic events to overwrite the
+      // saved value with 0 before the restoration runs.
       if (!scrollRestoredRef.current) return;
       setLogViewerScrollTop(panelId, scrollEl.scrollTop);
     };
@@ -896,11 +840,19 @@ const LogViewer: React.FC<LogViewerProps> = ({
     };
   }, [getScrollContainer, panelId]);
 
-  // Restoration effect — runs on every render but is a no-op after the
-  // first successful positioning. Re-runs until the scroll container is
-  // actually present (parsed view needs the virtualization wrapper to
-  // be mounted, which may take a frame or two) and has entries to
-  // render into.
+  // Restoration effect — runs on every render but is a no-op after
+  // the first successful positioning. Re-runs until the scroll
+  // container is actually present (parsed view needs the
+  // virtualization wrapper to be mounted, which may take a frame or
+  // two) and has entries to render into.
+  //
+  // Policy on (re)mount:
+  //   - If a saved scrollTop exists in the prefs cache (the user
+  //     had scrolled somewhere during a previous session), restore
+  //     it — clamped to the current maxScrollTop so a smaller
+  //     buffer doesn't land us past the bottom.
+  //   - Otherwise, scroll to the bottom (newest entries). This is
+  //     the intuitive default for a fresh view.
   useEffect(() => {
     if (scrollRestoredRef.current) return;
 
@@ -909,38 +861,61 @@ const LogViewer: React.FC<LogViewerProps> = ({
 
     const scrollEl = getScrollContainer();
     if (!scrollEl) return;
-    // scrollHeight === clientHeight means content hasn't laid out yet
-    // (parsed view virtualization wrapper takes a frame or two). Defer
-    // to the next render.
+    // scrollHeight === clientHeight means content hasn't laid out
+    // yet (parsed view virtualization wrapper takes a frame or
+    // two). Defer to the next render.
     if (scrollEl.scrollHeight <= scrollEl.clientHeight) return;
 
     const maxScrollTop = scrollEl.scrollHeight - scrollEl.clientHeight;
-    let targetScrollTop: number;
-
-    if (autoScroll) {
-      // autoScroll is on → always land at the bottom on (re)mount.
-      // Saved position is irrelevant because the auto-scroll effect
-      // would have kept the user pinned to the tail before unmount
-      // anyway, and it's about to resume following the tail as new
-      // entries arrive.
-      targetScrollTop = maxScrollTop;
-    } else {
-      const savedScrollTop = getLogViewerScrollTop(panelId);
-      targetScrollTop =
-        savedScrollTop != null
-          ? // Clamp to the current max — the buffer may have rotated
-            // while we were away, so a raw restore could land past
-            // the bottom. Clamp keeps the restore valid.
-            Math.min(savedScrollTop, maxScrollTop)
-          : // Fallback: scroll to the bottom (newest entries) since
-            // that's the most useful position on a fresh view when
-            // autoScroll is off and nothing was saved.
-            maxScrollTop;
-    }
+    const savedScrollTop = getLogViewerScrollTop(panelId);
+    const targetScrollTop =
+      savedScrollTop != null ? Math.min(savedScrollTop, maxScrollTop) : maxScrollTop;
 
     scrollEl.scrollTop = targetScrollTop;
     scrollRestoredRef.current = true;
-  }, [autoScroll, getScrollContainer, isParsedView, logEntries.length, panelId, parsedLogs.length]);
+  }, [getScrollContainer, isParsedView, logEntries.length, panelId, parsedLogs.length]);
+
+  // After commit: if the user was tail-following, scroll to the new
+  // bottom so the newly appended entries come into view. If not,
+  // leave scrollTop alone — the user is reading in place.
+  useEffect(() => {
+    if (!wasAtBottomRef.current) return;
+    // Don't interfere with the initial restoration effect; it owns
+    // the first scroll position of the mount.
+    if (!scrollRestoredRef.current) return;
+
+    const scrollEl = getScrollContainer();
+    if (!scrollEl) return;
+
+    // Parsed view's virtualization wrapper may not have laid out
+    // yet on the same frame the entries land — retry a few frames
+    // if scrollHeight hasn't caught up.
+    let rafId: number | undefined;
+    const scrollToBottom = () => {
+      const el = getScrollContainer();
+      if (!el) return;
+      el.scrollTop = el.scrollHeight;
+    };
+    if (isParsedView) {
+      let attempts = 0;
+      const maxAttempts = 20;
+      const checkAndScroll = () => {
+        const el = getScrollContainer();
+        if (el && el.scrollHeight > el.clientHeight) {
+          rafId = requestAnimationFrame(scrollToBottom);
+        } else if (attempts < maxAttempts) {
+          attempts += 1;
+          rafId = requestAnimationFrame(checkAndScroll);
+        }
+      };
+      rafId = requestAnimationFrame(checkAndScroll);
+    } else {
+      rafId = requestAnimationFrame(scrollToBottom);
+    }
+    return () => {
+      if (rafId !== undefined) cancelAnimationFrame(rafId);
+    };
+  }, [getScrollContainer, isParsedView, logEntries.length, parsedLogs.length, displayLogs]);
 
   // Derive field keys directly from parsed log data
   const derivedFieldKeys = useMemo(() => {
@@ -1221,14 +1196,6 @@ const LogViewer: React.FC<LogViewerProps> = ({
                     onClick: () => dispatch({ type: 'TOGGLE_AUTO_REFRESH' }),
                     title: 'Auto-refresh (R)',
                   },
-                  {
-                    type: 'toggle',
-                    id: 'autoScroll',
-                    icon: <AutoScrollIcon />,
-                    active: autoScroll,
-                    onClick: () => dispatch({ type: 'TOGGLE_AUTO_SCROLL' }),
-                    title: 'Auto-scroll (S)',
-                  },
                   { type: 'separator' },
                   ...(supportsPreviousLogs
                     ? [
@@ -1429,5 +1396,16 @@ const LogViewer: React.FC<LogViewerProps> = ({
     </div>
   );
 };
+
+// Memoize so panel drag/resize — which re-renders the DockablePanel
+// subtree on every rAF tick as width/height state updates — doesn't
+// reconcile LogViewer's (potentially ~1000-row) raw-log list on every
+// frame. All LogViewer props are referentially stable during drag:
+// strings/booleans from the object catalog and the memoized
+// activePodNames array from ObjectPanelContent (whose deps are the
+// stable *Details.pods references, not the fresh-every-render
+// detailTabProps object). With stable props, the default shallow
+// equality check short-circuits the entire render subtree.
+const LogViewer = React.memo(LogViewerInner);
 
 export default LogViewer;

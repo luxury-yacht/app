@@ -156,7 +156,6 @@ export type ViewType =
 export interface LogViewerPrefs {
   selectedContainer: string;
   selectedFilter: string;
-  autoScroll: boolean;
   autoRefresh: boolean;
   showTimestamps: boolean;
   wrapText: boolean;

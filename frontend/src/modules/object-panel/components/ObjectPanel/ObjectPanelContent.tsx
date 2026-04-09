@@ -179,6 +179,23 @@ export function ObjectPanelContent({
     };
   }, [logScope, isPanelOpen]);
 
+  // Derive activePodNames from the nested pod arrays directly, not from
+  // `detailTabProps` itself. `detailTabProps` is a fresh object literal
+  // every render (built inline in ObjectPanel), so using it as a useMemo
+  // dep would invalidate the cache on every parent re-render — including
+  // every rAF tick of a panel drag/resize. That in turn would rebuild the
+  // `activePodNames` array on every frame and cascade re-renders through
+  // LogViewer, making the Logs tab janky during drag.
+  //
+  // The nested `*Details` objects, on the other hand, come from the
+  // memoized `detailsProps` in ObjectPanel and are referentially stable
+  // until the backend detail payload changes — so their `.pods` arrays
+  // are stable drag-safe deps.
+  const deploymentPods = detailTabProps?.deploymentDetails?.pods;
+  const daemonSetPods = detailTabProps?.daemonSetDetails?.pods;
+  const statefulSetPods = detailTabProps?.statefulSetDetails?.pods;
+  const jobPods = detailTabProps?.jobDetails?.pods;
+  const cronJobPods = detailTabProps?.cronJobDetails?.pods;
   const activePodNames = useMemo(() => {
     if (!detailTabProps) {
       return null;
@@ -195,14 +212,18 @@ export function ObjectPanelContent({
     };
 
     return (
-      extractPodNames(detailTabProps.deploymentDetails?.pods ?? undefined) ??
-      extractPodNames(detailTabProps.daemonSetDetails?.pods ?? undefined) ??
-      extractPodNames(detailTabProps.statefulSetDetails?.pods ?? undefined) ??
-      extractPodNames(detailTabProps.jobDetails?.pods ?? undefined) ??
-      extractPodNames(detailTabProps.cronJobDetails?.pods ?? undefined) ??
+      extractPodNames(deploymentPods ?? undefined) ??
+      extractPodNames(daemonSetPods ?? undefined) ??
+      extractPodNames(statefulSetPods ?? undefined) ??
+      extractPodNames(jobPods ?? undefined) ??
+      extractPodNames(cronJobPods ?? undefined) ??
       null
     );
-  }, [detailTabProps]);
+    // detailTabProps is only read for the null-check above; the actual
+    // pod arrays are the useMemo deps so drag-driven re-renders don't
+    // invalidate this.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deploymentPods, daemonSetPods, statefulSetPods, jobPods, cronJobPods]);
 
   const availableContainers = useMemo(() => {
     const containers =

@@ -294,7 +294,6 @@ describe('LogViewer active pod synchronisation', () => {
 
   it('registers log tab shortcuts with appropriate availability', async () => {
     await renderViewer({ activePodNames: ['web-1'], isActive: true });
-    expect(getLatestShortcut('s')).toBeTruthy();
     expect(getLatestShortcut('r')).toBeTruthy();
     expect(getLatestShortcut('t')).toBeTruthy();
     expect(getLatestShortcut('w')).toBeTruthy();
@@ -303,7 +302,7 @@ describe('LogViewer active pod synchronisation', () => {
 
     let result = false;
     act(() => {
-      result = getLatestShortcut('s')!.handler();
+      result = getLatestShortcut('r')!.handler();
     });
     expect(result).toBe(true);
 
@@ -351,7 +350,6 @@ describe('LogViewer active pod synchronisation', () => {
       expect(result).toBe(false);
     };
 
-    expectDisabledShortcut('s');
     expectDisabledShortcut('r');
     expectDisabledShortcut('t');
     expectDisabledShortcut('w');
@@ -693,7 +691,6 @@ describe('LogViewer active pod synchronisation', () => {
     setLogViewerPrefs(panelId, {
       selectedContainer: 'sidecar',
       selectedFilter: 'web-1',
-      autoScroll: false,
       autoRefresh: false,
       showTimestamps: false,
       wrapText: false,
@@ -750,7 +747,6 @@ describe('LogViewer active pod synchronisation', () => {
     setLogViewerPrefs(panelA, {
       selectedContainer: '',
       selectedFilter: '',
-      autoScroll: true,
       autoRefresh: true,
       showTimestamps: true,
       wrapText: true,
@@ -762,7 +758,6 @@ describe('LogViewer active pod synchronisation', () => {
     setLogViewerPrefs(panelB, {
       selectedContainer: '',
       selectedFilter: '',
-      autoScroll: true,
       autoRefresh: true,
       showTimestamps: true,
       wrapText: true,

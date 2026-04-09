@@ -37,7 +37,6 @@ export interface LogViewerState {
   selectedFilter: string;
 
   // UI settings (user preferences)
-  autoScroll: boolean;
   autoRefresh: boolean;
   showTimestamps: boolean;
   wrapText: boolean;
@@ -68,7 +67,6 @@ export type LogViewerAction =
   | { type: 'SET_SELECTED_FILTER'; payload: string }
 
   // UI settings actions
-  | { type: 'TOGGLE_AUTO_SCROLL' }
   | { type: 'TOGGLE_AUTO_REFRESH' }
   | { type: 'TOGGLE_TIMESTAMPS' }
   | { type: 'TOGGLE_WRAP_TEXT' }
@@ -105,7 +103,6 @@ export const initialLogViewerState: LogViewerState = {
   selectedFilter: '',
 
   // UI settings
-  autoScroll: true,
   autoRefresh: true,
   showTimestamps: true,
   wrapText: true,
@@ -134,7 +131,6 @@ export const initialLogViewerState: LogViewerState = {
 export const extractLogViewerPrefs = (state: LogViewerState): LogViewerPrefs => ({
   selectedContainer: state.selectedContainer,
   selectedFilter: state.selectedFilter,
-  autoScroll: state.autoScroll,
   autoRefresh: state.autoRefresh,
   showTimestamps: state.showTimestamps,
   wrapText: state.wrapText,
@@ -156,7 +152,6 @@ export const applyLogViewerPrefs = (
   ...base,
   selectedContainer: prefs.selectedContainer,
   selectedFilter: prefs.selectedFilter,
-  autoScroll: prefs.autoScroll,
   autoRefresh: prefs.autoRefresh,
   showTimestamps: prefs.showTimestamps,
   wrapText: prefs.wrapText,
@@ -183,8 +178,6 @@ export function logViewerReducer(state: LogViewerState, action: LogViewerAction)
       return { ...state, selectedFilter: action.payload };
 
     // UI settings actions
-    case 'TOGGLE_AUTO_SCROLL':
-      return { ...state, autoScroll: !state.autoScroll };
     case 'TOGGLE_AUTO_REFRESH':
       return { ...state, autoRefresh: !state.autoRefresh };
     case 'TOGGLE_TIMESTAMPS':

@@ -15,7 +15,6 @@ import type { LogViewerPrefs } from '../types';
 const samplePrefs = (overrides: Partial<LogViewerPrefs> = {}): LogViewerPrefs => ({
   selectedContainer: 'app',
   selectedFilter: '',
-  autoScroll: true,
   autoRefresh: true,
   showTimestamps: true,
   wrapText: false,
