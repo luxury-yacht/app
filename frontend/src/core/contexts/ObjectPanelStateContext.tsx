@@ -7,6 +7,7 @@
  */
 import React, { createContext, useContext, useState, useCallback, useMemo, useEffect } from 'react';
 import type { KubernetesObjectReference } from '@/types/view-state';
+import type { ViewType } from '@modules/object-panel/components/ObjectPanel/types';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { clearPanelState } from '@ui/dockable/useDockablePanelState';
 
@@ -48,10 +49,19 @@ export function objectPanelId(ref: KubernetesObjectReference): string {
 interface ObjectPanelState {
   // Map of panelId → objectRef for all open object panels
   openPanels: Map<string, KubernetesObjectReference>;
+  // Map of panelId → which sub-tab (Details/YAML/Events/etc.) is active
+  // for that panel. Lifted out of ObjectPanel's useReducer so the active
+  // sub-tab survives cluster switches: ObjectPanel components unmount
+  // when the cluster switches away (because openPanels is per-cluster
+  // and AppLayout iterates the active cluster's slice), so any
+  // useReducer state inside the panel is lost on remount. Persisting
+  // the activeTab here means switching back restores the same sub-tab.
+  activeTabs: Map<string, ViewType>;
 }
 
 const DEFAULT_OBJECT_PANEL_STATE: ObjectPanelState = {
   openPanels: new Map(),
+  activeTabs: new Map(),
 };
 
 interface ObjectPanelStateContextType {
@@ -76,6 +86,20 @@ interface ObjectPanelStateContextType {
 
   // Hydrate cluster metadata onto an object reference.
   hydrateClusterMeta: (data: KubernetesObjectReference) => KubernetesObjectReference;
+
+  /**
+   * Read the persisted active sub-tab for an object panel. Returns
+   * undefined if no tab has been explicitly set; the panel can fall
+   * back to its own default in that case.
+   */
+  getObjectPanelActiveTab: (panelId: string) => ViewType | undefined;
+
+  /**
+   * Persist the active sub-tab for an object panel into the active
+   * cluster's slice. Survives unmount/remount cycles caused by cluster
+   * switching.
+   */
+  setObjectPanelActiveTab: (panelId: string, tab: ViewType) => void;
 }
 
 const ObjectPanelStateContext = createContext<ObjectPanelStateContextType | undefined>(undefined);
@@ -168,7 +192,7 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
         // Add new panel to the map.
         const nextPanels = new Map(prev.openPanels);
         nextPanels.set(panelId, enriched);
-        return { openPanels: nextPanels };
+        return { ...prev, openPanels: nextPanels };
       });
 
       return panelId;
@@ -179,12 +203,14 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
   const closePanel = useCallback(
     (panelId: string) => {
       updateActiveState((prev) => {
-        if (!prev.openPanels.has(panelId)) {
+        if (!prev.openPanels.has(panelId) && !prev.activeTabs.has(panelId)) {
           return prev;
         }
         const nextPanels = new Map(prev.openPanels);
         nextPanels.delete(panelId);
-        return { openPanels: nextPanels };
+        const nextActiveTabs = new Map(prev.activeTabs);
+        nextActiveTabs.delete(panelId);
+        return { openPanels: nextPanels, activeTabs: nextActiveTabs };
       });
       // Clear the dockable panel state so reopening gets fresh defaults
       // instead of remembering the old dock position.
@@ -200,6 +226,27 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
     updateActiveState(() => DEFAULT_OBJECT_PANEL_STATE);
   }, [updateActiveState, objectPanelStateByCluster, clusterKey]);
 
+  const getObjectPanelActiveTab = useCallback(
+    (panelId: string): ViewType | undefined => {
+      return activeState.activeTabs.get(panelId);
+    },
+    [activeState]
+  );
+
+  const setObjectPanelActiveTab = useCallback(
+    (panelId: string, tab: ViewType) => {
+      updateActiveState((prev) => {
+        if (prev.activeTabs.get(panelId) === tab) {
+          return prev;
+        }
+        const nextActiveTabs = new Map(prev.activeTabs);
+        nextActiveTabs.set(panelId, tab);
+        return { ...prev, activeTabs: nextActiveTabs };
+      });
+    },
+    [updateActiveState]
+  );
+
   const value = useMemo(
     () => ({
       showObjectPanel,
@@ -213,6 +260,8 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
         }
       },
       hydrateClusterMeta,
+      getObjectPanelActiveTab,
+      setObjectPanelActiveTab,
     }),
     [
       showObjectPanel,
@@ -222,6 +271,8 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
       onCloseObjectPanel,
       hydrateClusterMeta,
       updateActiveState,
+      getObjectPanelActiveTab,
+      setObjectPanelActiveTab,
     ]
   );
 

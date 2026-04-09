@@ -103,6 +103,67 @@ describe('ObjectPanelStateContext', () => {
     expect(clusterAEntries[0]?.name).toBe('api');
   });
 
+  it('persists active sub-tab per cluster slice and isolates across switches', async () => {
+    await renderProvider();
+
+    // Open a panel in cluster-a and persist its active tab.
+    let panelId = '';
+    act(() => {
+      panelId =
+        stateRef.current?.onRowClick({ kind: 'Pod', name: 'api', namespace: 'default' }) ?? '';
+    });
+    act(() => {
+      stateRef.current?.setObjectPanelActiveTab(panelId, 'logs');
+    });
+    expect(stateRef.current?.getObjectPanelActiveTab(panelId)).toBe('logs');
+
+    // Switch to cluster-b. The cluster-a tab persistence must not leak.
+    mockClusterId = 'cluster-b';
+    mockClusterName = 'Cluster B';
+    await renderProvider();
+    expect(stateRef.current?.getObjectPanelActiveTab(panelId)).toBeUndefined();
+
+    // Open the same identity in cluster-b and store a different sub-tab.
+    act(() => {
+      stateRef.current?.onRowClick({
+        kind: 'Pod',
+        name: 'api',
+        namespace: 'default',
+        clusterId: 'cluster-b',
+      });
+    });
+    act(() => {
+      stateRef.current?.setObjectPanelActiveTab(panelId, 'yaml');
+    });
+    expect(stateRef.current?.getObjectPanelActiveTab(panelId)).toBe('yaml');
+
+    // Switching back to cluster-a should restore that slice's tab, untouched.
+    mockClusterId = 'cluster-a';
+    mockClusterName = 'Cluster A';
+    await renderProvider();
+    expect(stateRef.current?.getObjectPanelActiveTab(panelId)).toBe('logs');
+  });
+
+  it('clears the active sub-tab entry when a panel is closed', async () => {
+    await renderProvider();
+
+    let panelId = '';
+    act(() => {
+      panelId =
+        stateRef.current?.onRowClick({ kind: 'Pod', name: 'api', namespace: 'default' }) ?? '';
+    });
+    act(() => {
+      stateRef.current?.setObjectPanelActiveTab(panelId, 'events');
+    });
+    expect(stateRef.current?.getObjectPanelActiveTab(panelId)).toBe('events');
+
+    act(() => {
+      stateRef.current?.closePanel(panelId);
+    });
+    expect(stateRef.current?.openPanels.has(panelId)).toBe(false);
+    expect(stateRef.current?.getObjectPanelActiveTab(panelId)).toBeUndefined();
+  });
+
   it('clears object panel state when a tab is closed', async () => {
     // Start on cluster-b and open a panel.
     mockClusterId = 'cluster-b';

@@ -141,10 +141,9 @@ export type ViewType =
   | 'maintenance';
 
 export type PanelState = {
-  // UI state
-  activeTab: ViewType;
-
-  // Action state
+  // Action state. Note: activeTab is NOT here — it lives in
+  // ObjectPanelStateContext (per-cluster) so the user's sub-tab choice
+  // survives unmount/remount caused by cluster switching.
   actionLoading: boolean;
   actionError: string | null;
   scaleReplicas: number;
@@ -159,7 +158,6 @@ export type PanelState = {
 };
 
 export type PanelAction =
-  | { type: 'SET_ACTIVE_TAB'; payload: ViewType }
   | { type: 'SET_ACTION_LOADING'; payload: boolean }
   | { type: 'SET_ACTION_ERROR'; payload: string | null }
   | { type: 'SET_SCALE_REPLICAS'; payload: number }

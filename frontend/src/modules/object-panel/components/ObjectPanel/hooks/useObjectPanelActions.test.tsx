@@ -38,7 +38,6 @@ describe('useObjectPanelActions', () => {
   const fetchDetailsMock = vi.fn();
 
   const baseState = (): PanelState => ({
-    activeTab: 'details',
     actionLoading: false,
     actionError: null,
     scaleReplicas: 3,

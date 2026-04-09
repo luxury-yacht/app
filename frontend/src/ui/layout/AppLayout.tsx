@@ -288,8 +288,11 @@ export const AppLayout: React.FC = () => {
         {hasActiveClusters && <AuthFailureOverlay />}
       </main>
 
-      <PanelErrorBoundary onClose={() => {}} panelName="app-logs">
-        <AppLogsPanel />
+      <PanelErrorBoundary onClose={() => viewState.setShowAppLogs(false)} panelName="app-logs">
+        <AppLogsPanel
+          isOpen={viewState.showAppLogs}
+          onClose={() => viewState.setShowAppLogs(false)}
+        />
       </PanelErrorBoundary>
 
       <PanelErrorBoundary onClose={() => setShowDiagnostics(false)} panelName="diagnostics">
