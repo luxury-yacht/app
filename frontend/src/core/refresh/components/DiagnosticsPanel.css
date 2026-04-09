@@ -17,6 +17,14 @@
   overflow: hidden;
 }
 
+/* Tabs are fixed at the top — never let the inner table content squeeze
+   the strip vertically. Without this the default flex-shrink: 1 lets the
+   strip collapse when the Effective Permissions table grows on "Show All",
+   pushing the content area up into where the tabs were. */
+.diagnostics-content > .tab-strip {
+  flex-shrink: 0;
+}
+
 .diagnostics-header-content {
   color: var(--color-text);
   display: grid;
@@ -343,12 +351,4 @@ tr.diagnostics-row-expanded .diagnostics-permission-reason {
   word-wrap: break-word;
   overflow: visible;
   text-overflow: unset;
-}
-
-.diagnostics-tabs {
-  padding: 0.3rem 0.5rem 0;
-}
-
-.diagnostics-tabs .tab-item {
-  text-transform: uppercase;
 }

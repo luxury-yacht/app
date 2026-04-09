@@ -10,16 +10,21 @@ import {
   getAutoRefreshEnabled,
   getBackgroundRefreshEnabled,
   getGridTablePersistenceMode,
+  getLogBufferMaxSize,
   getMetricsRefreshIntervalMs,
   getPaletteTint,
   getThemePreference,
   getUseShortResourceNames,
   hydrateAppPreferences,
+  LOG_BUFFER_DEFAULT_SIZE,
+  LOG_BUFFER_MAX_SIZE,
+  LOG_BUFFER_MIN_SIZE,
   resetAppPreferencesCacheForTesting,
   setAccentColor,
   setAutoRefreshEnabled,
   setBackgroundRefreshEnabled,
   setGridTablePersistenceMode,
+  setLogBufferMaxSize,
   setPaletteTint,
   setThemePreference,
   setUseShortResourceNames,
@@ -29,12 +34,14 @@ const appMocks = vi.hoisted(() => ({
   GetAppSettings: vi.fn(),
   SetTheme: vi.fn(),
   SetUseShortResourceNames: vi.fn(),
+  SetLogBufferMaxSize: vi.fn(),
 }));
 
 vi.mock('@wailsjs/go/backend/App', () => ({
   GetAppSettings: (...args: unknown[]) => appMocks.GetAppSettings(...args),
   SetTheme: (...args: unknown[]) => appMocks.SetTheme(...args),
   SetUseShortResourceNames: (...args: unknown[]) => appMocks.SetUseShortResourceNames(...args),
+  SetLogBufferMaxSize: (...args: unknown[]) => appMocks.SetLogBufferMaxSize(...args),
 }));
 
 describe('appPreferences', () => {
@@ -43,12 +50,15 @@ describe('appPreferences', () => {
     appMocks.GetAppSettings.mockReset();
     appMocks.SetTheme.mockReset();
     appMocks.SetUseShortResourceNames.mockReset();
+    appMocks.SetLogBufferMaxSize.mockReset();
+    appMocks.SetLogBufferMaxSize.mockResolvedValue(undefined);
     (window as any).go = {
       backend: {
         App: {
           SetAutoRefreshEnabled: vi.fn().mockResolvedValue(undefined),
           SetBackgroundRefreshEnabled: vi.fn().mockResolvedValue(undefined),
           SetGridTablePersistenceMode: vi.fn().mockResolvedValue(undefined),
+          SetLogBufferMaxSize: vi.fn().mockResolvedValue(undefined),
           SetPaletteTint: vi.fn().mockResolvedValue(undefined),
           SetAccentColor: vi.fn().mockResolvedValue(undefined),
         },
@@ -208,5 +218,64 @@ describe('appPreferences', () => {
     setAccentColor('light', '');
     expect(getAccentColor('light')).toBe('');
     expect(getAccentColor('dark')).toBe('#f59e0b');
+  });
+
+  // ---------------------------------------------------------------------
+  // Log buffer size — user-configurable via Advanced → Pod Logs. Must
+  // hydrate from the backend payload, round-trip through the setter, and
+  // clamp out-of-range values in the normalizer.
+  // ---------------------------------------------------------------------
+
+  it('hydrates logBufferMaxSize from backend settings', async () => {
+    appMocks.GetAppSettings.mockResolvedValue({
+      theme: 'system',
+      logBufferMaxSize: 2500,
+    });
+    await hydrateAppPreferences({ force: true });
+    expect(getLogBufferMaxSize()).toBe(2500);
+  });
+
+  it('defaults logBufferMaxSize when the backend payload is missing the field', async () => {
+    appMocks.GetAppSettings.mockResolvedValue({ theme: 'system' });
+    await hydrateAppPreferences({ force: true });
+    expect(getLogBufferMaxSize()).toBe(LOG_BUFFER_DEFAULT_SIZE);
+  });
+
+  it('defaults logBufferMaxSize when the backend payload reports zero (unset)', async () => {
+    appMocks.GetAppSettings.mockResolvedValue({ theme: 'system', logBufferMaxSize: 0 });
+    await hydrateAppPreferences({ force: true });
+    expect(getLogBufferMaxSize()).toBe(LOG_BUFFER_DEFAULT_SIZE);
+  });
+
+  it('setLogBufferMaxSize round-trips an in-range value through the cache and backend', async () => {
+    appMocks.GetAppSettings.mockResolvedValue({
+      theme: 'system',
+      logBufferMaxSize: LOG_BUFFER_DEFAULT_SIZE,
+    });
+    await hydrateAppPreferences({ force: true });
+
+    setLogBufferMaxSize(3500);
+    expect(getLogBufferMaxSize()).toBe(3500);
+    // Allow the fire-and-forget persist promise to resolve before we
+    // assert the backend call landed. The setter calls the imported
+    // Wails binding (mocked via appMocks), not window.go.backend.App
+    // directly — the window object is only read to check that the
+    // runtime is present.
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    expect(appMocks.SetLogBufferMaxSize).toHaveBeenCalledWith(3500);
+  });
+
+  it('setLogBufferMaxSize clamps values below the minimum', async () => {
+    appMocks.GetAppSettings.mockResolvedValue({ theme: 'system' });
+    await hydrateAppPreferences({ force: true });
+    setLogBufferMaxSize(1);
+    expect(getLogBufferMaxSize()).toBe(LOG_BUFFER_MIN_SIZE);
+  });
+
+  it('setLogBufferMaxSize clamps values above the maximum', async () => {
+    appMocks.GetAppSettings.mockResolvedValue({ theme: 'system' });
+    await hydrateAppPreferences({ force: true });
+    setLogBufferMaxSize(999_999);
+    expect(getLogBufferMaxSize()).toBe(LOG_BUFFER_MAX_SIZE);
   });
 });

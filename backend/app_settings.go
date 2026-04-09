@@ -34,6 +34,7 @@ type settingsPreferences struct {
 	Theme                         string           `json:"theme"`
 	UseShortResourceNames         bool             `json:"useShortResourceNames"`
 	Refresh                       *settingsRefresh `json:"refresh"`
+	Logs                          *settingsLogs    `json:"logs,omitempty"`
 	GridTablePersistenceMode      string           `json:"gridTablePersistenceMode"`
 	DefaultObjectPanelPosition    string           `json:"defaultObjectPanelPosition"`
 	ObjectPanelDockedRightWidth   int              `json:"objectPanelDockedRightWidth"`
@@ -71,6 +72,30 @@ type settingsRefresh struct {
 	MetricsIntervalMs int  `json:"metricsIntervalMs"`
 }
 
+// settingsLogs captures user-configurable pod-logs settings.
+type settingsLogs struct {
+	BufferMaxSize int `json:"bufferMaxSize"` // Max log entries kept in memory per Logs tab
+}
+
+// Log buffer size bounds. The frontend clamps to the same range in
+// normalizeLogBufferMaxSize, so the client can't push values outside
+// these limits; clamping again in the setter is defence in depth.
+const (
+	defaultLogBufferMaxSize = 1000
+	minLogBufferMaxSize     = 100
+	maxLogBufferMaxSize     = 10000
+)
+
+func clampLogBufferMaxSize(size int) int {
+	if size < minLogBufferMaxSize {
+		return minLogBufferMaxSize
+	}
+	if size > maxLogBufferMaxSize {
+		return maxLogBufferMaxSize
+	}
+	return size
+}
+
 // settingsKubeconfig captures user-configurable kubeconfig settings.
 type settingsKubeconfig struct {
 	Selected    []string `json:"selected"`
@@ -93,6 +118,7 @@ func defaultSettingsFile() *settingsFile {
 		Preferences: settingsPreferences{
 			Theme:   "system",
 			Refresh: &settingsRefresh{Auto: true, Background: true, MetricsIntervalMs: defaultMetricsIntervalMs()},
+			Logs:    &settingsLogs{BufferMaxSize: defaultLogBufferMaxSize},
 
 			GridTablePersistenceMode: "shared",
 			// DefaultObjectPanelPosition and object panel layout defaults are
@@ -122,6 +148,17 @@ func normalizeSettingsFile(settings *settingsFile) *settingsFile {
 	}
 	if settings.Preferences.Refresh.MetricsIntervalMs <= 0 {
 		settings.Preferences.Refresh.MetricsIntervalMs = defaultMetricsIntervalMs()
+	}
+	if settings.Preferences.Logs == nil {
+		settings.Preferences.Logs = &settingsLogs{BufferMaxSize: defaultLogBufferMaxSize}
+	}
+	// A zero value from an older settings file means "use the default",
+	// not "truncate every buffer to 0" — clamp after the fact so existing
+	// users upgrade cleanly.
+	if settings.Preferences.Logs.BufferMaxSize <= 0 {
+		settings.Preferences.Logs.BufferMaxSize = defaultLogBufferMaxSize
+	} else {
+		settings.Preferences.Logs.BufferMaxSize = clampLogBufferMaxSize(settings.Preferences.Logs.BufferMaxSize)
 	}
 	if settings.Preferences.GridTablePersistenceMode == "" {
 		settings.Preferences.GridTablePersistenceMode = "shared"
@@ -293,7 +330,8 @@ func getDefaultAppSettings() *AppSettings {
 		AutoRefreshEnabled:               true,
 		RefreshBackgroundClustersEnabled: true,
 		MetricsRefreshIntervalMs:         defaultMetricsIntervalMs(),
-		GridTablePersistenceMode: "shared",
+		LogBufferMaxSize:                 defaultLogBufferMaxSize,
+		GridTablePersistenceMode:         "shared",
 	}
 }
 
@@ -303,6 +341,11 @@ func (a *App) loadAppSettings() error {
 		return err
 	}
 
+	logBufferMaxSize := defaultLogBufferMaxSize
+	if settings.Preferences.Logs != nil && settings.Preferences.Logs.BufferMaxSize > 0 {
+		logBufferMaxSize = clampLogBufferMaxSize(settings.Preferences.Logs.BufferMaxSize)
+	}
+
 	a.appSettings = &AppSettings{
 		Theme:                            settings.Preferences.Theme,
 		SelectedKubeconfigs:              append([]string(nil), settings.Kubeconfig.Selected...),
@@ -310,6 +353,7 @@ func (a *App) loadAppSettings() error {
 		AutoRefreshEnabled:               settings.Preferences.Refresh.Auto,
 		RefreshBackgroundClustersEnabled: settings.Preferences.Refresh.Background,
 		MetricsRefreshIntervalMs:         settings.Preferences.Refresh.MetricsIntervalMs,
+		LogBufferMaxSize:                 logBufferMaxSize,
 		GridTablePersistenceMode:         settings.Preferences.GridTablePersistenceMode,
 		DefaultObjectPanelPosition:       settings.Preferences.DefaultObjectPanelPosition,
 		ObjectPanelDockedRightWidth:      settings.Preferences.ObjectPanelDockedRightWidth,
@@ -351,6 +395,10 @@ func (a *App) saveAppSettings() error {
 	settings.Preferences.Refresh.Auto = a.appSettings.AutoRefreshEnabled
 	settings.Preferences.Refresh.Background = a.appSettings.RefreshBackgroundClustersEnabled
 	settings.Preferences.Refresh.MetricsIntervalMs = a.appSettings.MetricsRefreshIntervalMs
+	if settings.Preferences.Logs == nil {
+		settings.Preferences.Logs = &settingsLogs{}
+	}
+	settings.Preferences.Logs.BufferMaxSize = clampLogBufferMaxSize(a.appSettings.LogBufferMaxSize)
 	settings.Preferences.GridTablePersistenceMode = a.appSettings.GridTablePersistenceMode
 	settings.Preferences.DefaultObjectPanelPosition = a.appSettings.DefaultObjectPanelPosition
 	settings.Preferences.ObjectPanelDockedRightWidth = a.appSettings.ObjectPanelDockedRightWidth
@@ -504,6 +552,24 @@ func (a *App) SetBackgroundRefreshEnabled(enabled bool) error {
 
 	a.logger.Info(fmt.Sprintf("Background refresh enabled changed to: %v", enabled), "Settings")
 	a.appSettings.RefreshBackgroundClustersEnabled = enabled
+	return a.saveAppSettings()
+}
+
+// SetLogBufferMaxSize persists the max log entries each Logs tab keeps
+// in memory. Values are clamped to [minLogBufferMaxSize, maxLogBufferMaxSize].
+func (a *App) SetLogBufferMaxSize(size int) error {
+	a.settingsMu.Lock()
+	defer a.settingsMu.Unlock()
+
+	if a.appSettings == nil {
+		if err := a.loadAppSettings(); err != nil {
+			return err
+		}
+	}
+
+	clamped := clampLogBufferMaxSize(size)
+	a.logger.Info(fmt.Sprintf("Log buffer max size changed to: %d", clamped), "Settings")
+	a.appSettings.LogBufferMaxSize = clamped
 	return a.saveAppSettings()
 }
 

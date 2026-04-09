@@ -41,13 +41,5 @@ export interface TabGroupState {
   floating: FloatingTabGroup[];
 }
 
-/** Drag state tracked by the provider during tab drags. */
-export interface TabDragState {
-  panelId: string;
-  sourceGroupKey: string;
-  cursorPosition: { x: number; y: number };
-  dropTarget: { groupKey: string; insertIndex: number } | null;
-}
-
 /** Identifies which group a panel belongs to. */
 export type GroupKey = 'right' | 'bottom' | string;

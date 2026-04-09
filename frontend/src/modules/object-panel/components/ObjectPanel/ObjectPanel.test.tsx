@@ -3,7 +3,7 @@
  */
 
 import ReactDOM from 'react-dom/client';
-import { createContext } from 'react';
+import { createContext, useCallback, useState } from 'react';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
@@ -85,17 +85,39 @@ const mockApp = {
 
 const defaultClusterId = 'alpha:ctx';
 
-// Mock useObjectPanelState to provide closePanel
+// Mock useObjectPanelState to provide closePanel + per-panel active tab helpers.
+// The active tab map lives in React state so calling setObjectPanelActiveTab
+// re-renders the consuming ObjectPanel — matching the real provider's
+// useState-backed updates that trigger a render when the tab changes.
 vi.mock('@/core/contexts/ObjectPanelStateContext', () => ({
-  useObjectPanelState: () => ({
-    closePanel: mockClosePanel,
-    openPanels: new Map(),
-    showObjectPanel: true,
-    onRowClick: vi.fn(),
-    onCloseObjectPanel: vi.fn(),
-    setShowObjectPanel: vi.fn(),
-    hydrateClusterMeta: vi.fn((d: any) => d),
-  }),
+  useObjectPanelState: () => {
+    const [activeTabs, setActiveTabs] = useState<Map<string, string>>(() => new Map());
+    const getObjectPanelActiveTab = useCallback(
+      (panelId: string) => activeTabs.get(panelId),
+      [activeTabs]
+    );
+    const setObjectPanelActiveTab = useCallback((panelId: string, tab: string) => {
+      setActiveTabs((prev) => {
+        if (prev.get(panelId) === tab) {
+          return prev;
+        }
+        const next = new Map(prev);
+        next.set(panelId, tab);
+        return next;
+      });
+    }, []);
+    return {
+      closePanel: mockClosePanel,
+      openPanels: new Map(),
+      showObjectPanel: true,
+      onRowClick: vi.fn(),
+      onCloseObjectPanel: vi.fn(),
+      setShowObjectPanel: vi.fn(),
+      hydrateClusterMeta: vi.fn((d: any) => d),
+      getObjectPanelActiveTab,
+      setObjectPanelActiveTab,
+    };
+  },
 }));
 
 // Mock dockable to provide both DockablePanel and useDockablePanelContext
@@ -413,7 +435,17 @@ describe('ObjectPanel tab availability', () => {
     });
 
     expect(mockRefreshManager.unregister).toHaveBeenCalledWith('object-pod');
-    expect(mockRefreshOrchestrator.resetScopedDomain).toHaveBeenCalledWith(
+    // Tier 1 responsiveness: unmount disables refreshing but preserves
+    // the cached snapshot so a remount (cluster switch round-trip)
+    // renders instantly. Eviction now lives in
+    // ObjectPanelStateContext.closePanel, not in the unmount destructor.
+    expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
+      'object-details',
+      detailScope,
+      false,
+      { preserveState: true }
+    );
+    expect(mockRefreshOrchestrator.resetScopedDomain).not.toHaveBeenCalledWith(
       'object-details',
       detailScope
     );

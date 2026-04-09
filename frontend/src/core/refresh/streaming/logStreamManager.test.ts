@@ -359,4 +359,281 @@ describe('LogStreamManager', () => {
     manager.handleStreamError(SCOPE, 'lost');
     expect(errorHandlerMock.handle).toHaveBeenCalledTimes(2);
   });
+
+  // ---------------------------------------------------------------------
+  // Reconnect semantics — the reset=true handshake on new connections
+  // must not wipe the client's buffered history, and the client-side
+  // sequence must stay monotonic across stream restarts. Together these
+  // guarantee the initial-load spinner only shows on the true first load
+  // of a scope, not on every auto-refresh toggle / cluster-switch
+  // remount. See docs/plans (Tier 1/2 responsiveness fix).
+  // ---------------------------------------------------------------------
+
+  const seedScopeWithEntries = async (
+    count: number,
+    sequence = 3
+  ): Promise<InstanceType<typeof import('./logStreamManager').LogStreamManager>> => {
+    const { LogStreamManager } = await import('./logStreamManager');
+    const manager = new LogStreamManager();
+    manager.applyPayload(
+      SCOPE,
+      {
+        domain: 'object-logs',
+        scope: SCOPE,
+        sequence,
+        generatedAt: 1_000,
+        reset: true,
+        entries: Array.from({ length: count }, (_, index) => ({
+          timestamp: `2024-01-01T00:00:${index.toString().padStart(2, '0')}Z`,
+          pod: 'pod-1',
+          container: 'app',
+          line: `seed-${index}`,
+          isInit: false,
+        })),
+      },
+      'stream'
+    );
+    return manager;
+  };
+
+  test('applyPayload preserves the buffer when reset=true and incoming is empty', async () => {
+    const manager = await seedScopeWithEntries(3);
+
+    // Simulates the server's "new connection" handshake on stream
+    // reconnect: reset flag set, but no new entries to send yet.
+    manager.applyPayload(
+      SCOPE,
+      {
+        domain: 'object-logs',
+        scope: SCOPE,
+        sequence: 1,
+        generatedAt: 2_000,
+        reset: true,
+        entries: [],
+      },
+      'stream'
+    );
+
+    const state = getScopedDomainState('object-logs', SCOPE);
+    expect(state.data?.entries).toHaveLength(3);
+    expect(state.data?.entries?.map((e) => e.line)).toEqual(['seed-0', 'seed-1', 'seed-2']);
+  });
+
+  test('applyPayload replaces the buffer when reset=true and incoming is non-empty', async () => {
+    const manager = await seedScopeWithEntries(3);
+
+    // Manual refresh or server-driven fresh snapshot: replace as before.
+    manager.applyPayload(
+      SCOPE,
+      {
+        domain: 'object-logs',
+        scope: SCOPE,
+        sequence: 5,
+        generatedAt: 2_000,
+        reset: true,
+        entries: [
+          {
+            timestamp: '2024-01-01T00:01:00Z',
+            pod: 'pod-1',
+            container: 'app',
+            line: 'fresh-a',
+            isInit: false,
+          },
+          {
+            timestamp: '2024-01-01T00:01:01Z',
+            pod: 'pod-1',
+            container: 'app',
+            line: 'fresh-b',
+            isInit: false,
+          },
+        ],
+      },
+      'stream'
+    );
+
+    const state = getScopedDomainState('object-logs', SCOPE);
+    expect(state.data?.entries).toHaveLength(2);
+    expect(state.data?.entries?.map((e) => e.line)).toEqual(['fresh-a', 'fresh-b']);
+  });
+
+  test('applyPayload appends when reset=false regardless of what was buffered', async () => {
+    const manager = await seedScopeWithEntries(2);
+
+    manager.applyPayload(
+      SCOPE,
+      {
+        domain: 'object-logs',
+        scope: SCOPE,
+        sequence: 4,
+        generatedAt: 2_000,
+        reset: false,
+        entries: [
+          {
+            timestamp: '2024-01-01T00:02:00Z',
+            pod: 'pod-1',
+            container: 'app',
+            line: 'appended',
+            isInit: false,
+          },
+        ],
+      },
+      'stream'
+    );
+
+    const state = getScopedDomainState('object-logs', SCOPE);
+    expect(state.data?.entries).toHaveLength(3);
+    expect(state.data?.entries?.map((e) => e.line)).toEqual(['seed-0', 'seed-1', 'appended']);
+  });
+
+  test('sequence is monotonic across reset frames (does not regress on reconnect)', async () => {
+    const manager = await seedScopeWithEntries(2, 5);
+
+    // The server's per-connection counter restarts at 1 on every new
+    // stream open, but the client-side sequence must stay at 5 so the
+    // view's hasReceivedInitialLogs (>= 2) keeps evaluating true.
+    manager.applyPayload(
+      SCOPE,
+      {
+        domain: 'object-logs',
+        scope: SCOPE,
+        sequence: 1,
+        generatedAt: 2_000,
+        reset: true,
+        entries: [],
+      },
+      'stream'
+    );
+
+    const state = getScopedDomainState('object-logs', SCOPE);
+    expect(state.data?.sequence).toBe(5);
+  });
+
+  test('sequence advances normally on forward progress', async () => {
+    const manager = await seedScopeWithEntries(2, 2);
+
+    manager.applyPayload(
+      SCOPE,
+      {
+        domain: 'object-logs',
+        scope: SCOPE,
+        sequence: 4,
+        generatedAt: 2_000,
+        reset: false,
+        entries: [
+          {
+            timestamp: '2024-01-01T00:02:00Z',
+            pod: 'pod-1',
+            container: 'app',
+            line: 'forward',
+            isInit: false,
+          },
+        ],
+      },
+      'stream'
+    );
+
+    const state = getScopedDomainState('object-logs', SCOPE);
+    expect(state.data?.sequence).toBe(4);
+  });
+
+  // ---------------------------------------------------------------------
+  // User-configurable buffer size. The manager subscribes to the
+  // 'settings:log-buffer-size' event in its constructor — shrinking the
+  // size must retroactively trim existing buffers and push the update
+  // to the scoped store so open LogViewers re-render; growing the size
+  // must not disturb anything.
+  // ---------------------------------------------------------------------
+
+  const seedScopeWithNEntries = async (
+    count: number
+  ): Promise<InstanceType<typeof import('./logStreamManager').LogStreamManager>> => {
+    const { LogStreamManager } = await import('./logStreamManager');
+    const manager = new LogStreamManager();
+    manager.applyPayload(
+      SCOPE,
+      {
+        domain: 'object-logs',
+        scope: SCOPE,
+        sequence: 3,
+        generatedAt: 1_000,
+        reset: true,
+        entries: Array.from({ length: count }, (_, index) => ({
+          timestamp: `2024-01-01T00:00:${index.toString().padStart(2, '0')}Z`,
+          pod: 'pod-1',
+          container: 'app',
+          line: `line-${index}`,
+          isInit: false,
+        })),
+      },
+      'stream'
+    );
+    return manager;
+  };
+
+  test('settings:log-buffer-size event trims existing buffers when shrinking', async () => {
+    const { eventBus } = await import('@/core/events');
+    await seedScopeWithNEntries(50);
+
+    // Baseline: all 50 entries in the store.
+    expect(getScopedDomainState('object-logs', SCOPE).data?.entries).toHaveLength(50);
+
+    // Shrink the buffer cap. The event is dispatched synchronously, so
+    // the store update should be visible immediately after emit.
+    eventBus.emit('settings:log-buffer-size', 20);
+
+    const state = getScopedDomainState('object-logs', SCOPE);
+    expect(state.data?.entries).toHaveLength(20);
+    // The trim must keep the TAIL (newest entries), not the head.
+    expect(state.data?.entries?.[0].line).toBe('line-30');
+    expect(state.data?.entries?.[19].line).toBe('line-49');
+    expect(state.stats?.truncated).toBe(true);
+  });
+
+  test('settings:log-buffer-size event leaves smaller buffers untouched when growing', async () => {
+    const { eventBus } = await import('@/core/events');
+    await seedScopeWithNEntries(10);
+
+    const before = getScopedDomainState('object-logs', SCOPE).data?.entries;
+    expect(before).toHaveLength(10);
+
+    eventBus.emit('settings:log-buffer-size', 5000);
+
+    // No change — the existing buffer is smaller than the new cap.
+    const after = getScopedDomainState('object-logs', SCOPE).data?.entries;
+    expect(after).toHaveLength(10);
+    expect(after?.map((e) => e.line)).toEqual(before?.map((e) => e.line));
+  });
+
+  test('settings:log-buffer-size event clamps subsequent applyPayload truncation', async () => {
+    const { eventBus } = await import('@/core/events');
+    const manager = await seedScopeWithNEntries(5);
+
+    // Tighten the cap to 10. The existing 5 entries aren't touched.
+    eventBus.emit('settings:log-buffer-size', 10);
+
+    // Send a payload large enough to exceed the new cap. applyPayload
+    // must honor the updated cap, not the old default.
+    manager.applyPayload(
+      SCOPE,
+      {
+        domain: 'object-logs',
+        scope: SCOPE,
+        sequence: 4,
+        generatedAt: 2_000,
+        reset: false,
+        entries: Array.from({ length: 20 }, (_, index) => ({
+          timestamp: `2024-01-01T00:01:${index.toString().padStart(2, '0')}Z`,
+          pod: 'pod-1',
+          container: 'app',
+          line: `new-${index}`,
+          isInit: false,
+        })),
+      },
+      'stream'
+    );
+
+    const state = getScopedDomainState('object-logs', SCOPE);
+    expect(state.data?.entries).toHaveLength(10);
+    expect(state.stats?.truncated).toBe(true);
+  });
 });

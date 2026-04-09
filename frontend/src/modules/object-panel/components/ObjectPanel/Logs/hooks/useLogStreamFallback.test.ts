@@ -163,7 +163,13 @@ describe('useLogStreamFallback', () => {
       root.render(React.createElement(Harness, props));
     });
 
-    expect(mockSetScopedDomainEnabled).toHaveBeenCalledWith('object-logs', 'test-scope', true);
+    // preserveState: true on enable so the cached log buffer survives a
+    // remount (e.g. cluster-switch round-trip). Without it the
+    // orchestrator's streaming branch wipes the snapshot before
+    // scheduling the new stream.
+    expect(mockSetScopedDomainEnabled).toHaveBeenCalledWith('object-logs', 'test-scope', true, {
+      preserveState: true,
+    });
   });
 
   it('stops streaming and disables domain when inactive', () => {

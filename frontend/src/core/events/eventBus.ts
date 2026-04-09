@@ -81,6 +81,7 @@ export interface AppEvents {
   'settings:short-names': boolean;
   'settings:theme': string;
   'settings:metrics-interval': number;
+  'settings:log-buffer-size': number;
   'settings:palette-tint': {
     theme: 'light' | 'dark';
     hue: number;

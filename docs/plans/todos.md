@@ -1,5 +1,10 @@
 # TODO
 
+- Cursor turns to beam when dragging the app window in the header
+- Center Mac icons in header
+
+- Parsed logs, dropdown to hide fields
+
 - Resource creation
   - starter templates for common resource types
   - reuse the existing code editor

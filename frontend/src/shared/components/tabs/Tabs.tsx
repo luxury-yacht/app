@@ -1,0 +1,526 @@
+/**
+ * frontend/src/shared/components/tabs/Tabs.tsx
+ *
+ * Universal tab strip base component. Owns rendering, ARIA roles,
+ * manual-activation keyboard navigation, sizing, overflow scrolling,
+ * and the close-button overlay. Knows nothing about drag, persistence,
+ * or system-specific quirks — those live in wrapper components.
+ *
+ * See docs/plans/shared-tabs-component-design.md for the full design.
+ */
+import {
+  Fragment,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type HTMLAttributes,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+} from 'react';
+
+export interface TabDescriptor {
+  id: string;
+  label: ReactNode;
+  leading?: ReactNode;
+  onClose?: () => void;
+  /**
+   * Optional custom content for the close button. Default is a plain
+   * `×` text character. Pass a ReactNode (e.g. an SVG icon component)
+   * when the consumer needs its own visual.
+   */
+  closeIcon?: ReactNode;
+  /**
+   * Optional aria-label override for the close button. Defaults to
+   * `"Close"`. Per-tab labels like `"Close my-context-name"` are more
+   * informative for screen reader users and should be preferred when
+   * the tab label is user-facing text.
+   */
+  closeAriaLabel?: string;
+  disabled?: boolean;
+  ariaControls?: string;
+  ariaLabel?: string;
+  /**
+   * Freeform pass-through props merged onto the tab's root element. The
+   * root is a `<div role="tab">`, so this accepts any HTMLElement
+   * attribute. Used primarily by drag sources (draggable, onDragStart,
+   * onDragEnd).
+   */
+  extraProps?: HTMLAttributes<HTMLElement>;
+}
+
+// Keys owned by the base Tabs component. Wrappers must not override these via
+// extraProps — if they do, we warn in dev so the bug gets caught early. The
+// spread order in the JSX ensures the base's values still win at the DOM level
+// even when a warning fires, so ARIA stays correct in production.
+const RESERVED_TAB_KEYS = new Set([
+  'role',
+  'aria-selected',
+  'aria-controls',
+  'aria-disabled',
+  'aria-label',
+  'tabIndex',
+  'id',
+  'onClick',
+  'onKeyDown',
+]);
+
+function warnReservedKeys(tabId: string, extraProps: HTMLAttributes<HTMLElement> | undefined) {
+  if (process.env.NODE_ENV === 'production' || !extraProps) return;
+  for (const key of Object.keys(extraProps)) {
+    if (RESERVED_TAB_KEYS.has(key)) {
+      console.warn(
+        `<Tabs>: tab "${tabId}" extraProps overrode reserved key "${key}". The base owns this prop. Drop it from extraProps.`
+      );
+    }
+  }
+}
+
+export interface TabsProps {
+  tabs: TabDescriptor[];
+  activeId: string | null;
+  onActivate: (id: string) => void;
+  'aria-label': string;
+  textTransform?: 'none' | 'uppercase';
+  tabSizing?: 'fit' | 'equal';
+  minTabWidth?: number;
+  maxTabWidth?: number;
+  overflow?: 'scroll' | 'none';
+  className?: string;
+  id?: string;
+  /**
+   * When set to a number in `[0, tabs.length]`, a vertical drop indicator
+   * bar is rendered at that flex position. `0` places it before the first
+   * tab, `tabs.length` places it after the last. Used by drop-target
+   * wrappers to show where a dragged tab will land if released.
+   */
+  dropInsertIndex?: number | null;
+  /**
+   * When true, every tab gets `tabIndex={-1}` regardless of active state
+   * or the fallback focus rule. Use this when the surrounding component
+   * implements its own focus management and does not want the tabs to
+   * participate in the browser's native Tab-key order. Keyboard arrow
+   * navigation and Enter/Space activation still work — they're driven
+   * by the component's own `handleKeyDown`, which moves focus
+   * explicitly via `.focus()` regardless of tabindex.
+   *
+   * Default: false.
+   */
+  disableRovingTabIndex?: boolean;
+}
+
+export function Tabs({
+  tabs,
+  activeId,
+  onActivate,
+  'aria-label': ariaLabel,
+  textTransform = 'none',
+  tabSizing = 'fit',
+  minTabWidth,
+  maxTabWidth = 240,
+  overflow = 'scroll',
+  className: classNameProp,
+  id,
+  dropInsertIndex = null,
+  disableRovingTabIndex = false,
+}: TabsProps) {
+  // Mode-specific default for minTabWidth: 'fit' should size to content
+  // (no floor) so short labels like "YAML" don't get bloated; 'equal' needs
+  // a floor so tabs sharing a strip don't collapse below readable width.
+  // Closeable tabs in 'fit' mode get their own 80px floor via tabs.css to
+  // ensure room for the close button overlay.
+  const effectiveMinTabWidth = minTabWidth ?? (tabSizing === 'equal' ? 80 : 0);
+  const tabRefs = useRef<Map<string, HTMLElement>>(new Map());
+  const scrollRef = useRef<HTMLDivElement>(null);
+  // Single boolean: once the strip overflows, BOTH indicators render. Not
+  // tracked per-side. Keeping both mounted at the same time guarantees tab
+  // positions are stable across clicks, which makes the scroll math
+  // straightforward (no layout shifts to compensate for).
+  const [hasOverflow, setHasOverflow] = useState(false);
+  // Track whether the strip is scrolled to either extreme so the
+  // corresponding chevron can be greyed out.
+  const [atStart, setAtStart] = useState(true);
+  const [atEnd, setAtEnd] = useState(false);
+  // Pending scroll target: while an animation is in flight, hold its
+  // destination so rapid clicks can compute the next target from where
+  // we're *going* rather than from the intermediate scrollLeft. Cleared
+  // by the animation callback itself when the animation finishes.
+  const pendingScrollTargetRef = useRef<number | null>(null);
+  // Manual rAF animation frame id. We animate scrollLeft ourselves
+  // instead of using `scrollTo({ behavior: 'smooth' })` because Firefox's
+  // smooth scroll can leave the animation incomplete when interrupted by
+  // rapid subsequent calls, stranding scrollLeft at an intermediate
+  // value. Manual rAF gives consistent cross-browser behavior.
+  const animationFrameRef = useRef<number | null>(null);
+
+  // Scroll one tab at a time when the user clicks an overflow indicator.
+  // Both indicators are always present when the strip overflows, so the
+  // first tab is always at offsetLeft = indicatorSize and positions never
+  // shift between clicks. Find the first tab clipped on the relevant side
+  // and scroll so it just clears the indicator.
+  const scrollToNextTab = (direction: -1 | 1) => {
+    const bar = scrollRef.current;
+    if (!bar) return;
+    const indicatorSize =
+      parseFloat(getComputedStyle(bar).getPropertyValue('--tab-strip-overflow-indicator-size')) ||
+      32;
+
+    // If a smooth scroll is already in flight, compute the next target
+    // from its destination instead of the intermediate scrollLeft. That
+    // makes rapid clicks cumulative: N clicks always advance N tabs.
+    const maxScrollLeft = Math.max(0, bar.scrollWidth - bar.clientWidth);
+    const barLeft =
+      pendingScrollTargetRef.current !== null
+        ? Math.max(0, Math.min(maxScrollLeft, pendingScrollTargetRef.current))
+        : bar.scrollLeft;
+    const barRight = barLeft + bar.clientWidth;
+    let target: HTMLElement | null = null;
+
+    if (direction === 1) {
+      // First tab whose right edge is hidden past the right indicator.
+      for (const tab of tabs) {
+        const btn = tabRefs.current.get(tab.id);
+        if (!btn) continue;
+        if (btn.offsetLeft + btn.offsetWidth > barRight - indicatorSize + 1) {
+          target = btn;
+          break;
+        }
+      }
+    } else {
+      // Last tab whose left edge is hidden before the left indicator.
+      for (let i = tabs.length - 1; i >= 0; i--) {
+        const btn = tabRefs.current.get(tabs[i].id);
+        if (!btn) continue;
+        if (btn.offsetLeft < barLeft + indicatorSize - 1) {
+          target = btn;
+          break;
+        }
+      }
+    }
+    if (!target) return;
+
+    const rawTarget =
+      direction === 1
+        ? target.offsetLeft + target.offsetWidth - bar.clientWidth + indicatorSize
+        : target.offsetLeft - indicatorSize;
+    const scrollTarget = Math.max(0, Math.min(maxScrollLeft, rawTarget));
+    pendingScrollTargetRef.current = scrollTarget;
+    animateScrollTo(scrollTarget);
+  };
+
+  // Manually animate bar.scrollLeft to `target` over ~250ms using rAF and
+  // an ease-out-cubic curve. If called again mid-animation, the existing
+  // frame is cancelled and a fresh animation starts from the current
+  // scrollLeft to the new target. Clears pendingScrollTargetRef when the
+  // animation finishes so subsequent clicks compute fresh from the live
+  // scrollLeft.
+  const animateScrollTo = (target: number) => {
+    const bar = scrollRef.current;
+    if (!bar) return;
+
+    if (animationFrameRef.current !== null) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+
+    const DURATION_MS = 250;
+    const startTime = performance.now();
+    const startScroll = bar.scrollLeft;
+    const delta = target - startScroll;
+    if (Math.abs(delta) < 0.5) {
+      pendingScrollTargetRef.current = null;
+      return;
+    }
+
+    const step = (now: number) => {
+      const progress = Math.min(1, (now - startTime) / DURATION_MS);
+      // easeOutCubic
+      const eased = 1 - Math.pow(1 - progress, 3);
+      bar.scrollLeft = startScroll + delta * eased;
+      if (progress < 1) {
+        animationFrameRef.current = requestAnimationFrame(step);
+      } else {
+        animationFrameRef.current = null;
+        pendingScrollTargetRef.current = null;
+      }
+    };
+    animationFrameRef.current = requestAnimationFrame(step);
+  };
+
+  const focusFirstEnabled = () => {
+    const idx = tabs.findIndex((t) => !t.disabled);
+    if (idx >= 0) tabRefs.current.get(tabs[idx].id)?.focus();
+  };
+
+  const focusLastEnabled = () => {
+    for (let i = tabs.length - 1; i >= 0; i--) {
+      if (!tabs[i].disabled) {
+        tabRefs.current.get(tabs[i].id)?.focus();
+        return;
+      }
+    }
+  };
+
+  const focusNextEnabled = (currentIndex: number, direction: 1 | -1) => {
+    if (tabs.length === 0) return;
+    let next = currentIndex;
+    for (let i = 0; i < tabs.length; i++) {
+      next = (((next + direction) % tabs.length) + tabs.length) % tabs.length;
+      if (!tabs[next].disabled) {
+        tabRefs.current.get(tabs[next].id)?.focus();
+        return;
+      }
+    }
+  };
+
+  const handleKeyDown = (event: ReactKeyboardEvent<HTMLElement>, currentIndex: number) => {
+    switch (event.key) {
+      case 'ArrowRight':
+        event.preventDefault();
+        focusNextEnabled(currentIndex, 1);
+        break;
+      case 'ArrowLeft':
+        event.preventDefault();
+        focusNextEnabled(currentIndex, -1);
+        break;
+      case 'Home':
+        event.preventDefault();
+        focusFirstEnabled();
+        break;
+      case 'End':
+        event.preventDefault();
+        focusLastEnabled();
+        break;
+      case 'Enter':
+      case ' ':
+        event.preventDefault();
+        if (!tabs[currentIndex].disabled) {
+          onActivate(tabs[currentIndex].id);
+        }
+        break;
+      case 'Delete':
+      case 'Backspace':
+        if (tabs[currentIndex].onClose) {
+          event.preventDefault();
+          tabs[currentIndex].onClose?.();
+        }
+        break;
+    }
+  };
+
+  // Attach the scroll listener + ResizeObserver exactly once per `overflow`
+  // transition. The listener reads the latest DOM state on every scroll
+  // event, so it never needs to be re-created when the tab list changes.
+  //
+  // CRITICAL: this effect MUST NOT depend on `tabs`. If it did, any parent
+  // re-render that passes a new `tabs` array identity (as ClusterTabs and
+  // DockableTabBar both do — they rebuild descriptors inline on every
+  // render via `.map()` + `useTabDragSourceFactory()`) would re-run the
+  // cleanup, which would cancel an in-flight rAF animation mid-click. That
+  // was the root cause of rapid-chevron-click tabs appearing broken in the
+  // live app while working in Storybook (Storybook parents re-render far
+  // less frequently). See also the unmount-only rAF cleanup effect below.
+  useEffect(() => {
+    if (overflow !== 'scroll' || !scrollRef.current) {
+      setHasOverflow(false);
+      setAtStart(true);
+      setAtEnd(false);
+      return;
+    }
+
+    const el = scrollRef.current;
+    const measure = () => {
+      const max = el.scrollWidth - el.clientWidth;
+      setHasOverflow(max > 1);
+      setAtStart(el.scrollLeft <= 0);
+      setAtEnd(el.scrollLeft >= max - 1);
+    };
+
+    measure();
+    // ResizeObserver is a global in browsers; in environments without it
+    // (e.g. jsdom without a mock) fall back to a one-shot measurement.
+    const RO: typeof ResizeObserver | undefined = (globalThis as any).ResizeObserver;
+    const observer = RO ? new RO(measure) : null;
+    observer?.observe(el);
+    el.addEventListener('scroll', measure);
+    return () => {
+      observer?.disconnect();
+      el.removeEventListener('scroll', measure);
+    };
+  }, [overflow]);
+
+  // Re-measure when the tab list changes so hasOverflow / atStart / atEnd
+  // catch newly-added or newly-removed tabs. ResizeObserver observes the
+  // container element and only fires on container-size changes — adding a
+  // tab changes `scrollWidth` without changing the container size, so we
+  // need an explicit re-measure here. This is a state-update-only effect;
+  // it does NOT re-attach listeners, so it's safe to let `tabs` be in the
+  // dep array even though that identity flips on every parent render.
+  // React bails out of no-op state updates (e.g. setHasOverflow(true) when
+  // already true), so repeat invocations are free.
+  useEffect(() => {
+    if (overflow !== 'scroll') return;
+    const el = scrollRef.current;
+    if (!el) return;
+    const max = el.scrollWidth - el.clientWidth;
+    setHasOverflow(max > 1);
+    setAtStart(el.scrollLeft <= 0);
+    setAtEnd(el.scrollLeft >= max - 1);
+  }, [tabs, overflow]);
+
+  // Cancel any in-flight rAF scroll animation on unmount. Kept as a
+  // separate unmount-only effect so it doesn't run on every overflow or
+  // tabs change — that would strand rapid-click animations mid-flight.
+  useEffect(() => {
+    return () => {
+      if (animationFrameRef.current !== null) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
+    };
+  }, []);
+
+  // Auto-scroll the active tab into view when activeId changes (e.g., the
+  // consumer programmatically activates a tab that's currently scrolled
+  // off-screen).
+  useEffect(() => {
+    if (overflow !== 'scroll' || !activeId) return;
+    const el = tabRefs.current.get(activeId);
+    if (typeof el?.scrollIntoView === 'function') {
+      el.scrollIntoView({ inline: 'nearest', block: 'nearest', behavior: 'smooth' });
+    }
+  }, [activeId, overflow]);
+
+  const rootClassName = [
+    'tab-strip',
+    `tab-strip--sizing-${tabSizing}`,
+    textTransform === 'uppercase' ? 'tab-strip--uppercase' : null,
+    classNameProp || null,
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  const style = {
+    '--tab-item-min-width': `${effectiveMinTabWidth}px`,
+    '--tab-item-max-width': `${maxTabWidth}px`,
+  } as CSSProperties;
+
+  const showIndicators = overflow === 'scroll' && hasOverflow;
+
+  // Roving-tabindex fallback: when there's no matching active tab (either
+  // activeId is null or points to a tab that doesn't exist), give
+  // tabIndex=0 to the first non-disabled tab so the strip remains
+  // reachable via Tab key. Without this fallback the entire strip would
+  // be a keyboard dead zone, violating the accessibility contract.
+  const hasActiveTab = activeId !== null && tabs.some((t) => t.id === activeId);
+  const fallbackFocusIndex = hasActiveTab ? -1 : tabs.findIndex((t) => !t.disabled);
+
+  return (
+    <div
+      role="tablist"
+      aria-label={ariaLabel}
+      ref={scrollRef}
+      className={rootClassName}
+      style={style}
+      id={id}
+    >
+      {showIndicators && (
+        <button
+          type="button"
+          className="tab-strip__overflow-indicator tab-strip__overflow-indicator--left"
+          aria-label="Scroll tabs left"
+          tabIndex={-1}
+          disabled={atStart}
+          onClick={() => scrollToNextTab(-1)}
+        >
+          <svg
+            className="tab-strip__overflow-icon"
+            viewBox="0 0 12 12"
+            fill="none"
+            aria-hidden="true"
+          >
+            <path d="M7.5 2.5L4.5 6L7.5 9.5" stroke="currentColor" strokeWidth="1.6" />
+          </svg>
+        </button>
+      )}
+      {tabs.map((tab, index) => {
+        const isActive = tab.id === activeId;
+        const isCloseable = Boolean(tab.onClose);
+        const isFocusStop = hasActiveTab ? isActive : index === fallbackFocusIndex;
+        warnReservedKeys(tab.id, tab.extraProps);
+        return (
+          <Fragment key={tab.id}>
+            {dropInsertIndex === index && (
+              <div className="tab-strip__drop-indicator" data-testid="tab-strip-drop-indicator" />
+            )}
+            {/* Outer element is a <div role="tab"> rather than <button> so
+                the close affordance inside can be a real <button> without
+                violating HTML's ban on interactive-in-interactive nesting. */}
+            <div
+              ref={(el) => {
+                if (el) {
+                  tabRefs.current.set(tab.id, el);
+                } else {
+                  tabRefs.current.delete(tab.id);
+                }
+              }}
+              {...tab.extraProps}
+              role="tab"
+              aria-selected={isActive}
+              aria-controls={tab.ariaControls}
+              aria-disabled={tab.disabled || undefined}
+              aria-label={tab.ariaLabel}
+              tabIndex={disableRovingTabIndex ? -1 : isFocusStop ? 0 : -1}
+              className={`tab-item${isActive ? ' tab-item--active' : ''}${isCloseable ? ' tab-item--closeable' : ''}`}
+              onClick={() => {
+                if (!tab.disabled) {
+                  onActivate(tab.id);
+                }
+              }}
+              onKeyDown={(event) => handleKeyDown(event, index)}
+            >
+              {tab.leading}
+              <span className="tab-item__label">{tab.label}</span>
+              {tab.onClose && (
+                <button
+                  type="button"
+                  className="tab-item__close"
+                  aria-label={tab.closeAriaLabel ?? 'Close'}
+                  tabIndex={-1}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    tab.onClose?.();
+                  }}
+                >
+                  {tab.closeIcon ?? '×'}
+                </button>
+              )}
+            </div>
+          </Fragment>
+        );
+      })}
+      {dropInsertIndex === tabs.length && (
+        <div className="tab-strip__drop-indicator" data-testid="tab-strip-drop-indicator" />
+      )}
+      {showIndicators && (
+        <button
+          type="button"
+          className="tab-strip__overflow-indicator tab-strip__overflow-indicator--right"
+          aria-label="Scroll tabs right"
+          tabIndex={-1}
+          disabled={atEnd}
+          onClick={() => scrollToNextTab(1)}
+        >
+          <svg
+            className="tab-strip__overflow-icon"
+            viewBox="0 0 12 12"
+            fill="none"
+            aria-hidden="true"
+          >
+            <path d="M4.5 2.5L7.5 6L4.5 9.5" stroke="currentColor" strokeWidth="1.6" />
+          </svg>
+        </button>
+      )}
+    </div>
+  );
+}

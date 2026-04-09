@@ -23,6 +23,14 @@ interface UseObjectPanelTabsArgs {
   isHelmRelease: boolean;
   isEvent: boolean;
   isOpen: boolean;
+  /**
+   * Persist the active sub-tab. Lifted out of `dispatch` because the
+   * sub-tab now lives in ObjectPanelStateContext (per-cluster) instead
+   * of the ObjectPanel's local useReducer — see ObjectPanel.tsx for the
+   * rationale.
+   */
+  setActiveTab: (tab: ViewType) => void;
+  /** Dispatch for the remaining (transient, non-tab) panel reducer state. */
   dispatch: React.Dispatch<PanelAction>;
   close: () => void;
   currentTab: ViewType;
@@ -38,7 +46,8 @@ export const useObjectPanelTabs = ({
   isHelmRelease,
   isEvent,
   isOpen,
-  dispatch,
+  setActiveTab,
+  dispatch: _dispatch,
   close,
   currentTab,
 }: UseObjectPanelTabsArgs): ObjectPanelTabsResult => {
@@ -96,9 +105,9 @@ export const useObjectPanelTabs = ({
 
     const isViewAvailable = availableTabs.some((tab) => tab.id === currentTab);
     if (!isViewAvailable && currentTab !== 'details') {
-      dispatch({ type: 'SET_ACTIVE_TAB', payload: 'details' });
+      setActiveTab('details');
     }
-  }, [availableTabs, currentTab, dispatch, objectData]);
+  }, [availableTabs, currentTab, setActiveTab, objectData]);
 
   useShortcut({
     key: 'Escape',
@@ -125,7 +134,7 @@ export const useObjectPanelTabs = ({
         key: String(index + 1),
         handler: () => {
           if (isOpen) {
-            dispatch({ type: 'SET_ACTIVE_TAB', payload: tab.id as ViewType });
+            setActiveTab(tab.id as ViewType);
             return true;
           }
           return false;
@@ -133,7 +142,7 @@ export const useObjectPanelTabs = ({
         description: `Switch to ${tab.label} tab`,
         enabled: isOpen,
       })),
-    [availableTabs, isOpen, dispatch]
+    [availableTabs, isOpen, setActiveTab]
   );
 
   useShortcuts(tabShortcuts, {

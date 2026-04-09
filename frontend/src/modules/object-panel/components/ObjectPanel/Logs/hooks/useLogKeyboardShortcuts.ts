@@ -11,7 +11,6 @@ import type { LogViewerAction } from '../logViewerReducer';
 interface UseLogKeyboardShortcutsParams {
   isActive: boolean;
   isParsedView: boolean;
-  autoScroll: boolean;
   dispatch: React.Dispatch<LogViewerAction>;
   supportsPreviousLogs: boolean;
   canParseLogs: boolean;
@@ -27,7 +26,6 @@ interface UseLogKeyboardShortcutsParams {
 export function useLogKeyboardShortcuts({
   isActive,
   isParsedView,
-  autoScroll,
   dispatch,
   supportsPreviousLogs,
   canParseLogs,
@@ -35,21 +33,6 @@ export function useLogKeyboardShortcuts({
   filterInputRef,
   logsContentRef,
 }: UseLogKeyboardShortcutsParams) {
-  // Toggle auto-scroll with 'S' key
-  useShortcut({
-    key: 's',
-    handler: useCallback(() => {
-      if (!isActive) return false;
-      dispatch({ type: 'TOGGLE_AUTO_SCROLL' });
-      return true;
-    }, [isActive, dispatch]),
-    description: 'Toggle auto-scroll',
-    category: 'Logs Tab',
-    enabled: isActive,
-    view: 'global',
-    priority: 20,
-  });
-
   // Toggle auto-refresh with 'R' key
   useShortcut({
     key: 'r',
@@ -134,9 +117,12 @@ export function useLogKeyboardShortcuts({
     return logsContentRef.current;
   }, [isParsedView, logsContentRef]);
 
-  // Scroll to top with Home key (disables auto-scroll to prevent fighting).
-  // Priority 500 to override GridTable's Home/End at 400, which would
-  // otherwise intercept these keys when the parsed view table has focus.
+  // Scroll to top with Home key. Tail-following is derived from scroll
+  // position (see LogViewer's smart-scroll effect), so jumping to the
+  // top naturally disables it until the user scrolls back to the
+  // bottom. Priority 500 to override GridTable's Home/End at 400,
+  // which would otherwise intercept these keys when the parsed view
+  // table has focus.
   useShortcut({
     key: 'Home',
     handler: useCallback(() => {
@@ -144,11 +130,8 @@ export function useLogKeyboardShortcuts({
       const container = getScrollContainer();
       if (!container) return false;
       container.scrollTo({ top: 0, behavior: 'auto' });
-      if (autoScroll) {
-        dispatch({ type: 'TOGGLE_AUTO_SCROLL' });
-      }
       return true;
-    }, [isActive, autoScroll, getScrollContainer, dispatch]),
+    }, [isActive, getScrollContainer]),
     description: 'Scroll to top',
     category: 'Logs Tab',
     enabled: isActive,
@@ -156,7 +139,8 @@ export function useLogKeyboardShortcuts({
     priority: 500,
   });
 
-  // Scroll to bottom with End key (re-enables auto-scroll)
+  // Scroll to bottom with End key. Landing at the bottom re-engages
+  // tail-following automatically via the smart-scroll effect.
   useShortcut({
     key: 'End',
     handler: useCallback(() => {
@@ -164,11 +148,8 @@ export function useLogKeyboardShortcuts({
       const container = getScrollContainer();
       if (!container) return false;
       container.scrollTo({ top: container.scrollHeight, behavior: 'auto' });
-      if (!autoScroll) {
-        dispatch({ type: 'TOGGLE_AUTO_SCROLL' });
-      }
       return true;
-    }, [isActive, autoScroll, getScrollContainer, dispatch]),
+    }, [isActive, getScrollContainer]),
     description: 'Scroll to bottom',
     category: 'Logs Tab',
     enabled: isActive,

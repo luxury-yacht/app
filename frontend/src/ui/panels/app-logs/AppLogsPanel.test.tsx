@@ -9,11 +9,6 @@ import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const panelStateMock = vi.hoisted(() => ({
-  isOpen: true,
-  setOpen: vi.fn(),
-}));
-
 const getLogsMock = vi.hoisted(() => vi.fn());
 const clearLogsMock = vi.hoisted(() => vi.fn());
 const setLogsPanelVisibleMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
@@ -22,13 +17,17 @@ const useKeyboardNavigationScopeMock = vi.hoisted(() => vi.fn());
 const errorHandlerMock = vi.hoisted(() => ({ handle: vi.fn() }));
 const dropdownInstances = vi.hoisted(() => [] as Array<any>);
 
+// AppLogsPanel no longer calls useDockablePanelState — its open/close
+// state is now driven by props from AppLayout (which reads from
+// ModalStateContext). DockablePanel itself is mocked here as a
+// transparent container so the tests can inspect the rendered children
+// directly without exercising the dockable layout system.
 vi.mock('@ui/dockable', () => ({
   DockablePanel: ({ children }: any) => (
     <div data-testid="dockable-panel">
       <div data-testid="body">{children}</div>
     </div>
   ),
-  useDockablePanelState: () => panelStateMock,
 }));
 
 vi.mock('@shared/components/dropdowns/Dropdown', () => ({
@@ -60,22 +59,24 @@ vi.mock('@utils/errorHandler', () => ({
 
 import AppLogsPanel from './AppLogsPanel';
 
-const renderPanel = async () => {
+const renderPanel = async (initialIsOpen = true) => {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = ReactDOM.createRoot(container);
+  const onCloseMock = vi.fn();
 
   await act(async () => {
-    root.render(<AppLogsPanel />);
+    root.render(<AppLogsPanel isOpen={initialIsOpen} onClose={onCloseMock} />);
     await Promise.resolve();
   });
 
   return {
     container,
     root,
-    rerender: async () => {
+    onCloseMock,
+    rerender: async (nextIsOpen = true) => {
       await act(async () => {
-        root.render(<AppLogsPanel />);
+        root.render(<AppLogsPanel isOpen={nextIsOpen} onClose={onCloseMock} />);
         await Promise.resolve();
       });
     },
@@ -101,8 +102,6 @@ const setInputValue = (input: HTMLInputElement, value: string) => {
 };
 
 beforeEach(() => {
-  panelStateMock.isOpen = true;
-  panelStateMock.setOpen.mockClear();
   useShortcutMock.mockClear();
   useKeyboardNavigationScopeMock.mockClear();
   getLogsMock.mockReset();
@@ -133,12 +132,10 @@ describe('AppLogsPanel', () => {
     vi.useFakeTimers();
     getLogsMock.mockResolvedValue([]);
 
-    panelStateMock.isOpen = true;
-    const { rerender, cleanup } = await renderPanel();
+    const { rerender, cleanup } = await renderPanel(true);
     expect(setLogsPanelVisibleMock).toHaveBeenLastCalledWith(true);
 
-    panelStateMock.isOpen = false;
-    await rerender();
+    await rerender(false);
     expect(setLogsPanelVisibleMock).toHaveBeenLastCalledWith(false);
 
     cleanup();

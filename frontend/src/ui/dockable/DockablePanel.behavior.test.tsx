@@ -21,6 +21,13 @@ vi.mock('@wailsjs/go/backend/App', () => ({
   SetZoomLevel: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
+  useKubeconfig: vi.fn(() => ({
+    selectedClusterId: 'cluster-a',
+    selectedClusterIds: ['cluster-a'],
+  })),
+}));
+
 const removePanelLayers = () => {
   document.querySelectorAll('.dockable-panel-layer').forEach((node) => node.remove());
 };

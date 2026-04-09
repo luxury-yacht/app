@@ -38,6 +38,7 @@ import { ErrorNotificationSystem } from '@shared/components/errors/ErrorNotifica
 import { PanelErrorBoundary, RouteErrorBoundary } from '@ui/errors';
 import { DiagnosticsPanel } from '@/core/refresh/components/DiagnosticsPanel';
 import { getAllPanelStates, useDockablePanelContext } from '@ui/dockable';
+import { useDockablePanelEmptySpaceDropTarget } from '@ui/dockable/DockablePanelContentArea';
 // Auth Failure Overlay
 import { AuthFailureOverlay } from '@ui/overlays/AuthFailureOverlay';
 
@@ -73,6 +74,13 @@ export const AppLayout: React.FC = () => {
   const [isErrorOverlayVisible, setIsErrorOverlayVisible] = useState(false);
   const [isPanelDebugOverlayVisible, setIsPanelDebugOverlayVisible] = useState(false);
   const hasActiveClusters = kubeconfig.selectedClusterIds.length > 0;
+  // Empty-space drop target for dockable tabs: dropping a tab in empty
+  // content area spawns a new floating group at the cursor. The ref is
+  // merged onto the existing `<main>` element below — no new wrapper,
+  // no `display: contents`. `useTabDropTarget`'s `stopPropagation` in
+  // its drop handler guarantees that drops inside a tab bar's own
+  // drop target never bubble up to this container target.
+  const { ref: emptySpaceDropRef } = useDockablePanelEmptySpaceDropTarget();
   const handleAboutClose = () => {
     viewState.setIsAboutOpen(false);
   };
@@ -181,7 +189,10 @@ export const AppLayout: React.FC = () => {
       />
       <ClusterTabs />
 
-      <main className={`app-main ${hasActiveClusters ? '' : 'app-main-inactive'}`}>
+      <main
+        ref={emptySpaceDropRef as (el: HTMLElement | null) => void}
+        className={`app-main ${hasActiveClusters ? '' : 'app-main-inactive'}`}
+      >
         <Sidebar />
         {viewState.isSidebarVisible && (
           <div
@@ -277,8 +288,11 @@ export const AppLayout: React.FC = () => {
         {hasActiveClusters && <AuthFailureOverlay />}
       </main>
 
-      <PanelErrorBoundary onClose={() => {}} panelName="app-logs">
-        <AppLogsPanel />
+      <PanelErrorBoundary onClose={() => viewState.setShowAppLogs(false)} panelName="app-logs">
+        <AppLogsPanel
+          isOpen={viewState.showAppLogs}
+          onClose={() => viewState.setShowAppLogs(false)}
+        />
       </PanelErrorBoundary>
 
       <PanelErrorBoundary onClose={() => setShowDiagnostics(false)} panelName="diagnostics">

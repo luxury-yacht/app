@@ -19,6 +19,13 @@ vi.mock('@wailsjs/go/backend/App', () => ({
   SetZoomLevel: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
+  useKubeconfig: vi.fn(() => ({
+    selectedClusterId: 'cluster-a',
+    selectedClusterIds: ['cluster-a'],
+  })),
+}));
+
 const ensureContentElement = () => {
   if (!document.querySelector('.content')) {
     const el = document.createElement('div');

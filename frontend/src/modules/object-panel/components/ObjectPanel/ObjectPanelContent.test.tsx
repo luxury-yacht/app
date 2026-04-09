@@ -177,6 +177,7 @@ describe('ObjectPanelContent', () => {
       error: null,
       scope: null,
     },
+    panelId: 'obj:test:deployment:team-a:api',
   };
 
   beforeAll(() => {

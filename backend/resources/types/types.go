@@ -35,6 +35,7 @@ type AppSettings struct {
 	AutoRefreshEnabled               bool     `json:"autoRefreshEnabled"`               // Enable automatic refresh cycles
 	RefreshBackgroundClustersEnabled bool     `json:"refreshBackgroundClustersEnabled"` // Refresh inactive clusters in the background
 	MetricsRefreshIntervalMs         int      `json:"metricsRefreshIntervalMs"`         // Metrics refresh interval (ms)
+	LogBufferMaxSize                 int      `json:"logBufferMaxSize"`                 // Max log entries kept in memory per Logs tab (100-10000)
 	GridTablePersistenceMode         string   `json:"gridTablePersistenceMode"`         // "shared" or "namespaced"
 	DefaultObjectPanelPosition       string   `json:"defaultObjectPanelPosition"`       // "right", "bottom", or "floating"
 	ObjectPanelDockedRightWidth      int      `json:"objectPanelDockedRightWidth"`      // Default width when docked right (px)

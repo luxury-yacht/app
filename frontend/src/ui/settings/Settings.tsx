@@ -58,10 +58,15 @@ import {
   setDefaultObjectPanelPosition,
   getObjectPanelLayoutDefaults,
   setObjectPanelLayoutDefaults,
+  getLogBufferMaxSize,
+  setLogBufferMaxSize,
+  LOG_BUFFER_MIN_SIZE,
+  LOG_BUFFER_MAX_SIZE,
+  LOG_BUFFER_DEFAULT_SIZE,
   type ObjectPanelPosition,
   type ObjectPanelLayoutDefaults,
 } from '@core/settings/appPreferences';
-import { getActivePanelLayoutStore } from '@ui/dockable/panelLayoutStore';
+import { useDockablePanelContext } from '@ui/dockable';
 import { getContentBounds, PANEL_DEFAULTS } from '@ui/dockable/dockablePanelLayout';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
@@ -85,6 +90,7 @@ function Settings({ onClose }: SettingsProps) {
   const { enabled: backgroundRefreshEnabled, setBackgroundRefresh } = useBackgroundRefresh();
   const { loadKubeconfigs } = useKubeconfig();
   const { resolvedTheme } = useTheme();
+  const { applyLayoutDefaultsAcrossClusters } = useDockablePanelContext();
   const [useShortResourceNames, setUseShortResourceNames] = useState<boolean>(false);
   const [persistenceMode, setPersistenceMode] = useState<GridTablePersistenceMode>(() =>
     getGridTablePersistenceMode()
@@ -94,6 +100,13 @@ function Settings({ onClose }: SettingsProps) {
   );
   const [panelLayout, setPanelLayout] = useState<ObjectPanelLayoutDefaults>(() =>
     getObjectPanelLayoutDefaults()
+  );
+  // Log buffer size local state. We mirror the raw string so the user
+  // can temporarily type an out-of-range value while editing without the
+  // input immediately snapping back — we only push to the preference
+  // cache on blur/commit, where the normalizer clamps the final value.
+  const [logBufferMaxSizeInput, setLogBufferMaxSizeInput] = useState<string>(() =>
+    String(getLogBufferMaxSize())
   );
   // Track kubeconfig search paths for the settings panel.
   const [kubeconfigPaths, setKubeconfigPaths] = useState<string[]>([]);
@@ -246,6 +259,7 @@ function Settings({ onClose }: SettingsProps) {
         floatingX: String(freshLayout.floatingX),
         floatingY: String(freshLayout.floatingY),
       });
+      setLogBufferMaxSizeInput(String(getLogBufferMaxSize()));
       // Palette sliders are loaded by the resolvedTheme effect.
     } catch (error) {
       errorHandler.handle(error, { action: 'loadAppSettings' });
@@ -296,6 +310,21 @@ function Settings({ onClose }: SettingsProps) {
     setGridTablePersistenceMode(mode);
   };
 
+  // Parse the raw text input, clamp to the allowed range, and push to
+  // appPreferences. The preferences setter calls the normalizer again
+  // so we can't get out-of-range values into the cache. On an
+  // unparseable string, snap back to the last valid cached value.
+  const commitLogBufferMaxSize = (raw: string) => {
+    const parsed = Number.parseInt(raw, 10);
+    if (!Number.isFinite(parsed)) {
+      setLogBufferMaxSizeInput(String(getLogBufferMaxSize()));
+      return;
+    }
+    const clamped = Math.max(LOG_BUFFER_MIN_SIZE, Math.min(LOG_BUFFER_MAX_SIZE, parsed));
+    setLogBufferMaxSize(clamped);
+    setLogBufferMaxSizeInput(String(clamped));
+  };
+
   const handleObjectPanelPositionChange = (position: ObjectPanelPosition) => {
     setObjectPanelPositionState(position);
     setDefaultObjectPanelPosition(position);
@@ -334,7 +363,7 @@ function Settings({ onClose }: SettingsProps) {
       const updated = { ...panelLayout, [field]: clamped };
       setPanelLayout(updated);
       setObjectPanelLayoutDefaults(updated);
-      getActivePanelLayoutStore().applyObjectPanelLayoutDefaults();
+      applyLayoutDefaultsAcrossClusters();
     }
   };
 
@@ -1636,6 +1665,44 @@ function Settings({ onClose }: SettingsProps) {
                   variant="dark"
                 />
               </label>
+            </div>
+          </div>
+        </div>
+        <div className="settings-subsection">
+          <h4>Pod Logs</h4>
+          <div className="settings-items">
+            <div className="setting-item setting-item-inline">
+              <label htmlFor="log-buffer-max-size">Max logs </label>
+              <input
+                type="number"
+                id="log-buffer-max-size"
+                min={LOG_BUFFER_MIN_SIZE}
+                max={LOG_BUFFER_MAX_SIZE}
+                step={100}
+                value={logBufferMaxSizeInput}
+                onChange={(e) => setLogBufferMaxSizeInput(e.target.value)}
+                onBlur={(e) => commitLogBufferMaxSize(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    commitLogBufferMaxSize((e.target as HTMLInputElement).value);
+                  }
+                }}
+              />
+              <Tooltip
+                content={
+                  <>
+                    <p>
+                      Max number of logs in the pod logs viewer. Larger values use more memory but
+                      give deeper scrollback.
+                    </p>
+                    <p style={{ marginTop: '1em' }}>
+                      Range {LOG_BUFFER_MIN_SIZE}-{LOG_BUFFER_MAX_SIZE}, default{' '}
+                      {LOG_BUFFER_DEFAULT_SIZE}
+                    </p>
+                  </>
+                }
+                variant="dark"
+              />
             </div>
           </div>
         </div>

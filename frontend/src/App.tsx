@@ -45,8 +45,8 @@ import { ZoomProvider } from '@core/contexts/ZoomContext';
 
 // App components
 import { AppLayout } from '@ui/layout/AppLayout';
-import { useAppLogsPanel } from '@ui/panels/app-logs/AppLogsPanel';
 import { DockablePanelProvider } from '@ui/dockable';
+import { TabDragProvider } from '@shared/components/tabs/dragCoordinator';
 
 // Error Boundary
 import { AppErrorBoundary } from '@ui/errors';
@@ -85,7 +85,6 @@ const applyThemeOverrides = (theme: 'light' | 'dark') => {
  */
 function AppContent() {
   const viewState = useViewState();
-  const appLogsPanel = useAppLogsPanel();
   const connectionStatus = useConnectionStatus();
   const { selectedClusterId, selectedClusterName } = useKubeconfig();
 
@@ -169,8 +168,12 @@ function AppContent() {
 
   // Callbacks for UI actions
   const handleToggleAppLogsPanel = useCallback(() => {
-    appLogsPanel.toggle();
-  }, [appLogsPanel]);
+    // App logs is an app-global tool panel (like Settings, About). Its
+    // open/close lives in ModalStateContext via viewState, not in the
+    // per-cluster panel layout store. Toggling it directly keeps both
+    // the keyboard shortcut and command-palette paths in sync.
+    viewState.toggleAppLogs();
+  }, [viewState]);
 
   const handleToggleDiagnostics = useCallback(() => {
     eventBus.emit('view:toggle-diagnostics');
@@ -197,7 +200,10 @@ function AppContent() {
     onResizeEnd: () => viewState.setIsResizing(false),
   });
 
-  // Listen for app logs toggle events from command palette
+  // The command palette (CommandPaletteCommands.tsx) emits this event when
+  // the user picks "Toggle Application Logs". Forward it to the same
+  // handler the keyboard shortcut + tray menu use, so all paths share
+  // the single source of truth in ModalStateContext.
   useEffect(() => {
     return eventBus.on('view:toggle-app-logs', handleToggleAppLogsPanel);
   }, [handleToggleAppLogsPanel]);
@@ -228,7 +234,7 @@ function AppContent() {
         onRefresh={handleManualRefresh}
         onToggleDiagnostics={handleToggleDiagnostics}
         viewType={viewState.viewType}
-        isLogsPanelOpen={appLogsPanel.isOpen}
+        isLogsPanelOpen={viewState.showAppLogs}
         isObjectPanelOpen={viewState.showObjectPanel}
         isSettingsOpen={viewState.isSettingsOpen}
       />
@@ -253,9 +259,11 @@ function App() {
                   <KubernetesProvider>
                     <ClusterLifecycleProvider>
                       <FavoritesProvider>
-                        <DockablePanelProvider>
-                          <AppContent />
-                        </DockablePanelProvider>
+                        <TabDragProvider>
+                          <DockablePanelProvider>
+                            <AppContent />
+                          </DockablePanelProvider>
+                        </TabDragProvider>
                       </FavoritesProvider>
                     </ClusterLifecycleProvider>
                   </KubernetesProvider>

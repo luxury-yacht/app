@@ -898,7 +898,7 @@ describe('DiagnosticsPanel component', () => {
     expect(logPrimary?.textContent).toContain('Sessions: 1');
     expect(logPrimary?.textContent).toContain('Delivered: 9');
 
-    const tabButtons = rendered.container.querySelectorAll<HTMLButtonElement>('.tab-item');
+    const tabButtons = rendered.container.querySelectorAll<HTMLElement>('[role="tab"]');
     await act(async () => {
       tabButtons[1].click();
       await Promise.resolve();
@@ -1053,7 +1053,7 @@ describe('DiagnosticsPanel component', () => {
     await flushAsync();
     await flushAsync();
 
-    const tabButtons = rendered.container.querySelectorAll<HTMLButtonElement>('.tab-item');
+    const tabButtons = rendered.container.querySelectorAll<HTMLElement>('[role="tab"]');
     await act(async () => {
       tabButtons[1].click();
       await Promise.resolve();
@@ -1270,7 +1270,7 @@ describe('DiagnosticsPanel component', () => {
       await Promise.resolve();
     });
 
-    const tabButtons = rendered.container.querySelectorAll<HTMLButtonElement>('.tab-item');
+    const tabButtons = rendered.container.querySelectorAll<HTMLElement>('[role="tab"]');
     await act(async () => {
       // Skip the new streams tab to reach capability checks.
       tabButtons[2].click();
@@ -1338,6 +1338,27 @@ describe('DiagnosticsPanel component', () => {
     expect(allRows.length).toBe(4);
     expect(Array.from(allRows).some((row) => row.textContent?.includes('Cluster RBAC'))).toBe(true);
     expect(Array.from(allRows).some((row) => row.textContent?.includes('kube-system'))).toBe(true);
+
+    await rendered.unmount();
+  });
+
+  test('each tab carries data-diagnostics-focusable="true" for the focus walker', async () => {
+    // The focus walker at DiagnosticsPanel.tsx:~2067 queries
+    // '[data-diagnostics-focusable="true"]' to drive Escape/Arrow navigation.
+    // If extraProps stops being forwarded through the shared Tabs component,
+    // the attribute silently disappears and keyboard nav breaks. This test
+    // guards that regression.
+    const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
+    const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
+    await flushAsync();
+
+    const focusableEls = rendered.container.querySelectorAll('[data-diagnostics-focusable="true"]');
+    // Expect exactly four focusable tab elements (one per tab descriptor).
+    expect(focusableEls.length).toBe(4);
+    // Each should also carry role="tab" — confirming they are the tab divs.
+    for (const el of Array.from(focusableEls)) {
+      expect(el.getAttribute('role')).toBe('tab');
+    }
 
     await rendered.unmount();
   });
