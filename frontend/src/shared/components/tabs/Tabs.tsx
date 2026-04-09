@@ -308,9 +308,18 @@ export function Tabs({
     }
   };
 
-  // Measure overflow whenever the strip size or contents change, and
-  // update the at-start/at-end flags on scroll so the chevrons can grey
-  // out at the extremes.
+  // Attach the scroll listener + ResizeObserver exactly once per `overflow`
+  // transition. The listener reads the latest DOM state on every scroll
+  // event, so it never needs to be re-created when the tab list changes.
+  //
+  // CRITICAL: this effect MUST NOT depend on `tabs`. If it did, any parent
+  // re-render that passes a new `tabs` array identity (as ClusterTabs and
+  // DockableTabBar both do — they rebuild descriptors inline on every
+  // render via `.map()` + `useTabDragSourceFactory()`) would re-run the
+  // cleanup, which would cancel an in-flight rAF animation mid-click. That
+  // was the root cause of rapid-chevron-click tabs appearing broken in the
+  // live app while working in Storybook (Storybook parents re-render far
+  // less frequently). See also the unmount-only rAF cleanup effect below.
   useEffect(() => {
     if (overflow !== 'scroll' || !scrollRef.current) {
       setHasOverflow(false);
@@ -337,12 +346,39 @@ export function Tabs({
     return () => {
       observer?.disconnect();
       el.removeEventListener('scroll', measure);
+    };
+  }, [overflow]);
+
+  // Re-measure when the tab list changes so hasOverflow / atStart / atEnd
+  // catch newly-added or newly-removed tabs. ResizeObserver observes the
+  // container element and only fires on container-size changes — adding a
+  // tab changes `scrollWidth` without changing the container size, so we
+  // need an explicit re-measure here. This is a state-update-only effect;
+  // it does NOT re-attach listeners, so it's safe to let `tabs` be in the
+  // dep array even though that identity flips on every parent render.
+  // React bails out of no-op state updates (e.g. setHasOverflow(true) when
+  // already true), so repeat invocations are free.
+  useEffect(() => {
+    if (overflow !== 'scroll') return;
+    const el = scrollRef.current;
+    if (!el) return;
+    const max = el.scrollWidth - el.clientWidth;
+    setHasOverflow(max > 1);
+    setAtStart(el.scrollLeft <= 0);
+    setAtEnd(el.scrollLeft >= max - 1);
+  }, [tabs, overflow]);
+
+  // Cancel any in-flight rAF scroll animation on unmount. Kept as a
+  // separate unmount-only effect so it doesn't run on every overflow or
+  // tabs change — that would strand rapid-click animations mid-flight.
+  useEffect(() => {
+    return () => {
       if (animationFrameRef.current !== null) {
         cancelAnimationFrame(animationFrameRef.current);
         animationFrameRef.current = null;
       }
     };
-  }, [overflow, tabs]);
+  }, []);
 
   // Auto-scroll the active tab into view when activeId changes (e.g., the
   // consumer programmatically activates a tab that's currently scrolled
