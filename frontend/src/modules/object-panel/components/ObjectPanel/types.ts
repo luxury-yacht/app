@@ -160,6 +160,7 @@ export interface LogViewerPrefs {
   showTimestamps: boolean;
   wrapText: boolean;
   textFilter: string;
+  highlightFilter: string;
   includeFilter: string;
   excludeFilter: string;
   isParsedView: boolean;

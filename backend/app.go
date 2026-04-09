@@ -10,6 +10,7 @@ import (
 	"github.com/luxury-yacht/app/backend/capabilities"
 	"github.com/luxury-yacht/app/backend/internal/versioning"
 	"github.com/luxury-yacht/app/backend/refresh"
+	"github.com/luxury-yacht/app/backend/refresh/logstream"
 	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 	apiextinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
@@ -43,6 +44,7 @@ type App struct {
 	refreshBaseURL               string
 	refreshServerDone            chan struct{}
 	telemetryRecorder            *telemetry.Recorder
+	logTargetLimiter             *logstream.GlobalTargetLimiter
 	sharedInformerFactory        informers.SharedInformerFactory
 	apiExtensionsInformerFactory apiextinformers.SharedInformerFactory
 	refreshSubsystems            map[string]*system.Subsystem

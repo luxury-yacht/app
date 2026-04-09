@@ -107,6 +107,23 @@ const formatParsedValue = (value: unknown): string => {
 const formatContainerLabel = (container: string, isInit: boolean): string =>
   isInit ? `${container}:init` : container;
 
+const buildHighlightRegex = (pattern: string): RegExp | null => {
+  const trimmed = pattern.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  try {
+    const probe = new RegExp(trimmed);
+    if (probe.test('')) {
+      return null;
+    }
+    return new RegExp(trimmed, 'g');
+  } catch {
+    return null;
+  }
+};
+
 const LogViewerInner: React.FC<LogViewerProps> = ({
   namespace,
   resourceName,
@@ -139,6 +156,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     showTimestamps,
     wrapText,
     textFilter,
+    highlightFilter,
     includeFilter,
     excludeFilter,
     copyFeedback,
@@ -172,6 +190,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     state.showTimestamps,
     state.wrapText,
     state.textFilter,
+    state.highlightFilter,
     state.includeFilter,
     state.excludeFilter,
     state.isParsedView,
@@ -200,6 +219,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   const isWorkload = resourceKindKey !== 'pod';
   const supportsPreviousLogs = resourceKindKey === 'pod';
   const podName = !isWorkload ? resourceName : '';
+  const highlightRegex = useMemo(() => buildHighlightRegex(highlightFilter), [highlightFilter]);
   const backendLogSelection = useMemo(() => {
     const include = includeFilter.trim();
     const exclude = excludeFilter.trim();
@@ -727,6 +747,51 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       })
       .join('\n');
   }, [filteredEntries, isPendingLogs, isWorkload, selectedContainer, showTimestamps, textFilter]);
+
+  const renderHighlightedMessage = useCallback(
+    (text: string, keyPrefix: string) => {
+      if (!text) {
+        return '\u00A0';
+      }
+      if (!highlightRegex) {
+        return text;
+      }
+
+      const matches = Array.from(text.matchAll(highlightRegex));
+      if (matches.length === 0) {
+        return text;
+      }
+
+      const nodes: React.ReactNode[] = [];
+      let lastIndex = 0;
+
+      matches.forEach((match, index) => {
+        const matchIndex = match.index ?? -1;
+        const value = match[0] ?? '';
+        if (matchIndex < 0 || value.length === 0) {
+          return;
+        }
+        if (matchIndex > lastIndex) {
+          nodes.push(text.slice(lastIndex, matchIndex));
+        }
+        nodes.push(
+          <mark key={`${keyPrefix}-${matchIndex}-${index}`} className="pod-log-highlight">
+            {value}
+          </mark>
+        );
+        lastIndex = matchIndex + value.length;
+      });
+
+      if (nodes.length === 0) {
+        return text;
+      }
+      if (lastIndex < text.length) {
+        nodes.push(text.slice(lastIndex));
+      }
+      return nodes;
+    },
+    [highlightRegex]
+  );
 
   // Schedule copy feedback reset, cancelling any prior pending timer
   const scheduleCopyReset = useCallback(() => {
@@ -1272,6 +1337,29 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
             <div className="pod-logs-control-group pod-logs-filter-group">
               <input
                 type="text"
+                value={highlightFilter}
+                onChange={(e) =>
+                  dispatch({ type: 'SET_HIGHLIGHT_FILTER', payload: e.target.value })
+                }
+                placeholder="Highlight regex"
+                className="pod-logs-text-filter"
+                title="Highlight visible log message text that matches this regex"
+              />
+              {highlightFilter && (
+                <button
+                  className="pod-logs-filter-clear"
+                  onClick={() => dispatch({ type: 'SET_HIGHLIGHT_FILTER', payload: '' })}
+                  title="Clear highlight regex"
+                  aria-label="Clear highlight regex"
+                >
+                  ×
+                </button>
+              )}
+            </div>
+
+            <div className="pod-logs-control-group pod-logs-filter-group">
+              <input
+                type="text"
                 value={includeFilter}
                 onChange={(e) => dispatch({ type: 'SET_INCLUDE_FILTER', payload: e.target.value })}
                 placeholder="Include regex"
@@ -1473,7 +1561,10 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                             >
                               [{pod}/{container}]
                             </span>
-                            <span> {logLine}</span>
+                            <span>
+                              {' '}
+                              {renderHighlightedMessage(logLine, `workload-${entryKey}`)}
+                            </span>
                           </div>
                         );
                       }
@@ -1506,7 +1597,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                             {showContainerMeta && (
                               <span className="pod-log-metadata">[{containerLabel}]</span>
                             )}
-                            <span> {remainder || '\u00A0'}</span>
+                            <span> {renderHighlightedMessage(remainder, `pod-${entryKey}`)}</span>
                           </div>
                         );
                       }
@@ -1514,7 +1605,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
 
                     return (
                       <div key={entryKey} className="pod-log-line">
-                        {line || '\u00A0'}
+                        {renderHighlightedMessage(line, `line-${entryKey}`)}
                       </div>
                     );
                   })

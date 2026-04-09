@@ -30,6 +30,7 @@ const logPermissionResource = "core/pods/log"
 type Handler struct {
 	streamer  *Streamer
 	telemetry *telemetry.Recorder
+	limiter   *GlobalTargetLimiter
 }
 
 // permissionDeniedError preserves the original message while exposing details for structured payloads.
@@ -51,11 +52,15 @@ func (e permissionDeniedError) PermissionDeniedDetails() refresh.PermissionDenie
 }
 
 // NewHandler constructs a log stream handler.
-func NewHandler(client kubernetes.Interface, logger Logger, recorder *telemetry.Recorder) (*Handler, error) {
+func NewHandler(client kubernetes.Interface, logger Logger, recorder *telemetry.Recorder, limiters ...*GlobalTargetLimiter) (*Handler, error) {
 	if client == nil {
 		return nil, errors.New("logstream: kubernetes client is required")
 	}
-	return &Handler{streamer: NewStreamer(client, logger, recorder), telemetry: recorder}, nil
+	var limiter *GlobalTargetLimiter
+	if len(limiters) > 0 {
+		limiter = limiters[0]
+	}
+	return &Handler{streamer: NewStreamer(client, logger, recorder), telemetry: recorder, limiter: limiter}, nil
 }
 
 // ServeHTTP implements http.Handler for the log streaming endpoint.
@@ -115,7 +120,13 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.streamer.logger.Debug(fmt.Sprintf("logstream: client deadline %s", deadline.Format(time.RFC3339)), "LogStream")
 	}
 
-	initial, states, pods, selector, warnings, skippedTargets, err := h.streamer.tail(ctx, opts)
+	var limiterSession *TargetSession
+	if h.limiter != nil {
+		limiterSession = h.limiter.StartSession(opts.ClusterID, opts.ScopeString)
+		defer limiterSession.Release()
+	}
+
+	initial, states, pods, selector, warnings, skippedTargets, skipReason, err := h.streamer.tail(ctx, opts, limiterSession)
 	if err != nil {
 		if h.telemetry != nil {
 			h.telemetry.RecordStreamError(streamName, err)
@@ -137,7 +148,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if h.telemetry != nil && skippedTargets > 0 {
-		h.telemetry.RecordStreamSkippedTargets(streamName, skippedTargets, "per-scope target cap")
+		h.telemetry.RecordStreamSkippedTargets(streamName, skippedTargets, skipReason)
 	}
 
 	// Always send the initial event so frontend knows initial fetch is complete
@@ -166,6 +177,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	entriesCh := make(chan Entry, 256)
 	dropCh := make(chan int, 1024)
 	errCh := make(chan error, 1)
+	warningsCh := make(chan []string, 8)
 
 	go func() {
 		defer func() {
@@ -177,8 +189,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 			close(entriesCh)
 			close(dropCh)
+			close(warningsCh)
 		}()
-		h.streamer.run(ctx, opts, pods, selector, states, entriesCh, errCh, dropCh)
+		h.streamer.run(ctx, opts, pods, selector, states, limiterSession, warnings, entriesCh, warningsCh, errCh, dropCh)
 	}()
 
 	keepAlive := time.NewTicker(config.LogStreamKeepAliveInterval)
@@ -256,6 +269,24 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if h.telemetry != nil {
 				h.telemetry.RecordStreamError(streamName, err)
 			}
+		case warnings, ok := <-warningsCh:
+			if !ok {
+				continue
+			}
+			payload := EventPayload{
+				Domain:      "object-logs",
+				Scope:       opts.ScopeString,
+				Sequence:    sequence,
+				GeneratedAt: time.Now().UnixMilli(),
+				Warnings:    warnings,
+			}
+			sequence++
+			if writeEvent(w, f, payload) != nil {
+				if h.telemetry != nil {
+					h.telemetry.RecordStreamError(streamName, fmt.Errorf("logstream: failed to write warning update"))
+				}
+				return
+			}
 		case entry, ok := <-entriesCh:
 			if !ok {
 				flushBatch()
@@ -332,6 +363,7 @@ func parseOptions(r *http.Request) (Options, error) {
 	if rawScope == "" {
 		return Options{}, errors.New("scope is required")
 	}
+	clusterIDs, _ := refresh.SplitClusterScopeList(rawScope)
 
 	identity, err := refresh.ParseObjectScope(rawScope)
 	if err != nil {
@@ -355,6 +387,12 @@ func parseOptions(r *http.Request) (Options, error) {
 		return Options{}, fmt.Errorf("invalid log filter: %w", err)
 	}
 	return Options{
+		ClusterID: func() string {
+			if len(clusterIDs) == 1 {
+				return clusterIDs[0]
+			}
+			return ""
+		}(),
 		Namespace:  identity.Namespace,
 		Kind:       strings.ToLower(strings.TrimSpace(identity.GVK.Kind)),
 		Name:       strings.TrimSpace(identity.Name),

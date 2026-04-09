@@ -41,6 +41,7 @@ export interface LogViewerState {
   showTimestamps: boolean;
   wrapText: boolean;
   textFilter: string;
+  highlightFilter: string;
   includeFilter: string;
   excludeFilter: string;
 
@@ -73,6 +74,7 @@ export type LogViewerAction =
   | { type: 'TOGGLE_TIMESTAMPS' }
   | { type: 'TOGGLE_WRAP_TEXT' }
   | { type: 'SET_TEXT_FILTER'; payload: string }
+  | { type: 'SET_HIGHLIGHT_FILTER'; payload: string }
   | { type: 'SET_INCLUDE_FILTER'; payload: string }
   | { type: 'SET_EXCLUDE_FILTER'; payload: string }
 
@@ -111,6 +113,7 @@ export const initialLogViewerState: LogViewerState = {
   showTimestamps: true,
   wrapText: true,
   textFilter: '',
+  highlightFilter: '',
   includeFilter: '',
   excludeFilter: '',
 
@@ -141,6 +144,7 @@ export const extractLogViewerPrefs = (state: LogViewerState): LogViewerPrefs => 
   showTimestamps: state.showTimestamps,
   wrapText: state.wrapText,
   textFilter: state.textFilter,
+  highlightFilter: state.highlightFilter,
   includeFilter: state.includeFilter,
   excludeFilter: state.excludeFilter,
   isParsedView: state.isParsedView,
@@ -164,6 +168,7 @@ export const applyLogViewerPrefs = (
   showTimestamps: prefs.showTimestamps,
   wrapText: prefs.wrapText,
   textFilter: prefs.textFilter,
+  highlightFilter: prefs.highlightFilter ?? '',
   includeFilter: prefs.includeFilter ?? '',
   excludeFilter: prefs.excludeFilter ?? '',
   isParsedView: prefs.isParsedView,
@@ -196,6 +201,8 @@ export function logViewerReducer(state: LogViewerState, action: LogViewerAction)
       return { ...state, wrapText: !state.wrapText };
     case 'SET_TEXT_FILTER':
       return { ...state, textFilter: action.payload };
+    case 'SET_HIGHLIGHT_FILTER':
+      return { ...state, highlightFilter: action.payload };
     case 'SET_INCLUDE_FILTER':
       return { ...state, includeFilter: action.payload };
     case 'SET_EXCLUDE_FILTER':
@@ -249,6 +256,7 @@ export function logViewerReducer(state: LogViewerState, action: LogViewerAction)
         selectedFilter: '',
         selectedContainer: action.isWorkload ? state.selectedContainer : '',
         textFilter: '',
+        highlightFilter: '',
         includeFilter: '',
         excludeFilter: '',
         isParsedView: false,

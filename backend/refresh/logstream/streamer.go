@@ -51,10 +51,10 @@ func (t containerTarget) key() string {
 }
 
 // tail gathers the initial log history for the given options and prepares container state.
-func (s *Streamer) tail(ctx context.Context, opts Options) ([]Entry, map[string]*containerState, []*corev1.Pod, string, []string, int, error) {
+func (s *Streamer) tail(ctx context.Context, opts Options, limiterSession *TargetSession) ([]Entry, map[string]*containerState, []*corev1.Pod, string, []string, int, string, error) {
 	pods, selector, err := s.listPods(ctx, opts)
 	if err != nil {
-		return nil, nil, nil, "", nil, 0, fmt.Errorf("logstream: tail %s/%s: %w", opts.Namespace, opts.Name, err)
+		return nil, nil, nil, "", nil, 0, "", fmt.Errorf("logstream: tail %s/%s: %w", opts.Namespace, opts.Name, err)
 	}
 
 	var entries []Entry
@@ -62,6 +62,19 @@ func (s *Streamer) tail(ctx context.Context, opts Options) ([]Entry, map[string]
 	selectedTargets, totalTargets := selectRuntimeTargets(pods, opts.Container, podlogs.DefaultPerScopeTargetLimit)
 	warnings := podlogs.BuildTargetLimitWarnings(len(selectedTargets), totalTargets)
 	skippedTargets := totalTargets - len(selectedTargets)
+	skipReason := ""
+	if skippedTargets > 0 {
+		skipReason = "per-scope target cap"
+	}
+	if limiterSession != nil {
+		allowedKeys, globalSkipped := limiterSession.UpdateDesired(targetKeys(selectedTargets))
+		selectedTargets = filterTargetsByKeys(selectedTargets, allowedKeys)
+		warnings = append(warnings, buildGlobalTargetLimitWarnings(len(selectedTargets), len(selectedTargets)+globalSkipped)...)
+		if globalSkipped > 0 {
+			skippedTargets += globalSkipped
+			skipReason = "global target cap"
+		}
+	}
 
 	for _, selected := range selectedTargets {
 		target := selected
@@ -115,7 +128,7 @@ func (s *Streamer) tail(ctx context.Context, opts Options) ([]Entry, map[string]
 		}
 	})
 
-	return entries, state, pods, selector, warnings, skippedTargets, nil
+	return entries, state, pods, selector, warnings, skippedTargets, skipReason, nil
 }
 
 func (s *Streamer) run(
@@ -124,15 +137,19 @@ func (s *Streamer) run(
 	initialPods []*corev1.Pod,
 	selector string,
 	states map[string]*containerState,
+	limiterSession *TargetSession,
+	initialWarnings []string,
 	entriesCh chan<- Entry,
+	warningsCh chan<- []string,
 	errCh chan<- error,
 	dropCh chan<- int,
 ) {
 	var (
-		mu            sync.Mutex
-		targetWG      sync.WaitGroup
-		currentPods   = make(map[string]*corev1.Pod)
-		targetCancels = make(map[string]context.CancelFunc)
+		mu              sync.Mutex
+		targetWG        sync.WaitGroup
+		currentPods     = make(map[string]*corev1.Pod)
+		targetCancels   = make(map[string]context.CancelFunc)
+		currentWarnings = append([]string(nil), initialWarnings...)
 	)
 
 	// Ensure all followContainer goroutines exit before run returns so callers can safely close channels.
@@ -192,6 +209,15 @@ func (s *Streamer) run(
 			pods = append(pods, pod)
 		}
 		selectedTargets, _ := selectRuntimeTargets(pods, opts.Container, podlogs.DefaultPerScopeTargetLimit)
+		perScopeCount := len(selectedTargets)
+		totalTargets := countTargets(pods, opts.Container)
+		warnings := podlogs.BuildTargetLimitWarnings(perScopeCount, totalTargets)
+		if limiterSession != nil {
+			allowedKeys, globalSkipped := limiterSession.UpdateDesired(targetKeys(selectedTargets))
+			selectedTargets = filterTargetsByKeys(selectedTargets, allowedKeys)
+			warnings = append(warnings, buildGlobalTargetLimitWarnings(len(selectedTargets), perScopeCount)...)
+			_ = globalSkipped
+		}
 		desiredTargets := make(map[string]containerTarget, len(selectedTargets))
 		activeKeys := make([]string, 0, len(targetCancels))
 		activeKeySet := make(map[string]struct{}, len(targetCancels))
@@ -204,6 +230,7 @@ func (s *Streamer) run(
 		for _, target := range selectedTargets {
 			desiredTargets[target.key()] = target
 		}
+		emitWarningsIfChanged(warningsCh, &currentWarnings, warnings)
 
 		for _, key := range activeKeys {
 			if _, ok := desiredTargets[key]; !ok {
@@ -324,6 +351,22 @@ func (s *Streamer) run(
 		if pods, _, listErr := s.listPods(ctx, opts); listErr == nil {
 			replacePodInventory(pods)
 		}
+	}
+}
+
+func emitWarningsIfChanged(ch chan<- []string, current *[]string, next []string) {
+	if ch == nil {
+		*current = append((*current)[:0], next...)
+		return
+	}
+	if stringSlicesEqual(*current, next) {
+		return
+	}
+	copied := append([]string(nil), next...)
+	*current = copied
+	select {
+	case ch <- copied:
+	default:
 	}
 }
 
@@ -724,6 +767,50 @@ func selectRuntimeTargets(pods []*corev1.Pod, filter string, limit int) ([]conta
 		})
 	}
 	return runtimeTargets, totalTargets
+}
+
+func targetKeys(targets []containerTarget) []string {
+	keys := make([]string, 0, len(targets))
+	for _, target := range targets {
+		keys = append(keys, target.key())
+	}
+	return keys
+}
+
+func filterTargetsByKeys(targets []containerTarget, allowedKeys map[string]struct{}) []containerTarget {
+	if len(allowedKeys) == 0 {
+		return nil
+	}
+	filtered := make([]containerTarget, 0, len(targets))
+	for _, target := range targets {
+		if _, ok := allowedKeys[target.key()]; ok {
+			filtered = append(filtered, target)
+		}
+	}
+	return filtered
+}
+
+func countTargets(pods []*corev1.Pod, filter string) int {
+	total := 0
+	for _, pod := range pods {
+		if pod == nil {
+			continue
+		}
+		total += len(podlogs.EnumerateContainers(pod, filter))
+	}
+	return total
+}
+
+func stringSlicesEqual(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for i := range left {
+		if left[i] != right[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func matchContainerFilter(name, filter string, isInit, isEphemeral bool) bool {

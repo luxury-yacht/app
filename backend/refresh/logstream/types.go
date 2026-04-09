@@ -24,6 +24,7 @@ func (noopLogger) Error(string, ...string) {}
 
 // Options captures the parameters for a log streaming session.
 type Options struct {
+	ClusterID   string
 	Namespace   string
 	Kind        string
 	Name        string

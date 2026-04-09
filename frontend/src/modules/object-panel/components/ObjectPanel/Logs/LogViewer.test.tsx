@@ -735,6 +735,7 @@ describe('LogViewer active pod synchronisation', () => {
       showTimestamps: true,
       wrapText: true,
       textFilter: '',
+      highlightFilter: 'timeout',
       includeFilter: 'error|warn',
       excludeFilter: 'healthcheck',
       isParsedView: false,
@@ -837,6 +838,52 @@ describe('LogViewer active pod synchronisation', () => {
     expect(optionLabels).toContain('debug-abc (debug)');
   });
 
+  it('highlights matching substrings in visible log text without changing backend params', async () => {
+    setLogViewerPrefs('obj:test:highlight', {
+      selectedContainer: '',
+      selectedFilter: '',
+      autoRefresh: true,
+      showTimestamps: true,
+      wrapText: true,
+      textFilter: '',
+      highlightFilter: 'timeout|panic',
+      includeFilter: '',
+      excludeFilter: '',
+      isParsedView: false,
+      expandedRows: [],
+      showPreviousLogs: false,
+    });
+    seedLogSnapshot(
+      [
+        {
+          pod: 'web-1',
+          container: 'app',
+          line: 'timeout while waiting for panic handler',
+          timestamp: '2024-05-01T12:00:00Z',
+          isInit: false,
+        },
+      ],
+      defaultScope
+    );
+
+    await renderViewer({
+      activePodNames: ['web-1'],
+      panelId: 'obj:test:highlight',
+    });
+
+    const highlightInput = container.querySelector<HTMLInputElement>(
+      'input[placeholder="Highlight regex"]'
+    );
+    expect(highlightInput?.value).toBe('timeout|panic');
+    expect(getLogStreamScopeParams(defaultScope)).toBeUndefined();
+
+    const highlights = Array.from(container.querySelectorAll('.pod-log-highlight')).map((element) =>
+      element.textContent?.trim()
+    );
+    expect(highlights).toEqual(['timeout', 'panic']);
+    expect(container.textContent).toContain('timeout while waiting for panic handler');
+  });
+
   it('shows previous log message when toggled with no data', async () => {
     seedLogSnapshot([], buildLogScope('team-a:pod:api'));
     (LogFetcher as unknown as ViMock).mockResolvedValue({ entries: [] });
@@ -879,6 +926,7 @@ describe('LogViewer active pod synchronisation', () => {
       showTimestamps: true,
       wrapText: true,
       textFilter: '',
+      highlightFilter: '',
       includeFilter: '',
       excludeFilter: '',
       isParsedView: false,
@@ -926,15 +974,19 @@ describe('LogViewer active pod synchronisation', () => {
       showTimestamps: false,
       wrapText: false,
       textFilter: 'panic',
+      highlightFilter: 'timeout|panic',
       includeFilter: 'error|warn',
       excludeFilter: 'healthcheck',
-      isParsedView: true,
+      isParsedView: false,
       expandedRows: ['row-7', 'row-9'],
-      showPreviousLogs: true,
+      showPreviousLogs: false,
     });
 
     await renderViewer({ panelId });
     await flushAsync();
+    expect(
+      container.querySelector<HTMLInputElement>('input[placeholder="Highlight regex"]')?.value
+    ).toBe('timeout|panic');
     expect(getLogStreamScopeParams(defaultScope)).toEqual({
       include: 'error|warn',
       exclude: 'healthcheck',
@@ -970,6 +1022,18 @@ describe('LogViewer active pod synchronisation', () => {
     });
 
     expect(getLogViewerPrefs(panelId)?.textFilter).toBe('fatal');
+
+    const highlightInput = container.querySelector<HTMLInputElement>(
+      'input[placeholder="Highlight regex"]'
+    );
+    expect(highlightInput).toBeTruthy();
+    await act(async () => {
+      nativeValueSetter?.call(highlightInput, 'panic|timeout');
+      highlightInput!.dispatchEvent(new Event('input', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(getLogViewerPrefs(panelId)?.highlightFilter).toBe('panic|timeout');
   });
 
   it('keeps separate prefs entries for different panels', async () => {
@@ -982,6 +1046,7 @@ describe('LogViewer active pod synchronisation', () => {
       showTimestamps: true,
       wrapText: true,
       textFilter: 'a-only',
+      highlightFilter: '',
       includeFilter: '',
       excludeFilter: '',
       isParsedView: false,
@@ -995,6 +1060,7 @@ describe('LogViewer active pod synchronisation', () => {
       showTimestamps: true,
       wrapText: true,
       textFilter: 'b-only',
+      highlightFilter: '',
       includeFilter: '',
       excludeFilter: '',
       isParsedView: false,

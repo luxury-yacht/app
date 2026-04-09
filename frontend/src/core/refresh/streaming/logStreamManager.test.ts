@@ -123,6 +123,41 @@ describe('LogStreamManager', () => {
     );
   });
 
+  test('applyPayload clears backend warnings when the server sends an empty warning list', async () => {
+    const { LogStreamManager } = await import('./logStreamManager');
+    const manager = new LogStreamManager();
+
+    manager.applyPayload(
+      SCOPE,
+      {
+        domain: 'object-logs',
+        scope: SCOPE,
+        sequence: 1,
+        generatedAt: 123,
+        reset: true,
+        warnings: ['Showing logs for 24 of 25 pod/container targets. Refine filters to view more.'],
+        entries: [],
+      },
+      'stream'
+    );
+
+    manager.applyPayload(
+      SCOPE,
+      {
+        domain: 'object-logs',
+        scope: SCOPE,
+        sequence: 2,
+        generatedAt: 124,
+        warnings: [],
+        entries: [],
+      },
+      'stream'
+    );
+
+    const state = getScopedDomainState('object-logs', SCOPE);
+    expect(state.stats?.warnings).toBeUndefined();
+  });
+
   test('applyPayload uses permission denied details when provided', async () => {
     const { LogStreamManager } = await import('./logStreamManager');
     const manager = new LogStreamManager();

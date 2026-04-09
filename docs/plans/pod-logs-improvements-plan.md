@@ -146,10 +146,10 @@ Explicitly out of scope for this plan:
 - ✅ Share one backend target-resolution, filtering, ordering, and cap-handling path between live follow and previous-log fetch
 - ✅ Add per-scope maximum concurrent log target limits
 - ✅ Start with a provisional default per-scope cap of 24 resolved pod/container targets, subject to validation during hardening
-- [ ] Add a global maximum concurrent log target limit across all active log scopes
-- [ ] Start with a provisional default global cap of 72 resolved pod/container targets, subject to validation during hardening
-- [ ] Define the global cap as process-wide with fair sharing across clusters so one cluster cannot starve unrelated active scopes in another cluster
-- [ ] Count resolved pod/container targets, not just pod count, against both caps
+- ✅ Add a global maximum concurrent log target limit across all active log scopes
+- ✅ Start with a provisional default global cap of 72 resolved pod/container targets, subject to validation during hardening
+- ✅ Define the global cap as process-wide with fair sharing across clusters so one cluster cannot starve unrelated active scopes in another cluster
+- ✅ Count resolved pod/container targets, not just pod count, against both caps
 - [ ] Use deterministic target selection when caps are hit:
 - ✅ prefer ready/running pods first
 - ✅ then stable sort by pod name and container name
@@ -163,11 +163,11 @@ Explicitly out of scope for this plan:
 
 ### Frontend
 
-- [ ] Add UI controls for highlight filters appropriate to the object panel
+- ✅ Add UI controls for highlight filters appropriate to the object panel
 - ✅ Add UI controls for include/exclude regex filters appropriate to the object panel
-- [ ] Persist highlight filter state for the lifetime of the Object Panel tab, including transient remounts such as cluster switching
+- ✅ Persist highlight filter state for the lifetime of the Object Panel tab, including transient remounts such as cluster switching
 - ✅ Persist include/exclude filter state for the lifetime of the Object Panel tab, including transient remounts such as cluster switching
-- [ ] Drop highlight filter state when the owning Object Panel tab is closed
+- ✅ Drop highlight filter state when the owning Object Panel tab is closed
 - ✅ Drop include/exclude filter state when the owning Object Panel tab is closed
 - [ ] Reflect backend warnings when not all pod/container targets were opened or fetched
 - ✅ Reflect backend warnings when not all pod/container targets were opened or fetched
@@ -176,7 +176,7 @@ Explicitly out of scope for this plan:
 ### Tests
 
 - ✅ Add backend tests for include/exclude filters
-- [ ] Add backend tests for concurrency cap behavior
+- ✅ Add backend tests for concurrency cap behavior
 - [ ] Add backend tests proving live follow and previous/manual fetch resolve the same capped target set
 - [ ] Add frontend tests for warning states when limits are hit
 
@@ -199,7 +199,7 @@ Explicitly out of scope for this plan:
 - ✅ Keep the existing 12-color log pod palette from the light and dark themes
 - ✅ Change pod color assignment from sorted visible pod order to stable hash-based pod-name mapping so a pod keeps the same color across refreshes and pod-list churn
 - ✅ Ensure the stable mapping still degrades predictably when more than 12 pods are visible
-- [ ] Add highlight support for matched substrings
+- ✅ Add highlight support for matched substrings
 - [ ] Expand display modes:
 - [ ] raw
 - [ ] structured JSON
@@ -222,7 +222,7 @@ Explicitly out of scope for this plan:
 
 - ✅ Add frontend tests proving pod colors remain stable for a given pod name when the visible pod set changes
 - ✅ Add frontend tests covering >12 pod wraparound behavior
-- [ ] Add frontend tests for highlight behavior
+- ✅ Add frontend tests for highlight behavior
 - [ ] Add frontend tests for output mode switching
 - [ ] Add frontend tests for timestamp format controls
 

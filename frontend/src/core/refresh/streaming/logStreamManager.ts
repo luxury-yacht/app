@@ -433,8 +433,12 @@ export class LogStreamManager {
       payload.errorDetails
     );
     const isManual = mode === 'manual';
-    if (payload.warnings && payload.warnings.length > 0) {
-      this.backendWarnings.set(scope, payload.warnings);
+    if (payload.warnings !== undefined) {
+      if (payload.warnings.length > 0) {
+        this.backendWarnings.set(scope, payload.warnings);
+      } else {
+        this.backendWarnings.delete(scope);
+      }
     } else if (payload.reset) {
       this.backendWarnings.delete(scope);
     }

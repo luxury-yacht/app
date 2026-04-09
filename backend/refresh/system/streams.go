@@ -25,7 +25,12 @@ type streamDeps struct {
 
 // registerStreamHandlers wires stream endpoints and returns stream managers.
 func registerStreamHandlers(mux *http.ServeMux, deps streamDeps) (*eventstream.Manager, *resourcestream.Manager, error) {
-	logHandler, err := logstream.NewHandler(deps.cfg.KubernetesClient, deps.cfg.Logger, deps.telemetry)
+	logHandler, err := logstream.NewHandler(
+		deps.cfg.KubernetesClient,
+		deps.cfg.Logger,
+		deps.telemetry,
+		deps.cfg.LogTargetLimiter,
+	)
 	if err != nil {
 		return nil, nil, err
 	}
