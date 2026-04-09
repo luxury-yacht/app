@@ -29,6 +29,7 @@ import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
 import './LogViewer.css';
 import { refreshOrchestrator } from '@/core/refresh/orchestrator';
 import { setScopedDomainState, useRefreshScopedDomain } from '@/core/refresh/store';
+import { getLogBufferMaxSize } from '@/core/settings/appPreferences';
 import type { ObjectLogEntry } from '@/core/refresh/types';
 import type { types } from '@wailsjs/go/models';
 import {
@@ -343,6 +344,10 @@ const LogViewer: React.FC<LogViewerProps> = ({
       const { isManual = false, previous = false } = options;
 
       try {
+        // tailLines for the fallback fetch tracks the user-configurable
+        // log buffer size setting (Advanced → Pod Logs). This keeps the
+        // initial fallback fetch in sync with the rolling buffer cap so
+        // the user gets exactly as much history as their buffer can hold.
         const request: types.LogFetchRequest = {
           namespace,
           workloadName: isWorkload ? resourceName : '',
@@ -350,7 +355,7 @@ const LogViewer: React.FC<LogViewerProps> = ({
           podName: isWorkload ? '' : podName,
           container: !isWorkload && selectedContainer ? selectedContainer : '',
           previous,
-          tailLines: 1000,
+          tailLines: getLogBufferMaxSize(),
           sinceSeconds: 0,
         };
 

@@ -744,6 +744,7 @@ export namespace types {
 	    autoRefreshEnabled: boolean;
 	    refreshBackgroundClustersEnabled: boolean;
 	    metricsRefreshIntervalMs: number;
+	    logBufferMaxSize: number;
 	    gridTablePersistenceMode: string;
 	    defaultObjectPanelPosition: string;
 	    objectPanelDockedRightWidth: number;
@@ -776,6 +777,7 @@ export namespace types {
 	        this.autoRefreshEnabled = source["autoRefreshEnabled"];
 	        this.refreshBackgroundClustersEnabled = source["refreshBackgroundClustersEnabled"];
 	        this.metricsRefreshIntervalMs = source["metricsRefreshIntervalMs"];
+	        this.logBufferMaxSize = source["logBufferMaxSize"];
 	        this.gridTablePersistenceMode = source["gridTablePersistenceMode"];
 	        this.defaultObjectPanelPosition = source["defaultObjectPanelPosition"];
 	        this.objectPanelDockedRightWidth = source["objectPanelDockedRightWidth"];

@@ -535,4 +535,105 @@ describe('LogStreamManager', () => {
     const state = getScopedDomainState('object-logs', SCOPE);
     expect(state.data?.sequence).toBe(4);
   });
+
+  // ---------------------------------------------------------------------
+  // User-configurable buffer size. The manager subscribes to the
+  // 'settings:log-buffer-size' event in its constructor — shrinking the
+  // size must retroactively trim existing buffers and push the update
+  // to the scoped store so open LogViewers re-render; growing the size
+  // must not disturb anything.
+  // ---------------------------------------------------------------------
+
+  const seedScopeWithNEntries = async (
+    count: number
+  ): Promise<InstanceType<typeof import('./logStreamManager').LogStreamManager>> => {
+    const { LogStreamManager } = await import('./logStreamManager');
+    const manager = new LogStreamManager();
+    manager.applyPayload(
+      SCOPE,
+      {
+        domain: 'object-logs',
+        scope: SCOPE,
+        sequence: 3,
+        generatedAt: 1_000,
+        reset: true,
+        entries: Array.from({ length: count }, (_, index) => ({
+          timestamp: `2024-01-01T00:00:${index.toString().padStart(2, '0')}Z`,
+          pod: 'pod-1',
+          container: 'app',
+          line: `line-${index}`,
+          isInit: false,
+        })),
+      },
+      'stream'
+    );
+    return manager;
+  };
+
+  test('settings:log-buffer-size event trims existing buffers when shrinking', async () => {
+    const { eventBus } = await import('@/core/events');
+    await seedScopeWithNEntries(50);
+
+    // Baseline: all 50 entries in the store.
+    expect(getScopedDomainState('object-logs', SCOPE).data?.entries).toHaveLength(50);
+
+    // Shrink the buffer cap. The event is dispatched synchronously, so
+    // the store update should be visible immediately after emit.
+    eventBus.emit('settings:log-buffer-size', 20);
+
+    const state = getScopedDomainState('object-logs', SCOPE);
+    expect(state.data?.entries).toHaveLength(20);
+    // The trim must keep the TAIL (newest entries), not the head.
+    expect(state.data?.entries?.[0].line).toBe('line-30');
+    expect(state.data?.entries?.[19].line).toBe('line-49');
+    expect(state.stats?.truncated).toBe(true);
+  });
+
+  test('settings:log-buffer-size event leaves smaller buffers untouched when growing', async () => {
+    const { eventBus } = await import('@/core/events');
+    await seedScopeWithNEntries(10);
+
+    const before = getScopedDomainState('object-logs', SCOPE).data?.entries;
+    expect(before).toHaveLength(10);
+
+    eventBus.emit('settings:log-buffer-size', 5000);
+
+    // No change — the existing buffer is smaller than the new cap.
+    const after = getScopedDomainState('object-logs', SCOPE).data?.entries;
+    expect(after).toHaveLength(10);
+    expect(after?.map((e) => e.line)).toEqual(before?.map((e) => e.line));
+  });
+
+  test('settings:log-buffer-size event clamps subsequent applyPayload truncation', async () => {
+    const { eventBus } = await import('@/core/events');
+    const manager = await seedScopeWithNEntries(5);
+
+    // Tighten the cap to 10. The existing 5 entries aren't touched.
+    eventBus.emit('settings:log-buffer-size', 10);
+
+    // Send a payload large enough to exceed the new cap. applyPayload
+    // must honor the updated cap, not the old default.
+    manager.applyPayload(
+      SCOPE,
+      {
+        domain: 'object-logs',
+        scope: SCOPE,
+        sequence: 4,
+        generatedAt: 2_000,
+        reset: false,
+        entries: Array.from({ length: 20 }, (_, index) => ({
+          timestamp: `2024-01-01T00:01:${index.toString().padStart(2, '0')}Z`,
+          pod: 'pod-1',
+          container: 'app',
+          line: `new-${index}`,
+          isInit: false,
+        })),
+      },
+      'stream'
+    );
+
+    const state = getScopedDomainState('object-logs', SCOPE);
+    expect(state.data?.entries).toHaveLength(10);
+    expect(state.stats?.truncated).toBe(true);
+  });
 });

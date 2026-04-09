@@ -203,6 +203,37 @@ func TestAppSetBackgroundRefreshEnabledPersists(t *testing.T) {
 	require.Contains(t, last.Message, "Background refresh enabled changed to: false")
 }
 
+func TestAppSetLogBufferMaxSizePersistsAndClamps(t *testing.T) {
+	setTestConfigEnv(t)
+
+	// In-range value round-trips unchanged.
+	app := newTestAppWithDefaults(t)
+	require.NoError(t, app.SetLogBufferMaxSize(2500))
+	require.Equal(t, 2500, app.appSettings.LogBufferMaxSize)
+
+	app.appSettings = nil
+	require.NoError(t, app.loadAppSettings())
+	require.Equal(t, 2500, app.appSettings.LogBufferMaxSize)
+
+	entries := app.logger.GetEntries()
+	require.NotEmpty(t, entries)
+	require.Contains(t, entries[len(entries)-1].Message, "Log buffer max size changed to: 2500")
+
+	// Out-of-range values clamp to the allowed range.
+	require.NoError(t, app.SetLogBufferMaxSize(50))
+	require.Equal(t, minLogBufferMaxSize, app.appSettings.LogBufferMaxSize)
+
+	require.NoError(t, app.SetLogBufferMaxSize(50000))
+	require.Equal(t, maxLogBufferMaxSize, app.appSettings.LogBufferMaxSize)
+
+	// Default is returned when the settings file has no entry yet.
+	setTestConfigEnv(t)
+	freshApp := newTestAppWithDefaults(t)
+	settings, err := freshApp.GetAppSettings()
+	require.NoError(t, err)
+	require.Equal(t, defaultLogBufferMaxSize, settings.LogBufferMaxSize)
+}
+
 func TestAppSetGridTablePersistenceModePersists(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)

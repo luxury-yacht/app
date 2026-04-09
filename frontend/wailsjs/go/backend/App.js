@@ -470,6 +470,10 @@ export function SetLinkColor(arg1, arg2) {
   return window['go']['backend']['App']['SetLinkColor'](arg1, arg2);
 }
 
+export function SetLogBufferMaxSize(arg1) {
+  return window['go']['backend']['App']['SetLogBufferMaxSize'](arg1);
+}
+
 export function SetLogsPanelVisible(arg1) {
   return window['go']['backend']['App']['SetLogsPanelVisible'](arg1);
 }

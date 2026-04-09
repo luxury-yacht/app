@@ -14,6 +14,7 @@ import {
   ReorderThemes,
   ApplyTheme,
   MatchThemeForCluster,
+  SetLogBufferMaxSize as SetLogBufferMaxSizeBackend,
 } from '@wailsjs/go/backend/App';
 import { types } from '@wailsjs/go/models';
 import { eventBus } from '@/core/events';
@@ -28,6 +29,7 @@ interface AppPreferences {
   autoRefreshEnabled: boolean;
   refreshBackgroundClustersEnabled: boolean;
   metricsRefreshIntervalMs: number;
+  logBufferMaxSize: number;
   gridTablePersistenceMode: GridTablePersistenceMode;
   defaultObjectPanelPosition: ObjectPanelPosition;
   objectPanelDockedRightWidth: number;
@@ -54,6 +56,7 @@ interface AppSettingsPayload {
   autoRefreshEnabled?: boolean;
   refreshBackgroundClustersEnabled?: boolean;
   metricsRefreshIntervalMs?: number;
+  logBufferMaxSize?: number;
   gridTablePersistenceMode?: string;
   defaultObjectPanelPosition?: string;
   objectPanelDockedRightWidth?: number;
@@ -81,12 +84,20 @@ interface AppSettingsPayload {
 
 const DEFAULT_METRICS_REFRESH_INTERVAL_MS = 5000;
 
+// Log buffer bounds — keep in lockstep with backend/app_settings.go so the
+// client and server agree on the clamp range. Shown to the user in the
+// Advanced → Pod Logs settings section.
+export const LOG_BUFFER_MIN_SIZE = 100;
+export const LOG_BUFFER_MAX_SIZE = 10000;
+export const LOG_BUFFER_DEFAULT_SIZE = 1000;
+
 const DEFAULT_PREFERENCES: AppPreferences = {
   theme: 'system',
   useShortResourceNames: false,
   autoRefreshEnabled: true,
   refreshBackgroundClustersEnabled: true,
   metricsRefreshIntervalMs: DEFAULT_METRICS_REFRESH_INTERVAL_MS,
+  logBufferMaxSize: LOG_BUFFER_DEFAULT_SIZE,
   paletteHueLight: 0,
   paletteSaturationLight: 0,
   paletteBrightnessLight: 0,
@@ -140,6 +151,20 @@ const normalizeMetricsIntervalMs = (value?: number): number => {
   return Math.floor(value);
 };
 
+// Clamp to [LOG_BUFFER_MIN_SIZE, LOG_BUFFER_MAX_SIZE]. A zero/undefined
+// value from an old settings file (before this preference existed) maps
+// to the default, not to zero — otherwise an upgrade would wipe every
+// Logs tab to empty.
+const normalizeLogBufferMaxSize = (value?: number): number => {
+  if (value == null || Number.isNaN(value) || value <= 0) {
+    return LOG_BUFFER_DEFAULT_SIZE;
+  }
+  const floored = Math.floor(value);
+  if (floored < LOG_BUFFER_MIN_SIZE) return LOG_BUFFER_MIN_SIZE;
+  if (floored > LOG_BUFFER_MAX_SIZE) return LOG_BUFFER_MAX_SIZE;
+  return floored;
+};
+
 const emitPreferenceChanges = (previous: AppPreferences, next: AppPreferences): void => {
   if (previous.theme !== next.theme) {
     eventBus.emit('settings:theme', next.theme);
@@ -155,6 +180,9 @@ const emitPreferenceChanges = (previous: AppPreferences, next: AppPreferences): 
   }
   if (previous.metricsRefreshIntervalMs !== next.metricsRefreshIntervalMs) {
     eventBus.emit('settings:metrics-interval', next.metricsRefreshIntervalMs);
+  }
+  if (previous.logBufferMaxSize !== next.logBufferMaxSize) {
+    eventBus.emit('settings:log-buffer-size', next.logBufferMaxSize);
   }
   if (previous.gridTablePersistenceMode !== next.gridTablePersistenceMode) {
     eventBus.emit('gridtable:persistence-mode', next.gridTablePersistenceMode);
@@ -270,6 +298,7 @@ export const hydrateAppPreferences = async (options?: {
       backendSettings?.refreshBackgroundClustersEnabled ??
       DEFAULT_PREFERENCES.refreshBackgroundClustersEnabled,
     metricsRefreshIntervalMs: normalizeMetricsIntervalMs(backendSettings?.metricsRefreshIntervalMs),
+    logBufferMaxSize: normalizeLogBufferMaxSize(backendSettings?.logBufferMaxSize),
     gridTablePersistenceMode: normalizeGridTableMode(backendSettings?.gridTablePersistenceMode),
     defaultObjectPanelPosition: normalizeObjectPanelPosition(
       backendSettings?.defaultObjectPanelPosition
@@ -332,6 +361,10 @@ export const getBackgroundRefreshEnabled = (): boolean => {
 
 export const getMetricsRefreshIntervalMs = (): number => {
   return preferenceCache.metricsRefreshIntervalMs;
+};
+
+export const getLogBufferMaxSize = (): number => {
+  return preferenceCache.logBufferMaxSize;
 };
 
 export const getGridTablePersistenceMode = (): GridTablePersistenceMode => {
@@ -456,6 +489,26 @@ export const setBackgroundRefreshEnabled = (enabled: boolean): void => {
   updatePreferenceCache({ refreshBackgroundClustersEnabled: enabled });
   void persistBooleanPreference('SetBackgroundRefreshEnabled', enabled).catch((error) => {
     console.error('Failed to persist background refresh preference:', error);
+  });
+};
+
+// Fire-and-forget persistence for log buffer size. Skips the backend
+// call when Wails isn't present (unit tests) so the cache update still
+// lands in the event bus.
+const persistLogBufferMaxSize = async (size: number): Promise<void> => {
+  const runtimeApp = (window as any)?.go?.backend?.App;
+  if (!runtimeApp) {
+    return;
+  }
+  await SetLogBufferMaxSizeBackend(size);
+};
+
+export const setLogBufferMaxSize = (size: number): void => {
+  const normalized = normalizeLogBufferMaxSize(size);
+  hydrated = true;
+  updatePreferenceCache({ logBufferMaxSize: normalized });
+  void persistLogBufferMaxSize(normalized).catch((error) => {
+    console.error('Failed to persist log buffer max size:', error);
   });
 };
 
