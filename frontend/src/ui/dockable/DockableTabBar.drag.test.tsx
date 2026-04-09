@@ -10,7 +10,14 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
+  useKubeconfig: vi.fn(() => ({
+    selectedClusterId: 'cluster-a',
+    selectedClusterIds: ['cluster-a'],
+  })),
+}));
 
 import { DockableTabBar } from './DockableTabBar';
 import { DockablePanelProvider, useDockablePanelContext } from './DockablePanelProvider';

@@ -9,7 +9,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DockablePanelProvider, useDockablePanelContext } from './DockablePanelProvider';
 import { DockableTabBar } from './DockableTabBar';
@@ -19,6 +19,32 @@ import {
   TAB_DRAG_DATA_TYPE,
   type TabDragPayload,
 } from '@shared/components/tabs/dragCoordinator';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+
+// Per-cluster panel state work added cluster awareness to the provider.
+// Tests that don't care about clusters can leave selectedClusterId at
+// its default; tests that need to switch clusters use vi.mocked() to
+// change the mock return value between renders.
+vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
+  useKubeconfig: vi.fn(() => ({
+    selectedClusterId: 'cluster-a',
+    selectedClusterIds: ['cluster-a'],
+    // Other useKubeconfig fields aren't read by DockablePanelProvider,
+    // so we leave them undefined. Add stubs only if a future test
+    // needs them.
+  })),
+}));
+
+// Helper to satisfy TypeScript: vi.mocked(useKubeconfig).mockReturnValue
+// expects the full KubeconfigContextType, but DockablePanelProvider only
+// reads selectedClusterId and selectedClusterIds. Cast through unknown
+// at one place rather than 12 inline `as unknown as ...` casts.
+function setMockedKubeconfig(partial: {
+  selectedClusterId: string;
+  selectedClusterIds: string[];
+}): void {
+  vi.mocked(useKubeconfig).mockReturnValue(partial as unknown as ReturnType<typeof useKubeconfig>);
+}
 
 const render = async (element: React.ReactElement) => {
   const container = document.createElement('div');
@@ -816,5 +842,341 @@ describe('DockablePanelProvider', () => {
     expect(contextRef.current!.tabGroups.floating[0].tabs).toEqual(['bottom-a']);
 
     await unmount();
+  });
+});
+
+describe('DockablePanelProvider — per-cluster panel state', () => {
+  let container: HTMLDivElement;
+  let root: ReactDOM.Root;
+
+  beforeEach(() => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = ReactDOM.createRoot(container);
+    // Reset useKubeconfig mock to cluster-a between tests.
+    setMockedKubeconfig({
+      selectedClusterId: 'cluster-a',
+      selectedClusterIds: ['cluster-a', 'cluster-b'],
+    });
+  });
+
+  afterEach(() => {
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+    vi.clearAllMocks();
+  });
+
+  // === Task 7 ===
+  it('preserves tabGroups across cluster switch round-trip', () => {
+    let capturedCtx: ReturnType<typeof useDockablePanelContext> | null = null;
+    function Probe() {
+      capturedCtx = useDockablePanelContext();
+      return null;
+    }
+
+    // Render with cluster-a active. Place panel-a in the right dock.
+    act(() => {
+      root.render(
+        <DockablePanelProvider>
+          <Probe />
+        </DockablePanelProvider>
+      );
+    });
+    act(() => {
+      capturedCtx!.registerPanel({
+        panelId: 'panel-a',
+        title: 'Panel A',
+        position: 'right',
+      });
+      capturedCtx!.syncPanelGroup('panel-a', 'right', undefined);
+    });
+    expect(capturedCtx!.tabGroups.right.tabs).toEqual(['panel-a']);
+
+    // Switch to cluster-b.
+    setMockedKubeconfig({
+      selectedClusterId: 'cluster-b',
+      selectedClusterIds: ['cluster-a', 'cluster-b'],
+    });
+    act(() => {
+      root.render(
+        <DockablePanelProvider>
+          <Probe />
+        </DockablePanelProvider>
+      );
+    });
+    expect(capturedCtx!.tabGroups.right.tabs).toEqual([]);
+
+    // Switch back to cluster-a.
+    setMockedKubeconfig({
+      selectedClusterId: 'cluster-a',
+      selectedClusterIds: ['cluster-a', 'cluster-b'],
+    });
+    act(() => {
+      root.render(
+        <DockablePanelProvider>
+          <Probe />
+        </DockablePanelProvider>
+      );
+    });
+    expect(capturedCtx!.tabGroups.right.tabs).toEqual(['panel-a']);
+  });
+
+  // === Task 8 ===
+  it('clears a cluster store when the cluster tab is closed', () => {
+    let capturedCtx: ReturnType<typeof useDockablePanelContext> | null = null;
+    function Probe() {
+      capturedCtx = useDockablePanelContext();
+      return null;
+    }
+
+    act(() => {
+      root.render(
+        <DockablePanelProvider>
+          <Probe />
+        </DockablePanelProvider>
+      );
+    });
+    act(() => {
+      capturedCtx!.registerPanel({
+        panelId: 'panel-a',
+        title: 'Panel A',
+        position: 'right',
+      });
+      capturedCtx!.syncPanelGroup('panel-a', 'right', undefined);
+    });
+    expect(capturedCtx!.tabGroups.right.tabs).toEqual(['panel-a']);
+
+    setMockedKubeconfig({
+      selectedClusterId: 'cluster-b',
+      selectedClusterIds: ['cluster-b'],
+    });
+    act(() => {
+      root.render(
+        <DockablePanelProvider>
+          <Probe />
+        </DockablePanelProvider>
+      );
+    });
+    expect(capturedCtx!.tabGroups.right.tabs).toEqual([]);
+
+    // Re-open cluster-a — fresh state expected.
+    setMockedKubeconfig({
+      selectedClusterId: 'cluster-a',
+      selectedClusterIds: ['cluster-a', 'cluster-b'],
+    });
+    act(() => {
+      root.render(
+        <DockablePanelProvider>
+          <Probe />
+        </DockablePanelProvider>
+      );
+    });
+    expect(capturedCtx!.tabGroups.right.tabs).toEqual([]);
+  });
+
+  // === Task 9 ===
+  it('treats fixed-id panels (e.g. diagnostics) as per-cluster too', () => {
+    let capturedCtx: ReturnType<typeof useDockablePanelContext> | null = null;
+    function Probe() {
+      capturedCtx = useDockablePanelContext();
+      return null;
+    }
+
+    // Cluster-a: dock 'diagnostics' to the right.
+    setMockedKubeconfig({
+      selectedClusterId: 'cluster-a',
+      selectedClusterIds: ['cluster-a', 'cluster-b'],
+    });
+    act(() => {
+      root.render(
+        <DockablePanelProvider>
+          <Probe />
+        </DockablePanelProvider>
+      );
+    });
+    act(() => {
+      capturedCtx!.registerPanel({
+        panelId: 'diagnostics',
+        title: 'Diagnostics',
+        position: 'right',
+      });
+      capturedCtx!.syncPanelGroup('diagnostics', 'right', undefined);
+    });
+    expect(capturedCtx!.tabGroups.right.tabs).toEqual(['diagnostics']);
+
+    // Cluster-b: empty.
+    setMockedKubeconfig({
+      selectedClusterId: 'cluster-b',
+      selectedClusterIds: ['cluster-a', 'cluster-b'],
+    });
+    act(() => {
+      root.render(
+        <DockablePanelProvider>
+          <Probe />
+        </DockablePanelProvider>
+      );
+    });
+    expect(capturedCtx!.tabGroups.right.tabs).toEqual([]);
+    expect(capturedCtx!.tabGroups.bottom.tabs).toEqual([]);
+
+    // Open diagnostics on cluster-b in the bottom dock.
+    act(() => {
+      capturedCtx!.registerPanel({
+        panelId: 'diagnostics',
+        title: 'Diagnostics',
+        position: 'bottom',
+      });
+      capturedCtx!.syncPanelGroup('diagnostics', 'bottom', undefined);
+    });
+    expect(capturedCtx!.tabGroups.bottom.tabs).toEqual(['diagnostics']);
+
+    // Switch back to cluster-a.
+    setMockedKubeconfig({
+      selectedClusterId: 'cluster-a',
+      selectedClusterIds: ['cluster-a', 'cluster-b'],
+    });
+    act(() => {
+      root.render(
+        <DockablePanelProvider>
+          <Probe />
+        </DockablePanelProvider>
+      );
+    });
+    expect(capturedCtx!.tabGroups.right.tabs).toEqual(['diagnostics']);
+    expect(capturedCtx!.tabGroups.bottom.tabs).toEqual([]);
+
+    // And cluster-b still has it in the bottom dock.
+    setMockedKubeconfig({
+      selectedClusterId: 'cluster-b',
+      selectedClusterIds: ['cluster-a', 'cluster-b'],
+    });
+    act(() => {
+      root.render(
+        <DockablePanelProvider>
+          <Probe />
+        </DockablePanelProvider>
+      );
+    });
+    expect(capturedCtx!.tabGroups.bottom.tabs).toEqual(['diagnostics']);
+    expect(capturedCtx!.tabGroups.right.tabs).toEqual([]);
+  });
+
+  // === Task 10 ===
+  it('does not strip tab-group membership when a panel unmounts mid-cluster', () => {
+    let capturedCtx: ReturnType<typeof useDockablePanelContext> | null = null;
+    function Probe() {
+      capturedCtx = useDockablePanelContext();
+      return null;
+    }
+
+    act(() => {
+      root.render(
+        <DockablePanelProvider>
+          <Probe />
+        </DockablePanelProvider>
+      );
+    });
+    act(() => {
+      capturedCtx!.registerPanel({
+        panelId: 'panel-a',
+        title: 'Panel A',
+        position: 'right',
+      });
+      capturedCtx!.syncPanelGroup('panel-a', 'right', undefined);
+    });
+    expect(capturedCtx!.tabGroups.right.tabs).toEqual(['panel-a']);
+
+    // Simulate the panel unregistering WITHOUT calling any close path.
+    act(() => {
+      capturedCtx!.unregisterPanel('panel-a');
+    });
+
+    // tabGroups should still contain panel-a.
+    expect(capturedCtx!.tabGroups.right.tabs).toEqual(['panel-a']);
+  });
+
+  // === Task 11 ===
+  it('preserves floating group identities across cluster switches', () => {
+    let capturedCtx: ReturnType<typeof useDockablePanelContext> | null = null;
+    function Probe() {
+      capturedCtx = useDockablePanelContext();
+      return null;
+    }
+
+    setMockedKubeconfig({
+      selectedClusterId: 'cluster-a',
+      selectedClusterIds: ['cluster-a', 'cluster-b'],
+    });
+
+    act(() => {
+      root.render(
+        <DockablePanelProvider>
+          <Probe />
+        </DockablePanelProvider>
+      );
+    });
+
+    // Place two panels in the same floating group on cluster-a. The
+    // setLastFocusedGroupKey('floating-1') call between the two syncs
+    // matches the production flow: when the user drags a second panel
+    // onto an existing floating group, the provider treats the focused
+    // floating group as the target. Without this hint, syncPanelGroup
+    // would create a fresh floating group for panel-b.
+    act(() => {
+      capturedCtx!.registerPanel({
+        panelId: 'panel-a',
+        title: 'Panel A',
+        position: 'floating',
+      });
+      capturedCtx!.syncPanelGroup('panel-a', 'floating', undefined);
+    });
+    act(() => {
+      capturedCtx!.setLastFocusedGroupKey('floating-1');
+      capturedCtx!.registerPanel({
+        panelId: 'panel-b',
+        title: 'Panel B',
+        position: 'floating',
+      });
+      capturedCtx!.syncPanelGroup('panel-b', 'floating', undefined);
+    });
+
+    const floatingBefore = capturedCtx!.tabGroups.floating;
+    expect(floatingBefore.length).toBeGreaterThanOrEqual(1);
+    const groupContaining = floatingBefore.find(
+      (g) => g.tabs.includes('panel-a') && g.tabs.includes('panel-b')
+    );
+    expect(groupContaining).toBeDefined();
+    const originalGroupId = groupContaining!.groupId;
+
+    // Switch to cluster-b and back.
+    setMockedKubeconfig({
+      selectedClusterId: 'cluster-b',
+      selectedClusterIds: ['cluster-a', 'cluster-b'],
+    });
+    act(() => {
+      root.render(
+        <DockablePanelProvider>
+          <Probe />
+        </DockablePanelProvider>
+      );
+    });
+    setMockedKubeconfig({
+      selectedClusterId: 'cluster-a',
+      selectedClusterIds: ['cluster-a', 'cluster-b'],
+    });
+    act(() => {
+      root.render(
+        <DockablePanelProvider>
+          <Probe />
+        </DockablePanelProvider>
+      );
+    });
+
+    const floatingAfter = capturedCtx!.tabGroups.floating;
+    const restoredGroup = floatingAfter.find((g) => g.groupId === originalGroupId);
+    expect(restoredGroup).toBeDefined();
+    expect(restoredGroup!.tabs).toEqual(expect.arrayContaining(['panel-a', 'panel-b']));
   });
 });

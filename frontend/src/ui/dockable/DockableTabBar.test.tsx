@@ -13,6 +13,13 @@ import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
+vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
+  useKubeconfig: vi.fn(() => ({
+    selectedClusterId: 'cluster-a',
+    selectedClusterIds: ['cluster-a'],
+  })),
+}));
+
 import { DockableTabBar, TabInfo } from './DockableTabBar';
 import { DockablePanelProvider } from './DockablePanelProvider';
 import { TabDragProvider } from '@shared/components/tabs/dragCoordinator';

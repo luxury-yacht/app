@@ -12,9 +12,11 @@ import React, {
   useContext,
   useState,
   useCallback,
+  useEffect,
   useLayoutEffect,
   useRef,
   useMemo,
+  useSyncExternalStore,
 } from 'react';
 import type { TabGroupState, GroupKey, PanelRegistration } from './tabGroupTypes';
 import type { DockPosition } from './useDockablePanelState';
@@ -24,15 +26,12 @@ import {
   setPanelOpenById,
   setPanelPositionById,
 } from './useDockablePanelState';
-import {
-  createPanelLayoutStore,
-  getActivePanelLayoutStore,
-  setActivePanelLayoutStore,
-} from './panelLayoutStore';
+import { createPanelLayoutStore, setActivePanelLayoutStore } from './panelLayoutStore';
+import type { PanelLayoutStore } from './panelLayoutStore';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { getContentBounds } from './dockablePanelLayout';
 import { PanelLayoutStoreContext } from './panelLayoutStoreContext';
 import {
-  createInitialTabGroupState,
   addPanelToGroup,
   removePanelFromGroup,
   setActiveTab,
@@ -120,6 +119,9 @@ interface DockablePanelContextValue {
 
   // Focus a panel by ID -- activates its tab and brings the panel to front.
   focusPanel: (panelId: string) => void;
+
+  // Fan out applyObjectPanelLayoutDefaults to every cluster's store.
+  applyLayoutDefaultsAcrossClusters: () => void;
 }
 
 const DockablePanelContext = createContext<DockablePanelContextValue | null>(null);
@@ -155,24 +157,80 @@ interface DockablePanelProviderProps {
 }
 
 export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ children }) => {
-  // Provider-scoped panel layout store (Phase 3 migration).
-  const panelLayoutStoreRef = useRef(createPanelLayoutStore());
-  const previousActiveStoreRef = useRef(getActivePanelLayoutStore());
+  // Per-cluster panel layout stores. Each open cluster gets its own
+  // PanelLayoutStore that holds BOTH per-panel state and tabGroups for
+  // that cluster. The active store mirrors selectedClusterId. Cluster
+  // tab close prunes the entry.
+  const { selectedClusterId, selectedClusterIds } = useKubeconfig();
+  const storesRef = useRef<Map<string, PanelLayoutStore>>(new Map());
 
-  // Bridge imperative helper call sites to this provider's store after commit.
-  useLayoutEffect(() => {
-    previousActiveStoreRef.current = getActivePanelLayoutStore();
-    setActivePanelLayoutStore(panelLayoutStoreRef.current);
-    return () => {
-      setActivePanelLayoutStore(previousActiveStoreRef.current);
-    };
+  const getOrCreateStoreForCluster = useCallback((clusterKey: string): PanelLayoutStore => {
+    let store = storesRef.current.get(clusterKey);
+    if (!store) {
+      store = createPanelLayoutStore();
+      storesRef.current.set(clusterKey, store);
+    }
+    return store;
   }, []);
 
-  // Tab group state -- the primary model for which panels live where.
-  const [tabGroups, setTabGroups] = useState<TabGroupState>(() => createInitialTabGroupState());
-  // Keep latest tabGroups available to stable callbacks without recreating them.
-  const tabGroupsRef = useRef<TabGroupState>(tabGroups);
-  tabGroupsRef.current = tabGroups;
+  // CRITICAL: activeStore is computed in render via useMemo, NOT via
+  // useState + useLayoutEffect. The useState approach has a one-render
+  // lag between selectedClusterId changing and activeStore catching up
+  // — during that lag the wrong store is the context value, and any
+  // children that mount in that render (e.g. AppLayout's ObjectPanels
+  // for the new cluster, or remounting panels for the cluster we just
+  // switched back to) register themselves against the WRONG store.
+  // Floating groups in particular get fragmented because the panels
+  // re-sync against the wrong store on the lag render and the right
+  // store on the following render, sometimes producing two separate
+  // floating groups instead of one.
+  //
+  // useMemo is computed during render, so activeStore is always in
+  // sync with selectedClusterId — children always see the correct
+  // store on the same render that the cluster id changed. The
+  // useLayoutEffect below is only for the imperative global mirror
+  // (`setActivePanelLayoutStore`) used by Settings.tsx and similar
+  // imperative call sites; it does NOT participate in React rendering.
+  const activeStore = useMemo(
+    () => getOrCreateStoreForCluster(selectedClusterId || '__default__'),
+    [selectedClusterId, getOrCreateStoreForCluster]
+  );
+
+  // Bridge the imperative `getActivePanelLayoutStore()` global to the
+  // currently-active store. This runs after the React tree commits with
+  // the new activeStore, so any imperative call site that fires AFTER
+  // the cluster switch (event handlers, async callbacks) sees the
+  // correct store. Render-phase consumers don't go through this path —
+  // they read activeStore from context.
+  useLayoutEffect(() => {
+    setActivePanelLayoutStore(activeStore);
+  }, [activeStore]);
+
+  // Prune stores for clusters that have been closed. Mirrors the
+  // identical pattern in ObjectPanelStateContext.tsx (which keeps
+  // per-cluster `openPanels` slices). The '__default__' key is never
+  // pruned — it's the no-cluster-selected slot.
+  useEffect(() => {
+    const allowed = new Set(selectedClusterIds ?? []);
+    for (const clusterKey of Array.from(storesRef.current.keys())) {
+      if (clusterKey !== '__default__' && !allowed.has(clusterKey)) {
+        storesRef.current.delete(clusterKey);
+      }
+    }
+  }, [selectedClusterIds]);
+
+  // Tab group state lives inside the active cluster's store. Subscribe
+  // via useSyncExternalStore so React re-renders on any tabGroups change
+  // from any source (drag, close, programmatic move). When the active
+  // store changes (cluster switch), the subscribe function identity
+  // changes via [activeStore], so useSyncExternalStore re-subscribes to
+  // the new store automatically.
+  const subscribeTabGroups = useCallback(
+    (listener: () => void) => activeStore.subscribeTabGroups(listener),
+    [activeStore]
+  );
+  const getTabGroupsSnapshot = useCallback(() => activeStore.getTabGroups(), [activeStore]);
+  const tabGroups = useSyncExternalStore(subscribeTabGroups, getTabGroupsSnapshot);
 
   // Panel registrations are stored in a ref for callback access and mirrored
   // into snapshot state to notify context consumers when metadata changes.
@@ -245,18 +303,18 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
   // Focus a panel by ID: activate its tab in the group and bring it to front.
   const focusPanel = useCallback(
     (panelId: string) => {
-      const focusedGroupKey = getGroupForPanel(tabGroupsRef.current, panelId);
+      const focusedGroupKey = getGroupForPanel(activeStore.getTabGroups(), panelId);
       if (focusedGroupKey) {
         setLastFocusedGroupKey(focusedGroupKey);
       }
-      setTabGroups((prev) => {
+      activeStore.setTabGroups((prev) => {
         const groupKey = getGroupForPanel(prev, panelId);
         if (!groupKey) return prev;
         return setActiveTab(prev, panelId, groupKey);
       });
       focusPanelById(panelId);
     },
-    [setLastFocusedGroupKey]
+    [activeStore, setLastFocusedGroupKey]
   );
 
   useLayoutEffect(() => {
@@ -295,7 +353,7 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
   // -----------------------------------------------------------------------
   const syncPanelGroup = useCallback(
     (panelId: string, position: DockPosition, preferredGroupKey?: GroupKey | 'floating') => {
-      setTabGroups((prev) => {
+      activeStore.setTabGroups((prev) => {
         const currentGroup = getGroupForPanel(prev, panelId);
         const isCurrentFloating =
           currentGroup !== null && currentGroup !== 'right' && currentGroup !== 'bottom';
@@ -347,54 +405,68 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
         return addPanelToGroup(prev, panelId, 'floating');
       });
     },
-    []
+    [activeStore]
   );
 
   // -----------------------------------------------------------------------
   // removePanelFromGroups -- drop a panel from all groups when closing/unmounting.
   // -----------------------------------------------------------------------
-  const removePanelFromGroups = useCallback((panelId: string) => {
-    setTabGroups((prev) => removePanelFromGroup(prev, panelId));
-  }, []);
+  const removePanelFromGroups = useCallback(
+    (panelId: string) => {
+      activeStore.setTabGroups((prev) => removePanelFromGroup(prev, panelId));
+    },
+    [activeStore]
+  );
 
   // -----------------------------------------------------------------------
   // switchTab -- set the active tab within a group.
   // NOTE: setActiveTab helper signature is (state, panelId, groupKey).
   // -----------------------------------------------------------------------
-  const switchTab = useCallback((groupKey: GroupKey, panelId: string) => {
-    setTabGroups((prev) => setActiveTab(prev, panelId, groupKey));
-  }, []);
+  const switchTab = useCallback(
+    (groupKey: GroupKey, panelId: string) => {
+      activeStore.setTabGroups((prev) => setActiveTab(prev, panelId, groupKey));
+    },
+    [activeStore]
+  );
 
   // -----------------------------------------------------------------------
   // closeTab -- removes a panel from its group AND fires onClose callback.
   // -----------------------------------------------------------------------
-  const closeTab = useCallback((panelId: string) => {
-    const registration = panelRegistrationsRef.current.get(panelId);
+  const closeTab = useCallback(
+    (panelId: string) => {
+      const registration = panelRegistrationsRef.current.get(panelId);
 
-    // Remove from the tab group.
-    setTabGroups((prev) => removePanelFromGroup(prev, panelId));
+      // Remove from the tab group.
+      activeStore.setTabGroups((prev) => removePanelFromGroup(prev, panelId));
 
-    // Prefer external close handler, but fall back to directly closing the panel.
-    if (registration?.onClose) {
-      registration.onClose();
-      return;
-    }
-    setPanelOpenById(panelId, false);
-  }, []);
+      // Prefer external close handler, but fall back to directly closing the panel.
+      if (registration?.onClose) {
+        registration.onClose();
+        return;
+      }
+      setPanelOpenById(panelId, false);
+    },
+    [activeStore]
+  );
 
   // -----------------------------------------------------------------------
   // reorderTabInGroup -- move a tab to a new index within the same group.
   // -----------------------------------------------------------------------
-  const reorderTabInGroup = useCallback((groupKey: GroupKey, panelId: string, newIndex: number) => {
-    setTabGroups((prev) => reorderTab(prev, groupKey, panelId, newIndex));
-  }, []);
+  const reorderTabInGroup = useCallback(
+    (groupKey: GroupKey, panelId: string, newIndex: number) => {
+      activeStore.setTabGroups((prev) => reorderTab(prev, groupKey, panelId, newIndex));
+    },
+    [activeStore]
+  );
 
   // -----------------------------------------------------------------------
   // movePanelBetweenGroups -- move a panel to a different group.
   // -----------------------------------------------------------------------
   const movePanelBetweenGroups = useCallback(
     (panelId: string, targetGroupKey: GroupKey | 'floating', insertIndex?: number) => {
-      setTabGroups((prev) => movePanelToGroup(prev, panelId, targetGroupKey, insertIndex));
+      activeStore.setTabGroups((prev) =>
+        movePanelToGroup(prev, panelId, targetGroupKey, insertIndex)
+      );
 
       if (targetGroupKey === 'floating') {
         // New floating group id is generated during the tabGroups update;
@@ -410,7 +482,7 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
         targetGroupKey === 'right' || targetGroupKey === 'bottom' ? targetGroupKey : 'floating';
       setPanelPositionById(panelId, targetPosition);
     },
-    [setLastFocusedGroupKey]
+    [activeStore, setLastFocusedGroupKey]
   );
 
   // -----------------------------------------------------------------------
@@ -437,8 +509,8 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
   // compensation for same-group reorders so a forward drop lands at the
   // intended visual position after the source tab is removed first.
   //
-  // Reads the authoritative tabs list via `tabGroupsRef` (not via state
-  // snapshot in closure) to avoid stale reads when multiple drops fire in
+  // Reads the authoritative tabs list via `activeStore.getTabGroups()` (not via
+  // state snapshot in closure) to avoid stale reads when multiple drops fire in
   // rapid succession. Uses `getGroupTabs` from tabGroupState.ts to handle
   // the asymmetric TabGroupState shape: `right` and `bottom` are keyed
   // children, but `floating` is an array keyed by `groupId`.
@@ -446,7 +518,8 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
   const movePanel = useCallback(
     (panelId: string, sourceGroupId: string, targetGroupId: string, insertIndex: number) => {
       if (sourceGroupId === targetGroupId) {
-        const groupTabs = getGroupTabs(tabGroupsRef.current, targetGroupId as GroupKey)?.tabs ?? [];
+        const groupTabs =
+          getGroupTabs(activeStore.getTabGroups(), targetGroupId as GroupKey)?.tabs ?? [];
         const sourceIdx = groupTabs.indexOf(panelId);
         const adjustedInsert =
           sourceIdx >= 0 && sourceIdx < insertIndex ? insertIndex - 1 : insertIndex;
@@ -461,7 +534,7 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
       // from a different array than the insert.
       movePanelBetweenGroups(panelId, targetGroupId as GroupKey, insertIndex);
     },
-    [reorderTabInGroup, movePanelBetweenGroups]
+    [activeStore, reorderTabInGroup, movePanelBetweenGroups]
   );
 
   // -----------------------------------------------------------------------
@@ -541,6 +614,16 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
     }
   }, []);
 
+  // Fan out applyObjectPanelLayoutDefaults to every cluster's store.
+  // Called by Settings.tsx when the user changes the default object
+  // panel layout — every cluster's open object panels should pick up
+  // the new defaults, not just the active cluster's.
+  const applyLayoutDefaultsAcrossClusters = useCallback(() => {
+    storesRef.current.forEach((store) => {
+      store.applyObjectPanelLayoutDefaults();
+    });
+  }, []);
+
   const value: DockablePanelContextValue = useMemo(
     () => ({
       tabGroups,
@@ -567,6 +650,7 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
       getPreferredOpenGroupKey,
       getLastFocusedPosition,
       focusPanel,
+      applyLayoutDefaultsAcrossClusters,
     }),
     [
       tabGroups,
@@ -590,6 +674,7 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
       getPreferredOpenGroupKey,
       getLastFocusedPosition,
       focusPanel,
+      applyLayoutDefaultsAcrossClusters,
     ]
   );
 
@@ -636,7 +721,7 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
   // The cleanup effect above removes them when the provider unmounts.
 
   return (
-    <PanelLayoutStoreContext.Provider value={panelLayoutStoreRef.current}>
+    <PanelLayoutStoreContext.Provider value={activeStore}>
       <DockablePanelContext.Provider value={value}>
         <DockablePanelHostContext.Provider value={hostNode}>
           {children}

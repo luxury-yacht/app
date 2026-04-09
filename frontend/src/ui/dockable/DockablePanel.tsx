@@ -318,12 +318,6 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     removePanelFromGroups,
   ]);
 
-  useEffect(() => {
-    return () => {
-      removePanelFromGroups(panelId);
-    };
-  }, [panelId, removePanelFromGroups]);
-
   // Manage body class to disable hover effects during floating panel drag.
   useEffect(() => {
     const shouldSuppress = panelState.position === 'floating' && isDragging;
