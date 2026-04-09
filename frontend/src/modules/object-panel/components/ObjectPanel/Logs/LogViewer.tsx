@@ -40,7 +40,12 @@ import {
   extractLogViewerPrefs,
   type ParsedLogEntry,
 } from './logViewerReducer';
-import { getLogViewerPrefs, setLogViewerPrefs } from './logViewerPrefsCache';
+import {
+  getLogViewerPrefs,
+  getLogViewerScrollTop,
+  setLogViewerPrefs,
+  setLogViewerScrollTop,
+} from './logViewerPrefsCache';
 import { INACTIVE_SCOPE } from '../constants';
 
 interface LogViewerProps {
@@ -183,6 +188,11 @@ const LogViewer: React.FC<LogViewerProps> = ({
   const filterInputRef = useRef<HTMLInputElement>(null);
   const seqCounterRef = useRef(0);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // True until the restoration effect has successfully positioned the
+  // scroll container after a (re)mount. Prevents the auto-scroll effect
+  // from fighting the restoration for the first paint, and makes the
+  // restore-once behavior idempotent across state changes.
+  const scrollRestoredRef = useRef<boolean>(false);
 
   const resourceKindKey = resourceKind?.toLowerCase() ?? '';
   const isWorkload = resourceKindKey !== 'pod';
@@ -831,6 +841,106 @@ const LogViewer: React.FC<LogViewerProps> = ({
       };
     }
   }, [autoScroll, displayLogs, isParsedView, logEntries.length, parsedLogs.length]);
+
+  // --- Scroll position persistence ---
+  //
+  // On tab/cluster switch the LogViewer unmounts and a fresh instance
+  // mounts when the user comes back. Without any restoration the DOM
+  // resets to scrollTop=0, losing the user's reading position and
+  // showing the oldest cached entries instead of where they left off.
+  //
+  // Strategy:
+  //   1. While the view is live, listen for scroll events on the active
+  //      scroll container (pod-logs-content for raw view, the nested
+  //      .gridtable-wrapper for parsed view) and write the current
+  //      scrollTop to the panel-scoped cache.
+  //   2. On mount, once entries have been rendered, restore the saved
+  //      scrollTop (if any). Fall back to scrolling to the bottom —
+  //      newest logs — when nothing was saved.
+  //
+  // The restoration runs exactly once per mount: the scrollRestoredRef
+  // flag guards against re-running on subsequent re-renders caused by
+  // incoming stream events.
+
+  // Returns the element that actually scrolls for the current view
+  // mode. For raw view that's pod-logs-content itself; for parsed view
+  // it's the GridTable's virtualization wrapper inside.
+  const getScrollContainer = useCallback((): HTMLElement | null => {
+    const root = logsContentRef.current;
+    if (!root) return null;
+    if (isParsedView) {
+      return root.querySelector<HTMLElement>('.gridtable-wrapper');
+    }
+    return root;
+  }, [isParsedView]);
+
+  // Scroll-write listener — attached to whichever container is active
+  // for the current view mode. Re-runs when isParsedView changes so the
+  // listener always points at the right element.
+  useEffect(() => {
+    const scrollEl = getScrollContainer();
+    if (!scrollEl) return;
+
+    const handler = () => {
+      // Skip writeback until the initial restore has completed — the
+      // browser fires scroll events as we restore scrollTop, and we
+      // don't want those synthetic events to overwrite the saved value
+      // with 0 before the restoration runs.
+      if (!scrollRestoredRef.current) return;
+      setLogViewerScrollTop(panelId, scrollEl.scrollTop);
+    };
+
+    scrollEl.addEventListener('scroll', handler, { passive: true });
+    return () => {
+      scrollEl.removeEventListener('scroll', handler);
+    };
+  }, [getScrollContainer, panelId]);
+
+  // Restoration effect — runs on every render but is a no-op after the
+  // first successful positioning. Re-runs until the scroll container is
+  // actually present (parsed view needs the virtualization wrapper to
+  // be mounted, which may take a frame or two) and has entries to
+  // render into.
+  useEffect(() => {
+    if (scrollRestoredRef.current) return;
+
+    const entryCount = isParsedView ? parsedLogs.length : logEntries.length;
+    if (entryCount === 0) return;
+
+    const scrollEl = getScrollContainer();
+    if (!scrollEl) return;
+    // scrollHeight === clientHeight means content hasn't laid out yet
+    // (parsed view virtualization wrapper takes a frame or two). Defer
+    // to the next render.
+    if (scrollEl.scrollHeight <= scrollEl.clientHeight) return;
+
+    const maxScrollTop = scrollEl.scrollHeight - scrollEl.clientHeight;
+    let targetScrollTop: number;
+
+    if (autoScroll) {
+      // autoScroll is on → always land at the bottom on (re)mount.
+      // Saved position is irrelevant because the auto-scroll effect
+      // would have kept the user pinned to the tail before unmount
+      // anyway, and it's about to resume following the tail as new
+      // entries arrive.
+      targetScrollTop = maxScrollTop;
+    } else {
+      const savedScrollTop = getLogViewerScrollTop(panelId);
+      targetScrollTop =
+        savedScrollTop != null
+          ? // Clamp to the current max — the buffer may have rotated
+            // while we were away, so a raw restore could land past
+            // the bottom. Clamp keeps the restore valid.
+            Math.min(savedScrollTop, maxScrollTop)
+          : // Fallback: scroll to the bottom (newest entries) since
+            // that's the most useful position on a fresh view when
+            // autoScroll is off and nothing was saved.
+            maxScrollTop;
+    }
+
+    scrollEl.scrollTop = targetScrollTop;
+    scrollRestoredRef.current = true;
+  }, [autoScroll, getScrollContainer, isParsedView, logEntries.length, panelId, parsedLogs.length]);
 
   // Derive field keys directly from parsed log data
   const derivedFieldKeys = useMemo(() => {

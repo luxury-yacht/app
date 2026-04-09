@@ -36,6 +36,32 @@ export const setLogViewerPrefs = (panelId: string, prefs: LogViewerPrefs): void 
 
 export const clearLogViewerPrefs = (panelId: string): void => {
   cache.delete(panelId);
+  scrollTopCache.delete(panelId);
+};
+
+/**
+ * Per-panel scroll position for the active log content container.
+ *
+ * Kept in a separate Map (not merged into LogViewerPrefs) because:
+ *
+ *   - Scroll is ephemeral DOM state, not a user preference the way
+ *     autoScroll/textFilter/etc. are. Bundling them would muddy the
+ *     type.
+ *   - The existing prefs writeback in LogViewer replaces the entire
+ *     entry via setLogViewerPrefs(extractLogViewerPrefs(state)) on
+ *     every state change. Keeping scrollTop outside that shape means
+ *     the writeback can't accidentally clobber the scroll position.
+ *
+ * Eviction is tied into clearLogViewerPrefs above so the two entries
+ * always come and go together.
+ */
+const scrollTopCache = new Map<string, number>();
+
+export const getLogViewerScrollTop = (panelId: string): number | undefined =>
+  scrollTopCache.get(panelId);
+
+export const setLogViewerScrollTop = (panelId: string, scrollTop: number): void => {
+  scrollTopCache.set(panelId, scrollTop);
 };
 
 /**
@@ -44,4 +70,5 @@ export const clearLogViewerPrefs = (panelId: string): void => {
  */
 export const resetLogViewerPrefsCacheForTesting = (): void => {
   cache.clear();
+  scrollTopCache.clear();
 };
