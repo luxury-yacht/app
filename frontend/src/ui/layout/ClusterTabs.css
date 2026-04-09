@@ -7,7 +7,6 @@
    because the inner element's parent is not a grid. */
 
 .cluster-tabs-wrapper {
-  padding: 0 6px;
   grid-column: 1 / -1;
   grid-row: 2;
   display: flex;
@@ -15,8 +14,9 @@
 }
 
 /* The shared <Tabs> root fills the wrapper so the strip occupies the
-   full width of the grid row. */
+   full width of the grid row, edge to edge. */
 .cluster-tabs-wrapper > .cluster-tabs {
   flex: 1 1 auto;
   min-width: 0;
+  padding: 0;
 }
