@@ -359,4 +359,180 @@ describe('LogStreamManager', () => {
     manager.handleStreamError(SCOPE, 'lost');
     expect(errorHandlerMock.handle).toHaveBeenCalledTimes(2);
   });
+
+  // ---------------------------------------------------------------------
+  // Reconnect semantics — the reset=true handshake on new connections
+  // must not wipe the client's buffered history, and the client-side
+  // sequence must stay monotonic across stream restarts. Together these
+  // guarantee the initial-load spinner only shows on the true first load
+  // of a scope, not on every auto-refresh toggle / cluster-switch
+  // remount. See docs/plans (Tier 1/2 responsiveness fix).
+  // ---------------------------------------------------------------------
+
+  const seedScopeWithEntries = async (
+    count: number,
+    sequence = 3
+  ): Promise<InstanceType<typeof import('./logStreamManager').LogStreamManager>> => {
+    const { LogStreamManager } = await import('./logStreamManager');
+    const manager = new LogStreamManager();
+    manager.applyPayload(
+      SCOPE,
+      {
+        domain: 'object-logs',
+        scope: SCOPE,
+        sequence,
+        generatedAt: 1_000,
+        reset: true,
+        entries: Array.from({ length: count }, (_, index) => ({
+          timestamp: `2024-01-01T00:00:${index.toString().padStart(2, '0')}Z`,
+          pod: 'pod-1',
+          container: 'app',
+          line: `seed-${index}`,
+          isInit: false,
+        })),
+      },
+      'stream'
+    );
+    return manager;
+  };
+
+  test('applyPayload preserves the buffer when reset=true and incoming is empty', async () => {
+    const manager = await seedScopeWithEntries(3);
+
+    // Simulates the server's "new connection" handshake on stream
+    // reconnect: reset flag set, but no new entries to send yet.
+    manager.applyPayload(
+      SCOPE,
+      {
+        domain: 'object-logs',
+        scope: SCOPE,
+        sequence: 1,
+        generatedAt: 2_000,
+        reset: true,
+        entries: [],
+      },
+      'stream'
+    );
+
+    const state = getScopedDomainState('object-logs', SCOPE);
+    expect(state.data?.entries).toHaveLength(3);
+    expect(state.data?.entries?.map((e) => e.line)).toEqual(['seed-0', 'seed-1', 'seed-2']);
+  });
+
+  test('applyPayload replaces the buffer when reset=true and incoming is non-empty', async () => {
+    const manager = await seedScopeWithEntries(3);
+
+    // Manual refresh or server-driven fresh snapshot: replace as before.
+    manager.applyPayload(
+      SCOPE,
+      {
+        domain: 'object-logs',
+        scope: SCOPE,
+        sequence: 5,
+        generatedAt: 2_000,
+        reset: true,
+        entries: [
+          {
+            timestamp: '2024-01-01T00:01:00Z',
+            pod: 'pod-1',
+            container: 'app',
+            line: 'fresh-a',
+            isInit: false,
+          },
+          {
+            timestamp: '2024-01-01T00:01:01Z',
+            pod: 'pod-1',
+            container: 'app',
+            line: 'fresh-b',
+            isInit: false,
+          },
+        ],
+      },
+      'stream'
+    );
+
+    const state = getScopedDomainState('object-logs', SCOPE);
+    expect(state.data?.entries).toHaveLength(2);
+    expect(state.data?.entries?.map((e) => e.line)).toEqual(['fresh-a', 'fresh-b']);
+  });
+
+  test('applyPayload appends when reset=false regardless of what was buffered', async () => {
+    const manager = await seedScopeWithEntries(2);
+
+    manager.applyPayload(
+      SCOPE,
+      {
+        domain: 'object-logs',
+        scope: SCOPE,
+        sequence: 4,
+        generatedAt: 2_000,
+        reset: false,
+        entries: [
+          {
+            timestamp: '2024-01-01T00:02:00Z',
+            pod: 'pod-1',
+            container: 'app',
+            line: 'appended',
+            isInit: false,
+          },
+        ],
+      },
+      'stream'
+    );
+
+    const state = getScopedDomainState('object-logs', SCOPE);
+    expect(state.data?.entries).toHaveLength(3);
+    expect(state.data?.entries?.map((e) => e.line)).toEqual(['seed-0', 'seed-1', 'appended']);
+  });
+
+  test('sequence is monotonic across reset frames (does not regress on reconnect)', async () => {
+    const manager = await seedScopeWithEntries(2, 5);
+
+    // The server's per-connection counter restarts at 1 on every new
+    // stream open, but the client-side sequence must stay at 5 so the
+    // view's hasReceivedInitialLogs (>= 2) keeps evaluating true.
+    manager.applyPayload(
+      SCOPE,
+      {
+        domain: 'object-logs',
+        scope: SCOPE,
+        sequence: 1,
+        generatedAt: 2_000,
+        reset: true,
+        entries: [],
+      },
+      'stream'
+    );
+
+    const state = getScopedDomainState('object-logs', SCOPE);
+    expect(state.data?.sequence).toBe(5);
+  });
+
+  test('sequence advances normally on forward progress', async () => {
+    const manager = await seedScopeWithEntries(2, 2);
+
+    manager.applyPayload(
+      SCOPE,
+      {
+        domain: 'object-logs',
+        scope: SCOPE,
+        sequence: 4,
+        generatedAt: 2_000,
+        reset: false,
+        entries: [
+          {
+            timestamp: '2024-01-01T00:02:00Z',
+            pod: 'pod-1',
+            container: 'app',
+            line: 'forward',
+            isInit: false,
+          },
+        ],
+      },
+      'stream'
+    );
+
+    const state = getScopedDomainState('object-logs', SCOPE);
+    expect(state.data?.sequence).toBe(4);
+  });
 });

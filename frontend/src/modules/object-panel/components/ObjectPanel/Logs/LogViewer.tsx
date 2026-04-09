@@ -759,18 +759,6 @@ const LogViewer: React.FC<LogViewerProps> = ({
     };
   }, [namespace, podName, isWorkload, resolvedClusterId]);
 
-  // When auto-refresh is re-enabled, the stream restarts with a fresh
-  // (smaller) batch. Reset the previous log count so the auto-scroll
-  // effect treats it as an initial load and scrolls to the bottom.
-  const prevAutoRefreshRef = useRef(autoRefresh);
-  useEffect(() => {
-    const wasOff = !prevAutoRefreshRef.current;
-    prevAutoRefreshRef.current = autoRefresh;
-    if (wasOff && autoRefresh && autoScroll) {
-      previousLogCountRef.current = 0;
-    }
-  }, [autoRefresh, autoScroll]);
-
   // Track previous view to detect view switches
   const previousIsParsedViewRef = useRef(isParsedView);
 

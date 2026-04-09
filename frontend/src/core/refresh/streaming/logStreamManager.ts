@@ -315,11 +315,26 @@ export class LogStreamManager {
       _seq: ++this.seqCounter,
     }));
 
+    // Buffer replacement policy:
+    // - reset=true with non-empty incoming → replace (server is giving us a
+    //   fresh snapshot, use it).
+    // - reset=true with empty incoming → PRESERVE. The server emits the
+    //   reset flag as part of its "new connection" handshake on every
+    //   stream open, before it has had a chance to tail any lines. Wiping
+    //   the buffer here used to make auto-refresh toggle and
+    //   cluster-switch remount flash the initial-load spinner even when
+    //   the client already had plenty of log history cached.
+    // - reset=false → append, unchanged.
+    const shouldReplace = payload.reset && incoming.length > 0;
     const previousMeta = this.bufferMeta.get(scope);
-    let totalItems = payload.reset ? 0 : (previousMeta?.total ?? existing.length);
+    let totalItems = shouldReplace ? 0 : (previousMeta?.total ?? existing.length);
     totalItems += incoming.length;
 
-    let nextEntries = payload.reset ? incoming : existing.concat(incoming);
+    let nextEntries = shouldReplace
+      ? incoming
+      : payload.reset
+        ? existing
+        : existing.concat(incoming);
     let truncated = previousMeta?.truncated ?? false;
     if (nextEntries.length > MAX_BUFFER_SIZE) {
       truncated = true;
@@ -333,7 +348,7 @@ export class LogStreamManager {
     this.bufferMeta.set(scope, { total: totalItems, truncated });
 
     const generatedAt = payload.generatedAt || Date.now();
-    const sequence = payload.sequence ?? (payload.reset ? 1 : 0);
+    const payloadSequence = payload.sequence ?? (payload.reset ? 1 : 0);
     const errorMessage = resolvePermissionDeniedMessage(
       payload.error ?? null,
       payload.errorDetails
@@ -347,9 +362,17 @@ export class LogStreamManager {
         ? previousPayload.resetCount + 1
         : previousPayload.resetCount;
 
+      // Sequence is monotonic per-scope on the client. The server may
+      // restart its own per-connection counter on every reconnect, but at
+      // the view layer "have we ever received data for this scope" must
+      // survive stream restarts — otherwise the initial-load spinner
+      // reappears on every reconnect even though the cached entries are
+      // still present.
+      const nextSequence = Math.max(payloadSequence, previousPayload.sequence ?? 0);
+
       const nextPayload: ObjectLogsSnapshotPayload = {
         entries: nextEntries,
-        sequence: sequence || previousPayload.sequence,
+        sequence: nextSequence,
         generatedAt,
         resetCount,
         error: errorMessage,

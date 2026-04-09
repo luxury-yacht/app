@@ -781,4 +781,96 @@ describe('LogViewer active pod synchronisation', () => {
     // Panel A's prefs untouched.
     expect(getLogViewerPrefs(panelA)?.textFilter).toBe('a-only');
   });
+
+  // ---------------------------------------------------------------------
+  // Acceptance test: spinner must not reappear on stream reconnect once
+  // this LogViewer instance has content to show. This is the test that
+  // would have caught the original "pod logs reload every time I switch
+  // cluster tabs" bug — it exercises the full view-layer interaction with
+  // the fixed LogStreamManager.applyPayload behavior.
+  // ---------------------------------------------------------------------
+
+  it('does not re-show the initial-load spinner when the stream reconnects', async () => {
+    // Use the singleton manager so the in-memory buffers and the scoped
+    // store stay in lockstep — this is what happens in production when
+    // LogStreamConnection.handleLogEvent calls applyPayload on the
+    // module-scoped logStreamManager instance.
+    const { logStreamManager } = await import('@/core/refresh/streaming/logStreamManager');
+
+    // Seed via applyPayload (not seedLogSnapshot) so the manager's
+    // internal buffers AND the scoped store both have the entries. Use
+    // sequence: 3 so the view already thinks it's past the initial-load
+    // threshold (hasReceivedInitialLogs needs >= 2).
+    logStreamManager.applyPayload(
+      defaultScope,
+      {
+        domain: 'object-logs',
+        scope: defaultScope,
+        sequence: 3,
+        generatedAt: 1_000,
+        reset: true,
+        entries: [
+          {
+            pod: 'web-1',
+            container: 'app',
+            line: 'cached entry 1',
+            timestamp: '2024-05-01T10:00:00Z',
+            isInit: false,
+          },
+          {
+            pod: 'web-1',
+            container: 'app',
+            line: 'cached entry 2',
+            timestamp: '2024-05-01T10:00:01Z',
+            isInit: false,
+          },
+        ],
+      },
+      'stream'
+    );
+    // seedLogSnapshot's state variable needs to track the active scope
+    // so afterEach can reset it.
+    activeScope = defaultScope;
+
+    await renderViewer({ activePodNames: ['web-1'] });
+
+    // Baseline: entries are visible, no spinner.
+    expect(container.textContent).toContain('cached entry 1');
+    expect(container.textContent).not.toContain('Loading logs');
+
+    // Simulate the server's "new connection" handshake on stream
+    // reconnect: reset flag set, no new entries yet. With the fix in
+    // place, the buffer must be preserved and the sequence must not
+    // regress, so the view keeps showing the cached entries without
+    // flashing the initial-load spinner.
+    await act(async () => {
+      logStreamManager.applyPayload(
+        defaultScope,
+        {
+          domain: 'object-logs',
+          scope: defaultScope,
+          sequence: 1,
+          generatedAt: 2_000,
+          reset: true,
+          entries: [],
+        },
+        'stream'
+      );
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain('cached entry 1');
+    expect(container.textContent).toContain('cached entry 2');
+    expect(container.textContent).not.toContain('Loading logs');
+
+    // And the store's sequence must still be >= 2 — the client-side
+    // counter did not regress despite the reset=true frame carrying
+    // sequence=1 from the server.
+    const finalState = getScopedDomainState('object-logs', defaultScope);
+    expect(finalState.data?.sequence).toBeGreaterThanOrEqual(2);
+
+    // Clear the manager's buffer so the next test starts from a clean
+    // slate — afterEach only resets the scoped store, not the manager.
+    logStreamManager.stop(defaultScope, true);
+  });
 });

@@ -1,5 +1,14 @@
 # TODO
 
+- Cursor turns to beam when dragging the app window in the header
+- Center Mac icons in header
+
+- API Timestamp colors should match pod color in parsed json
+- Parsed logs, dropdown to hide fields
+- Remember position when switching
+- Show number of logs (filtered/total) next to copy icon
+- Remove tooltips from log hover in parsed mode
+
 - Resource creation
   - starter templates for common resource types
   - reuse the existing code editor
