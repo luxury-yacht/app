@@ -4,7 +4,6 @@
 - Center Mac icons in header
 
 - Parsed logs, dropdown to hide fields
-- Remember position when switching
 
 - Resource creation
   - starter templates for common resource types
