@@ -19,6 +19,8 @@ const samplePrefs = (overrides: Partial<LogViewerPrefs> = {}): LogViewerPrefs =>
   showTimestamps: true,
   wrapText: false,
   textFilter: 'error',
+  includeFilter: '',
+  excludeFilter: '',
   isParsedView: false,
   expandedRows: [],
   showPreviousLogs: false,

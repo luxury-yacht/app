@@ -21,6 +21,10 @@ import {
   resetLogViewerPrefsCacheForTesting,
   setLogViewerPrefs,
 } from './logViewerPrefsCache';
+import {
+  getLogStreamScopeParams,
+  resetLogStreamScopeParamsCacheForTesting,
+} from './logStreamScopeParamsCache';
 
 beforeAll(() => {
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
@@ -48,6 +52,20 @@ const waitForText = async (element: HTMLElement, text: string, attempts = 10) =>
     await flushAsync();
   }
   throw new Error(`Timed out waiting for text "${text}"`);
+};
+
+const waitForElement = async <T extends Element>(
+  lookup: () => T | null,
+  attempts = 10
+): Promise<T> => {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const element = lookup();
+    if (element) {
+      return element;
+    }
+    await flushAsync();
+  }
+  throw new Error('Timed out waiting for element');
 };
 
 const mockModules = vi.hoisted(() => {
@@ -103,11 +121,13 @@ vi.mock('@shared/components/dropdowns/Dropdown', () => ({
     onChange?: (v: string) => void;
     options?: Array<{ label?: string; value: string }>;
   }) => {
-    const testId = options?.some((opt) => opt?.label === 'All')
-      ? 'pod-container-dropdown'
-      : options?.some((opt) => opt?.label === 'Auto-scroll')
-        ? 'pod-options-dropdown'
-        : 'pod-filter-dropdown';
+    const testId =
+      options?.some((opt) => opt?.label === 'All') ||
+      options?.some((opt) => typeof opt?.label === 'string' && opt.label.startsWith('All '))
+        ? 'pod-container-dropdown'
+        : options?.some((opt) => opt?.label === 'Auto-scroll')
+          ? 'pod-options-dropdown'
+          : 'pod-filter-dropdown';
     return (
       <select
         data-testid={testId}
@@ -187,6 +207,7 @@ describe('LogViewer active pod synchronisation', () => {
     shortcutMocks.useShortcut.mockClear();
     (LogFetcher as unknown as ViMock).mockReset?.();
     resetLogViewerPrefsCacheForTesting();
+    resetLogStreamScopeParamsCacheForTesting();
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
@@ -215,6 +236,7 @@ describe('LogViewer active pod synchronisation', () => {
     });
     container.remove();
     resetScopedDomainState('object-logs', activeScope);
+    resetLogStreamScopeParamsCacheForTesting();
   });
 
   const renderViewer = async (
@@ -425,9 +447,55 @@ describe('LogViewer active pod synchronisation', () => {
 
     expect(LogFetcher).toHaveBeenCalledTimes(1);
     expect((LogFetcher as unknown as ViMock).mock.calls[0][1]).toMatchObject({
+      scope: defaultScope,
       workloadKind: 'deployment',
     });
     expect(mockModules.orchestrator.restartStreamingDomain).not.toHaveBeenCalled();
+  });
+
+  it('renders backend warning banners from fallback/manual log responses', async () => {
+    seedLogSnapshot(
+      [
+        {
+          pod: 'web-1',
+          container: 'app',
+          line: 'existing log',
+          timestamp: '2024-05-01T10:00:00Z',
+          isInit: false,
+        },
+      ],
+      defaultScope,
+      { status: 'error', error: 'stream disconnected' }
+    );
+    (LogFetcher as unknown as ViMock).mockResolvedValue({
+      entries: [
+        {
+          pod: 'web-1',
+          container: 'app',
+          line: 'fallback line',
+          timestamp: '2024-05-01T10:00:01Z',
+          isInit: false,
+        },
+      ],
+      warnings: ['Showing logs for 24 of 25 pod/container targets. Refine filters to view more.'],
+    });
+
+    await renderViewer({ activePodNames: ['web-1'] });
+    await flushAsync();
+
+    const registerCalls = mockModules.fallbackManager.register.mock.calls;
+    const fallbackFetcher = registerCalls[registerCalls.length - 1]?.[1] as
+      | ((isManual?: boolean) => Promise<void>)
+      | undefined;
+
+    await act(async () => {
+      await fallbackFetcher?.(true);
+    });
+    await flushAsync();
+
+    expect(container.textContent).toContain(
+      'Showing logs for 24 of 25 pod/container targets. Refine filters to view more.'
+    );
   });
 
   it('formats workload log lines and displays empty filter message', async () => {
@@ -615,6 +683,8 @@ describe('LogViewer active pod synchronisation', () => {
 
     await waitForMockCalls(GetPodContainers as unknown as ViMock, 1);
     await flushAsync();
+    expect(getLogStreamScopeParams(buildLogScope('team-a:pod:api'))).toBeUndefined();
+    expect(mockModules.orchestrator.restartStreamingDomain).not.toHaveBeenCalled();
 
     expect((GetPodContainers as unknown as ViMock).mock.calls[0]).toEqual([
       'alpha:ctx',
@@ -648,6 +718,123 @@ describe('LogViewer active pod synchronisation', () => {
     expect(filteredLines[0]).toContain('[2024-05-01T12:00:01Z]');
     expect(filteredLines[0]).not.toContain('[sidecar:init]');
     expect(filteredLines[0]).toContain('init complete');
+    expect(getLogStreamScopeParams(buildLogScope('team-a:pod:api'))).toEqual({
+      container: 'sidecar',
+    });
+    expect(mockModules.orchestrator.restartStreamingDomain).toHaveBeenCalledWith(
+      'object-logs',
+      buildLogScope('team-a:pod:api')
+    );
+  });
+
+  it('sends workload pod filters and line regex filters to fallback fetches and stream params', async () => {
+    setLogViewerPrefs('obj:test:deployment:team-a:api', {
+      selectedContainer: '',
+      selectedFilter: '',
+      autoRefresh: true,
+      showTimestamps: true,
+      wrapText: true,
+      textFilter: '',
+      includeFilter: 'error|warn',
+      excludeFilter: 'healthcheck',
+      isParsedView: false,
+      expandedRows: [],
+      showPreviousLogs: false,
+    });
+    seedLogSnapshot(
+      [
+        {
+          pod: 'web-1',
+          container: 'app',
+          line: 'existing log',
+          timestamp: '2024-05-01T10:00:00Z',
+          isInit: false,
+        },
+      ],
+      defaultScope,
+      { status: 'error', error: 'stream disconnected' }
+    );
+    (LogFetcher as unknown as ViMock).mockResolvedValue({ entries: [] });
+
+    await renderViewer({ activePodNames: ['web-1', 'web-2'] });
+    await flushAsync();
+
+    const workloadFilter = await waitForElement(() =>
+      container.querySelector<HTMLSelectElement>('select')
+    );
+
+    await act(async () => {
+      workloadFilter!.value = 'pod:web-2';
+      workloadFilter!.dispatchEvent(new Event('change', { bubbles: true }));
+      await Promise.resolve();
+    });
+    await flushAsync();
+
+    expect(getLogStreamScopeParams(defaultScope)).toEqual({
+      pod: 'web-2',
+      include: 'error|warn',
+      exclude: 'healthcheck',
+    });
+
+    const registerCalls = mockModules.fallbackManager.register.mock.calls;
+    const fallbackFetcher = registerCalls[registerCalls.length - 1]?.[1] as
+      | ((isManual?: boolean) => Promise<void>)
+      | undefined;
+    expect(typeof fallbackFetcher).toBe('function');
+
+    (LogFetcher as unknown as ViMock).mockClear();
+    await act(async () => {
+      await fallbackFetcher?.(true);
+    });
+
+    expect((LogFetcher as unknown as ViMock).mock.calls[0][1]).toMatchObject({
+      scope: defaultScope,
+      workloadKind: 'deployment',
+      podFilter: 'web-2',
+      container: '',
+      include: 'error|warn',
+      exclude: 'healthcheck',
+    });
+  });
+
+  it('labels all-containers mode to indicate debug containers are included', async () => {
+    (GetPodContainers as unknown as ViMock).mockResolvedValue(['app', 'debug-abc (debug)']);
+    seedLogSnapshot(
+      [
+        {
+          pod: 'api',
+          container: 'app',
+          line: 'main log line',
+          timestamp: '2024-05-01T12:00:00Z',
+          isInit: false,
+        },
+        {
+          pod: 'api',
+          container: 'debug-abc',
+          line: 'debug line',
+          timestamp: '2024-05-01T12:00:01Z',
+          isInit: false,
+        },
+      ],
+      buildLogScope('team-a:pod:api')
+    );
+
+    await renderViewer({
+      resourceKind: 'Pod',
+      resourceName: 'api',
+      activePodNames: ['api'],
+    });
+
+    await waitForMockCalls(GetPodContainers as unknown as ViMock, 1);
+    await flushAsync();
+
+    const containerSelect = container.querySelector<HTMLSelectElement>(
+      '[data-testid="pod-container-dropdown"]'
+    );
+    expect(containerSelect).toBeTruthy();
+    const optionLabels = Array.from(containerSelect?.options ?? []).map((option) => option.text);
+    expect(optionLabels).toContain('All (includes debug)');
+    expect(optionLabels).toContain('debug-abc (debug)');
   });
 
   it('shows previous log message when toggled with no data', async () => {
@@ -684,30 +871,74 @@ describe('LogViewer active pod synchronisation', () => {
     expect(container.textContent).toContain('Loading logs');
   });
 
+  it('renders a real backend error instead of an empty-log state', async () => {
+    setLogViewerPrefs('obj:test:error', {
+      selectedContainer: '',
+      selectedFilter: '',
+      autoRefresh: false,
+      showTimestamps: true,
+      wrapText: true,
+      textFilter: '',
+      includeFilter: '',
+      excludeFilter: '',
+      isParsedView: false,
+      expandedRows: [],
+      showPreviousLogs: false,
+    });
+    const generatedAt = Date.now();
+    setScopedDomainState('object-logs', defaultScope, () => ({
+      status: 'error',
+      data: {
+        entries: [],
+        sequence: 2,
+        generatedAt,
+        resetCount: 0,
+        error: 'forbidden',
+      },
+      stats: null,
+      error: 'forbidden',
+      droppedAutoRefreshes: 0,
+      scope: defaultScope,
+      lastUpdated: generatedAt,
+      lastAutoRefresh: generatedAt,
+      lastManualRefresh: undefined,
+      isManual: false,
+    }));
+
+    await renderViewer({
+      activePodNames: ['web-1'],
+      isActive: false,
+      panelId: 'obj:test:error',
+    });
+
+    expect(container.textContent).toContain('Error: forbidden');
+    expect(container.textContent).not.toContain('No logs available');
+  });
+
   // --- Tier 2 responsiveness: prefs cache rehydration ---
 
   it('rehydrates LogViewer state from logViewerPrefsCache on mount', async () => {
     const panelId = 'obj:cluster-a:pod:team-a:api';
     setLogViewerPrefs(panelId, {
       selectedContainer: 'sidecar',
-      selectedFilter: 'web-1',
+      selectedFilter: 'pod:web-1',
       autoRefresh: false,
       showTimestamps: false,
       wrapText: false,
       textFilter: 'panic',
+      includeFilter: 'error|warn',
+      excludeFilter: 'healthcheck',
       isParsedView: true,
       expandedRows: ['row-7', 'row-9'],
       showPreviousLogs: true,
     });
 
     await renderViewer({ panelId });
-
-    // The simplest observable signal that prefs were applied is the
-    // text-filter input value.
-    const filterInput = container.querySelector<HTMLInputElement>(
-      'input[placeholder="Filter logs..."]'
-    );
-    expect(filterInput?.value).toBe('panic');
+    await flushAsync();
+    expect(getLogStreamScopeParams(defaultScope)).toEqual({
+      include: 'error|warn',
+      exclude: 'healthcheck',
+    });
   });
 
   it('writes prefs back to the cache as the user toggles them', async () => {
@@ -751,6 +982,8 @@ describe('LogViewer active pod synchronisation', () => {
       showTimestamps: true,
       wrapText: true,
       textFilter: 'a-only',
+      includeFilter: '',
+      excludeFilter: '',
       isParsedView: false,
       expandedRows: [],
       showPreviousLogs: false,
@@ -762,6 +995,8 @@ describe('LogViewer active pod synchronisation', () => {
       showTimestamps: true,
       wrapText: true,
       textFilter: 'b-only',
+      includeFilter: '',
+      excludeFilter: '',
       isParsedView: false,
       expandedRows: [],
       showPreviousLogs: false,

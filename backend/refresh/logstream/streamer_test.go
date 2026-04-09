@@ -25,16 +25,22 @@ func TestBuildTargetsFromPod(t *testing.T) {
 		Spec: corev1.PodSpec{
 			InitContainers: []corev1.Container{{Name: "init"}},
 			Containers:     []corev1.Container{{Name: "app"}, {Name: "sidecar"}},
+			EphemeralContainers: []corev1.EphemeralContainer{
+				{EphemeralContainerCommon: corev1.EphemeralContainerCommon{Name: "debug-abc"}},
+			},
 		},
 	}
 
 	targets := buildTargetsFromPod(pod, "")
-	if len(targets) != 3 {
-		t.Fatalf("expected 3 targets, got %d", len(targets))
+	if len(targets) != 4 {
+		t.Fatalf("expected 4 targets, got %d", len(targets))
 	}
 
 	if !targets[0].isInit || targets[0].container != "init" {
 		t.Fatalf("expected init container first target, got %+v", targets[0])
+	}
+	if targets[3].container != "debug-abc" || targets[3].isInit {
+		t.Fatalf("expected ephemeral container target last, got %+v", targets[3])
 	}
 
 	filtered := buildTargetsFromPod(pod, "app")
@@ -46,17 +52,76 @@ func TestBuildTargetsFromPod(t *testing.T) {
 	if len(filteredInit) != 1 || !filteredInit[0].isInit {
 		t.Fatalf("expected init filter to match init container, got %+v", filteredInit)
 	}
+
+	filteredDebug := buildTargetsFromPod(pod, "debug-abc (debug)")
+	if len(filteredDebug) != 1 || filteredDebug[0].container != "debug-abc" || filteredDebug[0].isInit {
+		t.Fatalf("expected debug filter to match ephemeral container, got %+v", filteredDebug)
+	}
 }
 
 func TestMatchContainerFilterVariants(t *testing.T) {
-	if !matchContainerFilter("app", "", false) {
+	if !matchContainerFilter("app", "", false, false) {
 		t.Fatal("empty filter should match")
 	}
-	if !matchContainerFilter("init", "init (init)", true) {
+	if !matchContainerFilter("init", "init (init)", true, false) {
 		t.Fatal("init suffix should match init container")
 	}
-	if matchContainerFilter("sidecar", "main", false) {
+	if !matchContainerFilter("debug-abc", "debug-abc (debug)", false, true) {
+		t.Fatal("debug suffix should match ephemeral container")
+	}
+	if matchContainerFilter("sidecar", "main", false, false) {
 		t.Fatal("unexpected match")
+	}
+}
+
+func TestSelectRuntimeTargetsKeepsPerScopeCapWhenPodsGrow(t *testing.T) {
+	pods := []*corev1.Pod{
+		testLogPod("default", "web-1", corev1.PodRunning, true, "app"),
+		testLogPod("default", "web-2", corev1.PodRunning, true, "app"),
+	}
+
+	selected, total := selectRuntimeTargets(pods, "", 2)
+	if total != 2 {
+		t.Fatalf("expected total target count 2, got %d", total)
+	}
+	if keys := runtimeTargetKeys(selected); strings.Join(keys, ",") != "default/web-1/app,default/web-2/app" {
+		t.Fatalf("unexpected initial target keys: %v", keys)
+	}
+
+	pods = append(pods, testLogPod("default", "web-3", corev1.PodRunning, true, "app"))
+	selected, total = selectRuntimeTargets(pods, "", 2)
+	if total != 3 {
+		t.Fatalf("expected total target count 3 after pod growth, got %d", total)
+	}
+	if len(selected) != 2 {
+		t.Fatalf("expected capped selection of 2 targets after pod growth, got %d", len(selected))
+	}
+	if keys := runtimeTargetKeys(selected); strings.Join(keys, ",") != "default/web-1/app,default/web-2/app" {
+		t.Fatalf("unexpected capped target keys after pod growth: %v", keys)
+	}
+}
+
+func TestSelectRuntimeTargetsRefillsAfterPodRemoval(t *testing.T) {
+	pods := []*corev1.Pod{
+		testLogPod("default", "web-1", corev1.PodRunning, true, "app"),
+		testLogPod("default", "web-2", corev1.PodRunning, true, "app"),
+		testLogPod("default", "web-3", corev1.PodRunning, true, "app"),
+	}
+
+	selected, total := selectRuntimeTargets(pods, "", 2)
+	if total != 3 {
+		t.Fatalf("expected total target count 3, got %d", total)
+	}
+	if keys := runtimeTargetKeys(selected); strings.Join(keys, ",") != "default/web-1/app,default/web-2/app" {
+		t.Fatalf("unexpected initial capped target keys: %v", keys)
+	}
+
+	selected, total = selectRuntimeTargets(pods[1:], "", 2)
+	if total != 2 {
+		t.Fatalf("expected total target count 2 after pod removal, got %d", total)
+	}
+	if keys := runtimeTargetKeys(selected); strings.Join(keys, ",") != "default/web-2/app,default/web-3/app" {
+		t.Fatalf("expected selection to refill after pod removal, got %v", keys)
 	}
 }
 
@@ -119,6 +184,40 @@ func TestListPodsForDeployment(t *testing.T) {
 	}
 }
 
+func TestListPodsAppliesPodFilter(t *testing.T) {
+	ctx := context.Background()
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "web"},
+		Spec: appsv1.DeploymentSpec{
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "web"}},
+		},
+	}
+	podOne := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "web-1", Labels: map[string]string{"app": "web"}},
+	}
+	podTwo := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "web-2", Labels: map[string]string{"app": "web"}},
+	}
+	client := fake.NewClientset([]runtime.Object{deployment, podOne, podTwo}...)
+	streamer := NewStreamer(client, nil, nil)
+
+	pods, selector, err := streamer.listPods(ctx, Options{
+		Kind:      "deployment",
+		Namespace: "default",
+		Name:      "web",
+		PodFilter: "web-2",
+	})
+	if err != nil {
+		t.Fatalf("listPods returned error: %v", err)
+	}
+	if selector == "" {
+		t.Fatal("expected selector for deployment scope")
+	}
+	if len(pods) != 1 || pods[0].Name != "web-2" {
+		t.Fatalf("expected only web-2 after pod filter, got %#v", pods)
+	}
+}
+
 func TestListPodsForReplicaSet(t *testing.T) {
 	ctx := context.Background()
 	rs := &appsv1.ReplicaSet{
@@ -174,6 +273,41 @@ func TestPodBelongsToCronJob(t *testing.T) {
 	if cache["job-1/nightly"] != true || cache["job-1/other"] != false {
 		t.Fatalf("expected cache to contain keyed results, got %+v", cache)
 	}
+}
+
+func testLogPod(namespace, name string, phase corev1.PodPhase, ready bool, containers ...string) *corev1.Pod {
+	containerSpecs := make([]corev1.Container, 0, len(containers))
+	for _, container := range containers {
+		containerSpecs = append(containerSpecs, corev1.Container{Name: container})
+	}
+	conditions := []corev1.PodCondition{}
+	if ready {
+		conditions = append(conditions, corev1.PodCondition{
+			Type:   corev1.PodReady,
+			Status: corev1.ConditionTrue,
+		})
+	}
+	return &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: namespace,
+			Name:      name,
+		},
+		Spec: corev1.PodSpec{
+			Containers: containerSpecs,
+		},
+		Status: corev1.PodStatus{
+			Phase:      phase,
+			Conditions: conditions,
+		},
+	}
+}
+
+func runtimeTargetKeys(targets []containerTarget) []string {
+	keys := make([]string, 0, len(targets))
+	for _, target := range targets {
+		keys = append(keys, target.key())
+	}
+	return keys
 }
 
 func TestListPodsErrorPropagates(t *testing.T) {

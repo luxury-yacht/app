@@ -201,7 +201,7 @@ func parseHelmScope(scope string) (string, string, error) {
 		return "", "", fmt.Errorf("invalid helm scope %q", trimmed)
 	}
 	namespace := parts[0]
-	if namespace == clusterScopeToken {
+	if namespace == refresh.ObjectClusterScopeToken {
 		namespace = ""
 	}
 	name := parts[1]

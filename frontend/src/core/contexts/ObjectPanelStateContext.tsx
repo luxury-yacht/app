@@ -13,6 +13,7 @@ import { clearPanelState } from '@ui/dockable/useDockablePanelState';
 import { refreshOrchestrator } from '@/core/refresh';
 import { getObjectPanelKind } from '@modules/object-panel/components/ObjectPanel/hooks/getObjectPanelKind';
 import { clearLogViewerPrefs } from '@modules/object-panel/components/ObjectPanel/Logs/logViewerPrefsCache';
+import { clearLogStreamScopeParams } from '@modules/object-panel/components/ObjectPanel/Logs/logStreamScopeParamsCache';
 
 /**
  * Evict every scoped-domain entry that belongs to a single object panel.
@@ -36,6 +37,7 @@ const evictPanelScopes = (ref: KubernetesObjectReference): void => {
   }
   if (logScope) {
     refreshOrchestrator.resetScopedDomain('object-logs', logScope);
+    clearLogStreamScopeParams(logScope);
   }
   if (helmScope) {
     refreshOrchestrator.resetScopedDomain('object-helm-manifest', helmScope);

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/podlogs"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/kubernetes"
 
@@ -114,7 +115,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.streamer.logger.Debug(fmt.Sprintf("logstream: client deadline %s", deadline.Format(time.RFC3339)), "LogStream")
 	}
 
-	initial, states, pods, selector, err := h.streamer.tail(ctx, opts)
+	initial, states, pods, selector, warnings, skippedTargets, err := h.streamer.tail(ctx, opts)
 	if err != nil {
 		if h.telemetry != nil {
 			h.telemetry.RecordStreamError(streamName, err)
@@ -135,6 +136,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	if h.telemetry != nil && skippedTargets > 0 {
+		h.telemetry.RecordStreamSkippedTargets(streamName, skippedTargets, "per-scope target cap")
+	}
 
 	// Always send the initial event so frontend knows initial fetch is complete
 	// (even if there are no logs). This allows the frontend to distinguish between
@@ -146,6 +150,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		GeneratedAt: time.Now().UnixMilli(),
 		Reset:       false, // Already sent reset in connected event
 		Entries:     initial,
+		Warnings:    warnings,
 	}
 	sequence++
 	if err := writeEvent(w, f, event); err != nil {
@@ -327,31 +332,38 @@ func parseOptions(r *http.Request) (Options, error) {
 	if rawScope == "" {
 		return Options{}, errors.New("scope is required")
 	}
-	_, scope := refresh.SplitClusterScope(rawScope)
-	parts := strings.Split(scope, ":")
-	if len(parts) < 3 {
-		return Options{}, errors.New("scope must be namespace:kind:name")
+
+	identity, err := refresh.ParseObjectScope(rawScope)
+	if err != nil {
+		return Options{}, err
 	}
-	namespace := strings.TrimSpace(parts[0])
-	kind := strings.TrimSpace(parts[1])
-	name := strings.TrimSpace(strings.Join(parts[2:], ":"))
-	// Reject empty segments early to avoid downstream lookups with invalid scope.
-	if namespace == "" || kind == "" || name == "" {
-		return Options{}, errors.New("scope must be namespace:kind:name")
+	if identity.Namespace == "" {
+		return Options{}, errors.New("log scope must reference a namespaced object")
 	}
+	podFilter := strings.TrimSpace(r.URL.Query().Get("pod"))
 	container := strings.TrimSpace(r.URL.Query().Get("container"))
+	include := strings.TrimSpace(r.URL.Query().Get("include"))
+	exclude := strings.TrimSpace(r.URL.Query().Get("exclude"))
 	tail := defaultTailLines
 	if rawTail := strings.TrimSpace(r.URL.Query().Get("tailLines")); rawTail != "" {
 		if parsed, err := strconv.Atoi(rawTail); err == nil && parsed > 0 {
 			tail = min(parsed, maxTailLines)
 		}
 	}
+	lineFilter, err := podlogs.NewLineFilter(include, exclude)
+	if err != nil {
+		return Options{}, fmt.Errorf("invalid log filter: %w", err)
+	}
 	return Options{
-		Namespace: namespace,
-		Kind:      strings.ToLower(kind),
-		Name:      name,
-		Container: container,
-		TailLines: tail,
+		Namespace:  identity.Namespace,
+		Kind:       strings.ToLower(strings.TrimSpace(identity.GVK.Kind)),
+		Name:       strings.TrimSpace(identity.Name),
+		PodFilter:  podFilter,
+		Container:  container,
+		Include:    include,
+		Exclude:    exclude,
+		LineFilter: lineFilter,
+		TailLines:  tail,
 		// Keep the original scope for client-side keying.
 		ScopeString: rawScope,
 	}, nil

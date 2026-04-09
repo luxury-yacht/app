@@ -95,11 +95,15 @@ type PodLogEntry struct {
 
 // LogFetchRequest represents parameters for fetching logs
 type LogFetchRequest struct {
+	Scope        string `json:"scope,omitempty"`
 	Namespace    string `json:"namespace"`
 	WorkloadName string `json:"workloadName,omitempty"`
 	WorkloadKind string `json:"workloadKind,omitempty"` // deployment, daemonset, etc.
 	PodName      string `json:"podName,omitempty"`
+	PodFilter    string `json:"podFilter,omitempty"`
 	Container    string `json:"container,omitempty"` // empty means all containers
+	Include      string `json:"include,omitempty"`
+	Exclude      string `json:"exclude,omitempty"`
 	Previous     bool   `json:"previous"`
 	TailLines    int    `json:"tailLines"`
 	SinceSeconds int64  `json:"sinceSeconds,omitempty"`
@@ -107,8 +111,9 @@ type LogFetchRequest struct {
 
 // LogFetchResponse represents the response from LogFetcher
 type LogFetchResponse struct {
-	Entries []PodLogEntry `json:"entries"`
-	Error   string        `json:"error,omitempty"`
+	Entries  []PodLogEntry `json:"entries"`
+	Warnings []string      `json:"warnings,omitempty"`
+	Error    string        `json:"error,omitempty"`
 }
 
 // ShellSessionRequest describes the namespace/pod/container to exec into.

@@ -3,6 +3,7 @@ package logstream
 import (
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/podlogs"
 	"github.com/luxury-yacht/app/backend/refresh"
 )
 
@@ -26,7 +27,11 @@ type Options struct {
 	Namespace   string
 	Kind        string
 	Name        string
+	PodFilter   string
 	Container   string
+	Include     string
+	Exclude     string
+	LineFilter  podlogs.LineFilter
 	TailLines   int
 	ScopeString string
 }
@@ -48,6 +53,7 @@ type EventPayload struct {
 	GeneratedAt  int64                           `json:"generatedAt"`
 	Reset        bool                            `json:"reset,omitempty"`
 	Entries      []Entry                         `json:"entries,omitempty"`
+	Warnings     []string                        `json:"warnings,omitempty"`
 	Error        string                          `json:"error,omitempty"`
 	ErrorDetails *refresh.PermissionDeniedStatus `json:"errorDetails,omitempty"`
 }

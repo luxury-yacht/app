@@ -29,6 +29,10 @@ func TestParseOptions(t *testing.T) {
 		query       url.Values
 		expectError bool
 		kind        string
+		podFilter   string
+		container   string
+		include     string
+		exclude     string
 		tail        int
 	}{
 		{
@@ -38,16 +42,38 @@ func TestParseOptions(t *testing.T) {
 			tail:  defaultTailLines,
 		},
 		{
-			name:  "custom tail",
-			query: url.Values{"scope": []string{"prod:deployment:web"}, "tailLines": []string{"200"}},
+			name: "custom tail and filters",
+			query: url.Values{
+				"scope":     []string{"prod:deployment:web"},
+				"tailLines": []string{"200"},
+				"pod":       []string{"web-123"},
+				"container": []string{"app"},
+				"include":   []string{"error|warn"},
+				"exclude":   []string{"healthcheck"},
+			},
+			kind:      "deployment",
+			podFilter: "web-123",
+			container: "app",
+			include:   "error|warn",
+			exclude:   "healthcheck",
+			tail:      200,
+		},
+		{
+			name:  "gvk scope",
+			query: url.Values{"scope": []string{"cluster-a|default:apps/v1:deployment:web"}},
 			kind:  "deployment",
-			tail:  200,
+			tail:  defaultTailLines,
 		},
 		{
 			name:  "tail capped at max",
 			query: url.Values{"scope": []string{"default:pod:nginx"}, "tailLines": []string{"99999"}},
 			kind:  "pod",
 			tail:  maxTailLines,
+		},
+		{
+			name:        "invalid line filter",
+			query:       url.Values{"scope": []string{"default:pod:nginx"}, "include": []string{"["}},
+			expectError: true,
 		},
 		{
 			name:        "missing scope",
@@ -69,6 +95,11 @@ func TestParseOptions(t *testing.T) {
 			query:       url.Values{"scope": []string{"default:pod:"}},
 			expectError: true,
 		},
+		{
+			name:        "cluster-scoped object invalid",
+			query:       url.Values{"scope": []string{"__cluster__:Node:n1"}},
+			expectError: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -86,6 +117,18 @@ func TestParseOptions(t *testing.T) {
 		if opts.Kind != tt.kind {
 			t.Fatalf("%s: expected kind %q, got %q", tt.name, tt.kind, opts.Kind)
 		}
+		if opts.PodFilter != tt.podFilter {
+			t.Fatalf("%s: expected pod filter %q, got %q", tt.name, tt.podFilter, opts.PodFilter)
+		}
+		if opts.Container != tt.container {
+			t.Fatalf("%s: expected container %q, got %q", tt.name, tt.container, opts.Container)
+		}
+		if opts.Include != tt.include {
+			t.Fatalf("%s: expected include %q, got %q", tt.name, tt.include, opts.Include)
+		}
+		if opts.Exclude != tt.exclude {
+			t.Fatalf("%s: expected exclude %q, got %q", tt.name, tt.exclude, opts.Exclude)
+		}
 		if opts.TailLines != tt.tail {
 			t.Fatalf("%s: expected tail %d, got %d", tt.name, tt.tail, opts.TailLines)
 		}
@@ -93,16 +136,16 @@ func TestParseOptions(t *testing.T) {
 }
 
 func TestMatchContainerFilter(t *testing.T) {
-	if !matchContainerFilter("nginx", "nginx", false) {
+	if !matchContainerFilter("nginx", "nginx", false, false) {
 		t.Fatal("expected direct match for regular container")
 	}
-	if matchContainerFilter("init-setup", "init-setup", false) == false {
+	if matchContainerFilter("init-setup", "init-setup", false, false) == false {
 		t.Fatalf("expected filter to match identical name")
 	}
-	if !matchContainerFilter("init-setup", "init-setup (init)", true) {
+	if !matchContainerFilter("init-setup", "init-setup (init)", true, false) {
 		t.Fatal("expected init suffix match")
 	}
-	if matchContainerFilter("nginx", "sidecar", false) {
+	if matchContainerFilter("nginx", "sidecar", false, false) {
 		t.Fatal("unexpected match for different container")
 	}
 }

@@ -45,6 +45,8 @@ import {
   setLogViewerPrefs,
   setLogViewerScrollTop,
 } from './logViewerPrefsCache';
+import { buildStablePodColorMap } from './podColors';
+import { setLogStreamScopeParams } from './logStreamScopeParamsCache';
 import { INACTIVE_SCOPE } from '../constants';
 
 interface LogViewerProps {
@@ -137,6 +139,8 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     showTimestamps,
     wrapText,
     textFilter,
+    includeFilter,
+    excludeFilter,
     copyFeedback,
     isParsedView,
     parsedLogs,
@@ -168,6 +172,8 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     state.showTimestamps,
     state.wrapText,
     state.textFilter,
+    state.includeFilter,
+    state.excludeFilter,
     state.isParsedView,
     state.expandedRows,
     state.showPreviousLogs,
@@ -194,6 +200,23 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   const isWorkload = resourceKindKey !== 'pod';
   const supportsPreviousLogs = resourceKindKey === 'pod';
   const podName = !isWorkload ? resourceName : '';
+  const backendLogSelection = useMemo(() => {
+    const include = includeFilter.trim();
+    const exclude = excludeFilter.trim();
+    if (isWorkload) {
+      if (selectedFilter.startsWith('pod:')) {
+        return { pod: selectedFilter.substring(4), container: '', include, exclude };
+      }
+      if (selectedFilter.startsWith('container:')) {
+        return { pod: '', container: selectedFilter.substring(10), include, exclude };
+      }
+      return { pod: '', container: '', include, exclude };
+    }
+    if (selectedContainer && selectedContainer !== ALL_CONTAINERS) {
+      return { pod: '', container: selectedContainer, include, exclude };
+    }
+    return { pod: '', container: '', include, exclude };
+  }, [excludeFilter, includeFilter, isWorkload, selectedContainer, selectedFilter]);
 
   // Reset state when scope changes - do this during render, not in an effect,
   // to avoid causing a re-render that would interrupt streaming startup
@@ -231,6 +254,9 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   // to stay under MAX_BUFFER_SIZE. Exposed via the buildStats wrapper on
   // the scoped snapshot.
   const bufferLimitReached = Boolean(logSnapshot.stats?.truncated);
+  const logWarnings = (logSnapshot.stats?.warnings ?? []).filter(
+    (warning) => typeof warning === 'string' && warning.trim().length > 0
+  );
 
   const displayError = snapshotError && !isLogDataUnavailable(snapshotError) ? snapshotError : null;
   const fallbackDisplayError =
@@ -250,6 +276,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     transientStreamError ||
     (autoRefresh && snapshotStatus === 'error');
   const pendingFallback = shouldSuppressError;
+  const waitingForInitialPrime = !hasPrimedScopeRef.current && !displayError;
 
   const normalizedActivePods = useMemo(() => {
     if (!isWorkload) {
@@ -272,7 +299,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     ? isLoadingPreviousLogs && logEntries.length === 0
     : logEntries.length === 0 &&
       (!hasReceivedInitialLogs ||
-        !hasPrimedScopeRef.current ||
+        waitingForInitialPrime ||
         ['loading', 'updating', 'initialising'].includes(snapshotStatus) ||
         fallbackActive ||
         pendingFallback);
@@ -286,7 +313,12 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   });
 
   const mapEntriesToSnapshot = useCallback(
-    (entries: ObjectLogEntry[], generatedAt: number, isManual: boolean) => {
+    (
+      entries: ObjectLogEntry[],
+      generatedAt: number,
+      isManual: boolean,
+      warnings: string[] = []
+    ) => {
       if (!logScope) {
         return;
       }
@@ -303,6 +335,11 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
           ...previous,
           status: 'ready',
           error: null,
+          stats: {
+            itemCount: entries.length,
+            buildDurationMs: 0,
+            warnings: warnings.length > 0 ? warnings : undefined,
+          },
           data: {
             entries,
             sequence: previousPayload.sequence,
@@ -335,11 +372,15 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
         // initial fallback fetch in sync with the rolling buffer cap so
         // the user gets exactly as much history as their buffer can hold.
         const request: types.LogFetchRequest = {
+          scope: logScope,
           namespace,
           workloadName: isWorkload ? resourceName : '',
           workloadKind: isWorkload ? resourceKindKey : '',
           podName: isWorkload ? '' : podName,
-          container: !isWorkload && selectedContainer ? selectedContainer : '',
+          podFilter: backendLogSelection.pod,
+          container: backendLogSelection.container,
+          include: backendLogSelection.include,
+          exclude: backendLogSelection.exclude,
           previous,
           tailLines: getLogBufferMaxSize(),
           sinceSeconds: 0,
@@ -351,6 +392,9 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
         }
 
         const entries = Array.isArray(response?.entries) ? response.entries : [];
+        const warnings = Array.isArray(response?.warnings)
+          ? response.warnings.filter((warning): warning is string => typeof warning === 'string')
+          : [];
 
         const mapped: ObjectLogEntry[] = entries.map((entry) => ({
           timestamp: entry.timestamp ?? '',
@@ -362,7 +406,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
         }));
 
         const generatedAt = Date.now();
-        mapEntriesToSnapshot(mapped, generatedAt, isManual);
+        mapEntriesToSnapshot(mapped, generatedAt, isManual, warnings);
         dispatch({ type: 'SET_FALLBACK_ERROR', payload: null });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -389,7 +433,10 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       podName,
       resourceName,
       resourceKindKey,
-      selectedContainer,
+      backendLogSelection.container,
+      backendLogSelection.exclude,
+      backendLogSelection.include,
+      backendLogSelection.pod,
       resolvedClusterId,
     ]
   );
@@ -415,6 +462,44 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     fallbackRecoveringRef,
     hasPrimedScopeRef,
   });
+
+  useEffect(() => {
+    if (!logScope) {
+      return;
+    }
+    const changed = setLogStreamScopeParams(logScope, backendLogSelection);
+    if (!changed) {
+      return;
+    }
+    if (showPreviousLogs) {
+      dispatch({ type: 'SET_IS_LOADING_PREVIOUS_LOGS', payload: true });
+      void fetchLogs({ previous: true, isManual: true })
+        .catch((error) => {
+          console.error('Failed to reload previous logs', error);
+        })
+        .finally(() => {
+          dispatch({ type: 'SET_IS_LOADING_PREVIOUS_LOGS', payload: false });
+        });
+      return;
+    }
+    if (fallbackActive) {
+      void fetchFallbackLogs(false);
+      return;
+    }
+    if (!isActive || !autoRefresh) {
+      return;
+    }
+    void refreshOrchestrator.restartStreamingDomain(LOG_DOMAIN, logScope);
+  }, [
+    autoRefresh,
+    backendLogSelection,
+    fallbackActive,
+    fetchFallbackLogs,
+    fetchLogs,
+    isActive,
+    logScope,
+    showPreviousLogs,
+  ]);
 
   useEffect(() => {
     if (!isWorkload || !logScope || showPreviousLogs) {
@@ -553,7 +638,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   // Colors are read from CSS variables to support light/dark themes
   const podColors = useMemo(() => {
     const styles = getComputedStyle(document.documentElement);
-    const colors = [
+    const palette = [
       styles.getPropertyValue('--log-pod-color-1').trim(),
       styles.getPropertyValue('--log-pod-color-2').trim(),
       styles.getPropertyValue('--log-pod-color-3').trim(),
@@ -568,29 +653,24 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       styles.getPropertyValue('--log-pod-color-12').trim(),
     ];
     const fallbackColor = styles.getPropertyValue('--log-pod-color-fallback').trim();
-    const colorMap: Record<string, string> = {};
-
-    // Use the already-deduplicated and sorted pod list from state
-    availablePods.forEach((pod, index) => {
-      colorMap[pod] = colors[index % colors.length];
-    });
-
-    // Store fallback for use in render
-    colorMap['__fallback__'] = fallbackColor;
-
-    return colorMap;
+    return buildStablePodColorMap(availablePods, palette, fallbackColor);
   }, [availablePods]);
 
   useEffect(() => {
     if (isWorkload) {
-      const pods = Array.from(new Set(logEntries.map((entry) => entry.pod).filter(Boolean))).sort();
+      const pods = (
+        normalizedActivePods ??
+        Array.from(new Set(logEntries.map((entry) => entry.pod).filter(Boolean)))
+      )
+        .slice()
+        .sort();
       dispatch({ type: 'SET_AVAILABLE_PODS', payload: pods });
       const containersList = Array.from(
         new Set(logEntries.map((entry) => entry.container).filter(Boolean))
       ).sort();
       dispatch({ type: 'SET_AVAILABLE_CONTAINERS', payload: containersList });
     }
-  }, [isWorkload, logEntries]);
+  }, [isWorkload, logEntries, normalizedActivePods]);
 
   useEffect(() => {
     if (!isWorkload || !selectedFilter) {
@@ -613,6 +693,8 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   const getActualContainerName = (displayName: string) => {
     return displayName.replace(' (init)', '').replace(' (debug)', '');
   };
+  const hasDebugContainers = containers.some((container) => container.endsWith(' (debug)'));
+  const allContainersLabel = hasDebugContainers ? 'All (includes debug)' : 'All';
 
   const displayLogs = useMemo(() => {
     if (filteredEntries.length === 0) {
@@ -1147,7 +1229,9 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
               <div className="pod-logs-control-group">
                 <Dropdown
                   options={[
-                    ...(containers.length > 1 ? [{ value: ALL_CONTAINERS, label: 'All' }] : []),
+                    ...(containers.length > 1
+                      ? [{ value: ALL_CONTAINERS, label: allContainersLabel }]
+                      : []),
                     ...containers.map((container) => ({
                       value: getActualContainerName(container),
                       label: container,
@@ -1179,6 +1263,48 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                   onClick={() => dispatch({ type: 'SET_TEXT_FILTER', payload: '' })}
                   title="Clear filter"
                   aria-label="Clear filter"
+                >
+                  ×
+                </button>
+              )}
+            </div>
+
+            <div className="pod-logs-control-group pod-logs-filter-group">
+              <input
+                type="text"
+                value={includeFilter}
+                onChange={(e) => dispatch({ type: 'SET_INCLUDE_FILTER', payload: e.target.value })}
+                placeholder="Include regex"
+                className="pod-logs-text-filter"
+                title="Only send log lines whose message matches this regex"
+              />
+              {includeFilter && (
+                <button
+                  className="pod-logs-filter-clear"
+                  onClick={() => dispatch({ type: 'SET_INCLUDE_FILTER', payload: '' })}
+                  title="Clear include regex"
+                  aria-label="Clear include regex"
+                >
+                  ×
+                </button>
+              )}
+            </div>
+
+            <div className="pod-logs-control-group pod-logs-filter-group">
+              <input
+                type="text"
+                value={excludeFilter}
+                onChange={(e) => dispatch({ type: 'SET_EXCLUDE_FILTER', payload: e.target.value })}
+                placeholder="Exclude regex"
+                className="pod-logs-text-filter"
+                title="Drop log lines whose message matches this regex"
+              />
+              {excludeFilter && (
+                <button
+                  className="pod-logs-filter-clear"
+                  onClick={() => dispatch({ type: 'SET_EXCLUDE_FILTER', payload: '' })}
+                  title="Clear exclude regex"
+                  aria-label="Clear exclude regex"
                 >
                   ×
                 </button>
@@ -1281,6 +1407,12 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
               {fallbackDisplayError ? `: ${fallbackDisplayError}` : ''}. Showing fallback updates
               {autoRefresh ? ' every 2s' : ''}. Retrying connection automatically…
             </span>
+          </div>
+        )}
+
+        {logWarnings.length > 0 && (
+          <div className="pod-logs-fallback-banner" role="status">
+            <span>{logWarnings.join(' ')}</span>
           </div>
         )}
 

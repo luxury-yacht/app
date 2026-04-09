@@ -26,6 +26,10 @@ vi.mock('@utils/errorHandler', () => ({
 }));
 
 import { getScopedDomainState, resetScopedDomainState } from '../store';
+import {
+  resetLogStreamScopeParamsCacheForTesting,
+  setLogStreamScopeParams,
+} from '@modules/object-panel/components/ObjectPanel/Logs/logStreamScopeParamsCache';
 
 const SCOPE = 'default:pod:example';
 
@@ -45,6 +49,7 @@ beforeEach(() => {
     addEventListener: globalThis.window.addEventListener ?? vi.fn(),
     removeEventListener: globalThis.window.removeEventListener ?? vi.fn(),
   });
+  resetLogStreamScopeParamsCacheForTesting();
   resetScopedDomainState('object-logs', SCOPE);
 });
 
@@ -57,6 +62,7 @@ afterEach(() => {
       clearTimeout: globalThis.clearTimeout,
     });
   }
+  resetLogStreamScopeParamsCacheForTesting();
 });
 
 describe('LogStreamManager', () => {
@@ -90,6 +96,31 @@ describe('LogStreamManager', () => {
     expect(state.data?.entries).toHaveLength(1);
     expect(state.data?.entries?.[0].line).toBe('hello world');
     expect(state.data?.resetCount).toBe(1);
+  });
+
+  test('applyPayload carries backend warnings into snapshot stats', async () => {
+    const { LogStreamManager } = await import('./logStreamManager');
+    const manager = new LogStreamManager();
+
+    manager.applyPayload(
+      SCOPE,
+      {
+        domain: 'object-logs',
+        scope: SCOPE,
+        sequence: 1,
+        generatedAt: 123,
+        reset: true,
+        warnings: ['Showing logs for 24 of 25 pod/container targets. Refine filters to view more.'],
+        entries: [],
+      },
+      'stream'
+    );
+
+    const state = getScopedDomainState('object-logs', SCOPE);
+    expect(state.status).toBe('ready');
+    expect(state.stats?.warnings).toContain(
+      'Showing logs for 24 of 25 pod/container targets. Refine filters to view more.'
+    );
   });
 
   test('applyPayload uses permission denied details when provided', async () => {
@@ -238,6 +269,42 @@ describe('LogStreamManager', () => {
     expect(state.data?.sequence).toBe(10);
     expect(state.isManual).toBe(true);
     expect(errorHandlerMock.handle).not.toHaveBeenCalled();
+  });
+
+  test('startStream appends cached pod and container filters to the stream URL', async () => {
+    class MockEventSource {
+      static instances: MockEventSource[] = [];
+      listeners: Record<string, (evt?: any) => void> = {};
+      constructor(public url: string) {
+        MockEventSource.instances.push(this);
+      }
+      addEventListener(type: string, handler: (evt?: any) => void) {
+        this.listeners[type] = handler;
+      }
+      removeEventListener(): void {}
+      close(): void {}
+    }
+    (globalThis as any).EventSource = MockEventSource as any;
+
+    setLogStreamScopeParams(SCOPE, {
+      pod: 'web-2',
+      container: 'app',
+      include: 'error|warn',
+      exclude: 'healthcheck',
+    });
+
+    const { LogStreamManager } = await import('./logStreamManager');
+    const manager = new LogStreamManager();
+
+    await manager.startStream(SCOPE);
+
+    expect(MockEventSource.instances).toHaveLength(1);
+    const streamURL = new URL(MockEventSource.instances[0]!.url);
+    expect(streamURL.searchParams.get('scope')).toBe(SCOPE);
+    expect(streamURL.searchParams.get('pod')).toBe('web-2');
+    expect(streamURL.searchParams.get('container')).toBe('app');
+    expect(streamURL.searchParams.get('include')).toBe('error|warn');
+    expect(streamURL.searchParams.get('exclude')).toBe('healthcheck');
   });
 
   test('refreshOnce rejects and marks error when the stream fails', async () => {

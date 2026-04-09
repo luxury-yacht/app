@@ -766,6 +766,7 @@ describe('DiagnosticsPanel component', () => {
           activeSessions: 2,
           totalMessages: 12,
           droppedMessages: 1,
+          skippedTargets: 0,
           errorCount: 0,
           lastConnect: now - 6000,
           lastEvent: now - 3000,
@@ -775,6 +776,7 @@ describe('DiagnosticsPanel component', () => {
           activeSessions: 1,
           totalMessages: 15,
           droppedMessages: 0,
+          skippedTargets: 0,
           errorCount: 0,
           lastConnect: now - 4000,
           lastEvent: now - 1500,
@@ -784,6 +786,7 @@ describe('DiagnosticsPanel component', () => {
           activeSessions: 3,
           totalMessages: 20,
           droppedMessages: 4,
+          skippedTargets: 0,
           errorCount: 1,
           lastConnect: now - 7000,
           lastEvent: now - 2000,
@@ -794,9 +797,11 @@ describe('DiagnosticsPanel component', () => {
           activeSessions: 1,
           totalMessages: 9,
           droppedMessages: 2,
+          skippedTargets: 5,
           errorCount: 0,
           lastConnect: now - 8000,
           lastEvent: now - 1000,
+          lastSkipReason: 'per-scope target cap',
         },
       ],
     };
@@ -897,6 +902,7 @@ describe('DiagnosticsPanel component', () => {
     expect(logPrimary?.textContent).toContain('Scopes: 2');
     expect(logPrimary?.textContent).toContain('Sessions: 1');
     expect(logPrimary?.textContent).toContain('Delivered: 9');
+    expect(logPrimary?.textContent).toContain('Skipped Targets: 5');
 
     const tabButtons = rendered.container.querySelectorAll<HTMLElement>('[role="tab"]');
     await act(async () => {
@@ -954,6 +960,7 @@ describe('DiagnosticsPanel component', () => {
           activeSessions: 1,
           totalMessages: 5,
           droppedMessages: 1,
+          skippedTargets: 0,
           errorCount: 0,
           lastConnect: now - 4000,
           lastEvent: now - 1500,
@@ -1031,6 +1038,7 @@ describe('DiagnosticsPanel component', () => {
           activeSessions: 1,
           totalMessages: 5,
           droppedMessages: 0,
+          skippedTargets: 0,
           errorCount: 0,
           lastConnect: now - 1000,
           lastEvent: now - 500,
@@ -1040,6 +1048,7 @@ describe('DiagnosticsPanel component', () => {
           activeSessions: 2,
           totalMessages: 10,
           droppedMessages: 1,
+          skippedTargets: 0,
           errorCount: 0,
           lastConnect: now - 1200,
           lastEvent: now - 700,
