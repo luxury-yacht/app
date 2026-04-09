@@ -850,14 +850,35 @@ const LogViewer: React.FC<LogViewerProps> = ({
 
     const columns: GridColumnDefinition<ParsedLogEntry>[] = [];
 
-    // Always show metadata columns when relevant — don't gate on first entry
+    // Always show metadata columns when relevant — don't gate on first entry.
+    // API Timestamp is metadata we add on the client (not part of the log
+    // payload), so in workload mode we color it with the same pod color as
+    // the Pod column — visually grouping the metadata fields for a single
+    // pod together when multiple pods are interleaved.
     if (showTimestamps) {
       columns.push({
         key: '_timestamp',
         header: 'API Timestamp',
         sortable: false,
         minWidth: PARSED_TIMESTAMP_MIN_WIDTH,
-        render: (item: ParsedLogEntry) => (item.timestamp ? formatTimestamp(item.timestamp) : '-'),
+        render: (item: ParsedLogEntry) => {
+          const formatted = item.timestamp ? formatTimestamp(item.timestamp) : '-';
+          if (!isWorkload) {
+            return formatted;
+          }
+          return (
+            <span
+              className="pod-color-text"
+              style={
+                {
+                  '--pod-color': podColors[item.pod || ''] || podColors['__fallback__'],
+                } as React.CSSProperties
+              }
+            >
+              {formatted}
+            </span>
+          );
+        },
       });
     }
 
@@ -926,14 +947,9 @@ const LogViewer: React.FC<LogViewerProps> = ({
         header: key,
         sortable: false,
         minWidth: PARSED_COLUMN_MIN_WIDTH,
-        render: (item: ParsedLogEntry) => {
-          const displayValue = formatParsedValue(item.data[key]);
-          return (
-            <div className="parsed-log-cell" title={displayValue}>
-              {displayValue}
-            </div>
-          );
-        },
+        render: (item: ParsedLogEntry) => (
+          <div className="parsed-log-cell">{formatParsedValue(item.data[key])}</div>
+        ),
       });
     });
 
