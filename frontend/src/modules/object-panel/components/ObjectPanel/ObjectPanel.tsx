@@ -744,6 +744,7 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
           onClosePanel={close}
           onRefreshDetails={fetchResourceDetails}
           podsState={podsState}
+          panelId={panelId}
         />
       </DockablePanel>
 

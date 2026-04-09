@@ -435,7 +435,17 @@ describe('ObjectPanel tab availability', () => {
     });
 
     expect(mockRefreshManager.unregister).toHaveBeenCalledWith('object-pod');
-    expect(mockRefreshOrchestrator.resetScopedDomain).toHaveBeenCalledWith(
+    // Tier 1 responsiveness: unmount disables refreshing but preserves
+    // the cached snapshot so a remount (cluster switch round-trip)
+    // renders instantly. Eviction now lives in
+    // ObjectPanelStateContext.closePanel, not in the unmount destructor.
+    expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
+      'object-details',
+      detailScope,
+      false,
+      { preserveState: true }
+    );
+    expect(mockRefreshOrchestrator.resetScopedDomain).not.toHaveBeenCalledWith(
       'object-details',
       detailScope
     );

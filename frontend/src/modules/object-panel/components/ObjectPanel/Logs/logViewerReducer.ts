@@ -5,6 +5,8 @@
  * for better state management and reduced complexity.
  */
 
+import type { LogViewerPrefs } from '../types';
+
 // Empty string means "all containers" in both the backend API and the filter UI
 export const ALL_CONTAINERS = '';
 
@@ -122,6 +124,47 @@ export const initialLogViewerState: LogViewerState = {
   showPreviousLogs: false,
   isLoadingPreviousLogs: false,
 };
+
+/**
+ * Project the persistent subset of LogViewerState into a flat
+ * LogViewerPrefs snapshot. expandedRows is converted from Set → array
+ * here so the snapshot is trivially copyable; applyLogViewerPrefs
+ * inverts that on the way back in.
+ */
+export const extractLogViewerPrefs = (state: LogViewerState): LogViewerPrefs => ({
+  selectedContainer: state.selectedContainer,
+  selectedFilter: state.selectedFilter,
+  autoScroll: state.autoScroll,
+  autoRefresh: state.autoRefresh,
+  showTimestamps: state.showTimestamps,
+  wrapText: state.wrapText,
+  textFilter: state.textFilter,
+  isParsedView: state.isParsedView,
+  expandedRows: Array.from(state.expandedRows),
+  showPreviousLogs: state.showPreviousLogs,
+});
+
+/**
+ * Merge a LogViewerPrefs snapshot back onto a base state. Used by
+ * LogViewer's lazy useReducer initializer to rehydrate from the
+ * cached prefs on (re)mount.
+ */
+export const applyLogViewerPrefs = (
+  base: LogViewerState,
+  prefs: LogViewerPrefs
+): LogViewerState => ({
+  ...base,
+  selectedContainer: prefs.selectedContainer,
+  selectedFilter: prefs.selectedFilter,
+  autoScroll: prefs.autoScroll,
+  autoRefresh: prefs.autoRefresh,
+  showTimestamps: prefs.showTimestamps,
+  wrapText: prefs.wrapText,
+  textFilter: prefs.textFilter,
+  isParsedView: prefs.isParsedView,
+  expandedRows: new Set(prefs.expandedRows),
+  showPreviousLogs: prefs.showPreviousLogs,
+});
 
 export function logViewerReducer(state: LogViewerState, action: LogViewerAction): LogViewerState {
   switch (action.type) {

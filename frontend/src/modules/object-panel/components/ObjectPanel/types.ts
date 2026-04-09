@@ -140,6 +140,32 @@ export type ViewType =
   | 'values'
   | 'maintenance';
 
+/**
+ * Persistent subset of LogViewerState — the user-facing view preferences
+ * that should survive ObjectPanelContent unmount/remount caused by
+ * cluster switching. Stored outside React state in a module-level cache
+ * (logViewerPrefsCache) keyed by panelId, evicted by
+ * ObjectPanelStateContext when the panel actually closes.
+ *
+ * Pure-derived state (containers, parsedLogs, fallbackError, etc.) is
+ * NOT included — those get recomputed from the cached log entries on
+ * remount. expandedRows is stored as an array because the in-memory Set
+ * is rebuilt by applyLogViewerPrefs on rehydrate; using an array keeps
+ * the snapshot trivially copyable.
+ */
+export interface LogViewerPrefs {
+  selectedContainer: string;
+  selectedFilter: string;
+  autoScroll: boolean;
+  autoRefresh: boolean;
+  showTimestamps: boolean;
+  wrapText: boolean;
+  textFilter: string;
+  isParsedView: boolean;
+  expandedRows: string[];
+  showPreviousLogs: boolean;
+}
+
 export type PanelState = {
   // Action state. Note: activeTab is NOT here — it lives in
   // ObjectPanelStateContext (per-cluster) so the user's sub-tab choice

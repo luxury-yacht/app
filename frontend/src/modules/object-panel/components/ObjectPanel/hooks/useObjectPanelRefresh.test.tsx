@@ -139,7 +139,7 @@ describe('useObjectPanelRefresh', () => {
     expect(mockRefreshOrchestrator.updateContext).not.toHaveBeenCalled();
   });
 
-  it('cleans up refresh subscriptions on unmount', async () => {
+  it('cleans up refresh subscriptions on unmount but preserves cached state', async () => {
     await renderHook();
 
     act(() => {
@@ -147,12 +147,18 @@ describe('useObjectPanelRefresh', () => {
     });
 
     expect(mockRefreshManager.unregister).toHaveBeenCalledWith('object-deployment');
+    // Tier 1 responsiveness: stop refreshing this scope but keep the
+    // cached snapshot in place. The cache is only freed via
+    // ObjectPanelStateContext.closePanel when the user actually closes
+    // the panel — this lets cluster-switch round-trips render instantly
+    // from cache.
     expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
       'object-details',
       'team-a:deployment:api',
-      false
+      false,
+      { preserveState: true }
     );
-    expect(mockRefreshOrchestrator.resetScopedDomain).toHaveBeenCalledWith(
+    expect(mockRefreshOrchestrator.resetScopedDomain).not.toHaveBeenCalledWith(
       'object-details',
       'team-a:deployment:api'
     );

@@ -35,8 +35,11 @@ import {
   ALL_CONTAINERS,
   logViewerReducer,
   initialLogViewerState,
+  applyLogViewerPrefs,
+  extractLogViewerPrefs,
   type ParsedLogEntry,
 } from './logViewerReducer';
+import { getLogViewerPrefs, setLogViewerPrefs } from './logViewerPrefsCache';
 import { INACTIVE_SCOPE } from '../constants';
 
 interface LogViewerProps {
@@ -53,10 +56,13 @@ interface LogViewerProps {
   isActive?: boolean;
   activePodNames?: string[] | null;
   clusterId?: string | null;
-  /** Restore parsed view state from a previous mount. */
-  initialParsedView?: boolean;
-  /** Called when parsed view state changes so the parent can preserve it. */
-  onParsedViewChange?: (isParsed: boolean) => void;
+  /**
+   * Stable identifier for the owning ObjectPanel. Used as the key into
+   * logViewerPrefsCache so the user's view preferences (autoScroll,
+   * textFilter, isParsedView, expandedRows, etc.) survive
+   * ObjectPanelContent unmount/remount caused by cluster switches.
+   */
+  panelId: string;
 }
 
 const LOG_DOMAIN = 'object-logs' as const;
@@ -102,13 +108,17 @@ const LogViewer: React.FC<LogViewerProps> = ({
   isActive = false,
   activePodNames = null,
   clusterId,
-  initialParsedView = false,
-  onParsedViewChange,
+  panelId,
 }) => {
-  // Consolidated state via reducer. Restore parsed view from parent if provided.
-  const [state, dispatch] = useReducer(logViewerReducer, {
-    ...initialLogViewerState,
-    isParsedView: initialParsedView,
+  // Lazy reducer init: rehydrate from the panel-scoped prefs cache so a
+  // remount caused by a cluster switch picks up the user's previous
+  // selectedContainer / autoScroll / textFilter / isParsedView /
+  // expandedRows / etc. The cache lives outside React state so this
+  // lookup is a single Map.get on mount and never re-runs. The cache is
+  // evicted by ObjectPanelStateContext when the panel actually closes.
+  const [state, dispatch] = useReducer(logViewerReducer, undefined, () => {
+    const cached = getLogViewerPrefs(panelId);
+    return cached ? applyLogViewerPrefs(initialLogViewerState, cached) : initialLogViewerState;
   });
 
   // Destructure commonly used state for readability
@@ -133,10 +143,32 @@ const LogViewer: React.FC<LogViewerProps> = ({
     isLoadingPreviousLogs,
   } = state;
 
-  // Notify parent when parsed view changes so it can preserve across remounts
+  // Push the persistent subset of state into the panel-scoped prefs
+  // cache whenever it changes. The cache is a module-level Map (not
+  // React state), so this is just a Map.set per change with no
+  // re-renders triggered. On the next remount of this LogViewer instance
+  // (e.g. after a cluster-switch round trip) the lazy reducer
+  // initializer above pulls these values back out.
+  //
+  // Deps list every persistent field individually so changes to derived
+  // state (containers, availablePods, parsedLogs, fallbackError, etc.)
+  // don't trigger an unnecessary writeback.
   useEffect(() => {
-    onParsedViewChange?.(isParsedView);
-  }, [isParsedView, onParsedViewChange]);
+    setLogViewerPrefs(panelId, extractLogViewerPrefs(state));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: only persistent fields trigger writeback; `state` is read inside
+  }, [
+    panelId,
+    state.selectedContainer,
+    state.selectedFilter,
+    state.autoScroll,
+    state.autoRefresh,
+    state.showTimestamps,
+    state.wrapText,
+    state.textFilter,
+    state.isParsedView,
+    state.expandedRows,
+    state.showPreviousLogs,
+  ]);
 
   const hasPrimedScopeRef = useRef(false);
   const fallbackRecoveringRef = useRef(false);

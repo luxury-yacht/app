@@ -10,6 +10,38 @@ import type { KubernetesObjectReference } from '@/types/view-state';
 import type { ViewType } from '@modules/object-panel/components/ObjectPanel/types';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { clearPanelState } from '@ui/dockable/useDockablePanelState';
+import { refreshOrchestrator } from '@/core/refresh';
+import { getObjectPanelKind } from '@modules/object-panel/components/ObjectPanel/hooks/getObjectPanelKind';
+import { clearLogViewerPrefs } from '@modules/object-panel/components/ObjectPanel/Logs/logViewerPrefsCache';
+
+/**
+ * Evict every scoped-domain entry that belongs to a single object panel.
+ *
+ * The five scopes (object-details, object-events, object-yaml,
+ * object-helm-manifest, object-helm-values, object-logs) live in the
+ * global refresh store keyed by cluster-prefixed scope strings, so an
+ * unmount alone does NOT free them — that's deliberate, so a transient
+ * unmount caused by a cluster switch can render from cache on the way
+ * back. The cache should only be freed when the user actually closes
+ * the panel for good, which is what this helper enforces.
+ */
+const evictPanelScopes = (ref: KubernetesObjectReference): void => {
+  const { detailScope, eventsScope, logScope, helmScope } = getObjectPanelKind(ref);
+  if (detailScope) {
+    refreshOrchestrator.resetScopedDomain('object-details', detailScope);
+    refreshOrchestrator.resetScopedDomain('object-yaml', detailScope);
+  }
+  if (eventsScope) {
+    refreshOrchestrator.resetScopedDomain('object-events', eventsScope);
+  }
+  if (logScope) {
+    refreshOrchestrator.resetScopedDomain('object-logs', logScope);
+  }
+  if (helmScope) {
+    refreshOrchestrator.resetScopedDomain('object-helm-manifest', helmScope);
+    refreshOrchestrator.resetScopedDomain('object-helm-values', helmScope);
+  }
+};
 
 /**
  * Generate a stable, unique panel ID from a Kubernetes object reference.
@@ -148,10 +180,25 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
   // Clean up state for removed cluster tabs.
   useEffect(() => {
     setObjectPanelStateByCluster((prev) => {
+      const allowed = new Set(activeClusterIds);
+      // Free the global refresh-store entries AND the LogViewer prefs
+      // cache for any panels in clusters that are about to be dropped —
+      // those panels will never remount, so their cached scopes and
+      // prefs would otherwise leak forever.
+      Object.entries(prev).forEach(([key, value]) => {
+        const keepingThisCluster =
+          key === '__default__' || (activeClusterIds.length > 0 && allowed.has(key));
+        if (keepingThisCluster) {
+          return;
+        }
+        value.openPanels.forEach((ref, panelId) => {
+          evictPanelScopes(ref);
+          clearLogViewerPrefs(panelId);
+        });
+      });
       if (activeClusterIds.length === 0) {
         return prev.__default__ ? { __default__: prev.__default__ } : {};
       }
-      const allowed = new Set(activeClusterIds);
       const next: Record<string, ObjectPanelState> = {};
       Object.entries(prev).forEach(([key, value]) => {
         if (key === '__default__' || allowed.has(key)) {
@@ -206,6 +253,19 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
         if (!prev.openPanels.has(panelId) && !prev.activeTabs.has(panelId)) {
           return prev;
         }
+        // Evict the global refresh-store entries AND the LogViewer prefs
+        // cache for this panel BEFORE removing the ref from openPanels
+        // — once the ref is gone we can't compute the scope keys
+        // anymore. The unmount destructors in ObjectPanelContent /
+        // useObjectPanelRefresh deliberately preserve cached state on
+        // unmount so transient unmounts (cluster switches) keep their
+        // content; this is the only place that actually frees that
+        // cache.
+        const ref = prev.openPanels.get(panelId);
+        if (ref) {
+          evictPanelScopes(ref);
+        }
+        clearLogViewerPrefs(panelId);
         const nextPanels = new Map(prev.openPanels);
         nextPanels.delete(panelId);
         const nextActiveTabs = new Map(prev.activeTabs);
@@ -220,9 +280,14 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
   );
 
   const onCloseObjectPanel = useCallback(() => {
-    // Clear dockable state for every open object panel before closing.
+    // Clear dockable state, scoped-domain caches, AND LogViewer prefs
+    // for every open object panel in the active cluster before closing.
     const current = objectPanelStateByCluster[clusterKey] ?? DEFAULT_OBJECT_PANEL_STATE;
-    current.openPanels.forEach((_, panelId) => clearPanelState(panelId));
+    current.openPanels.forEach((ref, panelId) => {
+      evictPanelScopes(ref);
+      clearLogViewerPrefs(panelId);
+      clearPanelState(panelId);
+    });
     updateActiveState(() => DEFAULT_OBJECT_PANEL_STATE);
   }, [updateActiveState, objectPanelStateByCluster, clusterKey]);
 
@@ -256,7 +321,9 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
       onCloseObjectPanel,
       setShowObjectPanel: (show: boolean) => {
         if (!show) {
-          updateActiveState(() => DEFAULT_OBJECT_PANEL_STATE);
+          // Same eviction path as onCloseObjectPanel — anything else
+          // would leak the active cluster's panel scopes.
+          onCloseObjectPanel();
         }
       },
       hydrateClusterMeta,
@@ -270,7 +337,6 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
       closePanel,
       onCloseObjectPanel,
       hydrateClusterMeta,
-      updateActiveState,
       getObjectPanelActiveTab,
       setObjectPanelActiveTab,
     ]

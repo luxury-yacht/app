@@ -16,6 +16,11 @@ import {
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import type { ObjectLogEntry } from '@/core/refresh/types';
 import { GetPodContainers, LogFetcher } from '@wailsjs/go/backend/App';
+import {
+  getLogViewerPrefs,
+  resetLogViewerPrefsCacheForTesting,
+  setLogViewerPrefs,
+} from './logViewerPrefsCache';
 
 beforeAll(() => {
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
@@ -181,6 +186,7 @@ describe('LogViewer active pod synchronisation', () => {
     vi.clearAllMocks();
     shortcutMocks.useShortcut.mockClear();
     (LogFetcher as unknown as ViMock).mockReset?.();
+    resetLogViewerPrefsCacheForTesting();
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
@@ -226,6 +232,7 @@ describe('LogViewer active pod synchronisation', () => {
       // seedLogSnapshot wrote to so existing scope-keyed assertions
       // keep working without per-test plumbing.
       logScope = activeScope,
+      panelId = 'obj:test:deployment:team-a:api',
     } = overrides;
 
     await act(async () => {
@@ -238,6 +245,7 @@ describe('LogViewer active pod synchronisation', () => {
           isActive={isActive}
           activePodNames={activePodNames}
           clusterId={clusterId}
+          panelId={panelId}
         />
       );
       await Promise.resolve();
@@ -676,5 +684,101 @@ describe('LogViewer active pod synchronisation', () => {
     });
 
     expect(container.textContent).toContain('Loading logs');
+  });
+
+  // --- Tier 2 responsiveness: prefs cache rehydration ---
+
+  it('rehydrates LogViewer state from logViewerPrefsCache on mount', async () => {
+    const panelId = 'obj:cluster-a:pod:team-a:api';
+    setLogViewerPrefs(panelId, {
+      selectedContainer: 'sidecar',
+      selectedFilter: 'web-1',
+      autoScroll: false,
+      autoRefresh: false,
+      showTimestamps: false,
+      wrapText: false,
+      textFilter: 'panic',
+      isParsedView: true,
+      expandedRows: ['row-7', 'row-9'],
+      showPreviousLogs: true,
+    });
+
+    await renderViewer({ panelId });
+
+    // The simplest observable signal that prefs were applied is the
+    // text-filter input value.
+    const filterInput = container.querySelector<HTMLInputElement>(
+      'input[placeholder="Filter logs..."]'
+    );
+    expect(filterInput?.value).toBe('panic');
+  });
+
+  it('writes prefs back to the cache as the user toggles them', async () => {
+    const panelId = 'obj:cluster-a:pod:team-a:api';
+    await renderViewer({ panelId });
+
+    // Defaults are written immediately on first mount via the writeback
+    // effect — verify by reading back through the cache helper.
+    const initial = getLogViewerPrefs(panelId);
+    expect(initial).toBeDefined();
+    expect(initial?.textFilter).toBe('');
+
+    // Type in the filter input. React's controlled input reads from a
+    // tracked value descriptor; setting `.value` directly doesn't bump
+    // it, so use the native HTMLInputElement value setter to make React
+    // observe the change.
+    const filterInput = container.querySelector<HTMLInputElement>(
+      'input[placeholder="Filter logs..."]'
+    );
+    expect(filterInput).toBeTruthy();
+    const nativeValueSetter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      'value'
+    )?.set;
+    await act(async () => {
+      nativeValueSetter?.call(filterInput, 'fatal');
+      filterInput!.dispatchEvent(new Event('input', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(getLogViewerPrefs(panelId)?.textFilter).toBe('fatal');
+  });
+
+  it('keeps separate prefs entries for different panels', async () => {
+    const panelA = 'obj:cluster-a:pod:team-a:api';
+    const panelB = 'obj:cluster-b:pod:team-b:web';
+    setLogViewerPrefs(panelA, {
+      selectedContainer: '',
+      selectedFilter: '',
+      autoScroll: true,
+      autoRefresh: true,
+      showTimestamps: true,
+      wrapText: true,
+      textFilter: 'a-only',
+      isParsedView: false,
+      expandedRows: [],
+      showPreviousLogs: false,
+    });
+    setLogViewerPrefs(panelB, {
+      selectedContainer: '',
+      selectedFilter: '',
+      autoScroll: true,
+      autoRefresh: true,
+      showTimestamps: true,
+      wrapText: true,
+      textFilter: 'b-only',
+      isParsedView: false,
+      expandedRows: [],
+      showPreviousLogs: false,
+    });
+
+    await renderViewer({ panelId: panelB });
+    const filterInput = container.querySelector<HTMLInputElement>(
+      'input[placeholder="Filter logs..."]'
+    );
+    expect(filterInput?.value).toBe('b-only');
+
+    // Panel A's prefs untouched.
+    expect(getLogViewerPrefs(panelA)?.textFilter).toBe('a-only');
   });
 });

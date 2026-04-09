@@ -23,6 +23,13 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   }),
 }));
 
+const resetScopedDomainMock = vi.fn();
+vi.mock('@/core/refresh', () => ({
+  refreshOrchestrator: {
+    resetScopedDomain: (...args: unknown[]) => resetScopedDomainMock(...args),
+  },
+}));
+
 const stateRef: { current: ReturnType<typeof useObjectPanelState> | null } = { current: null };
 
 const Harness: React.FC = () => {
@@ -46,6 +53,7 @@ describe('ObjectPanelStateContext', () => {
     mockClusterName = 'Cluster A';
     mockClusterIds = ['cluster-a', 'cluster-b'];
     stateRef.current = null;
+    resetScopedDomainMock.mockClear();
   });
 
   afterEach(() => {
@@ -189,5 +197,158 @@ describe('ObjectPanelStateContext', () => {
 
     expect(stateRef.current?.showObjectPanel).toBe(false);
     expect(stateRef.current?.openPanels.size).toBe(0);
+  });
+
+  // --- Tier 1 responsiveness: scope eviction tied to actual close ---
+  //
+  // The unmount destructors in ObjectPanelContent / useObjectPanelRefresh
+  // intentionally preserve cached scoped-domain entries so that a
+  // transient unmount (caused by a cluster switch) renders instantly from
+  // cache on the way back. The ONLY places that should free those entries
+  // are the explicit close paths exercised below.
+
+  it('does not evict scopes when a panel is opened then a different cluster is activated', async () => {
+    await renderProvider();
+    act(() => {
+      stateRef.current?.onRowClick({
+        kind: 'Pod',
+        name: 'api',
+        namespace: 'default',
+        clusterId: 'cluster-a',
+      });
+    });
+    expect(resetScopedDomainMock).not.toHaveBeenCalled();
+
+    // Switching clusters does NOT evict — the panel still belongs to a
+    // live cluster slice, so its cached log/event/yaml entries must stay
+    // put for the eventual switch-back.
+    mockClusterId = 'cluster-b';
+    mockClusterName = 'Cluster B';
+    await renderProvider();
+    expect(resetScopedDomainMock).not.toHaveBeenCalled();
+  });
+
+  it('evicts every scoped-domain entry for a panel when closePanel runs', async () => {
+    await renderProvider();
+    let panelId = '';
+    act(() => {
+      panelId =
+        stateRef.current?.onRowClick({
+          kind: 'Pod',
+          name: 'api',
+          namespace: 'team-a',
+          clusterId: 'cluster-a',
+        }) ?? '';
+    });
+    resetScopedDomainMock.mockClear();
+
+    act(() => {
+      stateRef.current?.closePanel(panelId);
+    });
+
+    // Pod has 4 scopes that need eviction: details, yaml (both
+    // detailScope), events, logs. helmScope is null for non-Helm kinds.
+    const calls = resetScopedDomainMock.mock.calls.map(([domain]) => domain);
+    expect(calls).toEqual(
+      expect.arrayContaining(['object-details', 'object-yaml', 'object-events', 'object-logs'])
+    );
+    // Helm-only domains must NOT be evicted for a Pod (helmScope is null).
+    expect(calls).not.toContain('object-helm-manifest');
+    expect(calls).not.toContain('object-helm-values');
+  });
+
+  it('evicts helm scopes when closePanel runs on a HelmRelease panel', async () => {
+    await renderProvider();
+    let panelId = '';
+    act(() => {
+      panelId =
+        stateRef.current?.onRowClick({
+          kind: 'HelmRelease',
+          name: 'my-app',
+          namespace: 'team-a',
+          clusterId: 'cluster-a',
+        }) ?? '';
+    });
+    resetScopedDomainMock.mockClear();
+
+    act(() => {
+      stateRef.current?.closePanel(panelId);
+    });
+
+    const calls = resetScopedDomainMock.mock.calls.map(([domain]) => domain);
+    expect(calls).toEqual(expect.arrayContaining(['object-helm-manifest', 'object-helm-values']));
+  });
+
+  it('evicts every panel in a cluster slice when that cluster tab is closed', async () => {
+    await renderProvider();
+    act(() => {
+      stateRef.current?.onRowClick({
+        kind: 'Pod',
+        name: 'api',
+        namespace: 'team-a',
+        clusterId: 'cluster-a',
+      });
+    });
+
+    // Switch to cluster-b and open another panel there.
+    mockClusterId = 'cluster-b';
+    mockClusterName = 'Cluster B';
+    await renderProvider();
+    act(() => {
+      stateRef.current?.onRowClick({
+        kind: 'Pod',
+        name: 'web',
+        namespace: 'team-b',
+        clusterId: 'cluster-b',
+      });
+    });
+    resetScopedDomainMock.mockClear();
+
+    // Drop cluster-b from the active tabs (close the cluster tab).
+    mockClusterIds = ['cluster-a'];
+    mockClusterId = 'cluster-a';
+    mockClusterName = 'Cluster A';
+    await renderProvider();
+
+    // Cluster-b's panel scopes must be evicted; cluster-a's panel scopes
+    // must NOT be (it's still alive).
+    const calls = resetScopedDomainMock.mock.calls;
+    expect(calls.length).toBeGreaterThan(0);
+    const evictedScopes = calls.map(([, scope]) => scope as string);
+    // Every eviction call should target a cluster-b scope.
+    evictedScopes.forEach((scope) => {
+      expect(scope).toContain('cluster-b');
+    });
+    evictedScopes.forEach((scope) => {
+      expect(scope).not.toContain('cluster-a');
+    });
+  });
+
+  it('evicts every active-cluster panel when onCloseObjectPanel runs', async () => {
+    await renderProvider();
+    act(() => {
+      stateRef.current?.onRowClick({
+        kind: 'Pod',
+        name: 'api',
+        namespace: 'team-a',
+        clusterId: 'cluster-a',
+      });
+    });
+    act(() => {
+      stateRef.current?.onRowClick({
+        kind: 'Deployment',
+        name: 'web',
+        namespace: 'team-a',
+        clusterId: 'cluster-a',
+      });
+    });
+    resetScopedDomainMock.mockClear();
+
+    act(() => {
+      stateRef.current?.onCloseObjectPanel();
+    });
+
+    // Two panels × at least one scope each → at least 2 eviction calls.
+    expect(resetScopedDomainMock.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 });
