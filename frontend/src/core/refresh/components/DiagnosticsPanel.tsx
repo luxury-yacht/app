@@ -2180,16 +2180,14 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       contentClassName="diagnostics-content"
       className="diagnostics-panel"
     >
-      <div className="diagnostics-tabs">
-        <Tabs
-          aria-label="Diagnostics Panel Tabs"
-          tabs={DIAGNOSTICS_TAB_DESCRIPTORS}
-          activeId={activeTab}
-          onActivate={(id) => setActiveTab(id as DiagnosticsTabId)}
-          textTransform="uppercase"
-          disableRovingTabIndex
-        />
-      </div>
+      <Tabs
+        aria-label="Diagnostics Panel Tabs"
+        tabs={DIAGNOSTICS_TAB_DESCRIPTORS}
+        activeId={activeTab}
+        onActivate={(id) => setActiveTab(id as DiagnosticsTabId)}
+        textTransform="uppercase"
+        disableRovingTabIndex
+      />
       <div className="diagnostics-scroll-area">
         {activeTab === 'refresh-domains'
           ? refreshDomainsContent

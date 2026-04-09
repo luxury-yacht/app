@@ -344,7 +344,3 @@ tr.diagnostics-row-expanded .diagnostics-permission-reason {
   overflow: visible;
   text-overflow: unset;
 }
-
-.diagnostics-tabs {
-  padding: 0.3rem 0.5rem 0;
-}
