@@ -42,8 +42,12 @@ func (s *Service) LogFetcher(req types.LogFetchRequest) types.LogFetchResponse {
 	if err != nil {
 		return types.LogFetchResponse{Error: fmt.Sprintf("invalid log filter: %v", err)}
 	}
+	podNameFilter, err := podlogs.NewPodNameFilter(strings.TrimSpace(req.PodInclude), strings.TrimSpace(req.PodExclude))
+	if err != nil {
+		return types.LogFetchResponse{Error: fmt.Sprintf("invalid pod filter: %v", err)}
+	}
 
-	pods, err := s.resolveTargetPodObjects(req)
+	pods, err := s.resolveTargetPodObjects(req, podNameFilter)
 	if err != nil {
 		return types.LogFetchResponse{Error: err.Error()}
 	}
@@ -170,7 +174,11 @@ func (s *Service) resolveLogTarget(req types.LogFetchRequest) (resolvedLogTarget
 }
 
 func (s *Service) resolveTargetPods(req types.LogFetchRequest) ([]string, error) {
-	pods, err := s.resolveTargetPodObjects(req)
+	podNameFilter, err := podlogs.NewPodNameFilter(strings.TrimSpace(req.PodInclude), strings.TrimSpace(req.PodExclude))
+	if err != nil {
+		return nil, fmt.Errorf("invalid pod filter: %w", err)
+	}
+	pods, err := s.resolveTargetPodObjects(req, podNameFilter)
 	if err != nil {
 		return nil, err
 	}
@@ -183,7 +191,7 @@ func (s *Service) resolveTargetPods(req types.LogFetchRequest) ([]string, error)
 	return names, nil
 }
 
-func (s *Service) resolveTargetPodObjects(req types.LogFetchRequest) ([]*corev1.Pod, error) {
+func (s *Service) resolveTargetPodObjects(req types.LogFetchRequest, podNameFilter podlogs.PodNameFilter) ([]*corev1.Pod, error) {
 	target, err := s.resolveLogTarget(req)
 	if err != nil {
 		return nil, err
@@ -199,16 +207,28 @@ func (s *Service) resolveTargetPodObjects(req types.LogFetchRequest) ([]*corev1.
 	if err != nil {
 		return nil, err
 	}
-	if req.PodFilter == "" {
-		return pods, nil
+	return filterPodsByName(pods, req.PodFilter, podNameFilter), nil
+}
+
+func filterPodsByName(pods []*corev1.Pod, exactFilter string, podNameFilter podlogs.PodNameFilter) []*corev1.Pod {
+	exactFilter = strings.TrimSpace(exactFilter)
+	if exactFilter == "" && podNameFilter.IsZero() {
+		return pods
 	}
 	filtered := make([]*corev1.Pod, 0, len(pods))
 	for _, pod := range pods {
-		if pod != nil && pod.Name == req.PodFilter {
-			filtered = append(filtered, pod)
+		if pod == nil {
+			continue
 		}
+		if exactFilter != "" && pod.Name != exactFilter {
+			continue
+		}
+		if !podNameFilter.IsZero() && !podNameFilter.Match(pod.Name) {
+			continue
+		}
+		filtered = append(filtered, pod)
 	}
-	return filtered, nil
+	return filtered
 }
 
 func (s *Service) workloadPodObjects(namespace, workloadName, workloadKind string) ([]*corev1.Pod, error) {

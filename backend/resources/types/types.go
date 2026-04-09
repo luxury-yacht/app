@@ -101,6 +101,8 @@ type LogFetchRequest struct {
 	WorkloadKind string `json:"workloadKind,omitempty"` // deployment, daemonset, etc.
 	PodName      string `json:"podName,omitempty"`
 	PodFilter    string `json:"podFilter,omitempty"`
+	PodInclude   string `json:"podInclude,omitempty"`
+	PodExclude   string `json:"podExclude,omitempty"`
 	Container    string `json:"container,omitempty"` // empty means all containers
 	Include      string `json:"include,omitempty"`
 	Exclude      string `json:"exclude,omitempty"`

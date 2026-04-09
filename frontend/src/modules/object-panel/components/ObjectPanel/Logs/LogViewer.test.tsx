@@ -498,6 +498,40 @@ describe('LogViewer active pod synchronisation', () => {
     );
   });
 
+  it('renders a distinct unavailable-yet message when the snapshot carries that warning', async () => {
+    const generatedAt = Date.now();
+    setScopedDomainState('object-logs', defaultScope, () => ({
+      status: 'ready',
+      data: {
+        entries: [],
+        sequence: 2,
+        generatedAt,
+        resetCount: 0,
+        error: null,
+      },
+      stats: {
+        itemCount: 0,
+        buildDurationMs: 0,
+        warnings: ['Logs are not available yet for the selected pod or container'],
+      },
+      error: null,
+      droppedAutoRefreshes: 0,
+      scope: defaultScope,
+      lastUpdated: generatedAt,
+      lastAutoRefresh: generatedAt,
+      lastManualRefresh: undefined,
+      isManual: false,
+    }));
+
+    await renderViewer({ activePodNames: ['web-1'], isActive: false });
+    await waitForText(container, 'Logs are not available yet for the selected pod or container');
+
+    expect(container.textContent).toContain(
+      'Logs are not available yet for the selected pod or container'
+    );
+    expect(container.textContent).not.toContain('No logs available');
+  });
+
   it('formats workload log lines and displays empty filter message', async () => {
     seedLogSnapshot(
       [
@@ -735,6 +769,8 @@ describe('LogViewer active pod synchronisation', () => {
       showTimestamps: true,
       wrapText: true,
       textFilter: '',
+      podIncludeFilter: '^web-',
+      podExcludeFilter: '-canary$',
       highlightFilter: 'timeout',
       includeFilter: 'error|warn',
       excludeFilter: 'healthcheck',
@@ -773,6 +809,8 @@ describe('LogViewer active pod synchronisation', () => {
 
     expect(getLogStreamScopeParams(defaultScope)).toEqual({
       pod: 'web-2',
+      podInclude: '^web-',
+      podExclude: '-canary$',
       include: 'error|warn',
       exclude: 'healthcheck',
     });
@@ -792,6 +830,8 @@ describe('LogViewer active pod synchronisation', () => {
       scope: defaultScope,
       workloadKind: 'deployment',
       podFilter: 'web-2',
+      podInclude: '^web-',
+      podExclude: '-canary$',
       container: '',
       include: 'error|warn',
       exclude: 'healthcheck',
@@ -846,6 +886,8 @@ describe('LogViewer active pod synchronisation', () => {
       showTimestamps: true,
       wrapText: true,
       textFilter: '',
+      podIncludeFilter: '',
+      podExcludeFilter: '',
       highlightFilter: 'timeout|panic',
       includeFilter: '',
       excludeFilter: '',
@@ -926,6 +968,8 @@ describe('LogViewer active pod synchronisation', () => {
       showTimestamps: true,
       wrapText: true,
       textFilter: '',
+      podIncludeFilter: '',
+      podExcludeFilter: '',
       highlightFilter: '',
       includeFilter: '',
       excludeFilter: '',
@@ -974,6 +1018,8 @@ describe('LogViewer active pod synchronisation', () => {
       showTimestamps: false,
       wrapText: false,
       textFilter: 'panic',
+      podIncludeFilter: '^web-',
+      podExcludeFilter: '-canary$',
       highlightFilter: 'timeout|panic',
       includeFilter: 'error|warn',
       excludeFilter: 'healthcheck',
@@ -987,7 +1033,15 @@ describe('LogViewer active pod synchronisation', () => {
     expect(
       container.querySelector<HTMLInputElement>('input[placeholder="Highlight regex"]')?.value
     ).toBe('timeout|panic');
+    expect(
+      container.querySelector<HTMLInputElement>('input[placeholder="Pod include regex"]')?.value
+    ).toBe('^web-');
+    expect(
+      container.querySelector<HTMLInputElement>('input[placeholder="Pod exclude regex"]')?.value
+    ).toBe('-canary$');
     expect(getLogStreamScopeParams(defaultScope)).toEqual({
+      podInclude: '^web-',
+      podExclude: '-canary$',
       include: 'error|warn',
       exclude: 'healthcheck',
     });
@@ -1002,6 +1056,8 @@ describe('LogViewer active pod synchronisation', () => {
     const initial = getLogViewerPrefs(panelId);
     expect(initial).toBeDefined();
     expect(initial?.textFilter).toBe('');
+    expect(initial?.podIncludeFilter).toBe('');
+    expect(initial?.podExcludeFilter).toBe('');
 
     // Type in the filter input. React's controlled input reads from a
     // tracked value descriptor; setting `.value` directly doesn't bump
@@ -1034,6 +1090,29 @@ describe('LogViewer active pod synchronisation', () => {
     });
 
     expect(getLogViewerPrefs(panelId)?.highlightFilter).toBe('panic|timeout');
+
+    const podIncludeInput = container.querySelector<HTMLInputElement>(
+      'input[placeholder="Pod include regex"]'
+    );
+    expect(podIncludeInput).toBeTruthy();
+    await act(async () => {
+      nativeValueSetter?.call(podIncludeInput, '^api-');
+      podIncludeInput!.dispatchEvent(new Event('input', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    const podExcludeInput = container.querySelector<HTMLInputElement>(
+      'input[placeholder="Pod exclude regex"]'
+    );
+    expect(podExcludeInput).toBeTruthy();
+    await act(async () => {
+      nativeValueSetter?.call(podExcludeInput, '-canary$');
+      podExcludeInput!.dispatchEvent(new Event('input', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(getLogViewerPrefs(panelId)?.podIncludeFilter).toBe('^api-');
+    expect(getLogViewerPrefs(panelId)?.podExcludeFilter).toBe('-canary$');
   });
 
   it('keeps separate prefs entries for different panels', async () => {
@@ -1046,6 +1125,8 @@ describe('LogViewer active pod synchronisation', () => {
       showTimestamps: true,
       wrapText: true,
       textFilter: 'a-only',
+      podIncludeFilter: '',
+      podExcludeFilter: '',
       highlightFilter: '',
       includeFilter: '',
       excludeFilter: '',
@@ -1060,6 +1141,8 @@ describe('LogViewer active pod synchronisation', () => {
       showTimestamps: true,
       wrapText: true,
       textFilter: 'b-only',
+      podIncludeFilter: '',
+      podExcludeFilter: '',
       highlightFilter: '',
       includeFilter: '',
       excludeFilter: '',

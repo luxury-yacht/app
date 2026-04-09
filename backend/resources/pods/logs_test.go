@@ -261,6 +261,39 @@ func TestResolveTargetPodsAppliesPodFilter(t *testing.T) {
 	require.Equal(t, []string{"web-2"}, pods)
 }
 
+func TestResolveTargetPodsAppliesPodNameRegexFilters(t *testing.T) {
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "default"},
+		Spec: appsv1.DeploymentSpec{
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "web"}},
+		},
+	}
+	podOne := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "web-api-1", Namespace: "default", Labels: map[string]string{"app": "web"}},
+	}
+	podTwo := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "web-worker-1", Namespace: "default", Labels: map[string]string{"app": "web"}},
+	}
+	podThree := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "web-api-canary", Namespace: "default", Labels: map[string]string{"app": "web"}},
+	}
+	client := fake.NewClientset(deployment, podOne, podTwo, podThree)
+	service := NewService(common.Dependencies{
+		Context:          context.Background(),
+		KubernetesClient: client,
+	})
+
+	pods, err := service.resolveTargetPods(types.LogFetchRequest{
+		Namespace:    "default",
+		WorkloadKind: "deployment",
+		WorkloadName: "web",
+		PodInclude:   "api",
+		PodExclude:   "canary$",
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"web-api-1"}, pods)
+}
+
 func TestResolveTargetPodsCronJob(t *testing.T) {
 	owner := metav1.OwnerReference{Kind: "CronJob", Name: "nightly", Controller: ptrBool(true)}
 	job := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "nightly-1", Namespace: "default", OwnerReferences: []metav1.OwnerReference{owner}}}

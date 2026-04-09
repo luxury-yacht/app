@@ -42,6 +42,11 @@ export const isLogDataUnavailable = (message?: string | null): boolean => {
   );
 };
 
+export const getLogDataUnavailableMessage = (showPreviousLogs: boolean): string =>
+  showPreviousLogs
+    ? 'No previous logs are available for the selected pod or container yet'
+    : 'Logs are not available yet for the selected pod or container';
+
 interface UseLogStreamFallbackParams {
   logScope: string | null;
   isActive: boolean;
@@ -293,10 +298,28 @@ export function useLogStreamFallback({
         fallbackRecoveringRef.current = false;
         const message = restartError instanceof Error ? restartError.message : String(restartError);
         const unavailable = isLogDataUnavailable(message);
+        const warnings = unavailable ? [getLogDataUnavailableMessage(showPreviousLogs)] : undefined;
         setScopedDomainState(LOG_DOMAIN, logScope, (previous) => ({
           ...previous,
           status: unavailable ? 'ready' : 'error',
           error: unavailable ? null : message,
+          stats:
+            unavailable && warnings
+              ? {
+                  itemCount: previous.stats?.itemCount ?? 0,
+                  buildDurationMs: previous.stats?.buildDurationMs ?? 0,
+                  totalItems: previous.stats?.totalItems,
+                  truncated: previous.stats?.truncated,
+                  warnings,
+                  batchIndex: previous.stats?.batchIndex,
+                  batchSize: previous.stats?.batchSize,
+                  totalBatches: previous.stats?.totalBatches,
+                  isFinalBatch: previous.stats?.isFinalBatch,
+                  timeToFirstBatchMs: previous.stats?.timeToFirstBatchMs,
+                  timeToFirstRowMs: previous.stats?.timeToFirstRowMs,
+                  buildStartedAtUnix: previous.stats?.buildStartedAtUnix,
+                }
+              : previous.stats,
           scope: logScope,
         }));
         dispatch({ type: 'SET_FALLBACK_ERROR', payload: unavailable ? null : message });

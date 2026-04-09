@@ -19,6 +19,8 @@ const samplePrefs = (overrides: Partial<LogViewerPrefs> = {}): LogViewerPrefs =>
   showTimestamps: true,
   wrapText: false,
   textFilter: 'error',
+  podIncludeFilter: '^api-',
+  podExcludeFilter: '-canary$',
   highlightFilter: 'timeout|panic',
   includeFilter: '',
   excludeFilter: '',

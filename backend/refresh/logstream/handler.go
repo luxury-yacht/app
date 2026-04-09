@@ -373,6 +373,8 @@ func parseOptions(r *http.Request) (Options, error) {
 		return Options{}, errors.New("log scope must reference a namespaced object")
 	}
 	podFilter := strings.TrimSpace(r.URL.Query().Get("pod"))
+	podInclude := strings.TrimSpace(r.URL.Query().Get("podInclude"))
+	podExclude := strings.TrimSpace(r.URL.Query().Get("podExclude"))
 	container := strings.TrimSpace(r.URL.Query().Get("container"))
 	include := strings.TrimSpace(r.URL.Query().Get("include"))
 	exclude := strings.TrimSpace(r.URL.Query().Get("exclude"))
@@ -386,6 +388,10 @@ func parseOptions(r *http.Request) (Options, error) {
 	if err != nil {
 		return Options{}, fmt.Errorf("invalid log filter: %w", err)
 	}
+	podNameFilter, err := podlogs.NewPodNameFilter(podInclude, podExclude)
+	if err != nil {
+		return Options{}, fmt.Errorf("invalid pod filter: %w", err)
+	}
 	return Options{
 		ClusterID: func() string {
 			if len(clusterIDs) == 1 {
@@ -393,15 +399,18 @@ func parseOptions(r *http.Request) (Options, error) {
 			}
 			return ""
 		}(),
-		Namespace:  identity.Namespace,
-		Kind:       strings.ToLower(strings.TrimSpace(identity.GVK.Kind)),
-		Name:       strings.TrimSpace(identity.Name),
-		PodFilter:  podFilter,
-		Container:  container,
-		Include:    include,
-		Exclude:    exclude,
-		LineFilter: lineFilter,
-		TailLines:  tail,
+		Namespace:     identity.Namespace,
+		Kind:          strings.ToLower(strings.TrimSpace(identity.GVK.Kind)),
+		Name:          strings.TrimSpace(identity.Name),
+		PodFilter:     podFilter,
+		PodInclude:    podInclude,
+		PodExclude:    podExclude,
+		Container:     container,
+		Include:       include,
+		Exclude:       exclude,
+		PodNameFilter: podNameFilter,
+		LineFilter:    lineFilter,
+		TailLines:     tail,
 		// Keep the original scope for client-side keying.
 		ScopeString: rawScope,
 	}, nil

@@ -11,6 +11,8 @@
 export interface LogStreamScopeParams {
   container?: string;
   pod?: string;
+  podInclude?: string;
+  podExclude?: string;
   include?: string;
   exclude?: string;
 }
@@ -20,6 +22,8 @@ const cache = new Map<string, LogStreamScopeParams>();
 const normalize = (params: LogStreamScopeParams): LogStreamScopeParams => {
   const container = params.container?.trim() ?? '';
   const pod = params.pod?.trim() ?? '';
+  const podInclude = params.podInclude?.trim() ?? '';
+  const podExclude = params.podExclude?.trim() ?? '';
   const include = params.include?.trim() ?? '';
   const exclude = params.exclude?.trim() ?? '';
   const next: LogStreamScopeParams = {};
@@ -28,6 +32,12 @@ const normalize = (params: LogStreamScopeParams): LogStreamScopeParams => {
   }
   if (pod) {
     next.pod = pod;
+  }
+  if (podInclude) {
+    next.podInclude = podInclude;
+  }
+  if (podExclude) {
+    next.podExclude = podExclude;
   }
   if (include) {
     next.include = include;
@@ -41,6 +51,8 @@ const normalize = (params: LogStreamScopeParams): LogStreamScopeParams => {
 const areEqual = (left: LogStreamScopeParams, right: LogStreamScopeParams): boolean =>
   (left.container ?? '') === (right.container ?? '') &&
   (left.pod ?? '') === (right.pod ?? '') &&
+  (left.podInclude ?? '') === (right.podInclude ?? '') &&
+  (left.podExclude ?? '') === (right.podExclude ?? '') &&
   (left.include ?? '') === (right.include ?? '') &&
   (left.exclude ?? '') === (right.exclude ?? '');
 

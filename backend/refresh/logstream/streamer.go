@@ -640,7 +640,7 @@ func (s *Streamer) listPods(ctx context.Context, opts Options) ([]*corev1.Pod, s
 		if err != nil {
 			return nil, "", fmt.Errorf("logstream: get pod %s/%s: %w", opts.Namespace, opts.Name, err)
 		}
-		return filterPodsByName([]*corev1.Pod{pod}, opts.PodFilter), "", nil
+		return filterPodsByName([]*corev1.Pod{pod}, opts.PodFilter, opts.PodNameFilter), "", nil
 	case "deployment", "replicaset", "statefulset", "daemonset":
 		selector, err := s.selectorForWorkload(ctx, opts)
 		if err != nil {
@@ -650,14 +650,14 @@ func (s *Streamer) listPods(ctx context.Context, opts Options) ([]*corev1.Pod, s
 		if err != nil {
 			return nil, "", fmt.Errorf("logstream: list pods for %s %s/%s: %w", kind, opts.Namespace, opts.Name, err)
 		}
-		return filterPodsByName(podPointers(pods.Items), opts.PodFilter), selector, nil
+		return filterPodsByName(podPointers(pods.Items), opts.PodFilter, opts.PodNameFilter), selector, nil
 	case "job":
 		selector := labels.Set{"job-name": opts.Name}.AsSelector().String()
 		pods, err := s.client.CoreV1().Pods(opts.Namespace).List(ctx, metav1.ListOptions{LabelSelector: selector})
 		if err != nil {
 			return nil, "", fmt.Errorf("logstream: list pods for job %s/%s: %w", opts.Namespace, opts.Name, err)
 		}
-		return filterPodsByName(podPointers(pods.Items), opts.PodFilter), selector, nil
+		return filterPodsByName(podPointers(pods.Items), opts.PodFilter, opts.PodNameFilter), selector, nil
 	case "cronjob":
 		jobs, err := s.client.BatchV1().Jobs(opts.Namespace).List(ctx, metav1.ListOptions{})
 		if err != nil {
@@ -681,22 +681,32 @@ func (s *Streamer) listPods(ctx context.Context, opts Options) ([]*corev1.Pod, s
 		}
 		// Return empty selector so the pod watch sees pods from future Jobs.
 		// consumeWatch filters by CronJob ownership via podBelongsToCronJob.
-		return filterPodsByName(podPointers(list.Items), opts.PodFilter), "", nil
+		return filterPodsByName(podPointers(list.Items), opts.PodFilter, opts.PodNameFilter), "", nil
 	default:
 		return nil, "", fmt.Errorf("logstream: unsupported workload kind %q", opts.Kind)
 	}
 }
 
-func filterPodsByName(pods []*corev1.Pod, filter string) []*corev1.Pod {
-	filter = strings.TrimSpace(filter)
-	if filter == "" || len(pods) == 0 {
+func filterPodsByName(pods []*corev1.Pod, exactFilter string, podNameFilter podlogs.PodNameFilter) []*corev1.Pod {
+	exactFilter = strings.TrimSpace(exactFilter)
+	if len(pods) == 0 {
+		return pods
+	}
+	if exactFilter == "" && podNameFilter.IsZero() {
 		return pods
 	}
 	filtered := make([]*corev1.Pod, 0, len(pods))
 	for _, pod := range pods {
-		if pod != nil && pod.Name == filter {
-			filtered = append(filtered, pod)
+		if pod == nil {
+			continue
 		}
+		if exactFilter != "" && pod.Name != exactFilter {
+			continue
+		}
+		if !podNameFilter.IsZero() && !podNameFilter.Match(pod.Name) {
+			continue
+		}
+		filtered = append(filtered, pod)
 	}
 	return filtered
 }

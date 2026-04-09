@@ -142,7 +142,7 @@ Explicitly out of scope for this plan:
 
 - ✅ Extend log request/stream options with source-side filters for containers
 - ✅ Add include/exclude regex support for log lines before sending to the client
-- [ ] Add optional pod-name include/exclude filters for multi-pod workloads
+- ✅ Add optional pod-name include/exclude filters for multi-pod workloads
 - ✅ Share one backend target-resolution, filtering, ordering, and cap-handling path between live follow and previous-log fetch
 - ✅ Add per-scope maximum concurrent log target limits
 - ✅ Start with a provisional default per-scope cap of 24 resolved pod/container targets, subject to validation during hardening

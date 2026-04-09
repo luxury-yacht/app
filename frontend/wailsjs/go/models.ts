@@ -2536,6 +2536,8 @@ export namespace types {
 	    workloadKind?: string;
 	    podName?: string;
 	    podFilter?: string;
+	    podInclude?: string;
+	    podExclude?: string;
 	    container?: string;
 	    include?: string;
 	    exclude?: string;
@@ -2555,6 +2557,8 @@ export namespace types {
 	        this.workloadKind = source["workloadKind"];
 	        this.podName = source["podName"];
 	        this.podFilter = source["podFilter"];
+	        this.podInclude = source["podInclude"];
+	        this.podExclude = source["podExclude"];
 	        this.container = source["container"];
 	        this.include = source["include"];
 	        this.exclude = source["exclude"];

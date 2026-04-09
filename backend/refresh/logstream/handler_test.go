@@ -30,6 +30,8 @@ func TestParseOptions(t *testing.T) {
 		expectError bool
 		kind        string
 		podFilter   string
+		podInclude  string
+		podExclude  string
 		container   string
 		include     string
 		exclude     string
@@ -44,19 +46,23 @@ func TestParseOptions(t *testing.T) {
 		{
 			name: "custom tail and filters",
 			query: url.Values{
-				"scope":     []string{"prod:deployment:web"},
-				"tailLines": []string{"200"},
-				"pod":       []string{"web-123"},
-				"container": []string{"app"},
-				"include":   []string{"error|warn"},
-				"exclude":   []string{"healthcheck"},
+				"scope":      []string{"prod:deployment:web"},
+				"tailLines":  []string{"200"},
+				"pod":        []string{"web-123"},
+				"podInclude": []string{"^web-"},
+				"podExclude": []string{"-canary$"},
+				"container":  []string{"app"},
+				"include":    []string{"error|warn"},
+				"exclude":    []string{"healthcheck"},
 			},
-			kind:      "deployment",
-			podFilter: "web-123",
-			container: "app",
-			include:   "error|warn",
-			exclude:   "healthcheck",
-			tail:      200,
+			kind:       "deployment",
+			podFilter:  "web-123",
+			podInclude: "^web-",
+			podExclude: "-canary$",
+			container:  "app",
+			include:    "error|warn",
+			exclude:    "healthcheck",
+			tail:       200,
 		},
 		{
 			name:  "gvk scope",
@@ -73,6 +79,11 @@ func TestParseOptions(t *testing.T) {
 		{
 			name:        "invalid line filter",
 			query:       url.Values{"scope": []string{"default:pod:nginx"}, "include": []string{"["}},
+			expectError: true,
+		},
+		{
+			name:        "invalid pod filter",
+			query:       url.Values{"scope": []string{"default:pod:nginx"}, "podInclude": []string{"["}},
 			expectError: true,
 		},
 		{
@@ -119,6 +130,12 @@ func TestParseOptions(t *testing.T) {
 		}
 		if opts.PodFilter != tt.podFilter {
 			t.Fatalf("%s: expected pod filter %q, got %q", tt.name, tt.podFilter, opts.PodFilter)
+		}
+		if opts.PodInclude != tt.podInclude {
+			t.Fatalf("%s: expected pod include %q, got %q", tt.name, tt.podInclude, opts.PodInclude)
+		}
+		if opts.PodExclude != tt.podExclude {
+			t.Fatalf("%s: expected pod exclude %q, got %q", tt.name, tt.podExclude, opts.PodExclude)
 		}
 		if opts.Container != tt.container {
 			t.Fatalf("%s: expected container %q, got %q", tt.name, tt.container, opts.Container)

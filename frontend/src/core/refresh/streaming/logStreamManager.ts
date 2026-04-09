@@ -142,6 +142,12 @@ class LogStreamConnection {
       if (streamParams?.pod) {
         url.searchParams.set('pod', streamParams.pod);
       }
+      if (streamParams?.podInclude) {
+        url.searchParams.set('podInclude', streamParams.podInclude);
+      }
+      if (streamParams?.podExclude) {
+        url.searchParams.set('podExclude', streamParams.podExclude);
+      }
       if (streamParams?.include) {
         url.searchParams.set('include', streamParams.include);
       }

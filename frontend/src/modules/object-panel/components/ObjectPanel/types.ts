@@ -160,6 +160,8 @@ export interface LogViewerPrefs {
   showTimestamps: boolean;
   wrapText: boolean;
   textFilter: string;
+  podIncludeFilter: string;
+  podExcludeFilter: string;
   highlightFilter: string;
   includeFilter: string;
   excludeFilter: string;

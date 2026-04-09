@@ -14,7 +14,11 @@ import GridTable, {
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import { useLogKeyboardShortcuts } from './hooks/useLogKeyboardShortcuts';
 import { useLogFiltering } from './hooks/useLogFiltering';
-import { useLogStreamFallback, isLogDataUnavailable } from './hooks/useLogStreamFallback';
+import {
+  useLogStreamFallback,
+  isLogDataUnavailable,
+  getLogDataUnavailableMessage,
+} from './hooks/useLogStreamFallback';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import {
   AutoRefreshIcon,
@@ -156,6 +160,8 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     showTimestamps,
     wrapText,
     textFilter,
+    podIncludeFilter,
+    podExcludeFilter,
     highlightFilter,
     includeFilter,
     excludeFilter,
@@ -190,6 +196,8 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     state.showTimestamps,
     state.wrapText,
     state.textFilter,
+    state.podIncludeFilter,
+    state.podExcludeFilter,
     state.highlightFilter,
     state.includeFilter,
     state.excludeFilter,
@@ -221,22 +229,53 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   const podName = !isWorkload ? resourceName : '';
   const highlightRegex = useMemo(() => buildHighlightRegex(highlightFilter), [highlightFilter]);
   const backendLogSelection = useMemo(() => {
+    const podInclude = isWorkload ? podIncludeFilter.trim() : '';
+    const podExclude = isWorkload ? podExcludeFilter.trim() : '';
     const include = includeFilter.trim();
     const exclude = excludeFilter.trim();
     if (isWorkload) {
       if (selectedFilter.startsWith('pod:')) {
-        return { pod: selectedFilter.substring(4), container: '', include, exclude };
+        return {
+          pod: selectedFilter.substring(4),
+          podInclude,
+          podExclude,
+          container: '',
+          include,
+          exclude,
+        };
       }
       if (selectedFilter.startsWith('container:')) {
-        return { pod: '', container: selectedFilter.substring(10), include, exclude };
+        return {
+          pod: '',
+          podInclude,
+          podExclude,
+          container: selectedFilter.substring(10),
+          include,
+          exclude,
+        };
       }
-      return { pod: '', container: '', include, exclude };
+      return { pod: '', podInclude, podExclude, container: '', include, exclude };
     }
     if (selectedContainer && selectedContainer !== ALL_CONTAINERS) {
-      return { pod: '', container: selectedContainer, include, exclude };
+      return {
+        pod: '',
+        podInclude: '',
+        podExclude: '',
+        container: selectedContainer,
+        include,
+        exclude,
+      };
     }
-    return { pod: '', container: '', include, exclude };
-  }, [excludeFilter, includeFilter, isWorkload, selectedContainer, selectedFilter]);
+    return { pod: '', podInclude: '', podExclude: '', container: '', include, exclude };
+  }, [
+    excludeFilter,
+    includeFilter,
+    isWorkload,
+    podExcludeFilter,
+    podIncludeFilter,
+    selectedContainer,
+    selectedFilter,
+  ]);
 
   // Reset state when scope changes - do this during render, not in an effect,
   // to avoid causing a re-render that would interrupt streaming startup
@@ -296,7 +335,8 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     transientStreamError ||
     (autoRefresh && snapshotStatus === 'error');
   const pendingFallback = shouldSuppressError;
-  const waitingForInitialPrime = !hasPrimedScopeRef.current && !displayError;
+  const waitingForInitialPrime =
+    !hasPrimedScopeRef.current && !displayError && !hasReceivedInitialLogs;
 
   const normalizedActivePods = useMemo(() => {
     if (!isWorkload) {
@@ -362,7 +402,11 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
           },
           data: {
             entries,
-            sequence: previousPayload.sequence,
+            // sequence >= 2 means the initial log load completed even if
+            // the payload is empty. Fallback/manual fetches need to honor
+            // the same contract so empty-success responses don't leave the
+            // viewer stuck in the initial loading state.
+            sequence: Math.max(previousPayload.sequence, 2),
             generatedAt,
             resetCount: previousPayload.resetCount + (isManual ? 1 : 0),
             error: null,
@@ -398,6 +442,8 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
           workloadKind: isWorkload ? resourceKindKey : '',
           podName: isWorkload ? '' : podName,
           podFilter: backendLogSelection.pod,
+          podInclude: backendLogSelection.podInclude,
+          podExclude: backendLogSelection.podExclude,
           container: backendLogSelection.container,
           include: backendLogSelection.include,
           exclude: backendLogSelection.exclude,
@@ -427,12 +473,14 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
 
         const generatedAt = Date.now();
         mapEntriesToSnapshot(mapped, generatedAt, isManual, warnings);
+        hasPrimedScopeRef.current = true;
         dispatch({ type: 'SET_FALLBACK_ERROR', payload: null });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         if (isLogDataUnavailable(message)) {
           const generatedAt = Date.now();
-          mapEntriesToSnapshot([], generatedAt, isManual);
+          mapEntriesToSnapshot([], generatedAt, isManual, [getLogDataUnavailableMessage(previous)]);
+          hasPrimedScopeRef.current = true;
           dispatch({ type: 'SET_FALLBACK_ERROR', payload: null });
           return;
         }
@@ -457,6 +505,8 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       backendLogSelection.exclude,
       backendLogSelection.include,
       backendLogSelection.pod,
+      backendLogSelection.podExclude,
+      backendLogSelection.podInclude,
       resolvedClusterId,
     ]
   );
@@ -715,11 +765,22 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   };
   const hasDebugContainers = containers.some((container) => container.endsWith(' (debug)'));
   const allContainersLabel = hasDebugContainers ? 'All (includes debug)' : 'All';
+  const unavailableLogMessage =
+    filteredEntries.length === 0
+      ? (logWarnings.find(
+          (warning) =>
+            warning === getLogDataUnavailableMessage(false) ||
+            warning === getLogDataUnavailableMessage(true)
+        ) ?? null)
+      : null;
 
   const displayLogs = useMemo(() => {
     if (filteredEntries.length === 0) {
       if (isPendingLogs) {
         return '';
+      }
+      if (unavailableLogMessage) {
+        return unavailableLogMessage;
       }
       return textFilter.trim() ? 'No logs match the filter' : 'No logs available';
     }
@@ -746,7 +807,15 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
         return timestampPrefix + entry.line;
       })
       .join('\n');
-  }, [filteredEntries, isPendingLogs, isWorkload, selectedContainer, showTimestamps, textFilter]);
+  }, [
+    filteredEntries,
+    isPendingLogs,
+    isWorkload,
+    selectedContainer,
+    showTimestamps,
+    textFilter,
+    unavailableLogMessage,
+  ]);
 
   const renderHighlightedMessage = useCallback(
     (text: string, keyPrefix: string) => {
@@ -1333,6 +1402,56 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                 </button>
               )}
             </div>
+
+            {isWorkload && (
+              <>
+                <div className="pod-logs-control-group pod-logs-filter-group">
+                  <input
+                    type="text"
+                    value={podIncludeFilter}
+                    onChange={(e) =>
+                      dispatch({ type: 'SET_POD_INCLUDE_FILTER', payload: e.target.value })
+                    }
+                    placeholder="Pod include regex"
+                    className="pod-logs-text-filter"
+                    title="Only include workload pods whose names match this regex"
+                  />
+                  {podIncludeFilter && (
+                    <button
+                      className="pod-logs-filter-clear"
+                      onClick={() => dispatch({ type: 'SET_POD_INCLUDE_FILTER', payload: '' })}
+                      title="Clear pod include regex"
+                      aria-label="Clear pod include regex"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+
+                <div className="pod-logs-control-group pod-logs-filter-group">
+                  <input
+                    type="text"
+                    value={podExcludeFilter}
+                    onChange={(e) =>
+                      dispatch({ type: 'SET_POD_EXCLUDE_FILTER', payload: e.target.value })
+                    }
+                    placeholder="Pod exclude regex"
+                    className="pod-logs-text-filter"
+                    title="Exclude workload pods whose names match this regex"
+                  />
+                  {podExcludeFilter && (
+                    <button
+                      className="pod-logs-filter-clear"
+                      onClick={() => dispatch({ type: 'SET_POD_EXCLUDE_FILTER', payload: '' })}
+                      title="Clear pod exclude regex"
+                      aria-label="Clear pod exclude regex"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
 
             <div className="pod-logs-control-group pod-logs-filter-group">
               <input

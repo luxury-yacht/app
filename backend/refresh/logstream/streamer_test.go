@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/podlogs"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -215,6 +216,49 @@ func TestListPodsAppliesPodFilter(t *testing.T) {
 	}
 	if len(pods) != 1 || pods[0].Name != "web-2" {
 		t.Fatalf("expected only web-2 after pod filter, got %#v", pods)
+	}
+}
+
+func TestListPodsAppliesPodNameRegexFilters(t *testing.T) {
+	ctx := context.Background()
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "web"},
+		Spec: appsv1.DeploymentSpec{
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "web"}},
+		},
+	}
+	podOne := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "web-api-1", Labels: map[string]string{"app": "web"}},
+	}
+	podTwo := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "web-worker-1", Labels: map[string]string{"app": "web"}},
+	}
+	podThree := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "web-api-canary", Labels: map[string]string{"app": "web"}},
+	}
+	client := fake.NewClientset([]runtime.Object{deployment, podOne, podTwo, podThree}...)
+	streamer := NewStreamer(client, nil, nil)
+	podNameFilter, err := podlogs.NewPodNameFilter("api", "canary$")
+	if err != nil {
+		t.Fatalf("unexpected pod filter error: %v", err)
+	}
+
+	pods, selector, err := streamer.listPods(ctx, Options{
+		Kind:          "deployment",
+		Namespace:     "default",
+		Name:          "web",
+		PodNameFilter: podNameFilter,
+		PodInclude:    "api",
+		PodExclude:    "canary$",
+	})
+	if err != nil {
+		t.Fatalf("listPods returned error: %v", err)
+	}
+	if selector == "" {
+		t.Fatal("expected selector for deployment scope")
+	}
+	if len(pods) != 1 || pods[0].Name != "web-api-1" {
+		t.Fatalf("expected only web-api-1 after pod regex filters, got %#v", pods)
 	}
 }
 

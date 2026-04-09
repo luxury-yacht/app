@@ -323,6 +323,8 @@ describe('LogStreamManager', () => {
 
     setLogStreamScopeParams(SCOPE, {
       pod: 'web-2',
+      podInclude: '^web-',
+      podExclude: '-canary$',
       container: 'app',
       include: 'error|warn',
       exclude: 'healthcheck',
@@ -337,6 +339,8 @@ describe('LogStreamManager', () => {
     const streamURL = new URL(MockEventSource.instances[0]!.url);
     expect(streamURL.searchParams.get('scope')).toBe(SCOPE);
     expect(streamURL.searchParams.get('pod')).toBe('web-2');
+    expect(streamURL.searchParams.get('podInclude')).toBe('^web-');
+    expect(streamURL.searchParams.get('podExclude')).toBe('-canary$');
     expect(streamURL.searchParams.get('container')).toBe('app');
     expect(streamURL.searchParams.get('include')).toBe('error|warn');
     expect(streamURL.searchParams.get('exclude')).toBe('healthcheck');
