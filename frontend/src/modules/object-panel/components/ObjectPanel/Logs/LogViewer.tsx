@@ -1573,7 +1573,18 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       header: 'Container',
       sortable: false,
       minWidth: PARSED_POD_COLUMN_MIN_WIDTH,
-      render: (item: ParsedLogEntry) => item.container || '-',
+      render: (item: ParsedLogEntry) => (
+        <span
+          className="pod-color-text"
+          style={
+            {
+              '--pod-color': podColors[item.pod || ''] || podColors['__fallback__'],
+            } as React.CSSProperties
+          }
+        >
+          {item.container || '-'}
+        </span>
+      ),
     });
 
     // Promote well-known timestamp and level fields to appear first
@@ -1882,6 +1893,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                 className="parsed-logs-table"
                 tableClassName="gridtable-parsed-logs"
                 virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}
+                isKindColumnKey={() => false}
                 // Parsed logs use row-expansion to show the full cell
                 // contents; the native hover tooltip would duplicate that
                 // affordance and also race with the custom expand UX.
