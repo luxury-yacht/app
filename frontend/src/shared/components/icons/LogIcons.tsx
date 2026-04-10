@@ -129,6 +129,31 @@ export const ParseJsonIcon: React.FC<IconProps> = ({
   </svg>
 );
 
+/** Indented document — pretty-printed JSON */
+export const PrettyJsonIcon: React.FC<IconProps> = ({
+  width = 20,
+  height = 20,
+  fill = 'currentColor',
+}) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    width={width}
+    height={height}
+    fill="none"
+    stroke={fill}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    strokeWidth={2}
+  >
+    <path d="M8 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h2" />
+    <path d="M16 4h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-2" />
+    <path d="M9 8h6" />
+    <path d="M9 12h3" />
+    <path d="M11 16h4" />
+  </svg>
+);
+
 /** Clipboard — copy to clipboard */
 export const CopyIcon: React.FC<IconProps> = ({
   width = 20,

@@ -68,11 +68,6 @@ const waitForElement = async <T extends Element>(
   throw new Error('Timed out waiting for element');
 };
 
-const findSelectByOptionLabel = (root: HTMLElement, label: string): HTMLSelectElement | null =>
-  Array.from(root.querySelectorAll('select')).find((select) =>
-    Array.from(select.options).some((option) => option.text === label)
-  ) as HTMLSelectElement | null;
-
 const mockModules = vi.hoisted(() => {
   const orchestrator = {
     stopStreamingDomain: vi.fn(),
@@ -736,7 +731,7 @@ describe('LogViewer active pod synchronisation', () => {
     expect(container.querySelector('[data-testid="gridtable-parsed-logs"]')).toBeFalsy();
   });
 
-  it('switches between raw, compact JSON, pretty JSON, and parsed output modes', async () => {
+  it('switches between raw, pretty JSON, and parsed output modes from the icon bar', async () => {
     seedLogSnapshot([
       {
         pod: 'web-1',
@@ -749,37 +744,35 @@ describe('LogViewer active pod synchronisation', () => {
 
     await renderViewer();
 
-    const outputSelect = findSelectByOptionLabel(container, 'Parsed');
-    expect(outputSelect).toBeTruthy();
-
-    await act(async () => {
-      outputSelect!.value = 'structured';
-      outputSelect!.dispatchEvent(new Event('change', { bubbles: true }));
-      await Promise.resolve();
-    });
-    expect(container.textContent).toContain(
-      '{"level":"info","message":"hello","nested":{"ok":true}}'
+    const prettyButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Pretty JSON"]'
     );
+    const parsedButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Parsed JSON (P)"]'
+    );
+    expect(prettyButton).toBeTruthy();
+    expect(parsedButton).toBeTruthy();
 
     await act(async () => {
-      outputSelect!.value = 'pretty';
-      outputSelect!.dispatchEvent(new Event('change', { bubbles: true }));
+      prettyButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await Promise.resolve();
     });
+    expect(prettyButton?.getAttribute('aria-pressed')).toBe('true');
     expect(container.textContent).toContain('"nested": {');
 
     await act(async () => {
-      outputSelect!.value = 'parsed';
-      outputSelect!.dispatchEvent(new Event('change', { bubbles: true }));
+      parsedButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await Promise.resolve();
     });
+    expect(prettyButton?.getAttribute('aria-pressed')).toBe('false');
+    expect(parsedButton?.getAttribute('aria-pressed')).toBe('true');
     expect(container.querySelector('[data-testid="gridtable-parsed-logs"]')).toBeTruthy();
 
     await act(async () => {
-      outputSelect!.value = 'raw';
-      outputSelect!.dispatchEvent(new Event('change', { bubbles: true }));
+      parsedButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await Promise.resolve();
     });
+    expect(parsedButton?.getAttribute('aria-pressed')).toBe('false');
     expect(container.querySelector('[data-testid="gridtable-parsed-logs"]')).toBeFalsy();
   });
 

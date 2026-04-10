@@ -26,6 +26,8 @@ import {
   TimestampIcon,
   WrapTextIcon,
   CopyIcon,
+  ParseJsonIcon,
+  PrettyJsonIcon,
   HighlightSearchIcon,
   InverseSearchIcon,
   RegexSearchIcon,
@@ -82,13 +84,6 @@ const LOG_DOMAIN = 'object-logs' as const;
 const PARSED_COLUMN_MIN_WIDTH = 120;
 const PARSED_TIMESTAMP_MIN_WIDTH = 180;
 const PARSED_POD_COLUMN_MIN_WIDTH = 160;
-
-const DISPLAY_MODE_LABELS = {
-  raw: 'Raw',
-  structured: 'JSON',
-  pretty: 'Pretty',
-  parsed: 'Parsed',
-} as const;
 
 // Truncate RFC3339Nano timestamps to millisecond precision for display
 const formatTimestamp = (timestamp: string): string => {
@@ -1041,18 +1036,6 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
 
   const hasCopyableContent = isParsedView ? parsedLogs.length > 0 : filteredEntries.length > 0;
 
-  const outputModeOptions = useMemo(
-    () =>
-      (
-        Object.entries(DISPLAY_MODE_LABELS) as Array<[keyof typeof DISPLAY_MODE_LABELS, string]>
-      ).map(([value, label]) => ({
-        value,
-        label,
-        disabled: value !== 'raw' && !canParseLogs,
-      })),
-    [canParseLogs]
-  );
-
   useEffect(() => {
     if (displayMode !== 'raw' && !canParseLogs) {
       dispatch({ type: 'SET_DISPLAY_MODE', payload: 'raw' });
@@ -1581,6 +1564,10 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                   ref={filterInputRef}
                   value={textFilter}
                   onChange={(e) => dispatch({ type: 'SET_TEXT_FILTER', payload: e.target.value })}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="none"
+                  spellCheck={false}
                   placeholder="Filter logs..."
                   className="pod-logs-text-filter"
                   title="Filter logs by text (searches in log lines, pods, and containers)"
@@ -1596,58 +1583,38 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                   </button>
                 )}
               </div>
-              <IconBar
-                className="pod-logs-search-options"
-                items={
-                  [
-                    {
-                      type: 'toggle',
-                      id: 'highlightSearch',
-                      icon: <HighlightSearchIcon />,
-                      active: highlightMatches,
-                      onClick: () => dispatch({ type: 'TOGGLE_HIGHLIGHT_MATCHES' }),
-                      title: 'Highlight matches from the current text filter',
-                      disabled: !textFilter.trim() || inverseMatches,
-                    },
-                    {
-                      type: 'toggle',
-                      id: 'inverseSearch',
-                      icon: <InverseSearchIcon />,
-                      active: inverseMatches,
-                      onClick: () => dispatch({ type: 'TOGGLE_INVERSE_MATCHES' }),
-                      title: 'Show only logs that do not contain the current text filter',
-                      disabled: !textFilter.trim(),
-                    },
-                    {
-                      type: 'toggle',
-                      id: 'regexSearch',
-                      icon: <RegexSearchIcon />,
-                      active: regexMatches,
-                      onClick: () => dispatch({ type: 'TOGGLE_REGEX_MATCHES' }),
-                      title: 'Treat the current text filter as a regular expression',
-                    },
-                  ] satisfies IconBarItem[]
-                }
-              />
-            </div>
-
-            <div className="pod-logs-control-group">
-              <Dropdown
-                options={outputModeOptions}
-                value={displayMode}
-                onChange={(value) =>
-                  dispatch({
-                    type: 'SET_DISPLAY_MODE',
-                    payload: value as 'raw' | 'structured' | 'pretty' | 'parsed',
-                  })
-                }
-                size="compact"
-              />
             </div>
 
             <IconBar
               items={
                 [
+                  {
+                    type: 'toggle',
+                    id: 'highlightSearch',
+                    icon: <HighlightSearchIcon />,
+                    active: highlightMatches,
+                    onClick: () => dispatch({ type: 'TOGGLE_HIGHLIGHT_MATCHES' }),
+                    title: 'Highlight matches from the current text filter',
+                    disabled: !textFilter.trim() || inverseMatches,
+                  },
+                  {
+                    type: 'toggle',
+                    id: 'inverseSearch',
+                    icon: <InverseSearchIcon />,
+                    active: inverseMatches,
+                    onClick: () => dispatch({ type: 'TOGGLE_INVERSE_MATCHES' }),
+                    title: 'Show only logs that do not contain the current text filter',
+                    disabled: !textFilter.trim(),
+                  },
+                  {
+                    type: 'toggle',
+                    id: 'regexSearch',
+                    icon: <RegexSearchIcon />,
+                    active: regexMatches,
+                    onClick: () => dispatch({ type: 'TOGGLE_REGEX_MATCHES' }),
+                    title: 'Treat the current text filter as a regular expression',
+                  },
+                  { type: 'separator' },
                   {
                     type: 'toggle',
                     id: 'autoRefresh',
@@ -1656,7 +1623,6 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                     onClick: () => dispatch({ type: 'TOGGLE_AUTO_REFRESH' }),
                     title: 'Auto-refresh (R)',
                   },
-                  { type: 'separator' },
                   ...(supportsPreviousLogs
                     ? [
                         {
@@ -1669,6 +1635,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                         },
                       ]
                     : []),
+                  { type: 'separator' },
                   {
                     type: 'toggle',
                     id: 'apiTimestamps',
@@ -1689,6 +1656,32 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                     onClick: () => dispatch({ type: 'TOGGLE_WRAP_TEXT' }),
                     title: 'Wrap text (W)',
                     disabled: isParsedView,
+                  },
+                  {
+                    type: 'toggle',
+                    id: 'prettyJson',
+                    icon: <PrettyJsonIcon />,
+                    active: displayMode === 'pretty',
+                    onClick: () =>
+                      dispatch({
+                        type: 'SET_DISPLAY_MODE',
+                        payload: displayMode === 'pretty' ? 'raw' : 'pretty',
+                      }),
+                    title: 'Pretty JSON',
+                    disabled: !canParseLogs,
+                  },
+                  {
+                    type: 'toggle',
+                    id: 'parsedJson',
+                    icon: <ParseJsonIcon />,
+                    active: displayMode === 'parsed',
+                    onClick: () =>
+                      dispatch({
+                        type: 'SET_DISPLAY_MODE',
+                        payload: displayMode === 'parsed' ? 'raw' : 'parsed',
+                      }),
+                    title: 'Parsed JSON (P)',
+                    disabled: !canParseLogs,
                   },
                   { type: 'separator' },
                   {
