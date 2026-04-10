@@ -1989,11 +1989,63 @@ describe('LogViewer active pod synchronisation', () => {
 
     const chipStrip = container.querySelector('[aria-label="Active log filters"]');
     expect(chipStrip).toBeTruthy();
-    expect(chipStrip?.textContent).toContain('Filter: panic');
+    expect(chipStrip?.textContent).toContain('Regex: panic');
     expect(chipStrip?.textContent).toContain('web-1');
     expect(chipStrip?.textContent).toContain('app');
     expect(chipStrip?.textContent).toContain('Highlight');
-    expect(chipStrip?.textContent).toContain('Regex');
+    expect(chipStrip?.textContent).toContain('Regex: panic');
+  });
+
+  it('shows invalid regex validation in the regex chip', async () => {
+    const panelId = 'obj:cluster-a:pod:team-a:api';
+    setLogViewerPrefs(panelId, {
+      selectedContainer: '',
+      selectedFilters: [],
+      autoRefresh: true,
+      timestampMode: 'default',
+      showTimestamps: true,
+      wrapText: true,
+      textFilter: '[',
+      highlightMatches: false,
+      inverseMatches: false,
+      caseSensitiveMatches: false,
+      regexMatches: true,
+      displayMode: 'raw',
+      isParsedView: false,
+      expandedRows: [],
+      showPreviousLogs: false,
+    });
+
+    await renderViewer({ panelId });
+
+    const chipStrip = container.querySelector('[aria-label="Active log filters"]');
+    expect(chipStrip?.textContent).toContain('Regex: [ (invalid expression)');
+  });
+
+  it('shows Text in the combined chip when regex mode is disabled', async () => {
+    const panelId = 'obj:cluster-a:pod:team-a:api';
+    setLogViewerPrefs(panelId, {
+      selectedContainer: '',
+      selectedFilters: [],
+      autoRefresh: true,
+      timestampMode: 'default',
+      showTimestamps: true,
+      wrapText: true,
+      textFilter: 'panic',
+      highlightMatches: false,
+      inverseMatches: false,
+      caseSensitiveMatches: false,
+      regexMatches: false,
+      displayMode: 'raw',
+      isParsedView: false,
+      expandedRows: [],
+      showPreviousLogs: false,
+    });
+
+    await renderViewer({ panelId });
+
+    const chipStrip = container.querySelector('[aria-label="Active log filters"]');
+    expect(chipStrip?.textContent).toContain('Text: panic');
   });
 
   it('clears filters and toggles when active filter chips are removed', async () => {

@@ -256,6 +256,19 @@ const buildHighlightRegex = (
   }
 };
 
+const isValidRegexPattern = (pattern: string): boolean => {
+  const trimmed = pattern.trim();
+  if (!trimmed) {
+    return true;
+  }
+  try {
+    new RegExp(trimmed, 'i');
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 const tryParseJSONObject = (line: string): Record<string, unknown> | null => {
   try {
     const parsed = JSON.parse(stripAnsi(line));
@@ -1022,6 +1035,10 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       ),
     [selectorOptions]
   );
+  const hasInvalidRegex = useMemo(
+    () => regexMatches && !isValidRegexPattern(textFilter),
+    [regexMatches, textFilter]
+  );
   const activeFilterChips = useMemo(() => {
     const chips: Array<{
       key: string;
@@ -1030,10 +1047,16 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       onRemove: () => void;
     }> = [];
 
-    if (textFilter.trim()) {
+    const trimmedTextFilter = textFilter.trim();
+    if (trimmedTextFilter) {
       chips.push({
         key: 'text-filter',
-        label: `Filter: ${textFilter}`,
+        label:
+          regexMatches && hasInvalidRegex
+            ? `Regex: ${trimmedTextFilter} (invalid expression)`
+            : regexMatches
+              ? `Regex: ${trimmedTextFilter}`
+              : `Text: ${trimmedTextFilter}`,
         title: 'Clear text filter',
         onRemove: () => dispatch({ type: 'SET_TEXT_FILTER', payload: '' }),
       });
@@ -1080,7 +1103,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       });
     }
 
-    if (regexMatches) {
+    if (regexMatches && !trimmedTextFilter) {
       chips.push({
         key: 'regex',
         label: 'Regex',
@@ -1093,6 +1116,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   }, [
     caseSensitiveMatches,
     dispatch,
+    hasInvalidRegex,
     highlightMatches,
     inverseMatches,
     regexMatches,
