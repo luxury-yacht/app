@@ -14,6 +14,7 @@ import GridTable, {
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import { useLogKeyboardShortcuts } from './hooks/useLogKeyboardShortcuts';
 import { useLogFiltering } from './hooks/useLogFiltering';
+import { useVirtualizedLogRows } from './hooks/useVirtualizedLogRows';
 import {
   useLogStreamFallback,
   isLogDataUnavailable,
@@ -86,6 +87,10 @@ const LOG_DOMAIN = 'object-logs' as const;
 const PARSED_COLUMN_MIN_WIDTH = 120;
 const PARSED_TIMESTAMP_MIN_WIDTH = 180;
 const PARSED_POD_COLUMN_MIN_WIDTH = 160;
+const RAW_LOG_VIRTUALIZATION_THRESHOLD = 120;
+const RAW_LOG_VIRTUALIZATION_OVERSCAN = 10;
+const RAW_LOG_ESTIMATE_ROW_HEIGHT = 26;
+const RAW_LOG_VERTICAL_PADDING_PX = 16;
 
 // Truncate RFC3339Nano timestamps to millisecond precision for display
 const formatTimestamp = (timestamp: string): string => {
@@ -230,6 +235,11 @@ const tryParseJSONObject = (line: string): Record<string, unknown> | null => {
     return null;
   }
 };
+
+interface RenderedLogRow {
+  key: string;
+  line: string;
+}
 
 const LogViewerInner: React.FC<LogViewerProps> = ({
   namespace,
@@ -1029,9 +1039,19 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
 
   const displayLogs = useMemo(() => displayLines.join('\n'), [displayLines]);
 
-  const renderedDisplayLines = useMemo(
-    () => displayLines.flatMap((line) => line.split('\n')),
-    [displayLines]
+  const renderedDisplayRows = useMemo<RenderedLogRow[]>(
+    () =>
+      displayLines.flatMap((line, displayIndex) => {
+        const sourceSeq = filteredEntries[displayIndex]?._seq;
+        return line.split('\n').map((segment, segmentIndex) => ({
+          key:
+            sourceSeq !== undefined
+              ? `${sourceSeq}:${segmentIndex}`
+              : `placeholder:${displayIndex}:${segmentIndex}`,
+          line: segment,
+        }));
+      }),
+    [displayLines, filteredEntries]
   );
 
   const hasCopyableContent = isParsedView ? parsedLogs.length > 0 : filteredEntries.length > 0;
@@ -1044,6 +1064,21 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   const countLabel = `${displayedLogCount} of ${totalLogCount}`;
   const countTitle =
     logWarnings.length > 0 ? `${countLabel} logs. ${logWarnings.join(' ')}` : `${countLabel} logs`;
+
+  const {
+    shouldVirtualize: shouldVirtualizeRawLogs,
+    visibleRows: visibleRenderedLogRows,
+    totalHeight: virtualizedRawHeight,
+    offsetTop: virtualizedRawOffsetTop,
+    measureRowRef: measureVirtualizedRawRow,
+  } = useVirtualizedLogRows({
+    rows: renderedDisplayRows,
+    scrollContainerRef: logsContentRef,
+    keyExtractor: (row) => row.key,
+    threshold: RAW_LOG_VIRTUALIZATION_THRESHOLD,
+    overscan: RAW_LOG_VIRTUALIZATION_OVERSCAN,
+    estimateRowHeight: RAW_LOG_ESTIMATE_ROW_HEIGHT,
+  });
 
   useEffect(() => {
     if (displayMode !== 'raw' && !canParseLogs) {
@@ -1140,6 +1175,83 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       });
     },
     [renderHighlightedMessage, showAnsiColors]
+  );
+
+  const renderRawLogRow = useCallback(
+    (row: RenderedLogRow) => {
+      const line = row.line;
+
+      if (isWorkload && line.includes('[') && line.includes('/')) {
+        const match = line.match(
+          /^(?:\[\d{4}-\d{2}-\d{2}T[^\]]+\]\s*)?\[([^\/]+)\/([^\]]+)\]\s*(.*)/
+        );
+        if (match) {
+          const [, pod, container, logLine] = match;
+          const timestampMatch = line.match(/^(\[\d{4}-\d{2}-\d{2}T[^\]]+\]\s*)/);
+          const timestamp = timestampMatch ? timestampMatch[1] : '';
+          const podColor = podColors[pod] || podColors['__fallback__'];
+
+          return (
+            <div className="pod-log-line">
+              {timestamp && (
+                <span
+                  className="pod-log-metadata pod-color-text"
+                  style={{ '--pod-color': podColor } as React.CSSProperties}
+                >
+                  {timestamp}
+                </span>
+              )}
+              <span
+                className="pod-log-metadata pod-log-metadata--bold"
+                style={{ '--pod-color': podColor } as React.CSSProperties}
+              >
+                [{pod}/{container}]
+              </span>
+              <span> {renderMessageContent(logLine, `workload-${row.key}`)}</span>
+            </div>
+          );
+        }
+      }
+
+      if (!isWorkload) {
+        let workingLine = line;
+        let timestampPrefix = '';
+        if (showTimestamps) {
+          const podTimestampMatch = line.match(/^(\[[^\]]+\]\s*)(.*)$/);
+          if (podTimestampMatch) {
+            timestampPrefix = podTimestampMatch[1] ?? '';
+            workingLine = podTimestampMatch[2] ?? '';
+          }
+        }
+
+        const containerMatch = workingLine.match(/^\[([^\]]+)\]\s*(.*)$/);
+        const showContainerMeta =
+          containerMatch &&
+          selectedContainerFilterCount !== 1 &&
+          !(selectedContainerFilterCount === 0 && singlePodSelectableContainerCount === 1);
+        if (timestampPrefix || showContainerMeta) {
+          const containerLabel = containerMatch ? containerMatch[1] : '';
+          const remainder = containerMatch ? containerMatch[2] : workingLine;
+          return (
+            <div className="pod-log-line">
+              {timestampPrefix && <span className="pod-log-metadata">{timestampPrefix}</span>}
+              {showContainerMeta && <span className="pod-log-metadata">[{containerLabel}]</span>}
+              <span> {renderMessageContent(remainder, `pod-${row.key}`)}</span>
+            </div>
+          );
+        }
+      }
+
+      return <div className="pod-log-line">{renderMessageContent(line, `line-${row.key}`)}</div>;
+    },
+    [
+      isWorkload,
+      podColors,
+      renderMessageContent,
+      selectedContainerFilterCount,
+      showTimestamps,
+      singlePodSelectableContainerCount,
+    ]
   );
 
   // Schedule copy feedback reset, cancelling any prior pending timer
@@ -1776,97 +1888,46 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
               />
             </div>
           ) : (
-            <div className={`pod-logs-text ${!wrapText ? 'no-wrap' : ''}`}>
-              {displayLogs
-                ? renderedDisplayLines.map((line, index) => {
-                    // Stable key: use _seq from the source entry so buffer
-                    // truncation doesn't shift every key and cause scroll jumps.
-                    const entryKey = filteredEntries[index]?._seq ?? index;
-
-                    // For workload logs, apply color to pod name and timestamp
-                    // Note: Lines only have pod info if backend successfully found pods for the workload
-                    if (isWorkload && line.includes('[') && line.includes('/')) {
-                      // Handle both with and without timestamps
-                      // Pattern: optional timestamp [pod/container] rest of line
-                      const match = line.match(
-                        /^(?:\[\d{4}-\d{2}-\d{2}T[^\]]+\]\s*)?\[([^\/]+)\/([^\]]+)\]\s*(.*)/
-                      );
-                      if (match) {
-                        const [, pod, container, logLine] = match;
-                        // Extract only a real timestamp prefix; when timestamps
-                        // are hidden the line starts with [pod/container], and a
-                        // looser bracket match would duplicate that label.
-                        const timestampMatch = line.match(/^(\[\d{4}-\d{2}-\d{2}T[^\]]+\]\s*)/);
-                        const timestamp = timestampMatch ? timestampMatch[1] : '';
-                        const podColor = podColors[pod] || podColors['__fallback__'];
-
-                        return (
-                          <div key={entryKey} className="pod-log-line">
-                            {timestamp && (
-                              <span
-                                className="pod-log-metadata pod-color-text"
-                                style={{ '--pod-color': podColor } as React.CSSProperties}
-                              >
-                                {timestamp}
-                              </span>
-                            )}
-                            <span
-                              className="pod-log-metadata pod-log-metadata--bold"
-                              style={{ '--pod-color': podColor } as React.CSSProperties}
-                            >
-                              [{pod}/{container}]
-                            </span>
-                            <span> {renderMessageContent(logLine, `workload-${entryKey}`)}</span>
-                          </div>
-                        );
-                      }
-                    }
-
-                    if (!isWorkload) {
-                      let workingLine = line;
-                      let timestampPrefix = '';
-                      if (showTimestamps) {
-                        const podTimestampMatch = line.match(/^(\[[^\]]+\]\s*)(.*)$/);
-                        if (podTimestampMatch) {
-                          timestampPrefix = podTimestampMatch[1] ?? '';
-                          workingLine = podTimestampMatch[2] ?? '';
-                        }
-                      }
-
-                      const containerMatch = workingLine.match(/^\[([^\]]+)\]\s*(.*)$/);
-                      const showContainerMeta =
-                        containerMatch &&
-                        selectedContainerFilterCount !== 1 &&
-                        !(
-                          selectedContainerFilterCount === 0 &&
-                          singlePodSelectableContainerCount === 1
-                        );
-                      if (timestampPrefix || showContainerMeta) {
-                        const containerLabel = containerMatch ? containerMatch[1] : '';
-                        const remainder = containerMatch ? containerMatch[2] : workingLine;
-                        return (
-                          <div key={entryKey} className="pod-log-line">
-                            {timestampPrefix && (
-                              <span className="pod-log-metadata">{timestampPrefix}</span>
-                            )}
-                            {showContainerMeta && (
-                              <span className="pod-log-metadata">[{containerLabel}]</span>
-                            )}
-                            <span> {renderMessageContent(remainder, `pod-${entryKey}`)}</span>
-                          </div>
-                        );
-                      }
-                    }
-
-                    return (
-                      <div key={entryKey} className="pod-log-line">
-                        {renderMessageContent(line, `line-${entryKey}`)}
-                      </div>
-                    );
-                  })
-                : showPreviousLogs
-                  ? 'No previous logs found'
-                  : 'No logs available'}
+            <div
+              className={`pod-logs-text ${!wrapText ? 'no-wrap' : ''} ${shouldVirtualizeRawLogs ? 'pod-logs-text--virtualized' : ''}`}
+            >
+              {displayLogs ? (
+                shouldVirtualizeRawLogs ? (
+                  <div
+                    className="pod-logs-virtual-body"
+                    style={{ height: `${virtualizedRawHeight + RAW_LOG_VERTICAL_PADDING_PX}px` }}
+                  >
+                    <div
+                      className="pod-logs-virtual-inner"
+                      style={{
+                        transform: `translateY(${virtualizedRawOffsetTop + RAW_LOG_VERTICAL_PADDING_PX / 2}px)`,
+                      }}
+                    >
+                      {visibleRenderedLogRows.map((row) => (
+                        <div
+                          key={row.key}
+                          className="pod-log-row"
+                          ref={(node) => {
+                            measureVirtualizedRawRow(row.key, node);
+                          }}
+                        >
+                          {renderRawLogRow(row)}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  renderedDisplayRows.map((row) => (
+                    <div key={row.key} className="pod-log-row">
+                      {renderRawLogRow(row)}
+                    </div>
+                  ))
+                )
+              ) : showPreviousLogs ? (
+                'No previous logs found'
+              ) : (
+                'No logs available'
+              )}
             </div>
           )}
         </div>

@@ -787,6 +787,27 @@ describe('LogViewer active pod synchronisation', () => {
     await waitForText(container, 'No logs match the filter');
   });
 
+  it('virtualizes large raw log buffers instead of rendering every row at once', async () => {
+    seedLogSnapshot(
+      Array.from({ length: 200 }, (_, index) => ({
+        pod: 'web-1',
+        container: 'app',
+        line: `log line ${index + 1}`,
+        timestamp: `2024-05-01T10:00:${String(index % 60).padStart(2, '0')}Z`,
+        isInit: false,
+      })),
+      defaultScope
+    );
+
+    await renderViewer({ activePodNames: ['web-1'] });
+
+    const rowElements = Array.from(container.querySelectorAll('.pod-log-line'));
+    expect(rowElements.length).toBeGreaterThan(0);
+    expect(rowElements.length).toBeLessThan(200);
+    expect(container.textContent).toContain('log line 1');
+    expect(container.textContent).not.toContain('log line 200');
+  });
+
   it('colors API timestamps and container metadata only when showing all containers', async () => {
     (GetPodContainers as unknown as ViMock).mockResolvedValue(['app', 'sidecar']);
     seedLogSnapshot(

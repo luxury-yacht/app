@@ -260,6 +260,25 @@
   -ms-user-select: text;
 }
 
+.pod-logs-text.pod-logs-text--virtualized {
+  padding: 0;
+}
+
+.pod-logs-virtual-body {
+  position: relative;
+}
+
+.pod-logs-virtual-inner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+}
+
+.pod-log-row {
+  padding-bottom: 0.1rem;
+}
+
 /* No wrap mode - disable text wrapping */
 .pod-logs-text.no-wrap .pod-log-line {
   white-space: pre;
@@ -276,12 +295,11 @@
   /* Create hanging indent: first line flush left, wrapped lines indented */
   padding-left: 1rem;
   text-indent: -1rem;
-  /* Add small spacing between log lines for clarity */
-  margin-bottom: 0.1rem;
   user-select: text;
   -webkit-user-select: text;
   -moz-user-select: text;
   -ms-user-select: text;
+  contain: layout paint;
 }
 
 .pod-log-line .pod-log-metadata {
