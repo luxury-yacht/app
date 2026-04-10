@@ -793,9 +793,7 @@ describe('LogViewer active pod synchronisation', () => {
     await flushAsync();
 
     await waitForText(container, 'No logs match the filter');
-    expect(container.querySelector('.pod-logs-count')?.textContent?.trim()).toBe(
-      '0 logs match filters'
-    );
+    expect(container.querySelector('.pod-logs-count')?.textContent?.trim()).toBe('0 matching logs');
   });
 
   it('virtualizes large raw log buffers instead of rendering every row at once', async () => {
@@ -1492,6 +1490,47 @@ describe('LogViewer active pod synchronisation', () => {
     expect(container.textContent).toContain('steady state');
     expect(container.textContent).not.toContain('panic in worker');
     expect(container.textContent).not.toContain('timeout waiting on cache');
+  });
+
+  it('allows highlight and inverse toggles before any text filter is entered', async () => {
+    seedLogSnapshot([
+      {
+        pod: 'web-1',
+        container: 'app',
+        line: 'steady state',
+        timestamp: '2024-05-01T11:00:00Z',
+        isInit: false,
+      },
+    ]);
+
+    await renderViewer();
+
+    const highlightButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Highlight matches from the current text filter"]'
+    );
+    const inverseButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Show only logs that do not contain the current text filter"]'
+    );
+
+    expect(highlightButton).toBeTruthy();
+    expect(inverseButton).toBeTruthy();
+
+    await act(async () => {
+      highlightButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(highlightButton?.getAttribute('aria-pressed')).toBe('true');
+    expect(highlightButton?.hasAttribute('disabled')).toBe(false);
+
+    await act(async () => {
+      inverseButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(inverseButton?.getAttribute('aria-pressed')).toBe('true');
+    expect(highlightButton?.getAttribute('aria-pressed')).toBe('false');
+    expect(highlightButton?.hasAttribute('disabled')).toBe(true);
   });
 
   it('shows previous log message when toggled with no data', async () => {

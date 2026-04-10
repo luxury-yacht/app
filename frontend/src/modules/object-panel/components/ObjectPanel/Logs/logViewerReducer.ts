@@ -221,19 +221,13 @@ export function logViewerReducer(state: LogViewerState, action: LogViewerAction)
       return {
         ...state,
         textFilter: action.payload,
-        highlightMatches: action.payload.trim() ? state.highlightMatches : false,
-        inverseMatches: action.payload.trim() ? state.inverseMatches : false,
       };
     case 'TOGGLE_HIGHLIGHT_MATCHES':
       return {
         ...state,
-        highlightMatches:
-          state.textFilter.trim() && !state.inverseMatches ? !state.highlightMatches : false,
+        highlightMatches: !state.inverseMatches ? !state.highlightMatches : false,
       };
     case 'TOGGLE_INVERSE_MATCHES':
-      if (!state.textFilter.trim()) {
-        return { ...state, inverseMatches: false, highlightMatches: false };
-      }
       return {
         ...state,
         inverseMatches: !state.inverseMatches,
