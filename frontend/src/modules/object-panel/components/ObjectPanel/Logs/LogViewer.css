@@ -358,7 +358,7 @@
   color: var(--log-text-primary);
   font-size: var(--font-size-mono);
   line-height: 1.5;
-  padding: 0.5rem;
+  padding: 0 0.5rem;
   user-select: text;
   -webkit-user-select: text;
   -moz-user-select: text;
@@ -366,7 +366,7 @@
 }
 
 .pod-logs-text.pod-logs-text--virtualized {
-  padding: 0;
+  padding: 0 0.5rem;
 }
 
 .pod-logs-virtual-body {
