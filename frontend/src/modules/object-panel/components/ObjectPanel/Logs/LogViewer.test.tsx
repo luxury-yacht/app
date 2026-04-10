@@ -478,7 +478,7 @@ describe('LogViewer active pod synchronisation', () => {
     expect(mockModules.orchestrator.restartStreamingDomain).not.toHaveBeenCalled();
   });
 
-  it('renders backend warning banners from fallback/manual log responses', async () => {
+  it('does not render backend warning banners from fallback/manual log responses', async () => {
     seedLogSnapshot(
       [
         {
@@ -518,12 +518,12 @@ describe('LogViewer active pod synchronisation', () => {
     });
     await flushAsync();
 
-    expect(container.textContent).toContain(
+    expect(container.textContent).not.toContain(
       'Showing logs for 24 of 25 pod/container targets. Refine filters to view more.'
     );
   });
 
-  it('renders transport-drop warnings distinctly from active source filters', async () => {
+  it('does not render transport-drop warnings as banners', async () => {
     const panelId = 'obj:test:deployment:team-a:api';
     setLogViewerPrefs(panelId, {
       selectedContainer: '',
@@ -569,9 +569,9 @@ describe('LogViewer active pod synchronisation', () => {
     }));
 
     await renderViewer({ activePodNames: ['web-1'], isActive: false, panelId });
-    await waitForText(container, 'These lines were not intentionally filtered.');
+    await flushAsync();
 
-    expect(container.textContent).toContain(
+    expect(container.textContent).not.toContain(
       'Live log stream dropped one or more log entries due to client backlog. These lines were not intentionally filtered.'
     );
   });

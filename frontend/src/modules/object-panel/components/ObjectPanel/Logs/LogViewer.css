@@ -311,36 +311,6 @@
   color: var(--color-error, #dc3545);
 }
 
-.pod-logs-fallback-banner {
-  margin: 0.5rem 0.75rem 0;
-  padding: 0.5rem 0.75rem;
-  border-radius: var(--border-radius-sm);
-  border: 1px solid var(--color-warning-border);
-  background: var(--color-warning-bg);
-  color: var(--status-warning-text);
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  flex-wrap: wrap;
-}
-
-.pod-logs-fallback-banner .pod-logs-fallback-retry {
-  padding: 4px 12px;
-  border-radius: var(--border-radius-round, 16px);
-  border: 1px solid var(--color-warning-border);
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-  font-size: var(--font-size-normal, 14px);
-  transition:
-    background 0.2s ease,
-    color 0.2s ease;
-}
-
-.pod-logs-fallback-banner .pod-logs-fallback-retry:hover {
-  background: rgba(255, 193, 7, 0.2);
-}
-
 /* Custom scrollbar for logs content */
 .pod-logs-content::-webkit-scrollbar {
   width: 8px;

@@ -267,7 +267,6 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     parsedLogs,
     expandedRows,
     fallbackActive,
-    fallbackError,
     showPreviousLogs,
     isLoadingPreviousLogs,
   } = state;
@@ -405,17 +404,11 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   // sequence 1 = connected event, sequence >= 2 = initial logs received (may be empty)
   const snapshotSequence = logScope ? (logSnapshot.data?.sequence ?? 0) : 0;
   const hasReceivedInitialLogs = snapshotSequence >= 2;
-  // True once LogStreamManager has had to drop the front of the buffer
-  // to stay under MAX_BUFFER_SIZE. Exposed via the buildStats wrapper on
-  // the scoped snapshot.
-  const bufferLimitReached = Boolean(logSnapshot.stats?.truncated);
   const logWarnings = (logSnapshot.stats?.warnings ?? []).filter(
     (warning) => typeof warning === 'string' && warning.trim().length > 0
   );
 
   const displayError = snapshotError && !isLogDataUnavailable(snapshotError) ? snapshotError : null;
-  const fallbackDisplayError =
-    fallbackError && !isLogDataUnavailable(fallbackError) ? fallbackError : null;
   const transientStreamError = displayError
     ? [
         'log stream connection lost',
@@ -1035,6 +1028,11 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   );
 
   const hasCopyableContent = isParsedView ? parsedLogs.length > 0 : filteredEntries.length > 0;
+  const totalLogCount = logSnapshot.stats?.totalItems ?? logEntries.length;
+  const displayedLogCount = filteredEntries.length;
+  const countLabel = `${displayedLogCount} of ${totalLogCount}`;
+  const countTitle =
+    logWarnings.length > 0 ? `${countLabel} logs. ${logWarnings.join(' ')}` : `${countLabel} logs`;
 
   useEffect(() => {
     if (displayMode !== 'raw' && !canParseLogs) {
@@ -1702,41 +1700,11 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
               }
             />
 
-            <span
-              className="pod-logs-count"
-              title={
-                bufferLimitReached
-                  ? filteredEntries.length === logEntries.length
-                    ? `${logEntries.length} logs (buffer limit reached — older entries dropped)`
-                    : `${filteredEntries.length} of ${logEntries.length} logs (buffer limit reached — older entries dropped)`
-                  : filteredEntries.length === logEntries.length
-                    ? `${logEntries.length} logs`
-                    : `${filteredEntries.length} of ${logEntries.length} logs`
-              }
-            >
-              {filteredEntries.length === logEntries.length
-                ? `${logEntries.length} logs`
-                : `${filteredEntries.length} of ${logEntries.length} logs`}
-              {bufferLimitReached ? ' (max)' : ''}
+            <span className="pod-logs-count" title={countTitle}>
+              {countLabel}
             </span>
           </div>
         </div>
-
-        {fallbackActive && (
-          <div className="pod-logs-fallback-banner">
-            <span>
-              Streaming unavailable
-              {fallbackDisplayError ? `: ${fallbackDisplayError}` : ''}. Showing fallback updates
-              {autoRefresh ? ' every 2s' : ''}. Retrying connection automatically…
-            </span>
-          </div>
-        )}
-
-        {logWarnings.length > 0 && (
-          <div className="pod-logs-fallback-banner" role="status">
-            <span>{logWarnings.join(' ')}</span>
-          </div>
-        )}
 
         <div className="pod-logs-content" ref={logsContentRef}>
           {isParsedView ? (
