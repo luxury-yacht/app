@@ -1032,7 +1032,7 @@ describe('LogViewer active pod synchronisation', () => {
     );
     expect(containerSelect).toBeTruthy();
     const optionLabels = Array.from(containerSelect?.options ?? []).map((option) => option.text);
-    expect(optionLabels).toContain('Init Containers');
+    expect(optionLabels).not.toContain('Init Containers');
     expect(optionLabels).toContain('Containers');
     expect(optionLabels).toContain('debug-abc (debug)');
   });

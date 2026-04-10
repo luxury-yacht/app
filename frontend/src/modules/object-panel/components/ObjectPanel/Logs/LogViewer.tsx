@@ -879,7 +879,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
           }))
           .sort((left, right) => left.label.localeCompare(right.label));
 
-    if (isWorkload || containers.length > 0) {
+    if (initContainerOptions.length > 0) {
       options.push({
         value: '_init_containers_header',
         label: 'Init Containers',
