@@ -760,6 +760,8 @@ describe('LogViewer active pod synchronisation', () => {
 
     await renderViewer({ activePodNames: ['web-1', 'web-2'] });
 
+    expect(container.querySelector('.pod-logs-count')).toBeNull();
+
     const rowElements = Array.from(container.querySelectorAll('.pod-log-line'));
     expect(rowElements).toHaveLength(2);
     const lines = rowElements.map((el) => el.textContent?.replace(/\s+/g, ' ').trim());
@@ -785,6 +787,9 @@ describe('LogViewer active pod synchronisation', () => {
     await flushAsync();
 
     await waitForText(container, 'No logs match the filter');
+    expect(container.querySelector('.pod-logs-count')?.textContent?.trim()).toBe(
+      '0 logs match filters'
+    );
   });
 
   it('virtualizes large raw log buffers instead of rendering every row at once', async () => {

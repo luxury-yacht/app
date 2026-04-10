@@ -1059,11 +1059,10 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     () => rawLogEntries.some((entry) => containsAnsi(entry.line)),
     [rawLogEntries]
   );
-  const totalLogCount = logSnapshot.stats?.totalItems ?? logEntries.length;
+  const hasActiveResultFilter = selectedFilters.length > 0 || textFilter.trim().length > 0;
   const displayedLogCount = filteredEntries.length;
-  const countLabel = `${displayedLogCount} of ${totalLogCount}`;
-  const countTitle =
-    logWarnings.length > 0 ? `${countLabel} logs. ${logWarnings.join(' ')}` : `${countLabel} logs`;
+  const countLabel = `${displayedLogCount} log${displayedLogCount === 1 ? '' : 's'} match filters`;
+  const countTitle = countLabel;
 
   const {
     shouldVirtualize: shouldVirtualizeRawLogs,
@@ -1863,9 +1862,11 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
               }
             />
 
-            <span className="pod-logs-count" title={countTitle}>
-              {countLabel}
-            </span>
+            {hasActiveResultFilter && (
+              <span className="pod-logs-count" title={countTitle}>
+                {countLabel}
+              </span>
+            )}
           </div>
         </div>
 
