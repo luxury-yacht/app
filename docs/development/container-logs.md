@@ -24,7 +24,7 @@ Both paths share the same core target-resolution behavior:
 - resolve matching pods for that pod or workload
 - enumerate regular, init, and ephemeral containers
 - include all container states by default
-- optionally narrow to one exact container when the current UI selects exactly one container in single-pod mode
+- apply explicit pod/container selections from the current Object Panel tab before target caps
 - apply deterministic target ordering
 - enforce target caps and emit warnings when the result is degraded
 
@@ -39,6 +39,7 @@ Each entry contains:
 - `container`
 - `line`
 - `isInit`
+- `isEphemeral`
 
 The frontend derives everything else from that payload.
 
@@ -69,8 +70,8 @@ Current fetch behavior:
 
 The backend protects log fan-out in two places:
 
-- per-scope cap: `24` resolved pod/container targets
-- global cap: `72` resolved pod/container targets across all active scopes
+- per-scope cap: `100` resolved pod/container targets
+- global cap: `200` resolved pod/container targets across all active scopes
 
 Selection is deterministic:
 
@@ -80,7 +81,7 @@ Selection is deterministic:
 
 When a cap is hit, the backend emits a warning such as:
 
-- `Showing logs for 24 of 25 pod/container targets. Refine filters to view more.`
+- `Showing logs for 100 of 125 pod/container targets. Refine filters to view more.`
 
 The global limiter is shared across clusters and rebalances capacity so one cluster does not monopolize the full budget.
 
@@ -144,8 +145,9 @@ Notes:
 - the `Pods` section is omitted for single-pod logs
 - the `Init Containers` header is omitted when there are no init containers
 - `Select all` / `Select none` come from the shared multi-select dropdown component
-- selected pod/container filters currently narrow results in the frontend viewer
-- the only backend narrowing used by the current UI is exact single-container selection in single-pod mode
+- selected pod/container filters are sent to both live streaming and manual fetch
+- backend target resolution applies those selections before per-tab/global caps
+- this means narrowing the selector can reveal pods/containers that were previously excluded by the cap
 
 ### Search model
 
@@ -298,13 +300,3 @@ The frontend intentionally preserves per-tab log state across transient remounts
 ### 5. The current UI is intentionally simpler than the backend contract
 
 The backend still supports more source-side filter knobs than the Object Panel exposes. That is deliberate. If you add new UI controls, document clearly whether they are frontend-only narrowing or true backend-side target reduction.
-
-### 6. Tech debt: workload selector narrowing is still mostly client-side
-
-The current grouped `All Logs` selector is not a full source-side workload selector yet.
-
-- workload pod/init/container selections mostly narrow the visible result set in the frontend
-- the current backend stream/fetch narrowing used by the Object Panel is limited to exact single-container selection in single-pod mode
-- as a result, workload fan-out, target-cap warnings, and backend load can still reflect the broader workload even when the UI appears narrowly filtered
-
-If this selector is expanded further, the next cleanup step is to make workload pod/container selections participate in backend target resolution rather than only post-transport filtering.
