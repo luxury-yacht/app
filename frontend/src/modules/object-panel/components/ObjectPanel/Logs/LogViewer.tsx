@@ -1004,7 +1004,13 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       if (unavailableLogMessage) {
         return [unavailableLogMessage];
       }
-      return [textFilter.trim() ? 'No logs match the filter' : 'No logs available'];
+      return [
+        textFilter.trim()
+          ? 'No logs match the filter'
+          : showPreviousLogs
+            ? 'No previous logs found'
+            : 'No logs available',
+      ];
     }
 
     return filteredEntries.map((entry) => {
@@ -1049,6 +1055,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     isWorkload,
     singlePodSelectableContainerCount,
     showAnsiColors,
+    showPreviousLogs,
     selectedContainerFilterCount,
     textFilter,
     timestampMode,

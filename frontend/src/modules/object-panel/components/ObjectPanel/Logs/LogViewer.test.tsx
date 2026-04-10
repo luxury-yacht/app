@@ -1613,12 +1613,12 @@ describe('LogViewer active pod synchronisation', () => {
       activePodNames: ['api'],
     });
 
-    const previousShortcut = getLatestShortcut('x');
+    const previousShortcut = getLatestShortcut('v');
     await act(async () => {
       expect(previousShortcut?.handler()).toBe(true);
       await Promise.resolve();
     });
-    await waitForText(container, 'No logs available');
+    await waitForText(container, 'No previous logs found');
   });
 
   it('renders loading state when resource metadata is missing', async () => {
