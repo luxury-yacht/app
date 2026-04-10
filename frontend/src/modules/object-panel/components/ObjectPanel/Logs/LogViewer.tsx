@@ -25,6 +25,7 @@ import {
   PreviousLogsIcon,
   TimestampIcon,
   WrapTextIcon,
+  AnsiColorIcon,
   CopyIcon,
   ParseJsonIcon,
   PrettyJsonIcon,
@@ -53,6 +54,7 @@ import {
   setLogViewerPrefs,
   setLogViewerScrollTop,
 } from './logViewerPrefsCache';
+import { containsAnsi, parseAnsiTextSegments, stripAnsi } from './ansi';
 import { buildStablePodColorMap } from './podColors';
 import { setLogStreamScopeParams } from './logStreamScopeParamsCache';
 import { INACTIVE_SCOPE } from '../constants';
@@ -219,7 +221,7 @@ const buildHighlightRegex = (searchText: string, regexMode: boolean): RegExp | n
 
 const tryParseJSONObject = (line: string): Record<string, unknown> | null => {
   try {
-    const parsed = JSON.parse(line);
+    const parsed = JSON.parse(stripAnsi(line));
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
       return null;
     }
@@ -258,6 +260,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     autoRefresh,
     timestampMode,
     wrapText,
+    showAnsiColors,
     textFilter,
     highlightMatches,
     inverseMatches,
@@ -293,6 +296,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     state.autoRefresh,
     state.timestampMode,
     state.wrapText,
+    state.showAnsiColors,
     state.textFilter,
     state.highlightMatches,
     state.inverseMatches,
@@ -976,16 +980,17 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
 
     return filteredEntries.map((entry) => {
       const parsed = tryParseJSONObject(entry.line);
+      const normalizedLine = showAnsiColors ? entry.line : stripAnsi(entry.line);
       const lineContent =
         displayMode === 'structured'
           ? parsed
             ? JSON.stringify(parsed)
-            : entry.line
+            : normalizedLine
           : displayMode === 'pretty'
             ? parsed
               ? JSON.stringify(parsed, null, 2)
-              : entry.line
-            : entry.line;
+              : normalizedLine
+            : normalizedLine;
       const timestamp = formatTimestampForMode(entry.timestamp ?? '', timestampMode);
       const timestampPrefix = timestamp ? `[${timestamp}] ` : '';
 
@@ -1014,6 +1019,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     isPendingLogs,
     isWorkload,
     singlePodSelectableContainerCount,
+    showAnsiColors,
     selectedContainerFilterCount,
     textFilter,
     timestampMode,
@@ -1028,6 +1034,10 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   );
 
   const hasCopyableContent = isParsedView ? parsedLogs.length > 0 : filteredEntries.length > 0;
+  const hasAnsiLogEntries = useMemo(
+    () => rawLogEntries.some((entry) => containsAnsi(entry.line)),
+    [rawLogEntries]
+  );
   const totalLogCount = logSnapshot.stats?.totalItems ?? logEntries.length;
   const displayedLogCount = filteredEntries.length;
   const countLabel = `${displayedLogCount} of ${totalLogCount}`;
@@ -1102,6 +1112,33 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       return nodes;
     },
     [highlightRegex]
+  );
+
+  const renderMessageContent = useCallback(
+    (text: string, keyPrefix: string) => {
+      const normalizedText = showAnsiColors ? text : stripAnsi(text);
+      if (!showAnsiColors || !containsAnsi(text)) {
+        return renderHighlightedMessage(normalizedText, keyPrefix);
+      }
+
+      const segments = parseAnsiTextSegments(text);
+      if (segments.length === 0) {
+        return renderHighlightedMessage(stripAnsi(text), keyPrefix);
+      }
+
+      return segments.map((segment, index) => {
+        const content = renderHighlightedMessage(segment.text, `${keyPrefix}-${index}`);
+        if (Object.keys(segment.style).length === 0) {
+          return <React.Fragment key={`${keyPrefix}-plain-${index}`}>{content}</React.Fragment>;
+        }
+        return (
+          <span key={`${keyPrefix}-ansi-${index}`} style={segment.style}>
+            {content}
+          </span>
+        );
+      });
+    },
+    [renderHighlightedMessage, showAnsiColors]
   );
 
   // Schedule copy feedback reset, cancelling any prior pending timer
@@ -1655,6 +1692,19 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                     title: 'Wrap text (W)',
                     disabled: isParsedView,
                   },
+                  ...(hasAnsiLogEntries
+                    ? [
+                        {
+                          type: 'toggle' as const,
+                          id: 'ansiColors',
+                          icon: <AnsiColorIcon />,
+                          active: showAnsiColors,
+                          onClick: () => dispatch({ type: 'TOGGLE_SHOW_ANSI_COLORS' }),
+                          title: 'ANSI colors',
+                          disabled: isParsedView,
+                        },
+                      ]
+                    : []),
                   {
                     type: 'toggle',
                     id: 'prettyJson',
@@ -1742,8 +1792,10 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                       );
                       if (match) {
                         const [, pod, container, logLine] = match;
-                        // Extract timestamp if present
-                        const timestampMatch = line.match(/^(\[[^\]]+\]\s*)/);
+                        // Extract only a real timestamp prefix; when timestamps
+                        // are hidden the line starts with [pod/container], and a
+                        // looser bracket match would duplicate that label.
+                        const timestampMatch = line.match(/^(\[\d{4}-\d{2}-\d{2}T[^\]]+\]\s*)/);
                         const timestamp = timestampMatch ? timestampMatch[1] : '';
                         const podColor = podColors[pod] || podColors['__fallback__'];
 
@@ -1763,10 +1815,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                             >
                               [{pod}/{container}]
                             </span>
-                            <span>
-                              {' '}
-                              {renderHighlightedMessage(logLine, `workload-${entryKey}`)}
-                            </span>
+                            <span> {renderMessageContent(logLine, `workload-${entryKey}`)}</span>
                           </div>
                         );
                       }
@@ -1802,7 +1851,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                             {showContainerMeta && (
                               <span className="pod-log-metadata">[{containerLabel}]</span>
                             )}
-                            <span> {renderHighlightedMessage(remainder, `pod-${entryKey}`)}</span>
+                            <span> {renderMessageContent(remainder, `pod-${entryKey}`)}</span>
                           </div>
                         );
                       }
@@ -1810,7 +1859,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
 
                     return (
                       <div key={entryKey} className="pod-log-line">
-                        {renderHighlightedMessage(line, `line-${entryKey}`)}
+                        {renderMessageContent(line, `line-${entryKey}`)}
                       </div>
                     );
                   })

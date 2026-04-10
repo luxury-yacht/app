@@ -813,6 +813,82 @@ describe('LogViewer active pod synchronisation', () => {
     expect(container.textContent).toContain('2024-05-01T11:00:00.123Z');
   });
 
+  it('does not duplicate the workload pod/container label when timestamps are hidden', async () => {
+    seedLogSnapshot([
+      {
+        pod: 'web-1',
+        container: 'app',
+        line: 'matched log',
+        timestamp: '2024-05-01T10:00:00Z',
+        isInit: false,
+      },
+    ]);
+
+    await renderViewer({ activePodNames: ['web-1'], panelId: 'obj:test:deployment:team-a:api' });
+
+    const timestampButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="API timestamps (T)"]'
+    );
+    expect(timestampButton).toBeTruthy();
+
+    await act(async () => {
+      timestampButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    const line = container.querySelector('.pod-log-line')?.textContent?.replace(/\s+/g, ' ').trim();
+    expect(line).toBe('[web-1/app] matched log');
+  });
+
+  it('only shows the ANSI colors button when the current logs contain ANSI codes', async () => {
+    await renderViewer();
+
+    expect(container.querySelector('button[aria-label="ANSI colors"]')).toBeNull();
+  });
+
+  it('renders ANSI-colored segments by default and strips them when disabled', async () => {
+    (GetPodContainers as unknown as ViMock).mockResolvedValue(['app']);
+    seedLogSnapshot(
+      [
+        {
+          pod: 'api',
+          container: 'app',
+          line: '\u001b[2m2026-04-07T04:10:44.787377Z\u001b[0m \u001b[32mINFO\u001b[0m GuardDuty agent started',
+          timestamp: '2026-04-07T04:10:44.787377Z',
+          isInit: false,
+        },
+      ],
+      buildLogScope('team-a:pod:api')
+    );
+
+    await renderViewer({
+      resourceKind: 'Pod',
+      resourceName: 'api',
+      activePodNames: ['api'],
+      panelId: 'obj:test:pod:team-a:api',
+    });
+    await waitForMockCalls(GetPodContainers as unknown as ViMock, 1);
+    await flushAsync();
+
+    const ansiButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="ANSI colors"]'
+    );
+    expect(ansiButton).toBeTruthy();
+    expect(ansiButton?.getAttribute('aria-pressed')).toBe('true');
+    expect(container.textContent).toContain('INFO GuardDuty agent started');
+    expect(container.textContent).not.toContain('\u001b[');
+    expect(container.querySelector('.pod-log-line span[style*="color"]')).toBeTruthy();
+
+    await act(async () => {
+      ansiButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(ansiButton?.getAttribute('aria-pressed')).toBe('false');
+    expect(container.textContent).toContain('INFO GuardDuty agent started');
+    expect(container.querySelector('.pod-log-line span[style*="color"]')).toBeNull();
+  });
+
   it('auto-selects the only container for single pod logs', async () => {
     (GetPodContainers as unknown as ViMock).mockResolvedValue(['app']);
     seedLogSnapshot(

@@ -41,6 +41,7 @@ export interface LogViewerState {
   autoRefresh: boolean;
   timestampMode: LogTimestampMode;
   wrapText: boolean;
+  showAnsiColors: boolean;
   textFilter: string;
   highlightMatches: boolean;
   inverseMatches: boolean;
@@ -75,6 +76,7 @@ export type LogViewerAction =
   | { type: 'CYCLE_TIMESTAMP_MODE' }
   | { type: 'SET_TIMESTAMP_MODE'; payload: LogTimestampMode }
   | { type: 'TOGGLE_WRAP_TEXT' }
+  | { type: 'TOGGLE_SHOW_ANSI_COLORS' }
   | { type: 'SET_TEXT_FILTER'; payload: string }
   | { type: 'TOGGLE_HIGHLIGHT_MATCHES' }
   | { type: 'TOGGLE_INVERSE_MATCHES' }
@@ -114,6 +116,7 @@ export const initialLogViewerState: LogViewerState = {
   autoRefresh: true,
   timestampMode: 'default',
   wrapText: true,
+  showAnsiColors: true,
   textFilter: '',
   highlightMatches: false,
   inverseMatches: false,
@@ -146,6 +149,7 @@ export const extractLogViewerPrefs = (state: LogViewerState): LogViewerPrefs => 
   timestampMode: state.timestampMode,
   showTimestamps: state.timestampMode !== 'hidden',
   wrapText: state.wrapText,
+  showAnsiColors: state.showAnsiColors,
   textFilter: state.textFilter,
   highlightMatches: state.highlightMatches,
   inverseMatches: state.inverseMatches,
@@ -171,6 +175,7 @@ export const applyLogViewerPrefs = (
   autoRefresh: prefs.autoRefresh,
   timestampMode: prefs.timestampMode ?? (prefs.showTimestamps ? 'default' : 'hidden'),
   wrapText: prefs.wrapText,
+  showAnsiColors: prefs.showAnsiColors ?? true,
   textFilter: prefs.textFilter,
   highlightMatches: prefs.highlightMatches ?? false,
   inverseMatches: prefs.inverseMatches ?? false,
@@ -210,6 +215,8 @@ export function logViewerReducer(state: LogViewerState, action: LogViewerAction)
       return { ...state, timestampMode: action.payload };
     case 'TOGGLE_WRAP_TEXT':
       return { ...state, wrapText: !state.wrapText };
+    case 'TOGGLE_SHOW_ANSI_COLORS':
+      return { ...state, showAnsiColors: !state.showAnsiColors };
     case 'SET_TEXT_FILTER':
       return {
         ...state,

@@ -7,6 +7,7 @@
 import { useMemo } from 'react';
 import type { ObjectLogEntry } from '@/core/refresh/types';
 import type { ParsedLogEntry } from '../logViewerReducer';
+import { stripAnsi } from '../ansi';
 
 interface UseLogFilteringParams {
   logEntries: ObjectLogEntry[];
@@ -127,9 +128,10 @@ export function useLogFiltering({
         return [] as ObjectLogEntry[];
       }
       entries = entries.filter((entry) => {
+        const lineText = stripAnsi(entry.line);
         const lineMatches = regex
-          ? regex.test(entry.line)
-          : entry.line.toLowerCase().includes(searchText);
+          ? regex.test(lineText)
+          : lineText.toLowerCase().includes(searchText);
         const podMatches = regex
           ? regex.test(entry.pod ?? '')
           : entry.pod?.toLowerCase().includes(searchText) || false;
@@ -151,7 +153,8 @@ export function useLogFiltering({
     const parsed: ParsedLogEntry[] = [];
     filteredEntries.forEach((entry, index) => {
       try {
-        const jsonData = JSON.parse(entry.line);
+        const normalizedLine = stripAnsi(entry.line);
+        const jsonData = JSON.parse(normalizedLine);
         // Only accept non-empty plain objects (reject arrays, primitives, null, {})
         if (
           typeof jsonData !== 'object' ||
@@ -163,7 +166,7 @@ export function useLogFiltering({
         }
         parsed.push({
           data: jsonData,
-          rawLine: entry.line,
+          rawLine: normalizedLine,
           lineNumber: index + 1,
           timestamp: entry.timestamp,
           pod: isWorkload ? entry.pod : undefined,

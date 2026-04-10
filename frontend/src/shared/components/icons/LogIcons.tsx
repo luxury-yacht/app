@@ -112,6 +112,31 @@ export const WrapTextIcon: React.FC<IconProps> = ({
   </svg>
 );
 
+/** Palette / ANSI — render terminal color codes */
+export const AnsiColorIcon: React.FC<IconProps> = ({
+  width = 18,
+  height = 18,
+  fill = 'currentColor',
+}) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    width={width}
+    height={height}
+    fill="none"
+    stroke={fill}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    strokeWidth={1.8}
+  >
+    <path d="M12 3.5c4.97 0 9 4.03 9 9c0 3.59-2.11 6.7-5.16 8.14c-1.14.54-2.34-.35-2.23-1.6l.09-1c.08-.91-.63-1.69-1.54-1.69H10a5.5 5.5 0 0 1 0-11z" />
+    <circle cx="7.5" cy="10" r="1" fill={fill} stroke="none" />
+    <circle cx="10.5" cy="7.5" r="1" fill={fill} stroke="none" />
+    <circle cx="14.5" cy="7.8" r="1" fill={fill} stroke="none" />
+    <circle cx="16.8" cy="11.3" r="1" fill={fill} stroke="none" />
+  </svg>
+);
+
 /** Curly braces with document — JSON / structured data parsing */
 export const ParseJsonIcon: React.FC<IconProps> = ({
   width = 20,

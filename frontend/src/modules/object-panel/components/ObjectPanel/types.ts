@@ -164,6 +164,7 @@ export interface LogViewerPrefs {
   timestampMode: LogTimestampMode;
   showTimestamps: boolean;
   wrapText: boolean;
+  showAnsiColors?: boolean;
   textFilter: string;
   highlightMatches: boolean;
   inverseMatches: boolean;
