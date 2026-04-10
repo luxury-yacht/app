@@ -1062,6 +1062,18 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       });
     }
 
+    if (showPreviousLogs) {
+      chips.push({
+        key: 'previous-logs',
+        label: 'Showing previous logs',
+        title: 'Return to live logs',
+        onRemove: () => {
+          dispatch({ type: 'STOP_PREVIOUS_LOGS' });
+          hasPrimedScopeRef.current = false;
+        },
+      });
+    }
+
     selectedFilters.forEach((filterValue) => {
       const label = formatSelectedFilterLabel(filterValue, selectorOptionLabelsByValue);
       chips.push({
@@ -1122,11 +1134,16 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     regexMatches,
     selectedFilters,
     selectorOptionLabelsByValue,
+    showPreviousLogs,
     textFilter,
   ]);
   const handleClearAllFilters = useCallback(() => {
     dispatch({ type: 'SET_TEXT_FILTER', payload: '' });
     dispatch({ type: 'SET_SELECTED_FILTERS', payload: [] });
+    if (showPreviousLogs) {
+      dispatch({ type: 'STOP_PREVIOUS_LOGS' });
+      hasPrimedScopeRef.current = false;
+    }
     if (highlightMatches) {
       dispatch({ type: 'TOGGLE_HIGHLIGHT_MATCHES' });
     }
@@ -1139,7 +1156,14 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     if (regexMatches) {
       dispatch({ type: 'TOGGLE_REGEX_MATCHES' });
     }
-  }, [caseSensitiveMatches, dispatch, highlightMatches, inverseMatches, regexMatches]);
+  }, [
+    caseSensitiveMatches,
+    dispatch,
+    highlightMatches,
+    inverseMatches,
+    regexMatches,
+    showPreviousLogs,
+  ]);
 
   useEffect(() => {
     if (selectedFilters.length === 0) {

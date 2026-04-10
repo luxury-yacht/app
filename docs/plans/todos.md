@@ -9,11 +9,6 @@
     These should stay visually distinct.
 - Make previous-logs mode more visually obvious.
   A small mode badge like Previous logs near the toolbar would help, because it is easy to forget you are not looking at live logs anymore.
-- Keep toolbar toggle semantics extremely consistent.
-  The search toggles should always follow one rule:
-  - disabled only when logically incompatible
-  - never silently no-op
-  - if one toggle disables another, the UI should make that obvious
 
 - Cursor turns to beam when dragging the app window in the header
 - Center Mac icons in header

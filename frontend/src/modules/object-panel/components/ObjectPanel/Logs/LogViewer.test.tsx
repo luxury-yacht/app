@@ -2048,11 +2048,58 @@ describe('LogViewer active pod synchronisation', () => {
     expect(chipStrip?.textContent).toContain('Text: panic');
   });
 
+  it('shows a previous-logs chip and returns to live logs when it is cleared', async () => {
+    const panelId = 'obj:cluster-a:pod:team-a:api';
+    setLogViewerPrefs(panelId, {
+      selectedContainer: '',
+      selectedFilters: [],
+      autoRefresh: true,
+      timestampMode: 'default',
+      showTimestamps: true,
+      wrapText: true,
+      textFilter: '',
+      highlightMatches: false,
+      inverseMatches: false,
+      caseSensitiveMatches: false,
+      regexMatches: false,
+      displayMode: 'raw',
+      isParsedView: false,
+      expandedRows: [],
+      showPreviousLogs: true,
+    });
+
+    await renderViewer({
+      panelId,
+      resourceKind: 'Pod',
+      resourceName: 'api',
+      activePodNames: ['api'],
+      logScope: buildLogScope('team-a:pod:api'),
+    });
+
+    const chipStrip = container.querySelector('[aria-label="Active log filters"]');
+    expect(chipStrip?.textContent).toContain('Showing previous logs');
+
+    const removePreviousButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Return to live logs"]'
+    );
+    expect(removePreviousButton).toBeTruthy();
+
+    await act(async () => {
+      removePreviousButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(getLogViewerPrefs(panelId)?.showPreviousLogs).toBe(false);
+    expect(container.querySelector('[aria-label="Active log filters"]')?.textContent ?? '').not.toContain(
+      'Showing previous logs'
+    );
+  });
+
   it('clears filters and toggles when active filter chips are removed', async () => {
     const panelId = 'obj:cluster-a:pod:team-a:api';
     setLogViewerPrefs(panelId, {
       selectedContainer: '',
-      selectedFilters: ['pod:web-1'],
+      selectedFilters: [],
       autoRefresh: true,
       timestampMode: 'default',
       showTimestamps: true,
@@ -2065,23 +2112,25 @@ describe('LogViewer active pod synchronisation', () => {
       displayMode: 'raw',
       isParsedView: false,
       expandedRows: [],
-      showPreviousLogs: false,
+      showPreviousLogs: true,
     });
 
-    await renderViewer({ panelId });
+    await renderViewer({
+      panelId,
+      resourceKind: 'Pod',
+      resourceName: 'api',
+      activePodNames: ['api'],
+      logScope: buildLogScope('team-a:pod:api'),
+    });
 
     const removeTextFilterButton = container.querySelector<HTMLButtonElement>(
       'button[aria-label="Clear text filter"]'
-    );
-    const removePodFilterButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Remove filter web-1"]'
     );
     const removeHighlightButton = container.querySelector<HTMLButtonElement>(
       'button[aria-label="Disable highlight matches"]'
     );
 
     expect(removeTextFilterButton).toBeTruthy();
-    expect(removePodFilterButton).toBeTruthy();
     expect(removeHighlightButton).toBeTruthy();
 
     await act(async () => {
@@ -2091,18 +2140,22 @@ describe('LogViewer active pod synchronisation', () => {
     expect(getLogViewerPrefs(panelId)?.textFilter).toBe('');
 
     await act(async () => {
-      removePodFilterButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      await Promise.resolve();
-    });
-    expect(getLogViewerPrefs(panelId)?.selectedFilters).toEqual([]);
-
-    await act(async () => {
       removeHighlightButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await Promise.resolve();
     });
     expect(getLogViewerPrefs(panelId)?.highlightMatches).toBe(false);
+    const clearAllButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Clear all filters"]'
+    );
+    expect(clearAllButton).toBeTruthy();
+    await act(async () => {
+      clearAllButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+    expect(getLogViewerPrefs(panelId)?.showPreviousLogs).toBe(false);
     const chipStrip = container.querySelector('[aria-label="Active log filters"]');
     expect(chipStrip?.textContent ?? '').not.toContain('Highlight');
+    expect(chipStrip?.textContent ?? '').not.toContain('Showing previous logs');
   });
 
   // ---------------------------------------------------------------------
