@@ -164,8 +164,26 @@ const formatParsedValue = (value: unknown): string => {
 };
 
 // Build a display label for a container, appending :init for init containers
-const formatContainerLabel = (container: string, isInit: boolean): string =>
-  isInit ? `${container}:init` : container;
+const formatContainerLabel = (container: string, isInit: boolean, isEphemeral: boolean): string =>
+  isInit ? `${container}:init` : isEphemeral ? `${container} (debug)` : container;
+
+const parseContainerLabel = (label: string): { name: string; isInit: boolean; isEphemeral: boolean } => {
+  if (label.endsWith(':init')) {
+    return {
+      name: label.slice(0, -':init'.length),
+      isInit: true,
+      isEphemeral: false,
+    };
+  }
+  if (label.endsWith(' (debug)')) {
+    return {
+      name: label.slice(0, -' (debug)'.length),
+      isInit: false,
+      isEphemeral: true,
+    };
+  }
+  return { name: label, isInit: false, isEphemeral: false };
+};
 
 const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const escapeCsvCell = (value: string): string =>
@@ -174,16 +192,27 @@ const escapeCsvCell = (value: string): string =>
 const POD_FILTER_PREFIX = 'pod:';
 const INIT_FILTER_PREFIX = 'init:';
 const CONTAINER_FILTER_PREFIX = 'container:';
+const DEBUG_FILTER_PREFIX = 'debug:';
 
 const isInitContainerDisplayName = (container: string): boolean => container.endsWith(' (init)');
+const isDebugContainerDisplayName = (container: string): boolean => container.endsWith(' (debug)');
 
 const toPodFilterValue = (pod: string): string => `${POD_FILTER_PREFIX}${pod}`;
 const toInitContainerFilterValue = (container: string): string =>
   `${INIT_FILTER_PREFIX}${container}`;
 const toContainerFilterValue = (container: string): string =>
   `${CONTAINER_FILTER_PREFIX}${container}`;
-const toContainerFilterValueForKind = (container: string, isInit: boolean): string =>
-  isInit ? toInitContainerFilterValue(container) : toContainerFilterValue(container);
+const toDebugContainerFilterValue = (container: string): string => `${DEBUG_FILTER_PREFIX}${container}`;
+const toContainerFilterValueForKind = (
+  container: string,
+  isInit: boolean,
+  isEphemeral: boolean
+): string =>
+  isInit
+    ? toInitContainerFilterValue(container)
+    : isEphemeral
+      ? toDebugContainerFilterValue(container)
+      : toContainerFilterValue(container);
 
 const summarizeWorkloadSelection = (
   selectedValues: string[],
@@ -201,8 +230,9 @@ const summarizeWorkloadSelection = (
   const initContainerCount = selectedValues.filter((value) =>
     value.startsWith(INIT_FILTER_PREFIX)
   ).length;
-  const containerCount = selectedValues.filter((value) =>
-    value.startsWith(CONTAINER_FILTER_PREFIX)
+  const containerCount = selectedValues.filter(
+    (value) =>
+      value.startsWith(CONTAINER_FILTER_PREFIX) || value.startsWith(DEBUG_FILTER_PREFIX)
   ).length;
   const labels: string[] = [];
 
@@ -235,6 +265,9 @@ const formatSelectedFilterLabel = (
   }
   if (filterValue.startsWith(CONTAINER_FILTER_PREFIX)) {
     return filterValue.substring(CONTAINER_FILTER_PREFIX.length);
+  }
+  if (filterValue.startsWith(DEBUG_FILTER_PREFIX)) {
+    return `${filterValue.substring(DEBUG_FILTER_PREFIX.length)} (debug)`;
   }
   return filterValue;
 };
@@ -409,7 +442,17 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       ),
     [selectedFilters]
   );
-  const selectedContainerFilterCount = selectedInitContainers.size + selectedRegularContainers.size;
+  const selectedEphemeralContainers = useMemo(
+    () =>
+      new Set(
+        selectedFilters
+          .filter((filterValue) => filterValue.startsWith(DEBUG_FILTER_PREFIX))
+          .map((filterValue) => filterValue.substring(DEBUG_FILTER_PREFIX.length))
+      ),
+    [selectedFilters]
+  );
+  const selectedContainerFilterCount =
+    selectedInitContainers.size + selectedRegularContainers.size + selectedEphemeralContainers.size;
   const handleSelectPodFilter = useCallback(
     (pod: string) => {
       const preservedContainerFilters = selectedFilters.filter(
@@ -423,13 +466,16 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     [dispatch, selectedFilters]
   );
   const handleSelectContainerFilter = useCallback(
-    (container: string, isInit: boolean) => {
+    (container: string, isInit: boolean, isEphemeral: boolean) => {
       const preservedPodFilters = selectedFilters.filter((filterValue) =>
         filterValue.startsWith(POD_FILTER_PREFIX)
       );
       dispatch({
         type: 'SET_SELECTED_FILTERS',
-        payload: [...preservedPodFilters, toContainerFilterValueForKind(container, isInit)],
+        payload: [
+          ...preservedPodFilters,
+          toContainerFilterValueForKind(container, isInit, isEphemeral),
+        ],
       });
     },
     [dispatch, selectedFilters]
@@ -444,30 +490,13 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     [caseSensitiveMatches, highlightMatches, inverseMatches, regexMatches, textFilter]
   );
   const backendLogSelection = useMemo(() => {
-    const selectedContainerNames = [
-      ...Array.from(selectedInitContainers),
-      ...Array.from(selectedRegularContainers),
-    ];
-    if (isWorkload) {
-      return {
-        container: '',
-        includeInit: true,
-        includeEphemeral: true,
-      };
-    }
-    if (selectedContainerNames.length === 1) {
-      return {
-        container: selectedContainerNames[0],
-        includeInit: true,
-        includeEphemeral: true,
-      };
-    }
     return {
       container: '',
       includeInit: true,
       includeEphemeral: true,
+      selectedFilters,
     };
-  }, [isWorkload, selectedInitContainers, selectedRegularContainers]);
+  }, [selectedFilters]);
 
   // Reset state when scope changes - do this during render, not in an effect,
   // to avoid causing a re-render that would interrupt streaming startup
@@ -647,6 +676,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
           workloadName: isWorkload ? resourceName : '',
           workloadKind: isWorkload ? resourceKindKey : '',
           podName: isWorkload ? '' : podName,
+          selectedFilters: backendLogSelection.selectedFilters,
           container: backendLogSelection.container,
           includeInit: backendLogSelection.includeInit,
           includeEphemeral: backendLogSelection.includeEphemeral,
@@ -964,10 +994,22 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     options.push(...initContainerOptions);
 
     const regularContainerOptions = containers
-      .filter((container) => !isInitContainerDisplayName(container))
+      .filter(
+        (container) =>
+          !isInitContainerDisplayName(container) && !isDebugContainerDisplayName(container)
+      )
       .map((container) => ({
         value: toContainerFilterValue(getActualContainerName(container)),
         label: container.endsWith(' (debug)') ? container : getActualContainerName(container),
+        group: 'Containers',
+      }))
+      .sort((left, right) => left.label.localeCompare(right.label));
+
+    const debugContainerOptions = containers
+      .filter((container) => isDebugContainerDisplayName(container))
+      .map((container) => ({
+        value: toDebugContainerFilterValue(getActualContainerName(container)),
+        label: container,
         group: 'Containers',
       }))
       .sort((left, right) => left.label.localeCompare(right.label));
@@ -981,6 +1023,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       });
     }
     options.push(...regularContainerOptions);
+    options.push(...debugContainerOptions);
 
     return options;
   }, [containers, isWorkload, workloadPodsForSelector]);
@@ -989,7 +1032,8 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       selectorOptions.filter(
         (option) =>
           option.value.startsWith(INIT_FILTER_PREFIX) ||
-          option.value.startsWith(CONTAINER_FILTER_PREFIX)
+          option.value.startsWith(CONTAINER_FILTER_PREFIX) ||
+          option.value.startsWith(DEBUG_FILTER_PREFIX)
       ).length,
     [selectorOptions]
   );
@@ -1230,7 +1274,11 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       const timestampPrefix = timestamp ? `[${timestamp}] ` : '';
 
       if (isWorkload) {
-        const containerLabel = formatContainerLabel(entry.container, entry.isInit);
+        const containerLabel = formatContainerLabel(
+          entry.container,
+          entry.isInit,
+          Boolean(entry.isEphemeral)
+        );
         const formatted = lineContent.trim()
           ? `[${entry.pod}/${containerLabel}] ${lineContent}`
           : lineContent;
@@ -1241,7 +1289,11 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
         selectedContainerFilterCount !== 1 &&
         !(selectedContainerFilterCount === 0 && singlePodSelectableContainerCount === 1)
       ) {
-        const containerLabel = formatContainerLabel(entry.container, entry.isInit);
+        const containerLabel = formatContainerLabel(
+          entry.container,
+          entry.isInit,
+          Boolean(entry.isEphemeral)
+        );
         const formatted = lineContent.trim() ? `[${containerLabel}] ${lineContent}` : lineContent;
         return timestampPrefix + formatted;
       }
@@ -1444,10 +1496,14 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                   className="pod-log-metadata-button pod-color-text"
                   style={{ '--pod-color': podColor } as React.CSSProperties}
                   onClick={() =>
-                    handleSelectContainerFilter(
-                      container.endsWith(':init') ? container.slice(0, -':init'.length) : container,
-                      container.endsWith(':init')
-                    )
+                    (() => {
+                      const parsedContainerLabel = parseContainerLabel(container);
+                      handleSelectContainerFilter(
+                        parsedContainerLabel.name,
+                        parsedContainerLabel.isInit,
+                        parsedContainerLabel.isEphemeral
+                      );
+                    })()
                   }
                   title={`Show only logs from container ${container}`}
                   aria-label={`Show only logs from container ${container}`}
@@ -1491,12 +1547,14 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                     type="button"
                     className="pod-log-metadata-button"
                     onClick={() =>
-                      handleSelectContainerFilter(
-                        containerLabel.endsWith(':init')
-                          ? containerLabel.slice(0, -':init'.length)
-                          : containerLabel,
-                        containerLabel.endsWith(':init')
-                      )
+                      (() => {
+                        const parsedContainerLabel = parseContainerLabel(containerLabel);
+                        handleSelectContainerFilter(
+                          parsedContainerLabel.name,
+                          parsedContainerLabel.isInit,
+                          parsedContainerLabel.isEphemeral
+                        );
+                      })()
                     }
                     title={`Show only logs from container ${containerLabel}`}
                     aria-label={`Show only logs from container ${containerLabel}`}
@@ -1850,10 +1908,14 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
             }
             onClick={(event) => {
               event.stopPropagation();
-              handleSelectContainerFilter(item.container!, Boolean(item.isInit));
+              handleSelectContainerFilter(
+                item.container!,
+                Boolean(item.isInit),
+                Boolean(item.isEphemeral)
+              );
             }}
-            title={`Show only logs from container ${formatContainerLabel(item.container, Boolean(item.isInit))}`}
-            aria-label={`Show only logs from container ${formatContainerLabel(item.container, Boolean(item.isInit))}`}
+            title={`Show only logs from container ${formatContainerLabel(item.container, Boolean(item.isInit), Boolean(item.isEphemeral))}`}
+            aria-label={`Show only logs from container ${formatContainerLabel(item.container, Boolean(item.isInit), Boolean(item.isEphemeral))}`}
           >
             {item.container}
           </button>

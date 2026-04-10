@@ -109,15 +109,26 @@ export function useLogFiltering({
           .filter((filterValue) => filterValue.startsWith('container:'))
           .map((filterValue) => filterValue.substring(10))
       );
+      const selectedDebugContainers = new Set(
+        selectedFilters
+          .filter((filterValue) => filterValue.startsWith('debug:'))
+          .map((filterValue) => filterValue.substring(6))
+      );
 
       if (isWorkload && selectedPods.size > 0) {
         entries = entries.filter((entry) => selectedPods.has(entry.pod));
       }
-      if (selectedInitContainers.size > 0 || selectedContainers.size > 0) {
+      if (
+        selectedInitContainers.size > 0 ||
+        selectedContainers.size > 0 ||
+        selectedDebugContainers.size > 0
+      ) {
         entries = entries.filter((entry) =>
           entry.isInit
             ? selectedInitContainers.has(entry.container)
-            : selectedContainers.has(entry.container)
+            : entry.isEphemeral
+              ? selectedDebugContainers.has(entry.container)
+              : selectedContainers.has(entry.container)
         );
       }
     }
@@ -185,6 +196,7 @@ export function useLogFiltering({
           pod: isWorkload ? entry.pod : undefined,
           container: entry.container,
           isInit: entry.isInit,
+          isEphemeral: entry.isEphemeral,
           seq: entry._seq,
         });
       } catch {

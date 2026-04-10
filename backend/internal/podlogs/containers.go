@@ -21,6 +21,7 @@ type ContainerSelectionOptions struct {
 	IncludeInit      bool
 	IncludeEphemeral bool
 	StateFilter      ContainerStateFilter
+	Selection        ScopeSelection
 }
 
 type ContainerRef struct {
@@ -37,6 +38,17 @@ func (c ContainerRef) DisplayName() string {
 		return fmt.Sprintf("%s (debug)", c.Name)
 	default:
 		return c.Name
+	}
+}
+
+func (c ContainerRef) SelectionValue() string {
+	switch {
+	case c.IsInit:
+		return SelectedInitPrefix + c.Name
+	case c.IsEphemeral:
+		return SelectedDebugPrefix + c.Name
+	default:
+		return SelectedContainerPrefix + c.Name
 	}
 }
 
@@ -92,6 +104,9 @@ func EnumerateContainersWithOptions(pod *corev1.Pod, options ContainerSelectionO
 	var containers []ContainerRef
 
 	appendIfMatches := func(container ContainerRef) {
+		if !options.Selection.MatchContainer(container) {
+			return
+		}
 		if !isAll {
 			if MatchContainerFilter(container, filter) {
 				containers = append(containers, container)

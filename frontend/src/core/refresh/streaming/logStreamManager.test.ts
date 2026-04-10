@@ -306,7 +306,7 @@ describe('LogStreamManager', () => {
     expect(errorHandlerMock.handle).not.toHaveBeenCalled();
   });
 
-  test('startStream appends cached pod and container filters to the stream URL', async () => {
+  test('startStream appends cached selection filters to the stream URL', async () => {
     class MockEventSource {
       static instances: MockEventSource[] = [];
       listeners: Record<string, (evt?: any) => void> = {};
@@ -322,7 +322,7 @@ describe('LogStreamManager', () => {
     (globalThis as any).EventSource = MockEventSource as any;
 
     setLogStreamScopeParams(SCOPE, {
-      container: 'app',
+      selectedFilters: ['pod:web-2', 'container:app'],
     });
 
     const { LogStreamManager } = await import('./logStreamManager');
@@ -333,7 +333,7 @@ describe('LogStreamManager', () => {
     expect(MockEventSource.instances).toHaveLength(1);
     const streamURL = new URL(MockEventSource.instances[0]!.url);
     expect(streamURL.searchParams.get('scope')).toBe(SCOPE);
-    expect(streamURL.searchParams.get('container')).toBe('app');
+    expect(streamURL.searchParams.getAll('selectedFilter')).toEqual(['pod:web-2', 'container:app']);
   });
 
   test('refreshOnce rejects and marks error when the stream fails', async () => {

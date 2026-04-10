@@ -88,7 +88,7 @@ func TestSelectRuntimeTargetsKeepsPerScopeCapWhenPodsGrow(t *testing.T) {
 	if total != 2 {
 		t.Fatalf("expected total target count 2, got %d", total)
 	}
-	if keys := runtimeTargetKeys(selected); strings.Join(keys, ",") != "default/web-1/app,default/web-2/app" {
+	if keys := runtimeTargetKeys(selected); strings.Join(keys, ",") != "default/web-1/container:app,default/web-2/container:app" {
 		t.Fatalf("unexpected initial target keys: %v", keys)
 	}
 
@@ -100,7 +100,7 @@ func TestSelectRuntimeTargetsKeepsPerScopeCapWhenPodsGrow(t *testing.T) {
 	if len(selected) != 2 {
 		t.Fatalf("expected capped selection of 2 targets after pod growth, got %d", len(selected))
 	}
-	if keys := runtimeTargetKeys(selected); strings.Join(keys, ",") != "default/web-1/app,default/web-2/app" {
+	if keys := runtimeTargetKeys(selected); strings.Join(keys, ",") != "default/web-1/container:app,default/web-2/container:app" {
 		t.Fatalf("unexpected capped target keys after pod growth: %v", keys)
 	}
 }
@@ -116,7 +116,7 @@ func TestSelectRuntimeTargetsRefillsAfterPodRemoval(t *testing.T) {
 	if total != 3 {
 		t.Fatalf("expected total target count 3, got %d", total)
 	}
-	if keys := runtimeTargetKeys(selected); strings.Join(keys, ",") != "default/web-1/app,default/web-2/app" {
+	if keys := runtimeTargetKeys(selected); strings.Join(keys, ",") != "default/web-1/container:app,default/web-2/container:app" {
 		t.Fatalf("unexpected initial capped target keys: %v", keys)
 	}
 
@@ -124,7 +124,7 @@ func TestSelectRuntimeTargetsRefillsAfterPodRemoval(t *testing.T) {
 	if total != 2 {
 		t.Fatalf("expected total target count 2 after pod removal, got %d", total)
 	}
-	if keys := runtimeTargetKeys(selected); strings.Join(keys, ",") != "default/web-2/app,default/web-3/app" {
+	if keys := runtimeTargetKeys(selected); strings.Join(keys, ",") != "default/web-2/container:app,default/web-3/container:app" {
 		t.Fatalf("expected selection to refill after pod removal, got %v", keys)
 	}
 }

@@ -15,6 +15,7 @@ export interface ParsedLogEntry {
   pod?: string;
   container?: string;
   isInit?: boolean;
+  isEphemeral?: boolean;
   timestamp?: string;
   rawLine: string;
   lineNumber: number;

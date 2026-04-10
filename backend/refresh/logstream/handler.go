@@ -165,9 +165,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// tab switches/reconnect handshakes, so sending the first real
 		// snapshot with Reset=false causes the entire initial batch to be
 		// appended on remount.
-		Reset:       true,
-		Entries:     initial,
-		Warnings:    warningPayload(warnings, false),
+		Reset:    true,
+		Entries:  initial,
+		Warnings: warningPayload(warnings, false),
 	}
 	sequence++
 	if err := writeEvent(w, f, event); err != nil {
@@ -207,12 +207,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	lastDelivery := time.Now()
 
 	var (
-		batch                  []Entry
-		batchTimer             *time.Timer
-		pendingDropped         int
-		selectionWarnings      = append([]string(nil), warnings...)
-		emittedWarnings        = append([]string(nil), warnings...)
-		transportDropObserved  bool
+		batch                 []Entry
+		batchTimer            *time.Timer
+		pendingDropped        int
+		selectionWarnings     = append([]string(nil), warnings...)
+		emittedWarnings       = append([]string(nil), warnings...)
+		transportDropObserved bool
 	)
 
 	emitWarningUpdate := func() bool {
@@ -430,6 +430,7 @@ func parseOptions(r *http.Request) (Options, error) {
 	podFilter := strings.TrimSpace(r.URL.Query().Get("pod"))
 	podInclude := strings.TrimSpace(r.URL.Query().Get("podInclude"))
 	podExclude := strings.TrimSpace(r.URL.Query().Get("podExclude"))
+	selectedFilters := trimQueryValues(r.URL.Query()["selectedFilter"])
 	container := strings.TrimSpace(r.URL.Query().Get("container"))
 	includeInit := parseBoolQueryWithDefault(r, "includeInit", true)
 	includeEphemeral := parseBoolQueryWithDefault(r, "includeEphemeral", true)
@@ -453,6 +454,7 @@ func parseOptions(r *http.Request) (Options, error) {
 	if err != nil {
 		return Options{}, fmt.Errorf("invalid pod filter: %w", err)
 	}
+	selection := podlogs.ParseScopeSelection(selectedFilters)
 	return Options{
 		ClusterID: func() string {
 			if len(clusterIDs) == 1 {
@@ -466,6 +468,8 @@ func parseOptions(r *http.Request) (Options, error) {
 		PodFilter:        podFilter,
 		PodInclude:       podInclude,
 		PodExclude:       podExclude,
+		SelectedFilters:  selectedFilters,
+		Selection:        selection,
 		Container:        container,
 		IncludeInit:      includeInit,
 		IncludeEphemeral: includeEphemeral,
@@ -478,6 +482,21 @@ func parseOptions(r *http.Request) (Options, error) {
 		// Keep the original scope for client-side keying.
 		ScopeString: rawScope,
 	}, nil
+}
+
+func trimQueryValues(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	trimmed := make([]string, 0, len(values))
+	for _, value := range values {
+		next := strings.TrimSpace(value)
+		if next == "" {
+			continue
+		}
+		trimmed = append(trimmed, next)
+	}
+	return trimmed
 }
 
 func parseBoolQueryWithDefault(r *http.Request, key string, defaultValue bool) bool {

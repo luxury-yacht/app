@@ -31,6 +31,8 @@ type Options struct {
 	PodFilter        string
 	PodInclude       string
 	PodExclude       string
+	SelectedFilters  []string
+	Selection        podlogs.ScopeSelection
 	Container        string
 	IncludeInit      bool
 	IncludeEphemeral bool
@@ -45,11 +47,12 @@ type Options struct {
 
 // Entry mirrors the log line payload sent to clients.
 type Entry struct {
-	Timestamp string `json:"timestamp"`
-	Pod       string `json:"pod"`
-	Container string `json:"container"`
-	Line      string `json:"line"`
-	IsInit    bool   `json:"isInit"`
+	Timestamp   string `json:"timestamp"`
+	Pod         string `json:"pod"`
+	Container   string `json:"container"`
+	Line        string `json:"line"`
+	IsInit      bool   `json:"isInit"`
+	IsEphemeral bool   `json:"isEphemeral,omitempty"`
 }
 
 // EventPayload is the SSE message envelope emitted to clients.

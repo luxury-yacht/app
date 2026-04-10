@@ -648,6 +648,7 @@ export interface ObjectLogEntry {
   container: string;
   line: string;
   isInit: boolean;
+  isEphemeral?: boolean;
   /** Monotonically increasing sequence ID assigned by the frontend for stable rendering keys. */
   _seq?: number;
 }

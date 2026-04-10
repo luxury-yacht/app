@@ -88,32 +88,34 @@ type Theme struct {
 
 // PodLogEntry represents a single log line with metadata
 type PodLogEntry struct {
-	Timestamp string `json:"timestamp"` // RFC3339Nano format
-	Pod       string `json:"pod"`
-	Container string `json:"container"`
-	Line      string `json:"line"`
-	IsInit    bool   `json:"isInit"` // Whether this is from an init container
+	Timestamp   string `json:"timestamp"` // RFC3339Nano format
+	Pod         string `json:"pod"`
+	Container   string `json:"container"`
+	Line        string `json:"line"`
+	IsInit      bool   `json:"isInit"`                // Whether this is from an init container
+	IsEphemeral bool   `json:"isEphemeral,omitempty"` // Whether this is from an ephemeral/debug container
 }
 
 // LogFetchRequest represents parameters for fetching logs
 type LogFetchRequest struct {
-	Scope            string `json:"scope,omitempty"`
-	Namespace        string `json:"namespace"`
-	WorkloadName     string `json:"workloadName,omitempty"`
-	WorkloadKind     string `json:"workloadKind,omitempty"` // deployment, daemonset, etc.
-	PodName          string `json:"podName,omitempty"`
-	PodFilter        string `json:"podFilter,omitempty"`
-	PodInclude       string `json:"podInclude,omitempty"`
-	PodExclude       string `json:"podExclude,omitempty"`
-	Container        string `json:"container,omitempty"` // empty means all containers
-	IncludeInit      *bool  `json:"includeInit,omitempty"`
-	IncludeEphemeral *bool  `json:"includeEphemeral,omitempty"`
-	ContainerState   string `json:"containerState,omitempty"`
-	Include          string `json:"include,omitempty"`
-	Exclude          string `json:"exclude,omitempty"`
-	Previous         bool   `json:"previous"`
-	TailLines        int    `json:"tailLines"`
-	SinceSeconds     int64  `json:"sinceSeconds,omitempty"`
+	Scope            string   `json:"scope,omitempty"`
+	Namespace        string   `json:"namespace"`
+	WorkloadName     string   `json:"workloadName,omitempty"`
+	WorkloadKind     string   `json:"workloadKind,omitempty"` // deployment, daemonset, etc.
+	PodName          string   `json:"podName,omitempty"`
+	PodFilter        string   `json:"podFilter,omitempty"`
+	PodInclude       string   `json:"podInclude,omitempty"`
+	PodExclude       string   `json:"podExclude,omitempty"`
+	SelectedFilters  []string `json:"selectedFilters,omitempty"`
+	Container        string   `json:"container,omitempty"` // empty means all containers
+	IncludeInit      *bool    `json:"includeInit,omitempty"`
+	IncludeEphemeral *bool    `json:"includeEphemeral,omitempty"`
+	ContainerState   string   `json:"containerState,omitempty"`
+	Include          string   `json:"include,omitempty"`
+	Exclude          string   `json:"exclude,omitempty"`
+	Previous         bool     `json:"previous"`
+	TailLines        int      `json:"tailLines"`
+	SinceSeconds     int64    `json:"sinceSeconds,omitempty"`
 }
 
 // LogFetchResponse represents the response from LogFetcher

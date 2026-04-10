@@ -47,7 +47,7 @@ type SelectedTarget struct {
 }
 
 func (t SelectedTarget) Key() string {
-	return t.Namespace + "/" + t.PodName + "/" + t.Container.Name
+	return t.Namespace + "/" + t.PodName + "/" + t.Container.SelectionValue()
 }
 
 func SelectTargets(

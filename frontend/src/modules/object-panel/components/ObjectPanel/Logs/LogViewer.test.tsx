@@ -1271,7 +1271,7 @@ describe('LogViewer active pod synchronisation', () => {
     expect(filteredLines[0]).not.toContain('[sidecar:init]');
     expect(filteredLines[0]).toContain('init complete');
     expect(getLogStreamScopeParams(buildLogScope('team-a:pod:api'))).toEqual({
-      container: 'sidecar',
+      selectedFilters: ['init:sidecar'],
     });
     expect(mockModules.orchestrator.restartStreamingDomain).toHaveBeenCalledWith(
       'object-logs',
@@ -1329,8 +1329,7 @@ describe('LogViewer active pod synchronisation', () => {
           isInit: true,
         },
       ],
-      defaultScope,
-      { status: 'error', error: 'stream disconnected' }
+      defaultScope
     );
     await renderViewer({ activePodNames: ['web-1', 'web-2'] });
     await flushAsync();
@@ -1351,7 +1350,9 @@ describe('LogViewer active pod synchronisation', () => {
     );
     expect(filteredLines).toHaveLength(1);
     expect(filteredLines[0]).toContain('[web-1/app] matched log');
-    expect(getLogStreamScopeParams(defaultScope)).toBeUndefined();
+    expect(getLogStreamScopeParams(defaultScope)).toEqual({
+      selectedFilters: ['pod:web-1', 'container:app'],
+    });
     expect(getLogViewerPrefs('obj:test:deployment:team-a:api')?.selectedFilters).toEqual([
       'pod:web-1',
       'container:app',
@@ -1955,7 +1956,9 @@ describe('LogViewer active pod synchronisation', () => {
     );
     expect(highlightButton?.getAttribute('aria-pressed')).toBe('true');
     expect(getLogViewerPrefs(panelId)?.selectedFilters).toEqual(['pod:web-1']);
-    expect(getLogStreamScopeParams(defaultScope)).toBeUndefined();
+    expect(getLogStreamScopeParams(defaultScope)).toEqual({
+      selectedFilters: ['pod:web-1'],
+    });
   });
 
   it('writes prefs back to the cache as the user toggles them', async () => {

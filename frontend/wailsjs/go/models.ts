@@ -2542,6 +2542,7 @@ export namespace types {
 	    podFilter?: string;
 	    podInclude?: string;
 	    podExclude?: string;
+	    selectedFilters?: string[];
 	    container?: string;
 	    includeInit?: boolean;
 	    includeEphemeral?: boolean;
@@ -2566,6 +2567,7 @@ export namespace types {
 	        this.podFilter = source["podFilter"];
 	        this.podInclude = source["podInclude"];
 	        this.podExclude = source["podExclude"];
+	        this.selectedFilters = source["selectedFilters"];
 	        this.container = source["container"];
 	        this.includeInit = source["includeInit"];
 	        this.includeEphemeral = source["includeEphemeral"];
@@ -2583,6 +2585,7 @@ export namespace types {
 	    container: string;
 	    line: string;
 	    isInit: boolean;
+	    isEphemeral?: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new PodLogEntry(source);
@@ -2595,6 +2598,7 @@ export namespace types {
 	        this.container = source["container"];
 	        this.line = source["line"];
 	        this.isInit = source["isInit"];
+	        this.isEphemeral = source["isEphemeral"];
 	    }
 	}
 	export class LogFetchResponse {
