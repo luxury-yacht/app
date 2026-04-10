@@ -7,6 +7,7 @@
 import { getContentBounds } from './dockablePanelLayout';
 import { getObjectPanelLayoutDefaults } from '@core/settings/appPreferences';
 import { createInitialTabGroupState } from './tabGroupState';
+import { removePanelFromGroup } from './tabGroupState';
 import type { TabGroupState } from './tabGroupTypes';
 
 export type DockPosition = 'right' | 'bottom' | 'floating';
@@ -211,6 +212,7 @@ export function createPanelLayoutStore(): PanelLayoutStore {
       });
     },
     clearPanelState: (panelId: string) => {
+      setTabGroups((prev) => removePanelFromGroup(prev, panelId));
       panelStates.delete(panelId);
       panelListeners.delete(panelId);
       panelCloseHandlers.delete(panelId);

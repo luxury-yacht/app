@@ -11,6 +11,7 @@ import type { LogViewerAction } from '../logViewerReducer';
 interface UseLogKeyboardShortcutsParams {
   isActive: boolean;
   isParsedView: boolean;
+  displayMode: 'raw' | 'structured' | 'pretty' | 'parsed';
   showTimestamps: boolean;
   dispatch: React.Dispatch<LogViewerAction>;
   supportsPreviousLogs: boolean;
@@ -27,6 +28,7 @@ interface UseLogKeyboardShortcutsParams {
 export function useLogKeyboardShortcuts({
   isActive,
   isParsedView,
+  displayMode,
   showTimestamps,
   dispatch,
   supportsPreviousLogs,
@@ -68,9 +70,9 @@ export function useLogKeyboardShortcuts({
     priority: 20,
   });
 
-  // Toggle previous logs with 'X' key
+  // Toggle previous logs with 'V' key
   useShortcut({
-    key: 'x',
+    key: 'v',
     handler: useCallback(() => {
       if (!isActive || !supportsPreviousLogs) return false;
       handleTogglePreviousLogs();
@@ -79,6 +81,48 @@ export function useLogKeyboardShortcuts({
     description: 'Toggle previous logs',
     category: 'Logs Tab',
     enabled: isActive && supportsPreviousLogs,
+    view: 'global',
+    priority: 20,
+  });
+
+  useShortcut({
+    key: 'h',
+    handler: useCallback(() => {
+      if (!isActive) return false;
+      dispatch({ type: 'TOGGLE_HIGHLIGHT_MATCHES' });
+      return true;
+    }, [isActive, dispatch]),
+    description: 'Toggle match highlighting',
+    category: 'Logs Tab',
+    enabled: isActive,
+    view: 'global',
+    priority: 20,
+  });
+
+  useShortcut({
+    key: 'i',
+    handler: useCallback(() => {
+      if (!isActive) return false;
+      dispatch({ type: 'TOGGLE_INVERSE_MATCHES' });
+      return true;
+    }, [isActive, dispatch]),
+    description: 'Toggle inverse filtering',
+    category: 'Logs Tab',
+    enabled: isActive,
+    view: 'global',
+    priority: 20,
+  });
+
+  useShortcut({
+    key: 'x',
+    handler: useCallback(() => {
+      if (!isActive) return false;
+      dispatch({ type: 'TOGGLE_REGEX_MATCHES' });
+      return true;
+    }, [isActive, dispatch]),
+    description: 'Toggle regex filtering',
+    category: 'Logs Tab',
+    enabled: isActive,
     view: 'global',
     priority: 20,
   });
@@ -92,6 +136,23 @@ export function useLogKeyboardShortcuts({
       return true;
     }, [isActive, canParseLogs, dispatch]),
     description: 'Toggle Parse/Raw mode',
+    category: 'Logs Tab',
+    enabled: isActive && canParseLogs,
+    view: 'global',
+    priority: 20,
+  });
+
+  useShortcut({
+    key: 'j',
+    handler: useCallback(() => {
+      if (!isActive || !canParseLogs) return false;
+      dispatch({
+        type: 'SET_DISPLAY_MODE',
+        payload: displayMode === 'pretty' ? 'raw' : 'pretty',
+      });
+      return true;
+    }, [isActive, canParseLogs, displayMode, dispatch]),
+    description: 'Toggle pretty JSON',
     category: 'Logs Tab',
     enabled: isActive && canParseLogs,
     view: 'global',

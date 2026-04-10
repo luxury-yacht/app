@@ -342,10 +342,14 @@ describe('LogViewer active pod synchronisation', () => {
   it('registers log tab shortcuts with appropriate availability', async () => {
     await renderViewer({ activePodNames: ['web-1'], isActive: true });
     expect(getLatestShortcut('r')).toBeTruthy();
+    expect(getLatestShortcut('h')).toBeTruthy();
+    expect(getLatestShortcut('i')).toBeTruthy();
+    expect(getLatestShortcut('x')).toBeTruthy();
     expect(getLatestShortcut('t')).toBeTruthy();
+    expect(getLatestShortcut('j')?.enabled).toBe(false);
     expect(getLatestShortcut('w')).toBeTruthy();
     expect(getLatestShortcut('p')?.enabled).toBe(false);
-    expect(getLatestShortcut('x')?.enabled).toBe(false);
+    expect(getLatestShortcut('v')?.enabled).toBe(false);
 
     let result = false;
     act(() => {
@@ -366,7 +370,126 @@ describe('LogViewer active pod synchronisation', () => {
       resourceName: 'api',
     });
 
-    expect(getLatestShortcut('x')?.enabled).toBe(true);
+    expect(getLatestShortcut('j')?.enabled).toBe(false);
+    expect(getLatestShortcut('v')?.enabled).toBe(true);
+  });
+
+  it('toggles highlight, inverse, regex, and previous logs from keyboard shortcuts', async () => {
+    seedLogSnapshot(
+      [
+        {
+          pod: 'api',
+          container: 'app',
+          line: '{"msg":"panic","nested":{"ok":true}}',
+          timestamp: '2024-05-01T10:05:00Z',
+          isInit: false,
+        },
+      ],
+      buildLogScope('team-a:pod:api')
+    );
+
+    await renderViewer({
+      isActive: true,
+      activePodNames: ['api'],
+      resourceKind: 'Pod',
+      resourceName: 'api',
+      panelId: 'obj:test:shortcut-toggles',
+    });
+
+    const filterInput = await waitForElement(() =>
+      container.querySelector<HTMLInputElement>('input[placeholder="Filter logs..."]')
+    );
+    const nativeValueSetter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      'value'
+    )?.set;
+
+    await act(async () => {
+      nativeValueSetter?.call(filterInput, 'panic');
+      filterInput.dispatchEvent(new Event('input', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      expect(getLatestShortcut('h')?.handler()).toBe(true);
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      expect(getLatestShortcut('x')?.handler()).toBe(true);
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      expect(getLatestShortcut('i')?.handler()).toBe(true);
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      expect(getLatestShortcut('v')?.handler()).toBe(true);
+      await Promise.resolve();
+    });
+
+    expect(
+      container
+        .querySelector<HTMLButtonElement>(
+          'button[aria-label="Highlight matches from the current text filter"]'
+        )
+        ?.getAttribute('aria-pressed')
+    ).toBe('false');
+    expect(
+      container
+        .querySelector<HTMLButtonElement>(
+          'button[aria-label="Show only logs that do not contain the current text filter"]'
+        )
+        ?.getAttribute('aria-pressed')
+    ).toBe('true');
+    expect(
+      container
+        .querySelector<HTMLButtonElement>(
+          'button[aria-label="Treat the current text filter as a regular expression"]'
+        )
+        ?.getAttribute('aria-pressed')
+    ).toBe('true');
+    expect(
+      container
+        .querySelector<HTMLButtonElement>('button[aria-label="Previous logs (V)"]')
+        ?.getAttribute('aria-pressed')
+    ).toBe('true');
+  });
+
+  it('toggles pretty JSON from the keyboard shortcut', async () => {
+    seedLogSnapshot(
+      [
+        {
+          pod: 'api',
+          container: 'app',
+          line: '{"msg":"panic","nested":{"ok":true}}',
+          timestamp: '2024-05-01T10:05:00Z',
+          isInit: false,
+        },
+      ],
+      buildLogScope('team-a:pod:api')
+    );
+
+    await renderViewer({
+      isActive: true,
+      activePodNames: ['api'],
+      resourceKind: 'Pod',
+      resourceName: 'api',
+      panelId: 'obj:test:shortcut-pretty',
+    });
+
+    await act(async () => {
+      expect(getLatestShortcut('j')?.handler()).toBe(true);
+      await Promise.resolve();
+    });
+
+    expect(
+      container
+        .querySelector<HTMLButtonElement>('button[aria-label="Pretty JSON"]')
+        ?.getAttribute('aria-pressed')
+    ).toBe('true');
   });
 
   it('disables handlers when the tab is inactive', async () => {
@@ -398,6 +521,9 @@ describe('LogViewer active pod synchronisation', () => {
     };
 
     expectDisabledShortcut('r');
+    expectDisabledShortcut('h');
+    expectDisabledShortcut('i');
+    expectDisabledShortcut('x');
     expectDisabledShortcut('t');
     expectDisabledShortcut('w');
 
@@ -424,7 +550,8 @@ describe('LogViewer active pod synchronisation', () => {
       resourceName: 'api',
     });
 
-    expectDisabledShortcut('x');
+    expectDisabledShortcut('v');
+    expectDisabledShortcut('j');
     expectDisabledShortcut('p');
   });
 

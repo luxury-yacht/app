@@ -794,6 +794,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   useLogKeyboardShortcuts({
     isActive,
     isParsedView,
+    displayMode,
     showTimestamps,
     dispatch,
     supportsPreviousLogs,
@@ -1666,7 +1667,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                           icon: <PreviousLogsIcon />,
                           active: showPreviousLogs,
                           onClick: handleTogglePreviousLogs,
-                          title: 'Previous logs (X)',
+                          title: 'Previous logs (V)',
                         },
                       ]
                     : []),
