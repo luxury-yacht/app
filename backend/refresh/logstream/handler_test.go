@@ -277,9 +277,10 @@ func TestServeHTTPEmitsInitialSnapshot(t *testing.T) {
 	require.Equal(t, "default:/v1:pod:my-pod", connected.Scope)
 	require.Empty(t, connected.Entries)
 
-	// Second event has the initial log entries with Reset: false
+	// Second event has the initial log entries and must replace any
+	// preserved client buffer on reconnect/remount.
 	initial := events[1]
-	require.False(t, initial.Reset)
+	require.True(t, initial.Reset)
 	require.Equal(t, "default:/v1:pod:my-pod", initial.Scope)
 	require.Len(t, initial.Entries, 1)
 
@@ -389,7 +390,7 @@ func TestServeHTTPStreamsUpdates(t *testing.T) {
 
 	// Second event has initial log entries
 	initial := events[1]
-	require.False(t, initial.Reset)
+	require.True(t, initial.Reset)
 	require.Len(t, initial.Entries, 1)
 	require.Equal(t, "initial", initial.Entries[0].Line)
 

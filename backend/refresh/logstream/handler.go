@@ -160,7 +160,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Scope:       opts.ScopeString,
 		Sequence:    sequence,
 		GeneratedAt: time.Now().UnixMilli(),
-		Reset:       false, // Already sent reset in connected event
+		// The initial snapshot must replace any preserved client buffer.
+		// The frontend intentionally keeps the previous buffer across
+		// tab switches/reconnect handshakes, so sending the first real
+		// snapshot with Reset=false causes the entire initial batch to be
+		// appended on remount.
+		Reset:       true,
 		Entries:     initial,
 		Warnings:    warningPayload(warnings, false),
 	}
