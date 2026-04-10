@@ -63,7 +63,7 @@ func (s *Service) LogFetcher(req types.LogFetchRequest) types.LogFetchResponse {
 			IncludeEphemeral: boolValueOrDefault(req.IncludeEphemeral, true),
 			StateFilter:      containerState,
 		},
-		podlogs.DefaultPerScopeTargetLimit,
+		podlogs.GetPerScopeTargetLimit(),
 	)
 	warnings := podlogs.BuildTargetLimitWarnings(len(targets), totalTargets)
 
@@ -125,6 +125,37 @@ func (s *Service) PodContainers(namespace, podName string) ([]string, error) {
 	for _, container := range podlogs.EnumerateContainers(pod, "") {
 		containers = append(containers, container.DisplayName())
 	}
+	return containers, nil
+}
+
+// LogScopeContainers returns the unique display names for all containers addressed by the scope.
+func (s *Service) LogScopeContainers(scope string) ([]string, error) {
+	if s.deps.KubernetesClient == nil {
+		return nil, fmt.Errorf("kubernetes client not initialized")
+	}
+
+	pods, err := s.resolveTargetPodObjects(types.LogFetchRequest{Scope: scope}, podlogs.PodNameFilter{})
+	if err != nil {
+		return nil, err
+	}
+
+	seen := make(map[string]struct{})
+	containers := make([]string, 0)
+	for _, pod := range pods {
+		if pod == nil {
+			continue
+		}
+		for _, container := range podlogs.EnumerateContainers(pod, "") {
+			displayName := container.DisplayName()
+			if _, ok := seen[displayName]; ok {
+				continue
+			}
+			seen[displayName] = struct{}{}
+			containers = append(containers, displayName)
+		}
+	}
+
+	sort.Strings(containers)
 	return containers, nil
 }
 

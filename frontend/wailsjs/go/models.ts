@@ -745,6 +745,8 @@ export namespace types {
 	    refreshBackgroundClustersEnabled: boolean;
 	    metricsRefreshIntervalMs: number;
 	    logBufferMaxSize: number;
+	    logTargetPerScopeLimit: number;
+	    logTargetGlobalLimit: number;
 	    gridTablePersistenceMode: string;
 	    defaultObjectPanelPosition: string;
 	    objectPanelDockedRightWidth: number;
@@ -778,6 +780,8 @@ export namespace types {
 	        this.refreshBackgroundClustersEnabled = source["refreshBackgroundClustersEnabled"];
 	        this.metricsRefreshIntervalMs = source["metricsRefreshIntervalMs"];
 	        this.logBufferMaxSize = source["logBufferMaxSize"];
+	        this.logTargetPerScopeLimit = source["logTargetPerScopeLimit"];
+	        this.logTargetGlobalLimit = source["logTargetGlobalLimit"];
 	        this.gridTablePersistenceMode = source["gridTablePersistenceMode"];
 	        this.defaultObjectPanelPosition = source["defaultObjectPanelPosition"];
 	        this.objectPanelDockedRightWidth = source["objectPanelDockedRightWidth"];

@@ -36,6 +36,8 @@ type AppSettings struct {
 	RefreshBackgroundClustersEnabled bool     `json:"refreshBackgroundClustersEnabled"` // Refresh inactive clusters in the background
 	MetricsRefreshIntervalMs         int      `json:"metricsRefreshIntervalMs"`         // Metrics refresh interval (ms)
 	LogBufferMaxSize                 int      `json:"logBufferMaxSize"`                 // Max log entries kept in memory per Logs tab (100-10000)
+	LogTargetPerScopeLimit           int      `json:"logTargetPerScopeLimit"`           // Max pod/container log targets per Logs tab (1-1000)
+	LogTargetGlobalLimit             int      `json:"logTargetGlobalLimit"`             // Max pod/container log targets across all log tabs (1-1000)
 	GridTablePersistenceMode         string   `json:"gridTablePersistenceMode"`         // "shared" or "namespaced"
 	DefaultObjectPanelPosition       string   `json:"defaultObjectPanelPosition"`       // "right", "bottom", or "floating"
 	ObjectPanelDockedRightWidth      int      `json:"objectPanelDockedRightWidth"`      // Default width when docked right (px)

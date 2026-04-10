@@ -67,7 +67,7 @@ func (s *Streamer) tail(ctx context.Context, opts Options, limiterSession *Targe
 			IncludeEphemeral: opts.IncludeEphemeral,
 			StateFilter:      opts.ContainerState,
 		},
-		podlogs.DefaultPerScopeTargetLimit,
+		podlogs.GetPerScopeTargetLimit(),
 	)
 	warnings := podlogs.BuildTargetLimitWarnings(len(selectedTargets), totalTargets)
 	skippedTargets := totalTargets - len(selectedTargets)
@@ -222,7 +222,7 @@ func (s *Streamer) run(
 			IncludeInit:      opts.IncludeInit,
 			IncludeEphemeral: opts.IncludeEphemeral,
 			StateFilter:      opts.ContainerState,
-		}, podlogs.DefaultPerScopeTargetLimit)
+		}, podlogs.GetPerScopeTargetLimit())
 		perScopeCount := len(selectedTargets)
 		totalTargets := countTargets(pods, podlogs.ContainerSelectionOptions{
 			Filter:           opts.Container,

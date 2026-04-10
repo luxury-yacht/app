@@ -227,7 +227,16 @@ func (a *App) sharedLogTargetLimiter() *logstream.GlobalTargetLimiter {
 		return nil
 	}
 	if a.logTargetLimiter == nil {
-		a.logTargetLimiter = logstream.NewGlobalTargetLimiter(config.LogStreamGlobalTargetLimit)
+		limit := defaultLogTargetGlobalLimit
+		a.settingsMu.Lock()
+		if a.appSettings == nil {
+			_ = a.loadAppSettings()
+		}
+		if a.appSettings != nil && a.appSettings.LogTargetGlobalLimit > 0 {
+			limit = clampLogTargetGlobalLimit(a.appSettings.LogTargetGlobalLimit)
+		}
+		a.settingsMu.Unlock()
+		a.logTargetLimiter = logstream.NewGlobalTargetLimiter(limit)
 	}
 	return a.logTargetLimiter
 }

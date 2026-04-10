@@ -3,11 +3,42 @@ package podlogs
 import (
 	"fmt"
 	"sort"
+	"sync/atomic"
 
 	corev1 "k8s.io/api/core/v1"
 )
 
-const DefaultPerScopeTargetLimit = 96
+const DefaultPerScopeTargetLimit = 100
+const (
+	MinPerScopeTargetLimit = 1
+	MaxPerScopeTargetLimit = 1000
+)
+
+var currentPerScopeTargetLimit atomic.Int64
+
+func init() {
+	currentPerScopeTargetLimit.Store(DefaultPerScopeTargetLimit)
+}
+
+func clampPerScopeTargetLimit(limit int) int {
+	if limit < MinPerScopeTargetLimit {
+		return MinPerScopeTargetLimit
+	}
+	if limit > MaxPerScopeTargetLimit {
+		return MaxPerScopeTargetLimit
+	}
+	return limit
+}
+
+func GetPerScopeTargetLimit() int {
+	return clampPerScopeTargetLimit(int(currentPerScopeTargetLimit.Load()))
+}
+
+func SetPerScopeTargetLimit(limit int) int {
+	clamped := clampPerScopeTargetLimit(limit)
+	currentPerScopeTargetLimit.Store(int64(clamped))
+	return clamped
+}
 
 type SelectedTarget struct {
 	Namespace string
@@ -29,7 +60,7 @@ func SelectTargets(
 	}
 
 	if limit <= 0 {
-		limit = DefaultPerScopeTargetLimit
+		limit = GetPerScopeTargetLimit()
 	}
 
 	type rankedTarget struct {

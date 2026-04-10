@@ -6,7 +6,7 @@
  * Uses a reducer for state management.
  */
 import React, { useReducer, useEffect, useRef, useMemo, useCallback } from 'react';
-import { GetPodContainers, LogFetcher } from '@wailsjs/go/backend/App';
+import { GetLogScopeContainers, LogFetcher } from '@wailsjs/go/backend/App';
 import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
@@ -923,10 +923,6 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
         .slice()
         .sort();
       dispatch({ type: 'SET_AVAILABLE_PODS', payload: pods });
-      const containersList = Array.from(
-        new Set(logEntries.map((entry) => entry.container).filter(Boolean))
-      ).sort();
-      dispatch({ type: 'SET_AVAILABLE_CONTAINERS', payload: containersList });
     }
   }, [isWorkload, logEntries, normalizedActivePods]);
 
@@ -948,29 +944,14 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       );
     }
 
-    const initContainerOptions = isWorkload
-      ? Array.from(
-          new Set(
-            logEntries
-              .filter((entry) => entry.isInit && entry.container)
-              .map((entry) => entry.container)
-              .filter(Boolean)
-          )
-        )
-          .sort()
-          .map((container) => ({
-            value: toInitContainerFilterValue(container),
-            label: container,
-            group: 'Init Containers',
-          }))
-      : containers
-          .filter((container) => isInitContainerDisplayName(container))
-          .map((container) => ({
-            value: toInitContainerFilterValue(getActualContainerName(container)),
-            label: getActualContainerName(container),
-            group: 'Init Containers',
-          }))
-          .sort((left, right) => left.label.localeCompare(right.label));
+    const initContainerOptions = containers
+      .filter((container) => isInitContainerDisplayName(container))
+      .map((container) => ({
+        value: toInitContainerFilterValue(getActualContainerName(container)),
+        label: getActualContainerName(container),
+        group: 'Init Containers',
+      }))
+      .sort((left, right) => left.label.localeCompare(right.label));
 
     if (initContainerOptions.length > 0) {
       options.push({
@@ -982,29 +963,14 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     }
     options.push(...initContainerOptions);
 
-    const regularContainerOptions = isWorkload
-      ? Array.from(
-          new Set(
-            logEntries
-              .filter((entry) => !entry.isInit && entry.container)
-              .map((entry) => entry.container)
-              .filter(Boolean)
-          )
-        )
-          .sort()
-          .map((container) => ({
-            value: toContainerFilterValue(container),
-            label: container,
-            group: 'Containers',
-          }))
-      : containers
-          .filter((container) => !isInitContainerDisplayName(container))
-          .map((container) => ({
-            value: toContainerFilterValue(getActualContainerName(container)),
-            label: container.endsWith(' (debug)') ? container : getActualContainerName(container),
-            group: 'Containers',
-          }))
-          .sort((left, right) => left.label.localeCompare(right.label));
+    const regularContainerOptions = containers
+      .filter((container) => !isInitContainerDisplayName(container))
+      .map((container) => ({
+        value: toContainerFilterValue(getActualContainerName(container)),
+        label: container.endsWith(' (debug)') ? container : getActualContainerName(container),
+        group: 'Containers',
+      }))
+      .sort((left, right) => left.label.localeCompare(right.label));
 
     if (isWorkload || containers.length > 0) {
       options.push({
@@ -1017,7 +983,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     options.push(...regularContainerOptions);
 
     return options;
-  }, [containers, isWorkload, logEntries, workloadPodsForSelector]);
+  }, [containers, isWorkload, workloadPodsForSelector]);
   const singlePodSelectableContainerCount = useMemo(
     () =>
       selectorOptions.filter(
@@ -1170,6 +1136,14 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     if (selectedFilters.length === 0) {
       return;
     }
+    const hasSelectedContainerFilters = selectedFilters.some(
+      (filterValue) =>
+        filterValue.startsWith(INIT_FILTER_PREFIX) ||
+        filterValue.startsWith(CONTAINER_FILTER_PREFIX)
+    );
+    if (hasSelectedContainerFilters && containers.length === 0) {
+      return;
+    }
     const validFilterValues = new Set(
       selectorOptions.filter((option) => option.group !== 'header').map((option) => option.value)
     );
@@ -1182,7 +1156,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     if (nextSelectedFilters.length !== selectedFilters.length) {
       dispatch({ type: 'SET_SELECTED_FILTERS', payload: nextSelectedFilters });
     }
-  }, [selectedFilters, selectorOptions]);
+  }, [containers.length, selectedFilters, selectorOptions]);
 
   // Helper functions
   const unavailableLogMessage =
@@ -1568,25 +1542,29 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     };
   }, []);
 
-  // Fetch containers for single pod
+  // Fetch container inventory for the current log scope.
   useEffect(() => {
-    if (isWorkload || !namespace || !podName) return;
+    if (!logScope) {
+      dispatch({ type: 'SET_CONTAINERS', payload: [] });
+      dispatch({ type: 'SET_SELECTED_CONTAINER', payload: '' });
+      return;
+    }
 
     let isCancelled = false;
     const fetchContainers = async () => {
       try {
-        const containerList = await GetPodContainers(resolvedClusterId, namespace, podName);
+        const containerList = await GetLogScopeContainers(resolvedClusterId, logScope);
 
         if (isCancelled) return;
 
         if (!containerList || containerList.length === 0) {
           dispatch({ type: 'SET_CONTAINERS', payload: [] });
-          dispatch({ type: 'SET_SELECTED_CONTAINER', payload: '' });
+          dispatch({ type: 'SET_SELECTED_CONTAINER', payload: isWorkload ? '' : ALL_CONTAINERS });
           return;
         }
 
         dispatch({ type: 'SET_CONTAINERS', payload: containerList });
-        dispatch({ type: 'SET_SELECTED_CONTAINER', payload: ALL_CONTAINERS });
+        dispatch({ type: 'SET_SELECTED_CONTAINER', payload: isWorkload ? '' : ALL_CONTAINERS });
       } catch (err) {
         if (isCancelled) return;
         console.warn('Failed to fetch containers:', err);
@@ -1602,7 +1580,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     return () => {
       isCancelled = true;
     };
-  }, [namespace, podName, isWorkload, resolvedClusterId]);
+  }, [isWorkload, logScope, resolvedClusterId]);
 
   // --- Scroll position and tail-follow ---
   //

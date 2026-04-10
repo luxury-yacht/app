@@ -82,6 +82,8 @@ export interface AppEvents {
   'settings:theme': string;
   'settings:metrics-interval': number;
   'settings:log-buffer-size': number;
+  'settings:log-target-per-scope-limit': number;
+  'settings:log-target-global-limit': number;
   'settings:palette-tint': {
     theme: 'light' | 'dark';
     hue: number;

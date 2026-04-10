@@ -35,6 +35,22 @@ func NewGlobalTargetLimiter(limit int) *GlobalTargetLimiter {
 	}
 }
 
+func (l *GlobalTargetLimiter) SetLimit(limit int) {
+	if l == nil {
+		return
+	}
+	if limit <= 0 {
+		limit = config.LogStreamGlobalTargetLimit
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.total == limit {
+		return
+	}
+	l.total = limit
+	l.recomputeLocked()
+}
+
 func (l *GlobalTargetLimiter) StartSession(clusterID, scope string) *TargetSession {
 	if l == nil {
 		return nil

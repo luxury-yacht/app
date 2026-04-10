@@ -212,6 +212,39 @@ func TestPodContainersIncludesEphemeral(t *testing.T) {
 	require.Equal(t, []string{"app", "debug-abc (debug)"}, containers)
 }
 
+func TestLogScopeContainersWorkloadReturnsUniqueDisplayNames(t *testing.T) {
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "default"},
+		Spec: appsv1.DeploymentSpec{
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "web"}},
+		},
+	}
+	podOne := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "web-1", Namespace: "default", Labels: map[string]string{"app": "web"}},
+		Spec: corev1.PodSpec{
+			InitContainers: []corev1.Container{{Name: "init-a"}},
+			Containers:     []corev1.Container{{Name: "app"}, {Name: "sidecar"}},
+		},
+	}
+	podTwo := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "web-2", Namespace: "default", Labels: map[string]string{"app": "web"}},
+		Spec: corev1.PodSpec{
+			InitContainers: []corev1.Container{{Name: "init-a"}},
+			Containers:     []corev1.Container{{Name: "app"}, {Name: "other"}},
+		},
+	}
+	client := fake.NewClientset(deployment, podOne, podTwo)
+
+	service := NewService(common.Dependencies{
+		Context:          context.Background(),
+		KubernetesClient: client,
+	})
+
+	containers, err := service.LogScopeContainers("cluster-a|default:apps/v1:deployment:web")
+	require.NoError(t, err)
+	require.Equal(t, []string{"app", "init-a (init)", "other", "sidecar"}, containers)
+}
+
 func TestResolveTargetPodsDeployment(t *testing.T) {
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "default"},
@@ -845,8 +878,9 @@ func TestLogFetcherWarnsWhenTargetLimitExceeded(t *testing.T) {
 		logStreamFunc = orig
 	}(logStreamFunc)
 
-	containers := make([]corev1.Container, 0, 25)
-	for i := 0; i < 25; i++ {
+	containerCount := podlogs.DefaultPerScopeTargetLimit + 1
+	containers := make([]corev1.Container, 0, containerCount)
+	for i := 0; i < containerCount; i++ {
 		containers = append(containers, corev1.Container{Name: fmt.Sprintf("c-%02d", i)})
 	}
 	pod := &corev1.Pod{
@@ -868,7 +902,11 @@ func TestLogFetcherWarnsWhenTargetLimitExceeded(t *testing.T) {
 	require.Empty(t, resp.Error)
 	require.Len(t, resp.Entries, podlogs.DefaultPerScopeTargetLimit)
 	require.Len(t, resp.Warnings, 1)
-	require.Contains(t, resp.Warnings[0], "24 of 25")
+	require.Contains(
+		t,
+		resp.Warnings[0],
+		fmt.Sprintf("%d of %d", podlogs.DefaultPerScopeTargetLimit, containerCount),
+	)
 }
 
 func TestLogFetcherUsesSharedCappedTargetSelection(t *testing.T) {
@@ -884,8 +922,9 @@ func TestLogFetcherUsesSharedCappedTargetSelection(t *testing.T) {
 	}
 
 	objects := []runtime.Object{deployment}
-	podObjects := make([]*corev1.Pod, 0, 25)
-	for i := 0; i < 25; i++ {
+	podCount := podlogs.DefaultPerScopeTargetLimit + 1
+	podObjects := make([]*corev1.Pod, 0, podCount)
+	for i := 0; i < podCount; i++ {
 		pod := &corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      fmt.Sprintf("web-%02d", i),
@@ -932,7 +971,7 @@ func TestLogFetcherUsesSharedCappedTargetSelection(t *testing.T) {
 		podlogs.DefaultContainerSelection(""),
 		podlogs.DefaultPerScopeTargetLimit,
 	)
-	require.Equal(t, 25, total)
+	require.Equal(t, podCount, total)
 	expectedKeys := make([]string, 0, len(expectedTargets))
 	for _, target := range expectedTargets {
 		expectedKeys = append(expectedKeys, target.Key())
@@ -940,7 +979,11 @@ func TestLogFetcherUsesSharedCappedTargetSelection(t *testing.T) {
 
 	require.Equal(t, expectedKeys, requestedKeys)
 	require.Len(t, resp.Warnings, 1)
-	require.Contains(t, resp.Warnings[0], "24 of 25")
+	require.Contains(
+		t,
+		resp.Warnings[0],
+		fmt.Sprintf("%d of %d", podlogs.DefaultPerScopeTargetLimit, podCount),
+	)
 }
 
 func TestLogFetcherSortsWhenTimestampMissing(t *testing.T) {

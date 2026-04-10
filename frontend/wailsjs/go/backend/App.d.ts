@@ -112,6 +112,8 @@ export function GetKubeconfigs():Promise<Array<types.KubeconfigInfo>>;
 
 export function GetLimitRange(arg1:string,arg2:string,arg3:string):Promise<types.LimitRangeDetails>;
 
+export function GetLogScopeContainers(arg1:string,arg2:string):Promise<Array<string>>;
+
 export function GetLogs():Promise<Array<backend.LogEntry>>;
 
 export function GetMutatingWebhookConfiguration(arg1:string,arg2:string):Promise<types.MutatingWebhookConfigurationDetails>;
@@ -241,6 +243,10 @@ export function SetKubeconfigSearchPaths(arg1:Array<string>):Promise<void>;
 export function SetLinkColor(arg1:string,arg2:string):Promise<void>;
 
 export function SetLogBufferMaxSize(arg1:number):Promise<void>;
+
+export function SetLogTargetGlobalLimit(arg1:number):Promise<void>;
+
+export function SetLogTargetPerScopeLimit(arg1:number):Promise<void>;
 
 export function SetLogsPanelVisible(arg1:boolean):Promise<void>;
 

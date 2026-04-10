@@ -98,7 +98,7 @@ const (
 	LogStreamKeepAliveInterval = 15 * time.Second
 
 	// LogStreamGlobalTargetLimit caps resolved pod/container targets across all active log scopes.
-	LogStreamGlobalTargetLimit = 72
+	LogStreamGlobalTargetLimit = 200
 
 	// EventStreamKeepAliveInterval controls how often keepalive messages are emitted for event streams.
 	EventStreamKeepAliveInterval = 15 * time.Second
