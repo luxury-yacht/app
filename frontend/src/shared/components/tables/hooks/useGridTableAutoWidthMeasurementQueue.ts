@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import type { RefObject } from 'react';
 
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
+import { parseWidthInputToNumber } from '@shared/components/tables/GridTable.utils';
 import type { ColumnWidthPhase } from '@shared/components/tables/hooks/useGridTableColumnWidths';
 
 // Auto-width measurement queue for GridTable.
@@ -21,6 +22,17 @@ import type { ColumnWidthPhase } from '@shared/components/tables/hooks/useGridTa
 const DIRTY_DEBOUNCE_MS = 280;
 const DIRTY_MIN_INTERVAL_MS = 200;
 const WIDTH_EPSILON = 0.5;
+
+const getAutoSizeMaxWidth = <T,>(
+  column: GridColumnDefinition<T>,
+  getColumnMaxWidth: (column: GridColumnDefinition<T>) => number
+) => {
+  const configuredMaxWidth = getColumnMaxWidth(column);
+  const autoSizeMaxWidth = parseWidthInputToNumber(column.autoSizeMaxWidth);
+  return autoSizeMaxWidth != null
+    ? Math.min(configuredMaxWidth, autoSizeMaxWidth)
+    : configuredMaxWidth;
+};
 
 export type ManualResizeEvent = {
   type: 'dragStart' | 'drag' | 'dragEnd' | 'autoSize' | 'reset';
@@ -289,7 +301,7 @@ export function useDirtyQueue<T>({
 
       const measured = measureColumnWidth(column);
       const min = getColumnMinWidth(column);
-      const max = getColumnMaxWidth(column);
+      const max = getAutoSizeMaxWidth(column, getColumnMaxWidth);
       const clamped = Math.max(min, Math.min(max, measured));
       const current = naturalWidthsRef.current[column.key] ?? min;
 

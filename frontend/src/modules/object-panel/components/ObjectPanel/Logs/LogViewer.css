@@ -414,7 +414,6 @@
   font-size: var(--font-size-parsed-logs);
   font-weight: var(--font-weight-parsed-logs);
   color: var(--log-table-cell-text);
-  max-width: 300px;
 }
 
 .gridtable-parsed-logs .grid-cell-content {
@@ -422,7 +421,8 @@
 }
 
 .parsed-log-cell {
-  max-width: 300px;
+  display: block;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

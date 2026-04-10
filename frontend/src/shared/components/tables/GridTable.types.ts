@@ -36,6 +36,7 @@ export interface GridColumnDefinition<T> {
   width?: ColumnWidthInput;
   minWidth?: ColumnWidthInput;
   maxWidth?: ColumnWidthInput;
+  autoSizeMaxWidth?: ColumnWidthInput;
   autoWidth?: boolean;
   flex?: string;
   disableShortcuts?: boolean | ((item: T) => boolean);

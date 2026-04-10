@@ -87,6 +87,9 @@ const LOG_DOMAIN = 'object-logs' as const;
 const PARSED_COLUMN_MIN_WIDTH = 50;
 const PARSED_TIMESTAMP_MIN_WIDTH = 80;
 const PARSED_POD_COLUMN_MIN_WIDTH = 80;
+const PARSED_COLUMN_AUTOSIZE_MAX_WIDTH = 520;
+const PARSED_TIMESTAMP_AUTOSIZE_MAX_WIDTH = 280;
+const PARSED_METADATA_AUTOSIZE_MAX_WIDTH = 320;
 const RAW_LOG_VIRTUALIZATION_THRESHOLD = 120;
 const RAW_LOG_VIRTUALIZATION_OVERSCAN = 10;
 const RAW_LOG_ESTIMATE_ROW_HEIGHT = 26;
@@ -1524,6 +1527,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
         header: 'API Timestamp',
         sortable: false,
         minWidth: PARSED_TIMESTAMP_MIN_WIDTH,
+        autoSizeMaxWidth: PARSED_TIMESTAMP_AUTOSIZE_MAX_WIDTH,
         render: (item: ParsedLogEntry) => {
           const formatted = item.timestamp
             ? formatTimestampForMode(item.timestamp, timestampMode)
@@ -1553,6 +1557,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
         header: 'Pod',
         sortable: false,
         minWidth: PARSED_POD_COLUMN_MIN_WIDTH,
+        autoSizeMaxWidth: PARSED_METADATA_AUTOSIZE_MAX_WIDTH,
         render: (item: ParsedLogEntry) => (
           <span
             className="pod-color-text"
@@ -1573,6 +1578,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       header: 'Container',
       sortable: false,
       minWidth: PARSED_POD_COLUMN_MIN_WIDTH,
+      autoSizeMaxWidth: PARSED_METADATA_AUTOSIZE_MAX_WIDTH,
       render: (item: ParsedLogEntry) => (
         <span
           className="pod-color-text"
@@ -1596,6 +1602,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
         header: jsonTimestampKey,
         sortable: false,
         minWidth: PARSED_TIMESTAMP_MIN_WIDTH,
+        autoSizeMaxWidth: PARSED_TIMESTAMP_AUTOSIZE_MAX_WIDTH,
         render: (item: ParsedLogEntry) => formatParsedValue(item.data[jsonTimestampKey]),
       });
     }
@@ -1608,6 +1615,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
         header: jsonLevelKey,
         sortable: false,
         minWidth: PARSED_COLUMN_MIN_WIDTH,
+        autoSizeMaxWidth: PARSED_COLUMN_AUTOSIZE_MAX_WIDTH,
         render: (item: ParsedLogEntry) => formatParsedValue(item.data[jsonLevelKey]),
       });
     }
@@ -1623,6 +1631,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
         header: key,
         sortable: false,
         minWidth: PARSED_COLUMN_MIN_WIDTH,
+        autoSizeMaxWidth: PARSED_COLUMN_AUTOSIZE_MAX_WIDTH,
         render: (item: ParsedLogEntry) => (
           <div className="parsed-log-cell">{formatParsedValue(item.data[key])}</div>
         ),
