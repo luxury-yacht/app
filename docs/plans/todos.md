@@ -3,7 +3,6 @@
 - Cursor turns to beam when dragging the app window in the header
 - Center Mac icons in header
 
-- fix the ansi colors icon
 - can we get node logs?
 
 - Allow remove of default kubeconfig path, if not the last

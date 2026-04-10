@@ -1273,9 +1273,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     isWorkload,
     singlePodSelectableContainerCount,
     showAnsiColors,
-    showPreviousLogs,
     selectedContainerFilterCount,
-    textFilter,
     timestampMode,
     emptyStateMessage,
   ]);
@@ -2213,34 +2211,36 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                         },
                       ]
                     : []),
-                  {
-                    type: 'toggle',
-                    id: 'prettyJson',
-                    icon: <PrettyJsonIcon />,
-                    active: displayMode === 'pretty',
-                    onClick: () =>
-                      dispatch({
-                        type: 'SET_DISPLAY_MODE',
-                        payload: displayMode === 'pretty' ? 'raw' : 'pretty',
-                      }),
-                    title: 'Show pretty JSON (J)',
-                    ariaLabel: 'Show pretty JSON',
-                    disabled: !canParseLogs,
-                  },
-                  {
-                    type: 'toggle',
-                    id: 'parsedJson',
-                    icon: <ParseJsonIcon />,
-                    active: displayMode === 'parsed',
-                    onClick: () =>
-                      dispatch({
-                        type: 'SET_DISPLAY_MODE',
-                        payload: displayMode === 'parsed' ? 'raw' : 'parsed',
-                      }),
-                    title: 'Parse the JSON into a table (P)',
-                    ariaLabel: 'Parse the JSON into a table',
-                    disabled: !canParseLogs,
-                  },
+                  ...(canParseLogs
+                    ? [
+                        {
+                          type: 'toggle' as const,
+                          id: 'prettyJson',
+                          icon: <PrettyJsonIcon />,
+                          active: displayMode === 'pretty',
+                          onClick: () =>
+                            dispatch({
+                              type: 'SET_DISPLAY_MODE',
+                              payload: displayMode === 'pretty' ? 'raw' : 'pretty',
+                            }),
+                          title: 'Show pretty JSON (J)',
+                          ariaLabel: 'Show pretty JSON',
+                        },
+                        {
+                          type: 'toggle' as const,
+                          id: 'parsedJson',
+                          icon: <ParseJsonIcon />,
+                          active: displayMode === 'parsed',
+                          onClick: () =>
+                            dispatch({
+                              type: 'SET_DISPLAY_MODE',
+                              payload: displayMode === 'parsed' ? 'raw' : 'parsed',
+                            }),
+                          title: 'Parse the JSON into a table (P)',
+                          ariaLabel: 'Parse the JSON into a table',
+                        },
+                      ]
+                    : []),
                   { type: 'separator' },
                   {
                     type: 'action',
