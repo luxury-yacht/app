@@ -16,7 +16,7 @@ import type {
 } from '@shared/components/tables/GridTable.types';
 import type { ColumnWidthPhase } from '@shared/components/tables/hooks/useGridTableColumnWidths';
 
-const getAutoSizeMaxWidth = <T,>(
+const getAutoSizeMaxWidth = <T>(
   column: GridColumnDefinition<T>,
   getColumnMaxWidth: (column: GridColumnDefinition<T>) => number
 ) => {

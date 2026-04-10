@@ -28,6 +28,7 @@ const Dropdown: React.FC<DropdownProps> = ({
   clearable = false,
   renderOption,
   renderValue,
+  className = '',
   dropdownClassName = '',
   ariaLabel,
   ariaDescribedBy,
@@ -224,6 +225,7 @@ const Dropdown: React.FC<DropdownProps> = ({
     disabled && 'disabled',
     loading && 'loading',
     isOpen && 'open',
+    className,
   ]
     .filter(Boolean)
     .join(' ');

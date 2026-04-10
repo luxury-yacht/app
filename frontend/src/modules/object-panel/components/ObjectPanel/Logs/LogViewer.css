@@ -65,6 +65,18 @@
   gap: var(--spacing-sm);
 }
 
+.pod-logs-selector-dropdown .dropdown-trigger {
+  width: 175px;
+  min-width: 175px;
+  max-width: 175px;
+}
+
+.pod-logs-selector-dropdown .dropdown-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* "42 of 100" counter rendered immediately after the IconBar in the
    controls row. Uses tabular-nums so the value doesn't jitter as
    entries stream in, and the secondary text color so it reads as
@@ -113,7 +125,7 @@
   border-radius: var(--border-radius-sm);
   color: var(--color-text);
   font-size: var(--font-size-normal);
-  width: 150px;
+  width: 175px;
   outline: none;
 }
 

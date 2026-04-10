@@ -1066,7 +1066,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   );
   const hasActiveResultFilter = selectedFilters.length > 0 || textFilter.trim().length > 0;
   const displayedLogCount = filteredEntries.length;
-  const countLabel = `${displayedLogCount} log${displayedLogCount === 1 ? '' : 's'} match filters`;
+  const countLabel = `${displayedLogCount} matching log${displayedLogCount === 1 ? '' : 's'}`;
   const countTitle = countLabel;
 
   const {
@@ -1742,6 +1742,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                     )
                   }
                   size="compact"
+                  className="pod-logs-selector-dropdown"
                 />
               </div>
             )}
@@ -1825,7 +1826,6 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                         },
                       ]
                     : []),
-                  { type: 'separator' },
                   {
                     type: 'toggle',
                     id: 'apiTimestamps',

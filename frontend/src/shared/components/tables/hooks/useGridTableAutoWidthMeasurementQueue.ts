@@ -23,7 +23,7 @@ const DIRTY_DEBOUNCE_MS = 280;
 const DIRTY_MIN_INTERVAL_MS = 200;
 const WIDTH_EPSILON = 0.5;
 
-const getAutoSizeMaxWidth = <T,>(
+const getAutoSizeMaxWidth = <T>(
   column: GridColumnDefinition<T>,
   getColumnMaxWidth: (column: GridColumnDefinition<T>) => number
 ) => {
