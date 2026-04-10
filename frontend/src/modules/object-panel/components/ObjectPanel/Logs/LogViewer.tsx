@@ -1100,6 +1100,22 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     selectorOptionLabelsByValue,
     textFilter,
   ]);
+  const handleClearAllFilters = useCallback(() => {
+    dispatch({ type: 'SET_TEXT_FILTER', payload: '' });
+    dispatch({ type: 'SET_SELECTED_FILTERS', payload: [] });
+    if (highlightMatches) {
+      dispatch({ type: 'TOGGLE_HIGHLIGHT_MATCHES' });
+    }
+    if (inverseMatches) {
+      dispatch({ type: 'TOGGLE_INVERSE_MATCHES' });
+    }
+    if (caseSensitiveMatches) {
+      dispatch({ type: 'TOGGLE_CASE_SENSITIVE_MATCHES' });
+    }
+    if (regexMatches) {
+      dispatch({ type: 'TOGGLE_REGEX_MATCHES' });
+    }
+  }, [caseSensitiveMatches, dispatch, highlightMatches, inverseMatches, regexMatches]);
 
   useEffect(() => {
     if (selectedFilters.length === 0) {
@@ -2156,6 +2172,15 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
 
         {activeFilterChips.length > 0 && (
           <div className="pod-logs-active-filters" aria-label="Active log filters">
+            <button
+              type="button"
+              className="pod-logs-filter-chip pod-logs-filter-chip--clear-all"
+              onClick={handleClearAllFilters}
+              aria-label="Clear all filters"
+              title="Clear all filters"
+            >
+              Clear all
+            </button>
             {activeFilterChips.map((chip) => (
               <span key={chip.key} className="pod-logs-filter-chip">
                 <span className="pod-logs-filter-chip-label">{chip.label}</span>

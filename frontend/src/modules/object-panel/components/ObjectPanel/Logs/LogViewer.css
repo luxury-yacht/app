@@ -213,6 +213,21 @@
   font-size: var(--font-size-small, 0.75rem);
 }
 
+.pod-logs-filter-chip--clear-all {
+  appearance: none;
+  cursor: pointer;
+}
+
+.pod-logs-filter-chip--clear-all:hover {
+  color: var(--color-text);
+  border-color: var(--color-accent);
+}
+
+.pod-logs-filter-chip--clear-all:focus-visible {
+  outline: 1px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
 .pod-logs-filter-chip-label {
   overflow: hidden;
   text-overflow: ellipsis;
