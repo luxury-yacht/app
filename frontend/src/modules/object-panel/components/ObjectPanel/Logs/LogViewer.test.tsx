@@ -1965,6 +1965,94 @@ describe('LogViewer active pod synchronisation', () => {
     expect(getLogViewerPrefs(panelA)?.textFilter).toBe('a-only');
   });
 
+  it('shows active filter chips for the current filter state', async () => {
+    const panelId = 'obj:cluster-a:pod:team-a:api';
+    setLogViewerPrefs(panelId, {
+      selectedContainer: '',
+      selectedFilters: ['pod:web-1', 'container:app'],
+      autoRefresh: true,
+      timestampMode: 'default',
+      showTimestamps: true,
+      wrapText: true,
+      textFilter: 'panic',
+      highlightMatches: true,
+      inverseMatches: false,
+      caseSensitiveMatches: false,
+      regexMatches: true,
+      displayMode: 'raw',
+      isParsedView: false,
+      expandedRows: [],
+      showPreviousLogs: false,
+    });
+
+    await renderViewer({ panelId });
+
+    const chipStrip = container.querySelector('[aria-label="Active log filters"]');
+    expect(chipStrip).toBeTruthy();
+    expect(chipStrip?.textContent).toContain('Filter: panic');
+    expect(chipStrip?.textContent).toContain('web-1');
+    expect(chipStrip?.textContent).toContain('app');
+    expect(chipStrip?.textContent).toContain('Highlight');
+    expect(chipStrip?.textContent).toContain('Regex');
+  });
+
+  it('clears filters and toggles when active filter chips are removed', async () => {
+    const panelId = 'obj:cluster-a:pod:team-a:api';
+    setLogViewerPrefs(panelId, {
+      selectedContainer: '',
+      selectedFilters: ['pod:web-1'],
+      autoRefresh: true,
+      timestampMode: 'default',
+      showTimestamps: true,
+      wrapText: true,
+      textFilter: 'panic',
+      highlightMatches: true,
+      inverseMatches: false,
+      caseSensitiveMatches: false,
+      regexMatches: false,
+      displayMode: 'raw',
+      isParsedView: false,
+      expandedRows: [],
+      showPreviousLogs: false,
+    });
+
+    await renderViewer({ panelId });
+
+    const removeTextFilterButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Clear text filter"]'
+    );
+    const removePodFilterButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Remove filter web-1"]'
+    );
+    const removeHighlightButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Disable highlight matches"]'
+    );
+
+    expect(removeTextFilterButton).toBeTruthy();
+    expect(removePodFilterButton).toBeTruthy();
+    expect(removeHighlightButton).toBeTruthy();
+
+    await act(async () => {
+      removeTextFilterButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+    expect(getLogViewerPrefs(panelId)?.textFilter).toBe('');
+
+    await act(async () => {
+      removePodFilterButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+    expect(getLogViewerPrefs(panelId)?.selectedFilters).toEqual([]);
+
+    await act(async () => {
+      removeHighlightButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+    expect(getLogViewerPrefs(panelId)?.highlightMatches).toBe(false);
+    const chipStrip = container.querySelector('[aria-label="Active log filters"]');
+    expect(chipStrip?.textContent ?? '').not.toContain('Highlight');
+  });
+
   // ---------------------------------------------------------------------
   // Acceptance test: spinner must not reappear on stream reconnect once
   // this LogViewer instance has content to show. This is the test that

@@ -219,6 +219,26 @@ const summarizeWorkloadSelection = (
   return labels.join(', ');
 };
 
+const formatSelectedFilterLabel = (
+  filterValue: string,
+  optionsByValue: Map<string, string>
+): string => {
+  const knownLabel = optionsByValue.get(filterValue);
+  if (knownLabel) {
+    return knownLabel;
+  }
+  if (filterValue.startsWith(POD_FILTER_PREFIX)) {
+    return filterValue.substring(POD_FILTER_PREFIX.length);
+  }
+  if (filterValue.startsWith(INIT_FILTER_PREFIX)) {
+    return filterValue.substring(INIT_FILTER_PREFIX.length);
+  }
+  if (filterValue.startsWith(CONTAINER_FILTER_PREFIX)) {
+    return filterValue.substring(CONTAINER_FILTER_PREFIX.length);
+  }
+  return filterValue;
+};
+
 const buildHighlightRegex = (
   searchText: string,
   regexMode: boolean,
@@ -993,6 +1013,93 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       ).length,
     [selectorOptions]
   );
+  const selectorOptionLabelsByValue = useMemo(
+    () =>
+      new Map(
+        selectorOptions
+          .filter((option) => option.group !== 'header')
+          .map((option) => [option.value, option.label] as const)
+      ),
+    [selectorOptions]
+  );
+  const activeFilterChips = useMemo(() => {
+    const chips: Array<{
+      key: string;
+      label: string;
+      title: string;
+      onRemove: () => void;
+    }> = [];
+
+    if (textFilter.trim()) {
+      chips.push({
+        key: 'text-filter',
+        label: `Filter: ${textFilter}`,
+        title: 'Clear text filter',
+        onRemove: () => dispatch({ type: 'SET_TEXT_FILTER', payload: '' }),
+      });
+    }
+
+    selectedFilters.forEach((filterValue) => {
+      const label = formatSelectedFilterLabel(filterValue, selectorOptionLabelsByValue);
+      chips.push({
+        key: `selected-filter:${filterValue}`,
+        label,
+        title: `Remove filter ${label}`,
+        onRemove: () =>
+          dispatch({
+            type: 'SET_SELECTED_FILTERS',
+            payload: selectedFilters.filter((value) => value !== filterValue),
+          }),
+      });
+    });
+
+    if (highlightMatches) {
+      chips.push({
+        key: 'highlight',
+        label: 'Highlight',
+        title: 'Disable highlight matches',
+        onRemove: () => dispatch({ type: 'TOGGLE_HIGHLIGHT_MATCHES' }),
+      });
+    }
+
+    if (inverseMatches) {
+      chips.push({
+        key: 'invert',
+        label: 'Invert',
+        title: 'Disable invert filter',
+        onRemove: () => dispatch({ type: 'TOGGLE_INVERSE_MATCHES' }),
+      });
+    }
+
+    if (caseSensitiveMatches) {
+      chips.push({
+        key: 'case-sensitive',
+        label: 'Match case',
+        title: 'Disable case-sensitive matching',
+        onRemove: () => dispatch({ type: 'TOGGLE_CASE_SENSITIVE_MATCHES' }),
+      });
+    }
+
+    if (regexMatches) {
+      chips.push({
+        key: 'regex',
+        label: 'Regex',
+        title: 'Disable regex matching',
+        onRemove: () => dispatch({ type: 'TOGGLE_REGEX_MATCHES' }),
+      });
+    }
+
+    return chips;
+  }, [
+    caseSensitiveMatches,
+    dispatch,
+    highlightMatches,
+    inverseMatches,
+    regexMatches,
+    selectedFilters,
+    selectorOptionLabelsByValue,
+    textFilter,
+  ]);
 
   useEffect(() => {
     if (selectedFilters.length === 0) {
@@ -1842,7 +1949,9 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   return (
     <div className="object-panel-tab-content">
       <div className="pod-logs-display">
-        <div className="pod-logs-controls">
+        <div
+          className={`pod-logs-controls${activeFilterChips.length > 0 ? ' pod-logs-controls--with-active-filters' : ''}`}
+        >
           <div className="pod-logs-controls-left">
             {/* Pod / container selector */}
             {selectorOptions.length > 0 && (
@@ -2044,6 +2153,25 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
             )}
           </div>
         </div>
+
+        {activeFilterChips.length > 0 && (
+          <div className="pod-logs-active-filters" aria-label="Active log filters">
+            {activeFilterChips.map((chip) => (
+              <span key={chip.key} className="pod-logs-filter-chip">
+                <span className="pod-logs-filter-chip-label">{chip.label}</span>
+                <button
+                  type="button"
+                  className="pod-logs-filter-chip-remove"
+                  onClick={chip.onRemove}
+                  aria-label={chip.title}
+                  title={chip.title}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
 
         <div className="pod-logs-content" ref={logsContentRef}>
           {isParsedView ? (
