@@ -1,7 +1,5 @@
 # TODO
 
-- Center Mac icons in header, keep the app header positions stable when zooming
-
 - can we get node logs?
 
 - Allow remove of default kubeconfig path, if not the last
