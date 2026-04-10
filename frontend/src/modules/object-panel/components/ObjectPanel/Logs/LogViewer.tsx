@@ -1734,6 +1734,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                     })
                   }
                   multiple
+                  showBulkActions
                   placeholder={isPendingLogs ? 'Loading logs…' : 'All Logs'}
                   renderValue={(value, options) =>
                     summarizeWorkloadSelection(
@@ -1786,7 +1787,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                     active: highlightMatches,
                     onClick: () => dispatch({ type: 'TOGGLE_HIGHLIGHT_MATCHES' }),
                     title: 'Highlight matches from the current text filter',
-                    disabled: !textFilter.trim() || inverseMatches,
+                    disabled: inverseMatches,
                   },
                   {
                     type: 'toggle',
@@ -1795,7 +1796,6 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                     active: inverseMatches,
                     onClick: () => dispatch({ type: 'TOGGLE_INVERSE_MATCHES' }),
                     title: 'Show only logs that do not contain the current text filter',
-                    disabled: !textFilter.trim(),
                   },
                   {
                     type: 'toggle',
