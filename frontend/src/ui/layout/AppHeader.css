@@ -7,6 +7,7 @@
   border-bottom: 1px solid var(--border-color);
   --wails-draggable: true;
   user-select: none;
+  cursor: default;
   padding: 0 12px;
 }
 
@@ -47,6 +48,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  cursor: default;
 }
 
 .app-header-label {
