@@ -168,6 +168,7 @@ export interface LogViewerPrefs {
   textFilter: string;
   highlightMatches: boolean;
   inverseMatches: boolean;
+  caseSensitiveMatches: boolean;
   regexMatches: boolean;
   displayMode: LogDisplayMode;
   isParsedView: boolean;

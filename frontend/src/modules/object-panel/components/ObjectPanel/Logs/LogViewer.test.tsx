@@ -668,6 +668,7 @@ describe('LogViewer active pod synchronisation', () => {
       textFilter: '',
       highlightMatches: false,
       inverseMatches: false,
+      caseSensitiveMatches: false,
       regexMatches: false,
       displayMode: 'raw',
       isParsedView: false,
@@ -1203,6 +1204,7 @@ describe('LogViewer active pod synchronisation', () => {
       textFilter: '',
       highlightMatches: false,
       inverseMatches: false,
+      caseSensitiveMatches: false,
       regexMatches: false,
       displayMode: 'raw',
       isParsedView: false,
@@ -1321,6 +1323,7 @@ describe('LogViewer active pod synchronisation', () => {
       textFilter: 'panic',
       highlightMatches: true,
       inverseMatches: false,
+      caseSensitiveMatches: false,
       regexMatches: false,
       displayMode: 'raw',
       isParsedView: false,
@@ -1409,6 +1412,73 @@ describe('LogViewer active pod synchronisation', () => {
     expect(inverseButton?.getAttribute('aria-pressed')).toBe('true');
     expect(container.textContent).not.toContain('panic in worker');
     expect(container.textContent).toContain('steady state');
+  });
+
+  it('supports case-sensitive matching from the iconbar', async () => {
+    seedLogSnapshot([
+      {
+        pod: 'web-1',
+        container: 'app',
+        line: 'Error connecting to cache',
+        timestamp: '2024-05-01T11:00:00Z',
+        isInit: false,
+      },
+      {
+        pod: 'web-1',
+        container: 'app',
+        line: 'error connecting to db',
+        timestamp: '2024-05-01T11:00:01Z',
+        isInit: false,
+      },
+    ]);
+
+    await renderViewer();
+
+    const filterInput = container.querySelector<HTMLInputElement>(
+      'input[placeholder="Filter logs..."]'
+    );
+    const caseSensitiveButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Match case in the current text filter"]'
+    );
+    expect(filterInput).toBeTruthy();
+    expect(caseSensitiveButton).toBeTruthy();
+
+    const nativeValueSetter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      'value'
+    )?.set;
+
+    await act(async () => {
+      nativeValueSetter?.call(filterInput, 'Error');
+      filterInput!.dispatchEvent(new Event('input', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain('Error connecting to cache');
+    expect(container.textContent).toContain('error connecting to db');
+
+    await act(async () => {
+      caseSensitiveButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(caseSensitiveButton?.getAttribute('aria-pressed')).toBe('true');
+    expect(container.textContent).toContain('Error connecting to cache');
+    expect(container.textContent).not.toContain('error connecting to db');
+
+    const regexButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Treat the current text filter as a regular expression"]'
+    );
+    expect(regexButton).toBeTruthy();
+
+    await act(async () => {
+      regexButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(regexButton?.getAttribute('aria-pressed')).toBe('true');
+    expect(caseSensitiveButton?.getAttribute('aria-pressed')).toBe('false');
+    expect(caseSensitiveButton?.hasAttribute('disabled')).toBe(true);
   });
 
   it('supports regex mode and disables highlight while inverse regex filtering is active', async () => {
@@ -1578,6 +1648,7 @@ describe('LogViewer active pod synchronisation', () => {
       textFilter: '',
       highlightMatches: false,
       inverseMatches: false,
+      caseSensitiveMatches: false,
       regexMatches: false,
       displayMode: 'raw',
       isParsedView: false,
@@ -1628,6 +1699,7 @@ describe('LogViewer active pod synchronisation', () => {
       textFilter: 'panic',
       highlightMatches: true,
       inverseMatches: false,
+      caseSensitiveMatches: false,
       regexMatches: false,
       displayMode: 'raw',
       isParsedView: false,
@@ -1657,6 +1729,7 @@ describe('LogViewer active pod synchronisation', () => {
     expect(initial?.selectedFilters).toEqual([]);
     expect(initial?.highlightMatches).toBe(false);
     expect(initial?.inverseMatches).toBe(false);
+    expect(initial?.caseSensitiveMatches).toBe(false);
     expect(initial?.regexMatches).toBe(false);
 
     // Type in the filter input. React's controlled input reads from a
@@ -1701,6 +1774,17 @@ describe('LogViewer active pod synchronisation', () => {
 
     expect(getLogViewerPrefs(panelId)?.inverseMatches).toBe(true);
 
+    const caseSensitiveButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Match case in the current text filter"]'
+    );
+    expect(caseSensitiveButton).toBeTruthy();
+    await act(async () => {
+      caseSensitiveButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(getLogViewerPrefs(panelId)?.caseSensitiveMatches).toBe(true);
+
     const regexButton = container.querySelector<HTMLButtonElement>(
       'button[aria-label="Treat the current text filter as a regular expression"]'
     );
@@ -1734,6 +1818,7 @@ describe('LogViewer active pod synchronisation', () => {
       textFilter: 'a-only',
       highlightMatches: false,
       inverseMatches: false,
+      caseSensitiveMatches: false,
       regexMatches: false,
       displayMode: 'raw',
       isParsedView: false,
@@ -1750,6 +1835,7 @@ describe('LogViewer active pod synchronisation', () => {
       textFilter: 'b-only',
       highlightMatches: false,
       inverseMatches: false,
+      caseSensitiveMatches: false,
       regexMatches: false,
       displayMode: 'raw',
       isParsedView: false,

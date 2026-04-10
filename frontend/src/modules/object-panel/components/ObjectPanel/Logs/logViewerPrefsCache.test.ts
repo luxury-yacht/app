@@ -22,6 +22,7 @@ const samplePrefs = (overrides: Partial<LogViewerPrefs> = {}): LogViewerPrefs =>
   textFilter: 'error',
   highlightMatches: true,
   inverseMatches: false,
+  caseSensitiveMatches: false,
   regexMatches: false,
   displayMode: 'raw',
   isParsedView: false,

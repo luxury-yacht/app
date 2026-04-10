@@ -35,6 +35,7 @@ import {
   RegexSearchIcon,
 } from '@shared/components/icons/LogIcons';
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
+import { CaseSensitiveIcon } from '@shared/components/icons/MenuIcons';
 import './LogViewer.css';
 import { refreshOrchestrator } from '@/core/refresh/orchestrator';
 import { setScopedDomainState, useRefreshScopedDomain } from '@/core/refresh/store';
@@ -216,14 +217,18 @@ const summarizeWorkloadSelection = (
   return labels.join(', ');
 };
 
-const buildHighlightRegex = (searchText: string, regexMode: boolean): RegExp | null => {
+const buildHighlightRegex = (
+  searchText: string,
+  regexMode: boolean,
+  caseSensitive: boolean
+): RegExp | null => {
   const trimmed = searchText.trim();
   if (!trimmed) {
     return null;
   }
 
   try {
-    return new RegExp(regexMode ? trimmed : escapeRegExp(trimmed), 'gi');
+    return new RegExp(regexMode ? trimmed : escapeRegExp(trimmed), caseSensitive ? 'g' : 'gi');
   } catch {
     return null;
   }
@@ -279,6 +284,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     textFilter,
     highlightMatches,
     inverseMatches,
+    caseSensitiveMatches,
     regexMatches,
     copyFeedback,
     displayMode,
@@ -315,6 +321,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     state.textFilter,
     state.highlightMatches,
     state.inverseMatches,
+    state.caseSensitiveMatches,
     state.regexMatches,
     state.displayMode,
     state.expandedRows,
@@ -362,8 +369,13 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   );
   const selectedContainerFilterCount = selectedInitContainers.size + selectedRegularContainers.size;
   const highlightRegex = useMemo(
-    () => buildHighlightRegex(highlightMatches && !inverseMatches ? textFilter : '', regexMatches),
-    [highlightMatches, inverseMatches, regexMatches, textFilter]
+    () =>
+      buildHighlightRegex(
+        highlightMatches && !inverseMatches ? textFilter : '',
+        regexMatches,
+        caseSensitiveMatches
+      ),
+    [caseSensitiveMatches, highlightMatches, inverseMatches, regexMatches, textFilter]
   );
   const backendLogSelection = useMemo(() => {
     const selectedContainerNames = [
@@ -488,6 +500,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     selectedFilters,
     textFilter,
     inverseMatches,
+    caseSensitiveMatches,
     regexMatches,
   });
 
@@ -1796,6 +1809,15 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                     active: inverseMatches,
                     onClick: () => dispatch({ type: 'TOGGLE_INVERSE_MATCHES' }),
                     title: 'Show only logs that do not contain the current text filter',
+                  },
+                  {
+                    type: 'toggle',
+                    id: 'caseSensitiveSearch',
+                    icon: <CaseSensitiveIcon width={16} height={16} />,
+                    active: caseSensitiveMatches,
+                    onClick: () => dispatch({ type: 'TOGGLE_CASE_SENSITIVE_MATCHES' }),
+                    title: 'Match case in the current text filter',
+                    disabled: regexMatches,
                   },
                   {
                     type: 'toggle',

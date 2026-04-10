@@ -45,6 +45,7 @@ export interface LogViewerState {
   textFilter: string;
   highlightMatches: boolean;
   inverseMatches: boolean;
+  caseSensitiveMatches: boolean;
   regexMatches: boolean;
 
   // Parsed view state
@@ -80,6 +81,7 @@ export type LogViewerAction =
   | { type: 'SET_TEXT_FILTER'; payload: string }
   | { type: 'TOGGLE_HIGHLIGHT_MATCHES' }
   | { type: 'TOGGLE_INVERSE_MATCHES' }
+  | { type: 'TOGGLE_CASE_SENSITIVE_MATCHES' }
   | { type: 'TOGGLE_REGEX_MATCHES' }
 
   // Parsed view actions
@@ -120,6 +122,7 @@ export const initialLogViewerState: LogViewerState = {
   textFilter: '',
   highlightMatches: false,
   inverseMatches: false,
+  caseSensitiveMatches: false,
   regexMatches: false,
 
   // Parsed view state
@@ -153,6 +156,7 @@ export const extractLogViewerPrefs = (state: LogViewerState): LogViewerPrefs => 
   textFilter: state.textFilter,
   highlightMatches: state.highlightMatches,
   inverseMatches: state.inverseMatches,
+  caseSensitiveMatches: state.caseSensitiveMatches,
   regexMatches: state.regexMatches,
   displayMode: state.displayMode,
   isParsedView: state.displayMode === 'parsed',
@@ -179,6 +183,7 @@ export const applyLogViewerPrefs = (
   textFilter: prefs.textFilter,
   highlightMatches: prefs.highlightMatches ?? false,
   inverseMatches: prefs.inverseMatches ?? false,
+  caseSensitiveMatches: prefs.caseSensitiveMatches ?? false,
   regexMatches: prefs.regexMatches ?? false,
   displayMode: prefs.displayMode ?? (prefs.isParsedView ? 'parsed' : 'raw'),
   expandedRows: new Set(prefs.expandedRows),
@@ -233,10 +238,19 @@ export function logViewerReducer(state: LogViewerState, action: LogViewerAction)
         inverseMatches: !state.inverseMatches,
         highlightMatches: !state.inverseMatches ? false : state.highlightMatches,
       };
+    case 'TOGGLE_CASE_SENSITIVE_MATCHES':
+      if (state.regexMatches) {
+        return state;
+      }
+      return {
+        ...state,
+        caseSensitiveMatches: !state.caseSensitiveMatches,
+      };
     case 'TOGGLE_REGEX_MATCHES':
       return {
         ...state,
         regexMatches: !state.regexMatches,
+        caseSensitiveMatches: !state.regexMatches ? false : state.caseSensitiveMatches,
       };
 
     // Parsed view actions
@@ -289,6 +303,7 @@ export function logViewerReducer(state: LogViewerState, action: LogViewerAction)
         textFilter: '',
         highlightMatches: false,
         inverseMatches: false,
+        caseSensitiveMatches: false,
         regexMatches: false,
         displayMode: 'raw',
         parsedLogs: [],

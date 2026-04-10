@@ -15,6 +15,7 @@ interface UseLogFilteringParams {
   selectedFilters: string[];
   textFilter: string;
   inverseMatches: boolean;
+  caseSensitiveMatches: boolean;
   regexMatches: boolean;
 }
 
@@ -34,6 +35,7 @@ export function useLogFiltering({
   selectedFilters,
   textFilter,
   inverseMatches,
+  caseSensitiveMatches,
   regexMatches,
 }: UseLogFilteringParams): UseLogFilteringResult {
   const orderedEntries = useMemo(() => {
@@ -122,29 +124,40 @@ export function useLogFiltering({
 
     // Filter by text search
     if (textFilter.trim()) {
-      const searchText = textFilter.toLowerCase();
-      const regex = regexMatches ? buildSearchRegex(textFilter) : null;
+      const searchText = caseSensitiveMatches ? textFilter : textFilter.toLowerCase();
+      const regex = regexMatches ? buildSearchRegex(textFilter, caseSensitiveMatches) : null;
       if (regexMatches && !regex) {
         return [] as ObjectLogEntry[];
       }
       entries = entries.filter((entry) => {
         const lineText = stripAnsi(entry.line);
-        const lineMatches = regex
-          ? regex.test(lineText)
-          : lineText.toLowerCase().includes(searchText);
-        const podMatches = regex
-          ? regex.test(entry.pod ?? '')
-          : entry.pod?.toLowerCase().includes(searchText) || false;
+        const podText = entry.pod ?? '';
+        const containerText = entry.container ?? '';
+        const normalizedLineText = caseSensitiveMatches ? lineText : lineText.toLowerCase();
+        const normalizedPodText = caseSensitiveMatches ? podText : podText.toLowerCase();
+        const normalizedContainerText = caseSensitiveMatches
+          ? containerText
+          : containerText.toLowerCase();
+        const lineMatches = regex ? regex.test(lineText) : normalizedLineText.includes(searchText);
+        const podMatches = regex ? regex.test(podText) : normalizedPodText.includes(searchText);
         const containerMatches = regex
-          ? regex.test(entry.container ?? '')
-          : entry.container?.toLowerCase().includes(searchText) || false;
+          ? regex.test(containerText)
+          : normalizedContainerText.includes(searchText);
         const matches = lineMatches || podMatches || containerMatches;
         return inverseMatches ? !matches : matches;
       });
     }
 
     return entries;
-  }, [inverseMatches, isWorkload, orderedEntries, regexMatches, selectedFilters, textFilter]);
+  }, [
+    caseSensitiveMatches,
+    inverseMatches,
+    isWorkload,
+    orderedEntries,
+    regexMatches,
+    selectedFilters,
+    textFilter,
+  ]);
 
   const parsedCandidates = useMemo(() => {
     if (!filteredEntries.length) {
@@ -185,13 +198,13 @@ export function useLogFiltering({
   return { filteredEntries, parsedCandidates, canParseLogs };
 }
 
-function buildSearchRegex(pattern: string): RegExp | null {
+function buildSearchRegex(pattern: string, caseSensitive: boolean): RegExp | null {
   const trimmed = pattern.trim();
   if (!trimmed) {
     return null;
   }
   try {
-    return new RegExp(trimmed, 'i');
+    return new RegExp(trimmed, caseSensitive ? '' : 'i');
   } catch {
     return null;
   }
