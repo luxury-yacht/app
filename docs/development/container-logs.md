@@ -298,3 +298,13 @@ The frontend intentionally preserves per-tab log state across transient remounts
 ### 5. The current UI is intentionally simpler than the backend contract
 
 The backend still supports more source-side filter knobs than the Object Panel exposes. That is deliberate. If you add new UI controls, document clearly whether they are frontend-only narrowing or true backend-side target reduction.
+
+### 6. Tech debt: workload selector narrowing is still mostly client-side
+
+The current grouped `All Logs` selector is not a full source-side workload selector yet.
+
+- workload pod/init/container selections mostly narrow the visible result set in the frontend
+- the current backend stream/fetch narrowing used by the Object Panel is limited to exact single-container selection in single-pod mode
+- as a result, workload fan-out, target-cap warnings, and backend load can still reflect the broader workload even when the UI appears narrowly filtered
+
+If this selector is expanded further, the next cleanup step is to make workload pod/container selections participate in backend target resolution rather than only post-transport filtering.
