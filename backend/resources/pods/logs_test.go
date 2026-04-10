@@ -871,6 +871,78 @@ func TestLogFetcherWarnsWhenTargetLimitExceeded(t *testing.T) {
 	require.Contains(t, resp.Warnings[0], "24 of 25")
 }
 
+func TestLogFetcherUsesSharedCappedTargetSelection(t *testing.T) {
+	defer func(orig func(corev1client.PodInterface, context.Context, string, *corev1.PodLogOptions) (io.ReadCloser, error)) {
+		logStreamFunc = orig
+	}(logStreamFunc)
+
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "default"},
+		Spec: appsv1.DeploymentSpec{
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "web"}},
+		},
+	}
+
+	objects := []runtime.Object{deployment}
+	podObjects := make([]*corev1.Pod, 0, 25)
+	for i := 0; i < 25; i++ {
+		pod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      fmt.Sprintf("web-%02d", i),
+				Namespace: "default",
+				Labels:    map[string]string{"app": "web"},
+			},
+			Spec: corev1.PodSpec{
+				Containers: []corev1.Container{{Name: "app"}},
+			},
+			Status: corev1.PodStatus{
+				Phase: corev1.PodRunning,
+				Conditions: []corev1.PodCondition{{
+					Type:   corev1.PodReady,
+					Status: corev1.ConditionTrue,
+				}},
+			},
+		}
+		podObjects = append(podObjects, pod)
+		objects = append(objects, pod)
+	}
+
+	client := fake.NewClientset(objects...)
+	requestedKeys := make([]string, 0, podlogs.DefaultPerScopeTargetLimit)
+	logStreamFunc = func(_ corev1client.PodInterface, _ context.Context, podName string, opts *corev1.PodLogOptions) (io.ReadCloser, error) {
+		requestedKeys = append(requestedKeys, fmt.Sprintf("default/%s/%s", podName, opts.Container))
+		return io.NopCloser(strings.NewReader(fmt.Sprintf("2024-01-01T00:00:00Z %s log", podName))), nil
+	}
+
+	service := NewService(common.Dependencies{
+		Context:          context.Background(),
+		Logger:           testsupport.NoopLogger{},
+		KubernetesClient: client,
+	})
+
+	resp := service.LogFetcher(types.LogFetchRequest{
+		Namespace:    "default",
+		WorkloadKind: "deployment",
+		WorkloadName: "web",
+	})
+	require.Empty(t, resp.Error)
+
+	expectedTargets, total := podlogs.SelectTargets(
+		podObjects,
+		podlogs.DefaultContainerSelection(""),
+		podlogs.DefaultPerScopeTargetLimit,
+	)
+	require.Equal(t, 25, total)
+	expectedKeys := make([]string, 0, len(expectedTargets))
+	for _, target := range expectedTargets {
+		expectedKeys = append(expectedKeys, target.Key())
+	}
+
+	require.Equal(t, expectedKeys, requestedKeys)
+	require.Len(t, resp.Warnings, 1)
+	require.Contains(t, resp.Warnings[0], "24 of 25")
+}
+
 func TestLogFetcherSortsWhenTimestampMissing(t *testing.T) {
 	defer func(orig func(corev1client.PodInterface, context.Context, string, *corev1.PodLogOptions) (io.ReadCloser, error)) {
 		logStreamFunc = orig

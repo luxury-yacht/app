@@ -139,21 +139,6 @@ class LogStreamConnection {
       if (streamParams?.container) {
         url.searchParams.set('container', streamParams.container);
       }
-      if (streamParams?.pod) {
-        url.searchParams.set('pod', streamParams.pod);
-      }
-      if (streamParams?.podInclude) {
-        url.searchParams.set('podInclude', streamParams.podInclude);
-      }
-      if (streamParams?.podExclude) {
-        url.searchParams.set('podExclude', streamParams.podExclude);
-      }
-      if (streamParams?.include) {
-        url.searchParams.set('include', streamParams.include);
-      }
-      if (streamParams?.exclude) {
-        url.searchParams.set('exclude', streamParams.exclude);
-      }
 
       const eventSource = new EventSource(url.toString());
       this.eventSource = eventSource;

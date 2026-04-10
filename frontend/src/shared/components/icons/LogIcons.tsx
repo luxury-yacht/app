@@ -145,3 +145,74 @@ export const CopyIcon: React.FC<IconProps> = ({
     <path d="M11 12a1 1 0 1 0 0 2h10a1 1 0 1 0 0-2zm-1 6a1 1 0 0 1 1-1h5a1 1 0 1 1 0 2h-5a1 1 0 0 1-1-1m1 4a1 1 0 1 0 0 2h8a1 1 0 1 0 0-2zM21.83 4A3 3 0 0 0 19 2h-6a3 3 0 0 0-2.83 2H8.5A3.5 3.5 0 0 0 5 7.5v19A3.5 3.5 0 0 0 8.5 30h15a3.5 3.5 0 0 0 3.5-3.5v-19A3.5 3.5 0 0 0 23.5 4zM12 5a1 1 0 0 1 1-1h6a1 1 0 1 1 0 2h-6a1 1 0 0 1-1-1M7 7.5A1.5 1.5 0 0 1 8.5 6h1.67A3 3 0 0 0 13 8h6a3 3 0 0 0 2.83-2h1.67A1.5 1.5 0 0 1 25 7.5v19a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 7 26.5z" />
   </svg>
 );
+
+/** Magnifier with star — highlight matching search terms */
+export const HighlightSearchIcon: React.FC<IconProps> = ({
+  width = 18,
+  height = 18,
+  fill = 'currentColor',
+}) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    width={width}
+    height={height}
+    fill="none"
+    stroke={fill}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    strokeWidth={2}
+  >
+    <circle cx="10.5" cy="10.5" r="5.5" />
+    <path d="m15 15 4.5 4.5" />
+    <path d="m10.5 7.5.7 1.5 1.5.7-1.5.7-.7 1.5-.7-1.5-1.5-.7 1.5-.7z" />
+  </svg>
+);
+
+/** Magnifier with slash — invert the text filter */
+export const InverseSearchIcon: React.FC<IconProps> = ({
+  width = 18,
+  height = 18,
+  fill = 'currentColor',
+}) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    width={width}
+    height={height}
+    fill="none"
+    stroke={fill}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    strokeWidth={2}
+  >
+    <circle cx="10.5" cy="10.5" r="5.5" />
+    <path d="m15 15 4.5 4.5" />
+    <path d="M6.5 14.5 14.5 6.5" />
+  </svg>
+);
+
+/** Regex-style glyph — treat the filter text as a regular expression */
+export const RegexSearchIcon: React.FC<IconProps> = ({
+  width = 18,
+  height = 18,
+  fill = 'currentColor',
+}) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    width={width}
+    height={height}
+    fill="none"
+    stroke={fill}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    strokeWidth={2}
+  >
+    <path d="M4 7c1.5 0 2.5 1 2.5 2.5S5.5 12 4 12c1.5 0 2.5 1 2.5 2.5S5.5 17 4 17" />
+    <path d="M12 7v10" />
+    <path d="m10 9 2-2 2 2" />
+    <path d="m10 15 2 2 2-2" />
+    <path d="M20 7c-1.5 0-2.5 1-2.5 2.5S18.5 12 20 12c-1.5 0-2.5 1-2.5 2.5S18.5 17 20 17" />
+  </svg>
+);

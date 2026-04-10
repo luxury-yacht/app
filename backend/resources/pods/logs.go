@@ -46,12 +46,25 @@ func (s *Service) LogFetcher(req types.LogFetchRequest) types.LogFetchResponse {
 	if err != nil {
 		return types.LogFetchResponse{Error: fmt.Sprintf("invalid pod filter: %v", err)}
 	}
+	containerState, err := podlogs.ParseContainerStateFilter(req.ContainerState)
+	if err != nil {
+		return types.LogFetchResponse{Error: fmt.Sprintf("invalid container state filter: %v", err)}
+	}
 
 	pods, err := s.resolveTargetPodObjects(req, podNameFilter)
 	if err != nil {
 		return types.LogFetchResponse{Error: err.Error()}
 	}
-	targets, totalTargets := podlogs.SelectTargets(pods, req.Container, podlogs.DefaultPerScopeTargetLimit)
+	targets, totalTargets := podlogs.SelectTargets(
+		pods,
+		podlogs.ContainerSelectionOptions{
+			Filter:           req.Container,
+			IncludeInit:      boolValueOrDefault(req.IncludeInit, true),
+			IncludeEphemeral: boolValueOrDefault(req.IncludeEphemeral, true),
+			StateFilter:      containerState,
+		},
+		podlogs.DefaultPerScopeTargetLimit,
+	)
 	warnings := podlogs.BuildTargetLimitWarnings(len(targets), totalTargets)
 
 	var allEntries []types.PodLogEntry
@@ -127,6 +140,9 @@ func (s *Service) resolveLogTarget(req types.LogFetchRequest) (resolvedLogTarget
 		identity, err := refresh.ParseObjectScope(req.Scope)
 		if err != nil {
 			return resolvedLogTarget{}, err
+		}
+		if strings.TrimSpace(identity.GVK.Version) == "" {
+			return resolvedLogTarget{}, fmt.Errorf("logs require object scopes to include apiVersion")
 		}
 		if identity.Namespace == "" {
 			return resolvedLogTarget{}, fmt.Errorf("logs require a namespaced object scope")
@@ -425,6 +441,13 @@ func summarizeLogFetchErrors(prefix string, errs []error) string {
 		return fmt.Sprintf("%s: %v", prefix, errs[0])
 	}
 	return fmt.Sprintf("%s: %v (and %d more)", prefix, errs[0], len(errs)-1)
+}
+
+func boolValueOrDefault(value *bool, defaultValue bool) bool {
+	if value == nil {
+		return defaultValue
+	}
+	return *value
 }
 
 func (s *Service) ctx() context.Context {

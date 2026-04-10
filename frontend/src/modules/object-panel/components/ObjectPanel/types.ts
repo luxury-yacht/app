@@ -140,6 +140,10 @@ export type ViewType =
   | 'values'
   | 'maintenance';
 
+export type LogDisplayMode = 'raw' | 'structured' | 'pretty' | 'parsed';
+
+export type LogTimestampMode = 'hidden' | 'default' | 'short' | 'localized';
+
 /**
  * Persistent subset of LogViewerState — the user-facing view preferences
  * that should survive ObjectPanelContent unmount/remount caused by
@@ -155,16 +159,16 @@ export type ViewType =
  */
 export interface LogViewerPrefs {
   selectedContainer: string;
-  selectedFilter: string;
+  selectedFilters: string[];
   autoRefresh: boolean;
+  timestampMode: LogTimestampMode;
   showTimestamps: boolean;
   wrapText: boolean;
   textFilter: string;
-  podIncludeFilter: string;
-  podExcludeFilter: string;
-  highlightFilter: string;
-  includeFilter: string;
-  excludeFilter: string;
+  highlightMatches: boolean;
+  inverseMatches: boolean;
+  regexMatches: boolean;
+  displayMode: LogDisplayMode;
   isParsedView: boolean;
   expandedRows: string[];
   showPreviousLogs: boolean;

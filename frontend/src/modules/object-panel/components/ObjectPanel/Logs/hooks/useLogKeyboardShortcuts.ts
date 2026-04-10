@@ -11,6 +11,7 @@ import type { LogViewerAction } from '../logViewerReducer';
 interface UseLogKeyboardShortcutsParams {
   isActive: boolean;
   isParsedView: boolean;
+  showTimestamps: boolean;
   dispatch: React.Dispatch<LogViewerAction>;
   supportsPreviousLogs: boolean;
   canParseLogs: boolean;
@@ -26,6 +27,7 @@ interface UseLogKeyboardShortcutsParams {
 export function useLogKeyboardShortcuts({
   isActive,
   isParsedView,
+  showTimestamps,
   dispatch,
   supportsPreviousLogs,
   canParseLogs,
@@ -53,9 +55,12 @@ export function useLogKeyboardShortcuts({
     key: 't',
     handler: useCallback(() => {
       if (!isActive) return false;
-      dispatch({ type: 'TOGGLE_TIMESTAMPS' });
+      dispatch({
+        type: 'SET_TIMESTAMP_MODE',
+        payload: showTimestamps ? 'hidden' : 'default',
+      });
       return true;
-    }, [isActive, dispatch]),
+    }, [isActive, showTimestamps, dispatch]),
     description: 'Toggle API timestamps',
     category: 'Logs Tab',
     enabled: isActive,

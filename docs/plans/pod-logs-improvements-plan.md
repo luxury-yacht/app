@@ -71,13 +71,13 @@ Explicitly out of scope for this plan:
 - ✅ Update log stream scope parsing to support the GVK-aware object scope format
 - ✅ Update workload/pod resolution code to consume full object identity instead of legacy kind-only scope segments
 - ✅ Update fallback/manual log-fetch request handling to consume the same canonical object identity as the live stream path
-- [ ] Add hard failures for missing API version once all callers are migrated
+- ✅ Add hard failures for missing API version once all callers are migrated
 - ✅ Keep a temporary compatibility parser for old log scopes during rollout
 
 ### Frontend
 
 - ✅ Update `getObjectPanelKind` to build `logScope` from full object identity
-- [ ] Thread GVK-aware log scope through `ObjectPanelContent`, `LogViewer`, and refresh orchestration
+- ✅ Thread GVK-aware log scope through `ObjectPanelContent`, `LogViewer`, and refresh orchestration
 - ✅ Update manual/fallback log fetch requests to derive from the same canonical object identity used by live streaming
 - ✅ Remove legacy comments and assumptions that logs are the one exception to full object identity
 
@@ -102,18 +102,18 @@ Explicitly out of scope for this plan:
 
 ### Backend
 
-- [ ] Add explicit options for including or excluding init containers
-- [ ] Add explicit options for including or excluding ephemeral containers
+- ✅ Add explicit options for including or excluding init containers
+- ✅ Add explicit options for including or excluding ephemeral containers
 - ✅ Treat ephemeral containers as included by default in "all containers" mode
-- [ ] Add container-state targeting where Kubernetes semantics make it meaningful
+- ✅ Add container-state targeting where Kubernetes semantics make it meaningful
 - ✅ Ensure batch fetch and stream follow enumerate the same container sets
 - ✅ Stop returning empty success on permission or transport failures
 - ✅ Replace default `bufio.Scanner` limits with safer large-line handling
-- [ ] Normalize transient "no logs yet" conditions so they are distinguishable from real failures
+- ✅ Normalize transient "no logs yet" conditions so they are distinguishable from real failures
 
 ### Frontend
 
-- [ ] Update the single-pod container picker to accurately reflect containers the backend can actually stream
+- ✅ Update the single-pod container picker to accurately reflect containers the backend can actually stream
 - ✅ Surface backend failures as failures, not "No logs available"
 - ✅ Add UI affordances for init/debug/ephemeral container visibility when relevant
 - ✅ Ensure "all containers" mode clearly indicates that ephemeral containers are included by default when present
@@ -150,12 +150,12 @@ Explicitly out of scope for this plan:
 - ✅ Start with a provisional default global cap of 72 resolved pod/container targets, subject to validation during hardening
 - ✅ Define the global cap as process-wide with fair sharing across clusters so one cluster cannot starve unrelated active scopes in another cluster
 - ✅ Count resolved pod/container targets, not just pod count, against both caps
-- [ ] Use deterministic target selection when caps are hit:
+- ✅ Use deterministic target selection when caps are hit:
 - ✅ prefer ready/running pods first
 - ✅ then stable sort by pod name and container name
 - ✅ then take the first N targets allowed by the active cap
 - ✅ keep the cap enforced across stream lifecycle changes so pod churn rebalances the bounded target set instead of growing past it
-- [ ] Define behavior when the limit is exceeded:
+- ✅ Define behavior when the limit is exceeded:
 - ✅ object panel mode returns a structured warning and degraded subset
 - ✅ previous/manual mode uses the same target cap model and deterministic selection
 - ✅ previous/manual mode may batch or serialize requests internally, but must preserve the same visible target set semantics as live mode
@@ -169,16 +169,15 @@ Explicitly out of scope for this plan:
 - ✅ Persist include/exclude filter state for the lifetime of the Object Panel tab, including transient remounts such as cluster switching
 - ✅ Drop highlight filter state when the owning Object Panel tab is closed
 - ✅ Drop include/exclude filter state when the owning Object Panel tab is closed
-- [ ] Reflect backend warnings when not all pod/container targets were opened or fetched
 - ✅ Reflect backend warnings when not all pod/container targets were opened or fetched
-- [ ] Distinguish transport drops from intentional filtering
+- ✅ Distinguish transport drops from intentional filtering
 
 ### Tests
 
 - ✅ Add backend tests for include/exclude filters
 - ✅ Add backend tests for concurrency cap behavior
-- [ ] Add backend tests proving live follow and previous/manual fetch resolve the same capped target set
-- [ ] Add frontend tests for warning states when limits are hit
+- ✅ Add backend tests proving live follow and previous/manual fetch resolve the same capped target set
+- ✅ Add frontend tests for warning states when limits are hit
 
 ### Exit Criteria
 
@@ -200,31 +199,31 @@ Explicitly out of scope for this plan:
 - ✅ Change pod color assignment from sorted visible pod order to stable hash-based pod-name mapping so a pod keeps the same color across refreshes and pod-list churn
 - ✅ Ensure the stable mapping still degrades predictably when more than 12 pods are visible
 - ✅ Add highlight support for matched substrings
-- [ ] Expand display modes:
-- [ ] raw
-- [ ] structured JSON
-- [ ] pretty JSON
-- [ ] parsed table
-- [ ] Add richer timestamp controls:
-- [ ] hidden
-- [ ] default
-- [ ] short
-- [ ] localized display
-- [ ] Preserve current pod/container prefixes and color cues where useful
-- [ ] Ensure copy/export behavior respects the active display mode
+- ✅ Expand display modes:
+- ✅ raw
+- ✅ structured JSON
+- ✅ pretty JSON
+- ✅ parsed table
+- ✅ Add richer timestamp controls:
+- ✅ hidden
+- ✅ default
+- ✅ short
+- ✅ localized display
+- ✅ Preserve current pod/container prefixes and color cues where useful
+- ✅ Ensure copy/export behavior respects the active display mode
 
 ### Backend
 
-- [ ] Keep backend responsibility limited to log delivery, filtering, target selection, ordering, metadata, and warnings
-- [ ] Do not add backend-side parsed-log formatting or user-defined output rendering
+- ✅ Keep backend responsibility limited to log delivery, filtering, target selection, ordering, metadata, and warnings
+- ✅ Do not add backend-side parsed-log formatting or user-defined output rendering
 
 ### Tests
 
 - ✅ Add frontend tests proving pod colors remain stable for a given pod name when the visible pod set changes
 - ✅ Add frontend tests covering >12 pod wraparound behavior
 - ✅ Add frontend tests for highlight behavior
-- [ ] Add frontend tests for output mode switching
-- [ ] Add frontend tests for timestamp format controls
+- ✅ Add frontend tests for output mode switching
+- ✅ Add frontend tests for timestamp format controls
 
 ### Exit Criteria
 
@@ -236,21 +235,21 @@ Explicitly out of scope for this plan:
 
 ### Quality Gates
 
-- [ ] Run targeted backend tests for pod log fetch and stream packages
-- [ ] Run targeted frontend tests for `LogViewer`, log stream manager, and fallback manager
-- [ ] Run `mage qc:prerelease`
+- ✅ Run targeted backend tests for pod log fetch and stream packages
+- ✅ Run targeted frontend tests for `LogViewer`, log stream manager, and fallback manager
+- ✅ Run `mage qc:prerelease`
 
 ### Operational Checks
 
-- [ ] Validate behavior against large workloads with many pods and containers
-- [ ] Validate RBAC-denied, auth-recovery, and refresh-subsystem rebuild scenarios
-- [ ] Validate cluster switching with active log streams
-- [ ] Validate memory behavior with the configured log buffer limit
+- ✅ Validate behavior against large workloads with many pods and containers
+- ✅ Validate RBAC-denied, auth-recovery, and refresh-subsystem rebuild scenarios
+- ✅ Validate cluster switching with active log streams
+- ✅ Validate memory behavior with the configured log buffer limit
 
 ### Documentation
 
-- [ ] Add developer docs describing the log pipeline and scope format
-- [ ] Document which pod log behaviors are intentionally adopted vs intentionally omitted
+- ✅ Add developer docs describing the log pipeline and scope format
+- ✅ Document which pod log behaviors are intentionally adopted vs intentionally omitted
 
 ## Recommended Implementation Order
 

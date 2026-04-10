@@ -103,6 +103,7 @@
   position: relative;
   display: inline-flex;
   align-items: center;
+  gap: var(--spacing-xs);
 }
 
 .pod-logs-text-filter {
@@ -147,6 +148,32 @@
 
 .pod-logs-filter-clear:active {
   transform: scale(0.9);
+}
+
+.pod-logs-filter-toggle {
+  padding: 4px 10px;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-normal);
+  cursor: pointer;
+}
+
+.pod-logs-filter-toggle:hover:not(:disabled) {
+  color: var(--color-text);
+  border-color: var(--color-accent);
+}
+
+.pod-logs-filter-toggle.active {
+  background: var(--button-action-bg);
+  border-color: var(--button-action-bg);
+  color: var(--button-action-text);
+}
+
+.pod-logs-filter-toggle:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .pod-logs-control-btn {

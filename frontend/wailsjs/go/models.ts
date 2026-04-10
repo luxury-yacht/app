@@ -2539,6 +2539,9 @@ export namespace types {
 	    podInclude?: string;
 	    podExclude?: string;
 	    container?: string;
+	    includeInit?: boolean;
+	    includeEphemeral?: boolean;
+	    containerState?: string;
 	    include?: string;
 	    exclude?: string;
 	    previous: boolean;
@@ -2560,6 +2563,9 @@ export namespace types {
 	        this.podInclude = source["podInclude"];
 	        this.podExclude = source["podExclude"];
 	        this.container = source["container"];
+	        this.includeInit = source["includeInit"];
+	        this.includeEphemeral = source["includeEphemeral"];
+	        this.containerState = source["containerState"];
 	        this.include = source["include"];
 	        this.exclude = source["exclude"];
 	        this.previous = source["previous"];
@@ -4284,3 +4290,4 @@ export namespace v1 {
 	}
 
 }
+

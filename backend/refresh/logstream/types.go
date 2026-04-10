@@ -24,20 +24,23 @@ func (noopLogger) Error(string, ...string) {}
 
 // Options captures the parameters for a log streaming session.
 type Options struct {
-	ClusterID     string
-	Namespace     string
-	Kind          string
-	Name          string
-	PodFilter     string
-	PodInclude    string
-	PodExclude    string
-	Container     string
-	Include       string
-	Exclude       string
-	PodNameFilter podlogs.PodNameFilter
-	LineFilter    podlogs.LineFilter
-	TailLines     int
-	ScopeString   string
+	ClusterID        string
+	Namespace        string
+	Kind             string
+	Name             string
+	PodFilter        string
+	PodInclude       string
+	PodExclude       string
+	Container        string
+	IncludeInit      bool
+	IncludeEphemeral bool
+	ContainerState   podlogs.ContainerStateFilter
+	Include          string
+	Exclude          string
+	PodNameFilter    podlogs.PodNameFilter
+	LineFilter       podlogs.LineFilter
+	TailLines        int
+	ScopeString      string
 }
 
 // Entry mirrors the log line payload sent to clients.
@@ -57,7 +60,7 @@ type EventPayload struct {
 	GeneratedAt  int64                           `json:"generatedAt"`
 	Reset        bool                            `json:"reset,omitempty"`
 	Entries      []Entry                         `json:"entries,omitempty"`
-	Warnings     []string                        `json:"warnings,omitempty"`
+	Warnings     *[]string                       `json:"warnings,omitempty"`
 	Error        string                          `json:"error,omitempty"`
 	ErrorDetails *refresh.PermissionDeniedStatus `json:"errorDetails,omitempty"`
 }

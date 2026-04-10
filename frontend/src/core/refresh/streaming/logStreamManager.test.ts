@@ -322,12 +322,7 @@ describe('LogStreamManager', () => {
     (globalThis as any).EventSource = MockEventSource as any;
 
     setLogStreamScopeParams(SCOPE, {
-      pod: 'web-2',
-      podInclude: '^web-',
-      podExclude: '-canary$',
       container: 'app',
-      include: 'error|warn',
-      exclude: 'healthcheck',
     });
 
     const { LogStreamManager } = await import('./logStreamManager');
@@ -338,12 +333,7 @@ describe('LogStreamManager', () => {
     expect(MockEventSource.instances).toHaveLength(1);
     const streamURL = new URL(MockEventSource.instances[0]!.url);
     expect(streamURL.searchParams.get('scope')).toBe(SCOPE);
-    expect(streamURL.searchParams.get('pod')).toBe('web-2');
-    expect(streamURL.searchParams.get('podInclude')).toBe('^web-');
-    expect(streamURL.searchParams.get('podExclude')).toBe('-canary$');
     expect(streamURL.searchParams.get('container')).toBe('app');
-    expect(streamURL.searchParams.get('include')).toBe('error|warn');
-    expect(streamURL.searchParams.get('exclude')).toBe('healthcheck');
   });
 
   test('refreshOnce rejects and marks error when the stream fails', async () => {
@@ -418,6 +408,52 @@ describe('LogStreamManager', () => {
     expect(getScopedDomainState('object-logs', SCOPE).status).toBe('ready');
     manager.stopAll(true);
 
+    const state = getScopedDomainState('object-logs', SCOPE);
+    expect(state.status).toBe('idle');
+    expect(state.data).toBeNull();
+  });
+
+  test('kubeconfig:changing resets active log streams and scoped state', async () => {
+    class MockEventSource {
+      static instances: MockEventSource[] = [];
+      listeners: Record<string, (evt?: any) => void> = {};
+      closed = false;
+      constructor() {
+        MockEventSource.instances.push(this);
+      }
+      addEventListener(type: string, handler: (evt?: any) => void): void {
+        this.listeners[type] = handler;
+      }
+      removeEventListener(): void {}
+      close(): void {
+        this.closed = true;
+      }
+    }
+    (globalThis as any).EventSource = MockEventSource as any;
+
+    const { eventBus } = await import('@/core/events');
+    const { LogStreamManager } = await import('./logStreamManager');
+    const manager = new LogStreamManager();
+
+    await manager.startStream(SCOPE);
+    manager.applyPayload(
+      SCOPE,
+      {
+        domain: 'object-logs',
+        scope: SCOPE,
+        sequence: 2,
+        generatedAt: Date.now(),
+        reset: true,
+        entries: [{ timestamp: 't1', pod: 'pod-1', container: 'app', line: 'line 1' }],
+      },
+      'stream'
+    );
+
+    expect(getScopedDomainState('object-logs', SCOPE).data?.entries).toHaveLength(1);
+
+    eventBus.emit('kubeconfig:changing', '');
+
+    expect(MockEventSource.instances[0]?.closed).toBe(true);
     const state = getScopedDomainState('object-logs', SCOPE);
     expect(state.status).toBe('idle');
     expect(state.data).toBeNull();

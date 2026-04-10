@@ -4,8 +4,7 @@
  * Consolidates the multiple useState calls in LogViewer into a single reducer
  * for better state management and reduced complexity.
  */
-
-import type { LogViewerPrefs } from '../types';
+import type { LogDisplayMode, LogTimestampMode, LogViewerPrefs } from '../types';
 
 // Empty string means "all containers" in both the backend API and the filter UI
 export const ALL_CONTAINERS = '';
@@ -23,6 +22,8 @@ export interface ParsedLogEntry {
 
 export type CopyFeedback = 'idle' | 'copied' | 'error';
 
+const TIMESTAMP_MODE_ORDER: LogTimestampMode[] = ['hidden', 'default', 'short', 'localized'];
+
 /**
  * LogViewer state grouped by concern
  */
@@ -34,21 +35,19 @@ export interface LogViewerState {
   // Pod and container state (for workload view)
   availablePods: string[];
   availableContainers: string[];
-  selectedFilter: string;
+  selectedFilters: string[];
 
   // UI settings (user preferences)
   autoRefresh: boolean;
-  showTimestamps: boolean;
+  timestampMode: LogTimestampMode;
   wrapText: boolean;
   textFilter: string;
-  podIncludeFilter: string;
-  podExcludeFilter: string;
-  highlightFilter: string;
-  includeFilter: string;
-  excludeFilter: string;
+  highlightMatches: boolean;
+  inverseMatches: boolean;
+  regexMatches: boolean;
 
   // Parsed view state
-  isParsedView: boolean;
+  displayMode: LogDisplayMode;
   parsedLogs: ParsedLogEntry[];
   expandedRows: Set<string>;
 
@@ -69,22 +68,21 @@ export type LogViewerAction =
   // Workload filter actions
   | { type: 'SET_AVAILABLE_PODS'; payload: string[] }
   | { type: 'SET_AVAILABLE_CONTAINERS'; payload: string[] }
-  | { type: 'SET_SELECTED_FILTER'; payload: string }
+  | { type: 'SET_SELECTED_FILTERS'; payload: string[] }
 
   // UI settings actions
   | { type: 'TOGGLE_AUTO_REFRESH' }
-  | { type: 'TOGGLE_TIMESTAMPS' }
+  | { type: 'CYCLE_TIMESTAMP_MODE' }
+  | { type: 'SET_TIMESTAMP_MODE'; payload: LogTimestampMode }
   | { type: 'TOGGLE_WRAP_TEXT' }
   | { type: 'SET_TEXT_FILTER'; payload: string }
-  | { type: 'SET_POD_INCLUDE_FILTER'; payload: string }
-  | { type: 'SET_POD_EXCLUDE_FILTER'; payload: string }
-  | { type: 'SET_HIGHLIGHT_FILTER'; payload: string }
-  | { type: 'SET_INCLUDE_FILTER'; payload: string }
-  | { type: 'SET_EXCLUDE_FILTER'; payload: string }
+  | { type: 'TOGGLE_HIGHLIGHT_MATCHES' }
+  | { type: 'TOGGLE_INVERSE_MATCHES' }
+  | { type: 'TOGGLE_REGEX_MATCHES' }
 
   // Parsed view actions
   | { type: 'TOGGLE_PARSED_VIEW' }
-  | { type: 'SET_PARSED_VIEW'; payload: boolean }
+  | { type: 'SET_DISPLAY_MODE'; payload: LogDisplayMode }
   | { type: 'SET_PARSED_LOGS'; payload: ParsedLogEntry[] }
   | { type: 'TOGGLE_ROW_EXPANSION'; payload: string }
 
@@ -110,21 +108,19 @@ export const initialLogViewerState: LogViewerState = {
   // Workload filter state
   availablePods: [],
   availableContainers: [],
-  selectedFilter: '',
+  selectedFilters: [],
 
   // UI settings
   autoRefresh: true,
-  showTimestamps: true,
+  timestampMode: 'default',
   wrapText: true,
   textFilter: '',
-  podIncludeFilter: '',
-  podExcludeFilter: '',
-  highlightFilter: '',
-  includeFilter: '',
-  excludeFilter: '',
+  highlightMatches: false,
+  inverseMatches: false,
+  regexMatches: false,
 
   // Parsed view state
-  isParsedView: false,
+  displayMode: 'raw',
   parsedLogs: [],
   expandedRows: new Set<string>(),
 
@@ -145,17 +141,17 @@ export const initialLogViewerState: LogViewerState = {
  */
 export const extractLogViewerPrefs = (state: LogViewerState): LogViewerPrefs => ({
   selectedContainer: state.selectedContainer,
-  selectedFilter: state.selectedFilter,
+  selectedFilters: state.selectedFilters,
   autoRefresh: state.autoRefresh,
-  showTimestamps: state.showTimestamps,
+  timestampMode: state.timestampMode,
+  showTimestamps: state.timestampMode !== 'hidden',
   wrapText: state.wrapText,
   textFilter: state.textFilter,
-  podIncludeFilter: state.podIncludeFilter,
-  podExcludeFilter: state.podExcludeFilter,
-  highlightFilter: state.highlightFilter,
-  includeFilter: state.includeFilter,
-  excludeFilter: state.excludeFilter,
-  isParsedView: state.isParsedView,
+  highlightMatches: state.highlightMatches,
+  inverseMatches: state.inverseMatches,
+  regexMatches: state.regexMatches,
+  displayMode: state.displayMode,
+  isParsedView: state.displayMode === 'parsed',
   expandedRows: Array.from(state.expandedRows),
   showPreviousLogs: state.showPreviousLogs,
 });
@@ -171,17 +167,15 @@ export const applyLogViewerPrefs = (
 ): LogViewerState => ({
   ...base,
   selectedContainer: prefs.selectedContainer,
-  selectedFilter: prefs.selectedFilter,
+  selectedFilters: prefs.selectedFilters ?? [],
   autoRefresh: prefs.autoRefresh,
-  showTimestamps: prefs.showTimestamps,
+  timestampMode: prefs.timestampMode ?? (prefs.showTimestamps ? 'default' : 'hidden'),
   wrapText: prefs.wrapText,
   textFilter: prefs.textFilter,
-  podIncludeFilter: prefs.podIncludeFilter ?? '',
-  podExcludeFilter: prefs.podExcludeFilter ?? '',
-  highlightFilter: prefs.highlightFilter ?? '',
-  includeFilter: prefs.includeFilter ?? '',
-  excludeFilter: prefs.excludeFilter ?? '',
-  isParsedView: prefs.isParsedView,
+  highlightMatches: prefs.highlightMatches ?? false,
+  inverseMatches: prefs.inverseMatches ?? false,
+  regexMatches: prefs.regexMatches ?? false,
+  displayMode: prefs.displayMode ?? (prefs.isParsedView ? 'parsed' : 'raw'),
   expandedRows: new Set(prefs.expandedRows),
   showPreviousLogs: prefs.showPreviousLogs,
 });
@@ -199,42 +193,64 @@ export function logViewerReducer(state: LogViewerState, action: LogViewerAction)
       return { ...state, availablePods: action.payload };
     case 'SET_AVAILABLE_CONTAINERS':
       return { ...state, availableContainers: action.payload };
-    case 'SET_SELECTED_FILTER':
-      return { ...state, selectedFilter: action.payload };
+    case 'SET_SELECTED_FILTERS':
+      return { ...state, selectedFilters: action.payload };
 
     // UI settings actions
     case 'TOGGLE_AUTO_REFRESH':
       return { ...state, autoRefresh: !state.autoRefresh };
-    case 'TOGGLE_TIMESTAMPS':
-      return { ...state, showTimestamps: !state.showTimestamps };
+    case 'CYCLE_TIMESTAMP_MODE': {
+      const currentIndex = TIMESTAMP_MODE_ORDER.indexOf(state.timestampMode);
+      return {
+        ...state,
+        timestampMode: TIMESTAMP_MODE_ORDER[(currentIndex + 1) % TIMESTAMP_MODE_ORDER.length],
+      };
+    }
+    case 'SET_TIMESTAMP_MODE':
+      return { ...state, timestampMode: action.payload };
     case 'TOGGLE_WRAP_TEXT':
       return { ...state, wrapText: !state.wrapText };
     case 'SET_TEXT_FILTER':
-      return { ...state, textFilter: action.payload };
-    case 'SET_POD_INCLUDE_FILTER':
-      return { ...state, podIncludeFilter: action.payload };
-    case 'SET_POD_EXCLUDE_FILTER':
-      return { ...state, podExcludeFilter: action.payload };
-    case 'SET_HIGHLIGHT_FILTER':
-      return { ...state, highlightFilter: action.payload };
-    case 'SET_INCLUDE_FILTER':
-      return { ...state, includeFilter: action.payload };
-    case 'SET_EXCLUDE_FILTER':
-      return { ...state, excludeFilter: action.payload };
+      return {
+        ...state,
+        textFilter: action.payload,
+        highlightMatches: action.payload.trim() ? state.highlightMatches : false,
+        inverseMatches: action.payload.trim() ? state.inverseMatches : false,
+      };
+    case 'TOGGLE_HIGHLIGHT_MATCHES':
+      return {
+        ...state,
+        highlightMatches:
+          state.textFilter.trim() && !state.inverseMatches ? !state.highlightMatches : false,
+      };
+    case 'TOGGLE_INVERSE_MATCHES':
+      if (!state.textFilter.trim()) {
+        return { ...state, inverseMatches: false, highlightMatches: false };
+      }
+      return {
+        ...state,
+        inverseMatches: !state.inverseMatches,
+        highlightMatches: !state.inverseMatches ? false : state.highlightMatches,
+      };
+    case 'TOGGLE_REGEX_MATCHES':
+      return {
+        ...state,
+        regexMatches: !state.regexMatches,
+      };
 
     // Parsed view actions
     case 'TOGGLE_PARSED_VIEW':
       return {
         ...state,
-        isParsedView: !state.isParsedView,
-        parsedLogs: state.isParsedView ? [] : state.parsedLogs,
+        displayMode: state.displayMode === 'parsed' ? 'raw' : 'parsed',
+        parsedLogs: state.displayMode === 'parsed' ? [] : state.parsedLogs,
         expandedRows: new Set<string>(),
       };
-    case 'SET_PARSED_VIEW':
+    case 'SET_DISPLAY_MODE':
       return {
         ...state,
-        isParsedView: action.payload,
-        parsedLogs: action.payload ? state.parsedLogs : [],
+        displayMode: action.payload,
+        parsedLogs: action.payload === 'parsed' ? state.parsedLogs : [],
         expandedRows: new Set<string>(),
       };
     case 'SET_PARSED_LOGS':
@@ -267,15 +283,13 @@ export function logViewerReducer(state: LogViewerState, action: LogViewerAction)
     case 'RESET_FOR_NEW_SCOPE':
       return {
         ...state,
-        selectedFilter: '',
+        selectedFilters: [],
         selectedContainer: action.isWorkload ? state.selectedContainer : '',
         textFilter: '',
-        podIncludeFilter: '',
-        podExcludeFilter: '',
-        highlightFilter: '',
-        includeFilter: '',
-        excludeFilter: '',
-        isParsedView: false,
+        highlightMatches: false,
+        inverseMatches: false,
+        regexMatches: false,
+        displayMode: 'raw',
         parsedLogs: [],
         expandedRows: new Set<string>(),
         manualRefreshPending: false,

@@ -25,6 +25,7 @@ const (
 )
 
 const logPermissionResource = "core/pods/log"
+const transportDropWarning = "Live log stream dropped one or more log entries due to client backlog. These lines were not intentionally filtered."
 
 // Handler exposes an SSE endpoint for streaming pod/workload logs.
 type Handler struct {
@@ -161,7 +162,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		GeneratedAt: time.Now().UnixMilli(),
 		Reset:       false, // Already sent reset in connected event
 		Entries:     initial,
-		Warnings:    warnings,
+		Warnings:    warningPayload(warnings, false),
 	}
 	sequence++
 	if err := writeEvent(w, f, event); err != nil {
@@ -201,10 +202,36 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	lastDelivery := time.Now()
 
 	var (
-		batch          []Entry
-		batchTimer     *time.Timer
-		pendingDropped int
+		batch                  []Entry
+		batchTimer             *time.Timer
+		pendingDropped         int
+		selectionWarnings      = append([]string(nil), warnings...)
+		emittedWarnings        = append([]string(nil), warnings...)
+		transportDropObserved  bool
 	)
+
+	emitWarningUpdate := func() bool {
+		nextWarnings := composeStreamWarnings(selectionWarnings, transportDropObserved)
+		if stringSlicesEqual(emittedWarnings, nextWarnings) {
+			return false
+		}
+		payload := EventPayload{
+			Domain:      "object-logs",
+			Scope:       opts.ScopeString,
+			Sequence:    sequence,
+			GeneratedAt: time.Now().UnixMilli(),
+			Warnings:    warningPayload(nextWarnings, true),
+		}
+		sequence++
+		if writeEvent(w, f, payload) != nil {
+			if h.telemetry != nil {
+				h.telemetry.RecordStreamError(streamName, fmt.Errorf("logstream: failed to write warning update"))
+			}
+			return true
+		}
+		emittedWarnings = append(emittedWarnings[:0], nextWarnings...)
+		return false
+	}
 
 	flushBatch := func() bool {
 		delivered := len(batch)
@@ -230,6 +257,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		if h.telemetry != nil {
 			h.telemetry.RecordStreamDelivery(streamName, delivered, pendingDropped)
+		}
+		if pendingDropped > 0 && !transportDropObserved {
+			transportDropObserved = true
+			if emitWarningUpdate() {
+				return true
+			}
 		}
 		pendingDropped = 0
 		lastDelivery = time.Now()
@@ -273,18 +306,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				continue
 			}
-			payload := EventPayload{
-				Domain:      "object-logs",
-				Scope:       opts.ScopeString,
-				Sequence:    sequence,
-				GeneratedAt: time.Now().UnixMilli(),
-				Warnings:    warnings,
-			}
-			sequence++
-			if writeEvent(w, f, payload) != nil {
-				if h.telemetry != nil {
-					h.telemetry.RecordStreamError(streamName, fmt.Errorf("logstream: failed to write warning update"))
-				}
+			selectionWarnings = append(selectionWarnings[:0], warnings...)
+			if emitWarningUpdate() {
 				return
 			}
 		case entry, ok := <-entriesCh:
@@ -338,12 +361,36 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			pendingDropped += drop
+			if pendingDropped > 0 && !transportDropObserved && len(batch) == 0 {
+				transportDropObserved = true
+				if emitWarningUpdate() {
+					return
+				}
+			}
 			if h.telemetry != nil && len(batch) == 0 {
 				h.telemetry.RecordStreamDelivery(streamName, 0, pendingDropped)
 				pendingDropped = 0
 			}
 		}
 	}
+}
+
+func composeStreamWarnings(selectionWarnings []string, transportDropObserved bool) []string {
+	if !transportDropObserved {
+		return append([]string(nil), selectionWarnings...)
+	}
+	combined := make([]string, 0, len(selectionWarnings)+1)
+	combined = append(combined, selectionWarnings...)
+	combined = append(combined, transportDropWarning)
+	return combined
+}
+
+func warningPayload(warnings []string, includeEmpty bool) *[]string {
+	if len(warnings) == 0 && !includeEmpty {
+		return nil
+	}
+	copied := append([]string(nil), warnings...)
+	return &copied
 }
 
 func writeEvent(w http.ResponseWriter, f http.Flusher, payload EventPayload) error {
@@ -369,6 +416,9 @@ func parseOptions(r *http.Request) (Options, error) {
 	if err != nil {
 		return Options{}, err
 	}
+	if strings.TrimSpace(identity.GVK.Version) == "" {
+		return Options{}, errors.New("log scope must include apiVersion")
+	}
 	if identity.Namespace == "" {
 		return Options{}, errors.New("log scope must reference a namespaced object")
 	}
@@ -376,6 +426,12 @@ func parseOptions(r *http.Request) (Options, error) {
 	podInclude := strings.TrimSpace(r.URL.Query().Get("podInclude"))
 	podExclude := strings.TrimSpace(r.URL.Query().Get("podExclude"))
 	container := strings.TrimSpace(r.URL.Query().Get("container"))
+	includeInit := parseBoolQueryWithDefault(r, "includeInit", true)
+	includeEphemeral := parseBoolQueryWithDefault(r, "includeEphemeral", true)
+	containerState, err := podlogs.ParseContainerStateFilter(strings.TrimSpace(r.URL.Query().Get("containerState")))
+	if err != nil {
+		return Options{}, fmt.Errorf("invalid container state filter: %w", err)
+	}
 	include := strings.TrimSpace(r.URL.Query().Get("include"))
 	exclude := strings.TrimSpace(r.URL.Query().Get("exclude"))
 	tail := defaultTailLines
@@ -399,21 +455,39 @@ func parseOptions(r *http.Request) (Options, error) {
 			}
 			return ""
 		}(),
-		Namespace:     identity.Namespace,
-		Kind:          strings.ToLower(strings.TrimSpace(identity.GVK.Kind)),
-		Name:          strings.TrimSpace(identity.Name),
-		PodFilter:     podFilter,
-		PodInclude:    podInclude,
-		PodExclude:    podExclude,
-		Container:     container,
-		Include:       include,
-		Exclude:       exclude,
-		PodNameFilter: podNameFilter,
-		LineFilter:    lineFilter,
-		TailLines:     tail,
+		Namespace:        identity.Namespace,
+		Kind:             strings.ToLower(strings.TrimSpace(identity.GVK.Kind)),
+		Name:             strings.TrimSpace(identity.Name),
+		PodFilter:        podFilter,
+		PodInclude:       podInclude,
+		PodExclude:       podExclude,
+		Container:        container,
+		IncludeInit:      includeInit,
+		IncludeEphemeral: includeEphemeral,
+		ContainerState:   containerState,
+		Include:          include,
+		Exclude:          exclude,
+		PodNameFilter:    podNameFilter,
+		LineFilter:       lineFilter,
+		TailLines:        tail,
 		// Keep the original scope for client-side keying.
 		ScopeString: rawScope,
 	}, nil
+}
+
+func parseBoolQueryWithDefault(r *http.Request, key string, defaultValue bool) bool {
+	raw := strings.TrimSpace(r.URL.Query().Get(key))
+	if raw == "" {
+		return defaultValue
+	}
+	switch strings.ToLower(raw) {
+	case "1", "true", "yes", "on":
+		return true
+	case "0", "false", "no", "off":
+		return false
+	default:
+		return defaultValue
+	}
 }
 
 func applyCORS(w http.ResponseWriter, r *http.Request) bool {

@@ -59,7 +59,16 @@ func (s *Streamer) tail(ctx context.Context, opts Options, limiterSession *Targe
 
 	var entries []Entry
 	state := make(map[string]*containerState)
-	selectedTargets, totalTargets := selectRuntimeTargets(pods, opts.Container, podlogs.DefaultPerScopeTargetLimit)
+	selectedTargets, totalTargets := selectRuntimeTargets(
+		pods,
+		podlogs.ContainerSelectionOptions{
+			Filter:           opts.Container,
+			IncludeInit:      opts.IncludeInit,
+			IncludeEphemeral: opts.IncludeEphemeral,
+			StateFilter:      opts.ContainerState,
+		},
+		podlogs.DefaultPerScopeTargetLimit,
+	)
 	warnings := podlogs.BuildTargetLimitWarnings(len(selectedTargets), totalTargets)
 	skippedTargets := totalTargets - len(selectedTargets)
 	skipReason := ""
@@ -208,9 +217,19 @@ func (s *Streamer) run(
 		for _, pod := range currentPods {
 			pods = append(pods, pod)
 		}
-		selectedTargets, _ := selectRuntimeTargets(pods, opts.Container, podlogs.DefaultPerScopeTargetLimit)
+		selectedTargets, _ := selectRuntimeTargets(pods, podlogs.ContainerSelectionOptions{
+			Filter:           opts.Container,
+			IncludeInit:      opts.IncludeInit,
+			IncludeEphemeral: opts.IncludeEphemeral,
+			StateFilter:      opts.ContainerState,
+		}, podlogs.DefaultPerScopeTargetLimit)
 		perScopeCount := len(selectedTargets)
-		totalTargets := countTargets(pods, opts.Container)
+		totalTargets := countTargets(pods, podlogs.ContainerSelectionOptions{
+			Filter:           opts.Container,
+			IncludeInit:      opts.IncludeInit,
+			IncludeEphemeral: opts.IncludeEphemeral,
+			StateFilter:      opts.ContainerState,
+		})
 		warnings := podlogs.BuildTargetLimitWarnings(perScopeCount, totalTargets)
 		if limiterSession != nil {
 			allowedKeys, globalSkipped := limiterSession.UpdateDesired(targetKeys(selectedTargets))
@@ -751,9 +770,9 @@ func podPointers(items []corev1.Pod) []*corev1.Pod {
 	return result
 }
 
-func buildTargetsFromPod(pod *corev1.Pod, filter string) []containerTarget {
+func buildTargetsFromPod(pod *corev1.Pod, options podlogs.ContainerSelectionOptions) []containerTarget {
 	var targets []containerTarget
-	for _, containerRef := range podlogs.EnumerateContainers(pod, filter) {
+	for _, containerRef := range podlogs.EnumerateContainersWithOptions(pod, options) {
 		targets = append(targets, containerTarget{
 			namespace: pod.Namespace,
 			pod:       pod.Name,
@@ -765,8 +784,12 @@ func buildTargetsFromPod(pod *corev1.Pod, filter string) []containerTarget {
 	return targets
 }
 
-func selectRuntimeTargets(pods []*corev1.Pod, filter string, limit int) ([]containerTarget, int) {
-	selectedTargets, totalTargets := podlogs.SelectTargets(pods, filter, limit)
+func selectRuntimeTargets(
+	pods []*corev1.Pod,
+	options podlogs.ContainerSelectionOptions,
+	limit int,
+) ([]containerTarget, int) {
+	selectedTargets, totalTargets := podlogs.SelectTargets(pods, options, limit)
 	runtimeTargets := make([]containerTarget, 0, len(selectedTargets))
 	for _, selected := range selectedTargets {
 		runtimeTargets = append(runtimeTargets, containerTarget{
@@ -800,13 +823,13 @@ func filterTargetsByKeys(targets []containerTarget, allowedKeys map[string]struc
 	return filtered
 }
 
-func countTargets(pods []*corev1.Pod, filter string) int {
+func countTargets(pods []*corev1.Pod, options podlogs.ContainerSelectionOptions) int {
 	total := 0
 	for _, pod := range pods {
 		if pod == nil {
 			continue
 		}
-		total += len(podlogs.EnumerateContainers(pod, filter))
+		total += len(podlogs.EnumerateContainersWithOptions(pod, options))
 	}
 	return total
 }

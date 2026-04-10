@@ -32,7 +32,7 @@ func TestBuildTargetsFromPod(t *testing.T) {
 		},
 	}
 
-	targets := buildTargetsFromPod(pod, "")
+	targets := buildTargetsFromPod(pod, podlogs.DefaultContainerSelection(""))
 	if len(targets) != 4 {
 		t.Fatalf("expected 4 targets, got %d", len(targets))
 	}
@@ -44,17 +44,20 @@ func TestBuildTargetsFromPod(t *testing.T) {
 		t.Fatalf("expected ephemeral container target last, got %+v", targets[3])
 	}
 
-	filtered := buildTargetsFromPod(pod, "app")
+	filtered := buildTargetsFromPod(pod, podlogs.DefaultContainerSelection("app"))
 	if len(filtered) != 1 || filtered[0].container != "app" {
 		t.Fatalf("expected filtered target for 'app', got %+v", filtered)
 	}
 
-	filteredInit := buildTargetsFromPod(pod, "init (init)")
+	filteredInit := buildTargetsFromPod(pod, podlogs.DefaultContainerSelection("init (init)"))
 	if len(filteredInit) != 1 || !filteredInit[0].isInit {
 		t.Fatalf("expected init filter to match init container, got %+v", filteredInit)
 	}
 
-	filteredDebug := buildTargetsFromPod(pod, "debug-abc (debug)")
+	filteredDebug := buildTargetsFromPod(
+		pod,
+		podlogs.DefaultContainerSelection("debug-abc (debug)"),
+	)
 	if len(filteredDebug) != 1 || filteredDebug[0].container != "debug-abc" || filteredDebug[0].isInit {
 		t.Fatalf("expected debug filter to match ephemeral container, got %+v", filteredDebug)
 	}
@@ -81,7 +84,7 @@ func TestSelectRuntimeTargetsKeepsPerScopeCapWhenPodsGrow(t *testing.T) {
 		testLogPod("default", "web-2", corev1.PodRunning, true, "app"),
 	}
 
-	selected, total := selectRuntimeTargets(pods, "", 2)
+	selected, total := selectRuntimeTargets(pods, podlogs.DefaultContainerSelection(""), 2)
 	if total != 2 {
 		t.Fatalf("expected total target count 2, got %d", total)
 	}
@@ -90,7 +93,7 @@ func TestSelectRuntimeTargetsKeepsPerScopeCapWhenPodsGrow(t *testing.T) {
 	}
 
 	pods = append(pods, testLogPod("default", "web-3", corev1.PodRunning, true, "app"))
-	selected, total = selectRuntimeTargets(pods, "", 2)
+	selected, total = selectRuntimeTargets(pods, podlogs.DefaultContainerSelection(""), 2)
 	if total != 3 {
 		t.Fatalf("expected total target count 3 after pod growth, got %d", total)
 	}
@@ -109,7 +112,7 @@ func TestSelectRuntimeTargetsRefillsAfterPodRemoval(t *testing.T) {
 		testLogPod("default", "web-3", corev1.PodRunning, true, "app"),
 	}
 
-	selected, total := selectRuntimeTargets(pods, "", 2)
+	selected, total := selectRuntimeTargets(pods, podlogs.DefaultContainerSelection(""), 2)
 	if total != 3 {
 		t.Fatalf("expected total target count 3, got %d", total)
 	}
@@ -117,7 +120,7 @@ func TestSelectRuntimeTargetsRefillsAfterPodRemoval(t *testing.T) {
 		t.Fatalf("unexpected initial capped target keys: %v", keys)
 	}
 
-	selected, total = selectRuntimeTargets(pods[1:], "", 2)
+	selected, total = selectRuntimeTargets(pods[1:], podlogs.DefaultContainerSelection(""), 2)
 	if total != 2 {
 		t.Fatalf("expected total target count 2 after pod removal, got %d", total)
 	}

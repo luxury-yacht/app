@@ -7,6 +7,22 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
+type ContainerStateFilter string
+
+const (
+	ContainerStateAll        ContainerStateFilter = "all"
+	ContainerStateRunning    ContainerStateFilter = "running"
+	ContainerStateWaiting    ContainerStateFilter = "waiting"
+	ContainerStateTerminated ContainerStateFilter = "terminated"
+)
+
+type ContainerSelectionOptions struct {
+	Filter           string
+	IncludeInit      bool
+	IncludeEphemeral bool
+	StateFilter      ContainerStateFilter
+}
+
 type ContainerRef struct {
 	Name        string
 	IsInit      bool
@@ -38,17 +54,56 @@ func MatchContainerFilter(container ContainerRef, filter string) bool {
 	return filter == container.Name
 }
 
+func ParseContainerStateFilter(raw string) (ContainerStateFilter, error) {
+	switch normalized := strings.ToLower(strings.TrimSpace(raw)); normalized {
+	case "", string(ContainerStateAll):
+		return ContainerStateAll, nil
+	case string(ContainerStateRunning):
+		return ContainerStateRunning, nil
+	case string(ContainerStateWaiting):
+		return ContainerStateWaiting, nil
+	case string(ContainerStateTerminated):
+		return ContainerStateTerminated, nil
+	default:
+		return "", fmt.Errorf("unsupported container state %q", raw)
+	}
+}
+
+func DefaultContainerSelection(filter string) ContainerSelectionOptions {
+	return ContainerSelectionOptions{
+		Filter:           filter,
+		IncludeInit:      true,
+		IncludeEphemeral: true,
+		StateFilter:      ContainerStateAll,
+	}
+}
+
 func EnumerateContainers(pod *corev1.Pod, filter string) []ContainerRef {
+	return EnumerateContainersWithOptions(pod, DefaultContainerSelection(filter))
+}
+
+func EnumerateContainersWithOptions(pod *corev1.Pod, options ContainerSelectionOptions) []ContainerRef {
 	if pod == nil {
 		return nil
 	}
 
-	filter = strings.TrimSpace(filter)
+	filter := strings.TrimSpace(options.Filter)
 	isAll := filter == "" || strings.EqualFold(filter, "all")
 	var containers []ContainerRef
 
 	appendIfMatches := func(container ContainerRef) {
-		if !isAll && !MatchContainerFilter(container, filter) {
+		if !isAll {
+			if MatchContainerFilter(container, filter) {
+				containers = append(containers, container)
+			}
+			return
+		}
+		switch {
+		case container.IsInit && !options.IncludeInit:
+			return
+		case container.IsEphemeral && !options.IncludeEphemeral:
+			return
+		case !matchesContainerState(pod, container, options.StateFilter):
 			return
 		}
 		containers = append(containers, container)
@@ -65,4 +120,53 @@ func EnumerateContainers(pod *corev1.Pod, filter string) []ContainerRef {
 	}
 
 	return containers
+}
+
+func matchesContainerState(
+	pod *corev1.Pod,
+	container ContainerRef,
+	stateFilter ContainerStateFilter,
+) bool {
+	if pod == nil || stateFilter == "" || stateFilter == ContainerStateAll {
+		return true
+	}
+
+	status, ok := containerStatusForRef(pod, container)
+	if !ok {
+		return false
+	}
+
+	switch stateFilter {
+	case ContainerStateRunning:
+		return status.State.Running != nil
+	case ContainerStateWaiting:
+		return status.State.Waiting != nil
+	case ContainerStateTerminated:
+		return status.State.Terminated != nil
+	default:
+		return true
+	}
+}
+
+func containerStatusForRef(pod *corev1.Pod, container ContainerRef) (corev1.ContainerStatus, bool) {
+	if pod == nil {
+		return corev1.ContainerStatus{}, false
+	}
+
+	var statuses []corev1.ContainerStatus
+	switch {
+	case container.IsInit:
+		statuses = pod.Status.InitContainerStatuses
+	case container.IsEphemeral:
+		statuses = pod.Status.EphemeralContainerStatuses
+	default:
+		statuses = pod.Status.ContainerStatuses
+	}
+
+	for _, status := range statuses {
+		if status.Name == container.Name {
+			return status, true
+		}
+	}
+	return corev1.ContainerStatus{}, false
 }

@@ -19,7 +19,11 @@ func (t SelectedTarget) Key() string {
 	return t.Namespace + "/" + t.PodName + "/" + t.Container.Name
 }
 
-func SelectTargets(pods []*corev1.Pod, containerFilter string, limit int) ([]SelectedTarget, int) {
+func SelectTargets(
+	pods []*corev1.Pod,
+	options ContainerSelectionOptions,
+	limit int,
+) ([]SelectedTarget, int) {
 	if len(pods) == 0 {
 		return nil, 0
 	}
@@ -39,7 +43,7 @@ func SelectTargets(pods []*corev1.Pod, containerFilter string, limit int) ([]Sel
 			continue
 		}
 		rank := rankPodForLogs(pod)
-		for _, container := range EnumerateContainers(pod, containerFilter) {
+		for _, container := range EnumerateContainersWithOptions(pod, options) {
 			ranked = append(ranked, rankedTarget{
 				target: SelectedTarget{
 					Namespace: pod.Namespace,

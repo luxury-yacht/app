@@ -88,6 +88,8 @@ const IconBar: React.FC<IconBarProps> = ({ items, className }) => {
               onClick={item.onClick}
               disabled={item.disabled}
               title={item.title}
+              aria-label={item.title}
+              aria-pressed={item.active}
             >
               {item.icon}
             </button>
@@ -105,6 +107,7 @@ const IconBar: React.FC<IconBarProps> = ({ items, className }) => {
             onClick={item.onClick}
             disabled={item.disabled}
             title={item.title}
+            aria-label={item.title}
           >
             {item.icon}
           </button>
