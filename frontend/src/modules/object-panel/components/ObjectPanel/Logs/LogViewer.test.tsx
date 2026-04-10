@@ -1271,6 +1271,118 @@ describe('LogViewer active pod synchronisation', () => {
     ]);
   });
 
+  it('filters workload logs when pod and container metadata are clicked', async () => {
+    const panelId = 'obj:test:deployment:team-a:api';
+
+    seedLogSnapshot(
+      [
+        {
+          pod: 'web-1',
+          container: 'app',
+          line: 'matched log',
+          timestamp: '2024-05-01T10:00:00Z',
+          isInit: false,
+        },
+        {
+          pod: 'web-2',
+          container: 'app',
+          line: 'wrong pod',
+          timestamp: '2024-05-01T10:00:01Z',
+          isInit: false,
+        },
+        {
+          pod: 'web-1',
+          container: 'sidecar',
+          line: 'wrong container',
+          timestamp: '2024-05-01T10:00:02Z',
+          isInit: false,
+        },
+      ],
+      defaultScope
+    );
+
+    await renderViewer({ activePodNames: ['web-1', 'web-2'], panelId });
+
+    const podButton = await waitForElement(() =>
+      container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Show only logs from pod web-1"]'
+      )
+    );
+
+    await act(async () => {
+      podButton.click();
+      await Promise.resolve();
+    });
+
+    expect(getLogViewerPrefs(panelId)?.selectedFilters).toEqual(['pod:web-1']);
+    expect(container.textContent).toContain('matched log');
+    expect(container.textContent).toContain('wrong container');
+    expect(container.textContent).not.toContain('wrong pod');
+
+    const containerButton = await waitForElement(() =>
+      container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Show only logs from container app"]'
+      )
+    );
+
+    await act(async () => {
+      containerButton.click();
+      await Promise.resolve();
+    });
+
+    expect(getLogViewerPrefs(panelId)?.selectedFilters).toEqual(['pod:web-1', 'container:app']);
+    expect(container.textContent).toContain('matched log');
+    expect(container.textContent).not.toContain('wrong container');
+  });
+
+  it('filters single-pod logs when container metadata is clicked', async () => {
+    const panelId = 'obj:test:pod:team-a:api';
+    (GetPodContainers as unknown as ViMock).mockResolvedValue(['app', 'sidecar']);
+
+    seedLogSnapshot(
+      [
+        {
+          pod: 'api',
+          container: 'app',
+          line: 'main log line',
+          timestamp: '2024-05-01T12:00:00Z',
+          isInit: false,
+        },
+        {
+          pod: 'api',
+          container: 'sidecar',
+          line: 'sidecar log line',
+          timestamp: '2024-05-01T12:00:01Z',
+          isInit: false,
+        },
+      ],
+      buildLogScope('team-a:pod:api')
+    );
+
+    await renderViewer({
+      resourceKind: 'Pod',
+      resourceName: 'api',
+      activePodNames: ['api'],
+      panelId,
+    });
+    await waitForMockCalls(GetPodContainers as unknown as ViMock, 1);
+
+    const containerButton = await waitForElement(() =>
+      container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Show only logs from container sidecar"]'
+      )
+    );
+
+    await act(async () => {
+      containerButton.click();
+      await Promise.resolve();
+    });
+
+    expect(getLogViewerPrefs(panelId)?.selectedFilters).toEqual(['container:sidecar']);
+    expect(container.textContent).toContain('sidecar log line');
+    expect(container.textContent).not.toContain('main log line');
+  });
+
   it('labels all-containers mode to indicate debug containers are included', async () => {
     (GetPodContainers as unknown as ViMock).mockResolvedValue(['app', 'debug-abc (debug)']);
     seedLogSnapshot(

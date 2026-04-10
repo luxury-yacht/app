@@ -14,6 +14,7 @@ export interface ParsedLogEntry {
   data: Record<string, unknown>;
   pod?: string;
   container?: string;
+  isInit?: boolean;
   timestamp?: string;
   rawLine: string;
   lineNumber: number;

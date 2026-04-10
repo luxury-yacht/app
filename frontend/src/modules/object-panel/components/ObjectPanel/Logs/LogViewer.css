@@ -162,6 +162,27 @@
   transform: scale(0.9);
 }
 
+.pod-log-metadata-button {
+  appearance: none;
+  background: none;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  margin: 0;
+  padding: 0;
+}
+
+.pod-log-metadata-button:hover {
+  text-decoration: underline;
+}
+
+.pod-log-metadata-button:focus-visible {
+  outline: 1px solid currentColor;
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
 .pod-logs-filter-toggle {
   padding: 4px 10px;
   background: var(--color-bg-secondary);

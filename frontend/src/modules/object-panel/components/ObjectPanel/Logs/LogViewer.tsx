@@ -182,6 +182,8 @@ const toInitContainerFilterValue = (container: string): string =>
   `${INIT_FILTER_PREFIX}${container}`;
 const toContainerFilterValue = (container: string): string =>
   `${CONTAINER_FILTER_PREFIX}${container}`;
+const toContainerFilterValueForKind = (container: string, isInit: boolean): string =>
+  isInit ? toInitContainerFilterValue(container) : toContainerFilterValue(container);
 
 const summarizeWorkloadSelection = (
   selectedValues: string[],
@@ -368,6 +370,30 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     [selectedFilters]
   );
   const selectedContainerFilterCount = selectedInitContainers.size + selectedRegularContainers.size;
+  const handleSelectPodFilter = useCallback(
+    (pod: string) => {
+      const preservedContainerFilters = selectedFilters.filter(
+        (filterValue) => !filterValue.startsWith(POD_FILTER_PREFIX)
+      );
+      dispatch({
+        type: 'SET_SELECTED_FILTERS',
+        payload: [toPodFilterValue(pod), ...preservedContainerFilters],
+      });
+    },
+    [dispatch, selectedFilters]
+  );
+  const handleSelectContainerFilter = useCallback(
+    (container: string, isInit: boolean) => {
+      const preservedPodFilters = selectedFilters.filter((filterValue) =>
+        filterValue.startsWith(POD_FILTER_PREFIX)
+      );
+      dispatch({
+        type: 'SET_SELECTED_FILTERS',
+        payload: [...preservedPodFilters, toContainerFilterValueForKind(container, isInit)],
+      });
+    },
+    [dispatch, selectedFilters]
+  );
   const highlightRegex = useMemo(
     () =>
       buildHighlightRegex(
@@ -1229,7 +1255,34 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                 className="pod-log-metadata pod-log-metadata--bold"
                 style={{ '--pod-color': podColor } as React.CSSProperties}
               >
-                [{pod}/{container}]
+                [
+                <button
+                  type="button"
+                  className="pod-log-metadata-button pod-color-text"
+                  style={{ '--pod-color': podColor } as React.CSSProperties}
+                  onClick={() => handleSelectPodFilter(pod)}
+                  title={`Show only logs from pod ${pod}`}
+                  aria-label={`Show only logs from pod ${pod}`}
+                >
+                  {pod}
+                </button>
+                /
+                <button
+                  type="button"
+                  className="pod-log-metadata-button pod-color-text"
+                  style={{ '--pod-color': podColor } as React.CSSProperties}
+                  onClick={() =>
+                    handleSelectContainerFilter(
+                      container.endsWith(':init') ? container.slice(0, -':init'.length) : container,
+                      container.endsWith(':init')
+                    )
+                  }
+                  title={`Show only logs from container ${container}`}
+                  aria-label={`Show only logs from container ${container}`}
+                >
+                  {container}
+                </button>
+                ]
               </span>
               <span> {renderMessageContent(logLine, `workload-${row.key}`)}</span>
             </div>
@@ -1259,7 +1312,28 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
           return (
             <div className="pod-log-line">
               {timestampPrefix && <span className="pod-log-metadata">{timestampPrefix}</span>}
-              {showContainerMeta && <span className="pod-log-metadata">[{containerLabel}]</span>}
+              {showContainerMeta && (
+                <span className="pod-log-metadata">
+                  [
+                  <button
+                    type="button"
+                    className="pod-log-metadata-button"
+                    onClick={() =>
+                      handleSelectContainerFilter(
+                        containerLabel.endsWith(':init')
+                          ? containerLabel.slice(0, -':init'.length)
+                          : containerLabel,
+                        containerLabel.endsWith(':init')
+                      )
+                    }
+                    title={`Show only logs from container ${containerLabel}`}
+                    aria-label={`Show only logs from container ${containerLabel}`}
+                  >
+                    {containerLabel}
+                  </button>
+                  ]
+                </span>
+              )}
               <span> {renderMessageContent(remainder, `pod-${row.key}`)}</span>
             </div>
           );
@@ -1269,6 +1343,8 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       return <div className="pod-log-line">{renderMessageContent(line, `line-${row.key}`)}</div>;
     },
     [
+      handleSelectContainerFilter,
+      handleSelectPodFilter,
       isWorkload,
       podColors,
       renderMessageContent,
@@ -1555,18 +1631,28 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
         sortable: false,
         minWidth: PARSED_POD_COLUMN_MIN_WIDTH,
         autoSizeMaxWidth: PARSED_METADATA_AUTOSIZE_MAX_WIDTH,
-        render: (item: ParsedLogEntry) => (
-          <span
-            className="pod-color-text"
-            style={
-              {
-                '--pod-color': podColors[item.pod || ''] || podColors['__fallback__'],
-              } as React.CSSProperties
-            }
-          >
-            {item.pod || '-'}
-          </span>
-        ),
+        render: (item: ParsedLogEntry) =>
+          item.pod ? (
+            <button
+              type="button"
+              className="pod-log-metadata-button pod-color-text"
+              style={
+                {
+                  '--pod-color': podColors[item.pod] || podColors['__fallback__'],
+                } as React.CSSProperties
+              }
+              onClick={(event) => {
+                event.stopPropagation();
+                handleSelectPodFilter(item.pod!);
+              }}
+              title={`Show only logs from pod ${item.pod}`}
+              aria-label={`Show only logs from pod ${item.pod}`}
+            >
+              {item.pod}
+            </button>
+          ) : (
+            '-'
+          ),
       });
     }
 
@@ -1576,18 +1662,28 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       sortable: false,
       minWidth: PARSED_POD_COLUMN_MIN_WIDTH,
       autoSizeMaxWidth: PARSED_METADATA_AUTOSIZE_MAX_WIDTH,
-      render: (item: ParsedLogEntry) => (
-        <span
-          className="pod-color-text"
-          style={
-            {
-              '--pod-color': podColors[item.pod || ''] || podColors['__fallback__'],
-            } as React.CSSProperties
-          }
-        >
-          {item.container || '-'}
-        </span>
-      ),
+      render: (item: ParsedLogEntry) =>
+        item.container ? (
+          <button
+            type="button"
+            className="pod-log-metadata-button pod-color-text"
+            style={
+              {
+                '--pod-color': podColors[item.pod || ''] || podColors['__fallback__'],
+              } as React.CSSProperties
+            }
+            onClick={(event) => {
+              event.stopPropagation();
+              handleSelectContainerFilter(item.container!, Boolean(item.isInit));
+            }}
+            title={`Show only logs from container ${formatContainerLabel(item.container, Boolean(item.isInit))}`}
+            aria-label={`Show only logs from container ${formatContainerLabel(item.container, Boolean(item.isInit))}`}
+          >
+            {item.container}
+          </button>
+        ) : (
+          '-'
+        ),
     });
 
     // Promote well-known timestamp and level fields to appear first
@@ -1636,7 +1732,14 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     });
 
     return columns;
-  }, [derivedFieldKeys, isWorkload, podColors, timestampMode]);
+  }, [
+    derivedFieldKeys,
+    handleSelectContainerFilter,
+    handleSelectPodFilter,
+    isWorkload,
+    podColors,
+    timestampMode,
+  ]);
 
   const parsedCsv = useMemo(() => {
     if (!isParsedView || parsedLogs.length === 0 || tableColumns.length === 0) {

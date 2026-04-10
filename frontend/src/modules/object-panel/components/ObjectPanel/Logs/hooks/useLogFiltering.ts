@@ -184,6 +184,7 @@ export function useLogFiltering({
           timestamp: entry.timestamp,
           pod: isWorkload ? entry.pod : undefined,
           container: entry.container,
+          isInit: entry.isInit,
           seq: entry._seq,
         });
       } catch {
