@@ -99,4 +99,17 @@ describe('createPanelLayoutStore — tabGroups slice', () => {
 
     expect(listener).toHaveBeenCalledTimes(1);
   });
+
+  it('restores persisted maximized state with the rest of panel layout state', () => {
+    const store = createPanelLayoutStore();
+
+    store.updateState('panel-a', { isOpen: true, isMaximized: true });
+    const snapshot = store.getAllPanelStates();
+
+    const restoredStore = createPanelLayoutStore();
+    restoredStore.restorePanelStates(snapshot);
+
+    expect(restoredStore.getState('panel-a')?.isMaximized).toBe(true);
+    expect(restoredStore.getState('panel-a')?.isOpen).toBe(true);
+  });
 });

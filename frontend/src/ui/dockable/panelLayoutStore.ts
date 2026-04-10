@@ -18,6 +18,7 @@ export interface PanelLayoutState {
   rightSize: { width: number; height: number };
   bottomSize: { width: number; height: number };
   floatingPosition: { x: number; y: number };
+  isMaximized: boolean;
   isOpen: boolean;
   isInitialized: boolean;
   zIndex: number;
@@ -133,6 +134,7 @@ export function createPanelLayoutStore(): PanelLayoutStore {
         rightSize: { width: layout.dockedRightWidth, height: 300 },
         bottomSize: { width: 400, height: layout.dockedBottomHeight },
         floatingPosition: { x: layout.floatingX, y: layout.floatingY },
+        isMaximized: false,
         isOpen: false,
         isInitialized: false,
         zIndex: zIndexCounter++,
@@ -208,6 +210,7 @@ export function createPanelLayoutStore(): PanelLayoutStore {
         rightSize: { ...sourceState.rightSize },
         bottomSize: { ...sourceState.bottomSize },
         floatingPosition: { ...sourceState.floatingPosition },
+        isMaximized: sourceState.isMaximized,
         zIndex: Math.max(targetState.zIndex, sourceState.zIndex),
       });
     },

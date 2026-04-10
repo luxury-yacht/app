@@ -1,7 +1,7 @@
 # TODO
 
 - Cursor turns to beam when dragging the app window in the header
-- Center Mac icons in header
+- Center Mac icons in header, keep the app header positions stable when zooming
 
 - can we get node logs?
 

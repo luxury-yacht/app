@@ -13,11 +13,13 @@ interface DockablePanelState {
   position: DockPosition;
   size: { width: number; height: number };
   floatingPosition: { x: number; y: number };
+  isMaximized: boolean;
   isOpen: boolean;
   focus: () => void;
   setPosition: (position: DockPosition) => void;
   setSize: (size: { width: number; height: number }) => void;
   setFloatingPosition: (position: { x: number; y: number }) => void;
+  setMaximized: (isMaximized: boolean) => void;
 }
 
 interface DockablePanelMaximizeOptions {
@@ -33,7 +35,7 @@ interface DockablePanelMaximizeOptions {
  */
 export function useDockablePanelMaximize(options: DockablePanelMaximizeOptions) {
   const { panelState, allowMaximize, maximizeTargetSelector, onMaximizeChange, panelRef } = options;
-  const [isMaximized, setIsMaximized] = useState(false);
+  const isMaximized = panelState.isMaximized;
   const [maximizedRect, setMaximizedRect] = useState<DOMRect | null>(null);
   const restoreStateRef = useRef<{
     position: DockPosition;
@@ -129,11 +131,11 @@ export function useDockablePanelMaximize(options: DockablePanelMaximizeOptions) 
       return;
     }
     if (isMaximized) {
-      setIsMaximized(false);
+      panelState.setMaximized(false);
       onMaximizeChange?.(false);
     }
     restoreStateRef.current = null;
-  }, [panelState.isOpen, isMaximized, onMaximizeChange]);
+  }, [panelState, panelState.isOpen, isMaximized, onMaximizeChange]);
 
   const toggleMaximize = useCallback(() => {
     if (!allowMaximize) {
@@ -141,7 +143,7 @@ export function useDockablePanelMaximize(options: DockablePanelMaximizeOptions) 
     }
 
     if (isMaximized) {
-      setIsMaximized(false);
+      panelState.setMaximized(false);
       onMaximizeChange?.(false);
       const restore = restoreStateRef.current;
       restoreStateRef.current = null;
@@ -167,7 +169,7 @@ export function useDockablePanelMaximize(options: DockablePanelMaximizeOptions) 
     };
 
     panelState.focus();
-    setIsMaximized(true);
+    panelState.setMaximized(true);
     onMaximizeChange?.(true);
   }, [allowMaximize, isMaximized, onMaximizeChange, panelState]);
 
