@@ -1,5 +1,7 @@
 # TODO
 
+- large numbers of pods are not picked up by the log viewer
+
 - can we get node logs?
 
 - Allow remove of default kubeconfig path, if not the last

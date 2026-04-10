@@ -611,7 +611,7 @@ describe('LogViewer active pod synchronisation', () => {
     expect(mockModules.orchestrator.restartStreamingDomain).not.toHaveBeenCalled();
   });
 
-  it('does not render backend warning banners from fallback/manual log responses', async () => {
+  it('surfaces target-cap warnings from fallback/manual log responses', async () => {
     seedLogSnapshot(
       [
         {
@@ -651,8 +651,49 @@ describe('LogViewer active pod synchronisation', () => {
     });
     await flushAsync();
 
-    expect(container.textContent).not.toContain(
+    expect(container.textContent).toContain(
       'Showing logs for 24 of 25 pod/container targets. Refine filters to view more.'
+    );
+  });
+
+  it('surfaces target-cap warnings from the scoped log snapshot', async () => {
+    const generatedAt = Date.now();
+    setScopedDomainState('object-logs', defaultScope, () => ({
+      status: 'ready',
+      data: {
+        entries: [
+          {
+            pod: 'web-1',
+            container: 'app',
+            line: 'line 1',
+            timestamp: '2024-05-01T10:00:00Z',
+            isInit: false,
+          },
+        ],
+        sequence: 2,
+        generatedAt,
+        resetCount: 0,
+        error: null,
+      },
+      stats: {
+        itemCount: 1,
+        buildDurationMs: 0,
+        warnings: ['Showing logs for 24 of 52 pod/container targets. Refine filters to view more.'],
+      },
+      error: null,
+      droppedAutoRefreshes: 0,
+      scope: defaultScope,
+      lastUpdated: generatedAt,
+      lastAutoRefresh: generatedAt,
+      lastManualRefresh: undefined,
+      isManual: false,
+    }));
+
+    await renderViewer({ activePodNames: ['web-1'], isActive: false });
+    await flushAsync();
+
+    expect(container.textContent).toContain(
+      'Showing logs for 24 of 52 pod/container targets. Refine filters to view more.'
     );
   });
 

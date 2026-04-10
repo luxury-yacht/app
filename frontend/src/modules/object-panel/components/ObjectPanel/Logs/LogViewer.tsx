@@ -504,6 +504,14 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   const logWarnings = (logSnapshot.stats?.warnings ?? []).filter(
     (warning) => typeof warning === 'string' && warning.trim().length > 0
   );
+  const visibleLogWarnings = useMemo(
+    () =>
+      logWarnings.filter((warning) =>
+        warning.includes('pod/container targets') ||
+        warning.includes('global log stream cap')
+      ),
+    [logWarnings]
+  );
 
   const displayError = snapshotError && !isLogDataUnavailable(snapshotError) ? snapshotError : null;
   const transientStreamError = displayError
@@ -2051,7 +2059,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     <div className="object-panel-tab-content">
       <div className="pod-logs-display">
         <div
-          className={`pod-logs-controls${activeFilterChips.length > 0 ? ' pod-logs-controls--with-active-filters' : ''}`}
+          className={`pod-logs-controls${activeFilterChips.length > 0 || visibleLogWarnings.length > 0 ? ' pod-logs-controls--with-active-filters' : ''}`}
         >
           <div className="pod-logs-controls-left">
             {/* Pod / container selector */}
@@ -2269,17 +2277,19 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
           </div>
         </div>
 
-        {activeFilterChips.length > 0 && (
+        {(activeFilterChips.length > 0 || visibleLogWarnings.length > 0) && (
           <div className="pod-logs-active-filters" aria-label="Active log filters">
-            <button
-              type="button"
-              className="pod-logs-filter-chip pod-logs-filter-chip--clear-all"
-              onClick={handleClearAllFilters}
-              aria-label="Clear all filters"
-              title="Clear all filters"
-            >
-              Clear all
-            </button>
+            {activeFilterChips.length > 0 && (
+              <button
+                type="button"
+                className="pod-logs-filter-chip pod-logs-filter-chip--clear-all"
+                onClick={handleClearAllFilters}
+                aria-label="Clear all filters"
+                title="Clear all filters"
+              >
+                Clear all
+              </button>
+            )}
             {activeFilterChips.map((chip) => (
               <span key={chip.key} className="pod-logs-filter-chip">
                 <span className="pod-logs-filter-chip-label">{chip.label}</span>
@@ -2292,6 +2302,16 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                 >
                   ×
                 </button>
+              </span>
+            ))}
+            {visibleLogWarnings.map((warning) => (
+              <span
+                key={warning}
+                className="pod-logs-filter-chip"
+                title={warning}
+                aria-label={warning}
+              >
+                <span className="pod-logs-filter-chip-label">{warning}</span>
               </span>
             ))}
           </div>

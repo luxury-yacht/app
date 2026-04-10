@@ -7,7 +7,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-const DefaultPerScopeTargetLimit = 24
+const DefaultPerScopeTargetLimit = 96
 
 type SelectedTarget struct {
 	Namespace string
