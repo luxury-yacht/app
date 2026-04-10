@@ -1,15 +1,5 @@
 # TODO
 
-- Distinguish empty states more clearly.
-  There are several different situations:
-  - no logs yet
-  - no previous logs found
-  - no logs match filters
-  - logs unavailable due to backend/runtime conditions
-    These should stay visually distinct.
-- Make previous-logs mode more visually obvious.
-  A small mode badge like Previous logs near the toolbar would help, because it is easy to forget you are not looking at live logs anymore.
-
 - Cursor turns to beam when dragging the app window in the header
 - Center Mac icons in header
 

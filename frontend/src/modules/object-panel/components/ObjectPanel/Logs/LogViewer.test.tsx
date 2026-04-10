@@ -744,6 +744,38 @@ describe('LogViewer active pod synchronisation', () => {
     expect(container.textContent).not.toContain('No logs available');
   });
 
+  it('renders a distinct no-logs-yet message when the snapshot is healthy but empty', async () => {
+    const generatedAt = Date.now();
+    setScopedDomainState('object-logs', defaultScope, () => ({
+      status: 'ready',
+      data: {
+        entries: [],
+        sequence: 2,
+        generatedAt,
+        resetCount: 0,
+        error: null,
+      },
+      stats: {
+        itemCount: 0,
+        buildDurationMs: 0,
+        warnings: [],
+      },
+      error: null,
+      droppedAutoRefreshes: 0,
+      scope: defaultScope,
+      lastUpdated: generatedAt,
+      lastAutoRefresh: generatedAt,
+      lastManualRefresh: undefined,
+      isManual: false,
+    }));
+
+    await renderViewer({ activePodNames: ['web-1'], isActive: false });
+    await waitForText(container, 'No logs yet');
+
+    expect(container.textContent).toContain('No logs yet');
+    expect(container.textContent).not.toContain('No logs available');
+  });
+
   it('formats workload log lines and displays empty filter message', async () => {
     seedLogSnapshot(
       [
@@ -793,7 +825,7 @@ describe('LogViewer active pod synchronisation', () => {
     await flushAsync();
     await flushAsync();
 
-    await waitForText(container, 'No logs match the filter');
+    await waitForText(container, 'No logs match filters');
     expect(container.querySelector('.pod-logs-count')?.textContent?.trim()).toBe('0 matching logs');
   });
 

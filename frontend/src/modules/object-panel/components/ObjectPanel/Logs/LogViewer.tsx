@@ -286,6 +286,13 @@ interface RenderedLogRow {
   line: string;
 }
 
+type LogEmptyState =
+  | 'none'
+  | 'no_logs_yet'
+  | 'no_previous_logs'
+  | 'no_filter_matches'
+  | 'unavailable';
+
 const LogViewerInner: React.FC<LogViewerProps> = ({
   namespace,
   resourceName,
@@ -1192,22 +1199,50 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
             warning === getLogDataUnavailableMessage(true)
         ) ?? null)
       : null;
+  const logEmptyState = useMemo<LogEmptyState>(() => {
+    if (isPendingLogs || filteredEntries.length > 0) {
+      return 'none';
+    }
+    if (unavailableLogMessage) {
+      return 'unavailable';
+    }
+    if (showPreviousLogs) {
+      return 'no_previous_logs';
+    }
+    if ((textFilter.trim().length > 0 || selectedFilters.length > 0) && logEntries.length > 0) {
+      return 'no_filter_matches';
+    }
+    return 'no_logs_yet';
+  }, [
+    filteredEntries.length,
+    isPendingLogs,
+    logEntries.length,
+    selectedFilters.length,
+    showPreviousLogs,
+    textFilter,
+    unavailableLogMessage,
+  ]);
+  const emptyStateMessage = useMemo(() => {
+    switch (logEmptyState) {
+      case 'unavailable':
+        return unavailableLogMessage ?? 'Logs are unavailable right now';
+      case 'no_previous_logs':
+        return 'No previous logs found';
+      case 'no_filter_matches':
+        return 'No logs match the current filters';
+      case 'no_logs_yet':
+        return 'No logs yet';
+      default:
+        return '';
+    }
+  }, [logEmptyState, unavailableLogMessage]);
 
   const displayLines = useMemo(() => {
     if (filteredEntries.length === 0) {
       if (isPendingLogs) {
         return [] as string[];
       }
-      if (unavailableLogMessage) {
-        return [unavailableLogMessage];
-      }
-      return [
-        textFilter.trim()
-          ? 'No logs match the filter'
-          : showPreviousLogs
-            ? 'No previous logs found'
-            : 'No logs available',
-      ];
+      return emptyStateMessage ? [emptyStateMessage] : [];
     }
 
     return filteredEntries.map((entry) => {
@@ -1256,7 +1291,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     selectedContainerFilterCount,
     textFilter,
     timestampMode,
-    unavailableLogMessage,
+    emptyStateMessage,
   ]);
 
   const displayLogs = useMemo(() => displayLines.join('\n'), [displayLines]);
@@ -2301,10 +2336,8 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                     </div>
                   ))
                 )
-              ) : showPreviousLogs ? (
-                'No previous logs found'
               ) : (
-                'No logs available'
+                emptyStateMessage
               )}
             </div>
           )}
