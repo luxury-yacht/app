@@ -386,8 +386,11 @@ export class LogStreamManager {
     }));
 
     // Buffer replacement policy:
-    // - reset=true with non-empty incoming → replace (server is giving us a
-    //   fresh snapshot, use it).
+    // - reset=true with non-empty incoming → replace the buffered entries.
+    //   For live streams, this frame is a fresh tail snapshot after a
+    //   reconnect/remount, not an authoritative total, so preserve the
+    //   larger running total instead of letting the count shrink back to
+    //   the tail size.
     // - reset=true with empty incoming → PRESERVE. The server emits the
     //   reset flag as part of its "new connection" handshake on every
     //   stream open, before it has had a chance to tail any lines. Wiping
@@ -397,8 +400,12 @@ export class LogStreamManager {
     // - reset=false → append, unchanged.
     const shouldReplace = payload.reset && incoming.length > 0;
     const previousMeta = this.bufferMeta.get(scope);
-    let totalItems = shouldReplace ? 0 : (previousMeta?.total ?? existing.length);
-    totalItems += incoming.length;
+    const previousTotal = previousMeta?.total ?? existing.length;
+    let totalItems = shouldReplace
+      ? mode === 'stream'
+        ? Math.max(previousTotal, incoming.length)
+        : incoming.length
+      : previousTotal + incoming.length;
 
     let nextEntries = shouldReplace
       ? incoming

@@ -598,6 +598,59 @@ describe('LogStreamManager', () => {
     expect(state.data?.entries?.map((e) => e.line)).toEqual(['fresh-a', 'fresh-b']);
   });
 
+  test('applyPayload preserves truncated total across stream reconnect replacement snapshots', async () => {
+    const { eventBus } = await import('@/core/events');
+    const manager = await seedScopeWithEntries(5);
+
+    eventBus.emit('settings:log-buffer-size', 3);
+
+    let state = getScopedDomainState('object-logs', SCOPE);
+    expect(state.data?.entries).toHaveLength(3);
+    expect(state.stats?.totalItems).toBe(5);
+
+    manager.applyPayload(
+      SCOPE,
+      {
+        domain: 'object-logs',
+        scope: SCOPE,
+        sequence: 6,
+        generatedAt: 2_000,
+        reset: true,
+        entries: [
+          {
+            timestamp: '2024-01-01T00:01:00Z',
+            pod: 'pod-1',
+            container: 'app',
+            line: 'fresh-a',
+            isInit: false,
+          },
+          {
+            timestamp: '2024-01-01T00:01:01Z',
+            pod: 'pod-1',
+            container: 'app',
+            line: 'fresh-b',
+            isInit: false,
+          },
+          {
+            timestamp: '2024-01-01T00:01:02Z',
+            pod: 'pod-1',
+            container: 'app',
+            line: 'fresh-c',
+            isInit: false,
+          },
+        ],
+      },
+      'stream'
+    );
+
+    state = getScopedDomainState('object-logs', SCOPE);
+    expect(state.data?.entries).toHaveLength(3);
+    expect(state.data?.entries?.map((e) => e.line)).toEqual(['fresh-a', 'fresh-b', 'fresh-c']);
+    expect(state.stats?.totalItems).toBe(5);
+
+    eventBus.emit('settings:log-buffer-size', 1000);
+  });
+
   test('applyPayload appends when reset=false regardless of what was buffered', async () => {
     const manager = await seedScopeWithEntries(2);
 
