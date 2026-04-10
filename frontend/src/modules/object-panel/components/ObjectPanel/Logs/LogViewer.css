@@ -203,9 +203,9 @@
   align-items: center;
   gap: 4px;
   max-width: min(100%, 22rem);
-  min-height: 26px;
-  padding: 0 8px;
-  border-radius: 20px;
+  min-height: 22px;
+  padding: 0 4px 0 8px;
+  border-radius: 90px;
   background-color: var(--color-bg-tertiary);
   color: var(--color-text);
   font-size: 0.75rem;
@@ -219,6 +219,7 @@
   background: var(--color-text-secondary);
   color: var(--color-bg);
   font-weight: 600;
+  padding: 0 8px;
 }
 
 .pod-logs-filter-chip--clear-all:hover {
