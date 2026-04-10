@@ -22,6 +22,8 @@ export interface IconBarToggle {
   onClick: () => void;
   /** Tooltip text shown on hover. */
   title: string;
+  /** Accessible label for screen readers; defaults to title when omitted. */
+  ariaLabel?: string;
   /** When true, the button is dimmed and non-interactive. */
   disabled?: boolean;
 }
@@ -37,6 +39,8 @@ export interface IconBarAction {
   onClick: () => void;
   /** Tooltip text shown on hover. */
   title: string;
+  /** Accessible label for screen readers; defaults to title when omitted. */
+  ariaLabel?: string;
   /** When true, the button is dimmed and non-interactive. */
   disabled?: boolean;
   /** Brief feedback state: 'success' or 'error'. Omit or null for default. */
@@ -88,7 +92,7 @@ const IconBar: React.FC<IconBarProps> = ({ items, className }) => {
               onClick={item.onClick}
               disabled={item.disabled}
               title={item.title}
-              aria-label={item.title}
+              aria-label={item.ariaLabel ?? item.title}
               aria-pressed={item.active}
             >
               {item.icon}
@@ -107,7 +111,7 @@ const IconBar: React.FC<IconBarProps> = ({ items, className }) => {
             onClick={item.onClick}
             disabled={item.disabled}
             title={item.title}
-            aria-label={item.title}
+            aria-label={item.ariaLabel ?? item.title}
           >
             {item.icon}
           </button>

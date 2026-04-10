@@ -884,20 +884,6 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     }
   }, [supportsPreviousLogs, showPreviousLogs]);
 
-  // Keyboard shortcuts for Logs tab
-  useLogKeyboardShortcuts({
-    isActive,
-    isParsedView,
-    displayMode,
-    showTimestamps,
-    dispatch,
-    supportsPreviousLogs,
-    canParseLogs,
-    handleTogglePreviousLogs,
-    filterInputRef,
-    logsContentRef,
-  });
-
   // Generate consistent colors for pods (workload view)
   // Colors are read from CSS variables to support light/dark themes
   const podColors = useMemo(() => {
@@ -1993,6 +1979,24 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     }
   }, [displayLogs, displayMode, parsedCsv, scheduleCopyReset, dispatch]);
 
+  // Keyboard shortcuts for Logs tab
+  useLogKeyboardShortcuts({
+    isActive,
+    isParsedView,
+    displayMode,
+    showTimestamps,
+    regexMatches,
+    hasAnsiLogEntries,
+    hasCopyableContent,
+    dispatch,
+    supportsPreviousLogs,
+    canParseLogs,
+    handleTogglePreviousLogs,
+    handleCopyLogs,
+    filterInputRef,
+    logsContentRef,
+  });
+
   // Row expansion for parsed view.
   // GridTable's onRowClick only fires for keyboard activation (Enter), not mouse
   // clicks, so we use event delegation on a wrapper to handle pointer clicks.
@@ -2117,7 +2121,8 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                     icon: <HighlightSearchIcon />,
                     active: highlightMatches,
                     onClick: () => dispatch({ type: 'TOGGLE_HIGHLIGHT_MATCHES' }),
-                    title: 'Highlight matches from the current text filter',
+                    title: 'Highlight matching text - disabled when Invert is enabled (H)',
+                    ariaLabel: 'Highlight matching text - disabled when Invert is enabled',
                     disabled: inverseMatches,
                   },
                   {
@@ -2126,7 +2131,8 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                     icon: <InverseSearchIcon />,
                     active: inverseMatches,
                     onClick: () => dispatch({ type: 'TOGGLE_INVERSE_MATCHES' }),
-                    title: 'Show only logs that do not contain the current text filter',
+                    title: 'Invert the text filter to show only non-matching logs (I)',
+                    ariaLabel: 'Invert the text filter to show only non-matching logs',
                   },
                   {
                     type: 'toggle',
@@ -2134,7 +2140,8 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                     icon: <CaseSensitiveIcon width={16} height={16} />,
                     active: caseSensitiveMatches,
                     onClick: () => dispatch({ type: 'TOGGLE_CASE_SENSITIVE_MATCHES' }),
-                    title: 'Match case in the current text filter',
+                    title: 'Case-sensitive search - disabled when regex is enabled (C)',
+                    ariaLabel: 'Case-sensitive search - disabled when regex is enabled',
                     disabled: regexMatches,
                   },
                   {
@@ -2143,7 +2150,8 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                     icon: <RegexSearchIcon />,
                     active: regexMatches,
                     onClick: () => dispatch({ type: 'TOGGLE_REGEX_MATCHES' }),
-                    title: 'Treat the current text filter as a regular expression',
+                    title: 'Enable regular expression support for the text filter (X)',
+                    ariaLabel: 'Enable regular expression support for the text filter',
                   },
                   { type: 'separator' },
                   {
@@ -2152,7 +2160,8 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                     icon: <AutoRefreshIcon />,
                     active: autoRefresh,
                     onClick: () => dispatch({ type: 'TOGGLE_AUTO_REFRESH' }),
-                    title: 'Auto-refresh (R)',
+                    title: 'Toggle auto-refresh (R)',
+                    ariaLabel: 'Toggle auto-refresh',
                   },
                   ...(supportsPreviousLogs
                     ? [
@@ -2162,7 +2171,8 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                           icon: <PreviousLogsIcon />,
                           active: showPreviousLogs,
                           onClick: handleTogglePreviousLogs,
-                          title: 'Previous logs (V)',
+                          title: 'Show previous logs (V)',
+                          ariaLabel: 'Show previous logs (V)',
                         },
                       ]
                     : []),
@@ -2176,7 +2186,8 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                         type: 'SET_TIMESTAMP_MODE',
                         payload: showTimestamps ? 'hidden' : 'default',
                       }),
-                    title: 'API timestamps (T)',
+                    title: 'Show timestamps from the Kubernetes API (T)',
+                    ariaLabel: 'Show timestamps from the Kubernetes API',
                   },
                   {
                     type: 'toggle',
@@ -2185,6 +2196,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                     active: wrapText,
                     onClick: () => dispatch({ type: 'TOGGLE_WRAP_TEXT' }),
                     title: 'Wrap text (W)',
+                    ariaLabel: 'Wrap text',
                     disabled: isParsedView,
                   },
                   ...(hasAnsiLogEntries
@@ -2195,7 +2207,8 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                           icon: <AnsiColorIcon />,
                           active: showAnsiColors,
                           onClick: () => dispatch({ type: 'TOGGLE_SHOW_ANSI_COLORS' }),
-                          title: 'ANSI colors',
+                          title: 'Show ANSI colors if present (O)',
+                          ariaLabel: 'Show ANSI colors if present',
                           disabled: isParsedView,
                         },
                       ]
@@ -2210,7 +2223,8 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                         type: 'SET_DISPLAY_MODE',
                         payload: displayMode === 'pretty' ? 'raw' : 'pretty',
                       }),
-                    title: 'Pretty JSON',
+                    title: 'Show pretty JSON (J)',
+                    ariaLabel: 'Show pretty JSON',
                     disabled: !canParseLogs,
                   },
                   {
@@ -2223,7 +2237,8 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                         type: 'SET_DISPLAY_MODE',
                         payload: displayMode === 'parsed' ? 'raw' : 'parsed',
                       }),
-                    title: 'Parsed JSON (P)',
+                    title: 'Parse the JSON into a table (P)',
+                    ariaLabel: 'Parse the JSON into a table',
                     disabled: !canParseLogs,
                   },
                   { type: 'separator' },
@@ -2232,7 +2247,8 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                     id: 'copy',
                     icon: <CopyIcon />,
                     onClick: handleCopyLogs,
-                    title: 'Copy to clipboard',
+                    title: 'Copy to clipboard (Shift+C)',
+                    ariaLabel: 'Copy to clipboard',
                     disabled: !hasCopyableContent,
                     feedback:
                       copyFeedback === 'copied'

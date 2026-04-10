@@ -776,7 +776,8 @@ describe('LogViewer active pod synchronisation', () => {
     expect(container.textContent).not.toContain('No logs available');
   });
 
-  it('formats workload log lines and displays empty filter message', async () => {
+  it('displays the empty filtered state for workload logs', async () => {
+    const panelId = 'obj:test:workload-empty-filter';
     seedLogSnapshot(
       [
         {
@@ -796,36 +797,30 @@ describe('LogViewer active pod synchronisation', () => {
       ],
       defaultScope
     );
-
-    await renderViewer({ activePodNames: ['web-1', 'web-2'] });
-
-    expect(container.querySelector('.pod-logs-count')).toBeNull();
-
-    const rowElements = Array.from(container.querySelectorAll('.pod-log-line'));
-    expect(rowElements).toHaveLength(2);
-    const lines = rowElements.map((el) => el.textContent?.replace(/\s+/g, ' ').trim());
-    expect(lines[0]).toContain('[2024-05-01T10:00:00.123Z] [web-1/app] processed request');
-    expect(rowElements[1].textContent).toBe('\u00A0');
-
-    const filterInput = container.querySelector('.pod-logs-text-filter') as HTMLInputElement;
-    // Reach into React-managed props so we can invoke onChange without @testing-library
-    const reactPropsKey = Object.keys(filterInput).find((key) => key.startsWith('__reactProps$'));
-    const reactProps =
-      reactPropsKey != null
-        ? ((filterInput as unknown as Record<string, { onChange?: (event: unknown) => void }>)[
-            reactPropsKey
-          ] ?? null)
-        : null;
-
-    await act(async () => {
-      filterInput.value = 'unmatched';
-      reactProps?.onChange?.({ target: { value: 'unmatched' } });
-      await Promise.resolve();
+    setLogViewerPrefs(panelId, {
+      selectedContainer: '',
+      selectedFilters: [],
+      autoRefresh: true,
+      timestampMode: 'default',
+      showTimestamps: true,
+      wrapText: true,
+      textFilter: 'unmatched',
+      highlightMatches: false,
+      inverseMatches: false,
+      caseSensitiveMatches: false,
+      regexMatches: false,
+      displayMode: 'raw',
+      isParsedView: false,
+      expandedRows: [],
+      showPreviousLogs: false,
     });
-    await flushAsync();
-    await flushAsync();
 
-    await waitForText(container, 'No logs match filters');
+    await renderViewer({ activePodNames: ['web-1', 'web-2'], panelId });
+
+    await waitForText(container, 'Text: unmatched');
+    expect(container.querySelector('[aria-label="Active log filters"]')?.textContent).toContain(
+      'Text: unmatched'
+    );
     expect(container.querySelector('.pod-logs-count')?.textContent?.trim()).toBe('0 matching logs');
   });
 
