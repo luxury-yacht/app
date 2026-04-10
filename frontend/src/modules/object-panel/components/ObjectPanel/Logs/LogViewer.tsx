@@ -167,6 +167,8 @@ const formatContainerLabel = (container: string, isInit: boolean): string =>
   isInit ? `${container}:init` : container;
 
 const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const escapeCsvCell = (value: string): string =>
+  /[",\n\r]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 
 const POD_FILTER_PREFIX = 'pod:';
 const INIT_FILTER_PREFIX = 'init:';
@@ -1272,31 +1274,6 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     };
   }, []);
 
-  const handleCopyLogs = useCallback(async () => {
-    const text =
-      displayMode === 'parsed'
-        ? parsedLogs
-            .map((entry) =>
-              Object.keys(entry.data).length ? JSON.stringify(entry.data) : entry.rawLine
-            )
-            .join('\n')
-        : displayLogs;
-    if (!text) {
-      dispatch({ type: 'SET_COPY_FEEDBACK', payload: 'error' });
-      scheduleCopyReset();
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(text);
-      dispatch({ type: 'SET_COPY_FEEDBACK', payload: 'copied' });
-      scheduleCopyReset();
-    } catch (err) {
-      console.error('Failed to copy logs', err);
-      dispatch({ type: 'SET_COPY_FEEDBACK', payload: 'error' });
-      scheduleCopyReset();
-    }
-  }, [displayLogs, displayMode, parsedLogs, scheduleCopyReset, dispatch]);
-
   // Fetch containers for single pod
   useEffect(() => {
     if (isWorkload || !namespace || !podName) return;
@@ -1640,6 +1617,52 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
 
     return columns;
   }, [derivedFieldKeys, isWorkload, podColors, timestampMode]);
+
+  const parsedCsv = useMemo(() => {
+    if (!isParsedView || parsedLogs.length === 0 || tableColumns.length === 0) {
+      return '';
+    }
+
+    const getParsedColumnValue = (entry: ParsedLogEntry, key: string): string => {
+      switch (key) {
+        case '_timestamp':
+          return entry.timestamp ? formatTimestampForMode(entry.timestamp, timestampMode) : '-';
+        case '_pod':
+          return entry.pod || '-';
+        case '_container':
+          return entry.container || '-';
+        default:
+          return formatParsedValue(entry.data[key]);
+      }
+    };
+
+    const headerRow = tableColumns.map((column) =>
+      escapeCsvCell(typeof column.header === 'string' ? column.header : column.key)
+    );
+    const dataRows = parsedLogs.map((entry) =>
+      tableColumns.map((column) => escapeCsvCell(getParsedColumnValue(entry, column.key)))
+    );
+
+    return [headerRow, ...dataRows].map((row) => row.join(',')).join('\n');
+  }, [isParsedView, parsedLogs, tableColumns, timestampMode]);
+
+  const handleCopyLogs = useCallback(async () => {
+    const text = displayMode === 'parsed' ? parsedCsv : displayLogs;
+    if (!text) {
+      dispatch({ type: 'SET_COPY_FEEDBACK', payload: 'error' });
+      scheduleCopyReset();
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      dispatch({ type: 'SET_COPY_FEEDBACK', payload: 'copied' });
+      scheduleCopyReset();
+    } catch (err) {
+      console.error('Failed to copy logs', err);
+      dispatch({ type: 'SET_COPY_FEEDBACK', payload: 'error' });
+      scheduleCopyReset();
+    }
+  }, [displayLogs, displayMode, parsedCsv, scheduleCopyReset, dispatch]);
 
   // Row expansion for parsed view.
   // GridTable's onRowClick only fires for keyboard activation (Enter), not mouse

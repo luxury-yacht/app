@@ -226,6 +226,7 @@ const seedLogSnapshot = (
 describe('LogViewer active pod synchronisation', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
+  let writeTextMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -236,6 +237,11 @@ describe('LogViewer active pod synchronisation', () => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
+    writeTextMock = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(globalThis.navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: writeTextMock },
+    });
 
     seedLogSnapshot([
       {
@@ -927,6 +933,46 @@ describe('LogViewer active pod synchronisation', () => {
     });
     expect(parsedButton?.getAttribute('aria-pressed')).toBe('false');
     expect(container.querySelector('[data-testid="gridtable-parsed-logs"]')).toBeFalsy();
+  });
+
+  it('copies parsed logs as CSV using the visible parsed columns', async () => {
+    seedLogSnapshot([
+      {
+        pod: 'web-1',
+        container: 'app',
+        line: '{"level":"info","message":"hello, world","count":2}',
+        timestamp: '2024-05-01T11:00:00Z',
+        isInit: false,
+      },
+    ]);
+
+    await renderViewer();
+
+    const parsedButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Parsed JSON (P)"]'
+    );
+    const copyButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Copy to clipboard"]'
+    );
+    expect(parsedButton).toBeTruthy();
+    expect(copyButton).toBeTruthy();
+
+    await act(async () => {
+      parsedButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      copyButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(writeTextMock).toHaveBeenCalledWith(
+      [
+        'API Timestamp,Pod,Container,level,count,message',
+        '2024-05-01T11:00:00Z,web-1,app,info,2,"hello, world"',
+      ].join('\n')
+    );
   });
 
   it('toggles API timestamps from the icon bar', async () => {
