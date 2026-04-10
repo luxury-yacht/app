@@ -123,17 +123,13 @@ export const AnsiColorIcon: React.FC<IconProps> = ({
     viewBox="0 0 24 24"
     width={width}
     height={height}
-    fill="none"
-    stroke={fill}
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    strokeWidth={1.8}
+    fill={fill}
   >
-    <path d="M12 3.5c4.97 0 9 4.03 9 9c0 3.59-2.11 6.7-5.16 8.14c-1.14.54-2.34-.35-2.23-1.6l.09-1c.08-.91-.63-1.69-1.54-1.69H10a5.5 5.5 0 0 1 0-11z" />
-    <circle cx="7.5" cy="10" r="1" fill={fill} stroke="none" />
-    <circle cx="10.5" cy="7.5" r="1" fill={fill} stroke="none" />
-    <circle cx="14.5" cy="7.8" r="1" fill={fill} stroke="none" />
-    <circle cx="16.8" cy="11.3" r="1" fill={fill} stroke="none" />
+    <path d="M12 22C6.49 22 2 17.51 2 12S6.49 2 12 2s10 4.04 10 9c0 3.31-2.69 6-6 6h-1.77c-.28 0-.5.22-.5.5c0 .12.05.23.13.33c.41.47.64 1.06.64 1.67A2.5 2.5 0 0 1 12 22m0-18c-4.41 0-8 3.59-8 8s3.59 8 8 8c.28 0 .5-.22.5-.5a.54.54 0 0 0-.14-.35c-.41-.46-.63-1.05-.63-1.65a2.5 2.5 0 0 1 2.5-2.5H16c2.21 0 4-1.79 4-4c0-3.86-3.59-7-8-7" />
+    <circle cx="6.5" cy="11.5" r="1.5" />
+    <circle cx="9.5" cy="7.5" r="1.5" />
+    <circle cx="14.5" cy="7.5" r="1.5" />
+    <circle cx="17.5" cy="11.5" r="1.5" />
   </svg>
 );
 
