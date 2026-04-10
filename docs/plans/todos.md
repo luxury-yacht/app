@@ -5,6 +5,10 @@
 
 - Parsed logs, dropdown to hide fields
 
+- can we get node logs?
+
+- Allow remove of default kubeconfig path, if not the last
+
 - Resource creation
   - starter templates for common resource types
   - reuse the existing code editor
