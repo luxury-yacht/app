@@ -83,14 +83,23 @@ export const getObjectPanelKind = (
           })
         );
 
-  // logScope uses the lowercased kind in its legacy "ns:kind:name"
-  // form. No GVK threading: the log producer is keyed off Pod logs
-  // and never had to disambiguate colliding CRD kinds. Both
-  // ObjectPanelContent and LogViewer consume this — keep one builder.
+  // logScope follows the same object-scope encoding as detailScope so
+  // the live stream path and the fallback/manual fetch path can share a
+  // single canonical object identity. The kind stays lowercased to
+  // match the object-logs backend producer's workload dispatch.
   const logScope =
     !objectData?.name || !objectKind
       ? null
-      : buildClusterScope(clusterId, `${scopeNamespace}:${objectKind}:${objectData.name}`);
+      : buildClusterScope(
+          clusterId,
+          buildObjectScope({
+            namespace: scopeNamespace,
+            group: objectData?.group,
+            version: objectData?.version,
+            kind: objectKind,
+            name: objectData.name,
+          })
+        );
 
   const helmScope =
     objectKind !== 'helmrelease' || !objectData?.name

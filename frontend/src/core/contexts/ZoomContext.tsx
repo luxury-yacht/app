@@ -83,6 +83,7 @@ export const ZoomProvider: React.FC<ZoomProviderProps> = ({ children }) => {
   // Apply zoom to document.
   const applyZoom = useCallback((level: number) => {
     document.documentElement.style.zoom = `${level}%`;
+    document.documentElement.style.setProperty('--app-zoom-factor', `${level / 100}`);
     // Windows (chromium) does not properly adjust viewport units with CSS zoom
     // so we set a CSS variable to compensate.
     if (isWindowsPlatform()) {

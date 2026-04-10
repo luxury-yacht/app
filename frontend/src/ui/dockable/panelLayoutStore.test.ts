@@ -75,4 +75,41 @@ describe('createPanelLayoutStore — tabGroups slice', () => {
     expect(storeA.getTabGroups().right.tabs).toEqual(['panel-a']);
     expect(storeB.getTabGroups().right.tabs).toEqual([]);
   });
+
+  it('clearPanelState removes the panel from tab groups', () => {
+    const store = createPanelLayoutStore();
+
+    store.setTabGroups((prev) => addPanelToGroup(prev, 'panel-a', 'right'));
+    expect(store.getTabGroups().right.tabs).toEqual(['panel-a']);
+
+    store.clearPanelState('panel-a');
+
+    expect(store.getTabGroups().right.tabs).toEqual([]);
+    expect(store.getTabGroups().right.activeTab).toBeNull();
+  });
+
+  it('clearPanelState notifies tab group subscribers when it removes grouped panels', () => {
+    const store = createPanelLayoutStore();
+    const listener = vi.fn();
+
+    store.setTabGroups((prev) => addPanelToGroup(prev, 'panel-a', 'right'));
+    store.subscribeTabGroups(listener);
+
+    store.clearPanelState('panel-a');
+
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it('restores persisted maximized state with the rest of panel layout state', () => {
+    const store = createPanelLayoutStore();
+
+    store.updateState('panel-a', { isOpen: true, isMaximized: true });
+    const snapshot = store.getAllPanelStates();
+
+    const restoredStore = createPanelLayoutStore();
+    restoredStore.restorePanelStates(snapshot);
+
+    expect(restoredStore.getState('panel-a')?.isMaximized).toBe(true);
+    expect(restoredStore.getState('panel-a')?.isOpen).toBe(true);
+  });
 });

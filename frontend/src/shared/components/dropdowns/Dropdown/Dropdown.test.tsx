@@ -293,6 +293,50 @@ describe('Dropdown', () => {
     );
   });
 
+  it('supports select all and select none bulk actions for visible multi-select options', async () => {
+    const onChange = vi.fn<(value: string[]) => void>();
+
+    const Harness = () => {
+      const [value, setValue] = useState<string[]>(['postgres']);
+      return (
+        <Dropdown
+          options={[
+            { value: 'group-databases', label: 'Databases', group: 'header' },
+            { value: 'postgres', label: 'Postgres' },
+            { value: 'redis', label: 'Redis', disabled: true },
+            { value: 'mongo', label: 'Mongo' },
+            { value: 'sqlite', label: 'SQLite' },
+          ]}
+          value={value}
+          multiple
+          showBulkActions
+          onChange={(next) => {
+            const nextValue = Array.isArray(next) ? next : [];
+            onChange(nextValue);
+            setValue(nextValue);
+          }}
+        />
+      );
+    };
+
+    await mount(<Harness />);
+
+    click(container.querySelector('.dropdown-trigger'));
+
+    const bulkButtons = container.querySelectorAll<HTMLButtonElement>('.dropdown-bulk-action');
+    expect(bulkButtons).toHaveLength(2);
+    expect(bulkButtons[0]?.textContent).toBe('Select all');
+    expect(bulkButtons[1]?.textContent).toBe('Select none');
+
+    click(bulkButtons[0]);
+    expect(onChange).toHaveBeenCalledWith(['postgres', 'mongo', 'sqlite']);
+
+    const selectNoneButton =
+      container.querySelectorAll<HTMLButtonElement>('.dropdown-bulk-action')[1];
+    click(selectNoneButton);
+    expect(onChange).toHaveBeenCalledWith([]);
+  });
+
   it('adjusts menu position when space below trigger is limited', async () => {
     const originalInnerHeight = window.innerHeight;
     Object.defineProperty(window, 'innerHeight', { configurable: true, value: 720 });

@@ -95,20 +95,30 @@ type PodLogEntry struct {
 
 // LogFetchRequest represents parameters for fetching logs
 type LogFetchRequest struct {
-	Namespace    string `json:"namespace"`
-	WorkloadName string `json:"workloadName,omitempty"`
-	WorkloadKind string `json:"workloadKind,omitempty"` // deployment, daemonset, etc.
-	PodName      string `json:"podName,omitempty"`
-	Container    string `json:"container,omitempty"` // empty means all containers
-	Previous     bool   `json:"previous"`
-	TailLines    int    `json:"tailLines"`
-	SinceSeconds int64  `json:"sinceSeconds,omitempty"`
+	Scope            string `json:"scope,omitempty"`
+	Namespace        string `json:"namespace"`
+	WorkloadName     string `json:"workloadName,omitempty"`
+	WorkloadKind     string `json:"workloadKind,omitempty"` // deployment, daemonset, etc.
+	PodName          string `json:"podName,omitempty"`
+	PodFilter        string `json:"podFilter,omitempty"`
+	PodInclude       string `json:"podInclude,omitempty"`
+	PodExclude       string `json:"podExclude,omitempty"`
+	Container        string `json:"container,omitempty"` // empty means all containers
+	IncludeInit      *bool  `json:"includeInit,omitempty"`
+	IncludeEphemeral *bool  `json:"includeEphemeral,omitempty"`
+	ContainerState   string `json:"containerState,omitempty"`
+	Include          string `json:"include,omitempty"`
+	Exclude          string `json:"exclude,omitempty"`
+	Previous         bool   `json:"previous"`
+	TailLines        int    `json:"tailLines"`
+	SinceSeconds     int64  `json:"sinceSeconds,omitempty"`
 }
 
 // LogFetchResponse represents the response from LogFetcher
 type LogFetchResponse struct {
-	Entries []PodLogEntry `json:"entries"`
-	Error   string        `json:"error,omitempty"`
+	Entries  []PodLogEntry `json:"entries"`
+	Warnings []string      `json:"warnings,omitempty"`
+	Error    string        `json:"error,omitempty"`
 }
 
 // ShellSessionRequest describes the namespace/pod/container to exec into.

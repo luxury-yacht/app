@@ -1958,6 +1958,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
 
     const delivered = logStreamTelemetry?.totalMessages ?? 0;
     const dropped = logStreamTelemetry?.droppedMessages ?? 0;
+    const skippedTargets = logStreamTelemetry?.skippedTargets ?? 0;
     const activeSessions = logStreamTelemetry?.activeSessions ?? 0;
     const lastConnectInfo = formatLastUpdated(
       logStreamTelemetry?.lastConnect && logStreamTelemetry.lastConnect > 0
@@ -1975,6 +1976,9 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       summaryParts.push(`Sessions: ${activeSessions}`);
       summaryParts.push(`Delivered: ${delivered}`);
       summaryParts.push(`Dropped: ${dropped}`);
+      if (skippedTargets > 0) {
+        summaryParts.push(`Skipped Targets: ${skippedTargets}`);
+      }
     }
 
     const secondaryParts: string[] = [`Updated: ${lastUpdatedInfo.display}`];
@@ -1994,10 +1998,13 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     if (logStreamTelemetry?.lastError) {
       titleParts.push(logStreamTelemetry.lastError);
     }
+    if (logStreamTelemetry?.lastSkipReason) {
+      titleParts.push(logStreamTelemetry.lastSkipReason);
+    }
     if (lastConnectInfo.tooltip) {
       titleParts.push(`Connected ${lastConnectInfo.tooltip}`);
     }
-    if (className !== 'diagnostics-summary-error' && dropped > 0) {
+    if (className !== 'diagnostics-summary-error' && (dropped > 0 || skippedTargets > 0)) {
       className = 'diagnostics-summary-warning';
     }
 

@@ -14,11 +14,17 @@ import type { LogViewerPrefs } from '../types';
 
 const samplePrefs = (overrides: Partial<LogViewerPrefs> = {}): LogViewerPrefs => ({
   selectedContainer: 'app',
-  selectedFilter: '',
+  selectedFilters: [],
   autoRefresh: true,
+  timestampMode: 'default',
   showTimestamps: true,
   wrapText: false,
   textFilter: 'error',
+  highlightMatches: true,
+  inverseMatches: false,
+  caseSensitiveMatches: false,
+  regexMatches: false,
+  displayMode: 'raw',
   isParsedView: false,
   expandedRows: [],
   showPreviousLogs: false,

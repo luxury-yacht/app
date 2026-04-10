@@ -136,6 +136,44 @@ describe('getObjectPanelKind', () => {
     expect(result.logScope).toBe('cluster-1|team-a:deployment:api');
   });
 
+  it('threads group/version into logScope when PanelObjectData carries them', () => {
+    const result = getObjectPanelKind({
+      kind: 'Deployment',
+      name: 'api',
+      namespace: 'team-a',
+      group: 'apps',
+      version: 'v1',
+      clusterId: 'cluster-1',
+    });
+
+    expect(result.logScope).toBe('cluster-1|team-a:apps/v1:deployment:api');
+  });
+
+  it('keeps colliding kinds distinct in logScope by threading group/version', () => {
+    const first = getObjectPanelKind({
+      kind: 'DBInstance',
+      name: 'orders',
+      namespace: 'team-a',
+      group: 'rds.services.k8s.aws',
+      version: 'v1alpha1',
+      clusterId: 'cluster-1',
+    });
+    const second = getObjectPanelKind({
+      kind: 'DBInstance',
+      name: 'orders',
+      namespace: 'team-a',
+      group: 'documentdb.services.k8s.aws',
+      version: 'v1alpha1',
+      clusterId: 'cluster-1',
+    });
+
+    expect(first.logScope).toBe('cluster-1|team-a:rds.services.k8s.aws/v1alpha1:dbinstance:orders');
+    expect(second.logScope).toBe(
+      'cluster-1|team-a:documentdb.services.k8s.aws/v1alpha1:dbinstance:orders'
+    );
+    expect(first.logScope).not.toBe(second.logScope);
+  });
+
   it('returns null logScope when objectData is incomplete', () => {
     expect(getObjectPanelKind(null).logScope).toBeNull();
     expect(getObjectPanelKind({ kind: 'Pod' }).logScope).toBeNull();

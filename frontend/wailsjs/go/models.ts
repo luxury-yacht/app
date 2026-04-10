@@ -2530,11 +2530,20 @@ export namespace types {
 	}
 	
 	export class LogFetchRequest {
+	    scope?: string;
 	    namespace: string;
 	    workloadName?: string;
 	    workloadKind?: string;
 	    podName?: string;
+	    podFilter?: string;
+	    podInclude?: string;
+	    podExclude?: string;
 	    container?: string;
+	    includeInit?: boolean;
+	    includeEphemeral?: boolean;
+	    containerState?: string;
+	    include?: string;
+	    exclude?: string;
 	    previous: boolean;
 	    tailLines: number;
 	    sinceSeconds?: number;
@@ -2545,11 +2554,20 @@ export namespace types {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.scope = source["scope"];
 	        this.namespace = source["namespace"];
 	        this.workloadName = source["workloadName"];
 	        this.workloadKind = source["workloadKind"];
 	        this.podName = source["podName"];
+	        this.podFilter = source["podFilter"];
+	        this.podInclude = source["podInclude"];
+	        this.podExclude = source["podExclude"];
 	        this.container = source["container"];
+	        this.includeInit = source["includeInit"];
+	        this.includeEphemeral = source["includeEphemeral"];
+	        this.containerState = source["containerState"];
+	        this.include = source["include"];
+	        this.exclude = source["exclude"];
 	        this.previous = source["previous"];
 	        this.tailLines = source["tailLines"];
 	        this.sinceSeconds = source["sinceSeconds"];
@@ -2577,6 +2595,7 @@ export namespace types {
 	}
 	export class LogFetchResponse {
 	    entries: PodLogEntry[];
+	    warnings?: string[];
 	    error?: string;
 	
 	    static createFrom(source: any = {}) {
@@ -2586,6 +2605,7 @@ export namespace types {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.entries = this.convertValues(source["entries"], PodLogEntry);
+	        this.warnings = source["warnings"];
 	        this.error = source["error"];
 	    }
 	

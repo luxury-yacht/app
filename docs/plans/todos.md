@@ -1,9 +1,8 @@
 # TODO
 
-- Cursor turns to beam when dragging the app window in the header
-- Center Mac icons in header
+- can we get node logs?
 
-- Parsed logs, dropdown to hide fields
+- Allow remove of default kubeconfig path, if not the last
 
 - Resource creation
   - starter templates for common resource types

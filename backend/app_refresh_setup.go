@@ -10,6 +10,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
+	"github.com/luxury-yacht/app/backend/refresh/logstream"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
@@ -160,6 +161,7 @@ func (a *App) buildRefreshSubsystemForSelection(
 		HelmFactory:           a.helmActionFactoryForSelection(selection),
 		ObjectDetailsProvider: a.objectDetailProvider(),
 		Logger:                a.logger,
+		LogTargetLimiter:      a.sharedLogTargetLimiter(),
 		ClusterID:             clusterMeta.ID,
 		ClusterName:           clusterMeta.Name,
 	}
@@ -218,6 +220,16 @@ func (a *App) storeRefreshPermissionCancel(clusterID string, cancel context.Canc
 		prev()
 	}
 	a.refreshPermissionCancels[clusterID] = cancel
+}
+
+func (a *App) sharedLogTargetLimiter() *logstream.GlobalTargetLimiter {
+	if a == nil {
+		return nil
+	}
+	if a.logTargetLimiter == nil {
+		a.logTargetLimiter = logstream.NewGlobalTargetLimiter(config.LogStreamGlobalTargetLimit)
+	}
+	return a.logTargetLimiter
 }
 
 // buildRefreshMux wires the aggregate refresh routes on top of the core API endpoints.

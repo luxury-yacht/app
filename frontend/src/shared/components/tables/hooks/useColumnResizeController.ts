@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type React from 'react';
 
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
+import { parseWidthInputToNumber } from '@shared/components/tables/GridTable.utils';
 
 // Manages drag-to-resize and double-click autosize for GridTable headers. Keeps
 // track of the active resize gesture, applies width changes within min/max
@@ -221,7 +222,12 @@ export function useColumnResizeController<T>({
 
       const measuredWidth = measureColumnWidth(column);
       const minWidth = getColumnMinWidth(column);
-      const maxWidth = getColumnMaxWidth(column);
+      const configuredMaxWidth = getColumnMaxWidth(column);
+      const autoSizeMaxWidth = parseWidthInputToNumber(column.autoSizeMaxWidth);
+      const maxWidth =
+        autoSizeMaxWidth != null
+          ? Math.min(configuredMaxWidth, autoSizeMaxWidth)
+          : configuredMaxWidth;
       const clampedWidth = Math.max(minWidth, Math.min(maxWidth, measuredWidth));
 
       manuallyResizedColumnsRef.current.delete(columnKey);

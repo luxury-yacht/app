@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/podlogs"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -64,7 +65,7 @@ func TestFollowContainerStreamsBatches(t *testing.T) {
 	done := make(chan struct{})
 
 	go func() {
-		streamer.followContainer(ctx, target, entriesCh, errCh, dropCh)
+		streamer.followContainer(ctx, target, podlogs.LineFilter{}, entriesCh, errCh, dropCh)
 		close(done)
 	}()
 
@@ -142,7 +143,7 @@ func TestFollowContainerRecordsDroppedTelemetry(t *testing.T) {
 	done := make(chan struct{})
 
 	go func() {
-		streamer.followContainer(ctx, target, entriesCh, errCh, nil)
+		streamer.followContainer(ctx, target, podlogs.LineFilter{}, entriesCh, errCh, nil)
 		close(done)
 	}()
 
@@ -212,7 +213,7 @@ func TestFollowContainerRetriesAfterStreamFailure(t *testing.T) {
 	done := make(chan struct{})
 
 	go func() {
-		streamer.followContainer(ctx, target, entriesCh, errCh, dropCh)
+		streamer.followContainer(ctx, target, podlogs.LineFilter{}, entriesCh, errCh, dropCh)
 		close(done)
 	}()
 
@@ -279,7 +280,7 @@ func TestFollowContainerStopsAfterInitCompletes(t *testing.T) {
 	done := make(chan struct{})
 
 	go func() {
-		streamer.followContainer(ctx, target, entriesCh, errCh, nil)
+		streamer.followContainer(ctx, target, podlogs.LineFilter{}, entriesCh, errCh, nil)
 		close(done)
 	}()
 
@@ -361,7 +362,7 @@ func TestFollowContainerDeduplicatesMultipleLinesAtSameTimestamp(t *testing.T) {
 	done := make(chan struct{})
 
 	go func() {
-		streamer.followContainer(ctx, target, entriesCh, errCh, dropCh)
+		streamer.followContainer(ctx, target, podlogs.LineFilter{}, entriesCh, errCh, dropCh)
 		close(done)
 	}()
 
@@ -458,7 +459,7 @@ func TestFollowContainerStopsWhenPodTerminated(t *testing.T) {
 	done := make(chan struct{})
 
 	go func() {
-		streamer.followContainer(ctx, target, entriesCh, errCh, nil)
+		streamer.followContainer(ctx, target, podlogs.LineFilter{}, entriesCh, errCh, nil)
 		close(done)
 	}()
 

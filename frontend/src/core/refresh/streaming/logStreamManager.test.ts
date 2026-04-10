@@ -26,6 +26,10 @@ vi.mock('@utils/errorHandler', () => ({
 }));
 
 import { getScopedDomainState, resetScopedDomainState } from '../store';
+import {
+  resetLogStreamScopeParamsCacheForTesting,
+  setLogStreamScopeParams,
+} from '@modules/object-panel/components/ObjectPanel/Logs/logStreamScopeParamsCache';
 
 const SCOPE = 'default:pod:example';
 
@@ -45,6 +49,7 @@ beforeEach(() => {
     addEventListener: globalThis.window.addEventListener ?? vi.fn(),
     removeEventListener: globalThis.window.removeEventListener ?? vi.fn(),
   });
+  resetLogStreamScopeParamsCacheForTesting();
   resetScopedDomainState('object-logs', SCOPE);
 });
 
@@ -57,6 +62,7 @@ afterEach(() => {
       clearTimeout: globalThis.clearTimeout,
     });
   }
+  resetLogStreamScopeParamsCacheForTesting();
 });
 
 describe('LogStreamManager', () => {
@@ -90,6 +96,66 @@ describe('LogStreamManager', () => {
     expect(state.data?.entries).toHaveLength(1);
     expect(state.data?.entries?.[0].line).toBe('hello world');
     expect(state.data?.resetCount).toBe(1);
+  });
+
+  test('applyPayload carries backend warnings into snapshot stats', async () => {
+    const { LogStreamManager } = await import('./logStreamManager');
+    const manager = new LogStreamManager();
+
+    manager.applyPayload(
+      SCOPE,
+      {
+        domain: 'object-logs',
+        scope: SCOPE,
+        sequence: 1,
+        generatedAt: 123,
+        reset: true,
+        warnings: ['Showing logs for 24 of 25 pod/container targets. Refine filters to view more.'],
+        entries: [],
+      },
+      'stream'
+    );
+
+    const state = getScopedDomainState('object-logs', SCOPE);
+    expect(state.status).toBe('ready');
+    expect(state.stats?.warnings).toContain(
+      'Showing logs for 24 of 25 pod/container targets. Refine filters to view more.'
+    );
+  });
+
+  test('applyPayload clears backend warnings when the server sends an empty warning list', async () => {
+    const { LogStreamManager } = await import('./logStreamManager');
+    const manager = new LogStreamManager();
+
+    manager.applyPayload(
+      SCOPE,
+      {
+        domain: 'object-logs',
+        scope: SCOPE,
+        sequence: 1,
+        generatedAt: 123,
+        reset: true,
+        warnings: ['Showing logs for 24 of 25 pod/container targets. Refine filters to view more.'],
+        entries: [],
+      },
+      'stream'
+    );
+
+    manager.applyPayload(
+      SCOPE,
+      {
+        domain: 'object-logs',
+        scope: SCOPE,
+        sequence: 2,
+        generatedAt: 124,
+        warnings: [],
+        entries: [],
+      },
+      'stream'
+    );
+
+    const state = getScopedDomainState('object-logs', SCOPE);
+    expect(state.stats?.warnings).toBeUndefined();
   });
 
   test('applyPayload uses permission denied details when provided', async () => {
@@ -240,6 +306,36 @@ describe('LogStreamManager', () => {
     expect(errorHandlerMock.handle).not.toHaveBeenCalled();
   });
 
+  test('startStream appends cached pod and container filters to the stream URL', async () => {
+    class MockEventSource {
+      static instances: MockEventSource[] = [];
+      listeners: Record<string, (evt?: any) => void> = {};
+      constructor(public url: string) {
+        MockEventSource.instances.push(this);
+      }
+      addEventListener(type: string, handler: (evt?: any) => void) {
+        this.listeners[type] = handler;
+      }
+      removeEventListener(): void {}
+      close(): void {}
+    }
+    (globalThis as any).EventSource = MockEventSource as any;
+
+    setLogStreamScopeParams(SCOPE, {
+      container: 'app',
+    });
+
+    const { LogStreamManager } = await import('./logStreamManager');
+    const manager = new LogStreamManager();
+
+    await manager.startStream(SCOPE);
+
+    expect(MockEventSource.instances).toHaveLength(1);
+    const streamURL = new URL(MockEventSource.instances[0]!.url);
+    expect(streamURL.searchParams.get('scope')).toBe(SCOPE);
+    expect(streamURL.searchParams.get('container')).toBe('app');
+  });
+
   test('refreshOnce rejects and marks error when the stream fails', async () => {
     class MockEventSource {
       static instances: MockEventSource[] = [];
@@ -312,6 +408,52 @@ describe('LogStreamManager', () => {
     expect(getScopedDomainState('object-logs', SCOPE).status).toBe('ready');
     manager.stopAll(true);
 
+    const state = getScopedDomainState('object-logs', SCOPE);
+    expect(state.status).toBe('idle');
+    expect(state.data).toBeNull();
+  });
+
+  test('kubeconfig:changing resets active log streams and scoped state', async () => {
+    class MockEventSource {
+      static instances: MockEventSource[] = [];
+      listeners: Record<string, (evt?: any) => void> = {};
+      closed = false;
+      constructor() {
+        MockEventSource.instances.push(this);
+      }
+      addEventListener(type: string, handler: (evt?: any) => void): void {
+        this.listeners[type] = handler;
+      }
+      removeEventListener(): void {}
+      close(): void {
+        this.closed = true;
+      }
+    }
+    (globalThis as any).EventSource = MockEventSource as any;
+
+    const { eventBus } = await import('@/core/events');
+    const { LogStreamManager } = await import('./logStreamManager');
+    const manager = new LogStreamManager();
+
+    await manager.startStream(SCOPE);
+    manager.applyPayload(
+      SCOPE,
+      {
+        domain: 'object-logs',
+        scope: SCOPE,
+        sequence: 2,
+        generatedAt: Date.now(),
+        reset: true,
+        entries: [{ timestamp: 't1', pod: 'pod-1', container: 'app', line: 'line 1' }],
+      },
+      'stream'
+    );
+
+    expect(getScopedDomainState('object-logs', SCOPE).data?.entries).toHaveLength(1);
+
+    eventBus.emit('kubeconfig:changing', '');
+
+    expect(MockEventSource.instances[0]?.closed).toBe(true);
     const state = getScopedDomainState('object-logs', SCOPE);
     expect(state.status).toBe('idle');
     expect(state.data).toBeNull();
@@ -454,6 +596,59 @@ describe('LogStreamManager', () => {
     const state = getScopedDomainState('object-logs', SCOPE);
     expect(state.data?.entries).toHaveLength(2);
     expect(state.data?.entries?.map((e) => e.line)).toEqual(['fresh-a', 'fresh-b']);
+  });
+
+  test('applyPayload preserves truncated total across stream reconnect replacement snapshots', async () => {
+    const { eventBus } = await import('@/core/events');
+    const manager = await seedScopeWithEntries(5);
+
+    eventBus.emit('settings:log-buffer-size', 3);
+
+    let state = getScopedDomainState('object-logs', SCOPE);
+    expect(state.data?.entries).toHaveLength(3);
+    expect(state.stats?.totalItems).toBe(5);
+
+    manager.applyPayload(
+      SCOPE,
+      {
+        domain: 'object-logs',
+        scope: SCOPE,
+        sequence: 6,
+        generatedAt: 2_000,
+        reset: true,
+        entries: [
+          {
+            timestamp: '2024-01-01T00:01:00Z',
+            pod: 'pod-1',
+            container: 'app',
+            line: 'fresh-a',
+            isInit: false,
+          },
+          {
+            timestamp: '2024-01-01T00:01:01Z',
+            pod: 'pod-1',
+            container: 'app',
+            line: 'fresh-b',
+            isInit: false,
+          },
+          {
+            timestamp: '2024-01-01T00:01:02Z',
+            pod: 'pod-1',
+            container: 'app',
+            line: 'fresh-c',
+            isInit: false,
+          },
+        ],
+      },
+      'stream'
+    );
+
+    state = getScopedDomainState('object-logs', SCOPE);
+    expect(state.data?.entries).toHaveLength(3);
+    expect(state.data?.entries?.map((e) => e.line)).toEqual(['fresh-a', 'fresh-b', 'fresh-c']);
+    expect(state.stats?.totalItems).toBe(5);
+
+    eventBus.emit('settings:log-buffer-size', 1000);
   });
 
   test('applyPayload appends when reset=false regardless of what was buffered', async () => {

@@ -46,7 +46,11 @@ vi.mock('@/core/refresh/store', () => ({
 }));
 
 // Import after mocks
-import { useLogStreamFallback, isLogDataUnavailable } from './useLogStreamFallback';
+import {
+  useLogStreamFallback,
+  isLogDataUnavailable,
+  getLogDataUnavailableMessage,
+} from './useLogStreamFallback';
 
 // --- Test infrastructure ---
 
@@ -130,6 +134,11 @@ describe('isLogDataUnavailable', () => {
   it('returns false for transient errors', () => {
     expect(isLogDataUnavailable('connection refused')).toBe(false);
     expect(isLogDataUnavailable('log stream disconnected')).toBe(false);
+  });
+
+  it('builds the correct unavailable-state message', () => {
+    expect(getLogDataUnavailableMessage(false)).toContain('not available yet');
+    expect(getLogDataUnavailableMessage(true)).toContain('No previous logs');
   });
 });
 
@@ -348,6 +357,46 @@ describe('useLogStreamFallback', () => {
       vi.advanceTimersByTime(12000);
     });
     expect(mockRestartStreamingDomain).toHaveBeenCalledTimes(3);
+  });
+
+  it('records an unavailable warning instead of an error when recovery sees a startup-state log error', async () => {
+    const { Harness } = createHarness();
+    mockRestartStreamingDomain.mockRejectedValueOnce(
+      new Error('waiting to start: ContainerCreating')
+    );
+
+    act(() => {
+      root.render(
+        React.createElement(
+          Harness,
+          defaultProps({
+            fallbackActive: true,
+          })
+        )
+      );
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(3000);
+      await Promise.resolve();
+    });
+
+    const latestCall =
+      mockSetScopedDomainState.mock.calls[mockSetScopedDomainState.mock.calls.length - 1];
+    const updater = latestCall?.[2] as
+      | ((previous: Record<string, any>) => Record<string, any>)
+      | undefined;
+    expect(typeof updater).toBe('function');
+
+    const next = updater?.({
+      status: 'loading',
+      error: null,
+      stats: undefined,
+      scope: 'test-scope',
+    });
+    expect(next?.status).toBe('ready');
+    expect(next?.error).toBeNull();
+    expect(next?.stats?.warnings).toEqual([getLogDataUnavailableMessage(false)]);
   });
 
   it('does not schedule recovery when autoRefresh is off', () => {

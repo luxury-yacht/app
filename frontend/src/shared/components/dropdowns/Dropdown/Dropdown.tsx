@@ -26,8 +26,10 @@ const Dropdown: React.FC<DropdownProps> = ({
   multiple = false,
   searchable = false,
   clearable = false,
+  showBulkActions = false,
   renderOption,
   renderValue,
+  className = '',
   dropdownClassName = '',
   ariaLabel,
   ariaDescribedBy,
@@ -150,6 +152,46 @@ const Dropdown: React.FC<DropdownProps> = ({
     );
   }, [options, searchQuery, searchable]);
 
+  const selectableFilteredValues = useMemo(
+    () =>
+      filteredOptions
+        .filter((option) => !option.disabled && option.group !== 'header')
+        .map((option) => option.value),
+    [filteredOptions]
+  );
+
+  const selectedValueSet = useMemo(() => new Set(Array.isArray(value) ? value : []), [value]);
+
+  const selectableSelectedCount = useMemo(
+    () =>
+      selectableFilteredValues.filter((optionValue) => selectedValueSet.has(optionValue)).length,
+    [selectableFilteredValues, selectedValueSet]
+  );
+
+  const handleSelectAll = useMemo(
+    () => () => {
+      if (!multiple) {
+        return;
+      }
+      const currentValues = Array.isArray(value) ? value : [];
+      const nextValues = Array.from(new Set([...currentValues, ...selectableFilteredValues]));
+      onChange(nextValues);
+    },
+    [multiple, onChange, selectableFilteredValues, value]
+  );
+
+  const handleSelectNone = useMemo(
+    () => () => {
+      if (!multiple) {
+        return;
+      }
+      const currentValues = Array.isArray(value) ? value : [];
+      const visibleValues = new Set(selectableFilteredValues);
+      onChange(currentValues.filter((optionValue) => !visibleValues.has(optionValue)));
+    },
+    [multiple, onChange, selectableFilteredValues, value]
+  );
+
   // Get display text for current value
   const getDisplayText = () => {
     if (loading) {
@@ -224,6 +266,7 @@ const Dropdown: React.FC<DropdownProps> = ({
     disabled && 'disabled',
     loading && 'loading',
     isOpen && 'open',
+    className,
   ]
     .filter(Boolean)
     .join(' ');
@@ -375,6 +418,33 @@ const Dropdown: React.FC<DropdownProps> = ({
                 autoFocus
                 data-allow-shortcuts="true"
               />
+            </div>
+          )}
+
+          {multiple && showBulkActions && selectableFilteredValues.length > 0 && (
+            <div className="dropdown-bulk-actions">
+              <button
+                type="button"
+                className="dropdown-bulk-action"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleSelectAll();
+                }}
+                disabled={selectableSelectedCount === selectableFilteredValues.length}
+              >
+                Select all
+              </button>
+              <button
+                type="button"
+                className="dropdown-bulk-action"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleSelectNone();
+                }}
+                disabled={selectableSelectedCount === 0}
+              >
+                Select none
+              </button>
             </div>
           )}
 

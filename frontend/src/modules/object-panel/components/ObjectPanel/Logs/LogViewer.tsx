@@ -14,17 +14,28 @@ import GridTable, {
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import { useLogKeyboardShortcuts } from './hooks/useLogKeyboardShortcuts';
 import { useLogFiltering } from './hooks/useLogFiltering';
-import { useLogStreamFallback, isLogDataUnavailable } from './hooks/useLogStreamFallback';
-import { Dropdown } from '@shared/components/dropdowns/Dropdown';
+import { useVirtualizedLogRows } from './hooks/useVirtualizedLogRows';
+import {
+  useLogStreamFallback,
+  isLogDataUnavailable,
+  getLogDataUnavailableMessage,
+} from './hooks/useLogStreamFallback';
+import { Dropdown, type DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import {
   AutoRefreshIcon,
   PreviousLogsIcon,
   TimestampIcon,
   WrapTextIcon,
-  ParseJsonIcon,
+  AnsiColorIcon,
   CopyIcon,
+  ParseJsonIcon,
+  PrettyJsonIcon,
+  HighlightSearchIcon,
+  InverseSearchIcon,
+  RegexSearchIcon,
 } from '@shared/components/icons/LogIcons';
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
+import { CaseSensitiveIcon } from '@shared/components/icons/MenuIcons';
 import './LogViewer.css';
 import { refreshOrchestrator } from '@/core/refresh/orchestrator';
 import { setScopedDomainState, useRefreshScopedDomain } from '@/core/refresh/store';
@@ -45,6 +56,9 @@ import {
   setLogViewerPrefs,
   setLogViewerScrollTop,
 } from './logViewerPrefsCache';
+import { containsAnsi, parseAnsiTextSegments, stripAnsi } from './ansi';
+import { buildStablePodColorMap } from './podColors';
+import { setLogStreamScopeParams } from './logStreamScopeParamsCache';
 import { INACTIVE_SCOPE } from '../constants';
 
 interface LogViewerProps {
@@ -71,9 +85,16 @@ interface LogViewerProps {
 }
 
 const LOG_DOMAIN = 'object-logs' as const;
-const PARSED_COLUMN_MIN_WIDTH = 120;
-const PARSED_TIMESTAMP_MIN_WIDTH = 180;
-const PARSED_POD_COLUMN_MIN_WIDTH = 160;
+const PARSED_COLUMN_MIN_WIDTH = 50;
+const PARSED_TIMESTAMP_MIN_WIDTH = 80;
+const PARSED_POD_COLUMN_MIN_WIDTH = 80;
+const PARSED_COLUMN_AUTOSIZE_MAX_WIDTH = 520;
+const PARSED_TIMESTAMP_AUTOSIZE_MAX_WIDTH = 280;
+const PARSED_METADATA_AUTOSIZE_MAX_WIDTH = 320;
+const RAW_LOG_VIRTUALIZATION_THRESHOLD = 120;
+const RAW_LOG_VIRTUALIZATION_OVERSCAN = 10;
+const RAW_LOG_ESTIMATE_ROW_HEIGHT = 26;
+const RAW_LOG_VERTICAL_PADDING_PX = 16;
 
 // Truncate RFC3339Nano timestamps to millisecond precision for display
 const formatTimestamp = (timestamp: string): string => {
@@ -84,6 +105,47 @@ const formatTimestamp = (timestamp: string): string => {
     return `${dateTime}.${millis}${rest}`;
   }
   return timestamp;
+};
+
+const formatTimestampForMode = (
+  timestamp: string,
+  mode: 'hidden' | 'default' | 'short' | 'localized'
+): string => {
+  if (!timestamp || mode === 'hidden') {
+    return '';
+  }
+  switch (mode) {
+    case 'default':
+      return formatTimestamp(timestamp);
+    case 'short': {
+      const parsed = new Date(timestamp);
+      if (Number.isNaN(parsed.getTime())) {
+        return formatTimestamp(timestamp);
+      }
+      const hours = String(parsed.getHours()).padStart(2, '0');
+      const minutes = String(parsed.getMinutes()).padStart(2, '0');
+      const seconds = String(parsed.getSeconds()).padStart(2, '0');
+      const millis = String(parsed.getMilliseconds()).padStart(3, '0');
+      return `${hours}:${minutes}:${seconds}.${millis}`;
+    }
+    case 'localized': {
+      const parsed = new Date(timestamp);
+      if (Number.isNaN(parsed.getTime())) {
+        return formatTimestamp(timestamp);
+      }
+      return parsed.toLocaleString([], {
+        hour12: false,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      });
+    }
+    default:
+      return formatTimestamp(timestamp);
+  }
 };
 
 // Format a parsed JSON value for table cell display
@@ -105,6 +167,132 @@ const formatParsedValue = (value: unknown): string => {
 const formatContainerLabel = (container: string, isInit: boolean): string =>
   isInit ? `${container}:init` : container;
 
+const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const escapeCsvCell = (value: string): string =>
+  /[",\n\r]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+
+const POD_FILTER_PREFIX = 'pod:';
+const INIT_FILTER_PREFIX = 'init:';
+const CONTAINER_FILTER_PREFIX = 'container:';
+
+const isInitContainerDisplayName = (container: string): boolean => container.endsWith(' (init)');
+
+const toPodFilterValue = (pod: string): string => `${POD_FILTER_PREFIX}${pod}`;
+const toInitContainerFilterValue = (container: string): string =>
+  `${INIT_FILTER_PREFIX}${container}`;
+const toContainerFilterValue = (container: string): string =>
+  `${CONTAINER_FILTER_PREFIX}${container}`;
+const toContainerFilterValueForKind = (container: string, isInit: boolean): string =>
+  isInit ? toInitContainerFilterValue(container) : toContainerFilterValue(container);
+
+const summarizeWorkloadSelection = (
+  selectedValues: string[],
+  options: DropdownOption[]
+): string => {
+  if (selectedValues.length === 0) {
+    return 'All Logs';
+  }
+
+  if (selectedValues.length === 1) {
+    return options.find((option) => option.value === selectedValues[0])?.label ?? 'All Logs';
+  }
+
+  const podCount = selectedValues.filter((value) => value.startsWith(POD_FILTER_PREFIX)).length;
+  const initContainerCount = selectedValues.filter((value) =>
+    value.startsWith(INIT_FILTER_PREFIX)
+  ).length;
+  const containerCount = selectedValues.filter((value) =>
+    value.startsWith(CONTAINER_FILTER_PREFIX)
+  ).length;
+  const labels: string[] = [];
+
+  if (podCount > 0) {
+    labels.push(`${podCount} Pod${podCount === 1 ? '' : 's'}`);
+  }
+  if (initContainerCount > 0) {
+    labels.push(`${initContainerCount} Init Container${initContainerCount === 1 ? '' : 's'}`);
+  }
+  if (containerCount > 0) {
+    labels.push(`${containerCount} Container${containerCount === 1 ? '' : 's'}`);
+  }
+
+  return labels.join(', ');
+};
+
+const formatSelectedFilterLabel = (
+  filterValue: string,
+  optionsByValue: Map<string, string>
+): string => {
+  const knownLabel = optionsByValue.get(filterValue);
+  if (knownLabel) {
+    return knownLabel;
+  }
+  if (filterValue.startsWith(POD_FILTER_PREFIX)) {
+    return filterValue.substring(POD_FILTER_PREFIX.length);
+  }
+  if (filterValue.startsWith(INIT_FILTER_PREFIX)) {
+    return filterValue.substring(INIT_FILTER_PREFIX.length);
+  }
+  if (filterValue.startsWith(CONTAINER_FILTER_PREFIX)) {
+    return filterValue.substring(CONTAINER_FILTER_PREFIX.length);
+  }
+  return filterValue;
+};
+
+const buildHighlightRegex = (
+  searchText: string,
+  regexMode: boolean,
+  caseSensitive: boolean
+): RegExp | null => {
+  const trimmed = searchText.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  try {
+    return new RegExp(regexMode ? trimmed : escapeRegExp(trimmed), caseSensitive ? 'g' : 'gi');
+  } catch {
+    return null;
+  }
+};
+
+const isValidRegexPattern = (pattern: string): boolean => {
+  const trimmed = pattern.trim();
+  if (!trimmed) {
+    return true;
+  }
+  try {
+    new RegExp(trimmed, 'i');
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const tryParseJSONObject = (line: string): Record<string, unknown> | null => {
+  try {
+    const parsed = JSON.parse(stripAnsi(line));
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      return null;
+    }
+    return Object.keys(parsed).length > 0 ? (parsed as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+};
+
+interface RenderedLogRow {
+  key: string;
+  line: string;
+}
+
+type LogEmptyState =
+  | 'none'
+  | 'no_logs_yet'
+  | 'no_previous_logs'
+  | 'no_filter_matches'
+  | 'unavailable';
+
 const LogViewerInner: React.FC<LogViewerProps> = ({
   namespace,
   resourceName,
@@ -117,7 +305,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
 }) => {
   // Lazy reducer init: rehydrate from the panel-scoped prefs cache so a
   // remount caused by a cluster switch picks up the user's previous
-  // selectedContainer / autoScroll / textFilter / isParsedView /
+  // autoRefresh / textFilter / isParsedView /
   // expandedRows / etc. The cache lives outside React state so this
   // lookup is a single Map.get on mount and never re-runs. The cache is
   // evicted by ObjectPanelStateContext when the panel actually closes.
@@ -129,23 +317,27 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   // Destructure commonly used state for readability
   const {
     containers,
-    selectedContainer,
     availablePods,
-    availableContainers,
-    selectedFilter,
+    selectedFilters,
     autoRefresh,
-    showTimestamps,
+    timestampMode,
     wrapText,
+    showAnsiColors,
     textFilter,
+    highlightMatches,
+    inverseMatches,
+    caseSensitiveMatches,
+    regexMatches,
     copyFeedback,
-    isParsedView,
+    displayMode,
     parsedLogs,
     expandedRows,
     fallbackActive,
-    fallbackError,
     showPreviousLogs,
     isLoadingPreviousLogs,
   } = state;
+  const showTimestamps = timestampMode !== 'hidden';
+  const isParsedView = displayMode === 'parsed';
 
   // Push the persistent subset of state into the panel-scoped prefs
   // cache whenever it changes. The cache is a module-level Map (not
@@ -163,12 +355,17 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   }, [
     panelId,
     state.selectedContainer,
-    state.selectedFilter,
+    state.selectedFilters,
     state.autoRefresh,
-    state.showTimestamps,
+    state.timestampMode,
     state.wrapText,
+    state.showAnsiColors,
     state.textFilter,
-    state.isParsedView,
+    state.highlightMatches,
+    state.inverseMatches,
+    state.caseSensitiveMatches,
+    state.regexMatches,
+    state.displayMode,
     state.expandedRows,
     state.showPreviousLogs,
   ]);
@@ -194,6 +391,83 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   const isWorkload = resourceKindKey !== 'pod';
   const supportsPreviousLogs = resourceKindKey === 'pod';
   const podName = !isWorkload ? resourceName : '';
+  const selectedInitContainers = useMemo(
+    () =>
+      new Set(
+        selectedFilters
+          .filter((filterValue) => filterValue.startsWith(INIT_FILTER_PREFIX))
+          .map((filterValue) => filterValue.substring(INIT_FILTER_PREFIX.length))
+      ),
+    [selectedFilters]
+  );
+  const selectedRegularContainers = useMemo(
+    () =>
+      new Set(
+        selectedFilters
+          .filter((filterValue) => filterValue.startsWith(CONTAINER_FILTER_PREFIX))
+          .map((filterValue) => filterValue.substring(CONTAINER_FILTER_PREFIX.length))
+      ),
+    [selectedFilters]
+  );
+  const selectedContainerFilterCount = selectedInitContainers.size + selectedRegularContainers.size;
+  const handleSelectPodFilter = useCallback(
+    (pod: string) => {
+      const preservedContainerFilters = selectedFilters.filter(
+        (filterValue) => !filterValue.startsWith(POD_FILTER_PREFIX)
+      );
+      dispatch({
+        type: 'SET_SELECTED_FILTERS',
+        payload: [toPodFilterValue(pod), ...preservedContainerFilters],
+      });
+    },
+    [dispatch, selectedFilters]
+  );
+  const handleSelectContainerFilter = useCallback(
+    (container: string, isInit: boolean) => {
+      const preservedPodFilters = selectedFilters.filter((filterValue) =>
+        filterValue.startsWith(POD_FILTER_PREFIX)
+      );
+      dispatch({
+        type: 'SET_SELECTED_FILTERS',
+        payload: [...preservedPodFilters, toContainerFilterValueForKind(container, isInit)],
+      });
+    },
+    [dispatch, selectedFilters]
+  );
+  const highlightRegex = useMemo(
+    () =>
+      buildHighlightRegex(
+        highlightMatches && !inverseMatches ? textFilter : '',
+        regexMatches,
+        caseSensitiveMatches
+      ),
+    [caseSensitiveMatches, highlightMatches, inverseMatches, regexMatches, textFilter]
+  );
+  const backendLogSelection = useMemo(() => {
+    const selectedContainerNames = [
+      ...Array.from(selectedInitContainers),
+      ...Array.from(selectedRegularContainers),
+    ];
+    if (isWorkload) {
+      return {
+        container: '',
+        includeInit: true,
+        includeEphemeral: true,
+      };
+    }
+    if (selectedContainerNames.length === 1) {
+      return {
+        container: selectedContainerNames[0],
+        includeInit: true,
+        includeEphemeral: true,
+      };
+    }
+    return {
+      container: '',
+      includeInit: true,
+      includeEphemeral: true,
+    };
+  }, [isWorkload, selectedInitContainers, selectedRegularContainers]);
 
   // Reset state when scope changes - do this during render, not in an effect,
   // to avoid causing a re-render that would interrupt streaming startup
@@ -227,14 +501,11 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   // sequence 1 = connected event, sequence >= 2 = initial logs received (may be empty)
   const snapshotSequence = logScope ? (logSnapshot.data?.sequence ?? 0) : 0;
   const hasReceivedInitialLogs = snapshotSequence >= 2;
-  // True once LogStreamManager has had to drop the front of the buffer
-  // to stay under MAX_BUFFER_SIZE. Exposed via the buildStats wrapper on
-  // the scoped snapshot.
-  const bufferLimitReached = Boolean(logSnapshot.stats?.truncated);
+  const logWarnings = (logSnapshot.stats?.warnings ?? []).filter(
+    (warning) => typeof warning === 'string' && warning.trim().length > 0
+  );
 
   const displayError = snapshotError && !isLogDataUnavailable(snapshotError) ? snapshotError : null;
-  const fallbackDisplayError =
-    fallbackError && !isLogDataUnavailable(fallbackError) ? fallbackError : null;
   const transientStreamError = displayError
     ? [
         'log stream connection lost',
@@ -250,6 +521,8 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     transientStreamError ||
     (autoRefresh && snapshotStatus === 'error');
   const pendingFallback = shouldSuppressError;
+  const waitingForInitialPrime =
+    !hasPrimedScopeRef.current && !displayError && !hasReceivedInitialLogs;
 
   const normalizedActivePods = useMemo(() => {
     if (!isWorkload) {
@@ -267,12 +540,22 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     );
     return names;
   }, [activePodNames, isWorkload]);
+  const workloadPodsForSelector = useMemo(
+    () =>
+      (
+        normalizedActivePods ??
+        Array.from(new Set(logEntries.map((entry) => entry.pod).filter(Boolean)))
+      )
+        .slice()
+        .sort(),
+    [logEntries, normalizedActivePods]
+  );
 
   const isPendingLogs = showPreviousLogs
     ? isLoadingPreviousLogs && logEntries.length === 0
     : logEntries.length === 0 &&
       (!hasReceivedInitialLogs ||
-        !hasPrimedScopeRef.current ||
+        waitingForInitialPrime ||
         ['loading', 'updating', 'initialising'].includes(snapshotStatus) ||
         fallbackActive ||
         pendingFallback);
@@ -280,13 +563,20 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   const { filteredEntries, parsedCandidates, canParseLogs } = useLogFiltering({
     logEntries,
     isWorkload,
-    selectedFilter,
-    selectedContainer,
+    selectedFilters,
     textFilter,
+    inverseMatches,
+    caseSensitiveMatches,
+    regexMatches,
   });
 
   const mapEntriesToSnapshot = useCallback(
-    (entries: ObjectLogEntry[], generatedAt: number, isManual: boolean) => {
+    (
+      entries: ObjectLogEntry[],
+      generatedAt: number,
+      isManual: boolean,
+      warnings: string[] = []
+    ) => {
       if (!logScope) {
         return;
       }
@@ -303,9 +593,18 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
           ...previous,
           status: 'ready',
           error: null,
+          stats: {
+            itemCount: entries.length,
+            buildDurationMs: 0,
+            warnings: warnings.length > 0 ? warnings : undefined,
+          },
           data: {
             entries,
-            sequence: previousPayload.sequence,
+            // sequence >= 2 means the initial log load completed even if
+            // the payload is empty. Fallback/manual fetches need to honor
+            // the same contract so empty-success responses don't leave the
+            // viewer stuck in the initial loading state.
+            sequence: Math.max(previousPayload.sequence, 2),
             generatedAt,
             resetCount: previousPayload.resetCount + (isManual ? 1 : 0),
             error: null,
@@ -335,11 +634,14 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
         // initial fallback fetch in sync with the rolling buffer cap so
         // the user gets exactly as much history as their buffer can hold.
         const request: types.LogFetchRequest = {
+          scope: logScope,
           namespace,
           workloadName: isWorkload ? resourceName : '',
           workloadKind: isWorkload ? resourceKindKey : '',
           podName: isWorkload ? '' : podName,
-          container: !isWorkload && selectedContainer ? selectedContainer : '',
+          container: backendLogSelection.container,
+          includeInit: backendLogSelection.includeInit,
+          includeEphemeral: backendLogSelection.includeEphemeral,
           previous,
           tailLines: getLogBufferMaxSize(),
           sinceSeconds: 0,
@@ -351,6 +653,9 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
         }
 
         const entries = Array.isArray(response?.entries) ? response.entries : [];
+        const warnings = Array.isArray(response?.warnings)
+          ? response.warnings.filter((warning): warning is string => typeof warning === 'string')
+          : [];
 
         const mapped: ObjectLogEntry[] = entries.map((entry) => ({
           timestamp: entry.timestamp ?? '',
@@ -362,13 +667,15 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
         }));
 
         const generatedAt = Date.now();
-        mapEntriesToSnapshot(mapped, generatedAt, isManual);
+        mapEntriesToSnapshot(mapped, generatedAt, isManual, warnings);
+        hasPrimedScopeRef.current = true;
         dispatch({ type: 'SET_FALLBACK_ERROR', payload: null });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         if (isLogDataUnavailable(message)) {
           const generatedAt = Date.now();
-          mapEntriesToSnapshot([], generatedAt, isManual);
+          mapEntriesToSnapshot([], generatedAt, isManual, [getLogDataUnavailableMessage(previous)]);
+          hasPrimedScopeRef.current = true;
           dispatch({ type: 'SET_FALLBACK_ERROR', payload: null });
           return;
         }
@@ -389,7 +696,9 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       podName,
       resourceName,
       resourceKindKey,
-      selectedContainer,
+      backendLogSelection.container,
+      backendLogSelection.includeEphemeral,
+      backendLogSelection.includeInit,
       resolvedClusterId,
     ]
   );
@@ -415,6 +724,44 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     fallbackRecoveringRef,
     hasPrimedScopeRef,
   });
+
+  useEffect(() => {
+    if (!logScope) {
+      return;
+    }
+    const changed = setLogStreamScopeParams(logScope, backendLogSelection);
+    if (!changed) {
+      return;
+    }
+    if (showPreviousLogs) {
+      dispatch({ type: 'SET_IS_LOADING_PREVIOUS_LOGS', payload: true });
+      void fetchLogs({ previous: true, isManual: true })
+        .catch((error) => {
+          console.error('Failed to reload previous logs', error);
+        })
+        .finally(() => {
+          dispatch({ type: 'SET_IS_LOADING_PREVIOUS_LOGS', payload: false });
+        });
+      return;
+    }
+    if (fallbackActive) {
+      void fetchFallbackLogs(false);
+      return;
+    }
+    if (!isActive || !autoRefresh) {
+      return;
+    }
+    void refreshOrchestrator.restartStreamingDomain(LOG_DOMAIN, logScope);
+  }, [
+    autoRefresh,
+    backendLogSelection,
+    fallbackActive,
+    fetchFallbackLogs,
+    fetchLogs,
+    isActive,
+    logScope,
+    showPreviousLogs,
+  ]);
 
   useEffect(() => {
     if (!isWorkload || !logScope || showPreviousLogs) {
@@ -537,23 +884,11 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     }
   }, [supportsPreviousLogs, showPreviousLogs]);
 
-  // Keyboard shortcuts for Logs tab
-  useLogKeyboardShortcuts({
-    isActive,
-    isParsedView,
-    dispatch,
-    supportsPreviousLogs,
-    canParseLogs,
-    handleTogglePreviousLogs,
-    filterInputRef,
-    logsContentRef,
-  });
-
   // Generate consistent colors for pods (workload view)
   // Colors are read from CSS variables to support light/dark themes
   const podColors = useMemo(() => {
     const styles = getComputedStyle(document.documentElement);
-    const colors = [
+    const palette = [
       styles.getPropertyValue('--log-pod-color-1').trim(),
       styles.getPropertyValue('--log-pod-color-2').trim(),
       styles.getPropertyValue('--log-pod-color-3').trim(),
@@ -568,83 +903,646 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       styles.getPropertyValue('--log-pod-color-12').trim(),
     ];
     const fallbackColor = styles.getPropertyValue('--log-pod-color-fallback').trim();
-    const colorMap: Record<string, string> = {};
-
-    // Use the already-deduplicated and sorted pod list from state
-    availablePods.forEach((pod, index) => {
-      colorMap[pod] = colors[index % colors.length];
-    });
-
-    // Store fallback for use in render
-    colorMap['__fallback__'] = fallbackColor;
-
-    return colorMap;
+    return buildStablePodColorMap(availablePods, palette, fallbackColor);
   }, [availablePods]);
 
   useEffect(() => {
     if (isWorkload) {
-      const pods = Array.from(new Set(logEntries.map((entry) => entry.pod).filter(Boolean))).sort();
+      const pods = (
+        normalizedActivePods ??
+        Array.from(new Set(logEntries.map((entry) => entry.pod).filter(Boolean)))
+      )
+        .slice()
+        .sort();
       dispatch({ type: 'SET_AVAILABLE_PODS', payload: pods });
       const containersList = Array.from(
         new Set(logEntries.map((entry) => entry.container).filter(Boolean))
       ).sort();
       dispatch({ type: 'SET_AVAILABLE_CONTAINERS', payload: containersList });
     }
-  }, [isWorkload, logEntries]);
+  }, [isWorkload, logEntries, normalizedActivePods]);
 
-  useEffect(() => {
-    if (!isWorkload || !selectedFilter) {
-      return;
-    }
-    if (selectedFilter.startsWith('pod:')) {
-      const podName = selectedFilter.substring(4);
-      if (!availablePods.includes(podName)) {
-        dispatch({ type: 'SET_SELECTED_FILTER', payload: '' });
-      }
-    } else if (selectedFilter.startsWith('container:')) {
-      const containerName = selectedFilter.substring(10);
-      if (!availableContainers.includes(containerName)) {
-        dispatch({ type: 'SET_SELECTED_FILTER', payload: '' });
-      }
-    }
-  }, [availableContainers, availablePods, isWorkload, selectedFilter]);
-
-  // Helper functions
   const getActualContainerName = (displayName: string) => {
     return displayName.replace(' (init)', '').replace(' (debug)', '');
   };
 
-  const displayLogs = useMemo(() => {
-    if (filteredEntries.length === 0) {
-      if (isPendingLogs) {
-        return '';
-      }
-      return textFilter.trim() ? 'No logs match the filter' : 'No logs available';
+  const selectorOptions = useMemo(() => {
+    const options: DropdownOption[] = [];
+
+    if (isWorkload) {
+      options.push({ value: '_pods_header', label: 'Pods', disabled: true, group: 'header' });
+      options.push(
+        ...workloadPodsForSelector.map((pod) => ({
+          value: toPodFilterValue(pod),
+          label: pod,
+          group: 'Pods',
+        }))
+      );
     }
 
-    return filteredEntries
-      .map((entry) => {
-        const timestampPrefix =
-          showTimestamps && entry.timestamp ? `[${formatTimestamp(entry.timestamp)}] ` : '';
+    const initContainerOptions = isWorkload
+      ? Array.from(
+          new Set(
+            logEntries
+              .filter((entry) => entry.isInit && entry.container)
+              .map((entry) => entry.container)
+              .filter(Boolean)
+          )
+        )
+          .sort()
+          .map((container) => ({
+            value: toInitContainerFilterValue(container),
+            label: container,
+            group: 'Init Containers',
+          }))
+      : containers
+          .filter((container) => isInitContainerDisplayName(container))
+          .map((container) => ({
+            value: toInitContainerFilterValue(getActualContainerName(container)),
+            label: getActualContainerName(container),
+            group: 'Init Containers',
+          }))
+          .sort((left, right) => left.label.localeCompare(right.label));
 
-        if (isWorkload) {
-          const containerLabel = formatContainerLabel(entry.container, entry.isInit);
-          const formatted = entry.line.trim()
-            ? `[${entry.pod}/${containerLabel}] ${entry.line}`
-            : entry.line;
-          return timestampPrefix + formatted;
+    if (initContainerOptions.length > 0) {
+      options.push({
+        value: '_init_containers_header',
+        label: 'Init Containers',
+        disabled: true,
+        group: 'header',
+      });
+    }
+    options.push(...initContainerOptions);
+
+    const regularContainerOptions = isWorkload
+      ? Array.from(
+          new Set(
+            logEntries
+              .filter((entry) => !entry.isInit && entry.container)
+              .map((entry) => entry.container)
+              .filter(Boolean)
+          )
+        )
+          .sort()
+          .map((container) => ({
+            value: toContainerFilterValue(container),
+            label: container,
+            group: 'Containers',
+          }))
+      : containers
+          .filter((container) => !isInitContainerDisplayName(container))
+          .map((container) => ({
+            value: toContainerFilterValue(getActualContainerName(container)),
+            label: container.endsWith(' (debug)') ? container : getActualContainerName(container),
+            group: 'Containers',
+          }))
+          .sort((left, right) => left.label.localeCompare(right.label));
+
+    if (isWorkload || containers.length > 0) {
+      options.push({
+        value: '_containers_header',
+        label: 'Containers',
+        disabled: true,
+        group: 'header',
+      });
+    }
+    options.push(...regularContainerOptions);
+
+    return options;
+  }, [containers, isWorkload, logEntries, workloadPodsForSelector]);
+  const singlePodSelectableContainerCount = useMemo(
+    () =>
+      selectorOptions.filter(
+        (option) =>
+          option.value.startsWith(INIT_FILTER_PREFIX) ||
+          option.value.startsWith(CONTAINER_FILTER_PREFIX)
+      ).length,
+    [selectorOptions]
+  );
+  const selectorOptionLabelsByValue = useMemo(
+    () =>
+      new Map(
+        selectorOptions
+          .filter((option) => option.group !== 'header')
+          .map((option) => [option.value, option.label] as const)
+      ),
+    [selectorOptions]
+  );
+  const hasInvalidRegex = useMemo(
+    () => regexMatches && !isValidRegexPattern(textFilter),
+    [regexMatches, textFilter]
+  );
+  const activeFilterChips = useMemo(() => {
+    const chips: Array<{
+      key: string;
+      label: string;
+      title: string;
+      onRemove: () => void;
+    }> = [];
+
+    const trimmedTextFilter = textFilter.trim();
+    if (trimmedTextFilter) {
+      chips.push({
+        key: 'text-filter',
+        label:
+          regexMatches && hasInvalidRegex
+            ? `Regex: ${trimmedTextFilter} (invalid expression)`
+            : regexMatches
+              ? `Regex: ${trimmedTextFilter}`
+              : `Text: ${trimmedTextFilter}`,
+        title: 'Clear text filter',
+        onRemove: () => dispatch({ type: 'SET_TEXT_FILTER', payload: '' }),
+      });
+    }
+
+    if (showPreviousLogs) {
+      chips.push({
+        key: 'previous-logs',
+        label: 'Showing previous logs',
+        title: 'Return to live logs',
+        onRemove: () => {
+          dispatch({ type: 'STOP_PREVIOUS_LOGS' });
+          hasPrimedScopeRef.current = false;
+        },
+      });
+    }
+
+    selectedFilters.forEach((filterValue) => {
+      const label = formatSelectedFilterLabel(filterValue, selectorOptionLabelsByValue);
+      chips.push({
+        key: `selected-filter:${filterValue}`,
+        label,
+        title: `Remove filter ${label}`,
+        onRemove: () =>
+          dispatch({
+            type: 'SET_SELECTED_FILTERS',
+            payload: selectedFilters.filter((value) => value !== filterValue),
+          }),
+      });
+    });
+
+    if (highlightMatches) {
+      chips.push({
+        key: 'highlight',
+        label: 'Highlight',
+        title: 'Disable highlight matches',
+        onRemove: () => dispatch({ type: 'TOGGLE_HIGHLIGHT_MATCHES' }),
+      });
+    }
+
+    if (inverseMatches) {
+      chips.push({
+        key: 'invert',
+        label: 'Invert',
+        title: 'Disable invert filter',
+        onRemove: () => dispatch({ type: 'TOGGLE_INVERSE_MATCHES' }),
+      });
+    }
+
+    if (caseSensitiveMatches) {
+      chips.push({
+        key: 'case-sensitive',
+        label: 'Match case',
+        title: 'Disable case-sensitive matching',
+        onRemove: () => dispatch({ type: 'TOGGLE_CASE_SENSITIVE_MATCHES' }),
+      });
+    }
+
+    if (regexMatches && !trimmedTextFilter) {
+      chips.push({
+        key: 'regex',
+        label: 'Regex',
+        title: 'Disable regex matching',
+        onRemove: () => dispatch({ type: 'TOGGLE_REGEX_MATCHES' }),
+      });
+    }
+
+    return chips;
+  }, [
+    caseSensitiveMatches,
+    dispatch,
+    hasInvalidRegex,
+    highlightMatches,
+    inverseMatches,
+    regexMatches,
+    selectedFilters,
+    selectorOptionLabelsByValue,
+    showPreviousLogs,
+    textFilter,
+  ]);
+  const handleClearAllFilters = useCallback(() => {
+    dispatch({ type: 'SET_TEXT_FILTER', payload: '' });
+    dispatch({ type: 'SET_SELECTED_FILTERS', payload: [] });
+    if (showPreviousLogs) {
+      dispatch({ type: 'STOP_PREVIOUS_LOGS' });
+      hasPrimedScopeRef.current = false;
+    }
+    if (highlightMatches) {
+      dispatch({ type: 'TOGGLE_HIGHLIGHT_MATCHES' });
+    }
+    if (inverseMatches) {
+      dispatch({ type: 'TOGGLE_INVERSE_MATCHES' });
+    }
+    if (caseSensitiveMatches) {
+      dispatch({ type: 'TOGGLE_CASE_SENSITIVE_MATCHES' });
+    }
+    if (regexMatches) {
+      dispatch({ type: 'TOGGLE_REGEX_MATCHES' });
+    }
+  }, [
+    caseSensitiveMatches,
+    dispatch,
+    highlightMatches,
+    inverseMatches,
+    regexMatches,
+    showPreviousLogs,
+  ]);
+
+  useEffect(() => {
+    if (selectedFilters.length === 0) {
+      return;
+    }
+    const validFilterValues = new Set(
+      selectorOptions.filter((option) => option.group !== 'header').map((option) => option.value)
+    );
+    if (validFilterValues.size === 0) {
+      return;
+    }
+    const nextSelectedFilters = selectedFilters.filter((filterValue) =>
+      validFilterValues.has(filterValue)
+    );
+    if (nextSelectedFilters.length !== selectedFilters.length) {
+      dispatch({ type: 'SET_SELECTED_FILTERS', payload: nextSelectedFilters });
+    }
+  }, [selectedFilters, selectorOptions]);
+
+  // Helper functions
+  const unavailableLogMessage =
+    filteredEntries.length === 0
+      ? (logWarnings.find(
+          (warning) =>
+            warning === getLogDataUnavailableMessage(false) ||
+            warning === getLogDataUnavailableMessage(true)
+        ) ?? null)
+      : null;
+  const logEmptyState = useMemo<LogEmptyState>(() => {
+    if (isPendingLogs || filteredEntries.length > 0) {
+      return 'none';
+    }
+    if (unavailableLogMessage) {
+      return 'unavailable';
+    }
+    if (showPreviousLogs) {
+      return 'no_previous_logs';
+    }
+    if ((textFilter.trim().length > 0 || selectedFilters.length > 0) && logEntries.length > 0) {
+      return 'no_filter_matches';
+    }
+    return 'no_logs_yet';
+  }, [
+    filteredEntries.length,
+    isPendingLogs,
+    logEntries.length,
+    selectedFilters.length,
+    showPreviousLogs,
+    textFilter,
+    unavailableLogMessage,
+  ]);
+  const emptyStateMessage = useMemo(() => {
+    switch (logEmptyState) {
+      case 'unavailable':
+        return unavailableLogMessage ?? 'Logs are unavailable right now';
+      case 'no_previous_logs':
+        return 'No previous logs found';
+      case 'no_filter_matches':
+        return 'No logs match the current filters';
+      case 'no_logs_yet':
+        return 'No logs yet';
+      default:
+        return '';
+    }
+  }, [logEmptyState, unavailableLogMessage]);
+
+  const displayLines = useMemo(() => {
+    if (filteredEntries.length === 0) {
+      if (isPendingLogs) {
+        return [] as string[];
+      }
+      return emptyStateMessage ? [emptyStateMessage] : [];
+    }
+
+    return filteredEntries.map((entry) => {
+      const parsed = tryParseJSONObject(entry.line);
+      const normalizedLine = showAnsiColors ? entry.line : stripAnsi(entry.line);
+      const lineContent =
+        displayMode === 'structured'
+          ? parsed
+            ? JSON.stringify(parsed)
+            : normalizedLine
+          : displayMode === 'pretty'
+            ? parsed
+              ? JSON.stringify(parsed, null, 2)
+              : normalizedLine
+            : normalizedLine;
+      const timestamp = formatTimestampForMode(entry.timestamp ?? '', timestampMode);
+      const timestampPrefix = timestamp ? `[${timestamp}] ` : '';
+
+      if (isWorkload) {
+        const containerLabel = formatContainerLabel(entry.container, entry.isInit);
+        const formatted = lineContent.trim()
+          ? `[${entry.pod}/${containerLabel}] ${lineContent}`
+          : lineContent;
+        return timestampPrefix + formatted;
+      }
+
+      if (
+        selectedContainerFilterCount !== 1 &&
+        !(selectedContainerFilterCount === 0 && singlePodSelectableContainerCount === 1)
+      ) {
+        const containerLabel = formatContainerLabel(entry.container, entry.isInit);
+        const formatted = lineContent.trim() ? `[${containerLabel}] ${lineContent}` : lineContent;
+        return timestampPrefix + formatted;
+      }
+
+      return timestampPrefix + lineContent;
+    });
+  }, [
+    displayMode,
+    filteredEntries,
+    isPendingLogs,
+    isWorkload,
+    singlePodSelectableContainerCount,
+    showAnsiColors,
+    selectedContainerFilterCount,
+    timestampMode,
+    emptyStateMessage,
+  ]);
+
+  const displayLogs = useMemo(() => displayLines.join('\n'), [displayLines]);
+
+  const renderedDisplayRows = useMemo<RenderedLogRow[]>(
+    () =>
+      displayLines.flatMap((line, displayIndex) => {
+        const sourceSeq = filteredEntries[displayIndex]?._seq;
+        return line.split('\n').map((segment, segmentIndex) => ({
+          key:
+            sourceSeq !== undefined
+              ? `${sourceSeq}:${segmentIndex}`
+              : `placeholder:${displayIndex}:${segmentIndex}`,
+          line: segment,
+        }));
+      }),
+    [displayLines, filteredEntries]
+  );
+
+  const hasCopyableContent = isParsedView ? parsedLogs.length > 0 : filteredEntries.length > 0;
+  const hasAnsiLogEntries = useMemo(
+    () => rawLogEntries.some((entry) => containsAnsi(entry.line)),
+    [rawLogEntries]
+  );
+  const hasActiveResultFilter = selectedFilters.length > 0 || textFilter.trim().length > 0;
+  const displayedLogCount = filteredEntries.length;
+  const countLabel = `${displayedLogCount} matching log${displayedLogCount === 1 ? '' : 's'}`;
+  const countTitle = countLabel;
+
+  const {
+    shouldVirtualize: shouldVirtualizeRawLogs,
+    visibleRows: visibleRenderedLogRows,
+    totalHeight: virtualizedRawHeight,
+    offsetTop: virtualizedRawOffsetTop,
+    measureRowRef: measureVirtualizedRawRow,
+  } = useVirtualizedLogRows({
+    rows: renderedDisplayRows,
+    scrollContainerRef: logsContentRef,
+    keyExtractor: (row) => row.key,
+    threshold: RAW_LOG_VIRTUALIZATION_THRESHOLD,
+    overscan: RAW_LOG_VIRTUALIZATION_OVERSCAN,
+    estimateRowHeight: RAW_LOG_ESTIMATE_ROW_HEIGHT,
+  });
+
+  useEffect(() => {
+    if (displayMode !== 'raw' && !canParseLogs) {
+      dispatch({ type: 'SET_DISPLAY_MODE', payload: 'raw' });
+    }
+  }, [canParseLogs, displayMode]);
+
+  useEffect(() => {
+    if (!isParsedView) {
+      dispatch({ type: 'SET_PARSED_LOGS', payload: [] });
+      return;
+    }
+    if (!parsedCandidates.length) {
+      // Only exit parsed view if there are entries but none are JSON.
+      // When entries are empty (e.g. stream reconnecting or switching to
+      // previous logs), keep parsed view active but clear stale data so
+      // old logs aren't displayed while waiting for new data.
+      dispatch({ type: 'SET_PARSED_LOGS', payload: [] });
+      if (filteredEntries.length > 0) {
+        dispatch({ type: 'SET_DISPLAY_MODE', payload: 'raw' });
+      }
+      return;
+    }
+    dispatch({ type: 'SET_PARSED_LOGS', payload: parsedCandidates });
+  }, [filteredEntries.length, isParsedView, parsedCandidates]);
+
+  const renderHighlightedMessage = useCallback(
+    (text: string, keyPrefix: string) => {
+      if (!text) {
+        return '\u00A0';
+      }
+      if (!highlightRegex) {
+        return text;
+      }
+
+      const matches = Array.from(text.matchAll(highlightRegex));
+      if (matches.length === 0) {
+        return text;
+      }
+
+      const nodes: React.ReactNode[] = [];
+      let lastIndex = 0;
+
+      matches.forEach((match, index) => {
+        const matchIndex = match.index ?? -1;
+        const value = match[0] ?? '';
+        if (matchIndex < 0 || value.length === 0) {
+          return;
+        }
+        if (matchIndex > lastIndex) {
+          nodes.push(text.slice(lastIndex, matchIndex));
+        }
+        nodes.push(
+          <mark key={`${keyPrefix}-${matchIndex}-${index}`} className="pod-log-highlight">
+            {value}
+          </mark>
+        );
+        lastIndex = matchIndex + value.length;
+      });
+
+      if (nodes.length === 0) {
+        return text;
+      }
+      if (lastIndex < text.length) {
+        nodes.push(text.slice(lastIndex));
+      }
+      return nodes;
+    },
+    [highlightRegex]
+  );
+
+  const renderMessageContent = useCallback(
+    (text: string, keyPrefix: string) => {
+      const normalizedText = showAnsiColors ? text : stripAnsi(text);
+      if (!showAnsiColors || !containsAnsi(text)) {
+        return renderHighlightedMessage(normalizedText, keyPrefix);
+      }
+
+      const segments = parseAnsiTextSegments(text);
+      if (segments.length === 0) {
+        return renderHighlightedMessage(stripAnsi(text), keyPrefix);
+      }
+
+      return segments.map((segment, index) => {
+        const content = renderHighlightedMessage(segment.text, `${keyPrefix}-${index}`);
+        if (Object.keys(segment.style).length === 0) {
+          return <React.Fragment key={`${keyPrefix}-plain-${index}`}>{content}</React.Fragment>;
+        }
+        return (
+          <span key={`${keyPrefix}-ansi-${index}`} style={segment.style}>
+            {content}
+          </span>
+        );
+      });
+    },
+    [renderHighlightedMessage, showAnsiColors]
+  );
+
+  const renderRawLogRow = useCallback(
+    (row: RenderedLogRow) => {
+      const line = row.line;
+
+      if (isWorkload && line.includes('[') && line.includes('/')) {
+        const match = line.match(
+          /^(?:\[\d{4}-\d{2}-\d{2}T[^\]]+\]\s*)?\[([^\/]+)\/([^\]]+)\]\s*(.*)/
+        );
+        if (match) {
+          const [, pod, container, logLine] = match;
+          const timestampMatch = line.match(/^(\[\d{4}-\d{2}-\d{2}T[^\]]+\]\s*)/);
+          const timestamp = timestampMatch ? timestampMatch[1] : '';
+          const podColor = podColors[pod] || podColors['__fallback__'];
+
+          return (
+            <div className="pod-log-line">
+              {timestamp && (
+                <span
+                  className="pod-log-metadata pod-color-text"
+                  style={{ '--pod-color': podColor } as React.CSSProperties}
+                >
+                  {timestamp}
+                </span>
+              )}
+              <span
+                className="pod-log-metadata pod-log-metadata--bold"
+                style={{ '--pod-color': podColor } as React.CSSProperties}
+              >
+                [
+                <button
+                  type="button"
+                  className="pod-log-metadata-button pod-color-text"
+                  style={{ '--pod-color': podColor } as React.CSSProperties}
+                  onClick={() => handleSelectPodFilter(pod)}
+                  title={`Show only logs from pod ${pod}`}
+                  aria-label={`Show only logs from pod ${pod}`}
+                >
+                  {pod}
+                </button>
+                /
+                <button
+                  type="button"
+                  className="pod-log-metadata-button pod-color-text"
+                  style={{ '--pod-color': podColor } as React.CSSProperties}
+                  onClick={() =>
+                    handleSelectContainerFilter(
+                      container.endsWith(':init') ? container.slice(0, -':init'.length) : container,
+                      container.endsWith(':init')
+                    )
+                  }
+                  title={`Show only logs from container ${container}`}
+                  aria-label={`Show only logs from container ${container}`}
+                >
+                  {container}
+                </button>
+                ]
+              </span>
+              <span> {renderMessageContent(logLine, `workload-${row.key}`)}</span>
+            </div>
+          );
+        }
+      }
+
+      if (!isWorkload) {
+        let workingLine = line;
+        let timestampPrefix = '';
+        if (showTimestamps) {
+          const podTimestampMatch = line.match(/^(\[[^\]]+\]\s*)(.*)$/);
+          if (podTimestampMatch) {
+            timestampPrefix = podTimestampMatch[1] ?? '';
+            workingLine = podTimestampMatch[2] ?? '';
+          }
         }
 
-        if (selectedContainer === ALL_CONTAINERS) {
-          const containerLabel = formatContainerLabel(entry.container, entry.isInit);
-          const formatted = entry.line.trim() ? `[${containerLabel}] ${entry.line}` : entry.line;
-          return timestampPrefix + formatted;
+        const containerMatch = workingLine.match(/^\[([^\]]+)\]\s*(.*)$/);
+        const showContainerMeta =
+          containerMatch &&
+          selectedContainerFilterCount !== 1 &&
+          !(selectedContainerFilterCount === 0 && singlePodSelectableContainerCount === 1);
+        if (timestampPrefix || showContainerMeta) {
+          const containerLabel = containerMatch ? containerMatch[1] : '';
+          const remainder = containerMatch ? containerMatch[2] : workingLine;
+          return (
+            <div className="pod-log-line">
+              {timestampPrefix && <span className="pod-log-metadata">{timestampPrefix}</span>}
+              {showContainerMeta && (
+                <span className="pod-log-metadata">
+                  [
+                  <button
+                    type="button"
+                    className="pod-log-metadata-button"
+                    onClick={() =>
+                      handleSelectContainerFilter(
+                        containerLabel.endsWith(':init')
+                          ? containerLabel.slice(0, -':init'.length)
+                          : containerLabel,
+                        containerLabel.endsWith(':init')
+                      )
+                    }
+                    title={`Show only logs from container ${containerLabel}`}
+                    aria-label={`Show only logs from container ${containerLabel}`}
+                  >
+                    {containerLabel}
+                  </button>
+                  ]
+                </span>
+              )}
+              <span> {renderMessageContent(remainder, `pod-${row.key}`)}</span>
+            </div>
+          );
         }
+      }
 
-        return timestampPrefix + entry.line;
-      })
-      .join('\n');
-  }, [filteredEntries, isPendingLogs, isWorkload, selectedContainer, showTimestamps, textFilter]);
+      return <div className="pod-log-line">{renderMessageContent(line, `line-${row.key}`)}</div>;
+    },
+    [
+      handleSelectContainerFilter,
+      handleSelectPodFilter,
+      isWorkload,
+      podColors,
+      renderMessageContent,
+      selectedContainerFilterCount,
+      showTimestamps,
+      singlePodSelectableContainerCount,
+    ]
+  );
 
   // Schedule copy feedback reset, cancelling any prior pending timer
   const scheduleCopyReset = useCallback(() => {
@@ -661,49 +1559,6 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
     };
   }, []);
-
-  const handleCopyLogs = useCallback(async () => {
-    const text = isParsedView
-      ? parsedLogs
-          .map((entry) =>
-            Object.keys(entry.data).length ? JSON.stringify(entry.data) : entry.rawLine
-          )
-          .join('\n')
-      : displayLogs;
-    if (!text) {
-      dispatch({ type: 'SET_COPY_FEEDBACK', payload: 'error' });
-      scheduleCopyReset();
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(text);
-      dispatch({ type: 'SET_COPY_FEEDBACK', payload: 'copied' });
-      scheduleCopyReset();
-    } catch (err) {
-      console.error('Failed to copy logs', err);
-      dispatch({ type: 'SET_COPY_FEEDBACK', payload: 'error' });
-      scheduleCopyReset();
-    }
-  }, [displayLogs, isParsedView, parsedLogs, scheduleCopyReset, dispatch]);
-
-  useEffect(() => {
-    if (!isParsedView) {
-      dispatch({ type: 'SET_PARSED_LOGS', payload: [] });
-      return;
-    }
-    if (!parsedCandidates.length) {
-      // Only exit parsed view if there are entries but none are JSON.
-      // When entries are empty (e.g. stream reconnecting or switching to
-      // previous logs), keep parsed view active but clear stale data so
-      // old logs aren't displayed while waiting for new data.
-      dispatch({ type: 'SET_PARSED_LOGS', payload: [] });
-      if (filteredEntries.length > 0) {
-        dispatch({ type: 'SET_PARSED_VIEW', payload: false });
-      }
-      return;
-    }
-    dispatch({ type: 'SET_PARSED_LOGS', payload: parsedCandidates });
-  }, [isParsedView, parsedCandidates, filteredEntries.length]);
 
   // Fetch containers for single pod
   useEffect(() => {
@@ -723,18 +1578,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
         }
 
         dispatch({ type: 'SET_CONTAINERS', payload: containerList });
-
-        // Auto-select container
-        if (containerList.length === 1) {
-          // For single container, use the actual container name
-          dispatch({
-            type: 'SET_SELECTED_CONTAINER',
-            payload: getActualContainerName(containerList[0]),
-          });
-        } else {
-          // For multiple containers, default to all
-          dispatch({ type: 'SET_SELECTED_CONTAINER', payload: ALL_CONTAINERS });
-        }
+        dispatch({ type: 'SET_SELECTED_CONTAINER', payload: ALL_CONTAINERS });
       } catch (err) {
         if (isCancelled) return;
         console.warn('Failed to fetch containers:', err);
@@ -940,14 +1784,17 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     // payload), so in workload mode we color it with the same pod color as
     // the Pod column — visually grouping the metadata fields for a single
     // pod together when multiple pods are interleaved.
-    if (showTimestamps) {
+    if (timestampMode !== 'hidden') {
       columns.push({
         key: '_timestamp',
         header: 'API Timestamp',
         sortable: false,
         minWidth: PARSED_TIMESTAMP_MIN_WIDTH,
+        autoSizeMaxWidth: PARSED_TIMESTAMP_AUTOSIZE_MAX_WIDTH,
         render: (item: ParsedLogEntry) => {
-          const formatted = item.timestamp ? formatTimestamp(item.timestamp) : '-';
+          const formatted = item.timestamp
+            ? formatTimestampForMode(item.timestamp, timestampMode)
+            : '-';
           if (!isWorkload) {
             return formatted;
           }
@@ -973,18 +1820,29 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
         header: 'Pod',
         sortable: false,
         minWidth: PARSED_POD_COLUMN_MIN_WIDTH,
-        render: (item: ParsedLogEntry) => (
-          <span
-            className="pod-color-text"
-            style={
-              {
-                '--pod-color': podColors[item.pod || ''] || podColors['__fallback__'],
-              } as React.CSSProperties
-            }
-          >
-            {item.pod || '-'}
-          </span>
-        ),
+        autoSizeMaxWidth: PARSED_METADATA_AUTOSIZE_MAX_WIDTH,
+        render: (item: ParsedLogEntry) =>
+          item.pod ? (
+            <button
+              type="button"
+              className="pod-log-metadata-button pod-color-text"
+              style={
+                {
+                  '--pod-color': podColors[item.pod] || podColors['__fallback__'],
+                } as React.CSSProperties
+              }
+              onClick={(event) => {
+                event.stopPropagation();
+                handleSelectPodFilter(item.pod!);
+              }}
+              title={`Show only logs from pod ${item.pod}`}
+              aria-label={`Show only logs from pod ${item.pod}`}
+            >
+              {item.pod}
+            </button>
+          ) : (
+            '-'
+          ),
       });
     }
 
@@ -993,7 +1851,29 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       header: 'Container',
       sortable: false,
       minWidth: PARSED_POD_COLUMN_MIN_WIDTH,
-      render: (item: ParsedLogEntry) => item.container || '-',
+      autoSizeMaxWidth: PARSED_METADATA_AUTOSIZE_MAX_WIDTH,
+      render: (item: ParsedLogEntry) =>
+        item.container ? (
+          <button
+            type="button"
+            className="pod-log-metadata-button pod-color-text"
+            style={
+              {
+                '--pod-color': podColors[item.pod || ''] || podColors['__fallback__'],
+              } as React.CSSProperties
+            }
+            onClick={(event) => {
+              event.stopPropagation();
+              handleSelectContainerFilter(item.container!, Boolean(item.isInit));
+            }}
+            title={`Show only logs from container ${formatContainerLabel(item.container, Boolean(item.isInit))}`}
+            aria-label={`Show only logs from container ${formatContainerLabel(item.container, Boolean(item.isInit))}`}
+          >
+            {item.container}
+          </button>
+        ) : (
+          '-'
+        ),
     });
 
     // Promote well-known timestamp and level fields to appear first
@@ -1005,6 +1885,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
         header: jsonTimestampKey,
         sortable: false,
         minWidth: PARSED_TIMESTAMP_MIN_WIDTH,
+        autoSizeMaxWidth: PARSED_TIMESTAMP_AUTOSIZE_MAX_WIDTH,
         render: (item: ParsedLogEntry) => formatParsedValue(item.data[jsonTimestampKey]),
       });
     }
@@ -1017,6 +1898,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
         header: jsonLevelKey,
         sortable: false,
         minWidth: PARSED_COLUMN_MIN_WIDTH,
+        autoSizeMaxWidth: PARSED_COLUMN_AUTOSIZE_MAX_WIDTH,
         render: (item: ParsedLogEntry) => formatParsedValue(item.data[jsonLevelKey]),
       });
     }
@@ -1032,6 +1914,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
         header: key,
         sortable: false,
         minWidth: PARSED_COLUMN_MIN_WIDTH,
+        autoSizeMaxWidth: PARSED_COLUMN_AUTOSIZE_MAX_WIDTH,
         render: (item: ParsedLogEntry) => (
           <div className="parsed-log-cell">{formatParsedValue(item.data[key])}</div>
         ),
@@ -1039,7 +1922,78 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     });
 
     return columns;
-  }, [derivedFieldKeys, isWorkload, podColors, showTimestamps]);
+  }, [
+    derivedFieldKeys,
+    handleSelectContainerFilter,
+    handleSelectPodFilter,
+    isWorkload,
+    podColors,
+    timestampMode,
+  ]);
+
+  const parsedCsv = useMemo(() => {
+    if (!isParsedView || parsedLogs.length === 0 || tableColumns.length === 0) {
+      return '';
+    }
+
+    const getParsedColumnValue = (entry: ParsedLogEntry, key: string): string => {
+      switch (key) {
+        case '_timestamp':
+          return entry.timestamp ? formatTimestampForMode(entry.timestamp, timestampMode) : '-';
+        case '_pod':
+          return entry.pod || '-';
+        case '_container':
+          return entry.container || '-';
+        default:
+          return formatParsedValue(entry.data[key]);
+      }
+    };
+
+    const headerRow = tableColumns.map((column) =>
+      escapeCsvCell(typeof column.header === 'string' ? column.header : column.key)
+    );
+    const dataRows = parsedLogs.map((entry) =>
+      tableColumns.map((column) => escapeCsvCell(getParsedColumnValue(entry, column.key)))
+    );
+
+    return [headerRow, ...dataRows].map((row) => row.join(',')).join('\n');
+  }, [isParsedView, parsedLogs, tableColumns, timestampMode]);
+
+  const handleCopyLogs = useCallback(async () => {
+    const text = displayMode === 'parsed' ? parsedCsv : displayLogs;
+    if (!text) {
+      dispatch({ type: 'SET_COPY_FEEDBACK', payload: 'error' });
+      scheduleCopyReset();
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      dispatch({ type: 'SET_COPY_FEEDBACK', payload: 'copied' });
+      scheduleCopyReset();
+    } catch (err) {
+      console.error('Failed to copy logs', err);
+      dispatch({ type: 'SET_COPY_FEEDBACK', payload: 'error' });
+      scheduleCopyReset();
+    }
+  }, [displayLogs, displayMode, parsedCsv, scheduleCopyReset, dispatch]);
+
+  // Keyboard shortcuts for Logs tab
+  useLogKeyboardShortcuts({
+    isActive,
+    isParsedView,
+    displayMode,
+    showTimestamps,
+    regexMatches,
+    hasAnsiLogEntries,
+    hasCopyableContent,
+    dispatch,
+    supportsPreviousLogs,
+    canParseLogs,
+    handleTogglePreviousLogs,
+    handleCopyLogs,
+    filterInputRef,
+    logsContentRef,
+  });
 
   // Row expansion for parsed view.
   // GridTable's onRowClick only fires for keyboard activation (Enter), not mouse
@@ -1096,93 +2050,64 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   return (
     <div className="object-panel-tab-content">
       <div className="pod-logs-display">
-        <div className="pod-logs-controls">
+        <div
+          className={`pod-logs-controls${activeFilterChips.length > 0 ? ' pod-logs-controls--with-active-filters' : ''}`}
+        >
           <div className="pod-logs-controls-left">
-            {/* Pod and Container selector for workload view */}
-            {isWorkload && (availablePods.length > 0 || availableContainers.length > 0) && (
+            {/* Pod / container selector */}
+            {selectorOptions.length > 0 && (
               <div className="pod-logs-control-group">
                 <Dropdown
-                  options={[
-                    ...(isPendingLogs
-                      ? [{ value: '_loading', label: 'Loading logs…', disabled: true }]
-                      : []),
-                    { value: '', label: 'All Logs' },
-                    ...(availablePods.length > 0
-                      ? [
-                          { value: '_pods_header', label: 'Pods', disabled: true, group: 'header' },
-                          ...availablePods.map((pod) => ({
-                            value: `pod:${pod}`,
-                            label: pod,
-                            group: 'Pods',
-                          })),
-                        ]
-                      : []),
-                    ...(availableContainers.length > 0
-                      ? [
-                          {
-                            value: '_containers_header',
-                            label: 'Containers',
-                            disabled: true,
-                            group: 'header',
-                          },
-                          ...availableContainers.map((container) => ({
-                            value: `container:${container}`,
-                            label: container,
-                            group: 'Containers',
-                          })),
-                        ]
-                      : []),
-                  ]}
-                  value={selectedFilter}
+                  options={selectorOptions}
+                  value={selectedFilters}
                   onChange={(value) =>
-                    dispatch({ type: 'SET_SELECTED_FILTER', payload: value as string })
+                    dispatch({
+                      type: 'SET_SELECTED_FILTERS',
+                      payload: Array.isArray(value) ? value : [value],
+                    })
+                  }
+                  multiple
+                  showBulkActions
+                  placeholder={isPendingLogs ? 'Loading logs…' : 'All Logs'}
+                  renderValue={(value, options) =>
+                    summarizeWorkloadSelection(
+                      Array.isArray(value) ? value : value ? [value] : [],
+                      options
+                    )
                   }
                   size="compact"
-                />
-              </div>
-            )}
-
-            {/* Container selector for single pod */}
-            {!isWorkload && containers.length > 0 && (
-              <div className="pod-logs-control-group">
-                <Dropdown
-                  options={[
-                    ...(containers.length > 1 ? [{ value: ALL_CONTAINERS, label: 'All' }] : []),
-                    ...containers.map((container) => ({
-                      value: getActualContainerName(container),
-                      label: container,
-                    })),
-                  ]}
-                  value={selectedContainer}
-                  onChange={(value) =>
-                    dispatch({ type: 'SET_SELECTED_CONTAINER', payload: value as string })
-                  }
-                  size="compact"
+                  className="pod-logs-selector-dropdown"
                 />
               </div>
             )}
 
             {/* Text filter input */}
             <div className="pod-logs-control-group pod-logs-filter-group">
-              <input
-                type="text"
-                ref={filterInputRef}
-                value={textFilter}
-                onChange={(e) => dispatch({ type: 'SET_TEXT_FILTER', payload: e.target.value })}
-                placeholder="Filter logs..."
-                className="pod-logs-text-filter"
-                title="Filter logs by text (searches in log lines, pods, and containers)"
-              />
-              {textFilter && (
-                <button
-                  className="pod-logs-filter-clear"
-                  onClick={() => dispatch({ type: 'SET_TEXT_FILTER', payload: '' })}
-                  title="Clear filter"
-                  aria-label="Clear filter"
-                >
-                  ×
-                </button>
-              )}
+              <div className="pod-logs-filter-group">
+                <input
+                  type="text"
+                  ref={filterInputRef}
+                  value={textFilter}
+                  onChange={(e) => dispatch({ type: 'SET_TEXT_FILTER', payload: e.target.value })}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  placeholder="Filter logs..."
+                  className="pod-logs-text-filter"
+                  title="Filter logs by text (searches in log lines, pods, and containers)"
+                />
+                {textFilter && (
+                  <button
+                    className="pod-logs-filter-clear"
+                    onClick={() => dispatch({ type: 'SET_TEXT_FILTER', payload: '' })}
+                    title="Clear filter"
+                    aria-label="Clear filter"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
             </div>
 
             <IconBar
@@ -1190,13 +2115,52 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                 [
                   {
                     type: 'toggle',
+                    id: 'highlightSearch',
+                    icon: <HighlightSearchIcon />,
+                    active: highlightMatches,
+                    onClick: () => dispatch({ type: 'TOGGLE_HIGHLIGHT_MATCHES' }),
+                    title: 'Highlight matching text - disabled when Invert is enabled (H)',
+                    ariaLabel: 'Highlight matching text - disabled when Invert is enabled',
+                    disabled: inverseMatches,
+                  },
+                  {
+                    type: 'toggle',
+                    id: 'inverseSearch',
+                    icon: <InverseSearchIcon />,
+                    active: inverseMatches,
+                    onClick: () => dispatch({ type: 'TOGGLE_INVERSE_MATCHES' }),
+                    title: 'Invert the text filter to show only non-matching logs (I)',
+                    ariaLabel: 'Invert the text filter to show only non-matching logs',
+                  },
+                  {
+                    type: 'toggle',
+                    id: 'caseSensitiveSearch',
+                    icon: <CaseSensitiveIcon width={16} height={16} />,
+                    active: caseSensitiveMatches,
+                    onClick: () => dispatch({ type: 'TOGGLE_CASE_SENSITIVE_MATCHES' }),
+                    title: 'Case-sensitive search - disabled when regex is enabled (C)',
+                    ariaLabel: 'Case-sensitive search - disabled when regex is enabled',
+                    disabled: regexMatches,
+                  },
+                  {
+                    type: 'toggle',
+                    id: 'regexSearch',
+                    icon: <RegexSearchIcon />,
+                    active: regexMatches,
+                    onClick: () => dispatch({ type: 'TOGGLE_REGEX_MATCHES' }),
+                    title: 'Enable regular expression support for the text filter (X)',
+                    ariaLabel: 'Enable regular expression support for the text filter',
+                  },
+                  { type: 'separator' },
+                  {
+                    type: 'toggle',
                     id: 'autoRefresh',
                     icon: <AutoRefreshIcon />,
                     active: autoRefresh,
                     onClick: () => dispatch({ type: 'TOGGLE_AUTO_REFRESH' }),
-                    title: 'Auto-refresh (R)',
+                    title: 'Toggle auto-refresh (R)',
+                    ariaLabel: 'Toggle auto-refresh',
                   },
-                  { type: 'separator' },
                   ...(supportsPreviousLogs
                     ? [
                         {
@@ -1205,17 +2169,23 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                           icon: <PreviousLogsIcon />,
                           active: showPreviousLogs,
                           onClick: handleTogglePreviousLogs,
-                          title: 'Previous logs (X)',
+                          title: 'Show previous logs (V)',
+                          ariaLabel: 'Show previous logs (V)',
                         },
                       ]
                     : []),
                   {
                     type: 'toggle',
-                    id: 'timestamps',
+                    id: 'apiTimestamps',
                     icon: <TimestampIcon />,
                     active: showTimestamps,
-                    onClick: () => dispatch({ type: 'TOGGLE_TIMESTAMPS' }),
-                    title: 'Timestamps (T)',
+                    onClick: () =>
+                      dispatch({
+                        type: 'SET_TIMESTAMP_MODE',
+                        payload: showTimestamps ? 'hidden' : 'default',
+                      }),
+                    title: 'Show timestamps from the Kubernetes API (T)',
+                    ariaLabel: 'Show timestamps from the Kubernetes API',
                   },
                   {
                     type: 'toggle',
@@ -1224,25 +2194,62 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                     active: wrapText,
                     onClick: () => dispatch({ type: 'TOGGLE_WRAP_TEXT' }),
                     title: 'Wrap text (W)',
+                    ariaLabel: 'Wrap text',
                     disabled: isParsedView,
                   },
-                  {
-                    type: 'toggle',
-                    id: 'parseJson',
-                    icon: <ParseJsonIcon />,
-                    active: isParsedView,
-                    onClick: () => dispatch({ type: 'TOGGLE_PARSED_VIEW' }),
-                    title: 'Parse as JSON (P)',
-                    disabled: !canParseLogs,
-                  },
+                  ...(hasAnsiLogEntries
+                    ? [
+                        {
+                          type: 'toggle' as const,
+                          id: 'ansiColors',
+                          icon: <AnsiColorIcon />,
+                          active: showAnsiColors,
+                          onClick: () => dispatch({ type: 'TOGGLE_SHOW_ANSI_COLORS' }),
+                          title: 'Show ANSI colors if present (O)',
+                          ariaLabel: 'Show ANSI colors if present',
+                          disabled: isParsedView,
+                        },
+                      ]
+                    : []),
+                  ...(canParseLogs
+                    ? [
+                        {
+                          type: 'toggle' as const,
+                          id: 'prettyJson',
+                          icon: <PrettyJsonIcon />,
+                          active: displayMode === 'pretty',
+                          onClick: () =>
+                            dispatch({
+                              type: 'SET_DISPLAY_MODE',
+                              payload: displayMode === 'pretty' ? 'raw' : 'pretty',
+                            }),
+                          title: 'Show pretty JSON (J)',
+                          ariaLabel: 'Show pretty JSON',
+                        },
+                        {
+                          type: 'toggle' as const,
+                          id: 'parsedJson',
+                          icon: <ParseJsonIcon />,
+                          active: displayMode === 'parsed',
+                          onClick: () =>
+                            dispatch({
+                              type: 'SET_DISPLAY_MODE',
+                              payload: displayMode === 'parsed' ? 'raw' : 'parsed',
+                            }),
+                          title: 'Parse the JSON into a table (P)',
+                          ariaLabel: 'Parse the JSON into a table',
+                        },
+                      ]
+                    : []),
                   { type: 'separator' },
                   {
                     type: 'action',
                     id: 'copy',
                     icon: <CopyIcon />,
                     onClick: handleCopyLogs,
-                    title: 'Copy to clipboard',
-                    disabled: !displayLogs && !isParsedView,
+                    title: 'Copy to clipboard (Shift+C)',
+                    ariaLabel: 'Copy to clipboard',
+                    disabled: !hasCopyableContent,
                     feedback:
                       copyFeedback === 'copied'
                         ? 'success'
@@ -1254,33 +2261,39 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
               }
             />
 
-            <span
-              className="pod-logs-count"
-              title={
-                bufferLimitReached
-                  ? filteredEntries.length === logEntries.length
-                    ? `${logEntries.length} logs (buffer limit reached — older entries dropped)`
-                    : `${filteredEntries.length} of ${logEntries.length} logs (buffer limit reached — older entries dropped)`
-                  : filteredEntries.length === logEntries.length
-                    ? `${logEntries.length} logs`
-                    : `${filteredEntries.length} of ${logEntries.length} logs`
-              }
-            >
-              {filteredEntries.length === logEntries.length
-                ? `${logEntries.length} logs`
-                : `${filteredEntries.length} of ${logEntries.length} logs`}
-              {bufferLimitReached ? ' (max)' : ''}
-            </span>
+            {hasActiveResultFilter && (
+              <span className="pod-logs-count" title={countTitle}>
+                {countLabel}
+              </span>
+            )}
           </div>
         </div>
 
-        {fallbackActive && (
-          <div className="pod-logs-fallback-banner">
-            <span>
-              Streaming unavailable
-              {fallbackDisplayError ? `: ${fallbackDisplayError}` : ''}. Showing fallback updates
-              {autoRefresh ? ' every 2s' : ''}. Retrying connection automatically…
-            </span>
+        {activeFilterChips.length > 0 && (
+          <div className="pod-logs-active-filters" aria-label="Active log filters">
+            <button
+              type="button"
+              className="pod-logs-filter-chip pod-logs-filter-chip--clear-all"
+              onClick={handleClearAllFilters}
+              aria-label="Clear all filters"
+              title="Clear all filters"
+            >
+              Clear all
+            </button>
+            {activeFilterChips.map((chip) => (
+              <span key={chip.key} className="pod-logs-filter-chip">
+                <span className="pod-logs-filter-chip-label">{chip.label}</span>
+                <button
+                  type="button"
+                  className="pod-logs-filter-chip-remove"
+                  onClick={chip.onRemove}
+                  aria-label={chip.title}
+                  title={chip.title}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
           </div>
         )}
 
@@ -1296,6 +2309,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                 className="parsed-logs-table"
                 tableClassName="gridtable-parsed-logs"
                 virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}
+                isKindColumnKey={() => false}
                 // Parsed logs use row-expansion to show the full cell
                 // contents; the native hover tooltip would duplicate that
                 // affordance and also race with the custom expand UX.
@@ -1303,92 +2317,44 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
               />
             </div>
           ) : (
-            <div className={`pod-logs-text ${!wrapText ? 'no-wrap' : ''}`}>
-              {displayLogs
-                ? displayLogs.split('\n').map((line, index) => {
-                    // Stable key: use _seq from the source entry so buffer
-                    // truncation doesn't shift every key and cause scroll jumps.
-                    const entryKey = filteredEntries[index]?._seq ?? index;
-
-                    // For workload logs, apply color to pod name and timestamp
-                    // Note: Lines only have pod info if backend successfully found pods for the workload
-                    if (isWorkload && line.includes('[') && line.includes('/')) {
-                      // Handle both with and without timestamps
-                      // Pattern: optional timestamp [pod/container] rest of line
-                      const match = line.match(
-                        /^(?:\[\d{4}-\d{2}-\d{2}T[^\]]+\]\s*)?\[([^\/]+)\/([^\]]+)\]\s*(.*)/
-                      );
-                      if (match) {
-                        const [, pod, container, logLine] = match;
-                        // Extract timestamp if present
-                        const timestampMatch = line.match(/^(\[\d{4}-\d{2}-\d{2}T[^\]]+\]\s*)/);
-                        const timestamp = timestampMatch ? timestampMatch[1] : '';
-                        const podColor = podColors[pod] || podColors['__fallback__'];
-
-                        return (
-                          <div key={entryKey} className="pod-log-line">
-                            {timestamp && (
-                              <span
-                                className="pod-log-metadata pod-color-text"
-                                style={{ '--pod-color': podColor } as React.CSSProperties}
-                              >
-                                {timestamp}
-                              </span>
-                            )}
-                            <span
-                              className="pod-log-metadata pod-log-metadata--bold"
-                              style={{ '--pod-color': podColor } as React.CSSProperties}
-                            >
-                              [{pod}/{container}]
-                            </span>
-                            <span> {logLine}</span>
-                          </div>
-                        );
-                      }
-                    }
-
-                    if (!isWorkload) {
-                      let workingLine = line;
-                      let timestampPrefix = '';
-                      if (showTimestamps) {
-                        const podTimestampMatch = line.match(
-                          /^(\[\d{4}-\d{2}-\d{2}T[^\]]+\]\s*)(.*)$/
-                        );
-                        if (podTimestampMatch) {
-                          timestampPrefix = podTimestampMatch[1] ?? '';
-                          workingLine = podTimestampMatch[2] ?? '';
-                        }
-                      }
-
-                      const containerMatch = workingLine.match(/^\[([^\]]+)\]\s*(.*)$/);
-                      const showContainerMeta =
-                        containerMatch && selectedContainer === ALL_CONTAINERS;
-                      if (timestampPrefix || showContainerMeta) {
-                        const containerLabel = containerMatch ? containerMatch[1] : '';
-                        const remainder = containerMatch ? containerMatch[2] : workingLine;
-                        return (
-                          <div key={entryKey} className="pod-log-line">
-                            {timestampPrefix && (
-                              <span className="pod-log-metadata">{timestampPrefix}</span>
-                            )}
-                            {showContainerMeta && (
-                              <span className="pod-log-metadata">[{containerLabel}]</span>
-                            )}
-                            <span> {remainder || '\u00A0'}</span>
-                          </div>
-                        );
-                      }
-                    }
-
-                    return (
-                      <div key={entryKey} className="pod-log-line">
-                        {line || '\u00A0'}
-                      </div>
-                    );
-                  })
-                : showPreviousLogs
-                  ? 'No previous logs found'
-                  : 'No logs available'}
+            <div
+              className={`pod-logs-text ${!wrapText ? 'no-wrap' : ''} ${shouldVirtualizeRawLogs ? 'pod-logs-text--virtualized' : ''}`}
+            >
+              {displayLogs ? (
+                shouldVirtualizeRawLogs ? (
+                  <div
+                    className="pod-logs-virtual-body"
+                    style={{ height: `${virtualizedRawHeight + RAW_LOG_VERTICAL_PADDING_PX}px` }}
+                  >
+                    <div
+                      className="pod-logs-virtual-inner"
+                      style={{
+                        transform: `translateY(${virtualizedRawOffsetTop + RAW_LOG_VERTICAL_PADDING_PX / 2}px)`,
+                      }}
+                    >
+                      {visibleRenderedLogRows.map((row) => (
+                        <div
+                          key={row.key}
+                          className="pod-log-row"
+                          ref={(node) => {
+                            measureVirtualizedRawRow(row.key, node);
+                          }}
+                        >
+                          {renderRawLogRow(row)}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  renderedDisplayRows.map((row) => (
+                    <div key={row.key} className="pod-log-row">
+                      {renderRawLogRow(row)}
+                    </div>
+                  ))
+                )
+              ) : (
+                emptyStateMessage
+              )}
             </div>
           )}
         </div>

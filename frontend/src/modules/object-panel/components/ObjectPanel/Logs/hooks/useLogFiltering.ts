@@ -6,14 +6,17 @@
  */
 import { useMemo } from 'react';
 import type { ObjectLogEntry } from '@/core/refresh/types';
-import { ALL_CONTAINERS, type ParsedLogEntry } from '../logViewerReducer';
+import type { ParsedLogEntry } from '../logViewerReducer';
+import { stripAnsi } from '../ansi';
 
 interface UseLogFilteringParams {
   logEntries: ObjectLogEntry[];
   isWorkload: boolean;
-  selectedFilter: string;
-  selectedContainer: string;
+  selectedFilters: string[];
   textFilter: string;
+  inverseMatches: boolean;
+  caseSensitiveMatches: boolean;
+  regexMatches: boolean;
 }
 
 interface UseLogFilteringResult {
@@ -29,9 +32,11 @@ interface UseLogFilteringResult {
 export function useLogFiltering({
   logEntries,
   isWorkload,
-  selectedFilter,
-  selectedContainer,
+  selectedFilters,
   textFilter,
+  inverseMatches,
+  caseSensitiveMatches,
+  regexMatches,
 }: UseLogFilteringParams): UseLogFilteringResult {
   const orderedEntries = useMemo(() => {
     if (logEntries.length <= 1) {
@@ -87,35 +92,72 @@ export function useLogFiltering({
 
     let entries = orderedEntries;
 
-    // Filter by pod or container for workload views
-    if (isWorkload && selectedFilter) {
-      if (selectedFilter.startsWith('pod:')) {
-        const podName = selectedFilter.substring(4);
-        entries = entries.filter((entry) => entry.pod === podName);
-      } else if (selectedFilter.startsWith('container:')) {
-        const containerName = selectedFilter.substring(10);
-        entries = entries.filter((entry) => entry.container === containerName);
-      }
-    }
+    // Filter by selected pods/containers.
+    if (selectedFilters.length > 0) {
+      const selectedPods = new Set(
+        selectedFilters
+          .filter((filterValue) => filterValue.startsWith('pod:'))
+          .map((filterValue) => filterValue.substring(4))
+      );
+      const selectedInitContainers = new Set(
+        selectedFilters
+          .filter((filterValue) => filterValue.startsWith('init:'))
+          .map((filterValue) => filterValue.substring(5))
+      );
+      const selectedContainers = new Set(
+        selectedFilters
+          .filter((filterValue) => filterValue.startsWith('container:'))
+          .map((filterValue) => filterValue.substring(10))
+      );
 
-    // Filter by container for single-pod views
-    if (!isWorkload && selectedContainer && selectedContainer !== ALL_CONTAINERS) {
-      entries = entries.filter((entry) => entry.container === selectedContainer);
+      if (isWorkload && selectedPods.size > 0) {
+        entries = entries.filter((entry) => selectedPods.has(entry.pod));
+      }
+      if (selectedInitContainers.size > 0 || selectedContainers.size > 0) {
+        entries = entries.filter((entry) =>
+          entry.isInit
+            ? selectedInitContainers.has(entry.container)
+            : selectedContainers.has(entry.container)
+        );
+      }
     }
 
     // Filter by text search
     if (textFilter.trim()) {
-      const searchText = textFilter.toLowerCase();
+      const searchText = caseSensitiveMatches ? textFilter : textFilter.toLowerCase();
+      const regex = regexMatches ? buildSearchRegex(textFilter, caseSensitiveMatches) : null;
+      if (regexMatches && !regex) {
+        return [] as ObjectLogEntry[];
+      }
       entries = entries.filter((entry) => {
-        const lineMatches = entry.line.toLowerCase().includes(searchText);
-        const podMatches = entry.pod?.toLowerCase().includes(searchText) || false;
-        const containerMatches = entry.container?.toLowerCase().includes(searchText) || false;
-        return lineMatches || podMatches || containerMatches;
+        const lineText = stripAnsi(entry.line);
+        const podText = entry.pod ?? '';
+        const containerText = entry.container ?? '';
+        const normalizedLineText = caseSensitiveMatches ? lineText : lineText.toLowerCase();
+        const normalizedPodText = caseSensitiveMatches ? podText : podText.toLowerCase();
+        const normalizedContainerText = caseSensitiveMatches
+          ? containerText
+          : containerText.toLowerCase();
+        const lineMatches = regex ? regex.test(lineText) : normalizedLineText.includes(searchText);
+        const podMatches = regex ? regex.test(podText) : normalizedPodText.includes(searchText);
+        const containerMatches = regex
+          ? regex.test(containerText)
+          : normalizedContainerText.includes(searchText);
+        const matches = lineMatches || podMatches || containerMatches;
+        return inverseMatches ? !matches : matches;
       });
     }
 
     return entries;
-  }, [isWorkload, orderedEntries, selectedFilter, selectedContainer, textFilter]);
+  }, [
+    caseSensitiveMatches,
+    inverseMatches,
+    isWorkload,
+    orderedEntries,
+    regexMatches,
+    selectedFilters,
+    textFilter,
+  ]);
 
   const parsedCandidates = useMemo(() => {
     if (!filteredEntries.length) {
@@ -124,7 +166,8 @@ export function useLogFiltering({
     const parsed: ParsedLogEntry[] = [];
     filteredEntries.forEach((entry, index) => {
       try {
-        const jsonData = JSON.parse(entry.line);
+        const normalizedLine = stripAnsi(entry.line);
+        const jsonData = JSON.parse(normalizedLine);
         // Only accept non-empty plain objects (reject arrays, primitives, null, {})
         if (
           typeof jsonData !== 'object' ||
@@ -136,11 +179,12 @@ export function useLogFiltering({
         }
         parsed.push({
           data: jsonData,
-          rawLine: entry.line,
+          rawLine: normalizedLine,
           lineNumber: index + 1,
           timestamp: entry.timestamp,
           pod: isWorkload ? entry.pod : undefined,
           container: entry.container,
+          isInit: entry.isInit,
           seq: entry._seq,
         });
       } catch {
@@ -153,4 +197,16 @@ export function useLogFiltering({
   const canParseLogs = parsedCandidates.length > 0;
 
   return { filteredEntries, parsedCandidates, canParseLogs };
+}
+
+function buildSearchRegex(pattern: string, caseSensitive: boolean): RegExp | null {
+  const trimmed = pattern.trim();
+  if (!trimmed) {
+    return null;
+  }
+  try {
+    return new RegExp(trimmed, caseSensitive ? '' : 'i');
+  } catch {
+    return null;
+  }
 }

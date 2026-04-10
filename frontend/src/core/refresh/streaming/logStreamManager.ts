@@ -13,6 +13,7 @@ import { isPermissionDeniedStatus, resolvePermissionDeniedMessage } from '../per
 import { errorHandler } from '@utils/errorHandler';
 import { eventBus } from '@/core/events';
 import { getLogBufferMaxSize, LOG_BUFFER_DEFAULT_SIZE } from '@/core/settings/appPreferences';
+import { getLogStreamScopeParams } from '@modules/object-panel/components/ObjectPanel/Logs/logStreamScopeParamsCache';
 
 type StreamMode = 'stream' | 'manual';
 
@@ -29,6 +30,7 @@ interface StreamEventPayload {
     line?: string;
     isInit?: boolean;
   }>;
+  warnings?: string[];
   error?: string;
   errorDetails?: PermissionDeniedStatus;
 }
@@ -56,6 +58,13 @@ function isValidLogStreamPayload(data: unknown): data is StreamEventPayload {
   }
 
   if (obj.error !== undefined && typeof obj.error !== 'string') {
+    return false;
+  }
+
+  if (
+    obj.warnings !== undefined &&
+    (!Array.isArray(obj.warnings) || obj.warnings.some((warning) => typeof warning !== 'string'))
+  ) {
     return false;
   }
 
@@ -126,6 +135,10 @@ class LogStreamConnection {
       }
       const url = new URL('/api/v2/stream/logs', baseURL);
       url.searchParams.set('scope', this.scope);
+      const streamParams = getLogStreamScopeParams(this.scope);
+      if (streamParams?.container) {
+        url.searchParams.set('container', streamParams.container);
+      }
 
       const eventSource = new EventSource(url.toString());
       this.eventSource = eventSource;
@@ -207,6 +220,7 @@ export class LogStreamManager {
   private connections = new Map<string, LogStreamConnection>();
   private buffers = new Map<string, ObjectLogEntry[]>();
   private bufferMeta = new Map<string, { total: number; truncated: boolean }>();
+  private backendWarnings = new Map<string, string[]>();
   /** Monotonically increasing counter for stable entry keys across buffer truncations. */
   private seqCounter = 0;
   private lastNotifiedErrors = new Map<string, string>();
@@ -320,6 +334,7 @@ export class LogStreamManager {
     if (reset) {
       this.buffers.delete(scope);
       this.bufferMeta.delete(scope);
+      this.backendWarnings.delete(scope);
       resetScopedDomainState(DOMAIN_NAME, scope);
     } else {
       this.markIdle(scope);
@@ -371,8 +386,11 @@ export class LogStreamManager {
     }));
 
     // Buffer replacement policy:
-    // - reset=true with non-empty incoming → replace (server is giving us a
-    //   fresh snapshot, use it).
+    // - reset=true with non-empty incoming → replace the buffered entries.
+    //   For live streams, this frame is a fresh tail snapshot after a
+    //   reconnect/remount, not an authoritative total, so preserve the
+    //   larger running total instead of letting the count shrink back to
+    //   the tail size.
     // - reset=true with empty incoming → PRESERVE. The server emits the
     //   reset flag as part of its "new connection" handshake on every
     //   stream open, before it has had a chance to tail any lines. Wiping
@@ -382,8 +400,12 @@ export class LogStreamManager {
     // - reset=false → append, unchanged.
     const shouldReplace = payload.reset && incoming.length > 0;
     const previousMeta = this.bufferMeta.get(scope);
-    let totalItems = shouldReplace ? 0 : (previousMeta?.total ?? existing.length);
-    totalItems += incoming.length;
+    const previousTotal = previousMeta?.total ?? existing.length;
+    let totalItems = shouldReplace
+      ? mode === 'stream'
+        ? Math.max(previousTotal, incoming.length)
+        : incoming.length
+      : previousTotal + incoming.length;
 
     let nextEntries = shouldReplace
       ? incoming
@@ -409,6 +431,15 @@ export class LogStreamManager {
       payload.errorDetails
     );
     const isManual = mode === 'manual';
+    if (payload.warnings !== undefined) {
+      if (payload.warnings.length > 0) {
+        this.backendWarnings.set(scope, payload.warnings);
+      } else {
+        this.backendWarnings.delete(scope);
+      }
+    } else if (payload.reset) {
+      this.backendWarnings.delete(scope);
+    }
     const stats = this.buildStats(scope, nextEntries.length);
 
     setScopedDomainState(DOMAIN_NAME, scope, (previous) => {
@@ -533,7 +564,7 @@ export class LogStreamManager {
     const meta = this.bufferMeta.get(scope);
     const total = meta?.total ?? count;
     const truncated = meta?.truncated ?? false;
-    const warnings: string[] = [];
+    const warnings = [...(this.backendWarnings.get(scope) ?? [])];
     if (truncated && total > count) {
       warnings.push(`Showing most recent ${count} of ${total} log entries`);
     }

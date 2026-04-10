@@ -254,11 +254,10 @@
 /* Group headers */
 .dropdown-group-header {
   padding: 6px 10px 4px 10px;
-  font-size: 0.85rem;
+  font-size: 0.75rem;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--color-text-secondary);
+  color: var(--color-text);
   background-color: var(--color-bg-secondary);
   border-bottom: 1px solid var(--color-border);
   cursor: default;
@@ -316,6 +315,35 @@
   outline: none;
   border-color: var(--color-accent);
   box-shadow: var(--dropdown-trigger-focus-shadow);
+}
+
+.dropdown-bulk-actions {
+  display: flex;
+  gap: var(--spacing-xs);
+  padding: 0.5rem;
+  border-bottom: 1px solid var(--color-border);
+  background-color: var(--color-bg-secondary);
+}
+
+.dropdown-bulk-action {
+  appearance: none;
+  border: 1px solid var(--color-border);
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  border-radius: var(--border-radius-sm);
+  padding: 0.25rem 0.5rem;
+  font-size: var(--font-size-small, 0.75rem);
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.dropdown-bulk-action:hover:not(:disabled) {
+  border-color: var(--color-accent);
+}
+
+.dropdown-bulk-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* No options message */
