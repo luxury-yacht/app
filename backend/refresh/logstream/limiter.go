@@ -218,15 +218,16 @@ func keysToSet(keys []string) map[string]struct{} {
 	return out
 }
 
-func buildGlobalTargetLimitWarnings(selectedCount, totalCount int) []string {
+func buildGlobalTargetLimitWarnings(selectedCount, totalCount, limit int) []string {
 	if totalCount <= selectedCount || selectedCount < 0 {
 		return nil
 	}
+	hiddenCount := totalCount - selectedCount
 	return []string{
 		fmt.Sprintf(
-			"Showing logs for %d of %d selected pod/container targets due to the global log stream cap.",
-			selectedCount,
-			totalCount,
+			"Logs are hidden for %d containers because the global limit of %d was reached. Using filters to reduce the number of containers may clear this message.",
+			hiddenCount,
+			limit,
 		),
 	}
 }

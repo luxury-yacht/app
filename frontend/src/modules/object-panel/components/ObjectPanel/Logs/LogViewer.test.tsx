@@ -637,7 +637,9 @@ describe('LogViewer active pod synchronisation', () => {
           isInit: false,
         },
       ],
-      warnings: ['Showing logs for 24 of 25 pod/container targets. Refine filters to view more.'],
+      warnings: [
+        'Logs are hidden for 1 containers because the per-tab limit of 24 was reached. Using filters to reduce the number of containers may clear this message.',
+      ],
     });
 
     await renderViewer({ activePodNames: ['web-1'] });
@@ -653,8 +655,8 @@ describe('LogViewer active pod synchronisation', () => {
     });
     await flushAsync();
 
-    expect(container.textContent).toContain(
-      'Showing logs for 24 of 25 pod/container targets. Refine filters to view more.'
+    expect(container.querySelector('[aria-label="Log warnings"]')?.textContent).toContain(
+      'Logs are hidden for 1 containers because the per-tab limit of 24 was reached. Using filters to reduce the number of containers may clear this message.'
     );
   });
 
@@ -680,7 +682,9 @@ describe('LogViewer active pod synchronisation', () => {
       stats: {
         itemCount: 1,
         buildDurationMs: 0,
-        warnings: ['Showing logs for 24 of 52 pod/container targets. Refine filters to view more.'],
+        warnings: [
+          'Logs are hidden for 28 containers because the per-tab limit of 24 was reached. Using filters to reduce the number of containers may clear this message.',
+        ],
       },
       error: null,
       droppedAutoRefreshes: 0,
@@ -694,8 +698,52 @@ describe('LogViewer active pod synchronisation', () => {
     await renderViewer({ activePodNames: ['web-1'], isActive: false });
     await flushAsync();
 
-    expect(container.textContent).toContain(
-      'Showing logs for 24 of 52 pod/container targets. Refine filters to view more.'
+    expect(container.querySelector('[aria-label="Log warnings"]')?.textContent).toContain(
+      'Logs are hidden for 28 containers because the per-tab limit of 24 was reached. Using filters to reduce the number of containers may clear this message.'
+    );
+  });
+
+  it('merges per-tab and global target-cap warnings into a single message', async () => {
+    const generatedAt = Date.now();
+    setScopedDomainState('object-logs', defaultScope, () => ({
+      status: 'ready',
+      data: {
+        entries: [
+          {
+            pod: 'web-1',
+            container: 'app',
+            line: 'line 1',
+            timestamp: '2024-05-01T10:00:00Z',
+            isInit: false,
+          },
+        ],
+        sequence: 2,
+        generatedAt,
+        resetCount: 0,
+        error: null,
+      },
+      stats: {
+        itemCount: 1,
+        buildDurationMs: 0,
+        warnings: [
+          'Logs are hidden for 2 containers because the per-tab limit of 10 was reached. Using filters to reduce the number of containers may clear this message.',
+          'Logs are hidden for 1 containers because the global limit of 15 was reached. Using filters to reduce the number of containers may clear this message.',
+        ],
+      },
+      error: null,
+      droppedAutoRefreshes: 0,
+      scope: defaultScope,
+      lastUpdated: generatedAt,
+      lastAutoRefresh: generatedAt,
+      lastManualRefresh: undefined,
+      isManual: false,
+    }));
+
+    await renderViewer({ activePodNames: ['web-1'], isActive: false });
+    await flushAsync();
+
+    expect(container.querySelector('[aria-label="Log warnings"]')?.textContent).toContain(
+      'Logs are hidden for 3 containers because the per-tab limit of 10 and global limit of 15 were reached. Using filters to reduce the number of containers may clear this message.'
     );
   });
 
@@ -1280,7 +1328,11 @@ describe('LogViewer active pod synchronisation', () => {
   });
 
   it('filters workload logs locally from the multi-select pod/container dropdown', async () => {
-    (GetLogScopeContainers as unknown as ViMock).mockResolvedValue(['app', 'init-db (init)', 'sidecar']);
+    (GetLogScopeContainers as unknown as ViMock).mockResolvedValue([
+      'app',
+      'init-db (init)',
+      'sidecar',
+    ]);
     setLogViewerPrefs('obj:test:deployment:team-a:api', {
       selectedContainer: '',
       selectedFilters: [],

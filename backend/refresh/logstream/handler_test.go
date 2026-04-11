@@ -487,12 +487,12 @@ func TestServeHTTPEmitsErrorEvent(t *testing.T) {
 
 func TestComposeStreamWarningsDistinguishesTransportDrops(t *testing.T) {
 	warnings := composeStreamWarnings(
-		[]string{"Showing logs for 24 of 25 pod/container targets. Refine filters to view more."},
+		[]string{"Logs are hidden for 1 containers because the per-tab limit of 24 was reached. Using filters to reduce the number of containers may clear this message."},
 		true,
 	)
 
 	require.Equal(t, []string{
-		"Showing logs for 24 of 25 pod/container targets. Refine filters to view more.",
+		"Logs are hidden for 1 containers because the per-tab limit of 24 was reached. Using filters to reduce the number of containers may clear this message.",
 		transportDropWarning,
 	}, warnings)
 

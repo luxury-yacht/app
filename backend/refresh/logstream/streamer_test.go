@@ -2,6 +2,7 @@ package logstream
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -405,7 +406,16 @@ func TestConsumeWatchReturnsErrorOnWatchErrorEvent(t *testing.T) {
 	resultCh := make(chan error, 1)
 
 	go func() {
-		resultCh <- streamer.consumeWatch(ctx, fw, Options{}, map[string]bool{}, func(*corev1.Pod) {}, func(string) {})
+		resultCh <- streamer.consumeWatch(
+			ctx,
+			fw,
+			Options{},
+			map[string]bool{},
+			nil,
+			nil,
+			func(*corev1.Pod) {},
+			func(string) {},
+		)
 	}()
 
 	fw.ch <- watch.Event{
@@ -438,6 +448,54 @@ func TestWaitForReconnect(t *testing.T) {
 	}
 	if time.Since(start) < 4*time.Millisecond {
 		t.Fatal("expected waitForReconnect to respect the delay")
+	}
+}
+
+func TestConsumeWatchReconcilesTargetsOnLimiterNotification(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	streamer := NewStreamer(fake.NewClientset(), nil, nil)
+	fw := &fakeWatch{ch: make(chan watch.Event)}
+	limiterNotify := make(chan struct{}, 1)
+	reconciled := make(chan struct{}, 1)
+	resultCh := make(chan error, 1)
+
+	go func() {
+		resultCh <- streamer.consumeWatch(
+			ctx,
+			fw,
+			Options{},
+			map[string]bool{},
+			limiterNotify,
+			func() {
+				select {
+				case reconciled <- struct{}{}:
+				default:
+				}
+			},
+			func(*corev1.Pod) {},
+			func(string) {},
+		)
+	}()
+
+	limiterNotify <- struct{}{}
+
+	select {
+	case <-reconciled:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for limiter rebalance to trigger reconciliation")
+	}
+
+	cancel()
+
+	select {
+	case err := <-resultCh:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("expected consumeWatch to return context cancellation, got %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for consumeWatch to return")
 	}
 }
 
@@ -566,7 +624,16 @@ func TestCronJobWatchPicksUpFutureJob(t *testing.T) {
 
 	resultCh := make(chan error, 1)
 	go func() {
-		resultCh <- streamer.consumeWatch(ctx, fw, Options{Kind: "cronjob", Namespace: "default", Name: "cron"}, map[string]bool{}, startPod, stopPod)
+		resultCh <- streamer.consumeWatch(
+			ctx,
+			fw,
+			Options{Kind: "cronjob", Namespace: "default", Name: "cron"},
+			map[string]bool{},
+			nil,
+			nil,
+			startPod,
+			stopPod,
+		)
 	}()
 
 	// Deliver a pod from the future Job via the watch.

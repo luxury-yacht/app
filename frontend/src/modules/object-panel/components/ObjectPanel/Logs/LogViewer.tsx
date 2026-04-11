@@ -167,7 +167,9 @@ const formatParsedValue = (value: unknown): string => {
 const formatContainerLabel = (container: string, isInit: boolean, isEphemeral: boolean): string =>
   isInit ? `${container}:init` : isEphemeral ? `${container} (debug)` : container;
 
-const parseContainerLabel = (label: string): { name: string; isInit: boolean; isEphemeral: boolean } => {
+const parseContainerLabel = (
+  label: string
+): { name: string; isInit: boolean; isEphemeral: boolean } => {
   if (label.endsWith(':init')) {
     return {
       name: label.slice(0, -':init'.length),
@@ -193,6 +195,52 @@ const POD_FILTER_PREFIX = 'pod:';
 const INIT_FILTER_PREFIX = 'init:';
 const CONTAINER_FILTER_PREFIX = 'container:';
 const DEBUG_FILTER_PREFIX = 'debug:';
+const TARGET_LIMIT_WARNING_PATTERN =
+  /^Logs are hidden for (\d+) containers because the (per-tab|global) limit of (\d+) was reached\. Using filters to reduce the number of containers may clear this message\.$/;
+
+const mergeTargetLimitWarnings = (warnings: string[]): string[] => {
+  if (warnings.length < 2) {
+    return warnings;
+  }
+
+  const merged: string[] = [];
+  let perTabMatch: RegExpMatchArray | null = null;
+  let globalMatch: RegExpMatchArray | null = null;
+
+  for (const warning of warnings) {
+    const match = warning.match(TARGET_LIMIT_WARNING_PATTERN);
+    if (!match) {
+      merged.push(warning);
+      continue;
+    }
+    if (match[2] === 'per-tab') {
+      perTabMatch = match;
+      continue;
+    }
+    if (match[2] === 'global') {
+      globalMatch = match;
+      continue;
+    }
+    merged.push(warning);
+  }
+
+  if (perTabMatch && globalMatch) {
+    const hiddenCount = Number.parseInt(perTabMatch[1], 10) + Number.parseInt(globalMatch[1], 10);
+    merged.unshift(
+      `Logs are hidden for ${hiddenCount} containers because the per-tab limit of ${perTabMatch[3]} and global limit of ${globalMatch[3]} were reached. Using filters to reduce the number of containers may clear this message.`
+    );
+    return merged;
+  }
+
+  if (perTabMatch) {
+    merged.unshift(perTabMatch[0]);
+  }
+  if (globalMatch) {
+    merged.unshift(globalMatch[0]);
+  }
+
+  return merged;
+};
 
 const isInitContainerDisplayName = (container: string): boolean => container.endsWith(' (init)');
 const isDebugContainerDisplayName = (container: string): boolean => container.endsWith(' (debug)');
@@ -202,7 +250,8 @@ const toInitContainerFilterValue = (container: string): string =>
   `${INIT_FILTER_PREFIX}${container}`;
 const toContainerFilterValue = (container: string): string =>
   `${CONTAINER_FILTER_PREFIX}${container}`;
-const toDebugContainerFilterValue = (container: string): string => `${DEBUG_FILTER_PREFIX}${container}`;
+const toDebugContainerFilterValue = (container: string): string =>
+  `${DEBUG_FILTER_PREFIX}${container}`;
 const toContainerFilterValueForKind = (
   container: string,
   isInit: boolean,
@@ -231,8 +280,7 @@ const summarizeWorkloadSelection = (
     value.startsWith(INIT_FILTER_PREFIX)
   ).length;
   const containerCount = selectedValues.filter(
-    (value) =>
-      value.startsWith(CONTAINER_FILTER_PREFIX) || value.startsWith(DEBUG_FILTER_PREFIX)
+    (value) => value.startsWith(CONTAINER_FILTER_PREFIX) || value.startsWith(DEBUG_FILTER_PREFIX)
   ).length;
   const labels: string[] = [];
 
@@ -535,9 +583,10 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   );
   const visibleLogWarnings = useMemo(
     () =>
-      logWarnings.filter((warning) =>
-        warning.includes('pod/container targets') ||
-        warning.includes('global log stream cap')
+      mergeTargetLimitWarnings(
+        logWarnings.filter(
+          (warning) => warning.includes('per-tab limit') || warning.includes('global limit')
+        )
       ),
     [logWarnings]
   );
@@ -737,6 +786,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       backendLogSelection.container,
       backendLogSelection.includeEphemeral,
       backendLogSelection.includeInit,
+      backendLogSelection.selectedFilters,
       resolvedClusterId,
     ]
   );
@@ -2099,7 +2149,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     <div className="object-panel-tab-content">
       <div className="pod-logs-display">
         <div
-          className={`pod-logs-controls${activeFilterChips.length > 0 || visibleLogWarnings.length > 0 ? ' pod-logs-controls--with-active-filters' : ''}`}
+          className={`pod-logs-controls${activeFilterChips.length > 0 ? ' pod-logs-controls--with-active-filters' : ''}`}
         >
           <div className="pod-logs-controls-left">
             {/* Pod / container selector */}
@@ -2317,7 +2367,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
           </div>
         </div>
 
-        {(activeFilterChips.length > 0 || visibleLogWarnings.length > 0) && (
+        {activeFilterChips.length > 0 && (
           <div className="pod-logs-active-filters" aria-label="Active log filters">
             {activeFilterChips.length > 0 && (
               <button
@@ -2344,16 +2394,12 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                 </button>
               </span>
             ))}
-            {visibleLogWarnings.map((warning) => (
-              <span
-                key={warning}
-                className="pod-logs-filter-chip"
-                title={warning}
-                aria-label={warning}
-              >
-                <span className="pod-logs-filter-chip-label">{warning}</span>
-              </span>
-            ))}
+          </div>
+        )}
+
+        {visibleLogWarnings.length > 0 && (
+          <div className="pod-logs-warning-bar" aria-label="Log warnings">
+            {visibleLogWarnings.join(' ')}
           </div>
         )}
 

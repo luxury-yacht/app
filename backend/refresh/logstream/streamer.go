@@ -89,7 +89,11 @@ func (s *Streamer) tail(ctx context.Context, opts Options, limiterSession *Targe
 	if limiterSession != nil {
 		allowedKeys, globalSkipped := limiterSession.UpdateDesired(targetKeys(selectedTargets))
 		selectedTargets = filterTargetsByKeys(selectedTargets, allowedKeys)
-		warnings = append(warnings, buildGlobalTargetLimitWarnings(len(selectedTargets), len(selectedTargets)+globalSkipped)...)
+		globalLimit := config.LogStreamGlobalTargetLimit
+		if limiterSession != nil && limiterSession.limiter != nil {
+			globalLimit = limiterSession.limiter.total
+		}
+		warnings = append(warnings, buildGlobalTargetLimitWarnings(len(selectedTargets), len(selectedTargets)+globalSkipped, globalLimit)...)
 		if globalSkipped > 0 {
 			skippedTargets += globalSkipped
 			skipReason = "global target cap"
@@ -171,6 +175,10 @@ func (s *Streamer) run(
 		targetCancels   = make(map[string]context.CancelFunc)
 		currentWarnings = append([]string(nil), initialWarnings...)
 	)
+	var limiterNotify <-chan struct{}
+	if limiterSession != nil {
+		limiterNotify = limiterSession.Notify()
+	}
 
 	// Ensure all followContainer goroutines exit before run returns so callers can safely close channels.
 	defer func() {
@@ -247,7 +255,11 @@ func (s *Streamer) run(
 		if limiterSession != nil {
 			allowedKeys, globalSkipped := limiterSession.UpdateDesired(targetKeys(selectedTargets))
 			selectedTargets = filterTargetsByKeys(selectedTargets, allowedKeys)
-			warnings = append(warnings, buildGlobalTargetLimitWarnings(len(selectedTargets), perScopeCount)...)
+			globalLimit := config.LogStreamGlobalTargetLimit
+			if limiterSession != nil && limiterSession.limiter != nil {
+				globalLimit = limiterSession.limiter.total
+			}
+			warnings = append(warnings, buildGlobalTargetLimitWarnings(len(selectedTargets), perScopeCount, globalLimit)...)
 			_ = globalSkipped
 		}
 		desiredTargets := make(map[string]containerTarget, len(selectedTargets))
@@ -311,13 +323,19 @@ func (s *Streamer) run(
 	replacePodInventory(initialPods)
 
 	if strings.ToLower(opts.Kind) == "pod" {
-		<-ctx.Done()
-		mu.Lock()
-		for _, cancel := range targetCancels {
-			cancel()
+		for {
+			select {
+			case <-ctx.Done():
+				mu.Lock()
+				for _, cancel := range targetCancels {
+					cancel()
+				}
+				mu.Unlock()
+				return
+			case <-limiterNotify:
+				reconcileTargets()
+			}
 		}
-		mu.Unlock()
-		return
 	}
 
 	cronCache := make(map[string]bool)
@@ -354,7 +372,7 @@ func (s *Streamer) run(
 			continue
 		}
 
-		err = s.consumeWatch(ctx, watcher, opts, cronCache, updatePod, removePod)
+		err = s.consumeWatch(ctx, watcher, opts, cronCache, limiterNotify, reconcileTargets, updatePod, removePod)
 		watcher.Stop()
 		if err == nil || ctx.Err() != nil {
 			mu.Lock()
@@ -432,6 +450,8 @@ func (s *Streamer) consumeWatch(
 	watcher watch.Interface,
 	opts Options,
 	cronCache map[string]bool,
+	limiterNotify <-chan struct{},
+	reconcileTargets func(),
 	startPod func(*corev1.Pod),
 	stopPod func(string),
 ) error {
@@ -443,6 +463,10 @@ func (s *Streamer) consumeWatch(
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+		case <-limiterNotify:
+			if reconcileTargets != nil {
+				reconcileTargets()
+			}
 		case event, ok := <-result:
 			if !ok {
 				return errors.New("watch channel closed")

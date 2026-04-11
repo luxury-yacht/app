@@ -115,8 +115,14 @@ func BuildTargetLimitWarnings(selectedCount, totalCount int) []string {
 	if totalCount <= selectedCount || selectedCount <= 0 {
 		return nil
 	}
+	limit := GetPerScopeTargetLimit()
+	hiddenCount := totalCount - selectedCount
 	return []string{
-		fmt.Sprintf("Showing logs for %d of %d pod/container targets. Refine filters to view more.", selectedCount, totalCount),
+		fmt.Sprintf(
+			"Logs are hidden for %d containers because the per-tab limit of %d was reached. Using filters to reduce the number of containers may clear this message.",
+			hiddenCount,
+			limit,
+		),
 	}
 }
 

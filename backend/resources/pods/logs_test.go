@@ -905,7 +905,11 @@ func TestLogFetcherWarnsWhenTargetLimitExceeded(t *testing.T) {
 	require.Contains(
 		t,
 		resp.Warnings[0],
-		fmt.Sprintf("%d of %d", podlogs.DefaultPerScopeTargetLimit, containerCount),
+		fmt.Sprintf(
+			"Logs are hidden for %d containers because the per-tab limit of %d was reached.",
+			containerCount-podlogs.DefaultPerScopeTargetLimit,
+			podlogs.DefaultPerScopeTargetLimit,
+		),
 	)
 }
 
@@ -982,7 +986,11 @@ func TestLogFetcherUsesSharedCappedTargetSelection(t *testing.T) {
 	require.Contains(
 		t,
 		resp.Warnings[0],
-		fmt.Sprintf("%d of %d", podlogs.DefaultPerScopeTargetLimit, podCount),
+		fmt.Sprintf(
+			"Logs are hidden for %d containers because the per-tab limit of %d was reached.",
+			podCount-podlogs.DefaultPerScopeTargetLimit,
+			podlogs.DefaultPerScopeTargetLimit,
+		),
 	)
 }
 

@@ -52,8 +52,7 @@ vi.mock('@wailsjs/go/backend/App', () => ({
   SetTheme: (...args: unknown[]) => appMocks.SetTheme(...args),
   SetUseShortResourceNames: (...args: unknown[]) => appMocks.SetUseShortResourceNames(...args),
   SetLogBufferMaxSize: (...args: unknown[]) => appMocks.SetLogBufferMaxSize(...args),
-  SetLogTargetPerScopeLimit: (...args: unknown[]) =>
-    appMocks.SetLogTargetPerScopeLimit(...args),
+  SetLogTargetPerScopeLimit: (...args: unknown[]) => appMocks.SetLogTargetPerScopeLimit(...args),
   SetLogTargetGlobalLimit: (...args: unknown[]) => appMocks.SetLogTargetGlobalLimit(...args),
 }));
 
