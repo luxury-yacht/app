@@ -38,8 +38,13 @@ import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
 import { CaseSensitiveIcon } from '@shared/components/icons/MenuIcons';
 import './LogViewer.css';
 import { refreshOrchestrator } from '@/core/refresh/orchestrator';
+import { eventBus } from '@/core/events';
 import { setScopedDomainState, useRefreshScopedDomain } from '@/core/refresh/store';
-import { getLogBufferMaxSize } from '@/core/settings/appPreferences';
+import {
+  getLogApiTimestampFormat,
+  getLogApiTimestampUseLocalTimeZone,
+  getLogBufferMaxSize,
+} from '@/core/settings/appPreferences';
 import type { ObjectLogEntry } from '@/core/refresh/types';
 import type { types } from '@wailsjs/go/models';
 import {
@@ -60,6 +65,11 @@ import { containsAnsi, parseAnsiTextSegments, stripAnsi } from './ansi';
 import { buildStablePodColorMap } from './podColors';
 import { setLogStreamScopeParams } from './logStreamScopeParamsCache';
 import { INACTIVE_SCOPE } from '../constants';
+import {
+  DEFAULT_LOG_API_TIMESTAMP_FORMAT,
+  formatDefaultLogApiTimestamp,
+  formatLogApiTimestamp,
+} from '@/utils/logApiTimestampFormat';
 
 interface LogViewerProps {
   namespace: string;
@@ -96,42 +106,42 @@ const RAW_LOG_VIRTUALIZATION_OVERSCAN = 10;
 const RAW_LOG_ESTIMATE_ROW_HEIGHT = 26;
 const RAW_LOG_VERTICAL_PADDING_PX = 16;
 
-// Truncate RFC3339Nano timestamps to millisecond precision for display
-const formatTimestamp = (timestamp: string): string => {
-  const match = timestamp.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})\.(\d+)(.*)$/);
-  if (match) {
-    const [, dateTime, nanos, rest] = match;
-    const millis = nanos.substring(0, 3).padEnd(3, '0');
-    return `${dateTime}.${millis}${rest}`;
-  }
-  return timestamp;
-};
-
 const formatTimestampForMode = (
   timestamp: string,
-  mode: 'hidden' | 'default' | 'short' | 'localized'
+  mode: 'hidden' | 'default' | 'short' | 'localized',
+  apiTimestampFormat: string,
+  useLocalTimeZone: boolean
 ): string => {
   if (!timestamp || mode === 'hidden') {
     return '';
   }
   switch (mode) {
     case 'default':
-      return formatTimestamp(timestamp);
+      return formatLogApiTimestamp(timestamp, apiTimestampFormat, useLocalTimeZone);
     case 'short': {
       const parsed = new Date(timestamp);
       if (Number.isNaN(parsed.getTime())) {
-        return formatTimestamp(timestamp);
+        return formatDefaultLogApiTimestamp(timestamp, useLocalTimeZone);
       }
-      const hours = String(parsed.getHours()).padStart(2, '0');
-      const minutes = String(parsed.getMinutes()).padStart(2, '0');
-      const seconds = String(parsed.getSeconds()).padStart(2, '0');
-      const millis = String(parsed.getMilliseconds()).padStart(3, '0');
+      const hours = String(useLocalTimeZone ? parsed.getHours() : parsed.getUTCHours()).padStart(
+        2,
+        '0'
+      );
+      const minutes = String(
+        useLocalTimeZone ? parsed.getMinutes() : parsed.getUTCMinutes()
+      ).padStart(2, '0');
+      const seconds = String(
+        useLocalTimeZone ? parsed.getSeconds() : parsed.getUTCSeconds()
+      ).padStart(2, '0');
+      const millis = String(
+        useLocalTimeZone ? parsed.getMilliseconds() : parsed.getUTCMilliseconds()
+      ).padStart(3, '0');
       return `${hours}:${minutes}:${seconds}.${millis}`;
     }
     case 'localized': {
       const parsed = new Date(timestamp);
       if (Number.isNaN(parsed.getTime())) {
-        return formatTimestamp(timestamp);
+        return formatDefaultLogApiTimestamp(timestamp, useLocalTimeZone);
       }
       return parsed.toLocaleString([], {
         hour12: false,
@@ -141,10 +151,11 @@ const formatTimestampForMode = (
         hour: '2-digit',
         minute: '2-digit',
         second: '2-digit',
+        timeZone: useLocalTimeZone ? undefined : 'UTC',
       });
     }
     default:
-      return formatTimestamp(timestamp);
+      return formatLogApiTimestamp(timestamp, DEFAULT_LOG_API_TIMESTAMP_FORMAT, useLocalTimeZone);
   }
 };
 
@@ -394,6 +405,11 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     const cached = getLogViewerPrefs(panelId);
     return cached ? applyLogViewerPrefs(initialLogViewerState, cached) : initialLogViewerState;
   });
+  const [apiTimestampFormat, setApiTimestampFormatState] = React.useState<string>(() =>
+    getLogApiTimestampFormat()
+  );
+  const [apiTimestampUseLocalTimeZone, setApiTimestampUseLocalTimeZoneState] =
+    React.useState<boolean>(() => getLogApiTimestampUseLocalTimeZone());
 
   // Destructure commonly used state for readability
   const {
@@ -467,6 +483,16 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   // from fighting the restoration for the first paint, and makes the
   // restore-once behavior idempotent across state changes.
   const scrollRestoredRef = useRef<boolean>(false);
+
+  useEffect(() => eventBus.on('settings:log-api-timestamp-format', setApiTimestampFormatState), []);
+  useEffect(
+    () =>
+      eventBus.on(
+        'settings:log-api-timestamp-use-local-time-zone',
+        setApiTimestampUseLocalTimeZoneState
+      ),
+    []
+  );
 
   const resourceKindKey = resourceKind?.toLowerCase() ?? '';
   const isWorkload = resourceKindKey !== 'pod';
@@ -1328,7 +1354,12 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
               ? JSON.stringify(parsed, null, 2)
               : normalizedLine
             : normalizedLine;
-      const timestamp = formatTimestampForMode(entry.timestamp ?? '', timestampMode);
+      const timestamp = formatTimestampForMode(
+        entry.timestamp ?? '',
+        timestampMode,
+        apiTimestampFormat,
+        apiTimestampUseLocalTimeZone
+      );
       const timestampPrefix = timestamp ? `[${timestamp}] ` : '';
 
       if (isWorkload) {
@@ -1367,6 +1398,8 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     showAnsiColors,
     selectedContainerFilterCount,
     timestampMode,
+    apiTimestampFormat,
+    apiTimestampUseLocalTimeZone,
     emptyStateMessage,
   ]);
 
@@ -1895,7 +1928,12 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
         autoSizeMaxWidth: PARSED_TIMESTAMP_AUTOSIZE_MAX_WIDTH,
         render: (item: ParsedLogEntry) => {
           const formatted = item.timestamp
-            ? formatTimestampForMode(item.timestamp, timestampMode)
+            ? formatTimestampForMode(
+                item.timestamp,
+                timestampMode,
+                apiTimestampFormat,
+                apiTimestampUseLocalTimeZone
+              )
             : '-';
           if (!isWorkload) {
             return formatted;
@@ -2035,6 +2073,8 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     isWorkload,
     podColors,
     timestampMode,
+    apiTimestampFormat,
+    apiTimestampUseLocalTimeZone,
   ]);
 
   const parsedCsv = useMemo(() => {
@@ -2045,7 +2085,14 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     const getParsedColumnValue = (entry: ParsedLogEntry, key: string): string => {
       switch (key) {
         case '_timestamp':
-          return entry.timestamp ? formatTimestampForMode(entry.timestamp, timestampMode) : '-';
+          return entry.timestamp
+            ? formatTimestampForMode(
+                entry.timestamp,
+                timestampMode,
+                apiTimestampFormat,
+                apiTimestampUseLocalTimeZone
+              )
+            : '-';
         case '_pod':
           return entry.pod || '-';
         case '_container':
@@ -2063,7 +2110,14 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     );
 
     return [headerRow, ...dataRows].map((row) => row.join(',')).join('\n');
-  }, [isParsedView, parsedLogs, tableColumns, timestampMode]);
+  }, [
+    apiTimestampFormat,
+    apiTimestampUseLocalTimeZone,
+    isParsedView,
+    parsedLogs,
+    tableColumns,
+    timestampMode,
+  ]);
 
   const handleCopyLogs = useCallback(async () => {
     const text = displayMode === 'parsed' ? parsedCsv : displayLogs;

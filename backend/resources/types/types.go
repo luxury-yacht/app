@@ -38,6 +38,8 @@ type AppSettings struct {
 	LogBufferMaxSize                 int      `json:"logBufferMaxSize"`                 // Max log entries kept in memory per Logs tab (100-10000)
 	LogTargetPerScopeLimit           int      `json:"logTargetPerScopeLimit"`           // Max pod/container log targets per Logs tab (1-1000)
 	LogTargetGlobalLimit             int      `json:"logTargetGlobalLimit"`             // Max pod/container log targets across all log tabs (1-1000)
+	LogAPITimestampFormat            string   `json:"logApiTimestampFormat"`            // Day.js format for the Kubernetes API timestamp shown in pod logs
+	LogAPITimestampUseLocalTimeZone  bool     `json:"logApiTimestampUseLocalTimeZone"`  // Render the Kubernetes API timestamp in the user's local timezone instead of UTC
 	GridTablePersistenceMode         string   `json:"gridTablePersistenceMode"`         // "shared" or "namespaced"
 	DefaultObjectPanelPosition       string   `json:"defaultObjectPanelPosition"`       // "right", "bottom", or "floating"
 	ObjectPanelDockedRightWidth      int      `json:"objectPanelDockedRightWidth"`      // Default width when docked right (px)

@@ -82,6 +82,8 @@ export interface AppEvents {
   'settings:theme': string;
   'settings:metrics-interval': number;
   'settings:log-buffer-size': number;
+  'settings:log-api-timestamp-format': string;
+  'settings:log-api-timestamp-use-local-time-zone': boolean;
   'settings:log-target-per-scope-limit': number;
   'settings:log-target-global-limit': number;
   'settings:palette-tint': {

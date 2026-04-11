@@ -91,6 +91,8 @@ func TestAppSaveAndLoadAppSettingsRoundTrip(t *testing.T) {
 		LogBufferMaxSize:                 2500,
 		LogTargetPerScopeLimit:           144,
 		LogTargetGlobalLimit:             180,
+		LogAPITimestampFormat:            "HH:mm:ss.SSS",
+		LogAPITimestampUseLocalTimeZone:  true,
 		GridTablePersistenceMode:         "namespaced",
 		DefaultObjectPanelPosition:       "floating",
 		PaletteHueLight:                  200,
@@ -116,6 +118,8 @@ func TestAppSaveAndLoadAppSettingsRoundTrip(t *testing.T) {
 	require.Equal(t, 2500, app.appSettings.LogBufferMaxSize)
 	require.Equal(t, 144, app.appSettings.LogTargetPerScopeLimit)
 	require.Equal(t, 180, app.appSettings.LogTargetGlobalLimit)
+	require.Equal(t, "HH:mm:ss.SSS", app.appSettings.LogAPITimestampFormat)
+	require.True(t, app.appSettings.LogAPITimestampUseLocalTimeZone)
 	require.Equal(t, "namespaced", app.appSettings.GridTablePersistenceMode)
 	require.Equal(t, "floating", app.appSettings.DefaultObjectPanelPosition)
 	require.Equal(t, 200, app.appSettings.PaletteHueLight)
@@ -240,6 +244,8 @@ func TestAppSetLogBufferMaxSizePersistsAndClamps(t *testing.T) {
 	require.Equal(t, defaultLogBufferMaxSize, settings.LogBufferMaxSize)
 	require.Equal(t, defaultLogTargetPerScopeLimit, settings.LogTargetPerScopeLimit)
 	require.Equal(t, defaultLogTargetGlobalLimit, settings.LogTargetGlobalLimit)
+	require.Equal(t, defaultLogAPITimestampFormat, settings.LogAPITimestampFormat)
+	require.False(t, settings.LogAPITimestampUseLocalTimeZone)
 }
 
 func TestAppSetLogTargetPerScopeLimitPersistsAndClamps(t *testing.T) {
@@ -284,6 +290,45 @@ func TestAppSetLogTargetGlobalLimitPersistsAndClamps(t *testing.T) {
 
 	require.NoError(t, app.SetLogTargetGlobalLimit(999_999))
 	require.Equal(t, maxLogTargetGlobalLimit, app.appSettings.LogTargetGlobalLimit)
+}
+
+func TestAppSetLogAPITimestampFormatPersists(t *testing.T) {
+	setTestConfigEnv(t)
+
+	app := newTestAppWithDefaults(t)
+	require.NoError(t, app.SetLogAPITimestampFormat("HH:mm:ss.SSS"))
+	require.Equal(t, "HH:mm:ss.SSS", app.appSettings.LogAPITimestampFormat)
+
+	app.appSettings = nil
+	require.NoError(t, app.loadAppSettings())
+	require.Equal(t, "HH:mm:ss.SSS", app.appSettings.LogAPITimestampFormat)
+
+	entries := app.logger.GetEntries()
+	require.NotEmpty(t, entries)
+	require.Contains(t, entries[len(entries)-1].Message, "Log API timestamp format changed to: HH:mm:ss.SSS")
+
+	require.NoError(t, app.SetLogAPITimestampFormat(""))
+	require.Equal(t, defaultLogAPITimestampFormat, app.appSettings.LogAPITimestampFormat)
+}
+
+func TestAppSetLogAPITimestampUseLocalTimeZonePersists(t *testing.T) {
+	setTestConfigEnv(t)
+
+	app := newTestAppWithDefaults(t)
+	require.NoError(t, app.SetLogAPITimestampUseLocalTimeZone(true))
+	require.True(t, app.appSettings.LogAPITimestampUseLocalTimeZone)
+
+	app.appSettings = nil
+	require.NoError(t, app.loadAppSettings())
+	require.True(t, app.appSettings.LogAPITimestampUseLocalTimeZone)
+
+	entries := app.logger.GetEntries()
+	require.NotEmpty(t, entries)
+	require.Contains(
+		t,
+		entries[len(entries)-1].Message,
+		"Log API timestamp local timezone changed to: true",
+	)
 }
 
 func TestAppSetGridTablePersistenceModePersists(t *testing.T) {

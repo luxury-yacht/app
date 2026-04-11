@@ -474,6 +474,14 @@ export function SetLinkColor(arg1, arg2) {
   return window['go']['backend']['App']['SetLinkColor'](arg1, arg2);
 }
 
+export function SetLogAPITimestampFormat(arg1) {
+  return window['go']['backend']['App']['SetLogAPITimestampFormat'](arg1);
+}
+
+export function SetLogAPITimestampUseLocalTimeZone(arg1) {
+  return window['go']['backend']['App']['SetLogAPITimestampUseLocalTimeZone'](arg1);
+}
+
 export function SetLogBufferMaxSize(arg1) {
   return window['go']['backend']['App']['SetLogBufferMaxSize'](arg1);
 }

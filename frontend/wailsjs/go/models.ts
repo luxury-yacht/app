@@ -747,6 +747,8 @@ export namespace types {
 	    logBufferMaxSize: number;
 	    logTargetPerScopeLimit: number;
 	    logTargetGlobalLimit: number;
+	    logApiTimestampFormat: string;
+	    logApiTimestampUseLocalTimeZone: boolean;
 	    gridTablePersistenceMode: string;
 	    defaultObjectPanelPosition: string;
 	    objectPanelDockedRightWidth: number;
@@ -782,6 +784,8 @@ export namespace types {
 	        this.logBufferMaxSize = source["logBufferMaxSize"];
 	        this.logTargetPerScopeLimit = source["logTargetPerScopeLimit"];
 	        this.logTargetGlobalLimit = source["logTargetGlobalLimit"];
+	        this.logApiTimestampFormat = source["logApiTimestampFormat"];
+	        this.logApiTimestampUseLocalTimeZone = source["logApiTimestampUseLocalTimeZone"];
 	        this.gridTablePersistenceMode = source["gridTablePersistenceMode"];
 	        this.defaultObjectPanelPosition = source["defaultObjectPanelPosition"];
 	        this.objectPanelDockedRightWidth = source["objectPanelDockedRightWidth"];

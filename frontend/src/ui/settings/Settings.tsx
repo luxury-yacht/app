@@ -55,9 +55,13 @@ import {
 } from '@shared/components/tables/persistence/gridTablePersistenceSettings';
 import {
   getDefaultObjectPanelPosition,
+  getLogApiTimestampFormat,
+  getLogApiTimestampUseLocalTimeZone,
   setDefaultObjectPanelPosition,
   getObjectPanelLayoutDefaults,
   setObjectPanelLayoutDefaults,
+  setLogApiTimestampFormat,
+  setLogApiTimestampUseLocalTimeZone,
   getLogBufferMaxSize,
   setLogBufferMaxSize,
   getLogTargetGlobalLimit,
@@ -83,6 +87,7 @@ import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import SegmentedButton from '@shared/components/SegmentedButton';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import { getLogApiTimestampFormatValidationError } from '@/utils/logApiTimestampFormat';
 
 interface SettingsProps {
   onClose?: () => void;
@@ -118,6 +123,12 @@ function Settings({ onClose }: SettingsProps) {
   const [logBufferMaxSizeInput, setLogBufferMaxSizeInput] = useState<string>(() =>
     String(getLogBufferMaxSize())
   );
+  const [logApiTimestampFormatInput, setLogApiTimestampFormatInput] = useState<string>(() =>
+    getLogApiTimestampFormat()
+  );
+  const [logApiTimestampUseLocalTimeZone, setLogApiTimestampUseLocalTimeZoneState] =
+    useState<boolean>(() => getLogApiTimestampUseLocalTimeZone());
+  const [logApiTimestampFormatError, setLogApiTimestampFormatError] = useState<string | null>(null);
   const [logTargetPerScopeLimitInput, setLogTargetPerScopeLimitInput] = useState<string>(() =>
     String(getLogTargetPerScopeLimit())
   );
@@ -268,6 +279,9 @@ function Settings({ onClose }: SettingsProps) {
       const freshLayout = getObjectPanelLayoutDefaults();
       setPanelLayout(freshLayout);
       setLogBufferMaxSizeInput(String(getLogBufferMaxSize()));
+      setLogApiTimestampFormatInput(getLogApiTimestampFormat());
+      setLogApiTimestampUseLocalTimeZoneState(getLogApiTimestampUseLocalTimeZone());
+      setLogApiTimestampFormatError(null);
       setLogTargetPerScopeLimitInput(String(getLogTargetPerScopeLimit()));
       setLogTargetGlobalLimitInput(String(getLogTargetGlobalLimit()));
       setPanelLayoutInputs({
@@ -364,6 +378,18 @@ function Settings({ onClose }: SettingsProps) {
     const clamped = Math.max(LOG_TARGET_GLOBAL_MIN, Math.min(LOG_TARGET_GLOBAL_MAX, parsed));
     setLogTargetGlobalLimit(clamped);
     setLogTargetGlobalLimitInput(String(clamped));
+  };
+
+  const commitLogApiTimestampFormat = (raw: string) => {
+    const validationError = getLogApiTimestampFormatValidationError(raw);
+    if (validationError) {
+      setLogApiTimestampFormatError(validationError);
+      return;
+    }
+    const normalized = raw.trim();
+    setLogApiTimestampFormat(normalized);
+    setLogApiTimestampFormatInput(normalized);
+    setLogApiTimestampFormatError(null);
   };
 
   const handleObjectPanelPositionChange = (position: ObjectPanelPosition) => {
@@ -1809,6 +1835,73 @@ function Settings({ onClose }: SettingsProps) {
                 }
                 variant="dark"
               />
+            </div>
+            <div className="setting-item">
+              <label htmlFor="log-api-timestamp-local-time-zone">
+                <input
+                  type="checkbox"
+                  id="log-api-timestamp-local-time-zone"
+                  checked={logApiTimestampUseLocalTimeZone}
+                  onChange={(e) => {
+                    const enabled = e.target.checked;
+                    setLogApiTimestampUseLocalTimeZoneState(enabled);
+                    setLogApiTimestampUseLocalTimeZone(enabled);
+                  }}
+                />
+                Show API timestamps in the local time zone{' '}
+                <Tooltip
+                  content="Formats Kubernetes API timestamps using this machine's local timezone instead of UTC."
+                  variant="dark"
+                />
+              </label>
+            </div>
+            <div className="setting-item">
+              <div className="setting-item-inline">
+                <label htmlFor="log-api-timestamp-format">API timestamp format </label>
+                <input
+                  type="text"
+                  id="log-api-timestamp-format"
+                  value={logApiTimestampFormatInput}
+                  onChange={(e) => {
+                    setLogApiTimestampFormatInput(e.target.value);
+                    if (logApiTimestampFormatError) {
+                      setLogApiTimestampFormatError(null);
+                    }
+                  }}
+                  onBlur={(e) => commitLogApiTimestampFormat(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      commitLogApiTimestampFormat((e.target as HTMLInputElement).value);
+                    }
+                  }}
+                  className={logApiTimestampFormatError ? 'setting-input-error' : undefined}
+                  aria-invalid={logApiTimestampFormatError ? 'true' : 'false'}
+                />
+                <Tooltip
+                  content={
+                    <>
+                      <p>Day.js pattern used for the Kubernetes API timestamp shown in pod logs.</p>
+                      <p style={{ marginTop: '1em' }}>
+                        Examples: <code>YYYY-MM-DDTHH:mm:ss.SSS[Z]</code>, <code>HH:mm:ss.SSS</code>
+                        , <code>[ts=]HH:mm:ss.SSS</code>, <code>YYYY-MM-DD HH:mm:ss Z</code>
+                      </p>
+                      <p style={{ marginTop: '1em' }}>
+                        Wrap literal text in square brackets. Unsupported tokens are rejected.
+                      </p>
+                      <p style={{ marginTop: '1em' }}>
+                        Use <code>Z</code> or <code>ZZ</code> if you want the timezone offset shown
+                        in local-time mode.
+                      </p>
+                    </>
+                  }
+                  variant="dark"
+                />
+              </div>
+              {logApiTimestampFormatError ? (
+                <div className="setting-item-message setting-item-error" role="alert">
+                  {logApiTimestampFormatError}
+                </div>
+              ) : null}
             </div>
           </div>
         </div>

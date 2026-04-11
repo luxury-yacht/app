@@ -15,11 +15,18 @@ import {
   ApplyTheme,
   MatchThemeForCluster,
   SetLogBufferMaxSize as SetLogBufferMaxSizeBackend,
+  SetLogAPITimestampFormat as SetLogAPITimestampFormatBackend,
+  SetLogAPITimestampUseLocalTimeZone as SetLogAPITimestampUseLocalTimeZoneBackend,
   SetLogTargetGlobalLimit as SetLogTargetGlobalLimitBackend,
   SetLogTargetPerScopeLimit as SetLogTargetPerScopeLimitBackend,
 } from '@wailsjs/go/backend/App';
 import { types } from '@wailsjs/go/models';
 import { eventBus } from '@/core/events';
+import {
+  DEFAULT_LOG_API_TIMESTAMP_FORMAT,
+  getLogApiTimestampFormatValidationError,
+  normalizeLogApiTimestampFormat,
+} from '@/utils/logApiTimestampFormat';
 
 export type ThemePreference = 'light' | 'dark' | 'system';
 export type GridTablePersistenceMode = 'namespaced' | 'shared';
@@ -32,6 +39,8 @@ interface AppPreferences {
   refreshBackgroundClustersEnabled: boolean;
   metricsRefreshIntervalMs: number;
   logBufferMaxSize: number;
+  logApiTimestampFormat: string;
+  logApiTimestampUseLocalTimeZone: boolean;
   logTargetPerScopeLimit: number;
   logTargetGlobalLimit: number;
   gridTablePersistenceMode: GridTablePersistenceMode;
@@ -61,6 +70,8 @@ interface AppSettingsPayload {
   refreshBackgroundClustersEnabled?: boolean;
   metricsRefreshIntervalMs?: number;
   logBufferMaxSize?: number;
+  logApiTimestampFormat?: string;
+  logApiTimestampUseLocalTimeZone?: boolean;
   logTargetPerScopeLimit?: number;
   logTargetGlobalLimit?: number;
   gridTablePersistenceMode?: string;
@@ -110,6 +121,8 @@ const DEFAULT_PREFERENCES: AppPreferences = {
   refreshBackgroundClustersEnabled: true,
   metricsRefreshIntervalMs: DEFAULT_METRICS_REFRESH_INTERVAL_MS,
   logBufferMaxSize: LOG_BUFFER_DEFAULT_SIZE,
+  logApiTimestampFormat: DEFAULT_LOG_API_TIMESTAMP_FORMAT,
+  logApiTimestampUseLocalTimeZone: false,
   logTargetPerScopeLimit: LOG_TARGET_PER_SCOPE_DEFAULT,
   logTargetGlobalLimit: LOG_TARGET_GLOBAL_DEFAULT,
   paletteHueLight: 0,
@@ -217,6 +230,15 @@ const emitPreferenceChanges = (previous: AppPreferences, next: AppPreferences): 
   }
   if (previous.logBufferMaxSize !== next.logBufferMaxSize) {
     eventBus.emit('settings:log-buffer-size', next.logBufferMaxSize);
+  }
+  if (previous.logApiTimestampFormat !== next.logApiTimestampFormat) {
+    eventBus.emit('settings:log-api-timestamp-format', next.logApiTimestampFormat);
+  }
+  if (previous.logApiTimestampUseLocalTimeZone !== next.logApiTimestampUseLocalTimeZone) {
+    eventBus.emit(
+      'settings:log-api-timestamp-use-local-time-zone',
+      next.logApiTimestampUseLocalTimeZone
+    );
   }
   if (previous.logTargetPerScopeLimit !== next.logTargetPerScopeLimit) {
     eventBus.emit('settings:log-target-per-scope-limit', next.logTargetPerScopeLimit);
@@ -339,6 +361,10 @@ export const hydrateAppPreferences = async (options?: {
       DEFAULT_PREFERENCES.refreshBackgroundClustersEnabled,
     metricsRefreshIntervalMs: normalizeMetricsIntervalMs(backendSettings?.metricsRefreshIntervalMs),
     logBufferMaxSize: normalizeLogBufferMaxSize(backendSettings?.logBufferMaxSize),
+    logApiTimestampFormat: normalizeLogApiTimestampFormat(backendSettings?.logApiTimestampFormat),
+    logApiTimestampUseLocalTimeZone:
+      backendSettings?.logApiTimestampUseLocalTimeZone ??
+      DEFAULT_PREFERENCES.logApiTimestampUseLocalTimeZone,
     logTargetPerScopeLimit: normalizeLogTargetPerScopeLimit(
       backendSettings?.logTargetPerScopeLimit
     ),
@@ -409,6 +435,14 @@ export const getMetricsRefreshIntervalMs = (): number => {
 
 export const getLogBufferMaxSize = (): number => {
   return preferenceCache.logBufferMaxSize;
+};
+
+export const getLogApiTimestampFormat = (): string => {
+  return preferenceCache.logApiTimestampFormat;
+};
+
+export const getLogApiTimestampUseLocalTimeZone = (): boolean => {
+  return preferenceCache.logApiTimestampUseLocalTimeZone;
 };
 
 export const getLogTargetPerScopeLimit = (): number => {
@@ -555,6 +589,22 @@ const persistLogBufferMaxSize = async (size: number): Promise<void> => {
   await SetLogBufferMaxSizeBackend(size);
 };
 
+const persistLogApiTimestampFormat = async (format: string): Promise<void> => {
+  const runtimeApp = (window as any)?.go?.backend?.App;
+  if (!runtimeApp) {
+    return;
+  }
+  await SetLogAPITimestampFormatBackend(format);
+};
+
+const persistLogApiTimestampUseLocalTimeZone = async (enabled: boolean): Promise<void> => {
+  const runtimeApp = (window as any)?.go?.backend?.App;
+  if (!runtimeApp) {
+    return;
+  }
+  await SetLogAPITimestampUseLocalTimeZoneBackend(enabled);
+};
+
 const persistLogTargetPerScopeLimit = async (limit: number): Promise<void> => {
   const runtimeApp = (window as any)?.go?.backend?.App;
   if (!runtimeApp) {
@@ -577,6 +627,27 @@ export const setLogBufferMaxSize = (size: number): void => {
   updatePreferenceCache({ logBufferMaxSize: normalized });
   void persistLogBufferMaxSize(normalized).catch((error) => {
     console.error('Failed to persist log buffer max size:', error);
+  });
+};
+
+export const setLogApiTimestampFormat = (format: string): void => {
+  const validationError = getLogApiTimestampFormatValidationError(format);
+  if (validationError) {
+    throw new Error(validationError);
+  }
+  const normalized = format.trim();
+  hydrated = true;
+  updatePreferenceCache({ logApiTimestampFormat: normalized });
+  void persistLogApiTimestampFormat(normalized).catch((error) => {
+    console.error('Failed to persist log API timestamp format:', error);
+  });
+};
+
+export const setLogApiTimestampUseLocalTimeZone = (enabled: boolean): void => {
+  hydrated = true;
+  updatePreferenceCache({ logApiTimestampUseLocalTimeZone: enabled });
+  void persistLogApiTimestampUseLocalTimeZone(enabled).catch((error) => {
+    console.error('Failed to persist log API timestamp local timezone setting:', error);
   });
 };
 
