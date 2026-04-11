@@ -203,12 +203,20 @@
   --log-pod-color-4: #c084fc;
   --log-pod-color-5: #22d3ee;
   --log-pod-color-6: #a3e635;
-  --log-pod-color-7: #fbbf24;
-  --log-pod-color-8: #f472b6;
+  --log-pod-color-7: #f472b6;
+  --log-pod-color-8: #818cf8;
   --log-pod-color-9: #2dd4bf;
-  --log-pod-color-10: #a8a29e;
-  --log-pod-color-11: #94a3b8;
-  --log-pod-color-12: #fb7185;
+  --log-pod-color-10: #f87171;
+  --log-pod-color-11: #facc15;
+  --log-pod-color-12: #e879f9;
+  --log-pod-color-13: #a78bfa;
+  --log-pod-color-14: #5eead4;
+  --log-pod-color-15: #fdba74;
+  --log-pod-color-16: #fb7185;
+  --log-pod-color-17: #818cf8;
+  --log-pod-color-18: #4ade80;
+  --log-pod-color-19: #38bdf8;
+  --log-pod-color-20: #d946ef;
   --log-pod-color-fallback: var(--color-base-400);
 
   /* Dropdown */

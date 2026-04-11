@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { buildStablePodColorMap, hashPodColorIndex } from './podColors';
 
 describe('podColors', () => {
-  const palette = Array.from({ length: 12 }, (_, index) => `color-${index + 1}`);
+  const palette = Array.from({ length: 20 }, (_, index) => `color-${index + 1}`);
 
   it('keeps a pod on the same color when the visible pod set changes', () => {
     const first = buildStablePodColorMap(['api-7', 'api-1'], palette, 'fallback');
@@ -17,7 +17,7 @@ describe('podColors', () => {
     expect(first['api-1']).toBe(second['api-1']);
   });
 
-  it('wraps onto the existing 12-color palette deterministically', () => {
+  it('wraps onto the existing 20-color palette deterministically', () => {
     const podNames = Array.from({ length: 20 }, (_, index) => `pod-${index + 1}`);
     const colorMap = buildStablePodColorMap(podNames, palette, 'fallback');
 

@@ -989,6 +989,14 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       styles.getPropertyValue('--log-pod-color-10').trim(),
       styles.getPropertyValue('--log-pod-color-11').trim(),
       styles.getPropertyValue('--log-pod-color-12').trim(),
+      styles.getPropertyValue('--log-pod-color-13').trim(),
+      styles.getPropertyValue('--log-pod-color-14').trim(),
+      styles.getPropertyValue('--log-pod-color-15').trim(),
+      styles.getPropertyValue('--log-pod-color-16').trim(),
+      styles.getPropertyValue('--log-pod-color-17').trim(),
+      styles.getPropertyValue('--log-pod-color-18').trim(),
+      styles.getPropertyValue('--log-pod-color-19').trim(),
+      styles.getPropertyValue('--log-pod-color-20').trim(),
     ];
     const fallbackColor = styles.getPropertyValue('--log-pod-color-fallback').trim();
     return buildStablePodColorMap(availablePods, palette, fallbackColor);
