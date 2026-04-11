@@ -186,6 +186,42 @@ describe('Tooltip', () => {
     vi.useRealTimers();
   });
 
+  it('keeps an interactive tooltip open while moving from the trigger into the tooltip', async () => {
+    vi.useFakeTimers();
+
+    const { container, cleanup } = await renderTooltip({
+      content: 'Interactive tip',
+      interactive: true,
+    });
+
+    const trigger = container.querySelector('.tooltip-trigger') as HTMLElement;
+
+    await act(async () => {
+      trigger.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+      vi.advanceTimersByTime(250);
+    });
+
+    const tooltip = container.querySelector('.tooltip') as HTMLElement;
+    expect(tooltip).toBeTruthy();
+
+    await act(async () => {
+      trigger.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, relatedTarget: tooltip }));
+      vi.advanceTimersByTime(300);
+    });
+
+    expect(container.querySelector('.tooltip')).toBeTruthy();
+
+    await act(async () => {
+      tooltip.dispatchEvent(new MouseEvent('mouseout', { bubbles: true }));
+      vi.advanceTimersByTime(250);
+    });
+
+    expect(container.querySelector('.tooltip')).toBeFalsy();
+
+    cleanup();
+    vi.useRealTimers();
+  });
+
   // -----------------------------------------------------------------------
   // Click trigger toggles visibility
   // -----------------------------------------------------------------------
