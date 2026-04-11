@@ -214,6 +214,10 @@ export function GetLimitRange(arg1, arg2, arg3) {
   return window['go']['backend']['App']['GetLimitRange'](arg1, arg2, arg3);
 }
 
+export function GetLogScopeContainers(arg1, arg2) {
+  return window['go']['backend']['App']['GetLogScopeContainers'](arg1, arg2);
+}
+
 export function GetLogs() {
   return window['go']['backend']['App']['GetLogs']();
 }
@@ -472,6 +476,14 @@ export function SetLinkColor(arg1, arg2) {
 
 export function SetLogBufferMaxSize(arg1) {
   return window['go']['backend']['App']['SetLogBufferMaxSize'](arg1);
+}
+
+export function SetLogTargetGlobalLimit(arg1) {
+  return window['go']['backend']['App']['SetLogTargetGlobalLimit'](arg1);
+}
+
+export function SetLogTargetPerScopeLimit(arg1) {
+  return window['go']['backend']['App']['SetLogTargetPerScopeLimit'](arg1);
 }
 
 export function SetLogsPanelVisible(arg1) {

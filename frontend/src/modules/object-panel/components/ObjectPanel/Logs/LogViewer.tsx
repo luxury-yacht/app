@@ -6,7 +6,7 @@
  * Uses a reducer for state management.
  */
 import React, { useReducer, useEffect, useRef, useMemo, useCallback } from 'react';
-import { GetPodContainers, LogFetcher } from '@wailsjs/go/backend/App';
+import { GetLogScopeContainers, LogFetcher } from '@wailsjs/go/backend/App';
 import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
@@ -164,8 +164,28 @@ const formatParsedValue = (value: unknown): string => {
 };
 
 // Build a display label for a container, appending :init for init containers
-const formatContainerLabel = (container: string, isInit: boolean): string =>
-  isInit ? `${container}:init` : container;
+const formatContainerLabel = (container: string, isInit: boolean, isEphemeral: boolean): string =>
+  isInit ? `${container}:init` : isEphemeral ? `${container} (debug)` : container;
+
+const parseContainerLabel = (
+  label: string
+): { name: string; isInit: boolean; isEphemeral: boolean } => {
+  if (label.endsWith(':init')) {
+    return {
+      name: label.slice(0, -':init'.length),
+      isInit: true,
+      isEphemeral: false,
+    };
+  }
+  if (label.endsWith(' (debug)')) {
+    return {
+      name: label.slice(0, -' (debug)'.length),
+      isInit: false,
+      isEphemeral: true,
+    };
+  }
+  return { name: label, isInit: false, isEphemeral: false };
+};
 
 const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const escapeCsvCell = (value: string): string =>
@@ -174,16 +194,74 @@ const escapeCsvCell = (value: string): string =>
 const POD_FILTER_PREFIX = 'pod:';
 const INIT_FILTER_PREFIX = 'init:';
 const CONTAINER_FILTER_PREFIX = 'container:';
+const DEBUG_FILTER_PREFIX = 'debug:';
+const TARGET_LIMIT_WARNING_PATTERN =
+  /^Logs are hidden for (\d+) containers because the (per-tab|global) limit of (\d+) was reached\. Using filters to reduce the number of containers may clear this message\.$/;
+
+const mergeTargetLimitWarnings = (warnings: string[]): string[] => {
+  if (warnings.length < 2) {
+    return warnings;
+  }
+
+  const merged: string[] = [];
+  let perTabMatch: RegExpMatchArray | null = null;
+  let globalMatch: RegExpMatchArray | null = null;
+
+  for (const warning of warnings) {
+    const match = warning.match(TARGET_LIMIT_WARNING_PATTERN);
+    if (!match) {
+      merged.push(warning);
+      continue;
+    }
+    if (match[2] === 'per-tab') {
+      perTabMatch = match;
+      continue;
+    }
+    if (match[2] === 'global') {
+      globalMatch = match;
+      continue;
+    }
+    merged.push(warning);
+  }
+
+  if (perTabMatch && globalMatch) {
+    const hiddenCount = Number.parseInt(perTabMatch[1], 10) + Number.parseInt(globalMatch[1], 10);
+    merged.unshift(
+      `Logs are hidden for ${hiddenCount} containers because the per-tab limit of ${perTabMatch[3]} and global limit of ${globalMatch[3]} were reached. Using filters to reduce the number of containers may clear this message.`
+    );
+    return merged;
+  }
+
+  if (perTabMatch) {
+    merged.unshift(perTabMatch[0]);
+  }
+  if (globalMatch) {
+    merged.unshift(globalMatch[0]);
+  }
+
+  return merged;
+};
 
 const isInitContainerDisplayName = (container: string): boolean => container.endsWith(' (init)');
+const isDebugContainerDisplayName = (container: string): boolean => container.endsWith(' (debug)');
 
 const toPodFilterValue = (pod: string): string => `${POD_FILTER_PREFIX}${pod}`;
 const toInitContainerFilterValue = (container: string): string =>
   `${INIT_FILTER_PREFIX}${container}`;
 const toContainerFilterValue = (container: string): string =>
   `${CONTAINER_FILTER_PREFIX}${container}`;
-const toContainerFilterValueForKind = (container: string, isInit: boolean): string =>
-  isInit ? toInitContainerFilterValue(container) : toContainerFilterValue(container);
+const toDebugContainerFilterValue = (container: string): string =>
+  `${DEBUG_FILTER_PREFIX}${container}`;
+const toContainerFilterValueForKind = (
+  container: string,
+  isInit: boolean,
+  isEphemeral: boolean
+): string =>
+  isInit
+    ? toInitContainerFilterValue(container)
+    : isEphemeral
+      ? toDebugContainerFilterValue(container)
+      : toContainerFilterValue(container);
 
 const summarizeWorkloadSelection = (
   selectedValues: string[],
@@ -201,8 +279,8 @@ const summarizeWorkloadSelection = (
   const initContainerCount = selectedValues.filter((value) =>
     value.startsWith(INIT_FILTER_PREFIX)
   ).length;
-  const containerCount = selectedValues.filter((value) =>
-    value.startsWith(CONTAINER_FILTER_PREFIX)
+  const containerCount = selectedValues.filter(
+    (value) => value.startsWith(CONTAINER_FILTER_PREFIX) || value.startsWith(DEBUG_FILTER_PREFIX)
   ).length;
   const labels: string[] = [];
 
@@ -235,6 +313,9 @@ const formatSelectedFilterLabel = (
   }
   if (filterValue.startsWith(CONTAINER_FILTER_PREFIX)) {
     return filterValue.substring(CONTAINER_FILTER_PREFIX.length);
+  }
+  if (filterValue.startsWith(DEBUG_FILTER_PREFIX)) {
+    return `${filterValue.substring(DEBUG_FILTER_PREFIX.length)} (debug)`;
   }
   return filterValue;
 };
@@ -409,7 +490,17 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       ),
     [selectedFilters]
   );
-  const selectedContainerFilterCount = selectedInitContainers.size + selectedRegularContainers.size;
+  const selectedEphemeralContainers = useMemo(
+    () =>
+      new Set(
+        selectedFilters
+          .filter((filterValue) => filterValue.startsWith(DEBUG_FILTER_PREFIX))
+          .map((filterValue) => filterValue.substring(DEBUG_FILTER_PREFIX.length))
+      ),
+    [selectedFilters]
+  );
+  const selectedContainerFilterCount =
+    selectedInitContainers.size + selectedRegularContainers.size + selectedEphemeralContainers.size;
   const handleSelectPodFilter = useCallback(
     (pod: string) => {
       const preservedContainerFilters = selectedFilters.filter(
@@ -423,13 +514,16 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     [dispatch, selectedFilters]
   );
   const handleSelectContainerFilter = useCallback(
-    (container: string, isInit: boolean) => {
+    (container: string, isInit: boolean, isEphemeral: boolean) => {
       const preservedPodFilters = selectedFilters.filter((filterValue) =>
         filterValue.startsWith(POD_FILTER_PREFIX)
       );
       dispatch({
         type: 'SET_SELECTED_FILTERS',
-        payload: [...preservedPodFilters, toContainerFilterValueForKind(container, isInit)],
+        payload: [
+          ...preservedPodFilters,
+          toContainerFilterValueForKind(container, isInit, isEphemeral),
+        ],
       });
     },
     [dispatch, selectedFilters]
@@ -444,30 +538,13 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     [caseSensitiveMatches, highlightMatches, inverseMatches, regexMatches, textFilter]
   );
   const backendLogSelection = useMemo(() => {
-    const selectedContainerNames = [
-      ...Array.from(selectedInitContainers),
-      ...Array.from(selectedRegularContainers),
-    ];
-    if (isWorkload) {
-      return {
-        container: '',
-        includeInit: true,
-        includeEphemeral: true,
-      };
-    }
-    if (selectedContainerNames.length === 1) {
-      return {
-        container: selectedContainerNames[0],
-        includeInit: true,
-        includeEphemeral: true,
-      };
-    }
     return {
       container: '',
       includeInit: true,
       includeEphemeral: true,
+      selectedFilters,
     };
-  }, [isWorkload, selectedInitContainers, selectedRegularContainers]);
+  }, [selectedFilters]);
 
   // Reset state when scope changes - do this during render, not in an effect,
   // to avoid causing a re-render that would interrupt streaming startup
@@ -503,6 +580,15 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   const hasReceivedInitialLogs = snapshotSequence >= 2;
   const logWarnings = (logSnapshot.stats?.warnings ?? []).filter(
     (warning) => typeof warning === 'string' && warning.trim().length > 0
+  );
+  const visibleLogWarnings = useMemo(
+    () =>
+      mergeTargetLimitWarnings(
+        logWarnings.filter(
+          (warning) => warning.includes('per-tab limit') || warning.includes('global limit')
+        )
+      ),
+    [logWarnings]
   );
 
   const displayError = snapshotError && !isLogDataUnavailable(snapshotError) ? snapshotError : null;
@@ -639,6 +725,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
           workloadName: isWorkload ? resourceName : '',
           workloadKind: isWorkload ? resourceKindKey : '',
           podName: isWorkload ? '' : podName,
+          selectedFilters: backendLogSelection.selectedFilters,
           container: backendLogSelection.container,
           includeInit: backendLogSelection.includeInit,
           includeEphemeral: backendLogSelection.includeEphemeral,
@@ -699,6 +786,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       backendLogSelection.container,
       backendLogSelection.includeEphemeral,
       backendLogSelection.includeInit,
+      backendLogSelection.selectedFilters,
       resolvedClusterId,
     ]
   );
@@ -901,6 +989,14 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       styles.getPropertyValue('--log-pod-color-10').trim(),
       styles.getPropertyValue('--log-pod-color-11').trim(),
       styles.getPropertyValue('--log-pod-color-12').trim(),
+      styles.getPropertyValue('--log-pod-color-13').trim(),
+      styles.getPropertyValue('--log-pod-color-14').trim(),
+      styles.getPropertyValue('--log-pod-color-15').trim(),
+      styles.getPropertyValue('--log-pod-color-16').trim(),
+      styles.getPropertyValue('--log-pod-color-17').trim(),
+      styles.getPropertyValue('--log-pod-color-18').trim(),
+      styles.getPropertyValue('--log-pod-color-19').trim(),
+      styles.getPropertyValue('--log-pod-color-20').trim(),
     ];
     const fallbackColor = styles.getPropertyValue('--log-pod-color-fallback').trim();
     return buildStablePodColorMap(availablePods, palette, fallbackColor);
@@ -915,10 +1011,6 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
         .slice()
         .sort();
       dispatch({ type: 'SET_AVAILABLE_PODS', payload: pods });
-      const containersList = Array.from(
-        new Set(logEntries.map((entry) => entry.container).filter(Boolean))
-      ).sort();
-      dispatch({ type: 'SET_AVAILABLE_CONTAINERS', payload: containersList });
     }
   }, [isWorkload, logEntries, normalizedActivePods]);
 
@@ -940,29 +1032,14 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       );
     }
 
-    const initContainerOptions = isWorkload
-      ? Array.from(
-          new Set(
-            logEntries
-              .filter((entry) => entry.isInit && entry.container)
-              .map((entry) => entry.container)
-              .filter(Boolean)
-          )
-        )
-          .sort()
-          .map((container) => ({
-            value: toInitContainerFilterValue(container),
-            label: container,
-            group: 'Init Containers',
-          }))
-      : containers
-          .filter((container) => isInitContainerDisplayName(container))
-          .map((container) => ({
-            value: toInitContainerFilterValue(getActualContainerName(container)),
-            label: getActualContainerName(container),
-            group: 'Init Containers',
-          }))
-          .sort((left, right) => left.label.localeCompare(right.label));
+    const initContainerOptions = containers
+      .filter((container) => isInitContainerDisplayName(container))
+      .map((container) => ({
+        value: toInitContainerFilterValue(getActualContainerName(container)),
+        label: getActualContainerName(container),
+        group: 'Init Containers',
+      }))
+      .sort((left, right) => left.label.localeCompare(right.label));
 
     if (initContainerOptions.length > 0) {
       options.push({
@@ -974,29 +1051,26 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     }
     options.push(...initContainerOptions);
 
-    const regularContainerOptions = isWorkload
-      ? Array.from(
-          new Set(
-            logEntries
-              .filter((entry) => !entry.isInit && entry.container)
-              .map((entry) => entry.container)
-              .filter(Boolean)
-          )
-        )
-          .sort()
-          .map((container) => ({
-            value: toContainerFilterValue(container),
-            label: container,
-            group: 'Containers',
-          }))
-      : containers
-          .filter((container) => !isInitContainerDisplayName(container))
-          .map((container) => ({
-            value: toContainerFilterValue(getActualContainerName(container)),
-            label: container.endsWith(' (debug)') ? container : getActualContainerName(container),
-            group: 'Containers',
-          }))
-          .sort((left, right) => left.label.localeCompare(right.label));
+    const regularContainerOptions = containers
+      .filter(
+        (container) =>
+          !isInitContainerDisplayName(container) && !isDebugContainerDisplayName(container)
+      )
+      .map((container) => ({
+        value: toContainerFilterValue(getActualContainerName(container)),
+        label: container.endsWith(' (debug)') ? container : getActualContainerName(container),
+        group: 'Containers',
+      }))
+      .sort((left, right) => left.label.localeCompare(right.label));
+
+    const debugContainerOptions = containers
+      .filter((container) => isDebugContainerDisplayName(container))
+      .map((container) => ({
+        value: toDebugContainerFilterValue(getActualContainerName(container)),
+        label: container,
+        group: 'Containers',
+      }))
+      .sort((left, right) => left.label.localeCompare(right.label));
 
     if (isWorkload || containers.length > 0) {
       options.push({
@@ -1007,15 +1081,17 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       });
     }
     options.push(...regularContainerOptions);
+    options.push(...debugContainerOptions);
 
     return options;
-  }, [containers, isWorkload, logEntries, workloadPodsForSelector]);
+  }, [containers, isWorkload, workloadPodsForSelector]);
   const singlePodSelectableContainerCount = useMemo(
     () =>
       selectorOptions.filter(
         (option) =>
           option.value.startsWith(INIT_FILTER_PREFIX) ||
-          option.value.startsWith(CONTAINER_FILTER_PREFIX)
+          option.value.startsWith(CONTAINER_FILTER_PREFIX) ||
+          option.value.startsWith(DEBUG_FILTER_PREFIX)
       ).length,
     [selectorOptions]
   );
@@ -1162,6 +1238,14 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     if (selectedFilters.length === 0) {
       return;
     }
+    const hasSelectedContainerFilters = selectedFilters.some(
+      (filterValue) =>
+        filterValue.startsWith(INIT_FILTER_PREFIX) ||
+        filterValue.startsWith(CONTAINER_FILTER_PREFIX)
+    );
+    if (hasSelectedContainerFilters && containers.length === 0) {
+      return;
+    }
     const validFilterValues = new Set(
       selectorOptions.filter((option) => option.group !== 'header').map((option) => option.value)
     );
@@ -1174,7 +1258,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     if (nextSelectedFilters.length !== selectedFilters.length) {
       dispatch({ type: 'SET_SELECTED_FILTERS', payload: nextSelectedFilters });
     }
-  }, [selectedFilters, selectorOptions]);
+  }, [containers.length, selectedFilters, selectorOptions]);
 
   // Helper functions
   const unavailableLogMessage =
@@ -1248,7 +1332,11 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       const timestampPrefix = timestamp ? `[${timestamp}] ` : '';
 
       if (isWorkload) {
-        const containerLabel = formatContainerLabel(entry.container, entry.isInit);
+        const containerLabel = formatContainerLabel(
+          entry.container,
+          entry.isInit,
+          Boolean(entry.isEphemeral)
+        );
         const formatted = lineContent.trim()
           ? `[${entry.pod}/${containerLabel}] ${lineContent}`
           : lineContent;
@@ -1259,7 +1347,11 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
         selectedContainerFilterCount !== 1 &&
         !(selectedContainerFilterCount === 0 && singlePodSelectableContainerCount === 1)
       ) {
-        const containerLabel = formatContainerLabel(entry.container, entry.isInit);
+        const containerLabel = formatContainerLabel(
+          entry.container,
+          entry.isInit,
+          Boolean(entry.isEphemeral)
+        );
         const formatted = lineContent.trim() ? `[${containerLabel}] ${lineContent}` : lineContent;
         return timestampPrefix + formatted;
       }
@@ -1462,10 +1554,14 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                   className="pod-log-metadata-button pod-color-text"
                   style={{ '--pod-color': podColor } as React.CSSProperties}
                   onClick={() =>
-                    handleSelectContainerFilter(
-                      container.endsWith(':init') ? container.slice(0, -':init'.length) : container,
-                      container.endsWith(':init')
-                    )
+                    (() => {
+                      const parsedContainerLabel = parseContainerLabel(container);
+                      handleSelectContainerFilter(
+                        parsedContainerLabel.name,
+                        parsedContainerLabel.isInit,
+                        parsedContainerLabel.isEphemeral
+                      );
+                    })()
                   }
                   title={`Show only logs from container ${container}`}
                   aria-label={`Show only logs from container ${container}`}
@@ -1509,12 +1605,14 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                     type="button"
                     className="pod-log-metadata-button"
                     onClick={() =>
-                      handleSelectContainerFilter(
-                        containerLabel.endsWith(':init')
-                          ? containerLabel.slice(0, -':init'.length)
-                          : containerLabel,
-                        containerLabel.endsWith(':init')
-                      )
+                      (() => {
+                        const parsedContainerLabel = parseContainerLabel(containerLabel);
+                        handleSelectContainerFilter(
+                          parsedContainerLabel.name,
+                          parsedContainerLabel.isInit,
+                          parsedContainerLabel.isEphemeral
+                        );
+                      })()
                     }
                     title={`Show only logs from container ${containerLabel}`}
                     aria-label={`Show only logs from container ${containerLabel}`}
@@ -1560,25 +1658,29 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     };
   }, []);
 
-  // Fetch containers for single pod
+  // Fetch container inventory for the current log scope.
   useEffect(() => {
-    if (isWorkload || !namespace || !podName) return;
+    if (!logScope) {
+      dispatch({ type: 'SET_CONTAINERS', payload: [] });
+      dispatch({ type: 'SET_SELECTED_CONTAINER', payload: '' });
+      return;
+    }
 
     let isCancelled = false;
     const fetchContainers = async () => {
       try {
-        const containerList = await GetPodContainers(resolvedClusterId, namespace, podName);
+        const containerList = await GetLogScopeContainers(resolvedClusterId, logScope);
 
         if (isCancelled) return;
 
         if (!containerList || containerList.length === 0) {
           dispatch({ type: 'SET_CONTAINERS', payload: [] });
-          dispatch({ type: 'SET_SELECTED_CONTAINER', payload: '' });
+          dispatch({ type: 'SET_SELECTED_CONTAINER', payload: isWorkload ? '' : ALL_CONTAINERS });
           return;
         }
 
         dispatch({ type: 'SET_CONTAINERS', payload: containerList });
-        dispatch({ type: 'SET_SELECTED_CONTAINER', payload: ALL_CONTAINERS });
+        dispatch({ type: 'SET_SELECTED_CONTAINER', payload: isWorkload ? '' : ALL_CONTAINERS });
       } catch (err) {
         if (isCancelled) return;
         console.warn('Failed to fetch containers:', err);
@@ -1594,7 +1696,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     return () => {
       isCancelled = true;
     };
-  }, [namespace, podName, isWorkload, resolvedClusterId]);
+  }, [isWorkload, logScope, resolvedClusterId]);
 
   // --- Scroll position and tail-follow ---
   //
@@ -1864,10 +1966,14 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
             }
             onClick={(event) => {
               event.stopPropagation();
-              handleSelectContainerFilter(item.container!, Boolean(item.isInit));
+              handleSelectContainerFilter(
+                item.container!,
+                Boolean(item.isInit),
+                Boolean(item.isEphemeral)
+              );
             }}
-            title={`Show only logs from container ${formatContainerLabel(item.container, Boolean(item.isInit))}`}
-            aria-label={`Show only logs from container ${formatContainerLabel(item.container, Boolean(item.isInit))}`}
+            title={`Show only logs from container ${formatContainerLabel(item.container, Boolean(item.isInit), Boolean(item.isEphemeral))}`}
+            aria-label={`Show only logs from container ${formatContainerLabel(item.container, Boolean(item.isInit), Boolean(item.isEphemeral))}`}
           >
             {item.container}
           </button>
@@ -2271,15 +2377,17 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
 
         {activeFilterChips.length > 0 && (
           <div className="pod-logs-active-filters" aria-label="Active log filters">
-            <button
-              type="button"
-              className="pod-logs-filter-chip pod-logs-filter-chip--clear-all"
-              onClick={handleClearAllFilters}
-              aria-label="Clear all filters"
-              title="Clear all filters"
-            >
-              Clear all
-            </button>
+            {activeFilterChips.length > 0 && (
+              <button
+                type="button"
+                className="pod-logs-filter-chip pod-logs-filter-chip--clear-all"
+                onClick={handleClearAllFilters}
+                aria-label="Clear all filters"
+                title="Clear all filters"
+              >
+                Clear all
+              </button>
+            )}
             {activeFilterChips.map((chip) => (
               <span key={chip.key} className="pod-logs-filter-chip">
                 <span className="pod-logs-filter-chip-label">{chip.label}</span>
@@ -2294,6 +2402,12 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                 </button>
               </span>
             ))}
+          </div>
+        )}
+
+        {visibleLogWarnings.length > 0 && (
+          <div className="pod-logs-warning-bar" aria-label="Log warnings">
+            {visibleLogWarnings.join(' ')}
           </div>
         )}
 

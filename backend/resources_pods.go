@@ -44,6 +44,15 @@ func (a *App) GetPodContainers(clusterID, namespace, podName string) ([]string, 
 	return service.PodContainers(namespace, podName)
 }
 
+func (a *App) GetLogScopeContainers(clusterID, scope string) ([]string, error) {
+	deps, _, err := a.resolveClusterDependencies(clusterID)
+	if err != nil {
+		return nil, err
+	}
+	service := pods.NewService(deps)
+	return service.LogScopeContainers(scope)
+}
+
 // CreateDebugContainer adds an ephemeral debug container to a running pod.
 func (a *App) CreateDebugContainer(clusterID string, req DebugContainerRequest) (*DebugContainerResponse, error) {
 	deps, _, err := a.resolveClusterDependencies(clusterID)

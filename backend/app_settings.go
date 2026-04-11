@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/internal/podlogs"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -74,7 +75,9 @@ type settingsRefresh struct {
 
 // settingsLogs captures user-configurable pod-logs settings.
 type settingsLogs struct {
-	BufferMaxSize int `json:"bufferMaxSize"` // Max log entries kept in memory per Logs tab
+	BufferMaxSize       int `json:"bufferMaxSize"`       // Max log entries kept in memory per Logs tab
+	TargetPerScopeLimit int `json:"targetPerScopeLimit"` // Max pod/container targets per Logs tab
+	TargetGlobalLimit   int `json:"targetGlobalLimit"`   // Max pod/container targets across all Logs tabs
 }
 
 // Log buffer size bounds. The frontend clamps to the same range in
@@ -84,6 +87,12 @@ const (
 	defaultLogBufferMaxSize = 1000
 	minLogBufferMaxSize     = 100
 	maxLogBufferMaxSize     = 10000
+	defaultLogTargetPerScopeLimit = podlogs.DefaultPerScopeTargetLimit
+	minLogTargetPerScopeLimit     = podlogs.MinPerScopeTargetLimit
+	maxLogTargetPerScopeLimit     = podlogs.MaxPerScopeTargetLimit
+	defaultLogTargetGlobalLimit   = config.LogStreamGlobalTargetLimit
+	minLogTargetGlobalLimit       = 1
+	maxLogTargetGlobalLimit       = 1000
 )
 
 func clampLogBufferMaxSize(size int) int {
@@ -94,6 +103,26 @@ func clampLogBufferMaxSize(size int) int {
 		return maxLogBufferMaxSize
 	}
 	return size
+}
+
+func clampLogTargetPerScopeLimit(limit int) int {
+	if limit < minLogTargetPerScopeLimit {
+		return minLogTargetPerScopeLimit
+	}
+	if limit > maxLogTargetPerScopeLimit {
+		return maxLogTargetPerScopeLimit
+	}
+	return limit
+}
+
+func clampLogTargetGlobalLimit(limit int) int {
+	if limit < minLogTargetGlobalLimit {
+		return minLogTargetGlobalLimit
+	}
+	if limit > maxLogTargetGlobalLimit {
+		return maxLogTargetGlobalLimit
+	}
+	return limit
 }
 
 // settingsKubeconfig captures user-configurable kubeconfig settings.
@@ -118,7 +147,11 @@ func defaultSettingsFile() *settingsFile {
 		Preferences: settingsPreferences{
 			Theme:   "system",
 			Refresh: &settingsRefresh{Auto: true, Background: true, MetricsIntervalMs: defaultMetricsIntervalMs()},
-			Logs:    &settingsLogs{BufferMaxSize: defaultLogBufferMaxSize},
+			Logs: &settingsLogs{
+				BufferMaxSize:       defaultLogBufferMaxSize,
+				TargetPerScopeLimit: defaultLogTargetPerScopeLimit,
+				TargetGlobalLimit:   defaultLogTargetGlobalLimit,
+			},
 
 			GridTablePersistenceMode: "shared",
 			// DefaultObjectPanelPosition and object panel layout defaults are
@@ -150,7 +183,11 @@ func normalizeSettingsFile(settings *settingsFile) *settingsFile {
 		settings.Preferences.Refresh.MetricsIntervalMs = defaultMetricsIntervalMs()
 	}
 	if settings.Preferences.Logs == nil {
-		settings.Preferences.Logs = &settingsLogs{BufferMaxSize: defaultLogBufferMaxSize}
+		settings.Preferences.Logs = &settingsLogs{
+			BufferMaxSize:       defaultLogBufferMaxSize,
+			TargetPerScopeLimit: defaultLogTargetPerScopeLimit,
+			TargetGlobalLimit:   defaultLogTargetGlobalLimit,
+		}
 	}
 	// A zero value from an older settings file means "use the default",
 	// not "truncate every buffer to 0" — clamp after the fact so existing
@@ -159,6 +196,16 @@ func normalizeSettingsFile(settings *settingsFile) *settingsFile {
 		settings.Preferences.Logs.BufferMaxSize = defaultLogBufferMaxSize
 	} else {
 		settings.Preferences.Logs.BufferMaxSize = clampLogBufferMaxSize(settings.Preferences.Logs.BufferMaxSize)
+	}
+	if settings.Preferences.Logs.TargetPerScopeLimit <= 0 {
+		settings.Preferences.Logs.TargetPerScopeLimit = defaultLogTargetPerScopeLimit
+	} else {
+		settings.Preferences.Logs.TargetPerScopeLimit = clampLogTargetPerScopeLimit(settings.Preferences.Logs.TargetPerScopeLimit)
+	}
+	if settings.Preferences.Logs.TargetGlobalLimit <= 0 {
+		settings.Preferences.Logs.TargetGlobalLimit = defaultLogTargetGlobalLimit
+	} else {
+		settings.Preferences.Logs.TargetGlobalLimit = clampLogTargetGlobalLimit(settings.Preferences.Logs.TargetGlobalLimit)
 	}
 	if settings.Preferences.GridTablePersistenceMode == "" {
 		settings.Preferences.GridTablePersistenceMode = "shared"
@@ -331,6 +378,8 @@ func getDefaultAppSettings() *AppSettings {
 		RefreshBackgroundClustersEnabled: true,
 		MetricsRefreshIntervalMs:         defaultMetricsIntervalMs(),
 		LogBufferMaxSize:                 defaultLogBufferMaxSize,
+		LogTargetPerScopeLimit:           defaultLogTargetPerScopeLimit,
+		LogTargetGlobalLimit:             defaultLogTargetGlobalLimit,
 		GridTablePersistenceMode:         "shared",
 	}
 }
@@ -342,8 +391,16 @@ func (a *App) loadAppSettings() error {
 	}
 
 	logBufferMaxSize := defaultLogBufferMaxSize
+	logTargetPerScopeLimit := defaultLogTargetPerScopeLimit
+	logTargetGlobalLimit := defaultLogTargetGlobalLimit
 	if settings.Preferences.Logs != nil && settings.Preferences.Logs.BufferMaxSize > 0 {
 		logBufferMaxSize = clampLogBufferMaxSize(settings.Preferences.Logs.BufferMaxSize)
+	}
+	if settings.Preferences.Logs != nil && settings.Preferences.Logs.TargetPerScopeLimit > 0 {
+		logTargetPerScopeLimit = clampLogTargetPerScopeLimit(settings.Preferences.Logs.TargetPerScopeLimit)
+	}
+	if settings.Preferences.Logs != nil && settings.Preferences.Logs.TargetGlobalLimit > 0 {
+		logTargetGlobalLimit = clampLogTargetGlobalLimit(settings.Preferences.Logs.TargetGlobalLimit)
 	}
 
 	a.appSettings = &AppSettings{
@@ -354,6 +411,8 @@ func (a *App) loadAppSettings() error {
 		RefreshBackgroundClustersEnabled: settings.Preferences.Refresh.Background,
 		MetricsRefreshIntervalMs:         settings.Preferences.Refresh.MetricsIntervalMs,
 		LogBufferMaxSize:                 logBufferMaxSize,
+		LogTargetPerScopeLimit:           logTargetPerScopeLimit,
+		LogTargetGlobalLimit:             logTargetGlobalLimit,
 		GridTablePersistenceMode:         settings.Preferences.GridTablePersistenceMode,
 		DefaultObjectPanelPosition:       settings.Preferences.DefaultObjectPanelPosition,
 		ObjectPanelDockedRightWidth:      settings.Preferences.ObjectPanelDockedRightWidth,
@@ -373,6 +432,10 @@ func (a *App) loadAppSettings() error {
 		LinkColorLight:                   settings.Preferences.LinkColorLight,
 		LinkColorDark:                    settings.Preferences.LinkColorDark,
 		Themes:                           settings.Preferences.Themes,
+	}
+	podlogs.SetPerScopeTargetLimit(logTargetPerScopeLimit)
+	if a.logTargetLimiter != nil {
+		a.logTargetLimiter.SetLimit(logTargetGlobalLimit)
 	}
 	return nil
 }
@@ -399,6 +462,8 @@ func (a *App) saveAppSettings() error {
 		settings.Preferences.Logs = &settingsLogs{}
 	}
 	settings.Preferences.Logs.BufferMaxSize = clampLogBufferMaxSize(a.appSettings.LogBufferMaxSize)
+	settings.Preferences.Logs.TargetPerScopeLimit = clampLogTargetPerScopeLimit(a.appSettings.LogTargetPerScopeLimit)
+	settings.Preferences.Logs.TargetGlobalLimit = clampLogTargetGlobalLimit(a.appSettings.LogTargetGlobalLimit)
 	settings.Preferences.GridTablePersistenceMode = a.appSettings.GridTablePersistenceMode
 	settings.Preferences.DefaultObjectPanelPosition = a.appSettings.DefaultObjectPanelPosition
 	settings.Preferences.ObjectPanelDockedRightWidth = a.appSettings.ObjectPanelDockedRightWidth
@@ -570,6 +635,42 @@ func (a *App) SetLogBufferMaxSize(size int) error {
 	clamped := clampLogBufferMaxSize(size)
 	a.logger.Info(fmt.Sprintf("Log buffer max size changed to: %d", clamped), "Settings")
 	a.appSettings.LogBufferMaxSize = clamped
+	return a.saveAppSettings()
+}
+
+func (a *App) SetLogTargetPerScopeLimit(limit int) error {
+	a.settingsMu.Lock()
+	defer a.settingsMu.Unlock()
+
+	if a.appSettings == nil {
+		if err := a.loadAppSettings(); err != nil {
+			return err
+		}
+	}
+
+	clamped := clampLogTargetPerScopeLimit(limit)
+	a.logger.Info(fmt.Sprintf("Log target per-scope limit changed to: %d", clamped), "Settings")
+	a.appSettings.LogTargetPerScopeLimit = clamped
+	podlogs.SetPerScopeTargetLimit(clamped)
+	return a.saveAppSettings()
+}
+
+func (a *App) SetLogTargetGlobalLimit(limit int) error {
+	a.settingsMu.Lock()
+	defer a.settingsMu.Unlock()
+
+	if a.appSettings == nil {
+		if err := a.loadAppSettings(); err != nil {
+			return err
+		}
+	}
+
+	clamped := clampLogTargetGlobalLimit(limit)
+	a.logger.Info(fmt.Sprintf("Log target global limit changed to: %d", clamped), "Settings")
+	a.appSettings.LogTargetGlobalLimit = clamped
+	if a.logTargetLimiter != nil {
+		a.logTargetLimiter.SetLimit(clamped)
+	}
 	return a.saveAppSettings()
 }
 

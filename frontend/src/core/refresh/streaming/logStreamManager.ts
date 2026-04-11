@@ -29,6 +29,7 @@ interface StreamEventPayload {
     container?: string;
     line?: string;
     isInit?: boolean;
+    isEphemeral?: boolean;
   }>;
   warnings?: string[];
   error?: string;
@@ -138,6 +139,9 @@ class LogStreamConnection {
       const streamParams = getLogStreamScopeParams(this.scope);
       if (streamParams?.container) {
         url.searchParams.set('container', streamParams.container);
+      }
+      for (const selectedFilter of streamParams?.selectedFilters ?? []) {
+        url.searchParams.append('selectedFilter', selectedFilter);
       }
 
       const eventSource = new EventSource(url.toString());
@@ -382,6 +386,7 @@ export class LogStreamManager {
       container: entry.container ?? '',
       line: entry.line ?? '',
       isInit: Boolean(entry.isInit),
+      isEphemeral: Boolean(entry.isEphemeral),
       _seq: ++this.seqCounter,
     }));
 

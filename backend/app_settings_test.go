@@ -88,6 +88,9 @@ func TestAppSaveAndLoadAppSettingsRoundTrip(t *testing.T) {
 		AutoRefreshEnabled:               false,
 		RefreshBackgroundClustersEnabled: false,
 		MetricsRefreshIntervalMs:         7000,
+		LogBufferMaxSize:                 2500,
+		LogTargetPerScopeLimit:           144,
+		LogTargetGlobalLimit:             180,
 		GridTablePersistenceMode:         "namespaced",
 		DefaultObjectPanelPosition:       "floating",
 		PaletteHueLight:                  200,
@@ -110,6 +113,9 @@ func TestAppSaveAndLoadAppSettingsRoundTrip(t *testing.T) {
 	require.False(t, app.appSettings.AutoRefreshEnabled)
 	require.False(t, app.appSettings.RefreshBackgroundClustersEnabled)
 	require.Equal(t, 7000, app.appSettings.MetricsRefreshIntervalMs)
+	require.Equal(t, 2500, app.appSettings.LogBufferMaxSize)
+	require.Equal(t, 144, app.appSettings.LogTargetPerScopeLimit)
+	require.Equal(t, 180, app.appSettings.LogTargetGlobalLimit)
 	require.Equal(t, "namespaced", app.appSettings.GridTablePersistenceMode)
 	require.Equal(t, "floating", app.appSettings.DefaultObjectPanelPosition)
 	require.Equal(t, 200, app.appSettings.PaletteHueLight)
@@ -232,6 +238,52 @@ func TestAppSetLogBufferMaxSizePersistsAndClamps(t *testing.T) {
 	settings, err := freshApp.GetAppSettings()
 	require.NoError(t, err)
 	require.Equal(t, defaultLogBufferMaxSize, settings.LogBufferMaxSize)
+	require.Equal(t, defaultLogTargetPerScopeLimit, settings.LogTargetPerScopeLimit)
+	require.Equal(t, defaultLogTargetGlobalLimit, settings.LogTargetGlobalLimit)
+}
+
+func TestAppSetLogTargetPerScopeLimitPersistsAndClamps(t *testing.T) {
+	setTestConfigEnv(t)
+
+	app := newTestAppWithDefaults(t)
+	require.NoError(t, app.SetLogTargetPerScopeLimit(144))
+	require.Equal(t, 144, app.appSettings.LogTargetPerScopeLimit)
+
+	app.appSettings = nil
+	require.NoError(t, app.loadAppSettings())
+	require.Equal(t, 144, app.appSettings.LogTargetPerScopeLimit)
+
+	entries := app.logger.GetEntries()
+	require.NotEmpty(t, entries)
+	require.Contains(t, entries[len(entries)-1].Message, "Log target per-scope limit changed to: 144")
+
+	require.NoError(t, app.SetLogTargetPerScopeLimit(0))
+	require.Equal(t, minLogTargetPerScopeLimit, app.appSettings.LogTargetPerScopeLimit)
+
+	require.NoError(t, app.SetLogTargetPerScopeLimit(999_999))
+	require.Equal(t, maxLogTargetPerScopeLimit, app.appSettings.LogTargetPerScopeLimit)
+}
+
+func TestAppSetLogTargetGlobalLimitPersistsAndClamps(t *testing.T) {
+	setTestConfigEnv(t)
+
+	app := newTestAppWithDefaults(t)
+	require.NoError(t, app.SetLogTargetGlobalLimit(180))
+	require.Equal(t, 180, app.appSettings.LogTargetGlobalLimit)
+
+	app.appSettings = nil
+	require.NoError(t, app.loadAppSettings())
+	require.Equal(t, 180, app.appSettings.LogTargetGlobalLimit)
+
+	entries := app.logger.GetEntries()
+	require.NotEmpty(t, entries)
+	require.Contains(t, entries[len(entries)-1].Message, "Log target global limit changed to: 180")
+
+	require.NoError(t, app.SetLogTargetGlobalLimit(0))
+	require.Equal(t, minLogTargetGlobalLimit, app.appSettings.LogTargetGlobalLimit)
+
+	require.NoError(t, app.SetLogTargetGlobalLimit(999_999))
+	require.Equal(t, maxLogTargetGlobalLimit, app.appSettings.LogTargetGlobalLimit)
 }
 
 func TestAppSetGridTablePersistenceModePersists(t *testing.T) {

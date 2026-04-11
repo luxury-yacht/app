@@ -39,15 +39,25 @@ func NewStreamer(client kubernetes.Interface, logger Logger, recorder *telemetry
 }
 
 type containerTarget struct {
-	namespace string
-	pod       string
-	container string
-	isInit    bool
-	state     *containerState
+	namespace   string
+	pod         string
+	container   string
+	isInit      bool
+	isEphemeral bool
+	state       *containerState
 }
 
 func (t containerTarget) key() string {
-	return fmt.Sprintf("%s/%s/%s", t.namespace, t.pod, t.container)
+	return fmt.Sprintf(
+		"%s/%s/%s",
+		t.namespace,
+		t.pod,
+		podlogs.ContainerRef{
+			Name:        t.container,
+			IsInit:      t.isInit,
+			IsEphemeral: t.isEphemeral,
+		}.SelectionValue(),
+	)
 }
 
 // tail gathers the initial log history for the given options and prepares container state.
@@ -66,8 +76,9 @@ func (s *Streamer) tail(ctx context.Context, opts Options, limiterSession *Targe
 			IncludeInit:      opts.IncludeInit,
 			IncludeEphemeral: opts.IncludeEphemeral,
 			StateFilter:      opts.ContainerState,
+			Selection:        opts.Selection,
 		},
-		podlogs.DefaultPerScopeTargetLimit,
+		podlogs.GetPerScopeTargetLimit(),
 	)
 	warnings := podlogs.BuildTargetLimitWarnings(len(selectedTargets), totalTargets)
 	skippedTargets := totalTargets - len(selectedTargets)
@@ -78,7 +89,11 @@ func (s *Streamer) tail(ctx context.Context, opts Options, limiterSession *Targe
 	if limiterSession != nil {
 		allowedKeys, globalSkipped := limiterSession.UpdateDesired(targetKeys(selectedTargets))
 		selectedTargets = filterTargetsByKeys(selectedTargets, allowedKeys)
-		warnings = append(warnings, buildGlobalTargetLimitWarnings(len(selectedTargets), len(selectedTargets)+globalSkipped)...)
+		globalLimit := config.LogStreamGlobalTargetLimit
+		if limiterSession != nil && limiterSession.limiter != nil {
+			globalLimit = limiterSession.limiter.total
+		}
+		warnings = append(warnings, buildGlobalTargetLimitWarnings(len(selectedTargets), len(selectedTargets)+globalSkipped, globalLimit)...)
 		if globalSkipped > 0 {
 			skippedTargets += globalSkipped
 			skipReason = "global target cap"
@@ -160,6 +175,10 @@ func (s *Streamer) run(
 		targetCancels   = make(map[string]context.CancelFunc)
 		currentWarnings = append([]string(nil), initialWarnings...)
 	)
+	var limiterNotify <-chan struct{}
+	if limiterSession != nil {
+		limiterNotify = limiterSession.Notify()
+	}
 
 	// Ensure all followContainer goroutines exit before run returns so callers can safely close channels.
 	defer func() {
@@ -222,19 +241,25 @@ func (s *Streamer) run(
 			IncludeInit:      opts.IncludeInit,
 			IncludeEphemeral: opts.IncludeEphemeral,
 			StateFilter:      opts.ContainerState,
-		}, podlogs.DefaultPerScopeTargetLimit)
+			Selection:        opts.Selection,
+		}, podlogs.GetPerScopeTargetLimit())
 		perScopeCount := len(selectedTargets)
 		totalTargets := countTargets(pods, podlogs.ContainerSelectionOptions{
 			Filter:           opts.Container,
 			IncludeInit:      opts.IncludeInit,
 			IncludeEphemeral: opts.IncludeEphemeral,
 			StateFilter:      opts.ContainerState,
+			Selection:        opts.Selection,
 		})
 		warnings := podlogs.BuildTargetLimitWarnings(perScopeCount, totalTargets)
 		if limiterSession != nil {
 			allowedKeys, globalSkipped := limiterSession.UpdateDesired(targetKeys(selectedTargets))
 			selectedTargets = filterTargetsByKeys(selectedTargets, allowedKeys)
-			warnings = append(warnings, buildGlobalTargetLimitWarnings(len(selectedTargets), perScopeCount)...)
+			globalLimit := config.LogStreamGlobalTargetLimit
+			if limiterSession != nil && limiterSession.limiter != nil {
+				globalLimit = limiterSession.limiter.total
+			}
+			warnings = append(warnings, buildGlobalTargetLimitWarnings(len(selectedTargets), perScopeCount, globalLimit)...)
 			_ = globalSkipped
 		}
 		desiredTargets := make(map[string]containerTarget, len(selectedTargets))
@@ -298,13 +323,19 @@ func (s *Streamer) run(
 	replacePodInventory(initialPods)
 
 	if strings.ToLower(opts.Kind) == "pod" {
-		<-ctx.Done()
-		mu.Lock()
-		for _, cancel := range targetCancels {
-			cancel()
+		for {
+			select {
+			case <-ctx.Done():
+				mu.Lock()
+				for _, cancel := range targetCancels {
+					cancel()
+				}
+				mu.Unlock()
+				return
+			case <-limiterNotify:
+				reconcileTargets()
+			}
 		}
-		mu.Unlock()
-		return
 	}
 
 	cronCache := make(map[string]bool)
@@ -341,7 +372,7 @@ func (s *Streamer) run(
 			continue
 		}
 
-		err = s.consumeWatch(ctx, watcher, opts, cronCache, updatePod, removePod)
+		err = s.consumeWatch(ctx, watcher, opts, cronCache, limiterNotify, reconcileTargets, updatePod, removePod)
 		watcher.Stop()
 		if err == nil || ctx.Err() != nil {
 			mu.Lock()
@@ -419,6 +450,8 @@ func (s *Streamer) consumeWatch(
 	watcher watch.Interface,
 	opts Options,
 	cronCache map[string]bool,
+	limiterNotify <-chan struct{},
+	reconcileTargets func(),
 	startPod func(*corev1.Pod),
 	stopPod func(string),
 ) error {
@@ -430,6 +463,10 @@ func (s *Streamer) consumeWatch(
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+		case <-limiterNotify:
+			if reconcileTargets != nil {
+				reconcileTargets()
+			}
 		case event, ok := <-result:
 			if !ok {
 				return errors.New("watch channel closed")
@@ -451,6 +488,9 @@ func (s *Streamer) consumeWatch(
 				}
 			}
 			if opts.PodFilter != "" && pod.Name != opts.PodFilter {
+				continue
+			}
+			if !opts.Selection.MatchPod(pod.Name) {
 				continue
 			}
 			switch event.Type {
@@ -540,11 +580,12 @@ func (s *Streamer) followContainer(ctx context.Context, target containerTarget, 
 				continue
 			}
 			entry := Entry{
-				Timestamp: timestamp,
-				Pod:       target.pod,
-				Container: target.container,
-				Line:      content,
-				IsInit:    target.isInit,
+				Timestamp:   timestamp,
+				Pod:         target.pod,
+				Container:   target.container,
+				Line:        content,
+				IsInit:      target.isInit,
+				IsEphemeral: target.isEphemeral,
 			}
 
 			if timestamp != "" {
@@ -659,7 +700,7 @@ func (s *Streamer) listPods(ctx context.Context, opts Options) ([]*corev1.Pod, s
 		if err != nil {
 			return nil, "", fmt.Errorf("logstream: get pod %s/%s: %w", opts.Namespace, opts.Name, err)
 		}
-		return filterPodsByName([]*corev1.Pod{pod}, opts.PodFilter, opts.PodNameFilter), "", nil
+		return filterPodsByName([]*corev1.Pod{pod}, opts.PodFilter, opts.PodNameFilter, opts.Selection), "", nil
 	case "deployment", "replicaset", "statefulset", "daemonset":
 		selector, err := s.selectorForWorkload(ctx, opts)
 		if err != nil {
@@ -669,14 +710,14 @@ func (s *Streamer) listPods(ctx context.Context, opts Options) ([]*corev1.Pod, s
 		if err != nil {
 			return nil, "", fmt.Errorf("logstream: list pods for %s %s/%s: %w", kind, opts.Namespace, opts.Name, err)
 		}
-		return filterPodsByName(podPointers(pods.Items), opts.PodFilter, opts.PodNameFilter), selector, nil
+		return filterPodsByName(podPointers(pods.Items), opts.PodFilter, opts.PodNameFilter, opts.Selection), selector, nil
 	case "job":
 		selector := labels.Set{"job-name": opts.Name}.AsSelector().String()
 		pods, err := s.client.CoreV1().Pods(opts.Namespace).List(ctx, metav1.ListOptions{LabelSelector: selector})
 		if err != nil {
 			return nil, "", fmt.Errorf("logstream: list pods for job %s/%s: %w", opts.Namespace, opts.Name, err)
 		}
-		return filterPodsByName(podPointers(pods.Items), opts.PodFilter, opts.PodNameFilter), selector, nil
+		return filterPodsByName(podPointers(pods.Items), opts.PodFilter, opts.PodNameFilter, opts.Selection), selector, nil
 	case "cronjob":
 		jobs, err := s.client.BatchV1().Jobs(opts.Namespace).List(ctx, metav1.ListOptions{})
 		if err != nil {
@@ -700,18 +741,23 @@ func (s *Streamer) listPods(ctx context.Context, opts Options) ([]*corev1.Pod, s
 		}
 		// Return empty selector so the pod watch sees pods from future Jobs.
 		// consumeWatch filters by CronJob ownership via podBelongsToCronJob.
-		return filterPodsByName(podPointers(list.Items), opts.PodFilter, opts.PodNameFilter), "", nil
+		return filterPodsByName(podPointers(list.Items), opts.PodFilter, opts.PodNameFilter, opts.Selection), "", nil
 	default:
 		return nil, "", fmt.Errorf("logstream: unsupported workload kind %q", opts.Kind)
 	}
 }
 
-func filterPodsByName(pods []*corev1.Pod, exactFilter string, podNameFilter podlogs.PodNameFilter) []*corev1.Pod {
+func filterPodsByName(
+	pods []*corev1.Pod,
+	exactFilter string,
+	podNameFilter podlogs.PodNameFilter,
+	selection podlogs.ScopeSelection,
+) []*corev1.Pod {
 	exactFilter = strings.TrimSpace(exactFilter)
 	if len(pods) == 0 {
 		return pods
 	}
-	if exactFilter == "" && podNameFilter.IsZero() {
+	if exactFilter == "" && podNameFilter.IsZero() && selection.IsZero() {
 		return pods
 	}
 	filtered := make([]*corev1.Pod, 0, len(pods))
@@ -723,6 +769,9 @@ func filterPodsByName(pods []*corev1.Pod, exactFilter string, podNameFilter podl
 			continue
 		}
 		if !podNameFilter.IsZero() && !podNameFilter.Match(pod.Name) {
+			continue
+		}
+		if !selection.MatchPod(pod.Name) {
 			continue
 		}
 		filtered = append(filtered, pod)
@@ -774,11 +823,12 @@ func buildTargetsFromPod(pod *corev1.Pod, options podlogs.ContainerSelectionOpti
 	var targets []containerTarget
 	for _, containerRef := range podlogs.EnumerateContainersWithOptions(pod, options) {
 		targets = append(targets, containerTarget{
-			namespace: pod.Namespace,
-			pod:       pod.Name,
-			container: containerRef.Name,
-			isInit:    containerRef.IsInit,
-			state:     &containerState{},
+			namespace:   pod.Namespace,
+			pod:         pod.Name,
+			container:   containerRef.Name,
+			isInit:      containerRef.IsInit,
+			isEphemeral: containerRef.IsEphemeral,
+			state:       &containerState{},
 		})
 	}
 	return targets
@@ -793,10 +843,11 @@ func selectRuntimeTargets(
 	runtimeTargets := make([]containerTarget, 0, len(selectedTargets))
 	for _, selected := range selectedTargets {
 		runtimeTargets = append(runtimeTargets, containerTarget{
-			namespace: selected.Namespace,
-			pod:       selected.PodName,
-			container: selected.Container.Name,
-			isInit:    selected.Container.IsInit,
+			namespace:   selected.Namespace,
+			pod:         selected.PodName,
+			container:   selected.Container.Name,
+			isInit:      selected.Container.IsInit,
+			isEphemeral: selected.Container.IsEphemeral,
 		})
 	}
 	return runtimeTargets, totalTargets
@@ -880,11 +931,12 @@ func (s *Streamer) fetchContainerTail(ctx context.Context, target containerTarge
 			continue
 		}
 		entries = append(entries, Entry{
-			Timestamp: timestamp,
-			Pod:       target.pod,
-			Container: target.container,
-			Line:      content,
-			IsInit:    target.isInit,
+			Timestamp:   timestamp,
+			Pod:         target.pod,
+			Container:   target.container,
+			Line:        content,
+			IsInit:      target.isInit,
+			IsEphemeral: target.isEphemeral,
 		})
 	}
 	if err := scanner.Err(); err != nil && !errors.Is(err, io.EOF) {

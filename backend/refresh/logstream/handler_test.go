@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/podlogs"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -54,6 +55,7 @@ func TestParseOptions(t *testing.T) {
 				"pod":              []string{"web-123"},
 				"podInclude":       []string{"^web-"},
 				"podExclude":       []string{"-canary$"},
+				"selectedFilter":   []string{"pod:web-2", "debug:debug-abc"},
 				"container":        []string{"app"},
 				"includeInit":      []string{"false"},
 				"includeEphemeral": []string{"false"},
@@ -153,6 +155,13 @@ func TestParseOptions(t *testing.T) {
 		}
 		if opts.Container != tt.container {
 			t.Fatalf("%s: expected container %q, got %q", tt.name, tt.container, opts.Container)
+		}
+		if tt.name == "custom tail and filters" {
+			require.Equal(t, []string{"pod:web-2", "debug:debug-abc"}, opts.SelectedFilters)
+			require.True(t, opts.Selection.MatchPod("web-2"))
+			require.False(t, opts.Selection.MatchPod("web-1"))
+			require.True(t, opts.Selection.MatchContainer(podlogs.ContainerRef{Name: "debug-abc", IsEphemeral: true}))
+			require.False(t, opts.Selection.MatchContainer(podlogs.ContainerRef{Name: "app"}))
 		}
 		expectedIncludeInit := tt.includeInit
 		if _, ok := tt.query["includeInit"]; !ok {
@@ -478,12 +487,12 @@ func TestServeHTTPEmitsErrorEvent(t *testing.T) {
 
 func TestComposeStreamWarningsDistinguishesTransportDrops(t *testing.T) {
 	warnings := composeStreamWarnings(
-		[]string{"Showing logs for 24 of 25 pod/container targets. Refine filters to view more."},
+		[]string{"Logs are hidden for 1 containers because the per-tab limit of 24 was reached. Using filters to reduce the number of containers may clear this message."},
 		true,
 	)
 
 	require.Equal(t, []string{
-		"Showing logs for 24 of 25 pod/container targets. Refine filters to view more.",
+		"Logs are hidden for 1 containers because the per-tab limit of 24 was reached. Using filters to reduce the number of containers may clear this message.",
 		transportDropWarning,
 	}, warnings)
 

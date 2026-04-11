@@ -3,11 +3,42 @@ package podlogs
 import (
 	"fmt"
 	"sort"
+	"sync/atomic"
 
 	corev1 "k8s.io/api/core/v1"
 )
 
-const DefaultPerScopeTargetLimit = 24
+const DefaultPerScopeTargetLimit = 100
+const (
+	MinPerScopeTargetLimit = 1
+	MaxPerScopeTargetLimit = 1000
+)
+
+var currentPerScopeTargetLimit atomic.Int64
+
+func init() {
+	currentPerScopeTargetLimit.Store(DefaultPerScopeTargetLimit)
+}
+
+func clampPerScopeTargetLimit(limit int) int {
+	if limit < MinPerScopeTargetLimit {
+		return MinPerScopeTargetLimit
+	}
+	if limit > MaxPerScopeTargetLimit {
+		return MaxPerScopeTargetLimit
+	}
+	return limit
+}
+
+func GetPerScopeTargetLimit() int {
+	return clampPerScopeTargetLimit(int(currentPerScopeTargetLimit.Load()))
+}
+
+func SetPerScopeTargetLimit(limit int) int {
+	clamped := clampPerScopeTargetLimit(limit)
+	currentPerScopeTargetLimit.Store(int64(clamped))
+	return clamped
+}
 
 type SelectedTarget struct {
 	Namespace string
@@ -16,7 +47,7 @@ type SelectedTarget struct {
 }
 
 func (t SelectedTarget) Key() string {
-	return t.Namespace + "/" + t.PodName + "/" + t.Container.Name
+	return t.Namespace + "/" + t.PodName + "/" + t.Container.SelectionValue()
 }
 
 func SelectTargets(
@@ -29,7 +60,7 @@ func SelectTargets(
 	}
 
 	if limit <= 0 {
-		limit = DefaultPerScopeTargetLimit
+		limit = GetPerScopeTargetLimit()
 	}
 
 	type rankedTarget struct {
@@ -84,8 +115,14 @@ func BuildTargetLimitWarnings(selectedCount, totalCount int) []string {
 	if totalCount <= selectedCount || selectedCount <= 0 {
 		return nil
 	}
+	limit := GetPerScopeTargetLimit()
+	hiddenCount := totalCount - selectedCount
 	return []string{
-		fmt.Sprintf("Showing logs for %d of %d pod/container targets. Refine filters to view more.", selectedCount, totalCount),
+		fmt.Sprintf(
+			"Logs are hidden for %d containers because the per-tab limit of %d was reached. Using filters to reduce the number of containers may clear this message.",
+			hiddenCount,
+			limit,
+		),
 	}
 }
 

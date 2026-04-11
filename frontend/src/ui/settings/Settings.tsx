@@ -60,9 +60,19 @@ import {
   setObjectPanelLayoutDefaults,
   getLogBufferMaxSize,
   setLogBufferMaxSize,
+  getLogTargetGlobalLimit,
+  getLogTargetPerScopeLimit,
+  setLogTargetGlobalLimit,
+  setLogTargetPerScopeLimit,
   LOG_BUFFER_MIN_SIZE,
   LOG_BUFFER_MAX_SIZE,
   LOG_BUFFER_DEFAULT_SIZE,
+  LOG_TARGET_GLOBAL_DEFAULT,
+  LOG_TARGET_GLOBAL_MAX,
+  LOG_TARGET_GLOBAL_MIN,
+  LOG_TARGET_PER_SCOPE_DEFAULT,
+  LOG_TARGET_PER_SCOPE_MAX,
+  LOG_TARGET_PER_SCOPE_MIN,
   type ObjectPanelPosition,
   type ObjectPanelLayoutDefaults,
 } from '@core/settings/appPreferences';
@@ -107,6 +117,12 @@ function Settings({ onClose }: SettingsProps) {
   // cache on blur/commit, where the normalizer clamps the final value.
   const [logBufferMaxSizeInput, setLogBufferMaxSizeInput] = useState<string>(() =>
     String(getLogBufferMaxSize())
+  );
+  const [logTargetPerScopeLimitInput, setLogTargetPerScopeLimitInput] = useState<string>(() =>
+    String(getLogTargetPerScopeLimit())
+  );
+  const [logTargetGlobalLimitInput, setLogTargetGlobalLimitInput] = useState<string>(() =>
+    String(getLogTargetGlobalLimit())
   );
   // Track kubeconfig search paths for the settings panel.
   const [kubeconfigPaths, setKubeconfigPaths] = useState<string[]>([]);
@@ -251,6 +267,9 @@ function Settings({ onClose }: SettingsProps) {
       setObjectPanelPositionState(getDefaultObjectPanelPosition());
       const freshLayout = getObjectPanelLayoutDefaults();
       setPanelLayout(freshLayout);
+      setLogBufferMaxSizeInput(String(getLogBufferMaxSize()));
+      setLogTargetPerScopeLimitInput(String(getLogTargetPerScopeLimit()));
+      setLogTargetGlobalLimitInput(String(getLogTargetGlobalLimit()));
       setPanelLayoutInputs({
         dockedRightWidth: String(freshLayout.dockedRightWidth),
         dockedBottomHeight: String(freshLayout.dockedBottomHeight),
@@ -323,6 +342,28 @@ function Settings({ onClose }: SettingsProps) {
     const clamped = Math.max(LOG_BUFFER_MIN_SIZE, Math.min(LOG_BUFFER_MAX_SIZE, parsed));
     setLogBufferMaxSize(clamped);
     setLogBufferMaxSizeInput(String(clamped));
+  };
+
+  const commitLogTargetPerScopeLimit = (raw: string) => {
+    const parsed = Number.parseInt(raw, 10);
+    if (!Number.isFinite(parsed)) {
+      setLogTargetPerScopeLimitInput(String(getLogTargetPerScopeLimit()));
+      return;
+    }
+    const clamped = Math.max(LOG_TARGET_PER_SCOPE_MIN, Math.min(LOG_TARGET_PER_SCOPE_MAX, parsed));
+    setLogTargetPerScopeLimit(clamped);
+    setLogTargetPerScopeLimitInput(String(clamped));
+  };
+
+  const commitLogTargetGlobalLimit = (raw: string) => {
+    const parsed = Number.parseInt(raw, 10);
+    if (!Number.isFinite(parsed)) {
+      setLogTargetGlobalLimitInput(String(getLogTargetGlobalLimit()));
+      return;
+    }
+    const clamped = Math.max(LOG_TARGET_GLOBAL_MIN, Math.min(LOG_TARGET_GLOBAL_MAX, parsed));
+    setLogTargetGlobalLimit(clamped);
+    setLogTargetGlobalLimitInput(String(clamped));
   };
 
   const handleObjectPanelPositionChange = (position: ObjectPanelPosition) => {
@@ -1698,6 +1739,71 @@ function Settings({ onClose }: SettingsProps) {
                     <p style={{ marginTop: '1em' }}>
                       Range {LOG_BUFFER_MIN_SIZE}-{LOG_BUFFER_MAX_SIZE}, default{' '}
                       {LOG_BUFFER_DEFAULT_SIZE}
+                    </p>
+                  </>
+                }
+                variant="dark"
+              />
+            </div>
+            <div className="setting-item setting-item-inline">
+              <label htmlFor="log-target-per-scope-limit">Max log targets per tab </label>
+              <input
+                type="number"
+                id="log-target-per-scope-limit"
+                min={LOG_TARGET_PER_SCOPE_MIN}
+                max={LOG_TARGET_PER_SCOPE_MAX}
+                step={1}
+                value={logTargetPerScopeLimitInput}
+                onChange={(e) => setLogTargetPerScopeLimitInput(e.target.value)}
+                onBlur={(e) => commitLogTargetPerScopeLimit(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    commitLogTargetPerScopeLimit((e.target as HTMLInputElement).value);
+                  }
+                }}
+              />
+              <Tooltip
+                content={
+                  <>
+                    <p>
+                      Max pod/container log targets a single Logs tab can stream or fetch at once.
+                    </p>
+                    <p style={{ marginTop: '1em' }}>
+                      Range {LOG_TARGET_PER_SCOPE_MIN}-{LOG_TARGET_PER_SCOPE_MAX}, default{' '}
+                      {LOG_TARGET_PER_SCOPE_DEFAULT}
+                    </p>
+                  </>
+                }
+                variant="dark"
+              />
+            </div>
+            <div className="setting-item setting-item-inline">
+              <label htmlFor="log-target-global-limit">Max log targets across tabs </label>
+              <input
+                type="number"
+                id="log-target-global-limit"
+                min={LOG_TARGET_GLOBAL_MIN}
+                max={LOG_TARGET_GLOBAL_MAX}
+                step={1}
+                value={logTargetGlobalLimitInput}
+                onChange={(e) => setLogTargetGlobalLimitInput(e.target.value)}
+                onBlur={(e) => commitLogTargetGlobalLimit(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    commitLogTargetGlobalLimit((e.target as HTMLInputElement).value);
+                  }
+                }}
+              />
+              <Tooltip
+                content={
+                  <>
+                    <p>
+                      Max pod/container log targets shared across all open Logs tabs. Lower values
+                      reduce overall load but can cap large workloads sooner.
+                    </p>
+                    <p style={{ marginTop: '1em' }}>
+                      Range {LOG_TARGET_GLOBAL_MIN}-{LOG_TARGET_GLOBAL_MAX}, default{' '}
+                      {LOG_TARGET_GLOBAL_DEFAULT}
                     </p>
                   </>
                 }

@@ -15,6 +15,8 @@ import {
   ApplyTheme,
   MatchThemeForCluster,
   SetLogBufferMaxSize as SetLogBufferMaxSizeBackend,
+  SetLogTargetGlobalLimit as SetLogTargetGlobalLimitBackend,
+  SetLogTargetPerScopeLimit as SetLogTargetPerScopeLimitBackend,
 } from '@wailsjs/go/backend/App';
 import { types } from '@wailsjs/go/models';
 import { eventBus } from '@/core/events';
@@ -30,6 +32,8 @@ interface AppPreferences {
   refreshBackgroundClustersEnabled: boolean;
   metricsRefreshIntervalMs: number;
   logBufferMaxSize: number;
+  logTargetPerScopeLimit: number;
+  logTargetGlobalLimit: number;
   gridTablePersistenceMode: GridTablePersistenceMode;
   defaultObjectPanelPosition: ObjectPanelPosition;
   objectPanelDockedRightWidth: number;
@@ -57,6 +61,8 @@ interface AppSettingsPayload {
   refreshBackgroundClustersEnabled?: boolean;
   metricsRefreshIntervalMs?: number;
   logBufferMaxSize?: number;
+  logTargetPerScopeLimit?: number;
+  logTargetGlobalLimit?: number;
   gridTablePersistenceMode?: string;
   defaultObjectPanelPosition?: string;
   objectPanelDockedRightWidth?: number;
@@ -90,6 +96,12 @@ const DEFAULT_METRICS_REFRESH_INTERVAL_MS = 5000;
 export const LOG_BUFFER_MIN_SIZE = 100;
 export const LOG_BUFFER_MAX_SIZE = 10000;
 export const LOG_BUFFER_DEFAULT_SIZE = 1000;
+export const LOG_TARGET_PER_SCOPE_MIN = 1;
+export const LOG_TARGET_PER_SCOPE_MAX = 1000;
+export const LOG_TARGET_PER_SCOPE_DEFAULT = 100;
+export const LOG_TARGET_GLOBAL_MIN = 1;
+export const LOG_TARGET_GLOBAL_MAX = 1000;
+export const LOG_TARGET_GLOBAL_DEFAULT = 200;
 
 const DEFAULT_PREFERENCES: AppPreferences = {
   theme: 'system',
@@ -98,6 +110,8 @@ const DEFAULT_PREFERENCES: AppPreferences = {
   refreshBackgroundClustersEnabled: true,
   metricsRefreshIntervalMs: DEFAULT_METRICS_REFRESH_INTERVAL_MS,
   logBufferMaxSize: LOG_BUFFER_DEFAULT_SIZE,
+  logTargetPerScopeLimit: LOG_TARGET_PER_SCOPE_DEFAULT,
+  logTargetGlobalLimit: LOG_TARGET_GLOBAL_DEFAULT,
   paletteHueLight: 0,
   paletteSaturationLight: 0,
   paletteBrightnessLight: 0,
@@ -165,6 +179,26 @@ const normalizeLogBufferMaxSize = (value?: number): number => {
   return floored;
 };
 
+const normalizeLogTargetPerScopeLimit = (value?: number): number => {
+  if (value == null || Number.isNaN(value) || value <= 0) {
+    return LOG_TARGET_PER_SCOPE_DEFAULT;
+  }
+  const floored = Math.floor(value);
+  if (floored < LOG_TARGET_PER_SCOPE_MIN) return LOG_TARGET_PER_SCOPE_MIN;
+  if (floored > LOG_TARGET_PER_SCOPE_MAX) return LOG_TARGET_PER_SCOPE_MAX;
+  return floored;
+};
+
+const normalizeLogTargetGlobalLimit = (value?: number): number => {
+  if (value == null || Number.isNaN(value) || value <= 0) {
+    return LOG_TARGET_GLOBAL_DEFAULT;
+  }
+  const floored = Math.floor(value);
+  if (floored < LOG_TARGET_GLOBAL_MIN) return LOG_TARGET_GLOBAL_MIN;
+  if (floored > LOG_TARGET_GLOBAL_MAX) return LOG_TARGET_GLOBAL_MAX;
+  return floored;
+};
+
 const emitPreferenceChanges = (previous: AppPreferences, next: AppPreferences): void => {
   if (previous.theme !== next.theme) {
     eventBus.emit('settings:theme', next.theme);
@@ -183,6 +217,12 @@ const emitPreferenceChanges = (previous: AppPreferences, next: AppPreferences): 
   }
   if (previous.logBufferMaxSize !== next.logBufferMaxSize) {
     eventBus.emit('settings:log-buffer-size', next.logBufferMaxSize);
+  }
+  if (previous.logTargetPerScopeLimit !== next.logTargetPerScopeLimit) {
+    eventBus.emit('settings:log-target-per-scope-limit', next.logTargetPerScopeLimit);
+  }
+  if (previous.logTargetGlobalLimit !== next.logTargetGlobalLimit) {
+    eventBus.emit('settings:log-target-global-limit', next.logTargetGlobalLimit);
   }
   if (previous.gridTablePersistenceMode !== next.gridTablePersistenceMode) {
     eventBus.emit('gridtable:persistence-mode', next.gridTablePersistenceMode);
@@ -299,6 +339,10 @@ export const hydrateAppPreferences = async (options?: {
       DEFAULT_PREFERENCES.refreshBackgroundClustersEnabled,
     metricsRefreshIntervalMs: normalizeMetricsIntervalMs(backendSettings?.metricsRefreshIntervalMs),
     logBufferMaxSize: normalizeLogBufferMaxSize(backendSettings?.logBufferMaxSize),
+    logTargetPerScopeLimit: normalizeLogTargetPerScopeLimit(
+      backendSettings?.logTargetPerScopeLimit
+    ),
+    logTargetGlobalLimit: normalizeLogTargetGlobalLimit(backendSettings?.logTargetGlobalLimit),
     gridTablePersistenceMode: normalizeGridTableMode(backendSettings?.gridTablePersistenceMode),
     defaultObjectPanelPosition: normalizeObjectPanelPosition(
       backendSettings?.defaultObjectPanelPosition
@@ -365,6 +409,14 @@ export const getMetricsRefreshIntervalMs = (): number => {
 
 export const getLogBufferMaxSize = (): number => {
   return preferenceCache.logBufferMaxSize;
+};
+
+export const getLogTargetPerScopeLimit = (): number => {
+  return preferenceCache.logTargetPerScopeLimit;
+};
+
+export const getLogTargetGlobalLimit = (): number => {
+  return preferenceCache.logTargetGlobalLimit;
 };
 
 export const getGridTablePersistenceMode = (): GridTablePersistenceMode => {
@@ -503,12 +555,46 @@ const persistLogBufferMaxSize = async (size: number): Promise<void> => {
   await SetLogBufferMaxSizeBackend(size);
 };
 
+const persistLogTargetPerScopeLimit = async (limit: number): Promise<void> => {
+  const runtimeApp = (window as any)?.go?.backend?.App;
+  if (!runtimeApp) {
+    return;
+  }
+  await SetLogTargetPerScopeLimitBackend(limit);
+};
+
+const persistLogTargetGlobalLimit = async (limit: number): Promise<void> => {
+  const runtimeApp = (window as any)?.go?.backend?.App;
+  if (!runtimeApp) {
+    return;
+  }
+  await SetLogTargetGlobalLimitBackend(limit);
+};
+
 export const setLogBufferMaxSize = (size: number): void => {
   const normalized = normalizeLogBufferMaxSize(size);
   hydrated = true;
   updatePreferenceCache({ logBufferMaxSize: normalized });
   void persistLogBufferMaxSize(normalized).catch((error) => {
     console.error('Failed to persist log buffer max size:', error);
+  });
+};
+
+export const setLogTargetPerScopeLimit = (limit: number): void => {
+  const normalized = normalizeLogTargetPerScopeLimit(limit);
+  hydrated = true;
+  updatePreferenceCache({ logTargetPerScopeLimit: normalized });
+  void persistLogTargetPerScopeLimit(normalized).catch((error) => {
+    console.error('Failed to persist log target per-scope limit:', error);
+  });
+};
+
+export const setLogTargetGlobalLimit = (limit: number): void => {
+  const normalized = normalizeLogTargetGlobalLimit(limit);
+  hydrated = true;
+  updatePreferenceCache({ logTargetGlobalLimit: normalized });
+  void persistLogTargetGlobalLimit(normalized).catch((error) => {
+    console.error('Failed to persist log target global limit:', error);
   });
 };
 
