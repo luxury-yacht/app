@@ -47,21 +47,42 @@ vi.mock('@core/contexts/FavoritesContext', () => ({
 
 vi.mock('@ui/favorites/FavToggle', () => ({
   useFavToggle: () => ({
-    type: 'toggle',
-    id: 'favorite',
-    icon: null,
-    active: false,
-    onClick: () => {},
-    title: 'Save as favorite',
+    item: {
+      type: 'toggle',
+      id: 'favorite',
+      icon: null,
+      active: false,
+      onClick: () => {},
+      title: 'Save as favorite',
+    },
+    modal: null,
   }),
 }));
 
 vi.mock('@shared/components/tables/GridTable', () => ({
   default: (props: any) => {
     gridTablePropsRef.current = props;
+    const preActions = props.filters?.options?.preActions ?? [];
     return (
       <div>
         <div data-testid="mock-gridtable-filters">
+          {preActions.map((item: any, index: number) => {
+            if (!item || item.type === 'separator') {
+              return null;
+            }
+            return (
+              <button
+                key={item.id ?? `action-${index}`}
+                type="button"
+                title={item.title}
+                aria-label={item.ariaLabel ?? item.title}
+                aria-pressed={item.type === 'toggle' ? item.active : undefined}
+                onClick={item.onClick}
+              >
+                {item.icon}
+              </button>
+            );
+          })}
           {props.filters?.options?.customActions ?? null}
         </div>
         <table data-testid="grid-table">
@@ -459,10 +480,10 @@ describe('NsViewPods', () => {
     await renderPods({ data: pods });
 
     const toggle = container.querySelector<HTMLButtonElement>(
-      '[data-testid="pods-unhealthy-toggle"]'
+      'button[title="Show unhealthy pods (2/3)"]'
     );
     expect(toggle).not.toBeNull();
-    expect(toggle?.textContent).toContain('Show Unhealthy (2/3)');
+    expect(toggle?.getAttribute('aria-pressed')).toBe('false');
     expect(gridTablePropsRef.current.data).toEqual(pods);
 
     await act(async () => {
@@ -470,10 +491,14 @@ describe('NsViewPods', () => {
       await Promise.resolve();
     });
     expect(gridTablePropsRef.current.data).toEqual([pods[1], pods[2]]);
-    expect(toggle?.textContent).toContain('Show All');
+    const activeToggle = container.querySelector<HTMLButtonElement>(
+      'button[title="Show all pods"]'
+    );
+    expect(activeToggle).not.toBeNull();
+    expect(activeToggle?.getAttribute('aria-pressed')).toBe('true');
 
     await act(async () => {
-      toggle?.click();
+      activeToggle?.click();
       await Promise.resolve();
     });
     expect(gridTablePropsRef.current.data).toEqual(pods);
@@ -490,10 +515,10 @@ describe('NsViewPods', () => {
     await renderPods({ data: pods });
 
     const toggle = container.querySelector<HTMLButtonElement>(
-      '[data-testid="pods-unhealthy-toggle"]'
+      'button[title="Show unhealthy pods (1/3)"]'
     );
     expect(toggle).not.toBeNull();
-    expect(toggle?.textContent).toContain('Show Unhealthy (1/3)');
+    expect(toggle?.getAttribute('aria-pressed')).toBe('false');
 
     await act(async () => {
       toggle?.click();

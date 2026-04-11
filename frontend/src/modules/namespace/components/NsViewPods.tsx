@@ -11,6 +11,7 @@ import { getPodStatusSeverity } from '@/utils/podStatusSeverity';
 import { getPermissionKey, useUserPermissions } from '@/core/capabilities';
 import { eventBus } from '@/core/events';
 import { useClusterMetricsAvailability } from '@/core/refresh/hooks/useMetricsAvailability';
+import type { IconBarItem } from '@shared/components/IconBar/IconBar';
 import { useNamespaceGridTablePersistence } from '@modules/namespace/hooks/useNamespaceGridTablePersistence';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useTableSort } from '@/hooks/useTableSort';
@@ -47,6 +48,22 @@ interface PodsViewProps {
 }
 
 const HEALTHY_POD_STATUSES = new Set(['running', 'succeeded', 'completed']);
+
+const UnhealthyPodsIcon: React.FC<{ width?: number; height?: number }> = ({
+  width = 16,
+  height = 16,
+}) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill="currentColor"
+    width={width}
+    height={height}
+    aria-hidden="true"
+  >
+    <path d="M12 2L1 21H23L12 2ZM13 18H11V16H13V18ZM13 14H11V9H13V14Z" />
+  </svg>
+);
 
 const parseReadyCounts = (value?: string | null): { ready: number; total: number } | null => {
   if (!value) {
@@ -407,21 +424,25 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       setShowUnhealthyOnly((prev) => !prev);
     }, []);
 
-    const unhealthyToggle =
-      unhealthyCount > 0 ? (
-        <button
-          type="button"
-          className="button generic"
-          onClick={handleToggleUnhealthy}
-          aria-pressed={showUnhealthyOnly}
-          data-gridtable-shortcut-optout="true"
-          data-testid="pods-unhealthy-toggle"
-        >
-          {showUnhealthyOnly
-            ? 'Show All'
-            : `Show Unhealthy (${unhealthyCount}/${sortedData.length})`}
-        </button>
-      ) : null;
+    const unhealthyToggle = useMemo<IconBarItem | null>(() => {
+      if (unhealthyCount <= 0) {
+        return null;
+      }
+
+      const title = showUnhealthyOnly
+        ? 'Show all pods'
+        : `Show unhealthy pods (${unhealthyCount}/${sortedData.length})`;
+
+      return {
+        type: 'toggle',
+        id: 'pods-unhealthy-toggle',
+        icon: <UnhealthyPodsIcon />,
+        active: showUnhealthyOnly,
+        onClick: handleToggleUnhealthy,
+        title,
+        ariaLabel: title,
+      };
+    }, [handleToggleUnhealthy, showUnhealthyOnly, sortedData.length, unhealthyCount]);
 
     useEffect(() => {
       if (typeof window === 'undefined' || !selectedClusterId) {
@@ -561,8 +582,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
               onReset: resetPersistedState,
               options: {
                 showNamespaceDropdown: showNamespaceFilter,
-                customActions: unhealthyToggle,
-                preActions: [favToggle],
+                preActions: [favToggle, unhealthyToggle].filter(Boolean) as IconBarItem[],
               },
             }}
             virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}
