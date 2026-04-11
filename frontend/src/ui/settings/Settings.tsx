@@ -55,28 +55,9 @@ import {
 } from '@shared/components/tables/persistence/gridTablePersistenceSettings';
 import {
   getDefaultObjectPanelPosition,
-  getLogApiTimestampFormat,
-  getLogApiTimestampUseLocalTimeZone,
   setDefaultObjectPanelPosition,
   getObjectPanelLayoutDefaults,
   setObjectPanelLayoutDefaults,
-  setLogApiTimestampFormat,
-  setLogApiTimestampUseLocalTimeZone,
-  getLogBufferMaxSize,
-  setLogBufferMaxSize,
-  getLogTargetGlobalLimit,
-  getLogTargetPerScopeLimit,
-  setLogTargetGlobalLimit,
-  setLogTargetPerScopeLimit,
-  LOG_BUFFER_MIN_SIZE,
-  LOG_BUFFER_MAX_SIZE,
-  LOG_BUFFER_DEFAULT_SIZE,
-  LOG_TARGET_GLOBAL_DEFAULT,
-  LOG_TARGET_GLOBAL_MAX,
-  LOG_TARGET_GLOBAL_MIN,
-  LOG_TARGET_PER_SCOPE_DEFAULT,
-  LOG_TARGET_PER_SCOPE_MAX,
-  LOG_TARGET_PER_SCOPE_MIN,
   type ObjectPanelPosition,
   type ObjectPanelLayoutDefaults,
 } from '@core/settings/appPreferences';
@@ -87,7 +68,6 @@ import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import SegmentedButton from '@shared/components/SegmentedButton';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import { getLogApiTimestampFormatValidationError } from '@/utils/logApiTimestampFormat';
 
 interface SettingsProps {
   onClose?: () => void;
@@ -115,25 +95,6 @@ function Settings({ onClose }: SettingsProps) {
   );
   const [panelLayout, setPanelLayout] = useState<ObjectPanelLayoutDefaults>(() =>
     getObjectPanelLayoutDefaults()
-  );
-  // Log buffer size local state. We mirror the raw string so the user
-  // can temporarily type an out-of-range value while editing without the
-  // input immediately snapping back — we only push to the preference
-  // cache on blur/commit, where the normalizer clamps the final value.
-  const [logBufferMaxSizeInput, setLogBufferMaxSizeInput] = useState<string>(() =>
-    String(getLogBufferMaxSize())
-  );
-  const [logApiTimestampFormatInput, setLogApiTimestampFormatInput] = useState<string>(() =>
-    getLogApiTimestampFormat()
-  );
-  const [logApiTimestampUseLocalTimeZone, setLogApiTimestampUseLocalTimeZoneState] =
-    useState<boolean>(() => getLogApiTimestampUseLocalTimeZone());
-  const [logApiTimestampFormatError, setLogApiTimestampFormatError] = useState<string | null>(null);
-  const [logTargetPerScopeLimitInput, setLogTargetPerScopeLimitInput] = useState<string>(() =>
-    String(getLogTargetPerScopeLimit())
-  );
-  const [logTargetGlobalLimitInput, setLogTargetGlobalLimitInput] = useState<string>(() =>
-    String(getLogTargetGlobalLimit())
   );
   // Track kubeconfig search paths for the settings panel.
   const [kubeconfigPaths, setKubeconfigPaths] = useState<string[]>([]);
@@ -278,12 +239,6 @@ function Settings({ onClose }: SettingsProps) {
       setObjectPanelPositionState(getDefaultObjectPanelPosition());
       const freshLayout = getObjectPanelLayoutDefaults();
       setPanelLayout(freshLayout);
-      setLogBufferMaxSizeInput(String(getLogBufferMaxSize()));
-      setLogApiTimestampFormatInput(getLogApiTimestampFormat());
-      setLogApiTimestampUseLocalTimeZoneState(getLogApiTimestampUseLocalTimeZone());
-      setLogApiTimestampFormatError(null);
-      setLogTargetPerScopeLimitInput(String(getLogTargetPerScopeLimit()));
-      setLogTargetGlobalLimitInput(String(getLogTargetGlobalLimit()));
       setPanelLayoutInputs({
         dockedRightWidth: String(freshLayout.dockedRightWidth),
         dockedBottomHeight: String(freshLayout.dockedBottomHeight),
@@ -292,7 +247,6 @@ function Settings({ onClose }: SettingsProps) {
         floatingX: String(freshLayout.floatingX),
         floatingY: String(freshLayout.floatingY),
       });
-      setLogBufferMaxSizeInput(String(getLogBufferMaxSize()));
       // Palette sliders are loaded by the resolvedTheme effect.
     } catch (error) {
       errorHandler.handle(error, { action: 'loadAppSettings' });
@@ -341,55 +295,6 @@ function Settings({ onClose }: SettingsProps) {
     const mode: GridTablePersistenceMode = checked ? 'namespaced' : 'shared';
     setPersistenceMode(mode);
     setGridTablePersistenceMode(mode);
-  };
-
-  // Parse the raw text input, clamp to the allowed range, and push to
-  // appPreferences. The preferences setter calls the normalizer again
-  // so we can't get out-of-range values into the cache. On an
-  // unparseable string, snap back to the last valid cached value.
-  const commitLogBufferMaxSize = (raw: string) => {
-    const parsed = Number.parseInt(raw, 10);
-    if (!Number.isFinite(parsed)) {
-      setLogBufferMaxSizeInput(String(getLogBufferMaxSize()));
-      return;
-    }
-    const clamped = Math.max(LOG_BUFFER_MIN_SIZE, Math.min(LOG_BUFFER_MAX_SIZE, parsed));
-    setLogBufferMaxSize(clamped);
-    setLogBufferMaxSizeInput(String(clamped));
-  };
-
-  const commitLogTargetPerScopeLimit = (raw: string) => {
-    const parsed = Number.parseInt(raw, 10);
-    if (!Number.isFinite(parsed)) {
-      setLogTargetPerScopeLimitInput(String(getLogTargetPerScopeLimit()));
-      return;
-    }
-    const clamped = Math.max(LOG_TARGET_PER_SCOPE_MIN, Math.min(LOG_TARGET_PER_SCOPE_MAX, parsed));
-    setLogTargetPerScopeLimit(clamped);
-    setLogTargetPerScopeLimitInput(String(clamped));
-  };
-
-  const commitLogTargetGlobalLimit = (raw: string) => {
-    const parsed = Number.parseInt(raw, 10);
-    if (!Number.isFinite(parsed)) {
-      setLogTargetGlobalLimitInput(String(getLogTargetGlobalLimit()));
-      return;
-    }
-    const clamped = Math.max(LOG_TARGET_GLOBAL_MIN, Math.min(LOG_TARGET_GLOBAL_MAX, parsed));
-    setLogTargetGlobalLimit(clamped);
-    setLogTargetGlobalLimitInput(String(clamped));
-  };
-
-  const commitLogApiTimestampFormat = (raw: string) => {
-    const validationError = getLogApiTimestampFormatValidationError(raw);
-    if (validationError) {
-      setLogApiTimestampFormatError(validationError);
-      return;
-    }
-    const normalized = raw.trim();
-    setLogApiTimestampFormat(normalized);
-    setLogApiTimestampFormatInput(normalized);
-    setLogApiTimestampFormatError(null);
   };
 
   const handleObjectPanelPositionChange = (position: ObjectPanelPosition) => {
@@ -1732,176 +1637,6 @@ function Settings({ onClose }: SettingsProps) {
                   variant="dark"
                 />
               </label>
-            </div>
-          </div>
-        </div>
-        <div className="settings-subsection">
-          <h4>Pod Logs</h4>
-          <div className="settings-items">
-            <div className="setting-item setting-item-inline">
-              <label htmlFor="log-buffer-max-size">Max logs </label>
-              <input
-                type="number"
-                id="log-buffer-max-size"
-                min={LOG_BUFFER_MIN_SIZE}
-                max={LOG_BUFFER_MAX_SIZE}
-                step={100}
-                value={logBufferMaxSizeInput}
-                onChange={(e) => setLogBufferMaxSizeInput(e.target.value)}
-                onBlur={(e) => commitLogBufferMaxSize(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    commitLogBufferMaxSize((e.target as HTMLInputElement).value);
-                  }
-                }}
-              />
-              <Tooltip
-                content={
-                  <>
-                    <p>
-                      Max number of logs in the pod logs viewer. Larger values use more memory but
-                      give deeper scrollback.
-                    </p>
-                    <p style={{ marginTop: '1em' }}>
-                      Range {LOG_BUFFER_MIN_SIZE}-{LOG_BUFFER_MAX_SIZE}, default{' '}
-                      {LOG_BUFFER_DEFAULT_SIZE}
-                    </p>
-                  </>
-                }
-                variant="dark"
-              />
-            </div>
-            <div className="setting-item setting-item-inline">
-              <label htmlFor="log-target-per-scope-limit">Max log targets per tab </label>
-              <input
-                type="number"
-                id="log-target-per-scope-limit"
-                min={LOG_TARGET_PER_SCOPE_MIN}
-                max={LOG_TARGET_PER_SCOPE_MAX}
-                step={1}
-                value={logTargetPerScopeLimitInput}
-                onChange={(e) => setLogTargetPerScopeLimitInput(e.target.value)}
-                onBlur={(e) => commitLogTargetPerScopeLimit(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    commitLogTargetPerScopeLimit((e.target as HTMLInputElement).value);
-                  }
-                }}
-              />
-              <Tooltip
-                content={
-                  <>
-                    <p>
-                      Max pod/container log targets a single Logs tab can stream or fetch at once.
-                    </p>
-                    <p style={{ marginTop: '1em' }}>
-                      Range {LOG_TARGET_PER_SCOPE_MIN}-{LOG_TARGET_PER_SCOPE_MAX}, default{' '}
-                      {LOG_TARGET_PER_SCOPE_DEFAULT}
-                    </p>
-                  </>
-                }
-                variant="dark"
-              />
-            </div>
-            <div className="setting-item setting-item-inline">
-              <label htmlFor="log-target-global-limit">Max log targets across tabs </label>
-              <input
-                type="number"
-                id="log-target-global-limit"
-                min={LOG_TARGET_GLOBAL_MIN}
-                max={LOG_TARGET_GLOBAL_MAX}
-                step={1}
-                value={logTargetGlobalLimitInput}
-                onChange={(e) => setLogTargetGlobalLimitInput(e.target.value)}
-                onBlur={(e) => commitLogTargetGlobalLimit(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    commitLogTargetGlobalLimit((e.target as HTMLInputElement).value);
-                  }
-                }}
-              />
-              <Tooltip
-                content={
-                  <>
-                    <p>
-                      Max pod/container log targets shared across all open Logs tabs. Lower values
-                      reduce overall load but can cap large workloads sooner.
-                    </p>
-                    <p style={{ marginTop: '1em' }}>
-                      Range {LOG_TARGET_GLOBAL_MIN}-{LOG_TARGET_GLOBAL_MAX}, default{' '}
-                      {LOG_TARGET_GLOBAL_DEFAULT}
-                    </p>
-                  </>
-                }
-                variant="dark"
-              />
-            </div>
-            <div className="setting-item">
-              <label htmlFor="log-api-timestamp-local-time-zone">
-                <input
-                  type="checkbox"
-                  id="log-api-timestamp-local-time-zone"
-                  checked={logApiTimestampUseLocalTimeZone}
-                  onChange={(e) => {
-                    const enabled = e.target.checked;
-                    setLogApiTimestampUseLocalTimeZoneState(enabled);
-                    setLogApiTimestampUseLocalTimeZone(enabled);
-                  }}
-                />
-                Show API timestamps in the local time zone{' '}
-                <Tooltip
-                  content="Formats Kubernetes API timestamps using this machine's local timezone instead of UTC."
-                  variant="dark"
-                />
-              </label>
-            </div>
-            <div className="setting-item">
-              <div className="setting-item-inline">
-                <label htmlFor="log-api-timestamp-format">API timestamp format </label>
-                <input
-                  type="text"
-                  id="log-api-timestamp-format"
-                  value={logApiTimestampFormatInput}
-                  onChange={(e) => {
-                    setLogApiTimestampFormatInput(e.target.value);
-                    if (logApiTimestampFormatError) {
-                      setLogApiTimestampFormatError(null);
-                    }
-                  }}
-                  onBlur={(e) => commitLogApiTimestampFormat(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      commitLogApiTimestampFormat((e.target as HTMLInputElement).value);
-                    }
-                  }}
-                  className={logApiTimestampFormatError ? 'setting-input-error' : undefined}
-                  aria-invalid={logApiTimestampFormatError ? 'true' : 'false'}
-                />
-                <Tooltip
-                  content={
-                    <>
-                      <p>Day.js pattern used for the Kubernetes API timestamp shown in pod logs.</p>
-                      <p style={{ marginTop: '1em' }}>
-                        Examples: <code>YYYY-MM-DDTHH:mm:ss.SSS[Z]</code>, <code>HH:mm:ss.SSS</code>
-                        , <code>[ts=]HH:mm:ss.SSS</code>, <code>YYYY-MM-DD HH:mm:ss Z</code>
-                      </p>
-                      <p style={{ marginTop: '1em' }}>
-                        Wrap literal text in square brackets. Unsupported tokens are rejected.
-                      </p>
-                      <p style={{ marginTop: '1em' }}>
-                        Use <code>Z</code> or <code>ZZ</code> if you want the timezone offset shown
-                        in local-time mode.
-                      </p>
-                    </>
-                  }
-                  variant="dark"
-                />
-              </div>
-              {logApiTimestampFormatError ? (
-                <div className="setting-item-message setting-item-error" role="alert">
-                  {logApiTimestampFormatError}
-                </div>
-              ) : null}
             </div>
           </div>
         </div>

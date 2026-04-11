@@ -108,11 +108,20 @@ vi.mock('@/core/refresh/fallbacks/objectLogFallbackManager', () => ({
 
 const shortcutMocks = vi.hoisted(() => ({
   useShortcut: vi.fn(),
+  useKeyboardNavigationScope: vi.fn(),
+}));
+
+const contextMocks = vi.hoisted(() => ({
+  pushContext: vi.fn(),
+  popContext: vi.fn(),
 }));
 
 vi.mock('@ui/shortcuts', () => ({
   useShortcut: (...args: unknown[]) => shortcutMocks.useShortcut(...args),
+  useKeyboardContext: () => contextMocks,
   useSearchShortcutTarget: () => undefined,
+  useKeyboardNavigationScope: (...args: unknown[]) =>
+    shortcutMocks.useKeyboardNavigationScope(...args),
 }));
 
 vi.mock('@shared/components/dropdowns/Dropdown', () => ({
@@ -190,6 +199,11 @@ vi.mock('@shared/components/LoadingSpinner', () => ({
   default: ({ message }: { message?: string }) => <div>{message}</div>,
 }));
 
+vi.mock('@shared/components/Tooltip', () => ({
+  __esModule: true,
+  default: ({ children }: { children?: React.ReactNode }) => <>{children ?? null}</>,
+}));
+
 const testClusterId = 'alpha:ctx';
 const buildLogScope = (scope: string) => buildClusterScope(testClusterId, scope);
 const defaultScope = buildLogScope('team-a:deployment:api');
@@ -235,6 +249,9 @@ describe('LogViewer active pod synchronisation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     shortcutMocks.useShortcut.mockClear();
+    shortcutMocks.useKeyboardNavigationScope.mockClear();
+    contextMocks.pushContext.mockClear();
+    contextMocks.popContext.mockClear();
     (LogFetcher as unknown as ViMock).mockReset?.();
     (GetLogScopeContainers as unknown as ViMock).mockReset?.();
     (GetLogScopeContainers as unknown as ViMock).mockResolvedValue(['app']);
@@ -1174,6 +1191,24 @@ describe('LogViewer active pod synchronisation', () => {
     expect(writeTextMock).toHaveBeenLastCalledWith(
       ['API Timestamp,Pod,Container,level,message', '11:00:00.123,web-1,app,info,hello'].join('\n')
     );
+  });
+
+  it('opens the log settings modal from the icon bar', async () => {
+    await renderViewer({ activePodNames: ['web-1'] });
+
+    const settingsButton = await waitForElement(() =>
+      container.querySelector<HTMLButtonElement>('button[aria-label="Open log settings"]')
+    );
+
+    await act(async () => {
+      settingsButton.click();
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain('Log Settings');
+    expect(
+      container.querySelector<HTMLInputElement>('input#log-api-timestamp-format')
+    ).toBeTruthy();
   });
 
   it('formats API timestamps in the local timezone when enabled', async () => {

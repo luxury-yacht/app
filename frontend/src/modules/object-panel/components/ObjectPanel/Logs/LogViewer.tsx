@@ -35,7 +35,7 @@ import {
   RegexSearchIcon,
 } from '@shared/components/icons/LogIcons';
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
-import { CaseSensitiveIcon } from '@shared/components/icons/MenuIcons';
+import { CaseSensitiveIcon, SettingsIcon } from '@shared/components/icons/MenuIcons';
 import './LogViewer.css';
 import { refreshOrchestrator } from '@/core/refresh/orchestrator';
 import { eventBus } from '@/core/events';
@@ -70,6 +70,7 @@ import {
   formatDefaultLogApiTimestamp,
   formatLogApiTimestamp,
 } from '@/utils/logApiTimestampFormat';
+import LogSettingsModal from '@ui/modals/LogSettingsModal';
 
 interface LogViewerProps {
   namespace: string;
@@ -410,6 +411,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   );
   const [apiTimestampUseLocalTimeZone, setApiTimestampUseLocalTimeZoneState] =
     React.useState<boolean>(() => getLogApiTimestampUseLocalTimeZone());
+  const [isLogSettingsOpen, setIsLogSettingsOpen] = React.useState(false);
 
   // Destructure commonly used state for readability
   const {
@@ -2208,326 +2210,337 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   }
 
   return (
-    <div className="object-panel-tab-content">
-      <div className="pod-logs-display">
-        <div
-          className={`pod-logs-controls${activeFilterChips.length > 0 ? ' pod-logs-controls--with-active-filters' : ''}`}
-        >
-          <div className="pod-logs-controls-left">
-            {/* Pod / container selector */}
-            {selectorOptions.length > 0 && (
-              <div className="pod-logs-control-group">
-                <Dropdown
-                  options={selectorOptions}
-                  value={selectedFilters}
-                  onChange={(value) =>
-                    dispatch({
-                      type: 'SET_SELECTED_FILTERS',
-                      payload: Array.isArray(value) ? value : [value],
-                    })
-                  }
-                  multiple
-                  showBulkActions
-                  placeholder={isPendingLogs ? 'Loading logs…' : 'All Logs'}
-                  renderValue={(value, options) =>
-                    summarizeWorkloadSelection(
-                      Array.isArray(value) ? value : value ? [value] : [],
-                      options
-                    )
-                  }
-                  size="compact"
-                  className="pod-logs-selector-dropdown"
-                />
-              </div>
-            )}
+    <>
+      <div className="object-panel-tab-content">
+        <div className="pod-logs-display">
+          <div
+            className={`pod-logs-controls${activeFilterChips.length > 0 ? ' pod-logs-controls--with-active-filters' : ''}`}
+          >
+            <div className="pod-logs-controls-left">
+              {/* Pod / container selector */}
+              {selectorOptions.length > 0 && (
+                <div className="pod-logs-control-group">
+                  <Dropdown
+                    options={selectorOptions}
+                    value={selectedFilters}
+                    onChange={(value) =>
+                      dispatch({
+                        type: 'SET_SELECTED_FILTERS',
+                        payload: Array.isArray(value) ? value : [value],
+                      })
+                    }
+                    multiple
+                    showBulkActions
+                    placeholder={isPendingLogs ? 'Loading logs…' : 'All Logs'}
+                    renderValue={(value, options) =>
+                      summarizeWorkloadSelection(
+                        Array.isArray(value) ? value : value ? [value] : [],
+                        options
+                      )
+                    }
+                    size="compact"
+                    className="pod-logs-selector-dropdown"
+                  />
+                </div>
+              )}
 
-            {/* Text filter input */}
-            <div className="pod-logs-control-group pod-logs-filter-group">
-              <div className="pod-logs-filter-group">
-                <input
-                  type="text"
-                  ref={filterInputRef}
-                  value={textFilter}
-                  onChange={(e) => dispatch({ type: 'SET_TEXT_FILTER', payload: e.target.value })}
-                  autoComplete="off"
-                  autoCorrect="off"
-                  autoCapitalize="none"
-                  spellCheck={false}
-                  placeholder="Filter logs..."
-                  className="pod-logs-text-filter"
-                  title="Filter logs by text (searches in log lines, pods, and containers)"
-                />
-                {textFilter && (
+              {/* Text filter input */}
+              <div className="pod-logs-control-group pod-logs-filter-group">
+                <div className="pod-logs-filter-group">
+                  <input
+                    type="text"
+                    ref={filterInputRef}
+                    value={textFilter}
+                    onChange={(e) => dispatch({ type: 'SET_TEXT_FILTER', payload: e.target.value })}
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    placeholder="Filter logs..."
+                    className="pod-logs-text-filter"
+                    title="Filter logs by text (searches in log lines, pods, and containers)"
+                  />
+                  {textFilter && (
+                    <button
+                      className="pod-logs-filter-clear"
+                      onClick={() => dispatch({ type: 'SET_TEXT_FILTER', payload: '' })}
+                      title="Clear filter"
+                      aria-label="Clear filter"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <IconBar
+                items={
+                  [
+                    {
+                      type: 'toggle',
+                      id: 'highlightSearch',
+                      icon: <HighlightSearchIcon />,
+                      active: highlightMatches,
+                      onClick: () => dispatch({ type: 'TOGGLE_HIGHLIGHT_MATCHES' }),
+                      title: 'Highlight matching text - disabled when Invert is enabled (H)',
+                      ariaLabel: 'Highlight matching text - disabled when Invert is enabled',
+                      disabled: inverseMatches,
+                    },
+                    {
+                      type: 'toggle',
+                      id: 'inverseSearch',
+                      icon: <InverseSearchIcon />,
+                      active: inverseMatches,
+                      onClick: () => dispatch({ type: 'TOGGLE_INVERSE_MATCHES' }),
+                      title: 'Invert the text filter to show only non-matching logs (I)',
+                      ariaLabel: 'Invert the text filter to show only non-matching logs',
+                    },
+                    {
+                      type: 'toggle',
+                      id: 'caseSensitiveSearch',
+                      icon: <CaseSensitiveIcon width={16} height={16} />,
+                      active: caseSensitiveMatches,
+                      onClick: () => dispatch({ type: 'TOGGLE_CASE_SENSITIVE_MATCHES' }),
+                      title: 'Case-sensitive search - disabled when regex is enabled (C)',
+                      ariaLabel: 'Case-sensitive search - disabled when regex is enabled',
+                      disabled: regexMatches,
+                    },
+                    {
+                      type: 'toggle',
+                      id: 'regexSearch',
+                      icon: <RegexSearchIcon />,
+                      active: regexMatches,
+                      onClick: () => dispatch({ type: 'TOGGLE_REGEX_MATCHES' }),
+                      title: 'Enable regular expression support for the text filter (X)',
+                      ariaLabel: 'Enable regular expression support for the text filter',
+                    },
+                    { type: 'separator' },
+                    {
+                      type: 'toggle',
+                      id: 'autoRefresh',
+                      icon: <AutoRefreshIcon />,
+                      active: autoRefresh,
+                      onClick: () => dispatch({ type: 'TOGGLE_AUTO_REFRESH' }),
+                      title: 'Toggle auto-refresh (R)',
+                      ariaLabel: 'Toggle auto-refresh',
+                    },
+                    ...(supportsPreviousLogs
+                      ? [
+                          {
+                            type: 'toggle' as const,
+                            id: 'previousLogs',
+                            icon: <PreviousLogsIcon />,
+                            active: showPreviousLogs,
+                            onClick: handleTogglePreviousLogs,
+                            title: 'Show previous logs (V)',
+                            ariaLabel: 'Show previous logs (V)',
+                          },
+                        ]
+                      : []),
+                    {
+                      type: 'toggle',
+                      id: 'apiTimestamps',
+                      icon: <TimestampIcon />,
+                      active: showTimestamps,
+                      onClick: () =>
+                        dispatch({
+                          type: 'SET_TIMESTAMP_MODE',
+                          payload: showTimestamps ? 'hidden' : 'default',
+                        }),
+                      title: 'Show timestamps from the Kubernetes API (T)',
+                      ariaLabel: 'Show timestamps from the Kubernetes API',
+                    },
+                    {
+                      type: 'toggle',
+                      id: 'wrapText',
+                      icon: <WrapTextIcon />,
+                      active: wrapText,
+                      onClick: () => dispatch({ type: 'TOGGLE_WRAP_TEXT' }),
+                      title: 'Wrap text (W)',
+                      ariaLabel: 'Wrap text',
+                      disabled: isParsedView,
+                    },
+                    ...(hasAnsiLogEntries
+                      ? [
+                          {
+                            type: 'toggle' as const,
+                            id: 'ansiColors',
+                            icon: <AnsiColorIcon />,
+                            active: showAnsiColors,
+                            onClick: () => dispatch({ type: 'TOGGLE_SHOW_ANSI_COLORS' }),
+                            title: 'Show ANSI colors if present (O)',
+                            ariaLabel: 'Show ANSI colors if present',
+                            disabled: isParsedView,
+                          },
+                        ]
+                      : []),
+                    ...(canParseLogs
+                      ? [
+                          {
+                            type: 'toggle' as const,
+                            id: 'prettyJson',
+                            icon: <PrettyJsonIcon />,
+                            active: displayMode === 'pretty',
+                            onClick: () =>
+                              dispatch({
+                                type: 'SET_DISPLAY_MODE',
+                                payload: displayMode === 'pretty' ? 'raw' : 'pretty',
+                              }),
+                            title: 'Show pretty JSON (J)',
+                            ariaLabel: 'Show pretty JSON',
+                          },
+                          {
+                            type: 'toggle' as const,
+                            id: 'parsedJson',
+                            icon: <ParseJsonIcon />,
+                            active: displayMode === 'parsed',
+                            onClick: () =>
+                              dispatch({
+                                type: 'SET_DISPLAY_MODE',
+                                payload: displayMode === 'parsed' ? 'raw' : 'parsed',
+                              }),
+                            title: 'Parse the JSON into a table (P)',
+                            ariaLabel: 'Parse the JSON into a table',
+                          },
+                        ]
+                      : []),
+                    { type: 'separator' },
+                    {
+                      type: 'action',
+                      id: 'logSettings',
+                      icon: <SettingsIcon width={16} height={16} />,
+                      onClick: () => setIsLogSettingsOpen(true),
+                      title: 'Open log settings',
+                      ariaLabel: 'Open log settings',
+                    },
+                    {
+                      type: 'action',
+                      id: 'copy',
+                      icon: <CopyIcon />,
+                      onClick: handleCopyLogs,
+                      title: 'Copy to clipboard (Shift+C)',
+                      ariaLabel: 'Copy to clipboard',
+                      disabled: !hasCopyableContent,
+                      feedback:
+                        copyFeedback === 'copied'
+                          ? 'success'
+                          : copyFeedback === 'error'
+                            ? 'error'
+                            : null,
+                    },
+                  ] satisfies IconBarItem[]
+                }
+              />
+
+              {hasActiveResultFilter && (
+                <span className="pod-logs-count" title={countTitle}>
+                  {countLabel}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {activeFilterChips.length > 0 && (
+            <div className="pod-logs-active-filters" aria-label="Active log filters">
+              {activeFilterChips.length > 0 && (
+                <button
+                  type="button"
+                  className="pod-logs-filter-chip pod-logs-filter-chip--clear-all"
+                  onClick={handleClearAllFilters}
+                  aria-label="Clear all filters"
+                  title="Clear all filters"
+                >
+                  Clear all
+                </button>
+              )}
+              {activeFilterChips.map((chip) => (
+                <span key={chip.key} className="pod-logs-filter-chip">
+                  <span className="pod-logs-filter-chip-label">{chip.label}</span>
                   <button
-                    className="pod-logs-filter-clear"
-                    onClick={() => dispatch({ type: 'SET_TEXT_FILTER', payload: '' })}
-                    title="Clear filter"
-                    aria-label="Clear filter"
+                    type="button"
+                    className="pod-logs-filter-chip-remove"
+                    onClick={chip.onRemove}
+                    aria-label={chip.title}
+                    title={chip.title}
                   >
                     ×
                   </button>
-                )}
-              </div>
-            </div>
-
-            <IconBar
-              items={
-                [
-                  {
-                    type: 'toggle',
-                    id: 'highlightSearch',
-                    icon: <HighlightSearchIcon />,
-                    active: highlightMatches,
-                    onClick: () => dispatch({ type: 'TOGGLE_HIGHLIGHT_MATCHES' }),
-                    title: 'Highlight matching text - disabled when Invert is enabled (H)',
-                    ariaLabel: 'Highlight matching text - disabled when Invert is enabled',
-                    disabled: inverseMatches,
-                  },
-                  {
-                    type: 'toggle',
-                    id: 'inverseSearch',
-                    icon: <InverseSearchIcon />,
-                    active: inverseMatches,
-                    onClick: () => dispatch({ type: 'TOGGLE_INVERSE_MATCHES' }),
-                    title: 'Invert the text filter to show only non-matching logs (I)',
-                    ariaLabel: 'Invert the text filter to show only non-matching logs',
-                  },
-                  {
-                    type: 'toggle',
-                    id: 'caseSensitiveSearch',
-                    icon: <CaseSensitiveIcon width={16} height={16} />,
-                    active: caseSensitiveMatches,
-                    onClick: () => dispatch({ type: 'TOGGLE_CASE_SENSITIVE_MATCHES' }),
-                    title: 'Case-sensitive search - disabled when regex is enabled (C)',
-                    ariaLabel: 'Case-sensitive search - disabled when regex is enabled',
-                    disabled: regexMatches,
-                  },
-                  {
-                    type: 'toggle',
-                    id: 'regexSearch',
-                    icon: <RegexSearchIcon />,
-                    active: regexMatches,
-                    onClick: () => dispatch({ type: 'TOGGLE_REGEX_MATCHES' }),
-                    title: 'Enable regular expression support for the text filter (X)',
-                    ariaLabel: 'Enable regular expression support for the text filter',
-                  },
-                  { type: 'separator' },
-                  {
-                    type: 'toggle',
-                    id: 'autoRefresh',
-                    icon: <AutoRefreshIcon />,
-                    active: autoRefresh,
-                    onClick: () => dispatch({ type: 'TOGGLE_AUTO_REFRESH' }),
-                    title: 'Toggle auto-refresh (R)',
-                    ariaLabel: 'Toggle auto-refresh',
-                  },
-                  ...(supportsPreviousLogs
-                    ? [
-                        {
-                          type: 'toggle' as const,
-                          id: 'previousLogs',
-                          icon: <PreviousLogsIcon />,
-                          active: showPreviousLogs,
-                          onClick: handleTogglePreviousLogs,
-                          title: 'Show previous logs (V)',
-                          ariaLabel: 'Show previous logs (V)',
-                        },
-                      ]
-                    : []),
-                  {
-                    type: 'toggle',
-                    id: 'apiTimestamps',
-                    icon: <TimestampIcon />,
-                    active: showTimestamps,
-                    onClick: () =>
-                      dispatch({
-                        type: 'SET_TIMESTAMP_MODE',
-                        payload: showTimestamps ? 'hidden' : 'default',
-                      }),
-                    title: 'Show timestamps from the Kubernetes API (T)',
-                    ariaLabel: 'Show timestamps from the Kubernetes API',
-                  },
-                  {
-                    type: 'toggle',
-                    id: 'wrapText',
-                    icon: <WrapTextIcon />,
-                    active: wrapText,
-                    onClick: () => dispatch({ type: 'TOGGLE_WRAP_TEXT' }),
-                    title: 'Wrap text (W)',
-                    ariaLabel: 'Wrap text',
-                    disabled: isParsedView,
-                  },
-                  ...(hasAnsiLogEntries
-                    ? [
-                        {
-                          type: 'toggle' as const,
-                          id: 'ansiColors',
-                          icon: <AnsiColorIcon />,
-                          active: showAnsiColors,
-                          onClick: () => dispatch({ type: 'TOGGLE_SHOW_ANSI_COLORS' }),
-                          title: 'Show ANSI colors if present (O)',
-                          ariaLabel: 'Show ANSI colors if present',
-                          disabled: isParsedView,
-                        },
-                      ]
-                    : []),
-                  ...(canParseLogs
-                    ? [
-                        {
-                          type: 'toggle' as const,
-                          id: 'prettyJson',
-                          icon: <PrettyJsonIcon />,
-                          active: displayMode === 'pretty',
-                          onClick: () =>
-                            dispatch({
-                              type: 'SET_DISPLAY_MODE',
-                              payload: displayMode === 'pretty' ? 'raw' : 'pretty',
-                            }),
-                          title: 'Show pretty JSON (J)',
-                          ariaLabel: 'Show pretty JSON',
-                        },
-                        {
-                          type: 'toggle' as const,
-                          id: 'parsedJson',
-                          icon: <ParseJsonIcon />,
-                          active: displayMode === 'parsed',
-                          onClick: () =>
-                            dispatch({
-                              type: 'SET_DISPLAY_MODE',
-                              payload: displayMode === 'parsed' ? 'raw' : 'parsed',
-                            }),
-                          title: 'Parse the JSON into a table (P)',
-                          ariaLabel: 'Parse the JSON into a table',
-                        },
-                      ]
-                    : []),
-                  { type: 'separator' },
-                  {
-                    type: 'action',
-                    id: 'copy',
-                    icon: <CopyIcon />,
-                    onClick: handleCopyLogs,
-                    title: 'Copy to clipboard (Shift+C)',
-                    ariaLabel: 'Copy to clipboard',
-                    disabled: !hasCopyableContent,
-                    feedback:
-                      copyFeedback === 'copied'
-                        ? 'success'
-                        : copyFeedback === 'error'
-                          ? 'error'
-                          : null,
-                  },
-                ] satisfies IconBarItem[]
-              }
-            />
-
-            {hasActiveResultFilter && (
-              <span className="pod-logs-count" title={countTitle}>
-                {countLabel}
-              </span>
-            )}
-          </div>
-        </div>
-
-        {activeFilterChips.length > 0 && (
-          <div className="pod-logs-active-filters" aria-label="Active log filters">
-            {activeFilterChips.length > 0 && (
-              <button
-                type="button"
-                className="pod-logs-filter-chip pod-logs-filter-chip--clear-all"
-                onClick={handleClearAllFilters}
-                aria-label="Clear all filters"
-                title="Clear all filters"
-              >
-                Clear all
-              </button>
-            )}
-            {activeFilterChips.map((chip) => (
-              <span key={chip.key} className="pod-logs-filter-chip">
-                <span className="pod-logs-filter-chip-label">{chip.label}</span>
-                <button
-                  type="button"
-                  className="pod-logs-filter-chip-remove"
-                  onClick={chip.onRemove}
-                  aria-label={chip.title}
-                  title={chip.title}
-                >
-                  ×
-                </button>
-              </span>
-            ))}
-          </div>
-        )}
-
-        {visibleLogWarnings.length > 0 && (
-          <div className="pod-logs-warning-bar" aria-label="Log warnings">
-            {visibleLogWarnings.join(' ')}
-          </div>
-        )}
-
-        <div className="pod-logs-content" ref={logsContentRef}>
-          {isParsedView ? (
-            <div onClick={handleParsedTableClick} style={{ height: '100%' }}>
-              <GridTable
-                data={parsedLogs}
-                columns={tableColumns}
-                keyExtractor={(item: ParsedLogEntry) => `log-${item.seq ?? item.lineNumber}`}
-                onRowClick={handleParsedRowKeyboard}
-                getRowClassName={getParsedRowClassName}
-                className="parsed-logs-table"
-                tableClassName="gridtable-parsed-logs"
-                virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}
-                isKindColumnKey={() => false}
-                // Parsed logs use row-expansion to show the full cell
-                // contents; the native hover tooltip would duplicate that
-                // affordance and also race with the custom expand UX.
-                disableCellNativeTitle
-              />
-            </div>
-          ) : (
-            <div
-              className={`pod-logs-text ${!wrapText ? 'no-wrap' : ''} ${shouldVirtualizeRawLogs ? 'pod-logs-text--virtualized' : ''}`}
-            >
-              {displayLogs ? (
-                shouldVirtualizeRawLogs ? (
-                  <div
-                    className="pod-logs-virtual-body"
-                    style={{ height: `${virtualizedRawHeight + RAW_LOG_VERTICAL_PADDING_PX}px` }}
-                  >
-                    <div
-                      className="pod-logs-virtual-inner"
-                      style={{
-                        transform: `translateY(${virtualizedRawOffsetTop + RAW_LOG_VERTICAL_PADDING_PX / 2}px)`,
-                      }}
-                    >
-                      {visibleRenderedLogRows.map((row) => (
-                        <div
-                          key={row.key}
-                          className="pod-log-row"
-                          ref={(node) => {
-                            measureVirtualizedRawRow(row.key, node);
-                          }}
-                        >
-                          {renderRawLogRow(row)}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : (
-                  renderedDisplayRows.map((row) => (
-                    <div key={row.key} className="pod-log-row">
-                      {renderRawLogRow(row)}
-                    </div>
-                  ))
-                )
-              ) : (
-                emptyStateMessage
-              )}
+                </span>
+              ))}
             </div>
           )}
+
+          {visibleLogWarnings.length > 0 && (
+            <div className="pod-logs-warning-bar" aria-label="Log warnings">
+              {visibleLogWarnings.join(' ')}
+            </div>
+          )}
+
+          <div className="pod-logs-content" ref={logsContentRef}>
+            {isParsedView ? (
+              <div onClick={handleParsedTableClick} style={{ height: '100%' }}>
+                <GridTable
+                  data={parsedLogs}
+                  columns={tableColumns}
+                  keyExtractor={(item: ParsedLogEntry) => `log-${item.seq ?? item.lineNumber}`}
+                  onRowClick={handleParsedRowKeyboard}
+                  getRowClassName={getParsedRowClassName}
+                  className="parsed-logs-table"
+                  tableClassName="gridtable-parsed-logs"
+                  virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}
+                  isKindColumnKey={() => false}
+                  // Parsed logs use row-expansion to show the full cell
+                  // contents; the native hover tooltip would duplicate that
+                  // affordance and also race with the custom expand UX.
+                  disableCellNativeTitle
+                />
+              </div>
+            ) : (
+              <div
+                className={`pod-logs-text ${!wrapText ? 'no-wrap' : ''} ${shouldVirtualizeRawLogs ? 'pod-logs-text--virtualized' : ''}`}
+              >
+                {displayLogs ? (
+                  shouldVirtualizeRawLogs ? (
+                    <div
+                      className="pod-logs-virtual-body"
+                      style={{ height: `${virtualizedRawHeight + RAW_LOG_VERTICAL_PADDING_PX}px` }}
+                    >
+                      <div
+                        className="pod-logs-virtual-inner"
+                        style={{
+                          transform: `translateY(${virtualizedRawOffsetTop + RAW_LOG_VERTICAL_PADDING_PX / 2}px)`,
+                        }}
+                      >
+                        {visibleRenderedLogRows.map((row) => (
+                          <div
+                            key={row.key}
+                            className="pod-log-row"
+                            ref={(node) => {
+                              measureVirtualizedRawRow(row.key, node);
+                            }}
+                          >
+                            {renderRawLogRow(row)}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    renderedDisplayRows.map((row) => (
+                      <div key={row.key} className="pod-log-row">
+                        {renderRawLogRow(row)}
+                      </div>
+                    ))
+                  )
+                ) : (
+                  emptyStateMessage
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
-    </div>
+      <LogSettingsModal isOpen={isLogSettingsOpen} onClose={() => setIsLogSettingsOpen(false)} />
+    </>
   );
 };
 
