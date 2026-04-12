@@ -14,7 +14,6 @@ import ObjectDiffModal from './ObjectDiffModal';
 const shortcutMocks = vi.hoisted(() => ({
   useShortcut: vi.fn(),
   useShortcuts: vi.fn(),
-  useKeyboardNavigationScope: vi.fn(),
 }));
 
 const contextMocks = vi.hoisted(() => ({
@@ -44,8 +43,6 @@ vi.mock('@ui/shortcuts', async (importOriginal) => {
     useShortcut: (...args: unknown[]) => shortcutMocks.useShortcut(...args),
     useShortcuts: (...args: unknown[]) => shortcutMocks.useShortcuts(...args),
     useKeyboardContext: () => contextMocks,
-    useKeyboardNavigationScope: (...args: unknown[]) =>
-      shortcutMocks.useKeyboardNavigationScope(...args),
   };
 });
 

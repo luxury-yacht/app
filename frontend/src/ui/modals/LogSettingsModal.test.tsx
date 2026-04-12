@@ -7,7 +7,6 @@ import LogSettings from '@modules/object-panel/components/ObjectPanel/Logs/LogSe
 
 const shortcutMocks = vi.hoisted(() => ({
   useShortcut: vi.fn(),
-  useKeyboardNavigationScope: vi.fn(),
 }));
 
 const contextMocks = vi.hoisted(() => ({
@@ -19,8 +18,6 @@ vi.mock('@ui/shortcuts', () => ({
   useShortcut: (...args: unknown[]) => shortcutMocks.useShortcut(...args),
   useKeyboardContext: () => contextMocks,
   useSearchShortcutTarget: () => undefined,
-  useKeyboardNavigationScope: (...args: unknown[]) =>
-    shortcutMocks.useKeyboardNavigationScope(...args),
 }));
 
 vi.mock('@modules/object-panel/components/ObjectPanel/Logs/LogSettings', () => ({
@@ -38,7 +35,6 @@ describe('LogSettingsModal', () => {
 
   beforeEach(async () => {
     shortcutMocks.useShortcut.mockClear();
-    shortcutMocks.useKeyboardNavigationScope.mockClear();
     contextMocks.pushContext.mockClear();
     contextMocks.popContext.mockClear();
     container = document.createElement('div');

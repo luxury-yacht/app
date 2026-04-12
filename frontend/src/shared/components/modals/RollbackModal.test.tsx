@@ -34,7 +34,6 @@ vi.mock('@ui/shortcuts', () => ({
     updateSurface: vi.fn(),
     dispatchNativeAction: vi.fn(() => false),
   }),
-  useKeyboardNavigationScope: vi.fn(),
 }));
 
 // Mock the modal focus trap hook (used by ConfirmationModal).

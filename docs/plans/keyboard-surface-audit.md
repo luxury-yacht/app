@@ -7,7 +7,6 @@ This document audits the current production keyboard handling in `frontend/src`.
 It includes:
 
 - shared shortcut infrastructure
-- shared `Tab` navigation infrastructure
 - global shortcuts
 - panels, modals, menus, dropdowns, and command palette
 - local `onKeyDown` handlers on interactive controls
@@ -19,7 +18,7 @@ It excludes:
 
 Audit method:
 
-- searched for `useShortcut`, `useShortcuts`, `useKeyboardNavigationScope`
+- searched for `useShortcut`, `useShortcuts`, `useKeyboardSurface`
 - searched for `onKeyDown`
 - searched for direct `document` / `window` `keydown` listeners
 - searched for `keyup` / `keypress` listeners
@@ -41,7 +40,6 @@ Mechanism:
 
 Current behavior:
 
-- calls the shared tab-navigation layer first
 - suppresses bare-key shortcuts while typing in most inputs
 - preserves standard edit commands like copy, paste, cut, select all
 - dispatches the highest-priority matching registered shortcut
@@ -51,26 +49,6 @@ Compatibility requirements:
 
 - any new surface manager must preserve standard editing behavior in inputs
 - shortcut matching still needs business context such as view, panel, tab, resource kind
-
-### `frontend/src/ui/shortcuts/keyboardNavigationContext.tsx`
-
-Mechanism:
-
-- shared `Tab` scope registry
-- ordered scopes with priorities
-- fallback from one scope to the next
-
-Current behavior:
-
-- only handles `Tab`
-- intentionally allows native `Tab` in inputs and elements inside `data-tab-native="true"`
-- supports region entry and region-local tab routing
-
-Compatibility requirements:
-
-- region-entry behavior must remain available
-- native tabbing exceptions must be explicitly preserved where intended
-- blocking surfaces must be able to override this behavior
 
 ### `frontend/src/ui/shortcuts/hooks.ts`
 

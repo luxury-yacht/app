@@ -14,7 +14,6 @@ import Settings from '@ui/settings/Settings';
 
 const shortcutMocks = vi.hoisted(() => ({
   useShortcut: vi.fn(),
-  useKeyboardNavigationScope: vi.fn(),
 }));
 
 const contextMocks = vi.hoisted(() => ({
@@ -26,8 +25,6 @@ vi.mock('@ui/shortcuts', () => ({
   useShortcut: (...args: unknown[]) => shortcutMocks.useShortcut(...args),
   useKeyboardContext: () => contextMocks,
   useSearchShortcutTarget: () => undefined,
-  useKeyboardNavigationScope: (...args: unknown[]) =>
-    shortcutMocks.useKeyboardNavigationScope(...args),
 }));
 
 vi.mock('@ui/settings/Settings', () => ({

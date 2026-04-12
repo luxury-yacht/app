@@ -11,7 +11,7 @@ import * as YAML from 'yaml';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import ContextMenu, { type ContextMenuItem } from '@shared/components/ContextMenu';
 import { deriveCopyText } from '@ui/shortcuts/context';
-import { useShortcut, useSearchShortcutTarget } from '@ui/shortcuts';
+import { useKeyboardSurface, useShortcut, useSearchShortcutTarget } from '@ui/shortcuts';
 import { errorHandler } from '@utils/errorHandler';
 import { refreshOrchestrator } from '@/core/refresh';
 import { useRefreshScopedDomain } from '@/core/refresh/store';
@@ -21,6 +21,7 @@ import { parseObjectIdentity, validateYamlDraft, type ObjectIdentity } from './y
 import { computeLineDiff, type DiffResult } from './yamlDiff';
 import { coerceDiffResult, parseObjectYamlError } from './yamlErrors';
 import { buildCodeTheme } from '@/core/codemirror/theme';
+import { selectCodeMirrorContent } from '@/core/codemirror/nativeActions';
 import { createSearchExtensions, closeSearchPanel } from '@/core/codemirror/search';
 import {
   SearchQuery,
@@ -80,6 +81,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
 
   const editorRef = useRef<ReactCodeMirrorRef>(null);
   const editorViewRef = useRef<EditorView | null>(null);
+  const editorSurfaceRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   const effectiveScope = scope ?? INACTIVE_SCOPE;
@@ -409,6 +411,25 @@ const YamlTab: React.FC<YamlTabProps> = ({
     focus: () => focusSearchInput(true),
     priority: 30,
     label: 'YAML tab search',
+  });
+
+  useKeyboardSurface({
+    kind: 'editor',
+    rootRef: editorSurfaceRef,
+    active: isActive,
+    onEscape: () => {
+      if (!isEditing || isSaving) {
+        return false;
+      }
+      handleCancelClick();
+      return true;
+    },
+    onNativeAction: ({ action }) => {
+      if (action !== 'selectAll') {
+        return false;
+      }
+      return selectCodeMirrorContent(editorViewRef.current);
+    },
   });
 
   useEffect(() => {
@@ -1169,7 +1190,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
               Large manifest detected. Editor performance may be reduced while editing.
             </div>
           )}
-          <div className="codemirror-shell">
+          <div ref={editorSurfaceRef} className="codemirror-shell">
             <CodeMirror
               ref={editorRef}
               value={isEditing ? draftYaml : (displayYaml ?? '')}

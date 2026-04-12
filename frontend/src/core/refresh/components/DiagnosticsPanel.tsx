@@ -2160,8 +2160,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         return false;
       }
 
-      const current =
-        target && panelRef.current?.contains(target) ? findActiveIndex() : -1;
+      const current = target && panelRef.current?.contains(target) ? findActiveIndex() : -1;
       if (current === -1) {
         return direction === 'forward' ? focusFirst() : focusLast();
       }

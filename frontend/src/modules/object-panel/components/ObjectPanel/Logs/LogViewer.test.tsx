@@ -108,7 +108,6 @@ vi.mock('@/core/refresh/fallbacks/objectLogFallbackManager', () => ({
 
 const shortcutMocks = vi.hoisted(() => ({
   useShortcut: vi.fn(),
-  useKeyboardNavigationScope: vi.fn(),
 }));
 
 const contextMocks = vi.hoisted(() => ({
@@ -120,8 +119,6 @@ vi.mock('@ui/shortcuts', () => ({
   useShortcut: (...args: unknown[]) => shortcutMocks.useShortcut(...args),
   useKeyboardContext: () => contextMocks,
   useSearchShortcutTarget: () => undefined,
-  useKeyboardNavigationScope: (...args: unknown[]) =>
-    shortcutMocks.useKeyboardNavigationScope(...args),
 }));
 
 vi.mock('@shared/components/dropdowns/Dropdown', () => ({
@@ -249,7 +246,6 @@ describe('LogViewer active pod synchronisation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     shortcutMocks.useShortcut.mockClear();
-    shortcutMocks.useKeyboardNavigationScope.mockClear();
     contextMocks.pushContext.mockClear();
     contextMocks.popContext.mockClear();
     (LogFetcher as unknown as ViMock).mockReset?.();

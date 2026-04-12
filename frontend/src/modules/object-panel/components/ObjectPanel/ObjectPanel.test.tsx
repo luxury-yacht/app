@@ -56,7 +56,6 @@ const mockQueryNamespacePermissions = vi.fn();
 const mockUseRefreshScopedDomain = vi.fn();
 const mockUseRefreshWatcher = vi.fn();
 const mockUseShortcut = vi.fn();
-const mockUseKeyboardNavigationScope = vi.fn();
 
 const mockRefreshOrchestrator = {
   setScopedDomainEnabled: vi.fn(),
@@ -240,8 +239,6 @@ vi.mock('@ui/shortcuts', () => ({
   useShortcuts: vi.fn(),
   useSearchShortcutTarget: () => undefined,
   useKeyboardSurface: vi.fn(),
-  useKeyboardNavigationScope: (...args: unknown[]) =>
-    mockUseKeyboardNavigationScope(...(args as [])),
 }));
 
 vi.mock('@wailsjs/go/backend/App', () => mockApp);

@@ -252,6 +252,78 @@ describe('keyboard surfaces', () => {
     expect(panelHandler).not.toHaveBeenCalled();
   });
 
+  it('routes keys to the deepest containing surface before its parent surface', async () => {
+    const modalHandler = vi.fn();
+    const dropdownHandler = vi.fn();
+
+    const Harness = () => {
+      const modalRef = useRef<HTMLDivElement>(null);
+      const dropdownRef = useRef<HTMLDivElement>(null);
+
+      useKeyboardSurface({
+        kind: 'modal',
+        rootRef: modalRef,
+        active: true,
+        blocking: true,
+        onKeyDown: (event) => {
+          if (event.key !== 'ArrowDown') {
+            return false;
+          }
+          modalHandler();
+          return true;
+        },
+      });
+
+      useKeyboardSurface({
+        kind: 'dropdown',
+        rootRef: dropdownRef,
+        active: true,
+        suppressShortcuts: true,
+        onKeyDown: (event) => {
+          if (event.key !== 'ArrowDown') {
+            return false;
+          }
+          dropdownHandler();
+          return true;
+        },
+      });
+
+      return (
+        <div ref={modalRef}>
+          <div ref={dropdownRef}>
+            <button id="inside-dropdown">Inside dropdown</button>
+          </div>
+        </div>
+      );
+    };
+
+    await act(async () => {
+      root.render(
+        <KeyboardProvider>
+          <Harness />
+        </KeyboardProvider>
+      );
+      await Promise.resolve();
+    });
+
+    const insideDropdown = document.querySelector('#inside-dropdown') as HTMLButtonElement | null;
+    expect(insideDropdown).not.toBeNull();
+    insideDropdown?.focus();
+
+    act(() => {
+      insideDropdown?.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'ArrowDown',
+          bubbles: true,
+          cancelable: true,
+        })
+      );
+    });
+
+    expect(dropdownHandler).toHaveBeenCalledTimes(1);
+    expect(modalHandler).not.toHaveBeenCalled();
+  });
+
   it('routes native actions through the active surface before falling back', async () => {
     const nativeActionHandler = vi.fn();
     const apiRef: {
@@ -302,6 +374,76 @@ describe('keyboard surfaces', () => {
 
     expect(apiRef.current?.dispatchNativeAction('copy')).toBe(true);
     expect(nativeActionHandler).toHaveBeenCalledTimes(1);
+  });
+
+  it('routes native actions to the deepest containing surface before its parent surface', async () => {
+    const panelNativeActionHandler = vi.fn();
+    const editorNativeActionHandler = vi.fn();
+    const apiRef: {
+      current: ReturnType<typeof useKeyboardContext> | null;
+    } = { current: null };
+
+    const Harness = () => {
+      const panelRef = useRef<HTMLDivElement>(null);
+      const editorRef = useRef<HTMLDivElement>(null);
+      const keyboard = useKeyboardContext();
+
+      useEffect(() => {
+        apiRef.current = keyboard;
+      }, [keyboard]);
+
+      useKeyboardSurface({
+        kind: 'panel',
+        rootRef: panelRef,
+        active: true,
+        captureWhenActive: true,
+        onNativeAction: ({ action }) => {
+          if (action !== 'selectAll') {
+            return false;
+          }
+          panelNativeActionHandler();
+          return true;
+        },
+      });
+
+      useKeyboardSurface({
+        kind: 'editor',
+        rootRef: editorRef,
+        active: true,
+        onNativeAction: ({ action }) => {
+          if (action !== 'selectAll') {
+            return false;
+          }
+          editorNativeActionHandler();
+          return true;
+        },
+      });
+
+      return (
+        <div ref={panelRef}>
+          <div ref={editorRef}>
+            <button id="inside-editor">Inside editor</button>
+          </div>
+        </div>
+      );
+    };
+
+    await act(async () => {
+      root.render(
+        <KeyboardProvider>
+          <Harness />
+        </KeyboardProvider>
+      );
+      await Promise.resolve();
+    });
+
+    const insideEditor = document.querySelector('#inside-editor') as HTMLButtonElement | null;
+    expect(insideEditor).not.toBeNull();
+    insideEditor?.focus();
+
+    expect(apiRef.current?.dispatchNativeAction('selectAll')).toBe(true);
+    expect(editorNativeActionHandler).toHaveBeenCalledTimes(1);
+    expect(panelNativeActionHandler).not.toHaveBeenCalled();
   });
 
   it('suppresses the shortcut registry while a suppressing surface is active', async () => {

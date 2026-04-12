@@ -15,7 +15,8 @@ import { errorHandler } from '@utils/errorHandler';
 import './ValuesTab.css';
 import '../Yaml/YamlTab.css';
 import { buildCodeTheme } from '@/core/codemirror/theme';
-import { useSearchShortcutTarget } from '@ui/shortcuts';
+import { selectCodeMirrorContent } from '@/core/codemirror/nativeActions';
+import { useKeyboardSurface, useSearchShortcutTarget } from '@ui/shortcuts';
 import { createSearchExtensions, closeSearchPanel } from '@/core/codemirror/search';
 import {
   SearchQuery,
@@ -48,6 +49,7 @@ interface ValuesTabProps {
 const ValuesTab: React.FC<ValuesTabProps> = ({ scope, isActive = false }) => {
   const editorRef = useRef<ReactCodeMirrorRef>(null);
   const editorViewRef = useRef<EditorView | null>(null);
+  const editorSurfaceRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const [showMode, setShowMode] = useState<'defaults' | 'overrides' | 'merged'>('defaults');
   const [searchTerm, setSearchTerm] = useState('');
@@ -393,6 +395,18 @@ const ValuesTab: React.FC<ValuesTabProps> = ({ scope, isActive = false }) => {
     label: 'Helm values search',
   });
 
+  useKeyboardSurface({
+    kind: 'editor',
+    rootRef: editorSurfaceRef,
+    active: isActive,
+    onNativeAction: ({ action }) => {
+      if (action !== 'selectAll') {
+        return false;
+      }
+      return selectCodeMirrorContent(editorViewRef.current);
+    },
+  });
+
   if (valuesLoading) {
     return (
       <div className="object-panel-tab-content">
@@ -474,7 +488,7 @@ const ValuesTab: React.FC<ValuesTabProps> = ({ scope, isActive = false }) => {
         </div>
         <div className="yaml-display">
           <div className="yaml-content">
-            <div className="codemirror-shell">
+            <div ref={editorSurfaceRef} className="codemirror-shell">
               <CodeMirror
                 ref={editorRef}
                 value={displayContent}

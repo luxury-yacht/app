@@ -15,10 +15,6 @@ import {
   ShortcutModifiers,
 } from '@/types/shortcuts';
 import { getShortcutKey, modifiersMatch, isInputElement, resolveEventElement } from './utils';
-import {
-  KeyboardNavigationProvider,
-  useKeyboardNavigationContext,
-} from './keyboardNavigationContext';
 import { EventsOn, EventsOff } from '@wailsjs/runtime/runtime';
 import SearchShortcutHandler from './components/SearchShortcutHandler';
 
@@ -85,6 +81,24 @@ interface RegisteredKeyboardSurface extends KeyboardSurfaceOptions {
 }
 
 const KeyboardContext = createContext<KeyboardProviderValue | null>(null);
+
+const getSurfaceContainmentDepth = (target: Element, root: HTMLElement | null): number => {
+  if (!root) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  let depth = 0;
+  let current: Element | null = target;
+  while (current) {
+    if (current === root) {
+      return depth;
+    }
+    current = current.parentElement;
+    depth += 1;
+  }
+
+  return Number.POSITIVE_INFINITY;
+};
 
 export function useKeyboardContext() {
   const context = useContext(KeyboardContext);
@@ -200,11 +214,7 @@ export const applySelectAll = (selection: Selection | null, activeElement: Eleme
 };
 
 export function KeyboardProvider({ children, disabled = false }: KeyboardProviderProps) {
-  return (
-    <KeyboardNavigationProvider>
-      <KeyboardProviderInner disabled={disabled}>{children}</KeyboardProviderInner>
-    </KeyboardNavigationProvider>
-  );
+  return <KeyboardProviderInner disabled={disabled}>{children}</KeyboardProviderInner>;
 }
 
 const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disabled = false }) => {
@@ -287,8 +297,6 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
     [currentContext]
   );
 
-  const tabNavigation = useKeyboardNavigationContext();
-
   const getOrderedSurfaces = useCallback((): RegisteredKeyboardSurface[] => {
     return Array.from(surfacesRef.current.values())
       .filter((surface) => surface.active && surface.rootRef.current)
@@ -312,11 +320,19 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
       const orderedSurfaces = getOrderedSurfaces();
 
       if (targetElement) {
-        const containingSurface = orderedSurfaces.find((surface) =>
+        const containingSurfaces = orderedSurfaces.filter((surface) =>
           surface.rootRef.current?.contains(targetElement)
         );
-        if (containingSurface) {
-          return containingSurface;
+        if (containingSurfaces.length > 0) {
+          return containingSurfaces.sort((a, b) => {
+            const depthDiff =
+              getSurfaceContainmentDepth(targetElement, a.rootRef.current) -
+              getSurfaceContainmentDepth(targetElement, b.rootRef.current);
+            if (depthDiff !== 0) {
+              return depthDiff;
+            }
+            return orderedSurfaces.indexOf(a) - orderedSurfaces.indexOf(b);
+          })[0];
         }
       }
 
@@ -412,10 +428,6 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
         }
       }
 
-      if (tabNavigation.handleKeyEvent(event)) {
-        return;
-      }
-
       if (targetSurface?.suppressShortcuts) {
         return;
       }
@@ -478,7 +490,7 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [disabled, getTargetSurface, isEnabled, matchesContext, shortcuts, tabNavigation]);
+  }, [disabled, getTargetSurface, isEnabled, matchesContext, shortcuts]);
 
   // Handle menu events from Wails
   useEffect(() => {

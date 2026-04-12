@@ -6,9 +6,9 @@
  */
 
 import { useCallback, useEffect, useState, type RefObject } from 'react';
-import { useKeyboardNavigationScope } from '@ui/shortcuts';
 import { KeyboardScopePriority } from '@ui/shortcuts/priorities';
 import { useKeyboardSurface } from '@ui/shortcuts/surfaces';
+import { isInputElement, resolveEventElement } from '@ui/shortcuts/utils';
 import type { NamespaceViewType, ClusterViewType } from '@/types/navigation/views';
 
 export type SidebarCursorTarget =
@@ -222,24 +222,28 @@ export const useSidebarKeyboardControls = ({
     sidebarRef,
   ]);
 
-  useKeyboardNavigationScope({
-    ref: sidebarRef,
-    priority: KeyboardScopePriority.SIDEBAR,
-    disabled: isCollapsed,
-    onNavigate: () => 'bubble',
-    onEnter: () => {
-      const target = getDisplaySelectionTarget();
-      setIsKeyboardNavActive(true);
-      setCursorPreview(target);
-      focusSelectedSidebarItem();
-    },
-  });
-
   useKeyboardSurface({
     kind: 'region',
     rootRef: sidebarRef,
     active: !isCollapsed,
+    captureWhenActive: true,
+    priority: KeyboardScopePriority.SIDEBAR,
     onKeyDown: (event) => {
+      if (event.key === 'Tab') {
+        if (event.metaKey || event.ctrlKey || event.altKey) {
+          return false;
+        }
+        const targetElement = resolveEventElement(event.target);
+        if (targetElement?.closest('[data-tab-native="true"]') || isInputElement(targetElement)) {
+          return false;
+        }
+        const target = getDisplaySelectionTarget();
+        setIsKeyboardNavActive(true);
+        setCursorPreview(target);
+        focusSelectedSidebarItem();
+        return true;
+      }
+
       const container = sidebarRef.current;
       if (!container || !container.contains(document.activeElement)) {
         return false;

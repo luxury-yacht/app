@@ -131,7 +131,6 @@ let registeredPaletteShortcuts: Array<{
 }> = [];
 const pushContextMock = vi.fn();
 const popContextMock = vi.fn();
-const useKeyboardNavigationScopeMock = vi.fn();
 
 vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
   useObjectPanel: () => ({
@@ -175,8 +174,6 @@ vi.mock('@ui/shortcuts', () => ({
     dispatchNativeAction: vi.fn(() => false),
   }),
   useSearchShortcutTarget: () => undefined,
-  useKeyboardNavigationScope: (...args: unknown[]) =>
-    useKeyboardNavigationScopeMock(...(args as [unknown])),
 }));
 
 describe('CommandPalette component behaviour', () => {
@@ -247,7 +244,6 @@ describe('CommandPalette component behaviour', () => {
     openWithObjectMock.mockReset();
     pushContextMock.mockReset();
     popContextMock.mockReset();
-    useKeyboardNavigationScopeMock.mockReset();
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
@@ -653,7 +649,7 @@ describe('CommandPalette component behaviour', () => {
     errorSpy.mockRestore();
   });
 
-  it('focuses the search input without registering a keyboard navigation scope', async () => {
+  it('focuses the search input when the palette opens', async () => {
     const commands: Command[] = [
       { id: 'open-settings', label: 'Open Settings', category: 'Application', action: vi.fn() },
     ];
@@ -664,7 +660,6 @@ describe('CommandPalette component behaviour', () => {
     const input = container.querySelector('.command-palette-input') as HTMLInputElement;
     expect(input).not.toBeNull();
     expect(document.activeElement).toBe(input);
-    expect(useKeyboardNavigationScopeMock).not.toHaveBeenCalled();
   });
 });
 

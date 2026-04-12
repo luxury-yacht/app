@@ -10,5 +10,4 @@ export { KeyboardProvider, useKeyboardContext } from './context';
 export { useShortcut, useShortcuts } from './hooks';
 export { GlobalShortcuts } from './components/GlobalShortcuts';
 export { useSearchShortcutTarget } from './useSearchShortcutTarget';
-export { useKeyboardNavigationScope } from './keyboardNavigationContext';
 export { useKeyboardSurface } from './surfaces';

@@ -28,7 +28,6 @@ vi.mock('@ui/shortcuts', () => ({
   }),
   useShortcuts: vi.fn(),
   useSearchShortcutTarget: () => undefined,
-  useKeyboardNavigationScope: vi.fn(),
 }));
 
 vi.mock('@shared/components/modals/useModalFocusTrap', () => ({

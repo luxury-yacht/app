@@ -8,7 +8,7 @@
 import React from 'react';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { KeyboardProvider } from '@ui/shortcuts/context';
 import {
   useSidebarKeyboardControls,
@@ -16,12 +16,6 @@ import {
   describeElementTarget,
   type SidebarCursorTarget,
 } from './SidebarKeys';
-
-const useKeyboardNavigationScopeMock = vi.hoisted(() => vi.fn());
-
-vi.mock('@ui/shortcuts', () => ({
-  useKeyboardNavigationScope: (...args: unknown[]) => useKeyboardNavigationScopeMock(...args),
-}));
 
 const buildTargetElement = (attrs: Record<string, string>) => {
   const element = document.createElement('div');
@@ -236,15 +230,11 @@ const renderHarness = (props?: React.ComponentProps<typeof TestHarness>) => {
 };
 
 describe('useSidebarKeyboardControls', () => {
-  beforeEach(() => {
-    useKeyboardNavigationScopeMock.mockClear();
-  });
-
   afterEach(() => {
     vi.clearAllMocks();
   });
 
-  it('registers keyboard scopes and marks active/preview items', () => {
+  it('marks active/preview items', () => {
     const { ref, container, cleanup } = renderHarness({
       selectionTarget: { kind: 'overview' },
     });
@@ -255,7 +245,34 @@ describe('useSidebarKeyboardControls', () => {
     });
     const nodes = container.querySelector('[data-sidebar-target-view="nodes"]')!;
     expect(nodes.className).toContain('keyboard-preview');
-    expect(useKeyboardNavigationScopeMock).toHaveBeenCalled();
+    cleanup();
+  });
+
+  it('tabs into the current sidebar selection from outside the sidebar', async () => {
+    const { container, cleanup } = renderHarness({
+      selectionTarget: { kind: 'overview' },
+    });
+    const outside = document.createElement('button');
+    document.body.appendChild(outside);
+    outside.focus();
+    expect(document.activeElement).toBe(outside);
+
+    await act(async () => {
+      outside.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'Tab',
+          bubbles: true,
+          cancelable: true,
+        })
+      );
+      await Promise.resolve();
+    });
+
+    expect(document.activeElement).toBe(
+      container.querySelector('[data-sidebar-target-kind="overview"]')
+    );
+
+    outside.remove();
     cleanup();
   });
 
@@ -374,10 +391,28 @@ describe('useSidebarKeyboardControls', () => {
     cleanup();
   });
 
-  it('disables navigation when collapsed', () => {
-    const { cleanup } = renderHarness({ collapsed: true });
-    const scopeArgs = useKeyboardNavigationScopeMock.mock.calls[0][0];
-    expect(scopeArgs.disabled).toBe(true);
+  it('does not capture tab entry when collapsed', async () => {
+    const { cleanup } = renderHarness({
+      collapsed: true,
+      selectionTarget: { kind: 'overview' },
+    });
+    const outside = document.createElement('button');
+    document.body.appendChild(outside);
+    outside.focus();
+
+    await act(async () => {
+      outside.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'Tab',
+          bubbles: true,
+          cancelable: true,
+        })
+      );
+      await Promise.resolve();
+    });
+
+    expect(document.activeElement).toBe(outside);
+    outside.remove();
     cleanup();
   });
 });

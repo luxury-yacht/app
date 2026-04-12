@@ -19,7 +19,6 @@ vi.mock('@ui/shortcuts', async (importOriginal) => {
   return {
     ...actual,
     useSearchShortcutTarget: () => {},
-    useKeyboardNavigationScope: () => {},
     useKeyboardContext: () => ({
       pushContext: () => {},
       popContext: () => {},

@@ -5,7 +5,6 @@
 The app currently handles keyboard input through multiple overlapping systems:
 
 - global shortcut dispatch in `frontend/src/ui/shortcuts/context.tsx`
-- `Tab` routing in `frontend/src/ui/shortcuts/keyboardNavigationContext.tsx`
 - local component `onKeyDown` handlers
 - direct `document` and `window` key listeners in several components
 
@@ -43,19 +42,20 @@ Completed foundation and early migrations:
   - `AppLogsPanel`
   - `DiagnosticsPanel`
   - `ObjectPanel`
+  - `SidebarKeys`
 - ✅ Redundant tab-scope cleanup for `KubeconfigSelector`
-
-Current boundary:
-
-- `SidebarKeys` is the only remaining real production user of `useKeyboardNavigationScope`
-- `SidebarKeys` is intentionally left as the boundary between the safe cleanup work and the broader
-  region-ordering rewrite
+- ✅ Editor-surface integration for:
+  - YAML tab
+  - Helm manifest tab
+  - Helm values tab
+- ✅ Nested-surface routing now prefers the deepest containing surface over its parent region/modal
+- ✅ Runtime shortcut dispatch no longer depends on `KeyboardNavigationProvider`
+- ✅ `useKeyboardNavigationScope` is no longer exported from the active shortcut barrel
+- ✅ Legacy tab-scope implementation removed
 
 Still remaining:
 
-- broader region-ordering work for the sidebar
-- editor-surface integration work
-- legacy tab-scope system cleanup after the sidebar migration is done
+- broader cleanup/reduction of remaining legacy shortcut-context helpers where appropriate
 
 ## Execution Reference
 
@@ -101,7 +101,7 @@ Regional and panel surfaces:
 - legacy regional cleanup already completed
   - Kubeconfig selector no longer needs its old entry scope
 
-Editor-owned surfaces still remaining:
+Editor-owned surfaces:
 
 - `editor`
   - YAML tab
@@ -112,14 +112,10 @@ Editor-owned surfaces still remaining:
 
 Production `useKeyboardNavigationScope` usage still remaining:
 
-- `SidebarKeys.ts`
-  - intentionally left as the boundary between safe local migrations and the broader
-    region-ordering rewrite
+- none
 
 Legacy keyboard infrastructure still present:
 
-- `keyboardNavigationContext.tsx`
-  - still exists as infrastructure because the sidebar migration has not happened yet
 - shortcut context metadata in `context.tsx`
   - still coexists with the surface manager for business eligibility
 
@@ -132,20 +128,15 @@ Intentional out-of-band listeners still remaining:
 
 Next implementation slice:
 
-- migrate `SidebarKeys` as the first broader region-ordering change
+- continue cleanup/reduction of legacy shortcut-context helpers where the surface manager now owns
+  the behavior
 
 After that:
 
-- migrate editor-backed surfaces
-  - YAML
-  - Helm manifest
-  - Helm values
-- remove obsolete tab-scope glue and remaining legacy helpers
+- continue broader cleanup/reduction of legacy helpers around shortcut contexts where appropriate
 
 ### Key Rules For Remaining Work
 
-- Do not treat `SidebarKeys` like another local panel cleanup; it changes top-level region entry
-  and ordering.
 - Keep app-level `Escape` as the default in editor surfaces, with explicit per-surface override
   when an editor needs editor-first `Escape`.
 - Keep `menu:close` as an app/window close action, not a surface-routed close.
@@ -153,16 +144,16 @@ After that:
 
 ## Current Problems
 
-### Two shared keyboard systems with incomplete coordination
+### The old split keyboard model created long-lived complexity
 
-The app has one shared system for shortcuts and a separate shared system for `Tab` navigation.
+The app used to have one shared system for shortcuts and a separate shared system for `Tab`
+navigation.
 
-- `frontend/src/ui/shortcuts/context.tsx` handles shortcut registration and dispatch
-- `frontend/src/ui/shortcuts/keyboardNavigationContext.tsx` handles `Tab` scope navigation
+- `frontend/src/ui/shortcuts/context.tsx` handled shortcut registration and dispatch
+- `frontend/src/ui/shortcuts/keyboardNavigationContext.tsx` handled `Tab` scope navigation
 
-These systems are linked only loosely. The shortcut layer calls the tab-navigation layer first,
-then proceeds with its own matching. This means the app does not have a single authoritative
-decision point for keyboard routing.
+That split model is now retired from production runtime, but it is important context for why some
+tests and compatibility layers still carry legacy assumptions.
 
 ### Context is not the same thing as active surface ownership
 
@@ -219,7 +210,6 @@ To make a surface keyboard-correct today, a developer may need to know about:
 
 - `useShortcut`
 - `pushContext` / `popContext`
-- `useKeyboardNavigationScope`
 - `data-allow-shortcuts`
 - local `onKeyDown`
 - document-level `keydown` listeners
@@ -581,7 +571,7 @@ After this refactor, a developer should follow a simple rule set:
 - ✅ Context menu
 - ✅ Dropdown
 - ✅ Shortcut help modal
-- ⏳ Editor-backed surfaces where editor ownership must be explicit
+- ✅ Editor-backed surfaces where editor ownership must be explicit
 
 Implementation note:
 
@@ -592,7 +582,7 @@ Implementation note:
 
 ### Phase 3: Migrate major regions
 
-- ⏳ Sidebar
+- ✅ Sidebar
 - ✅ Object panel
 - ✅ App logs panel
 - ✅ Grid table filter/body regions
@@ -601,9 +591,10 @@ Implementation note:
 
 ### Phase 4: Remove legacy pathways
 
+- ✅ retire the production use of `useKeyboardNavigationScope` after the sidebar migration
+- ✅ delete the legacy tab-scope implementation once runtime usage was gone
 - ⏳ reduce direct `pushContext` / `popContext` usage to business-state cases only
 - ⏳ remove remaining raw document key listeners where they are no longer justified
-- ⏳ retire the production use of `useKeyboardNavigationScope` after the sidebar migration
 
 ## Testing Strategy
 

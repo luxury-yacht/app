@@ -51,7 +51,6 @@ vi.mock('@ui/shortcuts', () => ({
     updateSurface: vi.fn(),
     dispatchNativeAction: vi.fn(() => false),
   }),
-  useKeyboardNavigationScope: vi.fn(),
 }));
 
 const openMenu = (container: HTMLElement) => {

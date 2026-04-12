@@ -16,7 +16,6 @@ const shortcutContextMock = vi.hoisted(() => ({
 
 const shortcutMock = vi.hoisted(() => ({
   register: [] as Array<any>,
-  useKeyboardNavigationScope: vi.fn(),
 }));
 
 const appInfoMock = vi.hoisted(() => ({
@@ -34,8 +33,6 @@ vi.mock('@ui/shortcuts', () => ({
   },
   useKeyboardContext: () => shortcutContextMock,
   useSearchShortcutTarget: () => undefined,
-  useKeyboardNavigationScope: (...args: unknown[]) =>
-    shortcutMock.useKeyboardNavigationScope(...args),
 }));
 
 vi.mock('@wailsjs/go/backend/App', () => ({

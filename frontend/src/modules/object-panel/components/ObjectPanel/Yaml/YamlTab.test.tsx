@@ -10,6 +10,7 @@ type SnapshotStatus = 'idle' | 'loading' | 'ready' | 'updating' | 'initialising'
 
 const shortcutMocks = vi.hoisted(() => ({
   useShortcut: vi.fn(),
+  useKeyboardSurface: vi.fn(),
 }));
 const searchShortcutMocks = vi.hoisted(() => ({
   useSearchShortcutTarget: vi.fn(),
@@ -136,6 +137,7 @@ const codemirrorSearchMocks = vi.hoisted(() => {
 });
 
 vi.mock('@ui/shortcuts', () => ({
+  useKeyboardSurface: (config: unknown) => shortcutMocks.useKeyboardSurface(config),
   useShortcut: shortcutMocks.useShortcut,
   useSearchShortcutTarget: (config: unknown) => searchShortcutMocks.useSearchShortcutTarget(config),
 }));
@@ -316,6 +318,7 @@ describe('YamlTab', () => {
     refreshMocks.fetchScopedDomain.mockClear();
     refreshMocks.resetScopedDomain.mockClear();
     shortcutMocks.useShortcut.mockClear();
+    shortcutMocks.useKeyboardSurface.mockClear();
     searchShortcutMocks.useSearchShortcutTarget.mockClear();
     searchModuleMocks.createSearchExtensions.mockClear();
     searchModuleMocks.closeSearchPanel.mockClear();
@@ -348,6 +351,21 @@ describe('YamlTab', () => {
     await waitForUpdates();
 
     expect(codeMirrorState.value).toContain('managedFields');
+
+    await unmount();
+  });
+
+  it('registers the CodeMirror region as an editor surface', async () => {
+    const { unmount } = await renderYamlTab();
+
+    expect(shortcutMocks.useKeyboardSurface).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'editor',
+        active: true,
+        onEscape: expect.any(Function),
+        onNativeAction: expect.any(Function),
+      })
+    );
 
     await unmount();
   });
