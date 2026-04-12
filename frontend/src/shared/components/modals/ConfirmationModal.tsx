@@ -5,10 +5,8 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import React, { useEffect, useRef } from 'react';
-import { useShortcut, useKeyboardContext } from '@ui/shortcuts';
+import React, { useRef } from 'react';
 import { useModalFocusTrap } from './useModalFocusTrap';
-import { KeyboardContextPriority } from '@ui/shortcuts/priorities';
 import ModalSurface from './ModalSurface';
 import './ConfirmationModal.css';
 
@@ -32,33 +30,7 @@ const ConfirmationModalContent: React.FC<Omit<ConfirmationModalProps, 'isOpen'>>
   onConfirm,
   onCancel,
 }) => {
-  const { pushContext, popContext } = useKeyboardContext();
-  const contextPushedRef = useRef(false);
   const modalRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    pushContext({ priority: KeyboardContextPriority.CONFIRMATION_MODAL });
-    contextPushedRef.current = true;
-    return () => {
-      if (contextPushedRef.current) {
-        popContext();
-        contextPushedRef.current = false;
-      }
-    };
-  }, [popContext, pushContext]);
-
-  useShortcut({
-    key: 'Escape',
-    handler: () => {
-      onCancel();
-      return true;
-    },
-    description: 'Cancel dialog',
-    category: 'Modals',
-    enabled: true,
-    view: 'global',
-    priority: KeyboardContextPriority.CONFIRMATION_MODAL,
-  });
 
   useModalFocusTrap({
     ref: modalRef,

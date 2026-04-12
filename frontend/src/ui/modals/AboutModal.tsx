@@ -13,8 +13,6 @@ import captainK8s from '@assets/captain-k8s-color.png';
 import { BrowserOpenURL } from '@wailsjs/runtime/runtime';
 import { GetAppInfo } from '@wailsjs/go/backend/App';
 import { backend } from '@wailsjs/go/models';
-import { useShortcut, useKeyboardContext } from '@ui/shortcuts';
-import { KeyboardContextPriority } from '@ui/shortcuts/priorities';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
 import ModalSurface from '@shared/components/modals/ModalSurface';
 import { CloseIcon } from '@shared/components/icons/MenuIcons';
@@ -28,8 +26,6 @@ const AboutModal: React.FC<AboutModalProps> = React.memo(({ isOpen, onClose }) =
   const [isClosing, setIsClosing] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);
   const [appInfo, setAppInfo] = useState<backend.AppInfo | null>(null);
-  const { pushContext, popContext } = useKeyboardContext();
-  const contextPushedRef = useRef(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -54,41 +50,11 @@ const AboutModal: React.FC<AboutModalProps> = React.memo(({ isOpen, onClose }) =
   }, [isOpen, shouldRender]);
 
   useEffect(() => {
-    if (!isOpen) {
-      if (contextPushedRef.current) {
-        popContext();
-        contextPushedRef.current = false;
-      }
-      document.body.style.overflow = '';
-      return;
-    }
-
-    pushContext({ priority: KeyboardContextPriority.ABOUT_MODAL });
-    contextPushedRef.current = true;
-    document.body.style.overflow = 'hidden';
-
+    document.body.style.overflow = isOpen ? 'hidden' : '';
     return () => {
-      if (contextPushedRef.current) {
-        popContext();
-        contextPushedRef.current = false;
-      }
       document.body.style.overflow = '';
     };
-  }, [isOpen, popContext, pushContext]);
-
-  useShortcut({
-    key: 'Escape',
-    handler: () => {
-      if (!isOpen) return false;
-      onClose();
-      return true;
-    },
-    description: 'Close about modal',
-    category: 'Modals',
-    enabled: isOpen,
-    view: 'global',
-    priority: KeyboardContextPriority.ABOUT_MODAL,
-  });
+  }, [isOpen]);
 
   const modalRef = useRef<HTMLDivElement>(null);
 

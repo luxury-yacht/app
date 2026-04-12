@@ -7,8 +7,6 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import Settings from '@ui/settings/Settings';
-import { useShortcut, useKeyboardContext } from '@ui/shortcuts';
-import { KeyboardContextPriority } from '@ui/shortcuts/priorities';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
 import ModalSurface from '@shared/components/modals/ModalSurface';
 import { CloseIcon } from '@shared/components/icons/MenuIcons';
@@ -22,8 +20,6 @@ interface SettingsModalProps {
 const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const [isClosing, setIsClosing] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);
-  const { pushContext, popContext } = useKeyboardContext();
-  const contextPushedRef = useRef(false);
   const modalRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -41,42 +37,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   }, [isOpen, shouldRender]);
 
   useEffect(() => {
-    if (!isOpen) {
-      if (contextPushedRef.current) {
-        popContext();
-        contextPushedRef.current = false;
-      }
-      document.body.style.overflow = '';
-      return;
-    }
-
-    pushContext({ panelOpen: 'settings', priority: KeyboardContextPriority.SETTINGS_MODAL });
-    contextPushedRef.current = true;
-    document.body.style.overflow = 'hidden';
-
+    document.body.style.overflow = isOpen ? 'hidden' : '';
     return () => {
-      if (contextPushedRef.current) {
-        popContext();
-        contextPushedRef.current = false;
-      }
       document.body.style.overflow = '';
     };
-  }, [isOpen, popContext, pushContext]);
-
-  useShortcut({
-    key: 'Escape',
-    handler: () => {
-      if (!isOpen) return false;
-      onClose();
-      return true;
-    },
-    description: 'Close settings modal',
-    category: 'Modals',
-    enabled: isOpen,
-    view: 'global',
-    whenPanelOpen: 'settings',
-    priority: KeyboardContextPriority.SETTINGS_MODAL,
-  });
+  }, [isOpen]);
 
   useModalFocusTrap({
     ref: modalRef,

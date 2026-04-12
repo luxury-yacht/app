@@ -7,9 +7,7 @@
  */
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { useShortcut, useKeyboardContext } from '@ui/shortcuts';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
-import { KeyboardContextPriority } from '@ui/shortcuts/priorities';
 import { CloseIcon } from '@shared/components/icons/MenuIcons';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import Tooltip from '@shared/components/Tooltip';
@@ -176,8 +174,6 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
   const isEditing = existingFavorite != null;
   const { kubeconfigs } = useKubeconfig();
   const { namespaces } = useNamespace();
-  const { pushContext, popContext } = useKeyboardContext();
-  const contextPushedRef = useRef(false);
   const modalRef = useRef<HTMLDivElement>(null);
 
   // ----- Form state -----
@@ -232,39 +228,6 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
     filters,
     includeMetadata,
   ]);
-
-  // ----- Keyboard context management -----
-  useEffect(() => {
-    if (!isOpen) {
-      if (contextPushedRef.current) {
-        popContext();
-        contextPushedRef.current = false;
-      }
-      return;
-    }
-    pushContext({ priority: KeyboardContextPriority.SETTINGS_MODAL });
-    contextPushedRef.current = true;
-    return () => {
-      if (contextPushedRef.current) {
-        popContext();
-        contextPushedRef.current = false;
-      }
-    };
-  }, [isOpen, popContext, pushContext]);
-
-  useShortcut({
-    key: 'Escape',
-    handler: () => {
-      if (!isOpen) return false;
-      onClose();
-      return true;
-    },
-    description: 'Close favorite modal',
-    category: 'Modals',
-    enabled: isOpen && !showDeleteConfirm,
-    view: 'global',
-    priority: KeyboardContextPriority.SETTINGS_MODAL,
-  });
 
   useModalFocusTrap({
     ref: modalRef,

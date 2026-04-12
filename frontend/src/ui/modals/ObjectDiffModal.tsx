@@ -11,8 +11,6 @@ import './ObjectDiffModal.css';
 import Dropdown from '@shared/components/dropdowns/Dropdown/Dropdown';
 import { CloseIcon } from '@shared/components/icons/MenuIcons';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown/types';
-import { useShortcut, useKeyboardContext } from '@ui/shortcuts';
-import { KeyboardContextPriority, KeyboardScopePriority } from '@ui/shortcuts/priorities';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
 import ModalSurface from '@shared/components/modals/ModalSurface';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
@@ -291,8 +289,6 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
   const [rightNoMatch, setRightNoMatch] = useState(false);
   const [pendingLeftMatch, setPendingLeftMatch] = useState<MatchRequest | null>(null);
   const [pendingRightMatch, setPendingRightMatch] = useState<MatchRequest | null>(null);
-  const { pushContext, popContext } = useKeyboardContext();
-  const contextPushedRef = useRef(false);
   const leftChecksumRef = useRef<string | null>(null);
   const rightChecksumRef = useRef<string | null>(null);
   const leftNoMatchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -331,27 +327,11 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
   }, [isOpen, shouldRender]);
 
   useEffect(() => {
-    if (!isOpen) {
-      if (contextPushedRef.current) {
-        popContext();
-        contextPushedRef.current = false;
-      }
-      document.body.style.overflow = '';
-      return;
-    }
-
-    pushContext({ priority: KeyboardContextPriority.OBJECT_DIFF_MODAL });
-    contextPushedRef.current = true;
-    document.body.style.overflow = 'hidden';
-
+    document.body.style.overflow = isOpen ? 'hidden' : '';
     return () => {
-      if (contextPushedRef.current) {
-        popContext();
-        contextPushedRef.current = false;
-      }
       document.body.style.overflow = '';
     };
-  }, [isOpen, popContext, pushContext]);
+  }, [isOpen]);
 
   useEffect(
     () => () => {
@@ -365,24 +345,9 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
     []
   );
 
-  useShortcut({
-    key: 'Escape',
-    handler: () => {
-      if (!isOpen) return false;
-      onClose();
-      return true;
-    },
-    description: 'Close object diff modal',
-    category: 'Modals',
-    enabled: isOpen,
-    view: 'global',
-    priority: KeyboardContextPriority.OBJECT_DIFF_MODAL,
-  });
-
   useModalFocusTrap({
     ref: modalRef,
     focusableSelector: '.dropdown-trigger, button, input',
-    priority: KeyboardScopePriority.OBJECT_DIFF_MODAL,
     disabled: !shouldRender,
     onEscape: () => {
       if (!isOpen) return false;

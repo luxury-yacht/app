@@ -52,6 +52,8 @@ Completed foundation and early migrations:
 - ✅ Runtime shortcut dispatch no longer depends on `KeyboardNavigationProvider`
 - ✅ `useKeyboardNavigationScope` is no longer exported from the active shortcut barrel
 - ✅ Legacy tab-scope implementation removed
+- ✅ Blocking modals now rely on the shared modal surface for blocking and `Escape` ownership
+  instead of duplicating that behavior through modal-local shortcut context wiring
 
 Still remaining:
 
@@ -181,28 +183,24 @@ The modal rewrite removed the biggest focus-containment problems, but the broade
 architecture is still split across multiple ownership models:
 
 - shortcut contexts
-- tab-scope routing
 - local `onKeyDown`
-- direct document listeners on some modal-like and panel surfaces
+- a small number of direct document listeners in non-surface infrastructure
 
 Modal rendering, focus containment, and inert background behavior are intentionally documented in
 `docs/development/UI/modals.md`. This plan picks up after that work and focuses on unified key
 routing and surface ownership.
 
-### Too many components bypass the shared model
+### The app still carries legacy shortcut-context overlap
 
-Several components attach keyboard behavior directly:
+Several runtime surfaces have already been migrated to the shared surface model, but the app still
+has overlapping ownership between:
 
-- scale modal
-- rollback modal
-- port-forward modal
-- port-forwards panel
-- shortcut help modal
-- sidebar keyboard controls
-- command palette input
-- context menu
+- business-eligibility shortcut contexts in `context.tsx`
+- local component `onKeyDown` handlers for field- and surface-local behavior
+- a small amount of out-of-band keyboard/debug infrastructure
 
-This causes duplication, inconsistent precedence, and makes the app harder to reason about.
+The remaining work is to reduce that overlap where the surface manager already owns the runtime
+behavior, without breaking legitimate business-context filtering.
 
 ### Developers currently need to know too much
 
