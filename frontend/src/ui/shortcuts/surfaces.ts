@@ -11,6 +11,7 @@ export function useKeyboardSurface(options: KeyboardSurfaceOptions) {
     priority,
     blocking,
     captureWhenActive,
+    suppressShortcuts,
     onKeyDown,
     onEscape,
     onNativeAction,
@@ -38,6 +39,7 @@ export function useKeyboardSurface(options: KeyboardSurfaceOptions) {
       priority,
       blocking,
       captureWhenActive,
+      suppressShortcuts,
       onKeyDown,
       onEscape,
       onNativeAction,
@@ -66,5 +68,6 @@ export function useKeyboardSurface(options: KeyboardSurfaceOptions) {
     onNativeAction,
     priority,
     rootRef,
+    suppressShortcuts,
   ]);
 }

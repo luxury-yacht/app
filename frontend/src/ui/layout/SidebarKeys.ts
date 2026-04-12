@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useState, type RefObject } from 'react';
 import { useKeyboardNavigationScope } from '@ui/shortcuts';
 import { KeyboardScopePriority } from '@ui/shortcuts/priorities';
+import { useKeyboardSurface } from '@ui/shortcuts/surfaces';
 import type { NamespaceViewType, ClusterViewType } from '@/types/navigation/views';
 
 export type SidebarCursorTarget =
@@ -234,23 +235,22 @@ export const useSidebarKeyboardControls = ({
     },
   });
 
-  useEffect(() => {
-    const container = sidebarRef.current;
-    if (!container || isCollapsed) {
-      return;
-    }
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (!container.contains(document.activeElement)) {
-        return;
+  useKeyboardSurface({
+    kind: 'region',
+    rootRef: sidebarRef,
+    active: !isCollapsed,
+    onKeyDown: (event) => {
+      const container = sidebarRef.current;
+      if (!container || !container.contains(document.activeElement)) {
+        return false;
       }
       if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) {
-        return;
+        return false;
       }
 
       const items = getFocusableItems();
       if (items.length === 0) {
-        return;
+        return false;
       }
 
       const selectionIndex = getSelectionIndex();
@@ -267,7 +267,6 @@ export const useSidebarKeyboardControls = ({
       }
 
       if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-        event.preventDefault();
         const delta = event.key === 'ArrowDown' ? 1 : -1;
         const origin = cursorIndex === -1 ? selectionIndex : cursorIndex;
         const start = origin === -1 ? (delta > 0 ? -1 : items.length) : origin;
@@ -275,14 +274,18 @@ export const useSidebarKeyboardControls = ({
         const element = focusItemByIndex(nextIndex);
         const targetDescriptor = describeElementTarget(element);
         setCursorPreview(targetDescriptor);
-      } else if (event.key === 'Home' || event.key === 'End') {
-        event.preventDefault();
+        return true;
+      }
+
+      if (event.key === 'Home' || event.key === 'End') {
         const edgeIndex = event.key === 'Home' ? 0 : items.length - 1;
         const element = focusItemByIndex(edgeIndex);
         const targetDescriptor = describeElementTarget(element);
         setCursorPreview(targetDescriptor);
-      } else if (event.key === 'Enter' || event.key === ' ') {
-        event.preventDefault();
+        return true;
+      }
+
+      if (event.key === 'Enter' || event.key === ' ') {
         const targetIndex = cursorIndex === -1 ? selectionIndex : cursorIndex;
         if (targetIndex >= 0 && targetIndex < items.length) {
           const element = items[targetIndex];
@@ -299,31 +302,20 @@ export const useSidebarKeyboardControls = ({
             keyboardActivationRef.current = false;
           }
         }
-      } else if (event.key === 'Escape') {
-        event.preventDefault();
+        return true;
+      }
+
+      if (event.key === 'Escape') {
         pendingCommitRef.current = null;
         setCursorPreview(null);
         keyboardCursorIndexRef.current = null;
         focusSelectedSidebarItem();
+        return true;
       }
-    };
 
-    container.addEventListener('keydown', handleKeyDown);
-    return () => container.removeEventListener('keydown', handleKeyDown);
-  }, [
-    focusItemByIndex,
-    focusSelectedSidebarItem,
-    getFocusableItems,
-    getSelectionIndex,
-    isCollapsed,
-    isKeyboardNavActive,
-    keyboardActivationRef,
-    keyboardCursorIndexRef,
-    pendingCommitRef,
-    setCursorPreview,
-    setPendingSelection,
-    sidebarRef,
-  ]);
+      return false;
+    },
+  });
 
   useEffect(() => {
     if (isCollapsed) {

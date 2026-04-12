@@ -9,6 +9,7 @@ import React from 'react';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { KeyboardProvider } from '@ui/shortcuts/context';
 import {
   useSidebarKeyboardControls,
   targetsAreEqual,
@@ -218,7 +219,11 @@ const renderHarness = (props?: React.ComponentProps<typeof TestHarness>) => {
   const root = ReactDOM.createRoot(container);
   const ref = React.createRef<HarnessHandle>();
   act(() => {
-    root.render(<TestHarness ref={ref} {...props} />);
+    root.render(
+      <KeyboardProvider>
+        <TestHarness ref={ref} {...props} />
+      </KeyboardProvider>
+    );
   });
   return {
     container,

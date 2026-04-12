@@ -65,6 +65,7 @@ export interface KeyboardSurfaceOptions {
   priority?: number;
   blocking?: boolean;
   captureWhenActive?: boolean;
+  suppressShortcuts?: boolean;
   onKeyDown?: (event: KeyboardEvent) => boolean | void;
   onEscape?: (event: KeyboardEvent) => boolean | void;
   onNativeAction?: (context: KeyboardSurfaceNativeActionContext) => boolean | void;
@@ -76,6 +77,7 @@ interface RegisteredKeyboardSurface extends KeyboardSurfaceOptions {
   priority: number;
   blocking: boolean;
   captureWhenActive: boolean;
+  suppressShortcuts: boolean;
   registeredAt: number;
 }
 
@@ -333,6 +335,7 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
       priority: surface.priority ?? 0,
       blocking: surface.blocking ?? false,
       captureWhenActive: surface.captureWhenActive ?? false,
+      suppressShortcuts: surface.suppressShortcuts ?? false,
       registeredAt: surfaceIdCounter.current,
     });
     return id;
@@ -354,6 +357,7 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
       priority: surface.priority ?? existing.priority,
       blocking: surface.blocking ?? existing.blocking,
       captureWhenActive: surface.captureWhenActive ?? existing.captureWhenActive,
+      suppressShortcuts: surface.suppressShortcuts ?? existing.suppressShortcuts,
     });
   }, []);
 
@@ -396,6 +400,10 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
       }
 
       if (tabNavigation.handleKeyEvent(event)) {
+        return;
+      }
+
+      if (targetSurface?.suppressShortcuts) {
         return;
       }
 

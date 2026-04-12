@@ -303,4 +303,63 @@ describe('keyboard surfaces', () => {
     expect(apiRef.current?.dispatchNativeAction('copy')).toBe(true);
     expect(nativeActionHandler).toHaveBeenCalledTimes(1);
   });
+
+  it('suppresses the shortcut registry while a suppressing surface is active', async () => {
+    const shortcutHandler = vi.fn();
+
+    const Harness = () => {
+      const surfaceRef = useRef<HTMLDivElement>(null);
+
+      useKeyboardSurface({
+        kind: 'modal',
+        rootRef: surfaceRef,
+        active: true,
+        blocking: true,
+        suppressShortcuts: true,
+      });
+
+      useShortcut({
+        key: 'b',
+        modifiers: { meta: true },
+        handler: () => {
+          shortcutHandler();
+          return true;
+        },
+        description: 'Blocked global shortcut',
+        view: 'global',
+      });
+
+      return (
+        <div ref={surfaceRef}>
+          <button id="inside-surface">Inside</button>
+        </div>
+      );
+    };
+
+    await act(async () => {
+      root.render(
+        <KeyboardProvider>
+          <Harness />
+        </KeyboardProvider>
+      );
+      await Promise.resolve();
+    });
+
+    const insideButton = document.querySelector('#inside-surface') as HTMLButtonElement | null;
+    expect(insideButton).not.toBeNull();
+    insideButton?.focus();
+
+    act(() => {
+      insideButton?.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'b',
+          metaKey: true,
+          bubbles: true,
+          cancelable: true,
+        })
+      );
+    });
+
+    expect(shortcutHandler).not.toHaveBeenCalled();
+  });
 });
