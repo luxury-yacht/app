@@ -44,7 +44,7 @@ import type {
   ViewType,
 } from '@modules/object-panel/components/ObjectPanel/types';
 import type { KubernetesObjectReference } from '@/types/view-state';
-import { useKeyboardNavigationScope } from '@ui/shortcuts';
+import { useKeyboardSurface } from '@ui/shortcuts';
 import { KeyboardScopePriority } from '@ui/shortcuts/priorities';
 import { refreshOrchestrator } from '@/core/refresh/orchestrator';
 import { getGroupForPanel, getGroupTabs } from '@ui/dockable/tabGroupState';
@@ -661,39 +661,38 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
     return items.findIndex((item) => item === active || item.contains(active));
   }, [getFocusableElements]);
 
-  useKeyboardNavigationScope({
-    ref: panelScopeRef,
+  useKeyboardSurface({
+    kind: 'panel',
+    rootRef: panelScopeRef,
+    active: isActiveTab,
+    captureWhenActive: true,
     priority: KeyboardScopePriority.OBJECT_PANEL,
-    disabled: !isActiveTab,
-    allowNativeSelector: '.object-panel-body *',
-    onNavigate: ({ direction }) => {
+    onKeyDown: (event) => {
+      if (event.key !== 'Tab') {
+        return false;
+      }
+
+      const direction = event.shiftKey ? 'backward' : 'forward';
+      const target = event.target as HTMLElement | null;
+      if (target && target.closest('.object-panel-body *')) {
+        return false;
+      }
+
       const items = getFocusableElements();
       if (items.length === 0) {
-        return 'bubble';
+        return false;
       }
-      const currentIndex = findFocusedIndex();
+
+      const currentIndex =
+        target && panelScopeRef.current?.contains(target) ? findFocusedIndex() : -1;
       if (currentIndex === -1) {
-        return direction === 'forward'
-          ? focusFirstControl()
-            ? 'handled'
-            : 'bubble'
-          : focusLastControl()
-            ? 'handled'
-            : 'bubble';
+        return direction === 'forward' ? focusFirstControl() : focusLastControl();
       }
       const nextIndex = direction === 'forward' ? currentIndex + 1 : currentIndex - 1;
       if (nextIndex < 0 || nextIndex >= items.length) {
-        return 'bubble';
+        return false;
       }
-      focusElementAt(nextIndex);
-      return 'handled';
-    },
-    onEnter: ({ direction }) => {
-      if (direction === 'forward') {
-        focusFirstControl();
-      } else {
-        focusLastControl();
-      }
+      return focusElementAt(nextIndex);
     },
   });
 

@@ -23,6 +23,134 @@ The goal of this design is to define a single keyboard surface model that is:
 - easy for developers to apply consistently
 - correct for modals, command palette, menus, panels, tables, and form controls
 
+## Current Status
+
+Completed foundation and early migrations:
+
+- ✅ Shared modal baseline in `docs/development/UI/modals.md`
+- ✅ Shared keyboard surface manager and native action bridge
+- ✅ Direct `Escape` listener migrations for:
+  - `ScaleModal`
+  - `RollbackModal`
+  - `PortForwardModal`
+  - `PortForwardsPanel`
+- ✅ `ShortcutHelpModal` migrated onto the shared surface model
+- ✅ `CommandPalette` migrated to the shared surface model and blocked by active blocking modals
+- ✅ `ContextMenu` migrated to the shared surface model
+- ✅ `Dropdown` migrated to the shared surface model
+- ✅ Regional/panel migrations for:
+  - `GridTable` filter/body `Tab` transitions
+  - `AppLogsPanel`
+  - `DiagnosticsPanel`
+  - `ObjectPanel`
+- ✅ Redundant tab-scope cleanup for `KubeconfigSelector`
+
+Current boundary:
+
+- `SidebarKeys` is the only remaining real production user of `useKeyboardNavigationScope`
+- `SidebarKeys` is intentionally left as the boundary between the safe cleanup work and the broader
+  region-ordering rewrite
+
+Still remaining:
+
+- broader region-ordering work for the sidebar
+- editor-surface integration work
+- legacy tab-scope system cleanup after the sidebar migration is done
+
+## Execution Reference
+
+This section replaces the old prep doc and is the implementation source of truth alongside the
+design and migration phases below.
+
+### Runtime Surface Mapping
+
+Blocking surfaces:
+
+- `modal`
+  - Settings modal
+  - Log Settings modal
+  - About modal
+  - Object Diff modal
+  - Favorites save/edit modal
+  - Confirmation modal
+  - Scale modal
+  - Rollback modal
+  - Port forward modal
+  - Shortcut help modal
+
+Layered non-modal surfaces:
+
+- `palette`
+  - Command palette
+- `dropdown`
+  - dropdown menus/popovers
+- `menu`
+  - context menus
+
+Regional and panel surfaces:
+
+- `panel`
+  - Object panel controls
+  - App logs panel
+  - Diagnostics panel
+  - Port forwards panel
+- `region`
+  - Sidebar
+  - GridTable filters
+  - GridTable body
+- legacy regional cleanup already completed
+  - Kubeconfig selector no longer needs its old entry scope
+
+Editor-owned surfaces still remaining:
+
+- `editor`
+  - YAML tab
+  - Helm manifest tab
+  - Helm values tab
+
+### Remaining Legacy Pathways
+
+Production `useKeyboardNavigationScope` usage still remaining:
+
+- `SidebarKeys.ts`
+  - intentionally left as the boundary between safe local migrations and the broader
+    region-ordering rewrite
+
+Legacy keyboard infrastructure still present:
+
+- `keyboardNavigationContext.tsx`
+  - still exists as infrastructure because the sidebar migration has not happened yet
+- shortcut context metadata in `context.tsx`
+  - still coexists with the surface manager for business eligibility
+
+Intentional out-of-band listeners still remaining:
+
+- `AppLayout.tsx`
+  - debug overlay toggles and debug state updates only
+
+### Safe Next Work
+
+Next implementation slice:
+
+- migrate `SidebarKeys` as the first broader region-ordering change
+
+After that:
+
+- migrate editor-backed surfaces
+  - YAML
+  - Helm manifest
+  - Helm values
+- remove obsolete tab-scope glue and remaining legacy helpers
+
+### Key Rules For Remaining Work
+
+- Do not treat `SidebarKeys` like another local panel cleanup; it changes top-level region entry
+  and ordering.
+- Keep app-level `Escape` as the default in editor surfaces, with explicit per-surface override
+  when an editor needs editor-first `Escape`.
+- Keep `menu:close` as an app/window close action, not a surface-routed close.
+- Blocking modals continue to block the command palette.
+
 ## Current Problems
 
 ### Two shared keyboard systems with incomplete coordination
@@ -442,18 +570,18 @@ After this refactor, a developer should follow a simple rule set:
 
 ### Phase 1: Build the shared surface layer
 
-- Add the keyboard surface manager
-- Keep the current shortcut metadata model temporarily
-- Route keys through the surface stack first
-- Define the bridge for native menu/Wails actions into the active surface model
+- ✅ Add the keyboard surface manager
+- ✅ Keep the current shortcut metadata model temporarily
+- ✅ Route keys through the surface stack first
+- ✅ Define the bridge for native menu/Wails actions into the active surface model
 
 ### Phase 2: Migrate other layered surfaces
 
-- Command palette
-- Context menu
-- Dropdown
-- Shortcut help modal
-- Editor-backed surfaces where editor ownership must be explicit
+- ✅ Command palette
+- ✅ Context menu
+- ✅ Dropdown
+- ✅ Shortcut help modal
+- ⏳ Editor-backed surfaces where editor ownership must be explicit
 
 Implementation note:
 
@@ -464,15 +592,18 @@ Implementation note:
 
 ### Phase 3: Migrate major regions
 
-- Sidebar
-- Object panel
-- App logs panel
-- Grid table filter/body regions
+- ⏳ Sidebar
+- ✅ Object panel
+- ✅ App logs panel
+- ✅ Grid table filter/body regions
+- ✅ Diagnostics panel
+- ✅ Port-forwards panel
 
 ### Phase 4: Remove legacy pathways
 
-- reduce direct `pushContext` / `popContext` usage to business-state cases only
-- remove remaining raw document key listeners where they are no longer justified
+- ⏳ reduce direct `pushContext` / `popContext` usage to business-state cases only
+- ⏳ remove remaining raw document key listeners where they are no longer justified
+- ⏳ retire the production use of `useKeyboardNavigationScope` after the sidebar migration
 
 ## Testing Strategy
 

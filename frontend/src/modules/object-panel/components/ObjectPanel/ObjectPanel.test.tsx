@@ -122,8 +122,8 @@ vi.mock('@/core/contexts/ObjectPanelStateContext', () => ({
 
 // Mock dockable to provide both DockablePanel and useDockablePanelContext
 vi.mock('@ui/dockable', () => ({
-  DockablePanel: ({ children }: any) => (
-    <div>
+  DockablePanel: ({ children, panelRef }: any) => (
+    <div ref={panelRef}>
       <div data-testid="dockable-body">{children}</div>
     </div>
   ),
@@ -239,6 +239,7 @@ vi.mock('@ui/shortcuts', () => ({
   useShortcut: (...args: unknown[]) => mockUseShortcut(...(args as [])),
   useShortcuts: vi.fn(),
   useSearchShortcutTarget: () => undefined,
+  useKeyboardSurface: vi.fn(),
   useKeyboardNavigationScope: (...args: unknown[]) =>
     mockUseKeyboardNavigationScope(...(args as [])),
 }));
