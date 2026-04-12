@@ -1,9 +1,22 @@
+.log-settings-modal-overlay {
+  /* background: rgba(0, 0, 0, 0.2); */
+  background: none;
+  backdrop-filter: none;
+}
+
 .log-settings-view {
   padding: 0;
 }
 
 .log-settings-tooltip-paragraph + .log-settings-tooltip-paragraph {
   margin-top: 1em;
+}
+
+.log-settings-format-link {
+  color: var(--color-accent);
+  text-decoration-color: var(--color-accent);
+  white-space: nowrap;
+  padding-left: 0.5rem;
 }
 
 .log-settings-target-limits-grid {

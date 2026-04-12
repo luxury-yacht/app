@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import Tooltip from '@shared/components/Tooltip';
+import { BrowserOpenURL } from '@wailsjs/runtime/runtime';
 import {
   getLogApiTimestampFormat,
   getLogApiTimestampUseLocalTimeZone,
@@ -106,7 +107,7 @@ function LogSettings() {
   return (
     <div className="settings-view log-settings-view">
       <div className="settings-section">
-        <h3>Pod Logs</h3>
+        <h3>Constraints</h3>
         <div className="settings-items">
           <div className="setting-item setting-item-inline">
             <label htmlFor="log-buffer-max-size">Log buffer size </label>
@@ -121,7 +122,8 @@ function LogSettings() {
               onBlur={(e) => commitLogBufferMaxSize(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
-                  commitLogBufferMaxSize((e.target as HTMLInputElement).value);
+                  e.preventDefault();
+                  e.currentTarget.blur();
                 }
               }}
               data-log-settings-focusable="true"
@@ -165,7 +167,8 @@ function LogSettings() {
                   onBlur={(e) => commitLogTargetPerScopeLimit(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
-                      commitLogTargetPerScopeLimit((e.target as HTMLInputElement).value);
+                      e.preventDefault();
+                      e.currentTarget.blur();
                     }
                   }}
                   data-log-settings-focusable="true"
@@ -201,7 +204,8 @@ function LogSettings() {
                   onBlur={(e) => commitLogTargetGlobalLimit(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
-                      commitLogTargetGlobalLimit((e.target as HTMLInputElement).value);
+                      e.preventDefault();
+                      e.currentTarget.blur();
                     }
                   }}
                   data-log-settings-focusable="true"
@@ -224,6 +228,11 @@ function LogSettings() {
               </div>
             </div>
           </div>
+        </div>
+      </div>
+      <div className="settings-section">
+        <h3>API Timestamps</h3>
+        <div className="settings-items">
           <div className="setting-item log-settings-timestamp">
             <div className="log-settings-timestamp-grid">
               <div className="log-settings-timestamp-checkbox-row">
@@ -269,34 +278,26 @@ function LogSettings() {
                   onBlur={(e) => commitLogApiTimestampFormat(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
-                      commitLogApiTimestampFormat((e.target as HTMLInputElement).value);
+                      e.preventDefault();
+                      e.currentTarget.blur();
                     }
                   }}
                   className={logApiTimestampFormatError ? 'setting-input-error' : undefined}
                   aria-invalid={logApiTimestampFormatError ? 'true' : 'false'}
                   data-log-settings-focusable="true"
                 />
-                <Tooltip
-                  content={
-                    <>
-                      <p className="log-settings-tooltip-paragraph">
-                        Day.js pattern used for the Kubernetes API timestamp shown in pod logs.
-                      </p>
-                      <p className="log-settings-tooltip-paragraph">
-                        Examples: <code>YYYY-MM-DDTHH:mm:ss.SSS[Z]</code>, <code>HH:mm:ss.SSS</code>
-                        , <code>[ts=]HH:mm:ss.SSS</code>, <code>YYYY-MM-DD HH:mm:ss Z</code>
-                      </p>
-                      <p className="log-settings-tooltip-paragraph">
-                        Wrap literal text in square brackets. Unsupported tokens are rejected.
-                      </p>
-                      <p className="log-settings-tooltip-paragraph">
-                        Use <code>Z</code> or <code>ZZ</code> if you want the timezone offset shown
-                        in local-time mode.
-                      </p>
-                    </>
-                  }
-                  variant="dark"
-                />
+                <a
+                  className="log-settings-format-link"
+                  href="https://day.js.org/docs/en/parse/string-format#list-of-all-available-parsing-tokens"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    BrowserOpenURL(
+                      'https://day.js.org/docs/en/parse/string-format#list-of-all-available-parsing-tokens'
+                    );
+                  }}
+                >
+                  Formatting reference
+                </a>
               </div>
               {logApiTimestampPreview ? (
                 <>
