@@ -39,6 +39,10 @@ const buildShortcutContext = (
   isShortcutAvailable: vi.fn().mockReturnValue(true),
   setEnabled: vi.fn(),
   isEnabled: true,
+  registerSurface: vi.fn(),
+  unregisterSurface: vi.fn(),
+  updateSurface: vi.fn(),
+  dispatchNativeAction: vi.fn().mockReturnValue(false),
   ...overrides,
 });
 

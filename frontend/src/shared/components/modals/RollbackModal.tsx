@@ -15,6 +15,7 @@ import DiffViewer from '@shared/components/diff/DiffViewer';
 import ConfirmationModal from './ConfirmationModal';
 import ModalSurface from './ModalSurface';
 import { useModalFocusTrap } from './useModalFocusTrap';
+import { useKeyboardSurface } from '@ui/shortcuts/surfaces';
 import './RollbackModal.css';
 
 interface RollbackModalProps {
@@ -106,21 +107,16 @@ const RollbackModal = ({
     disabled: !isOpen,
   });
 
-  useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        onClose();
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown, true);
-    return () => document.removeEventListener('keydown', handleKeyDown, true);
-  }, [isOpen, onClose]);
+  useKeyboardSurface({
+    kind: 'modal',
+    rootRef: modalRef,
+    active: isOpen,
+    blocking: true,
+    onEscape: () => {
+      onClose();
+      return true;
+    },
+  });
 
   // Derive the current revision entry and the selected entry.
   const currentEntry = useMemo(() => revisions.find((r) => r.current) ?? null, [revisions]);

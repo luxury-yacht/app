@@ -8,6 +8,7 @@
 import { useState, useEffect, useRef } from 'react';
 import ModalSurface from './ModalSurface';
 import { useModalFocusTrap } from './useModalFocusTrap';
+import { useKeyboardSurface } from '@ui/shortcuts/surfaces';
 import './ScaleModal.css';
 
 interface ScaleModalProps {
@@ -61,21 +62,16 @@ const ScaleModal = ({
     disabled: !isOpen,
   });
 
-  useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        onCancel();
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown, true);
-    return () => document.removeEventListener('keydown', handleKeyDown, true);
-  }, [isOpen, onCancel]);
+  useKeyboardSurface({
+    kind: 'modal',
+    rootRef: modalRef,
+    active: isOpen,
+    blocking: true,
+    onEscape: () => {
+      onCancel();
+      return true;
+    },
+  });
 
   if (!isOpen) {
     return null;

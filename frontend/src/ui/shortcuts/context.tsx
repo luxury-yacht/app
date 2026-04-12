@@ -40,6 +40,41 @@ interface KeyboardProviderValue {
   // Control
   setEnabled: (enabled: boolean) => void; // Global enable/disable
   isEnabled: boolean;
+
+  // Surface registration
+  registerSurface: (surface: KeyboardSurfaceOptions) => string;
+  unregisterSurface: (id: string) => void;
+  updateSurface: (id: string, surface: Partial<KeyboardSurfaceOptions>) => void;
+
+  // Native action bridge
+  dispatchNativeAction: (action: KeyboardNativeAction) => boolean;
+}
+
+export type KeyboardNativeAction = 'copy' | 'selectAll';
+
+export interface KeyboardSurfaceNativeActionContext {
+  action: KeyboardNativeAction;
+  activeElement: Element | null;
+  selection: Selection | null;
+}
+
+export interface KeyboardSurfaceOptions {
+  kind: 'modal' | 'palette' | 'menu' | 'dropdown' | 'panel' | 'region' | 'editor';
+  rootRef: React.RefObject<HTMLElement | null>;
+  active?: boolean;
+  priority?: number;
+  blocking?: boolean;
+  onKeyDown?: (event: KeyboardEvent) => boolean | void;
+  onEscape?: (event: KeyboardEvent) => boolean | void;
+  onNativeAction?: (context: KeyboardSurfaceNativeActionContext) => boolean | void;
+}
+
+interface RegisteredKeyboardSurface extends KeyboardSurfaceOptions {
+  id: string;
+  active: boolean;
+  priority: number;
+  blocking: boolean;
+  registeredAt: number;
 }
 
 const KeyboardContext = createContext<KeyboardProviderValue | null>(null);
@@ -50,6 +85,10 @@ export function useKeyboardContext() {
     throw new Error('useKeyboardContext must be used within KeyboardProvider');
   }
   return context;
+}
+
+export function useOptionalKeyboardContext() {
+  return useContext(KeyboardContext);
 }
 
 interface KeyboardProviderProps {
@@ -168,6 +207,8 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
   ]);
   const [isEnabled, setIsEnabled] = useState(!disabled);
   const shortcutIdCounter = useRef(0);
+  const surfaceIdCounter = useRef(0);
+  const surfacesRef = useRef<Map<string, RegisteredKeyboardSurface>>(new Map());
 
   // Current context is the top of the stack merged with all below
   const currentContext = contextStack.reduce((acc, ctx) => ({ ...acc, ...ctx }), {});
@@ -241,11 +282,108 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
 
   const tabNavigation = useKeyboardNavigationContext();
 
+  const getOrderedSurfaces = useCallback((): RegisteredKeyboardSurface[] => {
+    return Array.from(surfacesRef.current.values())
+      .filter((surface) => surface.active && surface.rootRef.current)
+      .sort((a, b) => {
+        if (a.blocking !== b.blocking) {
+          return Number(b.blocking) - Number(a.blocking);
+        }
+        if (a.priority !== b.priority) {
+          return b.priority - a.priority;
+        }
+        return b.registeredAt - a.registeredAt;
+      });
+  }, []);
+
+  const getTargetSurface = useCallback(
+    (target: EventTarget | null): RegisteredKeyboardSurface | null => {
+      const targetElement = resolveEventElement(target);
+      const orderedSurfaces = getOrderedSurfaces();
+
+      if (targetElement) {
+        const containingSurface = orderedSurfaces.find((surface) =>
+          surface.rootRef.current?.contains(targetElement)
+        );
+        if (containingSurface) {
+          return containingSurface;
+        }
+      }
+
+      return orderedSurfaces.find((surface) => surface.blocking) ?? null;
+    },
+    [getOrderedSurfaces]
+  );
+
+  const registerSurface = useCallback((surface: KeyboardSurfaceOptions): string => {
+    const id = `surface-${++surfaceIdCounter.current}`;
+    surfacesRef.current.set(id, {
+      ...surface,
+      id,
+      active: surface.active ?? true,
+      priority: surface.priority ?? 0,
+      blocking: surface.blocking ?? false,
+      registeredAt: surfaceIdCounter.current,
+    });
+    return id;
+  }, []);
+
+  const unregisterSurface = useCallback((id: string) => {
+    surfacesRef.current.delete(id);
+  }, []);
+
+  const updateSurface = useCallback((id: string, surface: Partial<KeyboardSurfaceOptions>) => {
+    const existing = surfacesRef.current.get(id);
+    if (!existing) {
+      return;
+    }
+    surfacesRef.current.set(id, {
+      ...existing,
+      ...surface,
+      active: surface.active ?? existing.active,
+      priority: surface.priority ?? existing.priority,
+      blocking: surface.blocking ?? existing.blocking,
+    });
+  }, []);
+
+  const dispatchNativeAction = useCallback(
+    (action: KeyboardNativeAction): boolean => {
+      const targetSurface = getTargetSurface(document.activeElement);
+      if (!targetSurface?.onNativeAction) {
+        return false;
+      }
+
+      return (
+        targetSurface.onNativeAction({
+          action,
+          activeElement: document.activeElement,
+          selection: window.getSelection(),
+        }) === true
+      );
+    },
+    [getTargetSurface]
+  );
+
   // Handle keyboard events
   useEffect(() => {
     if (!isEnabled || disabled) return;
 
     const handleKeyDown = (event: KeyboardEvent) => {
+      const targetSurface = getTargetSurface(event.target);
+      if (targetSurface) {
+        const handledEscape =
+          event.key === 'Escape' && targetSurface.onEscape
+            ? targetSurface.onEscape(event) === true
+            : false;
+        const handledKey = !handledEscape && targetSurface.onKeyDown?.(event) === true;
+
+        if (handledEscape || handledKey) {
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
+      }
+
       if (tabNavigation.handleKeyEvent(event)) {
         return;
       }
@@ -308,11 +446,14 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [disabled, isEnabled, matchesContext, shortcuts, tabNavigation]);
+  }, [disabled, getTargetSurface, isEnabled, matchesContext, shortcuts, tabNavigation]);
 
   // Handle menu events from Wails
   useEffect(() => {
     const handleMenuCopy = () => {
+      if (dispatchNativeAction('copy')) {
+        return;
+      }
       const text = deriveCopyText(window.getSelection());
       if (text) {
         navigator.clipboard.writeText(text);
@@ -320,6 +461,9 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
     };
 
     const handleMenuSelectAll = () => {
+      if (dispatchNativeAction('selectAll')) {
+        return;
+      }
       applySelectAll(window.getSelection(), document.activeElement as Element | null);
     };
 
@@ -332,7 +476,7 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
       EventsOff('menu:copy');
       EventsOff('menu:selectAll');
     };
-  }, []);
+  }, [dispatchNativeAction]);
 
   // Get available shortcuts for current context
   const getAvailableShortcuts = useCallback((): ShortcutGroup[] => {
@@ -383,6 +527,10 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
     isShortcutAvailable,
     setEnabled: setIsEnabled,
     isEnabled: isEnabled && !disabled,
+    registerSurface,
+    unregisterSurface,
+    updateSurface,
+    dispatchNativeAction,
   };
 
   return (

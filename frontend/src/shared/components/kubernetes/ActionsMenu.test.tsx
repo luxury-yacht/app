@@ -46,6 +46,10 @@ vi.mock('@ui/shortcuts', () => ({
   useKeyboardContext: () => ({
     pushContext: vi.fn(),
     popContext: vi.fn(),
+    registerSurface: vi.fn(),
+    unregisterSurface: vi.fn(),
+    updateSurface: vi.fn(),
+    dispatchNativeAction: vi.fn(() => false),
   }),
   useKeyboardNavigationScope: vi.fn(),
 }));

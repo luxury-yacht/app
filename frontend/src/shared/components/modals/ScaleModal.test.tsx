@@ -2,6 +2,7 @@ import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import ScaleModal from './ScaleModal';
+import { KeyboardProvider } from '@ui/shortcuts';
 
 describe('ScaleModal', () => {
   let container: HTMLDivElement;
@@ -44,7 +45,11 @@ describe('ScaleModal', () => {
 
   const renderModal = async (props?: Partial<typeof defaultProps>) => {
     await act(async () => {
-      root.render(<ScaleModal {...defaultProps} {...props} />);
+      root.render(
+        <KeyboardProvider>
+          <ScaleModal {...defaultProps} {...props} />
+        </KeyboardProvider>
+      );
       await Promise.resolve();
     });
   };
@@ -88,5 +93,20 @@ describe('ScaleModal', () => {
     });
 
     expect(defaultProps.onApply).toHaveBeenCalledTimes(1);
+  });
+
+  it('cancels on Escape through the keyboard surface manager', async () => {
+    await renderModal();
+
+    const input = document.querySelector('#scale-replicas') as HTMLInputElement | null;
+    expect(input).not.toBeNull();
+    input?.focus();
+
+    await act(async () => {
+      input?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(defaultProps.onCancel).toHaveBeenCalledTimes(1);
   });
 });

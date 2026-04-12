@@ -46,6 +46,10 @@ vi.mock('../context', async () => {
       setEnabled: vi.fn(),
       isEnabled: true,
       currentContext: { view: 'global', priority: 0 },
+      registerSurface: vi.fn(),
+      unregisterSurface: vi.fn(),
+      updateSurface: vi.fn(),
+      dispatchNativeAction: vi.fn(() => false),
     }),
   };
 });

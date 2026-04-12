@@ -17,7 +17,14 @@ import GridTableFiltersBar from '@shared/components/tables/GridTableFiltersBar';
 vi.mock('@ui/shortcuts', () => ({
   useSearchShortcutTarget: () => {},
   useKeyboardNavigationScope: () => {},
-  useKeyboardContext: () => ({ pushContext: () => {}, popContext: () => {} }),
+  useKeyboardContext: () => ({
+    pushContext: () => {},
+    popContext: () => {},
+    registerSurface: () => 'mock-surface-id',
+    unregisterSurface: () => {},
+    updateSurface: () => {},
+    dispatchNativeAction: () => false,
+  }),
   useShortcuts: () => {},
 }));
 

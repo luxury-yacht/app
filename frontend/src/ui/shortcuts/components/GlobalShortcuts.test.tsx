@@ -47,6 +47,10 @@ const kubeconfigState = {
 vi.mock('../context', () => ({
   useKeyboardContext: () => ({
     setContext: setContextMock,
+    registerSurface: vi.fn(),
+    unregisterSurface: vi.fn(),
+    updateSurface: vi.fn(),
+    dispatchNativeAction: vi.fn(() => false),
   }),
 }));
 

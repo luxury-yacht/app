@@ -9,6 +9,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { StartPortForward } from '@wailsjs/go/backend/App';
 import ModalSurface from '@shared/components/modals/ModalSurface';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
+import { useKeyboardSurface } from '@ui/shortcuts/surfaces';
 import './PortForwardModal.css';
 
 /**
@@ -95,19 +96,18 @@ const PortForwardModal = ({ target, onClose, onStarted }: PortForwardModalProps)
     ? `${target.clusterId}:${target.namespace}:${target.kind}:${target.name}:${portsKey}`
     : '';
 
-  // Handle Escape key to close modal
-  useEffect(() => {
-    if (!target) return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !isLoading) {
+  useKeyboardSurface({
+    kind: 'modal',
+    rootRef: modalRef,
+    active: !!target,
+    blocking: true,
+    onEscape: () => {
+      if (!isLoading) {
         onClose();
       }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [target, isLoading, onClose]);
+      return true;
+    },
+  });
 
   // Reset form state when target changes, fetch ports if not provided
   useEffect(() => {

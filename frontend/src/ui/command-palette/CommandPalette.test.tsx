@@ -169,6 +169,10 @@ vi.mock('@ui/shortcuts', () => ({
   useKeyboardContext: () => ({
     pushContext: pushContextMock,
     popContext: popContextMock,
+    registerSurface: vi.fn(),
+    unregisterSurface: vi.fn(),
+    updateSurface: vi.fn(),
+    dispatchNativeAction: vi.fn(() => false),
   }),
   useSearchShortcutTarget: () => undefined,
   useKeyboardNavigationScope: (...args: unknown[]) =>
