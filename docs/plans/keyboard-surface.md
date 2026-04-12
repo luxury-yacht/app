@@ -395,8 +395,10 @@ This should bundle:
 - dialog semantics
 - inert background
 - focus trap
-- escape handling
 - focus restore
+
+`Escape` ownership should remain a surface-level concern handled through the surface manager or the
+surface's own explicit dismissal contract, not hard-coded into the modal rendering primitive.
 
 ### Menu and palette wrappers
 
@@ -525,7 +527,7 @@ Minimum gating checklist:
 - every known nested-surface scenario has an intended routing order
 - native menu/Wails actions have an explicit bridge into the new model
 
-## Open Questions
+## Non-Blocking Follow-Up Questions
 
 - Whether to keep the current shortcut-context metadata shape as-is or simplify it after the
   surface model is in place

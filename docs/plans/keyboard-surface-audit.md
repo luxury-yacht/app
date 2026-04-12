@@ -939,7 +939,7 @@ that the implementation must be compatibility-driven.
 The safest order is:
 
 1. build the surface manager
-2. implement the shared blocking modal primitive
+2. migrate a simple remaining direct-listener case such as `ScaleModal`
 3. migrate command palette, dropdown, and context menu
 4. migrate region-level tab routing
 5. remove direct document listeners only after equivalent coverage exists

@@ -530,7 +530,7 @@ Exit criteria:
 ### Phase 5: Cleanup
 
 - remove dead helpers
-- remove legacy modal traps
+- remove obsolete pre-surface-manager keyboard helpers and any superseded legacy tab-scope glue
 - remove redundant `data-allow-shortcuts` usage where the new system supersedes it
 - document the final developer API
 
