@@ -1205,10 +1205,8 @@ describe('LogViewer active pod synchronisation', () => {
       await Promise.resolve();
     });
 
-    expect(container.textContent).toContain('Log Settings');
-    expect(
-      container.querySelector<HTMLInputElement>('input#log-api-timestamp-format')
-    ).toBeTruthy();
+    expect(document.body.textContent).toContain('Log Settings');
+    expect(document.querySelector<HTMLInputElement>('input#log-api-timestamp-format')).toBeTruthy();
   });
 
   it('formats API timestamps in the local timezone when enabled', async () => {

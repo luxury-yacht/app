@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useKeyboardContext, useShortcut } from '@ui/shortcuts';
 import { KeyboardContextPriority, KeyboardScopePriority } from '@ui/shortcuts/priorities';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
@@ -14,7 +15,6 @@ interface LogSettingsModalProps {
 const LogSettingsModal: React.FC<LogSettingsModalProps> = ({ isOpen, onClose }) => {
   const [isClosing, setIsClosing] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);
-  const [horizontalOffset, setHorizontalOffset] = useState(0);
   const { pushContext, popContext } = useKeyboardContext();
   const contextPushedRef = useRef(false);
   const modalRef = useRef<HTMLDivElement>(null);
@@ -56,33 +56,6 @@ const LogSettingsModal: React.FC<LogSettingsModalProps> = ({ isOpen, onClose }) 
     };
   }, [isOpen, popContext, pushContext]);
 
-  useEffect(() => {
-    if (!shouldRender) {
-      setHorizontalOffset(0);
-      return;
-    }
-
-    const updateHorizontalOffset = () => {
-      const contentBody = document.querySelector('.content-body') as HTMLElement | null;
-      if (!contentBody) {
-        setHorizontalOffset(0);
-        return;
-      }
-
-      const rect = contentBody.getBoundingClientRect();
-      const contentBodyCenter = rect.left + rect.width / 2;
-      const viewportCenter = window.innerWidth / 2;
-      setHorizontalOffset(contentBodyCenter - viewportCenter);
-    };
-
-    updateHorizontalOffset();
-    window.addEventListener('resize', updateHorizontalOffset);
-
-    return () => {
-      window.removeEventListener('resize', updateHorizontalOffset);
-    };
-  }, [shouldRender]);
-
   useShortcut({
     key: 'Escape',
     handler: () => {
@@ -106,7 +79,7 @@ const LogSettingsModal: React.FC<LogSettingsModalProps> = ({ isOpen, onClose }) 
 
   if (!shouldRender) return null;
 
-  return (
+  return createPortal(
     <div
       className={`modal-overlay log-settings-modal-overlay ${isClosing ? 'closing' : ''}`}
       onClick={onClose}
@@ -115,7 +88,6 @@ const LogSettingsModal: React.FC<LogSettingsModalProps> = ({ isOpen, onClose }) 
         className={`modal-container log-settings-modal ${isClosing ? 'closing' : ''}`}
         onClick={(e) => e.stopPropagation()}
         ref={modalRef}
-        style={horizontalOffset === 0 ? undefined : { marginLeft: `${horizontalOffset}px` }}
       >
         <div className="modal-header log-settings-modal-header">
           <h2>Log Settings</h2>
@@ -132,7 +104,8 @@ const LogSettingsModal: React.FC<LogSettingsModalProps> = ({ isOpen, onClose }) 
           <LogSettings />
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 
