@@ -2,12 +2,15 @@ import { useCallback, useEffect, useRef } from 'react';
 import type { RefObject } from 'react';
 import { getTabbableElements } from './getTabbableElements';
 import { useKeyboardSurface } from '@ui/shortcuts/surfaces';
+import type { KeyboardSurfaceKeyResult } from '@ui/shortcuts/context';
 
 interface UseModalFocusTrapOptions {
   ref: RefObject<HTMLElement | null>;
   focusableSelector?: string;
   priority?: number;
   disabled?: boolean;
+  suppressShortcuts?: boolean;
+  onKeyDown?: (event: KeyboardEvent) => KeyboardSurfaceKeyResult;
   onEscape?: (event: KeyboardEvent) => boolean | void;
 }
 
@@ -84,6 +87,8 @@ export const useModalFocusTrap = ({
   focusableSelector,
   priority,
   disabled = false,
+  suppressShortcuts = false,
+  onKeyDown,
   onEscape,
 }: UseModalFocusTrapOptions) => {
   void priority;
@@ -95,6 +100,8 @@ export const useModalFocusTrap = ({
     rootRef: ref,
     active: !disabled,
     blocking: true,
+    suppressShortcuts,
+    onKeyDown,
     onEscape,
   });
 

@@ -9,7 +9,6 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { StartPortForward } from '@wailsjs/go/backend/App';
 import ModalSurface from '@shared/components/modals/ModalSurface';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
-import { useKeyboardSurface } from '@ui/shortcuts/surfaces';
 import './PortForwardModal.css';
 
 /**
@@ -82,6 +81,12 @@ const PortForwardModal = ({ target, onClose, onStarted }: PortForwardModalProps)
   useModalFocusTrap({
     ref: modalRef,
     disabled: !target,
+    onEscape: () => {
+      if (!isLoading) {
+        onClose();
+      }
+      return true;
+    },
   });
 
   useEffect(() => {
@@ -95,19 +100,6 @@ const PortForwardModal = ({ target, onClose, onStarted }: PortForwardModalProps)
   const targetKey = target
     ? `${target.clusterId}:${target.namespace}:${target.kind}:${target.name}:${portsKey}`
     : '';
-
-  useKeyboardSurface({
-    kind: 'modal',
-    rootRef: modalRef,
-    active: !!target,
-    blocking: true,
-    onEscape: () => {
-      if (!isLoading) {
-        onClose();
-      }
-      return true;
-    },
-  });
 
   // Reset form state when target changes, fetch ports if not provided
   useEffect(() => {

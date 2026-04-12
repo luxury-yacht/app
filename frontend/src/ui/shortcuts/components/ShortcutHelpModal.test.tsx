@@ -12,7 +12,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { ShortcutHelpModal } from './ShortcutHelpModal';
 
 const getAvailableShortcutsMock = vi.fn();
-const useKeyboardSurfaceMock = vi.fn();
+const useModalFocusTrapMock = vi.fn();
 
 vi.mock('../context', () => ({
   useKeyboardContext: () => ({
@@ -26,8 +26,8 @@ vi.mock('../context', () => ({
   useOptionalKeyboardContext: () => null,
 }));
 
-vi.mock('../surfaces', () => ({
-  useKeyboardSurface: (...args: unknown[]) => useKeyboardSurfaceMock(...args),
+vi.mock('@shared/components/modals/useModalFocusTrap', () => ({
+  useModalFocusTrap: (...args: unknown[]) => useModalFocusTrapMock(...args),
 }));
 
 describe('ShortcutHelpModal', () => {
@@ -43,7 +43,7 @@ describe('ShortcutHelpModal', () => {
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
     getAvailableShortcutsMock.mockReset();
-    useKeyboardSurfaceMock.mockReset();
+    useModalFocusTrapMock.mockReset();
   });
 
   afterEach(() => {
@@ -85,10 +85,8 @@ describe('ShortcutHelpModal', () => {
     expect(groups).toHaveLength(1);
     expect(groups[0].querySelectorAll('.shortcut-item')).toHaveLength(2);
     expect(document.querySelector('.shortcut-help-modal')?.getAttribute('role')).toBe('dialog');
-    expect(useKeyboardSurfaceMock).toHaveBeenCalledWith(
+    expect(useModalFocusTrapMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        kind: 'modal',
-        blocking: true,
         suppressShortcuts: true,
       })
     );
@@ -119,10 +117,10 @@ describe('ShortcutHelpModal', () => {
 
     await renderModal({ isOpen: true, onClose });
 
-    const surfaceOptions =
-      useKeyboardSurfaceMock.mock.calls[useKeyboardSurfaceMock.mock.calls.length - 1]?.[0];
-    expect(surfaceOptions).toBeTruthy();
-    surfaceOptions.onEscape();
+    const trapOptions =
+      useModalFocusTrapMock.mock.calls[useModalFocusTrapMock.mock.calls.length - 1]?.[0];
+    expect(trapOptions).toBeTruthy();
+    trapOptions.onEscape();
 
     expect(onClose).toHaveBeenCalledTimes(1);
   });
@@ -133,10 +131,10 @@ describe('ShortcutHelpModal', () => {
 
     await renderModal({ isOpen: true, onClose });
 
-    const surfaceOptions =
-      useKeyboardSurfaceMock.mock.calls[useKeyboardSurfaceMock.mock.calls.length - 1]?.[0];
-    expect(surfaceOptions).toBeTruthy();
-    expect(surfaceOptions.onKeyDown({ key: '/' })).toBe(true);
+    const trapOptions =
+      useModalFocusTrapMock.mock.calls[useModalFocusTrapMock.mock.calls.length - 1]?.[0];
+    expect(trapOptions).toBeTruthy();
+    expect(trapOptions.onKeyDown({ key: '/' })).toBe(true);
 
     expect(onClose).toHaveBeenCalledTimes(1);
   });

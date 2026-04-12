@@ -8,7 +8,6 @@
 import { useState, useEffect, useRef } from 'react';
 import ModalSurface from './ModalSurface';
 import { useModalFocusTrap } from './useModalFocusTrap';
-import { useKeyboardSurface } from '@ui/shortcuts/surfaces';
 import './ScaleModal.css';
 
 interface ScaleModalProps {
@@ -60,13 +59,6 @@ const ScaleModal = ({
   useModalFocusTrap({
     ref: modalRef,
     disabled: !isOpen,
-  });
-
-  useKeyboardSurface({
-    kind: 'modal',
-    rootRef: modalRef,
-    active: isOpen,
-    blocking: true,
     onEscape: () => {
       onCancel();
       return true;

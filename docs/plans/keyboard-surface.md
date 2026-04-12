@@ -54,6 +54,8 @@ Completed foundation and early migrations:
 - ✅ Legacy tab-scope implementation removed
 - ✅ Blocking modals now rely on the shared modal surface for blocking and `Escape` ownership
   instead of duplicating that behavior through modal-local shortcut context wiring
+- ✅ Shared modal trap now owns modal-surface options such as shortcut suppression and modal-local
+  key handling, removing duplicate modal registrations in shortcut help and action modals
 
 Still remaining:
 

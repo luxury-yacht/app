@@ -15,7 +15,6 @@ import DiffViewer from '@shared/components/diff/DiffViewer';
 import ConfirmationModal from './ConfirmationModal';
 import ModalSurface from './ModalSurface';
 import { useModalFocusTrap } from './useModalFocusTrap';
-import { useKeyboardSurface } from '@ui/shortcuts/surfaces';
 import './RollbackModal.css';
 
 interface RollbackModalProps {
@@ -105,13 +104,6 @@ const RollbackModal = ({
   useModalFocusTrap({
     ref: modalRef,
     disabled: !isOpen,
-  });
-
-  useKeyboardSurface({
-    kind: 'modal',
-    rootRef: modalRef,
-    active: isOpen,
-    blocking: true,
     onEscape: () => {
       onClose();
       return true;

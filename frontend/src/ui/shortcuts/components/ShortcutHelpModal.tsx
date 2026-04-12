@@ -7,7 +7,6 @@
 
 import React, { useRef, useState, useEffect } from 'react';
 import { useKeyboardContext } from '../context';
-import { useKeyboardSurface } from '../surfaces';
 import { CloseIcon } from '@shared/components/icons/MenuIcons';
 import ModalSurface from '@shared/components/modals/ModalSurface';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
@@ -50,13 +49,6 @@ export function ShortcutHelpModal({ isOpen, onClose }: ShortcutHelpModalProps) {
   useModalFocusTrap({
     ref: modalRef,
     disabled: !shouldRender,
-  });
-
-  useKeyboardSurface({
-    kind: 'modal',
-    rootRef: modalRef,
-    active: shouldRender,
-    blocking: true,
     suppressShortcuts: true,
     onEscape: () => {
       onClose();

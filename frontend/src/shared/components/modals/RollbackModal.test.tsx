@@ -23,24 +23,6 @@ vi.mock('@wailsjs/go/backend/App', () => ({
   RollbackWorkload: backendMocks.RollbackWorkload,
 }));
 
-// Mock keyboard shortcuts (used by ConfirmationModal).
-vi.mock('@ui/shortcuts', () => ({
-  useShortcut: vi.fn(),
-  useKeyboardContext: () => ({
-    pushContext: vi.fn(),
-    popContext: vi.fn(),
-    registerSurface: vi.fn(),
-    unregisterSurface: vi.fn(),
-    updateSurface: vi.fn(),
-    dispatchNativeAction: vi.fn(() => false),
-  }),
-}));
-
-// Mock the modal focus trap hook (used by ConfirmationModal).
-vi.mock('./useModalFocusTrap', () => ({
-  useModalFocusTrap: vi.fn(),
-}));
-
 /** Helper to build a RevisionEntry-like object. */
 const makeRevision = (
   revision: number,
