@@ -6,18 +6,9 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
-import {
-  useShortcut,
-  useKeyboardContext,
-  useShortcuts,
-  useKeyboardNavigationScope,
-} from '@ui/shortcuts';
+import { useShortcut, useKeyboardContext, useShortcuts } from '@ui/shortcuts';
 import { useKeyboardSurface } from '@ui/shortcuts/surfaces';
-import {
-  KeyboardContextPriority,
-  KeyboardScopePriority,
-  KeyboardShortcutPriority,
-} from '@ui/shortcuts/priorities';
+import { KeyboardContextPriority, KeyboardShortcutPriority } from '@ui/shortcuts/priorities';
 import { fetchSnapshot } from '@/core/refresh/client';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
@@ -505,22 +496,6 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
       }
     };
   }, [isOpen, popContext, pushContext]);
-
-  const handleScopeNavigate = useCallback(
-    () => (focusSearchInput() ? 'handled' : 'bubble'),
-    [focusSearchInput]
-  );
-  const handleScopeEnter = useCallback(() => {
-    focusSearchInput();
-  }, [focusSearchInput]);
-
-  useKeyboardNavigationScope({
-    ref: containerRef,
-    priority: KeyboardScopePriority.COMMAND_PALETTE,
-    disabled: !isOpen,
-    onNavigate: handleScopeNavigate,
-    onEnter: handleScopeEnter,
-  });
 
   // Execute selected item (command or catalog object)
   const executePaletteItem = useCallback(

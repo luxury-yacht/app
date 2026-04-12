@@ -362,4 +362,65 @@ describe('keyboard surfaces', () => {
 
     expect(shortcutHandler).not.toHaveBeenCalled();
   });
+
+  it('allows handled-no-prevent surface results to stop propagation without preventing default', async () => {
+    const surfaceHandler = vi.fn();
+    const shortcutHandler = vi.fn();
+
+    const Harness = () => {
+      const surfaceRef = useRef<HTMLDivElement>(null);
+
+      useKeyboardSurface({
+        kind: 'dropdown',
+        rootRef: surfaceRef,
+        active: true,
+        suppressShortcuts: true,
+        onKeyDown: (event) => {
+          if (event.key !== 'Tab') {
+            return false;
+          }
+          surfaceHandler();
+          return 'handled-no-prevent';
+        },
+      });
+
+      useShortcut({
+        key: 'Tab',
+        handler: () => {
+          shortcutHandler();
+          return true;
+        },
+        description: 'Blocked tab shortcut',
+        view: 'global',
+      });
+
+      return (
+        <div ref={surfaceRef}>
+          <button id="inside-surface">Inside</button>
+        </div>
+      );
+    };
+
+    await act(async () => {
+      root.render(
+        <KeyboardProvider>
+          <Harness />
+        </KeyboardProvider>
+      );
+      await Promise.resolve();
+    });
+
+    const insideButton = document.querySelector('#inside-surface') as HTMLButtonElement | null;
+    expect(insideButton).not.toBeNull();
+    insideButton?.focus();
+
+    const event = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+    act(() => {
+      insideButton?.dispatchEvent(event);
+    });
+
+    expect(surfaceHandler).toHaveBeenCalledTimes(1);
+    expect(shortcutHandler).not.toHaveBeenCalled();
+    expect(event.defaultPrevented).toBe(false);
+  });
 });

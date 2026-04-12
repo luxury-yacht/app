@@ -9,8 +9,6 @@ import React from 'react';
 import { types } from '@wailsjs/go/models';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import { useKeyboardNavigationScope } from '@ui/shortcuts';
-import { KeyboardScopePriority } from '@ui/shortcuts/priorities';
 import './KubeconfigSelector.css';
 
 type KubeconfigInfo = types.KubeconfigInfo;
@@ -68,18 +66,8 @@ function KubeconfigSelector() {
     return 'Select kubeconfig';
   };
 
-  const containerRef = React.useRef<HTMLDivElement | null>(null);
-  useKeyboardNavigationScope({
-    ref: containerRef,
-    priority: KeyboardScopePriority.KUBECONFIG_SELECTOR,
-    onEnter: () => {
-      const trigger = containerRef.current?.querySelector<HTMLElement>('.dropdown-trigger');
-      trigger?.focus();
-    },
-  });
-
   return (
-    <div className="kubeconfig-selector" ref={containerRef}>
+    <div className="kubeconfig-selector">
       <Dropdown
         options={dropdownOptions}
         value={selectedKubeconfigs}

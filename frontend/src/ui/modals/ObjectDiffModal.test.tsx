@@ -37,13 +37,17 @@ const kubeconfigMocks = vi.hoisted(() => ({
   getClusterMeta: () => ({ id: 'cluster-a', name: 'Cluster A' }),
 }));
 
-vi.mock('@ui/shortcuts', () => ({
-  useShortcut: (...args: unknown[]) => shortcutMocks.useShortcut(...args),
-  useShortcuts: (...args: unknown[]) => shortcutMocks.useShortcuts(...args),
-  useKeyboardContext: () => contextMocks,
-  useKeyboardNavigationScope: (...args: unknown[]) =>
-    shortcutMocks.useKeyboardNavigationScope(...args),
-}));
+vi.mock('@ui/shortcuts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@ui/shortcuts')>();
+  return {
+    ...actual,
+    useShortcut: (...args: unknown[]) => shortcutMocks.useShortcut(...args),
+    useShortcuts: (...args: unknown[]) => shortcutMocks.useShortcuts(...args),
+    useKeyboardContext: () => contextMocks,
+    useKeyboardNavigationScope: (...args: unknown[]) =>
+      shortcutMocks.useKeyboardNavigationScope(...args),
+  };
+});
 
 vi.mock('@core/refresh', () => ({
   useRefreshScopedDomain: (...args: unknown[]) => refreshMocks.useRefreshScopedDomain(...args),

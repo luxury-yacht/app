@@ -9,7 +9,6 @@ import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CatalogItem } from '@/core/refresh/types';
-import { KeyboardScopePriority } from '@ui/shortcuts/priorities';
 import type { Command } from './CommandPaletteCommands';
 import { CommandPalette, buildCatalogDisplayEntries, parseQueryTokens } from './CommandPalette';
 
@@ -654,7 +653,7 @@ describe('CommandPalette component behaviour', () => {
     errorSpy.mockRestore();
   });
 
-  it('registers a highest-priority navigation scope that keeps focus on the input', async () => {
+  it('focuses the search input without registering a keyboard navigation scope', async () => {
     const commands: Command[] = [
       { id: 'open-settings', label: 'Open Settings', category: 'Application', action: vi.fn() },
     ];
@@ -662,37 +661,10 @@ describe('CommandPalette component behaviour', () => {
     await renderPalette(commands);
     await openPalette();
 
-    const scopeCall =
-      useKeyboardNavigationScopeMock.mock.calls[
-        useKeyboardNavigationScopeMock.mock.calls.length - 1
-      ];
-    expect(scopeCall).toBeTruthy();
-    const scopeConfig = scopeCall?.[0] as {
-      priority: number;
-      disabled?: boolean;
-      onEnter?: (args: { direction: 'forward' | 'backward' }) => void;
-      onNavigate?: (args: {
-        direction: 'forward' | 'backward';
-        event: KeyboardEvent;
-      }) => 'handled' | 'bubble' | 'native' | void;
-    };
-
-    expect(scopeConfig?.priority).toBe(KeyboardScopePriority.COMMAND_PALETTE);
-    expect(scopeConfig?.disabled).toBe(false);
-
     const input = container.querySelector('.command-palette-input') as HTMLInputElement;
     expect(input).not.toBeNull();
-    input.blur();
-
-    scopeConfig?.onEnter?.({ direction: 'forward' });
     expect(document.activeElement).toBe(input);
-
-    const navigateResult = scopeConfig?.onNavigate?.({
-      direction: 'forward',
-      event: new KeyboardEvent('keydown', { key: 'Tab' }),
-    } as Parameters<NonNullable<typeof scopeConfig.onNavigate>>[0]);
-    expect(navigateResult).toBe('handled');
-    expect(document.activeElement).toBe(input);
+    expect(useKeyboardNavigationScopeMock).not.toHaveBeenCalled();
   });
 });
 

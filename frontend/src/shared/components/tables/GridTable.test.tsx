@@ -848,6 +848,113 @@ describe('GridTable interactions (non-virtualized)', () => {
     expect(onFilterChange).toHaveBeenCalledTimes(1);
   });
 
+  it('tabs from the last filter control into the table body', async () => {
+    let currentFilters = {
+      search: 'Row 1',
+      kinds: [] as string[],
+      namespaces: [] as string[],
+      caseSensitive: false,
+      includeMetadata: false,
+    };
+
+    const handleFilterChange = (next: typeof currentFilters) => {
+      currentFilters = next;
+    };
+
+    const makeFilters = (): GridTableFilterConfig<SimpleRow> => ({
+      enabled: true,
+      value: currentFilters,
+      onChange: handleFilterChange,
+    });
+
+    const { container, cleanup } = renderGridTable({
+      data: createRows(30),
+      filters: makeFilters(),
+      virtualization: { enabled: false },
+    });
+    cleanupRoot = cleanup;
+
+    await flushAsync();
+
+    const resetButton = container.querySelector<HTMLButtonElement>(
+      '.icon-bar-button[title="Reset filters"]'
+    );
+    const wrapper = container.querySelector<HTMLDivElement>('.gridtable-wrapper');
+    expect(resetButton).not.toBeNull();
+    expect(wrapper).not.toBeNull();
+
+    act(() => {
+      resetButton!.focus();
+    });
+    expect(document.activeElement).toBe(resetButton);
+
+    act(() => {
+      resetButton!.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'Tab',
+          bubbles: true,
+          cancelable: true,
+        })
+      );
+    });
+
+    expect(document.activeElement).toBe(wrapper);
+  });
+
+  it('shift-tabs from the table body back to the last filter control', async () => {
+    let currentFilters = {
+      search: 'Row 1',
+      kinds: [] as string[],
+      namespaces: [] as string[],
+      caseSensitive: false,
+      includeMetadata: false,
+    };
+
+    const handleFilterChange = (next: typeof currentFilters) => {
+      currentFilters = next;
+    };
+
+    const makeFilters = (): GridTableFilterConfig<SimpleRow> => ({
+      enabled: true,
+      value: currentFilters,
+      onChange: handleFilterChange,
+    });
+
+    const { container, cleanup } = renderGridTable({
+      data: createRows(30),
+      filters: makeFilters(),
+      virtualization: { enabled: false },
+    });
+    cleanupRoot = cleanup;
+
+    await flushAsync();
+
+    const wrapper = container.querySelector<HTMLDivElement>('.gridtable-wrapper');
+    const resetButton = container.querySelector<HTMLButtonElement>(
+      '.icon-bar-button[title="Reset filters"]'
+    );
+    expect(wrapper).not.toBeNull();
+    expect(resetButton).not.toBeNull();
+
+    act(() => {
+      wrapper!.focus();
+    });
+    expect(document.activeElement).toBe(wrapper);
+
+    act(() => {
+      wrapper!.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'Tab',
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        })
+      );
+    });
+
+    expect(document.activeElement).toBe(resetButton);
+  });
+
   it('shows selection counts in kind and namespace dropdown labels', async () => {
     let currentFilters = {
       search: '',

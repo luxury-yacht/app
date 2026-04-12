@@ -14,19 +14,23 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import GridTableFiltersBar from '@shared/components/tables/GridTableFiltersBar';
 
 // Mock the keyboard shortcuts hooks — we only need the rendered DOM.
-vi.mock('@ui/shortcuts', () => ({
-  useSearchShortcutTarget: () => {},
-  useKeyboardNavigationScope: () => {},
-  useKeyboardContext: () => ({
-    pushContext: () => {},
-    popContext: () => {},
-    registerSurface: () => 'mock-surface-id',
-    unregisterSurface: () => {},
-    updateSurface: () => {},
-    dispatchNativeAction: () => false,
-  }),
-  useShortcuts: () => {},
-}));
+vi.mock('@ui/shortcuts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@ui/shortcuts')>();
+  return {
+    ...actual,
+    useSearchShortcutTarget: () => {},
+    useKeyboardNavigationScope: () => {},
+    useKeyboardContext: () => ({
+      pushContext: () => {},
+      popContext: () => {},
+      registerSurface: () => 'mock-surface-id',
+      unregisterSurface: () => {},
+      updateSurface: () => {},
+      dispatchNativeAction: () => false,
+    }),
+    useShortcuts: () => {},
+  };
+});
 
 describe('GridTableKeys filter target selectors', () => {
   let container: HTMLDivElement;

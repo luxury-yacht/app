@@ -59,6 +59,8 @@ export interface KeyboardSurfaceNativeActionContext {
   selection: Selection | null;
 }
 
+export type KeyboardSurfaceKeyResult = boolean | 'handled-no-prevent' | void;
+
 export interface KeyboardSurfaceOptions {
   kind: 'modal' | 'palette' | 'menu' | 'dropdown' | 'panel' | 'region' | 'editor';
   rootRef: React.RefObject<HTMLElement | null>;
@@ -67,8 +69,8 @@ export interface KeyboardSurfaceOptions {
   blocking?: boolean;
   captureWhenActive?: boolean;
   suppressShortcuts?: boolean;
-  onKeyDown?: (event: KeyboardEvent) => boolean | void;
-  onEscape?: (event: KeyboardEvent) => boolean | void;
+  onKeyDown?: (event: KeyboardEvent) => KeyboardSurfaceKeyResult;
+  onEscape?: (event: KeyboardEvent) => KeyboardSurfaceKeyResult;
   onNativeAction?: (context: KeyboardSurfaceNativeActionContext) => boolean | void;
 }
 
@@ -392,14 +394,19 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
     const handleKeyDown = (event: KeyboardEvent) => {
       const targetSurface = getTargetSurface(event.target);
       if (targetSurface) {
-        const handledEscape =
-          event.key === 'Escape' && targetSurface.onEscape
-            ? targetSurface.onEscape(event) === true
-            : false;
-        const handledKey = !handledEscape && targetSurface.onKeyDown?.(event) === true;
+        const escapeResult =
+          event.key === 'Escape' && targetSurface.onEscape ? targetSurface.onEscape(event) : false;
+        const handledEscape = escapeResult === true || escapeResult === 'handled-no-prevent';
+        const handledEscapeNoPrevent = escapeResult === 'handled-no-prevent';
+        const keyResult =
+          !handledEscape && targetSurface.onKeyDown ? targetSurface.onKeyDown(event) : false;
+        const handledKey = keyResult === true || keyResult === 'handled-no-prevent';
+        const handledKeyNoPrevent = keyResult === 'handled-no-prevent';
 
         if (handledEscape || handledKey) {
-          event.preventDefault();
+          if (!handledEscapeNoPrevent && !handledKeyNoPrevent) {
+            event.preventDefault();
+          }
           event.stopPropagation();
           return;
         }
