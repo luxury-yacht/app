@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import Tooltip from '@shared/components/Tooltip';
 import {
   getLogApiTimestampFormat,
@@ -21,9 +21,14 @@ import {
   LOG_TARGET_PER_SCOPE_MAX,
   LOG_TARGET_PER_SCOPE_MIN,
 } from '@core/settings/appPreferences';
-import { getLogApiTimestampFormatValidationError } from '@/utils/logApiTimestampFormat';
+import {
+  formatLogApiTimestamp,
+  getLogApiTimestampFormatValidationError,
+} from '@/utils/logApiTimestampFormat';
 import '@ui/settings/Settings.css';
 import './LogSettings.css';
+
+const LOG_API_TIMESTAMP_EXAMPLE = '2026-04-11T12:34:55.000Z';
 
 function LogSettings() {
   const [logBufferMaxSizeInput, setLogBufferMaxSizeInput] = useState<string>(() =>
@@ -41,6 +46,17 @@ function LogSettings() {
   const [logTargetGlobalLimitInput, setLogTargetGlobalLimitInput] = useState<string>(() =>
     String(getLogTargetGlobalLimit())
   );
+  const logApiTimestampPreview = useMemo(() => {
+    const validationError = getLogApiTimestampFormatValidationError(logApiTimestampFormatInput);
+    if (validationError) {
+      return null;
+    }
+    return formatLogApiTimestamp(
+      LOG_API_TIMESTAMP_EXAMPLE,
+      logApiTimestampFormatInput.trim(),
+      logApiTimestampUseLocalTimeZone
+    );
+  }, [logApiTimestampFormatInput, logApiTimestampUseLocalTimeZone]);
 
   const commitLogBufferMaxSize = (raw: string) => {
     const parsed = Number.parseInt(raw, 10);
@@ -210,30 +226,29 @@ function LogSettings() {
           </div>
           <div className="setting-item log-settings-timestamp">
             <div className="log-settings-timestamp-grid">
-              <div className="log-settings-timestamp-title">API Timestamps</div>
-              <label
-                htmlFor="log-api-timestamp-local-time-zone"
-                className="log-settings-timestamp-checkbox"
-              >
-                <input
-                  type="checkbox"
-                  id="log-api-timestamp-local-time-zone"
-                  checked={logApiTimestampUseLocalTimeZone}
-                  onChange={(e) => {
-                    const enabled = e.target.checked;
-                    setLogApiTimestampUseLocalTimeZoneState(enabled);
-                    setLogApiTimestampUseLocalTimeZone(enabled);
-                  }}
-                  data-log-settings-focusable="true"
-                />
-                Use local time zone
-              </label>
-              <span className="log-settings-timestamp-control">
+              <div className="log-settings-timestamp-checkbox-row">
+                <label
+                  htmlFor="log-api-timestamp-local-time-zone"
+                  className="log-settings-timestamp-checkbox"
+                >
+                  <input
+                    type="checkbox"
+                    id="log-api-timestamp-local-time-zone"
+                    checked={logApiTimestampUseLocalTimeZone}
+                    onChange={(e) => {
+                      const enabled = e.target.checked;
+                      setLogApiTimestampUseLocalTimeZoneState(enabled);
+                      setLogApiTimestampUseLocalTimeZone(enabled);
+                    }}
+                    data-log-settings-focusable="true"
+                  />
+                  Use local time zone
+                </label>
                 <Tooltip
                   content="Formats Kubernetes API timestamps using this machine's local timezone instead of UTC."
                   variant="dark"
                 />
-              </span>
+              </div>
               <label
                 htmlFor="log-api-timestamp-format"
                 className="log-settings-timestamp-format-label"
@@ -283,6 +298,14 @@ function LogSettings() {
                   variant="dark"
                 />
               </div>
+              {logApiTimestampPreview ? (
+                <>
+                  <span className="log-settings-timestamp-example-label"></span>
+                  <span className="log-settings-timestamp-example-value">
+                    {logApiTimestampPreview}
+                  </span>
+                </>
+              ) : null}
               {logApiTimestampFormatError ? (
                 <div
                   className="setting-item-message setting-item-error log-settings-timestamp-error"

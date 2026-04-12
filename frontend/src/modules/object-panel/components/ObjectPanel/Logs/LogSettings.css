@@ -53,23 +53,21 @@
 
 .log-settings-timestamp-grid {
   display: inline-grid;
-  grid-template-columns: max-content max-content max-content;
-  column-gap: 0.35rem;
-  row-gap: 0.2rem;
+  grid-template-columns: max-content max-content;
+  column-gap: 1rem;
+  row-gap: 0.4rem;
   align-items: center;
   justify-content: start;
 }
 
-.log-settings-timestamp-title {
-  grid-column: 1;
-  grid-row: 1;
-  margin-right: 1rem;
-  font-size: var(--font-size-normal);
-  color: var(--color-text);
+.log-settings-timestamp-checkbox-row {
+  grid-column: 1 / span 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
 }
 
 .log-settings-timestamp-checkbox {
-  grid-column: 2;
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-sm);
@@ -83,31 +81,45 @@
 }
 
 .log-settings-timestamp-format-label {
-  grid-column: 2;
+  grid-column: 1;
   font-size: var(--font-size-normal);
   color: var(--color-text);
   white-space: nowrap;
 }
 
 .log-settings-timestamp-grid input[type="text"] {
-  min-width: 18ch;
-  max-width: 28ch;
   padding: var(--spacing-xs) var(--spacing-sm);
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius-sm);
   background-color: var(--color-bg);
   color: var(--color-text);
+  width: 30ch;
 }
 
 .log-settings-timestamp-control {
-  grid-column: 3;
+  grid-column: 2;
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
 }
 
 .log-settings-timestamp-error {
-  grid-column: 2 / span 2;
+  grid-column: 1 / span 2;
+}
+
+.log-settings-timestamp-example-label {
+  grid-column: 1;
+  font-size: var(--font-size-normal);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.log-settings-timestamp-example-value {
+  grid-column: 2;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-normal);
+  font-variant-numeric: tabular-nums;
+  padding-left: 0.5rem;
 }
 
 [data-theme="dark"] .log-settings-timestamp-grid input[type="text"] {
