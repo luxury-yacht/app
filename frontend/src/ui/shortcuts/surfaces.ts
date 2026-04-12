@@ -4,8 +4,17 @@ import { useOptionalKeyboardContext, type KeyboardSurfaceOptions } from './conte
 export function useKeyboardSurface(options: KeyboardSurfaceOptions) {
   const keyboardContext = useOptionalKeyboardContext();
   const surfaceIdRef = useRef<string | null>(null);
-  const { kind, rootRef, active, priority, blocking, onKeyDown, onEscape, onNativeAction } =
-    options;
+  const {
+    kind,
+    rootRef,
+    active,
+    priority,
+    blocking,
+    captureWhenActive,
+    onKeyDown,
+    onEscape,
+    onNativeAction,
+  } = options;
 
   useEffect(() => {
     if (!keyboardContext) {
@@ -28,6 +37,7 @@ export function useKeyboardSurface(options: KeyboardSurfaceOptions) {
       active,
       priority,
       blocking,
+      captureWhenActive,
       onKeyDown,
       onEscape,
       onNativeAction,
@@ -48,6 +58,7 @@ export function useKeyboardSurface(options: KeyboardSurfaceOptions) {
   }, [
     active,
     blocking,
+    captureWhenActive,
     kind,
     keyboardContext,
     onEscape,

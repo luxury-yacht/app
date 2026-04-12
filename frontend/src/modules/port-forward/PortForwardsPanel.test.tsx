@@ -6,8 +6,9 @@
  */
 
 import ReactDOM from 'react-dom/client';
-import { act } from 'react';
+import { act, type Ref } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { KeyboardProvider } from '@ui/shortcuts/context';
 
 // Mock the Wails backend
 const listPortForwardsMock = vi.hoisted(() => vi.fn());
@@ -59,8 +60,16 @@ const panelStateMock = vi.hoisted(() => ({
 }));
 
 vi.mock('@ui/dockable', () => ({
-  DockablePanel: ({ children, title }: { children: React.ReactNode; title: string }) => (
-    <div data-testid="dockable-panel" data-title={title}>
+  DockablePanel: ({
+    children,
+    title,
+    panelRef,
+  }: {
+    children: React.ReactNode;
+    title: string;
+    panelRef?: Ref<HTMLDivElement>;
+  }) => (
+    <div data-testid="dockable-panel" data-title={title} ref={panelRef}>
       {children}
     </div>
   ),
@@ -137,7 +146,12 @@ describe('PortForwardsPanel', () => {
    */
   const renderPanel = async () => {
     await act(async () => {
-      root.render(<PortForwardsPanel />);
+      root.render(
+        <KeyboardProvider>
+          <PortForwardsPanel />
+          <button id="outside-panel">Outside</button>
+        </KeyboardProvider>
+      );
       await Promise.resolve();
     });
   };
@@ -175,6 +189,24 @@ describe('PortForwardsPanel', () => {
     await flushPromises();
 
     expect(listPortForwardsMock).toHaveBeenCalled();
+  });
+
+  it('closes on Escape through the keyboard surface manager even when focus is outside the panel', async () => {
+    await renderPanel();
+    await flushPromises();
+
+    const outsideButton = document.querySelector('#outside-panel') as HTMLButtonElement | null;
+    expect(outsideButton).toBeTruthy();
+    outsideButton?.focus();
+
+    await act(async () => {
+      outsideButton?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+      );
+      await Promise.resolve();
+    });
+
+    expect(panelStateMock.setOpen).toHaveBeenCalledWith(false);
   });
 
   it('renders session cards with correct info', async () => {

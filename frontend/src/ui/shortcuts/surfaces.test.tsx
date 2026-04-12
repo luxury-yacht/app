@@ -137,6 +137,121 @@ describe('keyboard surfaces', () => {
     expect(surfaceHandler).toHaveBeenCalledTimes(1);
   });
 
+  it('falls back to an active capture surface when focus is outside surfaces', async () => {
+    const surfaceHandler = vi.fn();
+
+    const Harness = () => {
+      const surfaceRef = useRef<HTMLDivElement>(null);
+
+      useKeyboardSurface({
+        kind: 'panel',
+        rootRef: surfaceRef,
+        active: true,
+        captureWhenActive: true,
+        onEscape: () => {
+          surfaceHandler();
+          return true;
+        },
+      });
+
+      return (
+        <>
+          <div ref={surfaceRef}>
+            <button>Inside</button>
+          </div>
+          <button id="outside-surface">Outside</button>
+        </>
+      );
+    };
+
+    await act(async () => {
+      root.render(
+        <KeyboardProvider>
+          <Harness />
+        </KeyboardProvider>
+      );
+      await Promise.resolve();
+    });
+
+    const outsideButton = document.querySelector('#outside-surface') as HTMLButtonElement | null;
+    expect(outsideButton).not.toBeNull();
+    outsideButton?.focus();
+
+    act(() => {
+      outsideButton?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+      );
+    });
+
+    expect(surfaceHandler).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps blocking surfaces ahead of active capture surfaces', async () => {
+    const panelHandler = vi.fn();
+    const modalHandler = vi.fn();
+
+    const Harness = () => {
+      const panelRef = useRef<HTMLDivElement>(null);
+      const modalRef = useRef<HTMLDivElement>(null);
+
+      useKeyboardSurface({
+        kind: 'panel',
+        rootRef: panelRef,
+        active: true,
+        captureWhenActive: true,
+        onEscape: () => {
+          panelHandler();
+          return true;
+        },
+      });
+
+      useKeyboardSurface({
+        kind: 'modal',
+        rootRef: modalRef,
+        active: true,
+        blocking: true,
+        onEscape: () => {
+          modalHandler();
+          return true;
+        },
+      });
+
+      return (
+        <>
+          <div ref={panelRef}>
+            <button>Panel</button>
+          </div>
+          <div ref={modalRef}>
+            <button>Modal</button>
+          </div>
+          <button id="outside-surface">Outside</button>
+        </>
+      );
+    };
+
+    await act(async () => {
+      root.render(
+        <KeyboardProvider>
+          <Harness />
+        </KeyboardProvider>
+      );
+      await Promise.resolve();
+    });
+
+    const outsideButton = document.querySelector('#outside-surface') as HTMLButtonElement | null;
+    expect(outsideButton).not.toBeNull();
+    outsideButton?.focus();
+
+    act(() => {
+      outsideButton?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+      );
+    });
+
+    expect(modalHandler).toHaveBeenCalledTimes(1);
+    expect(panelHandler).not.toHaveBeenCalled();
+  });
+
   it('routes native actions through the active surface before falling back', async () => {
     const nativeActionHandler = vi.fn();
     const apiRef: {
