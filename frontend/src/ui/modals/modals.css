@@ -13,8 +13,8 @@
   right: 0;
   bottom: 0;
   background-color: var(--modal-overlay-bg);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(var(--modal-bg-blur));
+  -webkit-backdrop-filter: blur(var(--modal-bg-blur));
   display: flex;
   align-items: center;
   justify-content: center;

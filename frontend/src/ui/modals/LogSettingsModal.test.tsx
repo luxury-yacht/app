@@ -30,6 +30,7 @@ vi.mock('@modules/object-panel/components/ObjectPanel/Logs/LogSettings', () => (
 
 describe('LogSettingsModal', () => {
   let container: HTMLDivElement;
+  let contentBody: HTMLDivElement;
   let root: ReactDOM.Root;
 
   beforeAll(() => {
@@ -41,6 +42,9 @@ describe('LogSettingsModal', () => {
     shortcutMocks.useKeyboardNavigationScope.mockClear();
     contextMocks.pushContext.mockClear();
     contextMocks.popContext.mockClear();
+    contentBody = document.createElement('div');
+    contentBody.className = 'content-body';
+    document.body.appendChild(contentBody);
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
@@ -55,6 +59,7 @@ describe('LogSettingsModal', () => {
     act(() => {
       root.unmount();
     });
+    contentBody.remove();
     container.remove();
   });
 
@@ -155,5 +160,26 @@ describe('LogSettingsModal', () => {
     });
 
     expect(logSettingsSpy).toHaveBeenCalled();
+  });
+
+  it('positions the modal horizontally from the content-body center', async () => {
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      value: 1200,
+    });
+
+    contentBody.getBoundingClientRect = () =>
+      ({
+        left: 500,
+        width: 400,
+      }) as DOMRect;
+
+    await act(async () => {
+      window.dispatchEvent(new Event('resize'));
+      await Promise.resolve();
+    });
+
+    const modal = document.querySelector('.log-settings-modal') as HTMLDivElement | null;
+    expect(modal?.style.marginLeft).toBe('100px');
   });
 });
