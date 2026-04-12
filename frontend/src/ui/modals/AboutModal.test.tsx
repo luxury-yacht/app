@@ -103,7 +103,7 @@ describe('AboutModal', () => {
     });
     const onClose = vi.fn();
 
-    const { container, unmount } = await renderModal({
+    const { unmount } = await renderModal({
       isOpen: true,
       onClose,
     });
@@ -112,12 +112,14 @@ describe('AboutModal', () => {
       await Promise.resolve();
     });
 
-    expect(container.textContent).toContain('Version 1.2.3');
-    expect(container.textContent).toContain('Beta expires');
+    expect(document.body.textContent).toContain('Version 1.2.3');
+    expect(document.body.textContent).toContain('Beta expires');
     expect(shortcutContextMock.pushContext).toHaveBeenCalledWith({ priority: 900 });
     expect(document.body.style.overflow).toBe('hidden');
+    expect(document.querySelector('.about-modal')?.getAttribute('role')).toBe('dialog');
+    expect(document.querySelector('.about-modal')?.getAttribute('aria-modal')).toBe('true');
 
-    const wailsLink = Array.from(container.querySelectorAll('a')).find((link) =>
+    const wailsLink = Array.from(document.querySelectorAll('a')).find((link) =>
       link.textContent?.includes('Wails')
     );
     expect(wailsLink).toBeTruthy();
@@ -234,12 +236,12 @@ describe('AboutModal', () => {
   });
 
   it('does not render when closed', async () => {
-    const { container, unmount } = await renderModal({
+    const { unmount } = await renderModal({
       isOpen: false,
       onClose: vi.fn(),
     });
 
-    expect(container.querySelector('.about-modal')).toBeNull();
+    expect(document.querySelector('.about-modal')).toBeNull();
     await unmount();
   });
 });

@@ -6,10 +6,10 @@
  */
 
 import React, { useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
 import { useShortcut, useKeyboardContext } from '@ui/shortcuts';
 import { useModalFocusTrap } from './useModalFocusTrap';
-import { KeyboardContextPriority, KeyboardScopePriority } from '@ui/shortcuts/priorities';
+import { KeyboardContextPriority } from '@ui/shortcuts/priorities';
+import ModalSurface from './ModalSurface';
 import './ConfirmationModal.css';
 
 interface ConfirmationModalProps {
@@ -60,48 +60,34 @@ const ConfirmationModalContent: React.FC<Omit<ConfirmationModalProps, 'isOpen'>>
     priority: KeyboardContextPriority.CONFIRMATION_MODAL,
   });
 
-  const handleBackdropClick = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget) {
-      onCancel();
-    }
-  };
-
   useModalFocusTrap({
     ref: modalRef,
-    focusableSelector: '[data-confirmation-focusable="true"]',
-    priority: KeyboardScopePriority.CONFIRMATION_MODAL,
   });
 
   return (
-    <div className="modal-overlay confirmation-modal-backdrop" onClick={handleBackdropClick}>
-      <div className="modal-container confirmation-modal">
-        <div className="modal-header confirmation-modal-header">
-          <h2>{title}</h2>
-        </div>
-        <div className="confirmation-modal-body">
-          <p>{message}</p>
-        </div>
-        <div className="confirmation-modal-footer">
-          <button
-            className="button cancel"
-            onClick={onCancel}
-            data-confirmation-focusable="true"
-            tabIndex={-1}
-          >
-            {cancelText}
-          </button>
-          <button
-            className={`button ${confirmButtonClass}`}
-            onClick={onConfirm}
-            autoFocus
-            data-confirmation-focusable="true"
-            tabIndex={-1}
-          >
-            {confirmText}
-          </button>
-        </div>
+    <ModalSurface
+      modalRef={modalRef}
+      labelledBy="confirmation-modal-title"
+      onClose={onCancel}
+      overlayClassName="confirmation-modal-backdrop"
+      containerClassName="confirmation-modal"
+      closeOnBackdrop={true}
+    >
+      <div className="modal-header confirmation-modal-header">
+        <h2 id="confirmation-modal-title">{title}</h2>
       </div>
-    </div>
+      <div className="confirmation-modal-body">
+        <p>{message}</p>
+      </div>
+      <div className="confirmation-modal-footer">
+        <button className="button cancel" onClick={onCancel}>
+          {cancelText}
+        </button>
+        <button className={`button ${confirmButtonClass}`} onClick={onConfirm} autoFocus>
+          {confirmText}
+        </button>
+      </div>
+    </ModalSurface>
   );
 };
 
@@ -115,11 +101,11 @@ function ConfirmationModal({
   onConfirm,
   onCancel,
 }: ConfirmationModalProps) {
-  if (!isOpen || typeof document === 'undefined') {
+  if (!isOpen) {
     return null;
   }
 
-  return createPortal(
+  return (
     <ConfirmationModalContent
       title={title}
       message={message}
@@ -128,8 +114,7 @@ function ConfirmationModal({
       confirmButtonClass={confirmButtonClass}
       onConfirm={onConfirm}
       onCancel={onCancel}
-    />,
-    document.body
+    />
   );
 }
 

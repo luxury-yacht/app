@@ -14,8 +14,9 @@ import { BrowserOpenURL } from '@wailsjs/runtime/runtime';
 import { GetAppInfo } from '@wailsjs/go/backend/App';
 import { backend } from '@wailsjs/go/models';
 import { useShortcut, useKeyboardContext } from '@ui/shortcuts';
-import { KeyboardContextPriority, KeyboardScopePriority } from '@ui/shortcuts/priorities';
+import { KeyboardContextPriority } from '@ui/shortcuts/priorities';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
+import ModalSurface from '@shared/components/modals/ModalSurface';
 import { CloseIcon } from '@shared/components/icons/MenuIcons';
 
 interface AboutModalProps {
@@ -93,119 +94,107 @@ const AboutModal: React.FC<AboutModalProps> = React.memo(({ isOpen, onClose }) =
 
   useModalFocusTrap({
     ref: modalRef,
-    focusableSelector: '[data-about-focusable="true"]',
-    priority: KeyboardScopePriority.ABOUT_MODAL,
-    disabled: !isOpen,
+    disabled: !shouldRender,
   });
 
   if (!shouldRender) return null;
 
   return (
-    <>
-      <div className={`modal-overlay ${isClosing ? 'closing' : ''}`} onClick={onClose}>
-        <div
-          className={`modal-container about-modal ${isClosing ? 'closing' : ''}`}
-          style={{ maxWidth: '500px' }}
-          onClick={(e) => e.stopPropagation()}
-          ref={modalRef}
-        >
-          <div className="modal-header">
-            <h2>About</h2>
-            <button
-              className="modal-close"
-              onClick={onClose}
-              aria-label="Close"
-              data-about-focusable="true"
-            >
-              <CloseIcon />
-            </button>
+    <ModalSurface
+      modalRef={modalRef}
+      labelledBy="about-modal-title"
+      onClose={onClose}
+      containerClassName="about-modal"
+      isClosing={isClosing}
+    >
+      <div className="modal-header">
+        <h2 id="about-modal-title">About</h2>
+        <button className="modal-close" onClick={onClose} aria-label="Close">
+          <CloseIcon />
+        </button>
+      </div>
+
+      <div className="modal-content">
+        <div className="about-logo-section">
+          <img src={captainK8s} alt="Captain K8s" className="about-captain-k8s" />
+          <img src={logo} alt="Luxury Yacht Logo" className="about-logo" />
+        </div>
+
+        <div className="about-info">
+          <div className="about-description">
+            <p>
+              <strong>Version {appInfo?.version || 'Loading...'}</strong>
+            </p>
+            {appInfo?.update ? (
+              appInfo.update.isUpdateAvailable ? (
+                <p className="about-update-available">
+                  Update available:{' '}
+                  <a
+                    href={appInfo.update.releaseUrl}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      BrowserOpenURL(appInfo.update!.releaseUrl);
+                    }}
+                  >
+                    {appInfo.update.latestVersion}
+                  </a>
+                </p>
+              ) : !appInfo.update.error ? (
+                <p className="about-up-to-date">
+                  <span className="about-up-to-date-icon">&#x2714;</span> Up to date
+                </p>
+              ) : null
+            ) : null}
+            {appInfo?.isBeta && appInfo?.expiryDate ? (
+              <p className="about-beta-expiry">
+                Beta expires: {new Date(appInfo.expiryDate).toLocaleDateString()}
+              </p>
+            ) : null}
+            <p className="about-link-row">
+              <a
+                href="https://luxury-yacht.app"
+                onClick={(e) => {
+                  e.preventDefault();
+                  BrowserOpenURL('https://luxury-yacht.app');
+                }}
+              >
+                luxury-yacht.app
+              </a>
+            </p>
+            <p className="about-link-row">
+              Built with{' '}
+              <a
+                href="https://wails.io/"
+                onClick={(e) => {
+                  e.preventDefault();
+                  BrowserOpenURL('https://wails.io/');
+                }}
+              >
+                Wails
+              </a>
+            </p>
           </div>
 
-          <div className="modal-content">
-            <div className="about-logo-section">
-              <img src={captainK8s} alt="Captain K8s" className="about-captain-k8s" />
-              <img src={logo} alt="Luxury Yacht Logo" className="about-logo" />
-            </div>
-
-            <div className="about-info">
-              <div className="about-description">
-                <p>
-                  <strong>Version {appInfo?.version || 'Loading...'}</strong>
-                </p>
-                {/* Version status indicator */}
-                {appInfo?.update ? (
-                  appInfo.update.isUpdateAvailable ? (
-                    <p className="about-update-available">
-                      Update available:{' '}
-                      <a
-                        href={appInfo.update.releaseUrl}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          BrowserOpenURL(appInfo.update!.releaseUrl);
-                        }}
-                      >
-                        {appInfo.update.latestVersion}
-                      </a>
-                    </p>
-                  ) : !appInfo.update.error ? (
-                    <p className="about-up-to-date">
-                      <span className="about-up-to-date-icon">&#x2714;</span> Up to date
-                    </p>
-                  ) : null
-                ) : null}
-                {appInfo?.isBeta && appInfo?.expiryDate ? (
-                  <p className="about-beta-expiry">
-                    Beta expires: {new Date(appInfo.expiryDate).toLocaleDateString()}
-                  </p>
-                ) : null}
-                <p style={{ marginTop: '1em' }}>
-                  <a
-                    href="https://luxury-yacht.app"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      BrowserOpenURL('https://luxury-yacht.app');
-                    }}
-                  >
-                    luxury-yacht.app
-                  </a>
-                </p>
-                <p style={{ marginTop: '1em' }}>
-                  Built with{' '}
-                  <a
-                    href="https://wails.io/"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      BrowserOpenURL('https://wails.io/');
-                    }}
-                  >
-                    Wails
-                  </a>
-                </p>
-              </div>
-
-              <div className="about-footer">
-                <p className="about-license">
-                  This application is licensed under the GNU General Public License, version 3
-                  (GPLv3). This application is distributed WITHOUT ANY WARRANTY, explicit or
-                  implied. See the{' '}
-                  <a
-                    href="https://www.gnu.org/licenses/gpl-3.0.html"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      BrowserOpenURL('https://www.gnu.org/licenses/gpl-3.0.html');
-                    }}
-                  >
-                    GNU General Public License
-                  </a>{' '}
-                  for more details.
-                </p>
-                <p className="about-copyright">Copyright © 2025-2026 Luxury Yacht</p>
-              </div>
-            </div>
+          <div className="about-footer">
+            <p className="about-license">
+              This application is licensed under the GNU General Public License, version 3 (GPLv3).
+              This application is distributed WITHOUT ANY WARRANTY, explicit or implied. See the{' '}
+              <a
+                href="https://www.gnu.org/licenses/gpl-3.0.html"
+                onClick={(e) => {
+                  e.preventDefault();
+                  BrowserOpenURL('https://www.gnu.org/licenses/gpl-3.0.html');
+                }}
+              >
+                GNU General Public License
+              </a>{' '}
+              for more details.
+            </p>
+            <p className="about-copyright">Copyright © 2025-2026 Luxury Yacht</p>
           </div>
         </div>
       </div>
-    </>
+    </ModalSurface>
   );
 });
 

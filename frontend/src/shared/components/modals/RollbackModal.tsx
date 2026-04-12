@@ -13,6 +13,8 @@ import { computeLineDiff } from '@modules/object-panel/components/ObjectPanel/Ya
 import { mergeDiffLines } from '@shared/components/diff/diffUtils';
 import DiffViewer from '@shared/components/diff/DiffViewer';
 import ConfirmationModal from './ConfirmationModal';
+import ModalSurface from './ModalSurface';
+import { useModalFocusTrap } from './useModalFocusTrap';
 import './RollbackModal.css';
 
 interface RollbackModalProps {
@@ -99,44 +101,25 @@ const RollbackModal = ({
       });
   }, [isOpen, clusterId, namespace, name, kind]);
 
-  // Focus trap: Tab cycles through focusable elements within the modal.
+  useModalFocusTrap({
+    ref: modalRef,
+    disabled: !isOpen,
+  });
+
   useEffect(() => {
-    if (!isOpen) return;
-    const container = modalRef.current;
-    if (!container) return;
+    if (!isOpen) {
+      return;
+    }
 
-    const handler = (e: KeyboardEvent) => {
-      if (!container.contains(e.target as Node)) return;
-
-      if (e.key === 'Escape') {
-        e.preventDefault();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
         onClose();
-        return;
       }
-      if (e.key !== 'Tab') return;
-
-      e.preventDefault();
-      e.stopPropagation();
-
-      const focusable = Array.from(
-        container.querySelectorAll<HTMLElement>(
-          'button:not([disabled]):not([tabindex="-1"]), input:not([disabled])'
-        )
-      );
-      if (focusable.length === 0) return;
-
-      const idx = focusable.indexOf(document.activeElement as HTMLElement);
-      let next: number;
-      if (e.shiftKey) {
-        next = idx <= 0 ? focusable.length - 1 : idx - 1;
-      } else {
-        next = idx >= focusable.length - 1 ? 0 : idx + 1;
-      }
-      focusable[next].focus();
     };
 
-    document.addEventListener('keydown', handler, true);
-    return () => document.removeEventListener('keydown', handler, true);
+    document.addEventListener('keydown', handleKeyDown, true);
+    return () => document.removeEventListener('keydown', handleKeyDown, true);
   }, [isOpen, onClose]);
 
   // Derive the current revision entry and the selected entry.
@@ -190,132 +173,132 @@ const RollbackModal = ({
   const sortedRevisions = [...revisions].sort((a, b) => b.revision - a.revision);
 
   return (
-    <div className="modal-overlay">
-      <div
-        ref={modalRef}
-        className="modal-container rollback-modal"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="modal-header">
-          <h2>
-            Rollback {kind} &mdash; {name}
-          </h2>
-          <button className="modal-close" onClick={onClose} aria-label="Close">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M18 6L6 18M6 6l12 12" />
-            </svg>
-          </button>
+    <ModalSurface
+      modalRef={modalRef}
+      labelledBy="rollback-modal-title"
+      onClose={onClose}
+      containerClassName="rollback-modal"
+      closeOnBackdrop={false}
+    >
+      {/* Header */}
+      <div className="modal-header">
+        <h2 id="rollback-modal-title">
+          Rollback {kind} &mdash; {name}
+        </h2>
+        <button className="modal-close" onClick={onClose} aria-label="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M18 6L6 18M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      {/* Body */}
+      {loading && (
+        <div className="rollback-loading" data-testid="rollback-loading">
+          <div className="loading-spinner">
+            <div className="spinner" />
+            <p>Loading revisions...</p>
+          </div>
         </div>
+      )}
 
-        {/* Body */}
-        {loading && (
-          <div className="rollback-loading" data-testid="rollback-loading">
-            <div className="loading-spinner">
-              <div className="spinner" />
-              <p>Loading revisions...</p>
-            </div>
-          </div>
-        )}
-
-        {!loading && fetchError && (
-          <div className="rollback-error" data-testid="rollback-error">
-            {fetchError}
-          </div>
-        )}
-
-        {!loading && !fetchError && !hasNonCurrentRevisions && (
-          <div className="rollback-empty" data-testid="rollback-empty">
-            No previous revisions available for rollback
-          </div>
-        )}
-
-        {!loading && !fetchError && hasNonCurrentRevisions && (
-          <div className="rollback-body">
-            {/* Left panel: revision list */}
-            <div className="rollback-revision-list" data-testid="rollback-revision-list">
-              {sortedRevisions.map((entry) => {
-                const isCurrent = entry.current;
-                const isSelected = entry.revision === selectedRevision;
-                const classNames = [
-                  'rollback-revision-item',
-                  isSelected ? 'rollback-revision-item--selected' : '',
-                  isCurrent ? 'rollback-revision-item--disabled' : '',
-                ]
-                  .filter(Boolean)
-                  .join(' ');
-
-                return (
-                  <button
-                    key={entry.revision}
-                    type="button"
-                    className={classNames}
-                    disabled={isCurrent}
-                    onClick={() => setSelectedRevision(entry.revision)}
-                    data-testid={`revision-item-${entry.revision}`}
-                  >
-                    <div className="rollback-revision-item-header">
-                      <span className="rollback-revision-number">Revision {entry.revision}</span>
-                      {isCurrent && <span className="rollback-revision-badge">current</span>}
-                    </div>
-                    <span className="rollback-revision-age">{formatAge(entry.createdAt)}</span>
-                    {entry.changeCause && (
-                      <span className="rollback-revision-cause" title={entry.changeCause}>
-                        {entry.changeCause}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Right panel: diff viewer */}
-            <div className="rollback-diff-panel">
-              <div className="rollback-diff-header">
-                <span className="rollback-diff-label">
-                  Current &rarr; Revision {selectedRevision}
-                </span>
-                <label className="rollback-diff-only-toggle">
-                  <input
-                    type="checkbox"
-                    checked={diffOnly}
-                    onChange={(e) => setDiffOnly(e.target.checked)}
-                  />
-                  Diff only
-                </label>
-              </div>
-              <div className="rollback-diff-content">
-                {diffResult && (
-                  <DiffViewer
-                    lines={diffResult.lines}
-                    leftText={diffResult.leftText}
-                    rightText={diffResult.rightText}
-                    showDiffOnly={diffOnly}
-                  />
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Footer */}
-        <div className="rollback-modal-footer">
-          {rollbackError && (
-            <span className="rollback-modal-footer-error" title={rollbackError}>
-              {rollbackError}
-            </span>
-          )}
-          <button className="button cancel" onClick={onClose} disabled={rollbackLoading}>
-            Cancel
-          </button>
-          <button
-            className="button warning"
-            disabled={selectedRevision === null || rollbackLoading || loading}
-            onClick={() => setConfirmOpen(true)}
-          >
-            {rollbackLoading ? 'Rolling back...' : `Rollback to Revision ${selectedRevision ?? ''}`}
-          </button>
+      {!loading && fetchError && (
+        <div className="rollback-error" data-testid="rollback-error">
+          {fetchError}
         </div>
+      )}
+
+      {!loading && !fetchError && !hasNonCurrentRevisions && (
+        <div className="rollback-empty" data-testid="rollback-empty">
+          No previous revisions available for rollback
+        </div>
+      )}
+
+      {!loading && !fetchError && hasNonCurrentRevisions && (
+        <div className="rollback-body">
+          {/* Left panel: revision list */}
+          <div className="rollback-revision-list" data-testid="rollback-revision-list">
+            {sortedRevisions.map((entry) => {
+              const isCurrent = entry.current;
+              const isSelected = entry.revision === selectedRevision;
+              const classNames = [
+                'rollback-revision-item',
+                isSelected ? 'rollback-revision-item--selected' : '',
+                isCurrent ? 'rollback-revision-item--disabled' : '',
+              ]
+                .filter(Boolean)
+                .join(' ');
+
+              return (
+                <button
+                  key={entry.revision}
+                  type="button"
+                  className={classNames}
+                  disabled={isCurrent}
+                  onClick={() => setSelectedRevision(entry.revision)}
+                  data-testid={`revision-item-${entry.revision}`}
+                >
+                  <div className="rollback-revision-item-header">
+                    <span className="rollback-revision-number">Revision {entry.revision}</span>
+                    {isCurrent && <span className="rollback-revision-badge">current</span>}
+                  </div>
+                  <span className="rollback-revision-age">{formatAge(entry.createdAt)}</span>
+                  {entry.changeCause && (
+                    <span className="rollback-revision-cause" title={entry.changeCause}>
+                      {entry.changeCause}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Right panel: diff viewer */}
+          <div className="rollback-diff-panel">
+            <div className="rollback-diff-header">
+              <span className="rollback-diff-label">
+                Current &rarr; Revision {selectedRevision}
+              </span>
+              <label className="rollback-diff-only-toggle">
+                <input
+                  type="checkbox"
+                  checked={diffOnly}
+                  onChange={(e) => setDiffOnly(e.target.checked)}
+                />
+                Diff only
+              </label>
+            </div>
+            <div className="rollback-diff-content">
+              {diffResult && (
+                <DiffViewer
+                  lines={diffResult.lines}
+                  leftText={diffResult.leftText}
+                  rightText={diffResult.rightText}
+                  showDiffOnly={diffOnly}
+                />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Footer */}
+      <div className="rollback-modal-footer">
+        {rollbackError && (
+          <span className="rollback-modal-footer-error" title={rollbackError}>
+            {rollbackError}
+          </span>
+        )}
+        <button className="button cancel" onClick={onClose} disabled={rollbackLoading}>
+          Cancel
+        </button>
+        <button
+          className="button warning"
+          disabled={selectedRevision === null || rollbackLoading || loading}
+          onClick={() => setConfirmOpen(true)}
+        >
+          {rollbackLoading ? 'Rolling back...' : `Rollback to Revision ${selectedRevision ?? ''}`}
+        </button>
       </div>
 
       {/* Confirmation dialog before performing rollback */}
@@ -329,7 +312,7 @@ const RollbackModal = ({
         onConfirm={handleRollback}
         onCancel={() => setConfirmOpen(false)}
       />
-    </div>
+    </ModalSurface>
   );
 };
 

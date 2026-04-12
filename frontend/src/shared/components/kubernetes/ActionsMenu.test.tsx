@@ -181,7 +181,7 @@ describe('ActionsMenu', () => {
       scaleItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
-    const modal = container.querySelector('.scale-modal');
+    const modal = document.querySelector('.scale-modal');
     expect(modal).toBeTruthy();
     const input = modal?.querySelector<HTMLInputElement>('#scale-replicas');
     expect(input?.value).toBe('3');

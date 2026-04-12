@@ -7,6 +7,8 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { StartPortForward } from '@wailsjs/go/backend/App';
+import ModalSurface from '@shared/components/modals/ModalSurface';
+import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
 import './PortForwardModal.css';
 
 /**
@@ -74,6 +76,12 @@ const PortForwardModal = ({ target, onClose, onStarted }: PortForwardModalProps)
   const [fetchedPorts, setFetchedPorts] = useState<ContainerPort[]>([]);
   // Keep latest target available for effects keyed by targetKey.
   const targetRef = useRef<PortForwardTarget | null>(target);
+  const modalRef = useRef<HTMLDivElement>(null);
+
+  useModalFocusTrap({
+    ref: modalRef,
+    disabled: !target,
+  });
 
   useEffect(() => {
     targetRef.current = target;
@@ -241,16 +249,6 @@ const PortForwardModal = ({ target, onClose, onStarted }: PortForwardModalProps)
     }
   }, [target, containerPort, localPort, onStarted, onClose]);
 
-  // Handle backdrop click (close only when clicking the overlay, not the modal content)
-  const handleBackdropClick = useCallback(
-    (e: React.MouseEvent) => {
-      if (e.target === e.currentTarget && !isLoading) {
-        onClose();
-      }
-    },
-    [isLoading, onClose]
-  );
-
   // Don't render if no target
   if (!target) {
     return null;
@@ -261,149 +259,153 @@ const PortForwardModal = ({ target, onClose, onStarted }: PortForwardModalProps)
   const hasPredefinedPorts = availablePorts.length > 0;
 
   return (
-    <div className="modal-overlay" onClick={handleBackdropClick}>
-      <div className="modal-container port-forward-modal">
-        {/* Header */}
-        <div className="modal-header">
-          <h2>Port Forward</h2>
-          <button
-            className="modal-close"
-            onClick={onClose}
-            disabled={isLoading}
-            aria-label="Close modal"
+    <ModalSurface
+      modalRef={modalRef}
+      labelledBy="port-forward-modal-title"
+      onClose={onClose}
+      containerClassName="port-forward-modal"
+      closeOnBackdrop={!isLoading}
+    >
+      {/* Header */}
+      <div className="modal-header">
+        <h2 id="port-forward-modal-title">Port Forward</h2>
+        <button
+          className="modal-close"
+          onClick={onClose}
+          disabled={isLoading}
+          aria-label="Close modal"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </div>
+
+      {/* Body */}
+      <div className="port-forward-modal-body">
+        {/* Resource Information (read-only) */}
+        <div className="port-forward-resource-info">
+          <div className="port-forward-resource-info-row">
+            <span className="port-forward-resource-info-label">Cluster:</span>
+            <span className="port-forward-resource-info-value">{target.clusterName}</span>
+          </div>
+          <div className="port-forward-resource-info-row">
+            <span className="port-forward-resource-info-label">Namespace:</span>
+            <span className="port-forward-resource-info-value">{target.namespace}</span>
+          </div>
+          <div className="port-forward-resource-info-row">
+            <span className="port-forward-resource-info-label">Resource:</span>
+            <span className="port-forward-resource-info-value">
+              {target.kind}/{target.name}
+            </span>
+          </div>
         </div>
 
-        {/* Body */}
-        <div className="port-forward-modal-body">
-          {/* Resource Information (read-only) */}
-          <div className="port-forward-resource-info">
-            <div className="port-forward-resource-info-row">
-              <span className="port-forward-resource-info-label">Cluster:</span>
-              <span className="port-forward-resource-info-value">{target.clusterName}</span>
+        {/* Container Port Selection */}
+        <div className="port-forward-field">
+          <label>Container Port</label>
+          {isLoadingPorts ? (
+            // Loading indicator while fetching ports
+            <div className="port-forward-loading">Loading available ports...</div>
+          ) : hasPredefinedPorts ? (
+            // Radio buttons for predefined ports
+            <div className="port-forward-port-options">
+              {availablePorts.map((portInfo) => (
+                <label
+                  key={portInfo.port}
+                  className={`port-forward-port-option ${
+                    containerPort === portInfo.port ? 'selected' : ''
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="containerPort"
+                    value={portInfo.port}
+                    checked={containerPort === portInfo.port}
+                    onChange={() => handleContainerPortChange(portInfo.port)}
+                    disabled={isLoading}
+                  />
+                  <span className="port-forward-port-option-label">
+                    <span className="port-forward-port-number">{portInfo.port}</span>
+                    {portInfo.name && (
+                      <span className="port-forward-port-name">({portInfo.name})</span>
+                    )}
+                    {portInfo.protocol && (
+                      <span className="port-forward-port-protocol">{portInfo.protocol}</span>
+                    )}
+                  </span>
+                </label>
+              ))}
             </div>
-            <div className="port-forward-resource-info-row">
-              <span className="port-forward-resource-info-label">Namespace:</span>
-              <span className="port-forward-resource-info-value">{target.namespace}</span>
-            </div>
-            <div className="port-forward-resource-info-row">
-              <span className="port-forward-resource-info-label">Resource:</span>
-              <span className="port-forward-resource-info-value">
-                {target.kind}/{target.name}
-              </span>
-            </div>
-          </div>
-
-          {/* Container Port Selection */}
-          <div className="port-forward-field">
-            <label>Container Port</label>
-            {isLoadingPorts ? (
-              // Loading indicator while fetching ports
-              <div className="port-forward-loading">Loading available ports...</div>
-            ) : hasPredefinedPorts ? (
-              // Radio buttons for predefined ports
-              <div className="port-forward-port-options">
-                {availablePorts.map((portInfo) => (
-                  <label
-                    key={portInfo.port}
-                    className={`port-forward-port-option ${
-                      containerPort === portInfo.port ? 'selected' : ''
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="containerPort"
-                      value={portInfo.port}
-                      checked={containerPort === portInfo.port}
-                      onChange={() => handleContainerPortChange(portInfo.port)}
-                      disabled={isLoading}
-                    />
-                    <span className="port-forward-port-option-label">
-                      <span className="port-forward-port-number">{portInfo.port}</span>
-                      {portInfo.name && (
-                        <span className="port-forward-port-name">({portInfo.name})</span>
-                      )}
-                      {portInfo.protocol && (
-                        <span className="port-forward-port-protocol">{portInfo.protocol}</span>
-                      )}
-                    </span>
-                  </label>
-                ))}
-              </div>
-            ) : (
-              // Manual input for container port
-              <div className="port-forward-input-group">
-                <input
-                  type="number"
-                  className="port-forward-input"
-                  min={1}
-                  max={65535}
-                  value={containerPort || ''}
-                  onChange={handleContainerPortInput}
-                  placeholder="Enter port (1-65535)"
-                  disabled={isLoading}
-                  autoFocus
-                />
-              </div>
-            )}
-          </div>
-
-          {/* Local Port Input */}
-          <div className="port-forward-field">
-            <label htmlFor="port-forward-local-port">Local Port</label>
+          ) : (
+            // Manual input for container port
             <div className="port-forward-input-group">
               <input
-                id="port-forward-local-port"
                 type="number"
                 className="port-forward-input"
                 min={1}
                 max={65535}
-                value={localPort || ''}
-                onChange={handleLocalPortInput}
-                placeholder="Enter local port (1-65535)"
+                value={containerPort || ''}
+                onChange={handleContainerPortInput}
+                placeholder="Enter port (1-65535)"
                 disabled={isLoading}
+                autoFocus
               />
             </div>
-            <div className="port-forward-hint">
-              Forwards localhost:{localPort || '...'} to {target.kind.toLowerCase()}:
-              {containerPort || '...'}
-            </div>
+          )}
+        </div>
+
+        {/* Local Port Input */}
+        <div className="port-forward-field">
+          <label htmlFor="port-forward-local-port">Local Port</label>
+          <div className="port-forward-input-group">
+            <input
+              id="port-forward-local-port"
+              type="number"
+              className="port-forward-input"
+              min={1}
+              max={65535}
+              value={localPort || ''}
+              onChange={handleLocalPortInput}
+              placeholder="Enter local port (1-65535)"
+              disabled={isLoading}
+            />
+          </div>
+          <div className="port-forward-hint">
+            Forwards localhost:{localPort || '...'} to {target.kind.toLowerCase()}:
+            {containerPort || '...'}
           </div>
         </div>
-
-        {/* Error Message */}
-        {error && <div className="port-forward-error">{error}</div>}
-
-        {/* Footer */}
-        <div className="port-forward-footer">
-          <button className="button cancel" onClick={onClose} disabled={isLoading}>
-            Cancel
-          </button>
-          <button
-            className="button save"
-            onClick={handleSubmit}
-            disabled={
-              isLoading || isLoadingPorts || !isValidPort(containerPort) || !isValidPort(localPort)
-            }
-          >
-            {isLoading ? 'Starting...' : 'Start'}
-          </button>
-        </div>
       </div>
-    </div>
+
+      {/* Error Message */}
+      {error && <div className="port-forward-error">{error}</div>}
+
+      {/* Footer */}
+      <div className="port-forward-footer">
+        <button className="button cancel" onClick={onClose} disabled={isLoading}>
+          Cancel
+        </button>
+        <button
+          className="button save"
+          onClick={handleSubmit}
+          disabled={
+            isLoading || isLoadingPorts || !isValidPort(containerPort) || !isValidPort(localPort)
+          }
+        >
+          {isLoading ? 'Starting...' : 'Start'}
+        </button>
+      </div>
+    </ModalSurface>
   );
 };
 

@@ -1,45 +1,50 @@
-/**
- * frontend/src/components/modals/useModalFocusTrap.test.tsx
- *
- * Test suite for useModalFocusTrap.
- * Covers key behaviors and edge cases for useModalFocusTrap.
- */
-
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
-import { describe, expect, it, vi, beforeAll, afterEach } from 'vitest';
-
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { useModalFocusTrap } from './useModalFocusTrap';
 
-const scopeMock = vi.hoisted(() => vi.fn());
-
-vi.mock('@ui/shortcuts', () => ({
-  useKeyboardNavigationScope: (...args: unknown[]) => scopeMock(...args),
-}));
-
-const TestComponent: React.FC<{ disabled?: boolean }> = ({ disabled = false }) => {
+const TestModal: React.FC<{ disabled?: boolean }> = ({ disabled = false }) => {
   const ref = React.useRef<HTMLDivElement>(null);
+
   useModalFocusTrap({
     ref,
-    focusableSelector: '[data-focusable="true"]',
-    priority: 42,
     disabled,
   });
+
   return (
-    <div ref={ref}>
-      <button data-focusable="true">First</button>
-      <button data-focusable="true">Second</button>
+    <div ref={ref} className="modal-container" role="dialog" aria-modal="true" tabIndex={-1}>
+      <button>First</button>
+      <button>Second</button>
     </div>
   );
 };
 
 describe('useModalFocusTrap', () => {
+  let appRoot: HTMLDivElement;
+  let outsideButton: HTMLButtonElement;
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
 
   beforeAll(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+    (
+      globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+    ).IS_REACT_ACT_ENVIRONMENT = true;
+  });
+
+  beforeEach(() => {
+    appRoot = document.createElement('div');
+    appRoot.id = 'app';
+    outsideButton = document.createElement('button');
+    outsideButton.textContent = 'Outside';
+    appRoot.appendChild(outsideButton);
+    document.body.appendChild(appRoot);
+
+    container = document.createElement('div');
+    container.className = 'modal-overlay';
+    container.setAttribute('data-modal-surface', 'true');
+    document.body.appendChild(container);
+    root = ReactDOM.createRoot(container);
   });
 
   afterEach(() => {
@@ -47,55 +52,78 @@ describe('useModalFocusTrap', () => {
       root.unmount();
     });
     container.remove();
-    scopeMock.mockClear();
+    appRoot.remove();
   });
 
-  it('registers keyboard scope and manages focus order', async () => {
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
+  it('focuses the first tabbable control, traps Tab, and inerts the background', async () => {
+    outsideButton.focus();
 
     await act(async () => {
-      root.render(<TestComponent />);
+      root.render(<TestModal />);
       await Promise.resolve();
     });
 
-    const lastCall = scopeMock.mock.calls[scopeMock.mock.calls.length - 1];
-    const config = lastCall?.[0] as {
-      priority: number;
-      disabled: boolean;
-      onNavigate: (args: { direction: 'forward' | 'backward' }) => 'handled' | 'bubble';
-      onEnter: (args: { direction: 'forward' | 'backward' }) => void;
-    };
-    expect(config).toBeTruthy();
-    expect(config.priority).toBe(42);
-    expect(config.disabled).toBe(false);
-
-    let result: 'handled' | 'bubble' = 'bubble';
-    act(() => {
-      result = config.onNavigate({ direction: 'forward' });
-    });
-    expect(result).toBe('handled');
-    expect((document.activeElement as HTMLElement)?.textContent).toBe('First');
+    const buttons = Array.from(document.querySelectorAll('.modal-container button'));
+    expect(buttons).toHaveLength(2);
+    expect(document.activeElement).toBe(buttons[0]);
+    expect(appRoot.getAttribute('inert')).toBe('');
+    expect(appRoot.getAttribute('aria-hidden')).toBe('true');
 
     act(() => {
-      config.onEnter({ direction: 'backward' });
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
     });
-    expect((document.activeElement as HTMLElement)?.textContent).toBe('Second');
+    expect(document.activeElement).toBe(buttons[1]);
+
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+    });
+    expect(document.activeElement).toBe(buttons[0]);
+
+    act(() => {
+      document.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true })
+      );
+    });
+    expect(document.activeElement).toBe(buttons[1]);
   });
 
-  it('tracks disabled state', async () => {
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
+  it('redirects escaped focus back inside and restores prior focus on close', async () => {
+    outsideButton.focus();
 
     await act(async () => {
-      root.render(<TestComponent disabled />);
+      root.render(<TestModal />);
       await Promise.resolve();
     });
 
-    const lastCall = scopeMock.mock.calls[scopeMock.mock.calls.length - 1];
-    const config = lastCall?.[0] as { disabled: boolean };
-    expect(config.disabled).toBe(true);
+    const buttons = Array.from(document.querySelectorAll('.modal-container button'));
+    expect(document.activeElement).toBe(buttons[0]);
+
+    act(() => {
+      outsideButton.focus();
+    });
+    expect(document.activeElement).toBe(buttons[0]);
+
+    act(() => {
+      root.unmount();
+    });
+
+    expect(document.activeElement).toBe(outsideButton);
+    expect(appRoot.hasAttribute('inert')).toBe(false);
+    expect(appRoot.hasAttribute('aria-hidden')).toBe(false);
+
+    root = ReactDOM.createRoot(container);
+  });
+
+  it('does nothing when disabled', async () => {
+    outsideButton.focus();
+
+    await act(async () => {
+      root.render(<TestModal disabled />);
+      await Promise.resolve();
+    });
+
+    expect(document.activeElement).toBe(outsideButton);
+    expect(appRoot.hasAttribute('inert')).toBe(false);
+    expect(appRoot.hasAttribute('aria-hidden')).toBe(false);
   });
 });

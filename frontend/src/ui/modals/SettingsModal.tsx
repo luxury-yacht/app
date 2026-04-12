@@ -5,10 +5,12 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Settings from '@ui/settings/Settings';
-import { useShortcut, useKeyboardContext, useKeyboardNavigationScope } from '@ui/shortcuts';
-import { KeyboardContextPriority, KeyboardScopePriority } from '@ui/shortcuts/priorities';
+import { useShortcut, useKeyboardContext } from '@ui/shortcuts';
+import { KeyboardContextPriority } from '@ui/shortcuts/priorities';
+import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
+import ModalSurface from '@shared/components/modals/ModalSurface';
 import { CloseIcon } from '@shared/components/icons/MenuIcons';
 import './SettingsModal.css';
 
@@ -76,102 +78,36 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     priority: KeyboardContextPriority.SETTINGS_MODAL,
   });
 
-  const getFocusableControls = useCallback(() => {
-    if (!modalRef.current) {
-      return [];
-    }
-    return Array.from(
-      modalRef.current.querySelectorAll<HTMLElement>('[data-settings-focusable="true"]')
-    );
-  }, []);
-
-  const focusAt = useCallback(
-    (index: number) => {
-      const items = getFocusableControls();
-      if (index < 0 || index >= items.length) {
-        return false;
-      }
-      items[index].focus();
-      return true;
-    },
-    [getFocusableControls]
-  );
-
-  const focusFirst = useCallback(() => focusAt(0), [focusAt]);
-  const focusLast = useCallback(() => {
-    const items = getFocusableControls();
-    return focusAt(items.length - 1);
-  }, [focusAt, getFocusableControls]);
-
-  const findFocusedIndex = useCallback(() => {
-    const items = getFocusableControls();
-    const active = document.activeElement as HTMLElement | null;
-    return items.findIndex((item) => item === active || item.contains(active));
-  }, [getFocusableControls]);
-
-  useKeyboardNavigationScope({
+  useModalFocusTrap({
     ref: modalRef,
-    priority: KeyboardScopePriority.SETTINGS_MODAL,
-    disabled: !isOpen,
-    onNavigate: ({ direction }) => {
-      const items = getFocusableControls();
-      if (items.length === 0) {
-        return 'bubble';
-      }
-      const current = findFocusedIndex();
-      if (current === -1) {
-        return direction === 'forward'
-          ? focusFirst()
-            ? 'handled'
-            : 'bubble'
-          : focusLast()
-            ? 'handled'
-            : 'bubble';
-      }
-      const next = direction === 'forward' ? current + 1 : current - 1;
-      if (next < 0 || next >= items.length) {
-        return 'bubble';
-      }
-      focusAt(next);
-      return 'handled';
-    },
-    onEnter: ({ direction }) => {
-      if (direction === 'forward') {
-        focusFirst();
-      } else {
-        focusLast();
-      }
-    },
+    disabled: !shouldRender,
   });
 
   if (!shouldRender) return null;
 
   return (
-    <div
-      className={`modal-overlay settings-modal-overlay ${isClosing ? 'closing' : ''}`}
-      onClick={onClose}
+    <ModalSurface
+      modalRef={modalRef}
+      labelledBy="settings-modal-title"
+      onClose={onClose}
+      overlayClassName="settings-modal-overlay"
+      containerClassName="settings-modal"
+      isClosing={isClosing}
     >
-      <div
-        className={`modal-container settings-modal ${isClosing ? 'closing' : ''}`}
-        onClick={(e) => e.stopPropagation()}
-        ref={modalRef}
-      >
-        <div className="modal-header settings-modal-header">
-          <h2>Settings</h2>
-          <button
-            className="modal-close settings-modal-close"
-            onClick={onClose}
-            aria-label="Close Settings"
-            data-settings-focusable="true"
-          >
-            <CloseIcon />
-          </button>
-        </div>
-        <div className="modal-content settings-modal-content">
-          <Settings />
-        </div>
+      <div className="modal-header settings-modal-header">
+        <h2 id="settings-modal-title">Settings</h2>
+        <button
+          className="modal-close settings-modal-close"
+          onClick={onClose}
+          aria-label="Close Settings"
+        >
+          <CloseIcon />
+        </button>
       </div>
-    </div>
+      <div className="modal-content settings-modal-content">
+        <Settings />
+      </div>
+    </ModalSurface>
   );
 };
 

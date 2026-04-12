@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { useKeyboardContext, useShortcut } from '@ui/shortcuts';
-import { KeyboardContextPriority, KeyboardScopePriority } from '@ui/shortcuts/priorities';
+import { KeyboardContextPriority } from '@ui/shortcuts/priorities';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
+import ModalSurface from '@shared/components/modals/ModalSurface';
 import { CloseIcon } from '@shared/components/icons/MenuIcons';
 import LogSettings from '@modules/object-panel/components/ObjectPanel/Logs/LogSettings';
 import './LogSettingsModal.css';
@@ -72,40 +72,34 @@ const LogSettingsModal: React.FC<LogSettingsModalProps> = ({ isOpen, onClose }) 
 
   useModalFocusTrap({
     ref: modalRef,
-    focusableSelector: '[data-log-settings-focusable="true"]',
-    priority: KeyboardScopePriority.SETTINGS_MODAL,
-    disabled: !isOpen,
+    disabled: !shouldRender,
   });
 
   if (!shouldRender) return null;
 
-  return createPortal(
-    <div
-      className={`modal-overlay log-settings-modal-overlay ${isClosing ? 'closing' : ''}`}
-      onClick={onClose}
+  return (
+    <ModalSurface
+      modalRef={modalRef}
+      labelledBy="log-settings-modal-title"
+      onClose={onClose}
+      overlayClassName="log-settings-modal-overlay"
+      containerClassName="log-settings-modal"
+      isClosing={isClosing}
     >
-      <div
-        className={`modal-container log-settings-modal ${isClosing ? 'closing' : ''}`}
-        onClick={(e) => e.stopPropagation()}
-        ref={modalRef}
-      >
-        <div className="modal-header log-settings-modal-header">
-          <h2>Log Settings</h2>
-          <button
-            className="modal-close log-settings-modal-close"
-            onClick={onClose}
-            aria-label="Close Log Settings"
-            data-log-settings-focusable="true"
-          >
-            <CloseIcon />
-          </button>
-        </div>
-        <div className="modal-content log-settings-modal-content">
-          <LogSettings />
-        </div>
+      <div className="modal-header log-settings-modal-header">
+        <h2 id="log-settings-modal-title">Log Settings</h2>
+        <button
+          className="modal-close log-settings-modal-close"
+          onClick={onClose}
+          aria-label="Close Log Settings"
+        >
+          <CloseIcon />
+        </button>
       </div>
-    </div>,
-    document.body
+      <div className="modal-content log-settings-modal-content">
+        <LogSettings />
+      </div>
+    </ModalSurface>
   );
 };
 
