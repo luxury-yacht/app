@@ -33,6 +33,7 @@ If you break these rules I will be sad. Please don't make me sad.
 - Treat the object catalog as the source of truth for namespace/cluster listings
   (see `backend/AGENTS.md#Object-Catalog`).
 - Run `mage qc:prerelease` before presenting work as complete.
+  - You can skip this check if the only changes are to documentation.
 - Aim for ≥80% test coverage; note gaps and ask for guidance if not feasible.
 
 ## Claude Code Setup

@@ -89,7 +89,9 @@ Compatibility requirements:
 - existing declarative shortcut call sites should remain easy to express
 
 ### `frontend/src/ui/shortcuts/searchShortcutRegistry.ts`
+
 ### `frontend/src/ui/shortcuts/useSearchShortcutTarget.ts`
+
 ### `frontend/src/ui/shortcuts/components/SearchShortcutHandler.tsx`
 
 Mechanism:
@@ -141,7 +143,7 @@ Current shortcuts:
 Compatibility requirements:
 
 - app-shell shortcuts must continue to work when no higher-priority blocking surface owns the event
-- native menu close behavior must still close cluster tabs or quit appropriately
+- native `menu:close` must remain app/window close behavior rather than becoming modal/panel close
 
 ### `frontend/src/ui/layout/AppLayout.tsx`
 
@@ -251,23 +253,48 @@ Compatibility requirements:
 
 ## Modals
 
-### Shared modal trap
+### Shared modal foundation
 
 `frontend/src/shared/components/modals/useModalFocusTrap.ts`
 
 Mechanism:
 
-- wraps `useKeyboardNavigationScope`
-- relies on a caller-provided `focusableSelector`
+- root-based tabbable discovery
+- document-level `keydown` handling for `Tab`
+- document-level `focusin` containment
+- modal stack tracking plus body inert/`aria-hidden` management
 
 Current behavior:
 
-- only influences shared `Tab` scope behavior
-- does not provide a full modal focus trap
+- traps `Tab` / `Shift+Tab` inside the topmost open modal
+- restores focus on close
+- prevents background focus by inerting non-modal `body` children
+- can still accept an optional selector override, but default behavior is root-based
 
 Compatibility requirements:
 
-- this is not sufficient as the long-term modal implementation
+- preserve this modal baseline while the broader keyboard-surface refactor replaces the old split
+  between shortcut routing and tab-scope routing
+
+### Shared modal surface
+
+`frontend/src/shared/components/modals/ModalSurface.tsx`
+
+Mechanism:
+
+- portal rendering to `document.body`
+- shared dialog semantics
+- shared backdrop handling
+
+Current behavior:
+
+- renders blocking modals on a consistent full-app overlay
+- marks the surface for the modal focus trap with `data-modal-surface="true"`
+
+Compatibility requirements:
+
+- future keyboard-surface work must treat these modals as ordinary blocking surfaces rather than
+  special-case implementations
 
 ### `frontend/src/ui/modals/SettingsModal.tsx`
 
@@ -275,17 +302,18 @@ Mechanisms:
 
 - pushes context
 - shared `Escape`
-- local `useKeyboardNavigationScope`
+- `useModalFocusTrap`
+- `ModalSurface`
 
 Current behavior:
 
 - `Escape` closes modal
-- `Tab` cycles only among `[data-settings-focusable="true"]`
+- `Tab` containment comes from the shared modal foundation
 
 Compatibility requirements:
 
-- currently selector-based
-- must become a true modal surface
+- already on the shared modal baseline
+- still needs to migrate from context-plus-shortcut ownership into the future surface manager
 
 ### `frontend/src/ui/modals/LogSettingsModal.tsx`
 
@@ -294,17 +322,17 @@ Mechanisms:
 - pushes context
 - shared `Escape`
 - `useModalFocusTrap`
-- rendered through `createPortal(document.body)`
+- `ModalSurface`
 
 Current behavior:
 
 - `Escape` closes modal
-- `Tab` depends on `[data-log-settings-focusable="true"]`
+- `Tab` containment comes from the shared modal foundation
 
 Compatibility requirements:
 
-- this is the current failing case
-- must become a true blocking modal with inert background and root-based tabbable discovery
+- this was the motivating modal failure case and is now part of the regression baseline
+- broader keyboard changes must not regress its focus containment
 
 ### `frontend/src/ui/modals/AboutModal.tsx`
 
@@ -317,12 +345,12 @@ Mechanisms:
 Current behavior:
 
 - `Escape` closes modal
-- `Tab` only knows about `[data-about-focusable="true"]`
 - the modal also contains ordinary links
+- tabbing is handled by the shared modal foundation
 
 Compatibility requirements:
 
-- proves selector-based trapping is incomplete even outside Log Settings
+- link handling inside modal content must continue to work without hand-maintained focus selectors
 
 ### `frontend/src/ui/modals/ObjectDiffModal.tsx`
 
@@ -335,7 +363,7 @@ Mechanisms:
 Current behavior:
 
 - `Escape` closes modal
-- `Tab` uses broad selector `.dropdown-trigger, button, input`
+- `Tab` containment comes from the shared modal foundation
 
 Compatibility requirements:
 
@@ -349,7 +377,7 @@ Mechanisms:
 - pushes context
 - shared `Escape`
 - `useModalFocusTrap`
-- rendered through `createPortal`
+- `ModalSurface`
 - local input `onKeyDown`
 
 Current behavior:
@@ -368,7 +396,7 @@ Mechanisms:
 - pushes context
 - shared `Escape`
 - `useModalFocusTrap`
-- rendered through `createPortal`
+- `ModalSurface`
 
 Current behavior:
 
@@ -382,40 +410,47 @@ Compatibility requirements:
 
 Mechanisms:
 
+- `ModalSurface`
+- `useModalFocusTrap`
 - direct capture-phase `document` `keydown` listener
 - local input `onKeyDown`
 
 Current behavior:
 
 - `Escape`: cancel
-- `Tab`: cycles input -> Cancel -> Scale
+- modal focus containment comes from the shared modal foundation
 - input `Enter`: apply if value changed
 
 Compatibility requirements:
 
-- currently bypasses the shared keyboard system
-- should move onto the shared modal primitive
+- modal rendering/focus is already normalized
+- `Escape` ownership still bypasses the shared shortcut system
 
 ### `frontend/src/shared/components/modals/RollbackModal.tsx`
 
 Mechanisms:
 
+- `ModalSurface`
+- `useModalFocusTrap`
 - direct capture-phase `document` `keydown` listener
 - nested `ConfirmationModal`
 
 Current behavior:
 
 - `Escape`: close
-- `Tab`: cycles buttons and inputs within modal
+- modal focus containment comes from the shared modal foundation
 
 Compatibility requirements:
 
 - must support nesting with confirmation modal
+- `Escape` ownership still bypasses the shared shortcut system
 
 ### `frontend/src/modules/port-forward/PortForwardModal.tsx`
 
 Mechanism:
 
+- `ModalSurface`
+- `useModalFocusTrap`
 - direct `document` `keydown` listener
 
 Current behavior:
@@ -424,7 +459,8 @@ Current behavior:
 
 Compatibility requirements:
 
-- currently not integrated with shared modal ownership
+- modal rendering/focus is already normalized
+- `Escape` ownership still bypasses the shared shortcut system
 
 ### `frontend/src/ui/shortcuts/components/ShortcutHelpModal.tsx`
 
@@ -828,14 +864,14 @@ Current behavior:
 
 These are the highest-risk compatibility points for the proposed keyboard-surface refactor.
 
-### Modal containment is currently fragmented
+### Modal containment is largely normalized, but modal key ownership is still mixed
 
-The app mixes:
+The app now has:
 
-- shared modal trap
-- selector-based focus sets
-- direct document listeners
-- portal and non-portal modal rendering
+- shared modal rendering
+- shared focus containment
+- shared background inerting
+- some modal-specific `Escape` listeners and shortcut ownership
 
 Any migration must normalize this without breaking:
 

@@ -1,11 +1,8 @@
 # TODO
 
-- Profiling
-
 - Add a delete option to the favorites menu
 
 - API timestamp
-  - Option to use local time
   - Empty log lines dropping color, dropping pod name
 
 - Logging

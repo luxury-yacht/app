@@ -12,8 +12,9 @@ The app currently handles keyboard input through multiple overlapping systems:
 This works for some simple cases, but it is not stable enough for modal behavior, layered UI
 surfaces, or predictable developer ergonomics.
 
-This plan assumes the blocking-modal work documented in `docs/development/UI/modals.md` is
-completed first. True modal surfaces are a prerequisite for the broader keyboard-surface refactor.
+The blocking-modal prerequisite documented in `docs/development/UI/modals.md` is now complete for
+the main app modals. This plan starts from that new baseline instead of treating modal correctness
+as future work.
 
 The goal of this design is to define a single keyboard surface model that is:
 
@@ -55,16 +56,19 @@ But it is not a reliable way to model topmost interactive surfaces such as:
 
 These are surface-ownership problems, not metadata-merging problems.
 
-### The app has been relying on modal-specific workarounds
+### The app still has overlapping ownership models even after the modal rewrite
 
-The current broader keyboard architecture is complicated further by modal-specific workarounds:
+The modal rewrite removed the biggest focus-containment problems, but the broader keyboard
+architecture is still split across multiple ownership models:
 
-- selector-based focus traps
-- direct modal `document` listeners
-- inconsistent modal rendering
+- shortcut contexts
+- tab-scope routing
+- local `onKeyDown`
+- direct document listeners on some modal-like and panel surfaces
 
-Those modal concerns are intentionally split into `docs/development/UI/modals.md`. This plan
-assumes they have already been normalized into a shared blocking-modal primitive.
+Modal rendering, focus containment, and inert background behavior are intentionally documented in
+`docs/development/UI/modals.md`. This plan picks up after that work and focuses on unified key
+routing and surface ownership.
 
 ### Too many components bypass the shared model
 
@@ -89,7 +93,6 @@ To make a surface keyboard-correct today, a developer may need to know about:
 - `pushContext` / `popContext`
 - `useKeyboardNavigationScope`
 - `data-allow-shortcuts`
-- `data-*-focusable`
 - local `onKeyDown`
 - document-level `keydown` listeners
 - whether the surface should portal to `document.body`
@@ -179,19 +182,19 @@ For each `keydown`:
 
 This replaces the current split between shortcut-context matching and separate tab-scope fallback.
 
-## Modal Dependency
+## Modal Baseline
 
 Blocking modal behavior is defined separately in `docs/development/UI/modals.md`.
 
-This keyboard-surface plan depends on that work providing:
+That prerequisite now provides:
 
 - portal-based blocking modals
 - inert background behavior
 - standardized focus lifecycle
 - nested modal handoff
 
-Once that exists, modals can be treated as ordinary blocking surfaces within the broader routing
-model instead of as a special unstable case.
+This means modals can now be treated as ordinary blocking surfaces within the broader routing model
+instead of as a special unstable case.
 
 ## Shortcut Design
 
@@ -246,7 +249,8 @@ The new keyboard model must define how native accelerator paths intersect with s
 Recommended rule:
 
 - native menu actions remain out-of-band from browser `keydown`
-- they dispatch into the active surface stack through explicit action handlers
+- `menu:close` remains an app/window close action and is not surface-routed
+- copy/select-all dispatch into the active surface stack through explicit action handlers
 - copy/select-all continue to respect the focused surface and focused control
 
 This must be treated as part of the design, not as a separate legacy behavior.
@@ -261,6 +265,8 @@ must be able to register as `editor` surfaces with these rules:
 - editor-local keymaps get first refusal while the editor has focus
 - app shortcuts only run when the editor surface declines the event
 - app-level save, cancel, and search affordances can still be layered intentionally
+- `Escape` defaults to app-level ownership, but the surface must allow an explicit per-surface
+  override when a specific editor needs editor-first `Escape`
 
 This is especially important for YAML and Helm tabs.
 
@@ -439,15 +445,7 @@ After this refactor, a developer should follow a simple rule set:
 - Route keys through the surface stack first
 - Define the bridge for native menu/Wails actions into the active surface model
 
-### Phase 2: Build the modal primitive
-
-- Add shared modal surface behavior
-- Convert existing modals to use it
-- Remove selector-based focus traps
-- Remove per-modal document `keydown` listeners
-- Add focus lifecycle handling and background inerting
-
-### Phase 3: Migrate other layered surfaces
+### Phase 2: Migrate other layered surfaces
 
 - Command palette
 - Context menu
@@ -455,16 +453,22 @@ After this refactor, a developer should follow a simple rule set:
 - Shortcut help modal
 - Editor-backed surfaces where editor ownership must be explicit
 
-### Phase 4: Migrate major regions
+Implementation note:
+
+- do not start this phase with `ShortcutHelpModal`; it is a special-case migration because it
+  currently suppresses the keyboard provider
+- do not start this phase with command palette until its input-versus-surface ownership table is
+  written down explicitly
+
+### Phase 3: Migrate major regions
 
 - Sidebar
 - Object panel
 - App logs panel
 - Grid table filter/body regions
 
-### Phase 5: Remove legacy pathways
+### Phase 4: Remove legacy pathways
 
-- delete old modal trap helpers
 - reduce direct `pushContext` / `popContext` usage to business-state cases only
 - remove remaining raw document key listeners where they are no longer justified
 
@@ -530,9 +534,12 @@ Minimum gating checklist:
 
 ## Recommendation
 
-Do not begin this plan until the modal guidance in `docs/development/UI/modals.md` is implemented
-for the main blocking modals.
+The plan remains sound after the modal rewrite. The next safe step is to start with the audit and
+validation checklist above, then build the shared surface manager before migrating palette/menu/
+dropdown and regional keyboard ownership.
 
-After that prerequisite is complete, start this plan with the audit and validation checklist above.
+The safest first code slice is the surface-manager foundation plus one simple direct-`Escape`
+conversion such as `ScaleModal`, not command palette or shortcut help.
+
 The failure mode here is not lack of ideas, it is hidden incompatibility with existing keyboard
 behavior.
