@@ -95,6 +95,11 @@ const AboutModal: React.FC<AboutModalProps> = React.memo(({ isOpen, onClose }) =
   useModalFocusTrap({
     ref: modalRef,
     disabled: !shouldRender,
+    onEscape: () => {
+      if (!isOpen) return false;
+      onClose();
+      return true;
+    },
   });
 
   if (!shouldRender) return null;

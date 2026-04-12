@@ -73,6 +73,11 @@ const LogSettingsModal: React.FC<LogSettingsModalProps> = ({ isOpen, onClose }) 
   useModalFocusTrap({
     ref: modalRef,
     disabled: !shouldRender,
+    onEscape: () => {
+      if (!isOpen) return false;
+      onClose();
+      return true;
+    },
   });
 
   if (!shouldRender) return null;

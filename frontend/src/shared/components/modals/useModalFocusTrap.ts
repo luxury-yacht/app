@@ -8,6 +8,7 @@ interface UseModalFocusTrapOptions {
   focusableSelector?: string;
   priority?: number;
   disabled?: boolean;
+  onEscape?: (event: KeyboardEvent) => boolean | void;
 }
 
 interface OpenModalEntry {
@@ -83,6 +84,7 @@ export const useModalFocusTrap = ({
   focusableSelector,
   priority,
   disabled = false,
+  onEscape,
 }: UseModalFocusTrapOptions) => {
   void priority;
   const modalIdRef = useRef(Symbol('modal-focus-trap'));
@@ -93,6 +95,7 @@ export const useModalFocusTrap = ({
     rootRef: ref,
     active: !disabled,
     blocking: true,
+    onEscape,
   });
 
   const getFocusableItems = useCallback(() => {

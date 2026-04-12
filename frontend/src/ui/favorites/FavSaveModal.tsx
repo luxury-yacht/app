@@ -269,6 +269,11 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
   useModalFocusTrap({
     ref: modalRef,
     disabled: !isOpen || showDeleteConfirm,
+    onEscape: () => {
+      if (!isOpen || showDeleteConfirm) return false;
+      onClose();
+      return true;
+    },
   });
 
   // ----- Dropdown options -----

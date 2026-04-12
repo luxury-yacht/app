@@ -384,6 +384,11 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
     focusableSelector: '.dropdown-trigger, button, input',
     priority: KeyboardScopePriority.OBJECT_DIFF_MODAL,
     disabled: !shouldRender,
+    onEscape: () => {
+      if (!isOpen) return false;
+      onClose();
+      return true;
+    },
   });
 
   // Use scoped catalog snapshots so namespace options remain global while kinds/objects cascade.
