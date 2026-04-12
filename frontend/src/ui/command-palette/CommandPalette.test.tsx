@@ -169,6 +169,7 @@ vi.mock('@ui/shortcuts', () => ({
   useKeyboardContext: () => ({
     pushContext: pushContextMock,
     popContext: popContextMock,
+    hasActiveBlockingSurface: vi.fn(() => false),
     registerSurface: vi.fn(),
     unregisterSurface: vi.fn(),
     updateSurface: vi.fn(),

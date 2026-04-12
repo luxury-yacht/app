@@ -12,6 +12,7 @@ import {
   useShortcuts,
   useKeyboardNavigationScope,
 } from '@ui/shortcuts';
+import { useKeyboardSurface } from '@ui/shortcuts/surfaces';
 import {
   KeyboardContextPriority,
   KeyboardScopePriority,
@@ -224,7 +225,7 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
   const resultsRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
   const selectedIndexRef = useRef(0);
-  const { pushContext, popContext } = useKeyboardContext();
+  const { pushContext, popContext, hasActiveBlockingSurface } = useKeyboardContext();
   const shortcutContextActiveRef = useRef(false);
   const { openWithObject } = useObjectPanel();
   const { selectedClusterId } = useKubeconfig();
@@ -687,6 +688,40 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
     return true;
   }, [isOpen, namespaceSelectMode, kubeconfigSelectMode, close, updateSelection]);
 
+  useKeyboardSurface({
+    kind: 'palette',
+    rootRef: containerRef,
+    active: isOpen,
+    blocking: true,
+    suppressShortcuts: true,
+    onKeyDown: (event) => {
+      if (event.metaKey || event.ctrlKey || event.altKey) {
+        return false;
+      }
+
+      switch (event.key) {
+        case 'ArrowDown':
+          return selectNext();
+        case 'ArrowUp':
+          return selectPrevious();
+        case 'PageDown':
+          return pageDown();
+        case 'PageUp':
+          return pageUp();
+        case 'Home':
+          return goHome();
+        case 'End':
+          return goEnd();
+        case 'Enter':
+          return activateSelection();
+        case 'Escape':
+          return handleEscapeShortcut();
+        default:
+          return false;
+      }
+    },
+  });
+
   useShortcuts(
     [
       {
@@ -745,73 +780,20 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
     }
   );
 
-  const handleInputKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLInputElement>) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a') {
-        e.preventDefault();
-        e.currentTarget.select();
-        return;
-      }
-
-      if (!isOpen) {
-        return;
-      }
-
-      let handled = false;
-      switch (e.key) {
-        case 'ArrowDown':
-          handled = selectNext();
-          break;
-        case 'ArrowUp':
-          handled = selectPrevious();
-          break;
-        case 'PageDown':
-          handled = pageDown();
-          break;
-        case 'PageUp':
-          handled = pageUp();
-          break;
-        case 'Home':
-          handled = goHome();
-          break;
-        case 'End':
-          handled = goEnd();
-          break;
-        case 'Enter':
-          handled = activateSelection();
-          break;
-        case 'Escape':
-          handled = handleEscapeShortcut();
-          break;
-        default:
-          break;
-      }
-
-      if (handled) {
-        e.preventDefault();
-        e.stopPropagation();
-      }
-    },
-    [
-      activateSelection,
-      goEnd,
-      goHome,
-      handleEscapeShortcut,
-      isOpen,
-      pageDown,
-      pageUp,
-      selectNext,
-      selectPrevious,
-    ]
-  );
+  const handleInputKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a') {
+      e.preventDefault();
+      e.currentTarget.select();
+    }
+  }, []);
 
   const handleGlobalOpenShortcut = useCallback(() => {
-    if (!isOpen) {
+    if (!isOpen && !hasActiveBlockingSurface()) {
       open();
       return true;
     }
     return false;
-  }, [isOpen, open]);
+  }, [hasActiveBlockingSurface, isOpen, open]);
 
   // Register shortcuts for opening the command palette
   useShortcut({

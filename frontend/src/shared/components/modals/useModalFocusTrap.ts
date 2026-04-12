@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import type { RefObject } from 'react';
 import { getTabbableElements } from './getTabbableElements';
+import { useKeyboardSurface } from '@ui/shortcuts/surfaces';
 
 interface UseModalFocusTrapOptions {
   ref: RefObject<HTMLElement | null>;
@@ -86,6 +87,13 @@ export const useModalFocusTrap = ({
   void priority;
   const modalIdRef = useRef(Symbol('modal-focus-trap'));
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+
+  useKeyboardSurface({
+    kind: 'modal',
+    rootRef: ref,
+    active: !disabled,
+    blocking: true,
+  });
 
   const getFocusableItems = useCallback(() => {
     return getTabbableElements(ref.current, focusableSelector);

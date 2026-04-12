@@ -45,6 +45,7 @@ interface KeyboardProviderValue {
   registerSurface: (surface: KeyboardSurfaceOptions) => string;
   unregisterSurface: (id: string) => void;
   updateSurface: (id: string, surface: Partial<KeyboardSurfaceOptions>) => void;
+  hasActiveBlockingSurface: () => boolean;
 
   // Native action bridge
   dispatchNativeAction: (action: KeyboardNativeAction) => boolean;
@@ -361,6 +362,11 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
     });
   }, []);
 
+  const hasActiveBlockingSurface = useCallback(
+    () => getOrderedSurfaces().some((surface) => surface.blocking),
+    [getOrderedSurfaces]
+  );
+
   const dispatchNativeAction = useCallback(
     (action: KeyboardNativeAction): boolean => {
       const targetSurface = getTargetSurface(document.activeElement);
@@ -549,6 +555,7 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
     registerSurface,
     unregisterSurface,
     updateSurface,
+    hasActiveBlockingSurface,
     dispatchNativeAction,
   };
 
