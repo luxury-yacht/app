@@ -46,6 +46,13 @@ export interface ObjectActionData {
   namespace?: string;
   clusterId?: string;
   clusterName?: string;
+  // API group/version for the object's kind. Required to look up CRD
+  // permissions correctly: getPermissionKey only auto-resolves built-in
+  // GVK from a static table, so CRD callers must thread these through
+  // or the lookup key won't match the spec-emit key from
+  // queryKindPermissions and the Delete action silently disappears.
+  group?: string;
+  version?: string;
   // For workload-specific actions
   status?: string;
   ready?: string;
@@ -284,24 +291,59 @@ export function useObjectActions({
     const normalizedKind = normalizeKind(object.kind);
     const namespace = object.namespace || '';
 
-    // Get permissions from the map
+    // Get permissions from the map. Group/version are threaded through so
+    // CRD lookups produce the same key as the spec-emit side
+    // (queryKindPermissions). Built-in kinds work either way because
+    // getPermissionKey auto-resolves built-in GVK; CRDs do not, so the
+    // hook must forward what the caller supplied.
     const clusterId = object.clusterId ?? undefined;
+    const objectGroup = object.group ?? undefined;
+    const objectVersion = object.version ?? undefined;
     const restartStatus =
-      permissionMap.get(getPermissionKey(normalizedKind, 'patch', namespace, null, clusterId)) ??
-      null;
+      permissionMap.get(
+        getPermissionKey(
+          normalizedKind,
+          'patch',
+          namespace,
+          null,
+          clusterId,
+          objectGroup,
+          objectVersion
+        )
+      ) ?? null;
     // Rollback uses the same patch permission as restart
     const rollbackStatus = restartStatus;
     const scaleStatus =
       permissionMap.get(
-        getPermissionKey(normalizedKind, 'update', namespace, 'scale', clusterId)
+        getPermissionKey(
+          normalizedKind,
+          'update',
+          namespace,
+          'scale',
+          clusterId,
+          objectGroup,
+          objectVersion
+        )
       ) ?? null;
     const deleteStatus =
-      permissionMap.get(getPermissionKey(object.kind, 'delete', namespace, null, clusterId)) ??
-      null;
-    // Port forward requires create permission on pods/portforward subresource
+      permissionMap.get(
+        getPermissionKey(
+          object.kind,
+          'delete',
+          namespace,
+          null,
+          clusterId,
+          objectGroup,
+          objectVersion
+        )
+      ) ?? null;
+    // Port forward requires create permission on pods/portforward subresource.
+    // Always targets core/v1 Pod regardless of the object's own kind, so the
+    // GVK is hardcoded rather than threaded from `object`.
     const portForwardStatus =
-      permissionMap.get(getPermissionKey('Pod', 'create', namespace, 'portforward', clusterId)) ??
-      null;
+      permissionMap.get(
+        getPermissionKey('Pod', 'create', namespace, 'portforward', clusterId, '', 'v1')
+      ) ?? null;
 
     return buildObjectActionItems({
       object,

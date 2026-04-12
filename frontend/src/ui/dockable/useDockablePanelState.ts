@@ -98,6 +98,7 @@ export function useDockablePanelState(panelId: string) {
       setLocalState((prevState) => {
         const hasChanged =
           prevState.position !== newState.position ||
+          prevState.isMaximized !== newState.isMaximized ||
           prevState.isOpen !== newState.isOpen ||
           prevState.floatingSize.width !== newState.floatingSize.width ||
           prevState.floatingSize.height !== newState.floatingSize.height ||
@@ -159,6 +160,7 @@ export function useDockablePanelState(panelId: string) {
           x: options.floatingPosition?.x ?? localState.floatingPosition.x,
           y: options.floatingPosition?.y ?? localState.floatingPosition.y,
         },
+        isMaximized: localState.isMaximized,
         isOpen: finalIsOpen,
         isInitialized: true,
       });
@@ -219,6 +221,13 @@ export function useDockablePanelState(panelId: string) {
     [panelId, store]
   );
 
+  const setMaximized = useCallback(
+    (isMaximized: boolean) => {
+      store.updateState(panelId, { isMaximized });
+    },
+    [panelId, store]
+  );
+
   const toggle = useCallback(() => {
     setOpen(!localState.isOpen);
   }, [localState.isOpen, setOpen]);
@@ -240,6 +249,7 @@ export function useDockablePanelState(panelId: string) {
       rightSize: { width: 400, height: 300 },
       bottomSize: { width: 400, height: 300 },
       floatingPosition: { x: centerX, y: centerY },
+      isMaximized: false,
       isOpen: false,
       isInitialized: false,
       zIndex: localState.zIndex + 1,
@@ -254,6 +264,7 @@ export function useDockablePanelState(panelId: string) {
       rightSize: localState.rightSize,
       bottomSize: localState.bottomSize,
       floatingPosition: localState.floatingPosition,
+      isMaximized: localState.isMaximized,
       isOpen: localState.isOpen,
       isInitialized: localState.isInitialized,
       zIndex: localState.zIndex,
@@ -262,6 +273,7 @@ export function useDockablePanelState(panelId: string) {
       setSize,
       setFloatingPosition,
       setOpen,
+      setMaximized,
       toggle,
       focus,
       reset,
@@ -274,6 +286,7 @@ export function useDockablePanelState(panelId: string) {
       setSize,
       setFloatingPosition,
       setOpen,
+      setMaximized,
       toggle,
       focus,
       reset,

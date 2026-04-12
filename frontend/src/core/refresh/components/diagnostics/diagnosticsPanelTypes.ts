@@ -80,7 +80,7 @@ export interface DiagnosticsStreamRow {
 }
 
 export interface CapabilityDescriptorActivityDetails {
-  namespace: string;
+  scope: string;
   descriptorLabel: string;
   resourceKind: string;
   verb: string;
@@ -89,7 +89,7 @@ export interface CapabilityDescriptorActivityDetails {
   inFlightCount: number;
   runtimeDisplay: string;
   lastDurationDisplay: string;
-  lastCompleted: { display: string; tooltip: string };
+  age: { display: string; tooltip: string };
   lastResult: string;
   consecutiveFailureCount: number;
   totalChecks: number;
@@ -98,24 +98,28 @@ export interface CapabilityDescriptorActivityDetails {
 
 export interface CapabilityBatchRow {
   key: string;
-  namespace: string;
+  clusterId: string;
+  scope: string;
   pendingCount: number;
   inFlightCount: number;
   runtimeDisplay: string;
   runtimeMs: number | null;
   lastDurationDisplay: string;
-  lastCompleted: { display: string; tooltip: string };
+  age: { display: string; tooltip: string };
   lastResult: string;
   lastError: string | null;
   totalChecks: number;
   consecutiveFailureCount: number;
-  descriptorSummary: string | null;
-  featureSummary: string | null;
+  descriptorsByFeature: Array<{ feature: string; resources: string[] }> | null;
+  method: string | null;
+  ssrrIncomplete: boolean | null;
+  ssrrRuleCount: number | null;
+  ssarFallbackCount: number | null;
 }
 
 export interface PermissionRow {
+  clusterId: string;
   scope: string;
-  namespace: string;
   descriptorLabel: string;
   resource: string;
   verb: string;
@@ -129,7 +133,7 @@ export interface PermissionRow {
   inFlightCount: number | null;
   runtimeDisplay: string;
   lastDurationDisplay: string;
-  lastCompleted: { display: string; tooltip: string };
+  age: { display: string; tooltip: string };
   lastResult: string;
   consecutiveFailureCount: number;
   totalChecks: number | null;

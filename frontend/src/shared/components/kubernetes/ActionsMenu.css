@@ -12,7 +12,10 @@
   padding: 4px 8px;
   color: var(--actions-menu-button-text);
   cursor: pointer;
-  transition: all 0.2s;
+  transition:
+    background-color 0.2s,
+    border-color 0.2s,
+    color 0.2s;
   font-size: 20px;
   line-height: 1;
   display: flex;

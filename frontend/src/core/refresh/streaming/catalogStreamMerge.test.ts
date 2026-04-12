@@ -16,6 +16,7 @@ const createSnapshot = () => ({
   batchSize: 0,
   totalBatches: 0,
   isFinal: false,
+  clusterId: 'test-cluster',
 });
 
 const createEvent = (sequence: number) => ({

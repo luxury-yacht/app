@@ -6,6 +6,9 @@
 
 import { getContentBounds } from './dockablePanelLayout';
 import { getObjectPanelLayoutDefaults } from '@core/settings/appPreferences';
+import { createInitialTabGroupState } from './tabGroupState';
+import { removePanelFromGroup } from './tabGroupState';
+import type { TabGroupState } from './tabGroupTypes';
 
 export type DockPosition = 'right' | 'bottom' | 'floating';
 
@@ -15,6 +18,7 @@ export interface PanelLayoutState {
   rightSize: { width: number; height: number };
   bottomSize: { width: number; height: number };
   floatingPosition: { x: number; y: number };
+  isMaximized: boolean;
   isOpen: boolean;
   isInitialized: boolean;
   zIndex: number;
@@ -45,6 +49,33 @@ export interface PanelLayoutStore {
   restorePanelStates: (states: Record<string, PanelLayoutState>) => void;
   /** Apply updated layout defaults to all open object panels. */
   applyObjectPanelLayoutDefaults: () => void;
+
+  /**
+   * Returns the current tabGroups state. Reads are synchronous and
+   * always reflect the latest value.
+   */
+  getTabGroups(): TabGroupState;
+
+  /**
+   * Replaces the tabGroups state via an updater. If the updater returns
+   * the same reference as the previous value, the call is a no-op (no
+   * listeners fire). This matches React's setState bail-out semantics.
+   *
+   * IMPORTANT: the updater MUST return a new object reference to signal
+   * a real change. Mutating the previous state in place and returning
+   * the same reference will silently drop the update — TypeScript can't
+   * catch this. Use immutable helpers from `tabGroupState.ts`
+   * (`addPanelToGroup`, `removePanelFromGroup`, etc.) which always
+   * return new state objects.
+   */
+  setTabGroups(updater: (prev: TabGroupState) => TabGroupState): void;
+
+  /**
+   * Subscribe to tabGroups changes. The returned function unsubscribes.
+   * Per-panel state subscribers are NOT notified by tabGroups changes
+   * and vice versa — the channels are independent.
+   */
+  subscribeTabGroups(listener: () => void): () => void;
 }
 
 /**
@@ -71,6 +102,28 @@ export function createPanelLayoutStore(): PanelLayoutStore {
   const panelCloseHandlers = new Map<string, Set<(reason: PanelCloseReason) => void>>();
   let zIndexCounter = 1000;
 
+  // tabGroups slice — owned by each store instance, independent of
+  // per-panel state listeners. Cluster scoping happens at the store
+  // boundary: the provider holds one store per cluster.
+  let tabGroups: TabGroupState = createInitialTabGroupState();
+  const tabGroupsListeners = new Set<() => void>();
+
+  const setTabGroups = (updater: (prev: TabGroupState) => TabGroupState) => {
+    const next = updater(tabGroups);
+    if (next === tabGroups) {
+      // Bail out on no-op (identity-equal) updates so subscribers
+      // don't re-render unnecessarily. Mirrors React setState semantics.
+      return;
+    }
+    tabGroups = next;
+    // Snapshot the listener set before iterating so any listener that
+    // unsubscribes itself (or triggers a re-entrant setTabGroups) sees
+    // a consistent iteration order. Without this, a listener that
+    // re-enters could cause some listeners to fire twice for one
+    // logical update while others are skipped.
+    new Set(tabGroupsListeners).forEach((listener) => listener());
+  };
+
   const getInitialState = (panelId: string): PanelLayoutState => {
     if (!panelStates.has(panelId)) {
       const layout = getObjectPanelLayoutDefaults();
@@ -81,6 +134,7 @@ export function createPanelLayoutStore(): PanelLayoutStore {
         rightSize: { width: layout.dockedRightWidth, height: 300 },
         bottomSize: { width: 400, height: layout.dockedBottomHeight },
         floatingPosition: { x: layout.floatingX, y: layout.floatingY },
+        isMaximized: false,
         isOpen: false,
         isInitialized: false,
         zIndex: zIndexCounter++,
@@ -156,10 +210,12 @@ export function createPanelLayoutStore(): PanelLayoutStore {
         rightSize: { ...sourceState.rightSize },
         bottomSize: { ...sourceState.bottomSize },
         floatingPosition: { ...sourceState.floatingPosition },
+        isMaximized: sourceState.isMaximized,
         zIndex: Math.max(targetState.zIndex, sourceState.zIndex),
       });
     },
     clearPanelState: (panelId: string) => {
+      setTabGroups((prev) => removePanelFromGroup(prev, panelId));
       panelStates.delete(panelId);
       panelListeners.delete(panelId);
       panelCloseHandlers.delete(panelId);
@@ -204,6 +260,14 @@ export function createPanelLayoutStore(): PanelLayoutStore {
           floatingPosition: { x: layout.floatingX, y: layout.floatingY },
         });
       });
+    },
+    getTabGroups: () => tabGroups,
+    setTabGroups,
+    subscribeTabGroups: (listener) => {
+      tabGroupsListeners.add(listener);
+      return () => {
+        tabGroupsListeners.delete(listener);
+      };
     },
   };
 }

@@ -47,6 +47,6 @@ describe('components/dockable index exports', () => {
     expect(DockableTabBar).toBe(RawDockableTabBar);
 
     // Type-only exports are verified by TypeScript compilation
-    // (TabInfo, PanelRegistration, TabGroupState, GroupKey, TabDragState)
+    // (TabInfo, PanelRegistration, TabGroupState, GroupKey)
   });
 });

@@ -18,7 +18,6 @@ interface UseObjectPanelActionsArgs {
   dispatch: Dispatch<PanelAction>;
   close: () => void;
   fetchResourceDetails: (isManualRefresh?: boolean) => Promise<void>;
-  workloadKindApiNames: Record<string, string>;
 }
 
 interface ObjectPanelActions {
@@ -40,16 +39,16 @@ interface ObjectPanelActions {
 
 const getWorkloadKind = (
   objectKind: string | null,
-  objectData: PanelObjectData | null,
-  workloadKindApiNames: Record<string, string>
+  objectData: PanelObjectData | null
 ): string | null => {
-  if (!objectKind) {
-    return objectData?.kind ?? null;
-  }
+  // PanelObjectData.kind is the original-case Kind from the data source,
+  // so it's preferred whenever present. The previous fallback through
+  // WORKLOAD_KIND_API_NAMES existed only as a casing safety net for the
+  // (now defunct) lowercase callers; that map is retired.
   if (objectData?.kind) {
     return objectData.kind;
   }
-  return workloadKindApiNames[objectKind] ?? objectKind;
+  return objectKind;
 };
 
 export const useObjectPanelActions = ({
@@ -59,7 +58,6 @@ export const useObjectPanelActions = ({
   dispatch,
   close,
   fetchResourceDetails,
-  workloadKindApiNames,
 }: UseObjectPanelActionsArgs): ObjectPanelActions => {
   const setScaleReplicas = useCallback(
     (value: number) => {
@@ -127,7 +125,19 @@ export const useObjectPanelActions = ({
 
       const namespace = objectData.namespace || '';
       const name = objectData.name || '';
-      const clusterId = objectData.clusterId ?? '';
+      // Multi-cluster rule (see AGENTS.md): every backend command must
+      // carry a resolved clusterId. Fail loud here rather than letting
+      // an empty string fall through to the Wails layer, which would
+      // surface as "cluster not found" at the backend resolver.
+      const clusterId = objectData.clusterId;
+      if (!clusterId) {
+        dispatch({
+          type: 'SET_ACTION_ERROR',
+          payload: `Cannot perform ${action} on ${name}: clusterId is missing`,
+        });
+        dispatch({ type: 'SET_ACTION_LOADING', payload: false });
+        return;
+      }
 
       try {
         switch (action) {
@@ -137,7 +147,7 @@ export const useObjectPanelActions = ({
               objectKind === 'daemonset' ||
               objectKind === 'statefulset'
             ) {
-              const workloadKind = getWorkloadKind(objectKind, objectData, workloadKindApiNames);
+              const workloadKind = getWorkloadKind(objectKind, objectData);
               if (!workloadKind) {
                 throw new Error(
                   `Unsupported workload kind for restart: ${objectKind ?? 'unknown'}`
@@ -154,7 +164,22 @@ export const useObjectPanelActions = ({
               await app.DeleteHelmRelease(clusterId, namespace, name);
             } else {
               const resourceKind = objectData.kind || objectKind;
-              await app.DeleteResource(clusterId, resourceKind, namespace, name);
+              // PanelObjectData always carries a version after the
+              // kind-only-objects fix — every entry point (BrowseView,
+              // NsView*/ClusterView*, CommandPalette, EventsTab,
+              // resolveBuiltinGroupVersion) populates group/version. A
+              // missing version here is a programming bug; fail loud
+              // rather than fall back to the retired kind-only resolver.
+              // See  step 5.
+              if (!objectData.version) {
+                throw new Error(
+                  `Cannot delete ${resourceKind}/${name}: apiVersion missing on PanelObjectData`
+                );
+              }
+              const apiVersion = objectData.group
+                ? `${objectData.group}/${objectData.version}`
+                : objectData.version;
+              await app.DeleteResourceByGVK(clusterId, apiVersion, resourceKind, namespace, name);
             }
             dispatch({ type: 'SET_RESOURCE_DELETED', payload: { deleted: true, name } });
             close();
@@ -163,7 +188,7 @@ export const useObjectPanelActions = ({
           case 'scale': {
             if (objectKind === 'deployment' || objectKind === 'statefulset') {
               const replicas = scaleOverride ?? state.scaleReplicas;
-              const workloadKind = getWorkloadKind(objectKind, objectData, workloadKindApiNames);
+              const workloadKind = getWorkloadKind(objectKind, objectData);
               if (!workloadKind) {
                 throw new Error(`Unsupported workload kind for scale: ${objectKind ?? 'unknown'}`);
               }
@@ -194,7 +219,6 @@ export const useObjectPanelActions = ({
       close,
       fetchResourceDetails,
       state.scaleReplicas,
-      workloadKindApiNames,
     ]
   );
 

@@ -142,7 +142,9 @@
   border: none;
   color: var(--color-text-secondary, #999);
   cursor: pointer;
-  transition: all 0.2s;
+  transition:
+    background-color 0.2s,
+    color 0.2s;
 }
 
 .dockable-panel__control-btn:hover {
@@ -394,7 +396,6 @@ body.dockable-panel-resizing-sw * {
 
 /* Tab bar */
 .dockable-tab-bar-shell {
-  --dockable-tab-overflow-indicator-size: 32px;
   position: relative;
   flex: 1;
   height: 100%;
@@ -403,33 +404,14 @@ body.dockable-panel-resizing-sw * {
   align-items: stretch;
 }
 
-/* Dockable tab bar overrides — extends .tab-strip from styles/components/tabs.css */
+/* Dockable tab bar overrides — extends .tab-strip from styles/components/tabs.css.
+   Only the rules here are dockable-specific; layout, overflow, scrollbar-hiding,
+   and positioning all come from the shared .tab-strip base. */
 .dockable-tab-bar {
   height: 100%;
   flex: 1;
   min-width: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: none;
-  position: relative;
   border-bottom: none;
-}
-
-.dockable-tab-bar::-webkit-scrollbar {
-  display: none;
-}
-
-/* Dockable tab overrides — base tab styles live in styles/components/tabs.css */
-.dockable-tab {
-  user-select: none;
-  flex-shrink: 0;
-  white-space: nowrap;
-}
-
-.dockable-tab__label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 160px;
 }
 
 .dockable-tab__kind-indicator.kind-badge {
@@ -448,47 +430,16 @@ body.dockable-panel-resizing-sw * {
   flex-shrink: 0;
 }
 
-/* Tab being dragged -- reduced opacity to indicate it is moving. */
-.dockable-tab--dragging {
-  opacity: 0.65;
-  color: var(--color-text, #fff);
-  background: color-mix(in srgb, var(--color-accent, #3b82f6) 18%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-accent, #3b82f6) 72%, transparent);
-  cursor: grabbing;
-}
-
-/* Drop target highlight for drag-and-drop */
-.dockable-tab-bar--drag-active {
-  outline: 1px dashed color-mix(in srgb, var(--color-accent, #3b82f6) 55%, transparent);
-  outline-offset: -1px;
-}
-
-.dockable-tab-bar--drop-target {
-  background: color-mix(in srgb, var(--color-accent, #3b82f6) 14%, transparent);
-  outline: 2px solid var(--color-accent, #3b82f6);
-  outline-offset: -1px;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-accent, #3b82f6) 45%, transparent);
-}
-
-.dockable-tab-bar__drop-indicator {
-  width: 3px;
-  background: var(--color-accent, #3b82f6);
-  flex-shrink: 0;
-  align-self: stretch;
-  border-radius: 2px;
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-accent, #3b82f6) 50%, transparent);
-}
-
-/* Cursor-following preview for active tab drags. */
+/* Drag preview element — permanently mounted in the DOM so dragstart can
+   hand it to event.dataTransfer.setDragImage(). The browser takes a one-off
+   snapshot and renders that at the cursor for the rest of the drag. Keep
+   the element offscreen between drags so it doesn't visually pollute the
+   app; setDragImage screenshots the element at its computed styles, so the
+   offscreen position doesn't affect the snapshot's appearance. */
 .dockable-tab-drag-preview {
   position: fixed;
-  top: 0;
-  left: 0;
-  transform: translate3d(
-    var(--dockable-tab-drag-x, -9999px),
-    var(--dockable-tab-drag-y, -9999px),
-    0
-  );
+  top: -9999px;
+  left: -9999px;
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
@@ -505,7 +456,7 @@ body.dockable-panel-resizing-sw * {
     0 9px 24px rgb(0 0 0 / 35%),
     0 0 0 1px color-mix(in srgb, var(--color-accent, #3b82f6) 30%, transparent);
   pointer-events: none;
-  z-index: 10000;
+  z-index: var(--z-index-topmost);
   white-space: nowrap;
 }
 
@@ -525,62 +476,4 @@ body.dockable-panel-resizing-sw * {
 .dockable-tab-drag-preview__label {
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.dockable-tab-bar__overflow-indicator {
-  position: sticky;
-  top: 0;
-  width: var(--dockable-tab-overflow-indicator-size);
-  height: 100%;
-  flex: 0 0 var(--dockable-tab-overflow-indicator-size);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  align-self: stretch;
-  z-index: 3;
-  color: var(--color-text-secondary);
-  margin: 0;
-  padding: 0;
-  border: none;
-  background: var(--color-bg-secondary);
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.dockable-tab-bar__overflow-icon {
-  width: 16px;
-  height: 16px;
-  display: block;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.dockable-tab-bar__overflow-count {
-  font-size: 10px;
-  font-weight: 600;
-  line-height: 1;
-  color: var(--color-text-tertiary);
-}
-
-.dockable-tab-bar__overflow-indicator:hover .dockable-tab-bar__overflow-count {
-  color: var(--color-text-secondary);
-}
-
-.dockable-tab-bar__overflow-indicator--left {
-  left: 0;
-}
-
-.dockable-tab-bar__overflow-indicator--right {
-  margin-left: auto;
-  right: 0;
-}
-
-.dockable-tab-bar__overflow-indicator:hover {
-  background: var(--color-bg-tertiary, rgb(255 255 255 / 10%));
-  color: var(--color-text, #fff);
-}
-
-.dockable-tab-bar__overflow-indicator:focus-visible {
-  outline: 1px solid var(--color-accent, #3b82f6);
-  outline-offset: -1px;
 }

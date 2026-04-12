@@ -52,6 +52,9 @@ const (
 	// PermissionCheckTimeout bounds SelfSubjectAccessReview calls.
 	PermissionCheckTimeout = 5 * time.Second
 
+	// SSRRFetchTimeout bounds SelfSubjectRulesReview calls.
+	SSRRFetchTimeout = 5 * time.Second
+
 	// PermissionPrimeTimeout bounds permission priming calls before informer registration.
 	PermissionPrimeTimeout = 10 * time.Second
 
@@ -93,6 +96,9 @@ const (
 
 	// LogStreamKeepAliveInterval controls how often keepalive messages are emitted for log streams.
 	LogStreamKeepAliveInterval = 15 * time.Second
+
+	// LogStreamGlobalTargetLimit caps resolved pod/container targets across all active log scopes.
+	LogStreamGlobalTargetLimit = 200
 
 	// EventStreamKeepAliveInterval controls how often keepalive messages are emitted for event streams.
 	EventStreamKeepAliveInterval = 15 * time.Second

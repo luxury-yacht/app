@@ -35,6 +35,11 @@ type AppSettings struct {
 	AutoRefreshEnabled               bool     `json:"autoRefreshEnabled"`               // Enable automatic refresh cycles
 	RefreshBackgroundClustersEnabled bool     `json:"refreshBackgroundClustersEnabled"` // Refresh inactive clusters in the background
 	MetricsRefreshIntervalMs         int      `json:"metricsRefreshIntervalMs"`         // Metrics refresh interval (ms)
+	LogBufferMaxSize                 int      `json:"logBufferMaxSize"`                 // Max log entries kept in memory per Logs tab (100-10000)
+	LogTargetPerScopeLimit           int      `json:"logTargetPerScopeLimit"`           // Max pod/container log targets per Logs tab (1-1000)
+	LogTargetGlobalLimit             int      `json:"logTargetGlobalLimit"`             // Max pod/container log targets across all log tabs (1-1000)
+	LogAPITimestampFormat            string   `json:"logApiTimestampFormat"`            // Day.js format for the Kubernetes API timestamp shown in pod logs
+	LogAPITimestampUseLocalTimeZone  bool     `json:"logApiTimestampUseLocalTimeZone"`  // Render the Kubernetes API timestamp in the user's local timezone instead of UTC
 	GridTablePersistenceMode         string   `json:"gridTablePersistenceMode"`         // "shared" or "namespaced"
 	DefaultObjectPanelPosition       string   `json:"defaultObjectPanelPosition"`       // "right", "bottom", or "floating"
 	ObjectPanelDockedRightWidth      int      `json:"objectPanelDockedRightWidth"`      // Default width when docked right (px)
@@ -85,29 +90,41 @@ type Theme struct {
 
 // PodLogEntry represents a single log line with metadata
 type PodLogEntry struct {
-	Timestamp string `json:"timestamp"` // RFC3339Nano format
-	Pod       string `json:"pod"`
-	Container string `json:"container"`
-	Line      string `json:"line"`
-	IsInit    bool   `json:"isInit"` // Whether this is from an init container
+	Timestamp   string `json:"timestamp"` // RFC3339Nano format
+	Pod         string `json:"pod"`
+	Container   string `json:"container"`
+	Line        string `json:"line"`
+	IsInit      bool   `json:"isInit"`                // Whether this is from an init container
+	IsEphemeral bool   `json:"isEphemeral,omitempty"` // Whether this is from an ephemeral/debug container
 }
 
 // LogFetchRequest represents parameters for fetching logs
 type LogFetchRequest struct {
-	Namespace    string `json:"namespace"`
-	WorkloadName string `json:"workloadName,omitempty"`
-	WorkloadKind string `json:"workloadKind,omitempty"` // deployment, daemonset, etc.
-	PodName      string `json:"podName,omitempty"`
-	Container    string `json:"container,omitempty"` // empty means all containers
-	Previous     bool   `json:"previous"`
-	TailLines    int    `json:"tailLines"`
-	SinceSeconds int64  `json:"sinceSeconds,omitempty"`
+	Scope            string   `json:"scope,omitempty"`
+	Namespace        string   `json:"namespace"`
+	WorkloadName     string   `json:"workloadName,omitempty"`
+	WorkloadKind     string   `json:"workloadKind,omitempty"` // deployment, daemonset, etc.
+	PodName          string   `json:"podName,omitempty"`
+	PodFilter        string   `json:"podFilter,omitempty"`
+	PodInclude       string   `json:"podInclude,omitempty"`
+	PodExclude       string   `json:"podExclude,omitempty"`
+	SelectedFilters  []string `json:"selectedFilters,omitempty"`
+	Container        string   `json:"container,omitempty"` // empty means all containers
+	IncludeInit      *bool    `json:"includeInit,omitempty"`
+	IncludeEphemeral *bool    `json:"includeEphemeral,omitempty"`
+	ContainerState   string   `json:"containerState,omitempty"`
+	Include          string   `json:"include,omitempty"`
+	Exclude          string   `json:"exclude,omitempty"`
+	Previous         bool     `json:"previous"`
+	TailLines        int      `json:"tailLines"`
+	SinceSeconds     int64    `json:"sinceSeconds,omitempty"`
 }
 
 // LogFetchResponse represents the response from LogFetcher
 type LogFetchResponse struct {
-	Entries []PodLogEntry `json:"entries"`
-	Error   string        `json:"error,omitempty"`
+	Entries  []PodLogEntry `json:"entries"`
+	Warnings []string      `json:"warnings,omitempty"`
+	Error    string        `json:"error,omitempty"`
 }
 
 // ShellSessionRequest describes the namespace/pod/container to exec into.
@@ -317,6 +334,14 @@ type PodSimpleInfo struct {
 	MemUsage   string `json:"memUsage"`   // Current memory usage from metrics
 	OwnerKind  string `json:"ownerKind"`  // Kind of the owner (Deployment, StatefulSet, etc)
 	OwnerName  string `json:"ownerName"`  // Name of the owner resource
+	// OwnerAPIVersion is the wire-form apiVersion of the owner (e.g.
+	// "apps/v1", "argoproj.io/v1alpha1", "kubevirt.io/v1"). Threaded from
+	// pod.OwnerReferences[*].APIVersion (or hardcoded apps/v1 for the
+	// ReplicaSet→Deployment collapse) so the frontend can open
+	// CRD-as-Pod-owner targets in the object panel with a fully-qualified
+	// GVK. Required for Argo Rollouts, KubeVirt VMI, Tekton TaskRun,
+	// Spark SparkApplication, etc.
+	OwnerAPIVersion string `json:"ownerApiVersion,omitempty"`
 }
 
 // NsRBACInfo represents basic RBAC resource information (Roles, RoleBindings, ServiceAccounts)
@@ -447,11 +472,18 @@ type HelmRevision struct {
 	Description string `json:"description,omitempty"`
 }
 
-// HelmResource represents a Kubernetes resource managed by a Helm release
+// HelmResource represents a Kubernetes resource managed by a Helm release.
+//
+// APIVersion carries the manifest's apiVersion verbatim (e.g. "apps/v1",
+// "v1", "documentdb.services.k8s.aws/v1alpha1") so the frontend can open
+// the target in the object panel with a fully-qualified GVK. Required for
+// CRDs that share a Kind across operator groups — without it the strict
+// object-YAML path hard-fails on Helm-managed custom resources.
 type HelmResource struct {
-	Kind      string `json:"kind"`
-	Name      string `json:"name"`
-	Namespace string `json:"namespace"`
+	Kind       string `json:"kind"`
+	APIVersion string `json:"apiVersion,omitempty"`
+	Name       string `json:"name"`
+	Namespace  string `json:"namespace"`
 }
 
 // PodDetailInfoContainer represents detailed container information within a pod
@@ -495,6 +527,10 @@ type PodDetailInfo struct {
 	// Ownership information
 	OwnerKind string `json:"ownerKind"`
 	OwnerName string `json:"ownerName"`
+	// OwnerAPIVersion carries the wire-form apiVersion of the controlling
+	// owner so the panel can open CRD-as-Pod-owner targets correctly. See
+	//  and PodSimpleInfo.OwnerAPIVersion.
+	OwnerAPIVersion string `json:"ownerApiVersion,omitempty"`
 
 	// Additional details for object panel
 	Node            string                   `json:"node"`

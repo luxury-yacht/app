@@ -16,6 +16,17 @@ import type {
 } from '@shared/components/tables/GridTable.types';
 import type { ColumnWidthPhase } from '@shared/components/tables/hooks/useGridTableColumnWidths';
 
+const getAutoSizeMaxWidth = <T>(
+  column: GridColumnDefinition<T>,
+  getColumnMaxWidth: (column: GridColumnDefinition<T>) => number
+) => {
+  const configuredMaxWidth = getColumnMaxWidth(column);
+  const autoSizeMaxWidth = parseWidthInputToNumber(column.autoSizeMaxWidth);
+  return autoSizeMaxWidth != null
+    ? Math.min(configuredMaxWidth, autoSizeMaxWidth)
+    : configuredMaxWidth;
+};
+
 // Helper hooks extracted from useGridTableColumnWidths to reduce file size and clarify intent.
 // They cover local state init, syncing rendered columns, reacting to data changes,
 // reconciling external widths, and notifying parents/persistence.
@@ -441,7 +452,10 @@ export function useInitialMeasurementAndReconcile<T>({
     }
 
     const columnsSignature = renderedColumns
-      .map((col) => `${col.key}:${col.width ?? ''}:${col.minWidth ?? ''}:${col.maxWidth ?? ''}`)
+      .map(
+        (col) =>
+          `${col.key}:${col.width ?? ''}:${col.minWidth ?? ''}:${col.maxWidth ?? ''}:${col.autoSizeMaxWidth ?? ''}`
+      )
       .join('|');
 
     const needsInitialization = phaseRef.current === 'initializing';
@@ -483,7 +497,7 @@ export function useInitialMeasurementAndReconcile<T>({
           }
           const measured = measureColumnWidth(col);
           const min = getColumnMinWidth(col);
-          const max = getColumnMaxWidth(col);
+          const max = getAutoSizeMaxWidth(col, getColumnMaxWidth);
           measuredAutoWidths[col.key] = Math.max(min, Math.min(max, measured));
         });
 

@@ -1,7 +1,6 @@
 package logstream
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -11,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/linescanner"
+	"github.com/luxury-yacht/app/backend/internal/podlogs"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -38,63 +39,101 @@ func NewStreamer(client kubernetes.Interface, logger Logger, recorder *telemetry
 }
 
 type containerTarget struct {
-	namespace string
-	pod       string
-	container string
-	isInit    bool
-	state     *containerState
+	namespace   string
+	pod         string
+	container   string
+	isInit      bool
+	isEphemeral bool
+	state       *containerState
 }
 
 func (t containerTarget) key() string {
-	return fmt.Sprintf("%s/%s/%s", t.namespace, t.pod, t.container)
+	return fmt.Sprintf(
+		"%s/%s/%s",
+		t.namespace,
+		t.pod,
+		podlogs.ContainerRef{
+			Name:        t.container,
+			IsInit:      t.isInit,
+			IsEphemeral: t.isEphemeral,
+		}.SelectionValue(),
+	)
 }
 
 // tail gathers the initial log history for the given options and prepares container state.
-func (s *Streamer) tail(ctx context.Context, opts Options) ([]Entry, map[string]*containerState, []*corev1.Pod, string, error) {
+func (s *Streamer) tail(ctx context.Context, opts Options, limiterSession *TargetSession) ([]Entry, map[string]*containerState, []*corev1.Pod, string, []string, int, string, error) {
 	pods, selector, err := s.listPods(ctx, opts)
 	if err != nil {
-		return nil, nil, nil, "", err
+		return nil, nil, nil, "", nil, 0, "", fmt.Errorf("logstream: tail %s/%s: %w", opts.Namespace, opts.Name, err)
 	}
 
 	var entries []Entry
 	state := make(map[string]*containerState)
+	selectedTargets, totalTargets := selectRuntimeTargets(
+		pods,
+		podlogs.ContainerSelectionOptions{
+			Filter:           opts.Container,
+			IncludeInit:      opts.IncludeInit,
+			IncludeEphemeral: opts.IncludeEphemeral,
+			StateFilter:      opts.ContainerState,
+			Selection:        opts.Selection,
+		},
+		podlogs.GetPerScopeTargetLimit(),
+	)
+	warnings := podlogs.BuildTargetLimitWarnings(len(selectedTargets), totalTargets)
+	skippedTargets := totalTargets - len(selectedTargets)
+	skipReason := ""
+	if skippedTargets > 0 {
+		skipReason = "per-scope target cap"
+	}
+	if limiterSession != nil {
+		allowedKeys, globalSkipped := limiterSession.UpdateDesired(targetKeys(selectedTargets))
+		selectedTargets = filterTargetsByKeys(selectedTargets, allowedKeys)
+		globalLimit := config.LogStreamGlobalTargetLimit
+		if limiterSession != nil && limiterSession.limiter != nil {
+			globalLimit = limiterSession.limiter.total
+		}
+		warnings = append(warnings, buildGlobalTargetLimitWarnings(len(selectedTargets), len(selectedTargets)+globalSkipped, globalLimit)...)
+		if globalSkipped > 0 {
+			skippedTargets += globalSkipped
+			skipReason = "global target cap"
+		}
+	}
 
-	for _, pod := range pods {
-		targets := buildTargetsFromPod(pod, opts.Container)
-		for _, target := range targets {
-			if _, ok := state[target.key()]; !ok {
-				state[target.key()] = &containerState{}
-			}
-			podEntries, err := s.fetchContainerTail(ctx, target, opts.TailLines)
-			if err != nil {
-				s.logger.Warn(fmt.Sprintf("logstream: tail failed for %s/%s/%s: %v", target.namespace, target.pod, target.container, err), "LogStream")
+	for _, selected := range selectedTargets {
+		target := selected
+		if _, ok := state[target.key()]; !ok {
+			state[target.key()] = &containerState{}
+		}
+		podEntries, err := s.fetchContainerTail(ctx, target, opts.TailLines, opts.LineFilter)
+		if err != nil {
+			s.logger.Warn(fmt.Sprintf("logstream: tail failed for %s/%s/%s: %v", target.namespace, target.pod, target.container, err), "LogStream")
+			continue
+		}
+		for _, e := range podEntries {
+			entries = append(entries, e)
+			if e.Timestamp == "" {
 				continue
 			}
-			for _, e := range podEntries {
-				entries = append(entries, e)
-				if e.Timestamp == "" {
-					continue
-				}
-				ts, err := time.Parse(time.RFC3339Nano, e.Timestamp)
-				if err != nil {
-					continue
-				}
-				key := target.key()
-				current := state[key]
-				if current == nil {
-					current = &containerState{linesAtTimestamp: make(map[string]struct{})}
-					state[key] = current
-				}
-				if ts.After(current.lastTimestamp) {
-					// New timestamp - reset the set of lines
-					current.lastTimestamp = ts
-					current.linesAtTimestamp = map[string]struct{}{e.Line: {}}
-				} else if ts.Equal(current.lastTimestamp) {
-					// Same timestamp - add line to the set
-					current.linesAtTimestamp[e.Line] = struct{}{}
-				}
-				// Lines before lastTimestamp are ignored (already processed)
+			ts, err := time.Parse(time.RFC3339Nano, e.Timestamp)
+			if err != nil {
+				continue
 			}
+			key := target.key()
+			current := state[key]
+			if current == nil {
+				current = &containerState{linesAtTimestamp: make(map[string]struct{})}
+				state[key] = current
+			}
+			if ts.After(current.lastTimestamp) {
+				// New timestamp - reset the set of lines
+				current.lastTimestamp = ts
+				current.linesAtTimestamp = map[string]struct{}{e.Line: {}}
+			} else if ts.Equal(current.lastTimestamp) {
+				// Same timestamp - add line to the set
+				current.linesAtTimestamp[e.Line] = struct{}{}
+			}
+			// Lines before lastTimestamp are ignored (already processed)
 		}
 	}
 
@@ -113,7 +152,7 @@ func (s *Streamer) tail(ctx context.Context, opts Options) ([]Entry, map[string]
 		}
 	})
 
-	return entries, state, pods, selector, nil
+	return entries, state, pods, selector, warnings, skippedTargets, skipReason, nil
 }
 
 func (s *Streamer) run(
@@ -122,83 +161,181 @@ func (s *Streamer) run(
 	initialPods []*corev1.Pod,
 	selector string,
 	states map[string]*containerState,
+	limiterSession *TargetSession,
+	initialWarnings []string,
 	entriesCh chan<- Entry,
+	warningsCh chan<- []string,
 	errCh chan<- error,
 	dropCh chan<- int,
 ) {
 	var (
-		mu         sync.Mutex
-		podWG      sync.WaitGroup
-		podCancels = make(map[string]context.CancelFunc)
+		mu              sync.Mutex
+		targetWG        sync.WaitGroup
+		currentPods     = make(map[string]*corev1.Pod)
+		targetCancels   = make(map[string]context.CancelFunc)
+		currentWarnings = append([]string(nil), initialWarnings...)
 	)
+	var limiterNotify <-chan struct{}
+	if limiterSession != nil {
+		limiterNotify = limiterSession.Notify()
+	}
 
 	// Ensure all followContainer goroutines exit before run returns so callers can safely close channels.
 	defer func() {
 		mu.Lock()
-		for _, cancel := range podCancels {
+		for _, cancel := range targetCancels {
 			cancel()
 		}
 		mu.Unlock()
-		podWG.Wait()
+		targetWG.Wait()
 	}()
 
-	startPod := func(pod *corev1.Pod) {
-		targets := buildTargetsFromPod(pod, opts.Container)
-		if len(targets) == 0 {
-			return
-		}
+	startTarget := func(target containerTarget) {
+		key := target.key()
 		mu.Lock()
-		if _, exists := podCancels[pod.Name]; exists {
+		if _, exists := targetCancels[key]; exists {
 			mu.Unlock()
 			return
 		}
-		podCtx, cancel := context.WithCancel(ctx)
-		podCancels[pod.Name] = cancel
+		targetCtx, cancel := context.WithCancel(ctx)
+		targetCancels[key] = cancel
 		mu.Unlock()
 
-		for _, target := range targets {
-			target.state = states[target.key()]
-			if target.state == nil {
-				target.state = &containerState{}
-				states[target.key()] = target.state
-			}
-			podWG.Add(1)
-			go func(t containerTarget) {
-				defer podWG.Done()
-				defer func() {
-					if r := recover(); r != nil {
-						s.logger.Error(fmt.Sprintf("logstream: panic in followContainer for %s: %v", t.key(), r), "LogStream")
-						if s.telemetry != nil {
-							s.telemetry.RecordStreamError(telemetry.StreamLogs, fmt.Errorf("panic: %v", r))
-						}
+		target.state = states[key]
+		if target.state == nil {
+			target.state = &containerState{}
+			states[key] = target.state
+		}
+		targetWG.Add(1)
+		go func(t containerTarget) {
+			defer targetWG.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					s.logger.Error(fmt.Sprintf("logstream: panic in followContainer for %s: %v", t.key(), r), "LogStream")
+					if s.telemetry != nil {
+						s.telemetry.RecordStreamError(telemetry.StreamLogs, fmt.Errorf("panic: %v", r))
 					}
-				}()
-				s.followContainer(podCtx, t, entriesCh, errCh, dropCh)
-			}(target)
-		}
+				}
+			}()
+			s.followContainer(targetCtx, t, opts.LineFilter, entriesCh, errCh, dropCh)
+		}(target)
 	}
 
-	stopPod := func(name string) {
+	stopTarget := func(key string) {
 		mu.Lock()
-		if cancel, ok := podCancels[name]; ok {
+		if cancel, ok := targetCancels[key]; ok {
 			cancel()
-			delete(podCancels, name)
+			delete(targetCancels, key)
 		}
 		mu.Unlock()
 	}
 
-	for _, pod := range initialPods {
-		startPod(pod)
+	reconcileTargets := func() {
+		mu.Lock()
+		pods := make([]*corev1.Pod, 0, len(currentPods))
+		for _, pod := range currentPods {
+			pods = append(pods, pod)
+		}
+		selectedTargets, _ := selectRuntimeTargets(pods, podlogs.ContainerSelectionOptions{
+			Filter:           opts.Container,
+			IncludeInit:      opts.IncludeInit,
+			IncludeEphemeral: opts.IncludeEphemeral,
+			StateFilter:      opts.ContainerState,
+			Selection:        opts.Selection,
+		}, podlogs.GetPerScopeTargetLimit())
+		perScopeCount := len(selectedTargets)
+		totalTargets := countTargets(pods, podlogs.ContainerSelectionOptions{
+			Filter:           opts.Container,
+			IncludeInit:      opts.IncludeInit,
+			IncludeEphemeral: opts.IncludeEphemeral,
+			StateFilter:      opts.ContainerState,
+			Selection:        opts.Selection,
+		})
+		warnings := podlogs.BuildTargetLimitWarnings(perScopeCount, totalTargets)
+		if limiterSession != nil {
+			allowedKeys, globalSkipped := limiterSession.UpdateDesired(targetKeys(selectedTargets))
+			selectedTargets = filterTargetsByKeys(selectedTargets, allowedKeys)
+			globalLimit := config.LogStreamGlobalTargetLimit
+			if limiterSession != nil && limiterSession.limiter != nil {
+				globalLimit = limiterSession.limiter.total
+			}
+			warnings = append(warnings, buildGlobalTargetLimitWarnings(len(selectedTargets), perScopeCount, globalLimit)...)
+			_ = globalSkipped
+		}
+		desiredTargets := make(map[string]containerTarget, len(selectedTargets))
+		activeKeys := make([]string, 0, len(targetCancels))
+		activeKeySet := make(map[string]struct{}, len(targetCancels))
+		for key := range targetCancels {
+			activeKeys = append(activeKeys, key)
+			activeKeySet[key] = struct{}{}
+		}
+		mu.Unlock()
+
+		for _, target := range selectedTargets {
+			desiredTargets[target.key()] = target
+		}
+		emitWarningsIfChanged(warningsCh, &currentWarnings, warnings)
+
+		for _, key := range activeKeys {
+			if _, ok := desiredTargets[key]; !ok {
+				stopTarget(key)
+			}
+		}
+		for key, target := range desiredTargets {
+			if _, ok := activeKeySet[key]; ok {
+				continue
+			}
+			startTarget(target)
+		}
 	}
+
+	replacePodInventory := func(pods []*corev1.Pod) {
+		mu.Lock()
+		nextPods := make(map[string]*corev1.Pod, len(pods))
+		for _, pod := range pods {
+			if pod == nil {
+				continue
+			}
+			nextPods[pod.Name] = pod
+		}
+		currentPods = nextPods
+		mu.Unlock()
+		reconcileTargets()
+	}
+
+	updatePod := func(pod *corev1.Pod) {
+		if pod == nil {
+			return
+		}
+		mu.Lock()
+		currentPods[pod.Name] = pod
+		mu.Unlock()
+		reconcileTargets()
+	}
+
+	removePod := func(name string) {
+		mu.Lock()
+		delete(currentPods, name)
+		mu.Unlock()
+		reconcileTargets()
+	}
+
+	replacePodInventory(initialPods)
 
 	if strings.ToLower(opts.Kind) == "pod" {
-		<-ctx.Done()
-		mu.Lock()
-		for _, cancel := range podCancels {
-			cancel()
+		for {
+			select {
+			case <-ctx.Done():
+				mu.Lock()
+				for _, cancel := range targetCancels {
+					cancel()
+				}
+				mu.Unlock()
+				return
+			case <-limiterNotify:
+				reconcileTargets()
+			}
 		}
-		mu.Unlock()
-		return
 	}
 
 	cronCache := make(map[string]bool)
@@ -208,7 +345,7 @@ func (s *Streamer) run(
 		select {
 		case <-ctx.Done():
 			mu.Lock()
-			for _, cancel := range podCancels {
+			for _, cancel := range targetCancels {
 				cancel()
 			}
 			mu.Unlock()
@@ -235,11 +372,11 @@ func (s *Streamer) run(
 			continue
 		}
 
-		err = s.consumeWatch(ctx, watcher, opts, cronCache, startPod, stopPod)
+		err = s.consumeWatch(ctx, watcher, opts, cronCache, limiterNotify, reconcileTargets, updatePod, removePod)
 		watcher.Stop()
 		if err == nil || ctx.Err() != nil {
 			mu.Lock()
-			for _, cancel := range podCancels {
+			for _, cancel := range targetCancels {
 				cancel()
 			}
 			mu.Unlock()
@@ -252,7 +389,7 @@ func (s *Streamer) run(
 		}
 		if !s.waitForReconnect(ctx, backoff) {
 			mu.Lock()
-			for _, cancel := range podCancels {
+			for _, cancel := range targetCancels {
 				cancel()
 			}
 			mu.Unlock()
@@ -262,10 +399,24 @@ func (s *Streamer) run(
 
 		// Refresh pod list to ensure any missed pods are started.
 		if pods, _, listErr := s.listPods(ctx, opts); listErr == nil {
-			for _, pod := range pods {
-				startPod(pod)
-			}
+			replacePodInventory(pods)
 		}
+	}
+}
+
+func emitWarningsIfChanged(ch chan<- []string, current *[]string, next []string) {
+	if ch == nil {
+		*current = append((*current)[:0], next...)
+		return
+	}
+	if stringSlicesEqual(*current, next) {
+		return
+	}
+	copied := append([]string(nil), next...)
+	*current = copied
+	select {
+	case ch <- copied:
+	default:
 	}
 }
 
@@ -299,6 +450,8 @@ func (s *Streamer) consumeWatch(
 	watcher watch.Interface,
 	opts Options,
 	cronCache map[string]bool,
+	limiterNotify <-chan struct{},
+	reconcileTargets func(),
 	startPod func(*corev1.Pod),
 	stopPod func(string),
 ) error {
@@ -310,6 +463,10 @@ func (s *Streamer) consumeWatch(
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+		case <-limiterNotify:
+			if reconcileTargets != nil {
+				reconcileTargets()
+			}
 		case event, ok := <-result:
 			if !ok {
 				return errors.New("watch channel closed")
@@ -330,6 +487,12 @@ func (s *Streamer) consumeWatch(
 					continue
 				}
 			}
+			if opts.PodFilter != "" && pod.Name != opts.PodFilter {
+				continue
+			}
+			if !opts.Selection.MatchPod(pod.Name) {
+				continue
+			}
 			switch event.Type {
 			case watch.Added, watch.Modified:
 				startPod(pod)
@@ -340,7 +503,7 @@ func (s *Streamer) consumeWatch(
 	}
 }
 
-func (s *Streamer) followContainer(ctx context.Context, target containerTarget, entriesCh chan<- Entry, errCh chan<- error, dropCh chan<- int) {
+func (s *Streamer) followContainer(ctx context.Context, target containerTarget, lineFilter podlogs.LineFilter, entriesCh chan<- Entry, errCh chan<- error, dropCh chan<- int) {
 	backoff := config.LogStreamBackoffInitial
 	if target.state == nil {
 		target.state = &containerState{}
@@ -403,7 +566,7 @@ func (s *Streamer) followContainer(ctx context.Context, target containerTarget, 
 			continue
 		}
 
-		scanner := bufio.NewScanner(stream)
+		scanner := linescanner.New(stream)
 		for scanner.Scan() {
 			select {
 			case <-ctx.Done():
@@ -413,12 +576,16 @@ func (s *Streamer) followContainer(ctx context.Context, target containerTarget, 
 			}
 			line := scanner.Text()
 			timestamp, content := splitTimestamp(line)
+			if !lineFilter.Matches(content) {
+				continue
+			}
 			entry := Entry{
-				Timestamp: timestamp,
-				Pod:       target.pod,
-				Container: target.container,
-				Line:      content,
-				IsInit:    target.isInit,
+				Timestamp:   timestamp,
+				Pod:         target.pod,
+				Container:   target.container,
+				Line:        content,
+				IsInit:      target.isInit,
+				IsEphemeral: target.isEphemeral,
 			}
 
 			if timestamp != "" {
@@ -531,30 +698,30 @@ func (s *Streamer) listPods(ctx context.Context, opts Options) ([]*corev1.Pod, s
 	case "pod":
 		pod, err := s.client.CoreV1().Pods(opts.Namespace).Get(ctx, opts.Name, metav1.GetOptions{})
 		if err != nil {
-			return nil, "", err
+			return nil, "", fmt.Errorf("logstream: get pod %s/%s: %w", opts.Namespace, opts.Name, err)
 		}
-		return []*corev1.Pod{pod}, "", nil
+		return filterPodsByName([]*corev1.Pod{pod}, opts.PodFilter, opts.PodNameFilter, opts.Selection), "", nil
 	case "deployment", "replicaset", "statefulset", "daemonset":
 		selector, err := s.selectorForWorkload(ctx, opts)
 		if err != nil {
-			return nil, "", err
+			return nil, "", fmt.Errorf("logstream: selector for %s %s/%s: %w", kind, opts.Namespace, opts.Name, err)
 		}
 		pods, err := s.client.CoreV1().Pods(opts.Namespace).List(ctx, metav1.ListOptions{LabelSelector: selector})
 		if err != nil {
-			return nil, "", err
+			return nil, "", fmt.Errorf("logstream: list pods for %s %s/%s: %w", kind, opts.Namespace, opts.Name, err)
 		}
-		return podPointers(pods.Items), selector, nil
+		return filterPodsByName(podPointers(pods.Items), opts.PodFilter, opts.PodNameFilter, opts.Selection), selector, nil
 	case "job":
 		selector := labels.Set{"job-name": opts.Name}.AsSelector().String()
 		pods, err := s.client.CoreV1().Pods(opts.Namespace).List(ctx, metav1.ListOptions{LabelSelector: selector})
 		if err != nil {
-			return nil, "", err
+			return nil, "", fmt.Errorf("logstream: list pods for job %s/%s: %w", opts.Namespace, opts.Name, err)
 		}
-		return podPointers(pods.Items), selector, nil
+		return filterPodsByName(podPointers(pods.Items), opts.PodFilter, opts.PodNameFilter, opts.Selection), selector, nil
 	case "cronjob":
 		jobs, err := s.client.BatchV1().Jobs(opts.Namespace).List(ctx, metav1.ListOptions{})
 		if err != nil {
-			return nil, "", err
+			return nil, "", fmt.Errorf("logstream: list jobs for cronjob %s/%s: %w", opts.Namespace, opts.Name, err)
 		}
 		var jobNames []string
 		for _, job := range jobs.Items {
@@ -564,20 +731,52 @@ func (s *Streamer) listPods(ctx context.Context, opts Options) ([]*corev1.Pod, s
 				}
 			}
 		}
-		var pods []*corev1.Pod
-		for _, jobName := range jobNames {
-			selector := labels.Set{"job-name": jobName}.AsSelector().String()
-			list, err := s.client.CoreV1().Pods(opts.Namespace).List(ctx, metav1.ListOptions{LabelSelector: selector})
-			if err != nil {
-				s.logger.Warn(fmt.Sprintf("logstream: failed to list pods for job %s: %v", jobName, err), "LogStream")
-				continue
-			}
-			pods = append(pods, podPointers(list.Items)...)
+		if len(jobNames) == 0 {
+			return nil, "", nil
 		}
-		return pods, labels.Set{"cronjob": opts.Name}.AsSelector().String(), nil
+		selector := "job-name in (" + strings.Join(jobNames, ",") + ")"
+		list, err := s.client.CoreV1().Pods(opts.Namespace).List(ctx, metav1.ListOptions{LabelSelector: selector})
+		if err != nil {
+			return nil, "", fmt.Errorf("logstream: list pods for cronjob %s/%s: %w", opts.Namespace, opts.Name, err)
+		}
+		// Return empty selector so the pod watch sees pods from future Jobs.
+		// consumeWatch filters by CronJob ownership via podBelongsToCronJob.
+		return filterPodsByName(podPointers(list.Items), opts.PodFilter, opts.PodNameFilter, opts.Selection), "", nil
 	default:
 		return nil, "", fmt.Errorf("logstream: unsupported workload kind %q", opts.Kind)
 	}
+}
+
+func filterPodsByName(
+	pods []*corev1.Pod,
+	exactFilter string,
+	podNameFilter podlogs.PodNameFilter,
+	selection podlogs.ScopeSelection,
+) []*corev1.Pod {
+	exactFilter = strings.TrimSpace(exactFilter)
+	if len(pods) == 0 {
+		return pods
+	}
+	if exactFilter == "" && podNameFilter.IsZero() && selection.IsZero() {
+		return pods
+	}
+	filtered := make([]*corev1.Pod, 0, len(pods))
+	for _, pod := range pods {
+		if pod == nil {
+			continue
+		}
+		if exactFilter != "" && pod.Name != exactFilter {
+			continue
+		}
+		if !podNameFilter.IsZero() && !podNameFilter.Match(pod.Name) {
+			continue
+		}
+		if !selection.MatchPod(pod.Name) {
+			continue
+		}
+		filtered = append(filtered, pod)
+	}
+	return filtered
 }
 
 func (s *Streamer) selectorForWorkload(ctx context.Context, opts Options) (string, error) {
@@ -620,42 +819,93 @@ func podPointers(items []corev1.Pod) []*corev1.Pod {
 	return result
 }
 
-func buildTargetsFromPod(pod *corev1.Pod, filter string) []containerTarget {
+func buildTargetsFromPod(pod *corev1.Pod, options podlogs.ContainerSelectionOptions) []containerTarget {
 	var targets []containerTarget
-	filter = strings.TrimSpace(filter)
-
-	isAll := filter == "" || strings.EqualFold(filter, "all")
-	for _, c := range pod.Spec.InitContainers {
-		name := c.Name
-		if !isAll && !matchContainerFilter(name, filter, true) {
-			continue
-		}
-		targets = append(targets, containerTarget{namespace: pod.Namespace, pod: pod.Name, container: name, isInit: true, state: &containerState{}})
-	}
-	for _, c := range pod.Spec.Containers {
-		name := c.Name
-		if !isAll && !matchContainerFilter(name, filter, false) {
-			continue
-		}
-		targets = append(targets, containerTarget{namespace: pod.Namespace, pod: pod.Name, container: name, isInit: false, state: &containerState{}})
+	for _, containerRef := range podlogs.EnumerateContainersWithOptions(pod, options) {
+		targets = append(targets, containerTarget{
+			namespace:   pod.Namespace,
+			pod:         pod.Name,
+			container:   containerRef.Name,
+			isInit:      containerRef.IsInit,
+			isEphemeral: containerRef.IsEphemeral,
+			state:       &containerState{},
+		})
 	}
 	return targets
 }
 
-func matchContainerFilter(name, filter string, isInit bool) bool {
-	if filter == "" {
-		return true
+func selectRuntimeTargets(
+	pods []*corev1.Pod,
+	options podlogs.ContainerSelectionOptions,
+	limit int,
+) ([]containerTarget, int) {
+	selectedTargets, totalTargets := podlogs.SelectTargets(pods, options, limit)
+	runtimeTargets := make([]containerTarget, 0, len(selectedTargets))
+	for _, selected := range selectedTargets {
+		runtimeTargets = append(runtimeTargets, containerTarget{
+			namespace:   selected.Namespace,
+			pod:         selected.PodName,
+			container:   selected.Container.Name,
+			isInit:      selected.Container.IsInit,
+			isEphemeral: selected.Container.IsEphemeral,
+		})
 	}
-	if isInit {
-		if filter == name || filter == fmt.Sprintf("%s (init)", name) {
-			return true
-		}
-		return false
-	}
-	return filter == name
+	return runtimeTargets, totalTargets
 }
 
-func (s *Streamer) fetchContainerTail(ctx context.Context, target containerTarget, tailLines int) ([]Entry, error) {
+func targetKeys(targets []containerTarget) []string {
+	keys := make([]string, 0, len(targets))
+	for _, target := range targets {
+		keys = append(keys, target.key())
+	}
+	return keys
+}
+
+func filterTargetsByKeys(targets []containerTarget, allowedKeys map[string]struct{}) []containerTarget {
+	if len(allowedKeys) == 0 {
+		return nil
+	}
+	filtered := make([]containerTarget, 0, len(targets))
+	for _, target := range targets {
+		if _, ok := allowedKeys[target.key()]; ok {
+			filtered = append(filtered, target)
+		}
+	}
+	return filtered
+}
+
+func countTargets(pods []*corev1.Pod, options podlogs.ContainerSelectionOptions) int {
+	total := 0
+	for _, pod := range pods {
+		if pod == nil {
+			continue
+		}
+		total += len(podlogs.EnumerateContainersWithOptions(pod, options))
+	}
+	return total
+}
+
+func stringSlicesEqual(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for i := range left {
+		if left[i] != right[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func matchContainerFilter(name, filter string, isInit, isEphemeral bool) bool {
+	return podlogs.MatchContainerFilter(podlogs.ContainerRef{
+		Name:        name,
+		IsInit:      isInit,
+		IsEphemeral: isEphemeral,
+	}, filter)
+}
+
+func (s *Streamer) fetchContainerTail(ctx context.Context, target containerTarget, tailLines int, lineFilter podlogs.LineFilter) ([]Entry, error) {
 	options := &corev1.PodLogOptions{
 		Container:  target.container,
 		Timestamps: true,
@@ -673,16 +923,20 @@ func (s *Streamer) fetchContainerTail(ctx context.Context, target containerTarge
 	defer stream.Close()
 
 	var entries []Entry
-	scanner := bufio.NewScanner(stream)
+	scanner := linescanner.New(stream)
 	for scanner.Scan() {
 		line := scanner.Text()
 		timestamp, content := splitTimestamp(line)
+		if !lineFilter.Matches(content) {
+			continue
+		}
 		entries = append(entries, Entry{
-			Timestamp: timestamp,
-			Pod:       target.pod,
-			Container: target.container,
-			Line:      content,
-			IsInit:    target.isInit,
+			Timestamp:   timestamp,
+			Pod:         target.pod,
+			Container:   target.container,
+			Line:        content,
+			IsInit:      target.isInit,
+			IsEphemeral: target.isEphemeral,
 		})
 	}
 	if err := scanner.Err(); err != nil && !errors.Is(err, io.EOF) {

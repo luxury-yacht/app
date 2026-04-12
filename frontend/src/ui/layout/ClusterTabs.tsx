@@ -3,7 +3,14 @@
  *
  * Cluster tab strip for multi-cluster navigation.
  */
-import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
+import React, {
+  useMemo,
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  type HTMLAttributes,
+} from 'react';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import {
   getClusterTabOrder,
@@ -18,22 +25,12 @@ import {
 } from '@wailsjs/go/backend/App';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import { CloseIcon } from '@shared/components/icons/MenuIcons';
+import { Tabs, type TabDescriptor } from '@shared/components/tabs';
+import { useTabDragSourceFactory, useTabDropTarget } from '@shared/components/tabs/dragCoordinator';
 import './ClusterTabs.css';
 
 const ordersMatch = (left: string[], right: string[]) =>
   left.length === right.length && left.every((value, index) => value === right[index]);
-
-const moveTab = (order: string[], sourceId: string, targetId: string) => {
-  const fromIndex = order.indexOf(sourceId);
-  const toIndex = order.indexOf(targetId);
-  if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) {
-    return order;
-  }
-  const next = [...order];
-  next.splice(fromIndex, 1);
-  next.splice(toIndex, 0, sourceId);
-  return next;
-};
 
 type ClusterTab = {
   id: string;
@@ -50,8 +47,6 @@ const ClusterTabs: React.FC = () => {
     getClusterMeta,
   } = useKubeconfig();
   const [tabOrder, setTabOrder] = useState<string[]>(() => getClusterTabOrder());
-  const [draggingId, setDraggingId] = useState<string | null>(null);
-  const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const tabsRef = useRef<HTMLDivElement | null>(null);
   // State for cluster close confirmation modal when port forwards are active.
   const [closeConfirm, setCloseConfirm] = useState<{
@@ -201,25 +196,46 @@ const ClusterTabs: React.FC = () => {
     setCloseConfirm({ show: false, clusterId: null, clusterLabel: '', forwardCount: 0 });
   }, [closeConfirm.clusterId, selectedKubeconfigs, setSelectedKubeconfigs]);
 
-  const handleDrop = useCallback(
-    (targetId: string) => {
-      if (!draggingId) {
-        setDropTargetId(null);
-        return;
-      }
-      if (draggingId === targetId) {
-        setDraggingId(null);
-        setDropTargetId(null);
-        return;
-      }
-      const nextOrder = moveTab(mergedOrder, draggingId, targetId);
+  // One useContext call for the entire drag coordinator, regardless of how
+  // many tabs are rendered. Returned factory is a plain function legal inside
+  // .map() — no rules-of-hooks workaround and no upper bound on draggable tab
+  // count.
+  const makeDragSource = useTabDragSourceFactory();
+
+  const { ref: dropRef, dropInsertIndex } = useTabDropTarget({
+    accepts: ['cluster-tab'],
+    onDrop: (payload, _event, insertIndex) => {
+      // Reorder directly against insertIndex. DO NOT reuse the legacy
+      // moveTab helper — it splices at the target's ORIGINAL index in the
+      // reduced array, which produces off-by-one for forward drags.
+      //
+      // Shift compensation: when source is before the insert index, removing
+      // it bumps every later position down by 1, so the effective destination
+      // is insertIndex - 1. When source is at or after the insert index, no
+      // shift is needed.
+      const sourceIdx = mergedOrder.indexOf(payload.clusterId);
+      if (sourceIdx < 0) return;
+      const adjustedInsert = sourceIdx < insertIndex ? insertIndex - 1 : insertIndex;
+      if (adjustedInsert === sourceIdx) return; // no-op drop onto itself
+      const nextOrder = [...mergedOrder];
+      nextOrder.splice(sourceIdx, 1);
+      nextOrder.splice(adjustedInsert, 0, payload.clusterId);
       if (!ordersMatch(nextOrder, mergedOrder)) {
         setClusterTabOrder(nextOrder);
       }
-      setDraggingId(null);
-      setDropTargetId(null);
     },
-    [draggingId, mergedOrder]
+  });
+
+  // Compose the tabsRef + dropRef into a single ref callback so both the
+  // height observer and the drop target see the same element.
+  // IMPORTANT: this useCallback must be declared before the early-return
+  // conditional to satisfy the rules of hooks.
+  const assignRootRef = useCallback(
+    (el: HTMLDivElement | null) => {
+      tabsRef.current = el;
+      dropRef(el);
+    },
+    [dropRef]
   );
 
   useEffect(() => {
@@ -256,76 +272,38 @@ const ClusterTabs: React.FC = () => {
     return null;
   }
 
+  // Note: `makeDragSource` produces a fresh closure every call (by design —
+  // one call per tab per render). Do NOT wrap this .map() in useMemo with
+  // `makeDragSource` as a dep: the factory has new identity each render and
+  // would bust the memo every time. Per-render allocation is fine here.
+  const tabDescriptors: TabDescriptor[] = orderedTabs.map((tab) => ({
+    id: tab.id,
+    label: tab.label,
+    closeIcon: <CloseIcon width={10} height={10} />,
+    closeAriaLabel: `Close ${tab.label}`,
+    onClose: () => {
+      void handleCloseTab(tab.selection);
+    },
+    extraProps: {
+      title: tab.label, // tooltip for full text when truncated
+      ...makeDragSource({ kind: 'cluster-tab', clusterId: tab.id }),
+    } as HTMLAttributes<HTMLElement>,
+  }));
+
   return (
     <>
-      <div
-        ref={tabsRef}
-        className="tab-strip cluster-tabs"
-        role="tablist"
-        aria-label="Cluster tabs"
-      >
-        {orderedTabs.map((tab) => {
-          const isActive = tab.id === activeTabId;
-          const isDragging = tab.id === draggingId;
-          const isDropTarget = tab.id === dropTargetId && tab.id !== draggingId;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              role="tab"
-              aria-selected={isActive}
-              className={`tab-item tab-item--closeable${isActive ? ' tab-item--active' : ''}${isDragging ? ' cluster-tab--dragging' : ''}${isDropTarget ? ' cluster-tab--drop-target' : ''}`}
-              onClick={() => handleTabClick(tab.selection)}
-              draggable
-              onDragStart={(event) => {
-                event.dataTransfer.effectAllowed = 'move';
-                event.dataTransfer.setData('text/plain', tab.id);
-                setDraggingId(tab.id);
-              }}
-              onDragEnd={() => {
-                setDraggingId(null);
-                setDropTargetId(null);
-              }}
-              onDragOver={(event) => {
-                if (!draggingId) {
-                  return;
-                }
-                event.preventDefault();
-                setDropTargetId(tab.id);
-              }}
-              onDragLeave={() => {
-                setDropTargetId((current) => (current === tab.id ? null : current));
-              }}
-              onDrop={(event) => {
-                event.preventDefault();
-                handleDrop(tab.id);
-              }}
-            >
-              <span className="tab-item__label" title={tab.label}>
-                {tab.label}
-              </span>
-              <span
-                role="button"
-                tabIndex={0}
-                className="tab-item__close"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  handleCloseTab(tab.selection);
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.stopPropagation();
-                    handleCloseTab(tab.selection);
-                  }
-                }}
-                aria-label={`Close ${tab.label}`}
-                title={`Close ${tab.label}`}
-              >
-                <CloseIcon width={10} height={10} />
-              </span>
-            </button>
-          );
-        })}
+      <div ref={assignRootRef} className="cluster-tabs-wrapper">
+        <Tabs
+          aria-label="Cluster Tabs"
+          tabs={tabDescriptors}
+          activeId={activeTabId}
+          onActivate={(id) => {
+            const tab = tabsById.get(id);
+            if (tab) handleTabClick(tab.selection);
+          }}
+          dropInsertIndex={dropInsertIndex}
+          className="cluster-tabs"
+        />
       </div>
       <ConfirmationModal
         isOpen={closeConfirm.show}

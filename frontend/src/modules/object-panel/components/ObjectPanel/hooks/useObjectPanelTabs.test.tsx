@@ -31,6 +31,7 @@ describe('useObjectPanelTabs', () => {
   let root: ReactDOM.Root;
   const resultRef: { current: ReturnType<typeof useObjectPanelTabs> | null } = { current: null };
   const dispatchMock = vi.fn();
+  const setActiveTabMock = vi.fn();
   const closeMock = vi.fn();
 
   const baseCapabilities: ComputedCapabilities = {
@@ -61,6 +62,7 @@ describe('useObjectPanelTabs', () => {
       isHelmRelease: false,
       isEvent: false,
       isOpen: true,
+      setActiveTab: setActiveTabMock,
       dispatch: dispatchMock as React.Dispatch<PanelAction>,
       close: closeMock,
       currentTab: 'details' as ViewType,
@@ -90,6 +92,7 @@ describe('useObjectPanelTabs', () => {
     root = ReactDOM.createRoot(container);
     resultRef.current = null;
     dispatchMock.mockClear();
+    setActiveTabMock.mockClear();
     closeMock.mockClear();
     hoistedShortcuts.useShortcut.mockClear();
     hoistedShortcuts.useShortcuts.mockClear();
@@ -166,7 +169,7 @@ describe('useObjectPanelTabs', () => {
       currentTab: 'logs',
       capabilities: { ...baseCapabilities, hasLogs: false },
     });
-    expect(dispatchMock).toHaveBeenCalledWith({ type: 'SET_ACTIVE_TAB', payload: 'details' });
+    expect(setActiveTabMock).toHaveBeenCalledWith('details');
   });
 
   it('registers position-based shortcut keys matching visible tab order', async () => {
@@ -246,7 +249,7 @@ describe('useObjectPanelTabs', () => {
       | undefined;
     expect(tabShortcuts?.[0]?.enabled).toBe(false);
     expect(tabShortcuts?.[0]?.handler()).toBe(false);
-    expect(dispatchMock).not.toHaveBeenCalled();
+    expect(setActiveTabMock).not.toHaveBeenCalled();
   });
 
   it('fires tab change shortcuts matching visible tab positions', async () => {
@@ -258,14 +261,14 @@ describe('useObjectPanelTabs', () => {
 
     // Key '1' → Details (first visible tab).
     expect(tabShortcuts?.[0]?.handler()).toBe(true);
-    expect(dispatchMock).toHaveBeenCalledWith({ type: 'SET_ACTIVE_TAB', payload: 'details' });
+    expect(setActiveTabMock).toHaveBeenCalledWith('details');
 
     // Key '3' → Logs (third visible tab for Deployment: Details, Pods, Logs).
     expect(tabShortcuts?.[2]?.handler()).toBe(true);
-    expect(dispatchMock).toHaveBeenCalledWith({ type: 'SET_ACTIVE_TAB', payload: 'logs' });
+    expect(setActiveTabMock).toHaveBeenCalledWith('logs');
 
     // Key '4' → Events (fourth visible tab).
     expect(tabShortcuts?.[3]?.handler()).toBe(true);
-    expect(dispatchMock).toHaveBeenCalledWith({ type: 'SET_ACTIVE_TAB', payload: 'events' });
+    expect(setActiveTabMock).toHaveBeenCalledWith('events');
   });
 });

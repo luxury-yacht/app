@@ -14,6 +14,10 @@ export function ApplyTheme(arg1) {
   return window['go']['backend']['App']['ApplyTheme'](arg1);
 }
 
+export function ClearAllSSRRCaches() {
+  return window['go']['backend']['App']['ClearAllSSRRCaches']();
+}
+
 export function ClearAppState() {
   return window['go']['backend']['App']['ClearAppState']();
 }
@@ -24,6 +28,10 @@ export function ClearGridTablePersistence() {
 
 export function ClearLogs() {
   return window['go']['backend']['App']['ClearLogs']();
+}
+
+export function ClearSSRRCache(arg1) {
+  return window['go']['backend']['App']['ClearSSRRCache'](arg1);
 }
 
 export function CloseShellSession(arg1) {
@@ -74,8 +82,8 @@ export function DeletePod(arg1, arg2, arg3) {
   return window['go']['backend']['App']['DeletePod'](arg1, arg2, arg3);
 }
 
-export function DeleteResource(arg1, arg2, arg3, arg4) {
-  return window['go']['backend']['App']['DeleteResource'](arg1, arg2, arg3, arg4);
+export function DeleteResourceByGVK(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['backend']['App']['DeleteResourceByGVK'](arg1, arg2, arg3, arg4, arg5);
 }
 
 export function DeleteTheme(arg1) {
@@ -210,6 +218,10 @@ export function GetLimitRange(arg1, arg2, arg3) {
   return window['go']['backend']['App']['GetLimitRange'](arg1, arg2, arg3);
 }
 
+export function GetLogScopeContainers(arg1, arg2) {
+  return window['go']['backend']['App']['GetLogScopeContainers'](arg1, arg2);
+}
+
 export function GetLogs() {
   return window['go']['backend']['App']['GetLogs']();
 }
@@ -230,8 +242,8 @@ export function GetNode(arg1, arg2) {
   return window['go']['backend']['App']['GetNode'](arg1, arg2);
 }
 
-export function GetObjectYAML(arg1, arg2, arg3, arg4) {
-  return window['go']['backend']['App']['GetObjectYAML'](arg1, arg2, arg3, arg4);
+export function GetObjectYAMLByGVK(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['backend']['App']['GetObjectYAMLByGVK'](arg1, arg2, arg3, arg4, arg5);
 }
 
 export function GetPersistentVolume(arg1, arg2) {
@@ -378,6 +390,10 @@ export function OpenKubeconfigSearchPathDialog() {
   return window['go']['backend']['App']['OpenKubeconfigSearchPathDialog']();
 }
 
+export function QueryPermissions(arg1) {
+  return window['go']['backend']['App']['QueryPermissions'](arg1);
+}
+
 export function ReorderThemes(arg1) {
   return window['go']['backend']['App']['ReorderThemes'](arg1);
 }
@@ -460,6 +476,26 @@ export function SetKubeconfigSearchPaths(arg1) {
 
 export function SetLinkColor(arg1, arg2) {
   return window['go']['backend']['App']['SetLinkColor'](arg1, arg2);
+}
+
+export function SetLogAPITimestampFormat(arg1) {
+  return window['go']['backend']['App']['SetLogAPITimestampFormat'](arg1);
+}
+
+export function SetLogAPITimestampUseLocalTimeZone(arg1) {
+  return window['go']['backend']['App']['SetLogAPITimestampUseLocalTimeZone'](arg1);
+}
+
+export function SetLogBufferMaxSize(arg1) {
+  return window['go']['backend']['App']['SetLogBufferMaxSize'](arg1);
+}
+
+export function SetLogTargetGlobalLimit(arg1) {
+  return window['go']['backend']['App']['SetLogTargetGlobalLimit'](arg1);
+}
+
+export function SetLogTargetPerScopeLimit(arg1) {
+  return window['go']['backend']['App']['SetLogTargetPerScopeLimit'](arg1);
 }
 
 export function SetLogsPanelVisible(arg1) {

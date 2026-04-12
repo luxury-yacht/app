@@ -10,16 +10,33 @@ import {
   getAutoRefreshEnabled,
   getBackgroundRefreshEnabled,
   getGridTablePersistenceMode,
+  getLogApiTimestampFormat,
+  getLogApiTimestampUseLocalTimeZone,
+  getLogBufferMaxSize,
+  getLogTargetGlobalLimit,
+  getLogTargetPerScopeLimit,
   getMetricsRefreshIntervalMs,
   getPaletteTint,
   getThemePreference,
   getUseShortResourceNames,
   hydrateAppPreferences,
+  LOG_BUFFER_DEFAULT_SIZE,
+  LOG_BUFFER_MAX_SIZE,
+  LOG_BUFFER_MIN_SIZE,
+  LOG_TARGET_GLOBAL_DEFAULT,
+  LOG_TARGET_GLOBAL_MAX,
+  LOG_TARGET_PER_SCOPE_DEFAULT,
+  LOG_TARGET_PER_SCOPE_MAX,
   resetAppPreferencesCacheForTesting,
   setAccentColor,
   setAutoRefreshEnabled,
   setBackgroundRefreshEnabled,
   setGridTablePersistenceMode,
+  setLogApiTimestampFormat,
+  setLogApiTimestampUseLocalTimeZone,
+  setLogBufferMaxSize,
+  setLogTargetGlobalLimit,
+  setLogTargetPerScopeLimit,
   setPaletteTint,
   setThemePreference,
   setUseShortResourceNames,
@@ -29,12 +46,23 @@ const appMocks = vi.hoisted(() => ({
   GetAppSettings: vi.fn(),
   SetTheme: vi.fn(),
   SetUseShortResourceNames: vi.fn(),
+  SetLogAPITimestampFormat: vi.fn(),
+  SetLogAPITimestampUseLocalTimeZone: vi.fn(),
+  SetLogBufferMaxSize: vi.fn(),
+  SetLogTargetPerScopeLimit: vi.fn(),
+  SetLogTargetGlobalLimit: vi.fn(),
 }));
 
 vi.mock('@wailsjs/go/backend/App', () => ({
   GetAppSettings: (...args: unknown[]) => appMocks.GetAppSettings(...args),
   SetTheme: (...args: unknown[]) => appMocks.SetTheme(...args),
   SetUseShortResourceNames: (...args: unknown[]) => appMocks.SetUseShortResourceNames(...args),
+  SetLogAPITimestampFormat: (...args: unknown[]) => appMocks.SetLogAPITimestampFormat(...args),
+  SetLogAPITimestampUseLocalTimeZone: (...args: unknown[]) =>
+    appMocks.SetLogAPITimestampUseLocalTimeZone(...args),
+  SetLogBufferMaxSize: (...args: unknown[]) => appMocks.SetLogBufferMaxSize(...args),
+  SetLogTargetPerScopeLimit: (...args: unknown[]) => appMocks.SetLogTargetPerScopeLimit(...args),
+  SetLogTargetGlobalLimit: (...args: unknown[]) => appMocks.SetLogTargetGlobalLimit(...args),
 }));
 
 describe('appPreferences', () => {
@@ -43,12 +71,27 @@ describe('appPreferences', () => {
     appMocks.GetAppSettings.mockReset();
     appMocks.SetTheme.mockReset();
     appMocks.SetUseShortResourceNames.mockReset();
+    appMocks.SetLogAPITimestampFormat.mockReset();
+    appMocks.SetLogAPITimestampUseLocalTimeZone.mockReset();
+    appMocks.SetLogBufferMaxSize.mockReset();
+    appMocks.SetLogTargetPerScopeLimit.mockReset();
+    appMocks.SetLogTargetGlobalLimit.mockReset();
+    appMocks.SetLogAPITimestampFormat.mockResolvedValue(undefined);
+    appMocks.SetLogAPITimestampUseLocalTimeZone.mockResolvedValue(undefined);
+    appMocks.SetLogBufferMaxSize.mockResolvedValue(undefined);
+    appMocks.SetLogTargetPerScopeLimit.mockResolvedValue(undefined);
+    appMocks.SetLogTargetGlobalLimit.mockResolvedValue(undefined);
     (window as any).go = {
       backend: {
         App: {
           SetAutoRefreshEnabled: vi.fn().mockResolvedValue(undefined),
           SetBackgroundRefreshEnabled: vi.fn().mockResolvedValue(undefined),
           SetGridTablePersistenceMode: vi.fn().mockResolvedValue(undefined),
+          SetLogAPITimestampFormat: vi.fn().mockResolvedValue(undefined),
+          SetLogAPITimestampUseLocalTimeZone: vi.fn().mockResolvedValue(undefined),
+          SetLogBufferMaxSize: vi.fn().mockResolvedValue(undefined),
+          SetLogTargetPerScopeLimit: vi.fn().mockResolvedValue(undefined),
+          SetLogTargetGlobalLimit: vi.fn().mockResolvedValue(undefined),
           SetPaletteTint: vi.fn().mockResolvedValue(undefined),
           SetAccentColor: vi.fn().mockResolvedValue(undefined),
         },
@@ -67,6 +110,10 @@ describe('appPreferences', () => {
       autoRefreshEnabled: false,
       refreshBackgroundClustersEnabled: false,
       metricsRefreshIntervalMs: 7000,
+      logApiTimestampFormat: 'HH:mm:ss.SSS',
+      logApiTimestampUseLocalTimeZone: true,
+      logTargetPerScopeLimit: 144,
+      logTargetGlobalLimit: 180,
       gridTablePersistenceMode: 'namespaced',
       paletteHueLight: 220,
       paletteSaturationLight: 50,
@@ -85,6 +132,10 @@ describe('appPreferences', () => {
     expect(getAutoRefreshEnabled()).toBe(false);
     expect(getBackgroundRefreshEnabled()).toBe(false);
     expect(getMetricsRefreshIntervalMs()).toBe(7000);
+    expect(getLogApiTimestampFormat()).toBe('HH:mm:ss.SSS');
+    expect(getLogApiTimestampUseLocalTimeZone()).toBe(true);
+    expect(getLogTargetPerScopeLimit()).toBe(144);
+    expect(getLogTargetGlobalLimit()).toBe(180);
     expect(getGridTablePersistenceMode()).toBe('namespaced');
     expect(getPaletteTint('light')).toEqual({ hue: 220, saturation: 50, brightness: -15 });
     expect(getPaletteTint('dark')).toEqual({ hue: 120, saturation: 40, brightness: 10 });
@@ -105,6 +156,17 @@ describe('appPreferences', () => {
     expect(getAccentColor('dark')).toBe('');
   });
 
+  it('normalizes an invalid persisted log API timestamp format back to the default', async () => {
+    appMocks.GetAppSettings.mockResolvedValue({
+      theme: 'system',
+      logApiTimestampFormat: 'foo',
+    });
+
+    await hydrateAppPreferences({ force: true });
+
+    expect(getLogApiTimestampFormat()).toBe('YYYY-MM-DDTHH:mm:ss.SSS[Z]');
+  });
+
   it('persists preference updates and updates the cache', async () => {
     appMocks.GetAppSettings.mockResolvedValue({
       theme: 'system',
@@ -119,12 +181,16 @@ describe('appPreferences', () => {
 
     await setThemePreference('dark');
     await setUseShortResourceNames(true);
+    setLogApiTimestampFormat('HH:mm:ss.SSS');
+    setLogApiTimestampUseLocalTimeZone(true);
     setAutoRefreshEnabled(false);
     setBackgroundRefreshEnabled(false);
     setGridTablePersistenceMode('namespaced');
 
     expect(appMocks.SetTheme).toHaveBeenCalledWith('dark');
     expect(appMocks.SetUseShortResourceNames).toHaveBeenCalledWith(true);
+    expect(appMocks.SetLogAPITimestampFormat).toHaveBeenCalledWith('HH:mm:ss.SSS');
+    expect(appMocks.SetLogAPITimestampUseLocalTimeZone).toHaveBeenCalledWith(true);
     expect((window as any).go.backend.App.SetAutoRefreshEnabled).toHaveBeenCalledWith(false);
     expect((window as any).go.backend.App.SetBackgroundRefreshEnabled).toHaveBeenCalledWith(false);
     expect((window as any).go.backend.App.SetGridTablePersistenceMode).toHaveBeenCalledWith(
@@ -133,10 +199,20 @@ describe('appPreferences', () => {
 
     expect(getThemePreference()).toBe('dark');
     expect(getUseShortResourceNames()).toBe(true);
+    expect(getLogApiTimestampFormat()).toBe('HH:mm:ss.SSS');
+    expect(getLogApiTimestampUseLocalTimeZone()).toBe(true);
     expect(getAutoRefreshEnabled()).toBe(false);
     expect(getBackgroundRefreshEnabled()).toBe(false);
     expect(getMetricsRefreshIntervalMs()).toBe(6000);
     expect(getGridTablePersistenceMode()).toBe('namespaced');
+  });
+
+  it('rejects invalid log API timestamp formats before persisting', async () => {
+    appMocks.GetAppSettings.mockResolvedValue({ theme: 'system' });
+    await hydrateAppPreferences({ force: true });
+
+    expect(() => setLogApiTimestampFormat('foo')).toThrow(/Unsupported token/);
+    expect(appMocks.SetLogAPITimestampFormat).not.toHaveBeenCalled();
   });
 
   it('setPaletteTint updates cache and calls backend for the specified theme', async () => {
@@ -208,5 +284,124 @@ describe('appPreferences', () => {
     setAccentColor('light', '');
     expect(getAccentColor('light')).toBe('');
     expect(getAccentColor('dark')).toBe('#f59e0b');
+  });
+
+  // ---------------------------------------------------------------------
+  // Log buffer size — user-configurable via Advanced → Pod Logs. Must
+  // hydrate from the backend payload, round-trip through the setter, and
+  // clamp out-of-range values in the normalizer.
+  // ---------------------------------------------------------------------
+
+  it('hydrates logBufferMaxSize from backend settings', async () => {
+    appMocks.GetAppSettings.mockResolvedValue({
+      theme: 'system',
+      logBufferMaxSize: 2500,
+    });
+    await hydrateAppPreferences({ force: true });
+    expect(getLogBufferMaxSize()).toBe(2500);
+  });
+
+  it('defaults logBufferMaxSize when the backend payload is missing the field', async () => {
+    appMocks.GetAppSettings.mockResolvedValue({ theme: 'system' });
+    await hydrateAppPreferences({ force: true });
+    expect(getLogBufferMaxSize()).toBe(LOG_BUFFER_DEFAULT_SIZE);
+  });
+
+  it('defaults logBufferMaxSize when the backend payload reports zero (unset)', async () => {
+    appMocks.GetAppSettings.mockResolvedValue({ theme: 'system', logBufferMaxSize: 0 });
+    await hydrateAppPreferences({ force: true });
+    expect(getLogBufferMaxSize()).toBe(LOG_BUFFER_DEFAULT_SIZE);
+  });
+
+  it('setLogBufferMaxSize round-trips an in-range value through the cache and backend', async () => {
+    appMocks.GetAppSettings.mockResolvedValue({
+      theme: 'system',
+      logBufferMaxSize: LOG_BUFFER_DEFAULT_SIZE,
+    });
+    await hydrateAppPreferences({ force: true });
+
+    setLogBufferMaxSize(3500);
+    expect(getLogBufferMaxSize()).toBe(3500);
+    // Allow the fire-and-forget persist promise to resolve before we
+    // assert the backend call landed. The setter calls the imported
+    // Wails binding (mocked via appMocks), not window.go.backend.App
+    // directly — the window object is only read to check that the
+    // runtime is present.
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    expect(appMocks.SetLogBufferMaxSize).toHaveBeenCalledWith(3500);
+  });
+
+  it('setLogBufferMaxSize clamps values below the minimum', async () => {
+    appMocks.GetAppSettings.mockResolvedValue({ theme: 'system' });
+    await hydrateAppPreferences({ force: true });
+    setLogBufferMaxSize(1);
+    expect(getLogBufferMaxSize()).toBe(LOG_BUFFER_MIN_SIZE);
+  });
+
+  it('setLogBufferMaxSize clamps values above the maximum', async () => {
+    appMocks.GetAppSettings.mockResolvedValue({ theme: 'system' });
+    await hydrateAppPreferences({ force: true });
+    setLogBufferMaxSize(999_999);
+    expect(getLogBufferMaxSize()).toBe(LOG_BUFFER_MAX_SIZE);
+  });
+
+  it('hydrates log target limits from backend settings', async () => {
+    appMocks.GetAppSettings.mockResolvedValue({
+      theme: 'system',
+      logTargetPerScopeLimit: 144,
+      logTargetGlobalLimit: 180,
+    });
+    await hydrateAppPreferences({ force: true });
+    expect(getLogTargetPerScopeLimit()).toBe(144);
+    expect(getLogTargetGlobalLimit()).toBe(180);
+  });
+
+  it('defaults log target limits when the backend payload is missing the fields', async () => {
+    appMocks.GetAppSettings.mockResolvedValue({ theme: 'system' });
+    await hydrateAppPreferences({ force: true });
+    expect(getLogTargetPerScopeLimit()).toBe(LOG_TARGET_PER_SCOPE_DEFAULT);
+    expect(getLogTargetGlobalLimit()).toBe(LOG_TARGET_GLOBAL_DEFAULT);
+  });
+
+  it('setLogTargetPerScopeLimit round-trips an in-range value through the cache and backend', async () => {
+    appMocks.GetAppSettings.mockResolvedValue({ theme: 'system' });
+    await hydrateAppPreferences({ force: true });
+
+    setLogTargetPerScopeLimit(144);
+    expect(getLogTargetPerScopeLimit()).toBe(144);
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    expect(appMocks.SetLogTargetPerScopeLimit).toHaveBeenCalledWith(144);
+  });
+
+  it('setLogTargetPerScopeLimit defaults zero and clamps large values', async () => {
+    appMocks.GetAppSettings.mockResolvedValue({ theme: 'system' });
+    await hydrateAppPreferences({ force: true });
+
+    setLogTargetPerScopeLimit(0);
+    expect(getLogTargetPerScopeLimit()).toBe(LOG_TARGET_PER_SCOPE_DEFAULT);
+
+    setLogTargetPerScopeLimit(999_999);
+    expect(getLogTargetPerScopeLimit()).toBe(LOG_TARGET_PER_SCOPE_MAX);
+  });
+
+  it('setLogTargetGlobalLimit round-trips an in-range value through the cache and backend', async () => {
+    appMocks.GetAppSettings.mockResolvedValue({ theme: 'system' });
+    await hydrateAppPreferences({ force: true });
+
+    setLogTargetGlobalLimit(180);
+    expect(getLogTargetGlobalLimit()).toBe(180);
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    expect(appMocks.SetLogTargetGlobalLimit).toHaveBeenCalledWith(180);
+  });
+
+  it('setLogTargetGlobalLimit defaults zero and clamps large values', async () => {
+    appMocks.GetAppSettings.mockResolvedValue({ theme: 'system' });
+    await hydrateAppPreferences({ force: true });
+
+    setLogTargetGlobalLimit(0);
+    expect(getLogTargetGlobalLimit()).toBe(LOG_TARGET_GLOBAL_DEFAULT);
+
+    setLogTargetGlobalLimit(999_999);
+    expect(getLogTargetGlobalLimit()).toBe(LOG_TARGET_GLOBAL_MAX);
   });
 });

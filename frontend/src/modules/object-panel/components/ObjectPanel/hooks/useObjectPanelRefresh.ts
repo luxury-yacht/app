@@ -81,8 +81,14 @@ export const useObjectPanelRefresh = ({
     const enabled = isOpen && !resourceDeleted;
     refreshOrchestrator.setScopedDomainEnabled('object-details', detailScope, enabled);
     return () => {
-      refreshOrchestrator.setScopedDomainEnabled('object-details', detailScope, false);
-      refreshOrchestrator.resetScopedDomain('object-details', detailScope);
+      // Stop refreshing this scope but preserve the cached snapshot so a
+      // remount (e.g. cluster switch round-trip) renders instantly from
+      // cache while the next fetch catches up. Eviction happens in
+      // ObjectPanelStateContext.closePanel when the user actually closes
+      // the panel — see Tier 1 of the responsiveness fix.
+      refreshOrchestrator.setScopedDomainEnabled('object-details', detailScope, false, {
+        preserveState: true,
+      });
     };
   }, [detailScope, isOpen, resourceDeleted]);
 

@@ -5,11 +5,13 @@
  * Handles rendering and interactions for the namespace feature.
  */
 
+import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
 import { getPodStatusSeverity } from '@/utils/podStatusSeverity';
 import { getPermissionKey, useUserPermissions } from '@/core/capabilities';
 import { eventBus } from '@/core/events';
 import { useClusterMetricsAvailability } from '@/core/refresh/hooks/useMetricsAvailability';
+import type { IconBarItem } from '@shared/components/IconBar/IconBar';
 import { useNamespaceGridTablePersistence } from '@modules/namespace/hooks/useNamespaceGridTablePersistence';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useTableSort } from '@/hooks/useTableSort';
@@ -46,6 +48,22 @@ interface PodsViewProps {
 }
 
 const HEALTHY_POD_STATUSES = new Set(['running', 'succeeded', 'completed']);
+
+const UnhealthyPodsIcon: React.FC<{ width?: number; height?: number }> = ({
+  width = 16,
+  height = 16,
+}) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill="currentColor"
+    width={width}
+    height={height}
+    aria-hidden="true"
+  >
+    <path d="M12 2L1 21H23L12 2ZM13 18H11V16H13V18ZM13 14H11V9H13V14Z" />
+  </svg>
+);
 
 const parseReadyCounts = (value?: string | null): { ready: number; total: number } | null => {
   if (!value) {
@@ -120,6 +138,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
           kind: 'Pod',
           name: pod.name,
           namespace: pod.namespace,
+          ...resolveBuiltinGroupVersion('Pod'),
           clusterId: pod.clusterId ?? undefined,
           clusterName: pod.clusterName ?? undefined,
         });
@@ -136,6 +155,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
           kind: pod.ownerKind,
           name: pod.ownerName,
           namespace: pod.namespace,
+          ...resolveBuiltinGroupVersion(pod.ownerKind),
           clusterId: pod.clusterId ?? undefined,
           clusterName: pod.clusterName ?? undefined,
         });
@@ -151,6 +171,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
         openWithObject({
           kind: 'Node',
           name: pod.node,
+          ...resolveBuiltinGroupVersion('Node'),
           clusterId: pod.clusterId ?? undefined,
           clusterName: pod.clusterName ?? undefined,
         });
@@ -372,19 +393,21 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       if (!deleteConfirm.pod) {
         return;
       }
+      const pod = deleteConfirm.pod;
 
       try {
-        await DeletePod(
-          deleteConfirm.pod.clusterId ?? '',
-          deleteConfirm.pod.namespace,
-          deleteConfirm.pod.name
-        );
+        // Multi-cluster rule (AGENTS.md): every backend command must
+        // carry a resolved clusterId.
+        if (!pod.clusterId) {
+          throw new Error(`Cannot delete Pod/${pod.name}: clusterId is missing`);
+        }
+        await DeletePod(pod.clusterId, pod.namespace, pod.name);
         setDeleteConfirm({ show: false, pod: null });
       } catch (err) {
         errorHandler.handle(err, {
           action: 'delete',
           kind: 'Pod',
-          name: deleteConfirm.pod.name,
+          name: pod.name,
         });
         setDeleteConfirm({ show: false, pod: null });
       }
@@ -401,21 +424,25 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       setShowUnhealthyOnly((prev) => !prev);
     }, []);
 
-    const unhealthyToggle =
-      unhealthyCount > 0 ? (
-        <button
-          type="button"
-          className="button generic"
-          onClick={handleToggleUnhealthy}
-          aria-pressed={showUnhealthyOnly}
-          data-gridtable-shortcut-optout="true"
-          data-testid="pods-unhealthy-toggle"
-        >
-          {showUnhealthyOnly
-            ? 'Show All'
-            : `Show Unhealthy (${unhealthyCount}/${sortedData.length})`}
-        </button>
-      ) : null;
+    const unhealthyToggle = useMemo<IconBarItem | null>(() => {
+      if (unhealthyCount <= 0) {
+        return null;
+      }
+
+      const title = showUnhealthyOnly
+        ? 'Show all pods'
+        : `Show unhealthy pods (${unhealthyCount}/${sortedData.length})`;
+
+      return {
+        type: 'toggle',
+        id: 'pods-unhealthy-toggle',
+        icon: <UnhealthyPodsIcon />,
+        active: showUnhealthyOnly,
+        onClick: handleToggleUnhealthy,
+        title,
+        ariaLabel: title,
+      };
+    }, [handleToggleUnhealthy, showUnhealthyOnly, sortedData.length, unhealthyCount]);
 
     useEffect(() => {
       if (typeof window === 'undefined' || !selectedClusterId) {
@@ -484,11 +511,20 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
           handlers: {
             onOpen: () => handlePodOpen(pod),
             onPortForward: () => {
+              // Multi-cluster rule (AGENTS.md): port-forward is a backend
+              // command and must carry a resolved clusterId.
+              if (!pod.clusterId) {
+                errorHandler.handle(
+                  new Error(`Cannot open port-forward for Pod/${pod.name}: clusterId is missing`),
+                  { action: 'portForward', kind: 'Pod', name: pod.name }
+                );
+                return;
+              }
               setPortForwardTarget({
                 kind: 'Pod',
                 name: pod.name,
                 namespace: pod.namespace,
-                clusterId: pod.clusterId ?? '',
+                clusterId: pod.clusterId,
                 clusterName: pod.clusterName ?? '',
                 ports: [],
               });
@@ -546,8 +582,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
               onReset: resetPersistedState,
               options: {
                 showNamespaceDropdown: showNamespaceFilter,
-                customActions: unhealthyToggle,
-                preActions: [favToggle],
+                preActions: [favToggle, unhealthyToggle].filter(Boolean) as IconBarItem[],
               },
             }}
             virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}

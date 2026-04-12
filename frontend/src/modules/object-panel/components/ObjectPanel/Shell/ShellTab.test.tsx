@@ -116,6 +116,13 @@ vi.mock('@core/contexts/ZoomContext', () => ({
   useZoom: () => ({ zoomLevel: 100 }),
 }));
 
+vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
+  useKubeconfig: vi.fn(() => ({
+    selectedClusterId: 'cluster-a',
+    selectedClusterIds: ['cluster-a'],
+  })),
+}));
+
 vi.mock('@shared/components/dropdowns/Dropdown', () => ({
   Dropdown: ({
     value = '',

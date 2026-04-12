@@ -8,7 +8,14 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
-import { afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+
+vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
+  useKubeconfig: vi.fn(() => ({
+    selectedClusterId: 'cluster-a',
+    selectedClusterIds: ['cluster-a'],
+  })),
+}));
 
 import {
   useDockablePanelState,

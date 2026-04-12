@@ -57,6 +57,7 @@ type Config struct {
 	ObjectCatalogEnabled    func() bool                             // Function to check if the object catalog is enabled.
 	ObjectCatalogService    func() *objectcatalog.Service           // Function to get the object catalog service.
 	ObjectCatalogNamespaces func() []snapshot.CatalogNamespaceGroup // Function to get the object catalog namespaces.
+	LogTargetLimiter        *logstream.GlobalTargetLimiter          // Shared global limiter for log stream targets.
 	ClusterID               string                                  // stable identifier for cluster-scoped keys
 	ClusterName             string                                  // display name for cluster in payloads
 }

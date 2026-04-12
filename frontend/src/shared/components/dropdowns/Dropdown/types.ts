@@ -36,6 +36,7 @@ export interface DropdownProps {
   multiple?: boolean;
   searchable?: boolean;
   clearable?: boolean;
+  showBulkActions?: boolean;
 
   // Customization props
   renderOption?: (option: DropdownOption, isSelected: boolean) => ReactNode;

@@ -32,8 +32,7 @@ const {
   };
 
   const capabilityMockBag = {
-    registerNamespaceCapabilityDefinitions: vi.fn(),
-    evaluateNamespacePermissions: vi.fn(),
+    queryNamespacePermissions: vi.fn(),
   };
 
   const storeMockBag = {
@@ -85,8 +84,7 @@ vi.mock('@/core/capabilities', async () => {
   const actual = await vi.importActual<typeof import('@/core/capabilities')>('@/core/capabilities');
   return {
     ...actual,
-    registerNamespaceCapabilityDefinitions: capabilityMocks.registerNamespaceCapabilityDefinitions,
-    evaluateNamespacePermissions: capabilityMocks.evaluateNamespacePermissions,
+    queryNamespacePermissions: capabilityMocks.queryNamespacePermissions,
   };
 });
 
@@ -223,14 +221,7 @@ describe('NamespaceResourcesProvider', () => {
       `${testClusterId}|namespace:team-a`,
       expect.objectContaining({ isManual: true })
     );
-    expect(capabilityMocks.registerNamespaceCapabilityDefinitions).toHaveBeenCalledWith(
-      'team-a',
-      expect.any(Array),
-      expect.objectContaining({ ttlMs: expect.any(Number), clusterId: testClusterId })
-    );
-    expect(capabilityMocks.evaluateNamespacePermissions).toHaveBeenCalledWith('team-a', {
-      clusterId: testClusterId,
-    });
+    expect(capabilityMocks.queryNamespacePermissions).toHaveBeenCalledWith('team-a', testClusterId);
     expect(contextRef.current?.config.data).toEqual([]);
   });
 
@@ -376,6 +367,94 @@ describe('NamespaceResourcesProvider', () => {
     expect(invokedDomains).toContain('namespace-config');
   });
 
+  it('cancels pending load timer when namespace changes rapidly', async () => {
+    vi.useFakeTimers();
+
+    scopedStates[`${testClusterId}|namespace:ns-1`] = {
+      status: 'idle',
+      data: null,
+      error: null,
+      lastUpdated: null,
+    };
+
+    await render(
+      <NamespaceResourcesProvider namespace="ns-1" activeView="workloads">
+        <TestConsumer />
+      </NamespaceResourcesProvider>
+    );
+
+    orchestrator.fetchScopedDomain.mockClear();
+
+    // Switch namespace before the 100ms timer fires
+    scopedStates[`${testClusterId}|namespace:ns-2`] = {
+      status: 'idle',
+      data: null,
+      error: null,
+      lastUpdated: null,
+    };
+
+    await render(
+      <NamespaceResourcesProvider namespace="ns-2" activeView="workloads">
+        <TestConsumer />
+      </NamespaceResourcesProvider>
+    );
+
+    // Advance past both timers
+    await act(async () => {
+      vi.advanceTimersByTime(200);
+      await Promise.resolve();
+    });
+
+    // Only ns-2 should have been loaded — ns-1's timer should have been cancelled
+    const fetchedScopes = orchestrator.fetchScopedDomain.mock.calls.map(
+      (call: unknown[]) => call[1]
+    );
+    expect(fetchedScopes).not.toContain(`${testClusterId}|namespace:ns-1`);
+    expect(fetchedScopes).toContain(`${testClusterId}|namespace:ns-2`);
+  });
+
+  it('cancels pending load timer on unmount', async () => {
+    vi.useFakeTimers();
+
+    scopedStates[`${testClusterId}|namespace:ephemeral`] = {
+      status: 'idle',
+      data: null,
+      error: null,
+      lastUpdated: null,
+    };
+
+    await render(
+      <NamespaceResourcesProvider namespace="ephemeral" activeView="config">
+        <TestConsumer />
+      </NamespaceResourcesProvider>
+    );
+
+    orchestrator.fetchScopedDomain.mockClear();
+
+    // Unmount before the 100ms timer fires
+    await act(async () => {
+      root.unmount();
+      await Promise.resolve();
+    });
+
+    // Advance past the timer
+    await act(async () => {
+      vi.advanceTimersByTime(200);
+      await Promise.resolve();
+    });
+
+    // No fetch should have fired for the unmounted namespace
+    const fetchedScopes = orchestrator.fetchScopedDomain.mock.calls.map(
+      (call: unknown[]) => call[1]
+    );
+    expect(fetchedScopes).not.toContain(`${testClusterId}|namespace:ephemeral`);
+
+    // Re-create root for afterEach cleanup
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = ReactDOM.createRoot(container);
+  });
+
   it('forces capability refresh when a resource refresh is invoked', async () => {
     vi.useFakeTimers();
 
@@ -387,9 +466,8 @@ describe('NamespaceResourcesProvider', () => {
 
     await runTimers();
 
-    const forcedRefresh = capabilityMocks.registerNamespaceCapabilityDefinitions.mock.calls.some(
-      ([, , options]) => options?.force === true
-    );
-    expect(forcedRefresh).toBe(true);
+    // The new permission system calls queryNamespacePermissions on mount.
+    // registerNamespaceCapabilityDefinitions is now a no-op.
+    expect(capabilityMocks.queryNamespacePermissions).toHaveBeenCalledWith('alpha', testClusterId);
   });
 });

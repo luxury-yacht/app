@@ -1,13 +1,29 @@
 /**
- * frontend/src/components/dockable/DockableTabBar.tsx
+ * frontend/src/ui/dockable/DockableTabBar.tsx
  *
- * Renders a horizontal tab bar for switching between panels that share
- * a dock position (tab group).
+ * Horizontal tab bar for switching between panels that share a dock
+ * position (tab group). This is a thin wrapper over the shared `<Tabs>`
+ * component from `@shared/components/tabs`. It adds:
+ *
+ *  • a per-tab drag source via `useTabDragSourceFactory`, emitting
+ *    `{ kind: 'dockable-tab', panelId, sourceGroupId }` payloads;
+ *  • a bar-level drop target via `useTabDropTarget` that forwards to the
+ *    provider's `movePanel` adapter (same-group reorders AND cross-group
+ *    moves use a single call);
+ *  • a `getDragImage` callback that writes the dragged tab's label and
+ *    kind class into the provider-owned `.dockable-tab-drag-preview`
+ *    element immediately before `setDragImage` takes a snapshot.
+ *
+ * Overflow scrolling, keyboard navigation, the drop-position indicator,
+ * and close-button rendering are all owned by the shared `<Tabs>`
+ * component; no custom DOM measurement or scroll math lives in this file.
  */
 
-import React, { useCallback, useRef, useLayoutEffect, useState, useEffect } from 'react';
-import { useDockablePanelContext } from './DockablePanelProvider';
+import React, { type HTMLAttributes } from 'react';
+import { Tabs, type TabDescriptor } from '@shared/components/tabs';
+import { useTabDragSourceFactory, useTabDropTarget } from '@shared/components/tabs/dragCoordinator';
 import { CloseIcon } from '@shared/components/icons/MenuIcons';
+import { useDockablePanelContext } from './DockablePanelProvider';
 
 /** Describes a single tab in the bar. */
 export interface TabInfo {
@@ -24,390 +40,127 @@ interface DockableTabBarProps {
   activeTab: string | null;
   /** Called when the user clicks a tab to switch to it. */
   onTabClick: (panelId: string) => void;
-  /** Identifier for the tab group (e.g. "bottom", "right"). */
+  /** Identifier for the tab group (e.g. "bottom", "right", "floating-1"). */
   groupKey: string;
 }
 
-/** Horizontal pixels to move the tab strip for each overflow control click. */
-/** Minimum tab-strip width required before overflow controls are useful. */
-const MIN_OVERFLOW_HINT_WIDTH = 2;
-
-/**
- * DockableTabBar -- horizontal tab strip for grouped dockable panels.
- * Drag lifecycle and drop commit behavior are provider-owned.
- */
 export const DockableTabBar: React.FC<DockableTabBarProps> = ({
   tabs,
   activeTab,
   onTabClick,
   groupKey,
 }) => {
-  const { dragState, startTabDrag, registerTabBarElement, closeTab } = useDockablePanelContext();
-  const barRef = useRef<HTMLDivElement>(null);
-  const previousTabIdsRef = useRef<string[]>(tabs.map((tab) => tab.panelId));
-  const previousActiveTabRef = useRef<string | null>(activeTab ?? null);
-  const [overflowHint, setOverflowHint] = useState({
-    left: false,
-    right: false,
-    leftCount: 0,
-    rightCount: 0,
+  // Only `dragPreviewRef` (for getDragImage) and `movePanel` (for onDrop)
+  // plus `closeTab` (for per-tab close) are read from the provider.
+  const { dragPreviewRef, movePanel, closeTab } = useDockablePanelContext();
+
+  // One useContext call for the whole bar regardless of tab count. The
+  // returned factory is a plain closure that's legal to call inside .map().
+  const makeDragSource = useTabDragSourceFactory();
+
+  const { ref: dropRef, dropInsertIndex } = useTabDropTarget({
+    accepts: ['dockable-tab'],
+    onDrop: (payload, _event, insertIndex) => {
+      // Forward to the provider's movePanel adapter. The adapter
+      // dispatches internally between reorderTabInGroup (same group)
+      // and movePanelBetweenGroups (cross group) based on whether
+      // source and target groups match.
+      movePanel(payload.panelId, payload.sourceGroupId, groupKey, insertIndex);
+    },
   });
 
-  useEffect(() => {
-    registerTabBarElement(groupKey, barRef.current);
-    return () => {
-      registerTabBarElement(groupKey, null);
+  const tabDescriptors: TabDescriptor[] = tabs.map((tab) => {
+    const dragProps = makeDragSource(
+      { kind: 'dockable-tab', panelId: tab.panelId, sourceGroupId: groupKey },
+      {
+        getDragImage: () => {
+          const previewEl = dragPreviewRef.current;
+          if (!previewEl) return null;
+          const labelEl = previewEl.querySelector<HTMLSpanElement>(
+            '.dockable-tab-drag-preview__label'
+          );
+          if (labelEl) {
+            labelEl.textContent = tab.title;
+          }
+          const kindEl = previewEl.querySelector<HTMLSpanElement>(
+            '.dockable-tab-drag-preview__kind'
+          );
+          if (kindEl) {
+            kindEl.className = `dockable-tab-drag-preview__kind kind-badge${
+              tab.kindClass ? ` ${tab.kindClass}` : ''
+            }`;
+          }
+          return { element: previewEl, offsetX: 14, offsetY: 16 };
+        },
+      }
+    );
+    return {
+      id: tab.panelId,
+      label: tab.title,
+      leading: tab.kindClass ? (
+        <span
+          className={`dockable-tab__kind-indicator kind-badge ${tab.kindClass}`}
+          aria-hidden="true"
+        />
+      ) : undefined,
+      closeIcon: <CloseIcon width={10} height={10} />,
+      closeAriaLabel: `Close ${tab.title}`,
+      onClose: () => closeTab(tab.panelId),
+      extraProps: {
+        'data-panel-id': tab.panelId,
+        ...dragProps,
+      } as HTMLAttributes<HTMLElement>,
     };
-  }, [groupKey, registerTabBarElement]);
+  });
 
-  // Keep edge indicators in sync so users can tell when tab strip is scrollable.
-  const updateOverflowHint = useCallback(() => {
-    const bar = barRef.current;
-    if (!bar) {
-      return;
-    }
-    if (bar.clientWidth <= 0 || bar.clientWidth < MIN_OVERFLOW_HINT_WIDTH) {
-      setOverflowHint((prev) =>
-        prev.left || prev.right ? { left: false, right: false, leftCount: 0, rightCount: 0 } : prev
-      );
-      return;
-    }
-    const maxScrollLeft = Math.max(0, bar.scrollWidth - bar.clientWidth);
-    const hasOverflow = maxScrollLeft > 1;
-    const hasLeft = hasOverflow && bar.scrollLeft > 1;
-    const hasRight = hasOverflow && bar.scrollLeft < maxScrollLeft - 1;
-
-    // Count fully hidden tabs on each side (partially visible tabs are not counted).
-    // The sticky overflow indicators (position: sticky) visually cover part of the
-    // scrollable area, so a tab whose entire width falls behind an indicator is
-    // considered fully hidden even though it's still inside the scroll viewport.
-    let leftCount = 0;
-    let rightCount = 0;
-    if (hasLeft || hasRight) {
-      const indicatorSize = parseFloat(
-        getComputedStyle(bar.parentElement ?? bar).getPropertyValue(
-          '--dockable-tab-overflow-indicator-size'
-        ) || '32'
-      );
-      const tabEls = bar.querySelectorAll<HTMLElement>('[role="tab"]');
-      const barLeft = bar.scrollLeft;
-      const barRight = barLeft + bar.clientWidth;
-      const leftEdge = hasLeft ? barLeft + indicatorSize : barLeft;
-      const rightEdge = hasRight ? barRight - indicatorSize : barRight;
-      for (const tab of tabEls) {
-        const tabLeft = tab.offsetLeft;
-        const tabRight = tabLeft + tab.offsetWidth;
-        if (tabRight <= leftEdge + 1) leftCount++;
-        if (tabLeft >= rightEdge - 1) rightCount++;
-      }
-    }
-
-    const next = { left: hasLeft, right: hasRight, leftCount, rightCount };
-    setOverflowHint((prev) =>
-      prev.left === next.left &&
-      prev.right === next.right &&
-      prev.leftCount === next.leftCount &&
-      prev.rightCount === next.rightCount
-        ? prev
-        : next
-    );
-  }, []);
-
-  useLayoutEffect(() => {
-    updateOverflowHint();
-    const bar = barRef.current;
-    if (!bar) {
-      return;
-    }
-    const handleScroll = () => updateOverflowHint();
-    const handleResize = () => updateOverflowHint();
-
-    bar.addEventListener('scroll', handleScroll, { passive: true });
-    window.addEventListener('resize', handleResize);
-    // Track element size changes (e.g. panel resize) that do not emit window resize.
-    const resizeObserver =
-      typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => updateOverflowHint()) : null;
-    resizeObserver?.observe(bar);
-    return () => {
-      bar.removeEventListener('scroll', handleScroll);
-      window.removeEventListener('resize', handleResize);
-      resizeObserver?.disconnect();
-    };
-  }, [tabs, updateOverflowHint]);
-
-  useLayoutEffect(() => {
-    const bar = barRef.current;
-    const nextTabIds = tabs.map((tab) => tab.panelId);
-    const previousTabIds = previousTabIdsRef.current;
-    const previousActiveTab = previousActiveTabRef.current;
-    const addedTabIds = nextTabIds.filter((panelId) => !previousTabIds.includes(panelId));
-    let tabToRevealId: string | null = null;
-
-    if (addedTabIds.length > 0) {
-      // Prefer revealing the active tab when it's newly added; otherwise reveal
-      // the last added tab so new tabs are always visible on creation.
-      tabToRevealId =
-        activeTab && addedTabIds.includes(activeTab)
-          ? activeTab
-          : addedTabIds[addedTabIds.length - 1];
-    } else if (activeTab && previousActiveTab !== activeTab && nextTabIds.includes(activeTab)) {
-      // Existing tab selection changed -- ensure the newly active tab is visible.
-      tabToRevealId = activeTab;
-    }
-
-    previousTabIdsRef.current = nextTabIds;
-    previousActiveTabRef.current = activeTab ?? null;
-
-    if (!bar || !tabToRevealId) {
-      return;
-    }
-
-    const tabToReveal = Array.from(bar.querySelectorAll<HTMLElement>('.tab-item')).find(
-      (tabElement) => tabElement.dataset.panelId === tabToRevealId
-    );
-    if (!tabToReveal) {
-      return;
-    }
-
-    // scrollIntoView doesn't account for the sticky overflow indicators, so
-    // calculate the scroll position manually to clear the indicator width.
-    const indicatorSize = parseFloat(
-      getComputedStyle(bar.parentElement ?? bar).getPropertyValue(
-        '--dockable-tab-overflow-indicator-size'
-      ) || '32'
-    );
-    const elLeft = tabToReveal.offsetLeft;
-    const elRight = elLeft + tabToReveal.offsetWidth;
-    const barLeft = bar.scrollLeft;
-    const barRight = barLeft + bar.clientWidth;
-
-    if (elRight > barRight - indicatorSize) {
-      const target = elRight - bar.clientWidth + indicatorSize;
-      typeof bar.scrollTo === 'function'
-        ? bar.scrollTo({ left: target })
-        : (bar.scrollLeft = target);
-    } else if (elLeft < barLeft + indicatorSize) {
-      const target = Math.max(0, elLeft - indicatorSize);
-      typeof bar.scrollTo === 'function'
-        ? bar.scrollTo({ left: target })
-        : (bar.scrollLeft = target);
-    }
-    updateOverflowHint();
-  }, [tabs, activeTab, updateOverflowHint]);
-
-  // Allow header-drag from empty tab-bar space, but keep tab mousedown
-  // isolated so tab drag/reorder doesn't also trigger panel header drag.
-  const handleBarMouseDown = useCallback((e: React.MouseEvent) => {
-    const target = e.target instanceof HTMLElement ? e.target : null;
-    if (target?.closest('.tab-item') || target?.closest('.dockable-tab-bar__overflow-indicator')) {
-      e.stopPropagation();
-    }
-  }, []);
-
-  // Keep overflow controls clickable without triggering header drag handlers.
-  const handleOverflowMouseDown = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-  }, []);
-
-  // Scroll one tab at a time. direction: -1 = left, 1 = right.
-  // Accounts for the sticky overflow indicator width (32px) that visually
-  // covers part of the scrollable area.
-  const scrollToNextTab = useCallback((direction: -1 | 1) => {
-    const bar = barRef.current;
-    if (!bar) return;
-
-    const tabEls = bar.querySelectorAll<HTMLElement>('[role="tab"]');
-    if (tabEls.length === 0) return;
-
-    // The sticky overflow indicators cover part of the visible area.
-    const indicatorSize = parseFloat(
-      getComputedStyle(bar.parentElement ?? bar).getPropertyValue(
-        '--dockable-tab-overflow-indicator-size'
-      ) || '32'
-    );
-
-    const barLeft = bar.scrollLeft;
-    const barRight = barLeft + bar.clientWidth;
-    let target: HTMLElement | null = null;
-
-    if (direction === 1) {
-      // Find the first tab whose right edge is hidden (past visible area
-      // minus the right indicator).
-      for (const tab of tabEls) {
-        if (tab.offsetLeft + tab.offsetWidth > barRight - indicatorSize + 1) {
-          target = tab;
-          break;
-        }
-      }
-    } else {
-      // Find the last tab whose left edge is hidden (before visible area
-      // plus the left indicator).
-      for (let i = tabEls.length - 1; i >= 0; i--) {
-        if (tabEls[i].offsetLeft < barLeft + indicatorSize - 1) {
-          target = tabEls[i];
-          break;
-        }
-      }
-    }
-
+  // Stop mousedown from bubbling to the DockablePanelHeader ONLY when the
+  // click landed on an interactive child of the strip (a tab or an overflow
+  // chevron). Clicks on the bar's empty gutter past the last tab must still
+  // bubble, because that gutter is the only remaining drag handle on a
+  // floating panel's header — the tab-bar shell is `flex: 1` and fills the
+  // header, so without this carve-out users lose the ability to drag the
+  // floating panel by its header.
+  //
+  // DO NOT DELETE. The panel header attaches `onMouseDown={handleHeaderMouseDown}`,
+  // which starts a floating-panel move drag for `panelState.position === 'floating'`
+  // (useDockablePanelDragResize.ts:handleMouseDownDrag) and, critically, calls
+  // `e.preventDefault()` on the native mousedown. preventDefault on mousedown
+  // suppresses the browser's subsequent `dragstart` event, which means the
+  // shared drag coordinator never sees the tab drag and the user sees the
+  // floating panel move when they try to drag a tab.
+  //
+  // The previous hand-rolled DockableTabBar had an equivalent
+  // `handleBarMouseDown` for the same reason. Task 8 of the shared-tabs
+  // migration deleted it with the comment "no longer needed (shared component
+  // doesn't fire mousedown on drag)", which was wrong — tabs ARE native
+  // mousedown+mouseup+click sources, and propagation to the header still
+  // triggers the header's drag handler.
+  const stopMouseDownOnInteractive = React.useCallback((event: React.MouseEvent) => {
+    const target = event.target as HTMLElement | null;
     if (!target) return;
-
-    // Scroll so the target tab clears the sticky indicator on the arrival side.
-    const scrollTarget =
-      direction === 1
-        ? target.offsetLeft + target.offsetWidth - bar.clientWidth + indicatorSize
-        : target.offsetLeft - indicatorSize;
-
-    bar.scrollTo({ left: Math.max(0, scrollTarget), behavior: 'smooth' });
-    // The scroll event listener on the bar will update overflow hints automatically.
+    // [role="tab"] catches the tab root divs (which carry the drag source).
+    // button.tab-strip__overflow-indicator catches the scroll chevrons.
+    // button.tab-item__close is nested inside [role="tab"] so the first
+    // selector already covers it.
+    if (target.closest('[role="tab"], .tab-strip__overflow-indicator')) {
+      event.stopPropagation();
+    }
   }, []);
-
-  const handleScrollLeftClick = useCallback(
-    (e: React.MouseEvent) => {
-      e.stopPropagation();
-      scrollToNextTab(-1);
-    },
-    [scrollToNextTab]
-  );
-
-  const handleScrollRightClick = useCallback(
-    (e: React.MouseEvent) => {
-      e.stopPropagation();
-      scrollToNextTab(1);
-    },
-    [scrollToNextTab]
-  );
-
-  const handleTabMouseDown = useCallback(
-    (e: React.MouseEvent, panelId: string) => {
-      // Only handle left mouse button.
-      if (e.button !== 0) {
-        return;
-      }
-      // Prevent the header's drag handler from firing when clicking a tab.
-      e.stopPropagation();
-      startTabDrag(panelId, groupKey, e.clientX, e.clientY);
-    },
-    [groupKey, startTabDrag]
-  );
-
-  // Handle close button click — removes the tab from the group.
-  const handleCloseTab = useCallback(
-    (e: React.MouseEvent, panelId: string) => {
-      e.stopPropagation();
-      closeTab(panelId);
-    },
-    [closeTab]
-  );
-
-  // Determine if this bar is the current drop target.
-  const isDropTarget = dragState?.dropTarget?.groupKey === groupKey;
-  const dropInsertIndex = isDropTarget ? dragState!.dropTarget!.insertIndex : -1;
-  const isDragActive = Boolean(dragState);
-
-  const barClassName = `tab-strip dockable-tab-bar${isDragActive ? ' dockable-tab-bar--drag-active' : ''}${isDropTarget ? ' dockable-tab-bar--drop-target' : ''}${overflowHint.left ? ' dockable-tab-bar--has-left-overflow' : ''}${overflowHint.right ? ' dockable-tab-bar--has-right-overflow' : ''}`;
 
   return (
-    <div className="dockable-tab-bar-shell">
-      <div
-        ref={barRef}
-        className={barClassName}
-        data-group-key={groupKey}
-        onMouseDown={handleBarMouseDown}
-        role="tablist"
-        aria-label={`${groupKey} panel tabs`}
-      >
-        {overflowHint.left && (
-          <button
-            type="button"
-            className="dockable-tab-bar__overflow-indicator dockable-tab-bar__overflow-indicator--left"
-            aria-label={`Scroll tabs left${overflowHint.leftCount > 0 ? ` (${overflowHint.leftCount} hidden)` : ''}`}
-            onMouseDown={handleOverflowMouseDown}
-            onClick={handleScrollLeftClick}
-          >
-            {overflowHint.leftCount > 0 && (
-              <span className="dockable-tab-bar__overflow-count">{overflowHint.leftCount}</span>
-            )}
-            <svg
-              className="dockable-tab-bar__overflow-icon"
-              viewBox="0 0 12 12"
-              fill="none"
-              aria-hidden="true"
-            >
-              <path d="M7.5 2.5L4.5 6L7.5 9.5" stroke="currentColor" strokeWidth="1.6" />
-            </svg>
-          </button>
-        )}
-        {tabs.map((tab, index) => {
-          const isActive = tab.panelId === activeTab;
-          const isDragging = dragState?.panelId === tab.panelId;
-          const showIndicatorBefore = isDropTarget && dropInsertIndex === index;
-
-          return (
-            <React.Fragment key={tab.panelId}>
-              {showIndicatorBefore && (
-                <div className="dockable-tab-bar__drop-indicator" data-testid="drop-indicator" />
-              )}
-              <div
-                className={`tab-item tab-item--closeable dockable-tab${isActive ? ' tab-item--active dockable-tab--active' : ''}${isDragging ? ' dockable-tab--dragging' : ''}`}
-                role="tab"
-                aria-selected={isActive}
-                data-panel-id={tab.panelId}
-                onClick={() => onTabClick(tab.panelId)}
-                onMouseDown={(e) => handleTabMouseDown(e, tab.panelId)}
-              >
-                {tab.kindClass ? (
-                  <span
-                    className={`dockable-tab__kind-indicator kind-badge ${tab.kindClass}`}
-                    aria-hidden="true"
-                  />
-                ) : null}
-                <span className="dockable-tab__label">{tab.title}</span>
-                <span
-                  role="button"
-                  tabIndex={0}
-                  className="tab-item__close dockable-tab__close"
-                  onClick={(e) => handleCloseTab(e, tab.panelId)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.stopPropagation();
-                      closeTab(tab.panelId);
-                    }
-                  }}
-                  aria-label={`Close ${tab.title}`}
-                  title={`Close ${tab.title}`}
-                >
-                  <CloseIcon width={10} height={10} />
-                </span>
-              </div>
-            </React.Fragment>
-          );
-        })}
-        {isDropTarget && dropInsertIndex === tabs.length && (
-          <div className="dockable-tab-bar__drop-indicator" data-testid="drop-indicator" />
-        )}
-        {overflowHint.right && (
-          <button
-            type="button"
-            className="dockable-tab-bar__overflow-indicator dockable-tab-bar__overflow-indicator--right"
-            aria-label={`Scroll tabs right${overflowHint.rightCount > 0 ? ` (${overflowHint.rightCount} hidden)` : ''}`}
-            onMouseDown={handleOverflowMouseDown}
-            onClick={handleScrollRightClick}
-          >
-            <svg
-              className="dockable-tab-bar__overflow-icon"
-              viewBox="0 0 12 12"
-              fill="none"
-              aria-hidden="true"
-            >
-              <path d="M4.5 2.5L7.5 6L4.5 9.5" stroke="currentColor" strokeWidth="1.6" />
-            </svg>
-            {overflowHint.rightCount > 0 && (
-              <span className="dockable-tab-bar__overflow-count">{overflowHint.rightCount}</span>
-            )}
-          </button>
-        )}
-      </div>
+    <div
+      ref={dropRef as (el: HTMLDivElement | null) => void}
+      className="dockable-tab-bar-shell"
+      onMouseDown={stopMouseDownOnInteractive}
+    >
+      <Tabs
+        aria-label="Object Tabs"
+        tabs={tabDescriptors}
+        activeId={activeTab}
+        onActivate={onTabClick}
+        dropInsertIndex={dropInsertIndex}
+        className="dockable-tab-bar"
+      />
     </div>
   );
 };

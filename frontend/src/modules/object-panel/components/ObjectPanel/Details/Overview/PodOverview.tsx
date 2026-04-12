@@ -9,6 +9,10 @@ import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceStatus } from '@shared/components/kubernetes/ResourceStatus';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
+import {
+  parseApiVersion,
+  resolveBuiltinGroupVersion,
+} from '@shared/constants/builtinGroupVersions';
 
 interface PodOverviewProps {
   name: string;
@@ -17,7 +21,7 @@ interface PodOverviewProps {
   node?: string;
   nodeIP?: string;
   podIP?: string;
-  owner?: string | { kind: string; name: string };
+  owner?: string | { kind: string; name: string; apiVersion?: string };
   status?: string;
   statusSeverity?: string;
   ready?: string;
@@ -82,6 +86,14 @@ export const PodOverview: React.FC<PodOverviewProps> = ({
               <ObjectPanelLink
                 objectRef={{
                   kind: owner.kind.toLowerCase(),
+                  // Prefer the apiVersion the OwnerReference explicitly
+                  // declared (correct for any kind, including CRD-as-Pod-
+                  // owner like Argo Rollout, KubeVirt VMI, Tekton TaskRun);
+                  // fall back to the built-in lookup only when the backend
+                  // somehow lacks one (legacy data without ownerApiVersion).
+                  ...(owner.apiVersion
+                    ? parseApiVersion(owner.apiVersion)
+                    : resolveBuiltinGroupVersion(owner.kind)),
                   name: owner.name,
                   namespace: namespace,
                   ...clusterMeta,
@@ -100,7 +112,12 @@ export const PodOverview: React.FC<PodOverviewProps> = ({
           label="Node"
           value={
             <ObjectPanelLink
-              objectRef={{ kind: 'node', name: node, ...clusterMeta }}
+              objectRef={{
+                kind: 'node',
+                ...resolveBuiltinGroupVersion('Node'),
+                name: node,
+                ...clusterMeta,
+              }}
               title="Click to view node"
             >
               {node}
@@ -137,6 +154,7 @@ export const PodOverview: React.FC<PodOverviewProps> = ({
             <ObjectPanelLink
               objectRef={{
                 kind: 'serviceaccount',
+                ...resolveBuiltinGroupVersion('ServiceAccount'),
                 name: serviceAccount,
                 namespace: namespace,
                 ...clusterMeta,

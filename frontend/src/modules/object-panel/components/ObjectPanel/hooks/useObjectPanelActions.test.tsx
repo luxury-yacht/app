@@ -9,7 +9,6 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 
 import { useObjectPanelActions } from './useObjectPanelActions';
 import type { PanelState, PanelObjectData } from '../types';
-import { WORKLOAD_KIND_API_NAMES } from '../constants';
 
 const restartMock = vi.fn();
 const deletePodMock = vi.fn();
@@ -22,7 +21,7 @@ vi.mock('@wailsjs/go/backend/App', () => ({
   RestartWorkload: (...args: unknown[]) => restartMock(...args),
   DeletePod: (...args: unknown[]) => deletePodMock(...args),
   DeleteHelmRelease: (...args: unknown[]) => deleteHelmMock(...args),
-  DeleteResource: (...args: unknown[]) => deleteResourceMock(...args),
+  DeleteResourceByGVK: (...args: unknown[]) => deleteResourceMock(...args),
   ScaleWorkload: (...args: unknown[]) => scaleMock(...args),
 }));
 
@@ -39,7 +38,6 @@ describe('useObjectPanelActions', () => {
   const fetchDetailsMock = vi.fn();
 
   const baseState = (): PanelState => ({
-    activeTab: 'details',
     actionLoading: false,
     actionError: null,
     scaleReplicas: 3,
@@ -69,7 +67,6 @@ describe('useObjectPanelActions', () => {
         dispatch: dispatchMock,
         close: closeMock,
         fetchResourceDetails: fetchDetailsMock,
-        workloadKindApiNames: WORKLOAD_KIND_API_NAMES,
         ...override,
       },
     };

@@ -858,7 +858,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
             <div className="shell-tab__controls-grid">
               {startDebugContainer ? (
                 <>
-                  <div className="shell-tab__control-label">Debug Image:</div>
+                  <div className="shell-tab__control-label">Debug Image</div>
                   <div className="shell-tab__control-input">
                     <Dropdown
                       options={debugImageOptions}
@@ -880,7 +880,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
                       />
                     )}
                   </div>
-                  <div className="shell-tab__control-label">Target Container:</div>
+                  <div className="shell-tab__control-label">Target Container</div>
                   <div className="shell-tab__control-input">
                     <Dropdown
                       options={containerOptions}
@@ -892,7 +892,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
                       ariaLabel="Target container for process sharing"
                     />
                   </div>
-                  <div className="shell-tab__control-label">Shell:</div>
+                  <div className="shell-tab__control-label">Shell</div>
                   <div className="shell-tab__control-input">
                     <Dropdown
                       options={shellOptions}
@@ -917,7 +917,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
                 </>
               ) : (
                 <>
-                  <div className="shell-tab__control-label">Container:</div>
+                  <div className="shell-tab__control-label">Container</div>
                   <div className="shell-tab__control-input">
                     <Dropdown
                       options={containerOptions}
@@ -929,7 +929,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
                       ariaLabel="Shell container selector"
                     />
                   </div>
-                  <div className="shell-tab__control-label">Shell:</div>
+                  <div className="shell-tab__control-label">Shell</div>
                   <div className="shell-tab__control-input">
                     <Dropdown
                       options={shellOptions}

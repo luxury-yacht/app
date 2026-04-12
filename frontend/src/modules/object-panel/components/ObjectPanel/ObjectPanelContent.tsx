@@ -4,9 +4,8 @@
  * Renders the content of the object panel based on the active tab and provided props.
  * Each tab is conditionally rendered and wrapped in an error boundary for robustness.
  */
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo } from 'react';
 import { refreshOrchestrator } from '@/core/refresh';
-import { buildClusterScope } from '@/core/refresh/clusterScope';
 import DetailsTab from '@modules/object-panel/components/ObjectPanel/Details/DetailsTab';
 import type { DetailsTabProps } from '@modules/object-panel/components/ObjectPanel/Details/DetailsTab';
 import LogViewer from '@modules/object-panel/components/ObjectPanel/Logs/LogViewer';
@@ -47,6 +46,16 @@ interface ObjectPanelContentProps {
   capabilities: ComputedCapabilities;
   capabilityReasons: CapabilityReasons;
   detailScope: string | null;
+  // eventsScope is computed once in getObjectPanelKind and threaded
+  // here so this component (full-cleanup lifecycle) and EventsTab
+  // (fetch + per-tab enable/disable) consume the same string. Used to
+  // be computed independently in two places, which created a drift bug.
+  eventsScope: string | null;
+  // logScope follows the same pattern as eventsScope: one source of
+  // truth in getObjectPanelKind, consumed by this component (cleanup)
+  // and LogViewer (actual streaming). They used to duplicate the
+  // string builder and could drift apart on kind casing.
+  logScope: string | null;
   helmScope: string | null;
   objectData: PanelObjectData | null;
   objectKind: string | null;
@@ -55,6 +64,13 @@ interface ObjectPanelContentProps {
   onClosePanel?: () => void;
   onRefreshDetails?: () => void;
   podsState: ObjectPanelPodsState;
+  /**
+   * Stable identifier for the owning ObjectPanel. Threaded down to
+   * LogViewer so it can key its prefs cache by panel — see
+   * logViewerPrefsCache.ts. Required for cluster-switch round-trips
+   * to restore autoScroll/textFilter/parsed view/etc.
+   */
+  panelId: string;
 }
 
 export function ObjectPanelContent({
@@ -64,6 +80,8 @@ export function ObjectPanelContent({
   capabilities,
   capabilityReasons,
   detailScope,
+  eventsScope,
+  logScope,
   helmScope,
   objectData,
   objectKind,
@@ -72,6 +90,7 @@ export function ObjectPanelContent({
   onClosePanel,
   onRefreshDetails,
   podsState,
+  panelId,
 }: ObjectPanelContentProps) {
   const showDetails = activeTab === 'details' && detailTabProps;
   const showLogs = activeTab === 'logs' && capabilities.hasLogs && objectData;
@@ -84,39 +103,18 @@ export function ObjectPanelContent({
   const showValues = activeTab === 'values';
   const showMaintenance = activeTab === 'maintenance' && objectKind === 'node';
 
-  // Build scoped domain scopes for object panel tabs.
-  const CLUSTER_SCOPE_SENTINEL = '__cluster__';
-  const scopeNamespace = useMemo(() => {
-    if (!objectData?.namespace || objectData.namespace.length === 0) {
-      return CLUSTER_SCOPE_SENTINEL;
-    }
-    return objectData.namespace;
-  }, [objectData?.namespace]);
-
-  // Events scope uses original-case kind (matches EventsTab convention).
-  const eventsScope = useMemo(() => {
-    if (!objectData?.name || !objectData?.kind) {
-      return null;
-    }
-    const rawScope = `${scopeNamespace}:${objectData.kind}:${objectData.name}`;
-    return buildClusterScope(objectData.clusterId ?? undefined, rawScope);
-  }, [objectData?.clusterId, objectData?.kind, objectData?.name, scopeNamespace]);
-
-  // Logs scope uses lowercase kind (matches LogViewer convention).
-  const logScope = useMemo(() => {
-    if (!objectData?.name || !objectData?.kind) {
-      return null;
-    }
-    const rawScope = `${scopeNamespace}:${objectData.kind.toLowerCase()}:${objectData.name}`;
-    return buildClusterScope(objectData.clusterId ?? undefined, rawScope);
-  }, [objectData?.clusterId, objectData?.kind, objectData?.name, scopeNamespace]);
+  // eventsScope and logScope are produced upstream by getObjectPanelKind
+  // and threaded in via props so the lifecycle effects below and the
+  // tabs that consume them (EventsTab, LogViewer) cannot disagree.
 
   // --- Scoped domain lifecycle for object panel tabs ---
-  // Managed here (rather than in each tab) so that switching tabs doesn't
-  // unmount the component and reset the scoped domain entry. Each tab still
-  // controls its own enable/disable via setScopedDomainEnabled, but passes
-  // preserveState so the store entry is retained. Full cleanup (reset) only
-  // happens here when the panel closes or the scope changes.
+  // On unmount we stop refreshing/streaming each scope but preserve its
+  // cached snapshot via { preserveState: true }. That way a remount caused
+  // by a cluster switch (or any other transient unmount) reads cached
+  // entries instantly and the user sees content without a reload spinner
+  // while the next refresh/stream catches up. The cache is only fully
+  // evicted when the user closes the panel — see
+  // ObjectPanelStateContext.closePanel.
 
   // object-events
   useEffect(() => {
@@ -124,8 +122,9 @@ export function ObjectPanelContent({
       return;
     }
     return () => {
-      refreshOrchestrator.setScopedDomainEnabled('object-events', eventsScope, false);
-      refreshOrchestrator.resetScopedDomain('object-events', eventsScope);
+      refreshOrchestrator.setScopedDomainEnabled('object-events', eventsScope, false, {
+        preserveState: true,
+      });
     };
   }, [eventsScope, isPanelOpen]);
 
@@ -135,8 +134,9 @@ export function ObjectPanelContent({
       return;
     }
     return () => {
-      refreshOrchestrator.setScopedDomainEnabled('object-yaml', detailScope, false);
-      refreshOrchestrator.resetScopedDomain('object-yaml', detailScope);
+      refreshOrchestrator.setScopedDomainEnabled('object-yaml', detailScope, false, {
+        preserveState: true,
+      });
     };
   }, [detailScope, isPanelOpen]);
 
@@ -146,8 +146,9 @@ export function ObjectPanelContent({
       return;
     }
     return () => {
-      refreshOrchestrator.setScopedDomainEnabled('object-helm-manifest', helmScope, false);
-      refreshOrchestrator.resetScopedDomain('object-helm-manifest', helmScope);
+      refreshOrchestrator.setScopedDomainEnabled('object-helm-manifest', helmScope, false, {
+        preserveState: true,
+      });
     };
   }, [helmScope, isPanelOpen]);
 
@@ -157,24 +158,44 @@ export function ObjectPanelContent({
       return;
     }
     return () => {
-      refreshOrchestrator.setScopedDomainEnabled('object-helm-values', helmScope, false);
-      refreshOrchestrator.resetScopedDomain('object-helm-values', helmScope);
+      refreshOrchestrator.setScopedDomainEnabled('object-helm-values', helmScope, false, {
+        preserveState: true,
+      });
     };
   }, [helmScope, isPanelOpen]);
 
-  // object-logs — LogViewer manages streaming start/stop with preserveState.
-  // This effect handles the full cleanup when the panel closes.
+  // object-logs — LogViewer manages streaming start/stop. The disable call
+  // here stops the underlying stream while keeping the buffered entries in
+  // place; on remount the cache renders immediately and a new stream
+  // resumes appending fresh entries.
   useEffect(() => {
     if (!logScope || !isPanelOpen) {
       return;
     }
     return () => {
-      refreshOrchestrator.stopStreamingDomain('object-logs', logScope, { reset: false });
-      refreshOrchestrator.setScopedDomainEnabled('object-logs', logScope, false);
-      refreshOrchestrator.resetScopedDomain('object-logs', logScope);
+      refreshOrchestrator.setScopedDomainEnabled('object-logs', logScope, false, {
+        preserveState: true,
+      });
     };
   }, [logScope, isPanelOpen]);
 
+  // Derive activePodNames from the nested pod arrays directly, not from
+  // `detailTabProps` itself. `detailTabProps` is a fresh object literal
+  // every render (built inline in ObjectPanel), so using it as a useMemo
+  // dep would invalidate the cache on every parent re-render — including
+  // every rAF tick of a panel drag/resize. That in turn would rebuild the
+  // `activePodNames` array on every frame and cascade re-renders through
+  // LogViewer, making the Logs tab janky during drag.
+  //
+  // The nested `*Details` objects, on the other hand, come from the
+  // memoized `detailsProps` in ObjectPanel and are referentially stable
+  // until the backend detail payload changes — so their `.pods` arrays
+  // are stable drag-safe deps.
+  const deploymentPods = detailTabProps?.deploymentDetails?.pods;
+  const daemonSetPods = detailTabProps?.daemonSetDetails?.pods;
+  const statefulSetPods = detailTabProps?.statefulSetDetails?.pods;
+  const jobPods = detailTabProps?.jobDetails?.pods;
+  const cronJobPods = detailTabProps?.cronJobDetails?.pods;
   const activePodNames = useMemo(() => {
     if (!detailTabProps) {
       return null;
@@ -191,27 +212,24 @@ export function ObjectPanelContent({
     };
 
     return (
-      extractPodNames(detailTabProps.deploymentDetails?.pods ?? undefined) ??
-      extractPodNames(detailTabProps.daemonSetDetails?.pods ?? undefined) ??
-      extractPodNames(detailTabProps.statefulSetDetails?.pods ?? undefined) ??
-      extractPodNames(detailTabProps.jobDetails?.pods ?? undefined) ??
-      extractPodNames(detailTabProps.cronJobDetails?.pods ?? undefined) ??
+      extractPodNames(deploymentPods ?? undefined) ??
+      extractPodNames(daemonSetPods ?? undefined) ??
+      extractPodNames(statefulSetPods ?? undefined) ??
+      extractPodNames(jobPods ?? undefined) ??
+      extractPodNames(cronJobPods ?? undefined) ??
       null
     );
-  }, [detailTabProps]);
+    // detailTabProps is only read for the null-check above; the actual
+    // pod arrays are the useMemo deps so drag-driven re-renders don't
+    // invalidate this.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deploymentPods, daemonSetPods, statefulSetPods, jobPods, cronJobPods]);
 
   const availableContainers = useMemo(() => {
     const containers =
       detailTabProps?.podDetails?.containers?.map((container) => container.name?.trim()) ?? [];
     return containers.filter((name): name is string => Boolean(name));
   }, [detailTabProps?.podDetails?.containers]);
-
-  // Preserve parsed view preference across LogViewer unmount/remount (tab switches).
-  // The ref survives because ObjectPanelContent stays mounted while the panel is open.
-  const parsedViewRef = useRef(false);
-  const handleParsedViewChange = useCallback((isParsed: boolean) => {
-    parsedViewRef.current = isParsed;
-  }, []);
 
   if (resourceDeleted) {
     return (
@@ -254,10 +272,10 @@ export function ObjectPanelContent({
             isActive={isPanelOpen && activeTab === 'logs'}
             resourceName={objectData?.name || ''}
             resourceKind={objectKind || 'pod'}
+            logScope={logScope}
             activePodNames={activePodNames}
             clusterId={objectData?.clusterId ?? null}
-            initialParsedView={parsedViewRef.current}
-            onParsedViewChange={handleParsedViewChange}
+            panelId={panelId}
           />
         </ErrorBoundary>
       )}
@@ -286,7 +304,11 @@ export function ObjectPanelContent({
           resetKeys={[objectData?.name ?? '', objectData?.namespace ?? ''].filter(Boolean)}
           fallback={(_, reset) => <TabErrorFallback tabName="Events" reset={reset} />}
         >
-          <EventsTab objectData={objectData} isActive={isPanelOpen && activeTab === 'events'} />
+          <EventsTab
+            objectData={objectData}
+            isActive={isPanelOpen && activeTab === 'events'}
+            eventsScope={eventsScope}
+          />
         </ErrorBoundary>
       )}
 

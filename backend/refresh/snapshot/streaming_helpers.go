@@ -160,26 +160,61 @@ func BuildNetworkPolicySummary(meta ClusterMeta, policy *networkingv1.NetworkPol
 	}
 }
 
-// BuildNamespaceCustomSummary builds a custom resource row payload that matches snapshot formatting.
+// BuildNamespaceCustomSummary builds a custom resource row payload that
+// matches snapshot formatting. This is the **single source of truth** for
+// namespace-scoped custom resource row construction — the full-snapshot
+// builder in namespace_custom.go calls this helper rather than inlining
+// its own construction, so the two paths cannot drift.
+//
+// crdName is the canonical Kubernetes CRD name (`<plural>.<group>`,
+// e.g. "dbinstances.rds.services.k8s.aws"). The snapshot path passes
+// `crd.Name` directly from the apiextensions object; the streaming path
+// computes it from the GVR (`gvr.Resource + "." + gvr.Group`). Used by
+// the frontend's CRD column to render a clickable cell that opens the
+// owning CRD in the object panel.
+//
+// defaultNamespace is used when the unstructured resource itself carries
+// an empty namespace (rare but possible for newly-created items or
+// malformed objects returned from list-with-all-namespaces queries). The
+// snapshot path passes its scope namespace; the streaming path passes
+// the resource's own namespace (so the fallback is a no-op for it unless
+// the resource is pathologically empty).
+//
+// Any new field added to NamespaceCustomSummary MUST be populated here.
 func BuildNamespaceCustomSummary(
 	meta ClusterMeta,
 	resource *unstructured.Unstructured,
 	apiGroup string,
+	apiVersion string,
 	kindFallback string,
+	crdName string,
+	defaultNamespace string,
 ) NamespaceCustomSummary {
 	if resource == nil {
-		return NamespaceCustomSummary{ClusterMeta: meta, Kind: kindFallback, APIGroup: apiGroup}
+		return NamespaceCustomSummary{
+			ClusterMeta: meta,
+			Kind:        kindFallback,
+			APIGroup:    apiGroup,
+			APIVersion:  apiVersion,
+			CRDName:     crdName,
+		}
 	}
 	kind := resource.GetKind()
 	if kind == "" {
 		kind = kindFallback
+	}
+	namespace := resource.GetNamespace()
+	if namespace == "" {
+		namespace = defaultNamespace
 	}
 	return NamespaceCustomSummary{
 		ClusterMeta: meta,
 		Kind:        kind,
 		Name:        resource.GetName(),
 		APIGroup:    apiGroup,
-		Namespace:   resource.GetNamespace(),
+		APIVersion:  apiVersion,
+		CRDName:     crdName,
+		Namespace:   namespace,
 		Age:         formatAge(resource.GetCreationTimestamp().Time),
 		Labels:      resource.GetLabels(),
 		Annotations: resource.GetAnnotations(),
@@ -298,32 +333,66 @@ func BuildClusterMutatingWebhookSummary(
 	}
 }
 
-// BuildClusterCRDSummary builds a CRD row payload that matches snapshot formatting.
+// BuildClusterCRDSummary builds a CRD row payload that matches snapshot
+// formatting. This is the **single source of truth** for CRD row
+// construction — the full-snapshot builder in cluster_crds.go calls this
+// helper rather than inlining its own construction, so the two paths
+// cannot drift. A previous bug had the streaming/incremental update path
+// emitting rows without StorageVersion / ExtraServedVersionCount, which
+// caused the Version column to "disappear" for rows that received a
+// streaming update. The convergence here is the structural fix.
+//
+// Any new field added to ClusterCRDEntry MUST be populated here.
 func BuildClusterCRDSummary(meta ClusterMeta, crd *apiextensionsv1.CustomResourceDefinition) ClusterCRDEntry {
 	if crd == nil {
 		return ClusterCRDEntry{ClusterMeta: meta, Kind: "CustomResourceDefinition"}
 	}
+	storageVersion, extraServed := crdVersionSummary(crd)
 	return ClusterCRDEntry{
-		ClusterMeta: meta,
-		Kind:        "CustomResourceDefinition",
-		Name:        crd.Name,
-		Group:       crd.Spec.Group,
-		Scope:       string(crd.Spec.Scope),
-		Details:     describeCRDVersions(crd),
-		Age:         formatAge(crd.CreationTimestamp.Time),
-		TypeAlias:   "CRD",
+		ClusterMeta:             meta,
+		Kind:                    "CustomResourceDefinition",
+		Name:                    crd.Name,
+		Group:                   crd.Spec.Group,
+		Scope:                   string(crd.Spec.Scope),
+		Details:                 describeCRDVersions(crd),
+		StorageVersion:          storageVersion,
+		ExtraServedVersionCount: extraServed,
+		Age:                     formatAge(crd.CreationTimestamp.Time),
+		TypeAlias:               "CRD",
 	}
 }
 
-// BuildClusterCustomSummary builds a cluster custom resource row payload that matches snapshot formatting.
+// BuildClusterCustomSummary builds a cluster custom resource row payload
+// that matches snapshot formatting. This is the **single source of truth**
+// for cluster-scoped custom resource row construction — the full-snapshot
+// builder in cluster_custom.go calls this helper rather than inlining its
+// own construction, so the two paths cannot drift.
+//
+// crdName is the canonical Kubernetes CRD name (`<plural>.<group>`,
+// e.g. "dbclusters.rds.services.k8s.aws"). The snapshot path passes
+// `crd.Name` directly from the apiextensions object; the streaming path
+// computes it from the GVR (`gvr.Resource + "." + gvr.Group`). Used by
+// the frontend's CRD column to render a clickable cell that opens the
+// owning CRD in the object panel. See NamespaceCustomSummary for the
+// same-shape field on the namespace-scoped variant.
+//
+// Any new field added to ClusterCustomSummary MUST be populated here.
 func BuildClusterCustomSummary(
 	meta ClusterMeta,
 	resource *unstructured.Unstructured,
 	apiGroup string,
+	apiVersion string,
 	kindFallback string,
+	crdName string,
 ) ClusterCustomSummary {
 	if resource == nil {
-		return ClusterCustomSummary{ClusterMeta: meta, Kind: kindFallback, APIGroup: apiGroup}
+		return ClusterCustomSummary{
+			ClusterMeta: meta,
+			Kind:        kindFallback,
+			APIGroup:    apiGroup,
+			APIVersion:  apiVersion,
+			CRDName:     crdName,
+		}
 	}
 	kind := resourceKind(resource, kindFallback)
 	return ClusterCustomSummary{
@@ -331,6 +400,8 @@ func BuildClusterCustomSummary(
 		Kind:        kind,
 		Name:        resource.GetName(),
 		APIGroup:    apiGroup,
+		APIVersion:  apiVersion,
+		CRDName:     crdName,
 		Age:         formatAge(resource.GetCreationTimestamp().Time),
 		Labels:      resource.GetLabels(),
 		Annotations: resource.GetAnnotations(),
@@ -354,21 +425,37 @@ func BuildEndpointSliceSummary(
 	}
 }
 
-// BuildHPASummary builds an HPA row payload that matches snapshot formatting.
+// BuildHPASummary builds an HPA row payload that matches snapshot
+// formatting. This is the **single source of truth** for HPA row
+// construction — the full-snapshot builder in namespace_autoscaling.go
+// calls this helper rather than inlining its own construction, so the
+// two paths cannot drift.
+//
+// TargetAPIVersion is the wire-form apiVersion of the scale target,
+// threaded verbatim from hpa.Spec.ScaleTargetRef.APIVersion. It is what
+// lets the frontend open CRD scale targets (Argo Rollout, KEDA, custom
+// workload operators) in the object panel with a fully-qualified GVK. A
+// previous bug had this path dropping the field on streaming updates
+// (which HPAs receive constantly as Status.CurrentReplicas changes),
+// which silently re-introduced the kind-only-objects bug for CRD scale
+// targets.
+//
+// Any new field added to AutoscalingSummary MUST be populated here.
 func BuildHPASummary(meta ClusterMeta, hpa *autoscalingv1.HorizontalPodAutoscaler) AutoscalingSummary {
 	if hpa == nil {
 		return AutoscalingSummary{ClusterMeta: meta, Kind: "HorizontalPodAutoscaler"}
 	}
 	return AutoscalingSummary{
-		ClusterMeta: meta,
-		Kind:        "HorizontalPodAutoscaler",
-		Name:        hpa.Name,
-		Namespace:   hpa.Namespace,
-		Target:      describeHPATarget(hpa),
-		Min:         minReplicas(hpa),
-		Max:         hpa.Spec.MaxReplicas,
-		Current:     hpa.Status.CurrentReplicas,
-		Age:         formatAge(hpa.CreationTimestamp.Time),
+		ClusterMeta:      meta,
+		Kind:             "HorizontalPodAutoscaler",
+		Name:             hpa.Name,
+		Namespace:        hpa.Namespace,
+		Target:           describeHPATarget(hpa),
+		TargetAPIVersion: hpa.Spec.ScaleTargetRef.APIVersion,
+		Min:              minReplicas(hpa),
+		Max:              hpa.Spec.MaxReplicas,
+		Current:          hpa.Status.CurrentReplicas,
+		Age:              formatAge(hpa.CreationTimestamp.Time),
 	}
 }
 

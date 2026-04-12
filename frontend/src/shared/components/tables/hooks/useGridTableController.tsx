@@ -47,7 +47,7 @@ import {
   DEFAULT_COLUMN_WIDTH,
   getTextContent,
   isFixedColumnKey,
-  isKindColumnKey,
+  isKindColumnKey as defaultIsKindColumnKey,
   normalizeKindClass,
   parseWidthInputToNumber,
 } from '@shared/components/tables/GridTable.utils';
@@ -195,6 +195,8 @@ export function useGridTableController<T>({
   loadingOverlay,
   filters,
   allowHorizontalOverflow = true,
+  disableCellNativeTitle = false,
+  isKindColumnKey = defaultIsKindColumnKey,
 }: GridTableProps<T>): GridTableControllerResult<T> {
   const sourceData = useMemo<T[]>(
     () => (Array.isArray(inputData) ? inputData : ([] as T[])),
@@ -922,6 +924,7 @@ export function useGridTableController<T>({
     handleContextMenu: handleCellContextMenu,
     getCachedCellContent,
     measureRowRef,
+    disableCellNativeTitle,
   });
 
   const { loadMoreSentinelRef, handleManualLoadMore, paginationStatus } = useGridTablePagination({

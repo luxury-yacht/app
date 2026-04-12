@@ -65,7 +65,7 @@ The frontend orchestrator starts/stops stream managers for live updates (fronten
 - The object catalog periodically syncs: discovery → descriptors → RBAC evaluation → collection (via informers or direct list) → in-memory summaries. It exposes query APIs and a streaming channel for the catalog SSE endpoint.
   See backend/objectcatalog/discovery.go, backend/objectcatalog/sync.go, backend/objectcatalog/collect.go, backend/objectcatalog/query.go, backend/objectcatalog/streaming.go.
 - Snapshot builders use live clients and cached data (including the catalog) to build responses on demand.
-- The resource stream manager registers `AddEventHandler` callbacks on shared informers and broadcasts typed row deltas to WebSocket subscribers using the same `Build*Summary` helpers as the snapshot builders (backend/refresh/snapshot/streaming_helpers.go), ensuring both paths produce identical row shapes.
+- The resource stream manager registers `AddEventHandler` callbacks on shared informers and broadcasts typed row deltas to WebSocket subscribers using the same `Build*Summary` helpers as the snapshot builders (backend/refresh/snapshot/streaming_helpers.go), ensuring both paths produce identical row shapes. See "Row builder single source of truth" below for the rule that enforces this and why it matters.
 
 ### Example - Cluster Overview
 
@@ -352,6 +352,20 @@ The backend builds one refresh subsystem per active cluster (`backend/app_refres
 - Streaming managers: resource stream (`backend/refresh/resourcestream`), event stream (`backend/refresh/eventstream`), log stream (`backend/refresh/logstream`).
 - A telemetry recorder (`backend/refresh/telemetry`).
 
+### Row builder single source of truth
+
+Every row type that appears in a snapshot payload (`PodSummary`, `ConfigSummary`, `NetworkSummary`, `ClusterCRDEntry`, `AutoscalingSummary`, `ClusterCustomSummary`, `NamespaceCustomSummary`, …) has **exactly one constructor** — a `Build*Summary` helper in `backend/refresh/snapshot/streaming_helpers.go`. The full-snapshot builders in `backend/refresh/snapshot/*.go` call the same helper rather than inlining their own `TypeName{...}` struct literal. This is deliberate and load-bearing.
+
+**The rule:** any new field added to a row type MUST be populated by the `Build*Summary` helper. Never construct the row inline in a snapshot builder.
+
+**Why:** the snapshot builder and the streaming update path are two independent entry points that both produce rows of the same type. If they construct the row independently (two literals in two files), a new field added to the type will only be populated by whichever one the author remembers to update. The other path will emit rows with the field at its zero value, and every row that happens to be rebuilt via that path (e.g. after an informer event) will lose the field. This is how the "CRD version column disappears after a refresh" and "HPA scale target apiVersion silently drops on every status update" bug classes get introduced — the snapshot emits the right data at first paint, then streaming updates overwrite each row with a partial version.
+
+The convergence pattern (snapshot builder delegates to streaming helper) makes the bug class structurally impossible. There's only one place to forget.
+
+**Regression guards:** each helper with a critical threaded field has a matching `TestBuild*SummaryPopulatesAllFields` test in `backend/refresh/snapshot/streaming_helpers_test.go` that asserts the field is populated. These tests carry a doc comment calling out the "any new field added to this struct MUST be asserted here" rule — the test is as much a place to add a new assertion as it is a verifier of existing behavior.
+
+**Exceptions:** none. `PodSummary` has an internal `buildPodSummary` helper that `BuildPodSummary` delegates to, which is fine — it's still a single path. `WorkloadSummary` is built by `NamespaceWorkloadsBuilder`'s internal methods, which the streaming helper also uses. `NodeSummary` goes through `BuildNodeSnapshot`. All of these are single-source-of-truth even if the helper isn't literally in `streaming_helpers.go`.
+
 ### Response cache
 
 The response cache (`backend/response_cache.go`) is a separate in-memory cache for object detail panel data: object details, YAML content, and Helm manifest/values. It has a configurable TTL (`ResponseCacheTTL = 10s`) and a max-entries cap.
@@ -493,11 +507,20 @@ When adding a new domain, update:
 4. `frontend/src/core/refresh/components/diagnostics/diagnosticsPanelConfig.ts`.
 5. Backend snapshot builders in `backend/refresh/snapshot`.
 6. Backend domain registration in `backend/refresh/system/registrations.go`.
+7. **Extract row construction into a `Build*Summary` helper** in `backend/refresh/snapshot/streaming_helpers.go`. The snapshot builder from step 5 calls this helper; don't inline the struct literal. Add a regression test alongside the existing `TestBuild*SummaryPopulatesAllFields` tests in `streaming_helpers_test.go`. See "Row builder single source of truth" above for the why.
 
 If adding a streaming domain:
 
-7. Register the stream handler in `backend/refresh/system/streams.go`.
-8. For resource-stream domains, add informer event handlers in `backend/refresh/resourcestream/manager.go`.
-9. For SSE domains, implement a stream handler similar to `catalog_stream.go` or `eventstream/handler.go`.
+8. Register the stream handler in `backend/refresh/system/streams.go`.
+9. For resource-stream domains, add informer event handlers in `backend/refresh/resourcestream/manager.go`. Use the same `Build*Summary` helper as the snapshot path — that's what makes the dual-path drift bug class impossible.
+10. For SSE domains, implement a stream handler similar to `catalog_stream.go` or `eventstream/handler.go`.
+
+When adding a new **field** to an existing row type:
+
+- Add it to the Go struct in `backend/refresh/snapshot/*.go`.
+- Populate it in the `Build*Summary` helper in `streaming_helpers.go` (not in the snapshot builder's inline construction — that path should delegate to the helper).
+- Extend the matching `TestBuild*SummaryPopulatesAllFields` test to assert the new field.
+- Add the field to the matching frontend TypeScript interface in `frontend/src/core/refresh/types.ts`.
+- Thread it through any frontend mapping in the resources contexts (e.g. `NsResourcesContext`, `ClusterResourcesContext`).
 
 Always include cluster metadata in snapshot payloads and ensure scopes are cluster-prefixed for multi-cluster safety.

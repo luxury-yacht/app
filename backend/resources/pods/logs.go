@@ -8,7 +8,6 @@
 package pods
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"io"
@@ -16,6 +15,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/linescanner"
+	"github.com/luxury-yacht/app/backend/internal/podlogs"
+	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/resources/types"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -32,27 +34,65 @@ func (s *Service) LogFetcher(req types.LogFetchRequest) types.LogFetchResponse {
 		return types.LogFetchResponse{Error: "kubernetes client not initialized"}
 	}
 
-	if req.Namespace == "" {
-		return types.LogFetchResponse{Error: "namespace is required"}
-	}
-
 	if req.TailLines <= 0 {
 		req.TailLines = 1000
 	}
 
-	pods, err := s.resolveTargetPods(req)
+	lineFilter, err := podlogs.NewLineFilter(strings.TrimSpace(req.Include), strings.TrimSpace(req.Exclude))
+	if err != nil {
+		return types.LogFetchResponse{Error: fmt.Sprintf("invalid log filter: %v", err)}
+	}
+	podNameFilter, err := podlogs.NewPodNameFilter(strings.TrimSpace(req.PodInclude), strings.TrimSpace(req.PodExclude))
+	if err != nil {
+		return types.LogFetchResponse{Error: fmt.Sprintf("invalid pod filter: %v", err)}
+	}
+	selection := podlogs.ParseScopeSelection(req.SelectedFilters)
+	containerState, err := podlogs.ParseContainerStateFilter(req.ContainerState)
+	if err != nil {
+		return types.LogFetchResponse{Error: fmt.Sprintf("invalid container state filter: %v", err)}
+	}
+
+	pods, err := s.resolveTargetPodObjects(req, podNameFilter, selection)
 	if err != nil {
 		return types.LogFetchResponse{Error: err.Error()}
 	}
+	targets, totalTargets := podlogs.SelectTargets(
+		pods,
+		podlogs.ContainerSelectionOptions{
+			Filter:           req.Container,
+			IncludeInit:      boolValueOrDefault(req.IncludeInit, true),
+			IncludeEphemeral: boolValueOrDefault(req.IncludeEphemeral, true),
+			StateFilter:      containerState,
+			Selection:        selection,
+		},
+		podlogs.GetPerScopeTargetLimit(),
+	)
+	warnings := podlogs.BuildTargetLimitWarnings(len(targets), totalTargets)
 
 	var allEntries []types.PodLogEntry
-	for _, podName := range pods {
-		entries, err := s.fetchPodLogs(req.Namespace, podName, req.Container, req.TailLines, req.Previous, req.SinceSeconds)
+	var podErrors []error
+	for _, target := range targets {
+		entries, err := s.fetchContainerLogs(
+			target.Namespace,
+			target.PodName,
+			target.Container.Name,
+			target.Container.IsInit,
+			target.Container.IsEphemeral,
+			req.TailLines,
+			req.Previous,
+			req.SinceSeconds,
+			lineFilter,
+		)
 		if err != nil {
-			s.logWarn(fmt.Sprintf("Failed to fetch logs for pod %s: %v", podName, err))
+			s.logWarn(fmt.Sprintf("Failed to fetch logs for container %s/%s: %v", target.PodName, target.Container.Name, err))
+			podErrors = append(podErrors, fmt.Errorf("pod %s container %s: %w", target.PodName, target.Container.Name, err))
 			continue
 		}
 		allEntries = append(allEntries, entries...)
+	}
+
+	if len(allEntries) == 0 && len(podErrors) > 0 {
+		return types.LogFetchResponse{Error: summarizeLogFetchErrors("failed to fetch logs", podErrors)}
 	}
 
 	sort.Slice(allEntries, func(i, j int) bool {
@@ -70,7 +110,7 @@ func (s *Service) LogFetcher(req types.LogFetchRequest) types.LogFetchResponse {
 		return i < j
 	})
 
-	return types.LogFetchResponse{Entries: allEntries}
+	return types.LogFetchResponse{Entries: allEntries, Warnings: warnings}
 }
 
 // PodContainers returns container names (including init containers) for the specified pod.
@@ -85,29 +125,179 @@ func (s *Service) PodContainers(namespace, podName string) ([]string, error) {
 	}
 
 	var containers []string
-	for _, c := range pod.Spec.InitContainers {
-		containers = append(containers, c.Name+" (init)")
-	}
-	for _, c := range pod.Spec.Containers {
-		containers = append(containers, c.Name)
-	}
-	for _, c := range pod.Spec.EphemeralContainers {
-		containers = append(containers, c.Name+" (debug)")
+	for _, container := range podlogs.EnumerateContainers(pod, "") {
+		containers = append(containers, container.DisplayName())
 	}
 	return containers, nil
 }
 
-func (s *Service) resolveTargetPods(req types.LogFetchRequest) ([]string, error) {
-	if req.WorkloadName != "" && req.WorkloadKind != "" {
-		return s.workloadPods(req.Namespace, req.WorkloadName, req.WorkloadKind)
+// LogScopeContainers returns the unique display names for all containers addressed by the scope.
+func (s *Service) LogScopeContainers(scope string) ([]string, error) {
+	if s.deps.KubernetesClient == nil {
+		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
-	if req.PodName != "" {
-		return []string{req.PodName}, nil
+
+	pods, err := s.resolveTargetPodObjects(types.LogFetchRequest{Scope: scope}, podlogs.PodNameFilter{}, podlogs.ScopeSelection{})
+	if err != nil {
+		return nil, err
 	}
-	return nil, fmt.Errorf("either workload or pod must be specified")
+
+	seen := make(map[string]struct{})
+	containers := make([]string, 0)
+	for _, pod := range pods {
+		if pod == nil {
+			continue
+		}
+		for _, container := range podlogs.EnumerateContainers(pod, "") {
+			displayName := container.DisplayName()
+			if _, ok := seen[displayName]; ok {
+				continue
+			}
+			seen[displayName] = struct{}{}
+			containers = append(containers, displayName)
+		}
+	}
+
+	sort.Strings(containers)
+	return containers, nil
 }
 
-func (s *Service) workloadPods(namespace, workloadName, workloadKind string) ([]string, error) {
+type resolvedLogTarget struct {
+	Namespace string
+	Kind      string
+	Name      string
+	PodName   string
+}
+
+func (s *Service) resolveLogTarget(req types.LogFetchRequest) (resolvedLogTarget, error) {
+	if strings.TrimSpace(req.Scope) != "" {
+		identity, err := refresh.ParseObjectScope(req.Scope)
+		if err != nil {
+			return resolvedLogTarget{}, err
+		}
+		if strings.TrimSpace(identity.GVK.Version) == "" {
+			return resolvedLogTarget{}, fmt.Errorf("logs require object scopes to include apiVersion")
+		}
+		if identity.Namespace == "" {
+			return resolvedLogTarget{}, fmt.Errorf("logs require a namespaced object scope")
+		}
+		kind := strings.ToLower(strings.TrimSpace(identity.GVK.Kind))
+		if kind == "" {
+			return resolvedLogTarget{}, fmt.Errorf("object kind missing in scope %q", req.Scope)
+		}
+		target := resolvedLogTarget{
+			Namespace: identity.Namespace,
+			Kind:      kind,
+			Name:      strings.TrimSpace(identity.Name),
+		}
+		if target.Name == "" {
+			return resolvedLogTarget{}, fmt.Errorf("object name missing in scope %q", req.Scope)
+		}
+		if target.Kind == "pod" {
+			target.PodName = target.Name
+		}
+		return target, nil
+	}
+
+	if req.Namespace == "" {
+		return resolvedLogTarget{}, fmt.Errorf("namespace is required")
+	}
+
+	if req.WorkloadName != "" && req.WorkloadKind != "" {
+		return resolvedLogTarget{
+			Namespace: req.Namespace,
+			Kind:      strings.ToLower(strings.TrimSpace(req.WorkloadKind)),
+			Name:      strings.TrimSpace(req.WorkloadName),
+		}, nil
+	}
+	if req.PodName != "" {
+		podName := strings.TrimSpace(req.PodName)
+		return resolvedLogTarget{
+			Namespace: req.Namespace,
+			Kind:      "pod",
+			Name:      podName,
+			PodName:   podName,
+		}, nil
+	}
+
+	return resolvedLogTarget{}, fmt.Errorf("either workload or pod must be specified")
+}
+
+func (s *Service) resolveTargetPods(req types.LogFetchRequest) ([]string, error) {
+	podNameFilter, err := podlogs.NewPodNameFilter(strings.TrimSpace(req.PodInclude), strings.TrimSpace(req.PodExclude))
+	if err != nil {
+		return nil, fmt.Errorf("invalid pod filter: %w", err)
+	}
+	selection := podlogs.ParseScopeSelection(req.SelectedFilters)
+	pods, err := s.resolveTargetPodObjects(req, podNameFilter, selection)
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(pods))
+	for _, pod := range pods {
+		if pod != nil {
+			names = append(names, pod.Name)
+		}
+	}
+	return names, nil
+}
+
+func (s *Service) resolveTargetPodObjects(
+	req types.LogFetchRequest,
+	podNameFilter podlogs.PodNameFilter,
+	selection podlogs.ScopeSelection,
+) ([]*corev1.Pod, error) {
+	target, err := s.resolveLogTarget(req)
+	if err != nil {
+		return nil, err
+	}
+	if target.PodName != "" {
+		if !selection.MatchPod(target.PodName) {
+			return nil, nil
+		}
+		pod, err := s.deps.KubernetesClient.CoreV1().Pods(target.Namespace).Get(s.ctx(), target.PodName, metav1.GetOptions{})
+		if err != nil {
+			return nil, fmt.Errorf("failed to get pod: %w", err)
+		}
+		return []*corev1.Pod{pod}, nil
+	}
+	pods, err := s.workloadPodObjects(target.Namespace, target.Name, target.Kind)
+	if err != nil {
+		return nil, err
+	}
+	return filterPodsByName(pods, req.PodFilter, podNameFilter, selection), nil
+}
+
+func filterPodsByName(
+	pods []*corev1.Pod,
+	exactFilter string,
+	podNameFilter podlogs.PodNameFilter,
+	selection podlogs.ScopeSelection,
+) []*corev1.Pod {
+	exactFilter = strings.TrimSpace(exactFilter)
+	if exactFilter == "" && podNameFilter.IsZero() && selection.IsZero() {
+		return pods
+	}
+	filtered := make([]*corev1.Pod, 0, len(pods))
+	for _, pod := range pods {
+		if pod == nil {
+			continue
+		}
+		if exactFilter != "" && pod.Name != exactFilter {
+			continue
+		}
+		if !podNameFilter.IsZero() && !podNameFilter.Match(pod.Name) {
+			continue
+		}
+		if !selection.MatchPod(pod.Name) {
+			continue
+		}
+		filtered = append(filtered, pod)
+	}
+	return filtered
+}
+
+func (s *Service) workloadPodObjects(namespace, workloadName, workloadKind string) ([]*corev1.Pod, error) {
 	client := s.deps.KubernetesClient
 	switch strings.ToLower(workloadKind) {
 	case "deployment":
@@ -115,113 +305,123 @@ func (s *Service) workloadPods(namespace, workloadName, workloadKind string) ([]
 		if err != nil {
 			return nil, fmt.Errorf("failed to get deployment: %w", err)
 		}
-		return s.podsBySelector(namespace, metav1.FormatLabelSelector(deployment.Spec.Selector))
+		return s.podObjectsBySelector(namespace, metav1.FormatLabelSelector(deployment.Spec.Selector))
 	case "replicaset":
 		rs, err := client.AppsV1().ReplicaSets(namespace).Get(s.ctx(), workloadName, metav1.GetOptions{})
 		if err != nil {
 			return nil, fmt.Errorf("failed to get replicaset: %w", err)
 		}
-		return s.podsBySelector(namespace, metav1.FormatLabelSelector(rs.Spec.Selector))
+		return s.podObjectsBySelector(namespace, metav1.FormatLabelSelector(rs.Spec.Selector))
 	case "daemonset":
 		daemonSet, err := client.AppsV1().DaemonSets(namespace).Get(s.ctx(), workloadName, metav1.GetOptions{})
 		if err != nil {
 			return nil, fmt.Errorf("failed to get daemonset: %w", err)
 		}
-		return s.podsBySelector(namespace, metav1.FormatLabelSelector(daemonSet.Spec.Selector))
+		return s.podObjectsBySelector(namespace, metav1.FormatLabelSelector(daemonSet.Spec.Selector))
 	case "statefulset":
 		sts, err := client.AppsV1().StatefulSets(namespace).Get(s.ctx(), workloadName, metav1.GetOptions{})
 		if err != nil {
 			return nil, fmt.Errorf("failed to get statefulset: %w", err)
 		}
-		return s.podsBySelector(namespace, metav1.FormatLabelSelector(sts.Spec.Selector))
+		return s.podObjectsBySelector(namespace, metav1.FormatLabelSelector(sts.Spec.Selector))
 	case "job":
-		return s.podsBySelector(namespace, fmt.Sprintf("job-name=%s", workloadName))
+		return s.podObjectsBySelector(namespace, fmt.Sprintf("job-name=%s", workloadName))
 	case "cronjob":
-		return s.podsForCronJob(namespace, workloadName)
+		return s.podObjectsForCronJob(namespace, workloadName)
 	default:
 		return nil, fmt.Errorf("unsupported workload type: %s", workloadKind)
 	}
 }
 
 func (s *Service) podsBySelector(namespace, selector string) ([]string, error) {
+	pods, err := s.podObjectsBySelector(namespace, selector)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]string, 0, len(pods))
+	for _, pod := range pods {
+		if pod != nil {
+			result = append(result, pod.Name)
+		}
+	}
+	return result, nil
+}
+
+func (s *Service) podObjectsBySelector(namespace, selector string) ([]*corev1.Pod, error) {
 	pods, err := s.deps.KubernetesClient.CoreV1().Pods(namespace).List(s.ctx(), metav1.ListOptions{LabelSelector: selector})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list pods with selector %s: %w", selector, err)
 	}
-	result := make([]string, 0, len(pods.Items))
-	for _, pod := range pods.Items {
-		result = append(result, pod.Name)
+	result := make([]*corev1.Pod, 0, len(pods.Items))
+	for i := range pods.Items {
+		pod := pods.Items[i]
+		result = append(result, &pod)
 	}
 	return result, nil
 }
 
 func (s *Service) podsForCronJob(namespace, cronJobName string) ([]string, error) {
+	pods, err := s.podObjectsForCronJob(namespace, cronJobName)
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(pods))
+	for _, pod := range pods {
+		if pod != nil {
+			names = append(names, pod.Name)
+		}
+	}
+	return names, nil
+}
+
+func (s *Service) podObjectsForCronJob(namespace, cronJobName string) ([]*corev1.Pod, error) {
 	jobs, err := s.deps.KubernetesClient.BatchV1().Jobs(namespace).List(s.ctx(), metav1.ListOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list jobs: %w", err)
 	}
 
-	var podNames []string
+	var podObjects []*corev1.Pod
 	for _, job := range jobs.Items {
 		for _, owner := range job.OwnerReferences {
 			if owner.Kind == "CronJob" && owner.Name == cronJobName {
-				pods, err := s.podsBySelector(namespace, fmt.Sprintf("job-name=%s", job.Name))
+				pods, err := s.podObjectsBySelector(namespace, fmt.Sprintf("job-name=%s", job.Name))
 				if err != nil {
 					s.logWarn(fmt.Sprintf("Failed to list pods for job %s: %v", job.Name, err))
 					continue
 				}
-				podNames = append(podNames, pods...)
+				podObjects = append(podObjects, pods...)
 			}
 		}
 	}
-	return podNames, nil
+	return podObjects, nil
 }
 
-func (s *Service) fetchPodLogs(namespace, podName, container string, tailLines int, previous bool, sinceSeconds int64) ([]types.PodLogEntry, error) {
+func (s *Service) fetchPodLogs(namespace, podName, container string, tailLines int, previous bool, sinceSeconds int64, lineFilter podlogs.LineFilter) ([]types.PodLogEntry, error) {
 	pod, err := s.deps.KubernetesClient.CoreV1().Pods(namespace).Get(s.ctx(), podName, metav1.GetOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get pod: %w", err)
 	}
 
-	var containersToFetch []struct {
-		Name   string
-		IsInit bool
-	}
-
-	if container == "" || container == "all" {
-		for _, c := range pod.Spec.InitContainers {
-			containersToFetch = append(containersToFetch, struct {
-				Name   string
-				IsInit bool
-			}{Name: c.Name, IsInit: true})
-		}
-		for _, c := range pod.Spec.Containers {
-			containersToFetch = append(containersToFetch, struct {
-				Name   string
-				IsInit bool
-			}{Name: c.Name, IsInit: false})
-		}
-	} else {
-		containersToFetch = append(containersToFetch, struct {
-			Name   string
-			IsInit bool
-		}{Name: container, IsInit: false})
-	}
-
 	var entries []types.PodLogEntry
-	for _, c := range containersToFetch {
-		containerEntries, err := s.fetchContainerLogs(namespace, podName, c.Name, c.IsInit, tailLines, previous, sinceSeconds)
+	var containerErrors []error
+	for _, containerRef := range podlogs.EnumerateContainers(pod, container) {
+		containerEntries, err := s.fetchContainerLogs(namespace, podName, containerRef.Name, containerRef.IsInit, containerRef.IsEphemeral, tailLines, previous, sinceSeconds, lineFilter)
 		if err != nil {
-			s.logWarn(fmt.Sprintf("Failed to fetch logs for container %s/%s: %v", podName, c.Name, err))
+			s.logWarn(fmt.Sprintf("Failed to fetch logs for container %s/%s: %v", podName, containerRef.Name, err))
+			containerErrors = append(containerErrors, fmt.Errorf("container %s: %w", containerRef.Name, err))
 			continue
 		}
 		entries = append(entries, containerEntries...)
 	}
 
+	if len(entries) == 0 && len(containerErrors) > 0 {
+		return nil, fmt.Errorf("failed to fetch any container logs for pod %s: %s", podName, summarizeLogFetchErrors("all containers failed", containerErrors))
+	}
+
 	return entries, nil
 }
 
-func (s *Service) fetchContainerLogs(namespace, podName, containerName string, isInit bool, tailLines int, previous bool, sinceSeconds int64) ([]types.PodLogEntry, error) {
+func (s *Service) fetchContainerLogs(namespace, podName, containerName string, isInit bool, isEphemeral bool, tailLines int, previous bool, sinceSeconds int64, lineFilter podlogs.LineFilter) ([]types.PodLogEntry, error) {
 	logOptions := &corev1.PodLogOptions{
 		Container:  containerName,
 		Timestamps: true,
@@ -253,7 +453,7 @@ func (s *Service) fetchContainerLogs(namespace, podName, containerName string, i
 	defer stream.Close()
 
 	var entries []types.PodLogEntry
-	scanner := bufio.NewScanner(stream)
+	scanner := linescanner.New(stream)
 	for scanner.Scan() {
 		line := scanner.Text()
 		var timestamp, logLine string
@@ -263,13 +463,17 @@ func (s *Service) fetchContainerLogs(namespace, podName, containerName string, i
 		} else {
 			logLine = line
 		}
+		if !lineFilter.Matches(logLine) {
+			continue
+		}
 
 		entries = append(entries, types.PodLogEntry{
-			Timestamp: timestamp,
-			Pod:       podName,
-			Container: containerName,
-			Line:      logLine,
-			IsInit:    isInit,
+			Timestamp:   timestamp,
+			Pod:         podName,
+			Container:   containerName,
+			Line:        logLine,
+			IsInit:      isInit,
+			IsEphemeral: isEphemeral,
 		})
 	}
 
@@ -278,6 +482,23 @@ func (s *Service) fetchContainerLogs(namespace, podName, containerName string, i
 	}
 
 	return entries, nil
+}
+
+func summarizeLogFetchErrors(prefix string, errs []error) string {
+	if len(errs) == 0 {
+		return prefix
+	}
+	if len(errs) == 1 {
+		return fmt.Sprintf("%s: %v", prefix, errs[0])
+	}
+	return fmt.Sprintf("%s: %v (and %d more)", prefix, errs[0], len(errs)-1)
+}
+
+func boolValueOrDefault(value *bool, defaultValue bool) bool {
+	if value == nil {
+		return defaultValue
+	}
+	return *value
 }
 
 func (s *Service) ctx() context.Context {

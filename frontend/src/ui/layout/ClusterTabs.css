@@ -1,19 +1,22 @@
 /* Cluster tab strip — layout-specific overrides.
-   Base tab styles live in styles/components/tabs.css */
+   Base tab styles live in styles/components/tabs.css.
 
-.cluster-tabs {
-  padding: 0 6px;
-  overflow-x: auto;
+   The grid placement rules live on the wrapper (which is the direct
+   grid item in AppLayout's main grid), not on the shared <Tabs> root
+   that sits inside it. Putting them on the inner element is a no-op
+   because the inner element's parent is not a grid. */
+
+.cluster-tabs-wrapper {
   grid-column: 1 / -1;
   grid-row: 2;
-  /* --wails-draggable: none; */
+  display: flex;
+  min-width: 0;
 }
 
-/* Drag states */
-.cluster-tab--dragging {
-  opacity: 0.6;
-}
-
-.cluster-tab--drop-target {
-  border-color: var(--color-accent);
+/* The shared <Tabs> root fills the wrapper so the strip occupies the
+   full width of the grid row, edge to edge. */
+.cluster-tabs-wrapper > .cluster-tabs {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0;
 }

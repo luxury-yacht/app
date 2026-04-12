@@ -7,12 +7,13 @@
   border-bottom: 1px solid var(--border-color);
   --wails-draggable: true;
   user-select: none;
+  cursor: default;
   padding: 0 12px;
 }
 
 .app-header--mac {
   /* Offset for macOS window controls */
-  padding-left: 80px;
+  padding-left: calc(80px / var(--app-zoom-factor, 1));
 }
 
 .app-header-left {
@@ -47,6 +48,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  cursor: default;
 }
 
 .app-header-label {

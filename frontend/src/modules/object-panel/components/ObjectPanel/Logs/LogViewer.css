@@ -51,6 +51,21 @@
   box-shadow: var(--log-controls-shadow, none);
 }
 
+.pod-logs-controls--with-active-filters {
+  border-bottom: 0;
+}
+
+.pod-logs-active-filters {
+  display: flex;
+  align-items: center;
+  align-content: center;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+  padding: 0 0.8rem 0.6rem 0.8rem;
+  background-color: var(--log-controls-bg);
+  border-bottom: 1px solid var(--log-controls-border);
+}
+
 .pod-logs-controls-left {
   display: flex;
   align-items: center;
@@ -63,6 +78,30 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
+}
+
+.pod-logs-selector-dropdown .dropdown-trigger {
+  width: 175px;
+  min-width: 175px;
+  max-width: 175px;
+}
+
+.pod-logs-selector-dropdown .dropdown-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* "42 of 100" counter rendered immediately after the IconBar in the
+   controls row. Uses tabular-nums so the value doesn't jitter as
+   entries stream in, and the secondary text color so it reads as
+   metadata rather than a primary control. */
+.pod-logs-count {
+  font-size: var(--font-size-small, 0.75rem);
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  user-select: none;
 }
 
 .pod-logs-control-group label {
@@ -91,6 +130,7 @@
   position: relative;
   display: inline-flex;
   align-items: center;
+  gap: var(--spacing-xs);
 }
 
 .pod-logs-text-filter {
@@ -100,7 +140,7 @@
   border-radius: var(--border-radius-sm);
   color: var(--color-text);
   font-size: var(--font-size-normal);
-  width: 150px;
+  width: 175px;
   outline: none;
 }
 
@@ -137,25 +177,133 @@
   transform: scale(0.9);
 }
 
+.pod-log-metadata-button {
+  appearance: none;
+  background: none;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  margin: 0;
+  padding: 0;
+}
+
+.pod-log-metadata-button:hover {
+  text-decoration: underline;
+}
+
+.pod-log-metadata-button:focus-visible {
+  outline: 1px solid currentColor;
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.pod-logs-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: min(100%, 22rem);
+  min-height: 22px;
+  padding: 0 4px 0 8px;
+  border-radius: 90px;
+  background-color: var(--color-bg-tertiary);
+  color: var(--color-text);
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+
+.pod-logs-filter-chip--clear-all {
+  appearance: none;
+  cursor: pointer;
+  border: 0;
+  background: var(--color-text-secondary);
+  color: var(--color-bg);
+  font-weight: 600;
+  padding: 0 8px;
+}
+
+.pod-logs-filter-chip--clear-all:hover {
+  background: var(--color-accent);
+}
+
+.pod-logs-filter-chip-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pod-logs-filter-chip-remove {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 auto;
+  background: var(--color-bg-tertiary);
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  line-height: 1;
+  margin: 0;
+  padding: 0;
+  border-radius: 999px;
+}
+
+.pod-logs-filter-chip-remove:hover {
+  background-color: var(--color-accent);
+  color: var(--color-text);
+}
+
+.pod-logs-filter-toggle {
+  padding: 4px 10px;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-normal);
+  cursor: pointer;
+}
+
+.pod-logs-filter-toggle:hover:not(:disabled) {
+  color: var(--color-text);
+  border-color: var(--color-accent);
+}
+
+.pod-logs-filter-toggle.active {
+  background: var(--button-action-bg);
+  border-color: var(--button-action-bg);
+  color: var(--button-action-text);
+}
+
+.pod-logs-filter-toggle:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .pod-logs-control-btn {
   padding: var(--spacing-xs) 0.75rem;
   font-size: var(--font-size-normal);
   border-radius: var(--border-radius-round);
   cursor: pointer;
-  transition: all 0.2s;
+  transition:
+    background-color 0.2s,
+    border-color 0.2s,
+    color 0.2s;
   font-weight: 500;
   border: 1px solid;
 }
 
 .pod-logs-control-btn.refresh {
-  background-color: var(--primary-color);
-  color: white;
-  border-color: var(--primary-color);
+  background-color: var(--button-action-bg);
+  color: var(--button-action-text);
+  border-color: var(--button-action-bg);
 }
 
 .pod-logs-control-btn.refresh:hover:not(:disabled) {
-  background-color: var(--primary-hover);
-  border-color: var(--primary-hover);
+  background-color: var(--button-action-hover);
+  border-color: var(--button-action-hover);
 }
 
 .pod-logs-control-btn:disabled {
@@ -176,7 +324,10 @@
   border-radius: var(--border-radius);
   color: var(--color-text-secondary);
   cursor: pointer;
-  transition: all 0.2s;
+  transition:
+    background-color 0.2s,
+    border-color 0.2s,
+    color 0.2s;
   margin-left: auto;
   flex-shrink: 0;
 }
@@ -204,15 +355,44 @@
   position: relative;
 }
 
+.pod-logs-warning-bar {
+  display: flex;
+  align-items: center;
+  padding: 0.5rem 0.75rem;
+  background-color: var(--color-error-bg);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+  font-weight: 500;
+}
+
 .pod-logs-text {
   color: var(--log-text-primary);
   font-size: var(--font-size-mono);
   line-height: 1.5;
-  padding: 0.5rem;
+  padding: 0 0.5rem;
   user-select: text;
   -webkit-user-select: text;
   -moz-user-select: text;
   -ms-user-select: text;
+}
+
+.pod-logs-text.pod-logs-text--virtualized {
+  padding: 0 0.5rem;
+}
+
+.pod-logs-virtual-body {
+  position: relative;
+}
+
+.pod-logs-virtual-inner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+}
+
+.pod-log-row {
+  padding-bottom: 0.1rem;
 }
 
 /* No wrap mode - disable text wrapping */
@@ -231,12 +411,11 @@
   /* Create hanging indent: first line flush left, wrapped lines indented */
   padding-left: 1rem;
   text-indent: -1rem;
-  /* Add small spacing between log lines for clarity */
-  margin-bottom: 0.1rem;
   user-select: text;
   -webkit-user-select: text;
   -moz-user-select: text;
   -ms-user-select: text;
+  contain: layout paint;
 }
 
 .pod-log-line .pod-log-metadata {
@@ -264,36 +443,6 @@
 
 .pod-logs-display-error {
   color: var(--color-error, #dc3545);
-}
-
-.pod-logs-fallback-banner {
-  margin: 0.5rem 0.75rem 0;
-  padding: 0.5rem 0.75rem;
-  border-radius: var(--border-radius, 4px);
-  border: 1px solid var(--color-warning-border, rgba(255, 193, 7, 0.35));
-  background: var(--color-warning-bg, rgba(255, 193, 7, 0.12));
-  color: var(--color-warning-text, #ffb400);
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm, 8px);
-  flex-wrap: wrap;
-}
-
-.pod-logs-fallback-banner .pod-logs-fallback-retry {
-  padding: 4px 12px;
-  border-radius: var(--border-radius-round, 16px);
-  border: 1px solid var(--color-warning-border, rgba(255, 193, 7, 0.35));
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-  font-size: var(--font-size-normal, 14px);
-  transition:
-    background 0.2s ease,
-    color 0.2s ease;
-}
-
-.pod-logs-fallback-banner .pod-logs-fallback-retry:hover {
-  background: rgba(255, 193, 7, 0.2);
 }
 
 /* Custom scrollbar for logs content */
@@ -381,7 +530,6 @@
   font-size: var(--font-size-parsed-logs);
   font-weight: var(--font-weight-parsed-logs);
   color: var(--log-table-cell-text);
-  max-width: 300px;
 }
 
 .gridtable-parsed-logs .grid-cell-content {
@@ -389,7 +537,8 @@
 }
 
 .parsed-log-cell {
-  max-width: 300px;
+  display: block;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -522,6 +671,14 @@
 .pod-log-line .pod-log-metadata--bold {
   color: var(--pod-color);
   font-weight: 500;
+}
+
+.pod-log-highlight {
+  background: var(--code-selection-match-bg);
+  color: inherit;
+  outline: 1px solid var(--code-selection-match-outline);
+  border-radius: 2px;
+  padding: 0 1px;
 }
 
 /* Light theme adjustments for parsed table */

@@ -36,6 +36,7 @@ export interface GridColumnDefinition<T> {
   width?: ColumnWidthInput;
   minWidth?: ColumnWidthInput;
   maxWidth?: ColumnWidthInput;
+  autoSizeMaxWidth?: ColumnWidthInput;
   autoWidth?: boolean;
   flex?: string;
   disableShortcuts?: boolean | ((item: T) => boolean);
@@ -106,6 +107,13 @@ export interface GridTableProps<T> {
   data: T[];
   columns: GridColumnDefinition<T>[];
   keyExtractor: (item: T, index: number) => string;
+  /**
+   * Override which column keys should be treated as special "kind badge"
+   * columns by shared table helpers. Use this when a consumer needs plain
+   * text rendering for keys that would otherwise collide with global table
+   * conventions.
+   */
+  isKindColumnKey?: (key: string) => boolean;
   getRowClassName?: (item: T, index: number) => string | undefined | null;
   getRowStyle?: (item: T, index: number) => React.CSSProperties | undefined;
   onRowClick?: (item: T) => void;
@@ -142,6 +150,13 @@ export interface GridTableProps<T> {
   };
   filters?: GridTableFilterConfig<T>;
   allowHorizontalOverflow?: boolean;
+  /**
+   * When true, cells will not set a native `title` attribute from their
+   * extracted text content. Use this for tables where the consumer
+   * provides its own row-expansion or tooltip mechanism and doesn't want
+   * the browser's hover tooltip racing with it. Default: false.
+   */
+  disableCellNativeTitle?: boolean;
 }
 
 export interface InternalFilterOptions {

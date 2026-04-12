@@ -5,7 +5,7 @@
  * Handles rendering and interactions for the cluster feature.
  */
 
-import { DeleteResource } from '@wailsjs/go/backend/App';
+import { DeleteResourceByGVK } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 import { getPermissionKey, useUserPermissions } from '@/core/capabilities';
@@ -26,6 +26,10 @@ import GridTable, {
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
+import {
+  formatBuiltinApiVersion,
+  resolveBuiltinGroupVersion,
+} from '@shared/constants/builtinGroupVersions';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 import { useFavToggle } from '@ui/favorites/FavToggle';
 
@@ -38,8 +42,31 @@ interface CRDsData {
   clusterName?: string;
   group: string;
   scope: string;
+  /**
+   * Storage version name (the version etcd persists). Rendered in the
+   * Version column. Threaded from the backend's
+   * ClusterCRDEntry.storageVersion.
+   */
+  storageVersion?: string;
+  /** Count of additional served versions beyond the storage version. */
+  extraServedVersionCount?: number;
   age?: string;
 }
+
+/**
+ * Format the CRD's version cell. Single-version CRDs show just the
+ * storage version (e.g. "v1"); multi-version CRDs append a `(+N)` count
+ * of additional served versions (e.g. "v1 (+2)" for a CRD that also
+ * serves v1beta1 and v1alpha1).
+ */
+const formatCRDVersionCell = (crd: CRDsData): string => {
+  const storage = crd.storageVersion?.trim();
+  if (!storage) {
+    return '-';
+  }
+  const extra = crd.extraServedVersionCount ?? 0;
+  return extra > 0 ? `${storage} (+${extra})` : storage;
+};
 
 // Define props for CRDsViewGrid component
 interface CRDsViewProps {
@@ -69,6 +96,7 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
         openWithObject({
           kind: 'CustomResourceDefinition',
           name: crd.name,
+          ...resolveBuiltinGroupVersion('CustomResourceDefinition'),
           clusterId: crd.clusterId ?? undefined,
           clusterName: crd.clusterName ?? undefined,
         });
@@ -113,6 +141,20 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
           getClassName: () => 'object-panel-link',
         }),
         cf.createTextColumn('group', 'Group', (crd) => crd.group || '-'),
+        (() => {
+          // Version column renders storage version with `(+N)` suffix for
+          // multi-version CRDs. Sort uses bare storageVersion so that
+          // sibling CRDs with the same storage version cluster together
+          // regardless of whether they have additional served versions.
+          //
+          const versionColumn = cf.createTextColumn<CRDsData>(
+            'version',
+            'Version',
+            formatCRDVersionCell
+          );
+          versionColumn.sortValue = (crd) => crd.storageVersion ?? '';
+          return versionColumn;
+        })(),
         cf.createTextColumn('scope', 'Scope', (crd) => crd.scope || '-'),
         cf.createAgeColumn(),
       ];
@@ -121,6 +163,7 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
         kind: { autoWidth: true },
         name: { autoWidth: true },
         group: { autoWidth: true },
+        version: { autoWidth: true },
         scope: { autoWidth: true },
         age: { autoWidth: true },
       };
@@ -181,9 +224,25 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
       if (!deleteConfirm.resource) return;
 
       try {
-        const clusterId = deleteConfirm.resource.clusterId ?? selectedClusterId ?? '';
-        await DeleteResource(
+        // Multi-cluster rule (AGENTS.md): every backend command must
+        // carry a resolved clusterId.
+        const clusterId = deleteConfirm.resource.clusterId ?? selectedClusterId ?? null;
+        if (!clusterId) {
+          throw new Error(
+            `Cannot delete CustomResourceDefinition/${deleteConfirm.resource.name}: clusterId is missing`
+          );
+        }
+        // CRD itself is a built-in (apiextensions.k8s.io/v1) and always
+        // resolves via the lookup table.
+        const apiVersion = formatBuiltinApiVersion('CustomResourceDefinition');
+        if (!apiVersion) {
+          throw new Error(
+            `Cannot delete CustomResourceDefinition/${deleteConfirm.resource.name}: lookup table missing entry`
+          );
+        }
+        await DeleteResourceByGVK(
           clusterId,
+          apiVersion,
           'CustomResourceDefinition',
           '',
           deleteConfirm.resource.name

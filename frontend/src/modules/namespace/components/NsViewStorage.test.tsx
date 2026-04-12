@@ -16,13 +16,13 @@ const {
   gridTablePropsRef,
   confirmationPropsRef,
   openWithObjectMock,
-  deleteResourceMock,
+  deleteResourceByGVKMock,
   errorHandlerMock,
 } = vi.hoisted(() => ({
   gridTablePropsRef: { current: null as any },
   confirmationPropsRef: { current: null as any },
   openWithObjectMock: vi.fn(),
-  deleteResourceMock: vi.fn().mockResolvedValue(undefined),
+  deleteResourceByGVKMock: vi.fn().mockResolvedValue(undefined),
   errorHandlerMock: { handle: vi.fn() },
 }));
 
@@ -101,7 +101,7 @@ vi.mock('@shared/components/modals/ConfirmationModal', () => ({
 }));
 
 vi.mock('@wailsjs/go/backend/App', () => ({
-  DeleteResource: (...args: unknown[]) => deleteResourceMock(...args),
+  DeleteResourceByGVK: (...args: unknown[]) => deleteResourceByGVKMock(...args),
 }));
 
 vi.mock('@/hooks/useTableSort', () => ({
@@ -168,7 +168,8 @@ describe('NsViewStorage', () => {
     gridTablePropsRef.current = null;
     confirmationPropsRef.current = null;
     openWithObjectMock.mockReset();
-    deleteResourceMock.mockReset();
+    deleteResourceByGVKMock.mockReset();
+    deleteResourceByGVKMock.mockResolvedValue(undefined);
     errorHandlerMock.handle.mockClear();
   });
 
@@ -254,8 +255,10 @@ describe('NsViewStorage', () => {
     await act(async () => {
       await confirmationPropsRef.current?.onConfirm?.();
     });
-    expect(deleteResourceMock).toHaveBeenCalledWith(
+    // PersistentVolumeClaim is core/v1, resolved through formatBuiltinApiVersion.
+    expect(deleteResourceByGVKMock).toHaveBeenCalledWith(
       'alpha:ctx',
+      'v1',
       'PersistentVolumeClaim',
       'team-a',
       'pvc-data'
@@ -326,7 +329,7 @@ describe('NsViewStorage', () => {
   });
 
   it('handles delete failure with errorHandler', async () => {
-    deleteResourceMock.mockRejectedValueOnce(new Error('boom'));
+    deleteResourceByGVKMock.mockRejectedValueOnce(new Error('boom'));
     const entry = baseStorage();
     const props = await renderStorageView([entry]);
     const deleteItem = props

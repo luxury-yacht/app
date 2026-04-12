@@ -21,7 +21,7 @@ const runtimeProxy = new Proxy(
     get(target: Record<string, unknown>, prop: string) {
       return target[prop] ?? noOp;
     },
-  },
+  }
 );
 
 // Overrides for specific Go backend methods. Stories populate this via
@@ -42,17 +42,19 @@ const runtimeProxy = new Proxy(
   RetryClusterAuth: () => Promise.resolve(),
   ListShellSessions: () => Promise.resolve([]),
   ListPortForwards: () => Promise.resolve([]),
-  GetAppSettings: () => Promise.resolve({
-    theme: 'dark',
-    useShortResourceNames: false,
-    autoRefreshEnabled: false,
-    refreshBackgroundClustersEnabled: false,
-    metricsRefreshIntervalMs: 30000,
-    gridTablePersistenceMode: 'shared',
-    defaultObjectPanelPosition: 'right',
-  }),
+  GetAppSettings: () =>
+    Promise.resolve({
+      theme: 'dark',
+      useShortResourceNames: false,
+      autoRefreshEnabled: false,
+      refreshBackgroundClustersEnabled: false,
+      metricsRefreshIntervalMs: 30000,
+      gridTablePersistenceMode: 'shared',
+      defaultObjectPanelPosition: 'right',
+    }),
   GetFavorites: () => Promise.resolve([]),
-  AddFavorite: (fav: unknown) => Promise.resolve({ ...(fav as Record<string, unknown>), id: String(Date.now()) }),
+  AddFavorite: (fav: unknown) =>
+    Promise.resolve({ ...(fav as Record<string, unknown>), id: String(Date.now()) }),
   UpdateFavorite: () => Promise.resolve(),
   DeleteFavorite: () => Promise.resolve(),
   SetFavoriteOrder: () => Promise.resolve(),
@@ -80,13 +82,13 @@ const goProxy = new Proxy(
                   }
                   return noOpAsync;
                 },
-              },
+              }
             );
           },
-        },
+        }
       );
     },
-  },
+  }
 );
 
 (window as any).runtime = runtimeProxy;
@@ -98,6 +100,30 @@ const preview: Preview = {
       matchers: {
         color: /(background|color)$/i,
         date: /Date$/i,
+      },
+    },
+    options: {
+      // Explicit story ordering for the `Shared/Tabs` group. Storybook
+      // v7+ serializes this function and re-evaluates it in a sandboxed
+      // context where closed-over variables do NOT exist, so the order
+      // list must be declared INSIDE the function body — no outer
+      // references. Stories whose id isn't in the list fall through to
+      // Storybook's default alphabetical sort.
+      storySort: (a, b) => {
+        const order = [
+          'shared-tabs--cluster-tabs',
+          'shared-tabs--object-tabs',
+          'shared-tabs--object-panel-tabs',
+          'shared-tabs--disabled-tabs',
+          'shared-tabs--type-safety-demo',
+          'shared-tabs--tear-off-seam',
+        ];
+        const ai = order.indexOf(a.id);
+        const bi = order.indexOf(b.id);
+        if (ai !== -1 && bi !== -1) return ai - bi;
+        if (ai !== -1) return -1;
+        if (bi !== -1) return 1;
+        return a.id.localeCompare(b.id, undefined, { numeric: true });
       },
     },
   },

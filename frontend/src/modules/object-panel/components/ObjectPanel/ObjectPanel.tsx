@@ -17,14 +17,13 @@ import { getDefaultObjectPanelPosition } from '@core/settings/appPreferences';
 import { errorHandler } from '@utils/errorHandler';
 import { CurrentObjectPanelContext } from '@modules/object-panel/hooks/useObjectPanel';
 import { useObjectPanelState } from '@/core/contexts/ObjectPanelStateContext';
-import { evaluateNamespacePermissions } from '@/core/capabilities';
+import { queryNamespacePermissions } from '@/core/capabilities';
 import {
   clearRequestedObjectPanelTab,
   getRequestedObjectPanelTab,
   subscribeObjectPanelTabRequests,
 } from '@modules/object-panel/objectPanelTabRequests';
 import './ObjectPanel.css';
-import '@shared/components/tabs/Tabs/Tabs.css';
 import { getObjectPanelKind } from '@modules/object-panel/components/ObjectPanel/hooks/getObjectPanelKind';
 import { useObjectPanelFeatureSupport } from '@modules/object-panel/components/ObjectPanel/hooks/useObjectPanelFeatureSupport';
 import { useObjectPanelCapabilities } from '@modules/object-panel/components/ObjectPanel/hooks/useObjectPanelCapabilities';
@@ -38,7 +37,6 @@ import { ObjectPanelContent } from '@modules/object-panel/components/ObjectPanel
 import {
   CLUSTER_SCOPE,
   RESOURCE_CAPABILITIES,
-  WORKLOAD_KIND_API_NAMES,
 } from '@modules/object-panel/components/ObjectPanel/constants';
 import type {
   PanelAction,
@@ -127,8 +125,12 @@ const EMPTY_DETAILS: DetailsSnapshotProps = {
 // ============================================================================
 // REDUCER
 // ============================================================================
+// activeTab is intentionally NOT in this reducer — it lives in
+// ObjectPanelStateContext so it survives unmount/remount caused by
+// cluster switching. The reducer's local state is reset on remount,
+// which is the right behavior for modal flags but the wrong behavior
+// for "which tab was the user looking at."
 const INITIAL_PANEL_STATE: PanelState = {
-  activeTab: 'details',
   actionLoading: false,
   actionError: null,
   scaleReplicas: 1,
@@ -142,8 +144,6 @@ const INITIAL_PANEL_STATE: PanelState = {
 
 function panelReducer(state: PanelState, action: PanelAction): PanelState {
   switch (action.type) {
-    case 'SET_ACTIVE_TAB':
-      return { ...state, activeTab: action.payload };
     case 'SET_ACTION_LOADING':
       return { ...state, actionLoading: action.payload };
     case 'SET_ACTION_ERROR':
@@ -186,7 +186,7 @@ interface ObjectPanelProps {
 // ============================================================================
 function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
   const objectData = objectRef;
-  const { closePanel } = useObjectPanelState();
+  const { closePanel, getObjectPanelActiveTab, setObjectPanelActiveTab } = useObjectPanelState();
   const { tabGroups, getPreferredOpenGroupKey } = useDockablePanelContext();
   const openTargetGroupKey = getPreferredOpenGroupKey(getDefaultObjectPanelPosition());
   const openTargetPosition: DockPosition =
@@ -213,15 +213,19 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
     .toLowerCase()
     .replace(/[^a-z0-9]/g, '');
 
-  // Use reducer for state management
+  // Use reducer for transient panel state (modal flags, action loading,
+  // delete confirmation, etc.). The active sub-tab is intentionally NOT
+  // in this reducer — it lives in ObjectPanelStateContext so it survives
+  // unmount/remount caused by cluster switching. The reducer's local
+  // state is reset on remount, which is the right behavior for modal
+  // flags but the wrong behavior for "which tab was the user looking at."
   const [state, dispatch] = useReducer(panelReducer, INITIAL_PANEL_STATE);
+  const activeTab: ViewType = getObjectPanelActiveTab(panelId) ?? 'details';
 
-  const { objectKind, detailScope, helmScope, isHelmRelease, isEvent } = getObjectPanelKind(
-    objectData,
-    {
+  const { objectKind, detailScope, eventsScope, logScope, helmScope, isHelmRelease, isEvent } =
+    getObjectPanelKind(objectData, {
       clusterScope: CLUSTER_SCOPE,
-    }
-  );
+    });
 
   const lastEvaluatedNamespaceRef = useRef<string | null>(null);
   useEffect(() => {
@@ -236,7 +240,7 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
     }
 
     lastEvaluatedNamespaceRef.current = normalized;
-    evaluateNamespacePermissions(namespace, { clusterId: objectData?.clusterId ?? null });
+    queryNamespacePermissions(namespace, objectData?.clusterId ?? null);
   }, [objectData?.clusterId, objectData?.namespace]);
 
   const featureSupport = useObjectPanelFeatureSupport(objectKind, RESOURCE_CAPABILITIES);
@@ -246,7 +250,6 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
     objectKind,
     detailScope,
     featureSupport,
-    workloadKindApiNames: WORKLOAD_KIND_API_NAMES,
   });
 
   // Only poll when this tab is active in its group (Step 8: active-tab-only polling).
@@ -306,6 +309,14 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
     }
   }, [detailScope, isNotFoundError, objectData?.name, state.resourceDeleted]);
 
+  // Wrap setObjectPanelActiveTab into a panelId-bound callback so the hook
+  // doesn't have to know about panel identity. The wrapper is stable
+  // across renders.
+  const setActiveTab = useCallback(
+    (tab: ViewType) => setObjectPanelActiveTab(panelId, tab),
+    [panelId, setObjectPanelActiveTab]
+  );
+
   // Get available tabs based on capabilities
   const { availableTabs } = useObjectPanelTabs({
     capabilities,
@@ -313,16 +324,17 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
     isHelmRelease,
     isEvent,
     isOpen,
+    setActiveTab,
     dispatch,
     close,
-    currentTab: state.activeTab,
+    currentTab: activeTab,
   });
 
   const podsState = useObjectPanelPods({
     objectData,
     objectKind,
     isOpen,
-    activeTab: state.activeTab,
+    activeTab,
   });
 
   const {
@@ -343,7 +355,6 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
     dispatch,
     close,
     fetchResourceDetails,
-    workloadKindApiNames: WORKLOAD_KIND_API_NAMES,
   });
 
   // CronJob trigger handler
@@ -351,7 +362,12 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
     if (!objectData?.name || !objectData?.namespace) return;
     dispatch({ type: 'SET_ACTION_LOADING', payload: true });
     try {
-      await TriggerCronJob(objectData.clusterId ?? '', objectData.namespace, objectData.name);
+      // Multi-cluster rule (AGENTS.md): every backend command must
+      // carry a resolved clusterId.
+      if (!objectData.clusterId) {
+        throw new Error(`Cannot trigger CronJob/${objectData.name}: clusterId is missing`);
+      }
+      await TriggerCronJob(objectData.clusterId, objectData.namespace, objectData.name);
     } catch (err) {
       errorHandler.handle(err, { action: 'trigger', kind: 'CronJob', name: objectData.name });
     } finally {
@@ -366,8 +382,15 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
     const isSuspended = cronJobDetails?.suspend ?? false;
     dispatch({ type: 'SET_ACTION_LOADING', payload: true });
     try {
+      // Multi-cluster rule (AGENTS.md): every backend command must
+      // carry a resolved clusterId.
+      if (!objectData.clusterId) {
+        throw new Error(
+          `Cannot ${isSuspended ? 'resume' : 'suspend'} CronJob/${objectData.name}: clusterId is missing`
+        );
+      }
       await SuspendCronJob(
-        objectData.clusterId ?? '',
+        objectData.clusterId,
         objectData.namespace,
         objectData.name,
         !isSuspended
@@ -386,9 +409,9 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
 
   const handleTabSelect = useCallback(
     (tab: ViewType) => {
-      dispatch({ type: 'SET_ACTIVE_TAB', payload: tab });
+      setObjectPanelActiveTab(panelId, tab);
     },
-    [dispatch]
+    [panelId, setObjectPanelActiveTab]
   );
 
   const applyRequestedTab = useCallback(
@@ -400,12 +423,12 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
       if (!isAvailable) {
         return;
       }
-      if (state.activeTab !== requestedTab) {
-        dispatch({ type: 'SET_ACTIVE_TAB', payload: requestedTab });
+      if (activeTab !== requestedTab) {
+        setObjectPanelActiveTab(panelId, requestedTab);
       }
       clearRequestedObjectPanelTab(panelId);
     },
-    [availableTabs, panelId, state.activeTab]
+    [availableTabs, panelId, activeTab, setObjectPanelActiveTab]
   );
 
   useEffect(() => {
@@ -552,7 +575,7 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
     ? {
         ...detailsProps,
         objectData,
-        isActive: isOpen && state.activeTab === 'details',
+        isActive: isOpen && activeTab === 'details',
         detailsLoading,
         detailsError,
         resourceDeleted: state.resourceDeleted,
@@ -702,19 +725,17 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
           />
         </div>
 
-        <ObjectPanelTabs
-          tabs={availableTabs}
-          activeTab={state.activeTab}
-          onSelect={handleTabSelect}
-        />
+        <ObjectPanelTabs tabs={availableTabs} activeTab={activeTab} onSelect={handleTabSelect} />
 
         <ObjectPanelContent
-          activeTab={state.activeTab}
+          activeTab={activeTab}
           detailTabProps={detailTabProps}
           isPanelOpen={isOpen && isActiveTab}
           capabilities={capabilities}
           capabilityReasons={capabilityReasons}
           detailScope={detailScope}
+          eventsScope={eventsScope}
+          logScope={logScope}
           helmScope={helmScope}
           objectData={objectData}
           objectKind={objectKind}
@@ -723,6 +744,7 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
           onClosePanel={close}
           onRefreshDetails={fetchResourceDetails}
           podsState={podsState}
+          panelId={panelId}
         />
       </DockablePanel>
 
@@ -749,15 +771,24 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
         onCancel={closeDeleteConfirm}
       />
 
-      {/* Rollback Modal — opens the revision history picker for rollbackable workloads */}
-      <RollbackModal
-        isOpen={state.showRollbackModal}
-        onClose={closeRollbackModal}
-        clusterId={objectData?.clusterId ?? ''}
-        namespace={objectData?.namespace ?? ''}
-        name={objectData?.name ?? ''}
-        kind={objectData?.kind ?? ''}
-      />
+      {/* Rollback Modal — opens the revision history picker for rollbackable workloads.
+          Only mounted when objectData has a resolved clusterId + kind + name + namespace —
+          the modal's confirm button issues a backend command and per the multi-cluster
+          rule (AGENTS.md) every command must carry a cluster identity. */}
+      {state.showRollbackModal &&
+        objectData?.clusterId &&
+        objectData.kind &&
+        objectData.name &&
+        objectData.namespace && (
+          <RollbackModal
+            isOpen={true}
+            onClose={closeRollbackModal}
+            clusterId={objectData.clusterId}
+            namespace={objectData.namespace}
+            name={objectData.name}
+            kind={objectData.kind}
+          />
+        )}
     </CurrentObjectPanelContext.Provider>
   );
 }

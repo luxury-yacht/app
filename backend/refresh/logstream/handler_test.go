@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/podlogs"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -25,23 +26,76 @@ import (
 
 func TestParseOptions(t *testing.T) {
 	tests := []struct {
-		name        string
-		query       url.Values
-		expectError bool
-		kind        string
-		tail        int
+		name             string
+		query            url.Values
+		expectError      bool
+		kind             string
+		podFilter        string
+		podInclude       string
+		podExclude       string
+		container        string
+		includeInit      bool
+		includeEphemeral bool
+		containerState   string
+		include          string
+		exclude          string
+		tail             int
 	}{
 		{
 			name:  "valid scope with defaults",
-			query: url.Values{"scope": []string{"default:pod:nginx"}},
+			query: url.Values{"scope": []string{"default:/v1:pod:nginx"}},
 			kind:  "pod",
 			tail:  defaultTailLines,
 		},
 		{
-			name:  "custom tail",
-			query: url.Values{"scope": []string{"prod:deployment:web"}, "tailLines": []string{"200"}},
+			name: "custom tail and filters",
+			query: url.Values{
+				"scope":            []string{"prod:apps/v1:deployment:web"},
+				"tailLines":        []string{"200"},
+				"pod":              []string{"web-123"},
+				"podInclude":       []string{"^web-"},
+				"podExclude":       []string{"-canary$"},
+				"selectedFilter":   []string{"pod:web-2", "debug:debug-abc"},
+				"container":        []string{"app"},
+				"includeInit":      []string{"false"},
+				"includeEphemeral": []string{"false"},
+				"containerState":   []string{"running"},
+				"include":          []string{"error|warn"},
+				"exclude":          []string{"healthcheck"},
+			},
+			kind:             "deployment",
+			podFilter:        "web-123",
+			podInclude:       "^web-",
+			podExclude:       "-canary$",
+			container:        "app",
+			includeInit:      false,
+			includeEphemeral: false,
+			containerState:   "running",
+			include:          "error|warn",
+			exclude:          "healthcheck",
+			tail:             200,
+		},
+		{
+			name:  "gvk scope",
+			query: url.Values{"scope": []string{"cluster-a|default:apps/v1:deployment:web"}},
 			kind:  "deployment",
-			tail:  200,
+			tail:  defaultTailLines,
+		},
+		{
+			name:  "tail capped at max",
+			query: url.Values{"scope": []string{"default:/v1:pod:nginx"}, "tailLines": []string{"99999"}},
+			kind:  "pod",
+			tail:  maxTailLines,
+		},
+		{
+			name:        "invalid line filter",
+			query:       url.Values{"scope": []string{"default:/v1:pod:nginx"}, "include": []string{"["}},
+			expectError: true,
+		},
+		{
+			name:        "invalid pod filter",
+			query:       url.Values{"scope": []string{"default:/v1:pod:nginx"}, "podInclude": []string{"["}},
+			expectError: true,
 		},
 		{
 			name:        "missing scope",
@@ -50,7 +104,7 @@ func TestParseOptions(t *testing.T) {
 		},
 		{
 			name:        "empty namespace",
-			query:       url.Values{"scope": []string{":pod:nginx"}},
+			query:       url.Values{"scope": []string{":/v1:pod:nginx"}},
 			expectError: true,
 		},
 		{
@@ -60,7 +114,17 @@ func TestParseOptions(t *testing.T) {
 		},
 		{
 			name:        "empty name",
-			query:       url.Values{"scope": []string{"default:pod:"}},
+			query:       url.Values{"scope": []string{"default:/v1:pod:"}},
+			expectError: true,
+		},
+		{
+			name:        "missing api version rejected",
+			query:       url.Values{"scope": []string{"default:pod:nginx"}},
+			expectError: true,
+		},
+		{
+			name:        "cluster-scoped object invalid",
+			query:       url.Values{"scope": []string{"__cluster__:Node:n1"}},
 			expectError: true,
 		},
 	}
@@ -80,6 +144,52 @@ func TestParseOptions(t *testing.T) {
 		if opts.Kind != tt.kind {
 			t.Fatalf("%s: expected kind %q, got %q", tt.name, tt.kind, opts.Kind)
 		}
+		if opts.PodFilter != tt.podFilter {
+			t.Fatalf("%s: expected pod filter %q, got %q", tt.name, tt.podFilter, opts.PodFilter)
+		}
+		if opts.PodInclude != tt.podInclude {
+			t.Fatalf("%s: expected pod include %q, got %q", tt.name, tt.podInclude, opts.PodInclude)
+		}
+		if opts.PodExclude != tt.podExclude {
+			t.Fatalf("%s: expected pod exclude %q, got %q", tt.name, tt.podExclude, opts.PodExclude)
+		}
+		if opts.Container != tt.container {
+			t.Fatalf("%s: expected container %q, got %q", tt.name, tt.container, opts.Container)
+		}
+		if tt.name == "custom tail and filters" {
+			require.Equal(t, []string{"pod:web-2", "debug:debug-abc"}, opts.SelectedFilters)
+			require.True(t, opts.Selection.MatchPod("web-2"))
+			require.False(t, opts.Selection.MatchPod("web-1"))
+			require.True(t, opts.Selection.MatchContainer(podlogs.ContainerRef{Name: "debug-abc", IsEphemeral: true}))
+			require.False(t, opts.Selection.MatchContainer(podlogs.ContainerRef{Name: "app"}))
+		}
+		expectedIncludeInit := tt.includeInit
+		if _, ok := tt.query["includeInit"]; !ok {
+			expectedIncludeInit = true
+		}
+		if opts.IncludeInit != expectedIncludeInit {
+			t.Fatalf("%s: expected includeInit %t, got %t", tt.name, expectedIncludeInit, opts.IncludeInit)
+		}
+		expectedIncludeEphemeral := tt.includeEphemeral
+		if _, ok := tt.query["includeEphemeral"]; !ok {
+			expectedIncludeEphemeral = true
+		}
+		if opts.IncludeEphemeral != expectedIncludeEphemeral {
+			t.Fatalf("%s: expected includeEphemeral %t, got %t", tt.name, expectedIncludeEphemeral, opts.IncludeEphemeral)
+		}
+		expectedContainerState := tt.containerState
+		if expectedContainerState == "" {
+			expectedContainerState = "all"
+		}
+		if string(opts.ContainerState) != expectedContainerState {
+			t.Fatalf("%s: expected container state %q, got %q", tt.name, expectedContainerState, opts.ContainerState)
+		}
+		if opts.Include != tt.include {
+			t.Fatalf("%s: expected include %q, got %q", tt.name, tt.include, opts.Include)
+		}
+		if opts.Exclude != tt.exclude {
+			t.Fatalf("%s: expected exclude %q, got %q", tt.name, tt.exclude, opts.Exclude)
+		}
 		if opts.TailLines != tt.tail {
 			t.Fatalf("%s: expected tail %d, got %d", tt.name, tt.tail, opts.TailLines)
 		}
@@ -87,16 +197,16 @@ func TestParseOptions(t *testing.T) {
 }
 
 func TestMatchContainerFilter(t *testing.T) {
-	if !matchContainerFilter("nginx", "nginx", false) {
+	if !matchContainerFilter("nginx", "nginx", false, false) {
 		t.Fatal("expected direct match for regular container")
 	}
-	if matchContainerFilter("init-setup", "init-setup", false) == false {
+	if matchContainerFilter("init-setup", "init-setup", false, false) == false {
 		t.Fatalf("expected filter to match identical name")
 	}
-	if !matchContainerFilter("init-setup", "init-setup (init)", true) {
+	if !matchContainerFilter("init-setup", "init-setup (init)", true, false) {
 		t.Fatal("expected init suffix match")
 	}
-	if matchContainerFilter("nginx", "sidecar", false) {
+	if matchContainerFilter("nginx", "sidecar", false, false) {
 		t.Fatal("unexpected match for different container")
 	}
 }
@@ -108,7 +218,7 @@ func TestServeHTTPRequiresFlusher(t *testing.T) {
 		t.Fatalf("NewHandler returned error: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/?scope=default:pod:web", nil)
+	req := httptest.NewRequest(http.MethodGet, "/?scope=default:/v1:pod:web", nil)
 
 	rec := &noFlushRecorder{
 		header: make(http.Header),
@@ -143,7 +253,7 @@ func TestServeHTTPEmitsInitialSnapshot(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	req := httptest.NewRequest("GET", "/?scope=default:pod:my-pod", nil).WithContext(ctx)
+	req := httptest.NewRequest("GET", "/?scope=default:/v1:pod:my-pod", nil).WithContext(ctx)
 	rec := newFlushRecorder()
 
 	done := make(chan struct{})
@@ -173,13 +283,14 @@ func TestServeHTTPEmitsInitialSnapshot(t *testing.T) {
 	// First event is the "connected" event with Reset: true and empty entries
 	connected := events[0]
 	require.True(t, connected.Reset)
-	require.Equal(t, "default:pod:my-pod", connected.Scope)
+	require.Equal(t, "default:/v1:pod:my-pod", connected.Scope)
 	require.Empty(t, connected.Entries)
 
-	// Second event has the initial log entries with Reset: false
+	// Second event has the initial log entries and must replace any
+	// preserved client buffer on reconnect/remount.
 	initial := events[1]
-	require.False(t, initial.Reset)
-	require.Equal(t, "default:pod:my-pod", initial.Scope)
+	require.True(t, initial.Reset)
+	require.Equal(t, "default:/v1:pod:my-pod", initial.Scope)
 	require.Len(t, initial.Entries, 1)
 
 	entry := initial.Entries[0]
@@ -203,7 +314,7 @@ func TestServeHTTPEmitsPermissionDeniedPayload(t *testing.T) {
 	handler, err := NewHandler(client, noopLogger{}, telemetry.NewRecorder())
 	require.NoError(t, err)
 
-	req := httptest.NewRequest(http.MethodGet, "/?scope=default:job:my-job", nil)
+	req := httptest.NewRequest(http.MethodGet, "/?scope=default:batch/v1:job:my-job", nil)
 	rec := newFlushRecorder()
 
 	handler.ServeHTTP(rec, req)
@@ -258,7 +369,7 @@ func TestServeHTTPStreamsUpdates(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	req := httptest.NewRequest("GET", "/?scope=default:pod:stream-pod", nil).WithContext(ctx)
+	req := httptest.NewRequest("GET", "/?scope=default:/v1:pod:stream-pod", nil).WithContext(ctx)
 	rec := newFlushRecorder()
 
 	done := make(chan struct{})
@@ -288,7 +399,7 @@ func TestServeHTTPStreamsUpdates(t *testing.T) {
 
 	// Second event has initial log entries
 	initial := events[1]
-	require.False(t, initial.Reset)
+	require.True(t, initial.Reset)
 	require.Len(t, initial.Entries, 1)
 	require.Equal(t, "initial", initial.Entries[0].Line)
 
@@ -332,7 +443,7 @@ func TestServeHTTPEmitsErrorEvent(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	req := httptest.NewRequest("GET", "/?scope=default:pod:error-pod", nil).WithContext(ctx)
+	req := httptest.NewRequest("GET", "/?scope=default:/v1:pod:error-pod", nil).WithContext(ctx)
 	rec := newFlushRecorder()
 
 	done := make(chan struct{})
@@ -372,6 +483,21 @@ func TestServeHTTPEmitsErrorEvent(t *testing.T) {
 	require.NotNil(t, errorEvent, "error event should be present")
 	require.Contains(t, errorEvent.Error, "logstream: follow failed")
 	require.Empty(t, errorEvent.Entries)
+}
+
+func TestComposeStreamWarningsDistinguishesTransportDrops(t *testing.T) {
+	warnings := composeStreamWarnings(
+		[]string{"Logs are hidden for 1 containers because the per-tab limit of 24 was reached. Using filters to reduce the number of containers may clear this message."},
+		true,
+	)
+
+	require.Equal(t, []string{
+		"Logs are hidden for 1 containers because the per-tab limit of 24 was reached. Using filters to reduce the number of containers may clear this message.",
+		transportDropWarning,
+	}, warnings)
+
+	withoutDrops := composeStreamWarnings([]string{"selection warning"}, false)
+	require.Equal(t, []string{"selection warning"}, withoutDrops)
 }
 
 func TestSplitTimestamp(t *testing.T) {

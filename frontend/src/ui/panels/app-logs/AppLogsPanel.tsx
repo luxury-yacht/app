@@ -11,7 +11,7 @@ import { errorHandler } from '@utils/errorHandler';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import { useShortcut, useKeyboardNavigationScope } from '@ui/shortcuts';
 import { KeyboardScopePriority, KeyboardShortcutPriority } from '@ui/shortcuts/priorities';
-import { DockablePanel, useDockablePanelState } from '@ui/dockable';
+import { DockablePanel } from '@ui/dockable';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import './AppLogsPanel.css';
 
@@ -36,13 +36,12 @@ const LOG_LEVEL_OPTIONS = [
 const ALL_LEVEL_VALUES = LOG_LEVEL_BASE_OPTIONS.map((option) => option.value);
 const DEFAULT_LOG_LEVELS = ['info', 'warn', 'error'];
 
-export function useAppLogsPanel() {
-  const panelState = useDockablePanelState('app-logs');
-  return panelState;
+interface AppLogsPanelProps {
+  isOpen: boolean;
+  onClose: () => void;
 }
 
-function AppLogsPanel() {
-  const panelState = useAppLogsPanel();
+function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [isAutoScroll, setIsAutoScroll] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
@@ -64,10 +63,10 @@ function AppLogsPanel() {
 
   // Keep backend log-stream visibility aligned with this panel's open state.
   useEffect(() => {
-    SetLogsPanelVisible(panelState.isOpen).catch((error) => {
+    SetLogsPanelVisible(isOpen).catch((error) => {
       errorHandler.handle(error, { action: 'setLogsPanelVisible' });
     });
-  }, [panelState.isOpen]);
+  }, [isOpen]);
 
   // Update ref when state changes
   useEffect(() => {
@@ -327,7 +326,7 @@ function AppLogsPanel() {
 
   // Load logs when panel becomes visible
   useEffect(() => {
-    if (!panelState.isOpen) {
+    if (!isOpen) {
       return;
     }
 
@@ -350,23 +349,23 @@ function AppLogsPanel() {
       clearTimeout(loadTimer);
       runtime?.EventsOff?.('log-added');
     };
-  }, [panelState.isOpen, loadLogs]);
+  }, [isOpen, loadLogs]);
 
   // ESC key to close panel
   useShortcut({
     key: 'Escape',
     handler: () => {
-      if (panelState.isOpen) {
-        panelState.setOpen(false);
+      if (isOpen) {
+        onClose();
         return true;
       }
       return false;
     },
     description: 'Close app logs panel',
     category: 'App Logs',
-    enabled: panelState.isOpen,
+    enabled: isOpen,
     view: 'global',
-    priority: panelState.isOpen ? KeyboardShortcutPriority.APP_LOGS_ESCAPE : 0,
+    priority: isOpen ? KeyboardShortcutPriority.APP_LOGS_ESCAPE : 0,
   });
 
   const getLevelClass = (level: string) => {
@@ -415,7 +414,7 @@ function AppLogsPanel() {
   useShortcut({
     key: 's',
     handler: () => {
-      if (panelState.isOpen) {
+      if (isOpen) {
         setIsAutoScroll((prev) => !prev);
         return true;
       }
@@ -423,16 +422,16 @@ function AppLogsPanel() {
     },
     description: 'Toggle auto-scroll',
     category: 'Logs Panel',
-    enabled: panelState.isOpen, // Only show in help when logs panel is open
+    enabled: isOpen, // Only show in help when logs panel is open
     view: 'global',
-    priority: panelState.isOpen ? KeyboardShortcutPriority.APP_LOGS_ACTION : 0,
+    priority: isOpen ? KeyboardShortcutPriority.APP_LOGS_ACTION : 0,
   });
 
   useShortcut({
     key: 'c',
     modifiers: { shift: true },
     handler: () => {
-      if (panelState.isOpen) {
+      if (isOpen) {
         handleClearLogs();
         return true;
       }
@@ -440,9 +439,9 @@ function AppLogsPanel() {
     },
     description: 'Clear logs',
     category: 'Logs Panel',
-    enabled: panelState.isOpen, // Only show in help when logs panel is open
+    enabled: isOpen, // Only show in help when logs panel is open
     view: 'global',
-    priority: panelState.isOpen ? KeyboardShortcutPriority.APP_LOGS_ACTION : 0,
+    priority: isOpen ? KeyboardShortcutPriority.APP_LOGS_ACTION : 0,
   });
 
   const focusFirstControl = useCallback(() => {
@@ -472,7 +471,7 @@ function AppLogsPanel() {
   useKeyboardNavigationScope({
     ref: panelScopeRef,
     priority: KeyboardScopePriority.APP_LOGS_PANEL,
-    disabled: !panelState.isOpen,
+    disabled: !isOpen,
     allowNativeSelector: '.app-logs-panel-controls *',
     onNavigate: ({ direction, event }) => {
       const target = event.target as HTMLElement | null;
@@ -501,12 +500,11 @@ function AppLogsPanel() {
       panelRef={panelScopeRef}
       panelId="app-logs"
       title="Application Logs"
-      isOpen={panelState.isOpen}
+      isOpen={isOpen}
       defaultPosition="bottom"
-      defaultSize={{ width: 1030, height: 400 }}
       allowMaximize
       maximizeTargetSelector=".content-body"
-      onClose={() => panelState.setOpen(false)}
+      onClose={onClose}
       contentClassName="app-logs-panel-content"
     >
       {/* Panel-specific controls toolbar (moved from header for tab support) */}

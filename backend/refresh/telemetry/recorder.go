@@ -389,10 +389,12 @@ type StreamStatus struct {
 	ActiveSessions  int    `json:"activeSessions"`
 	TotalMessages   uint64 `json:"totalMessages"`
 	DroppedMessages uint64 `json:"droppedMessages"`
+	SkippedTargets  uint64 `json:"skippedTargets"`
 	ErrorCount      uint64 `json:"errorCount"`
 	LastConnect     int64  `json:"lastConnect"`
 	LastEvent       int64  `json:"lastEvent"`
 	LastError       string `json:"lastError,omitempty"`
+	LastSkipReason  string `json:"lastSkipReason,omitempty"`
 }
 
 // Stream name identifiers used across the backend/frontend telemetry contract.
@@ -451,6 +453,18 @@ func (r *Recorder) RecordStreamError(name string, err error) {
 	r.updateStream(name, func(status *StreamStatus) {
 		status.ErrorCount++
 		status.LastError = err.Error()
+	})
+}
+
+// RecordStreamSkippedTargets captures targets omitted due to backend selection caps.
+func (r *Recorder) RecordStreamSkippedTargets(name string, skipped int, reason string) {
+	if skipped <= 0 {
+		return
+	}
+	r.updateStream(name, func(status *StreamStatus) {
+		status.SkippedTargets += uint64(skipped)
+		status.LastSkipReason = reason
+		status.LastEvent = time.Now().UnixMilli()
 	})
 }
 

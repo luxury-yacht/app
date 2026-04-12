@@ -61,7 +61,7 @@ import {
   type ObjectPanelPosition,
   type ObjectPanelLayoutDefaults,
 } from '@core/settings/appPreferences';
-import { getActivePanelLayoutStore } from '@ui/dockable/panelLayoutStore';
+import { useDockablePanelContext } from '@ui/dockable';
 import { getContentBounds, PANEL_DEFAULTS } from '@ui/dockable/dockablePanelLayout';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
@@ -85,6 +85,7 @@ function Settings({ onClose }: SettingsProps) {
   const { enabled: backgroundRefreshEnabled, setBackgroundRefresh } = useBackgroundRefresh();
   const { loadKubeconfigs } = useKubeconfig();
   const { resolvedTheme } = useTheme();
+  const { applyLayoutDefaultsAcrossClusters } = useDockablePanelContext();
   const [useShortResourceNames, setUseShortResourceNames] = useState<boolean>(false);
   const [persistenceMode, setPersistenceMode] = useState<GridTablePersistenceMode>(() =>
     getGridTablePersistenceMode()
@@ -334,7 +335,7 @@ function Settings({ onClose }: SettingsProps) {
       const updated = { ...panelLayout, [field]: clamped };
       setPanelLayout(updated);
       setObjectPanelLayoutDefaults(updated);
-      getActivePanelLayoutStore().applyObjectPanelLayoutDefaults();
+      applyLayoutDefaultsAcrossClusters();
     }
   };
 

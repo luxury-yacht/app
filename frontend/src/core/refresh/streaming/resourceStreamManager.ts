@@ -1694,7 +1694,7 @@ export class ResourceStreamManager {
 
     if (subscription.domain === 'pods') {
       setScopedDomainState('pods', subscription.reportScope, (previous) => {
-        const currentPayload = previous.data ?? { pods: [] };
+        const currentPayload = previous.data ?? { pods: [], clusterId: subscription.clusterId };
         const existingRows = currentPayload.pods ?? [];
         const byKey = new Map(
           existingRows.map((row) => [
@@ -1741,7 +1741,10 @@ export class ResourceStreamManager {
 
     if (subscription.domain === 'namespace-workloads') {
       setScopedDomainState('namespace-workloads', subscription.reportScope, (previous) => {
-        const currentPayload = previous.data ?? { workloads: [] };
+        const currentPayload = previous.data ?? {
+          workloads: [],
+          clusterId: subscription.clusterId,
+        };
         const existingRows = currentPayload.workloads ?? [];
         const byKey = new Map(
           existingRows.map((row) => [
@@ -1794,7 +1797,10 @@ export class ResourceStreamManager {
 
     if (subscription.domain === 'namespace-config') {
       setScopedDomainState('namespace-config', subscription.reportScope, (previous) => {
-        const currentPayload = previous.data ?? { resources: [] };
+        const currentPayload = previous.data ?? {
+          resources: [],
+          clusterId: subscription.clusterId,
+        };
         const existingRows = currentPayload.resources ?? [];
         const byKey = new Map(
           existingRows.map((row) => [
@@ -1845,7 +1851,10 @@ export class ResourceStreamManager {
 
     if (subscription.domain === 'namespace-network') {
       setScopedDomainState('namespace-network', subscription.reportScope, (previous) => {
-        const currentPayload = previous.data ?? { resources: [] };
+        const currentPayload = previous.data ?? {
+          resources: [],
+          clusterId: subscription.clusterId,
+        };
         const existingRows = currentPayload.resources ?? [];
         const byKey = new Map(
           existingRows.map((row) => [
@@ -1896,7 +1905,10 @@ export class ResourceStreamManager {
 
     if (subscription.domain === 'namespace-rbac') {
       setScopedDomainState('namespace-rbac', subscription.reportScope, (previous) => {
-        const currentPayload = previous.data ?? { resources: [] };
+        const currentPayload = previous.data ?? {
+          resources: [],
+          clusterId: subscription.clusterId,
+        };
         const existingRows = currentPayload.resources ?? [];
         const byKey = new Map(
           existingRows.map((row) => [
@@ -1947,7 +1959,10 @@ export class ResourceStreamManager {
 
     if (subscription.domain === 'namespace-custom') {
       setScopedDomainState('namespace-custom', subscription.reportScope, (previous) => {
-        const currentPayload = previous.data ?? { resources: [] };
+        const currentPayload = previous.data ?? {
+          resources: [],
+          clusterId: subscription.clusterId,
+        };
         const existingRows = currentPayload.resources ?? [];
         const byKey = new Map(
           existingRows.map((row) => [
@@ -1998,7 +2013,10 @@ export class ResourceStreamManager {
 
     if (subscription.domain === 'namespace-helm') {
       setScopedDomainState('namespace-helm', subscription.reportScope, (previous) => {
-        const currentPayload = previous.data ?? { releases: [] };
+        const currentPayload = previous.data ?? {
+          releases: [],
+          clusterId: subscription.clusterId,
+        };
         const existingRows = currentPayload.releases ?? [];
         const byKey = new Map(
           existingRows.map((row) => [
@@ -2043,7 +2061,10 @@ export class ResourceStreamManager {
 
     if (subscription.domain === 'namespace-autoscaling') {
       setScopedDomainState('namespace-autoscaling', subscription.reportScope, (previous) => {
-        const currentPayload = previous.data ?? { resources: [] };
+        const currentPayload = previous.data ?? {
+          resources: [],
+          clusterId: subscription.clusterId,
+        };
         const existingRows = currentPayload.resources ?? [];
         const byKey = new Map(
           existingRows.map((row) => [
@@ -2094,7 +2115,10 @@ export class ResourceStreamManager {
 
     if (subscription.domain === 'namespace-quotas') {
       setScopedDomainState('namespace-quotas', subscription.reportScope, (previous) => {
-        const currentPayload = previous.data ?? { resources: [] };
+        const currentPayload = previous.data ?? {
+          resources: [],
+          clusterId: subscription.clusterId,
+        };
         const existingRows = currentPayload.resources ?? [];
         const byKey = new Map(
           existingRows.map((row) => [
@@ -2145,7 +2169,10 @@ export class ResourceStreamManager {
 
     if (subscription.domain === 'namespace-storage') {
       setScopedDomainState('namespace-storage', subscription.reportScope, (previous) => {
-        const currentPayload = previous.data ?? { resources: [] };
+        const currentPayload = previous.data ?? {
+          resources: [],
+          clusterId: subscription.clusterId,
+        };
         const existingRows = currentPayload.resources ?? [];
         const byKey = new Map(
           existingRows.map((row) => [
@@ -2196,7 +2223,10 @@ export class ResourceStreamManager {
 
     if (subscription.domain === 'cluster-rbac') {
       setScopedDomainState('cluster-rbac', subscription.reportScope, (previous) => {
-        const currentPayload = previous.data ?? { resources: [] };
+        const currentPayload = previous.data ?? {
+          resources: [],
+          clusterId: subscription.clusterId,
+        };
         const existingRows = currentPayload.resources ?? [];
         const byKey = new Map(
           existingRows.map((row) => [
@@ -2241,7 +2271,10 @@ export class ResourceStreamManager {
 
     if (subscription.domain === 'cluster-storage') {
       setScopedDomainState('cluster-storage', subscription.reportScope, (previous) => {
-        const currentPayload = previous.data ?? { volumes: [] };
+        const currentPayload = previous.data ?? {
+          volumes: [],
+          clusterId: subscription.clusterId,
+        };
         const existingRows = currentPayload.volumes ?? [];
         const byKey = new Map(
           existingRows.map((row) => [
@@ -2285,7 +2318,10 @@ export class ResourceStreamManager {
 
     if (subscription.domain === 'cluster-config') {
       setScopedDomainState('cluster-config', subscription.reportScope, (previous) => {
-        const currentPayload = previous.data ?? { resources: [] };
+        const currentPayload = previous.data ?? {
+          resources: [],
+          clusterId: subscription.clusterId,
+        };
         const existingRows = currentPayload.resources ?? [];
         const byKey = new Map(
           existingRows.map((row) => [
@@ -2330,7 +2366,10 @@ export class ResourceStreamManager {
 
     if (subscription.domain === 'cluster-crds') {
       setScopedDomainState('cluster-crds', subscription.reportScope, (previous) => {
-        const currentPayload = previous.data ?? { definitions: [] };
+        const currentPayload = previous.data ?? {
+          definitions: [],
+          clusterId: subscription.clusterId,
+        };
         const existingRows = currentPayload.definitions ?? [];
         const byKey = new Map(
           existingRows.map((row) => [
@@ -2374,7 +2413,10 @@ export class ResourceStreamManager {
 
     if (subscription.domain === 'cluster-custom') {
       setScopedDomainState('cluster-custom', subscription.reportScope, (previous) => {
-        const currentPayload = previous.data ?? { resources: [] };
+        const currentPayload = previous.data ?? {
+          resources: [],
+          clusterId: subscription.clusterId,
+        };
         const existingRows = currentPayload.resources ?? [];
         const byKey = new Map(
           existingRows.map((row) => [
@@ -2419,7 +2461,7 @@ export class ResourceStreamManager {
 
     if (subscription.domain === 'nodes') {
       setScopedDomainState('nodes', subscription.reportScope, (previous) => {
-        const currentPayload = previous.data ?? { nodes: [] };
+        const currentPayload = previous.data ?? { nodes: [], clusterId: subscription.clusterId };
         const existingRows = currentPayload.nodes ?? [];
         const byKey = new Map(
           existingRows.map((row) => [

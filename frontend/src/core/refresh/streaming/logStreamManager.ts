@@ -12,6 +12,8 @@ import type { ObjectLogEntry, ObjectLogsSnapshotPayload, PermissionDeniedStatus 
 import { isPermissionDeniedStatus, resolvePermissionDeniedMessage } from '../permissionErrors';
 import { errorHandler } from '@utils/errorHandler';
 import { eventBus } from '@/core/events';
+import { getLogBufferMaxSize, LOG_BUFFER_DEFAULT_SIZE } from '@/core/settings/appPreferences';
+import { getLogStreamScopeParams } from '@modules/object-panel/components/ObjectPanel/Logs/logStreamScopeParamsCache';
 
 type StreamMode = 'stream' | 'manual';
 
@@ -27,7 +29,9 @@ interface StreamEventPayload {
     container?: string;
     line?: string;
     isInit?: boolean;
+    isEphemeral?: boolean;
   }>;
+  warnings?: string[];
   error?: string;
   errorDetails?: PermissionDeniedStatus;
 }
@@ -58,6 +62,13 @@ function isValidLogStreamPayload(data: unknown): data is StreamEventPayload {
     return false;
   }
 
+  if (
+    obj.warnings !== undefined &&
+    (!Array.isArray(obj.warnings) || obj.warnings.some((warning) => typeof warning !== 'string'))
+  ) {
+    return false;
+  }
+
   if (obj.errorDetails !== undefined && !isPermissionDeniedStatus(obj.errorDetails)) {
     return false;
   }
@@ -71,7 +82,6 @@ function isValidLogStreamPayload(data: unknown): data is StreamEventPayload {
 }
 
 const DOMAIN_NAME = 'object-logs' as const;
-const MAX_BUFFER_SIZE = 1000;
 
 const DEFAULT_PAYLOAD: ObjectLogsSnapshotPayload = {
   entries: [],
@@ -126,6 +136,13 @@ class LogStreamConnection {
       }
       const url = new URL('/api/v2/stream/logs', baseURL);
       url.searchParams.set('scope', this.scope);
+      const streamParams = getLogStreamScopeParams(this.scope);
+      if (streamParams?.container) {
+        url.searchParams.set('container', streamParams.container);
+      }
+      for (const selectedFilter of streamParams?.selectedFilters ?? []) {
+        url.searchParams.append('selectedFilter', selectedFilter);
+      }
 
       const eventSource = new EventSource(url.toString());
       this.eventSource = eventSource;
@@ -207,11 +224,22 @@ export class LogStreamManager {
   private connections = new Map<string, LogStreamConnection>();
   private buffers = new Map<string, ObjectLogEntry[]>();
   private bufferMeta = new Map<string, { total: number; truncated: boolean }>();
+  private backendWarnings = new Map<string, string[]>();
   /** Monotonically increasing counter for stable entry keys across buffer truncations. */
   private seqCounter = 0;
   private lastNotifiedErrors = new Map<string, string>();
   private suspendedForVisibility = false;
   private suspendedScopes = new Set<string>();
+  /**
+   * Maximum entries kept per scope before the front of the buffer is
+   * trimmed. User-configurable via the Advanced → Pod Logs setting;
+   * initialized from the preference cache and kept in sync via the
+   * 'settings:log-buffer-size' event. Starts at the hardcoded default so
+   * the manager has a sane value even before appPreferences hydrates (the
+   * singleton is constructed at module-load time, before the backend
+   * settings round-trip completes).
+   */
+  private maxBufferSize = LOG_BUFFER_DEFAULT_SIZE;
 
   constructor() {
     eventBus.on('kubeconfig:changing', () => {
@@ -219,6 +247,51 @@ export class LogStreamManager {
     });
     eventBus.on('app:visibility-hidden', () => this.suspendForVisibility());
     eventBus.on('app:visibility-visible', () => this.resumeFromVisibility());
+    // Pull the initial value from the preference cache. If hydration
+    // hasn't run yet this returns the default; the subsequent hydration
+    // will emit 'settings:log-buffer-size' only if the stored value
+    // differs, so we converge either way.
+    this.maxBufferSize = getLogBufferMaxSize();
+    eventBus.on('settings:log-buffer-size', (size) => this.setMaxBufferSize(size));
+  }
+
+  /**
+   * Apply a new maximum buffer size. If the new size is smaller than an
+   * existing buffer, trim the front immediately and push the truncated
+   * snapshot to the scoped store so all open LogViewers re-render with
+   * the smaller view. Larger values take effect passively — existing
+   * buffers grow naturally as new entries arrive.
+   */
+  private setMaxBufferSize(size: number): void {
+    if (size === this.maxBufferSize) {
+      return;
+    }
+    this.maxBufferSize = size;
+    for (const [scope, entries] of this.buffers) {
+      if (entries.length <= size) {
+        continue;
+      }
+      const trimmed = entries.slice(entries.length - size);
+      this.buffers.set(scope, trimmed);
+      const previousMeta = this.bufferMeta.get(scope);
+      this.bufferMeta.set(scope, {
+        total: previousMeta?.total ?? entries.length,
+        truncated: true,
+      });
+      const stats = this.buildStats(scope, trimmed.length);
+      setScopedDomainState(DOMAIN_NAME, scope, (previous) => {
+        const previousPayload = previous.data ?? DEFAULT_PAYLOAD;
+        return {
+          ...previous,
+          data: {
+            ...previousPayload,
+            entries: trimmed,
+          },
+          stats,
+          scope,
+        };
+      });
+    }
   }
 
   private suspendForVisibility(): void {
@@ -265,6 +338,7 @@ export class LogStreamManager {
     if (reset) {
       this.buffers.delete(scope);
       this.bufferMeta.delete(scope);
+      this.backendWarnings.delete(scope);
       resetScopedDomainState(DOMAIN_NAME, scope);
     } else {
       this.markIdle(scope);
@@ -312,18 +386,41 @@ export class LogStreamManager {
       container: entry.container ?? '',
       line: entry.line ?? '',
       isInit: Boolean(entry.isInit),
+      isEphemeral: Boolean(entry.isEphemeral),
       _seq: ++this.seqCounter,
     }));
 
+    // Buffer replacement policy:
+    // - reset=true with non-empty incoming → replace the buffered entries.
+    //   For live streams, this frame is a fresh tail snapshot after a
+    //   reconnect/remount, not an authoritative total, so preserve the
+    //   larger running total instead of letting the count shrink back to
+    //   the tail size.
+    // - reset=true with empty incoming → PRESERVE. The server emits the
+    //   reset flag as part of its "new connection" handshake on every
+    //   stream open, before it has had a chance to tail any lines. Wiping
+    //   the buffer here used to make auto-refresh toggle and
+    //   cluster-switch remount flash the initial-load spinner even when
+    //   the client already had plenty of log history cached.
+    // - reset=false → append, unchanged.
+    const shouldReplace = payload.reset && incoming.length > 0;
     const previousMeta = this.bufferMeta.get(scope);
-    let totalItems = payload.reset ? 0 : (previousMeta?.total ?? existing.length);
-    totalItems += incoming.length;
+    const previousTotal = previousMeta?.total ?? existing.length;
+    let totalItems = shouldReplace
+      ? mode === 'stream'
+        ? Math.max(previousTotal, incoming.length)
+        : incoming.length
+      : previousTotal + incoming.length;
 
-    let nextEntries = payload.reset ? incoming : existing.concat(incoming);
+    let nextEntries = shouldReplace
+      ? incoming
+      : payload.reset
+        ? existing
+        : existing.concat(incoming);
     let truncated = previousMeta?.truncated ?? false;
-    if (nextEntries.length > MAX_BUFFER_SIZE) {
+    if (nextEntries.length > this.maxBufferSize) {
       truncated = true;
-      nextEntries = nextEntries.slice(nextEntries.length - MAX_BUFFER_SIZE);
+      nextEntries = nextEntries.slice(nextEntries.length - this.maxBufferSize);
     }
     if (totalItems < nextEntries.length) {
       totalItems = nextEntries.length;
@@ -333,12 +430,21 @@ export class LogStreamManager {
     this.bufferMeta.set(scope, { total: totalItems, truncated });
 
     const generatedAt = payload.generatedAt || Date.now();
-    const sequence = payload.sequence ?? (payload.reset ? 1 : 0);
+    const payloadSequence = payload.sequence ?? (payload.reset ? 1 : 0);
     const errorMessage = resolvePermissionDeniedMessage(
       payload.error ?? null,
       payload.errorDetails
     );
     const isManual = mode === 'manual';
+    if (payload.warnings !== undefined) {
+      if (payload.warnings.length > 0) {
+        this.backendWarnings.set(scope, payload.warnings);
+      } else {
+        this.backendWarnings.delete(scope);
+      }
+    } else if (payload.reset) {
+      this.backendWarnings.delete(scope);
+    }
     const stats = this.buildStats(scope, nextEntries.length);
 
     setScopedDomainState(DOMAIN_NAME, scope, (previous) => {
@@ -347,9 +453,17 @@ export class LogStreamManager {
         ? previousPayload.resetCount + 1
         : previousPayload.resetCount;
 
+      // Sequence is monotonic per-scope on the client. The server may
+      // restart its own per-connection counter on every reconnect, but at
+      // the view layer "have we ever received data for this scope" must
+      // survive stream restarts — otherwise the initial-load spinner
+      // reappears on every reconnect even though the cached entries are
+      // still present.
+      const nextSequence = Math.max(payloadSequence, previousPayload.sequence ?? 0);
+
       const nextPayload: ObjectLogsSnapshotPayload = {
         entries: nextEntries,
-        sequence: sequence || previousPayload.sequence,
+        sequence: nextSequence,
         generatedAt,
         resetCount,
         error: errorMessage,
@@ -455,7 +569,7 @@ export class LogStreamManager {
     const meta = this.bufferMeta.get(scope);
     const total = meta?.total ?? count;
     const truncated = meta?.truncated ?? false;
-    const warnings: string[] = [];
+    const warnings = [...(this.backendWarnings.get(scope) ?? [])];
     if (truncated && total > count) {
       warnings.push(`Showing most recent ${count} of ${total} log entries`);
     }

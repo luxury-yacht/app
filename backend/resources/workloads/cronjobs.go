@@ -194,8 +194,8 @@ func (s *CronJobService) collectCronJobPods(namespace string, cronJob *batchv1.C
 	metrics := podService.GetPodMetricsForPods(namespace, collected)
 	podInfos := make([]restypes.PodSimpleInfo, 0, len(collected))
 	for _, pod := range collected {
-		ownerKind, ownerName := pods.ResolveOwner(pod, rsMap)
-		podInfos = append(podInfos, pods.SummarizePod(pod, metrics, ownerKind, ownerName))
+		ownerKind, ownerName, ownerAPIVersion := pods.ResolveOwner(pod, rsMap)
+		podInfos = append(podInfos, pods.SummarizePod(pod, metrics, ownerKind, ownerName, ownerAPIVersion))
 	}
 
 	podSummary, _ := summarizePodMetrics(collected, metrics)

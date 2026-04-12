@@ -29,6 +29,7 @@ import { useViewState } from '@core/contexts/ViewStateContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import '../shared.css';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
+import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
 
 // Row type for the jobs table, combining job info with cluster context.
 interface JobRow {
@@ -138,6 +139,7 @@ export const JobsTab: React.FC<JobsTabProps> = ({
             kind: 'Job',
             name: job.name,
             namespace: job.namespace,
+            ...resolveBuiltinGroupVersion('Job'),
             ...getJobClusterMeta(job),
           }),
         onAltClick: (job) =>
@@ -156,6 +158,7 @@ export const JobsTab: React.FC<JobsTabProps> = ({
             kind: 'Job',
             name: job.name,
             namespace: job.namespace,
+            ...resolveBuiltinGroupVersion('Job'),
             ...getJobClusterMeta(job),
           }),
         onAltClick: (job) =>
@@ -213,7 +216,12 @@ export const JobsTab: React.FC<JobsTabProps> = ({
   } = useGridTablePersistence<JobRow>({
     viewId: 'object-panel-jobs',
     // Use the panel-scoped cluster ID, not the global sidebar selection.
+    // Multi-cluster rule (AGENTS.md): persistence is keyed per cluster
+    // so column widths/sort don't bleed between clusters. Disable
+    // persistence when clusterId is missing rather than falling through
+    // to a global storage bucket.
     clusterIdentity: objectData?.clusterId ?? '',
+    enabled: Boolean(objectData?.clusterId),
     namespace: null,
     isNamespaceScoped: false,
     columns,
@@ -256,6 +264,7 @@ export const JobsTab: React.FC<JobsTabProps> = ({
                 kind: 'Job',
                 name: job.name,
                 namespace: job.namespace,
+                ...resolveBuiltinGroupVersion('Job'),
                 ...getJobClusterMeta(job),
               })
             }
@@ -275,6 +284,7 @@ export const JobsTab: React.FC<JobsTabProps> = ({
                       kind: 'Job',
                       name: job.name,
                       namespace: job.namespace,
+                      ...resolveBuiltinGroupVersion('Job'),
                       ...getJobClusterMeta(job),
                     }),
                 },

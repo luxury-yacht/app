@@ -305,6 +305,13 @@ const queueFlush = () => {
         return {
           id: descriptor.id,
           clusterId: descriptor.clusterId,
+          // group/version on the descriptor are present whenever the call site
+          // knows the GVK (built-ins via resolveBuiltinGroupVersion, customs
+          // via the data source). The backend uses them to route through the
+          // strict GVK resolver and disambiguate colliding kinds. See
+
+          group: descriptor.group,
+          version: descriptor.version,
           verb: descriptor.verb,
           resourceKind: descriptor.resourceKind,
           namespace: descriptor.namespace,

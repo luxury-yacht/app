@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/internal/podlogs"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -34,6 +35,7 @@ type settingsPreferences struct {
 	Theme                         string           `json:"theme"`
 	UseShortResourceNames         bool             `json:"useShortResourceNames"`
 	Refresh                       *settingsRefresh `json:"refresh"`
+	Logs                          *settingsLogs    `json:"logs,omitempty"`
 	GridTablePersistenceMode      string           `json:"gridTablePersistenceMode"`
 	DefaultObjectPanelPosition    string           `json:"defaultObjectPanelPosition"`
 	ObjectPanelDockedRightWidth   int              `json:"objectPanelDockedRightWidth"`
@@ -71,6 +73,61 @@ type settingsRefresh struct {
 	MetricsIntervalMs int  `json:"metricsIntervalMs"`
 }
 
+// settingsLogs captures user-configurable pod-logs settings.
+type settingsLogs struct {
+	BufferMaxSize       int    `json:"bufferMaxSize"`       // Max log entries kept in memory per Logs tab
+	TargetPerScopeLimit int    `json:"targetPerScopeLimit"` // Max pod/container targets per Logs tab
+	TargetGlobalLimit   int    `json:"targetGlobalLimit"`   // Max pod/container targets across all Logs tabs
+	APITimestampFormat  string `json:"apiTimestampFormat"`  // Day.js format for the Kubernetes API timestamp shown in pod logs
+	UseLocalTimeZone    bool   `json:"useLocalTimeZone"`    // Render the Kubernetes API timestamp in the user's local timezone instead of UTC
+}
+
+// Log buffer size bounds. The frontend clamps to the same range in
+// normalizeLogBufferMaxSize, so the client can't push values outside
+// these limits; clamping again in the setter is defence in depth.
+const (
+	defaultLogBufferMaxSize       = 1000
+	minLogBufferMaxSize           = 100
+	maxLogBufferMaxSize           = 10000
+	defaultLogAPITimestampFormat  = "YYYY-MM-DDTHH:mm:ss.SSS[Z]"
+	defaultLogTargetPerScopeLimit = podlogs.DefaultPerScopeTargetLimit
+	minLogTargetPerScopeLimit     = podlogs.MinPerScopeTargetLimit
+	maxLogTargetPerScopeLimit     = podlogs.MaxPerScopeTargetLimit
+	defaultLogTargetGlobalLimit   = config.LogStreamGlobalTargetLimit
+	minLogTargetGlobalLimit       = 1
+	maxLogTargetGlobalLimit       = 1000
+)
+
+func clampLogBufferMaxSize(size int) int {
+	if size < minLogBufferMaxSize {
+		return minLogBufferMaxSize
+	}
+	if size > maxLogBufferMaxSize {
+		return maxLogBufferMaxSize
+	}
+	return size
+}
+
+func clampLogTargetPerScopeLimit(limit int) int {
+	if limit < minLogTargetPerScopeLimit {
+		return minLogTargetPerScopeLimit
+	}
+	if limit > maxLogTargetPerScopeLimit {
+		return maxLogTargetPerScopeLimit
+	}
+	return limit
+}
+
+func clampLogTargetGlobalLimit(limit int) int {
+	if limit < minLogTargetGlobalLimit {
+		return minLogTargetGlobalLimit
+	}
+	if limit > maxLogTargetGlobalLimit {
+		return maxLogTargetGlobalLimit
+	}
+	return limit
+}
+
 // settingsKubeconfig captures user-configurable kubeconfig settings.
 type settingsKubeconfig struct {
 	Selected    []string `json:"selected"`
@@ -93,6 +150,12 @@ func defaultSettingsFile() *settingsFile {
 		Preferences: settingsPreferences{
 			Theme:   "system",
 			Refresh: &settingsRefresh{Auto: true, Background: true, MetricsIntervalMs: defaultMetricsIntervalMs()},
+			Logs: &settingsLogs{
+				BufferMaxSize:       defaultLogBufferMaxSize,
+				TargetPerScopeLimit: defaultLogTargetPerScopeLimit,
+				TargetGlobalLimit:   defaultLogTargetGlobalLimit,
+				APITimestampFormat:  defaultLogAPITimestampFormat,
+			},
 
 			GridTablePersistenceMode: "shared",
 			// DefaultObjectPanelPosition and object panel layout defaults are
@@ -122,6 +185,35 @@ func normalizeSettingsFile(settings *settingsFile) *settingsFile {
 	}
 	if settings.Preferences.Refresh.MetricsIntervalMs <= 0 {
 		settings.Preferences.Refresh.MetricsIntervalMs = defaultMetricsIntervalMs()
+	}
+	if settings.Preferences.Logs == nil {
+		settings.Preferences.Logs = &settingsLogs{
+			BufferMaxSize:       defaultLogBufferMaxSize,
+			TargetPerScopeLimit: defaultLogTargetPerScopeLimit,
+			TargetGlobalLimit:   defaultLogTargetGlobalLimit,
+			APITimestampFormat:  defaultLogAPITimestampFormat,
+		}
+	}
+	// A zero value from an older settings file means "use the default",
+	// not "truncate every buffer to 0" — clamp after the fact so existing
+	// users upgrade cleanly.
+	if settings.Preferences.Logs.BufferMaxSize <= 0 {
+		settings.Preferences.Logs.BufferMaxSize = defaultLogBufferMaxSize
+	} else {
+		settings.Preferences.Logs.BufferMaxSize = clampLogBufferMaxSize(settings.Preferences.Logs.BufferMaxSize)
+	}
+	if settings.Preferences.Logs.TargetPerScopeLimit <= 0 {
+		settings.Preferences.Logs.TargetPerScopeLimit = defaultLogTargetPerScopeLimit
+	} else {
+		settings.Preferences.Logs.TargetPerScopeLimit = clampLogTargetPerScopeLimit(settings.Preferences.Logs.TargetPerScopeLimit)
+	}
+	if settings.Preferences.Logs.TargetGlobalLimit <= 0 {
+		settings.Preferences.Logs.TargetGlobalLimit = defaultLogTargetGlobalLimit
+	} else {
+		settings.Preferences.Logs.TargetGlobalLimit = clampLogTargetGlobalLimit(settings.Preferences.Logs.TargetGlobalLimit)
+	}
+	if settings.Preferences.Logs.APITimestampFormat == "" {
+		settings.Preferences.Logs.APITimestampFormat = defaultLogAPITimestampFormat
 	}
 	if settings.Preferences.GridTablePersistenceMode == "" {
 		settings.Preferences.GridTablePersistenceMode = "shared"
@@ -293,7 +385,12 @@ func getDefaultAppSettings() *AppSettings {
 		AutoRefreshEnabled:               true,
 		RefreshBackgroundClustersEnabled: true,
 		MetricsRefreshIntervalMs:         defaultMetricsIntervalMs(),
-		GridTablePersistenceMode: "shared",
+		LogBufferMaxSize:                 defaultLogBufferMaxSize,
+		LogTargetPerScopeLimit:           defaultLogTargetPerScopeLimit,
+		LogTargetGlobalLimit:             defaultLogTargetGlobalLimit,
+		LogAPITimestampFormat:            defaultLogAPITimestampFormat,
+		LogAPITimestampUseLocalTimeZone:  false,
+		GridTablePersistenceMode:         "shared",
 	}
 }
 
@@ -303,6 +400,27 @@ func (a *App) loadAppSettings() error {
 		return err
 	}
 
+	logBufferMaxSize := defaultLogBufferMaxSize
+	logTargetPerScopeLimit := defaultLogTargetPerScopeLimit
+	logTargetGlobalLimit := defaultLogTargetGlobalLimit
+	logAPITimestampFormat := defaultLogAPITimestampFormat
+	logAPITimestampUseLocalTimeZone := false
+	if settings.Preferences.Logs != nil && settings.Preferences.Logs.BufferMaxSize > 0 {
+		logBufferMaxSize = clampLogBufferMaxSize(settings.Preferences.Logs.BufferMaxSize)
+	}
+	if settings.Preferences.Logs != nil && settings.Preferences.Logs.TargetPerScopeLimit > 0 {
+		logTargetPerScopeLimit = clampLogTargetPerScopeLimit(settings.Preferences.Logs.TargetPerScopeLimit)
+	}
+	if settings.Preferences.Logs != nil && settings.Preferences.Logs.TargetGlobalLimit > 0 {
+		logTargetGlobalLimit = clampLogTargetGlobalLimit(settings.Preferences.Logs.TargetGlobalLimit)
+	}
+	if settings.Preferences.Logs != nil && settings.Preferences.Logs.APITimestampFormat != "" {
+		logAPITimestampFormat = settings.Preferences.Logs.APITimestampFormat
+	}
+	if settings.Preferences.Logs != nil {
+		logAPITimestampUseLocalTimeZone = settings.Preferences.Logs.UseLocalTimeZone
+	}
+
 	a.appSettings = &AppSettings{
 		Theme:                            settings.Preferences.Theme,
 		SelectedKubeconfigs:              append([]string(nil), settings.Kubeconfig.Selected...),
@@ -310,6 +428,11 @@ func (a *App) loadAppSettings() error {
 		AutoRefreshEnabled:               settings.Preferences.Refresh.Auto,
 		RefreshBackgroundClustersEnabled: settings.Preferences.Refresh.Background,
 		MetricsRefreshIntervalMs:         settings.Preferences.Refresh.MetricsIntervalMs,
+		LogBufferMaxSize:                 logBufferMaxSize,
+		LogTargetPerScopeLimit:           logTargetPerScopeLimit,
+		LogTargetGlobalLimit:             logTargetGlobalLimit,
+		LogAPITimestampFormat:            logAPITimestampFormat,
+		LogAPITimestampUseLocalTimeZone:  logAPITimestampUseLocalTimeZone,
 		GridTablePersistenceMode:         settings.Preferences.GridTablePersistenceMode,
 		DefaultObjectPanelPosition:       settings.Preferences.DefaultObjectPanelPosition,
 		ObjectPanelDockedRightWidth:      settings.Preferences.ObjectPanelDockedRightWidth,
@@ -329,6 +452,10 @@ func (a *App) loadAppSettings() error {
 		LinkColorLight:                   settings.Preferences.LinkColorLight,
 		LinkColorDark:                    settings.Preferences.LinkColorDark,
 		Themes:                           settings.Preferences.Themes,
+	}
+	podlogs.SetPerScopeTargetLimit(logTargetPerScopeLimit)
+	if a.logTargetLimiter != nil {
+		a.logTargetLimiter.SetLimit(logTargetGlobalLimit)
 	}
 	return nil
 }
@@ -351,6 +478,18 @@ func (a *App) saveAppSettings() error {
 	settings.Preferences.Refresh.Auto = a.appSettings.AutoRefreshEnabled
 	settings.Preferences.Refresh.Background = a.appSettings.RefreshBackgroundClustersEnabled
 	settings.Preferences.Refresh.MetricsIntervalMs = a.appSettings.MetricsRefreshIntervalMs
+	if settings.Preferences.Logs == nil {
+		settings.Preferences.Logs = &settingsLogs{}
+	}
+	settings.Preferences.Logs.BufferMaxSize = clampLogBufferMaxSize(a.appSettings.LogBufferMaxSize)
+	settings.Preferences.Logs.TargetPerScopeLimit = clampLogTargetPerScopeLimit(a.appSettings.LogTargetPerScopeLimit)
+	settings.Preferences.Logs.TargetGlobalLimit = clampLogTargetGlobalLimit(a.appSettings.LogTargetGlobalLimit)
+	if a.appSettings.LogAPITimestampFormat == "" {
+		settings.Preferences.Logs.APITimestampFormat = defaultLogAPITimestampFormat
+	} else {
+		settings.Preferences.Logs.APITimestampFormat = a.appSettings.LogAPITimestampFormat
+	}
+	settings.Preferences.Logs.UseLocalTimeZone = a.appSettings.LogAPITimestampUseLocalTimeZone
 	settings.Preferences.GridTablePersistenceMode = a.appSettings.GridTablePersistenceMode
 	settings.Preferences.DefaultObjectPanelPosition = a.appSettings.DefaultObjectPanelPosition
 	settings.Preferences.ObjectPanelDockedRightWidth = a.appSettings.ObjectPanelDockedRightWidth
@@ -504,6 +643,96 @@ func (a *App) SetBackgroundRefreshEnabled(enabled bool) error {
 
 	a.logger.Info(fmt.Sprintf("Background refresh enabled changed to: %v", enabled), "Settings")
 	a.appSettings.RefreshBackgroundClustersEnabled = enabled
+	return a.saveAppSettings()
+}
+
+// SetLogBufferMaxSize persists the max log entries each Logs tab keeps
+// in memory. Values are clamped to [minLogBufferMaxSize, maxLogBufferMaxSize].
+func (a *App) SetLogBufferMaxSize(size int) error {
+	a.settingsMu.Lock()
+	defer a.settingsMu.Unlock()
+
+	if a.appSettings == nil {
+		if err := a.loadAppSettings(); err != nil {
+			return err
+		}
+	}
+
+	clamped := clampLogBufferMaxSize(size)
+	a.logger.Info(fmt.Sprintf("Log buffer max size changed to: %d", clamped), "Settings")
+	a.appSettings.LogBufferMaxSize = clamped
+	return a.saveAppSettings()
+}
+
+func (a *App) SetLogTargetPerScopeLimit(limit int) error {
+	a.settingsMu.Lock()
+	defer a.settingsMu.Unlock()
+
+	if a.appSettings == nil {
+		if err := a.loadAppSettings(); err != nil {
+			return err
+		}
+	}
+
+	clamped := clampLogTargetPerScopeLimit(limit)
+	a.logger.Info(fmt.Sprintf("Log target per-scope limit changed to: %d", clamped), "Settings")
+	a.appSettings.LogTargetPerScopeLimit = clamped
+	podlogs.SetPerScopeTargetLimit(clamped)
+	return a.saveAppSettings()
+}
+
+func (a *App) SetLogTargetGlobalLimit(limit int) error {
+	a.settingsMu.Lock()
+	defer a.settingsMu.Unlock()
+
+	if a.appSettings == nil {
+		if err := a.loadAppSettings(); err != nil {
+			return err
+		}
+	}
+
+	clamped := clampLogTargetGlobalLimit(limit)
+	a.logger.Info(fmt.Sprintf("Log target global limit changed to: %d", clamped), "Settings")
+	a.appSettings.LogTargetGlobalLimit = clamped
+	if a.logTargetLimiter != nil {
+		a.logTargetLimiter.SetLimit(clamped)
+	}
+	return a.saveAppSettings()
+}
+
+func (a *App) SetLogAPITimestampFormat(format string) error {
+	a.settingsMu.Lock()
+	defer a.settingsMu.Unlock()
+
+	if a.appSettings == nil {
+		if err := a.loadAppSettings(); err != nil {
+			return err
+		}
+	}
+
+	if format == "" {
+		format = defaultLogAPITimestampFormat
+	}
+	a.logger.Info(fmt.Sprintf("Log API timestamp format changed to: %s", format), "Settings")
+	a.appSettings.LogAPITimestampFormat = format
+	return a.saveAppSettings()
+}
+
+func (a *App) SetLogAPITimestampUseLocalTimeZone(enabled bool) error {
+	a.settingsMu.Lock()
+	defer a.settingsMu.Unlock()
+
+	if a.appSettings == nil {
+		if err := a.loadAppSettings(); err != nil {
+			return err
+		}
+	}
+
+	a.logger.Info(
+		fmt.Sprintf("Log API timestamp local timezone changed to: %v", enabled),
+		"Settings",
+	)
+	a.appSettings.LogAPITimestampUseLocalTimeZone = enabled
 	return a.saveAppSettings()
 }
 

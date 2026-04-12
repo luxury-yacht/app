@@ -80,7 +80,7 @@ const Tooltip: React.FC<TooltipProps> = ({
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /** Grace period (ms) for the mouse to travel from trigger to tooltip */
-  const INTERACTIVE_GRACE = 100;
+  const INTERACTIVE_GRACE = 250;
 
   const { zoomLevel } = useZoom();
 
@@ -177,6 +177,13 @@ const Tooltip: React.FC<TooltipProps> = ({
     }
   }, []);
 
+  const isWithinInteractiveRegion = useCallback((node: EventTarget | null) => {
+    if (!(node instanceof Node)) {
+      return false;
+    }
+    return Boolean(triggerRef.current?.contains(node) || tooltipRef.current?.contains(node));
+  }, []);
+
   /** Schedule a hide after the grace period (interactive mode)
    *  or hide immediately (non-interactive). */
   const scheduleHide = useCallback(() => {
@@ -197,14 +204,20 @@ const Tooltip: React.FC<TooltipProps> = ({
     timerRef.current = setTimeout(() => setVisible(true), hoverDelay);
   }, [disabled, trigger, hoverDelay, cancelHide]);
 
-  const handleMouseLeave = useCallback(() => {
-    if (trigger !== 'hover') return;
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
-    scheduleHide();
-  }, [trigger, scheduleHide]);
+  const handleMouseLeave = useCallback(
+    (event: React.MouseEvent<HTMLElement>) => {
+      if (trigger !== 'hover') return;
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+      if (interactive && isWithinInteractiveRegion(event.relatedTarget)) {
+        return;
+      }
+      scheduleHide();
+    },
+    [interactive, isWithinInteractiveRegion, trigger, scheduleHide]
+  );
 
   /** When the mouse enters the tooltip popup (interactive mode). */
   const handleTooltipMouseEnter = useCallback(() => {
@@ -213,10 +226,16 @@ const Tooltip: React.FC<TooltipProps> = ({
   }, [interactive, cancelHide]);
 
   /** When the mouse leaves the tooltip popup (interactive mode). */
-  const handleTooltipMouseLeave = useCallback(() => {
-    if (!interactive) return;
-    scheduleHide();
-  }, [interactive, scheduleHide]);
+  const handleTooltipMouseLeave = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      if (!interactive) return;
+      if (isWithinInteractiveRegion(event.relatedTarget)) {
+        return;
+      }
+      scheduleHide();
+    },
+    [interactive, isWithinInteractiveRegion, scheduleHide]
+  );
 
   const handleClick = useCallback(() => {
     if (disabled || trigger !== 'click') return;

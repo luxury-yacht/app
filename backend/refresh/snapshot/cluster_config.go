@@ -102,18 +102,17 @@ func (b *ClusterConfigBuilder) buildFromListers(ctx context.Context) (*refresh.S
 		if err != nil {
 			return nil, err
 		}
+		// Delegate to the shared row builders so the full-snapshot path
+		// and the streaming/incremental update path emit identical row
+		// shapes. See BuildClusterStorageClassSummary /
+		// BuildClusterIngressClassSummary /
+		// BuildClusterValidatingWebhookSummary /
+		// BuildClusterMutatingWebhookSummary in streaming_helpers.go.
 		for _, sc := range storageClasses {
 			if sc == nil {
 				continue
 			}
-			entries = append(entries, ClusterConfigEntry{
-				ClusterMeta: meta,
-				Kind:      "StorageClass",
-				Name:      sc.Name,
-				Details:   sc.Provisioner,
-				IsDefault: isDefaultClass(sc.Annotations),
-				Age:       formatAge(sc.CreationTimestamp.Time),
-			})
+			entries = append(entries, BuildClusterStorageClassSummary(meta, sc))
 			if v := resourceVersionOrTimestamp(sc); v > version {
 				version = v
 			}
@@ -129,14 +128,7 @@ func (b *ClusterConfigBuilder) buildFromListers(ctx context.Context) (*refresh.S
 			if ic == nil {
 				continue
 			}
-			entries = append(entries, ClusterConfigEntry{
-				ClusterMeta: meta,
-				Kind:      "IngressClass",
-				Name:      ic.Name,
-				Details:   ic.Spec.Controller,
-				IsDefault: isDefaultClass(ic.Annotations),
-				Age:       formatAge(ic.CreationTimestamp.Time),
-			})
+			entries = append(entries, BuildClusterIngressClassSummary(meta, ic))
 			if v := resourceVersionOrTimestamp(ic); v > version {
 				version = v
 			}
@@ -152,13 +144,7 @@ func (b *ClusterConfigBuilder) buildFromListers(ctx context.Context) (*refresh.S
 			if webhook == nil {
 				continue
 			}
-			entries = append(entries, ClusterConfigEntry{
-				ClusterMeta: meta,
-				Kind:    "ValidatingWebhookConfiguration",
-				Name:    webhook.Name,
-				Details: webhookDetails(len(webhook.Webhooks)),
-				Age:     formatAge(webhook.CreationTimestamp.Time),
-			})
+			entries = append(entries, BuildClusterValidatingWebhookSummary(meta, webhook))
 			if v := resourceVersionOrTimestamp(webhook); v > version {
 				version = v
 			}
@@ -174,13 +160,7 @@ func (b *ClusterConfigBuilder) buildFromListers(ctx context.Context) (*refresh.S
 			if webhook == nil {
 				continue
 			}
-			entries = append(entries, ClusterConfigEntry{
-				ClusterMeta: meta,
-				Kind:    "MutatingWebhookConfiguration",
-				Name:    webhook.Name,
-				Details: webhookDetails(len(webhook.Webhooks)),
-				Age:     formatAge(webhook.CreationTimestamp.Time),
-			})
+			entries = append(entries, BuildClusterMutatingWebhookSummary(meta, webhook))
 			if v := resourceVersionOrTimestamp(webhook); v > version {
 				version = v
 			}

@@ -28,6 +28,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/rbac"
 	"github.com/luxury-yacht/app/backend/resources/storage"
 	"github.com/luxury-yacht/app/backend/resources/workloads"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 type objectDetailProvider struct {
@@ -309,15 +310,35 @@ func (p *objectDetailProvider) resolveDetailContext(ctx context.Context) resolve
 }
 
 // FetchObjectYAML retrieves the YAML representation of a Kubernetes object.
-func (p *objectDetailProvider) FetchObjectYAML(ctx context.Context, kind, namespace, name string) (string, error) {
+//
+// The caller MUST supply a fully-qualified GVK (group, version, and kind).
+// Resolution goes through the shared common.ResolveGVRForGVK helper so
+// colliding kinds from different groups disambiguate correctly. The
+// kind-only fallback that used to live here was the source of the
+// kind-only-objects bug — see the hard-error guard below
+func (p *objectDetailProvider) FetchObjectYAML(ctx context.Context, gvk schema.GroupVersionKind, namespace, name string) (string, error) {
 	resolved := p.resolveDetailContext(ctx)
 	if !resolved.scoped {
 		return "", fmt.Errorf("cluster scope is required")
 	}
-	if p == nil || p.app == nil {
-		return getObjectYAMLWithDependencies(resolved.deps, resolved.selectionKey, kind, namespace, name)
+
+	// All callers MUST supply at least the GVK Version; the kind-only
+	// fallback that used to live here was the source of the
+	// kind-only-objects bug (two CRDs sharing a Kind landed on whichever
+	// the legacy first-match-wins resolver returned). The frontend
+	// scope-string producers all emit the GVK form (see
+	// frontend/src/modules/object-panel/components/ObjectPanel/hooks/getObjectPanelKind.ts
+	// and the buildObjectScope helper), so reaching this branch with an
+	// empty Version means a producer was missed and we want to fail loud
+	// rather than silently pick a CRD.
+	if gvk.Version == "" {
+		return "", fmt.Errorf(
+			"object YAML fetch requires apiVersion (got kind=%q without group/version); "+
+				"refresh-domain scope must be in GVK form",
+			gvk.Kind,
+		)
 	}
-	return p.app.getObjectYAMLWithCache(resolved.deps, resolved.selectionKey, kind, namespace, name)
+	return fetchObjectYAMLByGVK(ctx, resolved.deps, gvk, namespace, name)
 }
 
 // FetchHelmManifest retrieves the manifest for a Helm release.

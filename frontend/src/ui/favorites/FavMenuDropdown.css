@@ -19,7 +19,7 @@
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius-lg, 8px);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-  z-index: 9999;
+  z-index: var(--z-index-overlay);
   display: flex;
   flex-direction: column;
   overflow: hidden;

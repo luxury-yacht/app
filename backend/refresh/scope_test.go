@@ -36,3 +36,50 @@ func TestSplitClusterScopeListHandlesPrefixedSelectors(t *testing.T) {
 		t.Fatalf("expected empty scope, got %q", scope)
 	}
 }
+
+func TestParseObjectScopeSupportsGVK(t *testing.T) {
+	identity, err := ParseObjectScope("cluster-a|default:apps/v1:deployment:web")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if identity.Namespace != "default" {
+		t.Fatalf("expected namespace default, got %q", identity.Namespace)
+	}
+	if identity.GVK.Group != "apps" || identity.GVK.Version != "v1" || identity.GVK.Kind != "deployment" {
+		t.Fatalf("unexpected gvk: %#v", identity.GVK)
+	}
+	if identity.Name != "web" {
+		t.Fatalf("expected name web, got %q", identity.Name)
+	}
+}
+
+func TestParseObjectScopeHandlesClusterToken(t *testing.T) {
+	identity, err := ParseObjectScope("__cluster__:Node:n1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if identity.Namespace != "" {
+		t.Fatalf("expected empty namespace, got %q", identity.Namespace)
+	}
+	if identity.GVK.Kind != "Node" {
+		t.Fatalf("expected kind Node, got %q", identity.GVK.Kind)
+	}
+}
+
+func TestParseObjectScopeKeepsCollidingKindsDistinctByGroup(t *testing.T) {
+	first, err := ParseObjectScope("default:rds.services.k8s.aws/v1alpha1:DBInstance:orders")
+	if err != nil {
+		t.Fatalf("unexpected error parsing first scope: %v", err)
+	}
+	second, err := ParseObjectScope("default:documentdb.services.k8s.aws/v1alpha1:DBInstance:orders")
+	if err != nil {
+		t.Fatalf("unexpected error parsing second scope: %v", err)
+	}
+
+	if first.GVK.Kind != second.GVK.Kind {
+		t.Fatalf("expected colliding kinds to match, got %q and %q", first.GVK.Kind, second.GVK.Kind)
+	}
+	if first.GVK.Group == second.GVK.Group {
+		t.Fatalf("expected groups to differ, got %q", first.GVK.Group)
+	}
+}

@@ -24,8 +24,8 @@ const (
 
 // NamespaceQuotasPermissions indicates which resources should be included in the domain.
 type NamespaceQuotasPermissions struct {
-	IncludeResourceQuotas      bool
-	IncludeLimitRanges         bool
+	IncludeResourceQuotas       bool
+	IncludeLimitRanges          bool
 	IncludePodDisruptionBudgets bool
 }
 
@@ -171,19 +171,15 @@ func (b *NamespaceQuotasBuilder) buildSnapshot(
 	resources := make([]QuotaSummary, 0, len(quotas)+len(limits)+len(pdbs))
 	var version uint64
 
+	// Delegate to the shared row builders so the full-snapshot path and
+	// the streaming/incremental update path emit identical row shapes.
+	// See BuildResourceQuotaSummary / BuildLimitRangeSummary /
+	// BuildPodDisruptionBudgetSummary in streaming_helpers.go.
 	for _, quota := range quotas {
 		if quota == nil {
 			continue
 		}
-		summary := QuotaSummary{
-			ClusterMeta: meta,
-			Kind:      "ResourceQuota",
-			Name:      quota.Name,
-			Namespace: quota.Namespace,
-			Details:   describeResourceQuota(quota),
-			Age:       formatAge(quota.CreationTimestamp.Time),
-		}
-		resources = append(resources, summary)
+		resources = append(resources, BuildResourceQuotaSummary(meta, quota))
 		if v := resourceVersionOrTimestamp(quota); v > version {
 			version = v
 		}
@@ -193,15 +189,7 @@ func (b *NamespaceQuotasBuilder) buildSnapshot(
 		if limit == nil {
 			continue
 		}
-		summary := QuotaSummary{
-			ClusterMeta: meta,
-			Kind:      "LimitRange",
-			Name:      limit.Name,
-			Namespace: limit.Namespace,
-			Details:   describeLimitRange(limit),
-			Age:       formatAge(limit.CreationTimestamp.Time),
-		}
-		resources = append(resources, summary)
+		resources = append(resources, BuildLimitRangeSummary(meta, limit))
 		if v := resourceVersionOrTimestamp(limit); v > version {
 			version = v
 		}
@@ -211,28 +199,7 @@ func (b *NamespaceQuotasBuilder) buildSnapshot(
 		if pdb == nil {
 			continue
 		}
-		summary := QuotaSummary{
-			ClusterMeta: meta,
-			Kind:      "PodDisruptionBudget",
-			Name:      pdb.Name,
-			Namespace: pdb.Namespace,
-			Details:   describePodDisruptionBudget(pdb),
-			Age:       formatAge(pdb.CreationTimestamp.Time),
-			Status: &QuotaStatus{
-				DisruptionsAllowed: pdb.Status.DisruptionsAllowed,
-				CurrentHealthy:     pdb.Status.CurrentHealthy,
-				DesiredHealthy:     pdb.Status.DesiredHealthy,
-			},
-		}
-		if pdb.Spec.MinAvailable != nil {
-			value := pdb.Spec.MinAvailable.String()
-			summary.MinAvailable = &value
-		}
-		if pdb.Spec.MaxUnavailable != nil {
-			value := pdb.Spec.MaxUnavailable.String()
-			summary.MaxUnavailable = &value
-		}
-		resources = append(resources, summary)
+		resources = append(resources, BuildPodDisruptionBudgetSummary(meta, pdb))
 		if v := resourceVersionOrTimestamp(pdb); v > version {
 			version = v
 		}

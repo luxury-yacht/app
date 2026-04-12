@@ -6,7 +6,7 @@
  * Also indicates if the object is a Helm release or an event.
  */
 import type { PanelObjectData } from '../types';
-import { buildClusterScope } from '@/core/refresh/clusterScope';
+import { buildClusterScope, buildObjectScope } from '@/core/refresh/clusterScope';
 
 export interface UseObjectPanelKindOptions {
   clusterScope?: string;
@@ -17,6 +17,18 @@ export interface ObjectPanelKindResult {
   objectKind: string | null;
   scopeNamespace: string | null;
   detailScope: string | null;
+  // Scope string for the object-events refresh domain. Distinct from
+  // detailScope because the events producer keeps the original-case
+  // kind. ObjectPanelContent and EventsTab both consume this — the
+  // string MUST come from one place so they cannot disagree (an old
+  // bug had each computing its own and the two drifting apart).
+  eventsScope: string | null;
+  // Scope string for the object-logs refresh domain. Used by both
+  // ObjectPanelContent (full-cleanup lifecycle on panel close) and
+  // LogViewer (the actual streaming start/stop). Same drift hazard as
+  // eventsScope: keep computation in one place. The log producer uses
+  // the lowercased kind by historical convention.
+  logScope: string | null;
   helmScope: string | null;
   isHelmRelease: boolean;
   isEvent: boolean;
@@ -41,7 +53,53 @@ export const getObjectPanelKind = (
   const detailScope =
     !objectData?.name || !objectKind
       ? null
-      : buildClusterScope(clusterId, `${scopeNamespace}:${objectKind}:${objectData.name}`);
+      : buildClusterScope(
+          clusterId,
+          buildObjectScope({
+            namespace: scopeNamespace,
+            group: objectData?.group,
+            version: objectData?.version,
+            kind: objectKind,
+            name: objectData.name,
+          })
+        );
+
+  // eventsScope mirrors detailScope but keeps the kind in its original
+  // case. The backend object-events provider does not lowercase the
+  // kind when registering its dispatch, so the producer convention is
+  // case-preserving. See ObjectPanelContent and EventsTab — both used
+  // to compute this independently and the strings could drift apart.
+  const eventsScope =
+    !objectData?.name || !objectData?.kind
+      ? null
+      : buildClusterScope(
+          clusterId,
+          buildObjectScope({
+            namespace: scopeNamespace,
+            group: objectData?.group,
+            version: objectData?.version,
+            kind: objectData.kind,
+            name: objectData.name,
+          })
+        );
+
+  // logScope follows the same object-scope encoding as detailScope so
+  // the live stream path and the fallback/manual fetch path can share a
+  // single canonical object identity. The kind stays lowercased to
+  // match the object-logs backend producer's workload dispatch.
+  const logScope =
+    !objectData?.name || !objectKind
+      ? null
+      : buildClusterScope(
+          clusterId,
+          buildObjectScope({
+            namespace: scopeNamespace,
+            group: objectData?.group,
+            version: objectData?.version,
+            kind: objectKind,
+            name: objectData.name,
+          })
+        );
 
   const helmScope =
     objectKind !== 'helmrelease' || !objectData?.name
@@ -55,6 +113,8 @@ export const getObjectPanelKind = (
     objectKind,
     scopeNamespace,
     detailScope,
+    eventsScope,
+    logScope,
     helmScope,
     isHelmRelease,
     isEvent,

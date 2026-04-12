@@ -57,7 +57,7 @@ func (s *ReplicaSetService) buildReplicaSetDetails(
 	podMetrics map[string]*metricsv1beta1.PodMetrics,
 ) *restypes.ReplicaSetDetails {
 	avgCPURequest, avgCPULimit, avgMemRequest, avgMemLimit, avgCPUUsage, avgMemUsage := aggregatePodAverages(podsList, podMetrics)
-	podInfos := buildPodSummaries("ReplicaSet", replicaSet.Name, podsList, podMetrics)
+	podInfos := buildPodSummaries("ReplicaSet", replicaSet.Name, "apps/v1", podsList, podMetrics)
 	podSummary, _ := summarizePodMetrics(podsList, podMetrics)
 	desiredReplicas := int32(0)
 	if replicaSet.Spec.Replicas != nil {

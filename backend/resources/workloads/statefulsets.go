@@ -88,7 +88,7 @@ func (s *StatefulSetService) buildStatefulSetDetails(
 	podMetrics map[string]*metricsv1beta1.PodMetrics,
 ) *restypes.StatefulSetDetails {
 	avgCPURequest, avgCPULimit, avgMemRequest, avgMemLimit, avgCPUUsage, avgMemUsage := aggregatePodAverages(podsList, podMetrics)
-	podInfos := buildPodSummaries("StatefulSet", statefulSet.Name, podsList, podMetrics)
+	podInfos := buildPodSummaries("StatefulSet", statefulSet.Name, "apps/v1", podsList, podMetrics)
 	podSummary, _ := summarizePodMetrics(podsList, podMetrics)
 
 	desiredReplicas := int32(0)

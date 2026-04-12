@@ -20,9 +20,10 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 )
 
+type scopeObjectIdentity = refresh.ObjectScopeIdentity
+
 const (
 	objectDetailsDomain = "object-details"
-	clusterScopeToken   = "__cluster__"
 )
 
 // ErrObjectDetailNotImplemented is returned when the provider does not support a kind.
@@ -70,10 +71,13 @@ func RegisterObjectDetailsDomain(
 }
 
 func (b *ObjectDetailsBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-	namespace, kind, name, err := parseObjectScope(scope)
+	identity, err := parseObjectScope(scope)
 	if err != nil {
 		return nil, err
 	}
+	namespace := identity.Namespace
+	kind := identity.GVK.Kind
+	name := identity.Name
 
 	if b.provider != nil {
 		if details, resourceVersion, err := b.provider.FetchObjectDetails(ctx, kind, namespace, name); err == nil {
@@ -122,32 +126,8 @@ func (b *ObjectDetailsBuilder) buildSnapshot(ctx context.Context, scope string, 
 	}
 }
 
-func parseObjectScope(scope string) (string, string, string, error) {
-	if strings.TrimSpace(scope) == "" {
-		return "", "", "", fmt.Errorf("object scope is required")
-	}
-
-	_, trimmed := refresh.SplitClusterScope(scope)
-	parts := strings.SplitN(trimmed, ":", 3)
-	if len(parts) != 3 {
-		return "", "", "", fmt.Errorf("invalid object scope %q", trimmed)
-	}
-
-	namespace := parts[0]
-	if namespace == clusterScopeToken {
-		namespace = ""
-	}
-
-	kind := strings.TrimSpace(parts[1])
-	name := parts[2]
-	if kind == "" {
-		return "", "", "", fmt.Errorf("object kind missing in scope %q", scope)
-	}
-	if name == "" {
-		return "", "", "", fmt.Errorf("object name missing in scope %q", scope)
-	}
-
-	return namespace, kind, name, nil
+func parseObjectScope(scope string) (scopeObjectIdentity, error) {
+	return refresh.ParseObjectScope(scope)
 }
 
 func parseVersion(rv string) uint64 {

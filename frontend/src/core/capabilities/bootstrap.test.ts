@@ -2,66 +2,60 @@
  * frontend/src/core/capabilities/bootstrap.test.ts
  *
  * Test suite for bootstrap.
- * Covers key behaviors and edge cases for bootstrap.
+ * Covers the thin delegation layer that preserves the public API surface
+ * while delegating to the new permissionStore.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { CapabilityEntry, NormalizedCapabilityDescriptor } from './types';
-import type { CapabilityDefinition } from './catalog';
-import { eventBus } from '@/core/events';
-
-const ensureCapabilityEntries = vi.fn();
-const requestCapabilities = vi.fn();
-const resetCapabilityStore = vi.fn();
-const storeListeners = new Set<() => void>();
-
-const snapshotEntries = vi.fn(
+// Mock permissionStore — bootstrap delegates all real work here.
+const mockInitializePermissionStore = vi.fn();
+const mockQueryNamespacePermissions = vi.fn();
+const mockResetPermissionStore = vi.fn();
+const mockSetCurrentClusterId = vi.fn();
+const mockGetPermissionKey = vi.fn(
   (
-    keys: readonly string[],
-    descriptorMap: ReadonlyMap<string, NormalizedCapabilityDescriptor>
-  ): CapabilityEntry[] =>
-    keys
-      .map((key) => {
-        const descriptor = descriptorMap.get(key);
-        if (!descriptor) {
-          return null;
-        }
-        return {
-          key,
-          request: descriptor,
-          status: 'ready',
-          result: {
-            id: descriptor.id,
-            verb: descriptor.verb,
-            resourceKind: descriptor.resourceKind,
-            namespace: descriptor.namespace,
-            allowed: true,
-          },
-          error: null,
-        } satisfies CapabilityEntry;
-      })
-      .filter(Boolean) as CapabilityEntry[]
+    resourceKind: string,
+    verb: string,
+    namespace?: string | null,
+    subresource?: string | null,
+    clusterId?: string | null,
+    group?: string | null,
+    version?: string | null
+  ) => {
+    const cid = (clusterId || '').toLowerCase();
+    const g = (group ?? '').trim();
+    const ver = (version ?? '').trim();
+    const rk = resourceKind.toLowerCase();
+    const v = verb.toLowerCase();
+    const ns = namespace ? namespace.toLowerCase() : 'cluster';
+    const sub = subresource ? subresource.toLowerCase() : '';
+    return `${cid}|${g}/${ver}|${rk}|${v}|${ns}|${sub}`;
+  }
 );
 
-const subscribeCapabilities = vi.fn((listener: () => void) => {
-  storeListeners.add(listener);
+const permissionListeners = new Set<() => void>();
+let permissionMap = new Map<string, unknown>();
+
+const mockSubscribeUserPermissions = vi.fn((listener: () => void) => {
+  permissionListeners.add(listener);
   return () => {
-    storeListeners.delete(listener);
+    permissionListeners.delete(listener);
   };
 });
+const mockGetUserPermissionMap = vi.fn(() => permissionMap);
 
-vi.mock('./store', () => ({
-  ensureCapabilityEntries,
-  requestCapabilities,
-  resetCapabilityStore,
-  snapshotEntries,
-  subscribe: subscribeCapabilities,
+vi.mock('./permissionStore', () => ({
+  initializePermissionStore: (...args: unknown[]) => mockInitializePermissionStore(...args),
+  queryNamespacePermissions: (...args: unknown[]) => mockQueryNamespacePermissions(...args),
+  resetPermissionStore: () => mockResetPermissionStore(),
+  setCurrentClusterId: (...args: unknown[]) => mockSetCurrentClusterId(...args),
+  getPermissionKey: (...args: unknown[]) =>
+    mockGetPermissionKey(...(args as [string, string, string?, string?, string?])),
+  subscribeUserPermissions: (...args: unknown[]) =>
+    mockSubscribeUserPermissions(...(args as [() => void])),
+  getUserPermissionMap: () => mockGetUserPermissionMap(),
 }));
-
-const windowListenerRegistry = new Map<string, Set<EventListener>>();
-const originalAddEventListener = window.addEventListener.bind(window);
-const originalRemoveEventListener = window.removeEventListener.bind(window);
 
 const loadBootstrap = async () => {
   const module = await import('./bootstrap');
@@ -69,210 +63,126 @@ const loadBootstrap = async () => {
   return module;
 };
 
-const clearWindowListeners = () => {
-  windowListenerRegistry.forEach((listeners, type) => {
-    listeners.forEach((listener) => originalRemoveEventListener(type, listener));
-  });
-  windowListenerRegistry.clear();
-};
-
 beforeEach(() => {
-  ensureCapabilityEntries.mockClear();
-  requestCapabilities.mockClear();
-  resetCapabilityStore.mockClear();
-  snapshotEntries.mockClear();
-  subscribeCapabilities.mockClear();
-  storeListeners.clear();
-  clearWindowListeners();
-
-  vi.spyOn(window, 'addEventListener').mockImplementation((type, listener, options) => {
-    const typed = String(type);
-    if (!windowListenerRegistry.has(typed)) {
-      windowListenerRegistry.set(typed, new Set());
-    }
-    windowListenerRegistry.get(typed)!.add(listener as EventListener);
-    return originalAddEventListener(type, listener, options);
-  });
-
-  vi.spyOn(window, 'removeEventListener').mockImplementation((type, listener, options) => {
-    const typed = String(type);
-    windowListenerRegistry.get(typed)?.delete(listener as EventListener);
-    return originalRemoveEventListener(type, listener, options);
-  });
+  mockInitializePermissionStore.mockClear();
+  mockQueryNamespacePermissions.mockClear();
+  mockResetPermissionStore.mockClear();
+  mockSetCurrentClusterId.mockClear();
+  mockGetPermissionKey.mockClear();
+  mockSubscribeUserPermissions.mockClear();
+  mockGetUserPermissionMap.mockClear();
+  permissionListeners.clear();
+  permissionMap = new Map();
 });
 
 afterEach(() => {
-  (window.addEventListener as unknown as { mockRestore: () => void }).mockRestore();
-  (window.removeEventListener as unknown as { mockRestore: () => void }).mockRestore();
-  clearWindowListeners();
+  vi.restoreAllMocks();
 });
 
 describe('capabilities bootstrap helpers', () => {
-  it('registers namespace capability definitions and dedupes existing entries', async () => {
+  it('getPermissionKey delegates to permissionStore and produces the correct format', async () => {
     const bootstrap = await loadBootstrap();
-    const { registerNamespaceCapabilityDefinitions } = bootstrap;
 
-    const definition: CapabilityDefinition = {
-      id: 'namespace:workloads:patch:default',
-      scope: 'namespace',
-      feature: 'Nodes pod actions',
-      descriptor: {
-        id: 'namespace:workloads:patch:default',
-        resourceKind: 'Deployment',
-        verb: 'patch',
-      },
-    };
+    const key = bootstrap.getPermissionKey('Deployment', 'patch', 'default', null, 'cluster-1');
+    expect(mockGetPermissionKey).toHaveBeenCalledWith(
+      'Deployment',
+      'patch',
+      'default',
+      null,
+      'cluster-1',
+      undefined,
+      undefined
+    );
+    expect(key).toBe('cluster-1|/|deployment|patch|default|');
+  });
 
-    registerNamespaceCapabilityDefinitions(' default ', [
-      definition,
-      { ...definition, id: 'duplicate', descriptor: { ...definition.descriptor } },
+  it('getPermissionKey handles null namespace as "cluster"', async () => {
+    const bootstrap = await loadBootstrap();
+
+    const key = bootstrap.getPermissionKey('Namespace', 'list', null, null, 'c1');
+    expect(key).toBe('c1|/|namespace|list|cluster|');
+  });
+
+  it('initializeUserPermissionsBootstrap calls setCurrentClusterId and initializePermissionStore', async () => {
+    const bootstrap = await loadBootstrap();
+
+    bootstrap.initializeUserPermissionsBootstrap('my-cluster');
+
+    expect(mockSetCurrentClusterId).toHaveBeenCalledWith('my-cluster');
+    expect(mockInitializePermissionStore).toHaveBeenCalledWith('my-cluster');
+  });
+
+  it('initializeUserPermissionsBootstrap trims the clusterId', async () => {
+    const bootstrap = await loadBootstrap();
+
+    bootstrap.initializeUserPermissionsBootstrap('  my-cluster  ');
+
+    expect(mockSetCurrentClusterId).toHaveBeenCalledWith('my-cluster');
+    expect(mockInitializePermissionStore).toHaveBeenCalledWith('my-cluster');
+  });
+
+  it('initializeUserPermissionsBootstrap calls initializePermissionStore on subsequent calls', async () => {
+    const bootstrap = await loadBootstrap();
+
+    bootstrap.initializeUserPermissionsBootstrap('cluster-a');
+    expect(mockInitializePermissionStore).toHaveBeenCalledTimes(1);
+
+    mockInitializePermissionStore.mockClear();
+    bootstrap.initializeUserPermissionsBootstrap('cluster-b');
+    // Re-initializes for the new cluster.
+    expect(mockInitializePermissionStore).toHaveBeenCalledWith('cluster-b');
+  });
+
+  it('evaluateNamespacePermissions delegates to queryNamespacePermissions', async () => {
+    const bootstrap = await loadBootstrap();
+
+    bootstrap.evaluateNamespacePermissions('metrics', { clusterId: 'cluster-1' });
+
+    expect(mockQueryNamespacePermissions).toHaveBeenCalledWith('metrics', 'cluster-1');
+  });
+
+  it('evaluateNamespacePermissions passes null clusterId when not provided', async () => {
+    const bootstrap = await loadBootstrap();
+
+    bootstrap.evaluateNamespacePermissions('default');
+
+    expect(mockQueryNamespacePermissions).toHaveBeenCalledWith('default', null);
+  });
+
+  it('registerNamespaceCapabilityDefinitions is a no-op', async () => {
+    const bootstrap = await loadBootstrap();
+
+    // Should not throw and should not call any store functions.
+    bootstrap.registerNamespaceCapabilityDefinitions('default', [
       {
-        id: 'invalid',
+        id: 'test',
         scope: 'namespace',
-        descriptor: { id: '', resourceKind: 'Service', verb: 'get' },
+        descriptor: { id: 'test', resourceKind: 'Pod', verb: 'get' },
       },
-    ]);
+    ] as any);
 
-    expect(ensureCapabilityEntries).toHaveBeenCalledTimes(1);
-    const [addedDescriptors] = ensureCapabilityEntries.mock.calls[0];
-    expect(addedDescriptors).toHaveLength(1);
-    expect(addedDescriptors[0]).toMatchObject({
-      id: 'namespace:workloads:patch:default',
-      resourceKind: 'Deployment',
-      verb: 'patch',
-      namespace: 'default',
-    });
-
-    expect(requestCapabilities).toHaveBeenCalledWith(addedDescriptors, {
-      force: false,
-      ttlMs: undefined,
-    });
-
-    ensureCapabilityEntries.mockClear();
-    requestCapabilities.mockClear();
-
-    registerNamespaceCapabilityDefinitions('default', [definition]);
-    expect(ensureCapabilityEntries).not.toHaveBeenCalled();
-    expect(requestCapabilities).not.toHaveBeenCalled();
-
-    requestCapabilities.mockClear();
-    registerNamespaceCapabilityDefinitions('default', [definition], {
-      force: true,
-      ttlMs: 90000,
-    });
-    expect(requestCapabilities).toHaveBeenCalledTimes(1);
-    const [forceDescriptors, forceOptions] = requestCapabilities.mock.calls[0];
-    expect(forceDescriptors).toHaveLength(1);
-    expect(forceOptions).toEqual({ force: true, ttlMs: 90000 });
+    expect(mockInitializePermissionStore).not.toHaveBeenCalled();
+    expect(mockQueryNamespacePermissions).not.toHaveBeenCalled();
   });
 
-  it('registers ad-hoc capabilities and notifies listeners only when new descriptors are added', async () => {
+  it('registerAdHocCapabilities is a no-op', async () => {
     const bootstrap = await loadBootstrap();
-    const { registerAdHocCapabilities, getUserPermission, subscribeUserPermissions } = bootstrap;
 
-    const listener = vi.fn();
-    const unsubscribe = subscribeUserPermissions(listener);
+    // Should not throw and should not call any store functions.
+    bootstrap.registerAdHocCapabilities([
+      { id: 'adhoc:test', resourceKind: 'Pod', verb: 'get', namespace: 'default' },
+    ] as any);
 
-    const adHocDescriptor: NormalizedCapabilityDescriptor = {
-      id: 'adhoc:roles:get:team-a',
-      resourceKind: 'Role',
-      verb: 'get',
-      namespace: 'team-a',
-    };
-
-    registerAdHocCapabilities([adHocDescriptor, { ...adHocDescriptor }]);
-
-    expect(ensureCapabilityEntries).toHaveBeenCalledTimes(1);
-    expect(ensureCapabilityEntries.mock.calls[0][0]).toHaveLength(1);
-    expect(listener).toHaveBeenCalledTimes(1);
-
-    const permission = getUserPermission('Role', 'get', 'team-a');
-    expect(permission?.descriptor.id).toBe(adHocDescriptor.id);
-
-    ensureCapabilityEntries.mockClear();
-    listener.mockClear();
-
-    registerAdHocCapabilities([{ ...adHocDescriptor }]);
-    expect(ensureCapabilityEntries).not.toHaveBeenCalled();
-    expect(listener).not.toHaveBeenCalled();
-
-    unsubscribe();
+    expect(mockInitializePermissionStore).not.toHaveBeenCalled();
+    expect(mockQueryNamespacePermissions).not.toHaveBeenCalled();
   });
 
-  it('evaluates namespace permissions with default TTL and force flags', async () => {
+  it('__resetCapabilitiesStateForTests calls resetPermissionStore', async () => {
     const bootstrap = await loadBootstrap();
-    const {
-      registerNamespaceCapabilityDefinitions,
-      evaluateNamespacePermissions,
-      DEFAULT_CAPABILITY_TTL_MS,
-    } = bootstrap;
 
-    const definition: CapabilityDefinition = {
-      id: 'namespace:configmaps:list:metrics',
-      scope: 'namespace',
-      descriptor: {
-        id: 'namespace:configmaps:list:metrics',
-        resourceKind: 'ConfigMap',
-        verb: 'list',
-      },
-    };
+    mockResetPermissionStore.mockClear();
+    bootstrap.__resetCapabilitiesStateForTests();
 
-    registerNamespaceCapabilityDefinitions('metrics', [definition]);
-
-    ensureCapabilityEntries.mockClear();
-    requestCapabilities.mockClear();
-
-    evaluateNamespacePermissions('metrics');
-
-    expect(ensureCapabilityEntries).toHaveBeenCalledTimes(1);
-    expect(requestCapabilities).toHaveBeenCalledWith(expect.any(Array), {
-      force: false,
-      ttlMs: DEFAULT_CAPABILITY_TTL_MS,
-    });
-
-    requestCapabilities.mockClear();
-    evaluateNamespacePermissions('metrics', { force: true });
-    expect(requestCapabilities).toHaveBeenCalledWith(expect.any(Array), {
-      force: true,
-      ttlMs: DEFAULT_CAPABILITY_TTL_MS,
-    });
-
-    evaluateNamespacePermissions('  ');
-    expect(requestCapabilities).toHaveBeenCalledTimes(1);
-  });
-
-  it('bootstraps cluster permissions once and reacts to kubeconfig events', async () => {
-    const bootstrap = await loadBootstrap();
-    const { initializeUserPermissionsBootstrap, getUserPermission, subscribeUserPermissions } =
-      bootstrap;
-
-    const listener = vi.fn();
-    const unsubscribe = subscribeUserPermissions(listener);
-
-    initializeUserPermissionsBootstrap();
-
-    expect(subscribeCapabilities).toHaveBeenCalledTimes(1);
-    expect(requestCapabilities).toHaveBeenCalledWith(expect.any(Array), { force: true });
-
-    const clusterPermission = getUserPermission('Namespace', 'list');
-    expect(clusterPermission?.allowed).toBe(true);
-
-    requestCapabilities.mockClear();
-    initializeUserPermissionsBootstrap();
-    expect(subscribeCapabilities).toHaveBeenCalledTimes(1);
-    expect(requestCapabilities).toHaveBeenCalledWith(expect.any(Array), { force: false });
-
-    eventBus.emit('kubeconfig:changing', '');
-    expect(resetCapabilityStore).toHaveBeenCalledTimes(1);
-
-    requestCapabilities.mockClear();
-    eventBus.emit('kubeconfig:changed', '');
-    expect(requestCapabilities).toHaveBeenCalledWith(expect.any(Array), { force: true });
-
-    listener.mockClear();
-    storeListeners.forEach((notify) => notify());
-    expect(listener).toHaveBeenCalled();
-
-    unsubscribe();
+    expect(mockResetPermissionStore).toHaveBeenCalledTimes(1);
   });
 });

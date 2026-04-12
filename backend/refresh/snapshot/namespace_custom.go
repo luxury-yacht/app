@@ -40,14 +40,30 @@ type NamespaceCustomSnapshot struct {
 }
 
 // NamespaceCustomSummary captures key CR instance fields.
+//
+// APIGroup and APIVersion together identify the owning CRD's GroupVersion
+// so the frontend can route downstream operations (view YAML, delete,
+// capability checks) through GVK-aware backend paths instead of the
+// first-match-wins kind-only resolver. Without APIVersion, two CRDs that
+// share a Kind (e.g. DBInstance.rds.services.k8s.aws vs
+// DBInstance.documentdb.services.k8s.aws) would be indistinguishable on
+// the frontend.
 type NamespaceCustomSummary struct {
 	ClusterMeta
-	Kind      string `json:"kind"`
-	Name      string `json:"name"`
-	APIGroup  string `json:"apiGroup"`
-	Namespace string `json:"namespace"`
-	Age       string `json:"age"`
-	Labels    map[string]string `json:"labels,omitempty"`
+	Kind       string `json:"kind"`
+	Name       string `json:"name"`
+	APIGroup   string `json:"apiGroup"`
+	APIVersion string `json:"apiVersion"`
+	// CRDName is the name of the CustomResourceDefinition that defines
+	// this resource's Kind, in the canonical Kubernetes form
+	// `<plural>.<group>` (e.g. "dbinstances.rds.services.k8s.aws"). The
+	// frontend uses it to render a clickable cell that opens the owning
+	// CRD in the object panel. Always set for CRD-backed resources;
+	// omitted (empty) for any synthetic/non-CRD case.
+	CRDName     string            `json:"crdName,omitempty"`
+	Namespace   string            `json:"namespace"`
+	Age         string            `json:"age"`
+	Labels      map[string]string `json:"labels,omitempty"`
 	Annotations map[string]string `json:"annotations,omitempty"`
 }
 
@@ -191,21 +207,22 @@ func (b *NamespaceCustomBuilder) Build(ctx context.Context, scope string) (*refr
 			var snapshotVersion uint64
 			for i := range resourceList.Items {
 				item := &resourceList.Items[i]
-				itemNamespace := item.GetNamespace()
-				if itemNamespace == "" {
-					itemNamespace = namespace
-				}
-				items = append(items, NamespaceCustomSummary{
-					ClusterMeta: meta,
-					Kind:        resourceKind(item, crdCopy.Spec.Names.Kind),
-					Name:        item.GetName(),
-					APIGroup:    gvr.Group,
-					Namespace:   itemNamespace,
-					Age:         formatAge(item.GetCreationTimestamp().Time),
-					// Include metadata so the custom view can surface labels/annotations.
-					Labels:      item.GetLabels(),
-					Annotations: item.GetAnnotations(),
-				})
+				// Delegate to the shared row builder so the full-snapshot
+				// path and the streaming/incremental update path emit
+				// identical row shapes. See BuildNamespaceCustomSummary in
+				// streaming_helpers.go. `namespace` is the scope fallback
+				// for items that don't carry their own. `crdCopy.Name` is
+				// the canonical CRD name (`<plural>.<group>`) used to
+				// open the owning CRD from the row.
+				items = append(items, BuildNamespaceCustomSummary(
+					meta,
+					item,
+					gvr.Group,
+					gvr.Version,
+					crdCopy.Spec.Names.Kind,
+					crdCopy.Name,
+					namespace,
+				))
 				if v := resourceVersionOrTimestamp(item); v > snapshotVersion {
 					snapshotVersion = v
 				}

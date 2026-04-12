@@ -46,6 +46,10 @@ vi.mock('@/core/refresh', () => ({
   },
 }));
 
+vi.mock('@/core/capabilities', () => ({
+  queryNamespacePermissions: vi.fn(),
+}));
+
 const SelectedNamespace: React.FC = () => {
   const { selectedNamespace, selectedNamespaceClusterId } = useNamespace();
   return (

@@ -3,7 +3,7 @@
  */
 
 import ReactDOM from 'react-dom/client';
-import { createContext } from 'react';
+import { createContext, useCallback, useState } from 'react';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
@@ -20,6 +20,8 @@ type PanelTestOptions = {
   name: string;
   namespace?: string;
   clusterId?: string;
+  group?: string;
+  version?: string;
   capabilityOverrides?: Record<string, CapabilityState>;
   logPermission?: { allowed: boolean; pending: boolean };
   scopedDomain?: { data: unknown; status: string; error: string | null };
@@ -50,7 +52,7 @@ const {
 const mockClosePanel = vi.fn();
 const mockUseCapabilities = vi.fn();
 const mockUseUserPermission = vi.fn();
-const mockEvaluateNamespacePermissions = vi.fn();
+const mockQueryNamespacePermissions = vi.fn();
 const mockUseRefreshScopedDomain = vi.fn();
 const mockUseRefreshWatcher = vi.fn();
 const mockUseShortcut = vi.fn();
@@ -77,23 +79,45 @@ const mockApp = {
   RestartWorkload: vi.fn().mockResolvedValue(undefined),
   DeletePod: vi.fn().mockResolvedValue(undefined),
   DeleteHelmRelease: vi.fn().mockResolvedValue(undefined),
-  DeleteResource: vi.fn().mockResolvedValue(undefined),
+  DeleteResourceByGVK: vi.fn().mockResolvedValue(undefined),
   ScaleWorkload: vi.fn().mockResolvedValue(undefined),
 };
 
 const defaultClusterId = 'alpha:ctx';
 
-// Mock useObjectPanelState to provide closePanel
+// Mock useObjectPanelState to provide closePanel + per-panel active tab helpers.
+// The active tab map lives in React state so calling setObjectPanelActiveTab
+// re-renders the consuming ObjectPanel — matching the real provider's
+// useState-backed updates that trigger a render when the tab changes.
 vi.mock('@/core/contexts/ObjectPanelStateContext', () => ({
-  useObjectPanelState: () => ({
-    closePanel: mockClosePanel,
-    openPanels: new Map(),
-    showObjectPanel: true,
-    onRowClick: vi.fn(),
-    onCloseObjectPanel: vi.fn(),
-    setShowObjectPanel: vi.fn(),
-    hydrateClusterMeta: vi.fn((d: any) => d),
-  }),
+  useObjectPanelState: () => {
+    const [activeTabs, setActiveTabs] = useState<Map<string, string>>(() => new Map());
+    const getObjectPanelActiveTab = useCallback(
+      (panelId: string) => activeTabs.get(panelId),
+      [activeTabs]
+    );
+    const setObjectPanelActiveTab = useCallback((panelId: string, tab: string) => {
+      setActiveTabs((prev) => {
+        if (prev.get(panelId) === tab) {
+          return prev;
+        }
+        const next = new Map(prev);
+        next.set(panelId, tab);
+        return next;
+      });
+    }, []);
+    return {
+      closePanel: mockClosePanel,
+      openPanels: new Map(),
+      showObjectPanel: true,
+      onRowClick: vi.fn(),
+      onCloseObjectPanel: vi.fn(),
+      setShowObjectPanel: vi.fn(),
+      hydrateClusterMeta: vi.fn((d: any) => d),
+      getObjectPanelActiveTab,
+      setObjectPanelActiveTab,
+    };
+  },
 }));
 
 // Mock dockable to provide both DockablePanel and useDockablePanelContext
@@ -208,8 +232,7 @@ vi.mock('@/core/refresh', () => ({
 vi.mock('@/core/capabilities', () => ({
   useCapabilities: (...args: unknown[]) => mockUseCapabilities(...(args as [])),
   useUserPermission: (...args: unknown[]) => mockUseUserPermission(...(args as [])),
-  evaluateNamespacePermissions: (...args: unknown[]) =>
-    mockEvaluateNamespacePermissions(...(args as [])),
+  queryNamespacePermissions: (...args: unknown[]) => mockQueryNamespacePermissions(...(args as [])),
 }));
 
 vi.mock('@ui/shortcuts', () => ({
@@ -272,7 +295,7 @@ describe('ObjectPanel tab availability', () => {
     mockApp.RestartWorkload.mockClear();
     mockApp.DeletePod.mockClear();
     mockApp.DeleteHelmRelease.mockClear();
-    mockApp.DeleteResource.mockClear();
+    mockApp.DeleteResourceByGVK.mockClear();
     mockApp.ScaleWorkload.mockClear();
 
     mockRefreshOrchestrator.fetchScopedDomain.mockResolvedValue(undefined);
@@ -316,6 +339,8 @@ describe('ObjectPanel tab availability', () => {
       namespace: options.namespace,
       kindAlias: options.kind,
       clusterId,
+      group: options.group,
+      version: options.version,
     };
 
     capabilityStateMap = options.capabilityOverrides ?? {};
@@ -410,7 +435,17 @@ describe('ObjectPanel tab availability', () => {
     });
 
     expect(mockRefreshManager.unregister).toHaveBeenCalledWith('object-pod');
-    expect(mockRefreshOrchestrator.resetScopedDomain).toHaveBeenCalledWith(
+    // Tier 1 responsiveness: unmount disables refreshing but preserves
+    // the cached snapshot so a remount (cluster switch round-trip)
+    // renders instantly. Eviction now lives in
+    // ObjectPanelStateContext.closePanel, not in the unmount destructor.
+    expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
+      'object-details',
+      detailScope,
+      false,
+      { preserveState: true }
+    );
+    expect(mockRefreshOrchestrator.resetScopedDomain).not.toHaveBeenCalledWith(
       'object-details',
       detailScope
     );
@@ -566,11 +601,13 @@ describe('ObjectPanel tab availability', () => {
     expect(mockApp.DeleteHelmRelease).toHaveBeenCalledWith('alpha:ctx', 'helm-ns', 'demo');
   });
 
-  it('falls back to DeleteResource for generic kinds', async () => {
+  it('routes generic kind deletes through DeleteResourceByGVK', async () => {
     await renderObjectPanel({
       kind: 'ConfigMap',
       name: 'settings',
       namespace: 'team-a',
+      group: '',
+      version: 'v1',
     });
 
     act(() => {
@@ -580,8 +617,9 @@ describe('ObjectPanel tab availability', () => {
       await deleteModalPropsRef.current.onConfirm();
     });
 
-    expect(mockApp.DeleteResource).toHaveBeenCalledWith(
+    expect(mockApp.DeleteResourceByGVK).toHaveBeenCalledWith(
       'alpha:ctx',
+      'v1',
       'ConfigMap',
       'team-a',
       'settings'
@@ -746,9 +784,7 @@ describe('ObjectPanel tab availability', () => {
       namespace: ' Team-A ',
     });
 
-    expect(mockEvaluateNamespacePermissions).toHaveBeenCalledWith('Team-A', {
-      clusterId: defaultClusterId,
-    });
+    expect(mockQueryNamespacePermissions).toHaveBeenCalledWith('Team-A', defaultClusterId);
   });
 
   it('skips namespace evaluation when the object has no namespace', async () => {
@@ -758,7 +794,7 @@ describe('ObjectPanel tab availability', () => {
       namespace: undefined,
     });
 
-    expect(mockEvaluateNamespacePermissions).not.toHaveBeenCalled();
+    expect(mockQueryNamespacePermissions).not.toHaveBeenCalled();
   });
 
   it('ignores scale clicks without an explicit replica count', async () => {

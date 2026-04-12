@@ -14,9 +14,19 @@ import {
   ReorderThemes,
   ApplyTheme,
   MatchThemeForCluster,
+  SetLogBufferMaxSize as SetLogBufferMaxSizeBackend,
+  SetLogAPITimestampFormat as SetLogAPITimestampFormatBackend,
+  SetLogAPITimestampUseLocalTimeZone as SetLogAPITimestampUseLocalTimeZoneBackend,
+  SetLogTargetGlobalLimit as SetLogTargetGlobalLimitBackend,
+  SetLogTargetPerScopeLimit as SetLogTargetPerScopeLimitBackend,
 } from '@wailsjs/go/backend/App';
 import { types } from '@wailsjs/go/models';
 import { eventBus } from '@/core/events';
+import {
+  DEFAULT_LOG_API_TIMESTAMP_FORMAT,
+  getLogApiTimestampFormatValidationError,
+  normalizeLogApiTimestampFormat,
+} from '@/utils/logApiTimestampFormat';
 
 export type ThemePreference = 'light' | 'dark' | 'system';
 export type GridTablePersistenceMode = 'namespaced' | 'shared';
@@ -28,6 +38,11 @@ interface AppPreferences {
   autoRefreshEnabled: boolean;
   refreshBackgroundClustersEnabled: boolean;
   metricsRefreshIntervalMs: number;
+  logBufferMaxSize: number;
+  logApiTimestampFormat: string;
+  logApiTimestampUseLocalTimeZone: boolean;
+  logTargetPerScopeLimit: number;
+  logTargetGlobalLimit: number;
   gridTablePersistenceMode: GridTablePersistenceMode;
   defaultObjectPanelPosition: ObjectPanelPosition;
   objectPanelDockedRightWidth: number;
@@ -54,6 +69,11 @@ interface AppSettingsPayload {
   autoRefreshEnabled?: boolean;
   refreshBackgroundClustersEnabled?: boolean;
   metricsRefreshIntervalMs?: number;
+  logBufferMaxSize?: number;
+  logApiTimestampFormat?: string;
+  logApiTimestampUseLocalTimeZone?: boolean;
+  logTargetPerScopeLimit?: number;
+  logTargetGlobalLimit?: number;
   gridTablePersistenceMode?: string;
   defaultObjectPanelPosition?: string;
   objectPanelDockedRightWidth?: number;
@@ -81,12 +101,30 @@ interface AppSettingsPayload {
 
 const DEFAULT_METRICS_REFRESH_INTERVAL_MS = 5000;
 
+// Log buffer bounds — keep in lockstep with backend/app_settings.go so the
+// client and server agree on the clamp range. Shown to the user in the
+// Advanced → Pod Logs settings section.
+export const LOG_BUFFER_MIN_SIZE = 100;
+export const LOG_BUFFER_MAX_SIZE = 10000;
+export const LOG_BUFFER_DEFAULT_SIZE = 1000;
+export const LOG_TARGET_PER_SCOPE_MIN = 1;
+export const LOG_TARGET_PER_SCOPE_MAX = 1000;
+export const LOG_TARGET_PER_SCOPE_DEFAULT = 100;
+export const LOG_TARGET_GLOBAL_MIN = 1;
+export const LOG_TARGET_GLOBAL_MAX = 1000;
+export const LOG_TARGET_GLOBAL_DEFAULT = 200;
+
 const DEFAULT_PREFERENCES: AppPreferences = {
   theme: 'system',
   useShortResourceNames: false,
   autoRefreshEnabled: true,
   refreshBackgroundClustersEnabled: true,
   metricsRefreshIntervalMs: DEFAULT_METRICS_REFRESH_INTERVAL_MS,
+  logBufferMaxSize: LOG_BUFFER_DEFAULT_SIZE,
+  logApiTimestampFormat: DEFAULT_LOG_API_TIMESTAMP_FORMAT,
+  logApiTimestampUseLocalTimeZone: false,
+  logTargetPerScopeLimit: LOG_TARGET_PER_SCOPE_DEFAULT,
+  logTargetGlobalLimit: LOG_TARGET_GLOBAL_DEFAULT,
   paletteHueLight: 0,
   paletteSaturationLight: 0,
   paletteBrightnessLight: 0,
@@ -140,6 +178,40 @@ const normalizeMetricsIntervalMs = (value?: number): number => {
   return Math.floor(value);
 };
 
+// Clamp to [LOG_BUFFER_MIN_SIZE, LOG_BUFFER_MAX_SIZE]. A zero/undefined
+// value from an old settings file (before this preference existed) maps
+// to the default, not to zero — otherwise an upgrade would wipe every
+// Logs tab to empty.
+const normalizeLogBufferMaxSize = (value?: number): number => {
+  if (value == null || Number.isNaN(value) || value <= 0) {
+    return LOG_BUFFER_DEFAULT_SIZE;
+  }
+  const floored = Math.floor(value);
+  if (floored < LOG_BUFFER_MIN_SIZE) return LOG_BUFFER_MIN_SIZE;
+  if (floored > LOG_BUFFER_MAX_SIZE) return LOG_BUFFER_MAX_SIZE;
+  return floored;
+};
+
+const normalizeLogTargetPerScopeLimit = (value?: number): number => {
+  if (value == null || Number.isNaN(value) || value <= 0) {
+    return LOG_TARGET_PER_SCOPE_DEFAULT;
+  }
+  const floored = Math.floor(value);
+  if (floored < LOG_TARGET_PER_SCOPE_MIN) return LOG_TARGET_PER_SCOPE_MIN;
+  if (floored > LOG_TARGET_PER_SCOPE_MAX) return LOG_TARGET_PER_SCOPE_MAX;
+  return floored;
+};
+
+const normalizeLogTargetGlobalLimit = (value?: number): number => {
+  if (value == null || Number.isNaN(value) || value <= 0) {
+    return LOG_TARGET_GLOBAL_DEFAULT;
+  }
+  const floored = Math.floor(value);
+  if (floored < LOG_TARGET_GLOBAL_MIN) return LOG_TARGET_GLOBAL_MIN;
+  if (floored > LOG_TARGET_GLOBAL_MAX) return LOG_TARGET_GLOBAL_MAX;
+  return floored;
+};
+
 const emitPreferenceChanges = (previous: AppPreferences, next: AppPreferences): void => {
   if (previous.theme !== next.theme) {
     eventBus.emit('settings:theme', next.theme);
@@ -155,6 +227,24 @@ const emitPreferenceChanges = (previous: AppPreferences, next: AppPreferences): 
   }
   if (previous.metricsRefreshIntervalMs !== next.metricsRefreshIntervalMs) {
     eventBus.emit('settings:metrics-interval', next.metricsRefreshIntervalMs);
+  }
+  if (previous.logBufferMaxSize !== next.logBufferMaxSize) {
+    eventBus.emit('settings:log-buffer-size', next.logBufferMaxSize);
+  }
+  if (previous.logApiTimestampFormat !== next.logApiTimestampFormat) {
+    eventBus.emit('settings:log-api-timestamp-format', next.logApiTimestampFormat);
+  }
+  if (previous.logApiTimestampUseLocalTimeZone !== next.logApiTimestampUseLocalTimeZone) {
+    eventBus.emit(
+      'settings:log-api-timestamp-use-local-time-zone',
+      next.logApiTimestampUseLocalTimeZone
+    );
+  }
+  if (previous.logTargetPerScopeLimit !== next.logTargetPerScopeLimit) {
+    eventBus.emit('settings:log-target-per-scope-limit', next.logTargetPerScopeLimit);
+  }
+  if (previous.logTargetGlobalLimit !== next.logTargetGlobalLimit) {
+    eventBus.emit('settings:log-target-global-limit', next.logTargetGlobalLimit);
   }
   if (previous.gridTablePersistenceMode !== next.gridTablePersistenceMode) {
     eventBus.emit('gridtable:persistence-mode', next.gridTablePersistenceMode);
@@ -270,6 +360,15 @@ export const hydrateAppPreferences = async (options?: {
       backendSettings?.refreshBackgroundClustersEnabled ??
       DEFAULT_PREFERENCES.refreshBackgroundClustersEnabled,
     metricsRefreshIntervalMs: normalizeMetricsIntervalMs(backendSettings?.metricsRefreshIntervalMs),
+    logBufferMaxSize: normalizeLogBufferMaxSize(backendSettings?.logBufferMaxSize),
+    logApiTimestampFormat: normalizeLogApiTimestampFormat(backendSettings?.logApiTimestampFormat),
+    logApiTimestampUseLocalTimeZone:
+      backendSettings?.logApiTimestampUseLocalTimeZone ??
+      DEFAULT_PREFERENCES.logApiTimestampUseLocalTimeZone,
+    logTargetPerScopeLimit: normalizeLogTargetPerScopeLimit(
+      backendSettings?.logTargetPerScopeLimit
+    ),
+    logTargetGlobalLimit: normalizeLogTargetGlobalLimit(backendSettings?.logTargetGlobalLimit),
     gridTablePersistenceMode: normalizeGridTableMode(backendSettings?.gridTablePersistenceMode),
     defaultObjectPanelPosition: normalizeObjectPanelPosition(
       backendSettings?.defaultObjectPanelPosition
@@ -332,6 +431,26 @@ export const getBackgroundRefreshEnabled = (): boolean => {
 
 export const getMetricsRefreshIntervalMs = (): number => {
   return preferenceCache.metricsRefreshIntervalMs;
+};
+
+export const getLogBufferMaxSize = (): number => {
+  return preferenceCache.logBufferMaxSize;
+};
+
+export const getLogApiTimestampFormat = (): string => {
+  return preferenceCache.logApiTimestampFormat;
+};
+
+export const getLogApiTimestampUseLocalTimeZone = (): boolean => {
+  return preferenceCache.logApiTimestampUseLocalTimeZone;
+};
+
+export const getLogTargetPerScopeLimit = (): number => {
+  return preferenceCache.logTargetPerScopeLimit;
+};
+
+export const getLogTargetGlobalLimit = (): number => {
+  return preferenceCache.logTargetGlobalLimit;
 };
 
 export const getGridTablePersistenceMode = (): GridTablePersistenceMode => {
@@ -456,6 +575,97 @@ export const setBackgroundRefreshEnabled = (enabled: boolean): void => {
   updatePreferenceCache({ refreshBackgroundClustersEnabled: enabled });
   void persistBooleanPreference('SetBackgroundRefreshEnabled', enabled).catch((error) => {
     console.error('Failed to persist background refresh preference:', error);
+  });
+};
+
+// Fire-and-forget persistence for log buffer size. Skips the backend
+// call when Wails isn't present (unit tests) so the cache update still
+// lands in the event bus.
+const persistLogBufferMaxSize = async (size: number): Promise<void> => {
+  const runtimeApp = (window as any)?.go?.backend?.App;
+  if (!runtimeApp) {
+    return;
+  }
+  await SetLogBufferMaxSizeBackend(size);
+};
+
+const persistLogApiTimestampFormat = async (format: string): Promise<void> => {
+  const runtimeApp = (window as any)?.go?.backend?.App;
+  if (!runtimeApp) {
+    return;
+  }
+  await SetLogAPITimestampFormatBackend(format);
+};
+
+const persistLogApiTimestampUseLocalTimeZone = async (enabled: boolean): Promise<void> => {
+  const runtimeApp = (window as any)?.go?.backend?.App;
+  if (!runtimeApp) {
+    return;
+  }
+  await SetLogAPITimestampUseLocalTimeZoneBackend(enabled);
+};
+
+const persistLogTargetPerScopeLimit = async (limit: number): Promise<void> => {
+  const runtimeApp = (window as any)?.go?.backend?.App;
+  if (!runtimeApp) {
+    return;
+  }
+  await SetLogTargetPerScopeLimitBackend(limit);
+};
+
+const persistLogTargetGlobalLimit = async (limit: number): Promise<void> => {
+  const runtimeApp = (window as any)?.go?.backend?.App;
+  if (!runtimeApp) {
+    return;
+  }
+  await SetLogTargetGlobalLimitBackend(limit);
+};
+
+export const setLogBufferMaxSize = (size: number): void => {
+  const normalized = normalizeLogBufferMaxSize(size);
+  hydrated = true;
+  updatePreferenceCache({ logBufferMaxSize: normalized });
+  void persistLogBufferMaxSize(normalized).catch((error) => {
+    console.error('Failed to persist log buffer max size:', error);
+  });
+};
+
+export const setLogApiTimestampFormat = (format: string): void => {
+  const validationError = getLogApiTimestampFormatValidationError(format);
+  if (validationError) {
+    throw new Error(validationError);
+  }
+  const normalized = format.trim();
+  hydrated = true;
+  updatePreferenceCache({ logApiTimestampFormat: normalized });
+  void persistLogApiTimestampFormat(normalized).catch((error) => {
+    console.error('Failed to persist log API timestamp format:', error);
+  });
+};
+
+export const setLogApiTimestampUseLocalTimeZone = (enabled: boolean): void => {
+  hydrated = true;
+  updatePreferenceCache({ logApiTimestampUseLocalTimeZone: enabled });
+  void persistLogApiTimestampUseLocalTimeZone(enabled).catch((error) => {
+    console.error('Failed to persist log API timestamp local timezone setting:', error);
+  });
+};
+
+export const setLogTargetPerScopeLimit = (limit: number): void => {
+  const normalized = normalizeLogTargetPerScopeLimit(limit);
+  hydrated = true;
+  updatePreferenceCache({ logTargetPerScopeLimit: normalized });
+  void persistLogTargetPerScopeLimit(normalized).catch((error) => {
+    console.error('Failed to persist log target per-scope limit:', error);
+  });
+};
+
+export const setLogTargetGlobalLimit = (limit: number): void => {
+  const normalized = normalizeLogTargetGlobalLimit(limit);
+  hydrated = true;
+  updatePreferenceCache({ logTargetGlobalLimit: normalized });
+  void persistLogTargetGlobalLimit(normalized).catch((error) => {
+    console.error('Failed to persist log target global limit:', error);
   });
 };
 

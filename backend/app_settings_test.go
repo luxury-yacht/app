@@ -88,6 +88,11 @@ func TestAppSaveAndLoadAppSettingsRoundTrip(t *testing.T) {
 		AutoRefreshEnabled:               false,
 		RefreshBackgroundClustersEnabled: false,
 		MetricsRefreshIntervalMs:         7000,
+		LogBufferMaxSize:                 2500,
+		LogTargetPerScopeLimit:           144,
+		LogTargetGlobalLimit:             180,
+		LogAPITimestampFormat:            "HH:mm:ss.SSS",
+		LogAPITimestampUseLocalTimeZone:  true,
 		GridTablePersistenceMode:         "namespaced",
 		DefaultObjectPanelPosition:       "floating",
 		PaletteHueLight:                  200,
@@ -110,6 +115,11 @@ func TestAppSaveAndLoadAppSettingsRoundTrip(t *testing.T) {
 	require.False(t, app.appSettings.AutoRefreshEnabled)
 	require.False(t, app.appSettings.RefreshBackgroundClustersEnabled)
 	require.Equal(t, 7000, app.appSettings.MetricsRefreshIntervalMs)
+	require.Equal(t, 2500, app.appSettings.LogBufferMaxSize)
+	require.Equal(t, 144, app.appSettings.LogTargetPerScopeLimit)
+	require.Equal(t, 180, app.appSettings.LogTargetGlobalLimit)
+	require.Equal(t, "HH:mm:ss.SSS", app.appSettings.LogAPITimestampFormat)
+	require.True(t, app.appSettings.LogAPITimestampUseLocalTimeZone)
 	require.Equal(t, "namespaced", app.appSettings.GridTablePersistenceMode)
 	require.Equal(t, "floating", app.appSettings.DefaultObjectPanelPosition)
 	require.Equal(t, 200, app.appSettings.PaletteHueLight)
@@ -201,6 +211,124 @@ func TestAppSetBackgroundRefreshEnabledPersists(t *testing.T) {
 	last := entries[len(entries)-1]
 	require.Equal(t, "INFO", last.Level)
 	require.Contains(t, last.Message, "Background refresh enabled changed to: false")
+}
+
+func TestAppSetLogBufferMaxSizePersistsAndClamps(t *testing.T) {
+	setTestConfigEnv(t)
+
+	// In-range value round-trips unchanged.
+	app := newTestAppWithDefaults(t)
+	require.NoError(t, app.SetLogBufferMaxSize(2500))
+	require.Equal(t, 2500, app.appSettings.LogBufferMaxSize)
+
+	app.appSettings = nil
+	require.NoError(t, app.loadAppSettings())
+	require.Equal(t, 2500, app.appSettings.LogBufferMaxSize)
+
+	entries := app.logger.GetEntries()
+	require.NotEmpty(t, entries)
+	require.Contains(t, entries[len(entries)-1].Message, "Log buffer max size changed to: 2500")
+
+	// Out-of-range values clamp to the allowed range.
+	require.NoError(t, app.SetLogBufferMaxSize(50))
+	require.Equal(t, minLogBufferMaxSize, app.appSettings.LogBufferMaxSize)
+
+	require.NoError(t, app.SetLogBufferMaxSize(50000))
+	require.Equal(t, maxLogBufferMaxSize, app.appSettings.LogBufferMaxSize)
+
+	// Default is returned when the settings file has no entry yet.
+	setTestConfigEnv(t)
+	freshApp := newTestAppWithDefaults(t)
+	settings, err := freshApp.GetAppSettings()
+	require.NoError(t, err)
+	require.Equal(t, defaultLogBufferMaxSize, settings.LogBufferMaxSize)
+	require.Equal(t, defaultLogTargetPerScopeLimit, settings.LogTargetPerScopeLimit)
+	require.Equal(t, defaultLogTargetGlobalLimit, settings.LogTargetGlobalLimit)
+	require.Equal(t, defaultLogAPITimestampFormat, settings.LogAPITimestampFormat)
+	require.False(t, settings.LogAPITimestampUseLocalTimeZone)
+}
+
+func TestAppSetLogTargetPerScopeLimitPersistsAndClamps(t *testing.T) {
+	setTestConfigEnv(t)
+
+	app := newTestAppWithDefaults(t)
+	require.NoError(t, app.SetLogTargetPerScopeLimit(144))
+	require.Equal(t, 144, app.appSettings.LogTargetPerScopeLimit)
+
+	app.appSettings = nil
+	require.NoError(t, app.loadAppSettings())
+	require.Equal(t, 144, app.appSettings.LogTargetPerScopeLimit)
+
+	entries := app.logger.GetEntries()
+	require.NotEmpty(t, entries)
+	require.Contains(t, entries[len(entries)-1].Message, "Log target per-scope limit changed to: 144")
+
+	require.NoError(t, app.SetLogTargetPerScopeLimit(0))
+	require.Equal(t, minLogTargetPerScopeLimit, app.appSettings.LogTargetPerScopeLimit)
+
+	require.NoError(t, app.SetLogTargetPerScopeLimit(999_999))
+	require.Equal(t, maxLogTargetPerScopeLimit, app.appSettings.LogTargetPerScopeLimit)
+}
+
+func TestAppSetLogTargetGlobalLimitPersistsAndClamps(t *testing.T) {
+	setTestConfigEnv(t)
+
+	app := newTestAppWithDefaults(t)
+	require.NoError(t, app.SetLogTargetGlobalLimit(180))
+	require.Equal(t, 180, app.appSettings.LogTargetGlobalLimit)
+
+	app.appSettings = nil
+	require.NoError(t, app.loadAppSettings())
+	require.Equal(t, 180, app.appSettings.LogTargetGlobalLimit)
+
+	entries := app.logger.GetEntries()
+	require.NotEmpty(t, entries)
+	require.Contains(t, entries[len(entries)-1].Message, "Log target global limit changed to: 180")
+
+	require.NoError(t, app.SetLogTargetGlobalLimit(0))
+	require.Equal(t, minLogTargetGlobalLimit, app.appSettings.LogTargetGlobalLimit)
+
+	require.NoError(t, app.SetLogTargetGlobalLimit(999_999))
+	require.Equal(t, maxLogTargetGlobalLimit, app.appSettings.LogTargetGlobalLimit)
+}
+
+func TestAppSetLogAPITimestampFormatPersists(t *testing.T) {
+	setTestConfigEnv(t)
+
+	app := newTestAppWithDefaults(t)
+	require.NoError(t, app.SetLogAPITimestampFormat("HH:mm:ss.SSS"))
+	require.Equal(t, "HH:mm:ss.SSS", app.appSettings.LogAPITimestampFormat)
+
+	app.appSettings = nil
+	require.NoError(t, app.loadAppSettings())
+	require.Equal(t, "HH:mm:ss.SSS", app.appSettings.LogAPITimestampFormat)
+
+	entries := app.logger.GetEntries()
+	require.NotEmpty(t, entries)
+	require.Contains(t, entries[len(entries)-1].Message, "Log API timestamp format changed to: HH:mm:ss.SSS")
+
+	require.NoError(t, app.SetLogAPITimestampFormat(""))
+	require.Equal(t, defaultLogAPITimestampFormat, app.appSettings.LogAPITimestampFormat)
+}
+
+func TestAppSetLogAPITimestampUseLocalTimeZonePersists(t *testing.T) {
+	setTestConfigEnv(t)
+
+	app := newTestAppWithDefaults(t)
+	require.NoError(t, app.SetLogAPITimestampUseLocalTimeZone(true))
+	require.True(t, app.appSettings.LogAPITimestampUseLocalTimeZone)
+
+	app.appSettings = nil
+	require.NoError(t, app.loadAppSettings())
+	require.True(t, app.appSettings.LogAPITimestampUseLocalTimeZone)
+
+	entries := app.logger.GetEntries()
+	require.NotEmpty(t, entries)
+	require.Contains(
+		t,
+		entries[len(entries)-1].Message,
+		"Log API timestamp local timezone changed to: true",
+	)
 }
 
 func TestAppSetGridTablePersistenceModePersists(t *testing.T) {

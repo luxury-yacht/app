@@ -96,6 +96,30 @@
   color: var(--color-text);
 }
 
+.setting-item-inline input[type="text"] {
+  min-width: 28ch;
+  max-width: min(56ch, 100%);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  background-color: var(--color-bg);
+  color: var(--color-text);
+}
+
+.setting-input-error {
+  border-color: var(--status-error-text) !important;
+  outline: 1px solid var(--status-error-text);
+}
+
+.setting-item-message {
+  font-size: var(--font-size-small);
+  margin-top: var(--spacing-xs);
+}
+
+.setting-item-error {
+  color: var(--status-error-text);
+}
+
 /* Object Panel Defaults */
 .object-panel-defaults .dropdown-trigger {
   min-width: auto;
@@ -124,12 +148,8 @@
 
 .object-panel-defaults .opd-warning {
   font-size: var(--font-size-small);
-  color: #92600a;
+  color: var(--status-warning-text);
   padding-top: var(--spacing-sm);
-}
-
-[data-theme="dark"] .object-panel-defaults .opd-warning {
-  color: var(--color-warning, #f59e0b);
 }
 
 .object-panel-defaults .opd-warning p {
@@ -146,6 +166,10 @@
 }
 
 [data-theme="dark"] .setting-item-inline input[type="number"] {
+  color-scheme: dark;
+}
+
+[data-theme="dark"] .setting-item-inline input[type="text"] {
   color-scheme: dark;
 }
 

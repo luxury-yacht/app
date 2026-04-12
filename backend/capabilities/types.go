@@ -10,6 +10,8 @@ package capabilities
 type CheckRequest struct {
 	ID           string `json:"id"`                    // Arbitrary identifier supplied by the caller.
 	ClusterID    string `json:"clusterId,omitempty"`   // Optional cluster identifier.
+	Group        string `json:"group,omitempty"`       // Optional API group; required to disambiguate colliding kinds (e.g. two CRDs with the same Kind from different operators).
+	Version      string `json:"version,omitempty"`     // Optional API version paired with Group; when both are set the backend uses the strict GVK resolver and bypasses kind-only first-match-wins discovery.
 	Verb         string `json:"verb"`                  // Kubernetes verb being evaluated (get, list, create, update, patch, delete, deletecollection, watch).
 	ResourceKind string `json:"resourceKind"`          // Kubernetes Kind being queried (Deployment, Pod, Namespace, etc.).
 	Namespace    string `json:"namespace,omitempty"`   // Optional namespace scope.
@@ -21,6 +23,8 @@ type CheckRequest struct {
 type CheckResult struct {
 	ID              string `json:"id"`                        // Arbitrary identifier supplied by the caller.
 	ClusterID       string `json:"clusterId,omitempty"`       // Optional cluster identifier.
+	Group           string `json:"group,omitempty"`           // API group echoed back from the request so the frontend can rebuild GVK-aware cache keys.
+	Version         string `json:"version,omitempty"`         // API version echoed back from the request.
 	Verb            string `json:"verb"`                      // Kubernetes verb being evaluated (get, list, create, update, patch, delete, deletecollection, watch).
 	ResourceKind    string `json:"resourceKind"`              // Kubernetes Kind being queried (Deployment, Pod, Namespace, etc.).
 	Namespace       string `json:"namespace,omitempty"`       // Optional namespace scope.

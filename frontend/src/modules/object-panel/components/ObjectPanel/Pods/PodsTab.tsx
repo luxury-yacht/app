@@ -30,6 +30,7 @@ import { useViewState } from '@core/contexts/ViewStateContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import '../shared.css';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
+import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
 
 interface PodsTabProps {
   pods: PodSnapshotEntry[];
@@ -107,6 +108,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
             kind: 'Pod',
             name: pod.name,
             namespace: pod.namespace,
+            ...resolveBuiltinGroupVersion('Pod'),
             ...getPodClusterMeta(pod),
           }),
         onAltClick: (pod) =>
@@ -125,6 +127,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
             kind: 'Pod',
             name: pod.name,
             namespace: pod.namespace,
+            ...resolveBuiltinGroupVersion('Pod'),
             ...getPodClusterMeta(pod),
           }),
         onAltClick: (pod) =>
@@ -250,7 +253,12 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
   } = useGridTablePersistence<PodSnapshotEntry>({
     viewId: 'object-panel-pods',
     // Use the panel-scoped cluster ID, not the global sidebar selection.
+    // Multi-cluster rule (AGENTS.md): persistence is keyed per cluster
+    // so column widths/sort don't bleed between clusters. Disable
+    // persistence when clusterId is missing rather than falling through
+    // to a global storage bucket.
     clusterIdentity: objectData?.clusterId ?? '',
+    enabled: Boolean(objectData?.clusterId),
     namespace: null,
     isNamespaceScoped: false,
     columns,
@@ -300,6 +308,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
                 kind: 'Pod',
                 name: pod.name,
                 namespace: pod.namespace,
+                ...resolveBuiltinGroupVersion('Pod'),
                 ...getPodClusterMeta(pod),
               })
             }
@@ -319,6 +328,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
                       kind: 'Pod',
                       name: pod.name,
                       namespace: pod.namespace,
+                      ...resolveBuiltinGroupVersion('Pod'),
                       ...getPodClusterMeta(pod),
                     }),
                 },

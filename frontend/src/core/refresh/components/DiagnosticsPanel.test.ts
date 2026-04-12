@@ -15,7 +15,6 @@ import type { ViewType } from '@/types/navigation/views';
 import type { TelemetrySummary } from '../types';
 import type {
   CapabilityNamespaceDiagnostics,
-  CapabilityEntry,
   NormalizedCapabilityDescriptor,
 } from '@/core/capabilities/types';
 import type { PermissionStatus } from '@/core/capabilities/bootstrap';
@@ -767,6 +766,7 @@ describe('DiagnosticsPanel component', () => {
           activeSessions: 2,
           totalMessages: 12,
           droppedMessages: 1,
+          skippedTargets: 0,
           errorCount: 0,
           lastConnect: now - 6000,
           lastEvent: now - 3000,
@@ -776,6 +776,7 @@ describe('DiagnosticsPanel component', () => {
           activeSessions: 1,
           totalMessages: 15,
           droppedMessages: 0,
+          skippedTargets: 0,
           errorCount: 0,
           lastConnect: now - 4000,
           lastEvent: now - 1500,
@@ -785,6 +786,7 @@ describe('DiagnosticsPanel component', () => {
           activeSessions: 3,
           totalMessages: 20,
           droppedMessages: 4,
+          skippedTargets: 0,
           errorCount: 1,
           lastConnect: now - 7000,
           lastEvent: now - 2000,
@@ -795,9 +797,11 @@ describe('DiagnosticsPanel component', () => {
           activeSessions: 1,
           totalMessages: 9,
           droppedMessages: 2,
+          skippedTargets: 5,
           errorCount: 0,
           lastConnect: now - 8000,
           lastEvent: now - 1000,
+          lastSkipReason: 'per-scope target cap',
         },
       ],
     };
@@ -898,8 +902,9 @@ describe('DiagnosticsPanel component', () => {
     expect(logPrimary?.textContent).toContain('Scopes: 2');
     expect(logPrimary?.textContent).toContain('Sessions: 1');
     expect(logPrimary?.textContent).toContain('Delivered: 9');
+    expect(logPrimary?.textContent).toContain('Skipped Targets: 5');
 
-    const tabButtons = rendered.container.querySelectorAll<HTMLButtonElement>('.tab-item');
+    const tabButtons = rendered.container.querySelectorAll<HTMLElement>('[role="tab"]');
     await act(async () => {
       tabButtons[1].click();
       await Promise.resolve();
@@ -955,6 +960,7 @@ describe('DiagnosticsPanel component', () => {
           activeSessions: 1,
           totalMessages: 5,
           droppedMessages: 1,
+          skippedTargets: 0,
           errorCount: 0,
           lastConnect: now - 4000,
           lastEvent: now - 1500,
@@ -1032,6 +1038,7 @@ describe('DiagnosticsPanel component', () => {
           activeSessions: 1,
           totalMessages: 5,
           droppedMessages: 0,
+          skippedTargets: 0,
           errorCount: 0,
           lastConnect: now - 1000,
           lastEvent: now - 500,
@@ -1041,6 +1048,7 @@ describe('DiagnosticsPanel component', () => {
           activeSessions: 2,
           totalMessages: 10,
           droppedMessages: 1,
+          skippedTargets: 0,
           errorCount: 0,
           lastConnect: now - 1200,
           lastEvent: now - 700,
@@ -1054,7 +1062,7 @@ describe('DiagnosticsPanel component', () => {
     await flushAsync();
     await flushAsync();
 
-    const tabButtons = rendered.container.querySelectorAll<HTMLButtonElement>('.tab-item');
+    const tabButtons = rendered.container.querySelectorAll<HTMLElement>('[role="tab"]');
     await act(async () => {
       tabButtons[1].click();
       await Promise.resolve();
@@ -1193,16 +1201,14 @@ describe('DiagnosticsPanel component', () => {
       },
     ];
 
-    const createEntry = (
-      descriptor: NormalizedCapabilityDescriptor,
-      overrides: Partial<CapabilityEntry> = {}
-    ): CapabilityEntry => ({
-      key: `entry-${descriptor.id}`,
-      request: descriptor,
-      status: overrides.status ?? 'ready',
-      result: overrides.result,
-      error: overrides.error,
-      lastFetched: overrides.lastFetched ?? now - 1000,
+    const toDescriptor = (d: NormalizedCapabilityDescriptor): PermissionStatus['descriptor'] => ({
+      clusterId: d.clusterId ?? 'test-cluster',
+      group: d.group ?? null,
+      version: d.version ?? null,
+      resourceKind: d.resourceKind,
+      verb: d.verb,
+      namespace: d.namespace ?? null,
+      subresource: d.subresource ?? null,
     });
 
     const permissionStatuses: PermissionStatus[] = [
@@ -1212,55 +1218,42 @@ describe('DiagnosticsPanel component', () => {
         pending: false,
         reason: 'Forbidden',
         error: 'Denied by policy',
-        descriptor: descriptorDefault,
-        entry: createEntry(descriptorDefault, {
-          result: {
-            id: descriptorDefault.id,
-            verb: descriptorDefault.verb,
-            resourceKind: descriptorDefault.resourceKind,
-            namespace: descriptorDefault.namespace,
-            allowed: false,
-          },
-        }),
+        source: 'denied',
+        descriptor: toDescriptor(descriptorDefault),
+        entry: { status: 'ready' },
         feature: 'Namespace workloads',
       },
       {
         id: 'perm-exec',
         allowed: false,
         pending: true,
-        descriptor: descriptorExec,
-        entry: createEntry(descriptorExec, { status: 'loading' }),
+        reason: null,
+        error: null,
+        source: null,
+        descriptor: toDescriptor(descriptorExec),
+        entry: { status: 'loading' },
         feature: 'Namespace workloads',
       },
       {
         id: 'perm-cluster',
         allowed: true,
         pending: false,
-        descriptor: descriptorCluster,
-        entry: createEntry(descriptorCluster, {
-          result: {
-            id: descriptorCluster.id,
-            verb: descriptorCluster.verb,
-            resourceKind: descriptorCluster.resourceKind,
-            allowed: true,
-          },
-        }),
+        reason: null,
+        error: null,
+        source: 'ssrr',
+        descriptor: toDescriptor(descriptorCluster),
+        entry: { status: 'ready' },
         feature: 'Cluster RBAC',
       },
       {
         id: 'perm-other',
         allowed: true,
         pending: false,
-        descriptor: descriptorOther,
-        entry: createEntry(descriptorOther, {
-          result: {
-            id: descriptorOther.id,
-            verb: descriptorOther.verb,
-            resourceKind: descriptorOther.resourceKind,
-            namespace: descriptorOther.namespace,
-            allowed: true,
-          },
-        }),
+        reason: null,
+        error: null,
+        source: 'ssrr',
+        descriptor: toDescriptor(descriptorOther),
+        entry: { status: 'ready' },
         feature: 'Namespace workloads',
       },
     ];
@@ -1286,7 +1279,7 @@ describe('DiagnosticsPanel component', () => {
       await Promise.resolve();
     });
 
-    const tabButtons = rendered.container.querySelectorAll<HTMLButtonElement>('.tab-item');
+    const tabButtons = rendered.container.querySelectorAll<HTMLElement>('[role="tab"]');
     await act(async () => {
       // Skip the new streams tab to reach capability checks.
       tabButtons[2].click();
@@ -1303,15 +1296,22 @@ describe('DiagnosticsPanel component', () => {
     expect(batchRows[1].textContent).toContain('Cluster');
     expect(batchRows[2].className).toContain('diagnostics-permission-denied');
     const batchCells = batchRows[2].querySelectorAll<HTMLTableCellElement>('td');
+    // Column order (15 cols): Namespace(0), InFlight(1), Runtime(2), Duration(3),
+    // Age(4), Result(5), Failures(6), Checks(7), Error(8), Method(9),
+    // Incomplete(10), Rules(11), SSARFallback(12), Descriptors(13), Features(14).
     expect(batchCells[0].textContent?.trim()).toBe('default');
-    expect(batchCells[1].textContent?.trim()).toBe('2');
-    expect(batchCells[2].textContent?.trim()).toBe('1');
-    expect(batchCells[3].textContent?.trim()).toMatch(/s$/);
-    expect(batchCells[6].textContent?.trim()).toBe('Error');
-    expect(batchCells[9].textContent).toContain('Denied by policy');
-    // Descriptors are rendered in grouped format: "resource: verb(s)".
-    expect(batchCells[10].textContent).toContain('deployments:');
-    expect(batchCells[10].textContent).toContain('pods:');
+    expect(batchCells[1].textContent?.trim()).toBe('1'); // In Flight
+    expect(batchCells[2].textContent?.trim()).toMatch(/s$/); // Runtime
+    expect(batchCells[5].textContent?.trim()).toBe('Error'); // Result
+    expect(batchCells[8].textContent).toContain('Denied by policy'); // Error
+    // Checks cell is collapsed by default — click the row to expand.
+    expect(batchCells[13].textContent).toContain('Click to expand');
+    await act(async () => {
+      batchRows[2].click();
+      await Promise.resolve();
+    });
+    const expandedCells = batchRows[2].querySelectorAll<HTMLTableCellElement>('td');
+    expect(expandedCells[13].textContent).toContain('deployments');
 
     await act(async () => {
       tabButtons[3].click();
@@ -1347,6 +1347,27 @@ describe('DiagnosticsPanel component', () => {
     expect(allRows.length).toBe(4);
     expect(Array.from(allRows).some((row) => row.textContent?.includes('Cluster RBAC'))).toBe(true);
     expect(Array.from(allRows).some((row) => row.textContent?.includes('kube-system'))).toBe(true);
+
+    await rendered.unmount();
+  });
+
+  test('each tab carries data-diagnostics-focusable="true" for the focus walker', async () => {
+    // The focus walker at DiagnosticsPanel.tsx:~2067 queries
+    // '[data-diagnostics-focusable="true"]' to drive Escape/Arrow navigation.
+    // If extraProps stops being forwarded through the shared Tabs component,
+    // the attribute silently disappears and keyboard nav breaks. This test
+    // guards that regression.
+    const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
+    const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
+    await flushAsync();
+
+    const focusableEls = rendered.container.querySelectorAll('[data-diagnostics-focusable="true"]');
+    // Expect exactly four focusable tab elements (one per tab descriptor).
+    expect(focusableEls.length).toBe(4);
+    // Each should also carry role="tab" — confirming they are the tab divs.
+    for (const el of Array.from(focusableEls)) {
+      expect(el.getAttribute('role')).toBe('tab');
+    }
 
     await rendered.unmount();
   });

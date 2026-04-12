@@ -34,16 +34,25 @@ type NamespaceAutoscalingSnapshot struct {
 }
 
 // AutoscalingSummary captures HPA details for display.
+//
+// Target is the human-readable "Kind/Name" string used by the table column.
+// TargetAPIVersion carries the scale target's apiVersion verbatim from
+// hpa.Spec.ScaleTargetRef.APIVersion so the frontend can open the target
+// in the object panel with a fully-qualified GVK — required for CRDs that
+// share a Kind across groups (e.g. two operators each defining a custom
+// scalable resource named DBCluster). Without it the strict object-YAML
+// path hard-fails on CRD HPA targets.
 type AutoscalingSummary struct {
 	ClusterMeta
-	Kind      string `json:"kind"`
-	Name      string `json:"name"`
-	Namespace string `json:"namespace"`
-	Target    string `json:"target"`
-	Min       int32  `json:"min"`
-	Max       int32  `json:"max"`
-	Current   int32  `json:"current"`
-	Age       string `json:"age"`
+	Kind             string `json:"kind"`
+	Name             string `json:"name"`
+	Namespace        string `json:"namespace"`
+	Target           string `json:"target"`
+	TargetAPIVersion string `json:"targetApiVersion,omitempty"`
+	Min              int32  `json:"min"`
+	Max              int32  `json:"max"`
+	Current          int32  `json:"current"`
+	Age              string `json:"age"`
 }
 
 func parseAutoscalingNamespace(scope string) (string, error) {
@@ -129,18 +138,10 @@ func (b *NamespaceAutoscalingBuilder) buildSnapshot(
 		if hpa == nil {
 			continue
 		}
-		summary := AutoscalingSummary{
-			ClusterMeta: meta,
-			Kind:      "HorizontalPodAutoscaler",
-			Name:      hpa.Name,
-			Namespace: hpa.Namespace,
-			Target:    describeHPATarget(hpa),
-			Min:       minReplicas(hpa),
-			Max:       hpa.Spec.MaxReplicas,
-			Current:   hpa.Status.CurrentReplicas,
-			Age:       formatAge(hpa.CreationTimestamp.Time),
-		}
-		resources = append(resources, summary)
+		// Delegate to the shared row builder so the full-snapshot path
+		// and the streaming/incremental update path emit identical row
+		// shapes. See BuildHPASummary in streaming_helpers.go.
+		resources = append(resources, BuildHPASummary(meta, hpa))
 		if v := resourceVersionOrTimestamp(hpa); v > version {
 			version = v
 		}

@@ -3,6 +3,7 @@ package logstream
 import (
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/podlogs"
 	"github.com/luxury-yacht/app/backend/refresh"
 )
 
@@ -23,21 +24,35 @@ func (noopLogger) Error(string, ...string) {}
 
 // Options captures the parameters for a log streaming session.
 type Options struct {
-	Namespace   string
-	Kind        string
-	Name        string
-	Container   string
-	TailLines   int
-	ScopeString string
+	ClusterID        string
+	Namespace        string
+	Kind             string
+	Name             string
+	PodFilter        string
+	PodInclude       string
+	PodExclude       string
+	SelectedFilters  []string
+	Selection        podlogs.ScopeSelection
+	Container        string
+	IncludeInit      bool
+	IncludeEphemeral bool
+	ContainerState   podlogs.ContainerStateFilter
+	Include          string
+	Exclude          string
+	PodNameFilter    podlogs.PodNameFilter
+	LineFilter       podlogs.LineFilter
+	TailLines        int
+	ScopeString      string
 }
 
 // Entry mirrors the log line payload sent to clients.
 type Entry struct {
-	Timestamp string `json:"timestamp"`
-	Pod       string `json:"pod"`
-	Container string `json:"container"`
-	Line      string `json:"line"`
-	IsInit    bool   `json:"isInit"`
+	Timestamp   string `json:"timestamp"`
+	Pod         string `json:"pod"`
+	Container   string `json:"container"`
+	Line        string `json:"line"`
+	IsInit      bool   `json:"isInit"`
+	IsEphemeral bool   `json:"isEphemeral,omitempty"`
 }
 
 // EventPayload is the SSE message envelope emitted to clients.
@@ -48,6 +63,7 @@ type EventPayload struct {
 	GeneratedAt  int64                           `json:"generatedAt"`
 	Reset        bool                            `json:"reset,omitempty"`
 	Entries      []Entry                         `json:"entries,omitempty"`
+	Warnings     *[]string                       `json:"warnings,omitempty"`
 	Error        string                          `json:"error,omitempty"`
 	ErrorDetails *refresh.PermissionDeniedStatus `json:"errorDetails,omitempty"`
 }

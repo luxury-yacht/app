@@ -96,7 +96,7 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     title = 'Panel',
     defaultPosition = 'right',
     defaultGroupKey,
-    defaultSize = { width: PANEL_DEFAULTS.DEFAULT_WIDTH, height: PANEL_DEFAULTS.DEFAULT_HEIGHT },
+    defaultSize: defaultSizeOverride,
     onClose,
     onPositionChange,
     className = '',
@@ -107,6 +107,13 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     maximizeTargetSelector = '.content-body',
     panelRef: forwardedPanelRef,
   } = props;
+  const defaultSize = useMemo(
+    () => ({
+      width: defaultSizeOverride?.width ?? PANEL_DEFAULTS.DEFAULT_WIDTH,
+      height: defaultSizeOverride?.height ?? PANEL_DEFAULTS.DEFAULT_HEIGHT,
+    }),
+    [defaultSizeOverride?.width, defaultSizeOverride?.height]
+  );
   const isControlled = typeof props.isOpen !== 'undefined';
   const resolvedIsOpen = props.isOpen ?? true;
 
@@ -310,12 +317,6 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     syncPanelGroup,
     removePanelFromGroups,
   ]);
-
-  useEffect(() => {
-    return () => {
-      removePanelFromGroups(panelId);
-    };
-  }, [panelId, removePanelFromGroups]);
 
   // Manage body class to disable hover effects during floating panel drag.
   useEffect(() => {

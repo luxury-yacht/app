@@ -13,11 +13,15 @@ export function ApplyObjectYaml(arg1:string,arg2:backend.ObjectYAMLMutationReque
 
 export function ApplyTheme(arg1:string):Promise<void>;
 
+export function ClearAllSSRRCaches():Promise<void>;
+
 export function ClearAppState():Promise<void>;
 
 export function ClearGridTablePersistence():Promise<number>;
 
 export function ClearLogs():Promise<void>;
+
+export function ClearSSRRCache(arg1:string):Promise<void>;
 
 export function CloseShellSession(arg1:string):Promise<void>;
 
@@ -43,7 +47,7 @@ export function DeleteNode(arg1:string,arg2:string):Promise<void>;
 
 export function DeletePod(arg1:string,arg2:string,arg3:string):Promise<void>;
 
-export function DeleteResource(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
+export function DeleteResourceByGVK(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<void>;
 
 export function DeleteTheme(arg1:string):Promise<void>;
 
@@ -111,6 +115,8 @@ export function GetKubeconfigs():Promise<Array<types.KubeconfigInfo>>;
 
 export function GetLimitRange(arg1:string,arg2:string,arg3:string):Promise<types.LimitRangeDetails>;
 
+export function GetLogScopeContainers(arg1:string,arg2:string):Promise<Array<string>>;
+
 export function GetLogs():Promise<Array<backend.LogEntry>>;
 
 export function GetMutatingWebhookConfiguration(arg1:string,arg2:string):Promise<types.MutatingWebhookConfigurationDetails>;
@@ -121,7 +127,7 @@ export function GetNetworkPolicy(arg1:string,arg2:string,arg3:string):Promise<ty
 
 export function GetNode(arg1:string,arg2:string):Promise<types.NodeDetails>;
 
-export function GetObjectYAML(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
+export function GetObjectYAMLByGVK(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<string>;
 
 export function GetPersistentVolume(arg1:string,arg2:string):Promise<types.PersistentVolumeDetails>;
 
@@ -195,6 +201,8 @@ export function MatchThemeForCluster(arg1:string):Promise<types.Theme>;
 
 export function OpenKubeconfigSearchPathDialog():Promise<string>;
 
+export function QueryPermissions(arg1:Array<capabilities.PermissionQuery>):Promise<capabilities.QueryPermissionsResponse>;
+
 export function ReorderThemes(arg1:Array<string>):Promise<void>;
 
 export function ResizeShellSession(arg1:string,arg2:number,arg3:number):Promise<void>;
@@ -236,6 +244,16 @@ export function SetKubeconfig(arg1:string):Promise<void>;
 export function SetKubeconfigSearchPaths(arg1:Array<string>):Promise<void>;
 
 export function SetLinkColor(arg1:string,arg2:string):Promise<void>;
+
+export function SetLogAPITimestampFormat(arg1:string):Promise<void>;
+
+export function SetLogAPITimestampUseLocalTimeZone(arg1:boolean):Promise<void>;
+
+export function SetLogBufferMaxSize(arg1:number):Promise<void>;
+
+export function SetLogTargetGlobalLimit(arg1:number):Promise<void>;
+
+export function SetLogTargetPerScopeLimit(arg1:number):Promise<void>;
 
 export function SetLogsPanelVisible(arg1:boolean):Promise<void>;
 

@@ -3,13 +3,11 @@ package backend
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/luxury-yacht/app/backend/capabilities"
 	authorizationv1 "k8s.io/api/authorization/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	fakediscovery "k8s.io/client-go/discovery/fake"
 	cgofake "k8s.io/client-go/kubernetes/fake"
 	cgotesting "k8s.io/client-go/testing"
@@ -54,34 +52,15 @@ func TestEvaluateCapabilitiesSuccess(t *testing.T) {
 		},
 	}
 
-	// Scope the GVR cache to the selected cluster to mirror production lookups.
-	cacheKey := gvrCacheKey(capabilitiesClusterID, "Deployment")
-	gvrCacheMutex.Lock()
-	original, hadOriginal := gvrCache[cacheKey]
-	gvrCache[cacheKey] = gvrCacheEntry{
-		gvr: schema.GroupVersionResource{
-			Group:    "apps",
-			Version:  "v1",
-			Resource: "deployments",
-		},
-		namespaced: true,
-		cachedAt:   time.Now(),
-	}
-	gvrCacheMutex.Unlock()
-	defer func() {
-		gvrCacheMutex.Lock()
-		if hadOriginal {
-			gvrCache[cacheKey] = original
-		} else {
-			delete(gvrCache, cacheKey)
-		}
-		gvrCacheMutex.Unlock()
-	}()
-
+	// discovery.Resources above advertises apps/v1 Deployment so
+	// common.ResolveGVRForGVK can resolve the request without a
+	// kind-only fallback.
 	requests := []capabilities.CheckRequest{
 		{
 			ID:           "update",
 			ClusterID:    capabilitiesClusterID,
+			Group:        "apps",
+			Version:      "v1",
 			Verb:         "update",
 			ResourceKind: "Deployment",
 			Namespace:    "default",
@@ -143,6 +122,20 @@ func TestEvaluateCapabilitiesDeduplicatesRequests(t *testing.T) {
 		return true, review, nil
 	})
 
+	discovery := client.Discovery().(*fakediscovery.FakeDiscovery)
+	discovery.Resources = []*metav1.APIResourceList{
+		{
+			GroupVersion: "apps/v1",
+			APIResources: []metav1.APIResource{
+				{
+					Name:       "deployments",
+					Namespaced: true,
+					Kind:       "Deployment",
+				},
+			},
+		},
+	}
+
 	app := NewApp()
 	app.Ctx = context.Background()
 	// Per-cluster client is stored in clusterClients, not in global fields.
@@ -155,29 +148,12 @@ func TestEvaluateCapabilitiesDeduplicatesRequests(t *testing.T) {
 		},
 	}
 
-	// Scope the GVR cache to the selected cluster to mirror production lookups.
-	cacheKey := gvrCacheKey(capabilitiesClusterID, "Deployment")
-	gvrCacheMutex.Lock()
-	gvrCache[cacheKey] = gvrCacheEntry{
-		gvr: schema.GroupVersionResource{
-			Group:    "apps",
-			Version:  "v1",
-			Resource: "deployments",
-		},
-		namespaced: true,
-		cachedAt:   time.Now(),
-	}
-	gvrCacheMutex.Unlock()
-	defer func() {
-		gvrCacheMutex.Lock()
-		delete(gvrCache, cacheKey)
-		gvrCacheMutex.Unlock()
-	}()
-
 	requests := []capabilities.CheckRequest{
 		{
 			ID:           "delete-a",
 			ClusterID:    capabilitiesClusterID,
+			Group:        "apps",
+			Version:      "v1",
 			Verb:         "delete",
 			ResourceKind: "Deployment",
 			Namespace:    "default",
@@ -186,6 +162,8 @@ func TestEvaluateCapabilitiesDeduplicatesRequests(t *testing.T) {
 		{
 			ID:           "delete-b",
 			ClusterID:    capabilitiesClusterID,
+			Group:        "apps",
+			Version:      "v1",
 			Verb:         "delete",
 			ResourceKind: "Deployment",
 			Namespace:    "default",
