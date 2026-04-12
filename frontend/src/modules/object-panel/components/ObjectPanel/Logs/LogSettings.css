@@ -1,0 +1,134 @@
+.log-settings-view {
+  padding: 0;
+}
+
+.log-settings-tooltip-paragraph + .log-settings-tooltip-paragraph {
+  margin-top: 1em;
+}
+
+.log-settings-format-link {
+  color: var(--color-accent);
+  text-decoration-color: var(--color-accent);
+  white-space: nowrap;
+  padding-left: 0.5rem;
+}
+
+.log-settings-target-limits-grid {
+  display: inline-grid;
+  grid-template-columns: max-content max-content max-content;
+  column-gap: 0.35rem;
+  row-gap: 0.2rem;
+  align-items: center;
+  justify-content: start;
+}
+
+.log-settings-target-limits-title {
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  margin-right: 1rem;
+  font-size: var(--font-size-normal);
+  color: var(--color-text);
+}
+
+.log-settings-target-limits-row {
+  grid-column: 2;
+  font-size: var(--font-size-normal);
+  color: var(--color-text);
+  white-space: nowrap;
+}
+
+.log-settings-target-limits input[type="number"] {
+  width: 8ch;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  background-color: var(--color-bg);
+  color: var(--color-text);
+}
+
+.log-settings-target-limits-control {
+  grid-column: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+[data-theme="dark"] .log-settings-target-limits input[type="number"] {
+  color-scheme: dark;
+}
+
+.log-settings-timestamp-grid {
+  display: inline-grid;
+  grid-template-columns: max-content max-content;
+  column-gap: 1rem;
+  row-gap: 0.4rem;
+  align-items: center;
+  justify-content: start;
+}
+
+.log-settings-timestamp-checkbox-row {
+  grid-column: 1 / span 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.log-settings-timestamp-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  font-size: var(--font-size-normal);
+  color: var(--color-text);
+  white-space: nowrap;
+}
+
+.log-settings-timestamp-checkbox input[type="checkbox"] {
+  margin: 0;
+}
+
+.log-settings-timestamp-format-label {
+  grid-column: 1;
+  font-size: var(--font-size-normal);
+  color: var(--color-text);
+  white-space: nowrap;
+}
+
+.log-settings-timestamp-grid input[type="text"] {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  width: 30ch;
+}
+
+.log-settings-timestamp-control {
+  grid-column: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.log-settings-timestamp-error {
+  grid-column: 1 / span 2;
+}
+
+.log-settings-timestamp-example-label {
+  grid-column: 1;
+  font-size: var(--font-size-normal);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.log-settings-timestamp-example-value {
+  grid-column: 2;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-normal);
+  font-variant-numeric: tabular-nums;
+  padding-left: 0.5rem;
+}
+
+[data-theme="dark"] .log-settings-timestamp-grid input[type="text"] {
+  color-scheme: dark;
+}

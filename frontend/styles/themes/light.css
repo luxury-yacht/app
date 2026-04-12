@@ -268,7 +268,8 @@
   --status-inactive-shadow: none;
 
   /* Modal overlays */
-  --modal-overlay-bg: rgba(15, 23, 42, 0.4);
+  --modal-overlay-bg: rgba(0, 0, 0, 0.3);
+  --modal-bg-blur: 1px;
   --grid-loading-overlay-bg: rgba(15, 23, 42, 0.15);
   --modal-container-shadow:
     0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.08),

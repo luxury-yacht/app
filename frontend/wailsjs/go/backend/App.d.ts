@@ -242,6 +242,10 @@ export function SetKubeconfigSearchPaths(arg1:Array<string>):Promise<void>;
 
 export function SetLinkColor(arg1:string,arg2:string):Promise<void>;
 
+export function SetLogAPITimestampFormat(arg1:string):Promise<void>;
+
+export function SetLogAPITimestampUseLocalTimeZone(arg1:boolean):Promise<void>;
+
 export function SetLogBufferMaxSize(arg1:number):Promise<void>;
 
 export function SetLogTargetGlobalLimit(arg1:number):Promise<void>;

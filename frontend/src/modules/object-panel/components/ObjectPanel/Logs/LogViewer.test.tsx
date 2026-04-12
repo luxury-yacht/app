@@ -9,6 +9,10 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 
 import LogViewer from './LogViewer';
 import {
+  resetAppPreferencesCacheForTesting,
+  setAppPreferencesForTesting,
+} from '@/core/settings/appPreferences';
+import {
   getScopedDomainState,
   resetScopedDomainState,
   setScopedDomainState,
@@ -104,11 +108,20 @@ vi.mock('@/core/refresh/fallbacks/objectLogFallbackManager', () => ({
 
 const shortcutMocks = vi.hoisted(() => ({
   useShortcut: vi.fn(),
+  useKeyboardNavigationScope: vi.fn(),
+}));
+
+const contextMocks = vi.hoisted(() => ({
+  pushContext: vi.fn(),
+  popContext: vi.fn(),
 }));
 
 vi.mock('@ui/shortcuts', () => ({
   useShortcut: (...args: unknown[]) => shortcutMocks.useShortcut(...args),
+  useKeyboardContext: () => contextMocks,
   useSearchShortcutTarget: () => undefined,
+  useKeyboardNavigationScope: (...args: unknown[]) =>
+    shortcutMocks.useKeyboardNavigationScope(...args),
 }));
 
 vi.mock('@shared/components/dropdowns/Dropdown', () => ({
@@ -186,6 +199,11 @@ vi.mock('@shared/components/LoadingSpinner', () => ({
   default: ({ message }: { message?: string }) => <div>{message}</div>,
 }));
 
+vi.mock('@shared/components/Tooltip', () => ({
+  __esModule: true,
+  default: ({ children }: { children?: React.ReactNode }) => <>{children ?? null}</>,
+}));
+
 const testClusterId = 'alpha:ctx';
 const buildLogScope = (scope: string) => buildClusterScope(testClusterId, scope);
 const defaultScope = buildLogScope('team-a:deployment:api');
@@ -231,9 +249,13 @@ describe('LogViewer active pod synchronisation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     shortcutMocks.useShortcut.mockClear();
+    shortcutMocks.useKeyboardNavigationScope.mockClear();
+    contextMocks.pushContext.mockClear();
+    contextMocks.popContext.mockClear();
     (LogFetcher as unknown as ViMock).mockReset?.();
     (GetLogScopeContainers as unknown as ViMock).mockReset?.();
     (GetLogScopeContainers as unknown as ViMock).mockResolvedValue(['app']);
+    resetAppPreferencesCacheForTesting();
     resetLogViewerPrefsCacheForTesting();
     resetLogStreamScopeParamsCacheForTesting();
     container = document.createElement('div');
@@ -1107,6 +1129,118 @@ describe('LogViewer active pod synchronisation', () => {
         '2024-05-01T11:00:00Z,web-1,app,info,2,"hello, world"',
       ].join('\n')
     );
+  });
+
+  it('formats the API timestamp using the configured preference in the rendered log rows', async () => {
+    setAppPreferencesForTesting({ logApiTimestampFormat: 'HH:mm:ss.SSS' });
+    seedLogSnapshot([
+      {
+        pod: 'web-1',
+        container: 'app',
+        line: 'hello',
+        timestamp: '2024-05-01T11:00:00.123456Z',
+        isInit: false,
+      },
+    ]);
+
+    await renderViewer({ activePodNames: ['web-1'] });
+
+    expect(container.textContent).toContain('[11:00:00.123] [web-1/app] hello');
+  });
+
+  it('copies the configured API timestamp format in raw and parsed views', async () => {
+    setAppPreferencesForTesting({ logApiTimestampFormat: 'HH:mm:ss.SSS' });
+    seedLogSnapshot([
+      {
+        pod: 'web-1',
+        container: 'app',
+        line: '{"level":"info","message":"hello"}',
+        timestamp: '2024-05-01T11:00:00.123456Z',
+        isInit: false,
+      },
+    ]);
+
+    await renderViewer({ activePodNames: ['web-1'] });
+
+    const copyButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Copy to clipboard"]'
+    );
+    const parsedButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Parse the JSON into a table"]'
+    );
+    expect(copyButton).toBeTruthy();
+    expect(parsedButton).toBeTruthy();
+
+    await act(async () => {
+      copyButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+    expect(writeTextMock).toHaveBeenLastCalledWith(
+      '[11:00:00.123] [web-1/app] {"level":"info","message":"hello"}'
+    );
+
+    await act(async () => {
+      parsedButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+    await act(async () => {
+      copyButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(writeTextMock).toHaveBeenLastCalledWith(
+      ['API Timestamp,Pod,Container,level,message', '11:00:00.123,web-1,app,info,hello'].join('\n')
+    );
+  });
+
+  it('opens the log settings modal from the icon bar', async () => {
+    await renderViewer({ activePodNames: ['web-1'] });
+
+    const settingsButton = await waitForElement(() =>
+      container.querySelector<HTMLButtonElement>('button[aria-label="Open log settings"]')
+    );
+
+    await act(async () => {
+      settingsButton.click();
+      await Promise.resolve();
+    });
+
+    expect(document.body.textContent).toContain('Log Settings');
+    expect(document.querySelector<HTMLInputElement>('input#log-api-timestamp-format')).toBeTruthy();
+  });
+
+  it('formats API timestamps in the local timezone when enabled', async () => {
+    const timestamp = '2024-05-01T11:00:00.123456Z';
+    const localDate = new Date(timestamp);
+    const pad = (value: number, size = 2) => String(value).padStart(size, '0');
+    const offsetMinutes = -localDate.getTimezoneOffset();
+    const offsetSign = offsetMinutes >= 0 ? '+' : '-';
+    const absoluteOffsetMinutes = Math.abs(offsetMinutes);
+    const offsetHours = Math.floor(absoluteOffsetMinutes / 60);
+    const offsetRemainderMinutes = absoluteOffsetMinutes % 60;
+    const expectedTimestamp = [
+      `${localDate.getFullYear()}-${pad(localDate.getMonth() + 1)}-${pad(localDate.getDate())}`,
+      `T${pad(localDate.getHours())}:${pad(localDate.getMinutes())}:${pad(localDate.getSeconds())}.${pad(localDate.getMilliseconds(), 3)}`,
+      `${offsetSign}${pad(offsetHours)}:${pad(offsetRemainderMinutes)}`,
+    ].join('');
+
+    setAppPreferencesForTesting({
+      logApiTimestampUseLocalTimeZone: true,
+      logApiTimestampFormat: 'YYYY-MM-DDTHH:mm:ss.SSS[Z]',
+    });
+    seedLogSnapshot([
+      {
+        pod: 'web-1',
+        container: 'app',
+        line: 'hello',
+        timestamp,
+        isInit: false,
+      },
+    ]);
+
+    await renderViewer({ activePodNames: ['web-1'] });
+
+    expect(container.textContent).toContain(`[${expectedTimestamp}] [web-1/app] hello`);
   });
 
   it('toggles API timestamps from the icon bar', async () => {
