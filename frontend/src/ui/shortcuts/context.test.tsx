@@ -10,15 +10,7 @@ import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  KeyboardProvider,
-  useKeyboardContext,
-  matchesShortcutContext,
-  deriveCopyText,
-  applySelectAll,
-  shallowEqual,
-} from './context';
-import type { RegisteredShortcut } from '@/types/shortcuts';
+import { KeyboardProvider, useKeyboardContext, deriveCopyText, applySelectAll } from './context';
 
 const runtimeMocks = vi.hoisted(() => ({
   eventsOn: vi.fn(),
@@ -30,7 +22,7 @@ vi.mock('@wailsjs/runtime/runtime', () => ({
   EventsOff: runtimeMocks.eventsOff,
 }));
 
-type ShortcutContextApi = ReturnType<typeof useKeyboardContext>;
+type KeyboardContextApi = ReturnType<typeof useKeyboardContext>;
 
 describe('KeyboardProvider', () => {
   let container: HTMLDivElement;
@@ -57,7 +49,7 @@ describe('KeyboardProvider', () => {
   });
 
   it('reports availability for registered shortcuts', async () => {
-    const apiRef: { current: ShortcutContextApi | null } = { current: null };
+    const apiRef: { current: KeyboardContextApi | null } = { current: null };
     const listHandler = vi.fn();
 
     const Harness = () => {
@@ -70,7 +62,7 @@ describe('KeyboardProvider', () => {
       useEffect(() => {
         const listId = ctx.registerShortcut({
           key: 'l',
-          contexts: [{ priority: 1 }],
+          priority: 1,
           handler: listHandler,
           description: 'List scope action',
         });
@@ -97,7 +89,7 @@ describe('KeyboardProvider', () => {
   });
 
   it('executes the highest priority shortcut for matching key events', async () => {
-    const apiRef: { current: ShortcutContextApi | null } = { current: null };
+    const apiRef: { current: KeyboardContextApi | null } = { current: null };
     const lowPriorityHandler = vi.fn();
     const highPriorityHandler = vi.fn();
 
@@ -111,13 +103,13 @@ describe('KeyboardProvider', () => {
       useEffect(() => {
         const lowId = ctx.registerShortcut({
           key: 'k',
-          contexts: [{ priority: 1 }],
+          priority: 1,
           handler: lowPriorityHandler,
           description: 'Lower priority action',
         });
         const highId = ctx.registerShortcut({
           key: 'k',
-          contexts: [{ priority: 5 }],
+          priority: 5,
           handler: highPriorityHandler,
           description: 'Higher priority action',
         });
@@ -153,21 +145,6 @@ describe('KeyboardProvider', () => {
   });
 
   describe('helper functions', () => {
-    it('treats enabled shortcuts as matching and disabled shortcuts as non-matching', () => {
-      const shortcut: RegisteredShortcut = {
-        id: '1',
-        key: 'a',
-        handler: vi.fn(),
-        description: '',
-        contexts: [{ priority: 2 }],
-        category: 'General',
-        enabled: true,
-      };
-
-      expect(matchesShortcutContext(shortcut, { priority: 0 })).toBe(true);
-      expect(matchesShortcutContext({ ...shortcut, enabled: false }, { priority: 0 })).toBe(false);
-    });
-
     it('removes YAML line numbers when deriving copy text', () => {
       const yamlNode = document.createElement('pre');
       yamlNode.className = 'yaml-content';
@@ -211,11 +188,6 @@ describe('KeyboardProvider', () => {
         delete (document as any).execCommand;
       }
     });
-
-    it('performs shallow equal comparison for context objects', () => {
-      expect(shallowEqual({ priority: 1 }, { priority: 1 })).toBe(true);
-      expect(shallowEqual({ priority: 1 }, { priority: 2 })).toBe(false);
-    });
   });
 });
 
@@ -244,7 +216,7 @@ describe('keyboard handling edge cases', () => {
   it('allows extended modifier shortcuts in inputs while protecting native copy/paste', async () => {
     const plainCopyHandler = vi.fn();
     const extendedHandler = vi.fn();
-    const apiRef: { current: ShortcutContextApi | null } = { current: null };
+    const apiRef: { current: KeyboardContextApi | null } = { current: null };
 
     const Harness = () => {
       const ctx = useKeyboardContext();
@@ -257,14 +229,12 @@ describe('keyboard handling edge cases', () => {
         const plainId = ctx.registerShortcut({
           key: 'c',
           modifiers: { meta: true },
-          contexts: [{}],
           handler: plainCopyHandler,
           description: 'Plain copy override',
         });
         const extendedId = ctx.registerShortcut({
           key: 'c',
           modifiers: { meta: true, shift: true },
-          contexts: [{}],
           handler: extendedHandler,
           description: 'Extended copy',
         });

@@ -7,7 +7,7 @@
 
 import { useEffect, useMemo, useRef } from 'react';
 import { useKeyboardContext } from './context';
-import { ShortcutModifiers, ShortcutContext } from '@/types/shortcuts';
+import { ShortcutModifiers } from '@/types/shortcuts';
 
 const normalizeModifiers = (modifiers?: ShortcutModifiers): ShortcutModifiers | undefined => {
   if (!modifiers) {
@@ -26,30 +26,13 @@ const normalizeModifiers = (modifiers?: ShortcutModifiers): ShortcutModifiers | 
     : undefined;
 };
 
-const buildContexts = (
-  providedContexts: ShortcutContext[] | undefined,
-  priority: number | undefined
-): ShortcutContext[] => {
-  if (providedContexts && providedContexts.length > 0) {
-    return providedContexts;
-  }
-
-  const context: ShortcutContext = {};
-
-  if (priority !== undefined) context.priority = priority;
-
-  return Object.keys(context).length === 0 ? [{}] : [context];
-};
-
 interface UseShortcutOptions {
   key: string;
   handler: (event?: KeyboardEvent) => void | boolean;
   modifiers?: ShortcutModifiers;
-  contexts?: ShortcutContext[];
   description?: string;
   category?: string;
   enabled?: boolean;
-  // Convenience props for common contexts
   priority?: number;
 }
 
@@ -73,28 +56,16 @@ interface UseShortcutOptions {
  *   description: 'Open command palette'
  * });
  *
- * // Multiple contexts
+ * // With priority
  * useShortcut({
  *   key: 'Delete',
  *   handler: () => deleteSelected(),
- *   contexts: [
- *     { priority: 5 },
- *     { priority: 10 }
- *   ],
+ *   priority: 10,
  *   description: 'Delete selected resource'
  * });
  */
 export function useShortcut(options: UseShortcutOptions) {
-  const {
-    key,
-    handler,
-    modifiers,
-    contexts: providedContexts,
-    description = '',
-    category,
-    enabled = true,
-    priority,
-  } = options;
+  const { key, handler, modifiers, description = '', category, enabled = true, priority } = options;
 
   const { registerShortcut, unregisterShortcut } = useKeyboardContext();
   const shortcutIdRef = useRef<string | null>(null);
@@ -117,16 +88,11 @@ export function useShortcut(options: UseShortcutOptions) {
     return { ctrl, shift, alt, meta };
   }, [ctrl, shift, alt, meta]);
 
-  const resolvedContexts = useMemo(
-    () => buildContexts(providedContexts, priority),
-    [providedContexts, priority]
-  );
-
   useEffect(() => {
     const id = registerShortcut({
       key,
       modifiers: normalizedModifiers,
-      contexts: resolvedContexts,
+      priority,
       handler: (event) => handlerRef.current(event),
       description,
       category,
@@ -149,7 +115,7 @@ export function useShortcut(options: UseShortcutOptions) {
     registerShortcut,
     unregisterShortcut,
     normalizedModifiers,
-    resolvedContexts,
+    priority,
   ]);
 }
 
@@ -208,12 +174,11 @@ export function useShortcuts(
       } as UseShortcutOptions;
 
       const normalizedModifiers = normalizeModifiers(merged.modifiers);
-      const contexts = buildContexts(merged.contexts, merged.priority);
 
       return registerShortcut({
         key: merged.key,
         modifiers: normalizedModifiers,
-        contexts,
+        priority: merged.priority,
         handler: (event) => handlerRefs.current[index]?.(event),
         description: merged.description || '',
         category: merged.category,

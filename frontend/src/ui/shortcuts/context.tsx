@@ -9,7 +9,6 @@ import React, { createContext, useContext, useEffect, useRef, useState, useCallb
 import {
   ShortcutDefinition,
   RegisteredShortcut,
-  ShortcutContext as ShortcutContextType,
   ShortcutMap,
   ShortcutGroup,
   ShortcutModifiers,
@@ -111,30 +110,6 @@ interface KeyboardProviderProps {
   disabled?: boolean; // Disable all shortcuts (e.g., when modal is open)
 }
 
-export const shallowEqual = (a: Partial<ShortcutContextType>, b: Partial<ShortcutContextType>) => {
-  const aKeys = Object.keys(a) as Array<keyof ShortcutContextType>;
-  const bKeys = Object.keys(b) as Array<keyof ShortcutContextType>;
-
-  if (aKeys.length !== bKeys.length) {
-    return false;
-  }
-
-  for (const key of aKeys) {
-    if (a[key] !== b[key]) {
-      return false;
-    }
-  }
-
-  return true;
-};
-
-export const matchesShortcutContext = (
-  shortcut: RegisteredShortcut,
-  _currentContext?: ShortcutContextType
-): boolean => {
-  return shortcut.enabled || shortcut.enabled === undefined;
-};
-
 export const deriveCopyText = (selection: Selection | null): string | null => {
   if (!selection || selection.isCollapsed) {
     return null;
@@ -227,12 +202,6 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
       return next;
     });
   }, []);
-
-  // Check if a shortcut matches the current context
-  const matchesContext = useCallback(
-    (shortcut: RegisteredShortcut) => matchesShortcutContext(shortcut),
-    []
-  );
 
   const getOrderedSurfaces = useCallback((): RegisteredKeyboardSurface[] => {
     return Array.from(surfacesRef.current.values())
@@ -407,12 +376,9 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
 
       // Find matching shortcuts for current context
       const matching = matchingShortcuts
-        .filter((s) => matchesContext(s) && modifiersMatch(event, s.modifiers))
+        .filter((s) => (s.enabled || s.enabled === undefined) && modifiersMatch(event, s.modifiers))
         .sort((a, b) => {
-          // Sort by priority (higher first)
-          const aPriority = Math.max(...a.contexts.map((c) => c.priority || 0));
-          const bPriority = Math.max(...b.contexts.map((c) => c.priority || 0));
-          return bPriority - aPriority;
+          return (b.priority ?? 0) - (a.priority ?? 0);
         });
 
       if (matching.length > 0) {
@@ -427,7 +393,7 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [disabled, getTargetSurface, isEnabled, matchesContext, shortcuts]);
+  }, [disabled, getTargetSurface, isEnabled, shortcuts]);
 
   // Handle menu events from Wails
   useEffect(() => {
@@ -468,7 +434,7 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
 
     for (const shortcutList of shortcuts.values()) {
       for (const shortcut of shortcutList) {
-        if (matchesContext(shortcut)) {
+        if (shortcut.enabled || shortcut.enabled === undefined) {
           const category = shortcut.category || 'General';
           const existing = groups.get(category) || [];
           existing.push({
@@ -485,16 +451,18 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
       category,
       shortcuts: shortcuts.sort((a, b) => a.key.localeCompare(b.key)),
     }));
-  }, [shortcuts, matchesContext]);
+  }, [shortcuts]);
 
   // Check if a shortcut is available
   const isShortcutAvailable = useCallback(
     (key: string, modifiers?: ShortcutModifiers): boolean => {
       const shortcutKey = getShortcutKey(key, modifiers);
       const shortcutList = shortcuts.get(shortcutKey);
-      return shortcutList ? shortcutList.some(matchesContext) : false;
+      return shortcutList
+        ? shortcutList.some((shortcut) => shortcut.enabled || shortcut.enabled === undefined)
+        : false;
     },
-    [shortcuts, matchesContext]
+    [shortcuts]
   );
 
   const value: KeyboardProviderValue = {

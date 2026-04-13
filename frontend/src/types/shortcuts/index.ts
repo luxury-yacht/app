@@ -14,14 +14,10 @@ export interface ShortcutModifiers {
   meta?: boolean; // Cmd on Mac, Windows key on Windows
 }
 
-export interface ShortcutContext {
-  priority?: number; // Higher priority wins in conflicts (default: 0)
-}
-
 export interface ShortcutDefinition {
   key: string; // The key to press (e.g., 's', 'Enter', 'Delete')
   modifiers?: ShortcutModifiers;
-  contexts: ShortcutContext[];
+  priority?: number; // Higher priority wins in conflicts (default: 0)
   handler: (event?: KeyboardEvent) => void | boolean; // Return false to prevent default
   description: string;
   category?: string; // For grouping in help menu
