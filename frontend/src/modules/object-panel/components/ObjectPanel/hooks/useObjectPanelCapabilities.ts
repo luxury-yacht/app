@@ -385,16 +385,6 @@ export const useObjectPanelCapabilities = ({
     'log',
     objectData?.clusterId ?? null
   );
-  const nodeLogsPermission = useUserPermission(
-    'Node',
-    'get',
-    null,
-    'proxy',
-    objectData?.clusterId ?? null
-  );
-  const nodeLogsPermissionPending = Boolean(nodeLogsPermission?.pending);
-  const nodeLogsPermissionAllowed = nodeLogsPermission?.allowed;
-  const nodeLogsPermissionReason = nodeLogsPermission?.reason;
 
   useEffect(() => {
     const isNodePanel = objectKind === 'node';
@@ -404,23 +394,6 @@ export const useObjectPanelCapabilities = ({
     if (!isNodePanel || !featureSupport.nodeLogs || !clusterId || !nodeName) {
       setNodeLogSources([]);
       setNodeLogsCapabilityState(createCapabilityState());
-      return;
-    }
-
-    if (nodeLogsPermissionPending) {
-      setNodeLogSources([]);
-      setNodeLogsCapabilityState(createCapabilityState({ pending: true }));
-      return;
-    }
-
-    if (nodeLogsPermissionAllowed === false) {
-      setNodeLogSources([]);
-      setNodeLogsCapabilityState(
-        createCapabilityState({
-          reason:
-            nodeLogsPermissionReason ?? 'Node logs are not accessible with the current permissions',
-        })
-      );
       return;
     }
 
@@ -478,15 +451,7 @@ export const useObjectPanelCapabilities = ({
     return () => {
       cancelled = true;
     };
-  }, [
-    featureSupport.nodeLogs,
-    nodeLogsPermissionAllowed,
-    nodeLogsPermissionPending,
-    nodeLogsPermissionReason,
-    objectData?.clusterId,
-    objectData?.name,
-    objectKind,
-  ]);
+  }, [featureSupport.nodeLogs, objectData?.clusterId, objectData?.name, objectKind]);
 
   const capabilities = useMemo<ComputedCapabilities>(() => {
     const hasLogs =

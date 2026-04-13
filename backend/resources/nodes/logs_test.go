@@ -135,13 +135,9 @@ func TestDiscoverLogsSkipsPodAndContainerSources(t *testing.T) {
 
 	nodeName := "node-a"
 	responses := map[string][]byte{
-		nodeLogProxyPath(nodeName, ""):                          []byte(`<!doctype html><pre><a href="journal/">journal/</a><a href="pods/">pods/</a><a href="containers/">containers/</a></pre>`),
-		nodeLogProxyPath(nodeName, "journal/"):                  []byte(`<!doctype html><pre><a href="kubelet">kubelet</a></pre>`),
-		nodeLogProxyPath(nodeName, "pods/"):                     []byte(`<!doctype html><pre><a href="kube-system/">kube-system/</a></pre>`),
-		nodeLogProxyPath(nodeName, "containers/"):               []byte(`<!doctype html><pre><a href="containerd.log">containerd.log</a></pre>`),
-		nodeLogProxyPath(nodeName, "journal/kubelet"):           []byte("kubelet log line"),
-		nodeLogProxyPath(nodeName, "pods/kube-system/"):         []byte(`<!doctype html><pre><a href="coredns">coredns</a></pre>`),
-		nodeLogProxyPath(nodeName, "containers/containerd.log"): []byte("container log line"),
+		nodeLogProxyPath(nodeName, ""):                []byte(`<!doctype html><pre><a href="journal/">journal/</a><a href="pods/">pods/</a><a href="containers/">containers/</a></pre>`),
+		nodeLogProxyPath(nodeName, "journal/"):        []byte(`<!doctype html><pre><a href="kubelet">kubelet</a></pre>`),
+		nodeLogProxyPath(nodeName, "journal/kubelet"): []byte("kubelet log line"),
 	}
 
 	nodeLogFetchRawFunc = func(_ context.Context, _ rest.Interface, absPath string) ([]byte, error) {

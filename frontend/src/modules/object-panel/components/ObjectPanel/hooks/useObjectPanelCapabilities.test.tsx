@@ -362,11 +362,7 @@ describe('useObjectPanelCapabilities', () => {
     mockUseCapabilities.mockImplementation(() => ({
       getState: () => ({ allowed: false, pending: false }),
     }));
-    mockUseUserPermission.mockImplementation((resourceKind: string) =>
-      resourceKind === 'Node'
-        ? { allowed: true, pending: false }
-        : { allowed: true, pending: false }
-    );
+    mockUseUserPermission.mockReturnValue({ allowed: true, pending: true });
     mockDiscoverNodeLogs.mockResolvedValue({
       supported: true,
       sources: [
@@ -404,7 +400,7 @@ describe('useObjectPanelCapabilities', () => {
     mockUseCapabilities.mockImplementation(() => ({
       getState: () => ({ allowed: false, pending: false }),
     }));
-    mockUseUserPermission.mockImplementation(() => ({ allowed: true, pending: false }));
+    mockUseUserPermission.mockReturnValue({ allowed: false, pending: true });
     mockGetCachedNodeLogDiscovery.mockReturnValue({
       supported: true,
       sources: [
@@ -489,11 +485,7 @@ describe('useObjectPanelCapabilities', () => {
     mockUseCapabilities.mockImplementation(() => ({
       getState: () => ({ allowed: false, pending: false }),
     }));
-    mockUseUserPermission.mockImplementation((resourceKind: string) =>
-      resourceKind === 'Node'
-        ? { allowed: true, pending: false }
-        : { allowed: true, pending: false }
-    );
+    mockUseUserPermission.mockReturnValue({ allowed: false, pending: true });
     mockDiscoverNodeLogs.mockResolvedValue({
       supported: false,
       sources: [],

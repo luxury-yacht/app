@@ -267,6 +267,9 @@ func (s *Service) processNodeLogDiscoveryTask(
 		if !ok || !state.markVisited(nextPath) {
 			continue
 		}
+		if shouldSkipNodeLogDiscoveryPath(nextPath) {
+			continue
+		}
 
 		childBody, err := s.fetchNodeLogPath(nodeName, nextPath, "")
 		if err != nil {
@@ -491,6 +494,10 @@ func isSupportedNodeLogSource(sourcePath string) bool {
 		trimmed != "pods" &&
 		!strings.HasPrefix(trimmed, "containers/") &&
 		trimmed != "containers"
+}
+
+func shouldSkipNodeLogDiscoveryPath(sourcePath string) bool {
+	return !isDisplayableNodeLogSource(sourcePath) || !isSupportedNodeLogSource(sourcePath)
 }
 
 func normalizeNodeLogTailBytes(requested int) int {
