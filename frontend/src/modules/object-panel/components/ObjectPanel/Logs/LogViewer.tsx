@@ -209,6 +209,7 @@ const CONTAINER_FILTER_PREFIX = 'container:';
 const DEBUG_FILTER_PREFIX = 'debug:';
 const TARGET_LIMIT_WARNING_PATTERN =
   /^Logs are hidden for (\d+) containers because the (per-tab|global) limit of (\d+) was reached\. Using filters to reduce the number of containers may clear this message\.$/;
+const WORKLOAD_RAW_LOG_PREFIX_PATTERN = /^(?:(\[[^\]]+\]\s*))?\[([^\/]+)\/([^\]]+)\]\s*(.*)/;
 
 const mergeTargetLimitWarnings = (warnings: string[]): string[] => {
   if (warnings.length < 2) {
@@ -1549,13 +1550,9 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       const line = row.line;
 
       if (isWorkload && line.includes('[') && line.includes('/')) {
-        const match = line.match(
-          /^(?:\[\d{4}-\d{2}-\d{2}T[^\]]+\]\s*)?\[([^\/]+)\/([^\]]+)\]\s*(.*)/
-        );
+        const match = line.match(WORKLOAD_RAW_LOG_PREFIX_PATTERN);
         if (match) {
-          const [, pod, container, logLine] = match;
-          const timestampMatch = line.match(/^(\[\d{4}-\d{2}-\d{2}T[^\]]+\]\s*)/);
-          const timestamp = timestampMatch ? timestampMatch[1] : '';
+          const [, timestamp = '', pod, container, logLine] = match;
           const podColor = podColors[pod] || podColors['__fallback__'];
 
           return (

@@ -2243,6 +2243,61 @@ describe('LogViewer active pod synchronisation', () => {
     expect(getLogViewerPrefs(panelId)?.selectedFilters).toEqual(['pod:web-1', 'container:app']);
   });
 
+  it('preserves workload pod color metadata when using a custom timestamp format', async () => {
+    setAppPreferencesForTesting({
+      logApiTimestampFormat: 'YYYY/MM/DD HH:mm:ss',
+      logApiTimestampUseLocalTimeZone: false,
+    });
+    for (let index = 1; index <= 20; index += 1) {
+      document.documentElement.style.setProperty(
+        `--log-pod-color-${index}`,
+        `rgb(${index}, ${index}, ${index})`
+      );
+    }
+    document.documentElement.style.setProperty('--log-pod-color-fallback', 'rgb(99, 99, 99)');
+
+    seedLogSnapshot(
+      [
+        {
+          pod: 'web-1',
+          container: 'app',
+          line: 'first',
+          timestamp: '2024-05-01T10:00:00Z',
+          isInit: false,
+        },
+        {
+          pod: 'web-2',
+          container: 'app',
+          line: 'second',
+          timestamp: '2024-05-01T10:00:01Z',
+          isInit: false,
+        },
+      ],
+      defaultScope
+    );
+
+    await renderViewer({ activePodNames: ['web-1', 'web-2'] });
+    await flushAsync();
+
+    const firstPodButton = await waitForElement(() =>
+      container.querySelector<HTMLButtonElement>('button[aria-label="Show only logs from pod web-1"]')
+    );
+    const secondPodButton = await waitForElement(() =>
+      container.querySelector<HTMLButtonElement>('button[aria-label="Show only logs from pod web-2"]')
+    );
+
+    expect(firstPodButton.style.getPropertyValue('--pod-color')).toBeTruthy();
+    expect(secondPodButton.style.getPropertyValue('--pod-color')).toBeTruthy();
+    expect(firstPodButton.style.getPropertyValue('--pod-color')).not.toBe(
+      secondPodButton.style.getPropertyValue('--pod-color')
+    );
+
+    for (let index = 1; index <= 20; index += 1) {
+      document.documentElement.style.removeProperty(`--log-pod-color-${index}`);
+    }
+    document.documentElement.style.removeProperty('--log-pod-color-fallback');
+  });
+
   it('keeps separate prefs entries for different panels', async () => {
     const panelA = 'obj:cluster-a:pod:team-a:api';
     const panelB = 'obj:cluster-b:pod:team-b:web';

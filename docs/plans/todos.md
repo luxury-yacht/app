@@ -1,7 +1,5 @@
 # TODO
 
-- Add a delete option to the favorites menu
-
 - API timestamp
   - Empty log lines dropping color, dropping pod name
 

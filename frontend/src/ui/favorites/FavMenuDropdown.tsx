@@ -8,6 +8,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
+  DeleteIcon,
   FavoriteFilledIcon,
   FavoriteGenericIcon,
   FavoritePinIcon,
@@ -71,7 +72,7 @@ const FavMenuDropdown: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const anchorRef = useRef<HTMLDivElement>(null);
 
-  const { favorites, reorderFavorites, setPendingFavorite } = useFavorites();
+  const { favorites, deleteFavorite, reorderFavorites, setPendingFavorite } = useFavorites();
   const kubeconfigCtx = useKubeconfig();
   const namespaceCtx = useNamespace();
 
@@ -122,6 +123,13 @@ const FavMenuDropdown: React.FC = () => {
       await reorderFavorites(ids);
     },
     [favorites, reorderFavorites]
+  );
+
+  const handleDelete = useCallback(
+    async (id: string) => {
+      await deleteFavorite(id);
+    },
+    [deleteFavorite]
   );
 
   // -- Navigate --
@@ -216,6 +224,16 @@ const FavMenuDropdown: React.FC = () => {
                         }}
                       >
                         <ChevronDownIcon />
+                      </button>
+                      <button
+                        className="fav-dropdown-action-btn danger"
+                        title="Delete favorite"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void handleDelete(fav.id);
+                        }}
+                      >
+                        <DeleteIcon width={13} height={13} />
                       </button>
                     </span>
                   </div>
