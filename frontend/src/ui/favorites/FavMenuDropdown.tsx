@@ -91,6 +91,16 @@ const FavMenuDropdown: React.FC = () => {
 
   const toggleOpen = useCallback(() => setIsOpen((prev) => !prev), []);
   const closeDropdown = useCallback(() => setIsOpen(false), []);
+  const handleTriggerKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (event.key !== 'Enter' && event.key !== ' ') {
+        return;
+      }
+      event.preventDefault();
+      toggleOpen();
+    },
+    [toggleOpen]
+  );
 
   // -- Reorder --
 
@@ -150,14 +160,17 @@ const FavMenuDropdown: React.FC = () => {
 
   return (
     <div className="fav-dropdown-anchor" ref={anchorRef}>
-      <button
+      <div
         className="settings-button"
         onClick={toggleOpen}
+        onKeyDown={handleTriggerKeyDown}
         title="Favorites"
         aria-label="Favorites"
+        role="button"
+        tabIndex={0}
       >
         <FavoriteFilledIcon width={18} height={18} />
-      </button>
+      </div>
 
       {isOpen && (
         <div className="fav-dropdown-panel" role="menu">

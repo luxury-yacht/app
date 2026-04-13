@@ -27,6 +27,16 @@ const AppHeader: React.FC<AppHeaderProps> = ({ contentTitle, onAboutClick }) => 
   const viewState = useViewState();
 
   const isMac = isMacPlatform();
+  const activateOnEnterOrSpace = (
+    event: React.KeyboardEvent<HTMLElement>,
+    onActivate: () => void
+  ) => {
+    if (event.key !== 'Enter' && event.key !== ' ') {
+      return;
+    }
+    event.preventDefault();
+    onActivate();
+  };
 
   return (
     <div
@@ -34,15 +44,21 @@ const AppHeader: React.FC<AppHeaderProps> = ({ contentTitle, onAboutClick }) => 
       onDoubleClick={() => WindowToggleMaximise()}
     >
       <div className="app-header-left">
-        <button
-          type="button"
+        <div
           className="app-header-about-button"
           onClick={onAboutClick}
+          onKeyDown={(event) =>
+            activateOnEnterOrSpace(event, () => {
+              onAboutClick?.();
+            })
+          }
           aria-label="About Luxury Yacht"
           title="About Luxury Yacht"
+          role="button"
+          tabIndex={0}
         >
           <img src={logo} alt="" className="app-header-logo" />
-        </button>
+        </div>
       </div>
       <div className="app-header-center">
         <span className="app-header-title">
@@ -78,15 +94,22 @@ const AppHeader: React.FC<AppHeaderProps> = ({ contentTitle, onAboutClick }) => 
         </div>
         <KubeconfigSelector />
         <FavMenuDropdown />
-        <button
+        <div
           className="settings-button"
           onClick={() => viewState.setIsSettingsOpen(true)}
+          onKeyDown={(event) =>
+            activateOnEnterOrSpace(event, () => {
+              viewState.setIsSettingsOpen(true);
+            })
+          }
           title="Settings"
           aria-label="Settings"
+          role="button"
+          tabIndex={0}
           data-app-header-last-focusable="true"
         >
           <SettingsIcon width={20} height={20} />
-        </button>
+        </div>
       </div>
     </div>
   );
