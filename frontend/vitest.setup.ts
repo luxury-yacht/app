@@ -56,6 +56,23 @@ const ensureStorage = (key: 'localStorage' | 'sessionStorage') => {
 ensureStorage('localStorage');
 ensureStorage('sessionStorage');
 
+// JSDOM emits noisy "navigation to another Document" warnings when tests click
+// anchors. The frontend tests assert app-side handlers, not real browser
+// navigation, so dispatch the click event without attempting navigation.
+Object.defineProperty(HTMLAnchorElement.prototype, 'click', {
+  configurable: true,
+  writable: true,
+  value: function click(this: HTMLAnchorElement) {
+    this.dispatchEvent(
+      new MouseEvent('click', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+      })
+    );
+  },
+});
+
 // Ensure React testing utilities run without extra warnings
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 

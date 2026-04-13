@@ -115,7 +115,7 @@ describe('AboutModal', () => {
     expect(wailsLink).toBeTruthy();
 
     await act(async () => {
-      wailsLink?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      wailsLink?.click();
     });
 
     expect(runtimeMock.BrowserOpenURL).toHaveBeenCalledWith('https://wails.io/');
