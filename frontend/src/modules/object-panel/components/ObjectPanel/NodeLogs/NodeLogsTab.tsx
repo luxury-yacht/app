@@ -43,6 +43,14 @@ const PARSED_TIMESTAMP_AUTOSIZE_MAX_WIDTH = 280;
 
 type CopyFeedback = 'idle' | 'copied' | 'error';
 
+type NodeLogSourceOptionMetadata =
+  | { kind: 'header' }
+  | {
+      kind: 'child';
+      childLabel: string;
+      isLastChild: boolean;
+    };
+
 const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const escapeCsvCell = (value: string): string =>
   /[",\n\r]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
@@ -65,6 +73,60 @@ const buildSearchRegex = (
 };
 
 const getParsedRowKey = (item: ParsedLogEntry): string => `log-${item.seq ?? item.lineNumber}`;
+
+const getNodeLogSourceLeafLabel = (label: string): string => {
+  const segments = label.split(' / ');
+  return segments[segments.length - 1] || label;
+};
+
+const buildNodeLogSourceOptions = (sources: NodeLogSource[]): DropdownOption[] => {
+  const grouped = new Map<string, NodeLogSource[]>();
+
+  sources.forEach((source) => {
+    const segments = source.label.split(' / ');
+    const root = segments[0] ?? source.label;
+    const existing = grouped.get(root) ?? [];
+    existing.push(source);
+    grouped.set(root, existing);
+  });
+
+  const options: DropdownOption[] = [];
+
+  grouped.forEach((groupSources, root) => {
+    const hasTreeChildren = groupSources.some((source) => source.label.includes(' / '));
+
+    if (!hasTreeChildren && groupSources.length === 1) {
+      const source = groupSources[0];
+      if (source) {
+        options.push({ value: source.path, label: source.label });
+      }
+      return;
+    }
+
+    options.push({
+      value: `header:${root}`,
+      label: root,
+      group: 'header',
+      metadata: { kind: 'header' } satisfies NodeLogSourceOptionMetadata,
+    });
+
+    groupSources.forEach((source, index) => {
+      const segments = source.label.split(' / ');
+      const childLabel = segments.slice(1).join(' / ') || segments[0] || source.label;
+      options.push({
+        value: source.path,
+        label: childLabel,
+        metadata: {
+          kind: 'child',
+          childLabel,
+          isLastChild: index === groupSources.length - 1,
+        } satisfies NodeLogSourceOptionMetadata,
+      });
+    });
+  });
+
+  return options;
+};
 
 interface NodeLogsTabProps {
   panelId: string;
@@ -108,7 +170,7 @@ const NodeLogsTab = ({
   const forceTailRestoreRef = useRef(true);
   const deferredTextFilter = useDeferredValue(textFilter);
   const sourceOptions = useMemo<DropdownOption[]>(
-    () => sources.map((source) => ({ value: source.path, label: source.label })),
+    () => buildNodeLogSourceOptions(sources),
     [sources]
   );
 
@@ -694,6 +756,36 @@ const NodeLogsTab = ({
                 size="compact"
                 className="pod-logs-selector-dropdown"
                 ariaLabel="Node log source"
+                renderOption={(option) => {
+                  if (option.group === 'header') {
+                    return <span className="node-log-source-header">{option.label}</span>;
+                  }
+
+                  const metadata = option.metadata as NodeLogSourceOptionMetadata | undefined;
+
+                  if (metadata?.kind === 'child') {
+                    return (
+                      <span
+                        className={[
+                          'node-log-source-label',
+                          'node-log-source-child',
+                          metadata.isLastChild && 'node-log-source-child-last',
+                        ]
+                          .filter(Boolean)
+                          .join(' ')}
+                      >
+                        <span className="node-log-source-child-text">{metadata.childLabel}</span>
+                      </span>
+                    );
+                  }
+
+                  return <span className="node-log-source-label">{option.label}</span>;
+                }}
+                renderValue={() =>
+                  selectedSource
+                    ? getNodeLogSourceLeafLabel(selectedSource.label)
+                    : 'Select log source'
+                }
               />
             </div>
 

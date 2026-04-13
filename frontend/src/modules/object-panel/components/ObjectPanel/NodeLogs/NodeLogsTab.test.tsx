@@ -125,11 +125,14 @@ describe('NodeLogsTab', () => {
       await Promise.resolve();
     });
 
-    const secondOption = container.querySelectorAll('.dropdown-option').item(1);
-    expect(secondOption?.textContent).toContain('journal / containerd');
+    const secondOption = Array.from(
+      container.querySelectorAll<HTMLElement>('.dropdown-option')
+    ).find((node) => node.textContent?.includes('containerd'));
+    expect(secondOption?.textContent).toContain('containerd');
+    expect(secondOption).toBeTruthy();
 
     await act(async () => {
-      secondOption.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      secondOption!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -141,6 +144,58 @@ describe('NodeLogsTab', () => {
     expect(container.querySelector('.pod-logs-text')?.textContent).toContain(
       'content for journal/containerd'
     );
+  });
+
+  it('renders node log sources as grouped tree-like dropdown options', async () => {
+    mockFetchNodeLogs.mockResolvedValue({
+      source: sources[0],
+      sourcePath: sources[0].path,
+      content: 'line one',
+    });
+
+    await renderTab({
+      sources: [
+        {
+          id: 'aws-routed-eni/ipamd.log',
+          label: 'aws-routed-eni / ipamd.log',
+          kind: 'path',
+          path: 'aws-routed-eni/ipamd.log',
+        },
+        {
+          id: 'aws-routed-eni/plugin.log',
+          label: 'aws-routed-eni / plugin.log',
+          kind: 'path',
+          path: 'aws-routed-eni/plugin.log',
+        },
+        {
+          id: 'private',
+          label: 'private',
+          kind: 'path',
+          path: 'private',
+        },
+      ],
+    });
+
+    const trigger = container.querySelector('.pod-logs-selector-dropdown .dropdown-trigger');
+    expect(trigger).toBeTruthy();
+    expect(
+      container.querySelector('.pod-logs-selector-dropdown .dropdown-value')?.textContent
+    ).toBe('ipamd.log');
+
+    await act(async () => {
+      trigger!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    const groupHeader = container.querySelector('.dropdown-group-header');
+    expect(groupHeader?.textContent).toBe('aws-routed-eni');
+
+    const optionLabels = Array.from(container.querySelectorAll('.dropdown-option')).map((node) =>
+      node.textContent?.replace(/\s+/g, ' ').trim()
+    );
+    expect(optionLabels).toContain('ipamd.log');
+    expect(optionLabels).toContain('plugin.log');
+    expect(optionLabels).toContain('private');
   });
 
   it('filters rendered log lines client-side', async () => {
@@ -436,11 +491,14 @@ describe('NodeLogsTab', () => {
       await Promise.resolve();
     });
 
-    const secondOption = container.querySelectorAll('.dropdown-option').item(1);
-    expect(secondOption?.textContent).toContain('journal / containerd');
+    const secondOption = Array.from(
+      container.querySelectorAll<HTMLElement>('.dropdown-option')
+    ).find((node) => node.textContent?.includes('containerd'));
+    expect(secondOption?.textContent).toContain('containerd');
+    expect(secondOption).toBeTruthy();
 
     await act(async () => {
-      secondOption.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      secondOption!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await Promise.resolve();
       await Promise.resolve();
       await new Promise((resolve) => requestAnimationFrame(resolve));

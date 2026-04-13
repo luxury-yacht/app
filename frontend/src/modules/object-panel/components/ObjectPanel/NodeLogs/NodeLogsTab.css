@@ -1,0 +1,47 @@
+.pod-logs-selector-dropdown .dropdown-group-header {
+  text-transform: none;
+}
+
+.node-log-source-header {
+  display: block;
+  font-weight: 600;
+}
+
+.node-log-source-label {
+  display: block;
+  white-space: nowrap;
+}
+
+.node-log-source-child {
+  position: relative;
+  width: 100%;
+  padding-left: 20px;
+}
+
+.node-log-source-child::before,
+.node-log-source-child::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  background-color: var(--color-text-tertiary);
+}
+
+.node-log-source-child::before {
+  top: -6px;
+  bottom: -6px;
+  width: 1px;
+}
+
+.node-log-source-child::after {
+  top: calc(50% - 0.5px);
+  width: 10px;
+  height: 1px;
+}
+
+.node-log-source-child-last::before {
+  bottom: calc(50% - 0.5px);
+}
+
+.node-log-source-child-text {
+  display: block;
+}
