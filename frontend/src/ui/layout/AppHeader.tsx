@@ -42,6 +42,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({ contentTitle, onAboutClick }) => 
     <div
       className={`app-header${isMac ? ' app-header--mac' : ''}`}
       onDoubleClick={() => WindowToggleMaximise()}
+      data-app-region="header"
     >
       <div className="app-header-left">
         <div

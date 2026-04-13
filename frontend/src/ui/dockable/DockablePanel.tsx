@@ -639,6 +639,8 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
       role="dialog"
       aria-label={activeTitle}
       aria-modal={panelState.position === 'floating'}
+      data-group-key={groupKey ?? undefined}
+      data-active-panel-id={groupInfo?.activeTab ?? panelId}
     >
       {isGroupLeader && (
         <>

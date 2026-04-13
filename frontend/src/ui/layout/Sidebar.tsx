@@ -366,6 +366,7 @@ function Sidebar() {
       ref={sidebarRef}
       role="navigation"
       tabIndex={isCollapsed ? -1 : 0}
+      data-app-region="sidebar"
     >
       <div className="sidebar-content">
         <button

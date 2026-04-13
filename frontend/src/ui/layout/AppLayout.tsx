@@ -40,10 +40,14 @@ import { PanelErrorBoundary, RouteErrorBoundary } from '@ui/errors';
 import { DiagnosticsPanel } from '@/core/refresh/components/DiagnosticsPanel';
 import { getAllPanelStates, useDockablePanelContext } from '@ui/dockable';
 import { useDockablePanelEmptySpaceDropTarget } from '@ui/dockable/DockablePanelContentArea';
+import { usePanelSurfaceCycling } from '@ui/dockable/usePanelSurfaceCycling';
 // Auth Failure Overlay
 import { AuthFailureOverlay } from '@ui/overlays/AuthFailureOverlay';
 import { useAppDebugShortcuts } from '@ui/layout/useAppDebugShortcuts';
-import { useContentRegionShiftTabHandoff } from '@ui/layout/appFocusRegions';
+import {
+  useContentRegionShiftTabHandoff,
+  useTopLevelAppRegionTracking,
+} from '@ui/layout/appFocusRegions';
 
 const Sidebar = withLazyBoundary(() => import('@ui/layout/Sidebar'), 'Loading sidebar...');
 
@@ -70,6 +74,7 @@ export const AppLayout: React.FC = () => {
   const namespace = useNamespace();
   const viewState = useViewState();
   const kubeconfig = useKubeconfig();
+  const { tabGroups, focusPanel, setLastFocusedGroupKey } = useDockablePanelContext();
   const { openPanels, closePanel } = useObjectPanelState();
   const commands = useCommandPaletteCommands();
   const contentBodyRef = useRef<HTMLDivElement | null>(null);
@@ -95,6 +100,12 @@ export const AppLayout: React.FC = () => {
     onToggleErrorDebug: () => setIsErrorOverlayVisible((prev) => !prev),
   });
   useContentRegionShiftTabHandoff(contentBodyRef, hasActiveClusters);
+  useTopLevelAppRegionTracking(hasActiveClusters);
+  usePanelSurfaceCycling({
+    tabGroups,
+    focusPanel,
+    setLastFocusedGroupKey,
+  });
 
   useEffect(() => {
     return eventBus.on('view:toggle-diagnostics', () => {
@@ -192,7 +203,7 @@ export const AppLayout: React.FC = () => {
         )}
 
         <div className="content">
-          <div ref={contentBodyRef} className="content-body">
+          <div ref={contentBodyRef} className="content-body" data-app-region="content">
             {hasActiveClusters ? (
               viewState.viewType === 'cluster' ? (
                 viewState.activeClusterTab === 'browse' ? (
