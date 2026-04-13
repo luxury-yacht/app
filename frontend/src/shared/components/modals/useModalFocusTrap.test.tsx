@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { KeyboardProvider } from '@ui/shortcuts/context';
-import { useModalFocusTrap } from './useModalFocusTrap';
+import { __resetModalFocusTrapForTest, useModalFocusTrap } from './useModalFocusTrap';
 
 const TestModal: React.FC<{
   disabled?: boolean;
@@ -171,5 +171,29 @@ describe('useModalFocusTrap', () => {
 
     expect(onEscape).toHaveBeenCalledTimes(1);
     expect(event.defaultPrevented).toBe(true);
+  });
+
+  it('reset helper clears managed background inert state', async () => {
+    await act(async () => {
+      root.render(
+        <KeyboardProvider>
+          <TestModal />
+        </KeyboardProvider>
+      );
+      await Promise.resolve();
+    });
+
+    expect(appRoot.getAttribute('inert')).toBe('');
+    expect(appRoot.getAttribute('aria-hidden')).toBe('true');
+
+    __resetModalFocusTrapForTest();
+
+    expect(appRoot.hasAttribute('inert')).toBe(false);
+    expect(appRoot.hasAttribute('aria-hidden')).toBe(false);
+
+    act(() => {
+      root.unmount();
+    });
+    root = ReactDOM.createRoot(container);
   });
 });

@@ -400,7 +400,6 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                     }
                   }}
                   autoFocus
-                  data-fav-modal-focusable="true"
                 />
               </div>
             </div>
@@ -417,7 +416,6 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                     name="cluster-type"
                     checked={!clusterSpecific}
                     onChange={() => handleTypeChange(false)}
-                    data-fav-modal-focusable="true"
                   />
                   Any
                   <Tooltip content="Can be used in any cluster. Attempts to open this view in the current active cluster." />
@@ -430,7 +428,6 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                     name="cluster-type"
                     checked={clusterSpecific}
                     onChange={() => handleTypeChange(true)}
-                    data-fav-modal-focusable="true"
                   />
                   Cluster
                   <Tooltip content="Opens the saved view in a specific cluster, and will activate that cluster if needed." />
@@ -548,7 +545,6 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                       (e.target as HTMLInputElement).select();
                     }
                   }}
-                  data-fav-modal-focusable="true"
                 />
               </div>
               <div className="setting-item">
@@ -557,7 +553,6 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                     type="checkbox"
                     checked={caseSensitive}
                     onChange={(e) => setCaseSensitive(e.target.checked)}
-                    data-fav-modal-focusable="true"
                   />
                   Match case
                 </label>
@@ -568,7 +563,6 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                     type="checkbox"
                     checked={includeMetadataState}
                     onChange={(e) => setIncludeMetadataState(e.target.checked)}
-                    data-fav-modal-focusable="true"
                   />
                   Include metadata
                 </label>

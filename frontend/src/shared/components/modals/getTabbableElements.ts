@@ -24,6 +24,10 @@ const isExcluded = (element: HTMLElement) => {
     return true;
   }
 
+  if (!element.isConnected) {
+    return true;
+  }
+
   const style = window.getComputedStyle(element);
   if (style.display === 'none' || style.visibility === 'hidden') {
     return true;

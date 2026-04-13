@@ -1,4 +1,4 @@
-import { vi } from 'vitest';
+import { afterEach, vi } from 'vitest';
 
 const buildStorageShim = (): Storage => {
   const store = new Map<string, string>();
@@ -71,6 +71,13 @@ Object.defineProperty(HTMLAnchorElement.prototype, 'click', {
       })
     );
   },
+});
+
+afterEach(async () => {
+  const { __resetModalFocusTrapForTest } = await vi.importActual<
+    typeof import('./src/shared/components/modals/useModalFocusTrap')
+  >('./src/shared/components/modals/useModalFocusTrap');
+  __resetModalFocusTrapForTest();
 });
 
 // Ensure React testing utilities run without extra warnings

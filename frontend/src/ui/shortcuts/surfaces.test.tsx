@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -321,6 +321,92 @@ describe('keyboard surfaces', () => {
 
     expect(dropdownHandler).toHaveBeenCalledTimes(1);
     expect(modalHandler).not.toHaveBeenCalled();
+  });
+
+  it('preserves registration order when inline surface callbacks change on rerender', async () => {
+    const firstHandler = vi.fn();
+    const secondHandler = vi.fn();
+
+    const Harness = () => {
+      const [version, setVersion] = useState(0);
+      const firstRef = useRef<HTMLDivElement>(null);
+      const secondRef = useRef<HTMLDivElement>(null);
+
+      useKeyboardSurface({
+        kind: 'panel',
+        rootRef: firstRef,
+        active: true,
+        captureWhenActive: true,
+        onEscape: () => {
+          firstHandler(version);
+          return true;
+        },
+      });
+
+      useKeyboardSurface({
+        kind: 'panel',
+        rootRef: secondRef,
+        active: true,
+        captureWhenActive: true,
+        onEscape: () => {
+          secondHandler();
+          return true;
+        },
+      });
+
+      return (
+        <>
+          <div ref={firstRef}>
+            <button id="first-surface">First</button>
+          </div>
+          <div ref={secondRef}>
+            <button id="second-surface">Second</button>
+          </div>
+          <button id="rerender" onClick={() => setVersion((current) => current + 1)}>
+            Rerender
+          </button>
+          <button id="outside-surface">Outside</button>
+        </>
+      );
+    };
+
+    await act(async () => {
+      root.render(
+        <KeyboardProvider>
+          <Harness />
+        </KeyboardProvider>
+      );
+      await Promise.resolve();
+    });
+
+    const outsideButton = document.querySelector('#outside-surface') as HTMLButtonElement | null;
+    const rerenderButton = document.querySelector('#rerender') as HTMLButtonElement | null;
+    expect(outsideButton).not.toBeNull();
+    expect(rerenderButton).not.toBeNull();
+
+    outsideButton?.focus();
+
+    act(() => {
+      outsideButton?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+      );
+    });
+
+    expect(secondHandler).toHaveBeenCalledTimes(1);
+    expect(firstHandler).not.toHaveBeenCalled();
+
+    act(() => {
+      rerenderButton?.click();
+    });
+
+    act(() => {
+      outsideButton?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+      );
+    });
+
+    expect(secondHandler).toHaveBeenCalledTimes(2);
+    expect(firstHandler).not.toHaveBeenCalled();
   });
 
   it('routes native actions through the active surface before falling back', async () => {

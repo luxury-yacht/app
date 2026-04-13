@@ -2150,7 +2150,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
 
       const direction = event.shiftKey ? 'backward' : 'forward';
       const target = event.target as HTMLElement | null;
-      if (target && target.closest('.diagnostics-content *')) {
+      if (target && target.closest('.diagnostics-content')) {
         return false;
       }
 

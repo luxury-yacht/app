@@ -674,7 +674,7 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
 
       const direction = event.shiftKey ? 'backward' : 'forward';
       const target = event.target as HTMLElement | null;
-      if (target && target.closest('.object-panel-body *')) {
+      if (target && target.closest('.object-panel-body')) {
         return false;
       }
 

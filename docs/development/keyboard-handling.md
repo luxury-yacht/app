@@ -262,6 +262,8 @@ Keyboard-relevant modal rules:
 - background content is inert while a blocking modal is open
 - focus is restored on close
 - modal-local key behavior is provided through the shared modal path, not duplicate registrations
+- modal `Tab` trapping is handled at document capture phase in the shared modal trap, while other
+  keys still route through the shared surface manager
 
 For new modals, use the shared modal foundation instead of inventing local key handling.
 

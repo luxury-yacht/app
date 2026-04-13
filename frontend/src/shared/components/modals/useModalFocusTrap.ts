@@ -7,7 +7,6 @@ import type { KeyboardSurfaceKeyResult } from '@ui/shortcuts/context';
 interface UseModalFocusTrapOptions {
   ref: RefObject<HTMLElement | null>;
   focusableSelector?: string;
-  priority?: number;
   disabled?: boolean;
   suppressShortcuts?: boolean;
   onKeyDown?: (event: KeyboardEvent) => KeyboardSurfaceKeyResult;
@@ -28,6 +27,15 @@ const getTrackedBodyChildren = () =>
   Array.from(document.body.children).filter(
     (element): element is HTMLElement => element instanceof HTMLElement
   );
+
+const pruneDisconnectedModalEntries = () => {
+  for (let i = openModalStack.length - 1; i >= 0; i -= 1) {
+    const surface = openModalStack[i]?.surface;
+    if (!surface || !surface.isConnected) {
+      openModalStack.splice(i, 1);
+    }
+  }
+};
 
 const setManagedBackgroundState = (element: HTMLElement, inert: boolean) => {
   if (inert) {
@@ -54,10 +62,22 @@ const syncBodyInertState = () => {
     return;
   }
 
+  pruneDisconnectedModalEntries();
+
   const topmostSurface = openModalStack[openModalStack.length - 1]?.surface ?? null;
 
   getTrackedBodyChildren().forEach((element) => {
     setManagedBackgroundState(element, topmostSurface !== null && element !== topmostSurface);
+  });
+};
+
+export const __resetModalFocusTrapForTest = () => {
+  openModalStack.splice(0, openModalStack.length);
+  if (typeof document === 'undefined') {
+    return;
+  }
+  getTrackedBodyChildren().forEach((element) => {
+    setManagedBackgroundState(element, false);
   });
 };
 
@@ -85,13 +105,11 @@ const isTopmostModal = (id: symbol) => openModalStack[openModalStack.length - 1]
 export const useModalFocusTrap = ({
   ref,
   focusableSelector,
-  priority,
   disabled = false,
   suppressShortcuts = false,
   onKeyDown,
   onEscape,
 }: UseModalFocusTrapOptions) => {
-  void priority;
   const modalIdRef = useRef(Symbol('modal-focus-trap'));
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
 
@@ -120,17 +138,6 @@ export const useModalFocusTrap = ({
     return true;
   }, [getFocusableItems, ref]);
 
-  const focusLast = useCallback(() => {
-    const root = ref.current;
-    if (!root) {
-      return false;
-    }
-    const items = getFocusableItems();
-    const target = items[items.length - 1] ?? root;
-    target.focus();
-    return true;
-  }, [getFocusableItems, ref]);
-
   useEffect(() => {
     const root = ref.current;
     if (!root || disabled) {
@@ -142,7 +149,7 @@ export const useModalFocusTrap = ({
     previouslyFocusedRef.current =
       activeElement instanceof HTMLElement && !root.contains(activeElement) ? activeElement : null;
 
-    const surface = root.closest<HTMLElement>('[data-modal-surface="true"]');
+    const surface = root.closest<HTMLElement>('[data-modal-surface="true"]') ?? root;
     registerOpenModal({ id: modalId, surface });
 
     return () => {
@@ -234,5 +241,5 @@ export const useModalFocusTrap = ({
       document.removeEventListener('keydown', handleKeyDown, true);
       document.removeEventListener('focusin', handleFocusIn, true);
     };
-  }, [disabled, focusFirst, focusLast, getFocusableItems, ref]);
+  }, [disabled, focusFirst, getFocusableItems, ref]);
 };

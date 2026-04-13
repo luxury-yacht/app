@@ -4,6 +4,9 @@ import { useOptionalKeyboardContext, type KeyboardSurfaceOptions } from './conte
 export function useKeyboardSurface(options: KeyboardSurfaceOptions) {
   const keyboardContext = useOptionalKeyboardContext();
   const surfaceIdRef = useRef<string | null>(null);
+  const onKeyDownRef = useRef(options.onKeyDown);
+  const onEscapeRef = useRef(options.onEscape);
+  const onNativeActionRef = useRef(options.onNativeAction);
   const {
     kind,
     rootRef,
@@ -16,6 +19,21 @@ export function useKeyboardSurface(options: KeyboardSurfaceOptions) {
     onEscape,
     onNativeAction,
   } = options;
+  const hasOnKeyDown = !!onKeyDown;
+  const hasOnEscape = !!onEscape;
+  const hasOnNativeAction = !!onNativeAction;
+
+  useEffect(() => {
+    onKeyDownRef.current = onKeyDown;
+  }, [onKeyDown]);
+
+  useEffect(() => {
+    onEscapeRef.current = onEscape;
+  }, [onEscape]);
+
+  useEffect(() => {
+    onNativeActionRef.current = onNativeAction;
+  }, [onNativeAction]);
 
   useEffect(() => {
     if (!keyboardContext) {
@@ -40,9 +58,11 @@ export function useKeyboardSurface(options: KeyboardSurfaceOptions) {
       blocking,
       captureWhenActive,
       suppressShortcuts,
-      onKeyDown,
-      onEscape,
-      onNativeAction,
+      onKeyDown: hasOnKeyDown ? (event) => onKeyDownRef.current?.(event) : undefined,
+      onEscape: hasOnEscape ? (event) => onEscapeRef.current?.(event) : undefined,
+      onNativeAction: hasOnNativeAction
+        ? (context) => onNativeActionRef.current?.(context)
+        : undefined,
     };
 
     if (!surfaceIdRef.current) {
@@ -61,11 +81,11 @@ export function useKeyboardSurface(options: KeyboardSurfaceOptions) {
     active,
     blocking,
     captureWhenActive,
+    hasOnEscape,
+    hasOnKeyDown,
+    hasOnNativeAction,
     kind,
     keyboardContext,
-    onEscape,
-    onKeyDown,
-    onNativeAction,
     priority,
     rootRef,
     suppressShortcuts,
