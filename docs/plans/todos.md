@@ -1,18 +1,5 @@
 # TODO
 
-- Add a delete option to the favorites menu
-
-- API timestamp
-  - Empty log lines dropping color, dropping pod name
-
-- Logging
-  - Auto-detect log levels?
-    - Colorize INFO ERROR DEBUG etc
-  - Advanced log formatting
-    - pattern matching by pod name/deployment name
-    - design a color-coding map for custom formats
-    - attempt to automatically parse?
-
 - can we get node logs?
 
 - Allow remove of default kubeconfig path, if not the last
