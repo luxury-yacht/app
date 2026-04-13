@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/rest"
@@ -19,6 +20,7 @@ import (
 const (
 	maxNodeLogDiscoveryDepth = 5
 	maxNodeLogDiscoveryNodes = 64
+	nodeLogDiscoveryWorkers  = 8
 	defaultNodeLogTailBytes  = 256 * 1024
 	maxNodeLogTailBytes      = 1024 * 1024
 )
@@ -36,6 +38,18 @@ var (
 type nodeLogListingEntry struct {
 	Href  string
 	Label string
+}
+
+type nodeLogDiscoveryTask struct {
+	path  string
+	body  []byte
+	depth int
+}
+
+type nodeLogDiscoveryState struct {
+	mu      sync.Mutex
+	visited map[string]struct{}
+	sources map[string]restypes.NodeLogSource
 }
 
 // DiscoverLogs probes the kubelet node log endpoint and returns directly readable sources.
@@ -66,8 +80,7 @@ func (s *Service) DiscoverLogs(nodeName string) restypes.NodeLogDiscoveryRespons
 	}
 
 	sources := make(map[string]restypes.NodeLogSource)
-	visited := map[string]struct{}{"": {}}
-	s.discoverNodeLogSources(nodeName, "", rootBody, 0, visited, sources)
+	s.discoverNodeLogSources(nodeName, rootBody, sources)
 
 	if len(sources) == 0 {
 		return restypes.NodeLogDiscoveryResponse{Reason: "node log endpoint did not expose any directly readable log sources"}
@@ -151,50 +164,109 @@ func (s *Service) FetchLogs(nodeName string, req restypes.NodeLogFetchRequest) r
 }
 
 func (s *Service) discoverNodeLogSources(
-	nodeName, basePath string,
-	body []byte,
-	depth int,
-	visited map[string]struct{},
+	nodeName string,
+	rootBody []byte,
 	sources map[string]restypes.NodeLogSource,
 ) {
-	if depth >= maxNodeLogDiscoveryDepth || len(sources) >= maxNodeLogDiscoveryNodes {
+	state := &nodeLogDiscoveryState{
+		visited: map[string]struct{}{"": {}},
+		sources: sources,
+	}
+
+	taskCh := make(chan nodeLogDiscoveryTask, nodeLogDiscoveryWorkers)
+	var taskWG sync.WaitGroup
+	var workerWG sync.WaitGroup
+
+	for range nodeLogDiscoveryWorkers {
+		workerWG.Add(1)
+		go func() {
+			defer workerWG.Done()
+			for task := range taskCh {
+				s.processNodeLogDiscoveryTask(nodeName, task, state, &taskWG, taskCh)
+				taskWG.Done()
+			}
+		}()
+	}
+
+	taskWG.Add(1)
+	taskCh <- nodeLogDiscoveryTask{path: "", body: rootBody, depth: 0}
+	taskWG.Wait()
+	close(taskCh)
+	workerWG.Wait()
+}
+
+func (s *Service) processNodeLogDiscoveryTask(
+	nodeName string,
+	task nodeLogDiscoveryTask,
+	state *nodeLogDiscoveryState,
+	taskWG *sync.WaitGroup,
+	taskCh chan<- nodeLogDiscoveryTask,
+) {
+	if task.depth >= maxNodeLogDiscoveryDepth || state.hasReachedSourceLimit() {
 		return
 	}
 
-	for _, entry := range parseNodeLogDirectoryListing(body) {
-		nextPath, ok := joinNodeLogPath(basePath, entry.Href)
-		if !ok {
+	for _, entry := range parseNodeLogDirectoryListing(task.body) {
+		if state.hasReachedSourceLimit() {
+			return
+		}
+
+		nextPath, ok := joinNodeLogPath(task.path, entry.Href)
+		if !ok || !state.markVisited(nextPath) {
 			continue
 		}
-		if _, seen := visited[nextPath]; seen {
-			continue
-		}
-		visited[nextPath] = struct{}{}
 
 		childBody, err := s.fetchNodeLogPath(nodeName, nextPath)
 		if err != nil {
 			continue
 		}
 		if isNodeLogDirectoryListing(childBody) {
-			s.discoverNodeLogSources(nodeName, nextPath, childBody, depth+1, visited, sources)
+			if task.depth+1 >= maxNodeLogDiscoveryDepth {
+				continue
+			}
+			taskWG.Add(1)
+			taskCh <- nodeLogDiscoveryTask{
+				path:  nextPath,
+				body:  childBody,
+				depth: task.depth + 1,
+			}
 			continue
 		}
-		if !isDisplayableNodeLogSource(nextPath) {
-			continue
-		}
-		if !isSupportedNodeLogSource(nextPath) {
+		if !isDisplayableNodeLogSource(nextPath) || !isSupportedNodeLogSource(nextPath) {
 			continue
 		}
 
-		if len(sources) >= maxNodeLogDiscoveryNodes {
-			return
-		}
-		sources[nextPath] = restypes.NodeLogSource{
-			ID:    nextPath,
-			Label: nodeLogSourceLabel(nextPath),
-			Kind:  nodeLogSourceKind(nextPath),
-			Path:  nextPath,
-		}
+		state.addSource(nextPath)
+	}
+}
+
+func (s *nodeLogDiscoveryState) hasReachedSourceLimit() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.sources) >= maxNodeLogDiscoveryNodes
+}
+
+func (s *nodeLogDiscoveryState) markVisited(path string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, seen := s.visited[path]; seen {
+		return false
+	}
+	s.visited[path] = struct{}{}
+	return true
+}
+
+func (s *nodeLogDiscoveryState) addSource(path string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.sources) >= maxNodeLogDiscoveryNodes {
+		return
+	}
+	s.sources[path] = restypes.NodeLogSource{
+		ID:    path,
+		Label: nodeLogSourceLabel(path),
+		Kind:  nodeLogSourceKind(path),
+		Path:  path,
 	}
 }
 
