@@ -16,6 +16,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const searchShortcutMocks = vi.hoisted(() => ({
   useSearchShortcutTarget: vi.fn(),
+  useKeyboardSurface: vi.fn(),
 }));
 
 const refreshMocks = vi.hoisted(() => ({
@@ -98,6 +99,7 @@ const codemirrorSearchMocks = vi.hoisted(() => {
 // ---------------------------------------------------------------------------
 
 vi.mock('@ui/shortcuts', () => ({
+  useKeyboardSurface: (config: unknown) => searchShortcutMocks.useKeyboardSurface(config),
   useSearchShortcutTarget: (config: unknown) => searchShortcutMocks.useSearchShortcutTarget(config),
 }));
 
@@ -256,6 +258,7 @@ describe('ValuesTab', () => {
     refreshMocks.setScopedDomainEnabled.mockClear();
     refreshMocks.fetchScopedDomain.mockClear();
     searchShortcutMocks.useSearchShortcutTarget.mockClear();
+    searchShortcutMocks.useKeyboardSurface.mockClear();
     searchModuleMocks.createSearchExtensions.mockClear();
     searchModuleMocks.closeSearchPanel.mockClear();
   });
@@ -278,6 +281,20 @@ describe('ValuesTab', () => {
     expect(parsed.image?.tag).toBeUndefined();
     expect(parsed.image?.repository).toBe('nginx');
     expect(parsed.service).toEqual({ type: 'ClusterIP', port: 80 });
+
+    await unmount();
+  });
+
+  it('registers the CodeMirror region as an editor surface', async () => {
+    const { unmount } = await renderValuesTab();
+
+    expect(searchShortcutMocks.useKeyboardSurface).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'editor',
+        active: true,
+        onNativeAction: expect.any(Function),
+      })
+    );
 
     await unmount();
   });

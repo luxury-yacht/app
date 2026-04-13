@@ -7,7 +7,7 @@
 
 import { useCallback } from 'react';
 import type { RefObject } from 'react';
-import { useKeyboardNavigationScope } from '@ui/shortcuts';
+import { useKeyboardSurface } from '@ui/shortcuts';
 import { KeyboardScopePriority } from '@ui/shortcuts/priorities';
 
 interface GridTableKeyboardOptions {
@@ -19,6 +19,7 @@ interface GridTableKeyboardOptions {
   wrapperRef: RefObject<HTMLDivElement | null>;
   tableDataLength: number;
   focusedRowKey: string | null;
+  suppressFocusedRowHighlight: () => void;
   jumpToIndex: (index: number) => boolean;
 }
 
@@ -31,6 +32,7 @@ export const useGridTableKeyboardScopes = ({
   wrapperRef,
   tableDataLength,
   focusedRowKey,
+  suppressFocusedRowHighlight,
   jumpToIndex,
 }: GridTableKeyboardOptions) => {
   const getFilterTargets = useCallback((): HTMLElement[] => {
@@ -61,8 +63,14 @@ export const useGridTableKeyboardScopes = ({
       );
     }
     addTarget(container.querySelector<HTMLElement>('[data-gridtable-filter-role="search"] input'));
-    // Reset is now an IconBar button.
-    addTarget(container.querySelector<HTMLElement>('.icon-bar-button[title="Reset filters"]'));
+    container
+      .querySelectorAll<HTMLElement>('.gridtable-filter-actions .icon-bar-button')
+      .forEach((element) => addTarget(element));
+    addTarget(
+      container.querySelector<HTMLElement>(
+        '[data-gridtable-filter-role="columns"] .dropdown-trigger'
+      )
+    );
 
     return targets;
   }, [filteringEnabled, filtersContainerRef, showKindDropdown, showNamespaceDropdown]);
@@ -112,31 +120,20 @@ export const useGridTableKeyboardScopes = ({
     [focusFilterAtIndex, filterFocusIndexRef, getFilterTargets]
   );
 
-  const filterTabEnterHandler = useCallback(
-    ({ direction }: { direction: 'forward' | 'backward' }) => {
-      const targets = getFilterTargets();
-      if (targets.length === 0) {
-        return;
-      }
-      const index = direction === 'backward' ? targets.length - 1 : 0;
-      focusFilterAtIndex(index);
-    },
-    [focusFilterAtIndex, getFilterTargets]
-  );
-
   const tableTabNavigationHandler = useCallback(
     ({ direction, event }: { direction: 'forward' | 'backward'; event: KeyboardEvent }) => {
       const filterTargets = getFilterTargets();
       if (direction === 'backward' && filterTargets.length > 0) {
+        suppressFocusedRowHighlight();
         event.preventDefault();
         focusFilterAtIndex(filterTargets.length - 1);
         return 'handled';
       }
-      event.preventDefault();
+      suppressFocusedRowHighlight();
       filterFocusIndexRef.current = null;
       return 'bubble';
     },
-    [focusFilterAtIndex, filterFocusIndexRef, getFilterTargets]
+    [focusFilterAtIndex, filterFocusIndexRef, getFilterTargets, suppressFocusedRowHighlight]
   );
 
   const tableTabEnterHandler = useCallback(
@@ -154,18 +151,54 @@ export const useGridTableKeyboardScopes = ({
     [filterFocusIndexRef, focusedRowKey, jumpToIndex, tableDataLength, wrapperRef]
   );
 
-  useKeyboardNavigationScope({
-    ref: filtersContainerRef,
+  const handleTableKeyDown = useCallback(
+    (event: KeyboardEvent) => {
+      if (event.key !== 'Tab') {
+        return false;
+      }
+      const direction = event.shiftKey ? 'backward' : 'forward';
+      const result = tableTabNavigationHandler({ direction, event });
+      if (result === 'handled') {
+        return true;
+      }
+      return false;
+    },
+    [tableTabNavigationHandler]
+  );
+
+  const handleFilterKeyDown = useCallback(
+    (event: KeyboardEvent) => {
+      if (event.key !== 'Tab') {
+        return false;
+      }
+      const direction = event.shiftKey ? 'backward' : 'forward';
+      const result = filterTabNavigationHandler({ direction, event });
+      if (result === 'handled') {
+        return true;
+      }
+      if (result === 'bubble' && direction === 'forward') {
+        tableTabEnterHandler({ direction });
+        event.preventDefault();
+        return true;
+      }
+      return false;
+    },
+    [filterTabNavigationHandler, tableTabEnterHandler]
+  );
+
+  useKeyboardSurface({
+    kind: 'region',
+    rootRef: filtersContainerRef,
+    active: filteringEnabled,
     priority: KeyboardScopePriority.GRIDTABLE_FILTERS,
-    disabled: !filteringEnabled,
-    onNavigate: filterTabNavigationHandler,
-    onEnter: filterTabEnterHandler,
+    onKeyDown: handleFilterKeyDown,
   });
 
-  useKeyboardNavigationScope({
-    ref: wrapperRef,
+  useKeyboardSurface({
+    kind: 'region',
+    rootRef: wrapperRef,
+    active: true,
     priority: KeyboardScopePriority.GRIDTABLE_BODY,
-    onNavigate: tableTabNavigationHandler,
-    onEnter: tableTabEnterHandler,
+    onKeyDown: handleTableKeyDown,
   });
 };

@@ -168,7 +168,7 @@ describe('FavMenuDropdown', () => {
   };
 
   const clickButton = async () => {
-    const btn = container.querySelector<HTMLButtonElement>('button[aria-label="Favorites"]');
+    const btn = container.querySelector<HTMLElement>('[aria-label="Favorites"]');
     expect(btn).toBeTruthy();
     await act(async () => {
       btn!.click();
@@ -206,9 +206,25 @@ describe('FavMenuDropdown', () => {
 
   it('renders the heart button', async () => {
     await renderComponent();
-    const btn = container.querySelector<HTMLButtonElement>('button[aria-label="Favorites"]');
+    const btn = container.querySelector<HTMLElement>('[aria-label="Favorites"]');
     expect(btn).toBeTruthy();
     expect(btn!.className).toContain('settings-button');
+  });
+
+  it('opens the dropdown from keyboard activation on the trigger', async () => {
+    await renderComponent();
+
+    const trigger = container.querySelector<HTMLElement>('[aria-label="Favorites"]');
+    expect(trigger).toBeTruthy();
+
+    await act(async () => {
+      trigger!.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+      );
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('.fav-dropdown-panel')).toBeTruthy();
   });
 
   // -----------------------------------------------------------------------

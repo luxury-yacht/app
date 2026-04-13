@@ -44,8 +44,6 @@ import type {
   ViewType,
 } from '@modules/object-panel/components/ObjectPanel/types';
 import type { KubernetesObjectReference } from '@/types/view-state';
-import { useKeyboardNavigationScope } from '@ui/shortcuts';
-import { KeyboardScopePriority } from '@ui/shortcuts/priorities';
 import { refreshOrchestrator } from '@/core/refresh/orchestrator';
 import { getGroupForPanel, getGroupTabs } from '@ui/dockable/tabGroupState';
 import type { DockPosition } from '@ui/dockable';
@@ -623,79 +621,6 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
     : null;
 
   const panelScopeRef = useRef<HTMLDivElement>(null);
-
-  const getFocusableElements = useCallback(() => {
-    if (!panelScopeRef.current) {
-      return [];
-    }
-    const nodes = Array.from(
-      panelScopeRef.current.querySelectorAll<HTMLElement>('[data-object-panel-focusable="true"]')
-    );
-    return nodes.filter((node) => !node.hasAttribute('disabled'));
-  }, []);
-
-  const focusElementAt = useCallback(
-    (index: number) => {
-      const items = getFocusableElements();
-      if (index < 0 || index >= items.length) {
-        return false;
-      }
-      items[index].focus();
-      return true;
-    },
-    [getFocusableElements]
-  );
-
-  const focusFirstControl = useCallback(() => focusElementAt(0), [focusElementAt]);
-  const focusLastControl = useCallback(() => {
-    const items = getFocusableElements();
-    return focusElementAt(items.length - 1);
-  }, [focusElementAt, getFocusableElements]);
-
-  const findFocusedIndex = useCallback(() => {
-    const active = document.activeElement as HTMLElement | null;
-    if (!active) {
-      return -1;
-    }
-    const items = getFocusableElements();
-    return items.findIndex((item) => item === active || item.contains(active));
-  }, [getFocusableElements]);
-
-  useKeyboardNavigationScope({
-    ref: panelScopeRef,
-    priority: KeyboardScopePriority.OBJECT_PANEL,
-    disabled: !isActiveTab,
-    allowNativeSelector: '.object-panel-body *',
-    onNavigate: ({ direction }) => {
-      const items = getFocusableElements();
-      if (items.length === 0) {
-        return 'bubble';
-      }
-      const currentIndex = findFocusedIndex();
-      if (currentIndex === -1) {
-        return direction === 'forward'
-          ? focusFirstControl()
-            ? 'handled'
-            : 'bubble'
-          : focusLastControl()
-            ? 'handled'
-            : 'bubble';
-      }
-      const nextIndex = direction === 'forward' ? currentIndex + 1 : currentIndex - 1;
-      if (nextIndex < 0 || nextIndex >= items.length) {
-        return 'bubble';
-      }
-      focusElementAt(nextIndex);
-      return 'handled';
-    },
-    onEnter: ({ direction }) => {
-      if (direction === 'forward') {
-        focusFirstControl();
-      } else {
-        focusLastControl();
-      }
-    },
-  });
 
   // Memoize the per-instance context value so child components get the correct objectData.
   const currentObjectPanelValue = useMemo(() => ({ objectData, panelId }), [objectData, panelId]);

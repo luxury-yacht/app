@@ -72,12 +72,10 @@ describe('SearchShortcutHandler', () => {
     expect(hooksMocks.useShortcut).toHaveBeenCalledTimes(1);
     const primaryConfig = hooksMocks.useShortcut.mock.calls[0][0] as {
       handler: () => boolean;
-      view: string;
       priority: number;
       modifiers?: { meta?: boolean; ctrl?: boolean };
     };
     expect(primaryConfig.modifiers?.meta).toBe(true);
-    expect(primaryConfig.view).toBe('global');
     expect(primaryConfig.priority).toBe(1000);
     const handled = primaryConfig.handler();
     expect(handled).toBe(true);

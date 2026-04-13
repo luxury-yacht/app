@@ -7,7 +7,6 @@
 
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useShortcut } from '../hooks';
-import { useKeyboardContext } from '../context';
 import { ShortcutHelpModal } from './ShortcutHelpModal';
 import { KeyCodes } from '../constants';
 import { isMacPlatform } from '@/utils/platform';
@@ -27,7 +26,6 @@ interface GlobalShortcutsProps {
   onToggleObjectDiff?: () => void;
   onRefresh?: () => void;
   onToggleDiagnostics?: () => void;
-  viewType?: string;
   isLogsPanelOpen?: boolean;
   isObjectPanelOpen?: boolean;
   isSettingsOpen?: boolean;
@@ -40,14 +38,12 @@ export function GlobalShortcuts({
   onToggleObjectDiff,
   onRefresh,
   onToggleDiagnostics,
-  viewType,
   isLogsPanelOpen,
   isObjectPanelOpen,
   isSettingsOpen,
 }: GlobalShortcutsProps) {
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [isModalAnimating, setIsModalAnimating] = useState(false);
-  const { setContext } = useKeyboardContext();
   const { selectedKubeconfig, selectedKubeconfigs, setSelectedKubeconfigs, setActiveKubeconfig } =
     useKubeconfig();
   const { zoomIn, zoomOut, resetZoom } = useZoom();
@@ -70,31 +66,6 @@ export function GlobalShortcuts({
       unsubscribe();
     };
   }, []);
-
-  // Update context based on current view
-  useEffect(() => {
-    const context: any = {};
-
-    // Set view context
-    if (isSettingsOpen) {
-      context.view = 'settings';
-    } else if (viewType === 'namespace') {
-      context.view = 'list';
-    } else {
-      context.view = 'list';
-    }
-
-    // Set panel context - prioritize object panel over logs panel
-    if (isObjectPanelOpen) {
-      context.panelOpen = 'object';
-    } else if (isLogsPanelOpen) {
-      context.panelOpen = 'logs';
-    } else {
-      context.panelOpen = undefined;
-    }
-
-    setContext(context);
-  }, [viewType, isLogsPanelOpen, isObjectPanelOpen, isSettingsOpen, setContext]);
 
   // Toggle help overlay - only if no other modal is open or animating
   const toggleHelp = useCallback(() => {
@@ -247,7 +218,6 @@ export function GlobalShortcuts({
     handler: toggleHelp,
     description: 'Show keyboard shortcuts help',
     category: 'Global',
-    view: 'global',
   });
 
   useShortcut({
@@ -257,7 +227,6 @@ export function GlobalShortcuts({
     description: 'Toggle sidebar',
     category: 'Global',
     enabled: !!onToggleSidebar,
-    view: 'global',
   });
 
   useShortcut({
@@ -267,7 +236,6 @@ export function GlobalShortcuts({
     description: 'Toggle logs panel',
     category: 'Global',
     enabled: !!onToggleLogsPanel,
-    view: 'global',
   });
 
   useShortcut({
@@ -277,7 +245,6 @@ export function GlobalShortcuts({
     description: 'Toggle settings',
     category: 'Global',
     enabled: !!onToggleSettings,
-    view: 'global',
   });
 
   useShortcut({
@@ -287,7 +254,6 @@ export function GlobalShortcuts({
     description: 'Toggle object diff viewer',
     category: 'Global',
     enabled: !!onToggleObjectDiff,
-    view: 'global',
   });
 
   useShortcut({
@@ -297,7 +263,6 @@ export function GlobalShortcuts({
     description: 'Refresh current view',
     category: 'Navigation',
     enabled: !!onRefresh,
-    view: 'global',
   });
 
   useShortcut({
@@ -307,7 +272,6 @@ export function GlobalShortcuts({
     description: 'Toggle diagnostics panel',
     category: 'Global',
     enabled: !!onToggleDiagnostics,
-    view: 'global',
   });
 
   // Zoom shortcuts — the Wails native menu accelerators for +/- don't work on
@@ -319,7 +283,6 @@ export function GlobalShortcuts({
     handler: zoomIn,
     description: 'Zoom in',
     category: 'View',
-    view: 'global',
   });
 
   useShortcut({
@@ -328,7 +291,6 @@ export function GlobalShortcuts({
     handler: zoomOut,
     description: 'Zoom out',
     category: 'View',
-    view: 'global',
   });
 
   useShortcut({
@@ -337,7 +299,6 @@ export function GlobalShortcuts({
     handler: resetZoom,
     description: 'Reset zoom',
     category: 'View',
-    view: 'global',
   });
 
   // Handle menu:close event from the backend (Cmd/Ctrl+W via native menu).
@@ -364,7 +325,6 @@ export function GlobalShortcuts({
     description: 'Switch to previous cluster tab',
     category: 'Navigation',
     enabled: selectedKubeconfigs.length > 1,
-    view: 'global',
   });
 
   useShortcut({
@@ -374,7 +334,6 @@ export function GlobalShortcuts({
     description: 'Switch to next cluster tab',
     category: 'Navigation',
     enabled: selectedKubeconfigs.length > 1,
-    view: 'global',
   });
 
   useShortcut({
@@ -382,7 +341,6 @@ export function GlobalShortcuts({
     handler: handleEscape,
     description: 'Close overlay/panel',
     category: 'Global',
-    view: 'global',
     priority: 10,
   });
 

@@ -17,28 +17,29 @@ import * as shortcutContextModule from './context';
 type RegisterArgs = {
   key: string;
   modifiers?: Record<string, boolean> | undefined;
-  contexts: any[];
+  priority?: number;
   handler: (event?: KeyboardEvent) => void;
   description: string;
   category?: string;
   enabled: boolean;
 };
 
-type ShortcutContextShape = ReturnType<(typeof shortcutContextModule)['useKeyboardContext']>;
+type KeyboardContextShape = ReturnType<(typeof shortcutContextModule)['useKeyboardContext']>;
 
-const buildShortcutContext = (
-  overrides: Partial<ShortcutContextShape> = {}
-): ShortcutContextShape => ({
+const buildKeyboardContext = (
+  overrides: Partial<KeyboardContextShape> = {}
+): KeyboardContextShape => ({
   registerShortcut: vi.fn(),
   unregisterShortcut: vi.fn(),
-  currentContext: { view: 'global', priority: 0 },
-  setContext: vi.fn(),
-  pushContext: vi.fn(),
-  popContext: vi.fn(),
   getAvailableShortcuts: vi.fn().mockReturnValue([]),
   isShortcutAvailable: vi.fn().mockReturnValue(true),
   setEnabled: vi.fn(),
   isEnabled: true,
+  registerSurface: vi.fn(),
+  unregisterSurface: vi.fn(),
+  updateSurface: vi.fn(),
+  hasActiveBlockingSurface: vi.fn().mockReturnValue(false),
+  dispatchNativeAction: vi.fn().mockReturnValue(false),
   ...overrides,
 });
 
@@ -67,7 +68,7 @@ describe('useShortcut hooks', () => {
     useKeyboardContextSpy.mockReset();
   });
 
-  const renderWithContext = async (element: React.ReactElement, ctx: ShortcutContextShape) => {
+  const renderWithContext = async (element: React.ReactElement, ctx: KeyboardContextShape) => {
     useKeyboardContextSpy.mockReturnValue(ctx);
     await act(async () => {
       root.render(element);
@@ -75,8 +76,8 @@ describe('useShortcut hooks', () => {
     });
   };
 
-  it('registers and unregisters a shortcut with normalized contexts', async () => {
-    const mockContext = buildShortcutContext({
+  it('registers and unregisters a shortcut with direct priority metadata', async () => {
+    const mockContext = buildKeyboardContext({
       registerShortcut: vi.fn().mockImplementation(({ handler }) => {
         handler(createEvent());
         return 'abc';
@@ -88,11 +89,6 @@ describe('useShortcut hooks', () => {
       handler: vi.fn(),
       modifiers: { ctrl: true, meta: false },
       description: 'Trigger action',
-      view: 'details' as const,
-      resourceKind: 'deployments' as const,
-      objectKind: 'Pod',
-      whenPanelOpen: 'object' as const,
-      whenTabActive: 'summary',
       priority: 2,
       category: 'test',
     };
@@ -108,16 +104,7 @@ describe('useShortcut hooks', () => {
     const registeredArgs = registerMock.mock.calls[0][0] as RegisterArgs;
     expect(registeredArgs.key).toBe('k');
     expect(registeredArgs.modifiers).toEqual({ ctrl: true, shift: false, alt: false, meta: false });
-    expect(registeredArgs.contexts).toEqual([
-      {
-        view: 'details',
-        resourceKind: 'deployments',
-        objectKind: 'Pod',
-        panelOpen: 'object',
-        tabActive: 'summary',
-        priority: 2,
-      },
-    ]);
+    expect(registeredArgs.priority).toBe(2);
     expect(shortcutOptions.handler).toHaveBeenCalled();
 
     await act(async () => {
@@ -132,7 +119,7 @@ describe('useShortcut hooks', () => {
     let counter = 0;
     const registerShortcut = vi.fn().mockImplementation(() => `id-${counter++}`);
     const unregisterShortcut = vi.fn();
-    const mockContext = buildShortcutContext({ registerShortcut, unregisterShortcut });
+    const mockContext = buildKeyboardContext({ registerShortcut, unregisterShortcut });
 
     const TestComponent: React.FC<{ enabled: boolean; handler: () => void }> = ({
       enabled,
@@ -143,7 +130,6 @@ describe('useShortcut hooks', () => {
         handler,
         enabled,
         description: 'close',
-        contexts: [{ view: 'global' as const }],
       });
       return null;
     };
@@ -169,8 +155,8 @@ describe('useShortcut hooks', () => {
       root.render(<TestComponent enabled={true} handler={handlerA} />);
       await Promise.resolve();
     });
-    expect(registerMock).toHaveBeenCalledTimes(3);
-    const latestHandler = registerMock.mock.calls[2][0].handler;
+    expect(registerMock).toHaveBeenCalledTimes(2);
+    const latestHandler = registerMock.mock.calls[1][0].handler;
     latestHandler(createEvent());
     expect(handlerA).toHaveBeenCalled();
 
@@ -179,22 +165,18 @@ describe('useShortcut hooks', () => {
       await Promise.resolve();
     });
     const unregisterMock = unregisterShortcut as unknown as Mock;
-    expect(Array.from(unregisterMock.mock.calls, (call) => call[0])).toEqual([
-      'id-0',
-      'id-1',
-      'id-2',
-    ]);
+    expect(Array.from(unregisterMock.mock.calls, (call) => call[0])).toEqual(['id-0', 'id-1']);
   });
 
   it('registers multiple shortcuts with common options and keeps handlers fresh', async () => {
     let multiCounter = 0;
     const registerShortcut = vi.fn().mockImplementation(() => `id-${multiCounter++}`);
     const unregisterShortcut = vi.fn();
-    const mockContext = buildShortcutContext({ registerShortcut, unregisterShortcut });
+    const mockContext = buildKeyboardContext({ registerShortcut, unregisterShortcut });
 
     const shortcutA = { key: 'j', handler: vi.fn(), description: 'Next item' };
     const shortcutB = { key: 'k', handler: vi.fn(), description: 'Previous item', enabled: false };
-    const common = { view: 'list' as const, resourceKind: 'pods' as const, category: 'navigation' };
+    const common = { category: 'navigation' };
 
     const TestComponent: React.FC<{ shortcuts: (typeof shortcutA)[] }> = ({ shortcuts }) => {
       useShortcuts(shortcuts, common);
@@ -206,7 +188,7 @@ describe('useShortcut hooks', () => {
     expect(registerMock).toHaveBeenCalledTimes(2);
 
     const firstArgs = registerMock.mock.calls[0][0] as RegisterArgs;
-    expect(firstArgs.contexts).toEqual([{ view: 'list', resourceKind: 'pods' }]);
+    expect(firstArgs.priority).toBeUndefined();
     expect(firstArgs.enabled).toBe(true);
 
     const secondArgs = registerMock.mock.calls[1][0] as RegisterArgs;

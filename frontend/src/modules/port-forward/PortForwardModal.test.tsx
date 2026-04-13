@@ -11,6 +11,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 
 import PortForwardModal from './PortForwardModal';
 import type { PortForwardTarget } from './PortForwardModal';
+import { KeyboardProvider } from '@ui/shortcuts';
 
 // Mock the Wails backend
 const startPortForwardMock = vi.hoisted(() => vi.fn());
@@ -78,7 +79,11 @@ describe('PortForwardModal', () => {
     };
 
     await act(async () => {
-      root.render(<PortForwardModal {...finalProps} />);
+      root.render(
+        <KeyboardProvider>
+          <PortForwardModal {...finalProps} />
+        </KeyboardProvider>
+      );
       await Promise.resolve();
     });
   };
@@ -200,6 +205,59 @@ describe('PortForwardModal', () => {
     });
 
     expect(mockOnClose).not.toHaveBeenCalled();
+  });
+
+  it('closes on Escape through the keyboard surface manager', async () => {
+    await renderModal();
+
+    const localPortInput = document.querySelector<HTMLInputElement>('#port-forward-local-port');
+    expect(localPortInput).toBeTruthy();
+    localPortInput?.focus();
+
+    await act(async () => {
+      localPortInput?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+      );
+      await Promise.resolve();
+    });
+
+    expect(mockOnClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('consumes Escape without closing while start is loading', async () => {
+    let resolveStart!: (value: string) => void;
+    startPortForwardMock.mockReturnValue(
+      new Promise((resolve) => {
+        resolveStart = resolve;
+      })
+    );
+
+    await renderModal();
+
+    const startButton = document.querySelector('.button.save') as HTMLButtonElement;
+    expect(startButton).toBeTruthy();
+
+    await act(async () => {
+      startButton.click();
+      await Promise.resolve();
+    });
+
+    const localPortInput = document.querySelector<HTMLInputElement>('#port-forward-local-port');
+    expect(localPortInput).toBeTruthy();
+    localPortInput?.focus();
+
+    const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    act(() => {
+      localPortInput?.dispatchEvent(event);
+    });
+
+    expect(mockOnClose).not.toHaveBeenCalled();
+    expect(event.defaultPrevented).toBe(true);
+
+    await act(async () => {
+      resolveStart('session-123');
+      await Promise.resolve();
+    });
   });
 
   it('shows manual input when no ports provided', async () => {
@@ -399,11 +457,13 @@ describe('PortForwardModal', () => {
 
     await act(async () => {
       root.render(
-        <PortForwardModal
-          target={{ ...targetWithoutPorts }}
-          onClose={mockOnClose}
-          onStarted={mockOnStarted}
-        />
+        <KeyboardProvider>
+          <PortForwardModal
+            target={{ ...targetWithoutPorts }}
+            onClose={mockOnClose}
+            onStarted={mockOnStarted}
+          />
+        </KeyboardProvider>
       );
       await Promise.resolve();
     });

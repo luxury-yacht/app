@@ -1,117 +1,164 @@
 # Frontend Component Structure
 
-This document describes where frontend components live and the rules for placing new ones.
+This document describes how the frontend is organized today, where new code should go, and which
+dependency directions are preferred for new work.
 
-## Directory Layout
+## Current Top-Level Layout
 
 ```text
 frontend/src/
-  ui/                  → App-shell: layout, navigation, panels, overlays
-  shared/components/   → Reusable primitives used across multiple features
-  shared/utils/        → Cross-cutting utility functions and helpers
-  modules/<feature>/   → Domain-specific feature UI (one directory per feature)
-  core/                → Application infrastructure (refresh, contexts, connections)
+  assets/              → Static assets
+  core/                → Application infrastructure and state orchestration
+  hooks/               → App-level hooks
+  modules/             → Feature-specific UI and behavior
+  shared/              → Reusable primitives, hooks, constants, and helpers
+  types/               → Shared TypeScript types
+  ui/                  → App shell, global surfaces, and app-owned UI
+  utils/               → App-level utilities not scoped under shared/
 ```
 
 ## Placement Rules
 
-### `ui/` — App-Shell Components
+### `core/` — Application Infrastructure
 
-Components that are part of the application shell — the chrome around feature content. These are
-tied to app-level layout, state, or Wails runtime APIs.
+Put code here if it owns application-wide state, orchestration, persistence, connections, or
+cross-cutting infrastructure.
 
-| Subdirectory         | Purpose                                          | Examples                                         |
-| -------------------- | ------------------------------------------------ | ------------------------------------------------ |
-| `ui/layout`          | Top-level page structure, header, sidebar        | `AppHeader.tsx`, `AppLayout.tsx`                 |
-| `ui/dockable`        | Dockable panel system (layout infrastructure)    | `DockablePanel.tsx`, `DockableTabBar.tsx`        |
-| `ui/modals`          | App-owned modals (settings, about, diff viewer)  | `SettingsModal.tsx`, `AboutModal.tsx`            |
-| `ui/overlays`        | Full-screen overlays (auth failure, etc.)        | `AuthFailureOverlay.tsx`                         |
-| `ui/panels`          | Global content panels                            | `panels/app-logs/AppLogsPanel.tsx`               |
-| `ui/settings`        | App settings content                             | `Settings.tsx`                                   |
-| `ui/status`          | Header status indicators (connectivity, metrics) | `ConnectivityStatus.tsx`                         |
-| `ui/errors`          | App-shell error boundaries                       | `AppErrorBoundary.tsx`, `PanelErrorBoundary.tsx` |
-| `ui/navigation`      | Sidebar and cluster navigation                   |                                                  |
-| `ui/command-palette` | Command palette                                  | `CommandPalette.tsx`                             |
-| `ui/shortcuts`       | Keyboard shortcut system                         |                                                  |
+Examples:
 
-**Put a component here if:** it is part of the app frame, orchestrated by layout state, or depends
-on Wails runtime APIs. It should NOT contain domain/feature logic.
+- `core/refresh`
+- `core/contexts`
+- `core/settings`
+- `core/capabilities`
 
-### `shared/components/` — Reusable Primitives
+`core/` should stay independent of React UI layers whenever possible.
 
-Generic, domain-agnostic components reused by multiple features or by the app shell itself. These
-must not import from `ui/` or `modules/`.
+### `modules/` — Feature-Owned UI
 
-| Subdirectory                   | Purpose                                   | Examples                                        |
-| ------------------------------ | ----------------------------------------- | ----------------------------------------------- |
-| `shared/components/errors`     | Generic error boundary and fallback       | `ErrorBoundary.tsx`, `ErrorFallback.tsx`        |
-| `shared/components/modals`     | Reusable modal primitives                 | `ConfirmationModal.tsx`, `useModalFocusTrap.ts` |
-| `shared/components/status`     | Reusable status indicators                | `StatusIndicator.tsx`                           |
-| `shared/components/tables`     | Grid table and column factories           | `GridTable.tsx`, `columnFactories.tsx`          |
-| `shared/components/kubernetes` | Shared Kubernetes UI (actions menu, etc.) | `ActionsMenu.tsx`                               |
-| `shared/components/dropdowns`  | Dropdown primitives                       | `Dropdown/`                                     |
-| `shared/components/icons`      | Icon components                           | `MenuIcons.tsx`                                 |
-| `shared/components/inputs`     | Input primitives                          | `SearchInput.tsx`                               |
-| `shared/components/tabs`       | Tab primitives                            | `Tabs/`                                         |
+Use `modules/<feature>/` for domain-specific behavior that belongs to one feature area.
 
-**Put a component here if:** it is generic, has no feature-specific logic, and is used (or likely to
-be used) by more than one feature or by the app shell.
+Current feature modules:
 
-### `shared/utils/` — Cross-Cutting Helpers
+- `modules/browse`
+- `modules/cluster`
+- `modules/kubernetes`
+- `modules/namespace`
+- `modules/object-panel`
+- `modules/port-forward`
 
-Utility functions and React helpers that are not components themselves.
+Put a component here if it implements feature-specific behavior and is not a reusable primitive.
 
-| Path                                      | Purpose                                    |
-| ----------------------------------------- | ------------------------------------------ |
-| `shared/utils/react/withLazyBoundary.tsx` | HOC for lazy-loading with error boundaries |
-| `shared/utils/metricsAvailability.ts`     | Metrics availability helpers               |
-| `shared/utils/resourceCalculations.ts`    | Resource calculation utilities             |
+### `ui/` — App Shell And App-Owned Surfaces
 
-### `modules/<feature>/` — Feature UI
+`ui/` contains the application frame and global UI systems. This includes shell-level layout and
+navigation, but it is not limited to purely presentation-only code.
 
-Domain-specific components scoped to a single feature. Each module owns its own components,
-hooks, and tests.
+Current `ui/` areas:
 
-| Module                   | Feature                           |
-| ------------------------ | --------------------------------- |
-| `modules/cluster`        | Cluster management and connection |
-| `modules/namespace`      | Namespace resource views          |
-| `modules/object-panel`   | Kubernetes object detail panel    |
-| `modules/browse`         | Catalog browsing                  |
-| `modules/shell-session`  | Shell/exec sessions               |
-| `modules/active-session` | Active session tracking           |
-| `modules/port-forward`   | Port forward management           |
-| `modules/kubernetes`     | Kubernetes-specific utilities     |
+| Subdirectory         | Purpose                                      | Examples                              |
+| -------------------- | -------------------------------------------- | ------------------------------------- |
+| `ui/layout`          | Top-level app structure and sidebar/header   | `AppLayout.tsx`, `Sidebar.tsx`        |
+| `ui/dockable`        | Dockable panel infrastructure                | `DockablePanel.tsx`                   |
+| `ui/modals`          | App-owned blocking modals                    | `SettingsModal.tsx`, `AboutModal.tsx` |
+| `ui/overlays`        | Full-screen overlays                         | `AuthFailureOverlay.tsx`              |
+| `ui/panels`          | Global panels                                | `AppLogsPanel.tsx`                    |
+| `ui/settings`        | Settings content                             | `Settings.tsx`                        |
+| `ui/status`          | Header/system status UI                      | `ConnectivityStatus.tsx`              |
+| `ui/errors`          | App-shell error boundaries                   | `AppErrorBoundary.tsx`                |
+| `ui/navigation`      | Sidebar and cluster navigation types/helpers | `types.ts`                            |
+| `ui/command-palette` | Command palette                              | `CommandPalette.tsx`                  |
+| `ui/shortcuts`       | Keyboard shortcut system                     | `context.tsx`                         |
+| `ui/favorites`       | App-owned favorites save/edit flow           | `FavToggle.tsx`, `FavSaveModal.tsx`   |
 
-**Put a component here if:** it implements feature-specific behavior and is not reused outside its
-feature. If a module component starts being imported by other modules, move it to
-`shared/components/`.
+Put code here if it is part of the app shell, a global UI system, or an app-owned flow that is
+used across multiple features.
 
-## Import Direction Rules
+### `shared/` — Reusable Building Blocks
 
-Dependencies flow downward only:
+`shared/` contains reusable code that is not owned by one feature module.
+
+Current areas:
+
+| Subdirectory                   | Purpose                                   | Examples                                    |
+| ------------------------------ | ----------------------------------------- | ------------------------------------------- |
+| `shared/components/errors`     | Generic error handling UI                 | `ErrorBoundary.tsx`                         |
+| `shared/components/modals`     | Reusable modal primitives and shared ones | `ModalSurface.tsx`, `ConfirmationModal.tsx` |
+| `shared/components/status`     | Reusable status indicators                | `StatusIndicator.tsx`                       |
+| `shared/components/tables`     | Shared table system                       | `GridTable.tsx`, `columnFactories.tsx`      |
+| `shared/components/kubernetes` | Reusable Kubernetes-oriented UI           | `ActionsMenu.tsx`                           |
+| `shared/components/dropdowns`  | Dropdown primitives                       | `Dropdown/`                                 |
+| `shared/components/icons`      | Shared icon components                    | `MenuIcons.tsx`                             |
+| `shared/components/inputs`     | Shared input primitives                   | `SearchInput.tsx`                           |
+| `shared/components/tabs`       | Shared tab primitives                     | `Tabs/`                                     |
+| `shared/components/IconBar`    | Shared icon-bar UI                        | `IconBar.tsx`                               |
+| `shared/components/diff`       | Shared diff viewer pieces                 |                                             |
+| `shared/hooks`                 | Reusable hooks                            | `useNavigateToView.ts`                      |
+| `shared/constants`             | Shared constants                          | `builtinGroupVersions.ts`                   |
+| `shared/utils`                 | Shared helpers                            | `metricsAvailability.ts`                    |
+
+Put code here if it is reusable and not owned by a single feature.
+
+### `hooks/`, `utils/`, and `types/`
+
+These top-level directories are real parts of the current structure and should not be ignored.
+
+- `hooks/` is for app-level hooks that are not naturally feature-owned.
+- `utils/` is for app-level utility code that is not under `shared/`.
+- `types/` is for shared TypeScript types and typing helpers.
+
+### `assets/`
+
+Static assets and asset-specific support files live here.
+
+## Preferred Dependency Direction
+
+The codebase is not perfectly layered today, so the rules below are the preferred direction for new
+code, not a claim that every existing file already follows them.
+
+Preferred flow:
 
 ```text
-modules/ ──→ ui/
-   │            │
-   │            ▼
-   └──────→ shared/
-               │
-               ▼
-             core/
+modules/ ───────→ shared/ ───────→ core/
+    │               ▲
+    │               │
+    └────────────→ ui/
 ```
 
-- `modules/` may import from `ui/`, `shared/`, and `core/`.
-- `ui/` may import from `shared/` and `core/`.
-- `shared/` may import from `core/` only. Never from `ui/` or `modules/`.
+Guidelines:
+
 - `core/` should not import from `ui/`, `shared/`, or `modules/`.
+- `shared/` should prefer importing from `shared/` and `core/`.
+- `ui/` may import from `shared/` and `core/`.
+- `modules/` may import from `modules/`, `shared/`, `ui/`, and `core/` when needed.
 
-## Checklist for Adding a New Component
+## Current Exceptions
 
-1. **Is it feature-specific?** → `modules/<feature>/components/`
-2. **Is it reusable across features?** → `shared/components/<category>/`
-3. **Is it part of the app shell/layout?** → `ui/<category>/`
-4. **Is it a utility function, not a component?** → `shared/utils/`
-5. Keep CSS adjacent to the component (e.g., `Foo.tsx` + `Foo.css`).
-6. Keep tests adjacent (e.g., `Foo.tsx` + `Foo.test.tsx`).
-7. Use path aliases (`@ui/`, `@shared/`, `@modules/`) instead of deep relative imports.
+The codebase currently has some real exceptions to the preferred layering. The doc should be honest
+about them:
+
+- Some `shared/` components currently depend on `ui/` keyboard infrastructure.
+  Example: [`ContextMenu.tsx`](/Volumes/git/luxury-yacht/app/frontend/src/shared/components/ContextMenu.tsx).
+- Some `shared/` components currently depend on module-owned state.
+  Example: [`KubeconfigSelector.tsx`](/Volumes/git/luxury-yacht/app/frontend/src/shared/components/KubeconfigSelector.tsx).
+- `ui/favorites` is app-owned and reused across feature views, but it also depends on module and
+  core state.
+
+Do not treat those exceptions as the pattern to extend by default. When adding new code, prefer the
+dependency direction above unless there is a clear reason not to.
+
+## Practical Placement Checklist
+
+1. Is it owned by one feature? Put it in `modules/<feature>/`.
+2. Is it a reusable primitive or helper? Put it in `shared/`.
+3. Is it part of the app shell, a global surface, or an app-owned cross-feature flow? Put it in
+   `ui/`.
+4. Is it infrastructure, orchestration, persistence, or a provider? Put it in `core/`.
+5. Is it a top-level shared hook, type, or utility rather than a component? Use `hooks/`,
+   `types/`, or `utils/` as appropriate.
+
+## File Organization Conventions
+
+- Keep CSS adjacent to the component when there is a dedicated stylesheet.
+- Keep tests adjacent to implementations with `*.test.ts` or `*.test.tsx`.
+- Prefer the configured aliases such as `@core`, `@modules`, `@shared`, and `@ui` instead of deep
+  relative imports.

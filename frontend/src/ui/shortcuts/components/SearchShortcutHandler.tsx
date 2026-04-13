@@ -23,7 +23,6 @@ const SearchShortcutHandler: React.FC = () => {
     handler,
     description: 'Focus active search',
     category: 'Global',
-    view: 'global',
     priority: 1000,
   });
 

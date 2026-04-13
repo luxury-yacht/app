@@ -108,20 +108,26 @@ vi.mock('@/core/refresh/fallbacks/objectLogFallbackManager', () => ({
 
 const shortcutMocks = vi.hoisted(() => ({
   useShortcut: vi.fn(),
-  useKeyboardNavigationScope: vi.fn(),
 }));
 
 const contextMocks = vi.hoisted(() => ({
-  pushContext: vi.fn(),
-  popContext: vi.fn(),
+  registerShortcut: vi.fn(),
+  unregisterShortcut: vi.fn(),
+  getAvailableShortcuts: vi.fn().mockReturnValue([]),
+  isShortcutAvailable: vi.fn().mockReturnValue(false),
+  setEnabled: vi.fn(),
+  isEnabled: true,
+  registerSurface: vi.fn(),
+  unregisterSurface: vi.fn(),
+  updateSurface: vi.fn(),
+  dispatchNativeAction: vi.fn(() => false),
+  hasActiveBlockingSurface: vi.fn(() => false),
 }));
 
 vi.mock('@ui/shortcuts', () => ({
   useShortcut: (...args: unknown[]) => shortcutMocks.useShortcut(...args),
   useKeyboardContext: () => contextMocks,
   useSearchShortcutTarget: () => undefined,
-  useKeyboardNavigationScope: (...args: unknown[]) =>
-    shortcutMocks.useKeyboardNavigationScope(...args),
 }));
 
 vi.mock('@shared/components/dropdowns/Dropdown', () => ({
@@ -249,9 +255,11 @@ describe('LogViewer active pod synchronisation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     shortcutMocks.useShortcut.mockClear();
-    shortcutMocks.useKeyboardNavigationScope.mockClear();
-    contextMocks.pushContext.mockClear();
-    contextMocks.popContext.mockClear();
+    contextMocks.registerShortcut.mockClear();
+    contextMocks.unregisterShortcut.mockClear();
+    contextMocks.getAvailableShortcuts.mockClear();
+    contextMocks.isShortcutAvailable.mockClear();
+    contextMocks.setEnabled.mockClear();
     (LogFetcher as unknown as ViMock).mockReset?.();
     (GetLogScopeContainers as unknown as ViMock).mockReset?.();
     (GetLogScopeContainers as unknown as ViMock).mockResolvedValue(['app']);
@@ -2568,6 +2576,9 @@ describe('LogViewer active pod synchronisation', () => {
 
     // Clear the manager's buffer so the next test starts from a clean
     // slate — afterEach only resets the scoped store, not the manager.
-    logStreamManager.stop(defaultScope, true);
+    await act(async () => {
+      logStreamManager.stop(defaultScope, true);
+      await Promise.resolve();
+    });
   });
 });

@@ -87,8 +87,13 @@ const mockNamespaceState: { selectedNamespace: string | null } = {
 };
 
 vi.mock('@ui/dockable', () => ({
-  DockablePanel: ({ children }: { children: React.ReactNode }) =>
-    React.createElement(React.Fragment, null, children),
+  DockablePanel: ({
+    children,
+    panelRef,
+  }: {
+    children: React.ReactNode;
+    panelRef?: React.Ref<HTMLDivElement>;
+  }) => React.createElement('div', { ref: panelRef }, children),
 }));
 
 const domainStateMap: Record<string, DomainSnapshotState<any>> = {};
@@ -206,11 +211,13 @@ const flushAsync = async () => {
 
 const renderDiagnosticsPanel = async (
   DiagnosticsPanelComponent: React.ComponentType<any>,
-  props: Partial<{ isOpen: boolean; onClose: () => void }> = {}
+  props: Partial<{ isOpen: boolean; onClose: () => void }> = {},
+  options: { keyboardDisabled?: boolean } = {}
 ) => {
   const host = document.createElement('div');
   document.body.appendChild(host);
   const root = ReactDOM.createRoot(host);
+  const keyboardDisabled = options.keyboardDisabled ?? true;
   let currentProps = {
     isOpen: true,
     onClose: () => undefined,
@@ -220,7 +227,7 @@ const renderDiagnosticsPanel = async (
   await act(async () => {
     root.render(
       React.createElement(KeyboardProvider, {
-        disabled: true,
+        disabled: keyboardDisabled,
         children: React.createElement(DiagnosticsPanelComponent, currentProps),
       })
     );
@@ -234,7 +241,7 @@ const renderDiagnosticsPanel = async (
       await act(async () => {
         root.render(
           React.createElement(KeyboardProvider, {
-            disabled: true,
+            disabled: keyboardDisabled,
             children: React.createElement(DiagnosticsPanelComponent, currentProps),
           })
         );
@@ -1369,6 +1376,41 @@ describe('DiagnosticsPanel component', () => {
       expect(el.getAttribute('role')).toBe('tab');
     }
 
+    await rendered.unmount();
+  });
+
+  test('tabs into the first diagnostics tab when the panel is open', async () => {
+    const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
+    const rendered = await renderDiagnosticsPanel(
+      DiagnosticsPanel,
+      { isOpen: true },
+      { keyboardDisabled: false }
+    );
+    await flushAsync();
+
+    const outsideButton = document.createElement('button');
+    document.body.appendChild(outsideButton);
+    outsideButton.focus();
+    expect(document.activeElement).toBe(outsideButton);
+
+    await act(async () => {
+      outsideButton.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'Tab',
+          bubbles: true,
+          cancelable: true,
+        })
+      );
+      await Promise.resolve();
+    });
+
+    const focusableEls = rendered.container.querySelectorAll<HTMLElement>(
+      '[data-diagnostics-focusable="true"]'
+    );
+    expect(focusableEls.length).toBeGreaterThan(0);
+    expect(document.activeElement).toBe(focusableEls[0]);
+
+    outsideButton.remove();
     await rendered.unmount();
   });
 });

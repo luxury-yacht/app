@@ -8,34 +8,16 @@
 import React, { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-const shortcutContextMock = vi.hoisted(() => ({
-  pushContext: vi.fn(),
-  popContext: vi.fn(),
-}));
-
-const shortcutMock = vi.hoisted(() => ({
-  register: [] as Array<any>,
-  useKeyboardNavigationScope: vi.fn(),
-}));
+import { KeyboardProvider } from '@ui/shortcuts';
 
 const appInfoMock = vi.hoisted(() => ({
   GetAppInfo: vi.fn(),
 }));
 
-const browserMock = vi.hoisted(() => ({
+const runtimeMock = vi.hoisted(() => ({
+  eventsOn: vi.fn(),
+  eventsOff: vi.fn(),
   BrowserOpenURL: vi.fn(),
-}));
-
-vi.mock('@ui/shortcuts', () => ({
-  useShortcut: (config: unknown) => {
-    shortcutMock.register.push(config);
-    return () => {};
-  },
-  useKeyboardContext: () => shortcutContextMock,
-  useSearchShortcutTarget: () => undefined,
-  useKeyboardNavigationScope: (...args: unknown[]) =>
-    shortcutMock.useKeyboardNavigationScope(...args),
 }));
 
 vi.mock('@wailsjs/go/backend/App', () => ({
@@ -43,7 +25,9 @@ vi.mock('@wailsjs/go/backend/App', () => ({
 }));
 
 vi.mock('@wailsjs/runtime/runtime', () => ({
-  BrowserOpenURL: browserMock.BrowserOpenURL,
+  EventsOn: runtimeMock.eventsOn,
+  EventsOff: runtimeMock.eventsOff,
+  BrowserOpenURL: runtimeMock.BrowserOpenURL,
 }));
 
 vi.mock('@assets/luxury-yacht-logo.png', () => ({ __esModule: true, default: 'logo.png' }));
@@ -60,7 +44,11 @@ const renderModal = async (props: AboutModalProps) => {
   const { default: AboutModal } = await import('./AboutModal');
 
   await act(async () => {
-    root.render(<AboutModal {...props} />);
+    root.render(
+      <KeyboardProvider>
+        <AboutModal {...props} />
+      </KeyboardProvider>
+    );
   });
 
   return {
@@ -68,7 +56,11 @@ const renderModal = async (props: AboutModalProps) => {
     root,
     rerender: async (newProps: AboutModalProps) => {
       await act(async () => {
-        root.render(<AboutModal {...newProps} />);
+        root.render(
+          <KeyboardProvider>
+            <AboutModal {...newProps} />
+          </KeyboardProvider>
+        );
       });
     },
     unmount: async () => {
@@ -82,10 +74,9 @@ const renderModal = async (props: AboutModalProps) => {
 
 describe('AboutModal', () => {
   beforeEach(() => {
-    shortcutContextMock.pushContext.mockClear();
-    shortcutContextMock.popContext.mockClear();
-    shortcutMock.register = [];
-    browserMock.BrowserOpenURL.mockReset();
+    runtimeMock.eventsOn.mockReset();
+    runtimeMock.eventsOff.mockReset();
+    runtimeMock.BrowserOpenURL.mockReset();
     appInfoMock.GetAppInfo.mockReset();
     document.body.style.overflow = '';
   });
@@ -103,7 +94,7 @@ describe('AboutModal', () => {
     });
     const onClose = vi.fn();
 
-    const { container, unmount } = await renderModal({
+    const { unmount } = await renderModal({
       isOpen: true,
       onClose,
     });
@@ -112,26 +103,27 @@ describe('AboutModal', () => {
       await Promise.resolve();
     });
 
-    expect(container.textContent).toContain('Version 1.2.3');
-    expect(container.textContent).toContain('Beta expires');
-    expect(shortcutContextMock.pushContext).toHaveBeenCalledWith({ priority: 900 });
+    expect(document.body.textContent).toContain('Version 1.2.3');
+    expect(document.body.textContent).toContain('Beta expires');
     expect(document.body.style.overflow).toBe('hidden');
+    expect(document.querySelector('.about-modal')?.getAttribute('role')).toBe('dialog');
+    expect(document.querySelector('.about-modal')?.getAttribute('aria-modal')).toBe('true');
 
-    const wailsLink = Array.from(container.querySelectorAll('a')).find((link) =>
+    const wailsLink = Array.from(document.querySelectorAll('a')).find((link) =>
       link.textContent?.includes('Wails')
     );
     expect(wailsLink).toBeTruthy();
 
     await act(async () => {
-      wailsLink?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      wailsLink?.click();
     });
 
-    expect(browserMock.BrowserOpenURL).toHaveBeenCalledWith('https://wails.io/');
+    expect(runtimeMock.BrowserOpenURL).toHaveBeenCalledWith('https://wails.io/');
 
     await unmount();
   });
 
-  it('invokes escape shortcut handler only when open', async () => {
+  it('closes on Escape while open', async () => {
     appInfoMock.GetAppInfo.mockResolvedValue({
       version: '2.0.0',
       isBeta: false,
@@ -148,27 +140,10 @@ describe('AboutModal', () => {
       await Promise.resolve();
     });
 
-    const escapeShortcut = shortcutMock.register.find(
-      (entry) => (entry as { key: string }).key === 'Escape'
-    ) as { handler: () => boolean };
-    expect(escapeShortcut).toBeTruthy();
-
     act(() => {
-      const handled = escapeShortcut.handler();
-      expect(handled).toBe(true);
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     });
     expect(onClose).toHaveBeenCalledTimes(1);
-
-    shortcutMock.register = [];
-    await modal.rerender({ isOpen: false, onClose });
-    const latestEscape = shortcutMock.register.find(
-      (entry) => (entry as { key: string }).key === 'Escape'
-    ) as { handler: () => boolean };
-    expect(latestEscape).toBeTruthy();
-    act(() => {
-      const handled = latestEscape.handler();
-      expect(handled).toBe(false);
-    });
 
     await modal.unmount();
   });
@@ -234,12 +209,12 @@ describe('AboutModal', () => {
   });
 
   it('does not render when closed', async () => {
-    const { container, unmount } = await renderModal({
+    const { unmount } = await renderModal({
       isOpen: false,
       onClose: vi.fn(),
     });
 
-    expect(container.querySelector('.about-modal')).toBeNull();
+    expect(document.querySelector('.about-modal')).toBeNull();
     await unmount();
   });
 });

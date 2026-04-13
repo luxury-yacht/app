@@ -8,9 +8,9 @@
 import { useEffect, useRef } from 'react';
 import { useShortcuts } from '@ui/shortcuts';
 
-// Coordinates all keyboard shortcuts for GridTable: pushes a shortcut context,
-// disables hover when shortcuts/context menu are active, and registers the
-// navigation/open/context-menu bindings expected by table users.
+// Coordinates all keyboard shortcuts for GridTable, disables hover when
+// shortcuts/context menu are active, and registers the navigation/open/
+// context-menu bindings expected by table users.
 
 // Set-based hover suppression to handle multiple GridTable instances.
 // The class is only removed when all tables release their hold.
@@ -48,13 +48,11 @@ type UseGridTableShortcutsOptions = {
   jumpToIndex: (index: number) => boolean;
   getPageSizeRef: React.RefObject<number>;
   tableDataLength: number;
-  pushShortcutContext: (opts: { view: 'list'; tabActive: 'gridtable'; priority: number }) => void;
-  popShortcutContext: () => void;
   isContextMenuVisible: boolean;
 };
 
-// Centralizes keyboard shortcut wiring and related side effects (context push/pop,
-// hover suppression) so GridTable stays lean.
+// Centralizes keyboard shortcut wiring and related side effects (hover
+// suppression) so GridTable stays lean.
 export function useGridTableShortcuts({
   shortcutsActive,
   enableContextMenu,
@@ -64,37 +62,8 @@ export function useGridTableShortcuts({
   jumpToIndex,
   getPageSizeRef,
   tableDataLength,
-  pushShortcutContext,
-  popShortcutContext,
   isContextMenuVisible,
 }: UseGridTableShortcutsOptions) {
-  const contextActiveRef = useRef(false);
-
-  useEffect(() => {
-    if (shortcutsActive === contextActiveRef.current) {
-      return;
-    }
-    if (shortcutsActive) {
-      // Push once per focus activation to prevent context churn on re-renders.
-      pushShortcutContext({ view: 'list', tabActive: 'gridtable', priority: 400 });
-      contextActiveRef.current = true;
-      return;
-    }
-    // Pop on deactivation instead of relying on cleanup to avoid loops.
-    popShortcutContext();
-    contextActiveRef.current = false;
-  }, [popShortcutContext, pushShortcutContext, shortcutsActive]);
-
-  useEffect(() => {
-    return () => {
-      if (!contextActiveRef.current) {
-        return;
-      }
-      popShortcutContext();
-      contextActiveRef.current = false;
-    };
-  }, [popShortcutContext]);
-
   // Stable identity for this hook instance, used by the hover suppression Set.
   const suppressionIdRef = useRef<symbol | null>(null);
   if (!suppressionIdRef.current) {
@@ -171,9 +140,8 @@ export function useGridTableShortcuts({
       },
     ],
     {
-      view: 'list',
+      enabled: shortcutsActive,
       priority: 400,
-      whenTabActive: 'gridtable',
       category: 'Grid Table',
     }
   );

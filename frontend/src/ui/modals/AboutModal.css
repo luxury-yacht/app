@@ -97,6 +97,10 @@
   font-size: 0.95rem;
 }
 
+.about-link-row {
+  margin-top: 1em;
+}
+
 .about-description a {
   color: var(--color-accent);
   text-decoration: none;

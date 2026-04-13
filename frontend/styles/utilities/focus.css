@@ -24,6 +24,31 @@
    Focus Ring Variants
    ========================================================================== */
 
+/* Explicit focus ring for elements focused programmatically by keyboard-region
+   shortcuts (for example Ctrl+Alt+Arrow surface cycling). This keeps those
+   jumps visibly trackable without broadening normal mouse-focus styling. */
+.keyboard-programmatic-focus {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.sidebar-item.keyboard-programmatic-focus,
+[role="tab"].keyboard-programmatic-focus {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--color-accent);
+}
+
+.sidebar-item.keyboard-programmatic-focus {
+  border-left-color: var(--color-accent);
+}
+
+.dropdown-trigger.keyboard-programmatic-focus,
+button.keyboard-programmatic-focus,
+[role="button"].keyboard-programmatic-focus {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
 /* Inset focus ring for contained elements (sidebar items, list items) */
 .focus-ring-inset:focus-visible {
   outline: none;

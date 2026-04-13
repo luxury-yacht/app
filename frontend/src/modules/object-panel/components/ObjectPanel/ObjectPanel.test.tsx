@@ -56,7 +56,6 @@ const mockQueryNamespacePermissions = vi.fn();
 const mockUseRefreshScopedDomain = vi.fn();
 const mockUseRefreshWatcher = vi.fn();
 const mockUseShortcut = vi.fn();
-const mockUseKeyboardNavigationScope = vi.fn();
 
 const mockRefreshOrchestrator = {
   setScopedDomainEnabled: vi.fn(),
@@ -122,8 +121,8 @@ vi.mock('@/core/contexts/ObjectPanelStateContext', () => ({
 
 // Mock dockable to provide both DockablePanel and useDockablePanelContext
 vi.mock('@ui/dockable', () => ({
-  DockablePanel: ({ children }: any) => (
-    <div>
+  DockablePanel: ({ children, panelRef }: any) => (
+    <div ref={panelRef}>
       <div data-testid="dockable-body">{children}</div>
     </div>
   ),
@@ -239,8 +238,7 @@ vi.mock('@ui/shortcuts', () => ({
   useShortcut: (...args: unknown[]) => mockUseShortcut(...(args as [])),
   useShortcuts: vi.fn(),
   useSearchShortcutTarget: () => undefined,
-  useKeyboardNavigationScope: (...args: unknown[]) =>
-    mockUseKeyboardNavigationScope(...(args as [])),
+  useKeyboardSurface: vi.fn(),
 }));
 
 vi.mock('@wailsjs/go/backend/App', () => mockApp);

@@ -23,6 +23,7 @@ import {
   PanelCloseReason,
 } from './useDockablePanelState';
 import { useDockablePanelContext, useDockablePanelHost } from './DockablePanelProvider';
+import { getTabbableElements } from '@shared/components/modals/getTabbableElements';
 import { DockablePanelControls } from './DockablePanelControls';
 import { DockablePanelHeader } from './DockablePanelHeader';
 import { useDockablePanelDragResize } from './useDockablePanelDragResize';
@@ -34,6 +35,7 @@ import type { PanelSizeConstraints } from './dockablePanelLayout';
 import type { TabInfo } from './DockableTabBar';
 import type { GroupKey } from './tabGroupTypes';
 import type { DockPosition } from './useDockablePanelState';
+import { useKeyboardSurface } from '@ui/shortcuts';
 import './DockablePanel.css';
 
 export type { DockPosition };
@@ -87,6 +89,70 @@ function assignRef<T>(ref: React.Ref<T> | undefined, value: T | null) {
   } catch (error) {
     console.error('DockablePanel: failed to assign ref', error);
   }
+}
+
+function isKeyboardVisibleElement(element: HTMLElement | null): element is HTMLElement {
+  if (!element) {
+    return false;
+  }
+
+  if (element.hidden || element.getAttribute('aria-hidden') === 'true') {
+    return false;
+  }
+
+  if (element.closest('[hidden], [aria-hidden="true"], [inert]')) {
+    return false;
+  }
+
+  const style = window.getComputedStyle(element);
+  return style.display !== 'none' && style.visibility !== 'hidden';
+}
+
+function getOrderedObjectPanelTabbables(panelRoot: HTMLElement): HTMLElement[] {
+  const ordered: HTMLElement[] = [];
+  const seen = new Set<HTMLElement>();
+  const addAll = (elements: HTMLElement[]) => {
+    for (const element of elements) {
+      if (seen.has(element)) {
+        continue;
+      }
+      seen.add(element);
+      ordered.push(element);
+    }
+  };
+
+  const groupedPanelTabs = Array.from(
+    panelRoot.querySelectorAll<HTMLElement>(
+      '.dockable-panel__header .dockable-tab-bar-shell [role="tab"]'
+    )
+  ).filter(isKeyboardVisibleElement);
+  addAll(groupedPanelTabs);
+
+  const activeObjectPanelBody =
+    Array.from(
+      panelRoot.querySelectorAll<HTMLElement>('.dockable-panel__content > .object-panel-body')
+    ).find(isKeyboardVisibleElement) ?? null;
+
+  if (activeObjectPanelBody) {
+    const objectTabs = Array.from(
+      activeObjectPanelBody.querySelectorAll<HTMLElement>(
+        '[aria-label="Object Panel Tabs"] [role="tab"]'
+      )
+    ).filter(isKeyboardVisibleElement);
+    addAll(objectTabs);
+
+    const activeContent = activeObjectPanelBody.querySelector<HTMLElement>('.object-panel-content');
+    addAll(getTabbableElements(activeContent));
+  }
+
+  const panelControls = Array.from(
+    panelRoot.querySelectorAll<HTMLElement>(
+      '.dockable-panel__controls .dockable-panel__control-btn'
+    )
+  ).filter(isKeyboardVisibleElement);
+  addAll(panelControls);
+
+  return ordered;
 }
 
 const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
@@ -153,6 +219,7 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     },
     [forwardedPanelRef]
   );
+  const suppressedTabbablesRef = useRef<Map<HTMLElement, string | null>>(new Map());
   // Content ref -- allows the group leader to render this panel's children.
   const contentRef = useRef<React.ReactNode>(children);
   contentRef.current = children;
@@ -527,6 +594,102 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     ]
   );
 
+  useKeyboardSurface({
+    kind: 'panel',
+    rootRef: panelRef,
+    active: panelState.isOpen && isGroupLeader,
+    onKeyDown: (event) => {
+      if (event.key !== 'Tab') {
+        return false;
+      }
+
+      const target = event.target as HTMLElement | null;
+      const panelRoot = panelRef.current;
+      if (!target || !panelRoot?.contains(target)) {
+        return false;
+      }
+
+      const tabbables = panelRoot.classList.contains('object-panel-dockable')
+        ? getOrderedObjectPanelTabbables(panelRoot)
+        : getTabbableElements(panelRoot);
+      if (tabbables.length === 0) {
+        return false;
+      }
+
+      const currentIndex = tabbables.findIndex((item) => item === target || item.contains(target));
+      if (currentIndex === -1) {
+        const fallbackTarget = event.shiftKey ? tabbables[tabbables.length - 1] : tabbables[0];
+        fallbackTarget.focus();
+        return true;
+      }
+
+      if (event.shiftKey) {
+        const previousIndex = currentIndex === 0 ? tabbables.length - 1 : currentIndex - 1;
+        tabbables[previousIndex].focus();
+        return true;
+      }
+
+      const nextIndex = currentIndex === tabbables.length - 1 ? 0 : currentIndex + 1;
+      tabbables[nextIndex].focus();
+      return true;
+    },
+  });
+
+  const restoreSuppressedTabbables = useCallback(() => {
+    for (const [element, originalTabIndex] of suppressedTabbablesRef.current.entries()) {
+      if (!element.isConnected) {
+        continue;
+      }
+      if (originalTabIndex === null) {
+        element.removeAttribute('tabindex');
+      } else {
+        element.setAttribute('tabindex', originalTabIndex);
+      }
+    }
+    suppressedTabbablesRef.current.clear();
+  }, []);
+
+  const suppressPanelTabbables = useCallback(() => {
+    const panelRoot = panelRef.current;
+    if (!panelRoot || suppressedTabbablesRef.current.size > 0) {
+      return;
+    }
+
+    for (const element of getTabbableElements(panelRoot)) {
+      suppressedTabbablesRef.current.set(element, element.getAttribute('tabindex'));
+      element.setAttribute('tabindex', '-1');
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!panelState.isOpen || !isGroupLeader) {
+      restoreSuppressedTabbables();
+      return;
+    }
+
+    const syncPanelTabbables = () => {
+      const panelRoot = panelRef.current;
+      if (!panelRoot) {
+        return;
+      }
+
+      const activeElement = document.activeElement as HTMLElement | null;
+      const panelHasFocus = !!activeElement && panelRoot.contains(activeElement);
+      if (panelHasFocus) {
+        restoreSuppressedTabbables();
+      } else {
+        suppressPanelTabbables();
+      }
+    };
+
+    syncPanelTabbables();
+    document.addEventListener('focusin', syncPanelTabbables);
+    return () => {
+      document.removeEventListener('focusin', syncPanelTabbables);
+      restoreSuppressedTabbables();
+    };
+  }, [isGroupLeader, panelState.isOpen, restoreSuppressedTabbables, suppressPanelTabbables]);
+
   // Memoize panel classes and styles
   const panelClassName = useMemo(() => {
     const classes = ['dockable-panel', `dockable-panel--${panelState.position}`, className];
@@ -639,6 +802,8 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
       role="dialog"
       aria-label={activeTitle}
       aria-modal={panelState.position === 'floating'}
+      data-group-key={groupKey ?? undefined}
+      data-active-panel-id={groupInfo?.activeTab ?? panelId}
     >
       {isGroupLeader && (
         <>

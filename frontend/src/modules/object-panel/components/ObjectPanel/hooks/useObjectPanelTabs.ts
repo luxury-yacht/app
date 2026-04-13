@@ -121,7 +121,6 @@ export const useObjectPanelTabs = ({
     description: 'Close object panel',
     category: 'Object Panel',
     enabled: isOpen,
-    view: 'global',
     priority: isOpen ? KeyboardShortcutPriority.OBJECT_PANEL_ESCAPE : 0,
   });
 
@@ -147,7 +146,6 @@ export const useObjectPanelTabs = ({
 
   useShortcuts(tabShortcuts, {
     category: 'Object Panel',
-    view: 'global',
     priority: isOpen ? 20 : 0,
   });
 
