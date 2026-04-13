@@ -1156,6 +1156,26 @@ describe('LogViewer active pod synchronisation', () => {
     expect(container.textContent).toContain('[11:00:00.123] [web-1/app] hello');
   });
 
+  it('keeps the workload pod metadata when the log line is empty', async () => {
+    setAppPreferencesForTesting({ logApiTimestampFormat: 'HH:mm:ss.SSS' });
+    seedLogSnapshot([
+      {
+        pod: 'web-1',
+        container: 'app',
+        line: '',
+        timestamp: '2024-05-01T11:00:00.123456Z',
+        isInit: false,
+      },
+    ]);
+
+    await renderViewer({ activePodNames: ['web-1'] });
+
+    const lines = Array.from(container.querySelectorAll('.pod-log-line')).map((element) =>
+      element.textContent?.replace(/\s+/g, ' ').trim()
+    );
+    expect(lines).toEqual(['[11:00:00.123] [web-1/app] [container emitted an empty log]']);
+  });
+
   it('copies the configured API timestamp format in raw and parsed views', async () => {
     setAppPreferencesForTesting({ logApiTimestampFormat: 'HH:mm:ss.SSS' });
     seedLogSnapshot([
@@ -1392,6 +1412,36 @@ describe('LogViewer active pod synchronisation', () => {
       el.textContent?.replace(/\s+/g, ' ').trim()
     );
     expect(lines).toEqual(['[2024-05-01T12:30:00Z] only container line']);
+  });
+
+  it('shows the empty-log placeholder for single pod logs', async () => {
+    (GetLogScopeContainers as unknown as ViMock).mockResolvedValue(['app']);
+    seedLogSnapshot(
+      [
+        {
+          pod: 'api',
+          container: 'app',
+          line: '',
+          timestamp: '2024-05-01T12:30:00Z',
+          isInit: false,
+        },
+      ],
+      buildLogScope('team-a:pod:api')
+    );
+
+    await renderViewer({
+      resourceKind: 'Pod',
+      resourceName: 'api',
+      activePodNames: ['api'],
+    });
+
+    await waitForMockCalls(GetLogScopeContainers as unknown as ViMock, 1);
+    await flushAsync();
+
+    const lines = Array.from(container.querySelectorAll('.pod-log-line')).map((el) =>
+      el.textContent?.replace(/\s+/g, ' ').trim()
+    );
+    expect(lines).toEqual(['[2024-05-01T12:30:00Z] [container emitted an empty log]']);
   });
 
   it('filters single pod logs by selected container', async () => {
@@ -2280,10 +2330,14 @@ describe('LogViewer active pod synchronisation', () => {
     await flushAsync();
 
     const firstPodButton = await waitForElement(() =>
-      container.querySelector<HTMLButtonElement>('button[aria-label="Show only logs from pod web-1"]')
+      container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Show only logs from pod web-1"]'
+      )
     );
     const secondPodButton = await waitForElement(() =>
-      container.querySelector<HTMLButtonElement>('button[aria-label="Show only logs from pod web-2"]')
+      container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Show only logs from pod web-2"]'
+      )
     );
 
     expect(firstPodButton.style.getPropertyValue('--pod-color')).toBeTruthy();

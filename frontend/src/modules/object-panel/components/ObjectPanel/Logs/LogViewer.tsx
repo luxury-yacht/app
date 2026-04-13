@@ -210,6 +210,7 @@ const DEBUG_FILTER_PREFIX = 'debug:';
 const TARGET_LIMIT_WARNING_PATTERN =
   /^Logs are hidden for (\d+) containers because the (per-tab|global) limit of (\d+) was reached\. Using filters to reduce the number of containers may clear this message\.$/;
 const WORKLOAD_RAW_LOG_PREFIX_PATTERN = /^(?:(\[[^\]]+\]\s*))?\[([^\/]+)\/([^\]]+)\]\s*(.*)/;
+const EMPTY_CONTAINER_LOG_PLACEHOLDER = '[container emitted an empty log]';
 
 const mergeTargetLimitWarnings = (warnings: string[]): string[] => {
   if (warnings.length < 2) {
@@ -1357,6 +1358,8 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
               ? JSON.stringify(parsed, null, 2)
               : normalizedLine
             : normalizedLine;
+      const displayContent =
+        lineContent.trim().length > 0 ? lineContent : EMPTY_CONTAINER_LOG_PLACEHOLDER;
       const timestamp = formatTimestampForMode(
         entry.timestamp ?? '',
         timestampMode,
@@ -1371,9 +1374,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
           entry.isInit,
           Boolean(entry.isEphemeral)
         );
-        const formatted = lineContent.trim()
-          ? `[${entry.pod}/${containerLabel}] ${lineContent}`
-          : lineContent;
+        const formatted = `[${entry.pod}/${containerLabel}] ${displayContent}`;
         return timestampPrefix + formatted;
       }
 
@@ -1386,11 +1387,11 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
           entry.isInit,
           Boolean(entry.isEphemeral)
         );
-        const formatted = lineContent.trim() ? `[${containerLabel}] ${lineContent}` : lineContent;
+        const formatted = `[${containerLabel}] ${displayContent}`;
         return timestampPrefix + formatted;
       }
 
-      return timestampPrefix + lineContent;
+      return timestampPrefix + displayContent;
     });
   }, [
     displayMode,
@@ -1625,8 +1626,8 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
           selectedContainerFilterCount !== 1 &&
           !(selectedContainerFilterCount === 0 && singlePodSelectableContainerCount === 1);
         if (timestampPrefix || showContainerMeta) {
-          const containerLabel = containerMatch ? containerMatch[1] : '';
-          const remainder = containerMatch ? containerMatch[2] : workingLine;
+          const containerLabel = showContainerMeta && containerMatch ? containerMatch[1] : '';
+          const remainder = showContainerMeta && containerMatch ? containerMatch[2] : workingLine;
           return (
             <div className="pod-log-line">
               {timestampPrefix && <span className="pod-log-metadata">{timestampPrefix}</span>}
