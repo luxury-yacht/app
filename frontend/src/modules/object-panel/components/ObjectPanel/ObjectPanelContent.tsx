@@ -312,6 +312,7 @@ export function ObjectPanelContent({
           fallback={(_, reset) => <TabErrorFallback tabName="Logs" reset={reset} />}
         >
           <NodeLogsTab
+            panelId={panelId}
             nodeName={objectData?.name || ''}
             clusterId={objectData?.clusterId ?? null}
             isActive={isPanelOpen && activeTab === 'logs'}

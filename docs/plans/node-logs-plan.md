@@ -89,6 +89,16 @@ Suggested backend behavior:
 - optionally probe known subpaths like `journal/`
 - return normalized sources plus a reason when unsupported
 
+Suggested future refresh behavior:
+
+- keep node-log fetch refresh-based rather than stream-based
+- use `sinceTime` for incremental refresh when possible, for both service-backed and file-backed
+  node log sources
+- append newly returned lines to the current view instead of replacing the whole buffer
+- dedupe overlapping boundary lines because `sinceTime` is inclusive
+- fall back to a full reload when the selected source changes, the response is inconsistent, or the
+  app cannot safely determine the append boundary
+
 ### 3. Tab Gating
 
 Follow the existing shell pattern:
@@ -162,6 +172,8 @@ V1 should fetch one source at a time.
 
 - [ ] Cache discovery results per panel or per node identity to avoid duplicate probes.
 - [ ] Define refresh behavior for discovery vs. log content fetch.
+- [ ] Add best-effort append-style refresh using `sinceTime`, with dedupe and fallback to full
+      reload.
 - [ ] Verify disabled tab behavior across cluster switches and panel remounts.
 - [ ] Confirm no cluster-wide assumptions leak into node-specific discovery.
 - [ ] Add documentation for supported and unsupported cluster configurations.
@@ -187,6 +199,8 @@ Usable source rules should be conservative in v1:
 - Service-style queries such as `?query=kubelet` may work on some nodes and fail on others.
 - RBAC success does not guarantee kubelet log query is enabled or useful.
 - Provider-specific entries may need normalization without overfitting to one platform.
+- Node log query is snapshot-based rather than stream-based, so append-style refresh is only
+  best-effort and may duplicate or miss boundary lines without careful handling.
 
 ## Open Questions
 
@@ -207,3 +221,14 @@ Ship the narrowest useful version first:
 4. Display raw logs with text filtering.
 
 That gets the core behavior into the app while keeping provider-specific edge cases contained.
+
+## Future Enhancements
+
+- Improve refresh from full-tail reloads to best-effort incremental append.
+- Track the last successful refresh time per selected source and request newer entries with
+  `sinceTime`.
+- Apply this to both service-backed and file-backed node sources; do not special-case journald
+  only.
+- Keep a small overlap window and dedupe appended lines at the boundary.
+- Retain a safe fallback to full reload when a source does not behave consistently enough for
+  append-style refresh.

@@ -4,6 +4,7 @@ import {
   useDeferredValue,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import GridTable, {
@@ -27,6 +28,7 @@ import { CaseSensitiveIcon } from '@shared/components/icons/MenuIcons';
 import type { LogDisplayMode, CapabilityState } from '../types';
 import { containsAnsi, parseAnsiTextSegments, stripAnsi } from '../Logs/ansi';
 import { formatParsedValue, tryParseJSONObject } from '../Logs/jsonLogs';
+import { getLogViewerScrollTop, setLogViewerScrollTop } from '../Logs/logViewerPrefsCache';
 import type { ParsedLogEntry } from '../Logs/logViewerReducer';
 import { fetchNodeLogs, type NodeLogSource } from './nodeLogsApi';
 import '../Logs/LogViewer.css';
@@ -65,6 +67,7 @@ const buildSearchRegex = (
 const getParsedRowKey = (item: ParsedLogEntry): string => `log-${item.seq ?? item.lineNumber}`;
 
 interface NodeLogsTabProps {
+  panelId: string;
   nodeName: string;
   clusterId?: string | null;
   isActive: boolean;
@@ -73,6 +76,7 @@ interface NodeLogsTabProps {
 }
 
 const NodeLogsTab = ({
+  panelId,
   nodeName,
   clusterId,
   isActive,
@@ -95,7 +99,13 @@ const NodeLogsTab = ({
   const [regexMatches, setRegexMatches] = useState(false);
   const [copyFeedback, setCopyFeedback] = useState<CopyFeedback>('idle');
   const [displayMode, setDisplayMode] = useState<LogDisplayMode>('raw');
+  const [parsedLogs, setParsedLogs] = useState<ParsedLogEntry[]>([]);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(() => new Set<string>());
+  const logsContentRef = useRef<HTMLDivElement>(null);
+  const scrollRestoredRef = useRef(false);
+  const wasAtBottomRef = useRef(true);
+  const previousSourcePathRef = useRef<string | null>(null);
+  const forceTailRestoreRef = useRef(true);
   const deferredTextFilter = useDeferredValue(textFilter);
   const sourceOptions = useMemo<DropdownOption[]>(
     () => sources.map((source) => ({ value: source.path, label: source.label })),
@@ -255,20 +265,34 @@ const NodeLogsTab = ({
     }
   }, [canParseLogs, displayMode, filteredLines.length, updateDisplayMode]);
 
+  useEffect(() => {
+    if (!isParsedView) {
+      setParsedLogs([]);
+      return;
+    }
+
+    if (!parsedCandidates.length) {
+      setParsedLogs([]);
+      return;
+    }
+
+    setParsedLogs(parsedCandidates);
+  }, [isParsedView, parsedCandidates]);
+
   const derivedFieldKeys = useMemo(() => {
-    if (parsedCandidates.length === 0) {
+    if (parsedLogs.length === 0) {
       return [] as string[];
     }
 
     const seen = new Set<string>();
-    parsedCandidates.forEach((entry) => {
+    parsedLogs.forEach((entry) => {
       Object.keys(entry.data).forEach((key) => {
         seen.add(key);
       });
     });
 
     return Array.from(seen).sort();
-  }, [parsedCandidates]);
+  }, [parsedLogs]);
 
   const tableColumns = useMemo(() => {
     if (derivedFieldKeys.length === 0) {
@@ -351,19 +375,19 @@ const NodeLogsTab = ({
   );
 
   const parsedCsv = useMemo(() => {
-    if (!isParsedView || parsedCandidates.length === 0 || tableColumns.length === 0) {
+    if (!isParsedView || parsedLogs.length === 0 || tableColumns.length === 0) {
       return '';
     }
 
     const headerRow = tableColumns.map((column) =>
       escapeCsvCell(typeof column.header === 'string' ? column.header : column.key)
     );
-    const dataRows = parsedCandidates.map((entry) =>
+    const dataRows = parsedLogs.map((entry) =>
       tableColumns.map((column) => escapeCsvCell(formatParsedValue(entry.data[column.key])))
     );
 
     return [headerRow, ...dataRows].map((row) => row.join(',')).join('\n');
-  }, [isParsedView, parsedCandidates, tableColumns]);
+  }, [isParsedView, parsedLogs, tableColumns]);
 
   const displayedText = useMemo(
     () => (isParsedView ? parsedCsv : displayLines.join('\n')),
@@ -373,11 +397,127 @@ const NodeLogsTab = ({
     () => filteredLines.some((line) => containsAnsi(line)),
     [filteredLines]
   );
+  const hasLoadedContent = content.length > 0;
   const hasCopyableContent = displayedText.length > 0;
   const displayedLogCount = isParsedView
-    ? parsedCandidates.length
+    ? parsedLogs.length
     : filteredLines.filter((line) => line.length > 0).length;
   const countLabel = `${displayedLogCount} matching log${displayedLogCount === 1 ? '' : 's'}`;
+
+  const getScrollContainer = useCallback((): HTMLElement | null => {
+    const root = logsContentRef.current;
+    if (!root) {
+      return null;
+    }
+    if (isParsedView) {
+      return root.querySelector<HTMLElement>('.gridtable-wrapper');
+    }
+    return root;
+  }, [isParsedView]);
+
+  useEffect(() => {
+    const sourcePath = selectedSource?.path ?? null;
+    if (sourcePath === previousSourcePathRef.current) {
+      return;
+    }
+
+    previousSourcePathRef.current = sourcePath;
+    scrollRestoredRef.current = false;
+    wasAtBottomRef.current = true;
+    forceTailRestoreRef.current = true;
+  }, [selectedSource?.path]);
+
+  useEffect(() => {
+    const scrollEl = getScrollContainer();
+    if (!scrollEl) {
+      return;
+    }
+
+    const handler = () => {
+      wasAtBottomRef.current =
+        scrollEl.scrollTop + scrollEl.clientHeight >= scrollEl.scrollHeight - 16;
+      if (!scrollRestoredRef.current) {
+        return;
+      }
+      setLogViewerScrollTop(panelId, scrollEl.scrollTop);
+    };
+
+    scrollEl.addEventListener('scroll', handler, { passive: true });
+    return () => {
+      scrollEl.removeEventListener('scroll', handler);
+    };
+  }, [getScrollContainer, panelId]);
+
+  useEffect(() => {
+    if (scrollRestoredRef.current) {
+      return;
+    }
+
+    const rowCount = isParsedView ? parsedLogs.length : renderedDisplayRows.length;
+    if (rowCount === 0) {
+      return;
+    }
+
+    const scrollEl = getScrollContainer();
+    if (!scrollEl) {
+      return;
+    }
+    if (scrollEl.scrollHeight <= scrollEl.clientHeight) {
+      return;
+    }
+
+    const maxScrollTop = scrollEl.scrollHeight - scrollEl.clientHeight;
+    const savedScrollTop = forceTailRestoreRef.current ? undefined : getLogViewerScrollTop(panelId);
+    const targetScrollTop =
+      savedScrollTop != null ? Math.min(savedScrollTop, maxScrollTop) : maxScrollTop;
+
+    scrollEl.scrollTop = targetScrollTop;
+    scrollRestoredRef.current = true;
+    forceTailRestoreRef.current = false;
+  }, [getScrollContainer, isParsedView, panelId, parsedLogs.length, renderedDisplayRows.length]);
+
+  useEffect(() => {
+    if (!wasAtBottomRef.current || !scrollRestoredRef.current) {
+      return;
+    }
+
+    const scrollEl = getScrollContainer();
+    if (!scrollEl) {
+      return;
+    }
+
+    let rafId: number | undefined;
+    const scrollToBottom = () => {
+      const element = getScrollContainer();
+      if (!element) {
+        return;
+      }
+      element.scrollTop = element.scrollHeight;
+    };
+
+    if (isParsedView) {
+      let attempts = 0;
+      const maxAttempts = 20;
+      const checkAndScroll = () => {
+        const element = getScrollContainer();
+        if (element && element.scrollHeight > element.clientHeight) {
+          rafId = requestAnimationFrame(scrollToBottom);
+        } else if (attempts < maxAttempts) {
+          attempts += 1;
+          rafId = requestAnimationFrame(checkAndScroll);
+        }
+      };
+      rafId = requestAnimationFrame(checkAndScroll);
+    } else {
+      rafId = requestAnimationFrame(scrollToBottom);
+    }
+
+    return () => {
+      if (rafId != null) {
+        cancelAnimationFrame(rafId);
+      }
+    };
+  }, [getScrollContainer, isParsedView, parsedLogs.length, renderedDisplayRows.length]);
 
   const handleParsedTableClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
     const row = (event.target as HTMLElement | null)?.closest<HTMLElement>('.gridtable-row');
@@ -725,10 +865,10 @@ const NodeLogsTab = ({
           </div>
         )}
 
-        <div className="pod-logs-content">
+        <div ref={logsContentRef} className="pod-logs-content">
           {error ? (
             <div className="pod-logs-display-error">{error}</div>
-          ) : loading ? (
+          ) : loading && !hasLoadedContent ? (
             <div className="pod-logs-display-loading">Loading logs…</div>
           ) : hasInvalidRegex ? (
             <div className="pod-logs-display-error">Enter a valid regular expression.</div>
@@ -739,14 +879,14 @@ const NodeLogsTab = ({
                 : 'No log lines match the current filter.'}
             </div>
           ) : isParsedView ? (
-            parsedCandidates.length === 0 ? (
+            !canParseLogs ? (
               <div className="pod-logs-display-loading">
                 No JSON log lines match the current filter.
               </div>
             ) : (
               <div onClick={handleParsedTableClick} style={{ height: '100%' }}>
                 <GridTable
-                  data={parsedCandidates}
+                  data={parsedLogs}
                   columns={tableColumns}
                   keyExtractor={(item: ParsedLogEntry) => getParsedRowKey(item)}
                   onRowClick={handleParsedRowKeyboard}

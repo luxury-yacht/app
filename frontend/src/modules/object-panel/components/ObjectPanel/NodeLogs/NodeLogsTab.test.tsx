@@ -4,6 +4,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { KeyboardProvider } from '@ui/shortcuts';
 
 import NodeLogsTab from './NodeLogsTab';
+import { resetLogViewerPrefsCacheForTesting } from '../Logs/logViewerPrefsCache';
 
 const mockFetchNodeLogs = vi.fn();
 
@@ -42,6 +43,7 @@ describe('NodeLogsTab', () => {
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
     mockFetchNodeLogs.mockReset();
+    resetLogViewerPrefsCacheForTesting();
   });
 
   afterEach(() => {
@@ -58,6 +60,7 @@ describe('NodeLogsTab', () => {
       root.render(
         <KeyboardProvider>
           <NodeLogsTab
+            panelId="panel-1"
             nodeName="node-a"
             clusterId="alpha:ctx"
             isActive
@@ -338,5 +341,165 @@ describe('NodeLogsTab', () => {
     });
 
     expect(container.textContent).toContain('Checking if logs are available for this node...');
+  });
+
+  it('defaults raw node logs to the newest visible content', async () => {
+    const originalScrollHeight = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      'scrollHeight'
+    );
+    const originalClientHeight = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      'clientHeight'
+    );
+
+    Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
+      configurable: true,
+      get: () => 500,
+    });
+    Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
+      configurable: true,
+      get: () => 100,
+    });
+
+    mockFetchNodeLogs.mockResolvedValue({
+      source: sources[0],
+      sourcePath: sources[0].path,
+      content: 'line one\nline two\nline three',
+    });
+
+    await renderTab();
+
+    await act(async () => {
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    });
+
+    const content = container.querySelector<HTMLElement>('.pod-logs-content');
+    expect(content).toBeTruthy();
+    expect(content!.scrollTop).toBe(500);
+
+    if (originalScrollHeight) {
+      Object.defineProperty(HTMLElement.prototype, 'scrollHeight', originalScrollHeight);
+    } else {
+      Reflect.deleteProperty(HTMLElement.prototype, 'scrollHeight');
+    }
+    if (originalClientHeight) {
+      Object.defineProperty(HTMLElement.prototype, 'clientHeight', originalClientHeight);
+    } else {
+      Reflect.deleteProperty(HTMLElement.prototype, 'clientHeight');
+    }
+  });
+
+  it('resets to the newest content when switching to a different node log source', async () => {
+    const originalScrollHeight = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      'scrollHeight'
+    );
+    const originalClientHeight = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      'clientHeight'
+    );
+
+    Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
+      configurable: true,
+      get: () => 500,
+    });
+    Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
+      configurable: true,
+      get: () => 100,
+    });
+
+    mockFetchNodeLogs.mockImplementation(
+      async (_clusterId: string, _nodeName: string, request: { sourcePath: string }) => ({
+        source: sources.find((source) => source.path === request.sourcePath) ?? sources[0],
+        sourcePath: request.sourcePath,
+        content: `content for ${request.sourcePath}`,
+      })
+    );
+
+    await renderTab();
+
+    const content = container.querySelector<HTMLElement>('.pod-logs-content');
+    expect(content).toBeTruthy();
+
+    await act(async () => {
+      content!.scrollTop = 40;
+      content!.dispatchEvent(new Event('scroll', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    const trigger = container.querySelector('.pod-logs-selector-dropdown .dropdown-trigger');
+    expect(trigger).toBeTruthy();
+
+    await act(async () => {
+      trigger!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    const secondOption = container.querySelectorAll('.dropdown-option').item(1);
+    expect(secondOption?.textContent).toContain('journal / containerd');
+
+    await act(async () => {
+      secondOption.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    });
+
+    expect(content!.scrollTop).toBe(500);
+
+    if (originalScrollHeight) {
+      Object.defineProperty(HTMLElement.prototype, 'scrollHeight', originalScrollHeight);
+    } else {
+      Reflect.deleteProperty(HTMLElement.prototype, 'scrollHeight');
+    }
+    if (originalClientHeight) {
+      Object.defineProperty(HTMLElement.prototype, 'clientHeight', originalClientHeight);
+    } else {
+      Reflect.deleteProperty(HTMLElement.prototype, 'clientHeight');
+    }
+  });
+
+  it('keeps existing log content mounted during refresh', async () => {
+    let refreshResolve: ((value: unknown) => void) | null = null;
+    mockFetchNodeLogs
+      .mockResolvedValueOnce({
+        source: sources[0],
+        sourcePath: sources[0].path,
+        content: 'line one\nline two',
+      })
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            refreshResolve = resolve;
+          })
+      );
+
+    await renderTab();
+
+    const refreshButton = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Refresh'
+    );
+    expect(refreshButton).toBeTruthy();
+
+    await act(async () => {
+      refreshButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('.pod-logs-text')?.textContent).toContain('line one');
+    expect(container.textContent).not.toContain('Loading logs…');
+
+    await act(async () => {
+      refreshResolve?.({
+        source: sources[0],
+        sourcePath: sources[0].path,
+        content: 'line one\nline two\nline three',
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('.pod-logs-text')?.textContent).toContain('line three');
   });
 });
