@@ -91,6 +91,70 @@ function assignRef<T>(ref: React.Ref<T> | undefined, value: T | null) {
   }
 }
 
+function isKeyboardVisibleElement(element: HTMLElement | null): element is HTMLElement {
+  if (!element) {
+    return false;
+  }
+
+  if (element.hidden || element.getAttribute('aria-hidden') === 'true') {
+    return false;
+  }
+
+  if (element.closest('[hidden], [aria-hidden="true"], [inert]')) {
+    return false;
+  }
+
+  const style = window.getComputedStyle(element);
+  return style.display !== 'none' && style.visibility !== 'hidden';
+}
+
+function getOrderedObjectPanelTabbables(panelRoot: HTMLElement): HTMLElement[] {
+  const ordered: HTMLElement[] = [];
+  const seen = new Set<HTMLElement>();
+  const addAll = (elements: HTMLElement[]) => {
+    for (const element of elements) {
+      if (seen.has(element)) {
+        continue;
+      }
+      seen.add(element);
+      ordered.push(element);
+    }
+  };
+
+  const groupedPanelTabs = Array.from(
+    panelRoot.querySelectorAll<HTMLElement>(
+      '.dockable-panel__header .dockable-tab-bar-shell [role="tab"]'
+    )
+  ).filter(isKeyboardVisibleElement);
+  addAll(groupedPanelTabs);
+
+  const activeObjectPanelBody =
+    Array.from(
+      panelRoot.querySelectorAll<HTMLElement>('.dockable-panel__content > .object-panel-body')
+    ).find(isKeyboardVisibleElement) ?? null;
+
+  if (activeObjectPanelBody) {
+    const objectTabs = Array.from(
+      activeObjectPanelBody.querySelectorAll<HTMLElement>(
+        '[aria-label="Object Panel Tabs"] [role="tab"]'
+      )
+    ).filter(isKeyboardVisibleElement);
+    addAll(objectTabs);
+
+    const activeContent = activeObjectPanelBody.querySelector<HTMLElement>('.object-panel-content');
+    addAll(getTabbableElements(activeContent));
+  }
+
+  const panelControls = Array.from(
+    panelRoot.querySelectorAll<HTMLElement>(
+      '.dockable-panel__controls .dockable-panel__control-btn'
+    )
+  ).filter(isKeyboardVisibleElement);
+  addAll(panelControls);
+
+  return ordered;
+}
+
 const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
   const {
     panelId,
@@ -544,27 +608,29 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
         return false;
       }
 
-      const tabbables = getTabbableElements(panelRoot);
+      const tabbables = panelRoot.classList.contains('object-panel-dockable')
+        ? getOrderedObjectPanelTabbables(panelRoot)
+        : getTabbableElements(panelRoot);
       if (tabbables.length === 0) {
         return false;
       }
 
-      const firstTabbable = tabbables[0];
-      const lastTabbable = tabbables[tabbables.length - 1];
-      if (event.shiftKey) {
-        if (target === firstTabbable) {
-          lastTabbable.focus();
-          return true;
-        }
-        return false;
-      }
-
-      if (target === lastTabbable) {
-        firstTabbable.focus();
+      const currentIndex = tabbables.findIndex((item) => item === target || item.contains(target));
+      if (currentIndex === -1) {
+        const fallbackTarget = event.shiftKey ? tabbables[tabbables.length - 1] : tabbables[0];
+        fallbackTarget.focus();
         return true;
       }
 
-      return false;
+      if (event.shiftKey) {
+        const previousIndex = currentIndex === 0 ? tabbables.length - 1 : currentIndex - 1;
+        tabbables[previousIndex].focus();
+        return true;
+      }
+
+      const nextIndex = currentIndex === tabbables.length - 1 ? 0 : currentIndex + 1;
+      tabbables[nextIndex].focus();
+      return true;
     },
   });
 

@@ -41,6 +41,65 @@ For each key event, the provider:
 4. Falls through to registered global shortcuts only if no surface owns it.
 5. Preserves native browser behavior when nothing handles the key.
 
+## Navigation Policy
+
+There are two different navigation mechanisms:
+
+- `Ctrl+Alt+Arrow` moves between major surfaces.
+- `Tab` moves within the currently focused surface.
+
+This split is intentional. `Tab` is local navigation, not cross-surface navigation.
+
+### Cross-Surface Navigation
+
+`Ctrl+Alt+Left` / `Ctrl+Alt+Up` and `Ctrl+Alt+Right` / `Ctrl+Alt+Down` move between:
+
+- the main app window
+- any open panels
+
+When cycling back out of panels into the main app, focus returns to the last focused top-level app region.
+
+### Main App Tab Order
+
+When the main app has focus, `Tab` should move through:
+
+- header
+- sidebar
+- current view
+
+`Shift+Tab` should reverse through the same top-level order.
+
+### Panel Tab Order
+
+When a panel has focus, `Tab` must stay inside that panel and never escape the panel.
+
+Panel-local order is:
+
+- grouped panel tab bar
+- object tab bar
+- targets within the active tab
+- panel controls (`dock`, `float`, `maximize`, `close`)
+
+This rule matters most for grouped floating object panels. The visible grouped panel shell must be the single owner of panel-local `Tab` behavior.
+
+### Modal Tab Order
+
+When a modal opens, it should take focus automatically.
+
+While a modal is open:
+
+- `Tab` must never escape the modal
+- focus stays inside the topmost modal
+
+### Command Palette Tab Order
+
+When the command palette opens, it should take focus automatically.
+
+While the command palette is open:
+
+- `Tab` must never escape the command palette
+- the palette owns local keyboard navigation until it closes
+
 ## Shared APIs
 
 Use these first:

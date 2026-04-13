@@ -78,6 +78,12 @@ const renderPanel = async (ui: React.ReactElement) => {
   };
 };
 
+const getVisiblePanelSection = (selector: string) =>
+  Array.from(document.querySelectorAll<HTMLElement>(selector)).find((element) => {
+    const style = window.getComputedStyle(element);
+    return style.display !== 'none' && style.visibility !== 'hidden';
+  }) ?? null;
+
 describe('DockablePanel', () => {
   beforeAll(() => {
     (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
@@ -234,6 +240,120 @@ describe('DockablePanel', () => {
     });
 
     expect(document.activeElement).toBe(lastTabbable);
+
+    unmount();
+  });
+
+  it('uses the grouped object-panel tab order from the visible active tab content', async () => {
+    const ObjectPanelShell = ({
+      panelId,
+      title,
+      tabPrefix,
+      contentLabel,
+    }: {
+      panelId: string;
+      title: string;
+      tabPrefix: string;
+      contentLabel: string;
+    }) => (
+      <DockablePanel
+        panelId={panelId}
+        title={title}
+        defaultPosition="right"
+        isOpen
+        className="object-panel-dockable"
+        contentClassName="object-panel-body"
+      >
+        <div className="object-panel-header">
+          <span>{title} header</span>
+        </div>
+        <div aria-label="Object Panel Tabs">
+          <div role="tab" tabIndex={-1}>
+            {tabPrefix} Details
+          </div>
+          <div role="tab" tabIndex={-1}>
+            {tabPrefix} Logs
+          </div>
+        </div>
+        <div className="object-panel-content">
+          <button type="button">{contentLabel}</button>
+        </div>
+      </DockablePanel>
+    );
+
+    const { unmount } = await renderPanel(
+      <>
+        <ObjectPanelShell
+          panelId="grouped-object-panel-a"
+          title="Panel A"
+          tabPrefix="A"
+          contentLabel="Content A"
+        />
+        <ObjectPanelShell
+          panelId="grouped-object-panel-b"
+          title="Panel B"
+          tabPrefix="B"
+          contentLabel="Content B"
+        />
+      </>
+    );
+
+    const groupedTabs = Array.from(
+      document.querySelectorAll<HTMLElement>(
+        '.dockable-panel__header .dockable-tab-bar-shell [role="tab"]'
+      )
+    );
+    expect(groupedTabs).toHaveLength(2);
+
+    const secondGroupedTab =
+      groupedTabs.find((tab) => tab.textContent?.includes('Panel B')) ?? null;
+    expect(secondGroupedTab).toBeTruthy();
+
+    await act(async () => {
+      secondGroupedTab?.click();
+      await Promise.resolve();
+    });
+
+    expect(getVisiblePanelSection('.object-panel-body')?.textContent).toContain('Content B');
+
+    await act(async () => {
+      secondGroupedTab?.focus();
+      secondGroupedTab?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })
+      );
+      await Promise.resolve();
+    });
+
+    expect(document.activeElement?.textContent).toContain('B Details');
+
+    await act(async () => {
+      (document.activeElement as HTMLElement | null)?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })
+      );
+      await Promise.resolve();
+    });
+
+    expect(document.activeElement?.textContent).toContain('B Logs');
+
+    await act(async () => {
+      (document.activeElement as HTMLElement | null)?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })
+      );
+      await Promise.resolve();
+    });
+
+    expect((document.activeElement as HTMLElement | null)?.textContent).toContain('Content B');
+
+    await act(async () => {
+      (document.activeElement as HTMLElement | null)?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })
+      );
+      await Promise.resolve();
+    });
+
+    expect((document.activeElement as HTMLElement | null)?.getAttribute('aria-label')).toBe(
+      'Dock panel to bottom'
+    );
 
     unmount();
   });
