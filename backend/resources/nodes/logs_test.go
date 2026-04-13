@@ -87,6 +87,40 @@ func TestDiscoverLogsSkipsCompressedSources(t *testing.T) {
 	require.Equal(t, "journal/kubelet", resp.Sources[0].Path)
 }
 
+func TestDiscoverLogsSkipsBinaryJournalLeaves(t *testing.T) {
+	client := fake.NewClientset()
+	service := NewService(testsupport.NewResourceDependencies(
+		testsupport.WithDepsContext(context.Background()),
+		testsupport.WithDepsKubeClient(client),
+	))
+
+	originalFetch := nodeLogFetchRawFunc
+	t.Cleanup(func() {
+		nodeLogFetchRawFunc = originalFetch
+	})
+
+	nodeName := "node-a"
+	responses := map[string][]byte{
+		nodeLogProxyPath(nodeName, ""):                                  []byte(`<!doctype html><pre><a href="journal/">journal/</a></pre>`),
+		nodeLogProxyPath(nodeName, "journal/"):                          []byte(`<!doctype html><pre><a href="machine-id/">machine-id/</a><a href="kubelet">kubelet</a></pre>`),
+		nodeLogProxyPath(nodeName, "journal/machine-id/"):               []byte(`<!doctype html><pre><a href="system.journal">system.journal</a></pre>`),
+		nodeLogProxyPath(nodeName, "journal/machine-id/system.journal"): []byte{0x4c, 0x50, 0x4b, 0x53, 0x48, 0x48, 0x52, 0x48, 0x00, 0x01},
+		nodeLogProxyPath(nodeName, "journal/kubelet"):                   []byte("kubelet log line"),
+	}
+
+	nodeLogFetchRawFunc = func(_ context.Context, _ rest.Interface, absPath string) ([]byte, error) {
+		if body, ok := responses[absPath]; ok {
+			return body, nil
+		}
+		return nil, errors.New("unexpected path: " + absPath)
+	}
+
+	resp := service.DiscoverLogs(nodeName)
+	require.True(t, resp.Supported)
+	require.Len(t, resp.Sources, 1)
+	require.Equal(t, "journal/kubelet", resp.Sources[0].Path)
+}
+
 func TestDiscoverLogsSkipsPodAndContainerSources(t *testing.T) {
 	client := fake.NewClientset()
 	service := NewService(testsupport.NewResourceDependencies(
@@ -206,6 +240,26 @@ func TestFetchLogsRejectsCompressedSources(t *testing.T) {
 	))
 
 	resp := service.FetchLogs("node-a", restypes.NodeLogFetchRequest{SourcePath: "journal/kubelet.log.gz"})
+	require.Contains(t, resp.Error, "compressed or binary")
+}
+
+func TestFetchLogsRejectsBinaryBodiesWithoutBinaryExtension(t *testing.T) {
+	client := fake.NewClientset()
+	service := NewService(testsupport.NewResourceDependencies(
+		testsupport.WithDepsContext(context.Background()),
+		testsupport.WithDepsKubeClient(client),
+	))
+
+	originalFetch := nodeLogFetchRawFunc
+	t.Cleanup(func() {
+		nodeLogFetchRawFunc = originalFetch
+	})
+
+	nodeLogFetchRawFunc = func(_ context.Context, _ rest.Interface, _ string) ([]byte, error) {
+		return []byte{0x00, 0xff, 0x10, 0x1f, 0x00}, nil
+	}
+
+	resp := service.FetchLogs("node-a", restypes.NodeLogFetchRequest{SourcePath: "journal/opaque-leaf"})
 	require.Contains(t, resp.Error, "compressed or binary")
 }
 

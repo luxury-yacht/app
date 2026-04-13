@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/rest"
@@ -40,6 +41,14 @@ type nodeLogListingEntry struct {
 	Label string
 }
 
+type nodeLogProbeKind string
+
+const (
+	nodeLogProbeDirectory nodeLogProbeKind = "directory"
+	nodeLogProbeText      nodeLogProbeKind = "text"
+	nodeLogProbeBinary    nodeLogProbeKind = "binary"
+)
+
 type nodeLogDiscoveryTask struct {
 	path  string
 	body  []byte
@@ -67,16 +76,20 @@ func (s *Service) DiscoverLogs(nodeName string) restypes.NodeLogDiscoveryRespons
 	}
 
 	if !isNodeLogDirectoryListing(rootBody) {
-		if len(bytes.TrimSpace(rootBody)) == 0 {
+		switch probeNodeLogPath("", rootBody) {
+		case nodeLogProbeText:
+			rootSource := restypes.NodeLogSource{
+				ID:    "__root__",
+				Label: "Node Logs",
+				Kind:  "path",
+				Path:  "",
+			}
+			return restypes.NodeLogDiscoveryResponse{Supported: true, Sources: []restypes.NodeLogSource{rootSource}}
+		case nodeLogProbeBinary:
+			return restypes.NodeLogDiscoveryResponse{Reason: "node log endpoint returned only binary or compressed content"}
+		default:
 			return restypes.NodeLogDiscoveryResponse{Reason: "node log endpoint returned no usable sources"}
 		}
-		rootSource := restypes.NodeLogSource{
-			ID:    "__root__",
-			Label: "Node Logs",
-			Kind:  "path",
-			Path:  "",
-		}
-		return restypes.NodeLogDiscoveryResponse{Supported: true, Sources: []restypes.NodeLogSource{rootSource}}
 	}
 
 	sources := make(map[string]restypes.NodeLogSource)
@@ -145,11 +158,19 @@ func (s *Service) FetchLogs(nodeName string, req restypes.NodeLogFetchRequest) r
 			Error:      classifyNodeLogError(err),
 		}
 	}
-	if isNodeLogDirectoryListing(body) {
+
+	switch probeNodeLogPath(sourcePath, body) {
+	case nodeLogProbeDirectory:
 		return restypes.NodeLogFetchResponse{
 			Source:     source,
 			SourcePath: sourcePath,
 			Error:      "selected source is a directory; deeper browsing is not supported yet",
+		}
+	case nodeLogProbeBinary:
+		return restypes.NodeLogFetchResponse{
+			Source:     source,
+			SourcePath: sourcePath,
+			Error:      "selected source appears to be compressed or binary and cannot be displayed",
 		}
 	}
 
@@ -220,7 +241,8 @@ func (s *Service) processNodeLogDiscoveryTask(
 		if err != nil {
 			continue
 		}
-		if isNodeLogDirectoryListing(childBody) {
+		switch probeNodeLogPath(nextPath, childBody) {
+		case nodeLogProbeDirectory:
 			if task.depth+1 >= maxNodeLogDiscoveryDepth {
 				continue
 			}
@@ -231,8 +253,10 @@ func (s *Service) processNodeLogDiscoveryTask(
 				depth: task.depth + 1,
 			}
 			continue
+		case nodeLogProbeBinary:
+			continue
 		}
-		if !isDisplayableNodeLogSource(nextPath) || !isSupportedNodeLogSource(nextPath) {
+		if !isSupportedNodeLogSource(nextPath) {
 			continue
 		}
 
@@ -374,7 +398,13 @@ func nodeLogSourceLabel(sourcePath string) string {
 
 func isDisplayableNodeLogSource(sourcePath string) bool {
 	trimmed := strings.ToLower(strings.TrimSpace(sourcePath))
-	return !strings.HasSuffix(trimmed, ".gz")
+	return !strings.HasSuffix(trimmed, ".gz") &&
+		!strings.HasSuffix(trimmed, ".journal") &&
+		!strings.HasSuffix(trimmed, ".tar") &&
+		!strings.HasSuffix(trimmed, ".tgz") &&
+		!strings.HasSuffix(trimmed, ".zip") &&
+		!strings.HasSuffix(trimmed, ".bz2") &&
+		!strings.HasSuffix(trimmed, ".xz")
 }
 
 func isSupportedNodeLogSource(sourcePath string) bool {
@@ -407,4 +437,42 @@ func truncateNodeLogContent(body []byte, tailBytes int) (string, bool) {
 	}
 
 	return string(trimmed), true
+}
+
+func probeNodeLogPath(sourcePath string, body []byte) nodeLogProbeKind {
+	if isNodeLogDirectoryListing(body) {
+		return nodeLogProbeDirectory
+	}
+	if !isDisplayableNodeLogSource(sourcePath) {
+		return nodeLogProbeBinary
+	}
+	if looksLikeBinaryNodeLogBody(body) {
+		return nodeLogProbeBinary
+	}
+	return nodeLogProbeText
+}
+
+func looksLikeBinaryNodeLogBody(body []byte) bool {
+	sample := body
+	if len(sample) > 8192 {
+		sample = sample[:8192]
+	}
+	if len(sample) == 0 {
+		return false
+	}
+	if bytes.IndexByte(sample, 0) >= 0 || !utf8.Valid(sample) {
+		return true
+	}
+
+	controlBytes := 0
+	for _, b := range sample {
+		switch {
+		case b == '\n' || b == '\r' || b == '\t' || b == '\f' || b == '\b' || b == 0x1b:
+			continue
+		case b < 0x20 || b == 0x7f:
+			controlBytes++
+		}
+	}
+
+	return controlBytes > len(sample)/20
 }
