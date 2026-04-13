@@ -834,7 +834,10 @@ const NodeLogsTab = ({
         <div className="pod-logs-display">
           <div className="pod-logs-content">
             <div className="pod-logs-display-error">
-              {availability.reason ?? 'Logs are not available for this node.'}
+              <div className="node-log-unavailable-message">
+                <div>Logs are not available on this node</div>
+                {availability.reason ? <div>Error: {availability.reason}</div> : null}
+              </div>
             </div>
           </div>
         </div>

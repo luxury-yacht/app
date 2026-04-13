@@ -417,6 +417,32 @@ describe('NodeLogsTab', () => {
     expect(container.textContent).toContain('Checking if logs are available for this node...');
   });
 
+  it('shows the unavailable message and omits the error line when no reason is provided', async () => {
+    await renderTab({
+      availability: { allowed: false, pending: false },
+      sources: [],
+    });
+
+    expect(container.textContent).toContain('Logs are not available on this node');
+    expect(container.textContent).not.toContain('Error:');
+  });
+
+  it('shows the unavailable message and error line when a reason is provided', async () => {
+    await renderTab({
+      availability: {
+        allowed: false,
+        pending: false,
+        reason: 'the server does not allow this method on the requested resource',
+      },
+      sources: [],
+    });
+
+    expect(container.textContent).toContain('Logs are not available on this node');
+    expect(container.textContent).toContain(
+      'Error: the server does not allow this method on the requested resource'
+    );
+  });
+
   it('defaults raw node logs to the newest visible content', async () => {
     const originalScrollHeight = Object.getOwnPropertyDescriptor(
       HTMLElement.prototype,

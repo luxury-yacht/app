@@ -14,17 +14,34 @@ import (
 	"k8s.io/client-go/rest"
 )
 
+func stubNodeLogFetchers(t *testing.T, responses map[string][]byte) {
+	originalFetch := nodeLogFetchRawFunc
+	originalProbe := nodeLogFetchProbeFunc
+	t.Cleanup(func() {
+		nodeLogFetchRawFunc = originalFetch
+		nodeLogFetchProbeFunc = originalProbe
+	})
+
+	nodeLogFetchRawFunc = func(_ context.Context, _ rest.Interface, absPath string) ([]byte, error) {
+		if body, ok := responses[absPath]; ok {
+			return body, nil
+		}
+		return nil, errors.New("unexpected path: " + absPath)
+	}
+	nodeLogFetchProbeFunc = func(_ context.Context, _ rest.Interface, absPath string, _ int) ([]byte, error) {
+		if body, ok := responses[absPath]; ok {
+			return body, nil
+		}
+		return nil, errors.New("unexpected path: " + absPath)
+	}
+}
+
 func TestDiscoverLogsFindsReadableSourcesOneLevelBelowRoot(t *testing.T) {
 	client := fake.NewClientset()
 	service := NewService(testsupport.NewResourceDependencies(
 		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
 	))
-
-	originalFetch := nodeLogFetchRawFunc
-	t.Cleanup(func() {
-		nodeLogFetchRawFunc = originalFetch
-	})
 
 	nodeName := "node-a"
 	responses := map[string][]byte{
@@ -35,13 +52,7 @@ func TestDiscoverLogsFindsReadableSourcesOneLevelBelowRoot(t *testing.T) {
 		nodeLogProxyPath(nodeName, "journal/containerd"): []byte("containerd log line"),
 		nodeLogProxyPath(nodeName, "pods/kube-system/"):  []byte(`<!doctype html><pre><a href="coredns">coredns</a></pre>`),
 	}
-
-	nodeLogFetchRawFunc = func(_ context.Context, _ rest.Interface, absPath string) ([]byte, error) {
-		if body, ok := responses[absPath]; ok {
-			return body, nil
-		}
-		return nil, errors.New("unexpected path: " + absPath)
-	}
+	stubNodeLogFetchers(t, responses)
 
 	resp := service.DiscoverLogs(nodeName)
 	require.True(t, resp.Supported)
@@ -61,11 +72,6 @@ func TestDiscoverLogsSkipsCompressedSources(t *testing.T) {
 		testsupport.WithDepsKubeClient(client),
 	))
 
-	originalFetch := nodeLogFetchRawFunc
-	t.Cleanup(func() {
-		nodeLogFetchRawFunc = originalFetch
-	})
-
 	nodeName := "node-a"
 	responses := map[string][]byte{
 		nodeLogProxyPath(nodeName, ""):                       []byte(`<!doctype html><pre><a href="journal/">journal/</a></pre>`),
@@ -73,13 +79,7 @@ func TestDiscoverLogsSkipsCompressedSources(t *testing.T) {
 		nodeLogProxyPath(nodeName, "journal/kubelet"):        []byte("kubelet log line"),
 		nodeLogProxyPath(nodeName, "journal/kubelet.log.gz"): []byte("compressed bytes"),
 	}
-
-	nodeLogFetchRawFunc = func(_ context.Context, _ rest.Interface, absPath string) ([]byte, error) {
-		if body, ok := responses[absPath]; ok {
-			return body, nil
-		}
-		return nil, errors.New("unexpected path: " + absPath)
-	}
+	stubNodeLogFetchers(t, responses)
 
 	resp := service.DiscoverLogs(nodeName)
 	require.True(t, resp.Supported)
@@ -94,11 +94,6 @@ func TestDiscoverLogsSkipsBinaryJournalLeaves(t *testing.T) {
 		testsupport.WithDepsKubeClient(client),
 	))
 
-	originalFetch := nodeLogFetchRawFunc
-	t.Cleanup(func() {
-		nodeLogFetchRawFunc = originalFetch
-	})
-
 	nodeName := "node-a"
 	responses := map[string][]byte{
 		nodeLogProxyPath(nodeName, ""):                                  []byte(`<!doctype html><pre><a href="journal/">journal/</a></pre>`),
@@ -107,13 +102,7 @@ func TestDiscoverLogsSkipsBinaryJournalLeaves(t *testing.T) {
 		nodeLogProxyPath(nodeName, "journal/machine-id/system.journal"): []byte{0x4c, 0x50, 0x4b, 0x53, 0x48, 0x48, 0x52, 0x48, 0x00, 0x01},
 		nodeLogProxyPath(nodeName, "journal/kubelet"):                   []byte("kubelet log line"),
 	}
-
-	nodeLogFetchRawFunc = func(_ context.Context, _ rest.Interface, absPath string) ([]byte, error) {
-		if body, ok := responses[absPath]; ok {
-			return body, nil
-		}
-		return nil, errors.New("unexpected path: " + absPath)
-	}
+	stubNodeLogFetchers(t, responses)
 
 	resp := service.DiscoverLogs(nodeName)
 	require.True(t, resp.Supported)
@@ -128,24 +117,13 @@ func TestDiscoverLogsSkipsPodAndContainerSources(t *testing.T) {
 		testsupport.WithDepsKubeClient(client),
 	))
 
-	originalFetch := nodeLogFetchRawFunc
-	t.Cleanup(func() {
-		nodeLogFetchRawFunc = originalFetch
-	})
-
 	nodeName := "node-a"
 	responses := map[string][]byte{
 		nodeLogProxyPath(nodeName, ""):                []byte(`<!doctype html><pre><a href="journal/">journal/</a><a href="pods/">pods/</a><a href="containers/">containers/</a></pre>`),
 		nodeLogProxyPath(nodeName, "journal/"):        []byte(`<!doctype html><pre><a href="kubelet">kubelet</a></pre>`),
 		nodeLogProxyPath(nodeName, "journal/kubelet"): []byte("kubelet log line"),
 	}
-
-	nodeLogFetchRawFunc = func(_ context.Context, _ rest.Interface, absPath string) ([]byte, error) {
-		if body, ok := responses[absPath]; ok {
-			return body, nil
-		}
-		return nil, errors.New("unexpected path: " + absPath)
-	}
+	stubNodeLogFetchers(t, responses)
 
 	resp := service.DiscoverLogs(nodeName)
 	require.True(t, resp.Supported)
@@ -160,11 +138,6 @@ func TestDiscoverLogsTraversesNestedJournalDirectories(t *testing.T) {
 		testsupport.WithDepsKubeClient(client),
 	))
 
-	originalFetch := nodeLogFetchRawFunc
-	t.Cleanup(func() {
-		nodeLogFetchRawFunc = originalFetch
-	})
-
 	nodeName := "node-a"
 	responses := map[string][]byte{
 		nodeLogProxyPath(nodeName, ""):                                    []byte(`<!doctype html><pre><a href="journal/">journal/</a></pre>`),
@@ -173,13 +146,7 @@ func TestDiscoverLogsTraversesNestedJournalDirectories(t *testing.T) {
 		nodeLogProxyPath(nodeName, "journal/services/kubernetes/"):        []byte(`<!doctype html><pre><a href="kubelet">kubelet</a></pre>`),
 		nodeLogProxyPath(nodeName, "journal/services/kubernetes/kubelet"): []byte("kubelet log line"),
 	}
-
-	nodeLogFetchRawFunc = func(_ context.Context, _ rest.Interface, absPath string) ([]byte, error) {
-		if body, ok := responses[absPath]; ok {
-			return body, nil
-		}
-		return nil, errors.New("unexpected path: " + absPath)
-	}
+	stubNodeLogFetchers(t, responses)
 
 	resp := service.DiscoverLogs(nodeName)
 	require.True(t, resp.Supported)
@@ -194,11 +161,6 @@ func TestDiscoverLogsIncludesWellKnownServiceQueries(t *testing.T) {
 		testsupport.WithDepsKubeClient(client),
 	))
 
-	originalFetch := nodeLogFetchRawFunc
-	t.Cleanup(func() {
-		nodeLogFetchRawFunc = originalFetch
-	})
-
 	nodeName := "node-a"
 	responses := map[string][]byte{
 		nodeLogProxyPath(nodeName, ""):                    []byte(`<!doctype html><pre><a href="journal/">journal/</a></pre>`),
@@ -210,14 +172,7 @@ func TestDiscoverLogsIncludesWellKnownServiceQueries(t *testing.T) {
 		nodeLogProxyPath(nodeName, "service:cri-o"):       []byte{0x00, 0xff, 0x10},
 		nodeLogProxyPath(nodeName, "service:docker"):      nil,
 	}
-
-	nodeLogFetchRawFunc = func(_ context.Context, _ rest.Interface, absPath string) ([]byte, error) {
-		body, ok := responses[absPath]
-		if !ok || body == nil {
-			return nil, errors.New("unexpected path: " + absPath)
-		}
-		return body, nil
-	}
+	stubNodeLogFetchers(t, responses)
 
 	resp := service.DiscoverLogs(nodeName)
 	require.True(t, resp.Supported)
@@ -348,6 +303,7 @@ func TestNodeLogProxyPathWithSinceTimeSupportsServiceQueries(t *testing.T) {
 		nodeLogProxyPathWithSinceTime("node-a", "service:kubelet", "2026-04-13T18:00:00Z"),
 	)
 }
+
 
 func TestFetchLogsRejectsBinaryBodiesWithoutBinaryExtension(t *testing.T) {
 	client := fake.NewClientset()

@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"html"
+	"io"
 	"net/url"
 	"regexp"
 	"sort"
@@ -22,6 +23,7 @@ const (
 	maxNodeLogDiscoveryDepth = 5
 	maxNodeLogDiscoveryNodes = 64
 	nodeLogDiscoveryWorkers  = 8
+	maxNodeLogProbeBytes     = 8192
 	defaultNodeLogTailBytes  = 256 * 1024
 	maxNodeLogTailBytes      = 1024 * 1024
 	nodeLogServicePrefix     = "service:"
@@ -34,6 +36,19 @@ var (
 			return nil, fmt.Errorf("kubernetes REST client not initialized")
 		}
 		return client.Get().AbsPath(absPath).DoRaw(ctx)
+	}
+	nodeLogFetchProbeFunc = func(ctx context.Context, client rest.Interface, absPath string, maxBytes int) ([]byte, error) {
+		if client == nil {
+			return nil, fmt.Errorf("kubernetes REST client not initialized")
+		}
+		stream, err := client.Get().AbsPath(absPath).Stream(ctx)
+		if err != nil {
+			return nil, err
+		}
+		defer stream.Close()
+
+		limited := io.LimitReader(stream, int64(maxBytes))
+		return io.ReadAll(limited)
 	}
 	wellKnownNodeLogServices = []string{"kubelet", "containerd", "crio", "cri-o", "docker"}
 )
@@ -78,7 +93,8 @@ func (s *Service) DiscoverLogs(nodeName string) restypes.NodeLogDiscoveryRespons
 	}
 
 	if !isNodeLogDirectoryListing(rootBody) {
-		switch probeNodeLogPath("", rootBody) {
+		rootProbe := probeNodeLogPath("", rootBody)
+		switch rootProbe {
 		case nodeLogProbeText:
 			rootSource := restypes.NodeLogSource{
 				ID:    "__root__",
@@ -163,7 +179,8 @@ func (s *Service) FetchLogs(nodeName string, req restypes.NodeLogFetchRequest) r
 		}
 	}
 
-	switch probeNodeLogPath(sourcePath, body) {
+	probeKind := probeNodeLogPath(sourcePath, body)
+	switch probeKind {
 	case nodeLogProbeDirectory:
 		return restypes.NodeLogFetchResponse{
 			Source:     source,
@@ -230,11 +247,12 @@ func (s *Service) discoverWellKnownNodeLogServices(
 			continue
 		}
 
-		body, err := s.fetchNodeLogPath(nodeName, sourcePath, "")
+		body, err := s.fetchNodeLogProbePath(nodeName, sourcePath)
 		if err != nil {
 			continue
 		}
-		if probeNodeLogPath(sourcePath, body) != nodeLogProbeText {
+		probeKind := probeNodeLogPath(sourcePath, body)
+		if probeKind != nodeLogProbeText {
 			continue
 		}
 
@@ -264,18 +282,22 @@ func (s *Service) processNodeLogDiscoveryTask(
 		}
 
 		nextPath, ok := joinNodeLogPath(task.path, entry.Href)
-		if !ok || !state.markVisited(nextPath) {
+		if !ok {
+			continue
+		}
+		if !state.markVisited(nextPath) {
 			continue
 		}
 		if shouldSkipNodeLogDiscoveryPath(nextPath) {
 			continue
 		}
 
-		childBody, err := s.fetchNodeLogPath(nodeName, nextPath, "")
+		childBody, err := s.fetchNodeLogDiscoveryPath(nodeName, nextPath)
 		if err != nil {
 			continue
 		}
-		switch probeNodeLogPath(nextPath, childBody) {
+		probeKind := probeNodeLogPath(nextPath, childBody)
+		switch probeKind {
 		case nodeLogProbeDirectory:
 			if task.depth+1 >= maxNodeLogDiscoveryDepth {
 				continue
@@ -329,19 +351,43 @@ func (s *nodeLogDiscoveryState) addSource(path string) {
 }
 
 func (s *Service) fetchNodeLogPath(nodeName, sourcePath, sinceTime string) ([]byte, error) {
+	return s.fetchNodeLogPathWithOptions(nodeName, sourcePath, sinceTime, 0)
+}
+
+func (s *Service) fetchNodeLogProbePath(nodeName, sourcePath string) ([]byte, error) {
 	restClient := s.deps.KubernetesClient.Discovery().RESTClient()
 	ctx := s.deps.Context
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	return nodeLogFetchRawFunc(ctx, restClient, nodeLogProxyPathWithSinceTime(nodeName, sourcePath, sinceTime))
+	return nodeLogFetchProbeFunc(ctx, restClient, nodeLogProxyPathWithOptions(nodeName, sourcePath, "", 0), maxNodeLogProbeBytes)
+}
+
+func (s *Service) fetchNodeLogDiscoveryPath(nodeName, sourcePath string) ([]byte, error) {
+	if strings.HasSuffix(strings.TrimSpace(sourcePath), "/") {
+		return s.fetchNodeLogPathWithOptions(nodeName, sourcePath, "", 0)
+	}
+	return s.fetchNodeLogProbePath(nodeName, sourcePath)
+}
+
+func (s *Service) fetchNodeLogPathWithOptions(nodeName, sourcePath, sinceTime string, tailLines int) ([]byte, error) {
+	restClient := s.deps.KubernetesClient.Discovery().RESTClient()
+	ctx := s.deps.Context
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return nodeLogFetchRawFunc(ctx, restClient, nodeLogProxyPathWithOptions(nodeName, sourcePath, sinceTime, tailLines))
 }
 
 func nodeLogProxyPath(nodeName, sourcePath string) string {
-	return nodeLogProxyPathWithSinceTime(nodeName, sourcePath, "")
+	return nodeLogProxyPathWithOptions(nodeName, sourcePath, "", 0)
 }
 
 func nodeLogProxyPathWithSinceTime(nodeName, sourcePath, sinceTime string) string {
+	return nodeLogProxyPathWithOptions(nodeName, sourcePath, sinceTime, 0)
+}
+
+func nodeLogProxyPathWithOptions(nodeName, sourcePath, sinceTime string, tailLines int) string {
 	base := fmt.Sprintf("/api/v1/nodes/%s/proxy/logs/", url.PathEscape(strings.TrimSpace(nodeName)))
 	query := url.Values{}
 
@@ -350,12 +396,18 @@ func nodeLogProxyPathWithSinceTime(nodeName, sourcePath, sinceTime string) strin
 		if trimmedSinceTime := strings.TrimSpace(sinceTime); trimmedSinceTime != "" {
 			query.Set("sinceTime", trimmedSinceTime)
 		}
+		if tailLines > 0 {
+			query.Set("tailLines", fmt.Sprintf("%d", tailLines))
+		}
 		return base + "?" + query.Encode()
 	}
 
 	trimmedPath := strings.TrimLeft(strings.TrimSpace(sourcePath), "/")
 	if trimmedSinceTime := strings.TrimSpace(sinceTime); trimmedSinceTime != "" {
 		query.Set("sinceTime", trimmedSinceTime)
+	}
+	if tailLines > 0 {
+		query.Set("tailLines", fmt.Sprintf("%d", tailLines))
 	}
 	if trimmedPath == "" {
 		if len(query) > 0 {
@@ -397,8 +449,7 @@ func classifyNodeLogError(err error) string {
 func isNodeLogDirectoryListing(body []byte) bool {
 	trimmed := strings.TrimSpace(strings.ToLower(string(body)))
 	return strings.HasPrefix(trimmed, "<!doctype html>") &&
-		strings.Contains(trimmed, "<pre>") &&
-		strings.Contains(trimmed, "<a href=")
+		strings.Contains(trimmed, "<pre>")
 }
 
 func parseNodeLogDirectoryListing(body []byte) []nodeLogListingEntry {
