@@ -141,6 +141,8 @@ interface ExtendedHandle extends HarnessHandle {
   shortcutsActive: boolean;
   isShortcutsSuppressed: boolean;
   isWrapperFocused: boolean;
+  suppressFocusedRowHighlight: () => void;
+  getRowClassNameWithFocus: (item: Row, index: number) => string;
   handleWrapperFocus: (event: React.FocusEvent<HTMLDivElement>) => void;
   handleWrapperBlur: (event: React.FocusEvent<HTMLDivElement>) => void;
   handleRowActivation: (item: Row, index: number, source: 'pointer' | 'keyboard') => void;
@@ -177,6 +179,8 @@ const ExtendedHarness = forwardRef<ExtendedHandle, ExtendedProps>(
       shortcutsActive: result.shortcutsActive,
       isShortcutsSuppressed: result.isShortcutsSuppressed,
       isWrapperFocused: result.isWrapperFocused,
+      suppressFocusedRowHighlight: result.suppressFocusedRowHighlight,
+      getRowClassNameWithFocus: result.getRowClassNameWithFocus,
       handleWrapperFocus: result.handleWrapperFocus,
       handleWrapperBlur: result.handleWrapperBlur,
       handleRowActivation: result.handleRowActivation,
@@ -275,6 +279,42 @@ describe('useGridTableFocusNavigation – pointer vs keyboard activation', () =>
 
     expect(ref.current!.isWrapperFocused).toBe(false);
     expect(ref.current!.focusedRowKey).toBe('a');
+  });
+
+  it('suppresses the highlight on tab exit without forgetting the focused row, then restores it on re-entry', async () => {
+    const data: Row[] = [{ id: 'a' }, { id: 'b' }];
+    const ref = React.createRef<ExtendedHandle>();
+
+    await act(async () => {
+      root.render(<ExtendedHarness ref={ref} tableData={data} updateHoverForElement={vi.fn()} />);
+    });
+
+    const focusEvent = {
+      target: document.createElement('div'),
+    } as unknown as React.FocusEvent<HTMLDivElement>;
+
+    await act(async () => {
+      ref.current!.handleWrapperFocus(focusEvent);
+    });
+
+    expect(ref.current!.focusedRowKey).toBe('a');
+    expect(ref.current!.getRowClassNameWithFocus(data[0], 0)).toContain('gridtable-row--focused');
+
+    await act(async () => {
+      ref.current!.suppressFocusedRowHighlight();
+    });
+
+    expect(ref.current!.focusedRowKey).toBe('a');
+    expect(ref.current!.getRowClassNameWithFocus(data[0], 0)).not.toContain(
+      'gridtable-row--focused'
+    );
+
+    await act(async () => {
+      ref.current!.handleWrapperFocus(focusEvent);
+    });
+
+    expect(ref.current!.focusedRowKey).toBe('a');
+    expect(ref.current!.getRowClassNameWithFocus(data[0], 0)).toContain('gridtable-row--focused');
   });
 });
 

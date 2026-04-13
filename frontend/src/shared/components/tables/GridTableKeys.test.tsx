@@ -188,7 +188,7 @@ describe('GridTableKeys filter target selectors', () => {
         wrapperRef,
         tableDataLength: 1,
         focusedRowKey: 'row-1',
-        clearFocusedRow: vi.fn(),
+        suppressFocusedRowHighlight: vi.fn(),
         jumpToIndex: () => true,
       });
 
@@ -319,7 +319,7 @@ describe('GridTableKeys filter target selectors', () => {
         wrapperRef,
         tableDataLength: 1,
         focusedRowKey: 'row-1',
-        clearFocusedRow: vi.fn(),
+        suppressFocusedRowHighlight: vi.fn(),
         jumpToIndex: () => true,
       });
 
@@ -352,8 +352,8 @@ describe('GridTableKeys filter target selectors', () => {
     expect(preventDefaultSpy).not.toHaveBeenCalled();
   });
 
-  it('clears the focused row only when tabbing out of the table body', async () => {
-    const clearFocusedRow = vi.fn();
+  it('suppresses the focused row highlight only when tabbing out of the table body', async () => {
+    const suppressFocusedRowHighlight = vi.fn();
 
     const HookHarness = () => {
       const filtersContainerRef = React.useRef<HTMLDivElement | null>(null);
@@ -369,7 +369,7 @@ describe('GridTableKeys filter target selectors', () => {
         wrapperRef,
         tableDataLength: 1,
         focusedRowKey: 'row-1',
-        clearFocusedRow,
+        suppressFocusedRowHighlight,
         jumpToIndex: () => true,
       });
 
@@ -417,6 +417,6 @@ describe('GridTableKeys filter target selectors', () => {
       await Promise.resolve();
     });
 
-    expect(clearFocusedRow).toHaveBeenCalledTimes(2);
+    expect(suppressFocusedRowHighlight).toHaveBeenCalledTimes(2);
   });
 });
