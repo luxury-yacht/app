@@ -13,6 +13,7 @@ import { useObjectPanelCapabilities } from './useObjectPanelCapabilities';
 const mockUseCapabilities = vi.fn();
 const mockUseUserPermission = vi.fn();
 const mockDiscoverNodeLogs = vi.fn();
+const mockGetCachedNodeLogDiscovery = vi.fn();
 
 vi.mock('@/core/capabilities', () => ({
   useCapabilities: (...args: unknown[]) => mockUseCapabilities(...args),
@@ -21,6 +22,7 @@ vi.mock('@/core/capabilities', () => ({
 
 vi.mock('../NodeLogs/nodeLogsApi', () => ({
   discoverNodeLogs: (...args: unknown[]) => mockDiscoverNodeLogs(...args),
+  getCachedNodeLogDiscovery: (...args: unknown[]) => mockGetCachedNodeLogDiscovery(...args),
 }));
 
 type HookProps = Parameters<typeof useObjectPanelCapabilities>[0];
@@ -73,6 +75,8 @@ describe('useObjectPanelCapabilities', () => {
     mockUseCapabilities.mockReset();
     mockUseUserPermission.mockReset();
     mockDiscoverNodeLogs.mockReset();
+    mockGetCachedNodeLogDiscovery.mockReset();
+    mockGetCachedNodeLogDiscovery.mockReturnValue(null);
   });
 
   afterEach(() => {
@@ -394,6 +398,91 @@ describe('useObjectPanelCapabilities', () => {
       },
     ]);
     expect(result.capabilityReasons.nodeLogs).toBeUndefined();
+  });
+
+  it('reuses cached node log discovery results for the same node', async () => {
+    mockUseCapabilities.mockImplementation(() => ({
+      getState: () => ({ allowed: false, pending: false }),
+    }));
+    mockUseUserPermission.mockImplementation(() => ({ allowed: true, pending: false }));
+    mockGetCachedNodeLogDiscovery.mockReturnValue({
+      supported: true,
+      sources: [
+        {
+          id: 'journal/kubelet',
+          label: 'journal / kubelet',
+          kind: 'journal',
+          path: 'journal/kubelet',
+        },
+      ],
+    });
+
+    const result = await renderHook({
+      objectData: { kind: 'Node', name: 'node-a', clusterId: 'c1' },
+      objectKind: 'node',
+      detailScope: 'node:node-a',
+      featureSupport: { ...baseFeatureSupport, logs: false, nodeLogs: true },
+    });
+
+    expect(mockGetCachedNodeLogDiscovery).toHaveBeenCalledWith('c1', 'node-a');
+    expect(mockDiscoverNodeLogs).not.toHaveBeenCalled();
+    expect(result.capabilities.hasNodeLogs).toBe(true);
+    expect(result.nodeLogSources).toHaveLength(1);
+  });
+
+  it('does not leak cached node log discovery across cluster switches', async () => {
+    mockUseCapabilities.mockImplementation(() => ({
+      getState: () => ({ allowed: false, pending: false }),
+    }));
+    mockUseUserPermission.mockImplementation(() => ({ allowed: true, pending: false }));
+    mockGetCachedNodeLogDiscovery.mockImplementation((clusterId: string, nodeName: string) => {
+      if (clusterId === 'c1' && nodeName === 'node-a') {
+        return {
+          supported: true,
+          sources: [
+            {
+              id: 'journal/kubelet',
+              label: 'journal / kubelet',
+              kind: 'journal',
+              path: 'journal/kubelet',
+            },
+          ],
+        };
+      }
+      return null;
+    });
+    mockDiscoverNodeLogs.mockResolvedValue({
+      supported: true,
+      sources: [
+        {
+          id: 'journal/containerd',
+          label: 'journal / containerd',
+          kind: 'journal',
+          path: 'journal/containerd',
+        },
+      ],
+    });
+
+    const first = await renderHook({
+      objectData: { kind: 'Node', name: 'node-a', clusterId: 'c1' },
+      objectKind: 'node',
+      detailScope: 'node:node-a:c1',
+      featureSupport: { ...baseFeatureSupport, logs: false, nodeLogs: true },
+    });
+
+    expect(first.nodeLogSources[0]?.path).toBe('journal/kubelet');
+    expect(mockDiscoverNodeLogs).not.toHaveBeenCalled();
+
+    const second = await renderHook({
+      objectData: { kind: 'Node', name: 'node-a', clusterId: 'c2' },
+      objectKind: 'node',
+      detailScope: 'node:node-a:c2',
+      featureSupport: { ...baseFeatureSupport, logs: false, nodeLogs: true },
+    });
+
+    expect(mockGetCachedNodeLogDiscovery).toHaveBeenCalledWith('c2', 'node-a');
+    expect(mockDiscoverNodeLogs).toHaveBeenCalledWith('c2', 'node-a');
+    expect(second.nodeLogSources[0]?.path).toBe('journal/containerd');
   });
 
   it('surfaces a node logs reason when discovery finds no readable sources', async () => {

@@ -191,6 +191,54 @@ func TestDiscoverLogsTraversesNestedJournalDirectories(t *testing.T) {
 	require.Equal(t, "journal/services/kubernetes/kubelet", resp.Sources[0].Path)
 }
 
+func TestDiscoverLogsIncludesWellKnownServiceQueries(t *testing.T) {
+	client := fake.NewClientset()
+	service := NewService(testsupport.NewResourceDependencies(
+		testsupport.WithDepsContext(context.Background()),
+		testsupport.WithDepsKubeClient(client),
+	))
+
+	originalFetch := nodeLogFetchRawFunc
+	t.Cleanup(func() {
+		nodeLogFetchRawFunc = originalFetch
+	})
+
+	nodeName := "node-a"
+	responses := map[string][]byte{
+		nodeLogProxyPath(nodeName, ""):                    []byte(`<!doctype html><pre><a href="journal/">journal/</a></pre>`),
+		nodeLogProxyPath(nodeName, "journal/"):            []byte(`<!doctype html><pre><a href="machine-id/">machine-id/</a></pre>`),
+		nodeLogProxyPath(nodeName, "journal/machine-id/"): []byte(`<!doctype html><pre></pre>`),
+		nodeLogProxyPath(nodeName, "service:kubelet"):     []byte("kubelet service log line"),
+		nodeLogProxyPath(nodeName, "service:containerd"):  []byte("containerd service log line"),
+		nodeLogProxyPath(nodeName, "service:crio"):        []byte(`<!doctype html><pre><a href="journal/">journal/</a></pre>`),
+		nodeLogProxyPath(nodeName, "service:cri-o"):       []byte{0x00, 0xff, 0x10},
+		nodeLogProxyPath(nodeName, "service:docker"):      nil,
+	}
+
+	nodeLogFetchRawFunc = func(_ context.Context, _ rest.Interface, absPath string) ([]byte, error) {
+		body, ok := responses[absPath]
+		if !ok || body == nil {
+			return nil, errors.New("unexpected path: " + absPath)
+		}
+		return body, nil
+	}
+
+	resp := service.DiscoverLogs(nodeName)
+	require.True(t, resp.Supported)
+	require.Contains(t, resp.Sources, restypes.NodeLogSource{
+		ID:    "service:kubelet",
+		Label: "services / kubelet",
+		Kind:  "service",
+		Path:  "service:kubelet",
+	})
+	require.Contains(t, resp.Sources, restypes.NodeLogSource{
+		ID:    "service:containerd",
+		Label: "services / containerd",
+		Kind:  "service",
+		Path:  "service:containerd",
+	})
+}
+
 func TestDiscoverLogsReturnsReasonForForbiddenEndpoint(t *testing.T) {
 	client := fake.NewClientset()
 	service := NewService(testsupport.NewResourceDependencies(
@@ -241,6 +289,68 @@ func TestFetchLogsRejectsCompressedSources(t *testing.T) {
 
 	resp := service.FetchLogs("node-a", restypes.NodeLogFetchRequest{SourcePath: "journal/kubelet.log.gz"})
 	require.Contains(t, resp.Error, "compressed or binary")
+}
+
+func TestFetchLogsSupportsWellKnownServiceQueries(t *testing.T) {
+	client := fake.NewClientset()
+	service := NewService(testsupport.NewResourceDependencies(
+		testsupport.WithDepsContext(context.Background()),
+		testsupport.WithDepsKubeClient(client),
+	))
+
+	originalFetch := nodeLogFetchRawFunc
+	t.Cleanup(func() {
+		nodeLogFetchRawFunc = originalFetch
+	})
+
+	nodeLogFetchRawFunc = func(_ context.Context, _ rest.Interface, absPath string) ([]byte, error) {
+		require.Equal(t, nodeLogProxyPath("node-a", "service:kubelet"), absPath)
+		return []byte("kubelet service log line"), nil
+	}
+
+	resp := service.FetchLogs("node-a", restypes.NodeLogFetchRequest{SourcePath: "service:kubelet"})
+	require.Empty(t, resp.Error)
+	require.Equal(t, "kubelet service log line", resp.Content)
+	require.Equal(t, "service", resp.Source.Kind)
+	require.Equal(t, "services / kubelet", resp.Source.Label)
+}
+
+func TestFetchLogsForwardsSinceTimeQueryParameter(t *testing.T) {
+	client := fake.NewClientset()
+	service := NewService(testsupport.NewResourceDependencies(
+		testsupport.WithDepsContext(context.Background()),
+		testsupport.WithDepsKubeClient(client),
+	))
+
+	originalFetch := nodeLogFetchRawFunc
+	t.Cleanup(func() {
+		nodeLogFetchRawFunc = originalFetch
+	})
+
+	sinceTime := "2026-04-13T18:00:00Z"
+	nodeLogFetchRawFunc = func(_ context.Context, _ rest.Interface, absPath string) ([]byte, error) {
+		require.Equal(
+			t,
+			nodeLogProxyPathWithSinceTime("node-a", "journal/kubelet", sinceTime),
+			absPath,
+		)
+		return []byte("kubelet log line"), nil
+	}
+
+	resp := service.FetchLogs("node-a", restypes.NodeLogFetchRequest{
+		SourcePath: "journal/kubelet",
+		SinceTime:  sinceTime,
+	})
+	require.Empty(t, resp.Error)
+	require.Equal(t, "kubelet log line", resp.Content)
+}
+
+func TestNodeLogProxyPathWithSinceTimeSupportsServiceQueries(t *testing.T) {
+	require.Equal(
+		t,
+		"/api/v1/nodes/node-a/proxy/logs/?query=kubelet&sinceTime=2026-04-13T18%3A00%3A00Z",
+		nodeLogProxyPathWithSinceTime("node-a", "service:kubelet", "2026-04-13T18:00:00Z"),
+	)
 }
 
 func TestFetchLogsRejectsBinaryBodiesWithoutBinaryExtension(t *testing.T) {

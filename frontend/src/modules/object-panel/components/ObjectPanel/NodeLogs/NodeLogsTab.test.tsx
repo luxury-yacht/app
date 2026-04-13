@@ -90,7 +90,28 @@ describe('NodeLogsTab', () => {
     });
   };
 
-  it('fetches and renders the selected source when active', async () => {
+  const selectSource = async (label: string): Promise<void> => {
+    const trigger = container.querySelector('.pod-logs-selector-dropdown .dropdown-trigger');
+    expect(trigger).toBeTruthy();
+
+    await act(async () => {
+      trigger!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    const option = Array.from(container.querySelectorAll<HTMLElement>('.dropdown-option')).find(
+      (node) => node.textContent?.includes(label)
+    );
+    expect(option).toBeTruthy();
+
+    await act(async () => {
+      option!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+  };
+
+  it('shows a selection prompt instead of auto-loading the first source', async () => {
     mockFetchNodeLogs.mockResolvedValue({
       source: sources[0],
       sourcePath: sources[0].path,
@@ -99,11 +120,11 @@ describe('NodeLogsTab', () => {
 
     await renderTab();
 
-    expect(mockFetchNodeLogs).toHaveBeenCalledWith('alpha:ctx', 'node-a', {
-      sourcePath: 'journal/kubelet',
-      tailBytes: 262144,
-    });
-    expect(container.querySelector('.pod-logs-text')?.textContent).toContain('line one');
+    expect(mockFetchNodeLogs).not.toHaveBeenCalled();
+    expect(container.textContent).toContain('Select a log source to view logs.');
+    expect(
+      container.querySelector('.pod-logs-selector-dropdown .dropdown-value')?.textContent
+    ).toBe('Select log source');
   });
 
   it('refetches when the selected source changes', async () => {
@@ -116,26 +137,8 @@ describe('NodeLogsTab', () => {
     );
 
     await renderTab();
-
-    const trigger = container.querySelector('.pod-logs-selector-dropdown .dropdown-trigger');
-    expect(trigger).toBeTruthy();
-
-    await act(async () => {
-      trigger!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      await Promise.resolve();
-    });
-
-    const secondOption = Array.from(
-      container.querySelectorAll<HTMLElement>('.dropdown-option')
-    ).find((node) => node.textContent?.includes('containerd'));
-    expect(secondOption?.textContent).toContain('containerd');
-    expect(secondOption).toBeTruthy();
-
-    await act(async () => {
-      secondOption!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await selectSource('kubelet');
+    await selectSource('containerd');
 
     expect(mockFetchNodeLogs).toHaveBeenLastCalledWith('alpha:ctx', 'node-a', {
       sourcePath: 'journal/containerd',
@@ -180,7 +183,7 @@ describe('NodeLogsTab', () => {
     expect(trigger).toBeTruthy();
     expect(
       container.querySelector('.pod-logs-selector-dropdown .dropdown-value')?.textContent
-    ).toBe('ipamd.log');
+    ).toBe('Select log source');
 
     await act(async () => {
       trigger!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -206,6 +209,7 @@ describe('NodeLogsTab', () => {
     });
 
     await renderTab();
+    await selectSource('kubelet');
     await setFilterValue('error');
 
     expect(container.querySelector('.pod-logs-text')?.textContent).toBe(
@@ -221,6 +225,7 @@ describe('NodeLogsTab', () => {
     });
 
     await renderTab();
+    await selectSource('kubelet');
     await setFilterValue('error');
 
     const inverseButton = container.querySelector<HTMLButtonElement>(
@@ -244,6 +249,7 @@ describe('NodeLogsTab', () => {
     });
 
     await renderTab();
+    await selectSource('kubelet');
     await setFilterValue('error');
 
     const highlightButton = container.querySelector<HTMLButtonElement>(
@@ -268,6 +274,7 @@ describe('NodeLogsTab', () => {
     });
 
     await renderTab();
+    await selectSource('kubelet');
 
     const regexButton = container.querySelector<HTMLButtonElement>(
       'button[aria-label="Enable regular expression support for the text filter"]'
@@ -292,6 +299,7 @@ describe('NodeLogsTab', () => {
     });
 
     await renderTab();
+    await selectSource('kubelet');
 
     const prettyButton = container.querySelector<HTMLButtonElement>(
       'button[aria-label="Show pretty JSON"]'
@@ -319,6 +327,7 @@ describe('NodeLogsTab', () => {
     });
 
     await renderTab();
+    await selectSource('kubelet');
 
     const parsedButton = container.querySelector<HTMLButtonElement>(
       'button[aria-label="Parse the JSON into a table"]'
@@ -345,6 +354,7 @@ describe('NodeLogsTab', () => {
     });
 
     await renderTab();
+    await selectSource('kubelet');
 
     const parsedButton = container.querySelector<HTMLButtonElement>(
       'button[aria-label="Parse the JSON into a table"]'
@@ -385,6 +395,7 @@ describe('NodeLogsTab', () => {
     });
 
     await renderTab();
+    await selectSource('kubelet');
 
     expect(container.textContent).toContain('Showing only the most recent 256 KB');
   });
@@ -424,6 +435,7 @@ describe('NodeLogsTab', () => {
     });
 
     await renderTab();
+    await selectSource('kubelet');
 
     await act(async () => {
       await new Promise((resolve) => requestAnimationFrame(resolve));
@@ -473,6 +485,7 @@ describe('NodeLogsTab', () => {
     );
 
     await renderTab();
+    await selectSource('kubelet');
 
     const content = container.querySelector<HTMLElement>('.pod-logs-content');
     expect(content).toBeTruthy();
@@ -485,22 +498,8 @@ describe('NodeLogsTab', () => {
 
     const trigger = container.querySelector('.pod-logs-selector-dropdown .dropdown-trigger');
     expect(trigger).toBeTruthy();
-
+    await selectSource('containerd');
     await act(async () => {
-      trigger!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      await Promise.resolve();
-    });
-
-    const secondOption = Array.from(
-      container.querySelectorAll<HTMLElement>('.dropdown-option')
-    ).find((node) => node.textContent?.includes('containerd'));
-    expect(secondOption?.textContent).toContain('containerd');
-    expect(secondOption).toBeTruthy();
-
-    await act(async () => {
-      secondOption!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      await Promise.resolve();
-      await Promise.resolve();
       await new Promise((resolve) => requestAnimationFrame(resolve));
     });
 
@@ -519,6 +518,7 @@ describe('NodeLogsTab', () => {
   });
 
   it('keeps existing log content mounted during refresh', async () => {
+    vi.useFakeTimers();
     let refreshResolve: ((value: unknown) => void) | null = null;
     mockFetchNodeLogs
       .mockResolvedValueOnce({
@@ -533,31 +533,72 @@ describe('NodeLogsTab', () => {
           })
       );
 
-    await renderTab();
+    try {
+      await renderTab();
+      await selectSource('kubelet');
 
-    const refreshButton = Array.from(container.querySelectorAll('button')).find(
-      (button) => button.textContent === 'Refresh'
-    );
-    expect(refreshButton).toBeTruthy();
+      await act(async () => {
+        vi.advanceTimersByTime(5000);
+        await Promise.resolve();
+      });
 
-    await act(async () => {
-      refreshButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      await Promise.resolve();
-    });
+      expect(container.querySelector('.pod-logs-text')?.textContent).toContain('line one');
+      expect(container.textContent).not.toContain('Loading logs…');
 
-    expect(container.querySelector('.pod-logs-text')?.textContent).toContain('line one');
-    expect(container.textContent).not.toContain('Loading logs…');
+      await act(async () => {
+        refreshResolve?.({
+          source: sources[0],
+          sourcePath: sources[0].path,
+          content: 'line one\nline two\nline three',
+        });
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(container.querySelector('.pod-logs-text')?.textContent).toContain('line three');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
-    await act(async () => {
-      refreshResolve?.({
+  it('appends incremental refresh results using sinceTime with overlap dedupe', async () => {
+    vi.useFakeTimers();
+    mockFetchNodeLogs
+      .mockResolvedValueOnce({
         source: sources[0],
         sourcePath: sources[0].path,
-        content: 'line one\nline two\nline three',
+        content: 'line one\nline two',
+      })
+      .mockResolvedValueOnce({
+        source: sources[0],
+        sourcePath: sources[0].path,
+        content: 'line two\nline three',
       });
-      await Promise.resolve();
-      await Promise.resolve();
-    });
 
-    expect(container.querySelector('.pod-logs-text')?.textContent).toContain('line three');
+    try {
+      await renderTab();
+      await selectSource('kubelet');
+
+      await act(async () => {
+        vi.advanceTimersByTime(5000);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(mockFetchNodeLogs).toHaveBeenLastCalledWith(
+        'alpha:ctx',
+        'node-a',
+        expect.objectContaining({
+          sourcePath: 'journal/kubelet',
+          tailBytes: 262144,
+          sinceTime: expect.any(String),
+        })
+      );
+      const logLines = Array.from(container.querySelectorAll('.pod-log-line')).map(
+        (element) => element.textContent
+      );
+      expect(logLines).toEqual(['line one', 'line two', 'line three']);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -2,19 +2,21 @@
 
 ## Overview
 
-Add a `Node Logs` tab to the object panel for `Node` objects.
+Use the existing `Logs` tab in the object panel for `Node` objects.
 
-The tab should only appear when the selected cluster/node supports node log access through the
-Kubernetes node proxy endpoint and the current user can use it. Unlike pod shell, this cannot be a
-pure RBAC check: the app must also discover whether the endpoint is functional and which log
-sources are available.
+The tab should appear immediately for nodes, while node-log capability discovery runs in the
+background. The view then shows either a loading message, usable node log sources, or an
+unavailable/unsupported state for that specific node. Unlike pod shell, this cannot be a pure RBAC
+check: the app must also discover whether the endpoint is functional and which log sources are
+available.
 
 ## Goals
 
-- Only show `Node Logs` when the current node supports usable log access.
+- Show the node `Logs` experience only within the node object panel.
 - Keep detection scoped to the node object panel, matching the current shell-tab pattern.
-- Discover available node log sources before rendering the tab.
+- Discover available node log sources per node.
 - Let the user choose one discovered source and then filter within that source.
+- Reuse as much of the pod logs interface and behavior as possible.
 - Keep all requests multi-cluster aware via `clusterId`.
 
 ## Non-Goals
@@ -28,14 +30,14 @@ sources are available.
 
 When a `Node` object panel opens:
 
-1. Run node-log capability discovery for that node.
-2. If discovery finds no usable sources, omit the `Node Logs` tab.
-3. If discovery succeeds, show the `Node Logs` tab.
-4. Inside the tab, show:
+1. Show the normal `Logs` tab immediately.
+2. Run node-log capability discovery for that node.
+3. While discovery is pending, show `Checking if logs are available for this node...`.
+4. If discovery succeeds, render the node log viewer inside the `Logs` tab.
+5. Inside the tab, show:
    - source selector
-   - optional path/query metadata for the selected source
    - text filter for the displayed log content
-   - raw log output
+   - pod-log-style controls and viewer behavior
 
 ## Architecture
 
@@ -49,9 +51,8 @@ Suggested frontend shape:
 interface NodeLogSource {
   id: string;
   label: string;
-  kind: 'journal' | 'path' | 'directory' | 'query';
-  path?: string;
-  query?: string;
+  kind: 'journal' | 'path' | 'service';
+  path: string;
 }
 
 interface NodeLogsCapabilityState {
@@ -105,7 +106,8 @@ Follow the existing shell pattern:
 
 - `ObjectPanel` mounts
 - node-log capability discovery runs for `Node` objects
-- `useObjectPanelTabs` includes `Node Logs` only when `hasNodeLogs` is true
+- the normal `Logs` tab is visible immediately for nodes
+- node-specific log content is rendered only when discovery succeeds
 
 Unlike shell:
 
@@ -127,70 +129,97 @@ V1 should fetch one source at a time.
 
 ### Phase 1: Backend Discovery
 
-- [ ] Define node-log discovery/fetch response types.
-- [ ] Implement backend node log root probe per `clusterId` + node name.
-- [ ] Normalize discovered entries into source records.
-- [ ] Distinguish:
+- ✅ Define node-log discovery/fetch response types.
+- ✅ Implement backend node log root probe per `clusterId` + node name.
+- ✅ Normalize discovered entries into source records.
+- ✅ Distinguish:
   - unsupported endpoint
   - forbidden access
   - empty/no usable sources
   - usable sources found
-- [ ] Add backend tests for representative responses:
+- ✅ Add backend tests for representative responses:
   - directory listing response
   - access denied
   - not found/unsupported
   - malformed response
+- ✅ Recurse through nested directory trees with bounded depth and node limits.
+- ✅ Filter compressed/binary leaves from discovery and reject them on fetch.
+- ✅ Drop `pods/...` and `containers/...` sources because those logs are already available elsewhere.
+- ✅ Add well-known service-query probing support for `?query=<service>` sources.
 
 ### Phase 2: Frontend Capability Integration
 
-- [ ] Extend object panel capability state with node-log discovery.
-- [ ] Run discovery only for `Node` object panels.
-- [ ] Keep the request keyed by `clusterId` + node identity.
-- [ ] Add `hasNodeLogs` to computed capabilities.
-- [ ] Add a capability reason for hidden/unsupported node logs.
-- [ ] Ensure no node-log probes run for non-node panels.
+- ✅ Extend object panel capability state with node-log discovery.
+- ✅ Run discovery only for `Node` object panels.
+- ✅ Keep the request keyed by `clusterId` + node identity.
+- ✅ Add `hasNodeLogs` to computed capabilities.
+- ✅ Add a capability reason for hidden/unsupported node logs.
+- ✅ Ensure no node-log probes run for non-node panels.
 
 ### Phase 3: Object Panel Tab
 
-- [ ] Add `Node Logs` tab definition.
-- [ ] Gate it with `hasNodeLogs`.
-- [ ] Keep it `Node`-only.
-- [ ] Preserve the existing tab ordering conventions.
-- [ ] Add tests proving the tab appears only after successful discovery.
+- ✅ Reuse the existing `Logs` tab instead of adding a separate `Node Logs` tab.
+- ✅ Keep it `Node`-only.
+- ✅ Preserve the existing tab ordering conventions.
+- ✅ Show the tab immediately for nodes while discovery is pending.
+- ✅ Add tests proving the node logs view is wired into the `Logs` tab for nodes.
 
 ### Phase 4: Node Logs Viewer
 
-- [ ] Build a minimal node-log viewer component.
-- [ ] Render discovered sources in a selector.
-- [ ] Fetch logs for the selected source.
-- [ ] Add client-side text filtering.
-- [ ] Handle empty states and backend errors clearly.
-- [ ] Reuse existing log viewer styling patterns where reasonable, without coupling node logs to
-      pod/workload-specific assumptions.
+- ✅ Build a node-log viewer component.
+- ✅ Render discovered sources in a selector.
+- ✅ Fetch logs for the selected source.
+- ✅ Add client-side text filtering.
+- ✅ Handle empty states and backend errors clearly.
+- ✅ Reuse pod log viewer styling and controls where reasonable.
+- ✅ Add bounded tail fetches so loading logs does not make the app unresponsive.
+- ✅ Show truncation state when only the recent tail is displayed.
+- ✅ Reuse pod-log icon bar features:
+  - filter/highlight/invert/case/regex
+  - auto-refresh
+  - wrap toggle
+  - ANSI color toggle
+  - copy
+- ✅ Reuse pod-log JSON display modes:
+  - pretty JSON
+  - parsed table
+- ✅ Match pod-log parsed-table expansion/collapse behavior.
+- ✅ Match pod-log default positioning:
+  - default to newest visible content
+  - preserve scroll position on remount
+  - only auto-follow when already at the bottom
+- ✅ Keep existing content mounted during refresh instead of resetting to a loading placeholder.
+- ✅ Group the source selector into a tree-like dropdown with CSS-drawn connectors.
+- ✅ Show only the selected leaf label in the closed dropdown trigger.
 
 ### Phase 5: Hardening
 
-- [ ] Cache discovery results per panel or per node identity to avoid duplicate probes.
-- [ ] Define refresh behavior for discovery vs. log content fetch.
-- [ ] Add best-effort append-style refresh using `sinceTime`, with dedupe and fallback to full
+- ✅ Cache discovery results per panel or per node identity to avoid duplicate probes.
+- ✅ Define refresh behavior for discovery vs. log content fetch.
+- ✅ Add best-effort append-style refresh using `sinceTime`, with dedupe and fallback to full
       reload.
-- [ ] Verify disabled tab behavior across cluster switches and panel remounts.
-- [ ] Confirm no cluster-wide assumptions leak into node-specific discovery.
-- [ ] Add documentation for supported and unsupported cluster configurations.
+- ✅ Keep well-known service-query sources hidden unless `?query=<service>` is proven to return
+      direct text during discovery.
+- ✅ Verify disabled/unavailable node logs behavior across cluster switches and panel remounts.
+- ✅ Confirm no cluster-wide assumptions leak into node-specific discovery.
+- ✅ Add documentation for supported and unsupported cluster configurations.
 
 ## Detection Rules
 
-Recommended v1 rules:
+Current rules:
 
 - `403` / `401`: treat as unavailable due to access
 - `404`: treat as unsupported
 - `200` with no usable sources: treat as unavailable
 - `200` with at least one usable source: treat as supported
 
-Usable source rules should be conservative in v1:
+Current usable-source rules are conservative:
 
 - allow sources explicitly discovered from the endpoint
+- allow well-known service-query sources only when `?query=<service>` returns direct text
 - do not invent provider-specific paths unless discovery confirms them
+- reject compressed/binary leaves
+- reject `pods/...` and `containers/...` sources
 
 ## Risks
 
@@ -202,33 +231,53 @@ Usable source rules should be conservative in v1:
 - Node log query is snapshot-based rather than stream-based, so append-style refresh is only
   best-effort and may duplicate or miss boundary lines without careful handling.
 
-## Open Questions
+## Decisions
 
-- Should discovery happen once per node panel mount only, or be refreshable from the UI?
-- Should directory entries like `pods/` and `containers/` be exposed directly in v1, or only
-  sources that map cleanly to readable log content?
-- Should the app expose raw discovered paths to the user, or only curated labels?
-- Do we want a small “unsupported on this cluster” reason available in the node details view, or
-  only implicit tab absence?
+- Discovery runs on node panel mount only in v1.
+- Well-known service-query sources are shown only when discovery proves `?query=<service>` returns
+  direct text.
+- Unsupported/unavailable reasoning stays inside the node `Logs` tab state, not in node details.
+- Discovery is cached per `clusterId + nodeName` in the frontend for the lifetime of the session.
+- Content refresh applies only to the selected log source; discovery itself does not auto-refresh.
+- Incremental refresh uses `sinceTime` with a small overlap window and line-based dedupe, and falls
+  back to a full tail reload when the append path returns an error or a truncated response.
+
+## Supported Configurations
+
+- Clusters where `/api/v1/nodes/<node>/proxy/logs/` is reachable and returns at least one directly
+  readable text source.
+- Text sources discovered from browsable node log trees, including nested directories such as
+  `journal/...`.
+- Well-known service-query sources only when `?query=<service>` returns direct text for that node.
+- Best-effort incremental refresh for both service-backed and file-backed sources, with fallback to
+  a full tail reload when append semantics are not reliable.
+
+## Unsupported Or Intentionally Hidden Configurations
+
+- Clusters where the node log endpoint is forbidden or not supported.
+- Nodes where discovery yields only directory listings, binary leaves, or compressed leaves.
+- Binary and compressed sources such as `.journal`, `.gz`, `.tar`, `.zip`, `.bz2`, and `.xz`.
+- `pods/...` and `containers/...` sources, because those logs are already available elsewhere in
+  the app.
+- Well-known service queries that fall back to directory listings or otherwise do not return direct
+  text for that node.
 
 ## Recommended First Slice
 
-Ship the narrowest useful version first:
+Shipped core slice:
 
-1. Discover root sources for a node.
-2. Gate `Node Logs` tab on discovery success.
+1. Discover root and nested sources for a node.
+2. Use the existing node `Logs` tab with pending/supported/unavailable states.
 3. Support selecting one discovered source.
-4. Display raw logs with text filtering.
+4. Display bounded raw logs with filtering and pod-log-style controls.
 
 That gets the core behavior into the app while keeping provider-specific edge cases contained.
 
 ## Future Enhancements
 
-- Improve refresh from full-tail reloads to best-effort incremental append.
-- Track the last successful refresh time per selected source and request newer entries with
-  `sinceTime`.
-- Apply this to both service-backed and file-backed node sources; do not special-case journald
-  only.
-- Keep a small overlap window and dedupe appended lines at the boundary.
+- Add a manual discovery refresh action if users need to rescan sources without reopening the panel.
+- Persist node-log discovery cache more deliberately if session-lifetime caching proves too coarse.
+- Improve non-blocking refresh failure UX so content can stay visible while refresh errors are
+  surfaced separately.
 - Retain a safe fallback to full reload when a source does not behave consistently enough for
   append-style refresh.

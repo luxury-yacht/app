@@ -3214,6 +3214,7 @@ export namespace types {
 	}
 	export class NodeLogFetchRequest {
 	    sourcePath: string;
+	    sinceTime?: string;
 	    tailBytes?: number;
 	
 	    static createFrom(source: any = {}) {
@@ -3223,6 +3224,7 @@ export namespace types {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.sourcePath = source["sourcePath"];
+	        this.sinceTime = source["sinceTime"];
 	        this.tailBytes = source["tailBytes"];
 	    }
 	}

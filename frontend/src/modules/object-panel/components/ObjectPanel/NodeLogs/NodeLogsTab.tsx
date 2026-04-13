@@ -36,6 +36,7 @@ import './NodeLogsTab.css';
 
 const NODE_LOG_TAIL_BYTES = 256 * 1024;
 const NODE_LOG_AUTO_REFRESH_MS = 5000;
+const NODE_LOG_APPEND_OVERLAP_MS = 5000;
 const PARSED_COLUMN_MIN_WIDTH = 50;
 const PARSED_TIMESTAMP_MIN_WIDTH = 80;
 const PARSED_COLUMN_AUTOSIZE_MAX_WIDTH = 520;
@@ -77,6 +78,58 @@ const getParsedRowKey = (item: ParsedLogEntry): string => `log-${item.seq ?? ite
 const getNodeLogSourceLeafLabel = (label: string): string => {
   const segments = label.split(' / ');
   return segments[segments.length - 1] || label;
+};
+
+const buildNodeLogSinceTime = (lastSuccessfulFetchAt: string | null): string | undefined => {
+  if (!lastSuccessfulFetchAt) {
+    return undefined;
+  }
+
+  const parsedTime = Date.parse(lastSuccessfulFetchAt);
+  if (Number.isNaN(parsedTime)) {
+    return undefined;
+  }
+
+  return new Date(Math.max(0, parsedTime - NODE_LOG_APPEND_OVERLAP_MS)).toISOString();
+};
+
+const appendNodeLogContent = (existingContent: string, incomingContent: string): string => {
+  if (!existingContent) {
+    return incomingContent;
+  }
+  if (!incomingContent) {
+    return existingContent;
+  }
+
+  const existingLines = existingContent.split('\n');
+  const incomingLines = incomingContent.split('\n');
+  const maxOverlap = Math.min(existingLines.length, incomingLines.length);
+
+  let overlap = 0;
+  for (let candidate = maxOverlap; candidate > 0; candidate -= 1) {
+    let matches = true;
+    for (let index = 0; index < candidate; index += 1) {
+      if (existingLines[existingLines.length - candidate + index] !== incomingLines[index]) {
+        matches = false;
+        break;
+      }
+    }
+    if (matches) {
+      overlap = candidate;
+      break;
+    }
+  }
+
+  const remainingLines = incomingLines.slice(overlap);
+  if (remainingLines.length === 0) {
+    return existingContent;
+  }
+
+  if (existingContent.endsWith('\n')) {
+    return `${existingContent}${remainingLines.join('\n')}`;
+  }
+
+  return `${existingContent}\n${remainingLines.join('\n')}`;
 };
 
 const buildNodeLogSourceOptions = (sources: NodeLogSource[]): DropdownOption[] => {
@@ -164,6 +217,9 @@ const NodeLogsTab = ({
   const [parsedLogs, setParsedLogs] = useState<ParsedLogEntry[]>([]);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(() => new Set<string>());
   const logsContentRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef('');
+  const loadedSourcePathRef = useRef<string | null>(null);
+  const lastSuccessfulFetchAtRef = useRef<string | null>(null);
   const scrollRestoredRef = useRef(false);
   const wasAtBottomRef = useRef(true);
   const previousSourcePathRef = useRef<string | null>(null);
@@ -179,15 +235,19 @@ const NodeLogsTab = ({
       setSelectedSourcePath('');
       return;
     }
-    if (!sources.some((source) => source.path === selectedSourcePath)) {
-      setSelectedSourcePath(sources[0]?.path ?? '');
+    if (selectedSourcePath && !sources.some((source) => source.path === selectedSourcePath)) {
+      setSelectedSourcePath('');
     }
   }, [selectedSourcePath, sources]);
 
   const selectedSource = useMemo(
-    () => sources.find((source) => source.path === selectedSourcePath) ?? sources[0] ?? null,
+    () => sources.find((source) => source.path === selectedSourcePath) ?? null,
     [selectedSourcePath, sources]
   );
+
+  useEffect(() => {
+    contentRef.current = content;
+  }, [content]);
   const filterRegex = useMemo(
     () => buildSearchRegex(deferredTextFilter, regexMatches, caseSensitiveMatches),
     [caseSensitiveMatches, deferredTextFilter, regexMatches]
@@ -208,25 +268,56 @@ const NodeLogsTab = ({
     }
 
     let cancelled = false;
+    const activeSourcePath = selectedSource.path;
+    const sourceChanged = loadedSourcePathRef.current !== activeSourcePath;
+    const incrementalSinceTime =
+      !sourceChanged && refreshNonce > 0
+        ? buildNodeLogSinceTime(lastSuccessfulFetchAtRef.current)
+        : undefined;
+    const requestStartedAt = new Date().toISOString();
     setLoading(true);
     setError(null);
 
-    void fetchNodeLogs(clusterId, nodeName, {
-      sourcePath: selectedSource.path,
-      tailBytes: NODE_LOG_TAIL_BYTES,
-    })
-      .then((response) => {
+    const fetchLogs = async () => {
+      const runFetch = async (sinceTime?: string) =>
+        fetchNodeLogs(clusterId, nodeName, {
+          sourcePath: activeSourcePath,
+          tailBytes: NODE_LOG_TAIL_BYTES,
+          sinceTime,
+        });
+
+      let appendMode = Boolean(incrementalSinceTime);
+      let response = await runFetch(incrementalSinceTime);
+
+      if (appendMode && (response.error || response.truncated)) {
+        response = await runFetch();
+        appendMode = false;
+      }
+
+      return { appendMode, response };
+    };
+
+    void fetchLogs()
+      .then(({ appendMode, response }) => {
         if (cancelled) {
           return;
         }
         if (response.error) {
           setError(response.error);
-          setContent('');
+          if (sourceChanged) {
+            setContent('');
+          }
           setTruncated(false);
           return;
         }
+        const nextContent =
+          appendMode && contentRef.current
+            ? appendNodeLogContent(contentRef.current, response.content ?? '')
+            : (response.content ?? '');
+        loadedSourcePathRef.current = activeSourcePath;
+        lastSuccessfulFetchAtRef.current = requestStartedAt;
         startTransition(() => {
-          setContent(response.content ?? '');
+          setContent(nextContent);
           setTruncated(Boolean(response.truncated));
         });
       })
@@ -235,7 +326,9 @@ const NodeLogsTab = ({
           return;
         }
         setError(fetchError instanceof Error ? fetchError.message : 'Failed to fetch node logs');
-        setContent('');
+        if (sourceChanged) {
+          setContent('');
+        }
         setTruncated(false);
       })
       .finally(() => {
@@ -464,7 +557,9 @@ const NodeLogsTab = ({
   const displayedLogCount = isParsedView
     ? parsedLogs.length
     : filteredLines.filter((line) => line.length > 0).length;
-  const countLabel = `${displayedLogCount} matching log${displayedLogCount === 1 ? '' : 's'}`;
+  const countLabel = selectedSource
+    ? `${displayedLogCount} matching log${displayedLogCount === 1 ? '' : 's'}`
+    : 'Select a log source';
 
   const getScrollContainer = useCallback((): HTMLElement | null => {
     const root = logsContentRef.current;
@@ -484,6 +579,8 @@ const NodeLogsTab = ({
     }
 
     previousSourcePathRef.current = sourcePath;
+    loadedSourcePathRef.current = null;
+    lastSuccessfulFetchAtRef.current = null;
     scrollRestoredRef.current = false;
     wasAtBottomRef.current = true;
     forceTailRestoreRef.current = true;
@@ -939,15 +1036,6 @@ const NodeLogsTab = ({
               {countLabel}
             </span>
           </div>
-
-          <button
-            type="button"
-            className="button generic"
-            onClick={() => setRefreshNonce((value) => value + 1)}
-            disabled={loading || !selectedSource}
-          >
-            {loading ? 'Loading...' : 'Refresh'}
-          </button>
         </div>
 
         {truncated && !error && (
@@ -960,6 +1048,8 @@ const NodeLogsTab = ({
         <div ref={logsContentRef} className="pod-logs-content">
           {error ? (
             <div className="pod-logs-display-error">{error}</div>
+          ) : !selectedSource ? (
+            <div className="pod-logs-display-loading">Select a log source to view logs.</div>
           ) : loading && !hasLoadedContent ? (
             <div className="pod-logs-display-loading">Loading logs…</div>
           ) : hasInvalidRegex ? (

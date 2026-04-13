@@ -145,6 +145,7 @@ type NodeLogDiscoveryResponse struct {
 // NodeLogFetchRequest selects a discovered node log source to fetch.
 type NodeLogFetchRequest struct {
 	SourcePath string `json:"sourcePath"`
+	SinceTime  string `json:"sinceTime,omitempty"`
 	TailBytes  int    `json:"tailBytes,omitempty"`
 }
 

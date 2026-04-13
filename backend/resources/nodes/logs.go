@@ -24,6 +24,7 @@ const (
 	nodeLogDiscoveryWorkers  = 8
 	defaultNodeLogTailBytes  = 256 * 1024
 	maxNodeLogTailBytes      = 1024 * 1024
+	nodeLogServicePrefix     = "service:"
 )
 
 var (
@@ -34,6 +35,7 @@ var (
 		}
 		return client.Get().AbsPath(absPath).DoRaw(ctx)
 	}
+	wellKnownNodeLogServices = []string{"kubelet", "containerd", "crio", "cri-o", "docker"}
 )
 
 type nodeLogListingEntry struct {
@@ -70,7 +72,7 @@ func (s *Service) DiscoverLogs(nodeName string) restypes.NodeLogDiscoveryRespons
 		return restypes.NodeLogDiscoveryResponse{Reason: "kubernetes client not initialized"}
 	}
 
-	rootBody, err := s.fetchNodeLogPath(nodeName, "")
+	rootBody, err := s.fetchNodeLogPath(nodeName, "", "")
 	if err != nil {
 		return restypes.NodeLogDiscoveryResponse{Reason: classifyNodeLogError(err)}
 	}
@@ -94,6 +96,7 @@ func (s *Service) DiscoverLogs(nodeName string) restypes.NodeLogDiscoveryRespons
 
 	sources := make(map[string]restypes.NodeLogSource)
 	s.discoverNodeLogSources(nodeName, rootBody, sources)
+	s.discoverWellKnownNodeLogServices(nodeName, sources)
 
 	if len(sources) == 0 {
 		return restypes.NodeLogDiscoveryResponse{Reason: "node log endpoint did not expose any directly readable log sources"}
@@ -150,7 +153,8 @@ func (s *Service) FetchLogs(nodeName string, req restypes.NodeLogFetchRequest) r
 		}
 	}
 
-	body, err := s.fetchNodeLogPath(nodeName, sourcePath)
+	sinceTime := strings.TrimSpace(req.SinceTime)
+	body, err := s.fetchNodeLogPath(nodeName, sourcePath, sinceTime)
 	if err != nil {
 		return restypes.NodeLogFetchResponse{
 			Source:     source,
@@ -216,6 +220,33 @@ func (s *Service) discoverNodeLogSources(
 	workerWG.Wait()
 }
 
+func (s *Service) discoverWellKnownNodeLogServices(
+	nodeName string,
+	sources map[string]restypes.NodeLogSource,
+) {
+	for _, serviceName := range wellKnownNodeLogServices {
+		sourcePath := nodeLogServicePrefix + serviceName
+		if _, exists := sources[sourcePath]; exists {
+			continue
+		}
+
+		body, err := s.fetchNodeLogPath(nodeName, sourcePath, "")
+		if err != nil {
+			continue
+		}
+		if probeNodeLogPath(sourcePath, body) != nodeLogProbeText {
+			continue
+		}
+
+		sources[sourcePath] = restypes.NodeLogSource{
+			ID:    sourcePath,
+			Label: nodeLogSourceLabel(sourcePath),
+			Kind:  nodeLogSourceKind(sourcePath),
+			Path:  sourcePath,
+		}
+	}
+}
+
 func (s *Service) processNodeLogDiscoveryTask(
 	nodeName string,
 	task nodeLogDiscoveryTask,
@@ -237,7 +268,7 @@ func (s *Service) processNodeLogDiscoveryTask(
 			continue
 		}
 
-		childBody, err := s.fetchNodeLogPath(nodeName, nextPath)
+		childBody, err := s.fetchNodeLogPath(nodeName, nextPath, "")
 		if err != nil {
 			continue
 		}
@@ -294,22 +325,57 @@ func (s *nodeLogDiscoveryState) addSource(path string) {
 	}
 }
 
-func (s *Service) fetchNodeLogPath(nodeName, sourcePath string) ([]byte, error) {
+func (s *Service) fetchNodeLogPath(nodeName, sourcePath, sinceTime string) ([]byte, error) {
 	restClient := s.deps.KubernetesClient.Discovery().RESTClient()
 	ctx := s.deps.Context
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	return nodeLogFetchRawFunc(ctx, restClient, nodeLogProxyPath(nodeName, sourcePath))
+	return nodeLogFetchRawFunc(ctx, restClient, nodeLogProxyPathWithSinceTime(nodeName, sourcePath, sinceTime))
 }
 
 func nodeLogProxyPath(nodeName, sourcePath string) string {
-	trimmedPath := strings.TrimLeft(strings.TrimSpace(sourcePath), "/")
+	return nodeLogProxyPathWithSinceTime(nodeName, sourcePath, "")
+}
+
+func nodeLogProxyPathWithSinceTime(nodeName, sourcePath, sinceTime string) string {
 	base := fmt.Sprintf("/api/v1/nodes/%s/proxy/logs/", url.PathEscape(strings.TrimSpace(nodeName)))
+	query := url.Values{}
+
+	if serviceName, ok := parseNodeLogServiceSource(sourcePath); ok {
+		query.Set("query", serviceName)
+		if trimmedSinceTime := strings.TrimSpace(sinceTime); trimmedSinceTime != "" {
+			query.Set("sinceTime", trimmedSinceTime)
+		}
+		return base + "?" + query.Encode()
+	}
+
+	trimmedPath := strings.TrimLeft(strings.TrimSpace(sourcePath), "/")
+	if trimmedSinceTime := strings.TrimSpace(sinceTime); trimmedSinceTime != "" {
+		query.Set("sinceTime", trimmedSinceTime)
+	}
 	if trimmedPath == "" {
+		if len(query) > 0 {
+			return base + "?" + query.Encode()
+		}
 		return base
 	}
+	if len(query) > 0 {
+		return base + trimmedPath + "?" + query.Encode()
+	}
 	return base + trimmedPath
+}
+
+func parseNodeLogServiceSource(sourcePath string) (string, bool) {
+	trimmed := strings.TrimSpace(sourcePath)
+	if !strings.HasPrefix(trimmed, nodeLogServicePrefix) {
+		return "", false
+	}
+	serviceName := strings.TrimSpace(strings.TrimPrefix(trimmed, nodeLogServicePrefix))
+	if serviceName == "" {
+		return "", false
+	}
+	return serviceName, true
 }
 
 func classifyNodeLogError(err error) string {
@@ -382,6 +448,9 @@ func joinNodeLogPath(basePath, href string) (string, bool) {
 }
 
 func nodeLogSourceKind(sourcePath string) string {
+	if _, ok := parseNodeLogServiceSource(sourcePath); ok {
+		return "service"
+	}
 	if strings.HasPrefix(strings.TrimLeft(sourcePath, "/"), "journal/") {
 		return "journal"
 	}
@@ -389,6 +458,9 @@ func nodeLogSourceKind(sourcePath string) string {
 }
 
 func nodeLogSourceLabel(sourcePath string) string {
+	if serviceName, ok := parseNodeLogServiceSource(sourcePath); ok {
+		return "services / " + serviceName
+	}
 	trimmed := strings.Trim(strings.TrimSpace(sourcePath), "/")
 	if trimmed == "" {
 		return "Node Logs"
@@ -397,6 +469,9 @@ func nodeLogSourceLabel(sourcePath string) string {
 }
 
 func isDisplayableNodeLogSource(sourcePath string) bool {
+	if _, ok := parseNodeLogServiceSource(sourcePath); ok {
+		return true
+	}
 	trimmed := strings.ToLower(strings.TrimSpace(sourcePath))
 	return !strings.HasSuffix(trimmed, ".gz") &&
 		!strings.HasSuffix(trimmed, ".journal") &&
@@ -408,6 +483,9 @@ func isDisplayableNodeLogSource(sourcePath string) bool {
 }
 
 func isSupportedNodeLogSource(sourcePath string) bool {
+	if _, ok := parseNodeLogServiceSource(sourcePath); ok {
+		return true
+	}
 	trimmed := strings.Trim(strings.ToLower(strings.TrimSpace(sourcePath)), "/")
 	return !strings.HasPrefix(trimmed, "pods/") &&
 		trimmed != "pods" &&

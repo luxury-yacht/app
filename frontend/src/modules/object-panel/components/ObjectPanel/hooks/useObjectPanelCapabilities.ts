@@ -9,7 +9,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useCapabilities, useUserPermission, type CapabilityDescriptor } from '@/core/capabilities';
-import { discoverNodeLogs, type NodeLogSource } from '../NodeLogs/nodeLogsApi';
+import {
+  discoverNodeLogs,
+  getCachedNodeLogDiscovery,
+  type NodeLogSource,
+} from '../NodeLogs/nodeLogsApi';
 
 import {
   CapabilityReasons,
@@ -415,6 +419,23 @@ export const useObjectPanelCapabilities = ({
         createCapabilityState({
           reason:
             nodeLogsPermissionReason ?? 'Node logs are not accessible with the current permissions',
+        })
+      );
+      return;
+    }
+
+    const cachedDiscovery = getCachedNodeLogDiscovery(clusterId, nodeName);
+    if (cachedDiscovery) {
+      const sources = Array.isArray(cachedDiscovery.sources) ? cachedDiscovery.sources : [];
+      setNodeLogSources(sources);
+      setNodeLogsCapabilityState(
+        createCapabilityState({
+          allowed: Boolean(cachedDiscovery.supported && sources.length > 0),
+          pending: false,
+          reason:
+            cachedDiscovery.supported && sources.length > 0
+              ? undefined
+              : (cachedDiscovery.reason ?? 'Node logs are not available for this node'),
         })
       );
       return;
