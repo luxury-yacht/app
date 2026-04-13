@@ -111,8 +111,6 @@ const shortcutMocks = vi.hoisted(() => ({
 }));
 
 const contextMocks = vi.hoisted(() => ({
-  currentContext: { view: 'global', priority: 0 },
-  setContext: vi.fn(),
   registerShortcut: vi.fn(),
   unregisterShortcut: vi.fn(),
   getAvailableShortcuts: vi.fn().mockReturnValue([]),
@@ -257,7 +255,6 @@ describe('LogViewer active pod synchronisation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     shortcutMocks.useShortcut.mockClear();
-    contextMocks.setContext.mockClear();
     contextMocks.registerShortcut.mockClear();
     contextMocks.unregisterShortcut.mockClear();
     contextMocks.getAvailableShortcuts.mockClear();

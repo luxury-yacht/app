@@ -19,8 +19,6 @@ import type { Favorite, FavoriteFilters, FavoriteTableState } from '@/core/persi
 vi.mock('@ui/shortcuts', () => ({
   useShortcut: vi.fn(),
   useKeyboardContext: () => ({
-    currentContext: { view: 'global', priority: 0 },
-    setContext: vi.fn(),
     registerShortcut: vi.fn(),
     unregisterShortcut: vi.fn(),
     getAvailableShortcuts: vi.fn(() => []),
@@ -31,6 +29,7 @@ vi.mock('@ui/shortcuts', () => ({
     unregisterSurface: vi.fn(),
     updateSurface: vi.fn(),
     dispatchNativeAction: vi.fn(() => false),
+    hasActiveBlockingSurface: vi.fn(() => false),
   }),
   useShortcuts: vi.fn(),
   useSearchShortcutTarget: () => undefined,

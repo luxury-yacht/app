@@ -20,8 +20,6 @@ vi.mock('@ui/shortcuts', async (importOriginal) => {
     ...actual,
     useSearchShortcutTarget: () => {},
     useKeyboardContext: () => ({
-      currentContext: { view: 'global', priority: 0 },
-      setContext: () => {},
       registerShortcut: () => 'mock-id',
       unregisterShortcut: () => {},
       getAvailableShortcuts: () => [],
@@ -32,6 +30,7 @@ vi.mock('@ui/shortcuts', async (importOriginal) => {
       unregisterSurface: () => {},
       updateSurface: () => {},
       dispatchNativeAction: () => false,
+      hasActiveBlockingSurface: () => false,
     }),
     useShortcuts: () => {},
   };

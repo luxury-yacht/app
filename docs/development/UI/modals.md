@@ -99,7 +99,7 @@ These remain modal-specific responsibilities:
 
 - open/close animation state such as `shouldRender` and `isClosing`
 - `Escape` behavior
-- keyboard shortcut context registration with `useShortcut` / `pushContext`
+- any modal-local shortcut registration with `useShortcut`
 - `document.body.style.overflow` scroll locking
 - busy-state dismissal rules
 

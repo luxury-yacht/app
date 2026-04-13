@@ -36,18 +36,17 @@ vi.mock('../context', async () => {
   return {
     ...actual,
     useKeyboardContext: () => ({
-      setContext: vi.fn(),
       registerShortcut: vi.fn(() => 'id'),
       unregisterShortcut: vi.fn(),
       getAvailableShortcuts: vi.fn(() => []),
       isShortcutAvailable: vi.fn(() => false),
       setEnabled: vi.fn(),
       isEnabled: true,
-      currentContext: { view: 'global', priority: 0 },
       registerSurface: vi.fn(),
       unregisterSurface: vi.fn(),
       updateSurface: vi.fn(),
       dispatchNativeAction: vi.fn(() => false),
+      hasActiveBlockingSurface: vi.fn(() => false),
     }),
   };
 });
