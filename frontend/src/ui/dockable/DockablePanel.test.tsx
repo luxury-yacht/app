@@ -9,6 +9,8 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { getTabbableElements } from '@shared/components/modals/getTabbableElements';
+import { KeyboardProvider } from '@ui/shortcuts/context';
 
 import DockablePanel from './DockablePanel';
 import { DockablePanelProvider } from './DockablePanelProvider';
@@ -51,11 +53,15 @@ const renderPanel = async (ui: React.ReactElement) => {
   await act(async () => {
     const wrapped =
       ui.type === DockablePanelProvider ? (
-        <ZoomProvider>{ui}</ZoomProvider>
-      ) : (
-        <DockablePanelProvider>
+        <KeyboardProvider>
           <ZoomProvider>{ui}</ZoomProvider>
-        </DockablePanelProvider>
+        </KeyboardProvider>
+      ) : (
+        <KeyboardProvider>
+          <DockablePanelProvider>
+            <ZoomProvider>{ui}</ZoomProvider>
+          </DockablePanelProvider>
+        </KeyboardProvider>
       );
     root.render(wrapped);
     await Promise.resolve();
@@ -183,6 +189,51 @@ describe('DockablePanel', () => {
         layer?.querySelector('.dockable-panel')?.className.includes('dockable-panel--right')
       ).toBe(true);
     }
+
+    unmount();
+  });
+
+  it('keeps Tab navigation contained within the panel once focus is inside it', async () => {
+    const { unmount } = await renderPanel(
+      <DockablePanel panelId="dockable-panel-tab-trap" defaultPosition="floating" isOpen>
+        <button type="button">First control</button>
+        <button type="button">Second control</button>
+      </DockablePanel>
+    );
+
+    const layer = document.querySelector('.dockable-panel-layer');
+    const panel = layer?.querySelector('.dockable-panel') as HTMLDivElement | null;
+    expect(panel).toBeTruthy();
+
+    const tabbables = getTabbableElements(panel);
+    const firstTabbable = tabbables[0];
+    const lastTabbable = tabbables[tabbables.length - 1];
+    expect(firstTabbable).toBeTruthy();
+    expect(lastTabbable).toBeTruthy();
+
+    await act(async () => {
+      lastTabbable?.focus();
+      lastTabbable?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })
+      );
+      await Promise.resolve();
+    });
+
+    expect(document.activeElement).toBe(firstTabbable);
+
+    await act(async () => {
+      firstTabbable?.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'Tab',
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        })
+      );
+      await Promise.resolve();
+    });
+
+    expect(document.activeElement).toBe(lastTabbable);
 
     unmount();
   });

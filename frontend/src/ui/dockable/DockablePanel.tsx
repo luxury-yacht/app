@@ -23,6 +23,7 @@ import {
   PanelCloseReason,
 } from './useDockablePanelState';
 import { useDockablePanelContext, useDockablePanelHost } from './DockablePanelProvider';
+import { getTabbableElements } from '@shared/components/modals/getTabbableElements';
 import { DockablePanelControls } from './DockablePanelControls';
 import { DockablePanelHeader } from './DockablePanelHeader';
 import { useDockablePanelDragResize } from './useDockablePanelDragResize';
@@ -34,6 +35,7 @@ import type { PanelSizeConstraints } from './dockablePanelLayout';
 import type { TabInfo } from './DockableTabBar';
 import type { GroupKey } from './tabGroupTypes';
 import type { DockPosition } from './useDockablePanelState';
+import { useKeyboardSurface } from '@ui/shortcuts';
 import './DockablePanel.css';
 
 export type { DockPosition };
@@ -526,6 +528,45 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
       isMaximized,
     ]
   );
+
+  useKeyboardSurface({
+    kind: 'panel',
+    rootRef: panelRef,
+    active: panelState.isOpen && isGroupLeader,
+    onKeyDown: (event) => {
+      if (event.key !== 'Tab') {
+        return false;
+      }
+
+      const target = event.target as HTMLElement | null;
+      const panelRoot = panelRef.current;
+      if (!target || !panelRoot?.contains(target)) {
+        return false;
+      }
+
+      const tabbables = getTabbableElements(panelRoot);
+      if (tabbables.length === 0) {
+        return false;
+      }
+
+      const firstTabbable = tabbables[0];
+      const lastTabbable = tabbables[tabbables.length - 1];
+      if (event.shiftKey) {
+        if (target === firstTabbable) {
+          lastTabbable.focus();
+          return true;
+        }
+        return false;
+      }
+
+      if (target === lastTabbable) {
+        firstTabbable.focus();
+        return true;
+      }
+
+      return false;
+    },
+  });
 
   // Memoize panel classes and styles
   const panelClassName = useMemo(() => {
