@@ -34,14 +34,15 @@ const AppHeader: React.FC<AppHeaderProps> = ({ contentTitle, onAboutClick }) => 
       onDoubleClick={() => WindowToggleMaximise()}
     >
       <div className="app-header-left">
-        <img
-          src={logo}
-          alt="Luxury Yacht"
-          className="app-header-logo"
+        <button
+          type="button"
+          className="app-header-about-button"
           onClick={onAboutClick}
-          style={{ cursor: onAboutClick ? 'pointer' : 'default' }}
+          aria-label="About Luxury Yacht"
           title="About Luxury Yacht"
-        />
+        >
+          <img src={logo} alt="" className="app-header-logo" />
+        </button>
       </div>
       <div className="app-header-center">
         <span className="app-header-title">
@@ -82,6 +83,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({ contentTitle, onAboutClick }) => 
           onClick={() => viewState.setIsSettingsOpen(true)}
           title="Settings"
           aria-label="Settings"
+          data-app-header-last-focusable="true"
         >
           <SettingsIcon width={20} height={20} />
         </button>

@@ -229,6 +229,20 @@ const renderHarness = (props?: React.ComponentProps<typeof TestHarness>) => {
   };
 };
 
+const dispatchTab = async (element: HTMLElement, shiftKey = false) => {
+  await act(async () => {
+    element.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 'Tab',
+        shiftKey,
+        bubbles: true,
+        cancelable: true,
+      })
+    );
+    await Promise.resolve();
+  });
+};
+
 describe('useSidebarKeyboardControls', () => {
   afterEach(() => {
     vi.clearAllMocks();
@@ -248,8 +262,8 @@ describe('useSidebarKeyboardControls', () => {
     cleanup();
   });
 
-  it('tabs into the current sidebar selection from outside the sidebar', async () => {
-    const { container, cleanup } = renderHarness({
+  it('does not capture tab entry from arbitrary outside focus', async () => {
+    const { cleanup } = renderHarness({
       selectionTarget: { kind: 'overview' },
     });
     const outside = document.createElement('button');
@@ -257,22 +271,50 @@ describe('useSidebarKeyboardControls', () => {
     outside.focus();
     expect(document.activeElement).toBe(outside);
 
-    await act(async () => {
-      outside.dispatchEvent(
-        new KeyboardEvent('keydown', {
-          key: 'Tab',
-          bubbles: true,
-          cancelable: true,
-        })
-      );
-      await Promise.resolve();
+    await dispatchTab(outside);
+
+    expect(document.activeElement).toBe(outside);
+
+    outside.remove();
+    cleanup();
+  });
+
+  it('tabs from the last header control into the current sidebar selection', async () => {
+    const { container, cleanup } = renderHarness({
+      selectionTarget: { kind: 'overview' },
     });
+    const headerButton = document.createElement('button');
+    headerButton.setAttribute('data-app-header-last-focusable', 'true');
+    document.body.appendChild(headerButton);
+    headerButton.focus();
+
+    await dispatchTab(headerButton);
 
     expect(document.activeElement).toBe(
       container.querySelector('[data-sidebar-target-kind="overview"]')
     );
 
-    outside.remove();
+    headerButton.remove();
+    cleanup();
+  });
+
+  it('shift-tabs from the sidebar back to the last header control', async () => {
+    const { container, cleanup } = renderHarness({
+      selectionTarget: { kind: 'overview' },
+    });
+    const headerButton = document.createElement('button');
+    headerButton.setAttribute('data-app-header-last-focusable', 'true');
+    document.body.appendChild(headerButton);
+    const overview = container.querySelector(
+      '[data-sidebar-target-kind="overview"]'
+    ) as HTMLElement;
+    overview.focus();
+
+    await dispatchTab(overview, true);
+
+    expect(document.activeElement).toBe(headerButton);
+
+    headerButton.remove();
     cleanup();
   });
 
@@ -400,16 +442,7 @@ describe('useSidebarKeyboardControls', () => {
     document.body.appendChild(outside);
     outside.focus();
 
-    await act(async () => {
-      outside.dispatchEvent(
-        new KeyboardEvent('keydown', {
-          key: 'Tab',
-          bubbles: true,
-          cancelable: true,
-        })
-      );
-      await Promise.resolve();
-    });
+    await dispatchTab(outside);
 
     expect(document.activeElement).toBe(outside);
     outside.remove();

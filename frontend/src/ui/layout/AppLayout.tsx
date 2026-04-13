@@ -5,7 +5,7 @@
  * Implements AppLayout logic for the UI layer.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 // Assets
 import logo from '@assets/luxury-yacht-logo.png';
 import captainK8s from '@assets/captain-k8s-color.png';
@@ -326,39 +326,123 @@ export const AppLayout: React.FC = () => {
   );
 };
 
-const describeFocusTarget = (element: Element | null): string => {
-  if (!element) {
-    return 'No active element';
+interface FocusDebugInfo {
+  summary: string;
+  tag: string;
+  role: string | null;
+  label: string | null;
+  text: string | null;
+  id: string | null;
+  classes: string | null;
+  tabIndex: number | null;
+  disabled: boolean | null;
+  focusArea: string | null;
+  surface: string | null;
+  path: string;
+}
+
+const getFocusableLabel = (element: HTMLElement) =>
+  element.getAttribute('aria-label') ||
+  element.getAttribute('aria-labelledby') ||
+  (element instanceof HTMLInputElement && element.name ? `input[name="${element.name}"]` : null);
+
+const describePathSegment = (element: HTMLElement) => {
+  const tag = element.tagName.toLowerCase();
+  const dataFocusArea = element.getAttribute('data-focus-area');
+  if (dataFocusArea) {
+    return `${tag}[data-focus-area="${dataFocusArea}"]`;
+  }
+  if (element.id) {
+    return `${tag}#${element.id}`;
+  }
+  const classes = Array.from(element.classList).slice(0, 2);
+  if (classes.length > 0) {
+    return `${tag}.${classes.join('.')}`;
+  }
+  return tag;
+};
+
+const getSurfaceDescription = (element: HTMLElement) => {
+  const modalSurface = element.closest<HTMLElement>('[data-modal-surface="true"]');
+  if (modalSurface) {
+    return 'modal';
   }
 
-  const target =
-    (element instanceof HTMLElement && element.getAttribute('data-focus-area')) ||
-    element.closest<HTMLElement>('[data-focus-area]')?.getAttribute('data-focus-area');
-  if (target) {
-    return target;
+  const roles = ['dialog', 'navigation', 'tablist', 'listbox', 'menu'];
+  for (const role of roles) {
+    const match = element.closest<HTMLElement>(`[role="${role}"]`);
+    if (match) {
+      return role;
+    }
   }
 
-  if (element instanceof HTMLElement) {
-    const ariaLabel =
-      element.getAttribute('aria-label') ||
-      element.getAttribute('aria-labelledby') ||
-      (element instanceof HTMLInputElement && element.name
-        ? `input[name="${element.name}"]`
-        : null);
-    if (ariaLabel) {
-      return ariaLabel;
+  const classMatches: Array<[selector: string, label: string]> = [
+    ['.dropdown', 'dropdown'],
+    ['.context-menu', 'context menu'],
+    ['.object-panel', 'object panel'],
+    ['.sidebar', 'sidebar'],
+    ['.app-header', 'header'],
+  ];
+  for (const [selector, label] of classMatches) {
+    if (element.closest(selector)) {
+      return label;
     }
-    if (element.id) {
-      return `${element.tagName.toLowerCase()}#${element.id}`;
-    }
-    const text = element.textContent?.trim();
-    if (text) {
-      return `${element.tagName.toLowerCase()} "${text.slice(0, 60)}"`;
-    }
-    return element.tagName.toLowerCase();
   }
 
-  return element.tagName.toLowerCase();
+  return null;
+};
+
+const describeFocusTarget = (element: Element | null): FocusDebugInfo => {
+  if (!(element instanceof HTMLElement)) {
+    return {
+      summary: 'No active element',
+      tag: 'none',
+      role: null,
+      label: null,
+      text: null,
+      id: null,
+      classes: null,
+      tabIndex: null,
+      disabled: null,
+      focusArea: null,
+      surface: null,
+      path: 'none',
+    };
+  }
+
+  const focusArea =
+    element.getAttribute('data-focus-area') ||
+    element.closest<HTMLElement>('[data-focus-area]')?.getAttribute('data-focus-area') ||
+    null;
+  const label = getFocusableLabel(element);
+  const text = element.textContent?.trim() || null;
+  const summarizedText = text ? text.slice(0, 120) : null;
+  const pathSegments: string[] = [];
+  let current: HTMLElement | null = element;
+  for (let depth = 0; current && depth < 4; depth += 1) {
+    pathSegments.push(describePathSegment(current));
+    current = current.parentElement;
+  }
+
+  return {
+    summary:
+      focusArea ||
+      label ||
+      (element.id ? `${element.tagName.toLowerCase()}#${element.id}` : null) ||
+      (summarizedText ? `${element.tagName.toLowerCase()} "${summarizedText}"` : null) ||
+      element.tagName.toLowerCase(),
+    tag: element.tagName.toLowerCase(),
+    role: element.getAttribute('role'),
+    label,
+    text: summarizedText,
+    id: element.id || null,
+    classes: element.className.trim() || null,
+    tabIndex: element.tabIndex >= 0 ? element.tabIndex : null,
+    disabled: 'disabled' in element ? Boolean((element as HTMLInputElement).disabled) : null,
+    focusArea,
+    surface: getSurfaceDescription(element),
+    path: pathSegments.join(' <- '),
+  };
 };
 
 interface OverlayCloseProps {
@@ -367,26 +451,65 @@ interface OverlayCloseProps {
 }
 
 const KeyboardFocusOverlay: React.FC<OverlayCloseProps> = ({ onClose }) => {
-  const [description, setDescription] = useState('No active element');
+  const overlayRef = useRef<HTMLDivElement | null>(null);
+  const overlayPointerInteractionRef = useRef(false);
+  const [focusInfo, setFocusInfo] = useState<FocusDebugInfo>(() => describeFocusTarget(null));
 
   useEffect(() => {
     if (typeof document === 'undefined') {
       return;
     }
 
-    const updateDescription = () => {
-      setDescription(describeFocusTarget(document.activeElement));
+    const updateDescription = (event?: Event) => {
+      const overlayElement = overlayRef.current;
+      const activeElement = document.activeElement;
+      const eventTarget = event?.target instanceof Node ? event.target : null;
+      const activeElementIsDocumentFallback =
+        activeElement === document.body || activeElement === document.documentElement;
+      const overlaySidebar =
+        overlayElement?.closest<HTMLElement>('.sidebar') ?? overlayElement?.parentElement ?? null;
+      const activeElementIsOverlayHost =
+        overlayPointerInteractionRef.current &&
+        activeElement instanceof Node &&
+        Boolean(overlaySidebar?.contains(activeElement));
+
+      if (
+        overlayElement &&
+        ((activeElement instanceof Node && overlayElement.contains(activeElement)) ||
+          (eventTarget && overlayElement.contains(eventTarget)) ||
+          (activeElementIsDocumentFallback && overlayPointerInteractionRef.current) ||
+          activeElementIsOverlayHost)
+      ) {
+        return;
+      }
+
+      overlayPointerInteractionRef.current = false;
+      setFocusInfo(describeFocusTarget(activeElement));
+    };
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const overlayElement = overlayRef.current;
+      overlayPointerInteractionRef.current = Boolean(
+        overlayElement && overlayElement.contains(event.target as Node)
+      );
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      overlayPointerInteractionRef.current = false;
+      updateDescription(event);
     };
 
     updateDescription();
+    window.addEventListener('pointerdown', handlePointerDown, true);
     window.addEventListener('focusin', updateDescription);
     window.addEventListener('focusout', updateDescription);
-    window.addEventListener('keydown', updateDescription);
+    window.addEventListener('keydown', handleKeyDown);
 
     return () => {
+      window.removeEventListener('pointerdown', handlePointerDown, true);
       window.removeEventListener('focusin', updateDescription);
       window.removeEventListener('focusout', updateDescription);
-      window.removeEventListener('keydown', updateDescription);
+      window.removeEventListener('keydown', handleKeyDown);
     };
   }, []);
 
@@ -394,12 +517,63 @@ const KeyboardFocusOverlay: React.FC<OverlayCloseProps> = ({ onClose }) => {
     <DebugOverlay
       title="Keyboard Focus (Ctrl+Alt+K)"
       testId="keyboard-focus-overlay"
+      overlayRef={overlayRef}
       onClose={onClose}
     >
       <div className="debug-overlay__section">
-        <div className="debug-overlay__label">Focus target</div>
-        <div className="debug-overlay__value" title={description}>
-          {description}
+        <div className="debug-overlay__label">Summary</div>
+        <div className="debug-overlay__value" title={focusInfo.summary}>
+          {focusInfo.summary}
+        </div>
+      </div>
+      <div className="debug-overlay__section">
+        <div className="debug-overlay__label">Tag</div>
+        <div className="debug-overlay__value">{focusInfo.tag}</div>
+      </div>
+      <div className="debug-overlay__section">
+        <div className="debug-overlay__label">Role</div>
+        <div className="debug-overlay__value">{focusInfo.role ?? 'none'}</div>
+      </div>
+      <div className="debug-overlay__section">
+        <div className="debug-overlay__label">Label</div>
+        <div className="debug-overlay__value">{focusInfo.label ?? 'none'}</div>
+      </div>
+      <div className="debug-overlay__section">
+        <div className="debug-overlay__label">Text</div>
+        <div className="debug-overlay__value">{focusInfo.text ?? 'none'}</div>
+      </div>
+      <div className="debug-overlay__section">
+        <div className="debug-overlay__label">Id</div>
+        <div className="debug-overlay__value">{focusInfo.id ?? 'none'}</div>
+      </div>
+      <div className="debug-overlay__section">
+        <div className="debug-overlay__label">Classes</div>
+        <div className="debug-overlay__value">{focusInfo.classes ?? 'none'}</div>
+      </div>
+      <div className="debug-overlay__section">
+        <div className="debug-overlay__label">Tab Index</div>
+        <div className="debug-overlay__value">
+          {focusInfo.tabIndex !== null ? String(focusInfo.tabIndex) : 'none'}
+        </div>
+      </div>
+      <div className="debug-overlay__section">
+        <div className="debug-overlay__label">Disabled</div>
+        <div className="debug-overlay__value">
+          {focusInfo.disabled === null ? 'n/a' : focusInfo.disabled ? 'true' : 'false'}
+        </div>
+      </div>
+      <div className="debug-overlay__section">
+        <div className="debug-overlay__label">Focus Area</div>
+        <div className="debug-overlay__value">{focusInfo.focusArea ?? 'none'}</div>
+      </div>
+      <div className="debug-overlay__section">
+        <div className="debug-overlay__label">Surface</div>
+        <div className="debug-overlay__value">{focusInfo.surface ?? 'none'}</div>
+      </div>
+      <div className="debug-overlay__section">
+        <div className="debug-overlay__label">Path</div>
+        <div className="debug-overlay__value" title={focusInfo.path}>
+          {focusInfo.path}
         </div>
       </div>
     </DebugOverlay>

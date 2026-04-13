@@ -111,6 +111,16 @@ export const useSidebarKeyboardControls = ({
   getCurrentSelectionTarget,
 }: SidebarKeyboardParams): SidebarKeyboardApi => {
   const [isKeyboardNavActive, setIsKeyboardNavActive] = useState(false);
+  const focusLastHeaderControl = useCallback(() => {
+    const settingsButton = document.querySelector<HTMLElement>(
+      '[data-app-header-last-focusable="true"]'
+    );
+    if (!settingsButton) {
+      return false;
+    }
+    settingsButton.focus();
+    return true;
+  }, []);
 
   const getFocusableItems = useCallback((): HTMLElement[] => {
     if (!sidebarRef.current) {
@@ -234,7 +244,23 @@ export const useSidebarKeyboardControls = ({
           return false;
         }
         const targetElement = resolveEventElement(event.target);
+        const container = sidebarRef.current;
+        const focusIsInsideSidebar =
+          Boolean(container) &&
+          ((targetElement && container?.contains(targetElement)) ||
+            (document.activeElement instanceof HTMLElement &&
+              container?.contains(document.activeElement)));
+
         if (targetElement?.closest('[data-tab-native="true"]') || isInputElement(targetElement)) {
+          return false;
+        }
+        if (focusIsInsideSidebar) {
+          if (!event.shiftKey) {
+            return false;
+          }
+          return focusLastHeaderControl();
+        }
+        if (!targetElement?.closest('[data-app-header-last-focusable="true"]')) {
           return false;
         }
         const target = getDisplaySelectionTarget();
@@ -320,6 +346,23 @@ export const useSidebarKeyboardControls = ({
       return false;
     },
   });
+
+  useEffect(() => {
+    const container = sidebarRef.current;
+    if (!container) {
+      return;
+    }
+
+    const handleFocusIn = (event: FocusEvent) => {
+      if (event.target !== container) {
+        return;
+      }
+      focusSelectedSidebarItem();
+    };
+
+    container.addEventListener('focusin', handleFocusIn);
+    return () => container.removeEventListener('focusin', handleFocusIn);
+  }, [focusSelectedSidebarItem, sidebarRef]);
 
   useEffect(() => {
     if (isCollapsed) {

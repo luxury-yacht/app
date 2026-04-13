@@ -16,6 +16,7 @@ interface DebugOverlayProps {
   className?: string;
   bodyClassName?: string;
   testId?: string;
+  overlayRef?: React.Ref<HTMLDivElement>;
   // Optional header action used to hide the active debug overlay.
   onClose?: () => void;
 }
@@ -26,6 +27,7 @@ export const DebugOverlay: React.FC<DebugOverlayProps> = ({
   className,
   bodyClassName,
   testId,
+  overlayRef,
   onClose,
 }) => {
   const [sidebarElement, setSidebarElement] = useState<HTMLElement | null>(null);
@@ -63,7 +65,7 @@ export const DebugOverlay: React.FC<DebugOverlayProps> = ({
     : 'debug-overlay__body';
 
   return createPortal(
-    <div className={overlayClassName} data-testid={testId}>
+    <div ref={overlayRef} className={overlayClassName} data-testid={testId}>
       <div className="debug-overlay__header">
         <span className="debug-overlay__title">{title}</span>
         {onClose ? (

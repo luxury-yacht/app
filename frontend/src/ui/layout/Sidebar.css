@@ -457,9 +457,9 @@ body.sidebar-resizing * {
 
 .debug-overlay__value {
   font-family: var(--font-family-mono, monospace);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   color: var(--color-text);
 }
 
