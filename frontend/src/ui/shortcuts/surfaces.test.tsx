@@ -323,6 +323,77 @@ describe('keyboard surfaces', () => {
     expect(modalHandler).not.toHaveBeenCalled();
   });
 
+  it('falls back to the parent surface for Tab when the deepest surface does not handle it', async () => {
+    const regionHandler = vi.fn();
+    const dropdownHandler = vi.fn();
+
+    const Harness = () => {
+      const regionRef = useRef<HTMLDivElement>(null);
+      const dropdownRef = useRef<HTMLDivElement>(null);
+
+      useKeyboardSurface({
+        kind: 'region',
+        rootRef: regionRef,
+        active: true,
+        captureWhenActive: true,
+        onKeyDown: (event) => {
+          if (event.key !== 'Tab') {
+            return false;
+          }
+          regionHandler();
+          return true;
+        },
+      });
+
+      useKeyboardSurface({
+        kind: 'dropdown',
+        rootRef: dropdownRef,
+        active: true,
+        onKeyDown: (event) => {
+          if (event.key !== 'Tab') {
+            return false;
+          }
+          dropdownHandler();
+          return false;
+        },
+      });
+
+      return (
+        <div ref={regionRef}>
+          <div ref={dropdownRef}>
+            <button id="inside-dropdown">Inside dropdown</button>
+          </div>
+        </div>
+      );
+    };
+
+    await act(async () => {
+      root.render(
+        <KeyboardProvider>
+          <Harness />
+        </KeyboardProvider>
+      );
+      await Promise.resolve();
+    });
+
+    const insideDropdown = document.querySelector('#inside-dropdown') as HTMLButtonElement | null;
+    expect(insideDropdown).not.toBeNull();
+    insideDropdown?.focus();
+
+    act(() => {
+      insideDropdown?.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'Tab',
+          bubbles: true,
+          cancelable: true,
+        })
+      );
+    });
+
+    expect(dropdownHandler).toHaveBeenCalledTimes(1);
+    expect(regionHandler).toHaveBeenCalledTimes(1);
+  });
+
   it('preserves registration order when inline surface callbacks change on rerender', async () => {
     const firstHandler = vi.fn();
     const secondHandler = vi.fn();

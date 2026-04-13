@@ -868,25 +868,26 @@ describe('GridTable interactions (non-virtualized)', () => {
       data: createRows(30),
       filters: makeFilters(),
       virtualization: { enabled: false },
+      enableColumnVisibilityMenu: true,
     });
     cleanupRoot = cleanup;
 
     await flushAsync();
 
-    const resetButton = container.querySelector<HTMLButtonElement>(
-      '.icon-bar-button[title="Reset filters"]'
+    const columnsTrigger = container.querySelector<HTMLElement>(
+      '[data-gridtable-filter-role="columns"] .dropdown-trigger'
     );
     const wrapper = container.querySelector<HTMLDivElement>('.gridtable-wrapper');
-    expect(resetButton).not.toBeNull();
+    expect(columnsTrigger).not.toBeNull();
     expect(wrapper).not.toBeNull();
 
     act(() => {
-      resetButton!.focus();
+      columnsTrigger!.focus();
     });
-    expect(document.activeElement).toBe(resetButton);
+    expect(document.activeElement).toBe(columnsTrigger);
 
     act(() => {
-      resetButton!.dispatchEvent(
+      columnsTrigger!.dispatchEvent(
         new KeyboardEvent('keydown', {
           key: 'Tab',
           bubbles: true,
@@ -921,17 +922,18 @@ describe('GridTable interactions (non-virtualized)', () => {
       data: createRows(30),
       filters: makeFilters(),
       virtualization: { enabled: false },
+      enableColumnVisibilityMenu: true,
     });
     cleanupRoot = cleanup;
 
     await flushAsync();
 
     const wrapper = container.querySelector<HTMLDivElement>('.gridtable-wrapper');
-    const resetButton = container.querySelector<HTMLButtonElement>(
-      '.icon-bar-button[title="Reset filters"]'
+    const columnsTrigger = container.querySelector<HTMLElement>(
+      '[data-gridtable-filter-role="columns"] .dropdown-trigger'
     );
     expect(wrapper).not.toBeNull();
-    expect(resetButton).not.toBeNull();
+    expect(columnsTrigger).not.toBeNull();
 
     act(() => {
       wrapper!.focus();
@@ -949,7 +951,7 @@ describe('GridTable interactions (non-virtualized)', () => {
       );
     });
 
-    expect(document.activeElement).toBe(resetButton);
+    expect(document.activeElement).toBe(columnsTrigger);
   });
 
   it('shows selection counts in kind and namespace dropdown labels', async () => {

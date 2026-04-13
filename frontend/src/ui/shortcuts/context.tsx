@@ -251,6 +251,39 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
     [getOrderedSurfaces]
   );
 
+  const getSurfaceCandidates = useCallback(
+    (target: EventTarget | null): RegisteredKeyboardSurface[] => {
+      const targetElement = resolveEventElement(target);
+      const orderedSurfaces = getOrderedSurfaces();
+
+      if (targetElement) {
+        const containingSurfaces = orderedSurfaces.filter((surface) =>
+          surface.rootRef.current?.contains(targetElement)
+        );
+        if (containingSurfaces.length > 0) {
+          const sortedContainingSurfaces = containingSurfaces.sort((a, b) => {
+            const depthDiff =
+              getSurfaceContainmentDepth(targetElement, a.rootRef.current) -
+              getSurfaceContainmentDepth(targetElement, b.rootRef.current);
+            if (depthDiff !== 0) {
+              return depthDiff;
+            }
+            return orderedSurfaces.indexOf(a) - orderedSurfaces.indexOf(b);
+          });
+
+          return sortedContainingSurfaces;
+        }
+      }
+
+      const fallbackSurface =
+        orderedSurfaces.find((surface) => surface.blocking) ??
+        orderedSurfaces.find((surface) => surface.captureWhenActive);
+
+      return fallbackSurface ? [fallbackSurface] : [];
+    },
+    [getOrderedSurfaces]
+  );
+
   const registerSurface = useCallback((surface: KeyboardSurfaceOptions): string => {
     const id = `surface-${++surfaceIdCounter.current}`;
     surfacesRef.current.set(id, {
@@ -318,23 +351,25 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
         return;
       }
 
-      const targetSurface = getTargetSurface(event.target);
-      if (!targetSurface?.onKeyDown) {
+      for (const surface of getSurfaceCandidates(event.target)) {
+        if (!surface.onKeyDown) {
+          continue;
+        }
+
+        const keyResult = surface.onKeyDown(event);
+        const handledKey = keyResult === true || keyResult === 'handled-no-prevent';
+        const handledKeyNoPrevent = keyResult === 'handled-no-prevent';
+
+        if (!handledKey) {
+          continue;
+        }
+
+        if (!handledKeyNoPrevent) {
+          event.preventDefault();
+        }
+        event.stopPropagation();
         return;
       }
-
-      const keyResult = targetSurface.onKeyDown(event);
-      const handledKey = keyResult === true || keyResult === 'handled-no-prevent';
-      const handledKeyNoPrevent = keyResult === 'handled-no-prevent';
-
-      if (!handledKey) {
-        return;
-      }
-
-      if (!handledKeyNoPrevent) {
-        event.preventDefault();
-      }
-      event.stopPropagation();
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -419,7 +454,7 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
       document.removeEventListener('keydown', handleCapturedTabKeyDown, true);
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [disabled, getTargetSurface, isEnabled, shortcuts]);
+  }, [disabled, getSurfaceCandidates, getTargetSurface, isEnabled, shortcuts]);
 
   // Handle menu events from Wails
   useEffect(() => {
