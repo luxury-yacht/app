@@ -19,6 +19,7 @@ interface DebugOverlayProps {
   bodyClassName?: string;
   testId?: string;
   overlayRef?: React.Ref<HTMLDivElement>;
+  headerActions?: React.ReactNode;
   onClose?: () => void;
 }
 
@@ -92,6 +93,7 @@ export const DebugOverlay: React.FC<DebugOverlayProps> = ({
   bodyClassName,
   testId,
   overlayRef,
+  headerActions,
   onClose,
 }) => {
   const [isMounted, setIsMounted] = useState(false);
@@ -239,17 +241,21 @@ export const DebugOverlay: React.FC<DebugOverlayProps> = ({
           onPointerDown={(event) => startInteraction(event, 'drag')}
         >
           <span className="debug-overlay__title">{title}</span>
-          {onClose ? (
-            <button
-              type="button"
-              className="debug-overlay__close"
-              onClick={onClose}
-              aria-label="Close debug overlay"
-              title="Close"
-            >
-              <CloseIcon width={14} height={14} />
-            </button>
-          ) : null}
+          <div className="debug-overlay__header-actions">
+            {headerActions}
+            {onClose ? (
+              <button
+                type="button"
+                className="debug-overlay__close"
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={onClose}
+                aria-label="Close debug overlay"
+                title="Close"
+              >
+                <CloseIcon width={14} height={14} />
+              </button>
+            ) : null}
+          </div>
         </div>
         <div className={resolvedBodyClassName}>{children}</div>
         <div

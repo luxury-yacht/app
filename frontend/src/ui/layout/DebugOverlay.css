@@ -81,6 +81,13 @@
     border-color var(--duration-fast, 150ms) var(--ease-out, ease);
 }
 
+.debug-overlay__header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex-shrink: 0;
+}
+
 .debug-overlay__close:hover {
   background-color: var(--color-surface-hover, var(--color-bg-tertiary));
   border-color: var(--color-border);

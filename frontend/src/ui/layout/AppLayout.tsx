@@ -5,7 +5,7 @@
  * Implements AppLayout logic for the UI layer.
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 // Assets
 import logo from '@assets/luxury-yacht-logo.png';
 import captainK8s from '@assets/captain-k8s-color.png';
@@ -13,6 +13,7 @@ import captainK8s from '@assets/captain-k8s-color.png';
 import '@/App.css';
 import { withLazyBoundary } from '@shared/utils/react/withLazyBoundary';
 import { DebugOverlay } from '@ui/layout/DebugOverlay';
+import { CopyIcon } from '@shared/components/icons/LogIcons';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useObjectPanelState } from '@/core/contexts/ObjectPanelStateContext';
@@ -341,6 +342,24 @@ interface FocusDebugInfo {
   path: string;
 }
 
+const serializeFocusInfo = (focusInfo: FocusDebugInfo) =>
+  [
+    ['Summary', focusInfo.summary],
+    ['Tag', focusInfo.tag],
+    ['Role', focusInfo.role ?? 'none'],
+    ['Label', focusInfo.label ?? 'none'],
+    ['Text', focusInfo.text ?? 'none'],
+    ['Id', focusInfo.id ?? 'none'],
+    ['Classes', focusInfo.classes ?? 'none'],
+    ['Tab Index', focusInfo.tabIndex !== null ? String(focusInfo.tabIndex) : 'none'],
+    ['Disabled', focusInfo.disabled === null ? 'n/a' : focusInfo.disabled ? 'true' : 'false'],
+    ['Focus Area', focusInfo.focusArea ?? 'none'],
+    ['Surface', focusInfo.surface ?? 'none'],
+    ['Path', focusInfo.path],
+  ]
+    .map(([label, value]) => `${label}: ${value}`)
+    .join('\n');
+
 const getFocusableLabel = (element: HTMLElement) =>
   element.getAttribute('aria-label') ||
   element.getAttribute('aria-labelledby') ||
@@ -454,6 +473,9 @@ const KeyboardFocusOverlay: React.FC<OverlayCloseProps> = ({ onClose }) => {
   const overlayRef = useRef<HTMLDivElement | null>(null);
   const overlayPointerInteractionRef = useRef(false);
   const [focusInfo, setFocusInfo] = useState<FocusDebugInfo>(() => describeFocusTarget(null));
+  const handleCopy = useCallback(async () => {
+    await navigator.clipboard.writeText(serializeFocusInfo(focusInfo));
+  }, [focusInfo]);
 
   useEffect(() => {
     if (typeof document === 'undefined') {
@@ -511,6 +533,18 @@ const KeyboardFocusOverlay: React.FC<OverlayCloseProps> = ({ onClose }) => {
       title="Keyboard Focus (Ctrl+Alt+K)"
       testId="keyboard-focus-overlay"
       overlayRef={overlayRef}
+      headerActions={
+        <button
+          type="button"
+          className="debug-overlay__close"
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={() => void handleCopy()}
+          aria-label="Copy keyboard focus details"
+          title="Copy keyboard focus details"
+        >
+          <CopyIcon width={14} height={14} />
+        </button>
+      }
       onClose={onClose}
     >
       <div className="debug-overlay__section">

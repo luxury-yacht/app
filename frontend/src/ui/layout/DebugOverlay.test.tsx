@@ -56,4 +56,25 @@ describe('DebugOverlay', () => {
 
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  it('renders header actions to the left of the close button', () => {
+    renderOverlay({
+      onClose: vi.fn(),
+      headerActions: (
+        <button type="button" aria-label="Copy debug overlay contents">
+          Copy
+        </button>
+      ),
+    });
+
+    const headerActions = document.body.querySelector('.debug-overlay__header-actions');
+    const headerButtons = Array.from(
+      headerActions?.querySelectorAll<HTMLButtonElement>('button') ?? []
+    );
+
+    expect(headerButtons.map((button) => button.getAttribute('aria-label'))).toEqual([
+      'Copy debug overlay contents',
+      'Close debug overlay',
+    ]);
+  });
 });
