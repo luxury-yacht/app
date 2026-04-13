@@ -111,6 +111,14 @@ describe('NodeLogsTab', () => {
     });
   };
 
+  const waitForAnimationFrames = async (count: number): Promise<void> => {
+    await act(async () => {
+      for (let index = 0; index < count; index += 1) {
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+      }
+    });
+  };
+
   it('shows a selection prompt instead of auto-loading the first source', async () => {
     mockFetchNodeLogs.mockResolvedValue({
       source: sources[0],
@@ -437,9 +445,7 @@ describe('NodeLogsTab', () => {
     await renderTab();
     await selectSource('kubelet');
 
-    await act(async () => {
-      await new Promise((resolve) => requestAnimationFrame(resolve));
-    });
+    await waitForAnimationFrames(2);
 
     const content = container.querySelector<HTMLElement>('.pod-logs-content');
     expect(content).toBeTruthy();
@@ -499,9 +505,7 @@ describe('NodeLogsTab', () => {
     const trigger = container.querySelector('.pod-logs-selector-dropdown .dropdown-trigger');
     expect(trigger).toBeTruthy();
     await selectSource('containerd');
-    await act(async () => {
-      await new Promise((resolve) => requestAnimationFrame(resolve));
-    });
+    await waitForAnimationFrames(6);
 
     expect(content!.scrollTop).toBe(500);
 
@@ -515,6 +519,62 @@ describe('NodeLogsTab', () => {
     } else {
       Reflect.deleteProperty(HTMLElement.prototype, 'clientHeight');
     }
+  });
+
+  it('clears the previous source logs and shows loading while a new source is fetching', async () => {
+    let secondSourceResolve: ((value: unknown) => void) | null = null;
+    mockFetchNodeLogs
+      .mockResolvedValueOnce({
+        source: sources[0],
+        sourcePath: sources[0].path,
+        content: 'content for journal/kubelet',
+      })
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            secondSourceResolve = resolve;
+          })
+      );
+
+    await renderTab();
+    await selectSource('kubelet');
+
+    expect(container.querySelector('.pod-logs-text')?.textContent).toContain(
+      'content for journal/kubelet'
+    );
+
+    await act(async () => {
+      const trigger = container.querySelector('.pod-logs-selector-dropdown .dropdown-trigger');
+      trigger!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    const secondOption = Array.from(
+      container.querySelectorAll<HTMLElement>('.dropdown-option')
+    ).find((node) => node.textContent?.includes('containerd'));
+    expect(secondOption).toBeTruthy();
+
+    await act(async () => {
+      secondOption!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain('Loading logs…');
+    expect(container.textContent).not.toContain('content for journal/kubelet');
+
+    await act(async () => {
+      secondSourceResolve?.({
+        source: sources[1],
+        sourcePath: sources[1].path,
+        content: 'content for journal/containerd',
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('.pod-logs-text')?.textContent).toContain(
+      'content for journal/containerd'
+    );
   });
 
   it('keeps existing log content mounted during refresh', async () => {
