@@ -364,7 +364,6 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
     description: 'Close app logs panel',
     category: 'App Logs',
     enabled: isOpen,
-    view: 'global',
     priority: isOpen ? KeyboardShortcutPriority.APP_LOGS_ESCAPE : 0,
   });
 
@@ -423,7 +422,6 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
     description: 'Toggle auto-scroll',
     category: 'Logs Panel',
     enabled: isOpen, // Only show in help when logs panel is open
-    view: 'global',
     priority: isOpen ? KeyboardShortcutPriority.APP_LOGS_ACTION : 0,
   });
 
@@ -440,7 +438,6 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
     description: 'Clear logs',
     category: 'Logs Panel',
     enabled: isOpen, // Only show in help when logs panel is open
-    view: 'global',
     priority: isOpen ? KeyboardShortcutPriority.APP_LOGS_ACTION : 0,
   });
 

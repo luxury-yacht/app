@@ -36,7 +36,6 @@ import { useGridTableContextMenuWiring } from '@shared/components/tables/hooks/u
 import { useGridTableFocusNavigation } from '@shared/components/tables/hooks/useGridTableFocusNavigation';
 import { useGridTableExternalFocus } from '@shared/components/tables/hooks/useGridTableExternalFocus';
 import { useGridTableShortcuts } from '@shared/components/tables/hooks/useGridTableShortcuts';
-import { useKeyboardContext } from '@ui/shortcuts';
 import { useGridTableKeyboardScopes } from '@shared/components/tables/GridTableKeys';
 import type {
   GridColumnDefinition,
@@ -202,7 +201,6 @@ export function useGridTableController<T>({
     () => (Array.isArray(inputData) ? inputData : ([] as T[])),
     [inputData]
   );
-  const { pushContext: pushShortcutContext, popContext: popShortcutContext } = useKeyboardContext();
   const wrapperRef = useRef<HTMLDivElement>(null);
   const tableRef = useRef<HTMLDivElement>(null);
   const tableRefMutable = tableRef as RefObject<HTMLElement | null>;
@@ -443,8 +441,6 @@ export function useGridTableController<T>({
     jumpToIndex,
     getPageSizeRef,
     tableDataLength: tableData.length,
-    pushShortcutContext: (opts) => pushShortcutContext(opts),
-    popShortcutContext,
     isContextMenuVisible,
   });
 

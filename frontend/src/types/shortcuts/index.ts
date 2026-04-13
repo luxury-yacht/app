@@ -14,31 +14,7 @@ export interface ShortcutModifiers {
   meta?: boolean; // Cmd on Mac, Windows key on Windows
 }
 
-export type ViewContext =
-  | 'global'
-  | 'logs'
-  | 'details'
-  | 'events'
-  | 'yaml'
-  | 'list'
-  | 'settings'
-  | 'object-panel';
-
-export type ResourceContext =
-  | 'pods'
-  | 'deployments'
-  | 'services'
-  | 'configmaps'
-  | 'secrets'
-  | 'nodes'
-  | '*'; // Any resource
-
 export interface ShortcutContext {
-  view?: ViewContext;
-  resourceKind?: ResourceContext;
-  objectKind?: string; // Type of object being viewed (e.g., 'secret', 'pod')
-  panelOpen?: 'object' | 'logs' | 'settings';
-  tabActive?: string; // Active tab within a panel
   priority?: number; // Higher priority wins in conflicts (default: 0)
 }
 

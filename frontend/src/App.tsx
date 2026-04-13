@@ -233,7 +233,6 @@ function AppContent() {
         onToggleObjectDiff={() => viewState.setIsObjectDiffOpen(!viewState.isObjectDiffOpen)}
         onRefresh={handleManualRefresh}
         onToggleDiagnostics={handleToggleDiagnostics}
-        viewType={viewState.viewType}
         isLogsPanelOpen={viewState.showAppLogs}
         isObjectPanelOpen={viewState.showObjectPanel}
         isSettingsOpen={viewState.isSettingsOpen}

@@ -129,9 +129,6 @@ let registeredPaletteShortcuts: Array<{
   handler: () => boolean | void;
   enabled?: boolean;
 }> = [];
-const pushContextMock = vi.fn();
-const popContextMock = vi.fn();
-
 vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
   useObjectPanel: () => ({
     openWithObject: openWithObjectMock,
@@ -165,8 +162,6 @@ vi.mock('@ui/shortcuts', () => ({
     registeredPaletteShortcuts = shortcuts;
   },
   useKeyboardContext: () => ({
-    pushContext: pushContextMock,
-    popContext: popContextMock,
     hasActiveBlockingSurface: vi.fn(() => false),
     registerSurface: vi.fn(),
     unregisterSurface: vi.fn(),
@@ -242,8 +237,6 @@ describe('CommandPalette component behaviour', () => {
     registeredPaletteShortcuts = [];
     fetchSnapshotMock.mockReset();
     openWithObjectMock.mockReset();
-    pushContextMock.mockReset();
-    popContextMock.mockReset();
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
@@ -285,7 +278,6 @@ describe('CommandPalette component behaviour', () => {
 
     const input = container.querySelector<HTMLInputElement>('.command-palette-input');
     expect(input).not.toBeNull();
-    expect(pushContextMock).toHaveBeenCalled();
 
     await triggerShortcut('ArrowDown');
     expect(queryItems()[1].classList.contains('selected')).toBe(true);

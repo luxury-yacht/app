@@ -56,7 +56,7 @@ describe('KeyboardProvider', () => {
     runtimeMocks.eventsOff.mockReset();
   });
 
-  it('stacks contexts and reflects availability changes', async () => {
+  it('reports availability for registered shortcuts', async () => {
     const apiRef: { current: ShortcutContextApi | null } = { current: null };
     const listHandler = vi.fn();
 
@@ -70,7 +70,7 @@ describe('KeyboardProvider', () => {
       useEffect(() => {
         const listId = ctx.registerShortcut({
           key: 'l',
-          contexts: [{ view: 'list', priority: 1 }],
+          contexts: [{ priority: 1 }],
           handler: listHandler,
           description: 'List scope action',
         });
@@ -93,21 +93,6 @@ describe('KeyboardProvider', () => {
     });
 
     expect(apiRef.current).not.toBeNull();
-    expect(apiRef.current?.isShortcutAvailable('l')).toBe(false);
-
-    act(() => {
-      apiRef.current?.setContext({ view: 'list' });
-    });
-    expect(apiRef.current?.isShortcutAvailable('l')).toBe(true);
-
-    act(() => {
-      apiRef.current?.pushContext({ view: 'details', priority: 5 });
-    });
-    expect(apiRef.current?.isShortcutAvailable('l')).toBe(false);
-
-    act(() => {
-      apiRef.current?.popContext();
-    });
     expect(apiRef.current?.isShortcutAvailable('l')).toBe(true);
   });
 
@@ -126,13 +111,13 @@ describe('KeyboardProvider', () => {
       useEffect(() => {
         const lowId = ctx.registerShortcut({
           key: 'k',
-          contexts: [{ view: 'list', priority: 1 }],
+          contexts: [{ priority: 1 }],
           handler: lowPriorityHandler,
           description: 'Lower priority action',
         });
         const highId = ctx.registerShortcut({
           key: 'k',
-          contexts: [{ view: 'list', priority: 5 }],
+          contexts: [{ priority: 5 }],
           handler: highPriorityHandler,
           description: 'Higher priority action',
         });
@@ -156,11 +141,6 @@ describe('KeyboardProvider', () => {
     });
 
     expect(apiRef.current).not.toBeNull();
-
-    act(() => {
-      apiRef.current?.setContext({ view: 'list' });
-    });
-
     const event = new KeyboardEvent('keydown', { key: 'k', bubbles: true, cancelable: true });
 
     act(() => {
@@ -173,58 +153,19 @@ describe('KeyboardProvider', () => {
   });
 
   describe('helper functions', () => {
-    it('evaluates matchesShortcutContext across all conditions', () => {
+    it('treats enabled shortcuts as matching and disabled shortcuts as non-matching', () => {
       const shortcut: RegisteredShortcut = {
         id: '1',
         key: 'a',
         handler: vi.fn(),
         description: '',
-        contexts: [
-          {
-            view: 'details',
-            priority: 2,
-            resourceKind: 'deployments',
-            objectKind: 'pod',
-            panelOpen: 'object',
-          },
-          {
-            view: 'details',
-            priority: 1,
-            resourceKind: 'deployments',
-            objectKind: '*',
-          },
-        ],
+        contexts: [{ priority: 2 }],
         category: 'General',
         enabled: true,
       };
 
-      expect(matchesShortcutContext(shortcut, { view: 'list', priority: 0 })).toBe(false);
-      expect(
-        matchesShortcutContext(shortcut, {
-          view: 'details',
-          priority: 0,
-          resourceKind: 'deployments',
-          objectKind: 'pod',
-          panelOpen: 'object',
-        })
-      ).toBe(true);
-      expect(
-        matchesShortcutContext(shortcut, {
-          view: 'details',
-          priority: 0,
-          resourceKind: 'configmaps',
-          objectKind: 'pod',
-          panelOpen: 'object',
-        })
-      ).toBe(false);
-      expect(
-        matchesShortcutContext(shortcut, {
-          view: 'details',
-          priority: 0,
-          resourceKind: 'deployments',
-          objectKind: 'service',
-        })
-      ).toBe(true);
+      expect(matchesShortcutContext(shortcut, { priority: 0 })).toBe(true);
+      expect(matchesShortcutContext({ ...shortcut, enabled: false }, { priority: 0 })).toBe(false);
     });
 
     it('removes YAML line numbers when deriving copy text', () => {
@@ -272,8 +213,8 @@ describe('KeyboardProvider', () => {
     });
 
     it('performs shallow equal comparison for context objects', () => {
-      expect(shallowEqual({ view: 'list' }, { view: 'list' })).toBe(true);
-      expect(shallowEqual({ view: 'list' }, { view: 'details' })).toBe(false);
+      expect(shallowEqual({ priority: 1 }, { priority: 1 })).toBe(true);
+      expect(shallowEqual({ priority: 1 }, { priority: 2 })).toBe(false);
     });
   });
 });
@@ -316,14 +257,14 @@ describe('keyboard handling edge cases', () => {
         const plainId = ctx.registerShortcut({
           key: 'c',
           modifiers: { meta: true },
-          contexts: [{ view: 'global' }],
+          contexts: [{}],
           handler: plainCopyHandler,
           description: 'Plain copy override',
         });
         const extendedId = ctx.registerShortcut({
           key: 'c',
           modifiers: { meta: true, shift: true },
-          contexts: [{ view: 'global' }],
+          contexts: [{}],
           handler: extendedHandler,
           description: 'Extended copy',
         });

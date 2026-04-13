@@ -31,10 +31,6 @@ const buildShortcutContext = (
 ): ShortcutContextShape => ({
   registerShortcut: vi.fn(),
   unregisterShortcut: vi.fn(),
-  currentContext: { view: 'global', priority: 0 },
-  setContext: vi.fn(),
-  pushContext: vi.fn(),
-  popContext: vi.fn(),
   getAvailableShortcuts: vi.fn().mockReturnValue([]),
   isShortcutAvailable: vi.fn().mockReturnValue(true),
   setEnabled: vi.fn(),
@@ -93,11 +89,6 @@ describe('useShortcut hooks', () => {
       handler: vi.fn(),
       modifiers: { ctrl: true, meta: false },
       description: 'Trigger action',
-      view: 'details' as const,
-      resourceKind: 'deployments' as const,
-      objectKind: 'Pod',
-      whenPanelOpen: 'object' as const,
-      whenTabActive: 'summary',
       priority: 2,
       category: 'test',
     };
@@ -115,11 +106,6 @@ describe('useShortcut hooks', () => {
     expect(registeredArgs.modifiers).toEqual({ ctrl: true, shift: false, alt: false, meta: false });
     expect(registeredArgs.contexts).toEqual([
       {
-        view: 'details',
-        resourceKind: 'deployments',
-        objectKind: 'Pod',
-        panelOpen: 'object',
-        tabActive: 'summary',
         priority: 2,
       },
     ]);
@@ -148,7 +134,7 @@ describe('useShortcut hooks', () => {
         handler,
         enabled,
         description: 'close',
-        contexts: [{ view: 'global' as const }],
+        contexts: [{}],
       });
       return null;
     };
@@ -199,7 +185,7 @@ describe('useShortcut hooks', () => {
 
     const shortcutA = { key: 'j', handler: vi.fn(), description: 'Next item' };
     const shortcutB = { key: 'k', handler: vi.fn(), description: 'Previous item', enabled: false };
-    const common = { view: 'list' as const, resourceKind: 'pods' as const, category: 'navigation' };
+    const common = { category: 'navigation' };
 
     const TestComponent: React.FC<{ shortcuts: (typeof shortcutA)[] }> = ({ shortcuts }) => {
       useShortcuts(shortcuts, common);
@@ -211,7 +197,7 @@ describe('useShortcut hooks', () => {
     expect(registerMock).toHaveBeenCalledTimes(2);
 
     const firstArgs = registerMock.mock.calls[0][0] as RegisterArgs;
-    expect(firstArgs.contexts).toEqual([{ view: 'list', resourceKind: 'pods' }]);
+    expect(firstArgs.contexts).toEqual([{}]);
     expect(firstArgs.enabled).toBe(true);
 
     const secondArgs = registerMock.mock.calls[1][0] as RegisterArgs;

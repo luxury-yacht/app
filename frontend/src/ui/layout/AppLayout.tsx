@@ -41,6 +41,7 @@ import { getAllPanelStates, useDockablePanelContext } from '@ui/dockable';
 import { useDockablePanelEmptySpaceDropTarget } from '@ui/dockable/DockablePanelContentArea';
 // Auth Failure Overlay
 import { AuthFailureOverlay } from '@ui/overlays/AuthFailureOverlay';
+import { useAppDebugShortcuts } from '@ui/layout/useAppDebugShortcuts';
 
 const Sidebar = withLazyBoundary(() => import('@ui/layout/Sidebar'), 'Loading sidebar...');
 
@@ -85,29 +86,11 @@ export const AppLayout: React.FC = () => {
     viewState.setIsAboutOpen(false);
   };
 
-  useEffect(() => {
-    const handleDebugShortcut = (event: KeyboardEvent) => {
-      const key = event.key.toLowerCase();
-      const isCtrlAlt = event.ctrlKey && event.altKey;
-      if (!isCtrlAlt) {
-        return;
-      }
-
-      if (key === 'p') {
-        event.preventDefault();
-        setIsPanelDebugOverlayVisible((prev) => !prev);
-      } else if (key === 'k') {
-        event.preventDefault();
-        setIsFocusOverlayVisible((prev) => !prev);
-      } else if (key === 'e') {
-        event.preventDefault();
-        setIsErrorOverlayVisible((prev) => !prev);
-      }
-    };
-
-    window.addEventListener('keydown', handleDebugShortcut);
-    return () => window.removeEventListener('keydown', handleDebugShortcut);
-  }, []);
+  useAppDebugShortcuts({
+    onTogglePanelDebug: () => setIsPanelDebugOverlayVisible((prev) => !prev),
+    onToggleFocusDebug: () => setIsFocusOverlayVisible((prev) => !prev),
+    onToggleErrorDebug: () => setIsErrorOverlayVisible((prev) => !prev),
+  });
 
   useEffect(() => {
     return eventBus.on('view:toggle-diagnostics', () => {

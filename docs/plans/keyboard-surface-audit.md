@@ -35,20 +35,21 @@ Result:
 Mechanism:
 
 - global shortcut registry
-- merged `contextStack`
+- shared keyboard surface routing
 - one `document` `keydown` listener
 
 Current behavior:
 
 - suppresses bare-key shortcuts while typing in most inputs
 - preserves standard edit commands like copy, paste, cut, select all
-- dispatches the highest-priority matching registered shortcut
+- routes keys to the deepest active containing surface first
+- dispatches registered shortcuts only when no active surface owns the event
 - also handles native menu copy/select-all events from Wails
 
 Compatibility requirements:
 
-- any new surface manager must preserve standard editing behavior in inputs
-- shortcut matching still needs business context such as view, panel, tab, resource kind
+- standard editing behavior in inputs must remain intact
+- surface precedence must stay stable for nested panels, modals, menus, and editors
 
 ### `frontend/src/ui/shortcuts/hooks.ts`
 
@@ -60,7 +61,7 @@ Mechanism:
 Current behavior:
 
 - registers shortcuts into the global registry
-- supports convenience metadata such as `view`, `whenPanelOpen`, `whenTabActive`, `priority`
+- supports enabled-state and per-shortcut priority
 
 Compatibility requirements:
 
@@ -99,7 +100,6 @@ Compatibility requirements:
 Mechanism:
 
 - shared shortcuts via `useShortcut`
-- updates base keyboard context with `setContext`
 - handles native `menu:close` Wails event
 
 Current shortcuts:
@@ -138,7 +138,8 @@ Current behavior:
 
 Compatibility requirements:
 
-- debug-only listeners can remain out-of-band if documented
+- these listeners are intentionally out-of-band
+- they should stay limited to app-shell debugging tools only
 - they should not interfere with production surface ownership
 
 ## Layered Surfaces

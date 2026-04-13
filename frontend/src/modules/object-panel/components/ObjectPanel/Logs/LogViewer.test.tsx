@@ -111,8 +111,19 @@ const shortcutMocks = vi.hoisted(() => ({
 }));
 
 const contextMocks = vi.hoisted(() => ({
-  pushContext: vi.fn(),
-  popContext: vi.fn(),
+  currentContext: { view: 'global', priority: 0 },
+  setContext: vi.fn(),
+  registerShortcut: vi.fn(),
+  unregisterShortcut: vi.fn(),
+  getAvailableShortcuts: vi.fn().mockReturnValue([]),
+  isShortcutAvailable: vi.fn().mockReturnValue(false),
+  setEnabled: vi.fn(),
+  isEnabled: true,
+  registerSurface: vi.fn(),
+  unregisterSurface: vi.fn(),
+  updateSurface: vi.fn(),
+  dispatchNativeAction: vi.fn(() => false),
+  hasActiveBlockingSurface: vi.fn(() => false),
 }));
 
 vi.mock('@ui/shortcuts', () => ({
@@ -246,8 +257,12 @@ describe('LogViewer active pod synchronisation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     shortcutMocks.useShortcut.mockClear();
-    contextMocks.pushContext.mockClear();
-    contextMocks.popContext.mockClear();
+    contextMocks.setContext.mockClear();
+    contextMocks.registerShortcut.mockClear();
+    contextMocks.unregisterShortcut.mockClear();
+    contextMocks.getAvailableShortcuts.mockClear();
+    contextMocks.isShortcutAvailable.mockClear();
+    contextMocks.setEnabled.mockClear();
     (LogFetcher as unknown as ViMock).mockReset?.();
     (GetLogScopeContainers as unknown as ViMock).mockReset?.();
     (GetLogScopeContainers as unknown as ViMock).mockResolvedValue(['app']);

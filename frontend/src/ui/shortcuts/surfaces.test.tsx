@@ -52,7 +52,6 @@ describe('keyboard surfaces', () => {
           return true;
         },
         description: 'Global escape',
-        view: 'global',
       });
 
       return (
@@ -468,7 +467,6 @@ describe('keyboard surfaces', () => {
           return true;
         },
         description: 'Blocked global shortcut',
-        view: 'global',
       });
 
       return (
@@ -533,7 +531,6 @@ describe('keyboard surfaces', () => {
           return true;
         },
         description: 'Blocked tab shortcut',
-        view: 'global',
       });
 
       return (

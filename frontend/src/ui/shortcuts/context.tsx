@@ -23,12 +23,6 @@ interface KeyboardProviderValue {
   registerShortcut: (shortcut: ShortcutDefinition) => string; // Returns shortcut ID
   unregisterShortcut: (id: string) => void;
 
-  // Context management
-  currentContext: ShortcutContextType;
-  setContext: (context: Partial<ShortcutContextType>) => void;
-  pushContext: (context: Partial<ShortcutContextType>) => void; // For nested contexts
-  popContext: () => void;
-
   // Help and discovery
   getAvailableShortcuts: () => ShortcutGroup[];
   isShortcutAvailable: (key: string, modifiers?: ShortcutModifiers) => boolean;
@@ -136,31 +130,9 @@ export const shallowEqual = (a: Partial<ShortcutContextType>, b: Partial<Shortcu
 
 export const matchesShortcutContext = (
   shortcut: RegisteredShortcut,
-  currentContext: ShortcutContextType
+  _currentContext?: ShortcutContextType
 ): boolean => {
-  if (!shortcut.enabled && shortcut.enabled !== undefined) return false;
-
-  return shortcut.contexts.some((ctx) => {
-    if (ctx.view === 'global') return true;
-    if (ctx.view && ctx.view !== currentContext.view) return false;
-    if (
-      ctx.resourceKind &&
-      ctx.resourceKind !== '*' &&
-      ctx.resourceKind !== currentContext.resourceKind
-    ) {
-      return false;
-    }
-    if (ctx.objectKind && ctx.objectKind !== '*' && ctx.objectKind !== currentContext.objectKind) {
-      return false;
-    }
-    if (ctx.panelOpen !== undefined && ctx.panelOpen !== currentContext.panelOpen) {
-      return false;
-    }
-    if (ctx.tabActive !== undefined && ctx.tabActive !== currentContext.tabActive) {
-      return false;
-    }
-    return true;
-  });
+  return shortcut.enabled || shortcut.enabled === undefined;
 };
 
 export const deriveCopyText = (selection: Selection | null): string | null => {
@@ -219,16 +191,10 @@ export function KeyboardProvider({ children, disabled = false }: KeyboardProvide
 
 const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disabled = false }) => {
   const [shortcuts, setShortcuts] = useState<ShortcutMap>(new Map());
-  const [contextStack, setContextStack] = useState<ShortcutContextType[]>([
-    { view: 'global', priority: 0 },
-  ]);
   const [isEnabled, setIsEnabled] = useState(!disabled);
   const shortcutIdCounter = useRef(0);
   const surfaceIdCounter = useRef(0);
   const surfacesRef = useRef<Map<string, RegisteredKeyboardSurface>>(new Map());
-
-  // Current context is the top of the stack merged with all below
-  const currentContext = contextStack.reduce((acc, ctx) => ({ ...acc, ...ctx }), {});
 
   // Register a shortcut
   const registerShortcut = useCallback((shortcut: ShortcutDefinition): string => {
@@ -262,39 +228,10 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
     });
   }, []);
 
-  // Update context
-  const setContext = useCallback((context: Partial<ShortcutContextType>) => {
-    setContextStack((prev) => {
-      const current = prev[prev.length - 1] ?? {};
-      const merged = { ...current, ...context };
-
-      if (shallowEqual(current, merged)) {
-        return prev;
-      }
-
-      const stack = [...prev];
-      stack[stack.length - 1] = merged;
-      return stack;
-    });
-  }, []);
-
-  // Push a new context layer
-  const pushContext = useCallback((context: Partial<ShortcutContextType>) => {
-    setContextStack((prev) => [
-      ...prev,
-      { ...context, priority: (context.priority || 0) + prev.length },
-    ]);
-  }, []);
-
-  // Pop context layer
-  const popContext = useCallback(() => {
-    setContextStack((prev) => (prev.length > 1 ? prev.slice(0, -1) : prev));
-  }, []);
-
   // Check if a shortcut matches the current context
   const matchesContext = useCallback(
-    (shortcut: RegisteredShortcut) => matchesShortcutContext(shortcut, currentContext),
-    [currentContext]
+    (shortcut: RegisteredShortcut) => matchesShortcutContext(shortcut),
+    []
   );
 
   const getOrderedSurfaces = useCallback((): RegisteredKeyboardSurface[] => {
@@ -563,10 +500,6 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
   const value: KeyboardProviderValue = {
     registerShortcut,
     unregisterShortcut,
-    currentContext,
-    setContext,
-    pushContext,
-    popContext,
     getAvailableShortcuts,
     isShortcutAvailable,
     setEnabled: setIsEnabled,

@@ -44,8 +44,14 @@ vi.mock('@/core/capabilities', () => ({
 vi.mock('@ui/shortcuts', () => ({
   useShortcut: vi.fn(),
   useKeyboardContext: () => ({
-    pushContext: vi.fn(),
-    popContext: vi.fn(),
+    currentContext: { view: 'global', priority: 0 },
+    setContext: vi.fn(),
+    registerShortcut: vi.fn(),
+    unregisterShortcut: vi.fn(),
+    getAvailableShortcuts: vi.fn(() => []),
+    isShortcutAvailable: vi.fn(() => false),
+    setEnabled: vi.fn(),
+    isEnabled: true,
     registerSurface: vi.fn(),
     unregisterSurface: vi.fn(),
     updateSurface: vi.fn(),

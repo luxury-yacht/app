@@ -2028,7 +2028,6 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     description: 'Close diagnostics panel',
     category: 'Diagnostics',
     enabled: isOpen,
-    view: 'global',
     priority: isOpen ? 35 : 0,
   });
 

@@ -138,7 +138,6 @@ const YamlTab: React.FC<YamlTabProps> = ({
     description: 'Toggle managedFields',
     category: 'YAML Tab',
     enabled: true,
-    view: 'global',
     priority: 20,
   });
 
@@ -976,7 +975,6 @@ const YamlTab: React.FC<YamlTabProps> = ({
     description: 'Save YAML changes',
     category: 'YAML Tab',
     enabled: isEditing && !isSaving,
-    view: 'global',
     priority: 30,
   });
 
@@ -993,7 +991,6 @@ const YamlTab: React.FC<YamlTabProps> = ({
     description: 'Save YAML changes',
     category: 'YAML Tab',
     enabled: isEditing && !isSaving,
-    view: 'global',
     priority: 30,
   });
 
@@ -1009,7 +1006,6 @@ const YamlTab: React.FC<YamlTabProps> = ({
     description: 'Cancel YAML edit',
     category: 'YAML Tab',
     enabled: isEditing && !isSaving,
-    view: 'global',
     priority: 30,
   });
 

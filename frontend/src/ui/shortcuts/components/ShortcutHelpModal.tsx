@@ -18,7 +18,7 @@ interface ShortcutHelpModalProps {
 }
 
 export function ShortcutHelpModal({ isOpen, onClose }: ShortcutHelpModalProps) {
-  const { getAvailableShortcuts, currentContext } = useKeyboardContext();
+  const { getAvailableShortcuts } = useKeyboardContext();
   const [shortcuts, setShortcuts] = useState(getAvailableShortcuts());
   const [isClosing, setIsClosing] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);
@@ -44,7 +44,7 @@ export function ShortcutHelpModal({ isOpen, onClose }: ShortcutHelpModalProps) {
     if (isOpen) {
       setShortcuts(getAvailableShortcuts());
     }
-  }, [isOpen, currentContext, getAvailableShortcuts]);
+  }, [isOpen, getAvailableShortcuts]);
 
   useModalFocusTrap({
     ref: modalRef,

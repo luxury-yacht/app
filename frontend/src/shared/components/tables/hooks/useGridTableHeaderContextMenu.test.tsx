@@ -48,8 +48,6 @@ vi.mock('@ui/shortcuts', async (importOriginal) => {
       unregisterShortcut: () => {},
       currentContext: { view: 'global', priority: 0 },
       setContext: () => {},
-      pushContext: () => {},
-      popContext: () => {},
       getAvailableShortcuts: () => [],
       isShortcutAvailable: () => false,
       setEnabled: () => {},

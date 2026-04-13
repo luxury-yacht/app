@@ -17,7 +17,6 @@ const useModalFocusTrapMock = vi.fn();
 vi.mock('../context', () => ({
   useKeyboardContext: () => ({
     getAvailableShortcuts: getAvailableShortcutsMock,
-    currentContext: { view: 'global' },
     registerSurface: vi.fn(),
     unregisterSurface: vi.fn(),
     updateSurface: vi.fn(),

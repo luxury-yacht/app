@@ -8,7 +8,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
 import { useShortcut, useKeyboardContext, useShortcuts } from '@ui/shortcuts';
 import { useKeyboardSurface } from '@ui/shortcuts/surfaces';
-import { KeyboardContextPriority, KeyboardShortcutPriority } from '@ui/shortcuts/priorities';
+import { KeyboardShortcutPriority } from '@ui/shortcuts/priorities';
 import { fetchSnapshot } from '@/core/refresh/client';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
@@ -216,8 +216,7 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
   const resultsRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
   const selectedIndexRef = useRef(0);
-  const { pushContext, popContext, hasActiveBlockingSurface } = useKeyboardContext();
-  const shortcutContextActiveRef = useRef(false);
+  const { hasActiveBlockingSurface } = useKeyboardContext();
   const { openWithObject } = useObjectPanel();
   const { selectedClusterId } = useKubeconfig();
   const useShortResourceNames = useShortNames();
@@ -474,29 +473,6 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
     setCatalogLoading(false);
   }, []);
 
-  useEffect(() => {
-    if (!isOpen) {
-      if (shortcutContextActiveRef.current) {
-        popContext();
-        shortcutContextActiveRef.current = false;
-      }
-      return;
-    }
-
-    pushContext({
-      tabActive: 'command-palette',
-      priority: KeyboardContextPriority.COMMAND_PALETTE,
-    });
-    shortcutContextActiveRef.current = true;
-
-    return () => {
-      if (shortcutContextActiveRef.current) {
-        popContext();
-        shortcutContextActiveRef.current = false;
-      }
-    };
-  }, [isOpen, popContext, pushContext]);
-
   // Execute selected item (command or catalog object)
   const executePaletteItem = useCallback(
     (item: PaletteItem) => {
@@ -750,7 +726,6 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
     ],
     {
       priority: KeyboardShortcutPriority.COMMAND_PALETTE,
-      whenTabActive: 'command-palette',
       category: 'Command Palette',
     }
   );
@@ -778,7 +753,6 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
     description: 'Open command palette',
     category: 'Global',
     enabled: true,
-    view: 'global',
     priority: 100,
   });
 

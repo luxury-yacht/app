@@ -56,10 +56,27 @@ Completed foundation and early migrations:
   instead of duplicating that behavior through modal-local shortcut context wiring
 - ✅ Shared modal trap now owns modal-surface options such as shortcut suppression and modal-local
   key handling, removing duplicate modal registrations in shortcut help and action modals
+- ✅ Command palette no longer depends on `pushContext` / `tabActive` metadata for its own
+  runtime shortcuts or discovery registrations
+- ✅ GridTable shortcuts no longer depend on `tabActive: 'gridtable'` context gating and now use
+  shared enabled-state registration instead
+- ✅ Dead shortcut-context metadata removed:
+  - `panelOpen`
+  - `tabActive`
+- ✅ Dead shortcut-eligibility metadata removed:
+  - `resourceKind`
+  - `objectKind`
+- ✅ Dead `view` shortcut context removed from runtime routing and help filtering
+- ✅ Dead nested shortcut-context API removed:
+  - `pushContext`
+  - `popContext`
+- ✅ `GlobalShortcuts` no longer publishes runtime shortcut context metadata
 
-Still remaining:
+Intentional exception retained:
 
-- broader cleanup/reduction of remaining legacy shortcut-context helpers where appropriate
+- `AppLayout` debug overlay toggles remain out-of-band on purpose
+  - they are app-shell debugging tools, not production surface routing
+  - they stay available even when blocking surfaces suppress normal shortcuts
 
 ## Execution Reference
 
@@ -120,24 +137,25 @@ Production `useKeyboardNavigationScope` usage still remaining:
 
 Legacy keyboard infrastructure still present:
 
-- shortcut context metadata in `context.tsx`
-  - still coexists with the surface manager for business eligibility
+- none in runtime shortcut routing
+- shared shortcut registration still carries per-shortcut priority metadata
 
 Intentional out-of-band listeners still remaining:
 
 - `AppLayout.tsx`
   - debug overlay toggles and debug state updates only
+  - this is an explicit exception, not unfinished migration work
 
 ### Safe Next Work
 
 Next implementation slice:
 
-- continue cleanup/reduction of legacy shortcut-context helpers where the surface manager now owns
-  the behavior
+- none required for the shared keyboard-surface migration itself
 
 After that:
 
-- continue broader cleanup/reduction of legacy helpers around shortcut contexts where appropriate
+- optional cleanup/simplification work only, if the shortcut registration API should be reduced
+  further
 
 ### Key Rules For Remaining Work
 
@@ -159,18 +177,18 @@ navigation.
 That split model is now retired from production runtime, but it is important context for why some
 tests and compatibility layers still carry legacy assumptions.
 
-### Context is not the same thing as active surface ownership
+### Context metadata is not the same thing as active surface ownership
 
-The current shortcut system uses a merged `contextStack` to decide which shortcuts apply.
+The old shortcut system used a merged `contextStack` to decide which shortcuts applied.
 
-That is useful for business context such as:
+That metadata model was useful for business context such as:
 
 - current view
 - current panel
 - current tab
 - resource kind
 
-But it is not a reliable way to model topmost interactive surfaces such as:
+But it was not a reliable way to model topmost interactive surfaces such as:
 
 - a modal over the app
 - the command palette over a modal
@@ -179,43 +197,42 @@ But it is not a reliable way to model topmost interactive surfaces such as:
 
 These are surface-ownership problems, not metadata-merging problems.
 
-### The app still has overlapping ownership models even after the modal rewrite
+### The app still has a few intentional ownership boundaries
 
-The modal rewrite removed the biggest focus-containment problems, but the broader keyboard
-architecture is still split across multiple ownership models:
+The modal rewrite and surface migration removed the biggest focus-containment and routing problems.
+The runtime ownership model is now centered on shared surfaces, with only a few intentional
+exceptions remaining:
 
-- shortcut contexts
-- local `onKeyDown`
-- a small number of direct document listeners in non-surface infrastructure
+- local `onKeyDown` for field-local behavior
+- out-of-band app-shell debug listeners in `AppLayout`
 
 Modal rendering, focus containment, and inert background behavior are intentionally documented in
 `docs/development/UI/modals.md`. This plan picks up after that work and focuses on unified key
 routing and surface ownership.
 
-### The app still carries legacy shortcut-context overlap
+### The app no longer routes runtime ownership through shortcut context metadata
 
-Several runtime surfaces have already been migrated to the shared surface model, but the app still
-has overlapping ownership between:
+The runtime migration is complete:
 
-- business-eligibility shortcut contexts in `context.tsx`
-- local component `onKeyDown` handlers for field- and surface-local behavior
-- a small amount of out-of-band keyboard/debug infrastructure
+- business-eligibility shortcut metadata is no longer part of surface ownership
+- shared surfaces own runtime routing
+- local `onKeyDown` remains only where field-local behavior is the correct abstraction
 
-The remaining work is to reduce that overlap where the surface manager already owns the runtime
-behavior, without breaking legitimate business-context filtering.
+The only intentional out-of-band keyboard path left is the app-shell debug tooling in
+`AppLayout`.
 
-### Developers currently need to know too much
+### Developers should now have one primary runtime model
 
-To make a surface keyboard-correct today, a developer may need to know about:
+To make a surface keyboard-correct, a developer should primarily need to know about:
 
 - `useShortcut`
-- `pushContext` / `popContext`
+- `useKeyboardSurface`
 - `data-allow-shortcuts`
 - local `onKeyDown`
-- document-level `keydown` listeners
 - whether the surface should portal to `document.body`
 
-That is too much implicit system knowledge for a routine UI change.
+That is still more than ideal, but it is much smaller and more coherent than the pre-migration
+state.
 
 ## Design Goals
 
@@ -334,9 +351,9 @@ Business eligibility answers:
 
 - if this surface sees the event, is this shortcut valid in the current app state?
 
-The current `view`, `panelOpen`, `tabActive`, `resourceKind`, and `objectKind` metadata can still
-exist, but they should be inputs to shortcut matching within the active surface, not the global
-ownership model.
+The runtime no longer depends on view/panel/tab/object metadata for shortcut ownership or matching.
+If business-state filtering is reintroduced later, it should remain local to the relevant surface
+instead of becoming a global ownership layer again.
 
 ### Default shortcut behavior inside inputs
 
@@ -593,8 +610,11 @@ Implementation note:
 
 - ✅ retire the production use of `useKeyboardNavigationScope` after the sidebar migration
 - ✅ delete the legacy tab-scope implementation once runtime usage was gone
-- ⏳ reduce direct `pushContext` / `popContext` usage to business-state cases only
-- ⏳ remove remaining raw document key listeners where they are no longer justified
+- ✅ remove dead `pushContext` / `popContext` context layering once runtime usage was gone
+- ✅ remove dead shortcut metadata (`panelOpen`, `tabActive`, `resourceKind`, `objectKind`,
+  `view`) from runtime routing/matching
+- ✅ review the intentional out-of-band debug listeners in `AppLayout`
+  - keep them out-of-band as an explicit app-shell debug exception
 
 ## Testing Strategy
 
@@ -658,12 +678,11 @@ Minimum gating checklist:
 
 ## Recommendation
 
-The plan remains sound after the modal rewrite. The next safe step is to start with the audit and
-validation checklist above, then build the shared surface manager before migrating palette/menu/
-dropdown and regional keyboard ownership.
+The shared keyboard-surface migration is now complete for production runtime behavior.
 
-The safest first code slice is the surface-manager foundation plus one simple direct-`Escape`
-conversion such as `ScaleModal`, not command palette or shortcut help.
+What remains in this doc is reference material:
 
-The failure mode here is not lack of ideas, it is hidden incompatibility with existing keyboard
-behavior.
+- the surface model
+- the migration history
+- the testing strategy
+- the one intentional app-shell debug exception in `AppLayout`

@@ -36,8 +36,6 @@ vi.mock('../context', async () => {
   return {
     ...actual,
     useKeyboardContext: () => ({
-      pushContext: vi.fn(),
-      popContext: vi.fn(),
       setContext: vi.fn(),
       registerShortcut: vi.fn(() => 'id'),
       unregisterShortcut: vi.fn(),

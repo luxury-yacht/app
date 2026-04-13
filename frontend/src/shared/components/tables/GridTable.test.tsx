@@ -9,7 +9,7 @@
 //
 // MOCKING STRATEGY: useKeyboardContext is mocked to return no-op functions.
 // This avoids shortcut registration overhead that causes act() to hang in jsdom
-// due to ~19 batched state updates (1 pushContext + 9 unregister + 9 register).
+// due to ~18 batched state updates (9 unregister + 9 register).
 //
 // This is NOT a bug - the app works correctly in real browsers where React's
 // scheduler processes updates across event loop ticks. The tests verify
@@ -59,8 +59,6 @@ vi.mock('@ui/shortcuts', async (importOriginal) => {
       unregisterShortcut: () => {},
       currentContext: { view: 'global', priority: 0 },
       setContext: () => {},
-      pushContext: () => {},
-      popContext: () => {},
       getAvailableShortcuts: () => [],
       isShortcutAvailable: () => false,
       setEnabled: () => {},
