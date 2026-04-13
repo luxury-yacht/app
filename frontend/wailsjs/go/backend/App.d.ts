@@ -48,9 +48,13 @@ export function DeleteResourceByGVK(arg1:string,arg2:string,arg3:string,arg4:str
 
 export function DeleteTheme(arg1:string):Promise<void>;
 
+export function DiscoverNodeLogs(arg1:string,arg2:string):Promise<types.NodeLogDiscoveryResponse>;
+
 export function DrainNode(arg1:string,arg2:string,arg3:types.DrainNodeOptions):Promise<void>;
 
 export function EvaluateCapabilities(arg1:Array<capabilities.CheckRequest>):Promise<Array<capabilities.CheckResult>>;
+
+export function FetchNodeLogs(arg1:string,arg2:string,arg3:types.NodeLogFetchRequest):Promise<types.NodeLogFetchResponse>;
 
 export function ForceDeleteNode(arg1:string,arg2:string):Promise<void>;
 

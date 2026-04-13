@@ -34,6 +34,7 @@ export type PanelObjectData = {
 
 export type ResourceCapability = {
   logs?: boolean;
+  nodeLogs?: boolean;
   delete?: boolean;
   restart?: boolean;
   scale?: boolean;
@@ -46,6 +47,7 @@ export type ResourceCapability = {
 
 export type FeatureSupport = {
   logs: boolean;
+  nodeLogs: boolean;
   manifest: boolean;
   values: boolean;
   delete: boolean;
@@ -60,6 +62,7 @@ export type FeatureSupport = {
 
 export type ComputedCapabilities = {
   hasLogs: boolean;
+  hasNodeLogs: boolean;
   hasShell: boolean;
   hasManifest: boolean;
   hasValues: boolean;
@@ -104,7 +107,10 @@ export type CapabilityStates = {
   debug: CapabilityState;
 };
 
+export type NodeLogsState = CapabilityState;
+
 export type CapabilityReasons = {
+  nodeLogs?: string;
   delete?: string;
   restart?: string;
   scale?: string;

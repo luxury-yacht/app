@@ -82,3 +82,19 @@ func (a *App) ForceDeleteNode(clusterID, nodeName string) error {
 func (a *App) clearNodeCaches(nodeName string) {
 	_ = nodeName
 }
+
+func (a *App) DiscoverNodeLogs(clusterID, nodeName string) NodeLogDiscoveryResponse {
+	deps, _, err := a.resolveClusterDependencies(clusterID)
+	if err != nil {
+		return NodeLogDiscoveryResponse{Reason: err.Error()}
+	}
+	return nodes.NewService(deps).DiscoverLogs(nodeName)
+}
+
+func (a *App) FetchNodeLogs(clusterID, nodeName string, req NodeLogFetchRequest) NodeLogFetchResponse {
+	deps, _, err := a.resolveClusterDependencies(clusterID)
+	if err != nil {
+		return NodeLogFetchResponse{Error: err.Error(), SourcePath: req.SourcePath}
+	}
+	return nodes.NewService(deps).FetchLogs(nodeName, req)
+}

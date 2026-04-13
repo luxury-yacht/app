@@ -19,6 +19,7 @@ describe('useObjectPanelFeatureSupport', () => {
 
   const capabilities: Record<string, ResourceCapability> = {
     deployment: { logs: true, restart: true, scale: true, delete: true },
+    node: { nodeLogs: true },
     helmrelease: { delete: true },
   };
 
@@ -59,6 +60,7 @@ describe('useObjectPanelFeatureSupport', () => {
 
     expect(result).toEqual({
       logs: false,
+      nodeLogs: false,
       manifest: false,
       values: false,
       delete: false,
@@ -77,6 +79,7 @@ describe('useObjectPanelFeatureSupport', () => {
 
     expect(result).toEqual({
       logs: true,
+      nodeLogs: false,
       manifest: false,
       values: false,
       delete: true,
@@ -95,6 +98,7 @@ describe('useObjectPanelFeatureSupport', () => {
 
     expect(result).toEqual({
       logs: false,
+      nodeLogs: false,
       manifest: true,
       values: true,
       delete: true,
@@ -113,9 +117,29 @@ describe('useObjectPanelFeatureSupport', () => {
 
     expect(result).toEqual({
       logs: false,
+      nodeLogs: false,
       manifest: false,
       values: false,
       delete: true,
+      restart: false,
+      scale: false,
+      edit: true,
+      shell: false,
+      debug: false,
+      trigger: false,
+      suspend: false,
+    });
+  });
+
+  it('enables node logs for nodes', async () => {
+    const result = await renderHook('node');
+
+    expect(result).toEqual({
+      logs: false,
+      nodeLogs: true,
+      manifest: false,
+      values: false,
+      delete: false,
       restart: false,
       scale: false,
       edit: true,

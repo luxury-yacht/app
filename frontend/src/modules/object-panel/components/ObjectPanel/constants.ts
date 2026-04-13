@@ -52,6 +52,7 @@ export const RESOURCE_CAPABILITIES: Record<string, ResourceCapability> = {
   limitrange: { delete: true },
 
   // Cluster Resources
+  node: { nodeLogs: true },
   namespace: { delete: true },
   ingressclass: { delete: true },
   customresourcedefinition: { delete: true },

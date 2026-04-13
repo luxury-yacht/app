@@ -3160,6 +3160,113 @@ export namespace types {
 		    return a;
 		}
 	}
+	export class NodeLogSource {
+	    id: string;
+	    label: string;
+	    kind: string;
+	    path: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new NodeLogSource(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.label = source["label"];
+	        this.kind = source["kind"];
+	        this.path = source["path"];
+	    }
+	}
+	export class NodeLogDiscoveryResponse {
+	    supported: boolean;
+	    sources?: NodeLogSource[];
+	    reason?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new NodeLogDiscoveryResponse(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.supported = source["supported"];
+	        this.sources = this.convertValues(source["sources"], NodeLogSource);
+	        this.reason = source["reason"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class NodeLogFetchRequest {
+	    sourcePath: string;
+	    sinceTime?: string;
+	    tailBytes?: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new NodeLogFetchRequest(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.sourcePath = source["sourcePath"];
+	        this.sinceTime = source["sinceTime"];
+	        this.tailBytes = source["tailBytes"];
+	    }
+	}
+	export class NodeLogFetchResponse {
+	    content?: string;
+	    source: NodeLogSource;
+	    error?: string;
+	    sourcePath?: string;
+	    truncated?: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new NodeLogFetchResponse(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.content = source["content"];
+	        this.source = this.convertValues(source["source"], NodeLogSource);
+	        this.error = source["error"];
+	        this.sourcePath = source["sourcePath"];
+	        this.truncated = source["truncated"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
 	
 	export class PersistentVolumeClaimDetails {
 	    kind: string;

@@ -127,6 +127,37 @@ type LogFetchResponse struct {
 	Error    string        `json:"error,omitempty"`
 }
 
+// NodeLogSource represents a discovered node log source that can be fetched directly.
+type NodeLogSource struct {
+	ID    string `json:"id"`
+	Label string `json:"label"`
+	Kind  string `json:"kind"`
+	Path  string `json:"path"`
+}
+
+// NodeLogDiscoveryResponse describes whether node logs are usable and which sources are available.
+type NodeLogDiscoveryResponse struct {
+	Supported bool            `json:"supported"`
+	Sources   []NodeLogSource `json:"sources,omitempty"`
+	Reason    string          `json:"reason,omitempty"`
+}
+
+// NodeLogFetchRequest selects a discovered node log source to fetch.
+type NodeLogFetchRequest struct {
+	SourcePath string `json:"sourcePath"`
+	SinceTime  string `json:"sinceTime,omitempty"`
+	TailBytes  int    `json:"tailBytes,omitempty"`
+}
+
+// NodeLogFetchResponse contains raw node log content for a selected source.
+type NodeLogFetchResponse struct {
+	Content    string        `json:"content,omitempty"`
+	Source     NodeLogSource `json:"source"`
+	Error      string        `json:"error,omitempty"`
+	SourcePath string        `json:"sourcePath,omitempty"`
+	Truncated  bool          `json:"truncated,omitempty"`
+}
+
 // ShellSessionRequest describes the namespace/pod/container to exec into.
 type ShellSessionRequest struct {
 	Namespace string   `json:"namespace"`
