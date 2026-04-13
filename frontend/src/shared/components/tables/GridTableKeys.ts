@@ -19,6 +19,7 @@ interface GridTableKeyboardOptions {
   wrapperRef: RefObject<HTMLDivElement | null>;
   tableDataLength: number;
   focusedRowKey: string | null;
+  clearFocusedRow: () => void;
   jumpToIndex: (index: number) => boolean;
 }
 
@@ -31,6 +32,7 @@ export const useGridTableKeyboardScopes = ({
   wrapperRef,
   tableDataLength,
   focusedRowKey,
+  clearFocusedRow,
   jumpToIndex,
 }: GridTableKeyboardOptions) => {
   const getFilterTargets = useCallback((): HTMLElement[] => {
@@ -122,14 +124,16 @@ export const useGridTableKeyboardScopes = ({
     ({ direction, event }: { direction: 'forward' | 'backward'; event: KeyboardEvent }) => {
       const filterTargets = getFilterTargets();
       if (direction === 'backward' && filterTargets.length > 0) {
+        clearFocusedRow();
         event.preventDefault();
         focusFilterAtIndex(filterTargets.length - 1);
         return 'handled';
       }
+      clearFocusedRow();
       filterFocusIndexRef.current = null;
       return 'bubble';
     },
-    [focusFilterAtIndex, filterFocusIndexRef, getFilterTargets]
+    [clearFocusedRow, focusFilterAtIndex, filterFocusIndexRef, getFilterTargets]
   );
 
   const tableTabEnterHandler = useCallback(

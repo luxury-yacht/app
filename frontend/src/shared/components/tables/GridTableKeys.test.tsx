@@ -188,6 +188,7 @@ describe('GridTableKeys filter target selectors', () => {
         wrapperRef,
         tableDataLength: 1,
         focusedRowKey: 'row-1',
+        clearFocusedRow: vi.fn(),
         jumpToIndex: () => true,
       });
 
@@ -318,6 +319,7 @@ describe('GridTableKeys filter target selectors', () => {
         wrapperRef,
         tableDataLength: 1,
         focusedRowKey: 'row-1',
+        clearFocusedRow: vi.fn(),
         jumpToIndex: () => true,
       });
 
@@ -348,5 +350,73 @@ describe('GridTableKeys filter target selectors', () => {
 
     expect(result).toBe(false);
     expect(preventDefaultSpy).not.toHaveBeenCalled();
+  });
+
+  it('clears the focused row only when tabbing out of the table body', async () => {
+    const clearFocusedRow = vi.fn();
+
+    const HookHarness = () => {
+      const filtersContainerRef = React.useRef<HTMLDivElement | null>(null);
+      const wrapperRef = React.useRef<HTMLDivElement | null>(null);
+      const filterFocusIndexRef = React.useRef<number | null>(null);
+
+      useGridTableKeyboardScopes({
+        filteringEnabled: true,
+        showKindDropdown: false,
+        showNamespaceDropdown: false,
+        filtersContainerRef,
+        filterFocusIndexRef,
+        wrapperRef,
+        tableDataLength: 1,
+        focusedRowKey: 'row-1',
+        clearFocusedRow,
+        jumpToIndex: () => true,
+      });
+
+      return (
+        <>
+          <div ref={filtersContainerRef}>
+            <button type="button">Columns</button>
+          </div>
+          <div ref={wrapperRef} />
+        </>
+      );
+    };
+
+    await act(async () => {
+      root.render(<HookHarness />);
+      await Promise.resolve();
+    });
+
+    const tableSurface = registeredSurfaces[registeredSurfaces.length - 1];
+    expect(tableSurface?.onKeyDown).toBeTruthy();
+
+    await act(async () => {
+      tableSurface?.onKeyDown?.({
+        key: 'Tab',
+        shiftKey: false,
+        metaKey: false,
+        ctrlKey: false,
+        altKey: false,
+        target: document.createElement('div'),
+        preventDefault: vi.fn(),
+      } as unknown as KeyboardEvent);
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      tableSurface?.onKeyDown?.({
+        key: 'Tab',
+        shiftKey: true,
+        metaKey: false,
+        ctrlKey: false,
+        altKey: false,
+        target: document.createElement('div'),
+        preventDefault: vi.fn(),
+      } as unknown as KeyboardEvent);
+      await Promise.resolve();
+    });
+
+    expect(clearFocusedRow).toHaveBeenCalledTimes(2);
   });
 });

@@ -439,6 +439,7 @@ export function useGridTableController<T>({
     wrapperRef,
     tableDataLength: tableData.length,
     focusedRowKey,
+    clearFocusedRow: () => setFocusedRowKey(null),
     jumpToIndex,
   });
 

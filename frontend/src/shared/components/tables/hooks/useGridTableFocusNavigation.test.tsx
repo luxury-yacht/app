@@ -250,6 +250,32 @@ describe('useGridTableFocusNavigation – pointer vs keyboard activation', () =>
     expect(ref.current!.focusedRowKey).toBe('b');
     expect(ref.current!.lastNavigationMethodRef.current).toBe('keyboard');
   });
+
+  it('keeps the focused row when the wrapper blurs outside of tab navigation', async () => {
+    const data: Row[] = [{ id: 'a' }, { id: 'b' }];
+    const ref = React.createRef<ExtendedHandle>();
+
+    await act(async () => {
+      root.render(<ExtendedHarness ref={ref} tableData={data} updateHoverForElement={vi.fn()} />);
+    });
+
+    const focusEvent = {
+      target: document.createElement('div'),
+    } as unknown as React.FocusEvent<HTMLDivElement>;
+
+    await act(async () => {
+      ref.current!.handleWrapperFocus(focusEvent);
+    });
+
+    expect(ref.current!.focusedRowKey).toBe('a');
+
+    await act(async () => {
+      ref.current!.handleWrapperBlur({} as React.FocusEvent<HTMLDivElement>);
+    });
+
+    expect(ref.current!.isWrapperFocused).toBe(false);
+    expect(ref.current!.focusedRowKey).toBe('a');
+  });
 });
 
 describe('useGridTableFocusNavigation – shortcut suppression', () => {

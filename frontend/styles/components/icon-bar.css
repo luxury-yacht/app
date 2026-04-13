@@ -30,6 +30,22 @@
   background: var(--color-bg-tertiary);
 }
 
+.icon-bar-button:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-accent);
+  opacity: 1;
+}
+
+.icon-bar-button:focus:not(:focus-visible) {
+  box-shadow: none;
+}
+
+.icon-bar-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-accent);
+  opacity: 1;
+}
+
 /* Toggle button in the "on" state */
 .icon-bar-button.active {
   opacity: 1;
