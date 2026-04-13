@@ -12,6 +12,12 @@ import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import GridTableFiltersBar from '@shared/components/tables/GridTableFiltersBar';
+import { useGridTableKeyboardScopes } from '@shared/components/tables/GridTableKeys';
+
+const registeredSurfaces: Array<{
+  kind: string;
+  onKeyDown?: (event: KeyboardEvent) => boolean | 'handled-no-prevent' | void;
+}> = [];
 
 // Mock the keyboard shortcuts hooks — we only need the rendered DOM.
 vi.mock('@ui/shortcuts', async (importOriginal) => {
@@ -33,6 +39,12 @@ vi.mock('@ui/shortcuts', async (importOriginal) => {
       hasActiveBlockingSurface: () => false,
     }),
     useShortcuts: () => {},
+    useKeyboardSurface: (surface: {
+      kind: string;
+      onKeyDown?: (event: KeyboardEvent) => boolean | 'handled-no-prevent' | void;
+    }) => {
+      registeredSurfaces.push(surface);
+    },
   };
 });
 
@@ -55,6 +67,7 @@ describe('GridTableKeys filter target selectors', () => {
       root.unmount();
     });
     container.remove();
+    registeredSurfaces.length = 0;
     vi.restoreAllMocks();
   });
 
@@ -144,5 +157,52 @@ describe('GridTableKeys filter target selectors', () => {
     const searchInput = el.querySelector<HTMLInputElement>(SELECTORS.search);
     expect(searchInput).not.toBeNull();
     expect(searchInput!.tagName).toBe('INPUT');
+  });
+
+  it('lets body tab bubble without preventing default at the region boundary', async () => {
+    const HookHarness = () => {
+      const filtersContainerRef = React.useRef<HTMLDivElement | null>(null);
+      const wrapperRef = React.useRef<HTMLDivElement | null>(null);
+      const filterFocusIndexRef = React.useRef<number | null>(null);
+
+      useGridTableKeyboardScopes({
+        filteringEnabled: false,
+        showKindDropdown: false,
+        showNamespaceDropdown: false,
+        filtersContainerRef,
+        filterFocusIndexRef,
+        wrapperRef,
+        tableDataLength: 1,
+        focusedRowKey: 'row-1',
+        jumpToIndex: () => true,
+      });
+
+      return (
+        <>
+          <div ref={filtersContainerRef} />
+          <div ref={wrapperRef} />
+        </>
+      );
+    };
+
+    await act(async () => {
+      root.render(<HookHarness />);
+      await Promise.resolve();
+    });
+
+    const tableSurface = registeredSurfaces[registeredSurfaces.length - 1];
+    expect(tableSurface?.onKeyDown).toBeTruthy();
+
+    const event = new KeyboardEvent('keydown', {
+      key: 'Tab',
+      bubbles: true,
+      cancelable: true,
+    });
+
+    const preventDefaultSpy = vi.spyOn(event, 'preventDefault');
+    const result = tableSurface?.onKeyDown?.(event);
+
+    expect(result).toBe(false);
+    expect(preventDefaultSpy).not.toHaveBeenCalled();
   });
 });

@@ -120,7 +120,6 @@ export const useGridTableKeyboardScopes = ({
         focusFilterAtIndex(filterTargets.length - 1);
         return 'handled';
       }
-      event.preventDefault();
       filterFocusIndexRef.current = null;
       return 'bubble';
     },
