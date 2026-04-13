@@ -211,6 +211,14 @@ describe('DockablePanel', () => {
     const panel = layer?.querySelector('.dockable-panel') as HTMLDivElement | null;
     expect(panel).toBeTruthy();
 
+    const entryTarget = panel?.querySelector(
+      '[aria-label="Dock panel to bottom"]'
+    ) as HTMLButtonElement | null;
+    await act(async () => {
+      entryTarget?.focus();
+      await Promise.resolve();
+    });
+
     const tabbables = getTabbableElements(panel);
     const firstTabbable = tabbables[0];
     const lastTabbable = tabbables[tabbables.length - 1];
@@ -240,6 +248,41 @@ describe('DockablePanel', () => {
     });
 
     expect(document.activeElement).toBe(lastTabbable);
+
+    unmount();
+  });
+
+  it('keeps panel controls out of the native tab order until the panel is focused', async () => {
+    const { unmount } = await renderPanel(
+      <>
+        <button type="button">Outside app control</button>
+        <DockablePanel panelId="dockable-panel-native-tab-gate" defaultPosition="floating" isOpen>
+          <button type="button">Panel body control</button>
+        </DockablePanel>
+      </>
+    );
+
+    const layer = document.querySelector('.dockable-panel-layer');
+    const panel = layer?.querySelector('.dockable-panel') as HTMLDivElement | null;
+    expect(panel).toBeTruthy();
+
+    const closeButton = panel?.querySelector(
+      '[aria-label="Close all tabs in this panel"]'
+    ) as HTMLButtonElement | null;
+    const bodyButton = Array.from(panel?.querySelectorAll('button') ?? []).find(
+      (button) => button.textContent === 'Panel body control'
+    );
+
+    expect(closeButton?.getAttribute('tabindex')).toBe('-1');
+    expect(bodyButton?.getAttribute('tabindex')).toBe('-1');
+
+    await act(async () => {
+      closeButton?.focus();
+      await Promise.resolve();
+    });
+
+    expect(closeButton?.getAttribute('tabindex')).toBeNull();
+    expect(bodyButton?.getAttribute('tabindex')).toBeNull();
 
     unmount();
   });

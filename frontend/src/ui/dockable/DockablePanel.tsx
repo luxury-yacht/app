@@ -219,6 +219,7 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     },
     [forwardedPanelRef]
   );
+  const suppressedTabbablesRef = useRef<Map<HTMLElement, string | null>>(new Map());
   // Content ref -- allows the group leader to render this panel's children.
   const contentRef = useRef<React.ReactNode>(children);
   contentRef.current = children;
@@ -633,6 +634,61 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
       return true;
     },
   });
+
+  const restoreSuppressedTabbables = useCallback(() => {
+    for (const [element, originalTabIndex] of suppressedTabbablesRef.current.entries()) {
+      if (!element.isConnected) {
+        continue;
+      }
+      if (originalTabIndex === null) {
+        element.removeAttribute('tabindex');
+      } else {
+        element.setAttribute('tabindex', originalTabIndex);
+      }
+    }
+    suppressedTabbablesRef.current.clear();
+  }, []);
+
+  const suppressPanelTabbables = useCallback(() => {
+    const panelRoot = panelRef.current;
+    if (!panelRoot || suppressedTabbablesRef.current.size > 0) {
+      return;
+    }
+
+    for (const element of getTabbableElements(panelRoot)) {
+      suppressedTabbablesRef.current.set(element, element.getAttribute('tabindex'));
+      element.setAttribute('tabindex', '-1');
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!panelState.isOpen || !isGroupLeader) {
+      restoreSuppressedTabbables();
+      return;
+    }
+
+    const syncPanelTabbables = () => {
+      const panelRoot = panelRef.current;
+      if (!panelRoot) {
+        return;
+      }
+
+      const activeElement = document.activeElement as HTMLElement | null;
+      const panelHasFocus = !!activeElement && panelRoot.contains(activeElement);
+      if (panelHasFocus) {
+        restoreSuppressedTabbables();
+      } else {
+        suppressPanelTabbables();
+      }
+    };
+
+    syncPanelTabbables();
+    document.addEventListener('focusin', syncPanelTabbables);
+    return () => {
+      document.removeEventListener('focusin', syncPanelTabbables);
+      restoreSuppressedTabbables();
+    };
+  }, [isGroupLeader, panelState.isOpen, restoreSuppressedTabbables, suppressPanelTabbables]);
 
   // Memoize panel classes and styles
   const panelClassName = useMemo(() => {
