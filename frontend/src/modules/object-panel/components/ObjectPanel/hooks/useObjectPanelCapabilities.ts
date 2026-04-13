@@ -6,9 +6,10 @@
  * - Handles dynamic capability evaluation based on object data and feature support.
  * - Returns structured capability states, computed capabilities, and reasons for capability restrictions.
  */
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useCapabilities, useUserPermission, type CapabilityDescriptor } from '@/core/capabilities';
+import { discoverNodeLogs, type NodeLogSource } from '../NodeLogs/nodeLogsApi';
 
 import {
   CapabilityReasons,
@@ -16,6 +17,7 @@ import {
   CapabilityStates,
   ComputedCapabilities,
   FeatureSupport,
+  NodeLogsState,
   PanelObjectData,
   createEmptyCapabilityIdMap,
 } from '../types';
@@ -31,6 +33,8 @@ export interface ObjectPanelCapabilitiesResult {
   capabilityStates: CapabilityStates;
   capabilities: ComputedCapabilities;
   capabilityReasons: CapabilityReasons;
+  nodeLogsState: NodeLogsState;
+  nodeLogSources: NodeLogSource[];
 }
 
 const createCapabilityState = (override?: Partial<CapabilityState>): CapabilityState => ({
@@ -299,6 +303,9 @@ export const useObjectPanelCapabilities = ({
   detailScope,
   featureSupport,
 }: UseObjectPanelCapabilitiesOptions): ObjectPanelCapabilitiesResult => {
+  const [nodeLogSources, setNodeLogSources] = useState<NodeLogSource[]>([]);
+  const [nodeLogsCapabilityState, setNodeLogsCapabilityState] =
+    useState<CapabilityState>(createCapabilityState());
   const capabilityDescriptorInfo = useMemo(
     () => computeCapabilityDescriptors(objectData, objectKind, featureSupport),
     [featureSupport, objectData, objectKind]
@@ -374,14 +381,106 @@ export const useObjectPanelCapabilities = ({
     'log',
     objectData?.clusterId ?? null
   );
+  const nodeLogsPermission = useUserPermission(
+    'Node',
+    'get',
+    null,
+    'proxy',
+    objectData?.clusterId ?? null
+  );
+  const nodeLogsPermissionPending = Boolean(nodeLogsPermission?.pending);
+  const nodeLogsPermissionAllowed = nodeLogsPermission?.allowed;
+  const nodeLogsPermissionReason = nodeLogsPermission?.reason;
+
+  useEffect(() => {
+    const isNodePanel = objectKind === 'node';
+    const clusterId = objectData?.clusterId?.trim() ?? '';
+    const nodeName = objectData?.name?.trim() ?? '';
+
+    if (!isNodePanel || !featureSupport.nodeLogs || !clusterId || !nodeName) {
+      setNodeLogSources([]);
+      setNodeLogsCapabilityState(createCapabilityState());
+      return;
+    }
+
+    if (nodeLogsPermissionPending) {
+      setNodeLogSources([]);
+      setNodeLogsCapabilityState(createCapabilityState({ pending: true }));
+      return;
+    }
+
+    if (nodeLogsPermissionAllowed === false) {
+      setNodeLogSources([]);
+      setNodeLogsCapabilityState(
+        createCapabilityState({
+          reason:
+            nodeLogsPermissionReason ?? 'Node logs are not accessible with the current permissions',
+        })
+      );
+      return;
+    }
+
+    let cancelled = false;
+    setNodeLogSources([]);
+    setNodeLogsCapabilityState(createCapabilityState({ pending: true }));
+
+    void discoverNodeLogs(clusterId, nodeName)
+      .then((response) => {
+        if (cancelled) {
+          return;
+        }
+        const sources = Array.isArray(response.sources) ? response.sources : [];
+        setNodeLogSources(sources);
+        setNodeLogsCapabilityState(
+          createCapabilityState({
+            allowed: Boolean(response.supported && sources.length > 0),
+            pending: false,
+            reason:
+              response.supported && sources.length > 0
+                ? undefined
+                : (response.reason ?? 'Node logs are not available for this node'),
+          })
+        );
+      })
+      .catch((error) => {
+        if (cancelled) {
+          return;
+        }
+        setNodeLogSources([]);
+        setNodeLogsCapabilityState(
+          createCapabilityState({
+            reason: error instanceof Error ? error.message : 'Failed to discover node logs',
+          })
+        );
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    featureSupport.nodeLogs,
+    nodeLogsPermissionAllowed,
+    nodeLogsPermissionPending,
+    nodeLogsPermissionReason,
+    objectData?.clusterId,
+    objectData?.name,
+    objectKind,
+  ]);
 
   const capabilities = useMemo<ComputedCapabilities>(() => {
     const hasLogs =
-      featureSupport.logs &&
-      !(viewLogsPermission && !viewLogsPermission.pending && viewLogsPermission.allowed === false);
+      objectKind === 'node'
+        ? featureSupport.nodeLogs
+        : featureSupport.logs &&
+          !(
+            viewLogsPermission &&
+            !viewLogsPermission.pending &&
+            viewLogsPermission.allowed === false
+          );
 
     return {
       hasLogs,
+      hasNodeLogs: featureSupport.nodeLogs && nodeLogsCapabilityState.allowed,
       hasShell: featureSupport.shell && capabilityStates.shell.allowed,
       hasManifest: featureSupport.manifest,
       hasValues: featureSupport.values,
@@ -392,10 +491,17 @@ export const useObjectPanelCapabilities = ({
       canTrigger: featureSupport.trigger,
       canSuspend: featureSupport.suspend,
     };
-  }, [capabilityStates, featureSupport, viewLogsPermission]);
+  }, [
+    capabilityStates,
+    featureSupport,
+    nodeLogsCapabilityState.allowed,
+    objectKind,
+    viewLogsPermission,
+  ]);
 
   const capabilityReasons = useMemo<CapabilityReasons>(
     () => ({
+      nodeLogs: nodeLogsCapabilityState.allowed ? undefined : nodeLogsCapabilityState.reason,
       delete: capabilityStates.delete.allowed ? undefined : capabilityStates.delete.reason,
       restart: capabilityStates.restart.allowed ? undefined : capabilityStates.restart.reason,
       scale: capabilityStates.scale.allowed ? undefined : capabilityStates.scale.reason,
@@ -416,6 +522,8 @@ export const useObjectPanelCapabilities = ({
       capabilityStates.scale.reason,
       capabilityStates.shell.allowed,
       capabilityStates.shell.reason,
+      nodeLogsCapabilityState.allowed,
+      nodeLogsCapabilityState.reason,
     ]
   );
 
@@ -423,5 +531,7 @@ export const useObjectPanelCapabilities = ({
     capabilityStates,
     capabilities,
     capabilityReasons,
+    nodeLogsState: nodeLogsCapabilityState,
+    nodeLogSources,
   };
 };

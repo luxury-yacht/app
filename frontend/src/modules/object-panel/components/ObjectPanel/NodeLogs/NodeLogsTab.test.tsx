@@ -1,0 +1,342 @@
+import ReactDOM from 'react-dom/client';
+import { act } from 'react';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { KeyboardProvider } from '@ui/shortcuts';
+
+import NodeLogsTab from './NodeLogsTab';
+
+const mockFetchNodeLogs = vi.fn();
+
+vi.mock('./nodeLogsApi', () => ({
+  fetchNodeLogs: (...args: unknown[]) => mockFetchNodeLogs(...args),
+}));
+
+describe('NodeLogsTab', () => {
+  let container: HTMLDivElement;
+  let root: ReactDOM.Root;
+
+  const sources = [
+    {
+      id: 'journal/kubelet',
+      label: 'journal / kubelet',
+      kind: 'journal' as const,
+      path: 'journal/kubelet',
+    },
+    {
+      id: 'journal/containerd',
+      label: 'journal / containerd',
+      kind: 'journal' as const,
+      path: 'journal/containerd',
+    },
+  ];
+
+  beforeAll(() => {
+    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+    if (!Element.prototype.scrollIntoView) {
+      Element.prototype.scrollIntoView = vi.fn();
+    }
+  });
+
+  beforeEach(() => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = ReactDOM.createRoot(container);
+    mockFetchNodeLogs.mockReset();
+  });
+
+  afterEach(() => {
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  const renderTab = async (
+    props?: Partial<React.ComponentProps<typeof NodeLogsTab>>
+  ): Promise<void> => {
+    await act(async () => {
+      root.render(
+        <KeyboardProvider>
+          <NodeLogsTab
+            nodeName="node-a"
+            clusterId="alpha:ctx"
+            isActive
+            availability={{ allowed: true, pending: false }}
+            sources={sources}
+            {...props}
+          />
+        </KeyboardProvider>
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+  };
+
+  const setFilterValue = async (value: string): Promise<void> => {
+    const filterInput = container.querySelector<HTMLInputElement>(
+      'input[aria-label="Filter node logs"]'
+    );
+    expect(filterInput).toBeTruthy();
+
+    await act(async () => {
+      const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+      setValue?.call(filterInput, value);
+      filterInput!.dispatchEvent(new Event('change', { bubbles: true }));
+      filterInput!.dispatchEvent(new Event('input', { bubbles: true }));
+      await Promise.resolve();
+    });
+  };
+
+  it('fetches and renders the selected source when active', async () => {
+    mockFetchNodeLogs.mockResolvedValue({
+      source: sources[0],
+      sourcePath: sources[0].path,
+      content: 'line one\nline two',
+    });
+
+    await renderTab();
+
+    expect(mockFetchNodeLogs).toHaveBeenCalledWith('alpha:ctx', 'node-a', {
+      sourcePath: 'journal/kubelet',
+      tailBytes: 262144,
+    });
+    expect(container.querySelector('.pod-logs-text')?.textContent).toContain('line one');
+  });
+
+  it('refetches when the selected source changes', async () => {
+    mockFetchNodeLogs.mockImplementation(
+      async (_clusterId: string, _nodeName: string, request: { sourcePath: string }) => ({
+        source: sources.find((source) => source.path === request.sourcePath) ?? sources[0],
+        sourcePath: request.sourcePath,
+        content: `content for ${request.sourcePath}`,
+      })
+    );
+
+    await renderTab();
+
+    const trigger = container.querySelector('.pod-logs-selector-dropdown .dropdown-trigger');
+    expect(trigger).toBeTruthy();
+
+    await act(async () => {
+      trigger!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    const secondOption = container.querySelectorAll('.dropdown-option').item(1);
+    expect(secondOption?.textContent).toContain('journal / containerd');
+
+    await act(async () => {
+      secondOption.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mockFetchNodeLogs).toHaveBeenLastCalledWith('alpha:ctx', 'node-a', {
+      sourcePath: 'journal/containerd',
+      tailBytes: 262144,
+    });
+    expect(container.querySelector('.pod-logs-text')?.textContent).toContain(
+      'content for journal/containerd'
+    );
+  });
+
+  it('filters rendered log lines client-side', async () => {
+    mockFetchNodeLogs.mockResolvedValue({
+      source: sources[0],
+      sourcePath: sources[0].path,
+      content: 'info boot complete\nerror failed to reconcile',
+    });
+
+    await renderTab();
+    await setFilterValue('error');
+
+    expect(container.querySelector('.pod-logs-text')?.textContent).toBe(
+      'error failed to reconcile'
+    );
+  });
+
+  it('can invert the filter from the icon bar', async () => {
+    mockFetchNodeLogs.mockResolvedValue({
+      source: sources[0],
+      sourcePath: sources[0].path,
+      content: 'info boot complete\nerror failed to reconcile',
+    });
+
+    await renderTab();
+    await setFilterValue('error');
+
+    const inverseButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Invert the text filter to show only non-matching logs"]'
+    );
+    expect(inverseButton).toBeTruthy();
+
+    await act(async () => {
+      inverseButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('.pod-logs-text')?.textContent).toBe('info boot complete');
+  });
+
+  it('can highlight matches from the icon bar', async () => {
+    mockFetchNodeLogs.mockResolvedValue({
+      source: sources[0],
+      sourcePath: sources[0].path,
+      content: 'info boot complete\nerror failed to reconcile',
+    });
+
+    await renderTab();
+    await setFilterValue('error');
+
+    const highlightButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Highlight matching text - disabled when Invert is enabled"]'
+    );
+    expect(highlightButton).toBeTruthy();
+
+    await act(async () => {
+      highlightButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    const highlightedMatch = container.querySelector('mark.pod-log-highlight');
+    expect(highlightedMatch?.textContent).toBe('error');
+  });
+
+  it('shows an error for invalid regex filters when regex mode is enabled', async () => {
+    mockFetchNodeLogs.mockResolvedValue({
+      source: sources[0],
+      sourcePath: sources[0].path,
+      content: 'info boot complete\nerror failed to reconcile',
+    });
+
+    await renderTab();
+
+    const regexButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Enable regular expression support for the text filter"]'
+    );
+    expect(regexButton).toBeTruthy();
+
+    await act(async () => {
+      regexButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    await setFilterValue('[');
+
+    expect(container.textContent).toContain('Enter a valid regular expression.');
+  });
+
+  it('can pretty-print JSON logs from the icon bar', async () => {
+    mockFetchNodeLogs.mockResolvedValue({
+      source: sources[0],
+      sourcePath: sources[0].path,
+      content: '{"level":"info","message":"boot complete"}',
+    });
+
+    await renderTab();
+
+    const prettyButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Show pretty JSON"]'
+    );
+    expect(prettyButton).toBeTruthy();
+
+    await act(async () => {
+      prettyButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    const logLines = Array.from(container.querySelectorAll('.pod-log-line')).map(
+      (element) => element.textContent
+    );
+    expect(logLines).toContain('{');
+    expect(logLines).toContain('  "message": "boot complete"');
+    expect(logLines).toContain('}');
+  });
+
+  it('can render parseable JSON logs as a table from the icon bar', async () => {
+    mockFetchNodeLogs.mockResolvedValue({
+      source: sources[0],
+      sourcePath: sources[0].path,
+      content: '{"level":"info","message":"boot complete"}',
+    });
+
+    await renderTab();
+
+    const parsedButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Parse the JSON into a table"]'
+    );
+    expect(parsedButton).toBeTruthy();
+
+    await act(async () => {
+      parsedButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('.parsed-logs-table')).toBeTruthy();
+    expect(container.textContent).toContain('level');
+    expect(container.textContent).toContain('message');
+    expect(container.textContent).toContain('boot complete');
+  });
+
+  it('supports parsed-table row expansion and collapse like pod logs', async () => {
+    mockFetchNodeLogs.mockResolvedValue({
+      source: sources[0],
+      sourcePath: sources[0].path,
+      content: '{"level":"info","message":"boot complete"}',
+    });
+
+    await renderTab();
+
+    const parsedButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Parse the JSON into a table"]'
+    );
+    expect(parsedButton).toBeTruthy();
+
+    await act(async () => {
+      parsedButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const row = container.querySelector<HTMLElement>('.parsed-logs-table .gridtable-row');
+    expect(row).toBeTruthy();
+    expect(row?.classList.contains('parsed-row-expanded')).toBe(false);
+
+    await act(async () => {
+      row!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(row?.classList.contains('parsed-row-expanded')).toBe(true);
+
+    await act(async () => {
+      row!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(row?.classList.contains('parsed-row-expanded')).toBe(false);
+  });
+
+  it('shows a truncation notice when the backend returns a truncated response', async () => {
+    mockFetchNodeLogs.mockResolvedValue({
+      source: sources[0],
+      sourcePath: sources[0].path,
+      content: 'recent log line',
+      truncated: true,
+    });
+
+    await renderTab();
+
+    expect(container.textContent).toContain('Showing only the most recent 256 KB');
+  });
+
+  it('shows a pending availability message before sources are known', async () => {
+    await renderTab({
+      availability: { allowed: false, pending: true },
+      sources: [],
+    });
+
+    expect(container.textContent).toContain('Checking if logs are available for this node...');
+  });
+});

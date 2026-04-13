@@ -17,6 +17,7 @@ const hoistedRefs = vi.hoisted(() => ({
   manifestTabProps: { current: null as any },
   valuesTabProps: { current: null as any },
   shellTabProps: { current: null as any },
+  nodeLogsTabProps: { current: null as any },
   maintenanceTabProps: { current: null as any },
   podsTabProps: { current: null as any },
 }));
@@ -67,6 +68,13 @@ vi.mock('@modules/object-panel/components/ObjectPanel/Shell/ShellTab', () => ({
   default: (props: unknown) => {
     hoistedRefs.shellTabProps.current = props;
     return <div data-testid="shell-tab" />;
+  },
+}));
+
+vi.mock('@modules/object-panel/components/ObjectPanel/NodeLogs/NodeLogsTab', () => ({
+  default: (props: unknown) => {
+    hoistedRefs.nodeLogsTabProps.current = props;
+    return <div data-testid="node-logs-tab" />;
   },
 }));
 
@@ -149,6 +157,7 @@ describe('ObjectPanelContent', () => {
     isPanelOpen: true,
     capabilities: {
       hasLogs: true,
+      hasNodeLogs: false,
       hasShell: false,
       hasManifest: true,
       hasValues: true,
@@ -160,6 +169,8 @@ describe('ObjectPanelContent', () => {
       canSuspend: false,
     },
     capabilityReasons: {},
+    nodeLogsState: { allowed: false, pending: false, reason: undefined },
+    nodeLogSources: [],
     detailScope: 'team-a:deployment:api',
     eventsScope: 'team-a:Deployment:api',
     logScope: 'team-a:deployment:api',
@@ -218,6 +229,32 @@ describe('ObjectPanelContent', () => {
       resourceName: 'api',
       resourceKind: 'deployment',
       isActive: true,
+    });
+  });
+
+  it('renders node logs tab when logs tab is active for a node', () => {
+    renderContent({
+      activeTab: 'logs',
+      capabilities: { ...baseProps.capabilities, hasLogs: true, hasNodeLogs: false },
+      objectData: { kind: 'Node', name: 'node-1', clusterId: 'alpha:ctx' },
+      objectKind: 'node',
+      nodeLogsState: { allowed: false, pending: true, reason: undefined },
+      nodeLogSources: [
+        {
+          id: 'journal/kubelet',
+          label: 'journal / kubelet',
+          kind: 'journal',
+          path: 'journal/kubelet',
+        },
+      ],
+    });
+
+    expect(hoistedRefs.nodeLogsTabProps.current).toMatchObject({
+      nodeName: 'node-1',
+      clusterId: 'alpha:ctx',
+      isActive: true,
+      availability: { pending: true },
+      sources: [{ path: 'journal/kubelet' }],
     });
   });
 

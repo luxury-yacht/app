@@ -1,0 +1,338 @@
+package nodes
+
+import (
+	"bytes"
+	"context"
+	"fmt"
+	"html"
+	"net/url"
+	"regexp"
+	"sort"
+	"strings"
+
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/client-go/rest"
+
+	restypes "github.com/luxury-yacht/app/backend/resources/types"
+)
+
+const (
+	maxNodeLogDiscoveryDepth = 5
+	maxNodeLogDiscoveryNodes = 64
+	defaultNodeLogTailBytes  = 256 * 1024
+	maxNodeLogTailBytes      = 1024 * 1024
+)
+
+var (
+	nodeLogAnchorPattern = regexp.MustCompile(`<a\s+href="([^"]+)">([^<]+)</a>`)
+	nodeLogFetchRawFunc  = func(ctx context.Context, client rest.Interface, absPath string) ([]byte, error) {
+		if client == nil {
+			return nil, fmt.Errorf("kubernetes REST client not initialized")
+		}
+		return client.Get().AbsPath(absPath).DoRaw(ctx)
+	}
+)
+
+type nodeLogListingEntry struct {
+	Href  string
+	Label string
+}
+
+// DiscoverLogs probes the kubelet node log endpoint and returns directly readable sources.
+func (s *Service) DiscoverLogs(nodeName string) restypes.NodeLogDiscoveryResponse {
+	if err := s.ensureClient("Nodes"); err != nil {
+		return restypes.NodeLogDiscoveryResponse{Reason: err.Error()}
+	}
+	if s.deps.KubernetesClient == nil {
+		return restypes.NodeLogDiscoveryResponse{Reason: "kubernetes client not initialized"}
+	}
+
+	rootBody, err := s.fetchNodeLogPath(nodeName, "")
+	if err != nil {
+		return restypes.NodeLogDiscoveryResponse{Reason: classifyNodeLogError(err)}
+	}
+
+	if !isNodeLogDirectoryListing(rootBody) {
+		if len(bytes.TrimSpace(rootBody)) == 0 {
+			return restypes.NodeLogDiscoveryResponse{Reason: "node log endpoint returned no usable sources"}
+		}
+		rootSource := restypes.NodeLogSource{
+			ID:    "__root__",
+			Label: "Node Logs",
+			Kind:  "path",
+			Path:  "",
+		}
+		return restypes.NodeLogDiscoveryResponse{Supported: true, Sources: []restypes.NodeLogSource{rootSource}}
+	}
+
+	sources := make(map[string]restypes.NodeLogSource)
+	visited := map[string]struct{}{"": {}}
+	s.discoverNodeLogSources(nodeName, "", rootBody, 0, visited, sources)
+
+	if len(sources) == 0 {
+		return restypes.NodeLogDiscoveryResponse{Reason: "node log endpoint did not expose any directly readable log sources"}
+	}
+
+	ordered := make([]restypes.NodeLogSource, 0, len(sources))
+	for _, source := range sources {
+		ordered = append(ordered, source)
+	}
+	sort.Slice(ordered, func(i, j int) bool {
+		if ordered[i].Label == ordered[j].Label {
+			return ordered[i].Path < ordered[j].Path
+		}
+		return ordered[i].Label < ordered[j].Label
+	})
+
+	return restypes.NodeLogDiscoveryResponse{Supported: true, Sources: ordered}
+}
+
+// FetchLogs returns the raw content for a previously discovered node log source.
+func (s *Service) FetchLogs(nodeName string, req restypes.NodeLogFetchRequest) restypes.NodeLogFetchResponse {
+	sourcePath := strings.TrimSpace(req.SourcePath)
+	tailBytes := normalizeNodeLogTailBytes(req.TailBytes)
+	source := restypes.NodeLogSource{
+		ID:    sourcePath,
+		Label: nodeLogSourceLabel(sourcePath),
+		Kind:  nodeLogSourceKind(sourcePath),
+		Path:  sourcePath,
+	}
+
+	if !isDisplayableNodeLogSource(sourcePath) {
+		return restypes.NodeLogFetchResponse{
+			Source:     source,
+			SourcePath: sourcePath,
+			Error:      "selected source appears to be compressed or binary and cannot be displayed",
+		}
+	}
+	if !isSupportedNodeLogSource(sourcePath) {
+		return restypes.NodeLogFetchResponse{
+			Source:     source,
+			SourcePath: sourcePath,
+			Error:      "selected source is already available in the pod/workload logs views",
+		}
+	}
+
+	if err := s.ensureClient("Nodes"); err != nil {
+		return restypes.NodeLogFetchResponse{Source: source, SourcePath: sourcePath, Error: err.Error()}
+	}
+	if s.deps.KubernetesClient == nil {
+		return restypes.NodeLogFetchResponse{
+			Source:     source,
+			SourcePath: sourcePath,
+			Error:      "kubernetes client not initialized",
+		}
+	}
+
+	body, err := s.fetchNodeLogPath(nodeName, sourcePath)
+	if err != nil {
+		return restypes.NodeLogFetchResponse{
+			Source:     source,
+			SourcePath: sourcePath,
+			Error:      classifyNodeLogError(err),
+		}
+	}
+	if isNodeLogDirectoryListing(body) {
+		return restypes.NodeLogFetchResponse{
+			Source:     source,
+			SourcePath: sourcePath,
+			Error:      "selected source is a directory; deeper browsing is not supported yet",
+		}
+	}
+
+	content, truncated := truncateNodeLogContent(body, tailBytes)
+
+	return restypes.NodeLogFetchResponse{
+		Source:     source,
+		SourcePath: sourcePath,
+		Content:    content,
+		Truncated:  truncated,
+	}
+}
+
+func (s *Service) discoverNodeLogSources(
+	nodeName, basePath string,
+	body []byte,
+	depth int,
+	visited map[string]struct{},
+	sources map[string]restypes.NodeLogSource,
+) {
+	if depth >= maxNodeLogDiscoveryDepth || len(sources) >= maxNodeLogDiscoveryNodes {
+		return
+	}
+
+	for _, entry := range parseNodeLogDirectoryListing(body) {
+		nextPath, ok := joinNodeLogPath(basePath, entry.Href)
+		if !ok {
+			continue
+		}
+		if _, seen := visited[nextPath]; seen {
+			continue
+		}
+		visited[nextPath] = struct{}{}
+
+		childBody, err := s.fetchNodeLogPath(nodeName, nextPath)
+		if err != nil {
+			continue
+		}
+		if isNodeLogDirectoryListing(childBody) {
+			s.discoverNodeLogSources(nodeName, nextPath, childBody, depth+1, visited, sources)
+			continue
+		}
+		if !isDisplayableNodeLogSource(nextPath) {
+			continue
+		}
+		if !isSupportedNodeLogSource(nextPath) {
+			continue
+		}
+
+		if len(sources) >= maxNodeLogDiscoveryNodes {
+			return
+		}
+		sources[nextPath] = restypes.NodeLogSource{
+			ID:    nextPath,
+			Label: nodeLogSourceLabel(nextPath),
+			Kind:  nodeLogSourceKind(nextPath),
+			Path:  nextPath,
+		}
+	}
+}
+
+func (s *Service) fetchNodeLogPath(nodeName, sourcePath string) ([]byte, error) {
+	restClient := s.deps.KubernetesClient.Discovery().RESTClient()
+	ctx := s.deps.Context
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return nodeLogFetchRawFunc(ctx, restClient, nodeLogProxyPath(nodeName, sourcePath))
+}
+
+func nodeLogProxyPath(nodeName, sourcePath string) string {
+	trimmedPath := strings.TrimLeft(strings.TrimSpace(sourcePath), "/")
+	base := fmt.Sprintf("/api/v1/nodes/%s/proxy/logs/", url.PathEscape(strings.TrimSpace(nodeName)))
+	if trimmedPath == "" {
+		return base
+	}
+	return base + trimmedPath
+}
+
+func classifyNodeLogError(err error) string {
+	switch {
+	case err == nil:
+		return ""
+	case apierrors.IsForbidden(err) || apierrors.IsUnauthorized(err):
+		return "node logs are not accessible with the current permissions"
+	case apierrors.IsNotFound(err):
+		return "node logs are not supported on this cluster"
+	default:
+		return err.Error()
+	}
+}
+
+func isNodeLogDirectoryListing(body []byte) bool {
+	trimmed := strings.TrimSpace(strings.ToLower(string(body)))
+	return strings.HasPrefix(trimmed, "<!doctype html>") &&
+		strings.Contains(trimmed, "<pre>") &&
+		strings.Contains(trimmed, "<a href=")
+}
+
+func parseNodeLogDirectoryListing(body []byte) []nodeLogListingEntry {
+	matches := nodeLogAnchorPattern.FindAllStringSubmatch(string(body), -1)
+	if len(matches) == 0 {
+		return nil
+	}
+	entries := make([]nodeLogListingEntry, 0, len(matches))
+	for _, match := range matches {
+		if len(match) < 3 {
+			continue
+		}
+		href := strings.TrimSpace(html.UnescapeString(match[1]))
+		label := strings.TrimSpace(html.UnescapeString(match[2]))
+		if href == "" || href == "../" || strings.Contains(href, "..") {
+			continue
+		}
+		entries = append(entries, nodeLogListingEntry{Href: href, Label: label})
+	}
+	return entries
+}
+
+func joinNodeLogPath(basePath, href string) (string, bool) {
+	cleanHref := strings.TrimSpace(href)
+	if cleanHref == "" {
+		return "", false
+	}
+	if strings.Contains(cleanHref, "://") || strings.HasPrefix(cleanHref, "#") || strings.HasPrefix(cleanHref, "?") {
+		return "", false
+	}
+	cleanHref = strings.TrimPrefix(cleanHref, "/")
+	if strings.HasPrefix(cleanHref, "api/") {
+		return "", false
+	}
+
+	base := strings.Trim(strings.TrimSpace(basePath), "/")
+	child := strings.Trim(cleanHref, "/")
+	if child == "" {
+		return "", false
+	}
+
+	combined := child
+	if base != "" {
+		combined = base + "/" + child
+	}
+	if strings.HasSuffix(cleanHref, "/") {
+		combined += "/"
+	}
+	return combined, true
+}
+
+func nodeLogSourceKind(sourcePath string) string {
+	if strings.HasPrefix(strings.TrimLeft(sourcePath, "/"), "journal/") {
+		return "journal"
+	}
+	return "path"
+}
+
+func nodeLogSourceLabel(sourcePath string) string {
+	trimmed := strings.Trim(strings.TrimSpace(sourcePath), "/")
+	if trimmed == "" {
+		return "Node Logs"
+	}
+	return strings.Join(strings.Split(trimmed, "/"), " / ")
+}
+
+func isDisplayableNodeLogSource(sourcePath string) bool {
+	trimmed := strings.ToLower(strings.TrimSpace(sourcePath))
+	return !strings.HasSuffix(trimmed, ".gz")
+}
+
+func isSupportedNodeLogSource(sourcePath string) bool {
+	trimmed := strings.Trim(strings.ToLower(strings.TrimSpace(sourcePath)), "/")
+	return !strings.HasPrefix(trimmed, "pods/") &&
+		trimmed != "pods" &&
+		!strings.HasPrefix(trimmed, "containers/") &&
+		trimmed != "containers"
+}
+
+func normalizeNodeLogTailBytes(requested int) int {
+	switch {
+	case requested <= 0:
+		return defaultNodeLogTailBytes
+	case requested > maxNodeLogTailBytes:
+		return maxNodeLogTailBytes
+	default:
+		return requested
+	}
+}
+
+func truncateNodeLogContent(body []byte, tailBytes int) (string, bool) {
+	if len(body) <= tailBytes {
+		return string(body), false
+	}
+
+	trimmed := body[len(body)-tailBytes:]
+	if newline := bytes.IndexByte(trimmed, '\n'); newline >= 0 && newline+1 < len(trimmed) {
+		trimmed = trimmed[newline+1:]
+	}
+
+	return string(trimmed), true
+}

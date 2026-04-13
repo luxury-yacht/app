@@ -62,6 +62,7 @@ import {
   setLogViewerScrollTop,
 } from './logViewerPrefsCache';
 import { containsAnsi, parseAnsiTextSegments, stripAnsi } from './ansi';
+import { formatParsedValue, tryParseJSONObject } from './jsonLogs';
 import { buildStablePodColorMap } from './podColors';
 import { setLogStreamScopeParams } from './logStreamScopeParamsCache';
 import { INACTIVE_SCOPE } from '../constants';
@@ -158,21 +159,6 @@ const formatTimestampForMode = (
     default:
       return formatLogApiTimestamp(timestamp, DEFAULT_LOG_API_TIMESTAMP_FORMAT, useLocalTimeZone);
   }
-};
-
-// Format a parsed JSON value for table cell display
-const formatParsedValue = (value: unknown): string => {
-  if (value === undefined || value === null) {
-    return '-';
-  }
-  if (typeof value === 'object') {
-    return JSON.stringify(value);
-  }
-  if (typeof value === 'string') {
-    return value.length > 0 ? value : '-';
-  }
-  const stringified = String(value);
-  return stringified.length > 0 ? stringified : '-';
 };
 
 // Build a display label for a container, appending :init for init containers
@@ -361,18 +347,6 @@ const isValidRegexPattern = (pattern: string): boolean => {
     return true;
   } catch {
     return false;
-  }
-};
-
-const tryParseJSONObject = (line: string): Record<string, unknown> | null => {
-  try {
-    const parsed = JSON.parse(stripAnsi(line));
-    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-      return null;
-    }
-    return Object.keys(parsed).length > 0 ? (parsed as Record<string, unknown>) : null;
-  } catch {
-    return null;
   }
 };
 

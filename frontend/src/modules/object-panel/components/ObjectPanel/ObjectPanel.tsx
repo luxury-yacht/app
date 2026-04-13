@@ -243,12 +243,13 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
 
   const featureSupport = useObjectPanelFeatureSupport(objectKind, RESOURCE_CAPABILITIES);
 
-  const { capabilities, capabilityReasons } = useObjectPanelCapabilities({
-    objectData,
-    objectKind,
-    detailScope,
-    featureSupport,
-  });
+  const { capabilities, capabilityReasons, nodeLogsState, nodeLogSources } =
+    useObjectPanelCapabilities({
+      objectData,
+      objectKind,
+      detailScope,
+      featureSupport,
+    });
 
   // Only poll when this tab is active in its group (Step 8: active-tab-only polling).
   const { detailPayload, detailsLoading, detailsError, fetchResourceDetails } =
@@ -658,6 +659,8 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
           isPanelOpen={isOpen && isActiveTab}
           capabilities={capabilities}
           capabilityReasons={capabilityReasons}
+          nodeLogsState={nodeLogsState}
+          nodeLogSources={nodeLogSources}
           detailScope={detailScope}
           eventsScope={eventsScope}
           logScope={logScope}
