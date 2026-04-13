@@ -284,13 +284,12 @@ const Dropdown: React.FC<DropdownProps> = ({
   });
 
   return (
-    <div ref={dropdownRef} className={containerClasses} data-allow-shortcuts="true">
+    <div ref={dropdownRef} className={containerClasses}>
       {/* Trigger */}
       <div
         ref={triggerRef}
         className="dropdown-trigger"
         onClick={toggleDropdown}
-        data-allow-shortcuts="true"
         role="combobox"
         aria-expanded={isOpen}
         aria-haspopup="listbox"
@@ -342,7 +341,6 @@ const Dropdown: React.FC<DropdownProps> = ({
           role="listbox"
           aria-multiselectable={multiple}
           id={`${id || 'dropdown'}-menu`}
-          data-allow-shortcuts="true"
         >
           {searchable && (
             <div className="search-container">
@@ -354,7 +352,6 @@ const Dropdown: React.FC<DropdownProps> = ({
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onClick={(e) => e.stopPropagation()}
                 autoFocus
-                data-allow-shortcuts="true"
               />
             </div>
           )}

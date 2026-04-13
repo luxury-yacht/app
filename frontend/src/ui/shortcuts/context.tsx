@@ -350,13 +350,7 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
       }
 
       // Ignore if user is typing in an input field
-      const targetElement = resolveEventElement(event.target);
       if (isInputElement(event.target)) {
-        const allowAttr = targetElement?.getAttribute('data-allow-shortcuts');
-        if (allowAttr && allowAttr.toLowerCase() === 'false') {
-          return;
-        }
-
         if (!hasAnyModifier) {
           return;
         }

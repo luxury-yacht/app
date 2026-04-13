@@ -290,27 +290,6 @@ describe('keyboard handling edge cases', () => {
     expect(extendedHandler).toHaveBeenCalledTimes(1);
     expect(extendedEvent.defaultPrevented).toBe(true);
 
-    const optOut = document.createElement('input');
-    optOut.setAttribute('data-allow-shortcuts', 'false');
-    document.body.appendChild(optOut);
-    optOut.focus();
-
-    const blockedEvent = new KeyboardEvent('keydown', {
-      key: 'c',
-      metaKey: true,
-      shiftKey: true,
-      bubbles: true,
-      cancelable: true,
-    });
-
-    act(() => {
-      optOut.dispatchEvent(blockedEvent);
-    });
-
-    expect(extendedHandler).toHaveBeenCalledTimes(1);
-    expect(blockedEvent.defaultPrevented).toBe(false);
-
-    optOut.remove();
     input.remove();
   });
 

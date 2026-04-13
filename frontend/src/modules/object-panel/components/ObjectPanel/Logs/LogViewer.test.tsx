@@ -2576,6 +2576,9 @@ describe('LogViewer active pod synchronisation', () => {
 
     // Clear the manager's buffer so the next test starts from a clean
     // slate — afterEach only resets the scoped store, not the manager.
-    logStreamManager.stop(defaultScope, true);
+    await act(async () => {
+      logStreamManager.stop(defaultScope, true);
+      await Promise.resolve();
+    });
   });
 });
