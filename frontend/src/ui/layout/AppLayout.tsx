@@ -466,19 +466,12 @@ const KeyboardFocusOverlay: React.FC<OverlayCloseProps> = ({ onClose }) => {
       const eventTarget = event?.target instanceof Node ? event.target : null;
       const activeElementIsDocumentFallback =
         activeElement === document.body || activeElement === document.documentElement;
-      const overlaySidebar =
-        overlayElement?.closest<HTMLElement>('.sidebar') ?? overlayElement?.parentElement ?? null;
-      const activeElementIsOverlayHost =
-        overlayPointerInteractionRef.current &&
-        activeElement instanceof Node &&
-        Boolean(overlaySidebar?.contains(activeElement));
 
       if (
         overlayElement &&
         ((activeElement instanceof Node && overlayElement.contains(activeElement)) ||
           (eventTarget && overlayElement.contains(eventTarget)) ||
-          (activeElementIsDocumentFallback && overlayPointerInteractionRef.current) ||
-          activeElementIsOverlayHost)
+          (activeElementIsDocumentFallback && overlayPointerInteractionRef.current))
       ) {
         return;
       }
