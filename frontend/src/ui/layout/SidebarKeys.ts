@@ -10,6 +10,7 @@ import { KeyboardScopePriority } from '@ui/shortcuts/priorities';
 import { useKeyboardSurface } from '@ui/shortcuts/surfaces';
 import { isInputElement, resolveEventElement } from '@ui/shortcuts/utils';
 import type { NamespaceViewType, ClusterViewType } from '@/types/navigation/views';
+import { focusPreviousRegionBeforeSidebar } from './appFocusRegions';
 
 export type SidebarCursorTarget =
   | { kind: 'overview' }
@@ -111,16 +112,7 @@ export const useSidebarKeyboardControls = ({
   getCurrentSelectionTarget,
 }: SidebarKeyboardParams): SidebarKeyboardApi => {
   const [isKeyboardNavActive, setIsKeyboardNavActive] = useState(false);
-  const focusLastHeaderControl = useCallback(() => {
-    const settingsButton = document.querySelector<HTMLElement>(
-      '[data-app-header-last-focusable="true"]'
-    );
-    if (!settingsButton) {
-      return false;
-    }
-    settingsButton.focus();
-    return true;
-  }, []);
+  const focusPreviousRegion = useCallback(() => focusPreviousRegionBeforeSidebar(), []);
 
   const getFocusableItems = useCallback((): HTMLElement[] => {
     if (!sidebarRef.current) {
@@ -258,9 +250,9 @@ export const useSidebarKeyboardControls = ({
           if (!event.shiftKey) {
             return false;
           }
-          return focusLastHeaderControl();
+          return focusPreviousRegion();
         }
-        if (!targetElement?.closest('[data-app-header-last-focusable="true"]')) {
+        if (event.shiftKey || !targetElement?.closest('[data-app-header-last-focusable="true"]')) {
           return false;
         }
         const target = getDisplaySelectionTarget();

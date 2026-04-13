@@ -298,6 +298,26 @@ describe('useSidebarKeyboardControls', () => {
     cleanup();
   });
 
+  it('does not intercept shift-tab on the last header control', async () => {
+    const { cleanup } = renderHarness({
+      selectionTarget: { kind: 'overview' },
+    });
+
+    const headerButton = document.createElement('button');
+    headerButton.type = 'button';
+    headerButton.textContent = 'Settings';
+    headerButton.setAttribute('data-app-header-last-focusable', 'true');
+    document.body.appendChild(headerButton);
+    headerButton.focus();
+
+    await dispatchTab(headerButton, true);
+
+    expect(document.activeElement).toBe(headerButton);
+
+    headerButton.remove();
+    cleanup();
+  });
+
   it('shift-tabs from the sidebar back to the last header control', async () => {
     const { container, cleanup } = renderHarness({
       selectionTarget: { kind: 'overview' },
@@ -312,8 +332,38 @@ describe('useSidebarKeyboardControls', () => {
 
     await dispatchTab(overview, true);
 
-    expect(document.activeElement).toBe(headerButton);
+    expect((document.activeElement as HTMLElement | null)?.dataset.appHeaderLastFocusable).toBe(
+      'true'
+    );
 
+    headerButton.remove();
+    cleanup();
+  });
+
+  it('shift-tabs from the sidebar back to the active cluster tab before the header', async () => {
+    const { container, cleanup } = renderHarness({
+      selectionTarget: { kind: 'overview' },
+    });
+    const headerButton = document.createElement('button');
+    headerButton.setAttribute('data-app-header-last-focusable', 'true');
+    document.body.appendChild(headerButton);
+    const clusterTabsWrapper = document.createElement('div');
+    clusterTabsWrapper.className = 'cluster-tabs-wrapper';
+    const activeClusterTab = document.createElement('div');
+    activeClusterTab.setAttribute('role', 'tab');
+    activeClusterTab.setAttribute('tabindex', '0');
+    clusterTabsWrapper.appendChild(activeClusterTab);
+    document.body.appendChild(clusterTabsWrapper);
+    const overview = container.querySelector(
+      '[data-sidebar-target-kind="overview"]'
+    ) as HTMLElement;
+    overview.focus();
+
+    await dispatchTab(overview, true);
+
+    expect(document.activeElement).toBe(activeClusterTab);
+
+    clusterTabsWrapper.remove();
     headerButton.remove();
     cleanup();
   });

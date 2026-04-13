@@ -43,6 +43,7 @@ import { useDockablePanelEmptySpaceDropTarget } from '@ui/dockable/DockablePanel
 // Auth Failure Overlay
 import { AuthFailureOverlay } from '@ui/overlays/AuthFailureOverlay';
 import { useAppDebugShortcuts } from '@ui/layout/useAppDebugShortcuts';
+import { useContentRegionShiftTabHandoff } from '@ui/layout/appFocusRegions';
 
 const Sidebar = withLazyBoundary(() => import('@ui/layout/Sidebar'), 'Loading sidebar...');
 
@@ -71,6 +72,7 @@ export const AppLayout: React.FC = () => {
   const kubeconfig = useKubeconfig();
   const { openPanels, closePanel } = useObjectPanelState();
   const commands = useCommandPaletteCommands();
+  const contentBodyRef = useRef<HTMLDivElement | null>(null);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [isFocusOverlayVisible, setIsFocusOverlayVisible] = useState(false);
   const [isErrorOverlayVisible, setIsErrorOverlayVisible] = useState(false);
@@ -92,6 +94,7 @@ export const AppLayout: React.FC = () => {
     onToggleFocusDebug: () => setIsFocusOverlayVisible((prev) => !prev),
     onToggleErrorDebug: () => setIsErrorOverlayVisible((prev) => !prev),
   });
+  useContentRegionShiftTabHandoff(contentBodyRef, hasActiveClusters);
 
   useEffect(() => {
     return eventBus.on('view:toggle-diagnostics', () => {
@@ -189,7 +192,7 @@ export const AppLayout: React.FC = () => {
         )}
 
         <div className="content">
-          <div className="content-body">
+          <div ref={contentBodyRef} className="content-body">
             {hasActiveClusters ? (
               viewState.viewType === 'cluster' ? (
                 viewState.activeClusterTab === 'browse' ? (

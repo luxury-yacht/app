@@ -313,7 +313,35 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
   useEffect(() => {
     if (!isEnabled || disabled) return;
 
+    const handleCapturedTabKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab') {
+        return;
+      }
+
+      const targetSurface = getTargetSurface(event.target);
+      if (!targetSurface?.onKeyDown) {
+        return;
+      }
+
+      const keyResult = targetSurface.onKeyDown(event);
+      const handledKey = keyResult === true || keyResult === 'handled-no-prevent';
+      const handledKeyNoPrevent = keyResult === 'handled-no-prevent';
+
+      if (!handledKey) {
+        return;
+      }
+
+      if (!handledKeyNoPrevent) {
+        event.preventDefault();
+      }
+      event.stopPropagation();
+    };
+
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Tab') {
+        return;
+      }
+
       const targetSurface = getTargetSurface(event.target);
       if (targetSurface) {
         const escapeResult =
@@ -385,8 +413,12 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
       }
     };
 
+    document.addEventListener('keydown', handleCapturedTabKeyDown, true);
     document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleCapturedTabKeyDown, true);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
   }, [disabled, getTargetSurface, isEnabled, shortcuts]);
 
   // Handle menu events from Wails
