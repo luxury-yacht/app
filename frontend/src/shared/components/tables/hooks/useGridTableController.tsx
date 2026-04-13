@@ -9,7 +9,7 @@
  * Extracted from GridTable.tsx — no behavioral change, purely mechanical.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ReactElement, ReactNode, RefObject } from 'react';
 import { useGridTableHoverSync } from '@shared/components/tables/hooks/useGridTableHoverSync';
 import type { HoverState } from '@shared/components/tables/hooks/useGridTableHoverSync';
@@ -63,6 +63,9 @@ const GRIDTABLE_ROWCLICK_SUPPRESS_SELECTOR = '[data-gridtable-rowclick="suppress
 const GRIDTABLE_ROWCLICK_ALLOW_SELECTOR = '[data-gridtable-rowclick="allow"]';
 const GRIDTABLE_INTERACTIVE_STOP_SELECTOR =
   'button, a[href], input, textarea, select, summary, [role="button"], [role="menuitem"], [data-gridtable-interactive="true"]';
+const GRIDTABLE_ROW_TABSTOP_SELECTOR = GRIDTABLE_INTERACTIVE_STOP_SELECTOR.split(',')
+  .map((selector) => `.gridtable-row ${selector.trim()}`)
+  .join(', ');
 
 const getColumnMinWidth = <T,>(column: GridColumnDefinition<T>) => {
   const parsed = parseWidthInputToNumber(column.minWidth);
@@ -328,6 +331,22 @@ export function useGridTableController<T>({
     updateHoverForElement,
     getRowClassName,
     shouldIgnoreRowClick,
+  });
+
+  useLayoutEffect(() => {
+    const wrapper = wrapperRef.current;
+    if (!wrapper) {
+      return;
+    }
+
+    // Grid body navigation is wrapper/arrow-key driven. Remove row-internal
+    // controls from the native tab order so Tab exits the grid instead of
+    // walking through every interactive cell.
+    wrapper.querySelectorAll<HTMLElement>(GRIDTABLE_ROW_TABSTOP_SELECTOR).forEach((element) => {
+      if (element.tabIndex !== -1) {
+        element.tabIndex = -1;
+      }
+    });
   });
 
   // External focus — allows other parts of the app to request that this

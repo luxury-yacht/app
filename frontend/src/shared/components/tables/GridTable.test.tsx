@@ -954,6 +954,32 @@ describe('GridTable interactions (non-virtualized)', () => {
     expect(document.activeElement).toBe(columnsTrigger);
   });
 
+  it('removes row-internal controls from the tab order so the wrapper stays the only body tab stop', async () => {
+    const interactiveColumns: GridColumnDefinition<SimpleRow>[] = [
+      {
+        key: 'label',
+        header: 'Label',
+        render: (row) => <button type="button">{row.label}</button>,
+      },
+    ];
+
+    const { container, cleanup } = renderGridTable({
+      data: createRows(5),
+      columns: interactiveColumns,
+      virtualization: { enabled: false },
+    });
+    cleanupRoot = cleanup;
+
+    await flushAsync();
+
+    const rowButton = container.querySelector<HTMLButtonElement>('.gridtable-row button');
+    const wrapper = container.querySelector<HTMLDivElement>('.gridtable-wrapper');
+    expect(rowButton).not.toBeNull();
+    expect(wrapper).not.toBeNull();
+    expect(rowButton!.tabIndex).toBe(-1);
+    expect(wrapper!.tabIndex).toBe(0);
+  });
+
   it('shows selection counts in kind and namespace dropdown labels', async () => {
     let currentFilters = {
       search: '',
