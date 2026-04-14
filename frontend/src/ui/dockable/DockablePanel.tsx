@@ -17,7 +17,9 @@ import React, {
 import { createPortal } from 'react-dom';
 import {
   copyPanelLayoutState,
+  clearGroupLeader,
   registerPanelCloseHandler,
+  setGroupLeader,
   unregisterPanelCloseHandler,
   useDockablePanelState,
   PanelCloseReason,
@@ -445,6 +447,7 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     if (!groupKey || !groupInfo || groupInfo.tabs.length === 0) {
       if (groupKey) {
         groupLeaderByKeyRef.current.delete(groupKey);
+        clearGroupLeader(groupKey);
       }
       return;
     }
@@ -456,6 +459,7 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
       copyPanelLayoutState(previousLeader, panelId);
     }
     groupLeaderByKeyRef.current.set(groupKey, panelId);
+    setGroupLeader(groupKey, panelId);
   }, [groupKey, groupInfo, isGroupLeader, panelId, groupLeaderByKeyRef]);
 
   // Set CSS variables so .app-main can shrink the content area for docked panels.

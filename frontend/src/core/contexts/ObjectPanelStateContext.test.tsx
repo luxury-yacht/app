@@ -11,6 +11,9 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 
 import { ObjectPanelStateProvider, useObjectPanelState } from './ObjectPanelStateContext';
 
+const clearPanelStateMock = vi.fn();
+const handoffLayoutBeforeCloseMock = vi.fn();
+
 let mockClusterId = 'cluster-a';
 let mockClusterName = 'Cluster A';
 let mockClusterIds = ['cluster-a', 'cluster-b'];
@@ -28,6 +31,11 @@ vi.mock('@/core/refresh', () => ({
   refreshOrchestrator: {
     resetScopedDomain: (...args: unknown[]) => resetScopedDomainMock(...args),
   },
+}));
+
+vi.mock('@ui/dockable/useDockablePanelState', () => ({
+  clearPanelState: (...args: unknown[]) => clearPanelStateMock(...args),
+  handoffLayoutBeforeClose: (...args: unknown[]) => handoffLayoutBeforeCloseMock(...args),
 }));
 
 const stateRef: { current: ReturnType<typeof useObjectPanelState> | null } = { current: null };
@@ -54,6 +62,8 @@ describe('ObjectPanelStateContext', () => {
     mockClusterIds = ['cluster-a', 'cluster-b'];
     stateRef.current = null;
     resetScopedDomainMock.mockClear();
+    clearPanelStateMock.mockClear();
+    handoffLayoutBeforeCloseMock.mockClear();
   });
 
   afterEach(() => {
@@ -170,6 +180,8 @@ describe('ObjectPanelStateContext', () => {
     });
     expect(stateRef.current?.openPanels.has(panelId)).toBe(false);
     expect(stateRef.current?.getObjectPanelActiveTab(panelId)).toBeUndefined();
+    expect(handoffLayoutBeforeCloseMock).toHaveBeenCalledWith(panelId);
+    expect(clearPanelStateMock).toHaveBeenCalledWith(panelId);
   });
 
   it('clears object panel state when a tab is closed', async () => {
