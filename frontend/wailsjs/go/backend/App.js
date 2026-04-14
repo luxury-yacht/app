@@ -90,12 +90,20 @@ export function DeleteTheme(arg1) {
   return window['go']['backend']['App']['DeleteTheme'](arg1);
 }
 
+export function DiscoverNodeLogs(arg1, arg2) {
+  return window['go']['backend']['App']['DiscoverNodeLogs'](arg1, arg2);
+}
+
 export function DrainNode(arg1, arg2, arg3) {
   return window['go']['backend']['App']['DrainNode'](arg1, arg2, arg3);
 }
 
 export function EvaluateCapabilities(arg1) {
   return window['go']['backend']['App']['EvaluateCapabilities'](arg1);
+}
+
+export function FetchNodeLogs(arg1, arg2, arg3) {
+  return window['go']['backend']['App']['FetchNodeLogs'](arg1, arg2, arg3);
 }
 
 export function ForceDeleteNode(arg1, arg2) {

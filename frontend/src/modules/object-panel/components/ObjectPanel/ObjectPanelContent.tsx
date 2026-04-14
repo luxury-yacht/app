@@ -14,6 +14,7 @@ import YamlTab from '@modules/object-panel/components/ObjectPanel/Yaml/YamlTab';
 import ManifestTab from '@modules/object-panel/components/ObjectPanel/Helm/ManifestTab';
 import ValuesTab from '@modules/object-panel/components/ObjectPanel/Helm/ValuesTab';
 import ShellTab from '@modules/object-panel/components/ObjectPanel/Shell/ShellTab';
+import NodeLogsTab from '@modules/object-panel/components/ObjectPanel/NodeLogs/NodeLogsTab';
 import { NodeMaintenanceTab } from '@modules/object-panel/components/ObjectPanel/Maintenance/NodeMaintenanceTab';
 import { PodsTab } from '@modules/object-panel/components/ObjectPanel/Pods/PodsTab';
 import { JobsTab } from '@modules/object-panel/components/ObjectPanel/Jobs/JobsTab';
@@ -22,10 +23,12 @@ import { ErrorBoundary } from '@shared/components/errors/ErrorBoundary';
 
 import type {
   CapabilityReasons,
+  CapabilityState,
   ComputedCapabilities,
   PanelObjectData,
   ViewType,
 } from '@modules/object-panel/components/ObjectPanel/types';
+import type { NodeLogSource } from '@modules/object-panel/components/ObjectPanel/NodeLogs/nodeLogsApi';
 
 const TabErrorFallback = ({ tabName, reset }: { tabName: string; reset: () => void }) => (
   <div className="object-panel-tab-content">
@@ -45,6 +48,8 @@ interface ObjectPanelContentProps {
   isPanelOpen: boolean;
   capabilities: ComputedCapabilities;
   capabilityReasons: CapabilityReasons;
+  nodeLogsState: CapabilityState;
+  nodeLogSources: NodeLogSource[];
   detailScope: string | null;
   // eventsScope is computed once in getObjectPanelKind and threaded
   // here so this component (full-cleanup lifecycle) and EventsTab
@@ -79,6 +84,8 @@ export function ObjectPanelContent({
   isPanelOpen,
   capabilities,
   capabilityReasons,
+  nodeLogsState,
+  nodeLogSources,
   detailScope,
   eventsScope,
   logScope,
@@ -261,7 +268,7 @@ export function ObjectPanelContent({
         </ErrorBoundary>
       )}
 
-      {showLogs && (
+      {showLogs && objectKind !== 'node' && (
         <ErrorBoundary
           scope="panel-logs"
           resetKeys={[objectData?.name ?? '', objectData?.namespace ?? ''].filter(Boolean)}
@@ -294,6 +301,23 @@ export function ObjectPanelContent({
             debugDisabledReason={capabilityReasons.debug}
             availableContainers={availableContainers}
             clusterId={objectData?.clusterId ?? null}
+          />
+        </ErrorBoundary>
+      )}
+
+      {showLogs && objectKind === 'node' && (
+        <ErrorBoundary
+          scope="panel-node-logs"
+          resetKeys={[objectData?.name ?? '', objectData?.clusterId ?? ''].filter(Boolean)}
+          fallback={(_, reset) => <TabErrorFallback tabName="Logs" reset={reset} />}
+        >
+          <NodeLogsTab
+            panelId={panelId}
+            nodeName={objectData?.name || ''}
+            clusterId={objectData?.clusterId ?? null}
+            isActive={isPanelOpen && activeTab === 'logs'}
+            availability={nodeLogsState}
+            sources={nodeLogSources}
           />
         </ErrorBoundary>
       )}

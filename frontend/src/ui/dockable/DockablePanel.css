@@ -152,7 +152,22 @@
   color: var(--color-text, #fff);
 }
 
+.dockable-panel__control-btn:focus,
+.dockable-panel__control-btn:focus-visible {
+  outline: none;
+  color: var(--color-text, #fff);
+  background: var(--color-bg-tertiary, rgb(255 255 255 / 10%));
+  box-shadow: inset 0 0 0 2px var(--color-accent);
+  border-radius: var(--border-radius-sm, 4px);
+}
+
 .dockable-panel__control-btn--close:hover {
+  background: var(--color-error-bg);
+  color: var(--color-error);
+}
+
+.dockable-panel__control-btn--close:focus,
+.dockable-panel__control-btn--close:focus-visible {
   background: var(--color-error-bg);
   color: var(--color-error);
 }

@@ -8,6 +8,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
+  DeleteIcon,
   FavoriteFilledIcon,
   FavoriteGenericIcon,
   FavoritePinIcon,
@@ -71,7 +72,7 @@ const FavMenuDropdown: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const anchorRef = useRef<HTMLDivElement>(null);
 
-  const { favorites, reorderFavorites, setPendingFavorite } = useFavorites();
+  const { favorites, deleteFavorite, reorderFavorites, setPendingFavorite } = useFavorites();
   const kubeconfigCtx = useKubeconfig();
   const namespaceCtx = useNamespace();
 
@@ -91,6 +92,16 @@ const FavMenuDropdown: React.FC = () => {
 
   const toggleOpen = useCallback(() => setIsOpen((prev) => !prev), []);
   const closeDropdown = useCallback(() => setIsOpen(false), []);
+  const handleTriggerKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (event.key !== 'Enter' && event.key !== ' ') {
+        return;
+      }
+      event.preventDefault();
+      toggleOpen();
+    },
+    [toggleOpen]
+  );
 
   // -- Reorder --
 
@@ -112,6 +123,13 @@ const FavMenuDropdown: React.FC = () => {
       await reorderFavorites(ids);
     },
     [favorites, reorderFavorites]
+  );
+
+  const handleDelete = useCallback(
+    async (id: string) => {
+      await deleteFavorite(id);
+    },
+    [deleteFavorite]
   );
 
   // -- Navigate --
@@ -150,14 +168,17 @@ const FavMenuDropdown: React.FC = () => {
 
   return (
     <div className="fav-dropdown-anchor" ref={anchorRef}>
-      <button
+      <div
         className="settings-button"
         onClick={toggleOpen}
+        onKeyDown={handleTriggerKeyDown}
         title="Favorites"
         aria-label="Favorites"
+        role="button"
+        tabIndex={0}
       >
         <FavoriteFilledIcon width={18} height={18} />
-      </button>
+      </div>
 
       {isOpen && (
         <div className="fav-dropdown-panel" role="menu">
@@ -203,6 +224,16 @@ const FavMenuDropdown: React.FC = () => {
                         }}
                       >
                         <ChevronDownIcon />
+                      </button>
+                      <button
+                        className="fav-dropdown-action-btn danger"
+                        title="Delete favorite"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void handleDelete(fav.id);
+                        }}
+                      >
+                        <DeleteIcon width={13} height={13} />
                       </button>
                     </span>
                   </div>

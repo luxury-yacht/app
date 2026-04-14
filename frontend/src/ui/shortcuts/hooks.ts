@@ -7,12 +7,7 @@
 
 import { useEffect, useMemo, useRef } from 'react';
 import { useKeyboardContext } from './context';
-import {
-  ShortcutModifiers,
-  ShortcutContext,
-  ViewContext,
-  ResourceContext,
-} from '@/types/shortcuts';
+import { ShortcutModifiers } from '@/types/shortcuts';
 
 const normalizeModifiers = (modifiers?: ShortcutModifiers): ShortcutModifiers | undefined => {
   if (!modifiers) {
@@ -31,49 +26,13 @@ const normalizeModifiers = (modifiers?: ShortcutModifiers): ShortcutModifiers | 
     : undefined;
 };
 
-const buildContexts = (
-  providedContexts: ShortcutContext[] | undefined,
-  view: ViewContext | undefined,
-  resourceKind: ResourceContext | undefined,
-  objectKind: string | undefined,
-  whenPanelOpen: 'object' | 'logs' | 'settings' | undefined,
-  whenTabActive: string | undefined,
-  priority: number | undefined
-): ShortcutContext[] => {
-  if (providedContexts && providedContexts.length > 0) {
-    return providedContexts;
-  }
-
-  const context: ShortcutContext = {};
-
-  if (view !== undefined) context.view = view;
-  if (resourceKind !== undefined) context.resourceKind = resourceKind;
-  if (objectKind !== undefined) context.objectKind = objectKind;
-  if (whenPanelOpen !== undefined) context.panelOpen = whenPanelOpen;
-  if (whenTabActive !== undefined) context.tabActive = whenTabActive;
-  if (priority !== undefined) context.priority = priority;
-
-  if (Object.keys(context).length === 0) {
-    context.view = 'global';
-  }
-
-  return [context];
-};
-
 interface UseShortcutOptions {
   key: string;
   handler: (event?: KeyboardEvent) => void | boolean;
   modifiers?: ShortcutModifiers;
-  contexts?: ShortcutContext[];
   description?: string;
   category?: string;
   enabled?: boolean;
-  // Convenience props for common contexts
-  view?: ViewContext;
-  resourceKind?: ResourceContext;
-  objectKind?: string;
-  whenPanelOpen?: 'object' | 'logs' | 'settings';
-  whenTabActive?: string;
   priority?: number;
 }
 
@@ -86,7 +45,7 @@ interface UseShortcutOptions {
  *   key: 's',
  *   handler: () => toggleAutoScroll(),
  *   description: 'Toggle auto-scroll',
- *   view: 'logs'
+ *   priority: 20
  * });
  *
  * // With modifiers
@@ -97,33 +56,16 @@ interface UseShortcutOptions {
  *   description: 'Open command palette'
  * });
  *
- * // Multiple contexts
+ * // With priority
  * useShortcut({
  *   key: 'Delete',
  *   handler: () => deleteSelected(),
- *   contexts: [
- *     { view: 'list', resourceKind: 'pods' },
- *     { view: 'list', resourceKind: 'deployments' }
- *   ],
+ *   priority: 10,
  *   description: 'Delete selected resource'
  * });
  */
 export function useShortcut(options: UseShortcutOptions) {
-  const {
-    key,
-    handler,
-    modifiers,
-    contexts: providedContexts,
-    description = '',
-    category,
-    enabled = true,
-    view,
-    resourceKind: resourceKind,
-    objectKind,
-    whenPanelOpen,
-    whenTabActive,
-    priority,
-  } = options;
+  const { key, handler, modifiers, description = '', category, enabled = true, priority } = options;
 
   const { registerShortcut, unregisterShortcut } = useKeyboardContext();
   const shortcutIdRef = useRef<string | null>(null);
@@ -146,25 +88,11 @@ export function useShortcut(options: UseShortcutOptions) {
     return { ctrl, shift, alt, meta };
   }, [ctrl, shift, alt, meta]);
 
-  const resolvedContexts = useMemo(
-    () =>
-      buildContexts(
-        providedContexts,
-        view,
-        resourceKind,
-        objectKind,
-        whenPanelOpen,
-        whenTabActive,
-        priority
-      ),
-    [providedContexts, view, resourceKind, objectKind, whenPanelOpen, whenTabActive, priority]
-  );
-
   useEffect(() => {
     const id = registerShortcut({
       key,
       modifiers: normalizedModifiers,
-      contexts: resolvedContexts,
+      priority,
       handler: (event) => handlerRef.current(event),
       description,
       category,
@@ -187,7 +115,7 @@ export function useShortcut(options: UseShortcutOptions) {
     registerShortcut,
     unregisterShortcut,
     normalizedModifiers,
-    resolvedContexts,
+    priority,
   ]);
 }
 
@@ -199,25 +127,11 @@ export function useShortcut(options: UseShortcutOptions) {
  *   { key: 'j', handler: selectNext, description: 'Select next' },
  *   { key: 'k', handler: selectPrev, description: 'Select previous' },
  *   { key: 'Enter', handler: openSelected, description: 'Open selected' },
- * ], { view: 'list' });
+ * ], { priority: 100 });
  */
 export function useShortcuts(
-  shortcuts: Array<
-    Omit<
-      UseShortcutOptions,
-      'view' | 'resourceKind' | 'objectKind' | 'whenPanelOpen' | 'whenTabActive' | 'priority'
-    >
-  >,
-  commonOptions?: Pick<
-    UseShortcutOptions,
-    | 'view'
-    | 'resourceKind'
-    | 'objectKind'
-    | 'whenPanelOpen'
-    | 'whenTabActive'
-    | 'priority'
-    | 'category'
-  >
+  shortcuts: Array<Omit<UseShortcutOptions, 'priority'>>,
+  commonOptions?: Pick<UseShortcutOptions, 'priority' | 'category' | 'enabled'>
 ) {
   const { registerShortcut, unregisterShortcut } = useKeyboardContext();
   const handlerRefs = useRef<Array<UseShortcutOptions['handler']>>([]);
@@ -260,20 +174,11 @@ export function useShortcuts(
       } as UseShortcutOptions;
 
       const normalizedModifiers = normalizeModifiers(merged.modifiers);
-      const contexts = buildContexts(
-        merged.contexts,
-        merged.view,
-        merged.resourceKind,
-        merged.objectKind,
-        merged.whenPanelOpen,
-        merged.whenTabActive,
-        merged.priority
-      );
 
       return registerShortcut({
         key: merged.key,
         modifiers: normalizedModifiers,
-        contexts,
+        priority: merged.priority,
         handler: (event) => handlerRefs.current[index]?.(event),
         description: merged.description || '',
         category: merged.category,

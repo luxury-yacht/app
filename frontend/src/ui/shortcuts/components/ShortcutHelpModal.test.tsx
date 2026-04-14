@@ -12,14 +12,21 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { ShortcutHelpModal } from './ShortcutHelpModal';
 
 const getAvailableShortcutsMock = vi.fn();
-const setEnabledMock = vi.fn();
+const useModalFocusTrapMock = vi.fn();
 
 vi.mock('../context', () => ({
   useKeyboardContext: () => ({
     getAvailableShortcuts: getAvailableShortcutsMock,
-    currentContext: { view: 'global' },
-    setEnabled: setEnabledMock,
+    registerSurface: vi.fn(),
+    unregisterSurface: vi.fn(),
+    updateSurface: vi.fn(),
+    dispatchNativeAction: vi.fn().mockReturnValue(false),
   }),
+  useOptionalKeyboardContext: () => null,
+}));
+
+vi.mock('@shared/components/modals/useModalFocusTrap', () => ({
+  useModalFocusTrap: (...args: unknown[]) => useModalFocusTrapMock(...args),
 }));
 
 describe('ShortcutHelpModal', () => {
@@ -35,7 +42,7 @@ describe('ShortcutHelpModal', () => {
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
     getAvailableShortcutsMock.mockReset();
-    setEnabledMock.mockReset();
+    useModalFocusTrapMock.mockReset();
   });
 
   afterEach(() => {
@@ -73,10 +80,15 @@ describe('ShortcutHelpModal', () => {
 
     await renderModal({ isOpen: true, onClose: vi.fn() });
 
-    const groups = container.querySelectorAll('.shortcut-group');
+    const groups = document.querySelectorAll('.shortcut-group');
     expect(groups).toHaveLength(1);
     expect(groups[0].querySelectorAll('.shortcut-item')).toHaveLength(2);
-    expect(setEnabledMock).toHaveBeenCalledWith(false);
+    expect(document.querySelector('.shortcut-help-modal')?.getAttribute('role')).toBe('dialog');
+    expect(useModalFocusTrapMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        suppressShortcuts: true,
+      })
+    );
   });
 
   it('handles closing animation and re-enables shortcuts', async () => {
@@ -87,7 +99,7 @@ describe('ShortcutHelpModal', () => {
     await renderModal({ isOpen: true, onClose });
     await renderModal({ isOpen: false, onClose });
 
-    const overlay = container.querySelector('.shortcut-help-modal-overlay');
+    const overlay = document.querySelector('.shortcut-help-modal-overlay');
     expect(overlay).not.toBeNull();
     expect(overlay?.className).toContain('closing');
 
@@ -95,21 +107,33 @@ describe('ShortcutHelpModal', () => {
       vi.advanceTimersByTime(200);
     });
 
-    expect(container.querySelector('.shortcut-help-modal-overlay')).toBeNull();
-    expect(setEnabledMock).toHaveBeenCalledWith(true);
+    expect(document.querySelector('.shortcut-help-modal-overlay')).toBeNull();
   });
 
   it('closes on Escape key press', async () => {
-    vi.useFakeTimers();
     const onClose = vi.fn();
     getAvailableShortcutsMock.mockReturnValue([]);
 
     await renderModal({ isOpen: true, onClose });
 
-    await act(async () => {
-      const escapeEvent = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true });
-      document.dispatchEvent(escapeEvent);
-    });
+    const trapOptions =
+      useModalFocusTrapMock.mock.calls[useModalFocusTrapMock.mock.calls.length - 1]?.[0];
+    expect(trapOptions).toBeTruthy();
+    trapOptions.onEscape();
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes on slash through the modal surface handler', async () => {
+    const onClose = vi.fn();
+    getAvailableShortcutsMock.mockReturnValue([]);
+
+    await renderModal({ isOpen: true, onClose });
+
+    const trapOptions =
+      useModalFocusTrapMock.mock.calls[useModalFocusTrapMock.mock.calls.length - 1]?.[0];
+    expect(trapOptions).toBeTruthy();
+    expect(trapOptions.onKeyDown({ key: '/' })).toBe(true);
 
     expect(onClose).toHaveBeenCalledTimes(1);
   });

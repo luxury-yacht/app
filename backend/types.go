@@ -14,6 +14,10 @@ type (
 	PodLogEntry                           = types.PodLogEntry
 	LogFetchRequest                       = types.LogFetchRequest
 	LogFetchResponse                      = types.LogFetchResponse
+	NodeLogSource                         = types.NodeLogSource
+	NodeLogDiscoveryResponse              = types.NodeLogDiscoveryResponse
+	NodeLogFetchRequest                   = types.NodeLogFetchRequest
+	NodeLogFetchResponse                  = types.NodeLogFetchResponse
 	ShellSessionRequest                   = types.ShellSessionRequest
 	ShellSession                          = types.ShellSession
 	ShellSessionInfo                      = types.ShellSessionInfo

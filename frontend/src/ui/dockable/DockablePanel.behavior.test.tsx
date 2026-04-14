@@ -9,6 +9,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { KeyboardProvider } from '@ui/shortcuts/context';
 
 import DockablePanel from './DockablePanel';
 import { DockablePanelProvider } from './DockablePanelProvider';
@@ -57,11 +58,15 @@ const renderPanel = async (element: React.ReactElement) => {
   await act(async () => {
     const wrapped =
       element.type === DockablePanelProvider ? (
-        <ZoomProvider>{element}</ZoomProvider>
-      ) : (
-        <DockablePanelProvider>
+        <KeyboardProvider>
           <ZoomProvider>{element}</ZoomProvider>
-        </DockablePanelProvider>
+        </KeyboardProvider>
+      ) : (
+        <KeyboardProvider>
+          <DockablePanelProvider>
+            <ZoomProvider>{element}</ZoomProvider>
+          </DockablePanelProvider>
+        </KeyboardProvider>
       );
     root.render(wrapped);
     await Promise.resolve();
@@ -73,11 +78,15 @@ const renderPanel = async (element: React.ReactElement) => {
       await act(async () => {
         const wrapped =
           nextElement.type === DockablePanelProvider ? (
-            <ZoomProvider>{nextElement}</ZoomProvider>
-          ) : (
-            <DockablePanelProvider>
+            <KeyboardProvider>
               <ZoomProvider>{nextElement}</ZoomProvider>
-            </DockablePanelProvider>
+            </KeyboardProvider>
+          ) : (
+            <KeyboardProvider>
+              <DockablePanelProvider>
+                <ZoomProvider>{nextElement}</ZoomProvider>
+              </DockablePanelProvider>
+            </KeyboardProvider>
           );
         root.render(wrapped);
         await Promise.resolve();

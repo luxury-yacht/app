@@ -36,6 +36,7 @@ describe('useObjectPanelTabs', () => {
 
   const baseCapabilities: ComputedCapabilities = {
     hasLogs: true,
+    hasNodeLogs: false,
     hasShell: false,
     hasManifest: false,
     hasValues: false,
@@ -153,6 +154,21 @@ describe('useObjectPanelTabs', () => {
   it('adds the Maintenance tab for node objects', async () => {
     const { availableTabs } = await renderHook({
       objectData: { kind: 'Node', name: 'node-1' },
+      capabilities: { ...baseCapabilities, hasLogs: false },
+    });
+    expect(availableTabs.map((tab) => tab.label)).toEqual([
+      'Details',
+      'Pods',
+      'Events',
+      'YAML',
+      'Maintenance',
+    ]);
+  });
+
+  it('uses the Logs tab for node objects rather than a separate node logs tab', async () => {
+    const { availableTabs } = await renderHook({
+      objectData: { kind: 'Node', name: 'node-1' },
+      capabilities: { ...baseCapabilities, hasLogs: true, hasNodeLogs: false },
     });
     expect(availableTabs.map((tab) => tab.label)).toEqual([
       'Details',

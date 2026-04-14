@@ -8,6 +8,7 @@ import { useMemo } from 'react';
 import type { ObjectLogEntry } from '@/core/refresh/types';
 import type { ParsedLogEntry } from '../logViewerReducer';
 import { stripAnsi } from '../ansi';
+import { tryParseJSONObject } from '../jsonLogs';
 
 interface UseLogFilteringParams {
   logEntries: ObjectLogEntry[];
@@ -176,32 +177,22 @@ export function useLogFiltering({
     }
     const parsed: ParsedLogEntry[] = [];
     filteredEntries.forEach((entry, index) => {
-      try {
-        const normalizedLine = stripAnsi(entry.line);
-        const jsonData = JSON.parse(normalizedLine);
-        // Only accept non-empty plain objects (reject arrays, primitives, null, {})
-        if (
-          typeof jsonData !== 'object' ||
-          jsonData === null ||
-          Array.isArray(jsonData) ||
-          Object.keys(jsonData).length === 0
-        ) {
-          return;
-        }
-        parsed.push({
-          data: jsonData,
-          rawLine: normalizedLine,
-          lineNumber: index + 1,
-          timestamp: entry.timestamp,
-          pod: isWorkload ? entry.pod : undefined,
-          container: entry.container,
-          isInit: entry.isInit,
-          isEphemeral: entry.isEphemeral,
-          seq: entry._seq,
-        });
-      } catch {
-        // Not JSON, ignore
+      const jsonData = tryParseJSONObject(entry.line);
+      if (!jsonData) {
+        return;
       }
+      const normalizedLine = stripAnsi(entry.line);
+      parsed.push({
+        data: jsonData,
+        rawLine: normalizedLine,
+        lineNumber: index + 1,
+        timestamp: entry.timestamp,
+        pod: isWorkload ? entry.pod : undefined,
+        container: entry.container,
+        isInit: entry.isInit,
+        isEphemeral: entry.isEphemeral,
+        seq: entry._seq,
+      });
     });
     return parsed;
   }, [filteredEntries, isWorkload]);

@@ -10,6 +10,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { ListPortForwards, StopPortForward } from '@wailsjs/go/backend/App';
 import { EventsOn, BrowserOpenURL } from '@wailsjs/runtime/runtime';
 import { DockablePanel, useDockablePanelState } from '@ui/dockable';
+import { useKeyboardSurface } from '@ui/shortcuts/surfaces';
 import { errorHandler } from '@utils/errorHandler';
 import './PortForwardsPanel.css';
 
@@ -75,6 +76,7 @@ function getStatusPriority(status: string): number {
  */
 function PortForwardsPanel() {
   const panelState = usePortForwardsPanel();
+  const panelRef = useRef<HTMLDivElement>(null);
   // All port forward sessions
   const [sessions, setSessions] = useState<PortForwardSession[]>([]);
   // Set of session IDs currently being stopped (for button loading state)
@@ -116,19 +118,16 @@ function PortForwardsPanel() {
     }
   }, []);
 
-  // Handle Escape key to close panel
-  useEffect(() => {
-    if (!panelState.isOpen) return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        panelState.setOpen(false);
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [panelState.isOpen, panelState]);
+  useKeyboardSurface({
+    kind: 'panel',
+    rootRef: panelRef,
+    active: panelState.isOpen,
+    captureWhenActive: true,
+    onEscape: () => {
+      panelState.setOpen(false);
+      return true;
+    },
+  });
 
   // Load sessions when panel opens
   useEffect(() => {
@@ -250,6 +249,7 @@ function PortForwardsPanel() {
       defaultSize={{ width: 350, height: 400 }}
       onClose={() => panelState.setOpen(false)}
       contentClassName="pf-panel-content"
+      panelRef={panelRef}
     >
       <div className="pf-sessions-container">
         {sortedSessions.length === 0 ? (

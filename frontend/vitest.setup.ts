@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, vi } from 'vitest';
+import { afterEach, vi } from 'vitest';
 
 const buildStorageShim = (): Storage => {
   const store = new Map<string, string>();
@@ -55,6 +55,30 @@ const ensureStorage = (key: 'localStorage' | 'sessionStorage') => {
 
 ensureStorage('localStorage');
 ensureStorage('sessionStorage');
+
+// JSDOM emits noisy "navigation to another Document" warnings when tests click
+// anchors. The frontend tests assert app-side handlers, not real browser
+// navigation, so dispatch the click event without attempting navigation.
+Object.defineProperty(HTMLAnchorElement.prototype, 'click', {
+  configurable: true,
+  writable: true,
+  value: function click(this: HTMLAnchorElement) {
+    this.dispatchEvent(
+      new MouseEvent('click', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+      })
+    );
+  },
+});
+
+afterEach(async () => {
+  const { __resetModalFocusTrapForTest } = await vi.importActual<
+    typeof import('./src/shared/components/modals/useModalFocusTrap')
+  >('./src/shared/components/modals/useModalFocusTrap');
+  __resetModalFocusTrapForTest();
+});
 
 // Ensure React testing utilities run without extra warnings
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;

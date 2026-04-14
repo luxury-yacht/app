@@ -9,7 +9,7 @@
 //
 // MOCKING STRATEGY: useKeyboardContext is mocked to return no-op functions.
 // This avoids shortcut registration overhead that causes act() to hang in jsdom
-// due to ~19 batched state updates (1 pushContext + 9 unregister + 9 register).
+// due to ~18 batched state updates (9 unregister + 9 register).
 //
 // This is NOT a bug - the app works correctly in real browsers where React's
 // scheduler processes updates across event loop ticks. The tests verify
@@ -57,14 +57,15 @@ vi.mock('@ui/shortcuts', async (importOriginal) => {
     useKeyboardContext: () => ({
       registerShortcut: () => 'mock-id',
       unregisterShortcut: () => {},
-      currentContext: { view: 'global', priority: 0 },
-      setContext: () => {},
-      pushContext: () => {},
-      popContext: () => {},
       getAvailableShortcuts: () => [],
       isShortcutAvailable: () => false,
       setEnabled: () => {},
       isEnabled: true,
+      registerSurface: () => 'mock-surface-id',
+      unregisterSurface: () => {},
+      updateSurface: () => {},
+      dispatchNativeAction: () => false,
+      hasActiveBlockingSurface: () => false,
     }),
   };
 });
@@ -842,6 +843,141 @@ describe('GridTable interactions (non-virtualized)', () => {
     const resetRows = container.querySelectorAll('.gridtable-row');
     expect(resetRows.length).toBe(initialRows.length);
     expect(onFilterChange).toHaveBeenCalledTimes(1);
+  });
+
+  it('tabs from the last filter control into the table body', async () => {
+    let currentFilters = {
+      search: 'Row 1',
+      kinds: [] as string[],
+      namespaces: [] as string[],
+      caseSensitive: false,
+      includeMetadata: false,
+    };
+
+    const handleFilterChange = (next: typeof currentFilters) => {
+      currentFilters = next;
+    };
+
+    const makeFilters = (): GridTableFilterConfig<SimpleRow> => ({
+      enabled: true,
+      value: currentFilters,
+      onChange: handleFilterChange,
+    });
+
+    const { container, cleanup } = renderGridTable({
+      data: createRows(30),
+      filters: makeFilters(),
+      virtualization: { enabled: false },
+      enableColumnVisibilityMenu: true,
+    });
+    cleanupRoot = cleanup;
+
+    await flushAsync();
+
+    const columnsTrigger = container.querySelector<HTMLElement>(
+      '[data-gridtable-filter-role="columns"] .dropdown-trigger'
+    );
+    const wrapper = container.querySelector<HTMLDivElement>('.gridtable-wrapper');
+    expect(columnsTrigger).not.toBeNull();
+    expect(wrapper).not.toBeNull();
+
+    act(() => {
+      columnsTrigger!.focus();
+    });
+    expect(document.activeElement).toBe(columnsTrigger);
+
+    act(() => {
+      columnsTrigger!.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'Tab',
+          bubbles: true,
+          cancelable: true,
+        })
+      );
+    });
+
+    expect(document.activeElement).toBe(wrapper);
+  });
+
+  it('shift-tabs from the table body back to the last filter control', async () => {
+    let currentFilters = {
+      search: 'Row 1',
+      kinds: [] as string[],
+      namespaces: [] as string[],
+      caseSensitive: false,
+      includeMetadata: false,
+    };
+
+    const handleFilterChange = (next: typeof currentFilters) => {
+      currentFilters = next;
+    };
+
+    const makeFilters = (): GridTableFilterConfig<SimpleRow> => ({
+      enabled: true,
+      value: currentFilters,
+      onChange: handleFilterChange,
+    });
+
+    const { container, cleanup } = renderGridTable({
+      data: createRows(30),
+      filters: makeFilters(),
+      virtualization: { enabled: false },
+      enableColumnVisibilityMenu: true,
+    });
+    cleanupRoot = cleanup;
+
+    await flushAsync();
+
+    const wrapper = container.querySelector<HTMLDivElement>('.gridtable-wrapper');
+    const columnsTrigger = container.querySelector<HTMLElement>(
+      '[data-gridtable-filter-role="columns"] .dropdown-trigger'
+    );
+    expect(wrapper).not.toBeNull();
+    expect(columnsTrigger).not.toBeNull();
+
+    act(() => {
+      wrapper!.focus();
+    });
+    expect(document.activeElement).toBe(wrapper);
+
+    act(() => {
+      wrapper!.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'Tab',
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        })
+      );
+    });
+
+    expect(document.activeElement).toBe(columnsTrigger);
+  });
+
+  it('removes row-internal controls from the tab order so the wrapper stays the only body tab stop', async () => {
+    const interactiveColumns: GridColumnDefinition<SimpleRow>[] = [
+      {
+        key: 'label',
+        header: 'Label',
+        render: (row) => <button type="button">{row.label}</button>,
+      },
+    ];
+
+    const { container, cleanup } = renderGridTable({
+      data: createRows(5),
+      columns: interactiveColumns,
+      virtualization: { enabled: false },
+    });
+    cleanupRoot = cleanup;
+
+    await flushAsync();
+
+    const rowButton = container.querySelector<HTMLButtonElement>('.gridtable-row button');
+    const wrapper = container.querySelector<HTMLDivElement>('.gridtable-wrapper');
+    expect(rowButton).not.toBeNull();
+    expect(wrapper).not.toBeNull();
+    expect(rowButton!.tabIndex).toBe(-1);
+    expect(wrapper!.tabIndex).toBe(0);
   });
 
   it('shows selection counts in kind and namespace dropdown labels', async () => {

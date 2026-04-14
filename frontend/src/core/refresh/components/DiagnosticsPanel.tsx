@@ -27,7 +27,7 @@ import type {
 } from '../types';
 import { refreshManager } from '../RefreshManager';
 import { resourceStreamManager } from '../streaming/resourceStreamManager';
-import { useShortcut, useKeyboardNavigationScope } from '@ui/shortcuts';
+import { useShortcut, useKeyboardSurface } from '@ui/shortcuts';
 import { KeyboardScopePriority } from '@ui/shortcuts/priorities';
 import {
   fetchSelectionDiagnostics,
@@ -2028,7 +2028,6 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     description: 'Close diagnostics panel',
     category: 'Diagnostics',
     enabled: isOpen,
-    view: 'global',
     priority: isOpen ? 35 : 0,
   });
 
@@ -2138,39 +2137,37 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     return items.findIndex((el) => el === active || el.contains(active));
   }, [focusables]);
 
-  useKeyboardNavigationScope({
-    ref: panelRef,
+  useKeyboardSurface({
+    kind: 'panel',
+    rootRef: panelRef,
+    active: isOpen,
+    captureWhenActive: true,
     priority: KeyboardScopePriority.DIAGNOSTICS_PANEL,
-    disabled: !isOpen,
-    allowNativeSelector: '.diagnostics-content *',
-    onNavigate: ({ direction }) => {
+    onKeyDown: (event) => {
+      if (event.key !== 'Tab') {
+        return false;
+      }
+
+      const direction = event.shiftKey ? 'backward' : 'forward';
+      const target = event.target as HTMLElement | null;
+      if (target && target.closest('.diagnostics-content')) {
+        return false;
+      }
+
       const items = focusables();
       if (items.length === 0) {
-        return 'bubble';
+        return false;
       }
-      const current = findActiveIndex();
+
+      const current = target && panelRef.current?.contains(target) ? findActiveIndex() : -1;
       if (current === -1) {
-        return direction === 'forward'
-          ? focusFirst()
-            ? 'handled'
-            : 'bubble'
-          : focusLast()
-            ? 'handled'
-            : 'bubble';
+        return direction === 'forward' ? focusFirst() : focusLast();
       }
       const next = direction === 'forward' ? current + 1 : current - 1;
       if (next < 0 || next >= items.length) {
-        return 'bubble';
+        return false;
       }
-      focusAt(next);
-      return 'handled';
-    },
-    onEnter: ({ direction }) => {
-      if (direction === 'forward') {
-        focusFirst();
-      } else {
-        focusLast();
-      }
+      return focusAt(next);
     },
   });
 

@@ -45,11 +45,7 @@ describe('useGridTableShortcuts', () => {
     vi.restoreAllMocks();
   });
 
-  const renderHook = async (
-    shortcutsActive: boolean,
-    pushShortcutContext: () => void,
-    popShortcutContext: () => void
-  ) => {
+  const renderHook = async (shortcutsActive: boolean) => {
     const getPageSizeRef = { current: 10 };
     const noop = () => false;
 
@@ -63,8 +59,6 @@ describe('useGridTableShortcuts', () => {
         jumpToIndex: () => false,
         getPageSizeRef,
         tableDataLength: 25,
-        pushShortcutContext,
-        popShortcutContext,
         isContextMenuVisible: false,
       });
       return null;
@@ -85,51 +79,15 @@ describe('useGridTableShortcuts', () => {
     return { rerender };
   };
 
-  it('pushes and pops context only when shortcutsActive changes', async () => {
-    const pushShortcutContext = vi.fn();
-    const popShortcutContext = vi.fn();
-
-    const { rerender } = await renderHook(false, pushShortcutContext, popShortcutContext);
-    expect(pushShortcutContext).not.toHaveBeenCalled();
-    expect(popShortcutContext).not.toHaveBeenCalled();
-
+  it('updates the shared enabled flag when shortcutsActive changes', async () => {
+    const { rerender } = await renderHook(false);
+    expect(capturedShortcuts.options).toEqual(expect.objectContaining({ enabled: false }));
     await rerender(true);
-    expect(pushShortcutContext).toHaveBeenCalledTimes(1);
-    expect(popShortcutContext).not.toHaveBeenCalled();
-
-    await rerender(true);
-    expect(pushShortcutContext).toHaveBeenCalledTimes(1);
-    expect(popShortcutContext).not.toHaveBeenCalled();
-
-    await rerender(false);
-    expect(popShortcutContext).toHaveBeenCalledTimes(1);
-
-    await act(async () => {
-      root.unmount();
-      await Promise.resolve();
-    });
-
-    // Cleanup should not pop again after explicit deactivation.
-    expect(popShortcutContext).toHaveBeenCalledTimes(1);
-  });
-
-  it('pops context on unmount when shortcuts remain active', async () => {
-    const pushShortcutContext = vi.fn();
-    const popShortcutContext = vi.fn();
-
-    await renderHook(true, pushShortcutContext, popShortcutContext);
-    expect(pushShortcutContext).toHaveBeenCalledTimes(1);
-
-    await act(async () => {
-      root.unmount();
-      await Promise.resolve();
-    });
-
-    expect(popShortcutContext).toHaveBeenCalledTimes(1);
+    expect(capturedShortcuts.options).toEqual(expect.objectContaining({ enabled: true }));
   });
 
   it('registers all expected shortcut keys with correct options', async () => {
-    await renderHook(true, vi.fn(), vi.fn());
+    await renderHook(true);
 
     const keys = capturedShortcuts.shortcuts.map((s) => s.key);
     expect(keys).toContain('ArrowDown');
@@ -145,9 +103,8 @@ describe('useGridTableShortcuts', () => {
     // Verify common options passed to useShortcuts.
     expect(capturedShortcuts.options).toEqual(
       expect.objectContaining({
-        view: 'list',
+        enabled: true,
         priority: 400,
-        whenTabActive: 'gridtable',
       })
     );
   });
@@ -167,8 +124,6 @@ describe('useGridTableShortcuts', () => {
         jumpToIndex,
         getPageSizeRef,
         tableDataLength: 50,
-        pushShortcutContext: vi.fn(),
-        popShortcutContext: vi.fn(),
         isContextMenuVisible: false,
       });
       return null;
@@ -203,7 +158,7 @@ describe('useGridTableShortcuts', () => {
   });
 
   it('disables Shift+F10 context menu shortcut when enableContextMenu is false', async () => {
-    await renderHook(true, vi.fn(), vi.fn());
+    await renderHook(true);
 
     const f10 = capturedShortcuts.shortcuts.find((s) => s.key === 'F10');
     expect(f10).toBeDefined();

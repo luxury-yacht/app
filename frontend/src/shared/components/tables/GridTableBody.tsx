@@ -181,7 +181,6 @@ function GridTableBody<T>({
       onFocus={onWrapperFocus}
       onBlur={onWrapperBlur}
       tabIndex={0}
-      data-allow-shortcuts="true"
       role="grid"
       aria-busy={loading || undefined}
       aria-activedescendant={focusedRowKey ? getStableRowId(focusedRowKey) : undefined}

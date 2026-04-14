@@ -71,7 +71,7 @@ const StatusIndicator: React.FC<StatusIndicatorProps> = ({
       className={tooltipClassName ? `status-popover ${tooltipClassName}` : 'status-popover'}
       interactive
     >
-      <div className="status-indicator" aria-label={ariaLabel} role="status" tabIndex={0}>
+      <div className="status-indicator" aria-label={ariaLabel} role="status">
         <div className="status-indicator-dot" data-status={status} />
       </div>
     </Tooltip>

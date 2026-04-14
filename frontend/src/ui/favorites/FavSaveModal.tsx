@@ -7,14 +7,12 @@
  */
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { createPortal } from 'react-dom';
-import { useShortcut, useKeyboardContext } from '@ui/shortcuts';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
-import { KeyboardContextPriority, KeyboardScopePriority } from '@ui/shortcuts/priorities';
 import { CloseIcon } from '@shared/components/icons/MenuIcons';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import Tooltip from '@shared/components/Tooltip';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
+import ModalSurface from '@shared/components/modals/ModalSurface';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
@@ -176,8 +174,6 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
   const isEditing = existingFavorite != null;
   const { kubeconfigs } = useKubeconfig();
   const { namespaces } = useNamespace();
-  const { pushContext, popContext } = useKeyboardContext();
-  const contextPushedRef = useRef(false);
   const modalRef = useRef<HTMLDivElement>(null);
 
   // ----- Form state -----
@@ -233,44 +229,14 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
     includeMetadata,
   ]);
 
-  // ----- Keyboard context management -----
-  useEffect(() => {
-    if (!isOpen) {
-      if (contextPushedRef.current) {
-        popContext();
-        contextPushedRef.current = false;
-      }
-      return;
-    }
-    pushContext({ priority: KeyboardContextPriority.SETTINGS_MODAL });
-    contextPushedRef.current = true;
-    return () => {
-      if (contextPushedRef.current) {
-        popContext();
-        contextPushedRef.current = false;
-      }
-    };
-  }, [isOpen, popContext, pushContext]);
-
-  useShortcut({
-    key: 'Escape',
-    handler: () => {
-      if (!isOpen) return false;
+  useModalFocusTrap({
+    ref: modalRef,
+    disabled: !isOpen || showDeleteConfirm,
+    onEscape: () => {
+      if (!isOpen || showDeleteConfirm) return false;
       onClose();
       return true;
     },
-    description: 'Close favorite modal',
-    category: 'Modals',
-    enabled: isOpen && !showDeleteConfirm,
-    view: 'global',
-    priority: KeyboardContextPriority.SETTINGS_MODAL,
-  });
-
-  useModalFocusTrap({
-    ref: modalRef,
-    focusableSelector: '[data-fav-modal-focusable="true"]',
-    priority: KeyboardScopePriority.SETTINGS_MODAL,
-    disabled: !isOpen || showDeleteConfirm,
   });
 
   // ----- Dropdown options -----
@@ -397,254 +363,233 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
 
   if (!isOpen) return null;
 
-  return createPortal(
+  return (
     <>
-      <div className="modal-overlay" onClick={onClose}>
-        <div
-          className="modal-container fav-save-modal"
-          onClick={(e) => e.stopPropagation()}
-          ref={modalRef}
-        >
-          <div className="modal-header">
-            <h2>{isEditing ? 'Edit Favorite' : 'Save Favorite'}</h2>
-            <button
-              className="modal-close"
-              onClick={onClose}
-              aria-label="Close"
-              data-fav-modal-focusable="true"
-            >
-              <CloseIcon />
-            </button>
-          </div>
+      <ModalSurface
+        modalRef={modalRef}
+        labelledBy="fav-save-modal-title"
+        onClose={onClose}
+        containerClassName="fav-save-modal"
+      >
+        <div className="modal-header">
+          <h2 id="fav-save-modal-title">{isEditing ? 'Edit Favorite' : 'Save Favorite'}</h2>
+          <button className="modal-close" onClick={onClose} aria-label="Close">
+            <CloseIcon />
+          </button>
+        </div>
 
-          <div className="modal-content">
-            {/* Name */}
-            <div className="settings-section">
-              <h3>Name</h3>
-              <div className="settings-items">
-                <div className="setting-item">
-                  <input
-                    id="fav-name"
-                    type="text"
-                    className="fav-save-input"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    autoComplete="off"
-                    autoCorrect="off"
-                    spellCheck={false}
-                    onKeyDown={(e) => {
-                      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a') {
-                        e.preventDefault();
-                        (e.target as HTMLInputElement).select();
-                      }
-                    }}
-                    autoFocus
-                    data-fav-modal-focusable="true"
-                  />
-                </div>
+        <div className="modal-content">
+          {/* Name */}
+          <div className="settings-section">
+            <h3>Name</h3>
+            <div className="settings-items">
+              <div className="setting-item">
+                <input
+                  id="fav-name"
+                  type="text"
+                  className="fav-save-input"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  onKeyDown={(e) => {
+                    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a') {
+                      e.preventDefault();
+                      (e.target as HTMLInputElement).select();
+                    }
+                  }}
+                  autoFocus
+                />
               </div>
             </div>
+          </div>
 
-            {/* Type (cluster binding) */}
-            <div className="settings-section">
-              <h3>Scope</h3>
-              <div className="settings-items">
-                <div className="setting-item fav-inline-row">
-                  <label>
-                    <input
-                      type="radio"
-                      name="cluster-type"
-                      checked={!clusterSpecific}
-                      onChange={() => handleTypeChange(false)}
-                      data-fav-modal-focusable="true"
-                    />
-                    Any
-                    <Tooltip content="Can be used in any cluster. Attempts to open this view in the current active cluster." />
-                  </label>
-                </div>
-                <div className="setting-item fav-inline-row">
-                  <label>
-                    <input
-                      type="radio"
-                      name="cluster-type"
-                      checked={clusterSpecific}
-                      onChange={() => handleTypeChange(true)}
-                      data-fav-modal-focusable="true"
-                    />
-                    Cluster
-                    <Tooltip content="Opens the saved view in a specific cluster, and will activate that cluster if needed." />
-                  </label>
-                  <Dropdown
-                    options={clusterOptions}
-                    value={clusterSelection}
-                    onChange={(val) => setClusterSelection(val as string)}
-                    placeholder="Select cluster..."
-                    disabled={!clusterSpecific}
-                    renderValue={(val) => {
-                      if (!clusterSpecific) return 'Select cluster...';
-                      const match = clusterOptions.find((o) => o.value === val);
-                      return match?.metadata?.context ?? val ?? 'Select cluster...';
-                    }}
-                    renderOption={(option) => (
-                      <div
-                        className={`kubeconfig-option${!option.metadata?.isFirstForFile ? ' no-filename' : ''}${option.metadata?.isCurrentContext ? ' current-context' : ''}`}
-                      >
-                        {option.metadata?.isFirstForFile && (
-                          <div className="kubeconfig-filename">{option.metadata.filename}</div>
-                        )}
-                        <div className="kubeconfig-context">
-                          <span className="kubeconfig-context-label">
-                            {option.metadata?.context}
-                          </span>
-                        </div>
+          {/* Type (cluster binding) */}
+          <div className="settings-section">
+            <h3>Scope</h3>
+            <div className="settings-items">
+              <div className="setting-item fav-inline-row">
+                <label>
+                  <input
+                    type="radio"
+                    name="cluster-type"
+                    checked={!clusterSpecific}
+                    onChange={() => handleTypeChange(false)}
+                  />
+                  Any
+                  <Tooltip content="Can be used in any cluster. Attempts to open this view in the current active cluster." />
+                </label>
+              </div>
+              <div className="setting-item fav-inline-row">
+                <label>
+                  <input
+                    type="radio"
+                    name="cluster-type"
+                    checked={clusterSpecific}
+                    onChange={() => handleTypeChange(true)}
+                  />
+                  Cluster
+                  <Tooltip content="Opens the saved view in a specific cluster, and will activate that cluster if needed." />
+                </label>
+                <Dropdown
+                  options={clusterOptions}
+                  value={clusterSelection}
+                  onChange={(val) => setClusterSelection(val as string)}
+                  placeholder="Select cluster..."
+                  disabled={!clusterSpecific}
+                  renderValue={(val) => {
+                    if (!clusterSpecific) return 'Select cluster...';
+                    const match = clusterOptions.find((o) => o.value === val);
+                    return match?.metadata?.context ?? val ?? 'Select cluster...';
+                  }}
+                  renderOption={(option) => (
+                    <div
+                      className={`kubeconfig-option${!option.metadata?.isFirstForFile ? ' no-filename' : ''}${option.metadata?.isCurrentContext ? ' current-context' : ''}`}
+                    >
+                      {option.metadata?.isFirstForFile && (
+                        <div className="kubeconfig-filename">{option.metadata.filename}</div>
+                      )}
+                      <div className="kubeconfig-context">
+                        <span className="kubeconfig-context-label">{option.metadata?.context}</span>
                       </div>
-                    )}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* View */}
-            <div className="settings-section">
-              <h3>View</h3>
-              <div className="settings-items">
-                <div className="setting-item fav-inline-row">
-                  <label>View</label>
-                  <Dropdown
-                    options={ALL_VIEWS}
-                    value={selectedView}
-                    onChange={(val) => setSelectedView(val as string)}
-                    placeholder="Select view..."
-                  />
-                </div>
-                {isNamespaceScope && (
-                  <div className="setting-item fav-inline-row">
-                    <label>Namespace</label>
-                    <Dropdown
-                      options={namespaceOptions}
-                      value={selectedNamespace}
-                      onChange={(val) => setSelectedNamespace(val as string)}
-                    />
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Filters */}
-            <div className="settings-section">
-              <h3>Filters</h3>
-              <div className="settings-items">
-                {kindDropdownOptions.length > 0 && (
-                  <div className="setting-item fav-inline-row">
-                    <label>Kinds</label>
-                    <Dropdown
-                      options={kindDropdownOptions}
-                      value={filterKinds}
-                      onChange={(val) =>
-                        setFilterKinds(Array.isArray(val) ? val : val ? [val] : [])
-                      }
-                      placeholder="All kinds"
-                      multiple
-                      renderValue={(val) => {
-                        const count = Array.isArray(val) ? val.length : val ? 1 : 0;
-                        if (count === 0) return 'All kinds';
-                        if (count === 1) return Array.isArray(val) ? val[0] : val;
-                        return `${count} selected`;
-                      }}
-                    />
-                  </div>
-                )}
-                {nsFilterDropdownOptions.length > 0 && (
-                  <div className="setting-item fav-inline-row">
-                    <label>Namespaces</label>
-                    <Dropdown
-                      options={nsFilterDropdownOptions}
-                      value={filterNamespaces}
-                      onChange={(val) =>
-                        setFilterNamespaces(Array.isArray(val) ? val : val ? [val] : [])
-                      }
-                      placeholder="All namespaces"
-                      multiple
-                      renderValue={(val) => {
-                        const count = Array.isArray(val) ? val.length : val ? 1 : 0;
-                        if (count === 0) return 'All namespaces';
-                        if (count === 1) return Array.isArray(val) ? val[0] : val;
-                        return `${count} selected`;
-                      }}
-                    />
-                  </div>
-                )}
-                <div className="setting-item fav-inline-row">
-                  <label htmlFor="fav-filter-text">Filter Text</label>
-                  <input
-                    id="fav-filter-text"
-                    type="text"
-                    className="fav-save-input"
-                    value={filterText}
-                    onChange={(e) => setFilterText(e.target.value)}
-                    autoComplete="off"
-                    autoCorrect="off"
-                    spellCheck={false}
-                    onKeyDown={(e) => {
-                      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a') {
-                        e.preventDefault();
-                        (e.target as HTMLInputElement).select();
-                      }
-                    }}
-                    data-fav-modal-focusable="true"
-                  />
-                </div>
-                <div className="setting-item">
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={caseSensitive}
-                      onChange={(e) => setCaseSensitive(e.target.checked)}
-                      data-fav-modal-focusable="true"
-                    />
-                    Match case
-                  </label>
-                </div>
-                <div className="setting-item">
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={includeMetadataState}
-                      onChange={(e) => setIncludeMetadataState(e.target.checked)}
-                      data-fav-modal-focusable="true"
-                    />
-                    Include metadata
-                  </label>
-                </div>
+                    </div>
+                  )}
+                />
               </div>
             </div>
           </div>
 
-          <div className="modal-footer">
-            {isEditing && (
-              <button
-                className="button danger"
-                onClick={handleDelete}
-                data-fav-modal-focusable="true"
-              >
-                Delete
-              </button>
-            )}
-            <div className="fav-save-footer-spacer" />
-            <button className="button cancel" onClick={onClose} data-fav-modal-focusable="true">
-              Cancel
-            </button>
-            <button
-              className="button save"
-              onClick={handleSave}
-              disabled={isEditing && !changesDetected}
-              data-fav-modal-focusable="true"
-            >
-              Save
-            </button>
+          {/* View */}
+          <div className="settings-section">
+            <h3>View</h3>
+            <div className="settings-items">
+              <div className="setting-item fav-inline-row">
+                <label>View</label>
+                <Dropdown
+                  options={ALL_VIEWS}
+                  value={selectedView}
+                  onChange={(val) => setSelectedView(val as string)}
+                  placeholder="Select view..."
+                />
+              </div>
+              {isNamespaceScope && (
+                <div className="setting-item fav-inline-row">
+                  <label>Namespace</label>
+                  <Dropdown
+                    options={namespaceOptions}
+                    value={selectedNamespace}
+                    onChange={(val) => setSelectedNamespace(val as string)}
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Filters */}
+          <div className="settings-section">
+            <h3>Filters</h3>
+            <div className="settings-items">
+              {kindDropdownOptions.length > 0 && (
+                <div className="setting-item fav-inline-row">
+                  <label>Kinds</label>
+                  <Dropdown
+                    options={kindDropdownOptions}
+                    value={filterKinds}
+                    onChange={(val) => setFilterKinds(Array.isArray(val) ? val : val ? [val] : [])}
+                    placeholder="All kinds"
+                    multiple
+                    renderValue={(val) => {
+                      const count = Array.isArray(val) ? val.length : val ? 1 : 0;
+                      if (count === 0) return 'All kinds';
+                      if (count === 1) return Array.isArray(val) ? val[0] : val;
+                      return `${count} selected`;
+                    }}
+                  />
+                </div>
+              )}
+              {nsFilterDropdownOptions.length > 0 && (
+                <div className="setting-item fav-inline-row">
+                  <label>Namespaces</label>
+                  <Dropdown
+                    options={nsFilterDropdownOptions}
+                    value={filterNamespaces}
+                    onChange={(val) =>
+                      setFilterNamespaces(Array.isArray(val) ? val : val ? [val] : [])
+                    }
+                    placeholder="All namespaces"
+                    multiple
+                    renderValue={(val) => {
+                      const count = Array.isArray(val) ? val.length : val ? 1 : 0;
+                      if (count === 0) return 'All namespaces';
+                      if (count === 1) return Array.isArray(val) ? val[0] : val;
+                      return `${count} selected`;
+                    }}
+                  />
+                </div>
+              )}
+              <div className="setting-item fav-inline-row">
+                <label htmlFor="fav-filter-text">Filter Text</label>
+                <input
+                  id="fav-filter-text"
+                  type="text"
+                  className="fav-save-input"
+                  value={filterText}
+                  onChange={(e) => setFilterText(e.target.value)}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  onKeyDown={(e) => {
+                    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a') {
+                      e.preventDefault();
+                      (e.target as HTMLInputElement).select();
+                    }
+                  }}
+                />
+              </div>
+              <div className="setting-item">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={caseSensitive}
+                    onChange={(e) => setCaseSensitive(e.target.checked)}
+                  />
+                  Match case
+                </label>
+              </div>
+              <div className="setting-item">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={includeMetadataState}
+                    onChange={(e) => setIncludeMetadataState(e.target.checked)}
+                  />
+                  Include metadata
+                </label>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
+
+        <div className="modal-footer">
+          {isEditing && (
+            <button className="button danger" onClick={handleDelete}>
+              Delete
+            </button>
+          )}
+          <div className="fav-save-footer-spacer" />
+          <button className="button cancel" onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            className="button save"
+            onClick={handleSave}
+            disabled={isEditing && !changesDetected}
+          >
+            Save
+          </button>
+        </div>
+      </ModalSurface>
 
       <ConfirmationModal
         isOpen={showDeleteConfirm}
@@ -656,8 +601,7 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
         onConfirm={confirmDelete}
         onCancel={() => setShowDeleteConfirm(false)}
       />
-    </>,
-    document.body
+    </>
   );
 };
 

@@ -28,7 +28,6 @@ vi.mock('@wailsjs/runtime/runtime', () => ({
   Quit: (...args: any[]) => QuitMock(...args),
 }));
 
-const setContextMock = vi.fn();
 let latestHelpProps: { isOpen: boolean; onClose: () => void } | null = null;
 const registeredShortcuts: Array<{
   key: string;
@@ -43,12 +42,6 @@ const kubeconfigState = {
   selectedKubeconfig: 'cluster-1',
   selectedKubeconfigs: ['cluster-1', 'cluster-2'],
 };
-
-vi.mock('../context', () => ({
-  useKeyboardContext: () => ({
-    setContext: setContextMock,
-  }),
-}));
 
 vi.mock('../hooks', () => ({
   useShortcut: (options: any) => {
@@ -149,7 +142,6 @@ describe('GlobalShortcuts', () => {
   beforeEach(() => {
     registeredShortcuts.length = 0;
     latestHelpProps = null;
-    setContextMock.mockClear();
     setSelectedKubeconfigsMock.mockClear();
     setActiveKubeconfigMock.mockClear();
     QuitMock.mockClear();
@@ -171,26 +163,6 @@ describe('GlobalShortcuts', () => {
       root.unmount();
     });
     container.remove();
-  });
-
-  it('updates shortcut context with current view and panel state', async () => {
-    await renderComponent({
-      viewType: 'namespace',
-      isLogsPanelOpen: true,
-      isObjectPanelOpen: false,
-      isSettingsOpen: false,
-    });
-
-    expect(setContextMock).toHaveBeenCalledWith({ view: 'list', panelOpen: 'logs' });
-
-    await renderComponent({
-      viewType: 'namespace',
-      isLogsPanelOpen: false,
-      isObjectPanelOpen: true,
-      isSettingsOpen: true,
-    });
-
-    expect(setContextMock).toHaveBeenLastCalledWith({ view: 'settings', panelOpen: 'object' });
   });
 
   it('toggles shortcut help overlay through the registered handler', async () => {

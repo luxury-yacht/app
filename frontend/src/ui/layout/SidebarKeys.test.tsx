@@ -8,19 +8,14 @@
 import React from 'react';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { KeyboardProvider } from '@ui/shortcuts/context';
 import {
   useSidebarKeyboardControls,
   targetsAreEqual,
   describeElementTarget,
   type SidebarCursorTarget,
 } from './SidebarKeys';
-
-const useKeyboardNavigationScopeMock = vi.hoisted(() => vi.fn());
-
-vi.mock('@ui/shortcuts', () => ({
-  useKeyboardNavigationScope: (...args: unknown[]) => useKeyboardNavigationScopeMock(...args),
-}));
 
 const buildTargetElement = (attrs: Record<string, string>) => {
   const element = document.createElement('div');
@@ -218,7 +213,11 @@ const renderHarness = (props?: React.ComponentProps<typeof TestHarness>) => {
   const root = ReactDOM.createRoot(container);
   const ref = React.createRef<HarnessHandle>();
   act(() => {
-    root.render(<TestHarness ref={ref} {...props} />);
+    root.render(
+      <KeyboardProvider>
+        <TestHarness ref={ref} {...props} />
+      </KeyboardProvider>
+    );
   });
   return {
     container,
@@ -230,16 +229,26 @@ const renderHarness = (props?: React.ComponentProps<typeof TestHarness>) => {
   };
 };
 
-describe('useSidebarKeyboardControls', () => {
-  beforeEach(() => {
-    useKeyboardNavigationScopeMock.mockClear();
+const dispatchTab = async (element: HTMLElement, shiftKey = false) => {
+  await act(async () => {
+    element.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 'Tab',
+        shiftKey,
+        bubbles: true,
+        cancelable: true,
+      })
+    );
+    await Promise.resolve();
   });
+};
 
+describe('useSidebarKeyboardControls', () => {
   afterEach(() => {
     vi.clearAllMocks();
   });
 
-  it('registers keyboard scopes and marks active/preview items', () => {
+  it('marks active/preview items', () => {
     const { ref, container, cleanup } = renderHarness({
       selectionTarget: { kind: 'overview' },
     });
@@ -250,7 +259,112 @@ describe('useSidebarKeyboardControls', () => {
     });
     const nodes = container.querySelector('[data-sidebar-target-view="nodes"]')!;
     expect(nodes.className).toContain('keyboard-preview');
-    expect(useKeyboardNavigationScopeMock).toHaveBeenCalled();
+    cleanup();
+  });
+
+  it('does not capture tab entry from arbitrary outside focus', async () => {
+    const { cleanup } = renderHarness({
+      selectionTarget: { kind: 'overview' },
+    });
+    const outside = document.createElement('button');
+    document.body.appendChild(outside);
+    outside.focus();
+    expect(document.activeElement).toBe(outside);
+
+    await dispatchTab(outside);
+
+    expect(document.activeElement).toBe(outside);
+
+    outside.remove();
+    cleanup();
+  });
+
+  it('tabs from the last header control into the current sidebar selection', async () => {
+    const { container, cleanup } = renderHarness({
+      selectionTarget: { kind: 'overview' },
+    });
+    const headerButton = document.createElement('button');
+    headerButton.setAttribute('data-app-header-last-focusable', 'true');
+    document.body.appendChild(headerButton);
+    headerButton.focus();
+
+    await dispatchTab(headerButton);
+
+    expect(document.activeElement).toBe(
+      container.querySelector('[data-sidebar-target-kind="overview"]')
+    );
+
+    headerButton.remove();
+    cleanup();
+  });
+
+  it('does not intercept shift-tab on the last header control', async () => {
+    const { cleanup } = renderHarness({
+      selectionTarget: { kind: 'overview' },
+    });
+
+    const headerButton = document.createElement('button');
+    headerButton.type = 'button';
+    headerButton.textContent = 'Settings';
+    headerButton.setAttribute('data-app-header-last-focusable', 'true');
+    document.body.appendChild(headerButton);
+    headerButton.focus();
+
+    await dispatchTab(headerButton, true);
+
+    expect(document.activeElement).toBe(headerButton);
+
+    headerButton.remove();
+    cleanup();
+  });
+
+  it('shift-tabs from the sidebar back to the last header control', async () => {
+    const { container, cleanup } = renderHarness({
+      selectionTarget: { kind: 'overview' },
+    });
+    const headerButton = document.createElement('button');
+    headerButton.setAttribute('data-app-header-last-focusable', 'true');
+    document.body.appendChild(headerButton);
+    const overview = container.querySelector(
+      '[data-sidebar-target-kind="overview"]'
+    ) as HTMLElement;
+    overview.focus();
+
+    await dispatchTab(overview, true);
+
+    expect((document.activeElement as HTMLElement | null)?.dataset.appHeaderLastFocusable).toBe(
+      'true'
+    );
+
+    headerButton.remove();
+    cleanup();
+  });
+
+  it('shift-tabs from the sidebar back to the active cluster tab before the header', async () => {
+    const { container, cleanup } = renderHarness({
+      selectionTarget: { kind: 'overview' },
+    });
+    const headerButton = document.createElement('button');
+    headerButton.setAttribute('data-app-header-last-focusable', 'true');
+    document.body.appendChild(headerButton);
+    const clusterTabsWrapper = document.createElement('div');
+    clusterTabsWrapper.className = 'cluster-tabs-wrapper';
+    const activeClusterTab = document.createElement('div');
+    activeClusterTab.setAttribute('role', 'tab');
+    activeClusterTab.setAttribute('tabindex', '0');
+    clusterTabsWrapper.appendChild(activeClusterTab);
+    document.body.appendChild(clusterTabsWrapper);
+    const overview = container.querySelector(
+      '[data-sidebar-target-kind="overview"]'
+    ) as HTMLElement;
+    overview.focus();
+
+    await dispatchTab(overview, true);
+
+    expect(document.activeElement).toBe(activeClusterTab);
+
+    clusterTabsWrapper.remove();
+    headerButton.remove();
     cleanup();
   });
 
@@ -369,10 +483,19 @@ describe('useSidebarKeyboardControls', () => {
     cleanup();
   });
 
-  it('disables navigation when collapsed', () => {
-    const { cleanup } = renderHarness({ collapsed: true });
-    const scopeArgs = useKeyboardNavigationScopeMock.mock.calls[0][0];
-    expect(scopeArgs.disabled).toBe(true);
+  it('does not capture tab entry when collapsed', async () => {
+    const { cleanup } = renderHarness({
+      collapsed: true,
+      selectionTarget: { kind: 'overview' },
+    });
+    const outside = document.createElement('button');
+    document.body.appendChild(outside);
+    outside.focus();
+
+    await dispatchTab(outside);
+
+    expect(document.activeElement).toBe(outside);
+    outside.remove();
     cleanup();
   });
 });

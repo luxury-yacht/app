@@ -234,7 +234,6 @@ function AppContent() {
         onCreateResource={() => viewState.setIsCreateResourceOpen(true)}
         onRefresh={handleManualRefresh}
         onToggleDiagnostics={handleToggleDiagnostics}
-        viewType={viewState.viewType}
         isLogsPanelOpen={viewState.showAppLogs}
         isObjectPanelOpen={viewState.showObjectPanel}
         isSettingsOpen={viewState.isSettingsOpen}

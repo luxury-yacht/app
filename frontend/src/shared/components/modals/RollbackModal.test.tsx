@@ -10,6 +10,7 @@ import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import RollbackModal from './RollbackModal';
+import { KeyboardProvider } from '@ui/shortcuts/context';
 
 // Hoisted mock for the Wails backend bindings.
 const backendMocks = vi.hoisted(() => ({
@@ -20,21 +21,6 @@ const backendMocks = vi.hoisted(() => ({
 vi.mock('@wailsjs/go/backend/App', () => ({
   GetRevisionHistory: backendMocks.GetRevisionHistory,
   RollbackWorkload: backendMocks.RollbackWorkload,
-}));
-
-// Mock keyboard shortcuts (used by ConfirmationModal).
-vi.mock('@ui/shortcuts', () => ({
-  useShortcut: vi.fn(),
-  useKeyboardContext: () => ({
-    pushContext: vi.fn(),
-    popContext: vi.fn(),
-  }),
-  useKeyboardNavigationScope: vi.fn(),
-}));
-
-// Mock the modal focus trap hook (used by ConfirmationModal).
-vi.mock('./useModalFocusTrap', () => ({
-  useModalFocusTrap: vi.fn(),
 }));
 
 /** Helper to build a RevisionEntry-like object. */
@@ -90,7 +76,11 @@ describe('RollbackModal', () => {
   /** Render the modal and wait for async effects. */
   const renderModal = async (props?: Partial<typeof defaultProps>) => {
     await act(async () => {
-      root.render(<RollbackModal {...defaultProps} {...props} />);
+      root.render(
+        <KeyboardProvider>
+          <RollbackModal {...defaultProps} {...props} />
+        </KeyboardProvider>
+      );
       await Promise.resolve();
     });
   };
@@ -212,6 +202,31 @@ describe('RollbackModal', () => {
 
     // It should have the "current" badge.
     expect(currentItem?.querySelector('.rollback-revision-badge')?.textContent).toBe('current');
+  });
+
+  it('closes on Escape through the keyboard surface manager', async () => {
+    backendMocks.GetRevisionHistory.mockResolvedValue([
+      makeRevision(3, true),
+      makeRevision(2, false),
+    ]);
+
+    await renderModal();
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const closeButton = document.querySelector('.modal-close') as HTMLButtonElement | null;
+    expect(closeButton).not.toBeNull();
+    closeButton?.focus();
+
+    await act(async () => {
+      closeButton?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+      );
+      await Promise.resolve();
+    });
+
+    expect(defaultProps.onClose).toHaveBeenCalledTimes(1);
   });
 
   it('passes clusterId to GetRevisionHistory for multi-cluster awareness', async () => {

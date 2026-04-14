@@ -44,10 +44,18 @@ vi.mock('@/core/capabilities', () => ({
 vi.mock('@ui/shortcuts', () => ({
   useShortcut: vi.fn(),
   useKeyboardContext: () => ({
-    pushContext: vi.fn(),
-    popContext: vi.fn(),
+    registerShortcut: vi.fn(),
+    unregisterShortcut: vi.fn(),
+    getAvailableShortcuts: vi.fn(() => []),
+    isShortcutAvailable: vi.fn(() => false),
+    setEnabled: vi.fn(),
+    isEnabled: true,
+    registerSurface: vi.fn(),
+    unregisterSurface: vi.fn(),
+    updateSurface: vi.fn(),
+    dispatchNativeAction: vi.fn(() => false),
+    hasActiveBlockingSurface: vi.fn(() => false),
   }),
-  useKeyboardNavigationScope: vi.fn(),
 }));
 
 const openMenu = (container: HTMLElement) => {
@@ -181,7 +189,7 @@ describe('ActionsMenu', () => {
       scaleItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
-    const modal = container.querySelector('.scale-modal');
+    const modal = document.querySelector('.scale-modal');
     expect(modal).toBeTruthy();
     const input = modal?.querySelector<HTMLInputElement>('#scale-replicas');
     expect(input?.value).toBe('3');

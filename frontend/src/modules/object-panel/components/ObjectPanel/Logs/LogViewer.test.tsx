@@ -108,20 +108,26 @@ vi.mock('@/core/refresh/fallbacks/objectLogFallbackManager', () => ({
 
 const shortcutMocks = vi.hoisted(() => ({
   useShortcut: vi.fn(),
-  useKeyboardNavigationScope: vi.fn(),
 }));
 
 const contextMocks = vi.hoisted(() => ({
-  pushContext: vi.fn(),
-  popContext: vi.fn(),
+  registerShortcut: vi.fn(),
+  unregisterShortcut: vi.fn(),
+  getAvailableShortcuts: vi.fn().mockReturnValue([]),
+  isShortcutAvailable: vi.fn().mockReturnValue(false),
+  setEnabled: vi.fn(),
+  isEnabled: true,
+  registerSurface: vi.fn(),
+  unregisterSurface: vi.fn(),
+  updateSurface: vi.fn(),
+  dispatchNativeAction: vi.fn(() => false),
+  hasActiveBlockingSurface: vi.fn(() => false),
 }));
 
 vi.mock('@ui/shortcuts', () => ({
   useShortcut: (...args: unknown[]) => shortcutMocks.useShortcut(...args),
   useKeyboardContext: () => contextMocks,
   useSearchShortcutTarget: () => undefined,
-  useKeyboardNavigationScope: (...args: unknown[]) =>
-    shortcutMocks.useKeyboardNavigationScope(...args),
 }));
 
 vi.mock('@shared/components/dropdowns/Dropdown', () => ({
@@ -249,9 +255,11 @@ describe('LogViewer active pod synchronisation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     shortcutMocks.useShortcut.mockClear();
-    shortcutMocks.useKeyboardNavigationScope.mockClear();
-    contextMocks.pushContext.mockClear();
-    contextMocks.popContext.mockClear();
+    contextMocks.registerShortcut.mockClear();
+    contextMocks.unregisterShortcut.mockClear();
+    contextMocks.getAvailableShortcuts.mockClear();
+    contextMocks.isShortcutAvailable.mockClear();
+    contextMocks.setEnabled.mockClear();
     (LogFetcher as unknown as ViMock).mockReset?.();
     (GetLogScopeContainers as unknown as ViMock).mockReset?.();
     (GetLogScopeContainers as unknown as ViMock).mockResolvedValue(['app']);
@@ -1148,6 +1156,26 @@ describe('LogViewer active pod synchronisation', () => {
     expect(container.textContent).toContain('[11:00:00.123] [web-1/app] hello');
   });
 
+  it('keeps the workload pod metadata when the log line is empty', async () => {
+    setAppPreferencesForTesting({ logApiTimestampFormat: 'HH:mm:ss.SSS' });
+    seedLogSnapshot([
+      {
+        pod: 'web-1',
+        container: 'app',
+        line: '',
+        timestamp: '2024-05-01T11:00:00.123456Z',
+        isInit: false,
+      },
+    ]);
+
+    await renderViewer({ activePodNames: ['web-1'] });
+
+    const lines = Array.from(container.querySelectorAll('.pod-log-line')).map((element) =>
+      element.textContent?.replace(/\s+/g, ' ').trim()
+    );
+    expect(lines).toEqual(['[11:00:00.123] [web-1/app] [container emitted an empty log]']);
+  });
+
   it('copies the configured API timestamp format in raw and parsed views', async () => {
     setAppPreferencesForTesting({ logApiTimestampFormat: 'HH:mm:ss.SSS' });
     seedLogSnapshot([
@@ -1384,6 +1412,36 @@ describe('LogViewer active pod synchronisation', () => {
       el.textContent?.replace(/\s+/g, ' ').trim()
     );
     expect(lines).toEqual(['[2024-05-01T12:30:00Z] only container line']);
+  });
+
+  it('shows the empty-log placeholder for single pod logs', async () => {
+    (GetLogScopeContainers as unknown as ViMock).mockResolvedValue(['app']);
+    seedLogSnapshot(
+      [
+        {
+          pod: 'api',
+          container: 'app',
+          line: '',
+          timestamp: '2024-05-01T12:30:00Z',
+          isInit: false,
+        },
+      ],
+      buildLogScope('team-a:pod:api')
+    );
+
+    await renderViewer({
+      resourceKind: 'Pod',
+      resourceName: 'api',
+      activePodNames: ['api'],
+    });
+
+    await waitForMockCalls(GetLogScopeContainers as unknown as ViMock, 1);
+    await flushAsync();
+
+    const lines = Array.from(container.querySelectorAll('.pod-log-line')).map((el) =>
+      el.textContent?.replace(/\s+/g, ' ').trim()
+    );
+    expect(lines).toEqual(['[2024-05-01T12:30:00Z] [container emitted an empty log]']);
   });
 
   it('filters single pod logs by selected container', async () => {
@@ -2235,6 +2293,65 @@ describe('LogViewer active pod synchronisation', () => {
     expect(getLogViewerPrefs(panelId)?.selectedFilters).toEqual(['pod:web-1', 'container:app']);
   });
 
+  it('preserves workload pod color metadata when using a custom timestamp format', async () => {
+    setAppPreferencesForTesting({
+      logApiTimestampFormat: 'YYYY/MM/DD HH:mm:ss',
+      logApiTimestampUseLocalTimeZone: false,
+    });
+    for (let index = 1; index <= 20; index += 1) {
+      document.documentElement.style.setProperty(
+        `--log-pod-color-${index}`,
+        `rgb(${index}, ${index}, ${index})`
+      );
+    }
+    document.documentElement.style.setProperty('--log-pod-color-fallback', 'rgb(99, 99, 99)');
+
+    seedLogSnapshot(
+      [
+        {
+          pod: 'web-1',
+          container: 'app',
+          line: 'first',
+          timestamp: '2024-05-01T10:00:00Z',
+          isInit: false,
+        },
+        {
+          pod: 'web-2',
+          container: 'app',
+          line: 'second',
+          timestamp: '2024-05-01T10:00:01Z',
+          isInit: false,
+        },
+      ],
+      defaultScope
+    );
+
+    await renderViewer({ activePodNames: ['web-1', 'web-2'] });
+    await flushAsync();
+
+    const firstPodButton = await waitForElement(() =>
+      container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Show only logs from pod web-1"]'
+      )
+    );
+    const secondPodButton = await waitForElement(() =>
+      container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Show only logs from pod web-2"]'
+      )
+    );
+
+    expect(firstPodButton.style.getPropertyValue('--pod-color')).toBeTruthy();
+    expect(secondPodButton.style.getPropertyValue('--pod-color')).toBeTruthy();
+    expect(firstPodButton.style.getPropertyValue('--pod-color')).not.toBe(
+      secondPodButton.style.getPropertyValue('--pod-color')
+    );
+
+    for (let index = 1; index <= 20; index += 1) {
+      document.documentElement.style.removeProperty(`--log-pod-color-${index}`);
+    }
+    document.documentElement.style.removeProperty('--log-pod-color-fallback');
+  });
+
   it('keeps separate prefs entries for different panels', async () => {
     const panelA = 'obj:cluster-a:pod:team-a:api';
     const panelB = 'obj:cluster-b:pod:team-b:web';
@@ -2568,6 +2685,9 @@ describe('LogViewer active pod synchronisation', () => {
 
     // Clear the manager's buffer so the next test starts from a clean
     // slate — afterEach only resets the scoped store, not the manager.
-    logStreamManager.stop(defaultScope, true);
+    await act(async () => {
+      logStreamManager.stop(defaultScope, true);
+      await Promise.resolve();
+    });
   });
 });

@@ -123,6 +123,21 @@
   outline-offset: 2px;
 }
 
+.modal-container
+  :is(
+    button,
+    a[href],
+    input,
+    select,
+    textarea,
+    summary,
+    [role="button"],
+    [tabindex]:not([tabindex="-1"])
+  ):focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
 /* ==========================================================================
    Modal Content
    ========================================================================== */

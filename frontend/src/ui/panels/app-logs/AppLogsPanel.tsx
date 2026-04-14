@@ -9,7 +9,7 @@ import { useState, useEffect, useCallback, useRef, useMemo, useLayoutEffect } fr
 import { GetLogs, ClearLogs, SetLogsPanelVisible } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
-import { useShortcut, useKeyboardNavigationScope } from '@ui/shortcuts';
+import { useShortcut, useKeyboardSurface } from '@ui/shortcuts';
 import { KeyboardScopePriority, KeyboardShortcutPriority } from '@ui/shortcuts/priorities';
 import { DockablePanel } from '@ui/dockable';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
@@ -364,7 +364,6 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
     description: 'Close app logs panel',
     category: 'App Logs',
     enabled: isOpen,
-    view: 'global',
     priority: isOpen ? KeyboardShortcutPriority.APP_LOGS_ESCAPE : 0,
   });
 
@@ -423,7 +422,6 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
     description: 'Toggle auto-scroll',
     category: 'Logs Panel',
     enabled: isOpen, // Only show in help when logs panel is open
-    view: 'global',
     priority: isOpen ? KeyboardShortcutPriority.APP_LOGS_ACTION : 0,
   });
 
@@ -440,7 +438,6 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
     description: 'Clear logs',
     category: 'Logs Panel',
     enabled: isOpen, // Only show in help when logs panel is open
-    view: 'global',
     priority: isOpen ? KeyboardShortcutPriority.APP_LOGS_ACTION : 0,
   });
 
@@ -468,30 +465,31 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
     return false;
   }, []);
 
-  useKeyboardNavigationScope({
-    ref: panelScopeRef,
+  useKeyboardSurface({
+    kind: 'panel',
+    rootRef: panelScopeRef,
+    active: isOpen,
+    captureWhenActive: true,
     priority: KeyboardScopePriority.APP_LOGS_PANEL,
-    disabled: !isOpen,
-    allowNativeSelector: '.app-logs-panel-controls *',
-    onNavigate: ({ direction, event }) => {
+    onKeyDown: (event) => {
+      if (event.key !== 'Tab') {
+        return false;
+      }
+
+      const direction = event.shiftKey ? 'backward' : 'forward';
       const target = event.target as HTMLElement | null;
+
       if (target && panelScopeRef.current?.contains(target)) {
         if (logsContainerRef.current?.contains(target)) {
-          return direction === 'forward' ? 'bubble' : focusFirstControl() ? 'handled' : 'bubble';
+          return direction === 'forward' ? false : focusFirstControl();
         }
-        return 'native';
+        return false;
       }
+
       if (direction === 'forward') {
-        return focusFirstControl() ? 'handled' : 'bubble';
+        return focusFirstControl();
       }
-      return focusLastControl() ? 'handled' : 'bubble';
-    },
-    onEnter: ({ direction }) => {
-      if (direction === 'forward') {
-        focusFirstControl();
-      } else {
-        focusLastControl();
-      }
+      return focusLastControl();
     },
   });
 

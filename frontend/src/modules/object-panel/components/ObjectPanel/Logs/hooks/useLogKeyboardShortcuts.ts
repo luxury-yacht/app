@@ -56,7 +56,6 @@ export function useLogKeyboardShortcuts({
     description: 'Toggle auto-refresh',
     category: 'Logs Tab',
     enabled: isActive,
-    view: 'global',
     priority: 20,
   });
 
@@ -74,7 +73,6 @@ export function useLogKeyboardShortcuts({
     description: 'Toggle API timestamps',
     category: 'Logs Tab',
     enabled: isActive,
-    view: 'global',
     priority: 20,
   });
 
@@ -89,7 +87,6 @@ export function useLogKeyboardShortcuts({
     description: 'Toggle previous logs',
     category: 'Logs Tab',
     enabled: isActive && supportsPreviousLogs,
-    view: 'global',
     priority: 20,
   });
 
@@ -103,7 +100,6 @@ export function useLogKeyboardShortcuts({
     description: 'Toggle match highlighting',
     category: 'Logs Tab',
     enabled: isActive,
-    view: 'global',
     priority: 20,
   });
 
@@ -117,7 +113,6 @@ export function useLogKeyboardShortcuts({
     description: 'Toggle inverse filtering',
     category: 'Logs Tab',
     enabled: isActive,
-    view: 'global',
     priority: 20,
   });
 
@@ -131,7 +126,6 @@ export function useLogKeyboardShortcuts({
     description: 'Toggle regex filtering',
     category: 'Logs Tab',
     enabled: isActive,
-    view: 'global',
     priority: 20,
   });
 
@@ -145,7 +139,6 @@ export function useLogKeyboardShortcuts({
     description: 'Toggle case-sensitive matching',
     category: 'Logs Tab',
     enabled: isActive && !regexMatches,
-    view: 'global',
     priority: 20,
   });
 
@@ -160,7 +153,6 @@ export function useLogKeyboardShortcuts({
     description: 'Toggle Parse/Raw mode',
     category: 'Logs Tab',
     enabled: isActive && canParseLogs,
-    view: 'global',
     priority: 20,
   });
 
@@ -174,7 +166,6 @@ export function useLogKeyboardShortcuts({
     description: 'Toggle ANSI colors',
     category: 'Logs Tab',
     enabled: isActive && !isParsedView && hasAnsiLogEntries,
-    view: 'global',
     priority: 20,
   });
 
@@ -189,7 +180,6 @@ export function useLogKeyboardShortcuts({
     description: 'Copy logs to clipboard',
     category: 'Logs Tab',
     enabled: isActive && hasCopyableContent,
-    view: 'global',
     priority: 20,
   });
 
@@ -206,7 +196,6 @@ export function useLogKeyboardShortcuts({
     description: 'Toggle pretty JSON',
     category: 'Logs Tab',
     enabled: isActive && canParseLogs,
-    view: 'global',
     priority: 20,
   });
 
@@ -221,7 +210,6 @@ export function useLogKeyboardShortcuts({
     description: 'Toggle text wrap',
     category: 'Logs Tab',
     enabled: isActive && !isParsedView,
-    view: 'global',
     priority: 20,
   });
 
@@ -252,7 +240,6 @@ export function useLogKeyboardShortcuts({
     description: 'Scroll to top',
     category: 'Logs Tab',
     enabled: isActive,
-    view: 'global',
     priority: 500,
   });
 
@@ -270,7 +257,6 @@ export function useLogKeyboardShortcuts({
     description: 'Scroll to bottom',
     category: 'Logs Tab',
     enabled: isActive,
-    view: 'global',
     priority: 500,
   });
 

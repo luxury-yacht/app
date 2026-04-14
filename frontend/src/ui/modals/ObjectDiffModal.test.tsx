@@ -10,17 +10,7 @@ import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import ObjectDiffModal from './ObjectDiffModal';
-
-const shortcutMocks = vi.hoisted(() => ({
-  useShortcut: vi.fn(),
-  useShortcuts: vi.fn(),
-  useKeyboardNavigationScope: vi.fn(),
-}));
-
-const contextMocks = vi.hoisted(() => ({
-  pushContext: vi.fn(),
-  popContext: vi.fn(),
-}));
+import { KeyboardProvider } from '@ui/shortcuts';
 
 const refreshMocks = vi.hoisted(() => ({
   useRefreshScopedDomain: vi.fn(),
@@ -37,12 +27,14 @@ const kubeconfigMocks = vi.hoisted(() => ({
   getClusterMeta: () => ({ id: 'cluster-a', name: 'Cluster A' }),
 }));
 
-vi.mock('@ui/shortcuts', () => ({
-  useShortcut: (...args: unknown[]) => shortcutMocks.useShortcut(...args),
-  useShortcuts: (...args: unknown[]) => shortcutMocks.useShortcuts(...args),
-  useKeyboardContext: () => contextMocks,
-  useKeyboardNavigationScope: (...args: unknown[]) =>
-    shortcutMocks.useKeyboardNavigationScope(...args),
+const runtimeMocks = vi.hoisted(() => ({
+  eventsOn: vi.fn(),
+  eventsOff: vi.fn(),
+}));
+
+vi.mock('@wailsjs/runtime/runtime', () => ({
+  EventsOn: runtimeMocks.eventsOn,
+  EventsOff: runtimeMocks.eventsOff,
 }));
 
 vi.mock('@core/refresh', () => ({
@@ -63,10 +55,8 @@ describe('ObjectDiffModal', () => {
   });
 
   beforeEach(async () => {
-    shortcutMocks.useShortcut.mockClear();
-    shortcutMocks.useShortcuts.mockClear();
-    contextMocks.pushContext.mockClear();
-    contextMocks.popContext.mockClear();
+    runtimeMocks.eventsOn.mockReset();
+    runtimeMocks.eventsOff.mockReset();
     refreshMocks.useRefreshScopedDomain.mockImplementation(() => ({
       status: 'idle',
       data: null,
@@ -81,7 +71,11 @@ describe('ObjectDiffModal', () => {
     root = ReactDOM.createRoot(container);
 
     await act(async () => {
-      root.render(<ObjectDiffModal isOpen onClose={vi.fn()} />);
+      root.render(
+        <KeyboardProvider>
+          <ObjectDiffModal isOpen onClose={vi.fn()} />
+        </KeyboardProvider>
+      );
       await Promise.resolve();
     });
   });
@@ -93,24 +87,14 @@ describe('ObjectDiffModal', () => {
     container.remove();
   });
 
-  const getEscapeShortcut = () => {
-    for (let i = shortcutMocks.useShortcut.mock.calls.length - 1; i >= 0; i -= 1) {
-      const config = shortcutMocks.useShortcut.mock.calls[i][0] as {
-        key: string;
-        handler: () => boolean;
-        enabled?: boolean;
-      };
-      if (config.key === 'Escape') {
-        return config;
-      }
-    }
-    throw new Error('Escape shortcut not registered');
-  };
-
-  it('does not close via overlay click', () => {
+  it('closes via overlay click but ignores clicks inside modal', () => {
     const onClose = vi.fn();
     act(() => {
-      root.render(<ObjectDiffModal isOpen onClose={onClose} />);
+      root.render(
+        <KeyboardProvider>
+          <ObjectDiffModal isOpen onClose={onClose} />
+        </KeyboardProvider>
+      );
     });
 
     const overlay = document.querySelector('.object-diff-modal-overlay') as HTMLDivElement | null;
@@ -122,20 +106,20 @@ describe('ObjectDiffModal', () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
-  it('invokes onClose when Escape shortcut handler fires', () => {
+  it('closes on Escape through the shared modal surface', () => {
     const onClose = vi.fn();
     act(() => {
-      root.render(<ObjectDiffModal isOpen onClose={onClose} />);
+      root.render(
+        <KeyboardProvider>
+          <ObjectDiffModal isOpen onClose={onClose} />
+        </KeyboardProvider>
+      );
     });
 
-    const escapeShortcut = getEscapeShortcut();
-    expect(escapeShortcut.enabled).toBe(true);
-
-    let result = false;
     act(() => {
-      result = escapeShortcut.handler();
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     });
-    expect(result).toBe(true);
+
     expect(onClose).toHaveBeenCalled();
   });
 });

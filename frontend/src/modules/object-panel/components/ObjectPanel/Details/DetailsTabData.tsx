@@ -83,7 +83,6 @@ const DataSectionInner: React.FC<DataSectionProps> = ({ data, binaryData, isSecr
     description: 'Toggle encode/decode (when viewing secret data)',
     category: 'Object Panel',
     enabled: hasData, // Only active when data is available
-    view: 'global',
     priority: isSecret ? 20 : 0,
   });
 

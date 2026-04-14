@@ -16,6 +16,7 @@ export const useObjectPanelFeatureSupport = (
     if (!objectKind) {
       return {
         logs: false,
+        nodeLogs: false,
         manifest: false,
         values: false,
         delete: false,
@@ -35,6 +36,7 @@ export const useObjectPanelFeatureSupport = (
     if (!definition) {
       return {
         logs: false,
+        nodeLogs: false,
         manifest: isHelmRelease,
         values: isHelmRelease,
         delete: true,
@@ -50,6 +52,7 @@ export const useObjectPanelFeatureSupport = (
 
     return {
       logs: Boolean(definition.logs),
+      nodeLogs: Boolean(definition.nodeLogs),
       manifest: isHelmRelease,
       values: isHelmRelease,
       delete: Boolean(definition.delete),

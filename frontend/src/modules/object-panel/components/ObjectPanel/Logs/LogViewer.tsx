@@ -62,6 +62,7 @@ import {
   setLogViewerScrollTop,
 } from './logViewerPrefsCache';
 import { containsAnsi, parseAnsiTextSegments, stripAnsi } from './ansi';
+import { formatParsedValue, tryParseJSONObject } from './jsonLogs';
 import { buildStablePodColorMap } from './podColors';
 import { setLogStreamScopeParams } from './logStreamScopeParamsCache';
 import { INACTIVE_SCOPE } from '../constants';
@@ -160,21 +161,6 @@ const formatTimestampForMode = (
   }
 };
 
-// Format a parsed JSON value for table cell display
-const formatParsedValue = (value: unknown): string => {
-  if (value === undefined || value === null) {
-    return '-';
-  }
-  if (typeof value === 'object') {
-    return JSON.stringify(value);
-  }
-  if (typeof value === 'string') {
-    return value.length > 0 ? value : '-';
-  }
-  const stringified = String(value);
-  return stringified.length > 0 ? stringified : '-';
-};
-
 // Build a display label for a container, appending :init for init containers
 const formatContainerLabel = (container: string, isInit: boolean, isEphemeral: boolean): string =>
   isInit ? `${container}:init` : isEphemeral ? `${container} (debug)` : container;
@@ -209,6 +195,8 @@ const CONTAINER_FILTER_PREFIX = 'container:';
 const DEBUG_FILTER_PREFIX = 'debug:';
 const TARGET_LIMIT_WARNING_PATTERN =
   /^Logs are hidden for (\d+) containers because the (per-tab|global) limit of (\d+) was reached\. Using filters to reduce the number of containers may clear this message\.$/;
+const WORKLOAD_RAW_LOG_PREFIX_PATTERN = /^(?:(\[[^\]]+\]\s*))?\[([^\/]+)\/([^\]]+)\]\s*(.*)/;
+const EMPTY_CONTAINER_LOG_PLACEHOLDER = '[container emitted an empty log]';
 
 const mergeTargetLimitWarnings = (warnings: string[]): string[] => {
   if (warnings.length < 2) {
@@ -359,18 +347,6 @@ const isValidRegexPattern = (pattern: string): boolean => {
     return true;
   } catch {
     return false;
-  }
-};
-
-const tryParseJSONObject = (line: string): Record<string, unknown> | null => {
-  try {
-    const parsed = JSON.parse(stripAnsi(line));
-    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-      return null;
-    }
-    return Object.keys(parsed).length > 0 ? (parsed as Record<string, unknown>) : null;
-  } catch {
-    return null;
   }
 };
 
@@ -1356,6 +1332,8 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
               ? JSON.stringify(parsed, null, 2)
               : normalizedLine
             : normalizedLine;
+      const displayContent =
+        lineContent.trim().length > 0 ? lineContent : EMPTY_CONTAINER_LOG_PLACEHOLDER;
       const timestamp = formatTimestampForMode(
         entry.timestamp ?? '',
         timestampMode,
@@ -1370,9 +1348,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
           entry.isInit,
           Boolean(entry.isEphemeral)
         );
-        const formatted = lineContent.trim()
-          ? `[${entry.pod}/${containerLabel}] ${lineContent}`
-          : lineContent;
+        const formatted = `[${entry.pod}/${containerLabel}] ${displayContent}`;
         return timestampPrefix + formatted;
       }
 
@@ -1385,11 +1361,11 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
           entry.isInit,
           Boolean(entry.isEphemeral)
         );
-        const formatted = lineContent.trim() ? `[${containerLabel}] ${lineContent}` : lineContent;
+        const formatted = `[${containerLabel}] ${displayContent}`;
         return timestampPrefix + formatted;
       }
 
-      return timestampPrefix + lineContent;
+      return timestampPrefix + displayContent;
     });
   }, [
     displayMode,
@@ -1549,13 +1525,9 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       const line = row.line;
 
       if (isWorkload && line.includes('[') && line.includes('/')) {
-        const match = line.match(
-          /^(?:\[\d{4}-\d{2}-\d{2}T[^\]]+\]\s*)?\[([^\/]+)\/([^\]]+)\]\s*(.*)/
-        );
+        const match = line.match(WORKLOAD_RAW_LOG_PREFIX_PATTERN);
         if (match) {
-          const [, pod, container, logLine] = match;
-          const timestampMatch = line.match(/^(\[\d{4}-\d{2}-\d{2}T[^\]]+\]\s*)/);
-          const timestamp = timestampMatch ? timestampMatch[1] : '';
+          const [, timestamp = '', pod, container, logLine] = match;
           const podColor = podColors[pod] || podColors['__fallback__'];
 
           return (
@@ -1628,8 +1600,8 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
           selectedContainerFilterCount !== 1 &&
           !(selectedContainerFilterCount === 0 && singlePodSelectableContainerCount === 1);
         if (timestampPrefix || showContainerMeta) {
-          const containerLabel = containerMatch ? containerMatch[1] : '';
-          const remainder = containerMatch ? containerMatch[2] : workingLine;
+          const containerLabel = showContainerMeta && containerMatch ? containerMatch[1] : '';
+          const remainder = showContainerMeta && containerMatch ? containerMatch[2] : workingLine;
           return (
             <div className="pod-log-line">
               {timestampPrefix && <span className="pod-log-metadata">{timestampPrefix}</span>}

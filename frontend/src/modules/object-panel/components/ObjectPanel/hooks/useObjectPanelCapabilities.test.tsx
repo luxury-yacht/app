@@ -12,10 +12,17 @@ import { useObjectPanelCapabilities } from './useObjectPanelCapabilities';
 
 const mockUseCapabilities = vi.fn();
 const mockUseUserPermission = vi.fn();
+const mockDiscoverNodeLogs = vi.fn();
+const mockGetCachedNodeLogDiscovery = vi.fn();
 
 vi.mock('@/core/capabilities', () => ({
   useCapabilities: (...args: unknown[]) => mockUseCapabilities(...args),
   useUserPermission: (...args: unknown[]) => mockUseUserPermission(...(args as [])),
+}));
+
+vi.mock('../NodeLogs/nodeLogsApi', () => ({
+  discoverNodeLogs: (...args: unknown[]) => mockDiscoverNodeLogs(...args),
+  getCachedNodeLogDiscovery: (...args: unknown[]) => mockGetCachedNodeLogDiscovery(...args),
 }));
 
 type HookProps = Parameters<typeof useObjectPanelCapabilities>[0];
@@ -35,6 +42,7 @@ describe('useObjectPanelCapabilities', () => {
     await act(async () => {
       root.render(<HookHarness />);
       await Promise.resolve();
+      await Promise.resolve();
     });
 
     return resultRef.current!;
@@ -42,6 +50,7 @@ describe('useObjectPanelCapabilities', () => {
 
   const baseFeatureSupport: FeatureSupport = {
     logs: true,
+    nodeLogs: false,
     manifest: false,
     values: false,
     delete: true,
@@ -65,6 +74,9 @@ describe('useObjectPanelCapabilities', () => {
     resultRef.current = null;
     mockUseCapabilities.mockReset();
     mockUseUserPermission.mockReset();
+    mockDiscoverNodeLogs.mockReset();
+    mockGetCachedNodeLogDiscovery.mockReset();
+    mockGetCachedNodeLogDiscovery.mockReturnValue(null);
   });
 
   afterEach(() => {
@@ -107,7 +119,7 @@ describe('useObjectPanelCapabilities', () => {
       featureSupport: baseFeatureSupport,
     });
 
-    expect(mockUseCapabilities).toHaveBeenCalledTimes(1);
+    expect(mockUseCapabilities).toHaveBeenCalled();
     const [descriptors] = mockUseCapabilities.mock.calls[0];
     const descriptorIds = (descriptors as Array<{ id: string }>).map((d) => d.id);
     expect(descriptorIds).toEqual(
@@ -148,6 +160,7 @@ describe('useObjectPanelCapabilities', () => {
       detailScope: null,
       featureSupport: {
         logs: false,
+        nodeLogs: false,
         manifest: false,
         values: false,
         delete: false,
@@ -163,6 +176,7 @@ describe('useObjectPanelCapabilities', () => {
 
     expect(result.capabilities).toEqual({
       hasLogs: false,
+      hasNodeLogs: false,
       hasShell: false,
       hasManifest: false,
       hasValues: false,
@@ -174,6 +188,7 @@ describe('useObjectPanelCapabilities', () => {
       canSuspend: false,
     });
     expect(result.capabilityReasons).toEqual({
+      nodeLogs: undefined,
       delete: undefined,
       restart: undefined,
       scale: undefined,
@@ -341,5 +356,152 @@ describe('useObjectPanelCapabilities', () => {
 
     expect(result.capabilityStates.debug.allowed).toBe(true);
     expect(result.capabilityReasons.debug).toBeUndefined();
+  });
+
+  it('enables node logs when discovery returns readable sources', async () => {
+    mockUseCapabilities.mockImplementation(() => ({
+      getState: () => ({ allowed: false, pending: false }),
+    }));
+    mockUseUserPermission.mockReturnValue({ allowed: true, pending: true });
+    mockDiscoverNodeLogs.mockResolvedValue({
+      supported: true,
+      sources: [
+        {
+          id: 'journal/kubelet',
+          label: 'journal / kubelet',
+          kind: 'journal',
+          path: 'journal/kubelet',
+        },
+      ],
+    });
+
+    const result = await renderHook({
+      objectData: { kind: 'Node', name: 'node-a', clusterId: 'c1' },
+      objectKind: 'node',
+      detailScope: 'node:node-a',
+      featureSupport: { ...baseFeatureSupport, logs: false, nodeLogs: true },
+    });
+
+    expect(mockDiscoverNodeLogs).toHaveBeenCalledWith('c1', 'node-a');
+    expect(result.capabilities.hasNodeLogs).toBe(true);
+    expect(result.capabilities.hasLogs).toBe(true);
+    expect(result.nodeLogSources).toEqual([
+      {
+        id: 'journal/kubelet',
+        label: 'journal / kubelet',
+        kind: 'journal',
+        path: 'journal/kubelet',
+      },
+    ]);
+    expect(result.capabilityReasons.nodeLogs).toBeUndefined();
+  });
+
+  it('reuses cached node log discovery results for the same node', async () => {
+    mockUseCapabilities.mockImplementation(() => ({
+      getState: () => ({ allowed: false, pending: false }),
+    }));
+    mockUseUserPermission.mockReturnValue({ allowed: false, pending: true });
+    mockGetCachedNodeLogDiscovery.mockReturnValue({
+      supported: true,
+      sources: [
+        {
+          id: 'journal/kubelet',
+          label: 'journal / kubelet',
+          kind: 'journal',
+          path: 'journal/kubelet',
+        },
+      ],
+    });
+
+    const result = await renderHook({
+      objectData: { kind: 'Node', name: 'node-a', clusterId: 'c1' },
+      objectKind: 'node',
+      detailScope: 'node:node-a',
+      featureSupport: { ...baseFeatureSupport, logs: false, nodeLogs: true },
+    });
+
+    expect(mockGetCachedNodeLogDiscovery).toHaveBeenCalledWith('c1', 'node-a');
+    expect(mockDiscoverNodeLogs).not.toHaveBeenCalled();
+    expect(result.capabilities.hasNodeLogs).toBe(true);
+    expect(result.nodeLogSources).toHaveLength(1);
+  });
+
+  it('does not leak cached node log discovery across cluster switches', async () => {
+    mockUseCapabilities.mockImplementation(() => ({
+      getState: () => ({ allowed: false, pending: false }),
+    }));
+    mockUseUserPermission.mockImplementation(() => ({ allowed: true, pending: false }));
+    mockGetCachedNodeLogDiscovery.mockImplementation((clusterId: string, nodeName: string) => {
+      if (clusterId === 'c1' && nodeName === 'node-a') {
+        return {
+          supported: true,
+          sources: [
+            {
+              id: 'journal/kubelet',
+              label: 'journal / kubelet',
+              kind: 'journal',
+              path: 'journal/kubelet',
+            },
+          ],
+        };
+      }
+      return null;
+    });
+    mockDiscoverNodeLogs.mockResolvedValue({
+      supported: true,
+      sources: [
+        {
+          id: 'journal/containerd',
+          label: 'journal / containerd',
+          kind: 'journal',
+          path: 'journal/containerd',
+        },
+      ],
+    });
+
+    const first = await renderHook({
+      objectData: { kind: 'Node', name: 'node-a', clusterId: 'c1' },
+      objectKind: 'node',
+      detailScope: 'node:node-a:c1',
+      featureSupport: { ...baseFeatureSupport, logs: false, nodeLogs: true },
+    });
+
+    expect(first.nodeLogSources[0]?.path).toBe('journal/kubelet');
+    expect(mockDiscoverNodeLogs).not.toHaveBeenCalled();
+
+    const second = await renderHook({
+      objectData: { kind: 'Node', name: 'node-a', clusterId: 'c2' },
+      objectKind: 'node',
+      detailScope: 'node:node-a:c2',
+      featureSupport: { ...baseFeatureSupport, logs: false, nodeLogs: true },
+    });
+
+    expect(mockGetCachedNodeLogDiscovery).toHaveBeenCalledWith('c2', 'node-a');
+    expect(mockDiscoverNodeLogs).toHaveBeenCalledWith('c2', 'node-a');
+    expect(second.nodeLogSources[0]?.path).toBe('journal/containerd');
+  });
+
+  it('surfaces a node logs reason when discovery finds no readable sources', async () => {
+    mockUseCapabilities.mockImplementation(() => ({
+      getState: () => ({ allowed: false, pending: false }),
+    }));
+    mockUseUserPermission.mockReturnValue({ allowed: false, pending: true });
+    mockDiscoverNodeLogs.mockResolvedValue({
+      supported: false,
+      sources: [],
+      reason: 'node logs are not supported on this cluster',
+    });
+
+    const result = await renderHook({
+      objectData: { kind: 'Node', name: 'node-a', clusterId: 'c1' },
+      objectKind: 'node',
+      detailScope: 'node:node-a',
+      featureSupport: { ...baseFeatureSupport, logs: false, nodeLogs: true },
+    });
+
+    expect(result.capabilities.hasNodeLogs).toBe(false);
+    expect(result.capabilities.hasLogs).toBe(true);
+    expect(result.nodeLogSources).toEqual([]);
+    expect(result.capabilityReasons.nodeLogs).toBe('node logs are not supported on this cluster');
   });
 });

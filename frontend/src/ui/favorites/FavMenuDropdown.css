@@ -150,6 +150,10 @@
   color: var(--color-text);
 }
 
+.fav-dropdown-action-btn.danger:hover {
+  color: var(--color-danger);
+}
+
 .fav-dropdown-action-btn.disabled {
   opacity: 0.3;
   cursor: default;

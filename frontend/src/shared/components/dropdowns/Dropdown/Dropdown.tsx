@@ -11,7 +11,7 @@ import { useDropdownState } from './hooks/useDropdownState';
 import { useKeyboardNavigation } from './hooks/useKeyboardNavigation';
 import { useAriaAnnouncements } from './hooks/useAriaAnnouncements';
 import '@styles/components/dropdowns.css';
-import { useKeyboardContext, useShortcuts } from '@ui/shortcuts';
+import { useKeyboardSurface } from '@ui/shortcuts';
 
 const CLIPPING_OVERFLOW_VALUES = new Set(['auto', 'scroll', 'hidden', 'clip']);
 
@@ -81,8 +81,6 @@ const Dropdown: React.FC<DropdownProps> = ({
   } = useDropdownState(value, onChange, multiple, disabled);
 
   const [isFocused, setIsFocused] = useState(false);
-  const { pushContext, popContext } = useKeyboardContext();
-  const shortcutContextActiveRef = useRef(false);
 
   useEffect(() => {
     const node = dropdownRef.current;
@@ -106,28 +104,6 @@ const Dropdown: React.FC<DropdownProps> = ({
     };
   }, [dropdownRef]);
 
-  useEffect(() => {
-    const shouldActivate = !disabled && (isFocused || isOpen);
-
-    if (shouldActivate && !shortcutContextActiveRef.current) {
-      pushContext({ tabActive: 'dropdown', priority: 350 });
-      shortcutContextActiveRef.current = true;
-    } else if (!shouldActivate && shortcutContextActiveRef.current) {
-      popContext();
-      shortcutContextActiveRef.current = false;
-    }
-  }, [disabled, isFocused, isOpen, popContext, pushContext]);
-
-  useEffect(
-    () => () => {
-      if (shortcutContextActiveRef.current) {
-        popContext();
-        shortcutContextActiveRef.current = false;
-      }
-    },
-    [popContext]
-  );
-
   // Set initial highlighted index when dropdown opens
   useEffect(() => {
     if (isOpen && !multiple && value && highlightedIndex === -1) {
@@ -138,7 +114,7 @@ const Dropdown: React.FC<DropdownProps> = ({
     }
   }, [isOpen, value, options, multiple, highlightedIndex, setHighlightedIndex]);
 
-  const { handleKeyDown, handleKeyAction } = useKeyboardNavigation({
+  const { handleKeyAction } = useKeyboardNavigation({
     options,
     isOpen,
     highlightedIndex,
@@ -312,74 +288,35 @@ const Dropdown: React.FC<DropdownProps> = ({
     return Boolean(active && active.classList.contains('search-input'));
   };
 
-  const runShortcutAction = (key: string) => handleKeyAction(key) === 'handled';
+  useKeyboardSurface({
+    kind: 'dropdown',
+    rootRef: dropdownRef,
+    active: shortcutsEnabled,
+    priority: 350,
+    suppressShortcuts: true,
+    onKeyDown: (event) => {
+      if (event.key === ' ' && isTypingInSearch()) {
+        return false;
+      }
 
-  useShortcuts(
-    [
-      {
-        key: 'ArrowDown',
-        handler: () => runShortcutAction('ArrowDown'),
-        description: 'Highlight next option',
-        enabled: shortcutsEnabled,
-      },
-      {
-        key: 'ArrowUp',
-        handler: () => runShortcutAction('ArrowUp'),
-        description: 'Highlight previous option',
-        enabled: shortcutsEnabled,
-      },
-      {
-        key: 'Home',
-        handler: () => runShortcutAction('Home'),
-        description: 'Jump to first option',
-        enabled: shortcutsEnabled,
-      },
-      {
-        key: 'End',
-        handler: () => runShortcutAction('End'),
-        description: 'Jump to last option',
-        enabled: shortcutsEnabled,
-      },
-      {
-        key: 'Enter',
-        handler: () => runShortcutAction('Enter'),
-        description: 'Select highlighted option',
-        enabled: shortcutsEnabled,
-      },
-      {
-        key: ' ',
-        handler: () => {
-          if (isTypingInSearch()) {
-            return false;
-          }
-          return runShortcutAction(' ');
-        },
-        description: 'Toggle dropdown or select highlighted option',
-        enabled: shortcutsEnabled,
-      },
-      {
-        key: 'Escape',
-        handler: () => runShortcutAction('Escape'),
-        description: 'Close dropdown',
-        enabled: shortcutsEnabled,
-      },
-    ],
-    {
-      view: 'list',
-      priority: 350,
-      category: 'Dropdown',
-    }
-  );
+      const result = handleKeyAction(event.key);
+      if (result === 'handled-no-prevent') {
+        return 'handled-no-prevent';
+      }
+      if (result === 'handled') {
+        return true;
+      }
+      return false;
+    },
+  });
 
   return (
-    <div ref={dropdownRef} className={containerClasses} data-allow-shortcuts="true">
+    <div ref={dropdownRef} className={containerClasses}>
       {/* Trigger */}
       <div
         ref={triggerRef}
         className="dropdown-trigger"
         onClick={toggleDropdown}
-        onKeyDown={handleKeyDown}
-        data-allow-shortcuts="true"
         role="combobox"
         aria-expanded={isOpen}
         aria-haspopup="listbox"
@@ -431,7 +368,6 @@ const Dropdown: React.FC<DropdownProps> = ({
           role="listbox"
           aria-multiselectable={multiple}
           id={`${id || 'dropdown'}-menu`}
-          data-allow-shortcuts="true"
         >
           {searchable && (
             <div className="search-container">
@@ -443,7 +379,6 @@ const Dropdown: React.FC<DropdownProps> = ({
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onClick={(e) => e.stopPropagation()}
                 autoFocus
-                data-allow-shortcuts="true"
               />
             </div>
           )}

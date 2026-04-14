@@ -16,6 +16,7 @@ import type { Favorite } from '@/core/persistence/favorites';
 // ---------------------------------------------------------------------------
 
 const mockFavorites: Favorite[] = [];
+const mockDeleteFavorite = vi.fn().mockResolvedValue(undefined);
 const mockReorderFavorites = vi.fn().mockResolvedValue(undefined);
 const mockSetPendingFavorite = vi.fn();
 
@@ -24,7 +25,7 @@ vi.mock('@core/contexts/FavoritesContext', () => ({
     favorites: mockFavorites,
     addFavorite: vi.fn().mockResolvedValue(undefined),
     updateFavorite: vi.fn().mockResolvedValue(undefined),
-    deleteFavorite: vi.fn().mockResolvedValue(undefined),
+    deleteFavorite: mockDeleteFavorite,
     reorderFavorites: mockReorderFavorites,
     pendingFavorite: null,
     setPendingFavorite: mockSetPendingFavorite,
@@ -168,7 +169,7 @@ describe('FavMenuDropdown', () => {
   };
 
   const clickButton = async () => {
-    const btn = container.querySelector<HTMLButtonElement>('button[aria-label="Favorites"]');
+    const btn = container.querySelector<HTMLElement>('[aria-label="Favorites"]');
     expect(btn).toBeTruthy();
     await act(async () => {
       btn!.click();
@@ -183,6 +184,7 @@ describe('FavMenuDropdown', () => {
   beforeEach(() => {
     // Reset favorites to empty by default; individual tests override via splice.
     mockFavorites.length = 0;
+    mockDeleteFavorite.mockClear();
     mockReorderFavorites.mockClear();
     mockSetPendingFavorite.mockClear();
     mockSetSelectedKubeconfigs.mockClear();
@@ -206,9 +208,25 @@ describe('FavMenuDropdown', () => {
 
   it('renders the heart button', async () => {
     await renderComponent();
-    const btn = container.querySelector<HTMLButtonElement>('button[aria-label="Favorites"]');
+    const btn = container.querySelector<HTMLElement>('[aria-label="Favorites"]');
     expect(btn).toBeTruthy();
     expect(btn!.className).toContain('settings-button');
+  });
+
+  it('opens the dropdown from keyboard activation on the trigger', async () => {
+    await renderComponent();
+
+    const trigger = container.querySelector<HTMLElement>('[aria-label="Favorites"]');
+    expect(trigger).toBeTruthy();
+
+    await act(async () => {
+      trigger!.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+      );
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('.fav-dropdown-panel')).toBeTruthy();
   });
 
   // -----------------------------------------------------------------------
@@ -317,10 +335,32 @@ describe('FavMenuDropdown', () => {
     expect(actions).toBeTruthy();
 
     const buttons = actions!.querySelectorAll('button');
-    // 2 action buttons: up, down
-    expect(buttons.length).toBe(2);
+    // 3 action buttons: up, down, delete
+    expect(buttons.length).toBe(3);
     expect(buttons[0].title).toBe('Move up');
     expect(buttons[1].title).toBe('Move down');
+    expect(buttons[2].title).toBe('Delete favorite');
+  });
+
+  it('delete button deletes the favorite without navigating', async () => {
+    mockFavorites.push(makeFavorite({ id: 'fav-1', name: 'My Pods' }));
+
+    await renderComponent();
+    await clickButton();
+
+    const deleteButton = Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(
+      (button) => button.title === 'Delete favorite'
+    );
+
+    expect(deleteButton).toBeTruthy();
+
+    await act(async () => {
+      deleteButton!.click();
+      await Promise.resolve();
+    });
+
+    expect(mockDeleteFavorite).toHaveBeenCalledWith('fav-1');
+    expect(mockSetPendingFavorite).not.toHaveBeenCalled();
   });
 
   // -----------------------------------------------------------------------

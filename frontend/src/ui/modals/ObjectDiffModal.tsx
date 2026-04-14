@@ -5,15 +5,14 @@
  * Provides a global, side-by-side YAML diff viewer for Kubernetes objects.
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import './modals.css';
 import './ObjectDiffModal.css';
 import Dropdown from '@shared/components/dropdowns/Dropdown/Dropdown';
 import { CloseIcon } from '@shared/components/icons/MenuIcons';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown/types';
-import { useShortcut, useKeyboardContext } from '@ui/shortcuts';
-import { KeyboardContextPriority, KeyboardScopePriority } from '@ui/shortcuts/priorities';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
+import ModalSurface from '@shared/components/modals/ModalSurface';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { buildClusterScope, buildObjectScope } from '@core/refresh/clusterScope';
 import { refreshOrchestrator, useRefreshScopedDomain } from '@core/refresh';
@@ -290,8 +289,6 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
   const [rightNoMatch, setRightNoMatch] = useState(false);
   const [pendingLeftMatch, setPendingLeftMatch] = useState<MatchRequest | null>(null);
   const [pendingRightMatch, setPendingRightMatch] = useState<MatchRequest | null>(null);
-  const { pushContext, popContext } = useKeyboardContext();
-  const contextPushedRef = useRef(false);
   const leftChecksumRef = useRef<string | null>(null);
   const rightChecksumRef = useRef<string | null>(null);
   const leftNoMatchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -330,27 +327,11 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
   }, [isOpen, shouldRender]);
 
   useEffect(() => {
-    if (!isOpen) {
-      if (contextPushedRef.current) {
-        popContext();
-        contextPushedRef.current = false;
-      }
-      document.body.style.overflow = '';
-      return;
-    }
-
-    pushContext({ priority: KeyboardContextPriority.OBJECT_DIFF_MODAL });
-    contextPushedRef.current = true;
-    document.body.style.overflow = 'hidden';
-
+    document.body.style.overflow = isOpen ? 'hidden' : '';
     return () => {
-      if (contextPushedRef.current) {
-        popContext();
-        contextPushedRef.current = false;
-      }
       document.body.style.overflow = '';
     };
-  }, [isOpen, popContext, pushContext]);
+  }, [isOpen]);
 
   useEffect(
     () => () => {
@@ -364,25 +345,15 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
     []
   );
 
-  useShortcut({
-    key: 'Escape',
-    handler: () => {
+  useModalFocusTrap({
+    ref: modalRef,
+    focusableSelector: '.dropdown-trigger, button, input',
+    disabled: !shouldRender,
+    onEscape: () => {
       if (!isOpen) return false;
       onClose();
       return true;
     },
-    description: 'Close object diff modal',
-    category: 'Modals',
-    enabled: isOpen,
-    view: 'global',
-    priority: KeyboardContextPriority.OBJECT_DIFF_MODAL,
-  });
-
-  useModalFocusTrap({
-    ref: modalRef,
-    focusableSelector: '.dropdown-trigger, button, input',
-    priority: KeyboardScopePriority.OBJECT_DIFF_MODAL,
-    disabled: !isOpen,
   });
 
   // Use scoped catalog snapshots so namespace options remain global while kinds/objects cascade.
@@ -916,261 +887,263 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
   if (!shouldRender) return null;
 
   return (
-    <div className={`modal-overlay object-diff-modal-overlay ${isClosing ? 'closing' : ''}`}>
-      <div
-        className={`modal-container object-diff-modal ${isClosing ? 'closing' : ''}`}
-        ref={modalRef}
-      >
-        <div className="modal-header object-diff-modal-header">
-          <h2>Diff Objects</h2>
-          <button
-            className="modal-close object-diff-modal-close"
-            onClick={onClose}
-            aria-label="Close object diff"
-          >
-            <CloseIcon />
-          </button>
-        </div>
-        <div className="modal-content object-diff-modal-content">
-          <div className="object-diff-selector-grid">
-            <div className="object-diff-selector">
-              <div className="object-diff-selector-header">
-                <span className="object-diff-selector-title">Left</span>
-                <div className="object-diff-selector-actions">
-                  <button
-                    type="button"
-                    className="button generic object-diff-match"
-                    onClick={handleLeftMatch}
-                    disabled={!leftSelection || !leftClusterId || !rightClusterId}
-                  >
-                    Match
-                  </button>
-                  <button
-                    type="button"
-                    className="button generic object-diff-clear"
-                    onClick={() => setLeftObjectUid('')}
-                    disabled={!leftSelection}
-                  >
-                    Clear
-                  </button>
-                </div>
-              </div>
-              {leftNoMatch && <div className="object-diff-match-message">No match found</div>}
-              <div className="object-diff-field">
-                <label className="object-diff-label" htmlFor="object-diff-left-cluster">
-                  Cluster
-                </label>
-                <Dropdown
-                  id="object-diff-left-cluster"
-                  options={clusterOptions}
-                  value={leftClusterId}
-                  onChange={handleLeftClusterChange}
-                  placeholder="Select cluster"
-                  disabled={clusterOptions.length === 0}
-                  ariaLabel="Left cluster"
-                />
-              </div>
-              <div className="object-diff-field">
-                <label className="object-diff-label" htmlFor="object-diff-left-namespace">
-                  Namespace
-                </label>
-                <Dropdown
-                  id="object-diff-left-namespace"
-                  options={leftNamespaceOptions}
-                  value={leftNamespace}
-                  onChange={handleLeftNamespaceChange}
-                  placeholder="Select namespace"
-                  loading={leftNamespaceLoading}
-                  disabled={!leftClusterId}
-                  error={Boolean(leftNamespaceError)}
-                  ariaLabel="Left namespace"
-                />
-              </div>
-              <div className="object-diff-field">
-                <label className="object-diff-label" htmlFor="object-diff-left-kind">
-                  Kind
-                </label>
-                <Dropdown
-                  id="object-diff-left-kind"
-                  options={leftKindOptions}
-                  value={leftKind}
-                  onChange={handleLeftKindChange}
-                  placeholder="Select kind"
-                  loading={leftKindLoading}
-                  disabled={!leftClusterId || !leftNamespace}
-                  error={Boolean(leftKindError)}
-                  ariaLabel="Left kind"
-                />
-              </div>
-              <div className="object-diff-field">
-                <label className="object-diff-label" htmlFor="object-diff-left-object">
-                  Object
-                </label>
-                <Dropdown
-                  id="object-diff-left-object"
-                  options={leftObjectOptions}
-                  value={leftObjectUid}
-                  onChange={handleLeftSelectionChange}
-                  placeholder="Select object"
-                  loading={leftObjectLoading}
-                  disabled={!leftClusterId || !leftNamespace || !leftKind}
-                  error={Boolean(leftObjectError)}
-                  ariaLabel="Left object"
-                />
-              </div>
-              {leftCatalogError && (
-                <div className="object-diff-error-message">Catalog error: {leftCatalogError}</div>
-              )}
-            </div>
-
-            <div className="object-diff-selector">
-              <div className="object-diff-selector-header">
-                <span className="object-diff-selector-title">Right</span>
-                <div className="object-diff-selector-actions">
-                  <button
-                    type="button"
-                    className="button generic object-diff-match"
-                    onClick={handleRightMatch}
-                    disabled={!rightSelection || !leftClusterId || !rightClusterId}
-                  >
-                    Match
-                  </button>
-                  <button
-                    type="button"
-                    className="button generic object-diff-clear"
-                    onClick={() => setRightObjectUid('')}
-                    disabled={!rightSelection}
-                  >
-                    Clear
-                  </button>
-                </div>
-              </div>
-              {rightNoMatch && <div className="object-diff-match-message">No match found</div>}
-              <div className="object-diff-field">
-                <label className="object-diff-label" htmlFor="object-diff-right-cluster">
-                  Cluster
-                </label>
-                <Dropdown
-                  id="object-diff-right-cluster"
-                  options={clusterOptions}
-                  value={rightClusterId}
-                  onChange={handleRightClusterChange}
-                  placeholder="Select cluster"
-                  disabled={clusterOptions.length === 0}
-                  ariaLabel="Right cluster"
-                />
-              </div>
-              <div className="object-diff-field">
-                <label className="object-diff-label" htmlFor="object-diff-right-namespace">
-                  Namespace
-                </label>
-                <Dropdown
-                  id="object-diff-right-namespace"
-                  options={rightNamespaceOptions}
-                  value={rightNamespace}
-                  onChange={handleRightNamespaceChange}
-                  placeholder="Select namespace"
-                  loading={rightNamespaceLoading}
-                  disabled={!rightClusterId}
-                  error={Boolean(rightNamespaceError)}
-                  ariaLabel="Right namespace"
-                />
-              </div>
-              <div className="object-diff-field">
-                <label className="object-diff-label" htmlFor="object-diff-right-kind">
-                  Kind
-                </label>
-                <Dropdown
-                  id="object-diff-right-kind"
-                  options={rightKindOptions}
-                  value={rightKind}
-                  onChange={handleRightKindChange}
-                  placeholder="Select kind"
-                  loading={rightKindLoading}
-                  disabled={!rightClusterId || !rightNamespace}
-                  error={Boolean(rightKindError)}
-                  ariaLabel="Right kind"
-                />
-              </div>
-              <div className="object-diff-field">
-                <label className="object-diff-label" htmlFor="object-diff-right-object">
-                  Object
-                </label>
-                <Dropdown
-                  id="object-diff-right-object"
-                  options={rightObjectOptions}
-                  value={rightObjectUid}
-                  onChange={handleRightSelectionChange}
-                  placeholder="Select object"
-                  loading={rightObjectLoading}
-                  disabled={!rightClusterId || !rightNamespace || !rightKind}
-                  error={Boolean(rightObjectError)}
-                  ariaLabel="Right object"
-                />
-              </div>
-              {rightCatalogError && (
-                <div className="object-diff-error-message">Catalog error: {rightCatalogError}</div>
-              )}
-            </div>
-          </div>
-
-          <div className="object-diff-viewer">
-            <div className="object-diff-viewer-header">
-              <div className="object-diff-viewer-header-row">
-                <div className="object-diff-viewer-title-group">
-                  <div className="object-diff-viewer-title">Diff Viewer</div>
-                  <span
-                    className="object-diff-info-indicator"
-                    title="Ignored fields: metadata.managedFields. Muted fields: metadata.resourceVersion, metadata.creationTimestamp, metadata.uid."
-                    aria-label="Diff metadata field info"
-                  >
-                    i
-                  </span>
-                </div>
+    <ModalSurface
+      modalRef={modalRef}
+      labelledBy="object-diff-modal-title"
+      onClose={onClose}
+      overlayClassName="object-diff-modal-overlay"
+      containerClassName="object-diff-modal"
+      isClosing={isClosing}
+    >
+      <div className="modal-header object-diff-modal-header">
+        <h2 id="object-diff-modal-title">Diff Objects</h2>
+        <button
+          className="modal-close object-diff-modal-close"
+          onClick={onClose}
+          aria-label="Close object diff"
+        >
+          <CloseIcon />
+        </button>
+      </div>
+      <div className="modal-content object-diff-modal-content">
+        <div className="object-diff-selector-grid">
+          <div className="object-diff-selector">
+            <div className="object-diff-selector-header">
+              <span className="object-diff-selector-title">Left</span>
+              <div className="object-diff-selector-actions">
                 <button
                   type="button"
-                  className="button generic object-diff-toggle"
-                  onClick={() => setShowDiffOnly((value) => !value)}
-                  disabled={!leftSelection || !rightSelection}
+                  className="button generic object-diff-match"
+                  onClick={handleLeftMatch}
+                  disabled={!leftSelection || !leftClusterId || !rightClusterId}
                 >
-                  {showDiffOnly ? 'Show All' : 'Show Diffs'}
+                  Match
+                </button>
+                <button
+                  type="button"
+                  className="button generic object-diff-clear"
+                  onClick={() => setLeftObjectUid('')}
+                  disabled={!leftSelection}
+                >
+                  Clear
                 </button>
               </div>
             </div>
-            <div className="object-diff-column-headers">
-              <div className="object-diff-column-title">
-                <span className="object-diff-column-label">
-                  {renderSelectionLabel(leftSelection)}
-                </span>
-                {/* Show per-side update indicators alongside each selection label. */}
-                {leftChangedAt && (
-                  <span
-                    className="object-diff-column-update"
-                    title={`Left updated ${formatFullDate(leftChangedAt)}`}
-                  >
-                    Updated {formatChangeAge(leftChangedAt)}
-                  </span>
-                )}
-              </div>
-              <div className="object-diff-column-title">
-                <span className="object-diff-column-label">
-                  {renderSelectionLabel(rightSelection)}
-                </span>
-                {rightChangedAt && (
-                  <span
-                    className="object-diff-column-update"
-                    title={`Right updated ${formatFullDate(rightChangedAt)}`}
-                  >
-                    Updated {formatChangeAge(rightChangedAt)}
-                  </span>
-                )}
+            {leftNoMatch && <div className="object-diff-match-message">No match found</div>}
+            <div className="object-diff-field">
+              <label className="object-diff-label" htmlFor="object-diff-left-cluster">
+                Cluster
+              </label>
+              <Dropdown
+                id="object-diff-left-cluster"
+                options={clusterOptions}
+                value={leftClusterId}
+                onChange={handleLeftClusterChange}
+                placeholder="Select cluster"
+                disabled={clusterOptions.length === 0}
+                ariaLabel="Left cluster"
+              />
+            </div>
+            <div className="object-diff-field">
+              <label className="object-diff-label" htmlFor="object-diff-left-namespace">
+                Namespace
+              </label>
+              <Dropdown
+                id="object-diff-left-namespace"
+                options={leftNamespaceOptions}
+                value={leftNamespace}
+                onChange={handleLeftNamespaceChange}
+                placeholder="Select namespace"
+                loading={leftNamespaceLoading}
+                disabled={!leftClusterId}
+                error={Boolean(leftNamespaceError)}
+                ariaLabel="Left namespace"
+              />
+            </div>
+            <div className="object-diff-field">
+              <label className="object-diff-label" htmlFor="object-diff-left-kind">
+                Kind
+              </label>
+              <Dropdown
+                id="object-diff-left-kind"
+                options={leftKindOptions}
+                value={leftKind}
+                onChange={handleLeftKindChange}
+                placeholder="Select kind"
+                loading={leftKindLoading}
+                disabled={!leftClusterId || !leftNamespace}
+                error={Boolean(leftKindError)}
+                ariaLabel="Left kind"
+              />
+            </div>
+            <div className="object-diff-field">
+              <label className="object-diff-label" htmlFor="object-diff-left-object">
+                Object
+              </label>
+              <Dropdown
+                id="object-diff-left-object"
+                options={leftObjectOptions}
+                value={leftObjectUid}
+                onChange={handleLeftSelectionChange}
+                placeholder="Select object"
+                loading={leftObjectLoading}
+                disabled={!leftClusterId || !leftNamespace || !leftKind}
+                error={Boolean(leftObjectError)}
+                ariaLabel="Left object"
+              />
+            </div>
+            {leftCatalogError && (
+              <div className="object-diff-error-message">Catalog error: {leftCatalogError}</div>
+            )}
+          </div>
+
+          <div className="object-diff-selector">
+            <div className="object-diff-selector-header">
+              <span className="object-diff-selector-title">Right</span>
+              <div className="object-diff-selector-actions">
+                <button
+                  type="button"
+                  className="button generic object-diff-match"
+                  onClick={handleRightMatch}
+                  disabled={!rightSelection || !leftClusterId || !rightClusterId}
+                >
+                  Match
+                </button>
+                <button
+                  type="button"
+                  className="button generic object-diff-clear"
+                  onClick={() => setRightObjectUid('')}
+                  disabled={!rightSelection}
+                >
+                  Clear
+                </button>
               </div>
             </div>
-            {renderDiffContent()}
+            {rightNoMatch && <div className="object-diff-match-message">No match found</div>}
+            <div className="object-diff-field">
+              <label className="object-diff-label" htmlFor="object-diff-right-cluster">
+                Cluster
+              </label>
+              <Dropdown
+                id="object-diff-right-cluster"
+                options={clusterOptions}
+                value={rightClusterId}
+                onChange={handleRightClusterChange}
+                placeholder="Select cluster"
+                disabled={clusterOptions.length === 0}
+                ariaLabel="Right cluster"
+              />
+            </div>
+            <div className="object-diff-field">
+              <label className="object-diff-label" htmlFor="object-diff-right-namespace">
+                Namespace
+              </label>
+              <Dropdown
+                id="object-diff-right-namespace"
+                options={rightNamespaceOptions}
+                value={rightNamespace}
+                onChange={handleRightNamespaceChange}
+                placeholder="Select namespace"
+                loading={rightNamespaceLoading}
+                disabled={!rightClusterId}
+                error={Boolean(rightNamespaceError)}
+                ariaLabel="Right namespace"
+              />
+            </div>
+            <div className="object-diff-field">
+              <label className="object-diff-label" htmlFor="object-diff-right-kind">
+                Kind
+              </label>
+              <Dropdown
+                id="object-diff-right-kind"
+                options={rightKindOptions}
+                value={rightKind}
+                onChange={handleRightKindChange}
+                placeholder="Select kind"
+                loading={rightKindLoading}
+                disabled={!rightClusterId || !rightNamespace}
+                error={Boolean(rightKindError)}
+                ariaLabel="Right kind"
+              />
+            </div>
+            <div className="object-diff-field">
+              <label className="object-diff-label" htmlFor="object-diff-right-object">
+                Object
+              </label>
+              <Dropdown
+                id="object-diff-right-object"
+                options={rightObjectOptions}
+                value={rightObjectUid}
+                onChange={handleRightSelectionChange}
+                placeholder="Select object"
+                loading={rightObjectLoading}
+                disabled={!rightClusterId || !rightNamespace || !rightKind}
+                error={Boolean(rightObjectError)}
+                ariaLabel="Right object"
+              />
+            </div>
+            {rightCatalogError && (
+              <div className="object-diff-error-message">Catalog error: {rightCatalogError}</div>
+            )}
           </div>
         </div>
+
+        <div className="object-diff-viewer">
+          <div className="object-diff-viewer-header">
+            <div className="object-diff-viewer-header-row">
+              <div className="object-diff-viewer-title-group">
+                <div className="object-diff-viewer-title">Diff Viewer</div>
+                <span
+                  className="object-diff-info-indicator"
+                  title="Ignored fields: metadata.managedFields. Muted fields: metadata.resourceVersion, metadata.creationTimestamp, metadata.uid."
+                  aria-label="Diff metadata field info"
+                >
+                  i
+                </span>
+              </div>
+              <button
+                type="button"
+                className="button generic object-diff-toggle"
+                onClick={() => setShowDiffOnly((value) => !value)}
+                disabled={!leftSelection || !rightSelection}
+              >
+                {showDiffOnly ? 'Show All' : 'Show Diffs'}
+              </button>
+            </div>
+          </div>
+          <div className="object-diff-column-headers">
+            <div className="object-diff-column-title">
+              <span className="object-diff-column-label">
+                {renderSelectionLabel(leftSelection)}
+              </span>
+              {/* Show per-side update indicators alongside each selection label. */}
+              {leftChangedAt && (
+                <span
+                  className="object-diff-column-update"
+                  title={`Left updated ${formatFullDate(leftChangedAt)}`}
+                >
+                  Updated {formatChangeAge(leftChangedAt)}
+                </span>
+              )}
+            </div>
+            <div className="object-diff-column-title">
+              <span className="object-diff-column-label">
+                {renderSelectionLabel(rightSelection)}
+              </span>
+              {rightChangedAt && (
+                <span
+                  className="object-diff-column-update"
+                  title={`Right updated ${formatFullDate(rightChangedAt)}`}
+                >
+                  Updated {formatChangeAge(rightChangedAt)}
+                </span>
+              )}
+            </div>
+          </div>
+          {renderDiffContent()}
+        </div>
       </div>
-    </div>
+    </ModalSurface>
   );
 };
 

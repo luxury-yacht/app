@@ -7,7 +7,7 @@
 
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useShortcut, useKeyboardContext } from '@ui/shortcuts';
+import { useKeyboardSurface } from '@ui/shortcuts';
 import { useZoom } from '@core/contexts/ZoomContext';
 import './ContextMenu.css';
 
@@ -31,10 +31,8 @@ interface ContextMenuProps {
 
 const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose }) => {
   const menuRef = useRef<HTMLDivElement>(null);
-  const { pushContext, popContext } = useKeyboardContext();
   const { zoomLevel } = useZoom();
   const [isPositioned, setIsPositioned] = useState(false);
-  const contextPushedRef = useRef(false);
   const selectableIndexes = useMemo(
     () =>
       items
@@ -72,28 +70,31 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose }) =
     onClose();
   };
 
-  useEffect(() => {
-    pushContext({ priority: 925 });
-    contextPushedRef.current = true;
-    return () => {
-      if (contextPushedRef.current) {
-        popContext();
-        contextPushedRef.current = false;
-      }
-    };
-  }, [popContext, pushContext]);
-
-  useShortcut({
-    key: 'Escape',
-    handler: () => {
+  useKeyboardSurface({
+    kind: 'menu',
+    rootRef: menuRef,
+    active: true,
+    priority: 925,
+    suppressShortcuts: true,
+    onEscape: () => {
       onClose();
       return true;
     },
-    description: 'Close context menu',
-    category: 'Modals',
-    enabled: true,
-    view: 'global',
-    priority: 925,
+    onKeyDown: (event) => {
+      if (event.key === 'ArrowDown') {
+        moveFocus(1);
+        return true;
+      }
+      if (event.key === 'ArrowUp') {
+        moveFocus(-1);
+        return true;
+      }
+      if (event.key === 'Enter' || event.key === ' ') {
+        activateFocusedItem();
+        return true;
+      }
+      return false;
+    },
   });
 
   useEffect(() => {
@@ -174,31 +175,6 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose }) =
         visibility: isPositioned ? 'visible' : 'hidden',
       }}
       role="menu"
-      onKeyDown={(e) => {
-        if (e.key === 'Escape') {
-          e.preventDefault();
-          e.stopPropagation();
-          onClose();
-          return;
-        }
-        if (e.key === 'ArrowDown') {
-          e.preventDefault();
-          e.stopPropagation();
-          moveFocus(1);
-          return;
-        }
-        if (e.key === 'ArrowUp') {
-          e.preventDefault();
-          e.stopPropagation();
-          moveFocus(-1);
-          return;
-        }
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          e.stopPropagation();
-          activateFocusedItem();
-        }
-      }}
       tabIndex={-1}
     >
       {items.map((item, index) => {

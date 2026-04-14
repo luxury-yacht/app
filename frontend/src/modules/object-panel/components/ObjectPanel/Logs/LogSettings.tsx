@@ -289,6 +289,8 @@ function LogSettings() {
                 <a
                   className="log-settings-format-link"
                   href="https://day.js.org/docs/en/parse/string-format#list-of-all-available-parsing-tokens"
+                  tabIndex={-1}
+                  data-focus-trap-ignore="true"
                   onClick={(e) => {
                     e.preventDefault();
                     BrowserOpenURL(

@@ -6,6 +6,8 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
+import ModalSurface from './ModalSurface';
+import { useModalFocusTrap } from './useModalFocusTrap';
 import './ScaleModal.css';
 
 interface ScaleModalProps {
@@ -52,54 +54,16 @@ const ScaleModal = ({
   }
   const unchanged = value === initialValueRef.current;
 
-  // Trap focus inside the modal so Tab cycles through: input → Cancel → Scale.
   const modalRef = useRef<HTMLDivElement>(null);
 
-  // Capture-phase document listener to intercept Tab before the browser moves focus.
-  useEffect(() => {
-    if (!isOpen) return;
-    const container = modalRef.current;
-    if (!container) return;
-
-    // Auto-focus the input when the modal opens.
-    const input = container.querySelector<HTMLElement>('input:not([disabled])');
-    input?.focus();
-
-    const handler = (e: KeyboardEvent) => {
-      // Only handle events for elements inside this modal.
-      if (!container.contains(e.target as Node)) return;
-
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        onCancel();
-        return;
-      }
-      if (e.key !== 'Tab') return;
-
-      e.preventDefault();
-      e.stopPropagation();
-
-      const focusable = Array.from(
-        container.querySelectorAll<HTMLElement>(
-          'input:not([disabled]), button:not([disabled]):not([tabindex="-1"])'
-        )
-      );
-      if (focusable.length === 0) return;
-
-      const idx = focusable.indexOf(document.activeElement as HTMLElement);
-      let next: number;
-      if (e.shiftKey) {
-        next = idx <= 0 ? focusable.length - 1 : idx - 1;
-      } else {
-        next = idx >= focusable.length - 1 ? 0 : idx + 1;
-      }
-      focusable[next].focus();
-    };
-
-    // Use capture phase so we intercept Tab before anything else.
-    document.addEventListener('keydown', handler, true);
-    return () => document.removeEventListener('keydown', handler, true);
-  }, [isOpen, onCancel]);
+  useModalFocusTrap({
+    ref: modalRef,
+    disabled: !isOpen,
+    onEscape: () => {
+      onCancel();
+      return true;
+    },
+  });
 
   if (!isOpen) {
     return null;
@@ -130,78 +94,78 @@ const ScaleModal = ({
   };
 
   return (
-    <div className="modal-overlay">
-      <div
-        ref={modalRef}
-        className="modal-container scale-modal"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="modal-header">
-          <h2>Scale {kind}</h2>
-        </div>
-        <div className="scale-modal-body">
-          <div className="scale-modal-fields">
-            {namespace && (
-              <>
-                <label className="scale-modal-label">Namespace:</label>
-                <span className="scale-modal-value">{namespace}</span>
-              </>
-            )}
-            {name && (
-              <>
-                <label className="scale-modal-label">{kind || 'Workload'}:</label>
-                <span className="scale-modal-value">{name}</span>
-              </>
-            )}
-            <label className="scale-modal-label" htmlFor="scale-replicas">
-              Replicas:
-            </label>
-            <div className="scale-input-group">
-              <button
-                className="scale-spinner-btn"
-                type="button"
-                tabIndex={-1}
-                onClick={() => handleIncrement(-1)}
-                disabled={value === 0 || loading}
-              >
-                −
-              </button>
-              <input
-                id="scale-replicas"
-                type="text"
-                inputMode="numeric"
-                value={inputText}
-                onChange={handleInputChange}
-                onBlur={handleBlur}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !unchanged) onApply();
-                }}
-                className="scale-input"
-                disabled={loading}
-              />
-              <button
-                className="scale-spinner-btn"
-                type="button"
-                tabIndex={-1}
-                onClick={() => handleIncrement(1)}
-                disabled={value >= 9999 || loading}
-              >
-                +
-              </button>
-            </div>
+    <ModalSurface
+      modalRef={modalRef}
+      labelledBy="scale-modal-title"
+      onClose={onCancel}
+      containerClassName="scale-modal"
+      closeOnBackdrop={false}
+    >
+      <div className="modal-header">
+        <h2 id="scale-modal-title">Scale {kind}</h2>
+      </div>
+      <div className="scale-modal-body">
+        <div className="scale-modal-fields">
+          {namespace && (
+            <>
+              <label className="scale-modal-label">Namespace:</label>
+              <span className="scale-modal-value">{namespace}</span>
+            </>
+          )}
+          {name && (
+            <>
+              <label className="scale-modal-label">{kind || 'Workload'}:</label>
+              <span className="scale-modal-value">{name}</span>
+            </>
+          )}
+          <label className="scale-modal-label" htmlFor="scale-replicas">
+            Replicas:
+          </label>
+          <div className="scale-input-group">
+            <button
+              className="scale-spinner-btn"
+              type="button"
+              tabIndex={-1}
+              onClick={() => handleIncrement(-1)}
+              disabled={value === 0 || loading}
+            >
+              −
+            </button>
+            <input
+              id="scale-replicas"
+              type="text"
+              inputMode="numeric"
+              value={inputText}
+              onChange={handleInputChange}
+              onBlur={handleBlur}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !unchanged) onApply();
+              }}
+              className="scale-input"
+              disabled={loading}
+            />
+            <button
+              className="scale-spinner-btn"
+              type="button"
+              tabIndex={-1}
+              onClick={() => handleIncrement(1)}
+              disabled={value >= 9999 || loading}
+            >
+              +
+            </button>
           </div>
         </div>
-        {error && <div className="scale-modal-error">{error}</div>}
-        <div className="scale-modal-footer">
-          <button className="button cancel" onClick={onCancel} disabled={loading}>
-            Cancel
-          </button>
-          <button className="button warning" onClick={onApply} disabled={loading || unchanged}>
-            {loading ? 'Scaling…' : 'Scale'}
-          </button>
-        </div>
       </div>
-    </div>
+      {error && <div className="scale-modal-error">{error}</div>}
+      <div className="scale-modal-footer">
+        <button className="button cancel" onClick={onCancel} disabled={loading}>
+          Cancel
+        </button>
+        <button className="button warning" onClick={onApply} disabled={loading || unchanged}>
+          {loading ? 'Scaling…' : 'Scale'}
+        </button>
+      </div>
+    </ModalSurface>
   );
 };
 

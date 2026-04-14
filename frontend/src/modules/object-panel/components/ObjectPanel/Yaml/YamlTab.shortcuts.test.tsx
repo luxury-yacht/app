@@ -10,9 +10,11 @@ import YamlTab from './YamlTab';
 
 const shortcutMocks = vi.hoisted(() => ({
   useShortcut: vi.fn(),
+  useKeyboardSurface: vi.fn(),
 }));
 
 vi.mock('@ui/shortcuts', () => ({
+  useKeyboardSurface: (...args: unknown[]) => shortcutMocks.useKeyboardSurface(...args),
   useShortcut: (...args: unknown[]) => shortcutMocks.useShortcut(...args),
   useSearchShortcutTarget: () => undefined,
 }));
@@ -58,6 +60,7 @@ describe('YamlTab shortcuts', () => {
 
   beforeEach(async () => {
     shortcutMocks.useShortcut.mockClear();
+    shortcutMocks.useKeyboardSurface.mockClear();
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);

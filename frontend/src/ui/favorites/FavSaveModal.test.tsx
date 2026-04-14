@@ -19,12 +19,20 @@ import type { Favorite, FavoriteFilters, FavoriteTableState } from '@/core/persi
 vi.mock('@ui/shortcuts', () => ({
   useShortcut: vi.fn(),
   useKeyboardContext: () => ({
-    pushContext: vi.fn(),
-    popContext: vi.fn(),
+    registerShortcut: vi.fn(),
+    unregisterShortcut: vi.fn(),
+    getAvailableShortcuts: vi.fn(() => []),
+    isShortcutAvailable: vi.fn(() => false),
+    setEnabled: vi.fn(),
+    isEnabled: true,
+    registerSurface: vi.fn(),
+    unregisterSurface: vi.fn(),
+    updateSurface: vi.fn(),
+    dispatchNativeAction: vi.fn(() => false),
+    hasActiveBlockingSurface: vi.fn(() => false),
   }),
   useShortcuts: vi.fn(),
   useSearchShortcutTarget: () => undefined,
-  useKeyboardNavigationScope: vi.fn(),
 }));
 
 vi.mock('@shared/components/modals/useModalFocusTrap', () => ({
