@@ -49,6 +49,12 @@
   white-space: nowrap;
 }
 
+.create-resource-context-value {
+  color: var(--color-text);
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+
 /* YAML editor container — capped at 900px so the YAML panel overlays
    from the right at narrow viewports and sits beside it at wide ones. */
 .create-resource-editor {

@@ -88,6 +88,12 @@ const wailsMock = vi.hoisted(() => ({
     apiVersion: 'apps/v1',
     resourceVersion: '1',
   }),
+  ValidateObjectYaml: vi.fn().mockResolvedValue({
+    resourceVersion: '2',
+  }),
+  ApplyObjectYaml: vi.fn().mockResolvedValue({
+    resourceVersion: '3',
+  }),
 }));
 
 const codeMirrorMock = vi.hoisted(() => ({
@@ -266,6 +272,7 @@ vi.mock('@utils/errorHandler', () => ({
 
 vi.mock('@/core/refresh', () => ({
   refreshOrchestrator: {
+    fetchScopedDomain: vi.fn().mockResolvedValue(undefined),
     triggerManualRefreshForContext: vi.fn().mockResolvedValue(undefined),
   },
   useRefreshScopedDomain: () => namespaceDomainMock,
@@ -290,6 +297,8 @@ vi.mock('@wailsjs/go/backend/App', () => ({
   GetResourceTemplates: wailsMock.GetResourceTemplates,
   ValidateResourceCreation: wailsMock.ValidateResourceCreation,
   CreateResource: wailsMock.CreateResource,
+  ValidateObjectYaml: wailsMock.ValidateObjectYaml,
+  ApplyObjectYaml: wailsMock.ApplyObjectYaml,
 }));
 
 vi.mock('@modules/object-panel/components/ObjectPanel/Yaml/yamlErrors', () => ({
@@ -424,6 +433,19 @@ const createDeferred = <T,>(): Deferred<T> => {
   return { promise, resolve, reject };
 };
 
+const EDIT_YAML = `
+apiVersion: v1
+kind: Pod
+metadata:
+  name: demo
+  namespace: default
+  resourceVersion: "123"
+spec:
+  containers:
+    - name: demo
+      image: demo:v1
+`.trim();
+
 // --- Tests ---
 
 describe('CreateResourceModal', () => {
@@ -436,6 +458,8 @@ describe('CreateResourceModal', () => {
     wailsMock.GetResourceTemplates.mockClear();
     wailsMock.ValidateResourceCreation.mockClear();
     wailsMock.CreateResource.mockClear();
+    wailsMock.ValidateObjectYaml.mockClear();
+    wailsMock.ApplyObjectYaml.mockClear();
     codeMirrorMock.renders = [];
     kubeconfigMock.selectedClusterId = 'config:test-cluster';
     kubeconfigMock.selectedClusterName = 'test-cluster';
@@ -466,6 +490,36 @@ describe('CreateResourceModal', () => {
     expect(container.textContent).toContain('Validate');
     expect(container.textContent).toContain('Create');
     expect(container.textContent).toContain('Cancel');
+    await unmount();
+  });
+
+  it('renders edit-mode controls when opened with an edit request', async () => {
+    const { container, unmount } = await renderModal({
+      isOpen: true,
+      onClose: vi.fn(),
+      request: {
+        mode: 'edit',
+        clusterId: 'config:test-cluster',
+        initialYaml: EDIT_YAML,
+        scope: 'default:pod:demo',
+        identity: {
+          apiVersion: 'v1',
+          kind: 'Pod',
+          name: 'demo',
+          namespace: 'default',
+          resourceVersion: '123',
+        },
+      },
+    });
+    await flushPromises();
+
+    expect(container.textContent).toContain('Edit Pod');
+    expect(container.textContent).toContain('Save');
+    expect(container.textContent).not.toContain('Create');
+    expect(container.textContent).toContain('test-cluster');
+    expect(container.textContent).toContain('Pod');
+    expect(wailsMock.GetResourceTemplates).not.toHaveBeenCalled();
+
     await unmount();
   });
 
@@ -655,6 +709,118 @@ describe('CreateResourceModal', () => {
       'config:test-cluster',
       expect.objectContaining({ yaml: expect.any(String) })
     );
+    await unmount();
+  });
+
+  it('validates edited YAML through the object YAML endpoint in edit mode', async () => {
+    const { container, unmount } = await renderModal({
+      isOpen: true,
+      onClose: vi.fn(),
+      request: {
+        mode: 'edit',
+        clusterId: 'config:test-cluster',
+        initialYaml: EDIT_YAML,
+        scope: 'default:pod:demo',
+        identity: {
+          apiVersion: 'v1',
+          kind: 'Pod',
+          name: 'demo',
+          namespace: 'default',
+          resourceVersion: '123',
+        },
+      },
+    });
+    await flushPromises();
+
+    const validateBtn = Array.from(container.querySelectorAll('button')).find(
+      (b) => b.textContent === 'Validate'
+    );
+
+    await act(async () => {
+      validateBtn?.click();
+    });
+    await flushPromises();
+
+    expect(wailsMock.ValidateObjectYaml).toHaveBeenCalledWith(
+      'config:test-cluster',
+      expect.objectContaining({
+        yaml: expect.stringContaining('kind: Pod'),
+        kind: 'Pod',
+        apiVersion: 'v1',
+        namespace: 'default',
+        name: 'demo',
+        resourceVersion: '123',
+      })
+    );
+
+    await unmount();
+  });
+
+  it('saves edited YAML and refreshes the object YAML domain in edit mode', async () => {
+    const onClose = vi.fn();
+    const refreshModule = await import('@/core/refresh');
+    const { container, unmount } = await renderModal({
+      isOpen: true,
+      onClose,
+      request: {
+        mode: 'edit',
+        clusterId: 'config:test-cluster',
+        initialYaml: EDIT_YAML,
+        scope: 'default:pod:demo',
+        identity: {
+          apiVersion: 'v1',
+          kind: 'Pod',
+          name: 'demo',
+          namespace: 'default',
+          resourceVersion: '123',
+        },
+      },
+    });
+    await flushPromises();
+
+    const editor = container.querySelector('[data-testid="yaml-editor"]') as HTMLTextAreaElement;
+    const setEditorValue = Object.getOwnPropertyDescriptor(
+      HTMLTextAreaElement.prototype,
+      'value'
+    )?.set;
+    await act(async () => {
+      setEditorValue?.call(editor, EDIT_YAML.replace('demo:v1', 'demo:v2'));
+      editor.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+
+    const saveBtn = Array.from(container.querySelectorAll('button')).find(
+      (b) => b.textContent === 'Save'
+    );
+    await act(async () => {
+      saveBtn?.click();
+    });
+    await flushPromises();
+
+    expect(wailsMock.ValidateObjectYaml).toHaveBeenCalled();
+    expect(wailsMock.ApplyObjectYaml).toHaveBeenCalledWith(
+      'config:test-cluster',
+      expect.objectContaining({
+        yaml: expect.stringContaining('demo:v2'),
+        kind: 'Pod',
+        apiVersion: 'v1',
+        namespace: 'default',
+        name: 'demo',
+        resourceVersion: '2',
+      })
+    );
+    expect(refreshModule.refreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
+      'object-yaml',
+      'default:pod:demo',
+      expect.objectContaining({ isManual: true })
+    );
+    expect(refreshModule.refreshOrchestrator.triggerManualRefreshForContext).toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalled();
+    expect(errorContextMock.addError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userMessage: 'Saved Pod/demo in namespace default on cluster test-cluster',
+      })
+    );
+
     await unmount();
   });
 

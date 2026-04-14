@@ -10,6 +10,8 @@ import { EditorSelection, type Extension } from '@codemirror/state';
 import * as YAML from 'yaml';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import ContextMenu, { type ContextMenuItem } from '@shared/components/ContextMenu';
+import CreateResourceModal from '@ui/modals/CreateResourceModal';
+import type { CreateResourceModalRequest } from '@ui/modals/create-resource/types';
 import { deriveCopyText } from '@ui/shortcuts/context';
 import { useKeyboardSurface, useShortcut, useSearchShortcutTarget } from '@ui/shortcuts';
 import { errorHandler } from '@utils/errorHandler';
@@ -72,6 +74,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
     yaml: string;
     resourceVersion: string | null;
   } | null>(null);
+  const [editModalRequest, setEditModalRequest] = useState<CreateResourceModalRequest | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [hasServerYamlError, setHasServerYamlError] = useState(false);
   const [contextMenu, setContextMenu] = useState<{
@@ -564,31 +567,23 @@ const YamlTab: React.FC<YamlTabProps> = ({
     const seedYaml = manualYamlOverride?.yaml ?? displayYaml ?? '';
     const preparedDraft = prepareDraftYaml(normalizeYamlString(seedYaml), showManagedFields);
 
-    setDraftYaml(preparedDraft);
-    setBaselineIdentity(identityForEditing);
-    setBaselineResourceVersion(identityForEditing.resourceVersion ?? null);
-    setLintError(null);
     setActionError(null);
     setActionDetails([]);
-    setHasRemoteDrift(false);
-    setDriftForced(false);
-    setBackendDriftDiff(null);
-    setHasServerYamlError(false);
-    setLatestObjectIdentity(identityForEditing);
-    setManualYamlOverride(
-      (current) =>
-        current ?? {
-          yaml: normalizeYamlString(seedYaml),
-          resourceVersion: identityForEditing.resourceVersion ?? null,
-        }
-    );
-    setIsEditing(true);
+    setEditModalRequest({
+      mode: 'edit',
+      clusterId: resolvedClusterId,
+      initialYaml: preparedDraft,
+      scope,
+      identity: identityForEditing,
+    });
   }, [
     canEdit,
     displayYaml,
     latestObjectIdentity,
     manualYamlOverride,
     objectIdentity,
+    resolvedClusterId,
+    scope,
     showManagedFields,
   ]);
 
@@ -1047,6 +1042,11 @@ const YamlTab: React.FC<YamlTabProps> = ({
   const isLargeManifest = activeYaml.length > LARGE_MANIFEST_THRESHOLD;
   return (
     <div className="object-panel-tab-content">
+      <CreateResourceModal
+        isOpen={!!editModalRequest}
+        onClose={() => setEditModalRequest(null)}
+        request={editModalRequest}
+      />
       <div className="yaml-display">
         <div className="yaml-header">
           <div className="yaml-controls">
