@@ -550,6 +550,7 @@ describe('DockablePanel behaviour (real hook)', () => {
     cafSpy.mockRestore();
     await unmount();
   });
+
   it('closes the panel when the close button is clicked', async () => {
     const Host: React.FC = () => {
       const [open, setOpen] = React.useState(true);

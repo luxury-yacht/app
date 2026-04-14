@@ -7,6 +7,8 @@
 import { getContentBounds } from './dockablePanelLayout';
 import { getObjectPanelLayoutDefaults } from '@core/settings/appPreferences';
 import { createInitialTabGroupState } from './tabGroupState';
+import { getGroupForPanel } from './tabGroupState';
+import { getGroupTabs } from './tabGroupState';
 import { removePanelFromGroup } from './tabGroupState';
 import type { TabGroupState } from './tabGroupTypes';
 
@@ -40,6 +42,9 @@ export interface PanelLayoutStore {
   setPanelOpenById: (panelId: string, isOpen: boolean) => void;
   copyPanelLayoutState: (sourcePanelId: string, targetPanelId: string) => void;
   clearPanelState: (panelId: string) => void;
+  handoffLayoutBeforeClose: (panelId: string) => void;
+  setGroupLeader: (groupKey: string, panelId: string) => void;
+  clearGroupLeader: (groupKey: string) => void;
   registerPanelCloseHandler: (panelId: string, handler: (reason: PanelCloseReason) => void) => void;
   unregisterPanelCloseHandler: (
     panelId: string,
@@ -100,6 +105,7 @@ export function createPanelLayoutStore(): PanelLayoutStore {
   const panelStates = new Map<string, PanelLayoutState>();
   const panelListeners = new Map<string, Set<PanelListener>>();
   const panelCloseHandlers = new Map<string, Set<(reason: PanelCloseReason) => void>>();
+  const groupLeaders = new Map<string, string>();
   let zIndexCounter = 1000;
 
   // tabGroups slice — owned by each store instance, independent of
@@ -213,6 +219,40 @@ export function createPanelLayoutStore(): PanelLayoutStore {
         isMaximized: sourceState.isMaximized,
         zIndex: Math.max(targetState.zIndex, sourceState.zIndex),
       });
+    },
+    handoffLayoutBeforeClose: (panelId: string) => {
+      const currentGroupKey = getGroupForPanel(tabGroups, panelId);
+      if (!currentGroupKey) {
+        return;
+      }
+
+      const currentGroup = getGroupTabs(tabGroups, currentGroupKey);
+      const currentLeader = groupLeaders.get(currentGroupKey) ?? currentGroup?.tabs[0] ?? null;
+      const nextTabGroups = removePanelFromGroup(tabGroups, panelId);
+      const nextGroup = getGroupTabs(nextTabGroups, currentGroupKey);
+      const nextLeader = nextGroup?.tabs[0] ?? null;
+
+      if (currentLeader === panelId && nextLeader) {
+        const sourceState = panelStates.get(panelId);
+        if (!sourceState) {
+          return;
+        }
+        const targetState = getInitialState(nextLeader);
+        updateState(nextLeader, {
+          floatingSize: { ...sourceState.floatingSize },
+          rightSize: { ...sourceState.rightSize },
+          bottomSize: { ...sourceState.bottomSize },
+          floatingPosition: { ...sourceState.floatingPosition },
+          isMaximized: sourceState.isMaximized,
+          zIndex: Math.max(targetState.zIndex, sourceState.zIndex),
+        });
+      }
+    },
+    setGroupLeader: (groupKey: string, panelId: string) => {
+      groupLeaders.set(groupKey, panelId);
+    },
+    clearGroupLeader: (groupKey: string) => {
+      groupLeaders.delete(groupKey);
     },
     clearPanelState: (panelId: string) => {
       setTabGroups((prev) => removePanelFromGroup(prev, panelId));

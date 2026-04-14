@@ -67,6 +67,18 @@ export function clearPanelState(panelId: string) {
   getActivePanelLayoutStore().clearPanelState(panelId);
 }
 
+export function handoffLayoutBeforeClose(panelId: string) {
+  getActivePanelLayoutStore().handoffLayoutBeforeClose(panelId);
+}
+
+export function setGroupLeader(groupKey: string, panelId: string) {
+  getActivePanelLayoutStore().setGroupLeader(groupKey, panelId);
+}
+
+export function clearGroupLeader(groupKey: string) {
+  getActivePanelLayoutStore().clearGroupLeader(groupKey);
+}
+
 export function registerPanelCloseHandler(
   panelId: string,
   handler: (reason: PanelCloseReason) => void

@@ -36,6 +36,7 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
 
 vi.mock('@ui/dockable/useDockablePanelState', () => ({
   clearPanelState: vi.fn(),
+  handoffLayoutBeforeClose: vi.fn(),
 }));
 
 beforeAll(() => {
