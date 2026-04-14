@@ -617,7 +617,8 @@ const NodeLogsTab = ({
       return;
     }
 
-    const rowCount = isParsedView ? parsedLogs.length : renderedDisplayRows.length;
+    const rowCount =
+      content.length === 0 ? 0 : isParsedView ? parsedLogs.length : renderedDisplayRows.length;
     if (rowCount === 0) {
       return;
     }
@@ -638,7 +639,15 @@ const NodeLogsTab = ({
     scrollEl.scrollTop = targetScrollTop;
     scrollRestoredRef.current = true;
     forceTailRestoreRef.current = false;
-  }, [getScrollContainer, isParsedView, panelId, parsedLogs.length, renderedDisplayRows.length]);
+  }, [
+    content.length,
+    getScrollContainer,
+    isParsedView,
+    panelId,
+    parsedLogs.length,
+    renderedDisplayRows.length,
+    selectedSource?.path,
+  ]);
 
   useEffect(() => {
     if (!wasAtBottomRef.current || !scrollRestoredRef.current) {
@@ -681,7 +690,13 @@ const NodeLogsTab = ({
         cancelAnimationFrame(rafId);
       }
     };
-  }, [getScrollContainer, isParsedView, parsedLogs.length, renderedDisplayRows.length]);
+  }, [
+    getScrollContainer,
+    isParsedView,
+    parsedLogs.length,
+    renderedDisplayRows.length,
+    selectedSource?.path,
+  ]);
 
   const handleParsedTableClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
     const row = (event.target as HTMLElement | null)?.closest<HTMLElement>('.gridtable-row');
