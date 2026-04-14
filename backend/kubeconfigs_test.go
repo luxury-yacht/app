@@ -2,11 +2,13 @@ package backend
 
 import (
 	"context"
+	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
 
+	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -180,7 +182,7 @@ func TestNormalizeKubeconfigSearchPathsDedupesResolvedPaths(t *testing.T) {
 	}
 
 	normalized := normalizeKubeconfigSearchPaths(paths)
-	require.Equal(t, []string{"~/config", "~/.kube"}, normalized)
+	require.Equal(t, []string{"~/config"}, normalized)
 }
 
 func TestNormalizeKubeconfigSearchPathsWindowsCaseInsensitive(t *testing.T) {
@@ -195,8 +197,8 @@ func TestNormalizeKubeconfigSearchPathsWindowsCaseInsensitive(t *testing.T) {
 	}
 
 	normalized := normalizeKubeconfigSearchPaths(paths)
-	require.Len(t, normalized, 2)
-	require.Contains(t, normalized, "~/.kube")
+	require.Len(t, normalized, 1)
+	require.Contains(t, normalized, `C:\Users\Example\.kube`)
 }
 
 func TestNormalizeKubeconfigSearchPathsMixedFilesAndDirs(t *testing.T) {
@@ -221,7 +223,7 @@ func TestNormalizeKubeconfigSearchPathsMixedFilesAndDirs(t *testing.T) {
 	normalized := normalizeKubeconfigSearchPaths(paths)
 	require.Equal(
 		t,
-		[]string{filepath.Join("~", dirName), filepath.Join("~", fileName), "~/.kube"},
+		[]string{filepath.Join("~", dirName), filepath.Join("~", fileName)},
 		normalized,
 	)
 }
@@ -253,11 +255,83 @@ func TestApp_SetKubeconfigSearchPathsPersistsAndDiscovers(t *testing.T) {
 
 	settings, err := app.loadSettingsFile()
 	require.NoError(t, err)
-	require.Equal(t, []string{dirPath, fileOnlyPath, "~/.kube"}, settings.Kubeconfig.SearchPaths)
+	require.Equal(t, []string{dirPath, fileOnlyPath}, settings.Kubeconfig.SearchPaths)
 
 	require.NotEmpty(t, app.availableKubeconfigs)
 	assert.True(t, hasKubeconfig(app.availableKubeconfigs, dirConfigPath, "dir-context"))
 	assert.True(t, hasKubeconfig(app.availableKubeconfigs, fileOnlyPath, "file-context"))
+}
+
+func TestApp_SetKubeconfigSearchPathsPrunesSelectionsFromRemovedPaths(t *testing.T) {
+	setTestConfigEnv(t)
+	app := NewApp()
+	app.Ctx = context.Background()
+	app.appSettings = getDefaultAppSettings()
+	app.refreshAggregates = &refreshAggregateHandlers{}
+	app.refreshHTTPServer = &http.Server{}
+	app.refreshCtx = context.Background()
+
+	baseDir := t.TempDir()
+	dirA := filepath.Join(baseDir, "configs-a")
+	dirB := filepath.Join(baseDir, "configs-b")
+	require.NoError(t, os.MkdirAll(dirA, 0o755))
+	require.NoError(t, os.MkdirAll(dirB, 0o755))
+
+	configA := createTempKubeconfig(t, dirA, "cluster-a", "ctx-a")
+	configB := createTempKubeconfig(t, dirB, "cluster-b", "ctx-b")
+
+	require.NoError(t, app.SetKubeconfigSearchPaths([]string{dirA, dirB}))
+
+	selectionA := configA + ":ctx-a"
+	selectionB := configB + ":ctx-b"
+	app.kubeconfigsMu.Lock()
+	app.selectedKubeconfigs = []string{selectionA, selectionB}
+	app.kubeconfigsMu.Unlock()
+	app.appSettings.SelectedKubeconfigs = []string{selectionA, selectionB}
+
+	metaA := app.clusterMetaForSelection(kubeconfigSelection{Path: configA, Context: "ctx-a"})
+	metaB := app.clusterMetaForSelection(kubeconfigSelection{Path: configB, Context: "ctx-b"})
+
+	app.clusterClients[metaA.ID] = &clusterClients{
+		meta:              metaA,
+		kubeconfigPath:    configA,
+		kubeconfigContext: "ctx-a",
+	}
+	app.clusterClients[metaB.ID] = &clusterClients{
+		meta:              metaB,
+		kubeconfigPath:    configB,
+		kubeconfigContext: "ctx-b",
+	}
+	app.refreshSubsystems[metaA.ID] = &system.Subsystem{}
+	app.refreshSubsystems[metaB.ID] = &system.Subsystem{}
+
+	require.NoError(t, app.SetKubeconfigSearchPaths([]string{dirA}))
+
+	assert.Equal(t, []string{selectionA}, app.GetSelectedKubeconfigs())
+	require.NotNil(t, app.appSettings)
+	assert.Equal(t, []string{selectionA}, app.appSettings.SelectedKubeconfigs)
+
+	_, kept := app.clusterClients[metaA.ID]
+	assert.True(t, kept)
+	_, removed := app.clusterClients[metaB.ID]
+	assert.False(t, removed)
+
+	settings, err := app.loadSettingsFile()
+	require.NoError(t, err)
+	assert.Equal(t, []string{dirA}, settings.Kubeconfig.SearchPaths)
+}
+
+func TestApp_SetKubeconfigSearchPathsRejectsEmptyList(t *testing.T) {
+	setTestConfigEnv(t)
+	app := NewApp()
+
+	err := app.SetKubeconfigSearchPaths([]string{" ", ""})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "at least one kubeconfig search path is required")
+
+	settings, loadErr := app.loadSettingsFile()
+	require.NoError(t, loadErr)
+	assert.Equal(t, defaultKubeconfigSearchPaths(), settings.Kubeconfig.SearchPaths)
 }
 
 func TestApp_GetSelectedKubeconfigs(t *testing.T) {

@@ -175,29 +175,36 @@ func (a *App) GetKubeconfigSearchPaths() ([]string, error) {
 
 // SetKubeconfigSearchPaths persists the search paths and refreshes kubeconfig discovery.
 func (a *App) SetKubeconfigSearchPaths(paths []string) error {
-	normalized := normalizeKubeconfigSearchPaths(paths)
-
-	settings, err := a.loadSettingsFile()
-	if err != nil {
-		return err
-	}
-
-	settings.Kubeconfig.SearchPaths = normalized
-	if err := a.saveSettingsFile(settings); err != nil {
-		return err
-	}
-
-	if err := a.discoverKubeconfigs(); err != nil {
-		a.logger.Warn(fmt.Sprintf("Failed to refresh kubeconfig discovery: %v", err), "KubeconfigManager")
-	}
-	if a.kubeconfigWatcher != nil {
-		watchPaths := a.resolvedKubeconfigWatchPaths()
-		if updateErr := a.kubeconfigWatcher.updateWatchedPaths(watchPaths); updateErr != nil {
-			a.logger.Warn(fmt.Sprintf("Failed to update watched paths: %v", updateErr), "KubeconfigWatcher")
+	return a.runSelectionMutation("set-kubeconfig-search-paths", func(mutation *selectionMutation) error {
+		normalized := normalizeKubeconfigSearchPaths(paths)
+		if len(normalized) == 0 {
+			return fmt.Errorf("at least one kubeconfig search path is required")
 		}
-	}
 
-	return nil
+		a.settingsMu.Lock()
+		settings, err := a.loadSettingsFile()
+		if err == nil {
+			settings.Kubeconfig.SearchPaths = normalized
+			err = a.saveSettingsFile(settings)
+		}
+		a.settingsMu.Unlock()
+		if err != nil {
+			return err
+		}
+
+		if err := a.discoverKubeconfigs(); err != nil {
+			a.logger.Warn(fmt.Sprintf("Failed to refresh kubeconfig discovery: %v", err), "KubeconfigManager")
+		}
+		if a.kubeconfigWatcher != nil {
+			watchPaths := a.resolvedKubeconfigWatchPaths()
+			if updateErr := a.kubeconfigWatcher.updateWatchedPaths(watchPaths); updateErr != nil {
+				a.logger.Warn(fmt.Sprintf("Failed to update watched paths: %v", updateErr), "KubeconfigWatcher")
+			}
+		}
+
+		a.pruneSelectionsAgainstDiscoveredKubeconfigs()
+		return nil
+	})
 }
 
 // OpenKubeconfigSearchPathDialog opens a directory picker for kubeconfig search paths.
@@ -251,10 +258,6 @@ func (a *App) defaultKubeconfigSearchDirectory() string {
 func normalizeKubeconfigSearchPaths(paths []string) []string {
 	normalized := make([]string, 0, len(paths))
 	seen := make(map[string]struct{}, len(paths))
-	// Always retain the default kubeconfig location in the list.
-	defaultEntry := defaultKubeconfigSearchPaths()[0]
-	defaultResolved := resolveKubeconfigSearchPath(defaultEntry)
-	defaultKey := kubeconfigPathKey(defaultResolved)
 
 	for _, path := range paths {
 		trimmed := strings.TrimSpace(path)
@@ -263,23 +266,11 @@ func normalizeKubeconfigSearchPaths(paths []string) []string {
 		}
 		resolved := resolveKubeconfigSearchPath(trimmed)
 		key := kubeconfigPathKey(resolved)
-		if key == defaultKey {
-			if _, exists := seen[defaultKey]; exists {
-				continue
-			}
-			seen[defaultKey] = struct{}{}
-			normalized = append(normalized, defaultEntry)
-			continue
-		}
 		if _, exists := seen[key]; exists {
 			continue
 		}
 		seen[key] = struct{}{}
 		normalized = append(normalized, trimmed)
-	}
-
-	if _, exists := seen[defaultKey]; !exists {
-		normalized = append(normalized, defaultEntry)
 	}
 
 	return normalized
@@ -898,9 +889,67 @@ func (a *App) deselectClusters(clusterIDs []string) {
 		}
 	}
 
+	a.applySelectionPrune(remainingSelections, remainingParsed, clusterIDs, "KubeconfigWatcher")
+}
+
+// pruneSelectionsAgainstDiscoveredKubeconfigs drops active selections that are no longer discoverable.
+// Caller must already hold the coordinated selection mutation boundary.
+func (a *App) pruneSelectionsAgainstDiscoveredKubeconfigs() {
+	currentSelections := a.GetSelectedKubeconfigs()
+	if len(currentSelections) == 0 {
+		return
+	}
+
+	remainingSelections := make([]string, 0, len(currentSelections))
+	remainingParsed := make([]kubeconfigSelection, 0, len(currentSelections))
+	removedClusterIDs := make([]string, 0)
+	removedSeen := make(map[string]struct{})
+
+	for _, raw := range currentSelections {
+		parsed, err := parseKubeconfigSelection(raw)
+		if err == nil && a.validateKubeconfigSelection(parsed) == nil {
+			remainingSelections = append(remainingSelections, parsed.String())
+			remainingParsed = append(remainingParsed, parsed)
+			continue
+		}
+
+		if err == nil {
+			if clients := a.clusterClientsForSelection(parsed); clients != nil && clients.meta.ID != "" {
+				if _, exists := removedSeen[clients.meta.ID]; !exists {
+					removedSeen[clients.meta.ID] = struct{}{}
+					removedClusterIDs = append(removedClusterIDs, clients.meta.ID)
+				}
+				continue
+			}
+
+			meta := a.clusterMetaForSelection(parsed)
+			if meta.ID != "" {
+				if _, exists := removedSeen[meta.ID]; !exists {
+					removedSeen[meta.ID] = struct{}{}
+					removedClusterIDs = append(removedClusterIDs, meta.ID)
+				}
+			}
+		}
+	}
+
+	if len(remainingSelections) == len(currentSelections) {
+		return
+	}
+
+	a.applySelectionPrune(remainingSelections, remainingParsed, removedClusterIDs, "KubeconfigManager")
+}
+
+// applySelectionPrune commits an already-computed selection prune and tears down removed cluster state.
+// Caller must already hold the coordinated selection mutation boundary.
+func (a *App) applySelectionPrune(
+	remainingSelections []string,
+	remainingParsed []kubeconfigSelection,
+	removedClusterIDs []string,
+	logComponent string,
+) {
 	if len(remainingParsed) > 0 {
 		if err := a.updateRefreshSubsystemSelections(remainingParsed); err != nil {
-			a.logger.Warn(fmt.Sprintf("Failed to reconcile refresh subsystems after deselect, aborting: %v", err), "KubeconfigWatcher")
+			a.logger.Warn(fmt.Sprintf("Failed to reconcile refresh subsystems after deselect, aborting: %v", err), logComponent)
 			return
 		}
 	} else {
@@ -913,7 +962,7 @@ func (a *App) deselectClusters(clusterIDs []string) {
 
 	var authManagers []interface{ Shutdown() }
 	a.clusterClientsMu.Lock()
-	for _, id := range clusterIDs {
+	for _, id := range removedClusterIDs {
 		if clients, ok := a.clusterClients[id]; ok {
 			if clients != nil && clients.authManager != nil {
 				authManagers = append(authManagers, clients.authManager)
@@ -925,21 +974,22 @@ func (a *App) deselectClusters(clusterIDs []string) {
 	for _, mgr := range authManagers {
 		mgr.Shutdown()
 	}
-	for _, id := range clusterIDs {
+	for _, id := range removedClusterIDs {
 		if err := a.StopClusterShellSessions(id); err != nil && a.logger != nil {
-			a.logger.Warn(fmt.Sprintf("Failed to stop shell sessions for deselected cluster %s: %v", id, err), "KubeconfigWatcher")
+			a.logger.Warn(fmt.Sprintf("Failed to stop shell sessions for deselected cluster %s: %v", id, err), logComponent)
 		}
 		if err := a.StopClusterPortForwards(id); err != nil && a.logger != nil {
-			a.logger.Warn(fmt.Sprintf("Failed to stop port forwards for deselected cluster %s: %v", id, err), "KubeconfigWatcher")
+			a.logger.Warn(fmt.Sprintf("Failed to stop port forwards for deselected cluster %s: %v", id, err), logComponent)
 		}
 	}
 
 	a.settingsMu.Lock()
-	if a.appSettings != nil {
-		a.appSettings.SelectedKubeconfigs = append([]string(nil), remainingSelections...)
-		if err := a.saveAppSettings(); err != nil {
-			a.logger.Warn(fmt.Sprintf("Failed to save updated selection: %v", err), "KubeconfigWatcher")
-		}
+	if a.appSettings == nil {
+		a.appSettings = getDefaultAppSettings()
+	}
+	a.appSettings.SelectedKubeconfigs = append([]string(nil), remainingSelections...)
+	if err := a.saveAppSettings(); err != nil {
+		a.logger.Warn(fmt.Sprintf("Failed to save updated selection: %v", err), logComponent)
 	}
 	a.settingsMu.Unlock()
 }
