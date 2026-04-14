@@ -1,7 +1,5 @@
 # TODO
 
-- can we get node logs?
-
 - Allow remove of default kubeconfig path, if not the last
 
 - Resource creation
