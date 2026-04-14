@@ -98,12 +98,9 @@ function Settings({ onClose }: SettingsProps) {
   );
   // Track kubeconfig search paths for the settings panel.
   const [kubeconfigPaths, setKubeconfigPaths] = useState<string[]>([]);
-  const [savedKubeconfigPaths, setSavedKubeconfigPaths] = useState<string[]>([]);
   const [kubeconfigPathsLoading, setKubeconfigPathsLoading] = useState(false);
   const [kubeconfigPathsSaving, setKubeconfigPathsSaving] = useState(false);
   const [kubeconfigPathsSelecting, setKubeconfigPathsSelecting] = useState(false);
-  // Keep the default kubeconfig search path pinned in the list.
-  const defaultKubeconfigPath = '~/.kube';
   // Palette tint state for hue/saturation/brightness sliders
   const [paletteHue, setPaletteHue] = useState(0);
   const [paletteSaturation, setPaletteSaturation] = useState(0);
@@ -154,9 +151,6 @@ function Settings({ onClose }: SettingsProps) {
   const [isClearStateConfirmOpen, setIsClearStateConfirmOpen] = useState(false);
   // Controls the confirmation modal for resetting view persistence.
   const [isResetViewsConfirmOpen, setIsResetViewsConfirmOpen] = useState(false);
-  const pathsDirty =
-    kubeconfigPaths.length !== savedKubeconfigPaths.length ||
-    kubeconfigPaths.some((path, index) => path !== savedKubeconfigPaths[index]);
 
   useEffect(() => {
     loadThemeInfo();
@@ -259,11 +253,25 @@ function Settings({ onClose }: SettingsProps) {
       const paths = await GetKubeconfigSearchPaths();
       const normalized = paths || [];
       setKubeconfigPaths(normalized);
-      setSavedKubeconfigPaths(normalized);
     } catch (error) {
       errorHandler.handle(error, { action: 'loadKubeconfigPaths' });
     } finally {
       setKubeconfigPathsLoading(false);
+    }
+  };
+
+  const persistKubeconfigPaths = async (nextPaths: string[], action: string) => {
+    setKubeconfigPaths(nextPaths);
+    setKubeconfigPathsSaving(true);
+    try {
+      await SetKubeconfigSearchPaths(nextPaths);
+      await loadKubeconfigPaths();
+      await loadKubeconfigs();
+    } catch (error) {
+      errorHandler.handle(error, { action });
+      await loadKubeconfigPaths();
+    } finally {
+      setKubeconfigPathsSaving(false);
     }
   };
 
@@ -851,12 +859,10 @@ function Settings({ onClose }: SettingsProps) {
       if (!trimmed) {
         return;
       }
-      setKubeconfigPaths((prev) => {
-        if (prev.some((path) => path.trim() === trimmed)) {
-          return prev;
-        }
-        return [...prev, trimmed];
-      });
+      if (kubeconfigPaths.some((path) => path.trim() === trimmed)) {
+        return;
+      }
+      await persistKubeconfigPaths([...kubeconfigPaths, trimmed], 'addKubeconfigPath');
     } catch (error) {
       errorHandler.handle(error, { action: 'addKubeconfigPath' });
     } finally {
@@ -864,30 +870,12 @@ function Settings({ onClose }: SettingsProps) {
     }
   };
 
-  const handleRemoveKubeconfigPath = (index: number) => {
-    setKubeconfigPaths((prev) =>
-      prev.filter((path, currentIndex) => {
-        if (currentIndex !== index) {
-          return true;
-        }
-        // Prevent removing the default kubeconfig search path.
-        return path.trim() === defaultKubeconfigPath;
-      })
-    );
-  };
-
-  const handleSaveKubeconfigPaths = async () => {
-    setKubeconfigPathsSaving(true);
-    try {
-      await SetKubeconfigSearchPaths(kubeconfigPaths);
-      await loadKubeconfigPaths();
-      await loadKubeconfigs();
-    } catch (error) {
-      errorHandler.handle(error, { action: 'saveKubeconfigPaths' });
-      await loadKubeconfigPaths();
-    } finally {
-      setKubeconfigPathsSaving(false);
+  const handleRemoveKubeconfigPath = async (index: number) => {
+    if (kubeconfigPaths.length <= 1) {
+      return;
     }
+    const nextPaths = kubeconfigPaths.filter((_, currentIndex) => currentIndex !== index);
+    await persistKubeconfigPaths(nextPaths, 'removeKubeconfigPath');
   };
 
   const handleResetViews = async () => {
@@ -1420,15 +1408,13 @@ function Settings({ onClose }: SettingsProps) {
                 <div className="setting-item kubeconfig-path-empty">No kubeconfig paths set.</div>
               )}
               {kubeconfigPaths.map((path, index) => {
-                const isDefaultPath = path.trim() === defaultKubeconfigPath;
+                const canRemove = kubeconfigPaths.length > 1;
                 return (
                   <div
                     className="setting-item kubeconfig-path-row"
                     key={`kubeconfig-path-${index}`}
                   >
-                    {isDefaultPath ? (
-                      <span className="kubeconfig-path-label">Default</span>
-                    ) : (
+                    {canRemove && (
                       <button
                         type="button"
                         className="kubeconfig-path-label kubeconfig-path-remove-button"
@@ -1454,14 +1440,6 @@ function Settings({ onClose }: SettingsProps) {
               disabled={kubeconfigPathsSaving || kubeconfigPathsLoading || kubeconfigPathsSelecting}
             >
               Add Path
-            </button>
-            <button
-              type="button"
-              className="button save"
-              onClick={handleSaveKubeconfigPaths}
-              disabled={kubeconfigPathsSaving || kubeconfigPathsLoading || !pathsDirty}
-            >
-              {kubeconfigPathsSaving ? 'Saving...' : 'Save Paths'}
             </button>
           </div>
         </div>

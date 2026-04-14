@@ -1,12 +1,12 @@
 # TODO
 
-- Allow remove of default kubeconfig path, if not the last
-
-- Resource creation
-  - starter templates for common resource types
-  - reuse the existing code editor
-
 ## Issues
+
+- Issue 40 Support object creation
+
+- Issue 135 Enable text select/copy in more places
+
+- Issue 113 Add support for Gateway API
 
 - Large cluster pagination — views other than Browse (e.g. Pods) load all items in one request. On clusters with thousands of resources this could be slow. Consider adding pagination/Load More to all grid table views.
 
