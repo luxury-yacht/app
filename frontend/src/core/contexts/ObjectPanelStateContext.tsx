@@ -10,6 +10,7 @@ import type { KubernetesObjectReference } from '@/types/view-state';
 import type { ViewType } from '@modules/object-panel/components/ObjectPanel/types';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { clearPanelState } from '@ui/dockable/useDockablePanelState';
+import { handoffLayoutBeforeClose } from '@ui/dockable/useDockablePanelState';
 import { refreshOrchestrator } from '@/core/refresh';
 import { getObjectPanelKind } from '@modules/object-panel/components/ObjectPanel/hooks/getObjectPanelKind';
 import { clearLogViewerPrefs } from '@modules/object-panel/components/ObjectPanel/Logs/logViewerPrefsCache';
@@ -276,6 +277,7 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
       });
       // Clear the dockable panel state so reopening gets fresh defaults
       // instead of remembering the old dock position.
+      handoffLayoutBeforeClose(panelId);
       clearPanelState(panelId);
     },
     [updateActiveState]
@@ -288,6 +290,7 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
     current.openPanels.forEach((ref, panelId) => {
       evictPanelScopes(ref);
       clearLogViewerPrefs(panelId);
+      handoffLayoutBeforeClose(panelId);
       clearPanelState(panelId);
     });
     updateActiveState(() => DEFAULT_OBJECT_PANEL_STATE);

@@ -112,4 +112,25 @@ describe('createPanelLayoutStore — tabGroups slice', () => {
     expect(restoredStore.getState('panel-a')?.isMaximized).toBe(true);
     expect(restoredStore.getState('panel-a')?.isOpen).toBe(true);
   });
+
+  it('hands off leader geometry to the next tab before the leader is cleared', () => {
+    const store = createPanelLayoutStore();
+
+    store.updateState('panel-a', {
+      isOpen: true,
+      rightSize: { width: 640, height: 300 },
+    });
+    store.updateState('panel-b', {
+      isOpen: true,
+      rightSize: { width: 400, height: 300 },
+    });
+    store.setTabGroups((prev) => addPanelToGroup(prev, 'panel-a', 'right'));
+    store.setTabGroups((prev) => addPanelToGroup(prev, 'panel-b', 'right'));
+    store.setGroupLeader('right', 'panel-a');
+
+    store.handoffLayoutBeforeClose('panel-a');
+    store.clearPanelState('panel-a');
+
+    expect(store.getState('panel-b')?.rightSize.width).toBe(640);
+  });
 });

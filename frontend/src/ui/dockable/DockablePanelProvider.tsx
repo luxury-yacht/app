@@ -435,9 +435,20 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
   const closeTab = useCallback(
     (panelId: string) => {
       const registration = panelRegistrationsRef.current.get(panelId);
+      const currentTabGroups = activeStore.getTabGroups();
+      const currentGroupKey = getGroupForPanel(currentTabGroups, panelId);
 
-      // Remove from the tab group.
-      activeStore.setTabGroups((prev) => removePanelFromGroup(prev, panelId));
+      if (currentGroupKey) {
+        activeStore.handoffLayoutBeforeClose(panelId);
+        const nextTabGroups = removePanelFromGroup(currentTabGroups, panelId);
+
+        // Remove from the tab group using the snapshot we already analyzed so
+        // leader hand-off and tab removal stay in sync for this close action.
+        activeStore.setTabGroups(() => nextTabGroups);
+      } else {
+        // Panel is not grouped; still clear any stale membership defensively.
+        activeStore.setTabGroups((prev) => removePanelFromGroup(prev, panelId));
+      }
 
       // Prefer external close handler, but fall back to directly closing the panel.
       if (registration?.onClose) {
