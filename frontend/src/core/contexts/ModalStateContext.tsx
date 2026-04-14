@@ -11,6 +11,7 @@ interface ModalStateContextType {
   isSettingsOpen: boolean;
   isAboutOpen: boolean;
   isObjectDiffOpen: boolean;
+  isCreateResourceOpen: boolean;
   /**
    * Application-logs panel visibility. App-global (not per-cluster):
    * the app logs are the application's own log output, not workspace
@@ -23,6 +24,7 @@ interface ModalStateContextType {
   setIsSettingsOpen: (open: boolean) => void;
   setIsAboutOpen: (open: boolean) => void;
   setIsObjectDiffOpen: (open: boolean) => void;
+  setIsCreateResourceOpen: (open: boolean) => void;
   setShowAppLogs: (open: boolean) => void;
   toggleAppLogs: () => void;
 }
@@ -45,6 +47,7 @@ export const ModalStateProvider: React.FC<ModalStateProviderProps> = ({ children
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isAboutOpen, setIsAboutOpen] = useState(false);
   const [isObjectDiffOpen, setIsObjectDiffOpen] = useState(false);
+  const [isCreateResourceOpen, setIsCreateResourceOpen] = useState(false);
   const [showAppLogs, setShowAppLogs] = useState(false);
 
   const toggleAppLogs = useCallback(() => {
@@ -56,14 +59,23 @@ export const ModalStateProvider: React.FC<ModalStateProviderProps> = ({ children
       isSettingsOpen,
       isAboutOpen,
       isObjectDiffOpen,
+      isCreateResourceOpen,
       showAppLogs,
       setIsSettingsOpen,
       setIsAboutOpen,
       setIsObjectDiffOpen,
+      setIsCreateResourceOpen,
       setShowAppLogs,
       toggleAppLogs,
     }),
-    [isSettingsOpen, isAboutOpen, isObjectDiffOpen, showAppLogs, toggleAppLogs]
+    [
+      isSettingsOpen,
+      isAboutOpen,
+      isObjectDiffOpen,
+      isCreateResourceOpen,
+      showAppLogs,
+      toggleAppLogs,
+    ]
   );
 
   return <ModalStateContext.Provider value={value}>{children}</ModalStateContext.Provider>;

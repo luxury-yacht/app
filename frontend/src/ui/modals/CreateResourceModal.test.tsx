@@ -381,9 +381,9 @@ type Deferred<T> = {
 };
 
 const renderModal = async (props: ModalProps) => {
-  const container = document.createElement('div');
-  document.body.appendChild(container);
-  const root = ReactDOM.createRoot(container);
+  const mountNode = document.createElement('div');
+  document.body.appendChild(mountNode);
+  const root = ReactDOM.createRoot(mountNode);
   const { default: CreateResourceModal } = await import('./CreateResourceModal');
 
   await act(async () => {
@@ -391,7 +391,7 @@ const renderModal = async (props: ModalProps) => {
   });
 
   return {
-    container,
+    container: document.body,
     root,
     rerender: async (newProps: ModalProps) => {
       await act(async () => {
@@ -402,7 +402,7 @@ const renderModal = async (props: ModalProps) => {
       await act(async () => {
         root.unmount();
       });
-      container.remove();
+      mountNode.remove();
     },
   };
 };

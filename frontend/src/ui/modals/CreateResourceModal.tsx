@@ -13,8 +13,7 @@ import { EditorView } from '@codemirror/view';
 import * as YAML from 'yaml';
 import './modals.css';
 import './CreateResourceModal.css';
-import { useShortcut, useKeyboardContext } from '@ui/shortcuts';
-import { KeyboardContextPriority, KeyboardScopePriority } from '@ui/shortcuts/priorities';
+import ModalSurface from '@shared/components/modals/ModalSurface';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
 import { CloseIcon } from '@shared/components/icons/MenuIcons';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
@@ -34,6 +33,7 @@ import {
   ValidateResourceCreation,
   CreateResource,
 } from '@wailsjs/go/backend/App';
+import { parseApiVersion } from '@shared/constants/builtinGroupVersions';
 import {
   parseObjectYamlError,
   type ObjectYamlErrorPayload,
@@ -61,8 +61,6 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
   ({ isOpen, onClose }) => {
     const [isClosing, setIsClosing] = useState(false);
     const [shouldRender, setShouldRender] = useState(false);
-    const { pushContext, popContext } = useKeyboardContext();
-    const contextPushedRef = useRef(false);
     const modalRef = useRef<HTMLDivElement>(null);
     const { selectedClusterId, selectedClusterIds, getClusterMeta } = useKubeconfig();
     const { selectedNamespace: activeNamespace } = useNamespace();
@@ -243,34 +241,20 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
       }
     }, [isOpen, shouldRender, activeNamespace, selectedClusterId, applyNamespaceToYaml]);
 
-    // Handle keyboard context and body overflow.
+    // Keep body scroll locked while the modal is open.
     useEffect(() => {
-      if (!isOpen) {
-        if (contextPushedRef.current) {
-          popContext();
-          contextPushedRef.current = false;
-        }
-        document.body.style.overflow = '';
-        return;
-      }
-
-      pushContext({ priority: KeyboardContextPriority.CREATE_RESOURCE_MODAL });
-      contextPushedRef.current = true;
-      document.body.style.overflow = 'hidden';
-
+      document.body.style.overflow = isOpen ? 'hidden' : '';
       return () => {
-        if (contextPushedRef.current) {
-          popContext();
-          contextPushedRef.current = false;
-        }
         document.body.style.overflow = '';
       };
-    }, [isOpen, popContext, pushContext]);
+    }, [isOpen]);
 
-    // Escape key handling.
-    useShortcut({
-      key: 'Escape',
-      handler: () => {
+    // Focus trap for accessibility.
+    useModalFocusTrap({
+      ref: modalRef,
+      focusableSelector: '[data-create-resource-focusable="true"]',
+      disabled: !shouldRender,
+      onEscape: () => {
         if (!isOpen) return false;
         if (yamlPanelOpen) {
           handleYamlPanelClose();
@@ -279,19 +263,6 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
         onClose();
         return true;
       },
-      description: 'Close create resource modal',
-      category: 'Modals',
-      enabled: isOpen,
-      view: 'global',
-      priority: KeyboardContextPriority.CREATE_RESOURCE_MODAL,
-    });
-
-    // Focus trap for accessibility.
-    useModalFocusTrap({
-      ref: modalRef,
-      focusableSelector: '[data-create-resource-focusable="true"]',
-      priority: KeyboardScopePriority.CREATE_RESOURCE_MODAL,
-      disabled: !isOpen,
     });
 
     // Client-side YAML parsing — extract kind for display and detect parse errors.
@@ -555,6 +526,7 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
 
         // 1. Open the new object in the Object Panel with pinned cluster context.
         openWithObject({
+          ...parseApiVersion(resp.apiVersion),
           kind: resp.kind,
           name: resp.name,
           namespace: resp.namespace || undefined,
@@ -602,220 +574,218 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
     const isBusy = isValidating || isCreating;
 
     return (
-      <>
-        <div className={`modal-overlay ${isClosing ? 'closing' : ''}`}>
-          <div
-            className={`modal-container create-resource-modal ${isClosing ? 'closing' : ''}${yamlPanelOpen && !yamlPanelClosing ? ' yaml-panel-visible' : ''}`}
-            ref={modalRef}
+      <ModalSurface
+        modalRef={modalRef}
+        labelledBy="create-resource-modal-title"
+        onClose={onClose}
+        containerClassName={`create-resource-modal${yamlPanelOpen && !yamlPanelClosing ? ' yaml-panel-visible' : ''}`}
+        isClosing={isClosing}
+        closeOnBackdrop={false}
+      >
+        <div className="modal-header">
+          <h2 id="create-resource-modal-title">{createHeaderTitle}</h2>
+          <button
+            className="modal-close"
+            onClick={onClose}
+            aria-label="Close"
+            data-create-resource-focusable="true"
           >
-            <div className="modal-header">
-              <h2>{createHeaderTitle}</h2>
+            <CloseIcon />
+          </button>
+        </div>
+
+        {hasCluster ? (
+          <>
+            {/* Context bar: direct child of modal-container for full width */}
+            <div className="create-resource-context-bar">
+              <div className="create-resource-dropdown-field">
+                <span className="create-resource-dropdown-label">Cluster</span>
+                <Dropdown
+                  options={clusterOptions}
+                  value={targetClusterId}
+                  onChange={(v) => setTargetClusterId(Array.isArray(v) ? (v[0] ?? '') : v)}
+                  placeholder="Select cluster"
+                  size="compact"
+                  ariaLabel="Target cluster"
+                />
+              </div>
+              <div className="create-resource-dropdown-field">
+                <span className="create-resource-dropdown-label">Kind</span>
+                <Dropdown
+                  options={templateOptions}
+                  value={selectedTemplate}
+                  onChange={handleTemplateChange}
+                  placeholder="Blank"
+                  size="compact"
+                  ariaLabel="Resource template"
+                />
+              </div>
               <button
-                className="modal-close"
-                onClick={onClose}
-                aria-label="Close"
+                type="button"
+                className="button generic create-resource-view-toggle"
+                onClick={() => {
+                  if (yamlPanelOpen) {
+                    handleYamlPanelClose();
+                  } else {
+                    setYamlPanelOpen(true);
+                  }
+                }}
                 data-create-resource-focusable="true"
               >
-                <CloseIcon />
+                {yamlPanelOpen ? 'Hide YAML' : 'Show YAML'}
               </button>
             </div>
 
-            {hasCluster ? (
-              <>
-                {/* Context bar: direct child of modal-container for full width */}
-                <div className="create-resource-context-bar">
-                  <div className="create-resource-dropdown-field">
-                    <span className="create-resource-dropdown-label">Cluster</span>
-                    <Dropdown
-                      options={clusterOptions}
-                      value={targetClusterId}
-                      onChange={(v) => setTargetClusterId(Array.isArray(v) ? (v[0] ?? '') : v)}
-                      placeholder="Select cluster"
-                      size="compact"
-                      ariaLabel="Target cluster"
-                    />
-                  </div>
-                  <div className="create-resource-dropdown-field">
-                    <span className="create-resource-dropdown-label">Kind</span>
-                    <Dropdown
-                      options={templateOptions}
-                      value={selectedTemplate}
-                      onChange={handleTemplateChange}
-                      placeholder="Blank"
-                      size="compact"
-                      ariaLabel="Resource template"
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    className="button generic create-resource-view-toggle"
-                    onClick={() => {
-                      if (yamlPanelOpen) {
-                        handleYamlPanelClose();
-                      } else {
-                        setYamlPanelOpen(true);
-                      }
-                    }}
-                    data-create-resource-focusable="true"
-                  >
-                    {yamlPanelOpen ? 'Hide YAML' : 'Show YAML'}
-                  </button>
-                </div>
-
-                {/* Middle area: form content + YAML panel side by side */}
-                <div className="create-resource-middle" ref={middleRef}>
-                  <div className="modal-content create-resource-content">
-                    {/* Editor section — Form view or YAML CodeMirror */}
-                    {showingForm && formDefinition ? (
-                      <div className="create-resource-editor">
-                        <ResourceForm
-                          definition={formDefinition}
-                          yamlContent={yamlContent}
-                          onYamlChange={handleYamlChange}
-                          namespaceOptions={namespaceOptions}
-                          onNamespaceChange={setSelectedNamespace}
-                        />
-                      </div>
-                    ) : (
-                      <div className="create-resource-editor">
-                        <CodeMirror
-                          value={yamlContent}
-                          height="100%"
-                          editable={!isBusy}
-                          basicSetup={{
-                            highlightActiveLine: true,
-                            highlightActiveLineGutter: true,
-                            lineNumbers: true,
-                            foldGutter: false,
-                            searchKeymap: false,
-                          }}
-                          theme={codeMirrorTheme}
-                          extensions={wrappedEditorExtensions}
-                          onChange={handleYamlChange}
-                        />
-                      </div>
-                    )}
-
-                    {/* Client-side parse error */}
-                    {parseError && (
-                      <div className="create-resource-parse-error">Parse error: {parseError}</div>
-                    )}
-
-                    {/* Validation success */}
-                    {validationSuccess && (
-                      <div className="create-resource-validation-success">{validationSuccess}</div>
-                    )}
-
-                    {/* Structured validation/creation error */}
-                    {validationError && (
-                      <div className="create-resource-validation-error">
-                        <strong>{validationError.code}:</strong> {validationError.message}
-                        {validationError.causes && validationError.causes.length > 0 && (
-                          <ul className="create-resource-error-causes">
-                            {validationError.causes.map((cause, i) => (
-                              <li key={i}>{cause}</li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Raw (non-structured) error */}
-                    {rawError && <div className="create-resource-validation-error">{rawError}</div>}
-                  </div>
-
-                  {/* YAML side panel — absolutely positioned inside .create-resource-middle */}
-                  {yamlPanelOpen && (
-                    <div
-                      className={`yaml-panel ${yamlPanelClosing ? 'closing' : yamlPanelReady ? '' : 'opening'}`}
-                      style={
-                        yamlPanelClosing
-                          ? { width: closingWidthRef.current }
-                          : { width: effectivePanelWidth }
-                      }
-                      onAnimationEnd={handlePanelAnimationEnd}
-                    >
-                      {/* Resize handle — only when panel overlays the form */}
-                      {panelResizable && (
-                        <div
-                          className="yaml-panel-resize-handle"
-                          onPointerDown={handleResizePointerDown}
-                        />
-                      )}
-                      <div className="yaml-panel-toolbar">
-                        <label className="yaml-panel-wrap-toggle">
-                          <input
-                            type="checkbox"
-                            checked={yamlPanelWrap}
-                            onChange={(event) => setYamlPanelWrap(event.target.checked)}
-                          />
-                          <span>Wrap</span>
-                        </label>
-                      </div>
-                      <div className="yaml-panel-editor">
-                        <CodeMirror
-                          value={yamlContent}
-                          height="100%"
-                          editable={!isBusy}
-                          basicSetup={{
-                            highlightActiveLine: true,
-                            highlightActiveLineGutter: true,
-                            lineNumbers: true,
-                            foldGutter: false,
-                            searchKeymap: false,
-                          }}
-                          theme={codeMirrorTheme}
-                          extensions={
-                            yamlPanelWrap ? wrappedEditorExtensions : baseEditorExtensions
-                          }
-                          onChange={handleYamlChange}
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </>
-            ) : (
+            {/* Middle area: form content + YAML panel side by side */}
+            <div className="create-resource-middle" ref={middleRef}>
               <div className="modal-content create-resource-content">
-                <div className="create-resource-no-cluster">
-                  No cluster connected. Connect to a cluster to create resources.
-                </div>
-              </div>
-            )}
+                {/* Editor section — Form view or YAML CodeMirror */}
+                {showingForm && formDefinition ? (
+                  <div className="create-resource-editor">
+                    <ResourceForm
+                      definition={formDefinition}
+                      yamlContent={yamlContent}
+                      onYamlChange={handleYamlChange}
+                      namespaceOptions={namespaceOptions}
+                      onNamespaceChange={setSelectedNamespace}
+                    />
+                  </div>
+                ) : (
+                  <div className="create-resource-editor">
+                    <CodeMirror
+                      value={yamlContent}
+                      height="100%"
+                      editable={!isBusy}
+                      basicSetup={{
+                        highlightActiveLine: true,
+                        highlightActiveLineGutter: true,
+                        lineNumbers: true,
+                        foldGutter: false,
+                        searchKeymap: false,
+                      }}
+                      theme={codeMirrorTheme}
+                      extensions={wrappedEditorExtensions}
+                      onChange={handleYamlChange}
+                    />
+                  </div>
+                )}
 
-            <div className="modal-footer">
-              <button
-                className="button generic create-resource-footer-cancel"
-                onClick={onClose}
-                data-create-resource-focusable="true"
-              >
-                Cancel
-              </button>
-              {requiredFieldErrors.length > 0 && showingForm && (
-                <span className="create-resource-required-errors">
-                  {requiredFieldErrors.join(', ')}
-                </span>
+                {/* Client-side parse error */}
+                {parseError && (
+                  <div className="create-resource-parse-error">Parse error: {parseError}</div>
+                )}
+
+                {/* Validation success */}
+                {validationSuccess && (
+                  <div className="create-resource-validation-success">{validationSuccess}</div>
+                )}
+
+                {/* Structured validation/creation error */}
+                {validationError && (
+                  <div className="create-resource-validation-error">
+                    <strong>{validationError.code}:</strong> {validationError.message}
+                    {validationError.causes && validationError.causes.length > 0 && (
+                      <ul className="create-resource-error-causes">
+                        {validationError.causes.map((cause, i) => (
+                          <li key={i}>{cause}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
+
+                {/* Raw (non-structured) error */}
+                {rawError && <div className="create-resource-validation-error">{rawError}</div>}
+              </div>
+
+              {/* YAML side panel — absolutely positioned inside .create-resource-middle */}
+              {yamlPanelOpen && (
+                <div
+                  className={`yaml-panel ${yamlPanelClosing ? 'closing' : yamlPanelReady ? '' : 'opening'}`}
+                  style={
+                    yamlPanelClosing
+                      ? { width: closingWidthRef.current }
+                      : { width: effectivePanelWidth }
+                  }
+                  onAnimationEnd={handlePanelAnimationEnd}
+                >
+                  {/* Resize handle — only when panel overlays the form */}
+                  {panelResizable && (
+                    <div
+                      className="yaml-panel-resize-handle"
+                      onPointerDown={handleResizePointerDown}
+                    />
+                  )}
+                  <div className="yaml-panel-toolbar">
+                    <label className="yaml-panel-wrap-toggle">
+                      <input
+                        type="checkbox"
+                        checked={yamlPanelWrap}
+                        onChange={(event) => setYamlPanelWrap(event.target.checked)}
+                      />
+                      <span>Wrap</span>
+                    </label>
+                  </div>
+                  <div className="yaml-panel-editor">
+                    <CodeMirror
+                      value={yamlContent}
+                      height="100%"
+                      editable={!isBusy}
+                      basicSetup={{
+                        highlightActiveLine: true,
+                        highlightActiveLineGutter: true,
+                        lineNumbers: true,
+                        foldGutter: false,
+                        searchKeymap: false,
+                      }}
+                      theme={codeMirrorTheme}
+                      extensions={yamlPanelWrap ? wrappedEditorExtensions : baseEditorExtensions}
+                      onChange={handleYamlChange}
+                    />
+                  </div>
+                </div>
               )}
-              <button
-                className="button generic"
-                disabled={!hasTarget || isBusy || (showingForm && requiredFieldErrors.length > 0)}
-                onClick={handleValidate}
-                data-create-resource-focusable="true"
-              >
-                {isValidating ? 'Validating...' : 'Validate'}
-              </button>
-              <button
-                className="button action"
-                disabled={!hasTarget || isBusy || (showingForm && requiredFieldErrors.length > 0)}
-                onClick={handleCreate}
-                data-create-resource-focusable="true"
-              >
-                {isCreating ? 'Creating...' : 'Create'}
-              </button>
+            </div>
+          </>
+        ) : (
+          <div className="modal-content create-resource-content">
+            <div className="create-resource-no-cluster">
+              No cluster connected. Connect to a cluster to create resources.
             </div>
           </div>
+        )}
+
+        <div className="modal-footer">
+          <button
+            className="button generic create-resource-footer-cancel"
+            onClick={onClose}
+            data-create-resource-focusable="true"
+          >
+            Cancel
+          </button>
+          {requiredFieldErrors.length > 0 && showingForm && (
+            <span className="create-resource-required-errors">
+              {requiredFieldErrors.join(', ')}
+            </span>
+          )}
+          <button
+            className="button generic"
+            disabled={!hasTarget || isBusy || (showingForm && requiredFieldErrors.length > 0)}
+            onClick={handleValidate}
+            data-create-resource-focusable="true"
+          >
+            {isValidating ? 'Validating...' : 'Validate'}
+          </button>
+          <button
+            className="button action"
+            disabled={!hasTarget || isBusy || (showingForm && requiredFieldErrors.length > 0)}
+            onClick={handleCreate}
+            data-create-resource-focusable="true"
+          >
+            {isCreating ? 'Creating...' : 'Create'}
+          </button>
         </div>
-      </>
+      </ModalSurface>
     );
   }
 );

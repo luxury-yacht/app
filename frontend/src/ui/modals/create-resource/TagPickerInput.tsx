@@ -66,10 +66,19 @@ export function TagPickerInput({
     const input = inputRef.current;
     const ctr = chipAreaRef.current;
 
-    const handleFocus = (): void => { cancelBlurTimer(); setIsOpen(true); };
-    const handleBlur = (): void => { startBlurTimer(); };
-    const handleContainerFocus = (): void => { cancelBlurTimer(); };
-    const handleContainerBlur = (): void => { startBlurTimer(); };
+    const handleFocus = (): void => {
+      cancelBlurTimer();
+      setIsOpen(true);
+    };
+    const handleBlur = (): void => {
+      startBlurTimer();
+    };
+    const handleContainerFocus = (): void => {
+      cancelBlurTimer();
+    };
+    const handleContainerBlur = (): void => {
+      startBlurTimer();
+    };
 
     input?.addEventListener('focus', handleFocus);
     input?.addEventListener('blur', handleBlur);
@@ -86,8 +95,7 @@ export function TagPickerInput({
   }, []);
 
   const filteredOptions = options.filter(
-    (option) =>
-      !value.includes(option) && option.toLowerCase().includes(filterText.toLowerCase())
+    (option) => !value.includes(option) && option.toLowerCase().includes(filterText.toLowerCase())
   );
 
   function removeTag(tag: string): void {
@@ -197,14 +205,15 @@ export function TagPickerInput({
       >
         {value.map((tag, index) => (
           <React.Fragment key={tag}>
-            {cursorPos === index && (
-              <span className="tag-picker-cursor" />
-            )}
+            {cursorPos === index && <span className="tag-picker-cursor" />}
             <span className="tag-picker-chip">
               {tag}
               <button
                 className="tag-picker-chip-remove"
-                onClick={(e) => { e.stopPropagation(); removeTag(tag); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  removeTag(tag);
+                }}
                 aria-label={`Remove ${tag}`}
                 tabIndex={-1}
               >
@@ -213,9 +222,7 @@ export function TagPickerInput({
             </span>
           </React.Fragment>
         ))}
-        {cursorPos === value.length && cursorPos !== null && (
-          <span className="tag-picker-cursor" />
-        )}
+        {cursorPos === value.length && cursorPos !== null && <span className="tag-picker-cursor" />}
         <input
           ref={inputRef}
           type="text"
@@ -224,7 +231,10 @@ export function TagPickerInput({
           placeholder={value.length === 0 ? placeholder : undefined}
           aria-label={ariaLabel}
           onChange={(e) => setFilterText(e.target.value)}
-          onKeyDown={(e) => { e.stopPropagation(); handleKeyDown(e); }}
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            handleKeyDown(e);
+          }}
           {...INPUT_BEHAVIOR_PROPS}
         />
       </div>

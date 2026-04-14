@@ -27,10 +27,7 @@ describe('TagPickerInput', () => {
 
   const OPTIONS = ['ALL', 'NET_ADMIN', 'NET_BIND_SERVICE', 'NET_RAW', 'SYS_ADMIN', 'SYS_PTRACE'];
 
-  const render = (
-    value: string[],
-    onChange?: (newValue: string[]) => void
-  ) => {
+  const render = (value: string[], onChange?: (newValue: string[]) => void) => {
     const mockOnChange = onChange ?? vi.fn<(newValue: string[]) => void>();
     act(() => {
       root.render(

@@ -149,6 +149,8 @@ export function GetReplicaSet(arg1:string,arg2:string,arg3:string):Promise<types
 
 export function GetResourceQuota(arg1:string,arg2:string,arg3:string):Promise<types.ResourceQuotaDetails>;
 
+export function GetResourceTemplates():Promise<Array<templates.ResourceTemplate>>;
+
 export function GetRevisionHistory(arg1:string,arg2:string,arg3:string,arg4:string):Promise<Array<backend.RevisionEntry>>;
 
 export function GetRole(arg1:string,arg2:string,arg3:string):Promise<types.RoleDetails>;

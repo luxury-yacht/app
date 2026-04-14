@@ -21,10 +21,10 @@
   z-index: var(--z-index-modal, 1050);
   animation: fadeIn 200ms ease-out;
   padding: 2rem;
-  /* Let pointer events pass through to the app header underneath so Wails
-     window dragging still works. The modal container re-enables pointer
-     events for its own content. */
-  pointer-events: none;
+  /* The modal backdrop doubles as the draggable region while a modal is open.
+     The modal container opts out so controls remain interactive. */
+  pointer-events: auto;
+  --wails-draggable: true;
 }
 
 .modal-overlay.closing {

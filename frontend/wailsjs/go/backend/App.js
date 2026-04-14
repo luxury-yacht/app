@@ -286,6 +286,10 @@ export function GetResourceQuota(arg1, arg2, arg3) {
   return window['go']['backend']['App']['GetResourceQuota'](arg1, arg2, arg3);
 }
 
+export function GetResourceTemplates() {
+  return window['go']['backend']['App']['GetResourceTemplates']();
+}
+
 export function GetRevisionHistory(arg1, arg2, arg3, arg4) {
   return window['go']['backend']['App']['GetRevisionHistory'](arg1, arg2, arg3, arg4);
 }

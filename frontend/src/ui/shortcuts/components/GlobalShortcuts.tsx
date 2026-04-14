@@ -271,7 +271,6 @@ export function GlobalShortcuts({
     description: 'Create resource',
     category: 'Global',
     enabled: !!onCreateResource,
-    view: 'global',
   });
 
   useShortcut({
