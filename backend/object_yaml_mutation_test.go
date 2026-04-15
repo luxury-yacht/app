@@ -191,8 +191,18 @@ spec:
 	if err == nil {
 		t.Fatalf("expected validation to fail due to resourceVersion drift")
 	}
-	if !strings.Contains(err.Error(), "resourceVersion") {
-		t.Fatalf("expected resourceVersion error, got %v", err)
+	var objErr *objectYAMLError
+	if !errors.As(err, &objErr) {
+		t.Fatalf("expected objectYAMLError, got %T", err)
+	}
+	if objErr.Code != "ResourceVersionMismatch" {
+		t.Fatalf("expected ResourceVersionMismatch code, got %s", objErr.Code)
+	}
+	if objErr.CurrentResourceVersion != "99" {
+		t.Fatalf("expected current resourceVersion 99, got %q", objErr.CurrentResourceVersion)
+	}
+	if !strings.Contains(objErr.CurrentYAML, "resourceVersion: \"99\"") {
+		t.Fatalf("expected normalized live YAML in error payload, got %q", objErr.CurrentYAML)
 	}
 }
 
@@ -323,14 +333,6 @@ func TestNormalizeObjectYAMLStripsMetadata(t *testing.T) {
 	}
 	if !strings.Contains(normalized, "data:\n  a: b") {
 		t.Fatalf("expected data to remain, got %s", normalized)
-	}
-}
-
-func TestComputeDiffLinesTruncatesLargeInput(t *testing.T) {
-	large := strings.Repeat("line\n", maxDiffLineCount)
-	lines, truncated := computeDiffLines(large, large)
-	if !truncated || lines != nil {
-		t.Fatalf("expected truncation for large diff")
 	}
 }
 

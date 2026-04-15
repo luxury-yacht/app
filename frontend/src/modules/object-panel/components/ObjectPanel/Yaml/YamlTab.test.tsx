@@ -65,27 +65,6 @@ CodeMirrorMock.displayName = 'CodeMirrorMock';
 
 const yamlErrorsMocks = vi.hoisted(() => ({
   parseObjectYamlError: vi.fn(),
-  coerceDiffResult: vi.fn(
-    (): {
-      tooLarge: boolean;
-      lines: Array<{
-        type: 'added';
-        leftLineNumber: null;
-        rightLineNumber: number;
-        value: string;
-      }>;
-    } | null => ({
-      tooLarge: false,
-      lines: [
-        {
-          type: 'added' as const,
-          leftLineNumber: null,
-          rightLineNumber: 1,
-          value: 'metadata:',
-        },
-      ],
-    })
-  ),
 }));
 
 const wailsMocks = vi.hoisted(() => ({
@@ -206,7 +185,6 @@ vi.mock('@/core/codemirror/search', () => ({
 
 vi.mock('./yamlErrors', () => ({
   parseObjectYamlError: yamlErrorsMocks.parseObjectYamlError,
-  coerceDiffResult: yamlErrorsMocks.coerceDiffResult,
 }));
 
 vi.mock('@utils/errorHandler', () => ({
@@ -342,7 +320,6 @@ describe('YamlTab', () => {
     wailsMocks.ApplyObjectYaml.mockReset();
     wailsMocks.GetObjectYAMLByGVK.mockReset();
     yamlErrorsMocks.parseObjectYamlError.mockReset();
-    yamlErrorsMocks.coerceDiffResult.mockClear();
     errorHandlerMock.handle.mockClear();
   });
 
@@ -440,6 +417,7 @@ describe('YamlTab', () => {
       code: 'ResourceVersionMismatch',
       message: 'Object changed upstream',
       causes: ['Remote diff detected'],
+      currentYaml: UPDATED_YAML,
       currentResourceVersion: '999',
     });
     wailsMocks.ValidateObjectYaml.mockRejectedValue(new Error('mismatch'));
@@ -497,9 +475,9 @@ describe('YamlTab', () => {
       code: 'ResourceVersionMismatch',
       message: 'Object changed upstream',
       causes: ['Remote diff detected'],
+      currentYaml: YAML,
       currentResourceVersion: '999',
     });
-    yamlErrorsMocks.coerceDiffResult.mockImplementation(() => null);
     wailsMocks.ValidateObjectYaml.mockRejectedValue(new Error('mismatch'));
 
     const { container, unmount } = await renderYamlTab();
@@ -536,6 +514,7 @@ describe('YamlTab', () => {
     yamlErrorsMocks.parseObjectYamlError.mockReturnValue({
       code: 'ResourceVersionMismatch',
       message: 'Conflict detected',
+      currentYaml: UPDATED_YAML,
       causes: [],
     });
     wailsMocks.ValidateObjectYaml.mockRejectedValue(new Error('mismatch'));

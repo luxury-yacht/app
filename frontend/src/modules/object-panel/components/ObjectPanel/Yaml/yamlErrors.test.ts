@@ -5,7 +5,6 @@
 import { describe, it, expect } from 'vitest';
 import {
   OBJECT_YAML_ERROR_PREFIX,
-  coerceDiffResult,
   parseObjectYamlError,
   type ObjectYamlErrorPayload,
 } from './yamlErrors';
@@ -19,13 +18,9 @@ describe('parseObjectYamlError', () => {
     const payload: ObjectYamlErrorPayload = {
       code: 'ResourceVersionMismatch',
       message: 'resource drift detected',
-      diff: [
-        { type: 'context', value: 'metadata:' },
-        { type: 'removed', value: '  resourceVersion: "42"', leftLineNumber: 3 },
-        { type: 'added', value: '  resourceVersion: "43"', rightLineNumber: 3 },
-      ],
-      truncated: false,
+      currentYaml: 'apiVersion: v1\nkind: Pod\nmetadata:\n  resourceVersion: "43"\n',
       currentResourceVersion: '43',
+      causes: ['resourceVersion changed'],
     };
 
     const error = new Error(`${OBJECT_YAML_ERROR_PREFIX}${JSON.stringify(payload)}`);
@@ -36,38 +31,5 @@ describe('parseObjectYamlError', () => {
   it('handles invalid JSON gracefully', () => {
     const error = new Error(`${OBJECT_YAML_ERROR_PREFIX}{invalid}`);
     expect(parseObjectYamlError(error)).toBeNull();
-  });
-});
-
-describe('coerceDiffResult', () => {
-  it('returns null when no diff lines are present', () => {
-    expect(coerceDiffResult({ code: 'Test', message: 'none' })).toBeNull();
-  });
-
-  it('surfaces backend truncation even when no diff lines are present', () => {
-    expect(
-      coerceDiffResult({ code: 'ResourceVersionMismatch', message: 'changed', truncated: true })
-    ).toEqual({
-      lines: [],
-      tooLarge: true,
-    });
-  });
-
-  it('maps backend diff lines into frontend result', () => {
-    const result = coerceDiffResult({
-      code: 'ResourceVersionMismatch',
-      message: 'changed',
-      diff: [
-        { type: 'context', value: 'spec:' },
-        { type: 'removed', value: '  replicas: 1', leftLineNumber: 5 },
-        { type: 'added', value: '  replicas: 2', rightLineNumber: 5 },
-      ],
-      truncated: true,
-    });
-
-    expect(result).not.toBeNull();
-    expect(result?.lines).toHaveLength(3);
-    expect(result?.lines[1]).toMatchObject({ type: 'removed', value: '  replicas: 1' });
-    expect(result?.tooLarge).toBe(true);
   });
 });

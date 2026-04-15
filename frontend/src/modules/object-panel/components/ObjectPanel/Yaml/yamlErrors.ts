@@ -3,29 +3,15 @@
  */
 
 import type { backend } from '@wailsjs/go/models';
-import type { DiffLine, DiffLineType } from '@shared/components/diff/lineDiff';
 
 export const OBJECT_YAML_ERROR_PREFIX = 'ObjectYAMLError:';
-
-export interface BackendDiffLine {
-  type: DiffLineType;
-  value: string;
-  leftLineNumber?: number | null;
-  rightLineNumber?: number | null;
-}
 
 export interface ObjectYamlErrorPayload {
   code: string;
   message: string;
-  diff?: BackendDiffLine[];
-  truncated?: boolean;
+  currentYaml?: string | null;
   currentResourceVersion?: string | null;
   causes?: string[];
-}
-
-export interface YamlTabDiffResult {
-  lines: DiffLine[];
-  tooLarge: boolean;
 }
 
 export const parseObjectYamlError = (err: unknown): ObjectYamlErrorPayload | null => {
@@ -42,34 +28,6 @@ export const parseObjectYamlError = (err: unknown): ObjectYamlErrorPayload | nul
   } catch {
     return null;
   }
-};
-
-export const coerceDiffResult = (payload: ObjectYamlErrorPayload): YamlTabDiffResult | null => {
-  if (!payload.diff || payload.diff.length === 0) {
-    if (!payload.truncated) {
-      return null;
-    }
-    return {
-      lines: [],
-      tooLarge: true,
-    };
-  }
-
-  return {
-    lines: payload.diff.map((line) => ({
-      type: line.type,
-      value: line.value,
-      leftLineNumber:
-        line.leftLineNumber === undefined || line.leftLineNumber === null
-          ? undefined
-          : line.leftLineNumber,
-      rightLineNumber:
-        line.rightLineNumber === undefined || line.rightLineNumber === null
-          ? undefined
-          : line.rightLineNumber,
-    })),
-    tooLarge: Boolean(payload.truncated),
-  };
 };
 
 export type ObjectYamlMutationResponse = backend.ObjectYAMLMutationResponse;

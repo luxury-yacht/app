@@ -16,11 +16,12 @@ import { errorHandler } from '@utils/errorHandler';
 import { refreshOrchestrator } from '@/core/refresh';
 import { useRefreshScopedDomain } from '@/core/refresh/store';
 import { GetObjectYAMLByGVK } from '@wailsjs/go/backend/App';
+import type { DiffLine } from '@shared/components/diff/lineDiff';
 import { computeBudgetedLineDiff } from '@shared/components/diff/lineDiff';
 import { YAML_TAB_DIFF_BUDGETS } from '@shared/components/diff/diffBudgets';
 import './YamlTab.css';
 import { parseObjectIdentity, validateYamlDraft, type ObjectIdentity } from './yamlValidation';
-import { coerceDiffResult, parseObjectYamlError, type YamlTabDiffResult } from './yamlErrors';
+import { parseObjectYamlError } from './yamlErrors';
 import { buildCodeTheme } from '@/core/codemirror/theme';
 import { selectCodeMirrorContent } from '@/core/codemirror/nativeActions';
 import { createSearchExtensions, closeSearchPanel } from '@/core/codemirror/search';
@@ -50,10 +51,12 @@ import {
 
 export type { YamlTabProps } from './yamlTabTypes';
 
-const normalizeYamlTabDiff = (diff: YamlTabDiffResult | null): YamlTabDiffResult | null => {
-  if (!diff) {
-    return null;
-  }
+type YamlTabDiffResult = {
+  lines: DiffLine[];
+  tooLarge: boolean;
+};
+
+const normalizeYamlTabDiff = (diff: YamlTabDiffResult): YamlTabDiffResult => {
   if (diff.tooLarge || diff.lines.length > YAML_TAB_DIFF_BUDGETS.maxRenderableRows) {
     return {
       lines: [],
@@ -80,7 +83,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
   const [baselineResourceVersion, setBaselineResourceVersion] = useState<string | null>(null);
   const [hasRemoteDrift, setHasRemoteDrift] = useState(false);
   const [driftForced, setDriftForced] = useState(false);
-  const [backendDriftDiff, setBackendDriftDiff] = useState<YamlTabDiffResult | null>(null);
+  const [backendDriftCurrentYaml, setBackendDriftCurrentYaml] = useState<string | null>(null);
   const [latestObjectIdentity, setLatestObjectIdentity] = useState<ObjectIdentity | null>(null);
   const [manualYamlOverride, setManualYamlOverride] = useState<{
     yaml: string;
@@ -218,8 +221,16 @@ const YamlTab: React.FC<YamlTabProps> = ({
   const activeYaml = isEditing ? draftYaml : (displayYaml ?? '');
 
   const driftDiff = useMemo(() => {
-    if (backendDriftDiff) {
-      return normalizeYamlTabDiff(backendDriftDiff);
+    if (backendDriftCurrentYaml) {
+      const backendDiff = computeBudgetedLineDiff(
+        backendDriftCurrentYaml,
+        draftYaml,
+        YAML_TAB_DIFF_BUDGETS
+      );
+      return normalizeYamlTabDiff({
+        lines: backendDiff.lines,
+        tooLarge: backendDiff.tooLarge,
+      });
     }
     if (!isEditing || (!hasRemoteDrift && !driftForced)) {
       return null;
@@ -233,7 +244,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
       lines: localDiff.lines,
       tooLarge: localDiff.tooLarge,
     });
-  }, [backendDriftDiff, displayYaml, draftYaml, driftForced, hasRemoteDrift, isEditing]);
+  }, [backendDriftCurrentYaml, displayYaml, draftYaml, driftForced, hasRemoteDrift, isEditing]);
 
   const { theme: codeMirrorTheme, highlight: highlightExtension } = useMemo(
     () => buildCodeTheme(isDarkTheme),
@@ -497,7 +508,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
   useEffect(() => {
     if (!isEditing) {
       setHasRemoteDrift(false);
-      setBackendDriftDiff(null);
+      setBackendDriftCurrentYaml(null);
       setDriftForced(false);
       return;
     }
@@ -511,13 +522,13 @@ const YamlTab: React.FC<YamlTabProps> = ({
       latestObjectIdentity?.resourceVersion ?? objectIdentity?.resourceVersion ?? null;
     if (!baselineResourceVersion || !currentVersion) {
       setHasRemoteDrift(false);
-      setBackendDriftDiff(null);
+      setBackendDriftCurrentYaml(null);
       return;
     }
     const driftDetected = currentVersion !== baselineResourceVersion;
     setHasRemoteDrift(driftDetected);
     if (!driftDetected) {
-      setBackendDriftDiff(null);
+      setBackendDriftCurrentYaml(null);
     }
   }, [baselineResourceVersion, driftForced, isEditing, latestObjectIdentity, objectIdentity]);
 
@@ -590,7 +601,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
     setActionDetails([]);
     setHasRemoteDrift(false);
     setDriftForced(false);
-    setBackendDriftDiff(null);
+    setBackendDriftCurrentYaml(null);
     setHasServerYamlError(false);
     setLatestObjectIdentity(identityForEditing);
     setManualYamlOverride(
@@ -620,7 +631,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
     setActionDetails([]);
     setHasRemoteDrift(false);
     setDriftForced(false);
-    setBackendDriftDiff(null);
+    setBackendDriftCurrentYaml(null);
     setIsSaving(false);
     setHasServerYamlError(false);
   }, []);
@@ -666,7 +677,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
       setActionDetails([]);
       setHasRemoteDrift(false);
       setDriftForced(false);
-      setBackendDriftDiff(null);
+      setBackendDriftCurrentYaml(null);
       setHasServerYamlError(false);
 
       if (scope) {
@@ -773,11 +784,12 @@ const YamlTab: React.FC<YamlTabProps> = ({
           setHasRemoteDrift(true);
           setActionError(parsed.message);
           setLintError(null);
+          setBackendDriftCurrentYaml(
+            parsed.currentYaml ? normalizeYamlString(parsed.currentYaml) : null
+          );
           if (parsed.currentResourceVersion) {
             setBaselineResourceVersion(parsed.currentResourceVersion);
           }
-          const backendDiff = coerceDiffResult(parsed);
-          setBackendDriftDiff(backendDiff);
           setActionDetails(parsed.causes ?? []);
           setHasServerYamlError(false);
         } else {

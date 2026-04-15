@@ -208,15 +208,17 @@ Status: ✅ Completed
 
 ### Phase 4: Backend Mutation Diff Cleanup
 
-- [ ] Revisit `backend/object_yaml_mutation.go`.
-- [ ] Reduce backend ownership of diff generation where practical.
-- [ ] Prefer backend retrieval/normalization of comparable YAML payloads over backend-owned diff
+- [x] Revisit `backend/object_yaml_mutation.go`.
+- [x] Reduce backend ownership of diff generation where practical.
+- [x] Prefer backend retrieval/normalization of comparable YAML payloads over backend-owned diff
   lines for UI presentation.
-- [ ] Align backend mutation-preview behavior with the frontend-owned diff direction.
+- [x] Align backend mutation-preview behavior with the frontend-owned diff direction.
 
 Phase 4 deliverable:
 
 - backend diff behavior no longer diverges from frontend diff behavior by accident
+
+Status: ✅ Completed
 
 ### Phase 5: Readability and Follow-up Tuning
 
