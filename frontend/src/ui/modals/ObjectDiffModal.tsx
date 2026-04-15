@@ -5,7 +5,7 @@
  * Provides a global, side-by-side YAML diff viewer for Kubernetes objects.
  */
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './modals.css';
 import './ObjectDiffModal.css';
 import Dropdown from '@shared/components/dropdowns/Dropdown/Dropdown';
@@ -38,9 +38,14 @@ import {
 import { getDisplayKind } from '@/utils/kindAliasMap';
 import { formatAge, formatFullDate } from '@/utils/ageFormatter';
 import { useShortNames } from '@/hooks/useShortNames';
+import type {
+  ObjectDiffOpenRequest,
+  ObjectDiffSelectionSeed,
+} from '@shared/components/diff/objectDiffSelection';
 
 interface ObjectDiffModalProps {
   isOpen: boolean;
+  initialRequest?: ObjectDiffOpenRequest | null;
   onClose: () => void;
 }
 
@@ -327,7 +332,11 @@ const useObjectYamlSnapshot = (selection: CatalogItem | null, enabled: boolean) 
   return { scope, state };
 };
 
-const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) => {
+const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
+  isOpen,
+  initialRequest = null,
+  onClose,
+}) => {
   const { selectedKubeconfigs, getClusterMeta } = useKubeconfig();
   const [isClosing, setIsClosing] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);
@@ -362,6 +371,8 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
   const rightObjectUidRef = useRef(rightObjectUid);
   const leftMatchRequestRef = useRef(0);
   const rightMatchRequestRef = useRef(0);
+  const appliedInitialRequestIdRef = useRef<number | null>(null);
+  const leftInitialSelectionRequestRef = useRef(0);
   const modalRef = useRef<HTMLDivElement>(null);
   const useShortNamesSetting = useShortNames();
 
@@ -581,7 +592,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
   const leftCatalogError = leftObjectError ?? leftKindError ?? leftNamespaceError;
   const rightCatalogError = rightObjectError ?? rightKindError ?? rightNamespaceError;
 
-  const showNoMatch = (side: 'left' | 'right') => {
+  const showNoMatch = useCallback((side: 'left' | 'right') => {
     const setMessage = side === 'left' ? setLeftNoMatch : setRightNoMatch;
     const timerRef = side === 'left' ? leftNoMatchTimerRef : rightNoMatchTimerRef;
     setMessage(true);
@@ -591,14 +602,58 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
     timerRef.current = setTimeout(() => {
       setMessage(false);
     }, 2000);
-  };
+  }, []);
 
-  const cancelPendingMatches = () => {
+  const cancelPendingMatches = useCallback(() => {
     leftMatchRequestRef.current += 1;
     rightMatchRequestRef.current += 1;
     setLeftMatching(false);
     setRightMatching(false);
-  };
+  }, []);
+
+  const applyInitialLeftSelection = useCallback(
+    async (selection: ObjectDiffSelectionSeed) => {
+      const requestId = leftInitialSelectionRequestRef.current + 1;
+      leftInitialSelectionRequestRef.current = requestId;
+      cancelPendingMatches();
+      setLeftNoMatch(false);
+      setLeftClusterId(selection.clusterId);
+      setLeftNamespace(normalizeMatchNamespace(selection.namespace));
+      setLeftKind(selection.kind);
+      setLeftObjectSearch('');
+      setLeftSelectedObject(null);
+      setLeftObjectUid('');
+
+      try {
+        const match = toCatalogItem(
+          await FindCatalogObjectMatch(
+            selection.clusterId,
+            selection.namespace ?? '',
+            selection.group,
+            selection.version,
+            selection.kind,
+            selection.name
+          )
+        );
+        if (leftInitialSelectionRequestRef.current !== requestId) {
+          return;
+        }
+        if (!match) {
+          showNoMatch('left');
+          return;
+        }
+        setLeftNamespace(normalizeMatchNamespace(match.namespace));
+        setLeftKind(match.kind);
+        setLeftSelectedObject(match);
+        setLeftObjectUid(match.uid);
+      } catch {
+        if (leftInitialSelectionRequestRef.current === requestId) {
+          showNoMatch('left');
+        }
+      }
+    },
+    [cancelPendingMatches, showNoMatch]
+  );
 
   const leftYaml = useObjectYamlSnapshot(leftSelection, isOpen);
   const rightYaml = useObjectYamlSnapshot(rightSelection, isOpen);
@@ -725,6 +780,20 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
       setRightYamlStable('');
     }
   }, [rightYamlRaw, rightYamlReady]);
+
+  useEffect(() => {
+    if (!isOpen || !initialRequest) {
+      return;
+    }
+    if (appliedInitialRequestIdRef.current === initialRequest.requestId) {
+      return;
+    }
+    appliedInitialRequestIdRef.current = initialRequest.requestId;
+    if (!initialRequest.left) {
+      return;
+    }
+    void applyInitialLeftSelection(initialRequest.left);
+  }, [applyInitialLeftSelection, initialRequest, isOpen]);
 
   // Surface change events without clearing the existing diff view.
   useEffect(() => {

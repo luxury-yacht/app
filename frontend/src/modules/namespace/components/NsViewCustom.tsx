@@ -381,6 +381,8 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
             namespace: resource.namespace,
             clusterId: resource.clusterId,
             clusterName: resource.clusterName,
+            group: resource.apiGroup ?? undefined,
+            version: resource.apiVersion ?? undefined,
           },
           context: 'gridtable',
           handlers: {

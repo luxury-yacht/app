@@ -9,6 +9,7 @@
  */
 
 import type { RefresherState } from '@/core/refresh/RefreshManager';
+import type { ObjectDiffOpenRequest } from '@shared/components/diff/objectDiffSelection';
 
 type ResourceStreamDomain =
   | 'pods'
@@ -46,6 +47,7 @@ export interface AppEvents {
   'view:reset': void;
   'view:toggle-diagnostics': void;
   'view:toggle-app-logs': void;
+  'view:open-object-diff': ObjectDiffOpenRequest;
   'cluster-tabs:order': string[];
 
   // Favorites events

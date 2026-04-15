@@ -292,8 +292,11 @@ describe('NsViewCustom', () => {
 
     const gridProps = gridTableMock.mock.calls[0][0];
     const contextItems = gridProps.getCustomContextMenuItems(resourceWithGVK, 'kind');
+    const deleteItem = contextItems.find(
+      (item: { label?: string; onClick?: () => void }) => item.label === 'Delete'
+    );
     await act(async () => {
-      contextItems[2].onClick();
+      deleteItem?.onClick?.();
       await Promise.resolve();
     });
     expect(modalProps.current?.isOpen).toBe(true);
@@ -340,8 +343,11 @@ describe('NsViewCustom', () => {
 
     const gridProps = gridTableMock.mock.calls[0][0];
     const contextItems = gridProps.getCustomContextMenuItems(dbInstance, 'kind');
+    const deleteItem = contextItems.find(
+      (item: { label?: string; onClick?: () => void }) => item.label === 'Delete'
+    );
     await act(async () => {
-      contextItems[2].onClick();
+      deleteItem?.onClick?.();
       await Promise.resolve();
     });
     expect(modalProps.current?.isOpen).toBe(true);
@@ -377,8 +383,11 @@ describe('NsViewCustom', () => {
 
     const gridProps = gridTableMock.mock.calls[0][0];
     const contextItems = gridProps.getCustomContextMenuItems(baseResource, 'kind');
+    const deleteItem = contextItems.find(
+      (item: { label?: string; onClick?: () => void }) => item.label === 'Delete'
+    );
     await act(async () => {
-      contextItems[2].onClick();
+      deleteItem?.onClick?.();
       await Promise.resolve();
     });
 
@@ -412,8 +421,11 @@ describe('NsViewCustom', () => {
     });
 
     const gridProps = gridTableMock.mock.calls[0][0];
+    const deleteItem = gridProps
+      .getCustomContextMenuItems(resourceWithGVK, 'kind')
+      .find((item: { label?: string; onClick?: () => void }) => item.label === 'Delete');
     await act(async () => {
-      gridProps.getCustomContextMenuItems(resourceWithGVK, 'kind')[2].onClick();
+      deleteItem?.onClick?.();
       await Promise.resolve();
     });
 

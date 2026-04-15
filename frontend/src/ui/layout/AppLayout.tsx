@@ -323,6 +323,7 @@ export const AppLayout: React.FC = () => {
       >
         <ObjectDiffModal
           isOpen={viewState.isObjectDiffOpen}
+          initialRequest={viewState.objectDiffOpenRequest}
           onClose={() => viewState.setIsObjectDiffOpen(false)}
         />
       </PanelErrorBoundary>

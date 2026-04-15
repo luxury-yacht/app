@@ -568,6 +568,69 @@ describe('ObjectDiffModal', () => {
     ) as HTMLSelectElement | null;
     expect(rightKindSelect?.value).toBe('Deployment');
   });
+
+  it('pre-populates the left side from an initial diff request', async () => {
+    appMocks.FindCatalogObjectMatch.mockResolvedValue({
+      uid: 'alpha-uid',
+      name: 'alpha',
+      namespace: 'apps',
+      kind: 'Deployment',
+      group: 'apps',
+      version: 'v1',
+      clusterId: 'cluster-a',
+      clusterName: 'Cluster A',
+    });
+
+    await act(async () => {
+      root.render(
+        <KeyboardProvider>
+          <ObjectDiffModal
+            isOpen
+            initialRequest={{
+              requestId: 7,
+              left: {
+                clusterId: 'cluster-a',
+                namespace: 'apps',
+                group: 'apps',
+                version: 'v1',
+                kind: 'Deployment',
+                name: 'alpha',
+              },
+            }}
+            onClose={vi.fn()}
+          />
+        </KeyboardProvider>
+      );
+      await Promise.resolve();
+    });
+
+    expect(appMocks.FindCatalogObjectMatch).toHaveBeenCalledWith(
+      'cluster-a',
+      'apps',
+      'apps',
+      'v1',
+      'Deployment',
+      'alpha'
+    );
+
+    const leftClusterSelect = document.querySelector(
+      'select[aria-label="Left cluster"]'
+    ) as HTMLSelectElement | null;
+    const leftNamespaceSelect = document.querySelector(
+      'select[aria-label="Left namespace"]'
+    ) as HTMLSelectElement | null;
+    const leftKindSelect = document.querySelector(
+      'select[aria-label="Left kind"]'
+    ) as HTMLSelectElement | null;
+    const leftObjectSelect = document.querySelector(
+      'select[aria-label="Left object"]'
+    ) as HTMLSelectElement | null;
+
+    expect(leftClusterSelect?.value).toBe('cluster-a');
+    expect(leftNamespaceSelect?.value).toBe('apps');
+    expect(leftKindSelect?.value).toBe('Deployment');
+    expect(leftObjectSelect?.value).toBe('alpha-uid');
+  });
 });
 
 const setTextInputValue = async (input: HTMLInputElement | null, nextValue: string) => {
