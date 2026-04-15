@@ -23,28 +23,12 @@ import (
 const objectYAMLErrorPrefix = "ObjectYAMLError:"
 const mutationRequestTimeout = 15 * time.Second
 
-type diffLineType string
-
-const (
-	diffLineContext diffLineType = "context"
-	diffLineAdded   diffLineType = "added"
-	diffLineRemoved diffLineType = "removed"
-)
-
-type diffLine struct {
-	Type            diffLineType `json:"type"`
-	Value           string       `json:"value"`
-	LeftLineNumber  *int         `json:"leftLineNumber,omitempty"`
-	RightLineNumber *int         `json:"rightLineNumber,omitempty"`
-}
-
 type objectYAMLError struct {
-	Code                   string     `json:"code"`
-	Message                string     `json:"message"`
-	Diff                   []diffLine `json:"diff,omitempty"`
-	Truncated              bool       `json:"truncated,omitempty"`
-	CurrentResourceVersion string     `json:"currentResourceVersion,omitempty"`
-	Causes                 []string   `json:"causes,omitempty"`
+	Code                   string   `json:"code"`
+	Message                string   `json:"message"`
+	CurrentYAML            string   `json:"currentYaml,omitempty"`
+	CurrentResourceVersion string   `json:"currentResourceVersion,omitempty"`
+	Causes                 []string `json:"causes,omitempty"`
 }
 
 func (e *objectYAMLError) Error() string {
@@ -248,12 +232,10 @@ func prepareMutationContextWithDependencies(
 		if err != nil {
 			return nil, err
 		}
-		diff, truncated := computeDiffLines(currentYAML, req.YAML)
 		return nil, &objectYAMLError{
 			Code:                   "ResourceVersionMismatch",
 			Message:                fmt.Sprintf("object has changed since editing began: current resourceVersion is %s, editor tracked %s", current.GetResourceVersion(), req.ResourceVersion),
-			Diff:                   diff,
-			Truncated:              truncated,
+			CurrentYAML:            currentYAML,
 			CurrentResourceVersion: current.GetResourceVersion(),
 		}
 	}
@@ -337,8 +319,6 @@ func namespaceLabel(value string) string {
 	return value
 }
 
-const maxDiffLineCount = 800
-
 func normalizeObjectYAML(obj *unstructured.Unstructured) (string, error) {
 	copyObj := obj.DeepCopy()
 	unstructured.RemoveNestedField(copyObj.Object, "metadata", "managedFields")
@@ -357,109 +337,6 @@ func normalizeObjectYAML(obj *unstructured.Unstructured) (string, error) {
 
 	return string(bytes), nil
 }
-
-func computeDiffLines(before, after string) ([]diffLine, bool) {
-	before = strings.TrimSuffix(before, "\n")
-	after = strings.TrimSuffix(after, "\n")
-	left := strings.Split(before, "\n")
-	right := strings.Split(after, "\n")
-	if before == "" {
-		left = []string{}
-	}
-	if after == "" {
-		right = []string{}
-	}
-
-	if len(left)+len(right) > maxDiffLineCount {
-		return nil, true
-	}
-
-	dp := buildDiffMatrix(left, right)
-	lines := make([]diffLine, 0, len(left)+len(right))
-	i, j := 0, 0
-	leftLine := 1
-	rightLine := 1
-
-	for i < len(left) && j < len(right) {
-		if left[i] == right[j] {
-			lines = append(lines, diffLine{
-				Type:            diffLineContext,
-				Value:           left[i],
-				LeftLineNumber:  intPtr(leftLine),
-				RightLineNumber: intPtr(rightLine),
-			})
-			i++
-			j++
-			leftLine++
-			rightLine++
-			continue
-		}
-
-		if dp[i+1][j] >= dp[i][j+1] {
-			lines = append(lines, diffLine{
-				Type:           diffLineRemoved,
-				Value:          left[i],
-				LeftLineNumber: intPtr(leftLine),
-			})
-			i++
-			leftLine++
-		} else {
-			lines = append(lines, diffLine{
-				Type:            diffLineAdded,
-				Value:           right[j],
-				RightLineNumber: intPtr(rightLine),
-			})
-			j++
-			rightLine++
-		}
-	}
-
-	for ; i < len(left); i++ {
-		lines = append(lines, diffLine{
-			Type:           diffLineRemoved,
-			Value:          left[i],
-			LeftLineNumber: intPtr(leftLine),
-		})
-		leftLine++
-	}
-
-	for ; j < len(right); j++ {
-		lines = append(lines, diffLine{
-			Type:            diffLineAdded,
-			Value:           right[j],
-			RightLineNumber: intPtr(rightLine),
-		})
-		rightLine++
-	}
-
-	return lines, false
-}
-
-func buildDiffMatrix(left, right []string) [][]int {
-	rows := len(left) + 1
-	cols := len(right) + 1
-	dp := make([][]int, rows)
-	for idx := range dp {
-		dp[idx] = make([]int, cols)
-	}
-	for i := len(left) - 1; i >= 0; i-- {
-		for j := len(right) - 1; j >= 0; j-- {
-			if left[i] == right[j] {
-				dp[i][j] = dp[i+1][j+1] + 1
-			} else if dp[i+1][j] >= dp[i][j+1] {
-				dp[i][j] = dp[i+1][j]
-			} else {
-				dp[i][j] = dp[i][j+1]
-			}
-		}
-	}
-	return dp
-}
-
-func intPtr(v int) *int {
-	return &v
-}
-
 func isDocEmpty(doc map[string]interface{}) bool {
 	if doc == nil {
 		return true

@@ -78,6 +78,16 @@ describe('Dropdown', () => {
     });
   };
 
+  const setTextInputValue = async (input: HTMLInputElement | null, value: string) => {
+    if (!input) throw new Error('Input not found');
+    const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+    descriptor?.set?.call(input, value);
+    await act(async () => {
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      await Promise.resolve();
+    });
+  };
+
   it('opens the menu and selects an option', async () => {
     const handleChange = vi.fn();
 
@@ -135,13 +145,7 @@ describe('Dropdown', () => {
     const searchInput = container.querySelector<HTMLInputElement>('.search-input');
     expect(searchInput).not.toBeNull();
 
-    await act(async () => {
-      searchInput!.value = 'gam';
-      const eventInit = { bubbles: true } as EventInit;
-      searchInput!.dispatchEvent(new Event('input', eventInit));
-      searchInput!.dispatchEvent(new Event('change', eventInit));
-      await Promise.resolve();
-    });
+    await setTextInputValue(searchInput, 'gam');
 
     expect(searchInput!.value).toBe('gam');
 
@@ -158,6 +162,78 @@ describe('Dropdown', () => {
 
     const reopenedInput = container.querySelector<HTMLInputElement>('.search-input');
     expect(reopenedInput?.value ?? '').toBe('');
+  });
+
+  it('filters visible options for local searchable dropdowns and keeps keyboard navigation on filtered options', async () => {
+    const handleChange = vi.fn();
+
+    const Harness = () => {
+      const [value, setValue] = useState('');
+      return (
+        <Dropdown
+          options={OPTIONS}
+          value={value}
+          onChange={(next) => {
+            handleChange(next);
+            setValue(next as string);
+          }}
+          searchable
+        />
+      );
+    };
+
+    await mount(<Harness />);
+
+    click(container.querySelector('.dropdown-trigger'));
+
+    const searchInput = container.querySelector<HTMLInputElement>('.search-input');
+    expect(searchInput).not.toBeNull();
+
+    await setTextInputValue(searchInput, 'gam');
+
+    const optionLabels = Array.from(container.querySelectorAll('.dropdown-option')).map((node) =>
+      node.textContent?.trim()
+    );
+    expect(optionLabels).toEqual(['Gamma']);
+
+    await pressKey(searchInput, 'ArrowDown');
+    expect(container.querySelector('.dropdown-option.highlighted')?.textContent).toContain('Gamma');
+
+    await pressKey(searchInput, 'Enter');
+    expect(handleChange).toHaveBeenCalledWith('gamma');
+  });
+
+  it('supports remote search without locally filtering the provided options', async () => {
+    const onSearchChange = vi.fn();
+
+    await mount(
+      <Dropdown
+        options={OPTIONS}
+        value=""
+        onChange={vi.fn()}
+        searchable
+        searchMode="remote"
+        searchValue="ga"
+        onSearchChange={onSearchChange}
+      />
+    );
+
+    click(container.querySelector('.dropdown-trigger'));
+
+    const optionLabels = Array.from(container.querySelectorAll('.dropdown-option')).map((node) =>
+      node.textContent?.trim()
+    );
+    expect(optionLabels).toEqual(['Alpha', 'Beta', 'Gamma']);
+
+    const searchInput = container.querySelector<HTMLInputElement>('.search-input');
+    expect(searchInput?.value).toBe('ga');
+
+    await setTextInputValue(searchInput, 'bet');
+
+    expect(onSearchChange).toHaveBeenCalledWith('bet');
+
+    click(container.querySelector('.dropdown-trigger'));
+    expect(onSearchChange).toHaveBeenCalledWith('');
   });
 
   it('renders an empty state when no options are available', async () => {

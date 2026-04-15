@@ -4,6 +4,7 @@ import {backend} from '../models';
 import {types} from '../models';
 import {context} from '../models';
 import {capabilities} from '../models';
+import {objectcatalog} from '../models';
 import {json} from '../models';
 
 export function AddFavorite(arg1:backend.Favorite):Promise<backend.Favorite>;
@@ -55,6 +56,8 @@ export function DrainNode(arg1:string,arg2:string,arg3:types.DrainNodeOptions):P
 export function EvaluateCapabilities(arg1:Array<capabilities.CheckRequest>):Promise<Array<capabilities.CheckResult>>;
 
 export function FetchNodeLogs(arg1:string,arg2:string,arg3:types.NodeLogFetchRequest):Promise<types.NodeLogFetchResponse>;
+
+export function FindCatalogObjectMatch(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string):Promise<objectcatalog.Summary>;
 
 export function ForceDeleteNode(arg1:string,arg2:string):Promise<void>;
 

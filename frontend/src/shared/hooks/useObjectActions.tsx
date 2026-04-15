@@ -7,8 +7,10 @@
 
 import { useMemo } from 'react';
 import { getPermissionKey, useUserPermissions } from '@/core/capabilities';
+import { eventBus } from '@/core/events';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import {
+  DiffIcon,
   OpenIcon,
   RestartIcon,
   RollbackIcon,
@@ -16,6 +18,8 @@ import {
   DeleteIcon,
   PortForwardIcon,
 } from '@shared/components/icons/MenuIcons';
+import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
+import type { ObjectDiffSelectionSeed } from '@shared/components/diff/objectDiffSelection';
 
 // Normalized kind mapping for permission checks
 const WORKLOAD_KIND_MAP: Record<string, string> = {
@@ -88,6 +92,7 @@ export const RESTARTABLE_KINDS = ['Deployment', 'StatefulSet', 'DaemonSet'];
 export const ROLLBACKABLE_KINDS = ['Deployment', 'StatefulSet', 'DaemonSet'];
 export const SCALABLE_KINDS = ['Deployment', 'StatefulSet', 'ReplicaSet'];
 const PORT_FORWARDABLE_KINDS = ['Pod', 'Deployment', 'StatefulSet', 'DaemonSet', 'Service'];
+let nextObjectDiffRequestId = 1;
 
 // Options for building action items
 export interface BuildObjectActionsOptions {
@@ -104,6 +109,35 @@ export interface BuildObjectActionsOptions {
   actionLoading?: boolean;
 }
 
+const buildObjectDiffSelection = (
+  object: ObjectActionData,
+  _context: 'gridtable' | 'object-panel',
+  _handlers: ObjectActionHandlers
+): ObjectDiffSelectionSeed | null => {
+  if (!object.clusterId) {
+    return null;
+  }
+  if (object.kind === 'Event' && object.involvedObject) {
+    return null;
+  }
+
+  const builtin = resolveBuiltinGroupVersion(object.kind);
+  const group = object.group ?? builtin.group;
+  const version = object.version ?? builtin.version;
+  if (!version) {
+    return null;
+  }
+
+  return {
+    clusterId: object.clusterId,
+    namespace: object.namespace,
+    group: group ?? '',
+    version,
+    kind: object.kind,
+    name: object.name,
+  };
+};
+
 /**
  * Build menu items for an object. Can be used directly or via the useObjectActions hook.
  */
@@ -116,6 +150,7 @@ export function buildObjectActionItems({
 }: BuildObjectActionsOptions): ContextMenuItem[] {
   const menuItems: ContextMenuItem[] = [];
   const normalizedKind = normalizeKind(object.kind);
+  const diffSelection = buildObjectDiffSelection(object, context, handlers);
 
   const {
     restart: restartStatus,
@@ -125,24 +160,25 @@ export function buildObjectActionItems({
     portForward: portForwardStatus,
   } = permissions;
 
-  // Permission pending header
-  const anyPending =
-    restartStatus?.pending ||
-    rollbackStatus?.pending ||
-    scaleStatus?.pending ||
-    deleteStatus?.pending ||
-    portForwardStatus?.pending;
-
-  if (anyPending) {
-    menuItems.push({ header: true, label: 'Awaiting permissions...' });
-  }
-
   // Open - only for gridtable context
   if (context === 'gridtable' && handlers.onOpen) {
     menuItems.push({
       label: 'Open',
       icon: <OpenIcon />,
       onClick: handlers.onOpen,
+    });
+  }
+
+  if (diffSelection) {
+    menuItems.push({
+      label: 'Diff',
+      icon: <DiffIcon />,
+      onClick: () => {
+        eventBus.emit('view:open-object-diff', {
+          requestId: nextObjectDiffRequestId++,
+          left: diffSelection,
+        });
+      },
     });
   }
 
@@ -157,6 +193,32 @@ export function buildObjectActionItems({
         onClick: handlers.onViewInvolvedObject,
       });
     }
+  }
+
+  // Permission pending header
+  const anyPending =
+    restartStatus?.pending ||
+    rollbackStatus?.pending ||
+    scaleStatus?.pending ||
+    deleteStatus?.pending ||
+    portForwardStatus?.pending;
+
+  const hasFollowUpSection =
+    anyPending ||
+    normalizedKind === 'CronJob' ||
+    (RESTARTABLE_KINDS.includes(normalizedKind) && Boolean(handlers.onRestart)) ||
+    (ROLLBACKABLE_KINDS.includes(normalizedKind) && Boolean(handlers.onRollback)) ||
+    (SCALABLE_KINDS.includes(normalizedKind) &&
+      (Boolean(object.hpaManaged) || Boolean(handlers.onScale))) ||
+    (PORT_FORWARDABLE_KINDS.includes(normalizedKind) && Boolean(handlers.onPortForward)) ||
+    Boolean(handlers.onDelete);
+
+  if (menuItems.length > 0 && hasFollowUpSection) {
+    menuItems.push({ divider: true });
+  }
+
+  if (anyPending) {
+    menuItems.push({ header: true, label: 'Awaiting permissions...' });
   }
 
   // CronJob-specific actions

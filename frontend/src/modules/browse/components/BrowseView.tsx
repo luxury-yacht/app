@@ -263,6 +263,8 @@ const BrowseView: React.FC<BrowseViewProps> = ({
           namespace: row.item.namespace,
           clusterId: row.item.clusterId,
           clusterName: row.item.clusterName,
+          group: row.item.group,
+          version: row.item.version,
         },
         context: 'gridtable',
         handlers: {

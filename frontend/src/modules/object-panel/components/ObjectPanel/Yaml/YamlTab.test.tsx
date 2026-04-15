@@ -65,17 +65,6 @@ CodeMirrorMock.displayName = 'CodeMirrorMock';
 
 const yamlErrorsMocks = vi.hoisted(() => ({
   parseObjectYamlError: vi.fn(),
-  coerceDiffResult: vi.fn(() => ({
-    truncated: false,
-    lines: [
-      {
-        type: 'added' as const,
-        leftLineNumber: null,
-        rightLineNumber: 1,
-        value: 'metadata:',
-      },
-    ],
-  })),
 }));
 
 const wailsMocks = vi.hoisted(() => ({
@@ -196,7 +185,6 @@ vi.mock('@/core/codemirror/search', () => ({
 
 vi.mock('./yamlErrors', () => ({
   parseObjectYamlError: yamlErrorsMocks.parseObjectYamlError,
-  coerceDiffResult: yamlErrorsMocks.coerceDiffResult,
 }));
 
 vi.mock('@utils/errorHandler', () => ({
@@ -238,6 +226,12 @@ spec:
     - name: demo
       image: demo:v2
 `.trim();
+
+const buildLargeYamlDraft = (commentLineCount: number) =>
+  [
+    UPDATED_YAML,
+    ...Array.from({ length: commentLineCount }, (_, index) => `# pad-${index + 1}`),
+  ].join('\n');
 
 type Snapshot = {
   status: SnapshotStatus;
@@ -326,7 +320,6 @@ describe('YamlTab', () => {
     wailsMocks.ApplyObjectYaml.mockReset();
     wailsMocks.GetObjectYAMLByGVK.mockReset();
     yamlErrorsMocks.parseObjectYamlError.mockReset();
-    yamlErrorsMocks.coerceDiffResult.mockClear();
     errorHandlerMock.handle.mockClear();
   });
 
@@ -424,6 +417,7 @@ describe('YamlTab', () => {
       code: 'ResourceVersionMismatch',
       message: 'Object changed upstream',
       causes: ['Remote diff detected'],
+      currentYaml: UPDATED_YAML,
       currentResourceVersion: '999',
     });
     wailsMocks.ValidateObjectYaml.mockRejectedValue(new Error('mismatch'));
@@ -476,10 +470,54 @@ describe('YamlTab', () => {
     await unmount();
   });
 
+  it('shows the shared too-large warning when a frontend drift diff exceeds budget', async () => {
+    yamlErrorsMocks.parseObjectYamlError.mockReturnValue({
+      code: 'ResourceVersionMismatch',
+      message: 'Object changed upstream',
+      causes: ['Remote diff detected'],
+      currentYaml: YAML,
+      currentResourceVersion: '999',
+    });
+    wailsMocks.ValidateObjectYaml.mockRejectedValue(new Error('mismatch'));
+
+    const { container, unmount } = await renderYamlTab();
+
+    const editButton = Array.from(container.querySelectorAll('button')).find((btn) =>
+      btn.textContent?.includes('Edit')
+    );
+    await act(async () => {
+      editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    await act(async () => {
+      codeMirrorState.latestProps.current.onChange(buildLargeYamlDraft(15_005));
+    });
+
+    const saveButton = Array.from(container.querySelectorAll('button')).find((btn) =>
+      btn.textContent?.includes('Save')
+    );
+    await act(async () => {
+      saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    await waitForUpdates();
+
+    expect(container.querySelector('.yaml-drift-diff')).toBeNull();
+    expect(container.querySelector('.yaml-drift-warning')?.textContent).toContain(
+      'The diff is too large to display in the current view'
+    );
+    expect(container.querySelector('.yaml-drift-warning')?.textContent).toContain(
+      'limit of 15,000'
+    );
+
+    await unmount();
+  });
+
   it('reports reload errors when merge fails', async () => {
     yamlErrorsMocks.parseObjectYamlError.mockReturnValue({
       code: 'ResourceVersionMismatch',
       message: 'Conflict detected',
+      currentYaml: UPDATED_YAML,
       causes: [],
     });
     wailsMocks.ValidateObjectYaml.mockRejectedValue(new Error('mismatch'));

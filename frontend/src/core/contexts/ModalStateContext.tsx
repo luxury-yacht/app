@@ -6,11 +6,14 @@
  * along with functions to update their states.
  */
 import React, { createContext, useContext, useState, useMemo, useCallback } from 'react';
+import { eventBus } from '@/core/events';
+import type { ObjectDiffOpenRequest } from '@shared/components/diff/objectDiffSelection';
 
 interface ModalStateContextType {
   isSettingsOpen: boolean;
   isAboutOpen: boolean;
   isObjectDiffOpen: boolean;
+  objectDiffOpenRequest: ObjectDiffOpenRequest | null;
   /**
    * Application-logs panel visibility. App-global (not per-cluster):
    * the app logs are the application's own log output, not workspace
@@ -23,6 +26,7 @@ interface ModalStateContextType {
   setIsSettingsOpen: (open: boolean) => void;
   setIsAboutOpen: (open: boolean) => void;
   setIsObjectDiffOpen: (open: boolean) => void;
+  openObjectDiff: (request?: { left?: ObjectDiffOpenRequest['left'] }) => void;
   setShowAppLogs: (open: boolean) => void;
   toggleAppLogs: () => void;
 }
@@ -45,10 +49,28 @@ export const ModalStateProvider: React.FC<ModalStateProviderProps> = ({ children
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isAboutOpen, setIsAboutOpen] = useState(false);
   const [isObjectDiffOpen, setIsObjectDiffOpen] = useState(false);
+  const [objectDiffOpenRequest, setObjectDiffOpenRequest] = useState<ObjectDiffOpenRequest | null>(
+    null
+  );
   const [showAppLogs, setShowAppLogs] = useState(false);
 
   const toggleAppLogs = useCallback(() => {
     setShowAppLogs((prev) => !prev);
+  }, []);
+
+  const openObjectDiff = useCallback((request?: { left?: ObjectDiffOpenRequest['left'] }) => {
+    setObjectDiffOpenRequest((prev) => ({
+      requestId: (prev?.requestId ?? 0) + 1,
+      left: request?.left ?? null,
+    }));
+    setIsObjectDiffOpen(true);
+  }, []);
+
+  React.useEffect(() => {
+    return eventBus.on('view:open-object-diff', (request) => {
+      setObjectDiffOpenRequest(request);
+      setIsObjectDiffOpen(true);
+    });
   }, []);
 
   const value = useMemo(
@@ -56,14 +78,24 @@ export const ModalStateProvider: React.FC<ModalStateProviderProps> = ({ children
       isSettingsOpen,
       isAboutOpen,
       isObjectDiffOpen,
+      objectDiffOpenRequest,
       showAppLogs,
       setIsSettingsOpen,
       setIsAboutOpen,
       setIsObjectDiffOpen,
+      openObjectDiff,
       setShowAppLogs,
       toggleAppLogs,
     }),
-    [isSettingsOpen, isAboutOpen, isObjectDiffOpen, showAppLogs, toggleAppLogs]
+    [
+      isSettingsOpen,
+      isAboutOpen,
+      isObjectDiffOpen,
+      objectDiffOpenRequest,
+      showAppLogs,
+      openObjectDiff,
+      toggleAppLogs,
+    ]
   );
 
   return <ModalStateContext.Provider value={value}>{children}</ModalStateContext.Provider>;

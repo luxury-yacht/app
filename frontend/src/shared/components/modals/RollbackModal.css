@@ -196,6 +196,16 @@
   border-radius: 3px;
 }
 
+.rollback-diff-warning {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100%;
+  padding: 2rem;
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
 /* ==========================================================================
    Loading, Empty, and Error States
    ========================================================================== */

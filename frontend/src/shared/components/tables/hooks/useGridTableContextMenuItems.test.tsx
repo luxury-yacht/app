@@ -139,6 +139,42 @@ describe('useGridTableContextMenuItems', () => {
     expect(result).toEqual(cellItems);
   });
 
+  it('inserts the navigation divider below Diff when both Open and Diff are present', async () => {
+    const params = buildParams({
+      getCustomContextMenuItems: () => [
+        { label: 'Open', onClick: vi.fn() },
+        { label: 'Diff', onClick: vi.fn() },
+        { label: 'Restart', onClick: vi.fn() },
+      ],
+    });
+    const { getItems } = await renderHook(params);
+
+    const result = invoke(getItems(), 'name', rowSample, 'cell');
+    expect(result[0]).toMatchObject({ label: 'Open' });
+    expect(result[1]).toMatchObject({ label: 'Diff' });
+    expect(result[2]).toMatchObject({ divider: true });
+    expect(result[3]).toMatchObject({ label: 'Restart' });
+  });
+
+  it('does not add a second divider before sort actions when Diff is immediately followed by sort items', async () => {
+    const onSort = vi.fn();
+    const params = buildParams({
+      onSort,
+      getCustomContextMenuItems: () => [
+        { label: 'Open', onClick: vi.fn() },
+        { label: 'Diff', onClick: vi.fn() },
+      ],
+    });
+    const { getItems } = await renderHook(params);
+
+    const result = invoke(getItems(), 'name', rowSample, 'cell');
+    const dividerIndexes = result
+      .map((item, index) => (item.divider ? index : null))
+      .filter((index): index is number => index !== null);
+    expect(dividerIndexes).toEqual([2]);
+    expect(result[3]).toMatchObject({ label: 'Sort Name Asc' });
+  });
+
   it('sort desc passes target direction directly from unsorted state', async () => {
     const onSort = vi.fn();
     const params = buildParams({

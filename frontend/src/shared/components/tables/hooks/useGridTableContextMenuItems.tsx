@@ -39,13 +39,20 @@ export function useGridTableContextMenuItems<T>({
       if (source === 'cell' && getCustomContextMenuItems && item) {
         const customItems = getCustomContextMenuItems(item, columnKey);
         if (customItems.length > 0) {
-          // Insert a divider after "Open" to separate navigation from actions
-          const openIndex = customItems.findIndex((ci) => 'label' in ci && ci.label === 'Open');
-          if (openIndex !== -1 && customItems.length > openIndex + 1) {
-            // Check if there's already a divider after Open
-            const nextItem = customItems[openIndex + 1];
+          // Keep the top ungated navigation block together. Prefer a divider
+          // below "Diff" when present; otherwise fall back to placing it
+          // below "Open".
+          const sectionBreakIndex = (() => {
+            const diffIndex = customItems.findIndex((ci) => 'label' in ci && ci.label === 'Diff');
+            if (diffIndex !== -1) {
+              return diffIndex;
+            }
+            return customItems.findIndex((ci) => 'label' in ci && ci.label === 'Open');
+          })();
+          if (sectionBreakIndex !== -1 && customItems.length > sectionBreakIndex + 1) {
+            const nextItem = customItems[sectionBreakIndex + 1];
             if (!('divider' in nextItem && nextItem.divider)) {
-              customItems.splice(openIndex + 1, 0, { divider: true });
+              customItems.splice(sectionBreakIndex + 1, 0, { divider: true });
             }
           }
           items.push(...customItems);
@@ -55,7 +62,8 @@ export function useGridTableContextMenuItems<T>({
       const column = columns.find((col) => col.key === columnKey);
 
       if (column?.sortable && onSort) {
-        if (items.length > 0) {
+        const lastItem = items[items.length - 1];
+        if (items.length > 0 && !('divider' in lastItem && lastItem.divider)) {
           items.push({ divider: true });
         }
 

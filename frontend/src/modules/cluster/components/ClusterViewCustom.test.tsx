@@ -261,10 +261,12 @@ describe('ClusterViewCustom', () => {
     const props = gridTablePropsRef.current;
     expect(props).toBeTruthy();
 
-    // The Delete context menu item is at index 2 (Open, View YAML, Delete).
     const contextItems = props.getCustomContextMenuItems(clusterScopedCR, 'kind');
+    const deleteItem = contextItems.find(
+      (item: { label?: string; onClick?: () => void }) => item.label === 'Delete'
+    );
     await act(async () => {
-      contextItems[2].onClick();
+      deleteItem?.onClick?.();
       await Promise.resolve();
     });
     expect(modalProps.current?.isOpen).toBe(true);
