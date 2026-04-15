@@ -885,8 +885,42 @@
 
 .resource-form-env-var-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  gap: var(--spacing-md);
+}
+
+/* A label + input/dropdown pair. Used for NAME, TYPE, VALUE, KEY, FIELD. */
+.resource-form-env-var-col {
+  display: inline-flex;
+  align-items: flex-start;
   gap: var(--spacing-xs);
+}
+
+/* Source-specific fields on the right — stack vertically when there is
+   more than one (ConfigMap/Secret render NAME + KEY on two lines). */
+.resource-form-env-var-source-fields {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.resource-form-env-var-source-fields .resource-form-env-var-col {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Make labels inside the source-fields column a fixed width so "NAME",
+   "KEY", "VALUE", "FIELD" all align left-justified. */
+.resource-form-env-var-source-fields .resource-form-field-label {
+  flex: 0 0 auto;
+  width: 5ch;
+}
+
+/* Align small-caps labels with the input's first-line text baseline. */
+.resource-form-env-var-col > .resource-form-field-label {
+  padding-top: 5px;
 }
 
 .resource-form-env-var-name {
@@ -894,14 +928,26 @@
   width: calc(25ch + 20px);
 }
 
+/* Sized to fit the longest option ("ConfigMap", 9 chars) plus arrow/padding. */
 .resource-form-env-var-source {
-  flex: 0 0 10rem;
-  min-width: 10rem;
+  flex: 0 0 auto;
+  width: calc(9ch + 40px);
+  min-width: calc(9ch + 40px);
+  max-width: calc(9ch + 40px);
 }
 
 .resource-form-env-var-source .dropdown {
-  display: inline-block;
-  width: auto;
+  display: block;
+  width: 100%;
+}
+
+/* Force the trigger to match the container width — the base dropdown-trigger
+   uses min-width: min-content which would otherwise size to its content and
+   overflow into the next column. */
+.resource-form-env-var-source .dropdown-trigger {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .resource-form-env-var-source .dropdown-menu {

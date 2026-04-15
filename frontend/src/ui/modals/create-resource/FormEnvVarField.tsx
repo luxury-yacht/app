@@ -179,93 +179,116 @@ export function FormEnvVarField({
 
         return (
           <div key={index} className="resource-form-env-var-row">
-            {/* Env var name input */}
-            <div data-field-key={`envVarName-${index}`} className="resource-form-env-var-name">
-              <input
-                {...INPUT_BEHAVIOR_PROPS}
-                className="resource-form-input"
-                type="text"
-                value={envName}
-                onChange={(e) => handleNameChange(index, e.target.value)}
-                placeholder="name"
-                aria-label={`Env var name ${rowLabel}`}
-              />
-            </div>
-
-            {/* Source type dropdown */}
-            <div className="resource-form-env-var-source">
-              <Dropdown
-                options={sourceTypeOptions}
-                value={sourceType}
-                onChange={(val) => handleSourceTypeChange(index, val as SourceType)}
-                ariaLabel={`Env var source ${rowLabel}`}
-              />
-            </div>
-
-            {/* Dynamic fields based on source type */}
-            {sourceType === 'value' && (
-              <div data-field-key={`envVarValue-${index}`} className="resource-form-env-var-value">
+            {/* NAME column */}
+            <div className="resource-form-env-var-col">
+              <span className="resource-form-field-label">NAME</span>
+              <div data-field-key={`envVarName-${index}`} className="resource-form-env-var-name">
                 <input
                   {...INPUT_BEHAVIOR_PROPS}
                   className="resource-form-input"
                   type="text"
-                  value={(item.value as string) ?? ''}
-                  onChange={(e) => handleValueChange(index, e.target.value)}
-                  placeholder="value"
-                  aria-label={`Env var value ${rowLabel}`}
+                  value={envName}
+                  onChange={(e) => handleNameChange(index, e.target.value)}
+                  placeholder="name"
+                  aria-label={`Env var name ${rowLabel}`}
                 />
               </div>
-            )}
+            </div>
 
-            {(sourceType === 'configMap' || sourceType === 'secret') && (
-              <>
-                <div
-                  data-field-key={`envVarRefName-${index}`}
-                  className="resource-form-env-var-ref-name"
-                >
-                  <input
-                    {...INPUT_BEHAVIOR_PROPS}
-                    className="resource-form-input"
-                    type="text"
-                    value={getRefName(item)}
-                    onChange={(e) => handleRefNameChange(index, e.target.value)}
-                    placeholder={sourceType === 'configMap' ? 'configmap name' : 'secret name'}
-                    aria-label={`Env var ref name ${rowLabel}`}
-                  />
-                </div>
-                <div
-                  data-field-key={`envVarRefKey-${index}`}
-                  className="resource-form-env-var-ref-key"
-                >
-                  <input
-                    {...INPUT_BEHAVIOR_PROPS}
-                    className="resource-form-input"
-                    type="text"
-                    value={getRefKey(item)}
-                    onChange={(e) => handleRefKeyChange(index, e.target.value)}
-                    placeholder="key"
-                    aria-label={`Env var ref key ${rowLabel}`}
-                  />
-                </div>
-              </>
-            )}
-
-            {sourceType === 'fieldRef' && (
-              <div
-                data-field-key={`envVarFieldPath-${index}`}
-                className="resource-form-env-var-value"
-              >
-                <input
-                  {...INPUT_BEHAVIOR_PROPS}
-                  className="resource-form-input"
-                  type="text"
-                  value={getFieldPath(item)}
-                  onChange={(e) => handleFieldPathChange(index, e.target.value)}
-                  placeholder="status.podIP"
-                  aria-label={`Env var field path ${rowLabel}`}
+            {/* TYPE column */}
+            <div className="resource-form-env-var-col">
+              <span className="resource-form-field-label">TYPE</span>
+              <div className="resource-form-env-var-source">
+                <Dropdown
+                  options={sourceTypeOptions}
+                  value={sourceType}
+                  onChange={(val) => handleSourceTypeChange(index, val as SourceType)}
+                  ariaLabel={`Env var source ${rowLabel}`}
                 />
               </div>
-            )}
+            </div>
+
+            {/* Source-specific fields (stacks vertically when there are two) */}
+            <div className="resource-form-env-var-source-fields">
+              {sourceType === 'value' && (
+                <div className="resource-form-env-var-col">
+                  <span className="resource-form-field-label">VALUE</span>
+                  <div
+                    data-field-key={`envVarValue-${index}`}
+                    className="resource-form-env-var-value"
+                  >
+                    <input
+                      {...INPUT_BEHAVIOR_PROPS}
+                      className="resource-form-input"
+                      type="text"
+                      value={(item.value as string) ?? ''}
+                      onChange={(e) => handleValueChange(index, e.target.value)}
+                      placeholder="value"
+                      aria-label={`Env var value ${rowLabel}`}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {(sourceType === 'configMap' || sourceType === 'secret') && (
+                <>
+                  <div className="resource-form-env-var-col">
+                    <span className="resource-form-field-label">NAME</span>
+                    <div
+                      data-field-key={`envVarRefName-${index}`}
+                      className="resource-form-env-var-ref-name"
+                    >
+                      <input
+                        {...INPUT_BEHAVIOR_PROPS}
+                        className="resource-form-input"
+                        type="text"
+                        value={getRefName(item)}
+                        onChange={(e) => handleRefNameChange(index, e.target.value)}
+                        placeholder={sourceType === 'configMap' ? 'configmap name' : 'secret name'}
+                        aria-label={`Env var ref name ${rowLabel}`}
+                      />
+                    </div>
+                  </div>
+                  <div className="resource-form-env-var-col">
+                    <span className="resource-form-field-label">KEY</span>
+                    <div
+                      data-field-key={`envVarRefKey-${index}`}
+                      className="resource-form-env-var-ref-key"
+                    >
+                      <input
+                        {...INPUT_BEHAVIOR_PROPS}
+                        className="resource-form-input"
+                        type="text"
+                        value={getRefKey(item)}
+                        onChange={(e) => handleRefKeyChange(index, e.target.value)}
+                        placeholder="key"
+                        aria-label={`Env var ref key ${rowLabel}`}
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {sourceType === 'fieldRef' && (
+                <div className="resource-form-env-var-col">
+                  <span className="resource-form-field-label">FIELD</span>
+                  <div
+                    data-field-key={`envVarFieldPath-${index}`}
+                    className="resource-form-env-var-value"
+                  >
+                    <input
+                      {...INPUT_BEHAVIOR_PROPS}
+                      className="resource-form-input"
+                      type="text"
+                      value={getFieldPath(item)}
+                      onChange={(e) => handleFieldPathChange(index, e.target.value)}
+                      placeholder="status.podIP"
+                      aria-label={`Env var field path ${rowLabel}`}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* Add/remove buttons — same pattern as FormNestedListField */}
             <div className="resource-form-nested-group-row-actions">
