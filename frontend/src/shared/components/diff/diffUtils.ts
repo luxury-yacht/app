@@ -105,3 +105,6 @@ export const countVisibleDiffRows = (lines: DisplayDiffLine[], showDiffOnly: boo
   }
   return lines.filter((line) => line.leftType !== 'context' || line.rightType !== 'context').length;
 };
+
+export const formatTooLargeDiffMessage = (actualLines: number, limit: number): string =>
+  `The diff is too large to display in the current view (${actualLines.toLocaleString()} lines exceed the limit of ${limit.toLocaleString()}).`;

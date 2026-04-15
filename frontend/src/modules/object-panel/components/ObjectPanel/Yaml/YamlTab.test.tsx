@@ -490,7 +490,7 @@ describe('YamlTab', () => {
     });
 
     await act(async () => {
-      codeMirrorState.latestProps.current.onChange(buildLargeYamlDraft(10_005));
+      codeMirrorState.latestProps.current.onChange(buildLargeYamlDraft(15_005));
     });
 
     const saveButton = Array.from(container.querySelectorAll('button')).find((btn) =>
@@ -504,7 +504,10 @@ describe('YamlTab', () => {
 
     expect(container.querySelector('.yaml-drift-diff')).toBeNull();
     expect(container.querySelector('.yaml-drift-warning')?.textContent).toContain(
-      'This diff is too large to display in the current view.'
+      'The diff is too large to display in the current view'
+    );
+    expect(container.querySelector('.yaml-drift-warning')?.textContent).toContain(
+      'limit of 15,000'
     );
 
     await unmount();

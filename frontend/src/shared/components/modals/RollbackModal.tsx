@@ -13,6 +13,7 @@ import { computeBudgetedLineDiff } from '@shared/components/diff/lineDiff';
 import { ROLLBACK_DIFF_BUDGETS } from '@shared/components/diff/diffBudgets';
 import {
   countVisibleDiffRows,
+  formatTooLargeDiffMessage,
   mergeDiffLines,
   type DisplayDiffLine,
 } from '@shared/components/diff/diffUtils';
@@ -38,6 +39,9 @@ interface RollbackDiffState {
   leftText: string;
   rightText: string;
   tooLarge: boolean;
+  tooLargeReason: 'input' | 'compute' | null;
+  leftLineCount: number;
+  rightLineCount: number;
 }
 
 /**
@@ -149,6 +153,9 @@ const RollbackModal = ({
         leftText: currentEntry.podTemplate,
         rightText: selectedEntry.podTemplate,
         tooLarge: true,
+        tooLargeReason: raw.tooLargeReason,
+        leftLineCount: raw.leftLineCount,
+        rightLineCount: raw.rightLineCount,
       } satisfies RollbackDiffState;
     }
 
@@ -157,6 +164,9 @@ const RollbackModal = ({
       leftText: currentEntry.podTemplate,
       rightText: selectedEntry.podTemplate,
       tooLarge: false,
+      tooLargeReason: null,
+      leftLineCount: raw.leftLineCount,
+      rightLineCount: raw.rightLineCount,
     } satisfies RollbackDiffState;
   }, [currentEntry, selectedEntry]);
 
@@ -168,6 +178,25 @@ const RollbackModal = ({
       countVisibleDiffRows(diffResult.lines, diffOnly) > ROLLBACK_DIFF_BUDGETS.maxRenderableRows
     );
   }, [diffOnly, diffResult]);
+
+  const diffTooLargeMessage = useMemo(() => {
+    if (!diffResult) {
+      return ROLLBACK_DIFF_TOO_LARGE_MESSAGE;
+    }
+    if (renderTooLarge) {
+      return formatTooLargeDiffMessage(
+        countVisibleDiffRows(diffResult.lines, diffOnly),
+        ROLLBACK_DIFF_BUDGETS.maxRenderableRows
+      );
+    }
+    if (diffResult.tooLargeReason === 'input') {
+      return formatTooLargeDiffMessage(
+        Math.max(diffResult.leftLineCount, diffResult.rightLineCount),
+        ROLLBACK_DIFF_BUDGETS.maxLinesPerSide
+      );
+    }
+    return ROLLBACK_DIFF_TOO_LARGE_MESSAGE;
+  }, [diffOnly, diffResult, renderTooLarge]);
 
   // Handle rollback confirmation.
   const handleRollback = useCallback(() => {
@@ -297,7 +326,7 @@ const RollbackModal = ({
             <div className="rollback-diff-content">
               {diffResult?.tooLarge || renderTooLarge ? (
                 <div className="rollback-diff-warning" data-testid="rollback-diff-warning">
-                  {ROLLBACK_DIFF_TOO_LARGE_MESSAGE}
+                  {diffTooLargeMessage}
                 </div>
               ) : (
                 diffResult && (

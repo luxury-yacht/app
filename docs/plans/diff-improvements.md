@@ -20,7 +20,7 @@ The core decisions are:
 - object diff phase 1 is frontend-only and does not add a new dependency
 - phase 1 uses a local Myers-style line diff in TypeScript
 - the backend remains responsible for retrieving and normalizing YAML, not calculating object diffs
-- the initial target is `10k` lines per side for the object diff modal
+- the initial target is `15k` lines per side for the object diff modal
 - phase 1 enforces separate shared budgets for:
   - maximum lines per side
   - deterministic compute work
@@ -122,7 +122,7 @@ and not a coarse `leftLines * rightLines` proxy.
 
 Phase 1 enforces all three budget types for the object diff modal:
 
-- input budget: reject objects above `10k` lines per side
+- input budget: reject objects above `15k` lines per side
 - compute budget: stop deterministic Myers work when `maxComputeWork` is exceeded
 - render budget: reject the active mode when its actual row count exceeds `maxRenderableRows`
 
@@ -156,7 +156,7 @@ The viewer work must preserve:
   - `maxLinesPerSide`
   - `maxComputeWork`
   - `maxRenderableRows`
-- [x] Set the initial object diff target to `10k` lines per side.
+- [x] Set the initial object diff target to `15k` lines per side.
 - [x] Implement a local Myers-style line diff in TypeScript.
 - [x] Enforce deterministic compute-budget failure based on actual Myers work.
 - [x] Enforce render-budget failure based on the current mode’s actual row count.
@@ -298,7 +298,7 @@ phases above allow staggered work, but the final rollout should not stop before 
 - The initial implementation uses a local TypeScript Myers diff, not a new dependency.
 - The backend remains responsible for object YAML retrieval and normalization, not object diff
   calculation.
-- The initial target is `10k` lines per side.
+- The initial target is `15k` lines per side.
 - Budgeting is split into named input, compute, and render budgets.
 - Compute budget uses deterministic algorithm work, not wall-clock time.
 - Render budget is enforced in phase 1 before virtualization exists.

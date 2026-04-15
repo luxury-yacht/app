@@ -4,7 +4,7 @@ import type { LineDiffBudgets } from './diffBudgets';
 import { computeBudgetedLineDiff } from './lineDiff';
 
 const TEST_BUDGETS: LineDiffBudgets = {
-  maxLinesPerSide: 10_000,
+  maxLinesPerSide: 15_000,
   maxComputeWork: 3_000_000,
   maxRenderableRows: 8_000,
 };
@@ -31,8 +31,8 @@ describe('computeBudgetedLineDiff', () => {
   });
 
   it('fails early when the input line budget is exceeded', () => {
-    const before = new Array(10_001).fill('before').join('\n');
-    const after = new Array(10_000).fill('after').join('\n');
+    const before = new Array(15_001).fill('before').join('\n');
+    const after = new Array(15_000).fill('after').join('\n');
 
     const result = computeBudgetedLineDiff(before, after, TEST_BUDGETS);
 

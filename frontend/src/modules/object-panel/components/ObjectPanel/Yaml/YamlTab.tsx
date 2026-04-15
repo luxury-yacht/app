@@ -19,6 +19,7 @@ import { GetObjectYAMLByGVK } from '@wailsjs/go/backend/App';
 import type { DiffLine } from '@shared/components/diff/lineDiff';
 import { computeBudgetedLineDiff } from '@shared/components/diff/lineDiff';
 import { YAML_TAB_DIFF_BUDGETS } from '@shared/components/diff/diffBudgets';
+import { formatTooLargeDiffMessage } from '@shared/components/diff/diffUtils';
 import './YamlTab.css';
 import { parseObjectIdentity, validateYamlDraft, type ObjectIdentity } from './yamlValidation';
 import { parseObjectYamlError } from './yamlErrors';
@@ -54,13 +55,21 @@ export type { YamlTabProps } from './yamlTabTypes';
 type YamlTabDiffResult = {
   lines: DiffLine[];
   tooLarge: boolean;
+  tooLargeMessage: string | null;
 };
 
 const normalizeYamlTabDiff = (diff: YamlTabDiffResult): YamlTabDiffResult => {
-  if (diff.tooLarge || diff.lines.length > YAML_TAB_DIFF_BUDGETS.maxRenderableRows) {
+  if (diff.tooLarge) {
+    return diff;
+  }
+  if (diff.lines.length > YAML_TAB_DIFF_BUDGETS.maxRenderableRows) {
     return {
       lines: [],
       tooLarge: true,
+      tooLargeMessage: formatTooLargeDiffMessage(
+        diff.lines.length,
+        YAML_TAB_DIFF_BUDGETS.maxRenderableRows
+      ),
     };
   }
   return diff;
@@ -230,6 +239,13 @@ const YamlTab: React.FC<YamlTabProps> = ({
       return normalizeYamlTabDiff({
         lines: backendDiff.lines,
         tooLarge: backendDiff.tooLarge,
+        tooLargeMessage:
+          backendDiff.tooLargeReason === 'input'
+            ? formatTooLargeDiffMessage(
+                Math.max(backendDiff.leftLineCount, backendDiff.rightLineCount),
+                YAML_TAB_DIFF_BUDGETS.maxLinesPerSide
+              )
+            : null,
       });
     }
     if (!isEditing || (!hasRemoteDrift && !driftForced)) {
@@ -243,6 +259,13 @@ const YamlTab: React.FC<YamlTabProps> = ({
     return normalizeYamlTabDiff({
       lines: localDiff.lines,
       tooLarge: localDiff.tooLarge,
+      tooLargeMessage:
+        localDiff.tooLargeReason === 'input'
+          ? formatTooLargeDiffMessage(
+              Math.max(localDiff.leftLineCount, localDiff.rightLineCount),
+              YAML_TAB_DIFF_BUDGETS.maxLinesPerSide
+            )
+          : null,
     });
   }, [backendDriftCurrentYaml, displayYaml, draftYaml, driftForced, hasRemoteDrift, isEditing]);
 
@@ -1193,8 +1216,9 @@ const YamlTab: React.FC<YamlTabProps> = ({
                 )}
                 {driftDiff?.tooLarge && (
                   <p className="yaml-drift-warning">
-                    This diff is too large to display in the current view. Reload the YAML to review
-                    the latest version before retrying.
+                    {driftDiff.tooLargeMessage ??
+                      'This diff is too large to display in the current view.'}{' '}
+                    Reload the YAML to review the latest version before retrying.
                   </p>
                 )}
               </>

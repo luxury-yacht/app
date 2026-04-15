@@ -265,8 +265,8 @@ describe('RollbackModal', () => {
 
   it('shows the shared too-large warning when a rollback diff exceeds budget', async () => {
     backendMocks.GetRevisionHistory.mockResolvedValue([
-      makeRevision(2, true, { podTemplate: buildLargeRollbackTemplate(10_001) }),
-      makeRevision(1, false, { podTemplate: buildLargeRollbackTemplate(10_001) }),
+      makeRevision(2, true, { podTemplate: buildLargeRollbackTemplate(15_001) }),
+      makeRevision(1, false, { podTemplate: buildLargeRollbackTemplate(15_001) }),
     ]);
 
     await renderModal();
@@ -276,7 +276,7 @@ describe('RollbackModal', () => {
 
     const warning = document.querySelector('[data-testid="rollback-diff-warning"]');
     expect(warning?.textContent).toContain(
-      'This diff is too large to display in the current view.'
+      'The diff is too large to display in the current view (15,001 lines exceed the limit of 15,000).'
     );
     expect(document.querySelector('.object-diff-table')).toBeNull();
   });

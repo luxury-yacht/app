@@ -396,7 +396,7 @@ describe('ObjectDiffModal', () => {
     await changeSelect('Right object', 'delta-uid');
 
     expect(document.body.textContent).toContain(
-      'This diff is too large to display in the current view.'
+      'The diff is too large to display in the current view (5 lines exceed the limit of 2).'
     );
 
     const toggle = Array.from(document.querySelectorAll('button')).find(
@@ -410,7 +410,7 @@ describe('ObjectDiffModal', () => {
     });
 
     expect(document.body.textContent).not.toContain(
-      'This diff is too large to display in the current view.'
+      'The diff is too large to display in the current view (5 lines exceed the limit of 2).'
     );
     expect(document.body.textContent).toContain('Show All');
   });

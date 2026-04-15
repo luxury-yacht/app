@@ -19,7 +19,11 @@ import { refreshOrchestrator, useRefreshScopedDomain } from '@core/refresh';
 import type { CatalogItem, CatalogSnapshotPayload } from '@core/refresh/types';
 import { computeBudgetedLineDiff, type LineDiffResult } from '@shared/components/diff/lineDiff';
 import { OBJECT_DIFF_BUDGETS } from '@shared/components/diff/diffBudgets';
-import { countVisibleDiffRows, mergeDiffLines } from '@shared/components/diff/diffUtils';
+import {
+  countVisibleDiffRows,
+  formatTooLargeDiffMessage,
+  mergeDiffLines,
+} from '@shared/components/diff/diffUtils';
 import DiffViewer from '@shared/components/diff/DiffViewer';
 import {
   buildIgnoredMetadataLineSet,
@@ -644,6 +648,18 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
     [displayDiffLines, showDiffOnly]
   );
   const renderTooLarge = renderableRowCount > OBJECT_DIFF_BUDGETS.maxRenderableRows;
+  const diffTooLargeMessage = useMemo(() => {
+    if (renderTooLarge) {
+      return formatTooLargeDiffMessage(renderableRowCount, OBJECT_DIFF_BUDGETS.maxRenderableRows);
+    }
+    if (diffResult?.tooLargeReason === 'input') {
+      return formatTooLargeDiffMessage(
+        Math.max(diffResult.leftLineCount, diffResult.rightLineCount),
+        OBJECT_DIFF_BUDGETS.maxLinesPerSide
+      );
+    }
+    return OBJECT_DIFF_TOO_LARGE_MESSAGE;
+  }, [diffResult, renderTooLarge, renderableRowCount]);
   const leftYamlError = leftYaml.state.error ?? null;
   const rightYamlError = rightYaml.state.error ?? null;
   const leftYamlInitialLoading =
@@ -1005,9 +1021,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
       return <div className="object-diff-empty">YAML is not available for both objects.</div>;
     }
     if (diffTooLarge || renderTooLarge) {
-      return (
-        <div className="object-diff-empty object-diff-warning">{OBJECT_DIFF_TOO_LARGE_MESSAGE}</div>
-      );
+      return <div className="object-diff-empty object-diff-warning">{diffTooLargeMessage}</div>;
     }
     if (
       showDiffOnly &&
