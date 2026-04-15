@@ -5,10 +5,7 @@
  * Contains types and functions for merging and comparing diff lines.
  */
 
-import {
-  type DiffLine,
-  type DiffLineType,
-} from '@modules/object-panel/components/ObjectPanel/Yaml/yamlDiff';
+import { type DiffLine, type DiffLineType } from '@shared/components/diff/lineDiff';
 
 // Re-export DiffLineType for consumers of this module.
 export type { DiffLineType };
@@ -100,4 +97,11 @@ export const mergeDiffLines = (lines: DiffLine[]): DisplayDiffLine[] => {
   }
 
   return merged;
+};
+
+export const countVisibleDiffRows = (lines: DisplayDiffLine[], showDiffOnly: boolean): number => {
+  if (!showDiffOnly) {
+    return lines.length;
+  }
+  return lines.filter((line) => line.leftType !== 'context' || line.rightType !== 'context').length;
 };

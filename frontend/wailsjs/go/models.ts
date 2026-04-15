@@ -687,6 +687,47 @@ export namespace capabilities {
 
 }
 
+export namespace objectcatalog {
+	
+	export class Summary {
+	    clusterId: string;
+	    clusterName: string;
+	    kind: string;
+	    group: string;
+	    version: string;
+	    resource: string;
+	    namespace?: string;
+	    name: string;
+	    uid: string;
+	    resourceVersion: string;
+	    creationTimestamp: string;
+	    scope: string;
+	    labelsDigest?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Summary(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.clusterId = source["clusterId"];
+	        this.clusterName = source["clusterName"];
+	        this.kind = source["kind"];
+	        this.group = source["group"];
+	        this.version = source["version"];
+	        this.resource = source["resource"];
+	        this.namespace = source["namespace"];
+	        this.name = source["name"];
+	        this.uid = source["uid"];
+	        this.resourceVersion = source["resourceVersion"];
+	        this.creationTimestamp = source["creationTimestamp"];
+	        this.scope = source["scope"];
+	        this.labelsDigest = source["labelsDigest"];
+	    }
+	}
+
+}
+
 export namespace types {
 	
 	export class AggregationRule {

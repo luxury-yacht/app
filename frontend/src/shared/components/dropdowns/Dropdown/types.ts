@@ -35,6 +35,10 @@ export interface DropdownProps {
   // Behavior props
   multiple?: boolean;
   searchable?: boolean;
+  searchMode?: 'local' | 'remote';
+  searchValue?: string;
+  searchPlaceholder?: string;
+  onSearchChange?: (value: string) => void;
   clearable?: boolean;
   showBulkActions?: boolean;
 

@@ -460,3 +460,39 @@ func (a *App) GetCatalogDiagnostics() (*CatalogDiagnostics, error) {
 
 	return diag, nil
 }
+
+// FindCatalogObjectMatch resolves a single catalog object in the requested
+// cluster by canonical identity.
+func (a *App) FindCatalogObjectMatch(
+	clusterID, namespace, group, version, kind, name string,
+) (*objectcatalog.Summary, error) {
+	if a == nil {
+		return nil, fmt.Errorf("app is not initialised")
+	}
+
+	trimmedClusterID := clusterID
+	if trimmedClusterID == "" {
+		return nil, fmt.Errorf("cluster ID is required")
+	}
+	if version == "" {
+		return nil, fmt.Errorf("version is required")
+	}
+	if kind == "" {
+		return nil, fmt.Errorf("kind is required")
+	}
+	if name == "" {
+		return nil, fmt.Errorf("name is required")
+	}
+
+	svc := a.objectCatalogServiceForCluster(trimmedClusterID)
+	if svc == nil {
+		return nil, fmt.Errorf("object catalog service unavailable for cluster %q", trimmedClusterID)
+	}
+
+	match, ok := svc.FindExactMatch(namespace, group, version, kind, name)
+	if !ok {
+		return nil, nil
+	}
+
+	return &match, nil
+}
