@@ -11,6 +11,7 @@ import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ActionsMenu } from './ActionsMenu';
+import { eventBus } from '@/core/events';
 import type { ObjectActionData } from '@shared/hooks/useObjectActions';
 
 // Spy-backed permission mock so tests can assert that getPermissionKey is
@@ -93,6 +94,7 @@ describe('ActionsMenu', () => {
   });
 
   afterEach(() => {
+    eventBus.clear();
     act(() => {
       root.unmount();
     });
@@ -247,6 +249,41 @@ describe('ActionsMenu', () => {
     const items = Array.from(container.querySelectorAll<HTMLElement>('.context-menu-item'));
     const portForwardItem = items.find((item) => item.textContent?.includes('Port Forward'));
     expect(portForwardItem).toBeTruthy();
+  });
+
+  it('shows Diff in the actions menu and emits an object-diff request', async () => {
+    await renderMenu({
+      object: makeObject('Deployment', {
+        group: 'apps',
+        version: 'v1',
+      }),
+    });
+
+    let payload: unknown;
+    const unsubscribe = eventBus.on('view:open-object-diff', (next) => {
+      payload = next;
+    });
+
+    openMenu(container);
+    const items = Array.from(container.querySelectorAll<HTMLElement>('.context-menu-item'));
+    const diffItem = items.find((item) => item.textContent?.includes('Diff'));
+    expect(diffItem).toBeTruthy();
+
+    act(() => {
+      diffItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    unsubscribe();
+
+    expect(payload).toMatchObject({
+      left: {
+        clusterId: 'cluster-1',
+        namespace: 'default',
+        group: 'apps',
+        version: 'v1',
+        kind: 'Deployment',
+        name: 'test-resource',
+      },
+    });
   });
 
   describe('CronJob actions', () => {

@@ -111,10 +111,13 @@ export interface BuildObjectActionsOptions {
 
 const buildObjectDiffSelection = (
   object: ObjectActionData,
-  context: 'gridtable' | 'object-panel',
-  handlers: ObjectActionHandlers
+  _context: 'gridtable' | 'object-panel',
+  _handlers: ObjectActionHandlers
 ): ObjectDiffSelectionSeed | null => {
-  if (context !== 'gridtable' || !handlers.onOpen || !object.clusterId) {
+  if (!object.clusterId) {
+    return null;
+  }
+  if (object.kind === 'Event' && object.involvedObject) {
     return null;
   }
 
@@ -157,18 +160,6 @@ export function buildObjectActionItems({
     portForward: portForwardStatus,
   } = permissions;
 
-  // Permission pending header
-  const anyPending =
-    restartStatus?.pending ||
-    rollbackStatus?.pending ||
-    scaleStatus?.pending ||
-    deleteStatus?.pending ||
-    portForwardStatus?.pending;
-
-  if (anyPending) {
-    menuItems.push({ header: true, label: 'Awaiting permissions...' });
-  }
-
   // Open - only for gridtable context
   if (context === 'gridtable' && handlers.onOpen) {
     menuItems.push({
@@ -202,6 +193,32 @@ export function buildObjectActionItems({
         onClick: handlers.onViewInvolvedObject,
       });
     }
+  }
+
+  // Permission pending header
+  const anyPending =
+    restartStatus?.pending ||
+    rollbackStatus?.pending ||
+    scaleStatus?.pending ||
+    deleteStatus?.pending ||
+    portForwardStatus?.pending;
+
+  const hasFollowUpSection =
+    anyPending ||
+    normalizedKind === 'CronJob' ||
+    (RESTARTABLE_KINDS.includes(normalizedKind) && Boolean(handlers.onRestart)) ||
+    (ROLLBACKABLE_KINDS.includes(normalizedKind) && Boolean(handlers.onRollback)) ||
+    (SCALABLE_KINDS.includes(normalizedKind) &&
+      (Boolean(object.hpaManaged) || Boolean(handlers.onScale))) ||
+    (PORT_FORWARDABLE_KINDS.includes(normalizedKind) && Boolean(handlers.onPortForward)) ||
+    Boolean(handlers.onDelete);
+
+  if (menuItems.length > 0 && hasFollowUpSection) {
+    menuItems.push({ divider: true });
+  }
+
+  if (anyPending) {
+    menuItems.push({ header: true, label: 'Awaiting permissions...' });
   }
 
   // CronJob-specific actions

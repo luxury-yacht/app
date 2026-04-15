@@ -51,7 +51,7 @@ describe('buildObjectActionItems', () => {
     });
   });
 
-  it('does not add a Diff action outside gridtable context', () => {
+  it('adds a Diff action in object-panel context when the object identity is resolvable', () => {
     const items = buildObjectActionItems({
       object: {
         kind: 'Deployment',
@@ -68,6 +68,31 @@ describe('buildObjectActionItems', () => {
       permissions: {},
     });
 
-    expect(items.some((item) => 'label' in item && item.label === 'Diff')).toBe(false);
+    const diffItem = items.find((item) => 'label' in item && item.label === 'Diff');
+    expect(diffItem).toBeTruthy();
+  });
+
+  it('places the divider below the ungated Open/Diff section', () => {
+    const items = buildObjectActionItems({
+      object: {
+        kind: 'Deployment',
+        name: 'api',
+        namespace: 'apps',
+        clusterId: 'cluster-a',
+      },
+      context: 'gridtable',
+      handlers: {
+        onOpen: () => undefined,
+        onRestart: () => undefined,
+      },
+      permissions: {
+        restart: { allowed: true, pending: false },
+      },
+    });
+
+    expect(items[0]).toMatchObject({ label: 'Open' });
+    expect(items[1]).toMatchObject({ label: 'Diff' });
+    expect(items[2]).toMatchObject({ divider: true });
+    expect(items[3]).toMatchObject({ label: 'Restart' });
   });
 });
