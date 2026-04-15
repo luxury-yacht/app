@@ -75,8 +75,8 @@
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius-sm, 4px);
   color: var(--color-text);
-  font-size: var(--font-size-normal, 0.875rem);
-  font-family: inherit;
+  font-size: 0.75rem;
+  font-family: var(--font-family-mono);
   outline: none;
   transition:
     border-color var(--duration-fast, 150ms) var(--ease-out, ease),
@@ -128,8 +128,8 @@
   min-width: 0;
   box-sizing: border-box;
   padding: 4px 28px 4px 10px;
-  font-size: var(--font-size-normal, 0.875rem);
-  font-family: inherit;
+  font-size: 0.75rem;
+  font-family: var(--font-family-mono);
   box-shadow: none;
 }
 
@@ -180,14 +180,26 @@
 
 .resource-form-kv-labeled-pairs {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--spacing-xl);
+  flex: 1;
+  min-width: 0;
 }
 
+/* Each labeled pair (KEY [input] / VALUE [input]) takes half of the row. */
 .resource-form-kv-pair {
   display: inline-flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--spacing-xs);
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* In labeled mode, nudge the small-caps label down so its text baseline
+   lines up with the input's first-line text (input has ~5px top inset
+   from padding + border). */
+.resource-form-kv-pair > .resource-form-field-label {
+  padding-top: 5px;
 }
 
 /* Inherits .resource-form-field-label via class composition in JSX. */
@@ -205,11 +217,26 @@
   flex: 0.6;
 }
 
-.resource-form-kv-row--labeled .resource-form-input.resource-form-kv-input--25ch {
-  flex: 0 0 auto;
-  width: calc(25ch + 20px);
-  min-width: calc(25ch + 20px);
-  max-width: calc(25ch + 20px);
+/* Multiline value cell — the textarea replaces the 2nd input. */
+.resource-form-kv-row .resource-form-textarea {
+  flex: 0.6;
+  min-width: 0;
+}
+
+/* When a row contains a multiline value, align the key input and action
+   buttons to the top so they don't float mid-textarea. */
+.resource-form-kv-row:has(.resource-form-textarea) {
+  align-items: flex-start;
+}
+
+/* In labeled mode the input/textarea fills its pair (minus the small-caps
+   label), so the KEY and VALUE pairs each claim ~50% of the row. */
+.resource-form-kv-row--labeled .resource-form-input.resource-form-kv-input--25ch,
+.resource-form-kv-row--labeled .resource-form-textarea.resource-form-kv-input--25ch {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+  max-width: none;
 }
 
 .resource-form-kv-empty-spacer {
@@ -232,6 +259,57 @@
   justify-content: flex-end;
   align-items: center;
   gap: var(--spacing-xs);
+}
+
+/* ── Labels + selectors (two grouped key-value lists) ────────────────── */
+
+.resource-form-labels-field {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+/* Push the whole field row (label + content) down a bit for annotations
+   and labels-with-selectors, so the left-side "Annotations"/"Labels"
+   label stays vertically aligned with the content area. */
+.resource-form-field:has(> .resource-form-kv-container--labeled),
+.resource-form-field:has(> .resource-form-labels-field) {
+  padding-top: var(--spacing-lg);
+}
+
+.resource-form-labels-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  border-radius: var(--border-radius-sm, 4px);
+  /* Outline-based drop target: doesn't reserve layout space, so the
+     group aligns flush with other fields (e.g., annotations) when idle. */
+  outline: 1px dashed transparent;
+  outline-offset: 2px;
+  transition:
+    outline-color var(--duration-fast, 150ms) var(--ease-out, ease),
+    background-color var(--duration-fast, 150ms) var(--ease-out, ease);
+}
+
+.resource-form-labels-group--drag-over {
+  outline-color: var(--color-accent);
+  background: var(--color-bg-secondary);
+}
+
+.resource-form-labels-group-title {
+  font-size: 0.75rem;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+}
+
+.resource-form-labels-row--draggable {
+  cursor: grab;
+}
+
+.resource-form-labels-row--draggable:active {
+  cursor: grabbing;
 }
 
 /* ── Group-list ──────────────────────────────────────────────────────── */

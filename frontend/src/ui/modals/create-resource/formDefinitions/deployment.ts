@@ -49,36 +49,6 @@ export const deploymentDefinition: ResourceFormDefinition = {
           tooltip: 'Number of desired pod instances to run.',
         },
         {
-          key: 'selectors',
-          label: 'Selectors',
-          path: ['spec', 'selector', 'matchLabels'],
-          type: 'selector-list',
-          mirrorPaths: [
-            ['metadata', 'labels'],
-            ['spec', 'template', 'metadata', 'labels'],
-          ],
-          addLabel: 'Add Selector',
-          addGhostText: 'Add selector',
-          inlineLabels: true,
-          leftAlignEmptyActions: true,
-          tooltip:
-            'Label selectors that determine which pods belong to this Deployment. Automatically mirrored to pod template labels.',
-        },
-        {
-          key: 'labels',
-          label: 'Labels',
-          path: ['metadata', 'labels'],
-          type: 'key-value-list',
-          excludedKeysSourcePath: ['spec', 'selector', 'matchLabels'],
-          addLabel: 'Add Label',
-          addGhostText: 'Add label',
-          inlineLabels: true,
-          leftAlignEmptyActions: true,
-          blankNewKeys: true,
-          tooltip:
-            'Additional key-value pairs attached to this Deployment for organization and selection. Selector labels are excluded.',
-        },
-        {
           key: 'annotations',
           label: 'Annotations',
           path: ['metadata', 'annotations'],
@@ -90,6 +60,18 @@ export const deploymentDefinition: ResourceFormDefinition = {
           blankNewKeys: true,
           tooltip:
             'Arbitrary key-value metadata for tools, libraries, and external systems. Not used for selection.',
+        },
+        {
+          key: 'labels',
+          label: 'Labels',
+          path: ['metadata', 'labels'],
+          type: 'labels-with-selectors',
+          selectorPaths: [
+            ['spec', 'selector', 'matchLabels'],
+            ['spec', 'template', 'metadata', 'labels'],
+          ],
+          tooltip:
+            'Key-value pairs attached to this Deployment. Drag a label into the Selectors group to use it for pod selection — selectors are mirrored to the pod template so they match managed pods.',
         },
       ],
     },

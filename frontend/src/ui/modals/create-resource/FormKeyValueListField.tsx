@@ -35,7 +35,10 @@ export function FormKeyValueListField({
   addGhostText = null,
 }: FormKeyValueListFieldProps): React.ReactElement {
   return (
-    <div data-field-key={dataFieldKey} className="resource-form-kv-container">
+    <div
+      data-field-key={dataFieldKey}
+      className={`resource-form-kv-container${showInlineKeyValueLabels ? ' resource-form-kv-container--labeled' : ''}`}
+    >
       {entries.map(([keyValue, value], index) => {
         const removable = canRemoveEntry ? canRemoveEntry(index) : true;
         return (
@@ -59,15 +62,25 @@ export function FormKeyValueListField({
                 </div>
                 <div className="resource-form-kv-pair">
                   <span className="resource-form-field-label">Value</span>
-                  <input
-                    type="text"
-                    className="resource-form-input resource-form-kv-input--25ch"
-                    value={value}
-                    placeholder="value"
-                    size={25}
-                    {...INPUT_BEHAVIOR_PROPS}
-                    onChange={(event) => onValueChange(index, event.target.value)}
-                  />
+                  {value.includes('\n') ? (
+                    <textarea
+                      className="resource-form-textarea resource-form-kv-input--25ch"
+                      value={value}
+                      placeholder="value"
+                      {...INPUT_BEHAVIOR_PROPS}
+                      onChange={(event) => onValueChange(index, event.target.value)}
+                    />
+                  ) : (
+                    <input
+                      type="text"
+                      className="resource-form-input resource-form-kv-input--25ch"
+                      value={value}
+                      placeholder="value"
+                      size={25}
+                      {...INPUT_BEHAVIOR_PROPS}
+                      onChange={(event) => onValueChange(index, event.target.value)}
+                    />
+                  )}
                 </div>
               </div>
             ) : (
@@ -80,14 +93,24 @@ export function FormKeyValueListField({
                   {...INPUT_BEHAVIOR_PROPS}
                   onChange={(event) => onKeyChange(index, event.target.value)}
                 />
-                <input
-                  type="text"
-                  className="resource-form-input"
-                  value={value}
-                  placeholder="value"
-                  {...INPUT_BEHAVIOR_PROPS}
-                  onChange={(event) => onValueChange(index, event.target.value)}
-                />
+                {value.includes('\n') ? (
+                  <textarea
+                    className="resource-form-textarea"
+                    value={value}
+                    placeholder="value"
+                    {...INPUT_BEHAVIOR_PROPS}
+                    onChange={(event) => onValueChange(index, event.target.value)}
+                  />
+                ) : (
+                  <input
+                    type="text"
+                    className="resource-form-input"
+                    value={value}
+                    placeholder="value"
+                    {...INPUT_BEHAVIOR_PROPS}
+                    onChange={(event) => onValueChange(index, event.target.value)}
+                  />
+                )}
               </>
             )}
             <div className="resource-form-actions-inline">

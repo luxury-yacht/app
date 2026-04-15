@@ -22,6 +22,7 @@ import {
 import { FormProbeField } from './FormProbeField';
 import { FormFieldRow } from './FormFieldRow';
 import { FormKeyValueListField } from './FormKeyValueListField';
+import { FormLabelsField } from './FormLabelsField';
 import { NestedGroupListField } from './NestedGroupListField';
 import { FormSectionCard } from './FormSectionCard';
 import { FormVolumeSourceField } from './FormVolumeSourceField';
@@ -1593,6 +1594,10 @@ function FieldRenderer({
     case 'selector-list':
       return (
         <SelectorListField field={field} yamlContent={yamlContent} onYamlChange={onYamlChange} />
+      );
+    case 'labels-with-selectors':
+      return (
+        <FormLabelsField field={field} yamlContent={yamlContent} onYamlChange={onYamlChange} />
       );
     case 'group-list':
       return <GroupListField field={field} yamlContent={yamlContent} onYamlChange={onYamlChange} />;

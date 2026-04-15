@@ -152,6 +152,59 @@ describe('FormEnvVarField', () => {
     expect(refKeyInput.value).toBe('password');
   });
 
+  it('detects fieldRef source and renders a fieldPath input', () => {
+    render([
+      {
+        name: 'POD_IP',
+        valueFrom: { fieldRef: { fieldPath: 'status.podIP' } },
+      },
+    ]);
+    const dropdown = container.querySelector(
+      '[data-testid="dropdown-Env var source 1"]'
+    ) as HTMLSelectElement;
+    expect(dropdown.value).toBe('fieldRef');
+    const fieldPathInput = container.querySelector(
+      '[data-field-key="envVarFieldPath-0"] input'
+    ) as HTMLInputElement;
+    expect(fieldPathInput).not.toBeNull();
+    expect(fieldPathInput.value).toBe('status.podIP');
+    // The ref name/key inputs used by ConfigMap/Secret should NOT render for fieldRef.
+    expect(container.querySelector('[data-field-key="envVarRefName-0"]')).toBeNull();
+    expect(container.querySelector('[data-field-key="envVarRefKey-0"]')).toBeNull();
+  });
+
+  it('switching Value -> Field preserves name, initializes empty fieldRef', () => {
+    const onChange = vi.fn();
+    render([{ name: 'MY_VAR', value: 'hello' }], onChange);
+    const dropdown = container.querySelector(
+      '[data-testid="dropdown-Env var source 1"]'
+    ) as HTMLSelectElement;
+    act(() => {
+      dropdown.value = 'fieldRef';
+      dropdown.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    expect(onChange).toHaveBeenCalledTimes(1);
+    const newItems = onChange.mock.calls[0][0];
+    expect(newItems[0].name).toBe('MY_VAR');
+    expect(newItems[0].value).toBeUndefined();
+    expect(newItems[0].valueFrom).toEqual({ fieldRef: { fieldPath: '' } });
+  });
+
+  it('fieldPath input updates valueFrom.fieldRef.fieldPath', () => {
+    const onChange = vi.fn();
+    render([{ name: 'POD_IP', valueFrom: { fieldRef: { fieldPath: '' } } }], onChange);
+    const fieldPathInput = container.querySelector(
+      '[data-field-key="envVarFieldPath-0"] input'
+    ) as HTMLInputElement;
+    act(() => {
+      setNativeInputValue(fieldPathInput, 'status.podIP');
+      fieldPathInput.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    expect(onChange).toHaveBeenCalled();
+    const newItems = onChange.mock.calls[onChange.mock.calls.length - 1][0];
+    expect(newItems[0].valueFrom.fieldRef.fieldPath).toBe('status.podIP');
+  });
+
   it('source dropdown defaults to Value for plain env vars', () => {
     render([{ name: 'PLAIN', value: 'val' }]);
     const dropdown = container.querySelector(

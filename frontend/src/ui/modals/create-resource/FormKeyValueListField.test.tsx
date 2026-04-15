@@ -3,6 +3,12 @@ import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FormKeyValueListField } from './FormKeyValueListField';
 
+const setNativeInputValue = (element: HTMLInputElement | HTMLTextAreaElement, value: string) => {
+  const prototype = Object.getPrototypeOf(element);
+  const prototypeValueSetter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set;
+  prototypeValueSetter?.call(element, value);
+};
+
 describe('FormKeyValueListField', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
@@ -98,6 +104,44 @@ describe('FormKeyValueListField', () => {
       addButton.click();
     });
     expect(onAdd).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders a textarea for multiline values and an input for single-line values', async () => {
+    const onValueChange = vi.fn();
+
+    await act(async () => {
+      root.render(
+        <FormKeyValueListField
+          dataFieldKey="data"
+          entries={[
+            ['single', 'one-liner'],
+            ['multi', 'line one\nline two'],
+          ]}
+          onKeyChange={vi.fn()}
+          onValueChange={onValueChange}
+          onRemove={vi.fn()}
+          onAdd={vi.fn()}
+          addButtonLabel="Add Entry"
+          removeButtonLabel="Remove Entry"
+        />
+      );
+    });
+
+    const rows = container.querySelectorAll('.resource-form-kv-row');
+    // First row (single-line) — 2 inputs, 0 textareas.
+    expect(rows[0].querySelectorAll('input').length).toBe(2);
+    expect(rows[0].querySelectorAll('textarea').length).toBe(0);
+    // Second row (multiline) — 1 input (key) and 1 textarea (value).
+    expect(rows[1].querySelectorAll('input').length).toBe(1);
+    const textarea = rows[1].querySelector('textarea') as HTMLTextAreaElement;
+    expect(textarea).not.toBeNull();
+    expect(textarea.value).toBe('line one\nline two');
+
+    await act(async () => {
+      setNativeInputValue(textarea, 'line one\nline two\nline three');
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    expect(onValueChange).toHaveBeenCalledWith(1, 'line one\nline two\nline three');
   });
 
   it('supports non-removable rows while preserving action alignment', async () => {

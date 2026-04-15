@@ -27,6 +27,7 @@ export interface FormFieldDefinition {
     | 'textarea'
     | 'key-value-list'
     | 'selector-list'
+    | 'labels-with-selectors'
     | 'group-list'
     | 'container-resources'
     | 'volume-source'
@@ -62,6 +63,12 @@ export interface FormFieldDefinition {
   defaultValue?: unknown;
   /** Additional map paths kept in sync with this field's map value. */
   mirrorPaths?: string[][];
+  /**
+   * For 'labels-with-selectors' fields, the YAML paths that hold the
+   * selector subset (e.g., spec.selector.matchLabels plus pod template
+   * labels). First entry is the primary; the rest are mirrors.
+   */
+  selectorPaths?: string[][];
   /** Map path whose keys should be excluded from this field's editable rows. */
   excludedKeysSourcePath?: string[];
   /** If true, empty string values are removed from YAML instead of persisted. */

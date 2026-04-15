@@ -2,9 +2,10 @@
  * Env var field editor.
  *
  * Renders a list of env var items, each with a name input, a source type
- * dropdown (Value/ConfigMap/Secret), and dynamic fields depending on the
+ * dropdown (Value/ConfigMap/Secret/Field), and dynamic fields depending on the
  * source. Handles the YAML mapping between the flat UI model and the nested
- * valueFrom.configMapKeyRef / valueFrom.secretKeyRef structure.
+ * valueFrom.configMapKeyRef / valueFrom.secretKeyRef / valueFrom.fieldRef
+ * structure.
  *
  * Uses the same FormIconActionButton add/remove pattern as every other
  * nested list field (ports, envFrom, volume mounts, etc.).
@@ -39,12 +40,13 @@ interface FormEnvVarFieldProps {
 // Helpers
 // ---------------------------------------------------------------------------
 
-type SourceType = 'value' | 'configMap' | 'secret';
+type SourceType = 'value' | 'configMap' | 'secret' | 'fieldRef';
 
 const sourceTypeOptions = [
   { value: 'value', label: 'Value' },
   { value: 'configMap', label: 'ConfigMap' },
   { value: 'secret', label: 'Secret' },
+  { value: 'fieldRef', label: 'Field' },
 ];
 
 /** Detect the source type of an env var item from its YAML structure. */
@@ -52,6 +54,7 @@ function getSourceType(item: EnvVarItem): SourceType {
   const valueFrom = item.valueFrom as Record<string, unknown> | undefined;
   if (valueFrom?.configMapKeyRef) return 'configMap';
   if (valueFrom?.secretKeyRef) return 'secret';
+  if (valueFrom?.fieldRef) return 'fieldRef';
   return 'value';
 }
 
@@ -73,6 +76,13 @@ function getRefKey(item: EnvVarItem): string {
   return ref?.key ?? '';
 }
 
+/** Get the fieldPath from a fieldRef. */
+function getFieldPath(item: EnvVarItem): string {
+  const valueFrom = item.valueFrom as Record<string, unknown> | undefined;
+  const ref = valueFrom?.fieldRef as { fieldPath?: string } | undefined;
+  return ref?.fieldPath ?? '';
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -88,7 +98,7 @@ export function FormEnvVarField({
     onChange(newItems);
   };
 
-  /** Handle source type change — swap between value / configMapKeyRef / secretKeyRef. */
+  /** Handle source type change — swap between value / configMapKeyRef / secretKeyRef / fieldRef. */
   const handleSourceTypeChange = (index: number, newType: SourceType) => {
     updateItem(index, (item) => {
       const name = (item.name as string) ?? '';
@@ -97,6 +107,9 @@ export function FormEnvVarField({
       }
       if (newType === 'configMap') {
         return { name, valueFrom: { configMapKeyRef: { name: '', key: '' } } };
+      }
+      if (newType === 'fieldRef') {
+        return { name, valueFrom: { fieldRef: { fieldPath: '' } } };
       }
       // secret
       return { name, valueFrom: { secretKeyRef: { name: '', key: '' } } };
@@ -135,6 +148,14 @@ export function FormEnvVarField({
       }
       return { ...item, valueFrom: { secretKeyRef: { name: refName, key: newRefKey } } };
     });
+  };
+
+  /** Handle fieldPath input change (for fieldRef source type). */
+  const handleFieldPathChange = (index: number, newFieldPath: string) => {
+    updateItem(index, (item) => ({
+      ...item,
+      valueFrom: { fieldRef: { fieldPath: newFieldPath } },
+    }));
   };
 
   /** Add a new env var item defaulting to plain value. */
@@ -227,6 +248,23 @@ export function FormEnvVarField({
                   />
                 </div>
               </>
+            )}
+
+            {sourceType === 'fieldRef' && (
+              <div
+                data-field-key={`envVarFieldPath-${index}`}
+                className="resource-form-env-var-value"
+              >
+                <input
+                  {...INPUT_BEHAVIOR_PROPS}
+                  className="resource-form-input"
+                  type="text"
+                  value={getFieldPath(item)}
+                  onChange={(e) => handleFieldPathChange(index, e.target.value)}
+                  placeholder="status.podIP"
+                  aria-label={`Env var field path ${rowLabel}`}
+                />
+              </div>
             )}
 
             {/* Add/remove buttons — same pattern as FormNestedListField */}

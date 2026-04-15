@@ -102,7 +102,7 @@ export function makeContainerSubFields(volumesPath: string[]): FormFieldDefiniti
       placeholder: '--port=8080 --log-level=info',
       omitIfEmpty: false,
     },
-    // env — individual env vars with optional valueFrom (configMapKeyRef/secretKeyRef).
+    // env — individual env vars with optional valueFrom (configMapKeyRef/secretKeyRef/fieldRef).
     // Rendered by FormEnvVarField; handles source type switching internally.
     {
       key: 'env',
