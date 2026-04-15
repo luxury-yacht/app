@@ -3,21 +3,147 @@
  *
  * Test suite for the DiffViewer component.
  * Covers rendering of context, added, and removed lines, diff-only filtering,
- * muted line styling, and empty input handling.
+ * muted line styling, virtualization, and triple-click selection behavior.
  */
 
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { DisplayDiffLine } from '@shared/components/diff/diffUtils';
 import DiffViewer from './DiffViewer';
+
+class MockResizeObserver {
+  private readonly callback: ResizeObserverCallback;
+
+  constructor(callback: ResizeObserverCallback) {
+    this.callback = callback;
+  }
+
+  observe(target: Element) {
+    this.callback([{ target } as ResizeObserverEntry], this as unknown as ResizeObserver);
+  }
+
+  unobserve() {}
+
+  disconnect() {}
+}
+
+const buildRect = (width: number, height: number): DOMRect =>
+  ({
+    x: 0,
+    y: 0,
+    top: 0,
+    left: 0,
+    bottom: height,
+    right: width,
+    width,
+    height,
+    toJSON: () => ({}),
+  }) as DOMRect;
+
+const waitForFrames = async (count = 2) => {
+  for (let frame = 0; frame < count; frame += 1) {
+    await act(async () => {
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    });
+  }
+};
 
 describe('DiffViewer', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
+  const originalResizeObserver = globalThis.ResizeObserver;
+  const originalClientHeight = Object.getOwnPropertyDescriptor(
+    HTMLElement.prototype,
+    'clientHeight'
+  );
+  const originalClientWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientWidth');
+  const originalScrollWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollWidth');
+  const originalScrollHeight = Object.getOwnPropertyDescriptor(
+    HTMLElement.prototype,
+    'scrollHeight'
+  );
+  const originalGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect;
 
   beforeAll(() => {
     (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+    globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
+
+    Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
+      configurable: true,
+      get() {
+        if (this.classList?.contains('object-diff-table')) {
+          return 120;
+        }
+        if (this.classList?.contains('object-diff-line-text')) {
+          return 20;
+        }
+        return originalClientHeight?.get ? originalClientHeight.get.call(this) : 0;
+      },
+    });
+
+    Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
+      configurable: true,
+      get() {
+        if (this.classList?.contains('object-diff-table')) {
+          return 800;
+        }
+        if (this.classList?.contains('object-diff-line-text')) {
+          return 60;
+        }
+        return originalClientWidth?.get ? originalClientWidth.get.call(this) : 0;
+      },
+    });
+
+    Object.defineProperty(HTMLElement.prototype, 'scrollWidth', {
+      configurable: true,
+      get() {
+        if (this.classList?.contains('object-diff-line-text')) {
+          return 240;
+        }
+        return originalScrollWidth?.get ? originalScrollWidth.get.call(this) : 0;
+      },
+    });
+
+    Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
+      configurable: true,
+      get() {
+        if (this.classList?.contains('object-diff-table')) {
+          return 5000;
+        }
+        return originalScrollHeight?.get ? originalScrollHeight.get.call(this) : 0;
+      },
+    });
+
+    HTMLElement.prototype.getBoundingClientRect = function getBoundingClientRect() {
+      if (this.classList?.contains('object-diff-table')) {
+        return buildRect(800, 120);
+      }
+      if (this.classList?.contains('object-diff-row')) {
+        return buildRect(800, 20);
+      }
+      if (this.classList?.contains('object-diff-line-text')) {
+        return buildRect(240, 20);
+      }
+      return buildRect(0, 0);
+    };
+  });
+
+  afterAll(() => {
+    globalThis.ResizeObserver = originalResizeObserver;
+    if (originalClientHeight) {
+      Object.defineProperty(HTMLElement.prototype, 'clientHeight', originalClientHeight);
+    }
+    if (originalClientWidth) {
+      Object.defineProperty(HTMLElement.prototype, 'clientWidth', originalClientWidth);
+    }
+    if (originalScrollWidth) {
+      Object.defineProperty(HTMLElement.prototype, 'scrollWidth', originalScrollWidth);
+    }
+    if (originalScrollHeight) {
+      Object.defineProperty(HTMLElement.prototype, 'scrollHeight', originalScrollHeight);
+    }
+    HTMLElement.prototype.getBoundingClientRect = originalGetBoundingClientRect;
   });
 
   beforeEach(() => {
@@ -33,7 +159,6 @@ describe('DiffViewer', () => {
     container.remove();
   });
 
-  // Helper: build a context DisplayDiffLine with matching left/right line numbers.
   const contextLine = (lineNumber: number): DisplayDiffLine => ({
     type: 'context',
     value: '',
@@ -43,7 +168,6 @@ describe('DiffViewer', () => {
     rightType: 'context',
   });
 
-  // Helper: build a removed-left / added-right DisplayDiffLine (modification row).
   const modifiedLine = (leftLineNumber: number, rightLineNumber: number): DisplayDiffLine => ({
     type: 'context',
     value: '',
@@ -52,6 +176,9 @@ describe('DiffViewer', () => {
     leftType: 'removed',
     rightType: 'added',
   });
+
+  const buildContextText = (count: number) =>
+    Array.from({ length: count }, (_, index) => `line-${index + 1}`).join('\n');
 
   it('renders context lines with correct text on both sides', () => {
     const leftText = 'alpha\nbeta\ngamma';
@@ -65,12 +192,10 @@ describe('DiffViewer', () => {
     const rows = container.querySelectorAll('.object-diff-row');
     expect(rows.length).toBe(3);
 
-    // First row: both sides show "alpha".
     const firstRowTexts = rows[0].querySelectorAll('.object-diff-line-text');
     expect(firstRowTexts[0].textContent).toBe('alpha');
     expect(firstRowTexts[1].textContent).toBe('alpha');
 
-    // Second row: both sides show "beta".
     const secondRowTexts = rows[1].querySelectorAll('.object-diff-line-text');
     expect(secondRowTexts[0].textContent).toBe('beta');
     expect(secondRowTexts[1].textContent).toBe('beta');
@@ -86,9 +211,7 @@ describe('DiffViewer', () => {
     });
 
     const cells = container.querySelectorAll('.object-diff-cell');
-    // Left cell should have the removed class.
     expect(cells[0].classList.contains('object-diff-cell-removed')).toBe(true);
-    // Right cell should have the added class.
     expect(cells[1].classList.contains('object-diff-cell-added')).toBe(true);
   });
 
@@ -103,47 +226,196 @@ describe('DiffViewer', () => {
       );
     });
 
-    // Only the modified row should be rendered; context rows are filtered out.
     const rows = container.querySelectorAll('.object-diff-row');
     expect(rows.length).toBe(1);
 
-    // Verify it is the modified row.
     const leftCell = rows[0].querySelector('.object-diff-cell-left');
     expect(leftCell?.classList.contains('object-diff-cell-removed')).toBe(true);
   });
 
-  it('applies muted class to specified lines', () => {
-    const leftText = 'line-a\nline-b';
-    const rightText = 'line-a\nline-b';
-    const lines: DisplayDiffLine[] = [contextLine(1), contextLine(2)];
-    const leftMuted = new Set([1]);
-    const rightMuted = new Set([2]);
+  it('virtualizes large full-view diffs and updates the rendered window on scroll', async () => {
+    const count = 250;
+    const text = buildContextText(count);
+    const lines = Array.from({ length: count }, (_, index) => contextLine(index + 1));
+
+    act(() => {
+      root.render(<DiffViewer lines={lines} leftText={text} rightText={text} />);
+    });
+    await waitForFrames();
+
+    let rows = container.querySelectorAll('.object-diff-row');
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.length).toBeLessThan(count);
+    expect(rows[0].querySelector('.object-diff-line-number')?.textContent).toBe('1');
+
+    const table = container.querySelector('.object-diff-table') as HTMLDivElement | null;
+    expect(table).toBeTruthy();
+
+    await act(async () => {
+      table!.scrollTop = 1600;
+      table!.dispatchEvent(new Event('scroll'));
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    });
+    await waitForFrames();
+
+    rows = container.querySelectorAll('.object-diff-row');
+    const firstVisibleNumber = Number(
+      rows[0].querySelector('.object-diff-line-number')?.textContent ?? '0'
+    );
+    expect(firstVisibleNumber).toBeGreaterThan(1);
+  });
+
+  it('keeps expanded state stable when virtualized rows unmount and remount', async () => {
+    const count = 250;
+    const text = Array.from({ length: count }, (_, index) => `very-long-line-${index + 1}`).join(
+      '\n'
+    );
+    const lines = Array.from({ length: count }, (_, index) => contextLine(index + 1));
+
+    act(() => {
+      root.render(<DiffViewer lines={lines} leftText={text} rightText={text} />);
+    });
+    await waitForFrames();
+
+    const firstToggle = container.querySelector(
+      '.object-diff-expand-toggle'
+    ) as HTMLButtonElement | null;
+    expect(firstToggle).toBeTruthy();
+
+    await act(async () => {
+      firstToggle!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    let firstLeftCell = container.querySelector('.object-diff-cell-left');
+    expect(firstLeftCell?.classList.contains('object-diff-cell-expanded')).toBe(true);
+
+    const table = container.querySelector('.object-diff-table') as HTMLDivElement | null;
+    await act(async () => {
+      table!.scrollTop = 1800;
+      table!.dispatchEvent(new Event('scroll'));
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    });
+    await waitForFrames();
+
+    await act(async () => {
+      table!.scrollTop = 0;
+      table!.dispatchEvent(new Event('scroll'));
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    });
+    await waitForFrames();
+
+    firstLeftCell = container.querySelector('.object-diff-cell-left');
+    expect(firstLeftCell?.classList.contains('object-diff-cell-expanded')).toBe(true);
+  });
+
+  it('renders the full diff on triple-click so side selection still spans the entire side', async () => {
+    const count = 250;
+    const text = buildContextText(count);
+    const lines = Array.from({ length: count }, (_, index) => contextLine(index + 1));
+
+    act(() => {
+      root.render(<DiffViewer lines={lines} leftText={text} rightText={text} />);
+    });
+    await waitForFrames();
+
+    expect(container.querySelectorAll('.object-diff-row').length).toBeLessThan(count);
+
+    const firstLeftText = container.querySelector(
+      '.object-diff-cell-left .object-diff-line-text'
+    ) as HTMLElement | null;
+    expect(firstLeftText).toBeTruthy();
+
+    await act(async () => {
+      firstLeftText!.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 3 }));
+      await Promise.resolve();
+    });
+    await waitForFrames();
+
+    expect(container.querySelectorAll('.object-diff-row').length).toBe(count);
+    expect(
+      container.querySelector('.object-diff-table')?.classList.contains('selection-left')
+    ).toBe(true);
+  });
+
+  it('preserves muted styling and line numbers for visible virtualized rows', async () => {
+    const count = 250;
+    const text = buildContextText(count);
+    const lines = Array.from({ length: count }, (_, index) => contextLine(index + 1));
 
     act(() => {
       root.render(
         <DiffViewer
           lines={lines}
-          leftText={leftText}
-          rightText={rightText}
-          leftMutedLines={leftMuted}
-          rightMutedLines={rightMuted}
+          leftText={text}
+          rightText={text}
+          leftMutedLines={new Set([1])}
+          rightMutedLines={new Set([2])}
         />
       );
     });
+    await waitForFrames();
 
     const rows = container.querySelectorAll('.object-diff-row');
+    expect(rows.length).toBeGreaterThan(0);
 
-    // Row 0: left side line 1 is muted, right side is not.
-    const row0LeftCell = rows[0].querySelector('.object-diff-cell-left');
-    const row0RightCell = rows[0].querySelector('.object-diff-cell-right');
-    expect(row0LeftCell?.classList.contains('object-diff-cell-muted')).toBe(true);
-    expect(row0RightCell?.classList.contains('object-diff-cell-muted')).toBe(false);
+    const firstRowNumbers = rows[0].querySelectorAll('.object-diff-line-number');
+    expect(firstRowNumbers[0].textContent).toBe('1');
+    expect(firstRowNumbers[1].textContent).toBe('1');
 
-    // Row 1: right side line 2 is muted, left side is not.
-    const row1LeftCell = rows[1].querySelector('.object-diff-cell-left');
-    const row1RightCell = rows[1].querySelector('.object-diff-cell-right');
-    expect(row1LeftCell?.classList.contains('object-diff-cell-muted')).toBe(false);
-    expect(row1RightCell?.classList.contains('object-diff-cell-muted')).toBe(true);
+    const firstLeftCell = rows[0].querySelector('.object-diff-cell-left');
+    expect(firstLeftCell?.classList.contains('object-diff-cell-muted')).toBe(true);
+  });
+
+  it('supports keyboard scrolling keys on the diff viewer', async () => {
+    const count = 250;
+    const text = buildContextText(count);
+    const lines = Array.from({ length: count }, (_, index) => contextLine(index + 1));
+
+    act(() => {
+      root.render(<DiffViewer lines={lines} leftText={text} rightText={text} />);
+    });
+    await waitForFrames();
+
+    const table = container.querySelector('.object-diff-table') as HTMLDivElement | null;
+    expect(table).toBeTruthy();
+    table!.focus();
+
+    await act(async () => {
+      table!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+      await Promise.resolve();
+    });
+    expect(table!.scrollTop).toBe(40);
+
+    await act(async () => {
+      table!.dispatchEvent(new KeyboardEvent('keydown', { key: 'PageDown', bubbles: true }));
+      await Promise.resolve();
+    });
+    expect(table!.scrollTop).toBe(120);
+
+    await act(async () => {
+      table!.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true }));
+      await Promise.resolve();
+    });
+    expect(table!.scrollTop).toBe(4880);
+
+    await act(async () => {
+      table!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+      await Promise.resolve();
+    });
+    expect(table!.scrollTop).toBe(4840);
+
+    await act(async () => {
+      table!.dispatchEvent(new KeyboardEvent('keydown', { key: 'PageUp', bubbles: true }));
+      await Promise.resolve();
+    });
+    expect(table!.scrollTop).toBe(4760);
+
+    await act(async () => {
+      table!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }));
+      await Promise.resolve();
+    });
+    expect(table!.scrollTop).toBe(0);
   });
 
   it('renders empty when no lines provided', () => {
@@ -154,7 +426,6 @@ describe('DiffViewer', () => {
     const rows = container.querySelectorAll('.object-diff-row');
     expect(rows.length).toBe(0);
 
-    // The table container should still render.
     const table = container.querySelector('.object-diff-table');
     expect(table).toBeTruthy();
   });

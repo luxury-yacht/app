@@ -151,22 +151,22 @@ The viewer work must preserve:
 
 ### Phase 1: Object Diff Modal
 
-- [ ] Add a new shared frontend diff module for the object diff path.
-- [ ] Define named budgets in that module:
+- [x] Add a new shared frontend diff module for the object diff path.
+- [x] Define named budgets in that module:
   - `maxLinesPerSide`
   - `maxComputeWork`
   - `maxRenderableRows`
-- [ ] Set the initial object diff target to `10k` lines per side.
-- [ ] Implement a local Myers-style line diff in TypeScript.
-- [ ] Enforce deterministic compute-budget failure based on actual Myers work.
-- [ ] Enforce render-budget failure based on the current mode’s actual row count.
-- [ ] Switch `ObjectDiffModal` to the new shared diff path.
-- [ ] Remove `ObjectDiffModal` reliance on the old `MAX_DIFF_LINES` constant.
-- [ ] Keep both `Full View` and `Diffs Only` modes intact.
-- [ ] Keep `Full View` rendering full context when it fits within budget.
-- [ ] Show the general “too large” warning when the active mode exceeds any budget.
-- [ ] Do not auto-switch from `Full View` to `Diffs Only`.
-- [ ] Add broad tests early, including large fixtures for successful and rejected cases.
+- [x] Set the initial object diff target to `10k` lines per side.
+- [x] Implement a local Myers-style line diff in TypeScript.
+- [x] Enforce deterministic compute-budget failure based on actual Myers work.
+- [x] Enforce render-budget failure based on the current mode’s actual row count.
+- [x] Switch `ObjectDiffModal` to the new shared diff path.
+- [x] Remove `ObjectDiffModal` reliance on the old `MAX_DIFF_LINES` constant.
+- [x] Keep both `Full View` and `Diffs Only` modes intact.
+- [x] Keep `Full View` rendering full context when it fits within budget.
+- [x] Show the general “too large” warning when the active mode exceeds any budget.
+- [x] Do not auto-switch from `Full View` to `Diffs Only`.
+- [x] Add broad tests early, including large fixtures for successful and rejected cases.
 
 Phase 1 deliverable:
 
@@ -174,20 +174,24 @@ Phase 1 deliverable:
 - object diff budget handling is cleaned up and explicit
 - large object diffs can be tested against the new algorithm and warning contract
 
+Status: ✅ Completed
+
 ### Phase 2: `DiffViewer` Virtualization
 
-- [ ] Virtualize `DiffViewer` rows.
-- [ ] Keep row identity stable so expand/collapse and copy behavior do not jitter.
-- [ ] Limit truncation measurement to mounted rows.
-- [ ] Re-test `Full View` and `Diffs Only` behavior against the virtualized viewer.
-- [ ] Re-test side selection and triple-click copy behavior.
-- [ ] Re-test muted lines and line-number rendering.
-- [ ] Revisit `maxRenderableRows` after virtualization lands.
+- [x] Virtualize `DiffViewer` rows.
+- [x] Keep row identity stable so expand/collapse and copy behavior do not jitter.
+- [x] Limit truncation measurement to mounted rows.
+- [x] Re-test `Full View` and `Diffs Only` behavior against the virtualized viewer.
+- [x] Re-test side selection and triple-click copy behavior.
+- [x] Re-test muted lines and line-number rendering.
+- [x] Revisit `maxRenderableRows` after virtualization lands.
 
 Phase 2 deliverable:
 
 - large successful diffs no longer mount one DOM row per rendered line
 - rendering cost is tied to the viewport window instead of total diff size
+
+Status: ✅ Completed
 
 ### Phase 3: Migrate Other Frontend Diff Surfaces
 

@@ -13,5 +13,5 @@ export interface LineDiffBudgets {
 export const OBJECT_DIFF_BUDGETS: LineDiffBudgets = {
   maxLinesPerSide: 10_000,
   maxComputeWork: 3_000_000,
-  maxRenderableRows: 8_000,
+  maxRenderableRows: 20_000,
 };
