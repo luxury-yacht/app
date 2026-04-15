@@ -16,10 +16,11 @@ import { errorHandler } from '@utils/errorHandler';
 import { refreshOrchestrator } from '@/core/refresh';
 import { useRefreshScopedDomain } from '@/core/refresh/store';
 import { GetObjectYAMLByGVK } from '@wailsjs/go/backend/App';
+import { computeBudgetedLineDiff } from '@shared/components/diff/lineDiff';
+import { YAML_TAB_DIFF_BUDGETS } from '@shared/components/diff/diffBudgets';
 import './YamlTab.css';
 import { parseObjectIdentity, validateYamlDraft, type ObjectIdentity } from './yamlValidation';
-import { computeLineDiff, type DiffResult } from './yamlDiff';
-import { coerceDiffResult, parseObjectYamlError } from './yamlErrors';
+import { coerceDiffResult, parseObjectYamlError, type YamlTabDiffResult } from './yamlErrors';
 import { buildCodeTheme } from '@/core/codemirror/theme';
 import { selectCodeMirrorContent } from '@/core/codemirror/nativeActions';
 import { createSearchExtensions, closeSearchPanel } from '@/core/codemirror/search';
@@ -49,6 +50,19 @@ import {
 
 export type { YamlTabProps } from './yamlTabTypes';
 
+const normalizeYamlTabDiff = (diff: YamlTabDiffResult | null): YamlTabDiffResult | null => {
+  if (!diff) {
+    return null;
+  }
+  if (diff.tooLarge || diff.lines.length > YAML_TAB_DIFF_BUDGETS.maxRenderableRows) {
+    return {
+      lines: [],
+      tooLarge: true,
+    };
+  }
+  return diff;
+};
+
 const YamlTab: React.FC<YamlTabProps> = ({
   scope,
   isActive = false,
@@ -66,7 +80,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
   const [baselineResourceVersion, setBaselineResourceVersion] = useState<string | null>(null);
   const [hasRemoteDrift, setHasRemoteDrift] = useState(false);
   const [driftForced, setDriftForced] = useState(false);
-  const [backendDriftDiff, setBackendDriftDiff] = useState<DiffResult | null>(null);
+  const [backendDriftDiff, setBackendDriftDiff] = useState<YamlTabDiffResult | null>(null);
   const [latestObjectIdentity, setLatestObjectIdentity] = useState<ObjectIdentity | null>(null);
   const [manualYamlOverride, setManualYamlOverride] = useState<{
     yaml: string;
@@ -205,7 +219,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
 
   const driftDiff = useMemo(() => {
     if (backendDriftDiff) {
-      return backendDriftDiff;
+      return normalizeYamlTabDiff(backendDriftDiff);
     }
     if (!isEditing || (!hasRemoteDrift && !driftForced)) {
       return null;
@@ -214,7 +228,11 @@ const YamlTab: React.FC<YamlTabProps> = ({
     if (!latestYaml) {
       return null;
     }
-    return computeLineDiff(latestYaml, draftYaml);
+    const localDiff = computeBudgetedLineDiff(latestYaml, draftYaml, YAML_TAB_DIFF_BUDGETS);
+    return normalizeYamlTabDiff({
+      lines: localDiff.lines,
+      tooLarge: localDiff.tooLarge,
+    });
   }, [backendDriftDiff, displayYaml, draftYaml, driftForced, hasRemoteDrift, isEditing]);
 
   const { theme: codeMirrorTheme, highlight: highlightExtension } = useMemo(
@@ -1131,7 +1149,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
                     Reload &amp; merge
                   </button>
                 </div>
-                {driftDiff && !driftDiff.truncated && driftDiff.lines.length > 0 && (
+                {driftDiff && !driftDiff.tooLarge && driftDiff.lines.length > 0 && (
                   <div className="yaml-drift-diff" role="status" aria-live="polite">
                     <pre>
                       {driftDiff.lines.map((line, index) => {
@@ -1161,10 +1179,10 @@ const YamlTab: React.FC<YamlTabProps> = ({
                     </pre>
                   </div>
                 )}
-                {driftDiff?.truncated && (
+                {driftDiff?.tooLarge && (
                   <p className="yaml-drift-warning">
-                    The diff is too large to display. Reload the YAML to review the latest version
-                    before retrying.
+                    This diff is too large to display in the current view. Reload the YAML to review
+                    the latest version before retrying.
                   </p>
                 )}
               </>

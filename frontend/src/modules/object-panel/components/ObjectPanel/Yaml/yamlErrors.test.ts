@@ -44,6 +44,15 @@ describe('coerceDiffResult', () => {
     expect(coerceDiffResult({ code: 'Test', message: 'none' })).toBeNull();
   });
 
+  it('surfaces backend truncation even when no diff lines are present', () => {
+    expect(
+      coerceDiffResult({ code: 'ResourceVersionMismatch', message: 'changed', truncated: true })
+    ).toEqual({
+      lines: [],
+      tooLarge: true,
+    });
+  });
+
   it('maps backend diff lines into frontend result', () => {
     const result = coerceDiffResult({
       code: 'ResourceVersionMismatch',
@@ -59,6 +68,6 @@ describe('coerceDiffResult', () => {
     expect(result).not.toBeNull();
     expect(result?.lines).toHaveLength(3);
     expect(result?.lines[1]).toMatchObject({ type: 'removed', value: '  replicas: 1' });
-    expect(result?.truncated).toBe(true);
+    expect(result?.tooLarge).toBe(true);
   });
 });

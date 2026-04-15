@@ -3,7 +3,7 @@
  */
 
 import type { backend } from '@wailsjs/go/models';
-import type { DiffResult, DiffLineType } from './yamlDiff';
+import type { DiffLine, DiffLineType } from '@shared/components/diff/lineDiff';
 
 export const OBJECT_YAML_ERROR_PREFIX = 'ObjectYAMLError:';
 
@@ -23,6 +23,11 @@ export interface ObjectYamlErrorPayload {
   causes?: string[];
 }
 
+export interface YamlTabDiffResult {
+  lines: DiffLine[];
+  tooLarge: boolean;
+}
+
 export const parseObjectYamlError = (err: unknown): ObjectYamlErrorPayload | null => {
   const rawMessage =
     err instanceof Error ? err.message : typeof err === 'string' ? err : String(err);
@@ -39,9 +44,15 @@ export const parseObjectYamlError = (err: unknown): ObjectYamlErrorPayload | nul
   }
 };
 
-export const coerceDiffResult = (payload: ObjectYamlErrorPayload): DiffResult | null => {
+export const coerceDiffResult = (payload: ObjectYamlErrorPayload): YamlTabDiffResult | null => {
   if (!payload.diff || payload.diff.length === 0) {
-    return null;
+    if (!payload.truncated) {
+      return null;
+    }
+    return {
+      lines: [],
+      tooLarge: true,
+    };
   }
 
   return {
@@ -57,7 +68,7 @@ export const coerceDiffResult = (payload: ObjectYamlErrorPayload): DiffResult | 
           ? undefined
           : line.rightLineNumber,
     })),
-    truncated: Boolean(payload.truncated),
+    tooLarge: Boolean(payload.truncated),
   };
 };
 

@@ -65,17 +65,27 @@ CodeMirrorMock.displayName = 'CodeMirrorMock';
 
 const yamlErrorsMocks = vi.hoisted(() => ({
   parseObjectYamlError: vi.fn(),
-  coerceDiffResult: vi.fn(() => ({
-    truncated: false,
-    lines: [
-      {
-        type: 'added' as const,
-        leftLineNumber: null,
-        rightLineNumber: 1,
-        value: 'metadata:',
-      },
-    ],
-  })),
+  coerceDiffResult: vi.fn(
+    (): {
+      tooLarge: boolean;
+      lines: Array<{
+        type: 'added';
+        leftLineNumber: null;
+        rightLineNumber: number;
+        value: string;
+      }>;
+    } | null => ({
+      tooLarge: false,
+      lines: [
+        {
+          type: 'added' as const,
+          leftLineNumber: null,
+          rightLineNumber: 1,
+          value: 'metadata:',
+        },
+      ],
+    })
+  ),
 }));
 
 const wailsMocks = vi.hoisted(() => ({
@@ -238,6 +248,12 @@ spec:
     - name: demo
       image: demo:v2
 `.trim();
+
+const buildLargeYamlDraft = (commentLineCount: number) =>
+  [
+    UPDATED_YAML,
+    ...Array.from({ length: commentLineCount }, (_, index) => `# pad-${index + 1}`),
+  ].join('\n');
 
 type Snapshot = {
   status: SnapshotStatus;
@@ -471,6 +487,46 @@ describe('YamlTab', () => {
       'object-yaml',
       'default:pod:demo',
       expect.objectContaining({ isManual: true })
+    );
+
+    await unmount();
+  });
+
+  it('shows the shared too-large warning when a frontend drift diff exceeds budget', async () => {
+    yamlErrorsMocks.parseObjectYamlError.mockReturnValue({
+      code: 'ResourceVersionMismatch',
+      message: 'Object changed upstream',
+      causes: ['Remote diff detected'],
+      currentResourceVersion: '999',
+    });
+    yamlErrorsMocks.coerceDiffResult.mockImplementation(() => null);
+    wailsMocks.ValidateObjectYaml.mockRejectedValue(new Error('mismatch'));
+
+    const { container, unmount } = await renderYamlTab();
+
+    const editButton = Array.from(container.querySelectorAll('button')).find((btn) =>
+      btn.textContent?.includes('Edit')
+    );
+    await act(async () => {
+      editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    await act(async () => {
+      codeMirrorState.latestProps.current.onChange(buildLargeYamlDraft(10_005));
+    });
+
+    const saveButton = Array.from(container.querySelectorAll('button')).find((btn) =>
+      btn.textContent?.includes('Save')
+    );
+    await act(async () => {
+      saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    await waitForUpdates();
+
+    expect(container.querySelector('.yaml-drift-diff')).toBeNull();
+    expect(container.querySelector('.yaml-drift-warning')?.textContent).toContain(
+      'This diff is too large to display in the current view.'
     );
 
     await unmount();

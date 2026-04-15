@@ -195,14 +195,16 @@ Status: ✅ Completed
 
 ### Phase 3: Migrate Other Frontend Diff Surfaces
 
-- [ ] Move YAML tab diff to the shared frontend diff module.
-- [ ] Move rollback diff to the shared frontend diff module.
-- [ ] Align warning behavior and budget handling across those surfaces.
-- [ ] Keep any surface-specific UI differences out of the shared algorithm/budget code.
+- [x] Move YAML tab diff to the shared frontend diff module.
+- [x] Move rollback diff to the shared frontend diff module.
+- [x] Align warning behavior and budget handling across those surfaces.
+- [x] Keep any surface-specific UI differences out of the shared algorithm/budget code.
 
 Phase 3 deliverable:
 
 - object diff, YAML tab diff, and rollback diff share one frontend diff path
+
+Status: ✅ Completed
 
 ### Phase 4: Backend Mutation Diff Cleanup
 
