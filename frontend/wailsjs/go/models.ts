@@ -341,6 +341,8 @@ export namespace backend {
 	export class PortForwardRequest {
 	    namespace: string;
 	    targetKind: string;
+	    targetGroup: string;
+	    targetVersion: string;
 	    targetName: string;
 	    containerPort: number;
 	    localPort: number;
@@ -353,6 +355,8 @@ export namespace backend {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.namespace = source["namespace"];
 	        this.targetKind = source["targetKind"];
+	        this.targetGroup = source["targetGroup"];
+	        this.targetVersion = source["targetVersion"];
 	        this.targetName = source["targetName"];
 	        this.containerPort = source["containerPort"];
 	        this.localPort = source["localPort"];
@@ -367,6 +371,8 @@ export namespace backend {
 	    containerPort: number;
 	    localPort: number;
 	    targetKind: string;
+	    targetGroup: string;
+	    targetVersion: string;
 	    targetName: string;
 	    status: string;
 	    statusReason?: string;
@@ -386,6 +392,8 @@ export namespace backend {
 	        this.containerPort = source["containerPort"];
 	        this.localPort = source["localPort"];
 	        this.targetKind = source["targetKind"];
+	        this.targetGroup = source["targetGroup"];
+	        this.targetVersion = source["targetVersion"];
 	        this.targetName = source["targetName"];
 	        this.status = source["status"];
 	        this.statusReason = source["statusReason"];

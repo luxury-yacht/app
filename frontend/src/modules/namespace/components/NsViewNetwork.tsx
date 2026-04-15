@@ -277,8 +277,11 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
                 );
                 return;
               }
+              const targetGVK = resolveBuiltinGroupVersion(resource.kind);
               setPortForwardTarget({
                 kind: resource.kind,
+                group: targetGVK.group ?? '',
+                version: targetGVK.version ?? 'v1',
                 name: resource.name,
                 namespace: resource.namespace,
                 clusterId: resource.clusterId,

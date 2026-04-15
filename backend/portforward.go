@@ -42,6 +42,9 @@ func (a *App) StartPortForward(clusterID string, req PortForwardRequest) (string
 	if req.Namespace == "" {
 		return "", fmt.Errorf("namespace is required")
 	}
+	if req.TargetKind == "" {
+		return "", fmt.Errorf("target kind is required")
+	}
 	if req.TargetName == "" {
 		return "", fmt.Errorf("target name is required")
 	}
@@ -49,11 +52,22 @@ func (a *App) StartPortForward(clusterID string, req PortForwardRequest) (string
 		return "", fmt.Errorf("container port must be positive")
 	}
 
+	target := portForwardTargetRef{
+		Namespace: req.Namespace,
+		Kind:      req.TargetKind,
+		Group:     req.TargetGroup,
+		Version:   req.TargetVersion,
+		Name:      req.TargetName,
+	}
+	if err := validatePortForwardTargetGVK(target); err != nil {
+		return "", err
+	}
+
 	// Resolve the target to a pod.
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	podName, err := resolvePodForTarget(ctx, deps.KubernetesClient, req.Namespace, req.TargetKind, req.TargetName)
+	resolved, err := resolvePortForwardDestination(ctx, deps.KubernetesClient, target, req.ContainerPort)
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve pod: %w", err)
 	}
@@ -68,10 +82,12 @@ func (a *App) StartPortForward(clusterID string, req PortForwardRequest) (string
 			ClusterID:     clusterID,
 			ClusterName:   deps.ClusterName,
 			Namespace:     req.Namespace,
-			PodName:       podName,
+			PodName:       resolved.PodName,
 			ContainerPort: req.ContainerPort,
 			LocalPort:     req.LocalPort,
 			TargetKind:    req.TargetKind,
+			TargetGroup:   req.TargetGroup,
+			TargetVersion: req.TargetVersion,
 			TargetName:    req.TargetName,
 			Status:        "connecting",
 			StartedAt:     time.Now().Format(time.RFC3339),
@@ -290,11 +306,23 @@ func (a *App) executePortForward(ctx context.Context, session *portForwardSessio
 	}
 
 	session.mu.Lock()
-	podName := session.PodName
 	namespace := session.Namespace
-	containerPort := session.ContainerPort
 	localPort := session.LocalPort
+	target := portForwardTargetRef{
+		Namespace: namespace,
+		Kind:      session.TargetKind,
+		Group:     session.TargetGroup,
+		Version:   session.TargetVersion,
+		Name:      session.TargetName,
+	}
 	session.mu.Unlock()
+
+	resolved, err := resolvePortForwardDestination(ctx, deps.KubernetesClient, target, session.ContainerPort)
+	if err != nil {
+		return fmt.Errorf("failed to resolve target port: %w", err)
+	}
+	podName := resolved.PodName
+	forwardPort := resolved.ForwardPort
 
 	// Build the pod port-forward URL.
 	podURL := deps.KubernetesClient.CoreV1().
@@ -315,7 +343,7 @@ func (a *App) executePortForward(ctx context.Context, session *portForwardSessio
 	dialer := spdy.NewDialer(upgrader, &http.Client{Transport: transport}, http.MethodPost, podURL)
 
 	// Build port mapping string.
-	ports := []string{fmt.Sprintf("%d:%d", localPort, containerPort)}
+	ports := []string{fmt.Sprintf("%d:%d", localPort, forwardPort)}
 
 	// Create channels for port forwarder.
 	readyChan := make(chan struct{})
@@ -415,12 +443,16 @@ func (a *App) reresolvePod(ctx context.Context, session *portForwardSessionInter
 	}
 
 	session.mu.Lock()
-	namespace := session.Namespace
-	targetKind := session.TargetKind
-	targetName := session.TargetName
+	target := portForwardTargetRef{
+		Namespace: session.Namespace,
+		Kind:      session.TargetKind,
+		Group:     session.TargetGroup,
+		Version:   session.TargetVersion,
+		Name:      session.TargetName,
+	}
 	session.mu.Unlock()
 
-	podName, err := resolvePodForTarget(ctx, deps.KubernetesClient, namespace, targetKind, targetName)
+	podName, err := resolvePodForTarget(ctx, deps.KubernetesClient, target)
 	if err != nil {
 		return err
 	}

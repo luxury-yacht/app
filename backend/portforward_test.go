@@ -71,6 +71,8 @@ func TestStartPortForward_MissingRestConfig(t *testing.T) {
 	_, err := app.StartPortForward(portForwardClusterID, PortForwardRequest{
 		Namespace:     "default",
 		TargetKind:    "Pod",
+		TargetGroup:   "",
+		TargetVersion: "v1",
 		TargetName:    "test-pod",
 		ContainerPort: 8080,
 	})
@@ -99,6 +101,8 @@ func TestStartPortForward_ValidationErrors(t *testing.T) {
 	// Missing namespace.
 	_, err := app.StartPortForward(portForwardClusterID, PortForwardRequest{
 		TargetKind:    "Pod",
+		TargetGroup:   "",
+		TargetVersion: "v1",
 		TargetName:    "test-pod",
 		ContainerPort: 8080,
 	})
@@ -110,6 +114,8 @@ func TestStartPortForward_ValidationErrors(t *testing.T) {
 	_, err = app.StartPortForward(portForwardClusterID, PortForwardRequest{
 		Namespace:     "default",
 		TargetKind:    "Pod",
+		TargetGroup:   "",
+		TargetVersion: "v1",
 		ContainerPort: 8080,
 	})
 	if err == nil {
@@ -120,6 +126,8 @@ func TestStartPortForward_ValidationErrors(t *testing.T) {
 	_, err = app.StartPortForward(portForwardClusterID, PortForwardRequest{
 		Namespace:     "default",
 		TargetKind:    "Pod",
+		TargetGroup:   "",
+		TargetVersion: "v1",
 		TargetName:    "test-pod",
 		ContainerPort: 0,
 	})
@@ -427,9 +435,9 @@ func TestValidatePortForwardURL(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 
 	tests := []struct {
-		url     string
-		valid   bool
-		errMsg  string
+		url    string
+		valid  bool
+		errMsg string
 	}{
 		{"http://localhost:8080", true, ""},
 		{"https://example.com/path", true, ""},

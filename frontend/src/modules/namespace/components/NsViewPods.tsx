@@ -520,8 +520,11 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
                 );
                 return;
               }
+              const targetGVK = resolveBuiltinGroupVersion('Pod');
               setPortForwardTarget({
                 kind: 'Pod',
+                group: targetGVK.group ?? '',
+                version: targetGVK.version ?? 'v1',
                 name: pod.name,
                 namespace: pod.namespace,
                 clusterId: pod.clusterId,
