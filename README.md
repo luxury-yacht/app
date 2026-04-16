@@ -25,7 +25,7 @@ Here are some of the things that Luxury Yacht offers that you might not find in 
 
 - **Command Palette.** Instant access to nearly everything in the app. Open clusters, toggle settings, select a namespace, go straight to a specific object's details, change themes, and much more.
 
-- **Favorites.** Do you have a view that you keep returning to? Favorites give you quick access. Save a view for a particular cluster, or create a generic favorite that will work in any cluster.
+- **Favorites.** Save a filtered view as a favorite for quick access. Favorites can be cluster-specific, or create a generic favorite that will work in any cluster.
 
 - **Themes Per Cluster.** The flexible theme system allows you to assign colors to specific clusters or patterns in cluster names. Assign your dev clusters a blue theme, and your prod clusters a red theme, so you can instantly know when you're working in production. And, of course, you can have light and dark versions of your themes.
 
