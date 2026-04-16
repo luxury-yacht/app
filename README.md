@@ -1,8 +1,43 @@
 # Luxury Yacht
 
-Luxury Yacht is a desktop app for managing Kubernetes clusters, available for Linux, macOS, and Windows.
+Luxury Yacht is a cross-platform GUI desktop app for managing Kubernetes clusters and resources.
 
-**New to Luxury Yacht?** Check out the [Features](https://luxury-yacht.app/features) page to see what it can do!
+![Screen shot of Luxury Yacht](https://luxury-yacht.app/images/screenshots/object-panel-right-dark.png)
+**New to Luxury Yacht?** Check out the [Features](https://luxury-yacht.app/features) page!
+
+**Luxury Yacht is open source and free for personal and commercial use.** No fees, no subscriptions, no strings attached.
+
+If you would like to help offset Luxury Yacht's development and maintenance costs, consider [sponsoring me](https://github.com/sponsors/johnjeffers).
+
+## Why Luxury Yacht?
+
+I'm a Kubernetes admin. I've tried most of the other apps in this space. None of them worked quite the way I wanted. I created Luxury Yacht to close those gaps, and make my life (and hopefully yours) a little easier.
+
+Luxury Yacht has all the standard features of a Kubernetes management app. If you've used k9s, Lens, Headlamp, or similar apps, you know what to expect: cluster summary data, real-time metrics, workload status, detailed drilldown info, pod logs, etc.
+
+### Highlights
+
+Here are some of the things that Luxury Yacht offers that you might not find in other apps.
+
+- **Maybe the Best Log Viewer You've Ever Used.** Highlight your search text. Invert the search to only show lines without the search text. Use regular expressions. Show the API's timestamps for logs without their own timestamps, or logs that have indecipherable timestamps like unix epoch time, in whatever timestamp format you like. Show times in UTC or your local time zone. Enable color support for logs with ASCII color codes. Make JSON logs readable in pretty-print format, or even as a table.
+
+- **Flexible panel layouts.** Organize your info however you like. When you open a detail panel for an object, you can choose to dock it to the bottom, to the right, or use a floating panel. Have multiple, resizable floating panels. Open multiple object tabs in each panel. Drag tabs between panels, or drag out to create a new floating panel.
+
+- **Object Diff.** Can't understand why a deployment is working correctly in one cluster, but not the other? Open both deployments in the Diff Objects panel to see exactly what the differences are.
+
+- **Command Palette.** Instant access to nearly everything in the app. Open clusters, toggle settings, select a namespace, go straight to a specific object's details, change themes, and much more.
+
+- **Favorites.** Do you have a view that you keep returning to? Favorites give you quick access. Save a view for a particular cluster, or create a generic favorite that will work in any cluster.
+
+- **Themes Per Cluster.** The flexible theme system allows you to assign colors to specific clusters or patterns in cluster names. Assign your dev clusters a blue theme, and your prod clusters a red theme, so you can instantly know when you're working in production. And, of course, you can have light and dark versions of your themes.
+
+- **Zero-Touch Setup.** Luxury Yacht does not create or modify kubeconfig files. It simply reads the directory that contains them and loads up your choices into a dropdown menu. Select a cluster from the dropdown to get started. Manage which directories Luxury Yacht uses in Settings.
+
+- **Node Maintenance.** Cordon, drain, and delete nodes with ease. Simply open a node's panel and select the Maintenance tab.
+
+- **Simple Port Forwarding.** Right-click on a workload, pod, or service. Select a port and click Start. That's it. Have multiple port forwards open simultaneously, and easily track them in a centralized status console.
+
+- **Shell Support with Debug Containers.** Of course you expect to be able to get a shell in a container, but what if the container doesn't support shell access? Luxury Yacht gives you a simple way to start an ephemeral debug container in that pod, attached to the container.
 
 ## Installation
 
