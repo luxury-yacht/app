@@ -7,8 +7,6 @@ Luxury Yacht is a cross-platform GUI desktop app for managing Kubernetes cluster
 
 **Luxury Yacht is open source and free for personal and commercial use.** No fees, no subscriptions, no strings attached.
 
-If you would like to help offset Luxury Yacht's development and maintenance costs, consider [sponsoring me](https://github.com/sponsors/johnjeffers).
-
 ## Why Luxury Yacht?
 
 I'm a Kubernetes admin. I've tried most of the other apps in this space. None of them worked quite the way I wanted. I created Luxury Yacht to close those gaps, and make my life (and hopefully yours) a little easier.
