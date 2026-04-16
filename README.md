@@ -17,7 +17,7 @@ Luxury Yacht has all the standard features of a Kubernetes management app. If yo
 
 Here are some of the things that Luxury Yacht offers that you might not find in other apps.
 
-- **Maybe the Best Log Viewer You've Ever Used.** Highlight your search text. Invert the search to only show lines without the search text. Use regular expressions. Show the API's timestamps for logs without their own timestamps, or logs that have indecipherable timestamps like unix epoch time, in whatever timestamp format you like. Show times in UTC or your local time zone. Enable color support for logs with ASCII color codes. Make JSON logs readable in pretty-print format, or even as a table.
+- **Maybe the best log viewer you've ever used.** Highlight your search text. Invert the search to only show lines without the search text. Use regular expressions. Show the API's timestamps for logs without their own timestamps, or logs that have indecipherable timestamps like unix epoch time, in whatever timestamp format you like. Show times in UTC or your local time zone. Enable color support for logs with ASCII color codes. Make JSON logs readable in pretty-print format, or even as a table.
 
 - **Flexible panel layouts.** Organize your info however you like. When you open a detail panel for an object, you can choose to dock it to the bottom, to the right, or use a floating panel. Have multiple, resizable floating panels. Open multiple object tabs in each panel. Drag tabs between panels, or drag out to create a new floating panel.
 
@@ -27,15 +27,15 @@ Here are some of the things that Luxury Yacht offers that you might not find in 
 
 - **Favorites.** Save a filtered view as a favorite for quick access. Favorites can be cluster-specific, or create a generic favorite that will work in any cluster.
 
-- **Themes Per Cluster.** The flexible theme system allows you to assign colors to specific clusters or patterns in cluster names. Assign your dev clusters a blue theme, and your prod clusters a red theme, so you can instantly know when you're working in production. And, of course, you can have light and dark versions of your themes.
+- **Themes per cluster.** The flexible theme system allows you to assign colors to specific clusters or patterns in cluster names. Assign your dev clusters a blue theme, and your prod clusters a red theme, so you can instantly know when you're working in production. And, of course, you can have light and dark versions of your themes.
 
-- **Zero-Touch Setup.** Luxury Yacht does not create or modify kubeconfig files. It simply reads the directory that contains them and loads up your choices into a dropdown menu. Select a cluster from the dropdown to get started. Manage which directories Luxury Yacht uses in Settings.
+- **Zero-touch setup.** Luxury Yacht does not create or modify kubeconfig files. It simply reads the directory that contains them and loads up your choices into a dropdown menu. Select a cluster from the dropdown to get started. Manage which directories Luxury Yacht uses in Settings.
 
-- **Node Maintenance.** Cordon, drain, and delete nodes with ease. Simply open a node's panel and select the Maintenance tab.
+- **Node maintenance.** Cordon, drain, and delete nodes with ease. Simply open a node's panel and select the Maintenance tab.
 
-- **Simple Port Forwarding.** Right-click on a workload, pod, or service. Select a port and click Start. That's it. Have multiple port forwards open simultaneously, and easily track them in a centralized status console.
+- **Simple port forwarding.** Right-click on a workload, pod, or service. Select a port and click Start. That's it. Have multiple port forwards open simultaneously, and easily track them in a centralized status console.
 
-- **Shell Support with Debug Containers.** Of course you expect to be able to get a shell in a container, but what if the container doesn't support shell access? Luxury Yacht gives you a simple way to start an ephemeral debug container in that pod, attached to the container.
+- **Shell support with debug containers.** Of course you expect to be able to get a shell in a container, but what if the container doesn't support shell access? Luxury Yacht gives you a simple way to start an ephemeral debug container in that pod, attached to the container.
 
 ## Installation
 
