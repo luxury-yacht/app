@@ -251,6 +251,36 @@ describe('ActionsMenu', () => {
     expect(portForwardItem).toBeTruthy();
   });
 
+  it('renders port forward as disabled when the target is unavailable', async () => {
+    await renderMenu({
+      object: makeObject('Pod', {
+        clusterId: undefined,
+      }),
+    });
+
+    openMenu(container);
+    const items = Array.from(container.querySelectorAll<HTMLElement>('.context-menu-item'));
+    const portForwardItem = items.find((item) => item.textContent?.includes('Port Forward'));
+    expect(portForwardItem).toBeTruthy();
+    expect(portForwardItem?.className).toContain('disabled');
+    expect(portForwardItem?.textContent).toContain('Port Forward');
+  });
+
+  it('renders port forward as disabled when the target has no forwardable ports', async () => {
+    await renderMenu({
+      object: makeObject('Pod', {
+        portForwardAvailable: false,
+      }),
+    });
+
+    openMenu(container);
+    const items = Array.from(container.querySelectorAll<HTMLElement>('.context-menu-item'));
+    const portForwardItem = items.find((item) => item.textContent?.includes('Port Forward'));
+    expect(portForwardItem).toBeTruthy();
+    expect(portForwardItem?.className).toContain('disabled');
+    expect(portForwardItem?.textContent).toContain('Port Forward');
+  });
+
   it('shows Diff in the actions menu and emits an object-diff request', async () => {
     await renderMenu({
       object: makeObject('Deployment', {

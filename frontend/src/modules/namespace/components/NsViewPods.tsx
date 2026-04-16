@@ -506,6 +506,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
             namespace: pod.namespace,
             clusterId: pod.clusterId,
             clusterName: pod.clusterName,
+            portForwardAvailable: pod.portForwardAvailable,
           },
           context: 'gridtable',
           handlers: {

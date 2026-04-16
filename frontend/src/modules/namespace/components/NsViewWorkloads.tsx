@@ -435,6 +435,7 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
             clusterId: row.clusterId,
             clusterName: row.clusterName,
             status: row.status,
+            portForwardAvailable: row.portForwardAvailable,
             hpaManaged: Boolean(row.hpaManaged),
           },
           context: 'gridtable',

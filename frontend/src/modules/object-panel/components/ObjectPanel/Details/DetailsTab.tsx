@@ -17,6 +17,15 @@ import { useUtilizationData, useHasUtilization } from './useUtilizationData';
 
 export type { DetailsTabProps } from './detailsTabTypes';
 
+const NON_TCP_PORT_SUFFIX = /\/(UDP|SCTP)$/i;
+
+const hasForwardableContainerDetails = (
+  containers?: Array<{ ports?: string[] | null }> | null
+): boolean =>
+  containers?.some((container) =>
+    container.ports?.some((port) => !NON_TCP_PORT_SUFFIX.test(port))
+  ) ?? false;
+
 const DetailsTabContent: React.FC<DetailsTabProps> = ({
   objectData,
   // Workloads
@@ -163,6 +172,45 @@ const DetailsTabContent: React.FC<DetailsTabProps> = ({
     nodeDetails,
   });
 
+  const portForwardAvailable = useMemo(() => {
+    switch (objectData?.kind?.toLowerCase()) {
+      case 'pod':
+        return podDetails ? hasForwardableContainerDetails(podDetails.containers) : undefined;
+      case 'deployment':
+        return deploymentDetails
+          ? hasForwardableContainerDetails(deploymentDetails.containers)
+          : undefined;
+      case 'replicaset':
+        return replicaSetDetails
+          ? hasForwardableContainerDetails(replicaSetDetails.containers)
+          : undefined;
+      case 'daemonset':
+        return daemonSetDetails
+          ? hasForwardableContainerDetails(daemonSetDetails.containers)
+          : undefined;
+      case 'statefulset':
+        return statefulSetDetails
+          ? hasForwardableContainerDetails(statefulSetDetails.containers)
+          : undefined;
+      case 'service':
+        return serviceDetails
+          ? (serviceDetails.ports?.some(
+              (port) => !port.protocol || port.protocol.toUpperCase() === 'TCP'
+            ) ?? false)
+          : undefined;
+      default:
+        return undefined;
+    }
+  }, [
+    objectData?.kind,
+    podDetails,
+    deploymentDetails,
+    replicaSetDetails,
+    daemonSetDetails,
+    statefulSetDetails,
+    serviceDetails,
+  ]);
+
   return (
     <div className="object-panel-tab-content">
       {/* Deleted Resource Warning */}
@@ -229,6 +277,7 @@ const DetailsTabContent: React.FC<DetailsTabProps> = ({
             showScaleInput={showScaleInput}
             actionLoading={actionLoading}
             objectKind={objectData?.kind}
+            portForwardAvailable={portForwardAvailable}
             onTrigger={onTriggerClick}
             onSuspendToggle={onSuspendToggle}
           />
