@@ -17,15 +17,11 @@
      UI in development. */
   user-select: none;
   -webkit-user-select: none;
-  -moz-user-select: none;
-  -ms-user-select: none;
 }
 
 .app * {
   user-select: none;
   -webkit-user-select: none;
-  -moz-user-select: none;
-  -ms-user-select: none;
 }
 
 /* Utility class to allow text selection on specific elements */
@@ -37,8 +33,6 @@ textarea,
 [contenteditable=""] {
   user-select: text;
   -webkit-user-select: text;
-  -moz-user-select: text;
-  -ms-user-select: text;
 }
 
 .app-container {

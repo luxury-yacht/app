@@ -32,8 +32,6 @@
   min-height: 100%;
   user-select: text;
   -webkit-user-select: text;
-  -moz-user-select: text;
-  -ms-user-select: text;
 }
 
 .values-pre > div {
@@ -51,8 +49,6 @@
   color: #858585;
   user-select: none !important;
   -webkit-user-select: none !important;
-  -moz-user-select: none !important;
-  -ms-user-select: none !important;
   flex-shrink: 0;
 }
 

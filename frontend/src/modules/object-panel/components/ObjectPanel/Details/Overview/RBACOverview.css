@@ -34,6 +34,8 @@
   font-size: 0.7rem;
   color: var(--color-text);
   word-break: break-word;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .field-value.verbs {
