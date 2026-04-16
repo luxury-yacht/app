@@ -330,8 +330,8 @@ export function GetStorageClass(arg1, arg2) {
   return window['go']['backend']['App']['GetStorageClass'](arg1, arg2);
 }
 
-export function GetTargetPorts(arg1, arg2, arg3, arg4) {
-  return window['go']['backend']['App']['GetTargetPorts'](arg1, arg2, arg3, arg4);
+export function GetTargetPorts(arg1, arg2, arg3, arg4, arg5, arg6) {
+  return window['go']['backend']['App']['GetTargetPorts'](arg1, arg2, arg3, arg4, arg5, arg6);
 }
 
 export function GetThemeInfo() {

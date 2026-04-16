@@ -27,6 +27,7 @@ interface GenericOverviewProps {
   onDelete?: () => void;
   onTrigger?: () => void;
   onSuspendToggle?: () => void;
+  portForwardAvailable?: boolean;
   [key: string]: any; // Allow any additional fields for generic resources
 }
 
@@ -82,11 +83,13 @@ const Overview: React.FC<OverviewProps> = (props) => {
       group: objectGroup ?? undefined,
       version: objectVersion ?? undefined,
       status: props.suspend ? 'Suspended' : props.status,
+      portForwardAvailable: props.portForwardAvailable,
     }),
     [
       props.kind,
       props.name,
       props.namespace,
+      props.portForwardAvailable,
       props.suspend,
       props.status,
       clusterId,

@@ -44,11 +44,19 @@ func TestBuildPodSummaryResolvesDeploymentOwner(t *testing.T) {
 				Controller: ptrBool(true),
 			}},
 		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{
+				Name:  "app",
+				Image: "example/app:1.0.0",
+				Ports: []corev1.ContainerPort{{ContainerPort: 8080}},
+			}},
+		},
 	}
 
 	summary := BuildPodSummary(ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}, pod, nil, rsLister)
 	require.Equal(t, "Deployment", summary.OwnerKind)
 	require.Equal(t, "web", summary.OwnerName)
+	require.True(t, summary.PortForwardAvailable)
 }
 
 func TestBuildWorkloadSummaryDeployment(t *testing.T) {
@@ -59,6 +67,15 @@ func TestBuildWorkloadSummaryDeployment(t *testing.T) {
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: ptrInt32(3),
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{
+						Name:  "app",
+						Image: "example/app:1.0.0",
+						Ports: []corev1.ContainerPort{{ContainerPort: 8080}},
+					}},
+				},
+			},
 		},
 		Status: appsv1.DeploymentStatus{
 			ReadyReplicas: 2,
@@ -84,6 +101,26 @@ func TestBuildWorkloadSummaryDeployment(t *testing.T) {
 	require.Equal(t, "web", summary.Name)
 	require.Equal(t, "default", summary.Namespace)
 	require.Equal(t, "c1", summary.ClusterID)
+	require.True(t, summary.PortForwardAvailable)
+}
+
+func TestBuildPodSummaryMarksNoForwardablePorts(t *testing.T) {
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "pod-1",
+			Namespace: "default",
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{
+				Name:  "dns",
+				Image: "example/dns:1.0.0",
+				Ports: []corev1.ContainerPort{{ContainerPort: 53, Protocol: corev1.ProtocolUDP}},
+			}},
+		},
+	}
+
+	summary := BuildPodSummary(ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}, pod, nil, nil)
+	require.False(t, summary.PortForwardAvailable)
 }
 
 func TestBuildNodeSummary(t *testing.T) {

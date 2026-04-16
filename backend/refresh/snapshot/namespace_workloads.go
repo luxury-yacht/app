@@ -63,19 +63,20 @@ type NamespaceWorkloadsSnapshot struct {
 // WorkloadSummary mirrors the data required by the workloads table.
 type WorkloadSummary struct {
 	ClusterMeta
-	Kind       string `json:"kind"`
-	Name       string `json:"name"`
-	Namespace  string `json:"namespace"`
-	Ready      string `json:"ready"`
-	Status     string `json:"status"`
-	Restarts   int32  `json:"restarts"`
-	Age        string `json:"age"`
-	CPUUsage   string `json:"cpuUsage,omitempty"`
-	CPURequest string `json:"cpuRequest,omitempty"`
-	CPULimit   string `json:"cpuLimit,omitempty"`
-	MemUsage   string `json:"memUsage,omitempty"`
-	MemRequest string `json:"memRequest,omitempty"`
-	MemLimit   string `json:"memLimit,omitempty"`
+	Kind                 string `json:"kind"`
+	Name                 string `json:"name"`
+	Namespace            string `json:"namespace"`
+	Ready                string `json:"ready"`
+	Status               string `json:"status"`
+	Restarts             int32  `json:"restarts"`
+	Age                  string `json:"age"`
+	CPUUsage             string `json:"cpuUsage,omitempty"`
+	CPURequest           string `json:"cpuRequest,omitempty"`
+	CPULimit             string `json:"cpuLimit,omitempty"`
+	MemUsage             string `json:"memUsage,omitempty"`
+	MemRequest           string `json:"memRequest,omitempty"`
+	MemLimit             string `json:"memLimit,omitempty"`
+	PortForwardAvailable bool   `json:"portForwardAvailable"`
 	// HPAManaged indicates whether a HorizontalPodAutoscaler targets this workload.
 	HPAManaged bool `json:"hpaManaged,omitempty"`
 }
@@ -318,8 +319,8 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 				continue
 			}
 		}
-	summary := buildStandalonePodSummary(pod, podUsage)
-	appendSummary(summary, pod)
+		summary := buildStandalonePodSummary(pod, podUsage)
+		appendSummary(summary, pod)
 	}
 
 	sortWorkloadSummaries(items)
@@ -375,19 +376,20 @@ func (b *NamespaceWorkloadsBuilder) buildDeploymentSummary(
 	}
 
 	return WorkloadSummary{
-		Kind:       "Deployment",
-		Name:       deployment.Name,
-		Namespace:  deployment.Namespace,
-		Ready:      fmt.Sprintf("%d/%d", ready, desired),
-		Status:     getDeploymentStatus(deployment),
-		Restarts:   resources.Restarts,
-		Age:        formatAge(deployment.CreationTimestamp.Time),
-		CPUUsage:   formatWorkloadCPUMilli(resources.CPUUsageMilli),
-		CPURequest: formatWorkloadCPUMilli(resources.CPURequestMilli),
-		CPULimit:   formatWorkloadCPUMilli(resources.CPULimitMilli),
-		MemUsage:   formatWorkloadMemory(resources.MemoryUsageBytes),
-		MemRequest: formatWorkloadMemory(resources.MemoryRequestBytes),
-		MemLimit:   formatWorkloadMemory(resources.MemoryLimitBytes),
+		Kind:                 "Deployment",
+		Name:                 deployment.Name,
+		Namespace:            deployment.Namespace,
+		Ready:                fmt.Sprintf("%d/%d", ready, desired),
+		Status:               getDeploymentStatus(deployment),
+		Restarts:             resources.Restarts,
+		Age:                  formatAge(deployment.CreationTimestamp.Time),
+		CPUUsage:             formatWorkloadCPUMilli(resources.CPUUsageMilli),
+		CPURequest:           formatWorkloadCPUMilli(resources.CPURequestMilli),
+		CPULimit:             formatWorkloadCPUMilli(resources.CPULimitMilli),
+		MemUsage:             formatWorkloadMemory(resources.MemoryUsageBytes),
+		MemRequest:           formatWorkloadMemory(resources.MemoryRequestBytes),
+		MemLimit:             formatWorkloadMemory(resources.MemoryLimitBytes),
+		PortForwardAvailable: hasForwardableContainerPorts(deployment.Spec.Template.Spec.Containers),
 	}
 }
 
@@ -412,19 +414,20 @@ func (b *NamespaceWorkloadsBuilder) buildStatefulSetSummary(
 	}
 
 	return WorkloadSummary{
-		Kind:       "StatefulSet",
-		Name:       stateful.Name,
-		Namespace:  stateful.Namespace,
-		Ready:      fmt.Sprintf("%d/%d", ready, desired),
-		Status:     getStatefulSetStatus(stateful),
-		Restarts:   resources.Restarts,
-		Age:        formatAge(stateful.CreationTimestamp.Time),
-		CPUUsage:   formatWorkloadCPUMilli(resources.CPUUsageMilli),
-		CPURequest: formatWorkloadCPUMilli(resources.CPURequestMilli),
-		CPULimit:   formatWorkloadCPUMilli(resources.CPULimitMilli),
-		MemUsage:   formatWorkloadMemory(resources.MemoryUsageBytes),
-		MemRequest: formatWorkloadMemory(resources.MemoryRequestBytes),
-		MemLimit:   formatWorkloadMemory(resources.MemoryLimitBytes),
+		Kind:                 "StatefulSet",
+		Name:                 stateful.Name,
+		Namespace:            stateful.Namespace,
+		Ready:                fmt.Sprintf("%d/%d", ready, desired),
+		Status:               getStatefulSetStatus(stateful),
+		Restarts:             resources.Restarts,
+		Age:                  formatAge(stateful.CreationTimestamp.Time),
+		CPUUsage:             formatWorkloadCPUMilli(resources.CPUUsageMilli),
+		CPURequest:           formatWorkloadCPUMilli(resources.CPURequestMilli),
+		CPULimit:             formatWorkloadCPUMilli(resources.CPULimitMilli),
+		MemUsage:             formatWorkloadMemory(resources.MemoryUsageBytes),
+		MemRequest:           formatWorkloadMemory(resources.MemoryRequestBytes),
+		MemLimit:             formatWorkloadMemory(resources.MemoryLimitBytes),
+		PortForwardAvailable: hasForwardableContainerPorts(stateful.Spec.Template.Spec.Containers),
 	}
 }
 
@@ -447,19 +450,20 @@ func (b *NamespaceWorkloadsBuilder) buildDaemonSetSummary(
 	}
 
 	return WorkloadSummary{
-		Kind:       "DaemonSet",
-		Name:       daemon.Name,
-		Namespace:  daemon.Namespace,
-		Ready:      fmt.Sprintf("%d/%d", ready, desired),
-		Status:     getDaemonSetStatus(daemon),
-		Restarts:   resources.Restarts,
-		Age:        formatAge(daemon.CreationTimestamp.Time),
-		CPUUsage:   formatWorkloadCPUMilli(resources.CPUUsageMilli),
-		CPURequest: formatWorkloadCPUMilli(resources.CPURequestMilli),
-		CPULimit:   formatWorkloadCPUMilli(resources.CPULimitMilli),
-		MemUsage:   formatWorkloadMemory(resources.MemoryUsageBytes),
-		MemRequest: formatWorkloadMemory(resources.MemoryRequestBytes),
-		MemLimit:   formatWorkloadMemory(resources.MemoryLimitBytes),
+		Kind:                 "DaemonSet",
+		Name:                 daemon.Name,
+		Namespace:            daemon.Namespace,
+		Ready:                fmt.Sprintf("%d/%d", ready, desired),
+		Status:               getDaemonSetStatus(daemon),
+		Restarts:             resources.Restarts,
+		Age:                  formatAge(daemon.CreationTimestamp.Time),
+		CPUUsage:             formatWorkloadCPUMilli(resources.CPUUsageMilli),
+		CPURequest:           formatWorkloadCPUMilli(resources.CPURequestMilli),
+		CPULimit:             formatWorkloadCPUMilli(resources.CPULimitMilli),
+		MemUsage:             formatWorkloadMemory(resources.MemoryUsageBytes),
+		MemRequest:           formatWorkloadMemory(resources.MemoryRequestBytes),
+		MemLimit:             formatWorkloadMemory(resources.MemoryLimitBytes),
+		PortForwardAvailable: hasForwardableContainerPorts(daemon.Spec.Template.Spec.Containers),
 	}
 }
 
@@ -484,19 +488,20 @@ func (b *NamespaceWorkloadsBuilder) buildJobSummary(
 	}
 
 	return WorkloadSummary{
-		Kind:       "Job",
-		Name:       job.Name,
-		Namespace:  job.Namespace,
-		Ready:      fmt.Sprintf("%d/%d", completed, desired),
-		Status:     getJobStatus(job),
-		Restarts:   resources.Restarts,
-		Age:        formatAge(job.CreationTimestamp.Time),
-		CPUUsage:   formatWorkloadCPUMilli(resources.CPUUsageMilli),
-		CPURequest: formatWorkloadCPUMilli(resources.CPURequestMilli),
-		CPULimit:   formatWorkloadCPUMilli(resources.CPULimitMilli),
-		MemUsage:   formatWorkloadMemory(resources.MemoryUsageBytes),
-		MemRequest: formatWorkloadMemory(resources.MemoryRequestBytes),
-		MemLimit:   formatWorkloadMemory(resources.MemoryLimitBytes),
+		Kind:                 "Job",
+		Name:                 job.Name,
+		Namespace:            job.Namespace,
+		Ready:                fmt.Sprintf("%d/%d", completed, desired),
+		Status:               getJobStatus(job),
+		Restarts:             resources.Restarts,
+		Age:                  formatAge(job.CreationTimestamp.Time),
+		CPUUsage:             formatWorkloadCPUMilli(resources.CPUUsageMilli),
+		CPURequest:           formatWorkloadCPUMilli(resources.CPURequestMilli),
+		CPULimit:             formatWorkloadCPUMilli(resources.CPULimitMilli),
+		MemUsage:             formatWorkloadMemory(resources.MemoryUsageBytes),
+		MemRequest:           formatWorkloadMemory(resources.MemoryRequestBytes),
+		MemLimit:             formatWorkloadMemory(resources.MemoryLimitBytes),
+		PortForwardAvailable: hasForwardableContainerPorts(job.Spec.Template.Spec.Containers),
 	}
 }
 
@@ -517,19 +522,20 @@ func (b *NamespaceWorkloadsBuilder) buildCronJobSummary(
 	}
 
 	return WorkloadSummary{
-		Kind:       "CronJob",
-		Name:       cron.Name,
-		Namespace:  cron.Namespace,
-		Ready:      fmt.Sprintf("%d", active),
-		Status:     getCronJobStatus(cron),
-		Restarts:   resources.Restarts,
-		Age:        formatAge(cron.CreationTimestamp.Time),
-		CPUUsage:   formatWorkloadCPUMilli(resources.CPUUsageMilli),
-		CPURequest: formatWorkloadCPUMilli(resources.CPURequestMilli),
-		CPULimit:   formatWorkloadCPUMilli(resources.CPULimitMilli),
-		MemUsage:   formatWorkloadMemory(resources.MemoryUsageBytes),
-		MemRequest: formatWorkloadMemory(resources.MemoryRequestBytes),
-		MemLimit:   formatWorkloadMemory(resources.MemoryLimitBytes),
+		Kind:                 "CronJob",
+		Name:                 cron.Name,
+		Namespace:            cron.Namespace,
+		Ready:                fmt.Sprintf("%d", active),
+		Status:               getCronJobStatus(cron),
+		Restarts:             resources.Restarts,
+		Age:                  formatAge(cron.CreationTimestamp.Time),
+		CPUUsage:             formatWorkloadCPUMilli(resources.CPUUsageMilli),
+		CPURequest:           formatWorkloadCPUMilli(resources.CPURequestMilli),
+		CPULimit:             formatWorkloadCPUMilli(resources.CPULimitMilli),
+		MemUsage:             formatWorkloadMemory(resources.MemoryUsageBytes),
+		MemRequest:           formatWorkloadMemory(resources.MemoryRequestBytes),
+		MemLimit:             formatWorkloadMemory(resources.MemoryLimitBytes),
+		PortForwardAvailable: hasForwardableContainerPorts(cron.Spec.JobTemplate.Spec.Template.Spec.Containers),
 	}
 }
 
@@ -539,19 +545,20 @@ func buildStandalonePodSummary(pod *corev1.Pod, usage map[string]metrics.PodUsag
 	status := podStatus(pod)
 
 	return WorkloadSummary{
-		Kind:       "Pod",
-		Name:       pod.Name,
-		Namespace:  pod.Namespace,
-		Ready:      ready,
-		Status:     status,
-		Restarts:   resources.Restarts,
-		Age:        formatAge(pod.CreationTimestamp.Time),
-		CPUUsage:   formatWorkloadCPUMilli(resources.CPUUsageMilli),
-		CPURequest: formatWorkloadCPUMilli(resources.CPURequestMilli),
-		CPULimit:   formatWorkloadCPUMilli(resources.CPULimitMilli),
-		MemUsage:   formatWorkloadMemory(resources.MemoryUsageBytes),
-		MemRequest: formatWorkloadMemory(resources.MemoryRequestBytes),
-		MemLimit:   formatWorkloadMemory(resources.MemoryLimitBytes),
+		Kind:                 "Pod",
+		Name:                 pod.Name,
+		Namespace:            pod.Namespace,
+		Ready:                ready,
+		Status:               status,
+		Restarts:             resources.Restarts,
+		Age:                  formatAge(pod.CreationTimestamp.Time),
+		CPUUsage:             formatWorkloadCPUMilli(resources.CPUUsageMilli),
+		CPURequest:           formatWorkloadCPUMilli(resources.CPURequestMilli),
+		CPULimit:             formatWorkloadCPUMilli(resources.CPULimitMilli),
+		MemUsage:             formatWorkloadMemory(resources.MemoryUsageBytes),
+		MemRequest:           formatWorkloadMemory(resources.MemoryRequestBytes),
+		MemLimit:             formatWorkloadMemory(resources.MemoryLimitBytes),
+		PortForwardAvailable: hasForwardablePodPorts(pod),
 	}
 }
 

@@ -28,6 +28,8 @@ describe('PortForwardModal', () => {
 
   const mockTarget: PortForwardTarget = {
     kind: 'Deployment',
+    group: 'apps',
+    version: 'v1',
     name: 'nginx',
     namespace: 'default',
     clusterId: 'cluster-1',
@@ -326,6 +328,8 @@ describe('PortForwardModal', () => {
     expect(startPortForwardMock).toHaveBeenCalledWith('cluster-1', {
       namespace: 'default',
       targetKind: 'Deployment',
+      targetGroup: 'apps',
+      targetVersion: 'v1',
       targetName: 'nginx',
       containerPort: 80,
       localPort: 8080,
@@ -430,7 +434,14 @@ describe('PortForwardModal', () => {
       await vi.advanceTimersByTimeAsync(100);
     });
 
-    expect(getTargetPortsMock).toHaveBeenCalledWith('cluster-1', 'default', 'Deployment', 'nginx');
+    expect(getTargetPortsMock).toHaveBeenCalledWith(
+      'cluster-1',
+      'default',
+      'Deployment',
+      'apps',
+      'v1',
+      'nginx'
+    );
 
     vi.useRealTimers();
   });

@@ -95,4 +95,85 @@ describe('buildObjectActionItems', () => {
     expect(items[2]).toMatchObject({ divider: true });
     expect(items[3]).toMatchObject({ label: 'Restart' });
   });
+
+  it('adds a disabled port-forward action when the target is missing cluster scope', () => {
+    const items = buildObjectActionItems({
+      object: {
+        kind: 'Pod',
+        name: 'api-123',
+        namespace: 'apps',
+      },
+      context: 'gridtable',
+      handlers: {
+        onOpen: () => undefined,
+        onPortForward: () => undefined,
+      },
+      permissions: {
+        portForward: { allowed: true, pending: false },
+      },
+    });
+
+    const portForwardItem = items.find(
+      (item) => 'label' in item && item.label?.includes('Port Forward')
+    );
+    expect(portForwardItem).toMatchObject({
+      label: 'Port Forward',
+      disabled: true,
+    });
+  });
+
+  it('adds a disabled port-forward action when the target GVK is unsupported', () => {
+    const items = buildObjectActionItems({
+      object: {
+        kind: 'Deployment',
+        name: 'api',
+        namespace: 'apps',
+        clusterId: 'cluster-a',
+        group: 'extensions',
+        version: 'v1beta1',
+      },
+      context: 'object-panel',
+      handlers: {
+        onPortForward: () => undefined,
+      },
+      permissions: {
+        portForward: { allowed: true, pending: false },
+      },
+    });
+
+    const portForwardItem = items.find(
+      (item) => 'label' in item && item.label?.includes('Port Forward')
+    );
+    expect(portForwardItem).toMatchObject({
+      label: 'Port Forward',
+      disabled: true,
+    });
+  });
+
+  it('adds a disabled port-forward action when the target exposes no forwardable ports', () => {
+    const items = buildObjectActionItems({
+      object: {
+        kind: 'Pod',
+        name: 'api-123',
+        namespace: 'apps',
+        clusterId: 'cluster-a',
+        portForwardAvailable: false,
+      },
+      context: 'gridtable',
+      handlers: {
+        onPortForward: () => undefined,
+      },
+      permissions: {
+        portForward: { allowed: true, pending: false },
+      },
+    });
+
+    const portForwardItem = items.find(
+      (item) => 'label' in item && item.label?.includes('Port Forward')
+    );
+    expect(portForwardItem).toMatchObject({
+      label: 'Port Forward',
+      disabled: true,
+    });
+  });
 });

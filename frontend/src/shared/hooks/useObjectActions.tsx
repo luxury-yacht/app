@@ -60,6 +60,8 @@ export interface ObjectActionData {
   // For workload-specific actions
   status?: string;
   ready?: string;
+  // Whether the target exposes any forwardable TCP ports.
+  portForwardAvailable?: boolean;
   // Whether a HorizontalPodAutoscaler targets this workload (disables manual scaling)
   hpaManaged?: boolean;
   // For Event-specific actions - the involved object reference (e.g., "Pod/my-pod")
@@ -87,12 +89,25 @@ export interface PermissionStatus {
   pending: boolean;
 }
 
+interface PortForwardAvailability {
+  show: boolean;
+  enabled: boolean;
+  label: string;
+}
+
 // Kinds that support each action
 export const RESTARTABLE_KINDS = ['Deployment', 'StatefulSet', 'DaemonSet'];
 export const ROLLBACKABLE_KINDS = ['Deployment', 'StatefulSet', 'DaemonSet'];
 export const SCALABLE_KINDS = ['Deployment', 'StatefulSet', 'ReplicaSet'];
-const PORT_FORWARDABLE_KINDS = ['Pod', 'Deployment', 'StatefulSet', 'DaemonSet', 'Service'];
 let nextObjectDiffRequestId = 1;
+
+const PORT_FORWARDABLE_TARGETS: Record<string, { group: string; version: string }> = {
+  Pod: { group: '', version: 'v1' },
+  Deployment: { group: 'apps', version: 'v1' },
+  StatefulSet: { group: 'apps', version: 'v1' },
+  DaemonSet: { group: 'apps', version: 'v1' },
+  Service: { group: '', version: 'v1' },
+};
 
 // Options for building action items
 export interface BuildObjectActionsOptions {
@@ -138,6 +153,52 @@ const buildObjectDiffSelection = (
   };
 };
 
+function getPortForwardAvailability(
+  object: ObjectActionData,
+  handlers: ObjectActionHandlers
+): PortForwardAvailability {
+  const normalizedKind = normalizeKind(object.kind);
+  const expectedTarget = PORT_FORWARDABLE_TARGETS[normalizedKind];
+
+  if (!expectedTarget || !handlers.onPortForward) {
+    return { show: false, enabled: false, label: 'Port Forward' };
+  }
+
+  const builtin = resolveBuiltinGroupVersion(object.kind);
+  const group = object.group ?? builtin.group;
+  const version = object.version ?? builtin.version;
+
+  if (!object.clusterId || !object.namespace) {
+    return {
+      show: true,
+      enabled: false,
+      label: 'Port Forward',
+    };
+  }
+
+  if (group !== expectedTarget.group || version !== expectedTarget.version) {
+    return {
+      show: true,
+      enabled: false,
+      label: 'Port Forward',
+    };
+  }
+
+  if (object.portForwardAvailable === false) {
+    return {
+      show: true,
+      enabled: false,
+      label: 'Port Forward',
+    };
+  }
+
+  return {
+    show: true,
+    enabled: true,
+    label: 'Port Forward',
+  };
+}
+
 /**
  * Build menu items for an object. Can be used directly or via the useObjectActions hook.
  */
@@ -151,6 +212,7 @@ export function buildObjectActionItems({
   const menuItems: ContextMenuItem[] = [];
   const normalizedKind = normalizeKind(object.kind);
   const diffSelection = buildObjectDiffSelection(object, context, handlers);
+  const portForwardAvailability = getPortForwardAvailability(object, handlers);
 
   const {
     restart: restartStatus,
@@ -210,7 +272,7 @@ export function buildObjectActionItems({
     (ROLLBACKABLE_KINDS.includes(normalizedKind) && Boolean(handlers.onRollback)) ||
     (SCALABLE_KINDS.includes(normalizedKind) &&
       (Boolean(object.hpaManaged) || Boolean(handlers.onScale))) ||
-    (PORT_FORWARDABLE_KINDS.includes(normalizedKind) && Boolean(handlers.onPortForward)) ||
+    portForwardAvailability.show ||
     Boolean(handlers.onDelete);
 
   if (menuItems.length > 0 && hasFollowUpSection) {
@@ -293,14 +355,20 @@ export function buildObjectActionItems({
   }
 
   // Port Forward
-  if (
-    PORT_FORWARDABLE_KINDS.includes(normalizedKind) &&
+  if (portForwardAvailability.show && !portForwardAvailability.enabled) {
+    menuItems.push({
+      label: portForwardAvailability.label,
+      icon: <PortForwardIcon />,
+      disabled: true,
+    });
+  } else if (
+    portForwardAvailability.show &&
     portForwardStatus?.allowed &&
     !portForwardStatus.pending &&
     handlers.onPortForward
   ) {
     menuItems.push({
-      label: 'Port Forward',
+      label: portForwardAvailability.label,
       icon: <PortForwardIcon />,
       onClick: handlers.onPortForward,
       disabled: actionLoading,

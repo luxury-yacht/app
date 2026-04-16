@@ -8,6 +8,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useObjectActions, type ObjectActionData } from '@shared/hooks/useObjectActions';
 import { PortForwardModal, type PortForwardTarget } from '@modules/port-forward';
+import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
 import ScaleModal from '@shared/components/modals/ScaleModal';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import '../ContextMenu.css';
@@ -153,8 +154,11 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
       if (!object) {
         return null;
       }
+      const builtinGVK = resolveBuiltinGroupVersion(object.kind);
       return {
         kind: object.kind,
+        group: object.group ?? builtinGVK.group ?? '',
+        version: object.version ?? builtinGVK.version ?? '',
         name: object.name,
         namespace: object.namespace || '',
         clusterId: object.clusterId || '',

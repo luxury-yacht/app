@@ -506,6 +506,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
             namespace: pod.namespace,
             clusterId: pod.clusterId,
             clusterName: pod.clusterName,
+            portForwardAvailable: pod.portForwardAvailable,
           },
           context: 'gridtable',
           handlers: {
@@ -520,8 +521,11 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
                 );
                 return;
               }
+              const targetGVK = resolveBuiltinGroupVersion('Pod');
               setPortForwardTarget({
                 kind: 'Pod',
+                group: targetGVK.group ?? '',
+                version: targetGVK.version ?? 'v1',
                 name: pod.name,
                 namespace: pod.namespace,
                 clusterId: pod.clusterId,

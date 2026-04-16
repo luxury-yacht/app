@@ -144,6 +144,7 @@ vi.mock('@/core/capabilities', () => ({
     map.set('Deployment:patch:default', { allowed: true, pending: false });
     map.set('Deployment:delete:default', { allowed: true, pending: false });
     map.set('Deployment:update:default:scale', { allowed: true, pending: false });
+    map.set('Pod:create:default:portforward', { allowed: true, pending: false });
     map.set('StatefulSet:update:default:scale', { allowed: true, pending: false });
     map.set('ReplicaSet:update:default:scale', { allowed: true, pending: false });
     return map;
@@ -246,6 +247,43 @@ describe('NsViewWorkloads', () => {
         clusterName: 'alpha',
       })
     );
+  });
+
+  it('disables port forward in the context menu when the workload exposes no forwardable ports', async () => {
+    const workload = {
+      kind: 'Deployment',
+      name: 'api',
+      namespace: 'default',
+      status: 'Running',
+      ready: '1/1',
+      restarts: 0,
+      age: '5m',
+      portForwardAvailable: false,
+      clusterId: 'test:ctx',
+      clusterName: 'test',
+    };
+
+    await act(async () => {
+      root.render(
+        <NsViewWorkloads
+          namespace="default"
+          data={[workload as any]}
+          loading={false}
+          loaded={true}
+          metrics={null}
+        />
+      );
+      await Promise.resolve();
+    });
+
+    const items = gridTablePropsRef.current.getCustomContextMenuItems(
+      gridTablePropsRef.current.data[0]
+    );
+    const portForwardItem = items.find((item: any) => item.label?.includes('Port Forward'));
+    expect(portForwardItem).toMatchObject({
+      label: 'Port Forward',
+      disabled: true,
+    });
   });
 
   describe('CronJob context menu', () => {
