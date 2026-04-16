@@ -297,6 +297,7 @@ export interface ClusterEventEntry extends ClusterMeta {
   resourceVersion?: string;
   namespace: string;
   objectNamespace?: string;
+  objectApiVersion?: string;
   type: string;
   source: string;
   reason: string;
@@ -589,6 +590,7 @@ export interface NamespaceEventSummary extends ClusterMeta {
   resourceVersion?: string;
   namespace: string;
   objectNamespace?: string;
+  objectApiVersion?: string;
   type: string;
   source: string;
   reason: string;

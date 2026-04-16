@@ -34,19 +34,20 @@ type ClusterEventsSnapshot struct {
 // ClusterEventEntry mirrors the fields consumed by the frontend grid.
 type ClusterEventEntry struct {
 	ClusterMeta
-	Kind            string `json:"kind"`
-	Name            string `json:"name"`
-	UID             string `json:"uid"`
-	ResourceVersion string `json:"resourceVersion"`
-	Namespace       string `json:"namespace"`
-	ObjectNamespace string `json:"objectNamespace"`
-	Type            string `json:"type"`
-	Source          string `json:"source"`
-	Reason          string `json:"reason"`
-	Object          string `json:"object"`
-	Message         string `json:"message"`
-	Age             string `json:"age"`
-	AgeTimestamp    int64  `json:"ageTimestamp"`
+	Kind             string `json:"kind"`
+	Name             string `json:"name"`
+	UID              string `json:"uid"`
+	ResourceVersion  string `json:"resourceVersion"`
+	Namespace        string `json:"namespace"`
+	ObjectNamespace  string `json:"objectNamespace"`
+	ObjectAPIVersion string `json:"objectApiVersion"`
+	Type             string `json:"type"`
+	Source           string `json:"source"`
+	Reason           string `json:"reason"`
+	Object           string `json:"object"`
+	Message          string `json:"message"`
+	Age              string `json:"age"`
+	AgeTimestamp     int64  `json:"ageTimestamp"`
 }
 
 // RegisterClusterEventsDomain registers the cluster events domain.
@@ -92,20 +93,21 @@ func (b *ClusterEventsBuilder) Build(ctx context.Context, scope string) (*refres
 			continue
 		}
 		entries = append(entries, ClusterEventEntry{
-			ClusterMeta:     meta,
-			Kind:            "Event",
-			Name:            evt.Name,
-			UID:             string(evt.UID),
-			ResourceVersion: evt.ResourceVersion,
-			Namespace:       objectNamespace,
-			ObjectNamespace: objectNamespace,
-			Type:            eventSeverity(evt),
-			Source:          eventSource(evt),
-			Reason:          evt.Reason,
-			Object:          eventObject(evt),
-			Message:         eventMessage(evt),
-			Age:             formatAge(timestamp),
-			AgeTimestamp:    timestamp.UnixMilli(),
+			ClusterMeta:      meta,
+			Kind:             "Event",
+			Name:             evt.Name,
+			UID:              string(evt.UID),
+			ResourceVersion:  evt.ResourceVersion,
+			Namespace:        objectNamespace,
+			ObjectNamespace:  objectNamespace,
+			ObjectAPIVersion: evt.InvolvedObject.APIVersion,
+			Type:             eventSeverity(evt),
+			Source:           eventSource(evt),
+			Reason:           evt.Reason,
+			Object:           eventObject(evt),
+			Message:          eventMessage(evt),
+			Age:              formatAge(timestamp),
+			AgeTimestamp:     timestamp.UnixMilli(),
 		})
 		if v := resourceVersionOrTimestamp(evt); v > version {
 			version = v

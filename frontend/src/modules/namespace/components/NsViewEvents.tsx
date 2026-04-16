@@ -9,6 +9,10 @@ import './NsViewEvents.css';
 import { formatAge } from '@/utils/ageFormatter';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
+import {
+  parseApiVersion,
+  resolveBuiltinGroupVersion,
+} from '@/shared/constants/builtinGroupVersions';
 import { useNamespaceGridTablePersistence } from '@modules/namespace/hooks/useNamespaceGridTablePersistence';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useObjectLink } from '@shared/hooks/useObjectLink';
@@ -26,6 +30,7 @@ import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 import { useFavToggle } from '@ui/favorites/FavToggle';
+import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
 
 export interface EventData {
   kind: string;
@@ -38,6 +43,7 @@ export interface EventData {
   clusterId?: string;
   clusterName?: string;
   objectNamespace?: string;
+  objectApiVersion?: string;
   namespace?: string;
   age?: string;
   ageTimestamp?: number;
@@ -59,6 +65,11 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
     const { openWithObject } = useObjectPanel();
     const objectLink = useObjectLink();
     const useShortResourceNames = useShortNames();
+    const namespaceColumnLink = useNamespaceColumnLink<EventData>('events', (event) =>
+      event.objectNamespace && event.objectNamespace.length > 0
+        ? event.objectNamespace
+        : event.namespace
+    );
     // Parse the involved object reference into its type and name for display/navigation.
     const splitEventObject = useCallback((value?: string | null) => {
       const raw = (value ?? '').trim();
@@ -104,10 +115,15 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
             : event.namespace && event.namespace.length > 0
               ? event.namespace
               : namespace;
+        const objectVersionParts = event.objectApiVersion
+          ? parseApiVersion(event.objectApiVersion)
+          : resolveBuiltinGroupVersion(parsed.objectType);
         return {
           kind: parsed.objectType,
           name: parsed.objectName,
           namespace: resolvedNamespace,
+          group: objectVersionParts.group,
+          version: objectVersionParts.version,
           clusterId: event.clusterId ?? undefined,
           clusterName: event.clusterName ?? undefined,
         };
@@ -151,10 +167,14 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
 
       if (showNamespaceColumn) {
         baseColumns.push(
-          cf.createTextColumn('namespace', 'Namespace', (event) =>
-            event.objectNamespace && event.objectNamespace.length > 0
-              ? event.objectNamespace
-              : event.namespace || '-'
+          cf.createTextColumn(
+            'namespace',
+            'Namespace',
+            (event) =>
+              event.objectNamespace && event.objectNamespace.length > 0
+                ? event.objectNamespace
+                : event.namespace || '-',
+            namespaceColumnLink
           )
         );
       }
@@ -203,6 +223,7 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
       return baseColumns;
     }, [
       getEventObjectRef,
+      namespaceColumnLink,
       objectLink,
       showNamespaceColumn,
       splitEventObject,

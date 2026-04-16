@@ -372,8 +372,6 @@
   padding: 0 0.5rem;
   user-select: text;
   -webkit-user-select: text;
-  -moz-user-select: text;
-  -ms-user-select: text;
 }
 
 .pod-logs-text.pod-logs-text--virtualized {
@@ -413,8 +411,6 @@
   text-indent: -1rem;
   user-select: text;
   -webkit-user-select: text;
-  -moz-user-select: text;
-  -ms-user-select: text;
   contain: layout paint;
 }
 
@@ -546,8 +542,6 @@
   transition: background-color 0.2s;
   user-select: text;
   -webkit-user-select: text;
-  -moz-user-select: text;
-  -ms-user-select: text;
 }
 
 .parsed-log-cell:hover {

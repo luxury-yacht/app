@@ -24,6 +24,8 @@
   color: var(--color-text);
   word-break: break-all;
   flex: 1;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .containers-tag {

@@ -29,8 +29,9 @@ func TestClusterEventsBuilder(t *testing.T) {
 			Component: "scheduler",
 		},
 		InvolvedObject: corev1.ObjectReference{
-			Kind: "Node",
-			Name: "node-new",
+			Kind:       "Node",
+			Name:       "node-new",
+			APIVersion: "v1",
 		},
 		LastTimestamp: metav1.NewTime(now.Add(-2 * time.Minute)),
 	}
@@ -46,8 +47,9 @@ func TestClusterEventsBuilder(t *testing.T) {
 		Reason: "FailedMount",
 		Source: corev1.EventSource{Component: "kubelet", Host: "node-a"},
 		InvolvedObject: corev1.ObjectReference{
-			Kind: "PersistentVolume",
-			Name: "pv-old",
+			Kind:       "PersistentVolume",
+			Name:       "pv-old",
+			APIVersion: "v1",
 		},
 		Message:       "",
 		LastTimestamp: metav1.NewTime(now.Add(-30 * time.Minute)),
@@ -67,9 +69,10 @@ func TestClusterEventsBuilder(t *testing.T) {
 			Component: "scheduler",
 		},
 		InvolvedObject: corev1.ObjectReference{
-			Kind:      "Pod",
-			Name:      "pod-new",
-			Namespace: "default",
+			Kind:       "Pod",
+			Name:       "pod-new",
+			Namespace:  "default",
+			APIVersion: "v1",
 		},
 		LastTimestamp: metav1.NewTime(now.Add(-1 * time.Minute)),
 	}
@@ -93,6 +96,7 @@ func TestClusterEventsBuilder(t *testing.T) {
 	require.Equal(t, "event-new", first.Name)
 	require.Equal(t, "Normal", first.Type)
 	require.Equal(t, "scheduler", first.Source)
+	require.Equal(t, "v1", first.ObjectAPIVersion)
 	require.Equal(t, clusterEventNew.LastTimestamp.UnixMilli(), first.AgeTimestamp)
 	require.Equal(t, "", first.Namespace)
 
@@ -117,8 +121,9 @@ func TestClusterEventsBuilderUsesDeterministicTieBreakers(t *testing.T) {
 			CreationTimestamp: timestamp,
 		},
 		InvolvedObject: corev1.ObjectReference{
-			Kind: "Node",
-			Name: "node-a",
+			Kind:       "Node",
+			Name:       "node-a",
+			APIVersion: "v1",
 		},
 		LastTimestamp: timestamp,
 	}
@@ -132,8 +137,9 @@ func TestClusterEventsBuilderUsesDeterministicTieBreakers(t *testing.T) {
 			CreationTimestamp: timestamp,
 		},
 		InvolvedObject: corev1.ObjectReference{
-			Kind: "Node",
-			Name: "node-b",
+			Kind:       "Node",
+			Name:       "node-b",
+			APIVersion: "v1",
 		},
 		LastTimestamp: timestamp,
 	}

@@ -43,6 +43,8 @@
   font-size: var(--font-size-normal);
   font-weight: var(--font-weight-bold);
   color: var(--color-primary);
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .utilization-details {
@@ -78,6 +80,13 @@
 .utilization-detail-value {
   font-size: var(--font-size-normal);
   color: var(--color-text);
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.utilization-detail-value * {
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .utilization-detail-value .overcommitted-text {

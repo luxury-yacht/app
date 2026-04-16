@@ -9,6 +9,14 @@ import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
+  useNamespaceColumnLink: () => ({
+    onClick: vi.fn(),
+    getClassName: () => 'object-panel-link',
+    isInteractive: () => true,
+  }),
+}));
+
 import NsViewEvents, { type EventData } from '@modules/namespace/components/NsViewEvents';
 
 const { gridTablePropsRef, openWithObjectMock, shortNamesMock, formatAgeMock } = vi.hoisted(() => ({
@@ -138,6 +146,7 @@ describe('NsViewEvents', () => {
     source: 'kubelet',
     reason: 'FailedScheduling',
     object: 'Pod/api',
+    objectApiVersion: 'v1',
     message: 'Insufficient CPU',
     objectNamespace: 'team-a',
     namespace: 'team-a',
@@ -183,6 +192,8 @@ describe('NsViewEvents', () => {
         kind: 'Pod',
         name: 'api',
         namespace: 'team-a',
+        group: '',
+        version: 'v1',
         clusterId: 'alpha:ctx',
       })
     );
@@ -206,6 +217,8 @@ describe('NsViewEvents', () => {
         kind: 'Pod',
         name: 'api',
         namespace: 'team-a',
+        group: '',
+        version: 'v1',
         clusterId: 'alpha:ctx',
       })
     );

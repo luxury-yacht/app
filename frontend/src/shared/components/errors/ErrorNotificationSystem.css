@@ -49,8 +49,6 @@
   /* Allow selecting toast text for copy shortcuts. */
   user-select: text;
   -webkit-user-select: text;
-  -moz-user-select: text;
-  -ms-user-select: text;
   transition:
     transform 160ms ease,
     opacity 160ms ease,

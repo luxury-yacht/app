@@ -29,6 +29,13 @@
   color: var(--color-text);
   word-break: break-word;
   flex: 1;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.overview-value * {
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .storage-parameters-list {
@@ -51,6 +58,8 @@
 
 .storage-parameters-value {
   color: var(--color-text);
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .overview-images {
@@ -67,6 +76,8 @@
   border-radius: var(--border-radius-sm);
   font-family: monospace;
   word-break: break-all;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .overview-separator {

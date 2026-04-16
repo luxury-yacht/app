@@ -30,6 +30,7 @@ import { getPermissionKey, queryKindPermissions, useUserPermissions } from '@/co
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 import { useFavToggle } from '@ui/favorites/FavToggle';
 import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
+import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
 
 // Data interface for custom resources
 export interface CustomResourceData {
@@ -92,6 +93,7 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const useShortResourceNames = useShortNames();
+    const namespaceColumnLink = useNamespaceColumnLink<CustomResourceData>('custom');
     const permissionMap = useUserPermissions();
     const [deleteConfirm, setDeleteConfirm] = useState<{
       show: boolean;
@@ -236,6 +238,7 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
         cf.upsertNamespaceColumn(baseColumns, {
           accessor: (resource) => resource.namespace,
           sortValue: (resource) => (resource.namespace || '').toLowerCase(),
+          ...namespaceColumnLink,
         });
       }
 
@@ -243,6 +246,7 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
     }, [
       handleResourceClick,
       handleCRDClick,
+      namespaceColumnLink,
       navigateToView,
       showNamespaceColumn,
       useShortResourceNames,
