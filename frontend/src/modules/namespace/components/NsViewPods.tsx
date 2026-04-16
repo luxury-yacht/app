@@ -36,6 +36,7 @@ import { PortForwardModal, PortForwardTarget } from '@modules/port-forward';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useFavToggle } from '@ui/favorites/FavToggle';
+import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
 
 interface PodsViewProps {
   namespace: string;
@@ -119,6 +120,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
   }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
+    const namespaceColumnLink = useNamespaceColumnLink<PodSnapshotEntry>('pods');
     const clusterMetrics = useClusterMetricsAvailability();
     const effectiveMetrics = metrics ?? clusterMetrics ?? null;
     const permissionMap = useUserPermissions();
@@ -328,6 +330,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
         cf.upsertNamespaceColumn(baseColumns, {
           accessor: (pod) => pod.namespace || '—',
           sortValue: (pod) => (pod.namespace || '').toLowerCase(),
+          ...namespaceColumnLink,
         });
       }
 
@@ -339,6 +342,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       handleOwnerOpen,
       handlePodOpen,
       metricsLastUpdated,
+      namespaceColumnLink,
       navigateToView,
       showNamespaceColumn,
     ]);

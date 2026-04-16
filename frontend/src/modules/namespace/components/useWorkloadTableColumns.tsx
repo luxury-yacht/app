@@ -11,6 +11,7 @@ import * as cf from '@shared/components/tables/columnFactories';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 
 import type { WorkloadData } from '@modules/namespace/components/NsViewWorkloads.helpers';
+import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
 
 interface UseWorkloadTableColumnsParams {
   handleWorkloadClick: (workload: WorkloadData) => void;
@@ -31,6 +32,8 @@ const useWorkloadTableColumns = ({
   useShortResourceNames,
   metrics,
 }: UseWorkloadTableColumnsParams): GridColumnDefinition<WorkloadData>[] => {
+  const namespaceColumnLink = useNamespaceColumnLink<WorkloadData>('workloads');
+
   return useMemo<GridColumnDefinition<WorkloadData>[]>(() => {
     const getReadyClassName = (workload: WorkloadData) => {
       const ready = workload.ready;
@@ -77,7 +80,7 @@ const useWorkloadTableColumns = ({
     if (showNamespaceColumn) {
       cf.upsertNamespaceColumn(columns, {
         accessor: (row) => row.namespace ?? '',
-        onClick: (row) => handleWorkloadClick(row),
+        ...namespaceColumnLink,
       });
     }
 
@@ -190,6 +193,7 @@ const useWorkloadTableColumns = ({
     metrics?.collectedAt,
     metrics?.lastError,
     metrics?.stale,
+    namespaceColumnLink,
     onAltClick,
     showNamespaceColumn,
     useShortResourceNames,

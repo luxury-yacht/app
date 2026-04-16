@@ -8,6 +8,16 @@ import { act } from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { StorageOverview } from './StorageOverview';
 
+const openWithObjectMock = vi.fn();
+const defaultClusterId = 'alpha:ctx';
+
+vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
+  useObjectPanel: () => ({
+    openWithObject: openWithObjectMock,
+    objectData: { clusterId: defaultClusterId, clusterName: 'alpha' },
+  }),
+}));
+
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
   ResourceHeader: (props: any) => (
     <div data-testid="resource-header">
@@ -20,12 +30,21 @@ vi.mock('@shared/components/kubernetes/ResourceStatus', () => ({
   ResourceStatus: (props: any) => <div data-testid="resource-status">{props.status}</div>,
 }));
 
+vi.mock('@shared/hooks/useNavigateToView', () => ({
+  useNavigateToView: () => ({ navigateToView: vi.fn() }),
+}));
+
 const getValueForLabel = (container: HTMLElement, label: string) => {
   const labelElement = Array.from(container.querySelectorAll<HTMLElement>('.overview-label')).find(
     (el) => el.textContent?.trim() === label
   );
   return labelElement?.parentElement?.querySelector<HTMLElement>('.overview-value') ?? null;
 };
+
+const getLinkByText = (container: HTMLElement, text: string) =>
+  Array.from(container.querySelectorAll<HTMLElement>('.object-panel-link')).find(
+    (el) => el.textContent?.trim() === text
+  );
 
 describe('StorageOverview', () => {
   let container: HTMLDivElement;
@@ -39,6 +58,7 @@ describe('StorageOverview', () => {
   };
 
   beforeEach(() => {
+    openWithObjectMock.mockReset();
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
@@ -55,6 +75,7 @@ describe('StorageOverview', () => {
     await renderComponent({
       kind: 'PersistentVolumeClaim',
       name: 'data',
+      namespace: 'storage',
       status: 'Bound',
       volumeName: 'pv-123',
       capacity: '20Gi',
@@ -67,8 +88,46 @@ describe('StorageOverview', () => {
     });
 
     expect(container.textContent).toContain('Bound');
-    expect(getValueForLabel(container, 'Volume')?.textContent).toBe('pv-123');
-    expect(getValueForLabel(container, 'Mounted By')?.textContent).toContain('pod-a');
+    const volumeLink = getLinkByText(container, 'pv-123');
+    expect(volumeLink).not.toBeUndefined();
+    act(() => {
+      volumeLink?.click();
+    });
+    expect(openWithObjectMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'persistentvolume',
+        name: 'pv-123',
+        clusterId: defaultClusterId,
+      })
+    );
+
+    const storageClassLink = getLinkByText(container, 'standard');
+    expect(storageClassLink).not.toBeUndefined();
+    act(() => {
+      storageClassLink?.click();
+    });
+    expect(openWithObjectMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'storageclass',
+        name: 'standard',
+        clusterId: defaultClusterId,
+      })
+    );
+
+    const mountedByLink = getLinkByText(container, 'pod-a');
+    expect(mountedByLink).not.toBeUndefined();
+    act(() => {
+      mountedByLink?.click();
+    });
+    expect(openWithObjectMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'pod',
+        name: 'pod-a',
+        namespace: 'storage',
+        clusterId: defaultClusterId,
+      })
+    );
+
     expect(container.textContent).toContain('Labels');
     expect(container.textContent).toContain('team:');
     expect(container.textContent).toContain('platform');
@@ -92,7 +151,33 @@ describe('StorageOverview', () => {
     });
 
     expect(getValueForLabel(container, 'Reclaim Policy')?.textContent).toBe('Retain');
-    expect(getValueForLabel(container, 'Claim')?.textContent).toBe('default/cache');
+    const storageClassLink = getLinkByText(container, 'nfs');
+    expect(storageClassLink).not.toBeUndefined();
+    act(() => {
+      storageClassLink?.click();
+    });
+    expect(openWithObjectMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'storageclass',
+        name: 'nfs',
+        clusterId: defaultClusterId,
+      })
+    );
+
+    const claimLink = getLinkByText(container, 'default/cache');
+    expect(claimLink).not.toBeUndefined();
+    act(() => {
+      claimLink?.click();
+    });
+    expect(openWithObjectMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'persistentvolumeclaim',
+        name: 'cache',
+        namespace: 'default',
+        clusterId: defaultClusterId,
+      })
+    );
+
     expect(container.textContent).toContain('Labels');
     expect(container.textContent).toContain('env:');
     expect(container.textContent).toContain('prod');

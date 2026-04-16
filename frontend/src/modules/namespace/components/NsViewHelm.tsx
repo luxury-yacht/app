@@ -25,6 +25,7 @@ import GridTable, {
 } from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
+import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
 
 // Data interface for Helm releases
 export interface HelmData {
@@ -73,6 +74,7 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const useShortResourceNames = useShortNames();
+    const namespaceColumnLink = useNamespaceColumnLink<HelmData>('helm');
     const handleResourceClick = useCallback(
       (resource: HelmData) => {
         openWithObject({
@@ -130,6 +132,7 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
         cf.upsertNamespaceColumn(baseColumns, {
           accessor: (resource) => resource.namespace,
           sortValue: (resource) => (resource.namespace || '').toLowerCase(),
+          ...namespaceColumnLink,
         });
       }
 
@@ -264,7 +267,13 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
       cf.applyColumnSizing(baseColumns, sizing);
 
       return baseColumns;
-    }, [handleResourceClick, navigateToView, showNamespaceColumn, useShortResourceNames]);
+    }, [
+      handleResourceClick,
+      namespaceColumnLink,
+      navigateToView,
+      showNamespaceColumn,
+      useShortResourceNames,
+    ]);
 
     const isNamespaceScoped = namespace !== ALL_NAMESPACES_SCOPE;
 

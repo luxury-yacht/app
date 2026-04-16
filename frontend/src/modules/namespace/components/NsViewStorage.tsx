@@ -34,6 +34,7 @@ import { errorHandler } from '@utils/errorHandler';
 import { getPermissionKey, useUserPermissions } from '@/core/capabilities';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 import { useFavToggle } from '@ui/favorites/FavToggle';
+import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
 
 // Data interface for storage resources (PVCs, VolumeAttachments, etc.)
 export interface StorageData {
@@ -67,6 +68,7 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
     const { navigateToView } = useNavigateToView();
     const objectLink = useObjectLink();
     const useShortResourceNames = useShortNames();
+    const namespaceColumnLink = useNamespaceColumnLink<StorageData>('storage');
     const permissionMap = useUserPermissions();
     const [deleteConfirm, setDeleteConfirm] = useState<{
       show: boolean;
@@ -187,12 +189,14 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
         cf.upsertNamespaceColumn(baseColumns, {
           accessor: (resource) => resource.namespace,
           sortValue: (resource) => (resource.namespace || '').toLowerCase(),
+          ...namespaceColumnLink,
         });
       }
 
       return baseColumns;
     }, [
       handleResourceClick,
+      namespaceColumnLink,
       navigateToView,
       objectLink,
       showNamespaceColumn,

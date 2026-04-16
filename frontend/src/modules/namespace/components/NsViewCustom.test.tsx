@@ -10,6 +10,14 @@ import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
+  useNamespaceColumnLink: () => ({
+    onClick: vi.fn(),
+    getClassName: () => 'object-panel-link',
+    isInteractive: () => true,
+  }),
+}));
+
 import NsViewCustom, { type CustomResourceData } from '@modules/namespace/components/NsViewCustom';
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;

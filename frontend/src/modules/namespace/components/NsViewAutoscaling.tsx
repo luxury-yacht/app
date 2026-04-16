@@ -34,6 +34,7 @@ import { DeleteResourceByGVK } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 import { useFavToggle } from '@ui/favorites/FavToggle';
+import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
 
 // Data interface for autoscaling resources
 export interface AutoscalingData {
@@ -93,6 +94,7 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const useShortResourceNames = useShortNames();
+    const namespaceColumnLink = useNamespaceColumnLink<AutoscalingData>('autoscaling');
     const permissionMap = useUserPermissions();
     const [deleteConfirm, setDeleteConfirm] = useState<{
       show: boolean;
@@ -284,12 +286,14 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
         cf.upsertNamespaceColumn(baseColumns, {
           accessor: (resource) => resource.namespace,
           sortValue: (resource) => (resource.namespace || '').toLowerCase(),
+          ...namespaceColumnLink,
         });
       }
 
       return baseColumns;
     }, [
       handleResourceClick,
+      namespaceColumnLink,
       navigateToView,
       openWithObject,
       showNamespaceColumn,

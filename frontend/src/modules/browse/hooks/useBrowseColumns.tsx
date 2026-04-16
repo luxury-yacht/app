@@ -144,6 +144,7 @@ export function useBrowseColumns({
             isInteractive: (row) => Boolean(row.item.namespace),
             getTitle: (row) =>
               row.item.namespace ? `View ${row.item.namespace} workloads` : undefined,
+            getClassName: () => 'object-panel-link',
           }
         )
       );
