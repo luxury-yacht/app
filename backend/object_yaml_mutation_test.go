@@ -15,6 +15,8 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
+	yamlutil "k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	fakediscovery "k8s.io/client-go/discovery/fake"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
@@ -73,19 +75,35 @@ func setupYAMLTestApp(t *testing.T) (*App, *dynamicfake.FakeDynamicClient, strin
 	}
 
 	dynamicClient := dynamicfake.NewSimpleDynamicClient(scheme, initialDeployment.DeepCopyObject())
-	updateCalls := 0
-	dynamicClient.Fake.PrependReactor("update", "*", func(action cgotesting.Action) (bool, runtime.Object, error) {
-		updateAction := action.(cgotesting.UpdateAction)
-		obj := updateAction.GetObject().(*unstructured.Unstructured)
-		copyObj := obj.DeepCopy()
-		updateCalls++
-		if updateCalls > 1 {
-			copyObj.SetResourceVersion("43")
+	patchCalls := 0
+	dynamicClient.Fake.PrependReactor("patch", "*", func(action cgotesting.Action) (bool, runtime.Object, error) {
+		patchAction := action.(cgotesting.PatchActionImpl)
+		if patchAction.GetPatchType() != types.ApplyPatchType {
+			return true, nil, fmt.Errorf("expected apply patch type, got %s", patchAction.GetPatchType())
 		}
-		if updateCalls == 1 {
+		if patchAction.GetPatchOptions().FieldManager != objectYAMLFieldManager {
+			return true, nil, fmt.Errorf(
+				"expected field manager %q, got %q",
+				objectYAMLFieldManager,
+				patchAction.GetPatchOptions().FieldManager,
+			)
+		}
+
+		var payload map[string]interface{}
+		if err := yamlutil.Unmarshal(patchAction.GetPatch(), &payload); err != nil {
+			return true, nil, fmt.Errorf("failed to decode apply payload: %w", err)
+		}
+		obj := &unstructured.Unstructured{Object: payload}
+		copyObj := obj.DeepCopy()
+
+		patchCalls++
+		if len(patchAction.GetPatchOptions().DryRun) > 0 {
+			copyObj.SetResourceVersion("42")
 			return true, copyObj, nil
 		}
-		if err := dynamicClient.Tracker().Update(updateAction.GetResource(), copyObj, updateAction.GetNamespace()); err != nil {
+
+		copyObj.SetResourceVersion("43")
+		if err := dynamicClient.Tracker().Update(patchAction.GetResource(), copyObj, patchAction.GetNamespace()); err != nil {
 			return true, nil, err
 		}
 		return true, copyObj, nil
@@ -257,11 +275,11 @@ spec:
 func TestValidateObjectYamlForbiddenError(t *testing.T) {
 	app, dynamicClient, clusterID := setupYAMLTestApp(t)
 
-	dynamicClient.Fake.PrependReactor("update", "*", func(action cgotesting.Action) (bool, runtime.Object, error) {
-		updateAction := action.(cgotesting.UpdateAction)
+	dynamicClient.Fake.PrependReactor("patch", "*", func(action cgotesting.Action) (bool, runtime.Object, error) {
+		patchAction := action.(cgotesting.PatchActionImpl)
 		return true, nil, apierrors.NewForbidden(
 			schema.GroupResource{Group: "apps", Resource: "deployments"},
-			updateAction.GetResource().Resource,
+			patchAction.GetResource().Resource,
 			fmt.Errorf("update forbidden"),
 		)
 	})

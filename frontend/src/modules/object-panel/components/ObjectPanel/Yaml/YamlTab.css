@@ -116,6 +116,26 @@
   color: var(--color-text-secondary);
 }
 
+.yaml-post-apply-notice {
+  margin: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--border-radius-sm);
+  background: var(--yaml-notice-bg);
+  border: 1px solid var(--yaml-notice-border);
+  color: var(--color-text-secondary);
+}
+
+.yaml-post-apply-notice p {
+  margin: 0;
+  line-height: 1.4;
+}
+
+.yaml-post-apply-notice-warning {
+  background: var(--yaml-validation-bg);
+  border-color: var(--yaml-validation-border);
+  color: var(--color-error, #ff6b6b);
+}
+
 .yaml-drift-diff {
   margin-top: 0.75rem;
   border-radius: var(--border-radius-sm);

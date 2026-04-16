@@ -52,6 +52,37 @@ export const applyResourceVersionToYaml = (yamlText: string, resourceVersion: st
   }
 };
 
+const deleteYamlPath = (doc: YAML.Document, path: (string | number)[]) => {
+  try {
+    doc.deleteIn(path);
+  } catch {
+    // Ignore invalid paths so comparison stays best-effort.
+  }
+};
+
+export const sanitizeYamlForSemanticCompare = (raw: string): string => {
+  try {
+    const doc = YAML.parseDocument(raw);
+    if (doc.errors.length > 0) {
+      throw doc.errors[0];
+    }
+
+    deleteYamlPath(doc, ['metadata', 'managedFields']);
+    deleteYamlPath(doc, ['metadata', 'resourceVersion']);
+    deleteYamlPath(doc, ['metadata', 'uid']);
+    deleteYamlPath(doc, ['metadata', 'creationTimestamp']);
+    deleteYamlPath(doc, ['metadata', 'deletionTimestamp']);
+    deleteYamlPath(doc, ['metadata', 'deletionGracePeriodSeconds']);
+    deleteYamlPath(doc, ['metadata', 'generation']);
+    deleteYamlPath(doc, ['metadata', 'selfLink']);
+    deleteYamlPath(doc, ['status']);
+
+    return doc.toString(YAML_STRINGIFY_OPTIONS);
+  } catch {
+    return raw;
+  }
+};
+
 export const validateYamlOnServer = async (
   clusterId: string,
   yamlContent: string,

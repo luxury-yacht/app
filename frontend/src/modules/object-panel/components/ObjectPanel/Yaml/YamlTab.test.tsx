@@ -227,6 +227,35 @@ spec:
       image: demo:v2
 `.trim();
 
+const LIVE_RELOAD_YAML = `
+apiVersion: v1
+kind: Pod
+metadata:
+  name: demo
+  namespace: default
+  resourceVersion: "999"
+  annotations:
+    syncedAt: now
+spec:
+  containers:
+    - name: demo
+      image: demo:v3
+`.trim();
+
+const POST_APPLY_MUTATED_YAML = `
+apiVersion: v1
+kind: Pod
+metadata:
+  name: demo
+  namespace: default
+  resourceVersion: "789"
+spec:
+  containers:
+    - name: demo
+      image: demo:v2
+  restartPolicy: Always
+`.trim();
+
 const buildLargeYamlDraft = (commentLineCount: number) =>
   [
     UPDATED_YAML,
@@ -364,7 +393,6 @@ describe('YamlTab', () => {
   });
 
   it('saves edited YAML and refreshes the snapshot', async () => {
-    wailsMocks.ValidateObjectYaml.mockResolvedValue({ resourceVersion: '456' });
     wailsMocks.ApplyObjectYaml.mockResolvedValue({ resourceVersion: '789' });
     // hydrateLatestObject routes through GetObjectYAMLByGVK now that the
     // YAML fixture carries apiVersion.
@@ -396,8 +424,8 @@ describe('YamlTab', () => {
 
     await waitForUpdates();
 
-    expect(wailsMocks.ValidateObjectYaml).toHaveBeenCalledTimes(1);
     expect(wailsMocks.ApplyObjectYaml).toHaveBeenCalledTimes(1);
+    expect(wailsMocks.ValidateObjectYaml).not.toHaveBeenCalled();
     expect(refreshMocks.fetchScopedDomain).toHaveBeenCalledWith(
       'object-yaml',
       'default:pod:demo',
@@ -412,6 +440,135 @@ describe('YamlTab', () => {
     await unmount();
   });
 
+  it('shows a post-apply notice when Kubernetes stores a different live object', async () => {
+    wailsMocks.ApplyObjectYaml.mockResolvedValue({ resourceVersion: '789' });
+    wailsMocks.GetObjectYAMLByGVK.mockResolvedValue(POST_APPLY_MUTATED_YAML);
+
+    const { container, unmount } = await renderYamlTab();
+
+    const editButton = Array.from(container.querySelectorAll('button')).find((btn) =>
+      btn.textContent?.includes('Edit')
+    );
+    await act(async () => {
+      editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    await act(async () => {
+      codeMirrorState.latestProps.current.onChange(UPDATED_YAML);
+    });
+
+    const saveButton = Array.from(container.querySelectorAll('button')).find((btn) =>
+      btn.textContent?.includes('Save')
+    );
+    await act(async () => {
+      saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    await waitForUpdates();
+
+    expect(container.querySelector('.yaml-post-apply-notice')?.textContent).toContain(
+      'Kubernetes stored a different live object'
+    );
+    expect(container.querySelector('.yaml-post-apply-notice')?.textContent).toContain(
+      'restartPolicy: Always'
+    );
+    expect(codeMirrorState.value).toContain('restartPolicy: Always');
+
+    await unmount();
+  });
+
+  it('warns when apply succeeds but the final live object cannot be verified', async () => {
+    wailsMocks.ApplyObjectYaml.mockResolvedValue({ resourceVersion: '789' });
+    wailsMocks.GetObjectYAMLByGVK.mockRejectedValue(new Error('live read failed'));
+
+    const { container, unmount } = await renderYamlTab();
+
+    const editButton = Array.from(container.querySelectorAll('button')).find((btn) =>
+      btn.textContent?.includes('Edit')
+    );
+    await act(async () => {
+      editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    await act(async () => {
+      codeMirrorState.latestProps.current.onChange(UPDATED_YAML);
+    });
+
+    const saveButton = Array.from(container.querySelectorAll('button')).find((btn) =>
+      btn.textContent?.includes('Save')
+    );
+    await act(async () => {
+      saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    await waitForUpdates();
+
+    expect(container.querySelector('.yaml-post-apply-notice-warning')?.textContent).toContain(
+      'could not reload the final live object'
+    );
+    expect(codeMirrorState.value).toContain('resourceVersion: "789"');
+    expect(errorHandlerMock.handle).toHaveBeenCalledWith(expect.any(Error), {
+      action: 'loadLatestObjectYAML',
+    });
+
+    await unmount();
+  });
+
+  it('pauses YAML auto-refresh while editing and resumes it after cancel', async () => {
+    const { container, unmount } = await renderYamlTab();
+
+    expect(refreshMocks.setScopedDomainEnabled).toHaveBeenCalledWith(
+      'object-yaml',
+      'default:pod:demo',
+      true
+    );
+    expect(refreshMocks.fetchScopedDomain).toHaveBeenCalledWith(
+      'object-yaml',
+      'default:pod:demo',
+      expect.objectContaining({ isManual: true })
+    );
+
+    refreshMocks.setScopedDomainEnabled.mockClear();
+    refreshMocks.fetchScopedDomain.mockClear();
+
+    const editButton = Array.from(container.querySelectorAll('button')).find((btn) =>
+      btn.textContent?.includes('Edit')
+    );
+    await act(async () => {
+      editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(refreshMocks.setScopedDomainEnabled).toHaveBeenCalledWith(
+      'object-yaml',
+      'default:pod:demo',
+      false
+    );
+    expect(refreshMocks.fetchScopedDomain).not.toHaveBeenCalled();
+
+    refreshMocks.setScopedDomainEnabled.mockClear();
+    refreshMocks.fetchScopedDomain.mockClear();
+
+    const cancelButton = Array.from(container.querySelectorAll('button')).find((btn) =>
+      btn.textContent?.includes('Cancel')
+    );
+    await act(async () => {
+      cancelButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(refreshMocks.setScopedDomainEnabled).toHaveBeenCalledWith(
+      'object-yaml',
+      'default:pod:demo',
+      true
+    );
+    expect(refreshMocks.fetchScopedDomain).toHaveBeenCalledWith(
+      'object-yaml',
+      'default:pod:demo',
+      expect.objectContaining({ isManual: true })
+    );
+
+    await unmount();
+  });
+
   it('handles resource version mismatches by surfacing drift diff and reload option', async () => {
     yamlErrorsMocks.parseObjectYamlError.mockReturnValue({
       code: 'ResourceVersionMismatch',
@@ -420,7 +577,7 @@ describe('YamlTab', () => {
       currentYaml: UPDATED_YAML,
       currentResourceVersion: '999',
     });
-    wailsMocks.ValidateObjectYaml.mockRejectedValue(new Error('mismatch'));
+    wailsMocks.ApplyObjectYaml.mockRejectedValue(new Error('mismatch'));
     wailsMocks.GetObjectYAMLByGVK.mockResolvedValue(UPDATED_YAML);
 
     const { container, unmount } = await renderYamlTab();
@@ -470,6 +627,68 @@ describe('YamlTab', () => {
     await unmount();
   });
 
+  it('merges non-conflicting local edits with the latest YAML on reload', async () => {
+    yamlErrorsMocks.parseObjectYamlError.mockReturnValue({
+      code: 'ResourceVersionMismatch',
+      message: 'Object changed upstream',
+      causes: ['Remote diff detected'],
+      currentYaml: LIVE_RELOAD_YAML,
+      currentResourceVersion: '999',
+    });
+    wailsMocks.ApplyObjectYaml.mockRejectedValue(new Error('mismatch'));
+    wailsMocks.GetObjectYAMLByGVK.mockResolvedValue(LIVE_RELOAD_YAML);
+
+    const { container, unmount } = await renderYamlTab();
+
+    const editButton = Array.from(container.querySelectorAll('button')).find((btn) =>
+      btn.textContent?.includes('Edit')
+    );
+    await act(async () => {
+      editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    const localDraft = `apiVersion: v1
+kind: Pod
+metadata:
+  name: demo
+  namespace: default
+  resourceVersion: "123"
+spec:
+  containers:
+    - name: demo
+      image: demo:v1
+  nodeName: worker-a`;
+
+    await act(async () => {
+      codeMirrorState.latestProps.current.onChange(localDraft);
+    });
+
+    const saveButton = Array.from(container.querySelectorAll('button')).find((btn) =>
+      btn.textContent?.includes('Save')
+    );
+    await act(async () => {
+      saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    await waitForUpdates();
+
+    const reloadButton = Array.from(container.querySelectorAll('button')).find((btn) =>
+      btn.textContent?.includes('Reload')
+    );
+    await act(async () => {
+      reloadButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    await waitForUpdates();
+
+    expect(codeMirrorState.value).toContain('resourceVersion: "999"');
+    expect(codeMirrorState.value).toContain('syncedAt: now');
+    expect(codeMirrorState.value).toContain('image: demo:v3');
+    expect(codeMirrorState.value).toContain('nodeName: worker-a');
+
+    await unmount();
+  });
+
   it('shows the shared too-large warning when a frontend drift diff exceeds budget', async () => {
     yamlErrorsMocks.parseObjectYamlError.mockReturnValue({
       code: 'ResourceVersionMismatch',
@@ -478,7 +697,7 @@ describe('YamlTab', () => {
       currentYaml: YAML,
       currentResourceVersion: '999',
     });
-    wailsMocks.ValidateObjectYaml.mockRejectedValue(new Error('mismatch'));
+    wailsMocks.ApplyObjectYaml.mockRejectedValue(new Error('mismatch'));
 
     const { container, unmount } = await renderYamlTab();
 
@@ -520,7 +739,7 @@ describe('YamlTab', () => {
       currentYaml: UPDATED_YAML,
       causes: [],
     });
-    wailsMocks.ValidateObjectYaml.mockRejectedValue(new Error('mismatch'));
+    wailsMocks.ApplyObjectYaml.mockRejectedValue(new Error('mismatch'));
     wailsMocks.GetObjectYAMLByGVK.mockRejectedValue(new Error('reload failed'));
 
     const { container, unmount } = await renderYamlTab();
@@ -731,7 +950,7 @@ describe('YamlTab', () => {
       message: 'Invalid YAML payload',
       causes: ['disallowed field'],
     });
-    wailsMocks.ValidateObjectYaml.mockRejectedValue(new Error('invalid'));
+    wailsMocks.ApplyObjectYaml.mockRejectedValue(new Error('invalid'));
 
     const { container, unmount } = await renderYamlTab();
 
@@ -759,7 +978,6 @@ describe('YamlTab', () => {
   });
 
   it('shows generic error when apply fails without parser details', async () => {
-    wailsMocks.ValidateObjectYaml.mockResolvedValue({ resourceVersion: '456' });
     wailsMocks.ApplyObjectYaml.mockRejectedValue(new Error('network down'));
     yamlErrorsMocks.parseObjectYamlError.mockReturnValue(null);
 
@@ -792,7 +1010,6 @@ describe('YamlTab', () => {
   });
 
   it('evaluates managed fields and save shortcuts across editing states', async () => {
-    wailsMocks.ValidateObjectYaml.mockResolvedValue({ resourceVersion: '456' });
     wailsMocks.ApplyObjectYaml.mockResolvedValue({ resourceVersion: '456' });
     wailsMocks.GetObjectYAMLByGVK.mockResolvedValue(UPDATED_YAML);
 
