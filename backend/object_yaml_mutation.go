@@ -15,7 +15,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
 	yamlutil "k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/dynamic"
 	"sigs.k8s.io/yaml"
@@ -23,7 +22,6 @@ import (
 
 const objectYAMLErrorPrefix = "ObjectYAMLError:"
 const mutationRequestTimeout = 15 * time.Second
-const objectYAMLFieldManager = "luxury-yacht-yaml-editor"
 
 type objectYAMLError struct {
 	Code                   string   `json:"code"`
@@ -93,14 +91,10 @@ func (a *App) ValidateObjectYaml(clusterID string, req ObjectYAMLMutationRequest
 		return nil, err
 	}
 
-	result, err := applyObjectYAMLPatch(
+	result, err := mc.resource.Update(
 		ctx,
-		mc.resource,
-		mc.sanitized,
-		metav1.PatchOptions{
-			DryRun:       []string{metav1.DryRunAll},
-			FieldManager: objectYAMLFieldManager,
-		},
+		mc.sanitized.DeepCopy(),
+		metav1.UpdateOptions{DryRun: []string{metav1.DryRunAll}},
 	)
 	if err != nil {
 		return nil, wrapKubernetesError(err, "validation failed")
@@ -126,13 +120,10 @@ func (a *App) ApplyObjectYaml(clusterID string, req ObjectYAMLMutationRequest) (
 		return nil, err
 	}
 
-	result, err := applyObjectYAMLPatch(
+	result, err := mc.resource.Update(
 		ctx,
-		mc.resource,
-		mc.sanitized,
-		metav1.PatchOptions{
-			FieldManager: objectYAMLFieldManager,
-		},
+		mc.sanitized.DeepCopy(),
+		metav1.UpdateOptions{},
 	)
 	if err != nil {
 		return nil, wrapKubernetesError(err, "apply failed")
@@ -320,27 +311,6 @@ func parseYAMLToUnstructured(content string) (*unstructured.Unstructured, error)
 	}
 
 	return obj, nil
-}
-
-func applyObjectYAMLPatch(
-	ctx context.Context,
-	resource dynamic.ResourceInterface,
-	obj *unstructured.Unstructured,
-	options metav1.PatchOptions,
-) (*unstructured.Unstructured, error) {
-	if resource == nil {
-		return nil, fmt.Errorf("resource interface is required")
-	}
-	if obj == nil {
-		return nil, fmt.Errorf("object payload is required")
-	}
-
-	payload, err := yaml.Marshal(obj.Object)
-	if err != nil {
-		return nil, fmt.Errorf("failed to encode YAML apply payload: %w", err)
-	}
-
-	return resource.Patch(ctx, obj.GetName(), types.ApplyPatchType, payload, options)
 }
 
 func sanitizeForUpdate(obj *unstructured.Unstructured, resourceVersion string) *unstructured.Unstructured {

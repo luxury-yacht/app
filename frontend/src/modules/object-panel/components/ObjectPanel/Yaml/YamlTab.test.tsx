@@ -306,6 +306,35 @@ spec:
   restartPolicy: Always
 `.trim();
 
+const VERIFIED_APPLIED_YAML_WITH_UID = `
+apiVersion: v1
+kind: Pod
+metadata:
+  name: demo
+  namespace: default
+  uid: pod-uid-1
+  resourceVersion: "789"
+spec:
+  containers:
+    - name: demo
+      image: demo:v2
+`.trim();
+
+const REPLACEMENT_POD_YAML = `
+apiVersion: v1
+kind: Pod
+metadata:
+  name: demo
+  namespace: default
+  uid: pod-uid-2
+  resourceVersion: "790"
+spec:
+  containers:
+    - name: demo
+      image: demo:v2
+  restartPolicy: Always
+`.trim();
+
 const buildLargeYamlDraft = (commentLineCount: number) =>
   [
     UPDATED_YAML,
@@ -627,6 +656,55 @@ describe('YamlTab', () => {
     await unmount();
   });
 
+  it('does not treat a recreated object as the same post-save target when uid changes', async () => {
+    wailsMocks.ApplyObjectYaml.mockResolvedValue({ resourceVersion: '789' });
+    wailsMocks.GetObjectYAMLByGVK.mockResolvedValue(VERIFIED_APPLIED_YAML_WITH_UID);
+
+    const { container, rerender, unmount } = await renderYamlTab();
+
+    const editButton = Array.from(container.querySelectorAll('button')).find((btn) =>
+      btn.textContent?.includes('Edit')
+    );
+    await act(async () => {
+      editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    await act(async () => {
+      codeMirrorState.latestProps.current.onChange(UPDATED_YAML);
+    });
+
+    const saveButton = Array.from(container.querySelectorAll('button')).find((btn) =>
+      btn.textContent?.includes('Save')
+    );
+    await act(async () => {
+      saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    await waitForUpdates();
+
+    snapshotState.current = {
+      status: 'ready',
+      data: { yaml: VERIFIED_APPLIED_YAML_WITH_UID },
+      error: null,
+    };
+
+    await rerender();
+    await waitForUpdates();
+
+    snapshotState.current = {
+      status: 'ready',
+      data: { yaml: REPLACEMENT_POD_YAML },
+      error: null,
+    };
+
+    await rerender();
+    await waitForUpdates();
+
+    expect(container.querySelector('.yaml-post-apply-notice-stale')).toBeNull();
+
+    await unmount();
+  });
+
   it('pauses YAML auto-refresh while editing and resumes it after cancel', async () => {
     const { container, unmount } = await renderYamlTab();
 
@@ -691,7 +769,11 @@ describe('YamlTab', () => {
       currentResourceVersion: '999',
     });
     wailsMocks.ApplyObjectYaml.mockRejectedValue(new Error('mismatch'));
-    wailsMocks.GetObjectYAMLByGVK.mockResolvedValue(UPDATED_YAML);
+    wailsMocks.MergeObjectYamlWithLatest.mockResolvedValue({
+      currentYAML: UPDATED_YAML.replace('"123"', '"999"'),
+      mergedYAML: UPDATED_YAML.replace('"123"', '"999"'),
+      resourceVersion: '999',
+    });
 
     const { container, unmount } = await renderYamlTab();
 
@@ -736,6 +818,11 @@ describe('YamlTab', () => {
       'default:pod:demo',
       expect.objectContaining({ isManual: true })
     );
+    const saveButtonAfterReload = Array.from(container.querySelectorAll('button')).find((btn) =>
+      btn.textContent?.includes('Save')
+    );
+    expect(container.querySelector('.yaml-validation-message')).toBeNull();
+    expect(saveButtonAfterReload?.hasAttribute('disabled')).toBe(false);
 
     await unmount();
   });

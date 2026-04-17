@@ -74,6 +74,7 @@ const isSameObjectReference = (left: ObjectIdentity, right: ObjectIdentity): boo
   left.apiVersion === right.apiVersion &&
   left.kind === right.kind &&
   left.name === right.name &&
+  (left.uid && right.uid ? left.uid === right.uid : true) &&
   (left.namespace ?? '') === (right.namespace ?? '');
 
 const normalizeYamlTabDiff = (diff: YamlTabDiffResult): YamlTabDiffResult => {
@@ -829,6 +830,11 @@ const YamlTab: React.FC<YamlTabProps> = ({
       setBaselineResourceVersion(latestIdentity.resourceVersion ?? null);
       setBaselineMergeYaml(preparedLatestYaml);
       setDraftYaml(mergedDraftYaml);
+      setLatestObjectIdentity(latestIdentity);
+      setManualYamlOverride({
+        yaml: normalizedLatestYaml,
+        resourceVersion: latestIdentity.resourceVersion ?? null,
+      });
       setLintError(null);
       setActionError(null);
       setActionDetails([]);
