@@ -347,6 +347,7 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
               options: {
                 showKindDropdown: true,
                 showNamespaceDropdown: showNamespaceFilter,
+                namespaceDropdownSearchable: showNamespaceFilter,
                 preActions: [favToggle],
               },
             }}

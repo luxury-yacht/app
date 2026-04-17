@@ -454,6 +454,7 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
               options: {
                 showKindDropdown: true,
                 showNamespaceDropdown: showNamespaceFilter,
+                namespaceDropdownSearchable: showNamespaceFilter,
                 preActions: [favToggle],
               },
             }}

@@ -357,6 +357,7 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
               options: {
                 showKindDropdown: true,
                 showNamespaceDropdown: showNamespaceFilter,
+                namespaceDropdownSearchable: showNamespaceFilter,
                 preActions: [favToggle],
               },
             }}

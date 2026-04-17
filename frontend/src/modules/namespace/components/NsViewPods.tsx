@@ -590,6 +590,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
               onReset: resetPersistedState,
               options: {
                 showNamespaceDropdown: showNamespaceFilter,
+                namespaceDropdownSearchable: showNamespaceFilter,
                 preActions: [favToggle, unhealthyToggle].filter(Boolean) as IconBarItem[],
               },
             }}

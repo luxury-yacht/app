@@ -402,6 +402,8 @@ const BrowseView: React.FC<BrowseViewProps> = ({
         namespaces: filterOptions.namespaces,
         showKindDropdown: true,
         showNamespaceDropdown: showNamespaceColumn,
+        kindDropdownSearchable: true,
+        namespaceDropdownSearchable: true,
         includeClusterScopedSyntheticNamespace: false,
         totalCount,
         preActions: [favToggle],

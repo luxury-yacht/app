@@ -535,6 +535,7 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
               onReset: resetPersistedState,
               options: {
                 showNamespaceDropdown: showNamespaceFilter,
+                namespaceDropdownSearchable: showNamespaceFilter,
                 showKindDropdown: true,
                 preActions: [favToggle],
               },

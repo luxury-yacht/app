@@ -865,10 +865,6 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
               setSelectedIndex(0);
             }}
             onKeyDown={handleInputKeyDown}
-            autoComplete="off"
-            autoCorrect="off"
-            autoCapitalize="off"
-            spellCheck={false}
           />
         </div>
 

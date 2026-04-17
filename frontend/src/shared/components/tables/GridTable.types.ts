@@ -82,6 +82,8 @@ export interface GridTableFilterOptions {
   namespaces?: string[];
   showKindDropdown?: boolean;
   showNamespaceDropdown?: boolean;
+  kindDropdownSearchable?: boolean;
+  namespaceDropdownSearchable?: boolean;
   includeClusterScopedSyntheticNamespace?: boolean;
   /** IconBar items rendered before the built-in Reset action (e.g. Favorite toggle). */
   preActions?: IconBarItem[];
@@ -163,6 +165,8 @@ export interface InternalFilterOptions {
   kinds: DropdownOption[];
   namespaces: DropdownOption[];
   searchPlaceholder?: string;
+  kindDropdownSearchable?: boolean;
+  namespaceDropdownSearchable?: boolean;
   preActions?: IconBarItem[];
   postActions?: IconBarItem[];
   customActions?: React.ReactNode;

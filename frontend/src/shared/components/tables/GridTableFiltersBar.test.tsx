@@ -26,14 +26,17 @@ vi.mock('@shared/components/dropdowns/Dropdown', () => ({
     value,
     options,
     onChange,
+    searchable,
   }: {
     id: string;
     value: string[];
     options: Array<{ label: string; value: string }>;
     onChange: (value: string[]) => void;
+    searchable?: boolean;
   }) => (
     <select
       data-testid={id}
+      data-searchable={searchable ? 'true' : 'false'}
       value={value[0] ?? ''}
       onChange={(event) => onChange([event.target.value])}
     >
@@ -152,6 +155,32 @@ describe('GridTableFiltersBar', () => {
       resetButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     expect(onReset).toHaveBeenCalledTimes(1);
+  });
+
+  it('passes searchable through to kind and namespace dropdowns when enabled', async () => {
+    await renderFilters({
+      showKindDropdown: true,
+      showNamespaceDropdown: true,
+      resolvedFilterOptions: {
+        kinds: [
+          { label: 'Pods', value: 'Pod' },
+          { label: 'Deployments', value: 'Deployment' },
+        ],
+        namespaces: [
+          { label: 'team-a', value: 'team-a' },
+          { label: 'team-b', value: 'team-b' },
+        ],
+        kindDropdownSearchable: true,
+        namespaceDropdownSearchable: true,
+      },
+    });
+
+    expect(container.querySelector('[data-testid="kinds"]')?.getAttribute('data-searchable')).toBe(
+      'true'
+    );
+    expect(
+      container.querySelector('[data-testid="namespaces"]')?.getAttribute('data-searchable')
+    ).toBe('true');
   });
 
   it('registers search shortcut and focuses the input when invoked', async () => {

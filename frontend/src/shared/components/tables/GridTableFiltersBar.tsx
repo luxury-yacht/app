@@ -160,6 +160,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
                   name="gridtable-filter-kind"
                   multiple
                   size="compact"
+                  searchable={resolvedFilterOptions.kindDropdownSearchable}
                   placeholder="All kinds"
                   value={activeFilters.kinds}
                   options={resolvedFilterOptions.kinds}
@@ -178,6 +179,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
                   name="gridtable-filter-namespace"
                   multiple
                   size="compact"
+                  searchable={resolvedFilterOptions.namespaceDropdownSearchable}
                   placeholder="All namespaces"
                   value={activeFilters.namespaces}
                   options={resolvedFilterOptions.namespaces}

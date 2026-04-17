@@ -8,6 +8,7 @@
 import React, { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 
 vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
   useNamespaceColumnLink: () => ({
@@ -223,7 +224,13 @@ describe('NsViewConfig ConfigViewGrid', () => {
     const ConfigView = module.default;
 
     const { unmount } = await createRoot(
-      <ConfigView namespace="team-a" data={sampleData} loaded loading={false} showNamespaceColumn />
+      <ConfigView
+        namespace={ALL_NAMESPACES_SCOPE}
+        data={sampleData}
+        loaded
+        loading={false}
+        showNamespaceColumn
+      />
     );
 
     expect(gridTablePropsRef.current).toBeTruthy();
@@ -281,6 +288,26 @@ describe('NsViewConfig ConfigViewGrid', () => {
     );
 
     onSort('name', 'desc');
+
+    await unmount();
+  });
+
+  it('enables namespace dropdown search when rendering all-namespaces filters', async () => {
+    const module = await import('./NsViewConfig');
+    const ConfigView = module.default;
+
+    const { unmount } = await createRoot(
+      <ConfigView
+        namespace={ALL_NAMESPACES_SCOPE}
+        data={sampleData}
+        loaded
+        loading={false}
+        showNamespaceColumn
+      />
+    );
+
+    expect(gridTablePropsRef.current?.filters?.options?.showNamespaceDropdown).toBe(true);
+    expect(gridTablePropsRef.current?.filters?.options?.namespaceDropdownSearchable).toBe(true);
 
     await unmount();
   });

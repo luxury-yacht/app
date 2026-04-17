@@ -917,10 +917,6 @@ const NodeLogsTab = ({
                 onChange={(event) => setTextFilter(event.target.value)}
                 placeholder="Filter logs..."
                 aria-label="Filter node logs"
-                autoCapitalize="off"
-                autoComplete="off"
-                autoCorrect="off"
-                spellCheck={false}
               />
               {textFilter && (
                 <button

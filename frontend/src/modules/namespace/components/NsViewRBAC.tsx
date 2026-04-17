@@ -329,6 +329,7 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
               options: {
                 showKindDropdown: true,
                 showNamespaceDropdown: showNamespaceFilter,
+                namespaceDropdownSearchable: showNamespaceFilter,
                 preActions: [favToggle],
               },
             }}

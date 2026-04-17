@@ -969,7 +969,6 @@ function Settings({ onClose }: SettingsProps) {
           }}
           onBlur={handlePaletteValueCancel}
           maxLength={4}
-          spellCheck={false}
         />
       );
     }
@@ -1104,7 +1103,6 @@ function Settings({ onClose }: SettingsProps) {
               }}
               onBlur={handleAccentHexCancel}
               maxLength={7}
-              spellCheck={false}
             />
           ) : (
             <span
@@ -1152,7 +1150,6 @@ function Settings({ onClose }: SettingsProps) {
               }}
               onBlur={handleLinkHexCancel}
               maxLength={7}
-              spellCheck={false}
             />
           ) : (
             <span
