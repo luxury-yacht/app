@@ -473,6 +473,18 @@ describe('Dropdown', () => {
     expect(controls?.querySelectorAll('.dropdown-bulk-action')).toHaveLength(2);
   });
 
+  it('shows text labels beside bulk-action icons when search is disabled', async () => {
+    await mount(<Dropdown options={OPTIONS} value={[]} onChange={vi.fn()} multiple showBulkActions />);
+
+    click(container.querySelector('.dropdown-trigger'));
+
+    const bulkButtons = container.querySelectorAll<HTMLButtonElement>('.dropdown-bulk-action');
+    expect(bulkButtons).toHaveLength(2);
+    expect(bulkButtons[0]?.textContent).toContain('Select All');
+    expect(bulkButtons[1]?.textContent).toContain('Select None');
+    expect(container.querySelector('.search-input')).toBeNull();
+  });
+
   it('adjusts menu position when space below trigger is limited', async () => {
     const originalInnerHeight = window.innerHeight;
     Object.defineProperty(window, 'innerHeight', { configurable: true, value: 720 });

@@ -338,6 +338,8 @@ const Dropdown: React.FC<DropdownProps> = ({
     setHighlightedIndex(-1);
   };
 
+  const showBulkActionLabels = !searchable;
+
   return (
     <div ref={dropdownRef} className={containerClasses}>
       {/* Trigger */}
@@ -416,10 +418,16 @@ const Dropdown: React.FC<DropdownProps> = ({
               )}
 
               {multiple && showBulkActions && selectableFilteredValues.length > 0 && (
-                <div className="dropdown-bulk-actions icon-bar">
+                <div
+                  className={`dropdown-bulk-actions icon-bar${
+                    showBulkActionLabels ? ' dropdown-bulk-actions--labeled' : ''
+                  }`}
+                >
                   <button
                     type="button"
-                    className="dropdown-bulk-action icon-bar-button"
+                    className={`dropdown-bulk-action icon-bar-button${
+                      showBulkActionLabels ? ' dropdown-bulk-action--labeled' : ''
+                    }`}
                     onClick={(e) => {
                       e.stopPropagation();
                       handleSelectAll();
@@ -429,10 +437,13 @@ const Dropdown: React.FC<DropdownProps> = ({
                     aria-label="Select all"
                   >
                     <SelectAllIcon />
+                    {showBulkActionLabels && <span className="dropdown-bulk-action-label">Select All</span>}
                   </button>
                   <button
                     type="button"
-                    className="dropdown-bulk-action icon-bar-button"
+                    className={`dropdown-bulk-action icon-bar-button${
+                      showBulkActionLabels ? ' dropdown-bulk-action--labeled' : ''
+                    }`}
                     onClick={(e) => {
                       e.stopPropagation();
                       handleSelectNone();
@@ -442,6 +453,9 @@ const Dropdown: React.FC<DropdownProps> = ({
                     aria-label="Select none"
                   >
                     <SelectNoneIcon />
+                    {showBulkActionLabels && (
+                      <span className="dropdown-bulk-action-label">Select None</span>
+                    )}
                   </button>
                 </div>
               )}
