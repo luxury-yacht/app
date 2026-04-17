@@ -295,6 +295,33 @@ describe('Dropdown', () => {
     expect(container.querySelector('.dropdown-option.highlighted')?.textContent).toContain('Beta');
   });
 
+  it('removes the trigger highlight while the internal search input is focused', async () => {
+    await mount(
+      <Dropdown options={OPTIONS} value="" onChange={vi.fn()} searchable placeholder="Searchable" />
+    );
+
+    click(container.querySelector('.dropdown-trigger'));
+
+    const dropdown = container.querySelector('.dropdown') as HTMLElement | null;
+    const searchInput = container.querySelector<HTMLInputElement>('.search-input');
+    expect(dropdown).not.toBeNull();
+    expect(searchInput).not.toBeNull();
+
+    await act(async () => {
+      searchInput?.focus();
+      await Promise.resolve();
+    });
+
+    expect(dropdown?.classList.contains('search-focused')).toBe(true);
+
+    await act(async () => {
+      searchInput?.blur();
+      await Promise.resolve();
+    });
+
+    expect(dropdown?.classList.contains('search-focused')).toBe(false);
+  });
+
   it('closes on Tab without preventing the browser focus move', async () => {
     await mount(
       <Dropdown options={OPTIONS} value="" onChange={vi.fn()} searchable placeholder="Searchable" />

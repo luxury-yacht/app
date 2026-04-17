@@ -27,16 +27,19 @@ vi.mock('@shared/components/dropdowns/Dropdown', () => ({
     options,
     onChange,
     searchable,
+    showBulkActions,
   }: {
     id: string;
     value: string[];
     options: Array<{ label: string; value: string }>;
     onChange: (value: string[]) => void;
     searchable?: boolean;
+    showBulkActions?: boolean;
   }) => (
     <select
       data-testid={id}
       data-searchable={searchable ? 'true' : 'false'}
+      data-bulk-actions={showBulkActions ? 'true' : 'false'}
       value={value[0] ?? ''}
       onChange={(event) => onChange([event.target.value])}
     >
@@ -180,6 +183,24 @@ describe('GridTableFiltersBar', () => {
     );
     expect(
       container.querySelector('[data-testid="namespaces"]')?.getAttribute('data-searchable')
+    ).toBe('true');
+  });
+
+  it('passes bulk actions through to the kind dropdown when enabled', async () => {
+    await renderFilters({
+      showKindDropdown: true,
+      resolvedFilterOptions: {
+        kinds: [
+          { label: 'Pods', value: 'Pod' },
+          { label: 'Deployments', value: 'Deployment' },
+        ],
+        namespaces: [],
+        kindDropdownBulkActions: true,
+      },
+    });
+
+    expect(
+      container.querySelector('[data-testid="kinds"]')?.getAttribute('data-bulk-actions')
     ).toBe('true');
   });
 

@@ -60,6 +60,7 @@ const Dropdown: React.FC<DropdownProps> = ({
   } = useDropdownState(value, onChange, multiple, disabled);
 
   const [isFocused, setIsFocused] = useState(false);
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
 
   useEffect(() => {
     const node = dropdownRef.current;
@@ -260,6 +261,7 @@ const Dropdown: React.FC<DropdownProps> = ({
     disabled && 'disabled',
     loading && 'loading',
     isOpen && 'open',
+    isSearchFocused && 'search-focused',
     className,
   ]
     .filter(Boolean)
@@ -377,6 +379,8 @@ const Dropdown: React.FC<DropdownProps> = ({
                 value={effectiveSearchQuery}
                 onChange={(e) => handleSearchInputChange(e.target.value)}
                 onClick={(e) => e.stopPropagation()}
+                onFocus={() => setIsSearchFocused(true)}
+                onBlur={() => setIsSearchFocused(false)}
                 autoFocus
               />
             </div>

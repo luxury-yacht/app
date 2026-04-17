@@ -403,6 +403,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
         showKindDropdown: true,
         showNamespaceDropdown: showNamespaceColumn,
         kindDropdownSearchable: true,
+        kindDropdownBulkActions: true,
         namespaceDropdownSearchable: true,
         includeClusterScopedSyntheticNamespace: false,
         totalCount,

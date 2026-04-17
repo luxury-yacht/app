@@ -68,6 +68,11 @@
   box-shadow: var(--dropdown-trigger-focus-shadow);
 }
 
+.dropdown.open.search-focused .dropdown-trigger {
+  border-color: var(--color-border);
+  box-shadow: var(--dropdown-trigger-shadow);
+}
+
 /* Trigger content elements */
 .dropdown-value {
   color: var(--color-text);

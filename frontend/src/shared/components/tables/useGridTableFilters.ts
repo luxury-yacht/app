@@ -174,6 +174,7 @@ export function useGridTableFilters<T>({
   const resolvedFilterOptions = useMemo<InternalFilterOptions>(() => {
     const searchPlaceholder = filters?.options?.searchPlaceholder;
     const kindDropdownSearchable = filters?.options?.kindDropdownSearchable ?? false;
+    const kindDropdownBulkActions = filters?.options?.kindDropdownBulkActions ?? false;
     const namespaceDropdownSearchable = filters?.options?.namespaceDropdownSearchable ?? false;
     const preActions = filters?.options?.preActions;
     const postActions = filters?.options?.postActions;
@@ -182,6 +183,7 @@ export function useGridTableFilters<T>({
       return {
         searchPlaceholder,
         kindDropdownSearchable,
+        kindDropdownBulkActions,
         namespaceDropdownSearchable,
         kinds: [],
         namespaces: [],
@@ -266,6 +268,7 @@ export function useGridTableFilters<T>({
     return {
       searchPlaceholder,
       kindDropdownSearchable,
+      kindDropdownBulkActions,
       namespaceDropdownSearchable,
       kinds,
       namespaces: namespaceOptions,
