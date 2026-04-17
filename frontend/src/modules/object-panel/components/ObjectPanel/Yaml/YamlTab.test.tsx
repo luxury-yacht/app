@@ -179,6 +179,10 @@ vi.mock('@/core/codemirror/theme', () => ({
   buildCodeTheme: themeMocks.buildCodeTheme,
 }));
 
+vi.mock('@core/contexts/ZoomContext', () => ({
+  useZoom: () => ({ zoomLevel: 100 }),
+}));
+
 vi.mock('@/core/codemirror/search', () => ({
   createSearchExtensions: searchModuleMocks.createSearchExtensions,
   closeSearchPanel: searchModuleMocks.closeSearchPanel,
@@ -343,6 +347,7 @@ Object.assign(globalThis, {
   navigator: {
     clipboard: {
       readText: vi.fn(() => Promise.resolve('')),
+      writeText: vi.fn(() => Promise.resolve()),
     },
   },
 });
@@ -404,8 +409,10 @@ describe('YamlTab', () => {
     codeMirrorState.selectionText = '';
     codeMirrorState.value = '';
     codeMirrorState.latestProps.current = null;
+    codeMirrorState.editorView.state.selection = { main: { from: 0, to: 0 }, ranges: [] } as any;
     codeMirrorState.editorView.dispatch.mockClear();
     codeMirrorState.editorView.focus.mockClear();
+    (navigator.clipboard.writeText as unknown as ReturnType<typeof vi.fn>).mockClear();
     refreshMocks.setScopedDomainEnabled.mockClear();
     refreshMocks.fetchScopedDomain.mockClear();
     refreshMocks.resetScopedDomain.mockClear();
@@ -458,6 +465,74 @@ describe('YamlTab', () => {
         onNativeAction: expect.any(Function),
       })
     );
+
+    await unmount();
+  });
+
+  it('copies the current selection from the read-only editor via native copy action', async () => {
+    const { unmount } = await renderYamlTab({ canEdit: false });
+
+    codeMirrorState.editorView.state.selection = {
+      main: { from: 0, to: 10 },
+      ranges: [{ from: 0, to: 10 }],
+    } as any;
+    codeMirrorState.selectionText = 'apiVersion';
+
+    const surfaceConfig = shortcutMocks.useKeyboardSurface.mock.calls
+      .map(([config]) => config as { onNativeAction?: (context: any) => boolean })
+      .filter((config) => typeof config.onNativeAction === 'function')
+      .pop();
+
+    let handled = false;
+    await act(async () => {
+      handled =
+        surfaceConfig?.onNativeAction?.({
+          action: 'copy',
+          activeElement: null,
+          selection: null,
+        }) ?? false;
+      await Promise.resolve();
+    });
+
+    expect(handled).toBe(true);
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('apiVersion');
+
+    await unmount();
+  });
+
+  it('enables context-menu copy for a read-only CodeMirror selection', async () => {
+    const { unmount } = await renderYamlTab({ canEdit: false });
+
+    codeMirrorState.editorView.state.selection = {
+      main: { from: 0, to: 10 },
+      ranges: [{ from: 0, to: 10 }],
+    } as any;
+    codeMirrorState.selectionText = 'apiVersion';
+
+    const contextMenuExtension = (codeMirrorState.latestProps.current.extensions as unknown[]).find(
+      (extension) =>
+        typeof extension === 'object' &&
+        extension !== null &&
+        'contextmenu' in (extension as Record<string, unknown>)
+    ) as { contextmenu: (event: MouseEvent, view: typeof codeMirrorState.editorView) => boolean };
+
+    await act(async () => {
+      contextMenuExtension.contextmenu(
+        new MouseEvent('contextmenu', {
+          clientX: 10,
+          clientY: 20,
+          bubbles: true,
+          cancelable: true,
+        }),
+        codeMirrorState.editorView as any
+      );
+      await Promise.resolve();
+    });
+
+    const copyItem = Array.from(document.querySelectorAll('.context-menu-item')).find((item) =>
+      item.textContent?.includes('Copy')
+    );
+    expect(copyItem?.getAttribute('aria-disabled')).toBe('false');
 
     await unmount();
   });

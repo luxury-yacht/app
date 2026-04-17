@@ -25,7 +25,11 @@ import './YamlTab.css';
 import { parseObjectIdentity, validateYamlDraft, type ObjectIdentity } from './yamlValidation';
 import { parseObjectYamlError } from './yamlErrors';
 import { buildCodeTheme } from '@/core/codemirror/theme';
-import { selectCodeMirrorContent } from '@/core/codemirror/nativeActions';
+import {
+  copyCodeMirrorSelection,
+  getCodeMirrorSelectedText,
+  selectCodeMirrorContent,
+} from '@/core/codemirror/nativeActions';
 import { createSearchExtensions, closeSearchPanel } from '@/core/codemirror/search';
 import {
   SearchQuery,
@@ -681,6 +685,9 @@ const YamlTab: React.FC<YamlTabProps> = ({
       return true;
     },
     onNativeAction: ({ action, text }) => {
+      if (action === 'copy') {
+        return copyCodeMirrorSelection(editorViewRef.current);
+      }
       if (action === 'selectAll') {
         return selectCodeMirrorContent(editorViewRef.current);
       }
@@ -1199,7 +1206,8 @@ const YamlTab: React.FC<YamlTabProps> = ({
           event.preventDefault();
 
           // Snapshot selected text before the menu steals focus.
-          const selectedText = deriveCopyText(window.getSelection());
+          const selectedText =
+            getCodeMirrorSelectedText(view) || deriveCopyText(window.getSelection()) || '';
           const hasSelection = !!selectedText;
           const editing = isEditingRef.current;
 
