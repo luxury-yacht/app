@@ -23,7 +23,7 @@ import {
   upsertByUID,
 } from '@modules/browse/utils/browseUtils';
 
-const DEFAULT_LIMIT = 200;
+const DEFAULT_LIMIT = 25000;
 
 type PageRequestMode = 'reset' | 'append' | null;
 

@@ -20,7 +20,7 @@ const (
 	defaultStreamingFlushInterval     = 500 * time.Millisecond
 	componentName                     = "ObjectCatalog"
 	defaultQueryLimit                 = 200
-	maxQueryLimit                     = 1000
+	maxQueryLimit                     = 25000
 	listRetryMaxAttempts              = 3
 	listRetryInitialBackoff           = 200 * time.Millisecond
 	listRetryMaxBackoff               = 2 * time.Second

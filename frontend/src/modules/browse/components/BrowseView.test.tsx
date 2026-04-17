@@ -173,12 +173,12 @@ describe('BrowseView', () => {
 
       expect(refreshMocks.orchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
         'catalog',
-        'cluster-1|limit=200&namespace=cluster',
+        'cluster-1|limit=25000&namespace=cluster',
         true
       );
       expect(refreshMocks.orchestrator.fetchScopedDomain).toHaveBeenCalledWith(
         'catalog',
-        'cluster-1|limit=200&namespace=cluster',
+        'cluster-1|limit=25000&namespace=cluster',
         expect.objectContaining({ isManual: true })
       );
     });
@@ -237,7 +237,7 @@ describe('BrowseView', () => {
       // The scope should include the pinned namespace
       expect(refreshMocks.orchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
         'catalog',
-        'cluster-1|limit=200&namespace=kube-system',
+        'cluster-1|limit=25000&namespace=kube-system',
         true
       );
     });
@@ -274,7 +274,7 @@ describe('BrowseView', () => {
       });
 
       // Use cluster-scoped items since cluster scope filters to only cluster-scoped objects
-      refreshMocks.catalogDomain.scope = 'cluster-1|limit=200&namespace=cluster';
+      refreshMocks.catalogDomain.scope = 'cluster-1|limit=25000&namespace=cluster';
       refreshMocks.catalogDomain.data = {
         items: [
           {
@@ -313,16 +313,16 @@ describe('BrowseView', () => {
 
       expect(refreshMocks.orchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
         'catalog',
-        'cluster-1|limit=200&namespace=cluster&continue=200',
+        'cluster-1|limit=25000&namespace=cluster&continue=200',
         true
       );
       expect(refreshMocks.orchestrator.fetchScopedDomain).toHaveBeenCalledWith(
         'catalog',
-        'cluster-1|limit=200&namespace=cluster&continue=200',
+        'cluster-1|limit=25000&namespace=cluster&continue=200',
         expect.objectContaining({ isManual: true })
       );
 
-      refreshMocks.catalogDomain.scope = 'cluster-1|limit=200&namespace=cluster&continue=200';
+      refreshMocks.catalogDomain.scope = 'cluster-1|limit=25000&namespace=cluster&continue=200';
       refreshMocks.catalogDomain.data = {
         items: [
           {
