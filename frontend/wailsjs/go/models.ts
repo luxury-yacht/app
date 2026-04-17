@@ -305,6 +305,7 @@ export namespace backend {
 	    }
 	}
 	export class ObjectYAMLMutationRequest {
+	    baseYAML: string;
 	    yaml: string;
 	    kind: string;
 	    apiVersion: string;
@@ -319,6 +320,7 @@ export namespace backend {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.baseYAML = source["baseYAML"];
 	        this.yaml = source["yaml"];
 	        this.kind = source["kind"];
 	        this.apiVersion = source["apiVersion"];
@@ -348,11 +350,11 @@ export namespace backend {
 	    namespace: string;
 	    name: string;
 	    uid: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new ObjectYAMLReloadMergeRequest(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.baseYAML = source["baseYAML"];
@@ -368,11 +370,11 @@ export namespace backend {
 	    mergedYAML: string;
 	    currentYAML: string;
 	    resourceVersion: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new ObjectYAMLReloadMergeResponse(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.mergedYAML = source["mergedYAML"];
@@ -4500,3 +4502,4 @@ export namespace v1 {
 	}
 
 }
+

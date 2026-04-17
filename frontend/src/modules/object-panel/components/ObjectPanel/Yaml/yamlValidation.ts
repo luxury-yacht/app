@@ -121,7 +121,7 @@ export const parseObjectIdentity = (yamlContent: string): ObjectIdentity | null 
 export const validateYamlDraft = (
   draft: string,
   expectedIdentity: ObjectIdentity | null,
-  baselineResourceVersion: string | null
+  _baselineResourceVersion: string | null
 ): ValidationResult => {
   if (!ensureNonEmptyString(draft)) {
     return {
@@ -228,21 +228,6 @@ export const validateYamlDraft = (
         message: `metadata.uid mismatch. Expected ${expectedIdentity.uid}, found ${uid}.`,
       };
     }
-  }
-
-  if (!resourceVersion) {
-    return {
-      isValid: false,
-      message:
-        'metadata.resourceVersion is required for edits to avoid overwriting concurrent changes.',
-    };
-  }
-
-  if (baselineResourceVersion && resourceVersion !== baselineResourceVersion) {
-    return {
-      isValid: false,
-      message: `metadata.resourceVersion (${resourceVersion}) differs from the value when edit mode began (${baselineResourceVersion}). Reload to get the latest version before saving.`,
-    };
   }
 
   return {

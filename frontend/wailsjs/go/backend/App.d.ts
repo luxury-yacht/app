@@ -11,8 +11,6 @@ export function AddFavorite(arg1:backend.Favorite):Promise<backend.Favorite>;
 
 export function ApplyObjectYaml(arg1:string,arg2:backend.ObjectYAMLMutationRequest):Promise<backend.ObjectYAMLMutationResponse>;
 
-export function MergeObjectYamlWithLatest(arg1:string,arg2:backend.ObjectYAMLReloadMergeRequest):Promise<backend.ObjectYAMLReloadMergeResponse>;
-
 export function ApplyTheme(arg1:string):Promise<void>;
 
 export function ClearAllSSRRCaches():Promise<void>;
@@ -204,6 +202,8 @@ export function LogFetcher(arg1:string,arg2:types.LogFetchRequest):Promise<types
 export function LogFrontend(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function MatchThemeForCluster(arg1:string):Promise<types.Theme>;
+
+export function MergeObjectYamlWithLatest(arg1:string,arg2:backend.ObjectYAMLReloadMergeRequest):Promise<backend.ObjectYAMLReloadMergeResponse>;
 
 export function OpenKubeconfigSearchPathDialog():Promise<string>;
 

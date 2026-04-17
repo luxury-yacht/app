@@ -89,11 +89,13 @@ export const sanitizeYamlForSemanticCompare = (raw: string): string => {
 
 export const validateYamlOnServer = async (
   clusterId: string,
+  baseYAML: string,
   yamlContent: string,
   identity: ObjectIdentity,
   resourceVersion: string
 ): Promise<ObjectYamlMutationResponse> => {
   return ValidateObjectYaml(clusterId, {
+    baseYAML,
     yaml: yamlContent,
     kind: identity.kind,
     apiVersion: identity.apiVersion,
@@ -106,11 +108,13 @@ export const validateYamlOnServer = async (
 
 export const applyYamlOnServer = async (
   clusterId: string,
+  baseYAML: string,
   yamlContent: string,
   identity: ObjectIdentity,
   resourceVersion: string
 ): Promise<ObjectYamlMutationResponse> => {
   return ApplyObjectYaml(clusterId, {
+    baseYAML,
     yaml: yamlContent,
     kind: identity.kind,
     apiVersion: identity.apiVersion,

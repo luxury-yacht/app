@@ -10,6 +10,7 @@ import { EditorSelection, type Extension } from '@codemirror/state';
 import * as YAML from 'yaml';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import ContextMenu, { type ContextMenuItem } from '@shared/components/ContextMenu';
+import { CloseIcon } from '@shared/components/icons/MenuIcons';
 import { deriveCopyText } from '@ui/shortcuts/context';
 import { useKeyboardSurface, useShortcut, useSearchShortcutTarget } from '@ui/shortcuts';
 import { errorHandler } from '@utils/errorHandler';
@@ -70,12 +71,26 @@ type VerifiedPostApplyState = {
   semanticYaml: string;
 };
 
+type RecentVerifiedSemanticEntry = {
+  reference: string;
+  semanticYaml: string;
+};
+
 const isSameObjectReference = (left: ObjectIdentity, right: ObjectIdentity): boolean =>
   left.apiVersion === right.apiVersion &&
   left.kind === right.kind &&
   left.name === right.name &&
   (left.uid && right.uid ? left.uid === right.uid : true) &&
   (left.namespace ?? '') === (right.namespace ?? '');
+
+const buildObjectReferenceKey = (identity: ObjectIdentity): string =>
+  [
+    identity.apiVersion,
+    identity.kind,
+    identity.namespace ?? '',
+    identity.name,
+    identity.uid ?? '',
+  ].join('|');
 
 const normalizeYamlTabDiff = (diff: YamlTabDiffResult): YamlTabDiffResult => {
   if (diff.tooLarge) {
@@ -109,17 +124,55 @@ const buildYamlTabDiff = (before: string, after: string): YamlTabDiffResult => {
   });
 };
 
-const renderYamlDiff = (diff: YamlTabDiffResult, keyPrefix: string) => {
+const renderYamlDiffToggle = (
+  diff: YamlTabDiffResult,
+  keyPrefix: string,
+  showFullDiff: boolean,
+  onToggleFullDiff: (key: string) => void
+) => {
   if (diff.tooLarge) {
     return null;
   }
   if (diff.lines.length === 0) {
     return null;
   }
+  const hasContextLines = diff.lines.some((line) => line.type === 'context');
+  const visibleLines = showFullDiff
+    ? diff.lines
+    : diff.lines.filter((line) => line.type !== 'context');
+  if (visibleLines.length === 0) {
+    return null;
+  }
+  return hasContextLines ? (
+    <button
+      className="button generic"
+      type="button"
+      aria-expanded={showFullDiff}
+      onClick={() => onToggleFullDiff(keyPrefix)}
+    >
+      {showFullDiff ? 'Show only changes' : 'Show full diff'}
+    </button>
+  ) : null;
+};
+
+const renderYamlDiff = (diff: YamlTabDiffResult, keyPrefix: string, showFullDiff: boolean) => {
+  if (diff.tooLarge) {
+    return null;
+  }
+  if (diff.lines.length === 0) {
+    return null;
+  }
+  const visibleLines = showFullDiff
+    ? diff.lines
+    : diff.lines.filter((line) => line.type !== 'context');
+  if (visibleLines.length === 0) {
+    return null;
+  }
   return (
     <div className="yaml-drift-diff" role="status" aria-live="polite">
       <pre>
-        {diff.lines.map((line, index) => {
+        {visibleLines.map((line, index) => {
+          const lineKeyIndex = showFullDiff ? index : diff.lines.indexOf(line);
           const prefix = line.type === 'added' ? '+' : line.type === 'removed' ? '-' : ' ';
           const left =
             line.leftLineNumber !== undefined && line.leftLineNumber !== null
@@ -131,7 +184,7 @@ const renderYamlDiff = (diff: YamlTabDiffResult, keyPrefix: string) => {
               : '    ';
           return (
             <span
-              key={`${keyPrefix}-${index}`}
+              key={`${keyPrefix}-${lineKeyIndex}`}
               className={`yaml-drift-diff-line yaml-drift-diff-line-${line.type}`}
             >
               {left}
@@ -178,6 +231,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
   } | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [hasServerYamlError, setHasServerYamlError] = useState(false);
+  const [expandedDiffs, setExpandedDiffs] = useState<Record<string, boolean>>({});
   const [contextMenu, setContextMenu] = useState<{
     position: { x: number; y: number };
     items: ContextMenuItem[];
@@ -187,6 +241,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
   const editorViewRef = useRef<EditorView | null>(null);
   const editorSurfaceRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const recentVerifiedSemanticYamlsRef = useRef<RecentVerifiedSemanticEntry[]>([]);
 
   const effectiveScope = scope ?? INACTIVE_SCOPE;
   const snapshot = useRefreshScopedDomain('object-yaml', effectiveScope);
@@ -212,8 +267,9 @@ const YamlTab: React.FC<YamlTabProps> = ({
 
   // Enable/disable the scoped domain based on tab activity. While editing,
   // pause the background refresher so routine controller updates do not keep
-  // replacing the live snapshot and spuriously trip drift detection. The save
-  // path still validates resourceVersion server-side before applying.
+  // replacing the live snapshot and spuriously trip drift detection. Saves use
+  // kubectl-edit-style patching against the live object, so background drift
+  // should not force a reload before saving.
   //
   // preserveState keeps the store entry alive when the tab unmounts so
   // diagnostics can still see it. Full cleanup (reset) is handled by
@@ -306,13 +362,45 @@ const YamlTab: React.FC<YamlTabProps> = ({
     if (
       snapshotIdentity &&
       overrideIdentity &&
-      isSameObjectReference(snapshotIdentity, overrideIdentity) &&
-      pendingSnapshotAdoptionYaml &&
-      snapshotNormalizedYaml !== pendingSnapshotAdoptionYaml
+      isSameObjectReference(snapshotIdentity, overrideIdentity)
     ) {
-      setManualYamlOverride(null);
-      setPendingSnapshotAdoptionYaml(null);
-      return;
+      if (pendingSnapshotAdoptionYaml && snapshotNormalizedYaml === pendingSnapshotAdoptionYaml) {
+        return;
+      }
+
+      if (
+        snapshotIdentity.resourceVersion &&
+        snapshotIdentity.resourceVersion === latestObjectIdentity.resourceVersion
+      ) {
+        setManualYamlOverride(null);
+        setPendingSnapshotAdoptionYaml(null);
+        return;
+      }
+
+      if (verifiedPostApply) {
+        const snapshotSemanticYaml = sanitizeYamlForSemanticCompare(snapshotNormalizedYaml);
+        const currentObjectReference = buildObjectReferenceKey(verifiedPostApply.identity);
+        if (
+          snapshotSemanticYaml === verifiedPostApply.semanticYaml ||
+          recentVerifiedSemanticYamlsRef.current.some(
+            (entry) =>
+              entry.reference === currentObjectReference &&
+              entry.semanticYaml === snapshotSemanticYaml
+          )
+        ) {
+          return;
+        }
+
+        setManualYamlOverride(null);
+        setPendingSnapshotAdoptionYaml(null);
+        return;
+      }
+
+      if (pendingSnapshotAdoptionYaml && snapshotNormalizedYaml !== pendingSnapshotAdoptionYaml) {
+        setManualYamlOverride(null);
+        setPendingSnapshotAdoptionYaml(null);
+        return;
+      }
     }
     if (
       snapshotIdentity?.resourceVersion &&
@@ -320,8 +408,15 @@ const YamlTab: React.FC<YamlTabProps> = ({
     ) {
       setManualYamlOverride(null);
       setPendingSnapshotAdoptionYaml(null);
+      return;
     }
-  }, [latestObjectIdentity, manualYamlOverride, pendingSnapshotAdoptionYaml, yamlContent]);
+  }, [
+    latestObjectIdentity,
+    manualYamlOverride,
+    pendingSnapshotAdoptionYaml,
+    verifiedPostApply,
+    yamlContent,
+  ]);
 
   const activeYaml = isEditing ? draftYaml : (displayYaml ?? '');
 
@@ -445,6 +540,13 @@ const YamlTab: React.FC<YamlTabProps> = ({
     },
     [handleFindNext, handleFindPrevious]
   );
+
+  const toggleDiffExpansion = useCallback((diffKey: string) => {
+    setExpandedDiffs((current) => ({
+      ...current,
+      [diffKey]: !current[diffKey],
+    }));
+  }, []);
 
   useEffect(() => {
     if (!postApplyNotice || postApplyNotice.kind !== 'warning' || manualYamlOverride) {
@@ -627,6 +729,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
       setHasRemoteDrift(false);
       setBackendDriftCurrentYaml(null);
       setDriftForced(false);
+      setExpandedDiffs({});
       return;
     }
 
@@ -721,9 +824,9 @@ const YamlTab: React.FC<YamlTabProps> = ({
     setDriftForced(false);
     setBackendDriftCurrentYaml(null);
     setPostApplyNotice(null);
-    setVerifiedPostApply(null);
     setPendingSnapshotAdoptionYaml(null);
     setHasServerYamlError(false);
+    setExpandedDiffs({});
     setLatestObjectIdentity(identityForEditing);
     setManualYamlOverride(
       (current) =>
@@ -756,6 +859,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
     setBackendDriftCurrentYaml(null);
     setIsSaving(false);
     setHasServerYamlError(false);
+    setExpandedDiffs({});
     setPendingSnapshotAdoptionYaml(null);
   }, []);
 
@@ -885,12 +989,6 @@ const YamlTab: React.FC<YamlTabProps> = ({
     if (!isEditing || isSaving) {
       return;
     }
-    if (hasRemoteDrift) {
-      setActionError(
-        'The object changed while you were editing. Reload to avoid overwriting someone else’s changes.'
-      );
-      return;
-    }
     const identity = effectiveIdentity;
     if (!identity) {
       setActionError('Unable to resolve object identity. Reload and try again.');
@@ -903,24 +1001,32 @@ const YamlTab: React.FC<YamlTabProps> = ({
       return;
     }
 
-    const baselineVersion = baselineResourceVersion ?? identity.resourceVersion ?? null;
-    if (!baselineVersion) {
-      setActionError('metadata.resourceVersion is required to save changes. Reload and try again.');
-      return;
-    }
+    const baselineYaml =
+      baselineMergeYaml ||
+      prepareDraftYaml(
+        normalizeYamlString(manualYamlOverride?.yaml ?? displayYaml ?? ''),
+        showManagedFields
+      );
 
     setIsSaving(true);
     setActionError(null);
 
     try {
-      setPendingSnapshotAdoptionYaml(normalizeYamlString(yamlContent));
+      const snapshotYamlBeforeSave = normalizeYamlString(yamlContent);
+      setPendingSnapshotAdoptionYaml(snapshotYamlBeforeSave);
       const applyResponse = await applyYamlOnServer(
         resolvedClusterId,
+        baselineYaml,
         validation.normalizedYAML,
         identity,
-        baselineVersion
+        baselineResourceVersion ?? identity.resourceVersion ?? ''
       );
-      const appliedResourceVersion = applyResponse?.resourceVersion ?? baselineVersion;
+      const appliedResourceVersion =
+        applyResponse?.resourceVersion ??
+        validation.resourceVersion ??
+        baselineResourceVersion ??
+        identity.resourceVersion ??
+        '';
       const immediateYaml = applyResourceVersionToYaml(
         validation.normalizedYAML,
         appliedResourceVersion
@@ -938,6 +1044,21 @@ const YamlTab: React.FC<YamlTabProps> = ({
         const { latestIdentity, normalizedYaml } = await hydrateLatestObject(identity);
         const submittedYaml = sanitizeYamlForSemanticCompare(immediateYaml);
         const storedYaml = sanitizeYamlForSemanticCompare(normalizedYaml);
+        if (verifiedPostApply?.semanticYaml) {
+          recentVerifiedSemanticYamlsRef.current = [
+            {
+              reference: buildObjectReferenceKey(verifiedPostApply.identity),
+              semanticYaml: verifiedPostApply.semanticYaml,
+            },
+            ...recentVerifiedSemanticYamlsRef.current.filter(
+              (entry) =>
+                !(
+                  entry.reference === buildObjectReferenceKey(verifiedPostApply.identity) &&
+                  entry.semanticYaml === verifiedPostApply.semanticYaml
+                )
+            ),
+          ].slice(0, 4);
+        }
         setVerifiedPostApply({
           identity: latestIdentity,
           semanticYaml: storedYaml,
@@ -946,7 +1067,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
           setPostApplyNotice({
             kind: 'diff',
             message:
-              'Kubernetes stored a different live object than the exact YAML you submitted. Review the diff below for defaults, webhook mutations, or controller-owned changes.',
+              'Your changes were applied to the latest live object, which also included other changes made while you were editing. Review the diff below to see how the final stored object differs from the exact YAML you submitted.',
             diff: buildYamlTabDiff(submittedYaml, storedYaml),
           });
         } else {
@@ -963,6 +1084,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
         errorHandler.handle(fetchErr, { action: 'loadLatestObjectYAML' });
       }
       exitEditMode();
+      setPendingSnapshotAdoptionYaml(snapshotYamlBeforeSave);
       if (scope) {
         await refreshOrchestrator.fetchScopedDomain('object-yaml', scope, { isManual: true });
       }
@@ -970,24 +1092,9 @@ const YamlTab: React.FC<YamlTabProps> = ({
     } catch (err) {
       const parsed = parseObjectYamlError(err);
       if (parsed) {
-        if (parsed.code === 'ResourceVersionMismatch') {
-          setDriftForced(true);
-          setHasRemoteDrift(true);
-          setActionError(parsed.message);
-          setLintError(null);
-          setBackendDriftCurrentYaml(
-            parsed.currentYaml ? normalizeYamlString(parsed.currentYaml) : null
-          );
-          if (parsed.currentResourceVersion) {
-            setBaselineResourceVersion(parsed.currentResourceVersion);
-          }
-          setActionDetails(parsed.causes ?? []);
-          setHasServerYamlError(false);
-        } else {
-          setActionError(parsed.message);
-          setActionDetails(parsed.causes ?? []);
-          setHasServerYamlError(true);
-        }
+        setActionError(parsed.message);
+        setActionDetails(parsed.causes ?? []);
+        setHasServerYamlError(true);
         errorHandler.handle(err, { action: 'saveObjectYAML' });
         setPendingSnapshotAdoptionYaml(null);
         setIsSaving(false);
@@ -1006,17 +1113,21 @@ const YamlTab: React.FC<YamlTabProps> = ({
       setIsSaving(false);
     }
   }, [
+    baselineMergeYaml,
     baselineResourceVersion,
+    displayYaml,
     draftYaml,
     effectiveIdentity,
     exitEditMode,
     hydrateLatestObject,
-    hasRemoteDrift,
     isEditing,
     isSaving,
+    manualYamlOverride,
     resolvedClusterId,
     scope,
+    showManagedFields,
     yamlContent,
+    verifiedPostApply,
   ]);
 
   const editorKeyBindings = useMemo<KeyBinding[]>(() => {
@@ -1264,13 +1375,12 @@ const YamlTab: React.FC<YamlTabProps> = ({
     );
   }
 
+  const showReloadMergeConflict = Boolean(backendDriftCurrentYaml) || driftForced;
+  const driftDiffKey = backendDriftCurrentYaml ? 'drift-backend' : 'drift-live';
+  const postApplyDiffKey = postApplyNotice ? `post-apply-${postApplyNotice.kind}` : 'post-apply';
   const hasYamlError = Boolean(lintError) || hasServerYamlError;
-  const disableSave = isSaving || hasRemoteDrift || hasYamlError;
-  const saveDisabledReason = hasYamlError
-    ? (lintError ?? actionError ?? undefined)
-    : hasRemoteDrift
-      ? 'The object changed while you were editing. Reload to continue.'
-      : undefined;
+  const disableSave = isSaving || hasYamlError;
+  const saveDisabledReason = hasYamlError ? (lintError ?? actionError ?? undefined) : undefined;
   const isLargeManifest = activeYaml.length > LARGE_MANIFEST_THRESHOLD;
   return (
     <div className="object-panel-tab-content">
@@ -1328,6 +1438,16 @@ const YamlTab: React.FC<YamlTabProps> = ({
                 <button className="button cancel" onClick={handleCancelClick} disabled={isSaving}>
                   Cancel
                 </button>
+                {hasRemoteDrift && (
+                  <button
+                    className="button secondary"
+                    type="button"
+                    onClick={handleReloadAndMerge}
+                    disabled={isSaving}
+                  >
+                    Reload &amp; merge
+                  </button>
+                )}
                 <button
                   className="button save"
                   onClick={handleSaveClick}
@@ -1340,25 +1460,26 @@ const YamlTab: React.FC<YamlTabProps> = ({
             )}
           </div>
         </div>
-        {isEditing && (lintError || actionError || hasRemoteDrift) && (
+        {isEditing && (lintError || actionError || showReloadMergeConflict) && (
           <div className="yaml-validation-message">
-            {hasRemoteDrift && (
+            {showReloadMergeConflict && (
               <>
-                <p>
-                  The object changed while you were editing. Reload the YAML to continue, otherwise
-                  you risk overwriting a newer version.
-                </p>
-                <div className="yaml-merge-actions">
-                  <button
-                    className="button secondary"
-                    type="button"
-                    onClick={handleReloadAndMerge}
-                    disabled={isSaving}
-                  >
-                    Reload &amp; merge
-                  </button>
+                <div className="yaml-notice-header">
+                  <p>
+                    Reload &amp; merge could not reconcile your draft with the latest YAML. Your
+                    draft is unchanged. Save will still patch your edited fields onto the live
+                    object, like kubectl edit.
+                  </p>
+                  {driftDiff &&
+                    renderYamlDiffToggle(
+                      driftDiff,
+                      driftDiffKey,
+                      Boolean(expandedDiffs[driftDiffKey]),
+                      toggleDiffExpansion
+                    )}
                 </div>
-                {driftDiff && renderYamlDiff(driftDiff, 'drift')}
+                {driftDiff &&
+                  renderYamlDiff(driftDiff, driftDiffKey, Boolean(expandedDiffs[driftDiffKey]))}
                 {driftDiff?.tooLarge && (
                   <p className="yaml-drift-warning">
                     {driftDiff.tooLargeMessage ??
@@ -1385,8 +1506,32 @@ const YamlTab: React.FC<YamlTabProps> = ({
             role="status"
             aria-live="polite"
           >
-            <p>{postApplyNotice.message}</p>
-            {postApplyNotice.diff && renderYamlDiff(postApplyNotice.diff, 'post-apply')}
+            <div className="yaml-notice-header">
+              <p>{postApplyNotice.message}</p>
+              <div className="yaml-notice-actions">
+                {postApplyNotice.diff &&
+                  renderYamlDiffToggle(
+                    postApplyNotice.diff,
+                    postApplyDiffKey,
+                    Boolean(expandedDiffs[postApplyDiffKey]),
+                    toggleDiffExpansion
+                  )}
+                <button
+                  className="yaml-notice-close"
+                  type="button"
+                  aria-label="Close diff notice"
+                  onClick={() => setPostApplyNotice(null)}
+                >
+                  <CloseIcon width={14} height={14} />
+                </button>
+              </div>
+            </div>
+            {postApplyNotice.diff &&
+              renderYamlDiff(
+                postApplyNotice.diff,
+                postApplyDiffKey,
+                Boolean(expandedDiffs[postApplyDiffKey])
+              )}
             {postApplyNotice.diff?.tooLarge && (
               <p className="yaml-drift-warning">
                 {postApplyNotice.diff.tooLargeMessage ??

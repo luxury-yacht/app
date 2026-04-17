@@ -2,11 +2,14 @@ package backend
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/evanphx/json-patch/v5"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsfake "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
@@ -16,6 +19,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/strategicpatch"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	fakediscovery "k8s.io/client-go/discovery/fake"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
@@ -75,23 +79,51 @@ func setupYAMLTestApp(t *testing.T) (*App, *dynamicfake.FakeDynamicClient, strin
 	}
 
 	dynamicClient := dynamicfake.NewSimpleDynamicClient(scheme, initialDeployment.DeepCopyObject())
-	updateCalls := 0
-	dynamicClient.Fake.PrependReactor("update", "*", func(action cgotesting.Action) (bool, runtime.Object, error) {
-		updateAction := action.(cgotesting.UpdateActionImpl)
-		obj := updateAction.GetObject().(*unstructured.Unstructured)
-		copyObj := obj.DeepCopy()
-
-		updateCalls++
-		if len(updateAction.GetUpdateOptions().DryRun) > 0 {
-			copyObj.SetResourceVersion("42")
-			return true, copyObj, nil
-		}
-
-		copyObj.SetResourceVersion("43")
-		if err := dynamicClient.Tracker().Update(updateAction.GetResource(), copyObj, updateAction.GetNamespace()); err != nil {
+	dynamicClient.Fake.PrependReactor("patch", "*", func(action cgotesting.Action) (bool, runtime.Object, error) {
+		patchAction := action.(cgotesting.PatchActionImpl)
+		current, err := dynamicClient.Tracker().Get(
+			patchAction.GetResource(),
+			patchAction.GetNamespace(),
+			patchAction.GetName(),
+		)
+		if err != nil {
 			return true, nil, err
 		}
-		return true, copyObj, nil
+
+		currentObj := current.(*unstructured.Unstructured)
+		currentJSON, err := json.Marshal(currentObj.Object)
+		if err != nil {
+			return true, nil, err
+		}
+
+		var patchedJSON []byte
+		switch patchAction.GetPatchType() {
+		case types.MergePatchType:
+			patchedJSON, err = jsonpatch.MergePatch(currentJSON, patchAction.GetPatch())
+		case types.StrategicMergePatchType:
+			patchedJSON, err = strategicpatch.StrategicMergePatch(currentJSON, patchAction.GetPatch(), &appsv1.Deployment{})
+		default:
+			return true, nil, fmt.Errorf("unexpected patch type %s", patchAction.GetPatchType())
+		}
+		if err != nil {
+			return true, nil, err
+		}
+
+		patchedObj := &unstructured.Unstructured{}
+		if err := patchedObj.UnmarshalJSON(patchedJSON); err != nil {
+			return true, nil, err
+		}
+
+		if len(patchAction.GetPatchOptions().DryRun) > 0 {
+			patchedObj.SetResourceVersion(currentObj.GetResourceVersion())
+			return true, patchedObj, nil
+		}
+
+		patchedObj.SetResourceVersion(nextResourceVersion(currentObj.GetResourceVersion()))
+		if err := dynamicClient.Tracker().Update(patchAction.GetResource(), patchedObj, patchAction.GetNamespace()); err != nil {
+			return true, nil, err
+		}
+		return true, patchedObj, nil
 	})
 	app := NewApp()
 	app.Ctx = context.Background()
@@ -116,10 +148,19 @@ func setupYAMLTestApp(t *testing.T) (*App, *dynamicfake.FakeDynamicClient, strin
 	return app, dynamicClient, clusterID
 }
 
+func nextResourceVersion(current string) string {
+	value, err := strconv.Atoi(current)
+	if err != nil {
+		return current
+	}
+	return strconv.Itoa(value + 1)
+}
+
 func TestValidateObjectYamlSuccess(t *testing.T) {
 	app, _, clusterID := setupYAMLTestApp(t)
 
 	request := ObjectYAMLMutationRequest{
+		BaseYAML: baseYAML(),
 		YAML: `apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -161,7 +202,7 @@ spec:
 	}
 }
 
-func TestValidateObjectYamlDetectsResourceVersionDrift(t *testing.T) {
+func TestValidateObjectYamlAllowsLiveResourceVersionDrift(t *testing.T) {
 	app, dynamicClient, clusterID := setupYAMLTestApp(t)
 
 	// Bump live resourceVersion to simulate drift.
@@ -176,6 +217,7 @@ func TestValidateObjectYamlDetectsResourceVersionDrift(t *testing.T) {
 	}
 
 	request := ObjectYAMLMutationRequest{
+		BaseYAML: baseYAML(),
 		YAML: `apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -194,22 +236,12 @@ spec:
 		ResourceVersion: "42",
 	}
 
-	_, err = app.ValidateObjectYaml(clusterID, request)
-	if err == nil {
-		t.Fatalf("expected validation to fail due to resourceVersion drift")
+	response, err := app.ValidateObjectYaml(clusterID, request)
+	if err != nil {
+		t.Fatalf("expected validation to succeed despite live resourceVersion drift: %v", err)
 	}
-	var objErr *objectYAMLError
-	if !errors.As(err, &objErr) {
-		t.Fatalf("expected objectYAMLError, got %T", err)
-	}
-	if objErr.Code != "ResourceVersionMismatch" {
-		t.Fatalf("expected ResourceVersionMismatch code, got %s", objErr.Code)
-	}
-	if objErr.CurrentResourceVersion != "99" {
-		t.Fatalf("expected current resourceVersion 99, got %q", objErr.CurrentResourceVersion)
-	}
-	if !strings.Contains(objErr.CurrentYAML, "resourceVersion: \"99\"") {
-		t.Fatalf("expected normalized live YAML in error payload, got %q", objErr.CurrentYAML)
+	if response == nil || response.ResourceVersion != "99" {
+		t.Fatalf("expected dry-run validation to reflect live resourceVersion 99, got %#v", response)
 	}
 }
 
@@ -217,6 +249,7 @@ func TestApplyObjectYamlSuccess(t *testing.T) {
 	app, _, clusterID := setupYAMLTestApp(t)
 
 	request := ObjectYAMLMutationRequest{
+		BaseYAML: baseYAML(),
 		YAML: `apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -246,20 +279,65 @@ spec:
 		ResourceVersion: "42",
 	}
 
-	validation, err := app.ValidateObjectYaml(clusterID, request)
-	if err != nil {
-		t.Fatalf("validation failed: %v", err)
-	}
-	// Align with returned resourceVersion (fake dynamic client may mutate on dry-run).
-	request.ResourceVersion = validation.ResourceVersion
-	request.YAML = strings.Replace(request.YAML, `"42"`, fmt.Sprintf(`"%s"`, validation.ResourceVersion), 1)
-
 	response, err := app.ApplyObjectYaml(clusterID, request)
 	if err != nil {
 		t.Fatalf("apply failed: %v", err)
 	}
-	if response.ResourceVersion == "" {
-		t.Fatalf("expected new resourceVersion in apply response")
+	if response.ResourceVersion != "43" {
+		t.Fatalf("expected new resourceVersion 43 in apply response, got %q", response.ResourceVersion)
+	}
+}
+
+func TestApplyObjectYamlPatchesAgainstLatestObject(t *testing.T) {
+	app, dynamicClient, clusterID := setupYAMLTestApp(t)
+
+	resource := dynamicClient.Resource(appsv1.SchemeGroupVersion.WithResource("deployments")).Namespace("default")
+	live, err := resource.Get(context.Background(), "demo", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("failed to get live deployment: %v", err)
+	}
+	live.SetResourceVersion("99")
+	live.SetAnnotations(map[string]string{"syncedAt": "now"})
+	if err := dynamicClient.Tracker().Update(appsv1.SchemeGroupVersion.WithResource("deployments"), live, "default"); err != nil {
+		t.Fatalf("failed to update live deployment: %v", err)
+	}
+
+	request := ObjectYAMLMutationRequest{
+		BaseYAML:        baseYAML(),
+		YAML:            strings.Replace(baseYAML(), "nginx:1.26", "nginx:1.27", 1),
+		Kind:            "Deployment",
+		APIVersion:      "apps/v1",
+		Namespace:       "default",
+		Name:            "demo",
+		UID:             "demo-uid",
+		ResourceVersion: "42",
+	}
+
+	response, err := app.ApplyObjectYaml(clusterID, request)
+	if err != nil {
+		t.Fatalf("expected apply to succeed despite live drift: %v", err)
+	}
+	if response.ResourceVersion != "100" {
+		t.Fatalf("expected apply to increment live resourceVersion to 100, got %q", response.ResourceVersion)
+	}
+
+	updated, err := resource.Get(context.Background(), "demo", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("failed to fetch updated deployment: %v", err)
+	}
+	if updated.GetAnnotations()["syncedAt"] != "now" {
+		t.Fatalf("expected live annotations to be preserved, got %#v", updated.GetAnnotations())
+	}
+	containers, _, err := unstructured.NestedSlice(updated.Object, "spec", "template", "spec", "containers")
+	if err != nil || len(containers) == 0 {
+		t.Fatalf("expected updated containers, got %#v err=%v", containers, err)
+	}
+	first, ok := containers[0].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected first container map, got %#v", containers[0])
+	}
+	if first["image"] != "nginx:1.27" {
+		t.Fatalf("expected image nginx:1.27, got %#v", first["image"])
 	}
 }
 
@@ -407,16 +485,17 @@ func TestMergeObjectYamlWithLatestDetectsUIDMismatch(t *testing.T) {
 func TestValidateObjectYamlForbiddenError(t *testing.T) {
 	app, dynamicClient, clusterID := setupYAMLTestApp(t)
 
-	dynamicClient.Fake.PrependReactor("update", "*", func(action cgotesting.Action) (bool, runtime.Object, error) {
-		updateAction := action.(cgotesting.UpdateActionImpl)
+	dynamicClient.Fake.PrependReactor("patch", "*", func(action cgotesting.Action) (bool, runtime.Object, error) {
+		patchAction := action.(cgotesting.PatchActionImpl)
 		return true, nil, apierrors.NewForbidden(
 			schema.GroupResource{Group: "apps", Resource: "deployments"},
-			updateAction.GetResource().Resource,
+			patchAction.GetResource().Resource,
 			fmt.Errorf("update forbidden"),
 		)
 	})
 
 	request := ObjectYAMLMutationRequest{
+		BaseYAML:        baseYAML(),
 		YAML:            baseYAML(),
 		Kind:            "Deployment",
 		APIVersion:      "apps/v1",
@@ -468,6 +547,16 @@ func TestValidateObjectYamlDetectsUIDDrift(t *testing.T) {
 	}
 
 	request := ObjectYAMLMutationRequest{
+		BaseYAML: `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo
+  namespace: default
+  uid: demo-uid
+  resourceVersion: "42"
+spec:
+  replicas: 3
+`,
 		YAML: `apiVersion: apps/v1
 kind: Deployment
 metadata:

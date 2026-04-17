@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/evanphx/json-patch/v5"
 	"github.com/luxury-yacht/app/backend/resources/common"
-	jsonpatch "gopkg.in/evanphx/json-patch.v4"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"

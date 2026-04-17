@@ -25,7 +25,7 @@ spec:
 `;
 
 describe('validateYamlDraft', () => {
-  it('accepts valid YAML matching identity and resourceVersion', () => {
+  it('accepts valid YAML matching identity', () => {
     const result = validateYamlDraft(baseYaml, baseIdentity, '42');
     expect(result.isValid).toBe(true);
     if (result.isValid) {
@@ -59,21 +59,21 @@ describe('validateYamlDraft', () => {
     }
   });
 
-  it('rejects missing resourceVersion', () => {
+  it('allows drafts without metadata.resourceVersion like kubectl edit', () => {
     const yaml = baseYaml.replace('resourceVersion: "42"', '');
     const result = validateYamlDraft(yaml, baseIdentity, '42');
-    expect(result.isValid).toBe(false);
-    if (!result.isValid) {
-      expect(result.message).toMatch(/resourceVersion is required/i);
+    expect(result.isValid).toBe(true);
+    if (result.isValid) {
+      expect(result.resourceVersion).toBeNull();
     }
   });
 
-  it('rejects resourceVersion drift', () => {
+  it('allows edited metadata.resourceVersion and leaves validation to the server', () => {
     const yaml = baseYaml.replace('"42"', '"43"');
     const result = validateYamlDraft(yaml, baseIdentity, '42');
-    expect(result.isValid).toBe(false);
-    if (!result.isValid) {
-      expect(result.message).toMatch(/differs from the value when edit mode began/i);
+    expect(result.isValid).toBe(true);
+    if (result.isValid) {
+      expect(result.resourceVersion).toBe('43');
     }
   });
 

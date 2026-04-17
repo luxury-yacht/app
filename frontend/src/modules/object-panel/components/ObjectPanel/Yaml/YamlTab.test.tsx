@@ -229,40 +229,17 @@ spec:
       image: demo:v2
 `.trim();
 
-const LIVE_STRATEGIC_RELOAD_YAML = `
+const SECOND_UPDATED_YAML = `
 apiVersion: v1
 kind: Pod
 metadata:
   name: demo
   namespace: default
-  resourceVersion: "999"
-  annotations:
-    syncedAt: now
+  resourceVersion: "789"
 spec:
   containers:
     - name: demo
-      image: demo:v1
-      resources:
-        limits:
-          cpu: "1"
-`.trim();
-
-const LIVE_STRATEGIC_MERGED_YAML = `
-apiVersion: v1
-kind: Pod
-metadata:
-  name: demo
-  namespace: default
-  resourceVersion: "999"
-  annotations:
-    syncedAt: now
-spec:
-  containers:
-    - name: demo
-      image: demo:v2
-      resources:
-        limits:
-          cpu: "1"
+      image: demo:v3
 `.trim();
 
 const POST_APPLY_MUTATED_YAML = `
@@ -290,6 +267,19 @@ spec:
   containers:
     - name: demo
       image: demo:v2
+`.trim();
+
+const SECOND_VERIFIED_APPLIED_YAML = `
+apiVersion: v1
+kind: Pod
+metadata:
+  name: demo
+  namespace: default
+  resourceVersion: "790"
+spec:
+  containers:
+    - name: demo
+      image: demo:v3
 `.trim();
 
 const LATER_MUTATED_YAML = `
@@ -334,12 +324,6 @@ spec:
       image: demo:v2
   restartPolicy: Always
 `.trim();
-
-const buildLargeYamlDraft = (commentLineCount: number) =>
-  [
-    UPDATED_YAML,
-    ...Array.from({ length: commentLineCount }, (_, index) => `# pad-${index + 1}`),
-  ].join('\n');
 
 type Snapshot = {
   status: SnapshotStatus;
@@ -511,6 +495,20 @@ describe('YamlTab', () => {
     await waitForUpdates();
 
     expect(wailsMocks.ApplyObjectYaml).toHaveBeenCalledTimes(1);
+    expect(wailsMocks.ApplyObjectYaml.mock.calls[0]?.[0]).toBe('alpha:ctx');
+    expect(wailsMocks.ApplyObjectYaml.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({
+        apiVersion: 'v1',
+        kind: 'Pod',
+        namespace: 'default',
+        name: 'demo',
+        uid: '',
+        resourceVersion: '123',
+      })
+    );
+    expect(wailsMocks.ApplyObjectYaml.mock.calls[0]?.[1]?.baseYAML).toContain('image: demo:v1');
+    expect(wailsMocks.ApplyObjectYaml.mock.calls[0]?.[1]?.baseYAML).not.toContain('managedFields');
+    expect(wailsMocks.ApplyObjectYaml.mock.calls[0]?.[1]?.yaml).toContain('image: demo:v2');
     expect(wailsMocks.ValidateObjectYaml).not.toHaveBeenCalled();
     expect(refreshMocks.fetchScopedDomain).toHaveBeenCalledWith(
       'object-yaml',
@@ -526,7 +524,7 @@ describe('YamlTab', () => {
     await unmount();
   });
 
-  it('shows a post-apply notice when Kubernetes stores a different live object', async () => {
+  it('shows a post-apply notice when the final stored object differs from the submitted YAML', async () => {
     wailsMocks.ApplyObjectYaml.mockResolvedValue({ resourceVersion: '789' });
     wailsMocks.GetObjectYAMLByGVK.mockResolvedValue(POST_APPLY_MUTATED_YAML);
 
@@ -553,12 +551,62 @@ describe('YamlTab', () => {
     await waitForUpdates();
 
     expect(container.querySelector('.yaml-post-apply-notice')?.textContent).toContain(
-      'Kubernetes stored a different live object'
+      'Your changes were applied to the latest live object'
     );
     expect(container.querySelector('.yaml-post-apply-notice')?.textContent).toContain(
       'restartPolicy: Always'
     );
+    const diff = container.querySelector('.yaml-drift-diff');
+    expect(diff?.textContent).not.toContain('apiVersion: v1');
+    const showFullDiffButton = Array.from(container.querySelectorAll('button')).find((btn) =>
+      btn.textContent?.includes('Show full diff')
+    );
+    expect(showFullDiffButton).toBeTruthy();
+
+    await act(async () => {
+      showFullDiffButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(container.querySelector('.yaml-drift-diff')?.textContent).toContain('apiVersion: v1');
     expect(codeMirrorState.value).toContain('restartPolicy: Always');
+
+    await unmount();
+  });
+
+  it('allows dismissing the post-apply diff notice', async () => {
+    wailsMocks.ApplyObjectYaml.mockResolvedValue({ resourceVersion: '789' });
+    wailsMocks.GetObjectYAMLByGVK.mockResolvedValue(POST_APPLY_MUTATED_YAML);
+
+    const { container, unmount } = await renderYamlTab();
+
+    const editButton = Array.from(container.querySelectorAll('button')).find((btn) =>
+      btn.textContent?.includes('Edit')
+    );
+    await act(async () => {
+      editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    await act(async () => {
+      codeMirrorState.latestProps.current.onChange(UPDATED_YAML);
+    });
+
+    const saveButton = Array.from(container.querySelectorAll('button')).find((btn) =>
+      btn.textContent?.includes('Save')
+    );
+    await act(async () => {
+      saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    await waitForUpdates();
+
+    const closeButton = container.querySelector('button[aria-label="Close diff notice"]');
+    expect(closeButton).toBeTruthy();
+
+    await act(async () => {
+      closeButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(container.querySelector('.yaml-post-apply-notice')).toBeNull();
 
     await unmount();
   });
@@ -652,6 +700,85 @@ describe('YamlTab', () => {
     expect(container.querySelector('.yaml-post-apply-notice-stale')?.textContent).toContain(
       'restartPolicy: Always'
     );
+
+    await unmount();
+  });
+
+  it('does not warn when an older snapshot from a previous save arrives after a rapid second save', async () => {
+    wailsMocks.ApplyObjectYaml.mockResolvedValueOnce({
+      resourceVersion: '789',
+    }).mockResolvedValueOnce({ resourceVersion: '790' });
+    wailsMocks.GetObjectYAMLByGVK.mockResolvedValueOnce(
+      VERIFIED_APPLIED_YAML
+    ).mockResolvedValueOnce(SECOND_VERIFIED_APPLIED_YAML);
+
+    const { container, rerender, unmount } = await renderYamlTab();
+
+    const editButton = Array.from(container.querySelectorAll('button')).find((btn) =>
+      btn.textContent?.includes('Edit')
+    );
+    expect(editButton).toBeTruthy();
+
+    await act(async () => {
+      editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    await act(async () => {
+      codeMirrorState.latestProps.current.onChange(UPDATED_YAML);
+    });
+
+    let saveButton = Array.from(container.querySelectorAll('button')).find((btn) =>
+      btn.textContent?.includes('Save')
+    );
+    await act(async () => {
+      saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    await waitForUpdates();
+
+    const editButtonAgain = Array.from(container.querySelectorAll('button')).find((btn) =>
+      btn.textContent?.includes('Edit')
+    );
+    await act(async () => {
+      editButtonAgain?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    await act(async () => {
+      codeMirrorState.latestProps.current.onChange(SECOND_UPDATED_YAML);
+    });
+
+    saveButton = Array.from(container.querySelectorAll('button')).find((btn) =>
+      btn.textContent?.includes('Save')
+    );
+    await act(async () => {
+      saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    await waitForUpdates();
+
+    snapshotState.current = {
+      status: 'ready',
+      data: { yaml: VERIFIED_APPLIED_YAML },
+      error: null,
+    };
+
+    await rerender();
+    await waitForUpdates();
+
+    expect(container.querySelector('.yaml-post-apply-notice-stale')).toBeNull();
+    expect(codeMirrorState.value).toContain('image: demo:v3');
+
+    snapshotState.current = {
+      status: 'ready',
+      data: { yaml: SECOND_VERIFIED_APPLIED_YAML },
+      error: null,
+    };
+
+    await rerender();
+    await waitForUpdates();
+
+    expect(container.querySelector('.yaml-post-apply-notice-stale')).toBeNull();
+    expect(codeMirrorState.value).toContain('image: demo:v3');
 
     await unmount();
   });
@@ -760,22 +887,11 @@ describe('YamlTab', () => {
     await unmount();
   });
 
-  it('handles resource version mismatches by surfacing drift diff and reload option', async () => {
-    yamlErrorsMocks.parseObjectYamlError.mockReturnValue({
-      code: 'ResourceVersionMismatch',
-      message: 'Object changed upstream',
-      causes: ['Remote diff detected'],
-      currentYaml: UPDATED_YAML,
-      currentResourceVersion: '999',
-    });
-    wailsMocks.ApplyObjectYaml.mockRejectedValue(new Error('mismatch'));
-    wailsMocks.MergeObjectYamlWithLatest.mockResolvedValue({
-      currentYAML: UPDATED_YAML.replace('"123"', '"999"'),
-      mergedYAML: UPDATED_YAML.replace('"123"', '"999"'),
-      resourceVersion: '999',
-    });
+  it('keeps drift non-blocking while editing and saves like kubectl edit', async () => {
+    wailsMocks.ApplyObjectYaml.mockResolvedValue({ resourceVersion: '790' });
+    wailsMocks.GetObjectYAMLByGVK.mockResolvedValue(LATER_MUTATED_YAML);
 
-    const { container, unmount } = await renderYamlTab();
+    const { container, rerender, unmount } = await renderYamlTab();
 
     const editButton = Array.from(container.querySelectorAll('button')).find((btn) =>
       btn.textContent?.includes('Edit')
@@ -788,219 +904,34 @@ describe('YamlTab', () => {
       codeMirrorState.latestProps.current.onChange(UPDATED_YAML);
     });
 
-    const saveButton = Array.from(container.querySelectorAll('button')).find((btn) =>
-      btn.textContent?.includes('Save')
-    );
-    await act(async () => {
-      saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
+    snapshotState.current = {
+      status: 'ready',
+      data: { yaml: LATER_MUTATED_YAML },
+      error: null,
+    };
+    await rerender();
     await waitForUpdates();
 
-    const warning = container.querySelector('.yaml-validation-message');
-    expect(warning?.textContent).toContain('Object changed upstream');
-    expect(container.querySelector('.yaml-drift-diff')).toBeTruthy();
+    expect(container.querySelector('.yaml-validation-message')).toBeNull();
 
     const reloadButton = Array.from(container.querySelectorAll('button')).find((btn) =>
-      btn.textContent?.includes('Reload')
+      btn.textContent?.includes('Reload & merge')
     );
     expect(reloadButton).toBeTruthy();
 
-    await act(async () => {
-      reloadButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    await waitForUpdates();
-
-    expect(wailsMocks.MergeObjectYamlWithLatest).toHaveBeenCalled();
-    expect(refreshMocks.fetchScopedDomain).toHaveBeenCalledWith(
-      'object-yaml',
-      'default:pod:demo',
-      expect.objectContaining({ isManual: true })
-    );
-    const saveButtonAfterReload = Array.from(container.querySelectorAll('button')).find((btn) =>
-      btn.textContent?.includes('Save')
-    );
-    expect(container.querySelector('.yaml-validation-message')).toBeNull();
-    expect(saveButtonAfterReload?.hasAttribute('disabled')).toBe(false);
-
-    await unmount();
-  });
-
-  it('merges container-list edits with kubernetes-aware semantics on reload', async () => {
-    yamlErrorsMocks.parseObjectYamlError.mockReturnValue({
-      code: 'ResourceVersionMismatch',
-      message: 'Object changed upstream',
-      causes: ['Remote diff detected'],
-      currentYaml: LIVE_STRATEGIC_RELOAD_YAML,
-      currentResourceVersion: '999',
-    });
-    wailsMocks.ApplyObjectYaml.mockRejectedValue(new Error('mismatch'));
-    wailsMocks.MergeObjectYamlWithLatest.mockResolvedValue({
-      currentYAML: LIVE_STRATEGIC_RELOAD_YAML,
-      mergedYAML: LIVE_STRATEGIC_MERGED_YAML,
-      resourceVersion: '999',
-    });
-
-    const { container, unmount } = await renderYamlTab();
-
-    const editButton = Array.from(container.querySelectorAll('button')).find((btn) =>
-      btn.textContent?.includes('Edit')
-    );
-    await act(async () => {
-      editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    const localDraft = `apiVersion: v1
-kind: Pod
-metadata:
-  name: demo
-  namespace: default
-  resourceVersion: "123"
-spec:
-  containers:
-    - name: demo
-      image: demo:v2`;
-
-    await act(async () => {
-      codeMirrorState.latestProps.current.onChange(localDraft);
-    });
-
     const saveButton = Array.from(container.querySelectorAll('button')).find((btn) =>
       btn.textContent?.includes('Save')
-    );
+    ) as HTMLButtonElement | undefined;
+    expect(saveButton).toBeTruthy();
+    expect(saveButton?.disabled).toBe(false);
+
     await act(async () => {
       saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
     await waitForUpdates();
 
-    const reloadButton = Array.from(container.querySelectorAll('button')).find((btn) =>
-      btn.textContent?.includes('Reload')
-    );
-    await act(async () => {
-      reloadButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    await waitForUpdates();
-
-    expect(wailsMocks.MergeObjectYamlWithLatest).toHaveBeenCalledWith('alpha:ctx', {
-      apiVersion: 'v1',
-      baseYAML: `apiVersion: v1
-kind: Pod
-metadata:
-  name: demo
-  namespace: default
-  resourceVersion: "123"
-spec:
-  containers:
-    - name: demo
-      image: demo:v1
-`,
-      draftYAML: localDraft,
-      kind: 'Pod',
-      name: 'demo',
-      namespace: 'default',
-      uid: '',
-    });
-    expect(codeMirrorState.value).toContain('resourceVersion: "999"');
-    expect(codeMirrorState.value).toContain('syncedAt: now');
-    expect(codeMirrorState.value).toContain('image: demo:v2');
-    expect(codeMirrorState.value).toContain('cpu: "1"');
-
-    await unmount();
-  });
-
-  it('shows the shared too-large warning when a frontend drift diff exceeds budget', async () => {
-    yamlErrorsMocks.parseObjectYamlError.mockReturnValue({
-      code: 'ResourceVersionMismatch',
-      message: 'Object changed upstream',
-      causes: ['Remote diff detected'],
-      currentYaml: YAML,
-      currentResourceVersion: '999',
-    });
-    wailsMocks.ApplyObjectYaml.mockRejectedValue(new Error('mismatch'));
-
-    const { container, unmount } = await renderYamlTab();
-
-    const editButton = Array.from(container.querySelectorAll('button')).find((btn) =>
-      btn.textContent?.includes('Edit')
-    );
-    await act(async () => {
-      editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    await act(async () => {
-      codeMirrorState.latestProps.current.onChange(buildLargeYamlDraft(15_005));
-    });
-
-    const saveButton = Array.from(container.querySelectorAll('button')).find((btn) =>
-      btn.textContent?.includes('Save')
-    );
-    await act(async () => {
-      saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    await waitForUpdates();
-
-    expect(container.querySelector('.yaml-drift-diff')).toBeNull();
-    expect(container.querySelector('.yaml-drift-warning')?.textContent).toContain(
-      'The diff is too large to display in the current view'
-    );
-    expect(container.querySelector('.yaml-drift-warning')?.textContent).toContain(
-      'limit of 15,000'
-    );
-
-    await unmount();
-  });
-
-  it('reports reload errors when merge fails', async () => {
-    yamlErrorsMocks.parseObjectYamlError
-      .mockReturnValueOnce({
-        code: 'ResourceVersionMismatch',
-        message: 'Conflict detected',
-        currentYaml: UPDATED_YAML,
-        causes: [],
-      })
-      .mockReturnValueOnce(null);
-    wailsMocks.ApplyObjectYaml.mockRejectedValue(new Error('mismatch'));
-    wailsMocks.MergeObjectYamlWithLatest.mockRejectedValue(new Error('reload failed'));
-
-    const { container, unmount } = await renderYamlTab();
-
-    const editButton = Array.from(container.querySelectorAll('button')).find((btn) =>
-      btn.textContent?.includes('Edit')
-    );
-    await act(async () => {
-      editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    await act(async () => {
-      codeMirrorState.latestProps.current.onChange(UPDATED_YAML);
-    });
-
-    const saveButton = Array.from(container.querySelectorAll('button')).find((btn) =>
-      btn.textContent?.includes('Save')
-    );
-    await act(async () => {
-      saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    const reloadButton = Array.from(container.querySelectorAll('button')).find((btn) =>
-      btn.textContent?.includes('Reload')
-    );
-    await act(async () => {
-      reloadButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    expect(container.textContent).toContain('reload failed');
-    expect(errorHandlerMock.handle).toHaveBeenCalledWith(expect.any(Error), {
-      action: 'reloadAndMerge',
-    });
+    expect(wailsMocks.ApplyObjectYaml).toHaveBeenCalledTimes(1);
 
     await unmount();
   });
@@ -1139,7 +1070,12 @@ spec:
     await unmount();
   });
 
-  it('requires metadata.resourceVersion before saving', async () => {
+  it('allows saving without metadata.resourceVersion like kubectl edit', async () => {
+    wailsMocks.ApplyObjectYaml.mockResolvedValue({ resourceVersion: '789' });
+    wailsMocks.GetObjectYAMLByGVK.mockResolvedValue(
+      UPDATED_YAML.replace('resourceVersion: "123"\n', '')
+    );
+
     snapshotState.current = {
       status: 'ready',
       data: {
@@ -1164,7 +1100,23 @@ spec:
       saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
-    expect(container.textContent).toContain('metadata.resourceVersion is required');
+    await waitForUpdates();
+
+    expect(wailsMocks.ApplyObjectYaml.mock.calls[0]?.[0]).toBe('alpha:ctx');
+    expect(wailsMocks.ApplyObjectYaml.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({
+        apiVersion: 'v1',
+        kind: 'Pod',
+        namespace: 'default',
+        name: 'demo',
+        uid: '',
+        resourceVersion: '',
+      })
+    );
+    expect(wailsMocks.ApplyObjectYaml.mock.calls[0]?.[1]?.baseYAML).not.toContain(
+      'resourceVersion'
+    );
+    expect(wailsMocks.ApplyObjectYaml.mock.calls[0]?.[1]?.yaml).not.toContain('resourceVersion');
     await unmount();
   });
 

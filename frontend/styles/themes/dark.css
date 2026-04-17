@@ -298,9 +298,9 @@
   /* YAML tab */
   --yaml-validation-bg: rgba(239, 68, 68, 0.15);
   --yaml-validation-border: rgba(239, 68, 68, 0.35);
-  --yaml-notice-bg: rgba(245, 158, 11, 0.1);
-  --yaml-notice-border: rgba(245, 158, 11, 0.25);
-  --yaml-notice-text: var(--color-base-300);
+  --yaml-notice-bg: var(--color-bg);
+  --yaml-notice-border: var(--color-bg);
+  --yaml-notice-text: var(--color-text-secondary);
   --yaml-drift-bg: rgba(0, 0, 0, 0.25);
 
   /* Utilization indicators */
