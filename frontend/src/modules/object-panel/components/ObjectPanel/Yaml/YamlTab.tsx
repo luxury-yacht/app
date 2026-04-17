@@ -10,7 +10,14 @@ import { EditorSelection, type Extension } from '@codemirror/state';
 import * as YAML from 'yaml';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import ContextMenu, { type ContextMenuItem } from '@shared/components/ContextMenu';
-import { CloseIcon } from '@shared/components/icons/MenuIcons';
+import {
+  CaseSensitiveIcon,
+  CloseIcon,
+  CollapseIcon,
+  OpenIcon,
+} from '@shared/components/icons/MenuIcons';
+import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
+import { RegexSearchIcon } from '@shared/components/icons/LogIcons';
 import { deriveCopyText } from '@ui/shortcuts/context';
 import { useKeyboardSurface, useShortcut, useSearchShortcutTarget } from '@ui/shortcuts';
 import { errorHandler } from '@utils/errorHandler';
@@ -55,6 +62,7 @@ import {
   mergeYamlWithLatestOnServer,
   sanitizeYamlForSemanticCompare,
 } from './yamlTabUtils';
+import { YamlCancelIcon, YamlEditIcon, YamlManagedFieldsIcon, YamlSaveIcon } from './YamlTabIcons';
 
 export type { YamlTabProps } from './yamlTabTypes';
 
@@ -78,6 +86,16 @@ type VerifiedPostApplyState = {
 type RecentVerifiedSemanticEntry = {
   reference: string;
   semanticYaml: string;
+};
+
+type YamlSearchState = {
+  caseSensitiveMatches: boolean;
+  regexMatches: boolean;
+};
+
+const DEFAULT_YAML_SEARCH_STATE: YamlSearchState = {
+  caseSensitiveMatches: false,
+  regexMatches: false,
 };
 
 const isSameObjectReference = (left: ObjectIdentity, right: ObjectIdentity): boolean =>
@@ -234,6 +252,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
     resourceVersion: string | null;
   } | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [searchState, setSearchState] = useState<YamlSearchState>(DEFAULT_YAML_SEARCH_STATE);
   const [hasServerYamlError, setHasServerYamlError] = useState(false);
   const [expandedDiffs, setExpandedDiffs] = useState<Record<string, boolean>>({});
   const [contextMenu, setContextMenu] = useState<{
@@ -452,21 +471,24 @@ const YamlTab: React.FC<YamlTabProps> = ({
     return [yamlLang(), EditorView.lineWrapping, highlightExtension, ...searchExtensions];
   }, [highlightExtension, searchExtensions]);
 
-  const applySearchQuery = useCallback((view: EditorView | null, term: string) => {
-    if (!view) {
-      return;
-    }
-    const current = getSearchQuery(view.state);
-    const query = new SearchQuery({
-      search: term,
-      caseSensitive: current.caseSensitive,
-      literal: current.literal,
-      regexp: current.regexp,
-      wholeWord: current.wholeWord,
-      replace: current.replace,
-    });
-    view.dispatch({ effects: setSearchQuery.of(query) });
-  }, []);
+  const applySearchQuery = useCallback(
+    (view: EditorView | null, term: string) => {
+      if (!view) {
+        return;
+      }
+      const current = getSearchQuery(view.state);
+      const query = new SearchQuery({
+        search: term,
+        caseSensitive: searchState.caseSensitiveMatches,
+        literal: !searchState.regexMatches,
+        regexp: searchState.regexMatches,
+        wholeWord: current.wholeWord,
+        replace: current.replace,
+      });
+      view.dispatch({ effects: setSearchQuery.of(query) });
+    },
+    [searchState.caseSensitiveMatches, searchState.regexMatches]
+  );
 
   const focusSearchInput = useCallback(
     (useSelection: boolean): boolean => {
@@ -672,6 +694,10 @@ const YamlTab: React.FC<YamlTabProps> = ({
     }
   }, [activeYaml, applySearchQuery]);
 
+  useEffect(() => {
+    applySearchQuery(editorViewRef.current, searchTerm);
+  }, [applySearchQuery, searchTerm]);
+
   useSearchShortcutTarget({
     isActive,
     focus: () => focusSearchInput(true),
@@ -821,9 +847,9 @@ const YamlTab: React.FC<YamlTabProps> = ({
     [isEditing]
   );
 
-  const handleToggleManagedFields = () => {
+  const handleToggleManagedFields = useCallback(() => {
     setShowManagedFields((prev) => !prev);
-  };
+  }, []);
 
   const handleEnterEdit = useCallback(() => {
     if (!canEdit) {
@@ -1343,6 +1369,121 @@ const YamlTab: React.FC<YamlTabProps> = ({
     priority: 30,
   });
 
+  const hasYamlError = Boolean(lintError) || hasServerYamlError;
+  const disableSave = isSaving || hasYamlError;
+  const searchIconBarItems = useMemo<IconBarItem[]>(
+    () => [
+      {
+        type: 'action',
+        id: 'search-previous',
+        icon: <CollapseIcon />,
+        onClick: handleFindPrevious,
+        title: 'Previous match',
+        ariaLabel: 'Previous match',
+        disabled: !searchTerm,
+      },
+      {
+        type: 'action',
+        id: 'search-next',
+        icon: <OpenIcon />,
+        onClick: handleFindNext,
+        title: 'Next match',
+        ariaLabel: 'Next match',
+        disabled: !searchTerm,
+      },
+      {
+        type: 'toggle',
+        id: 'case-sensitive-search',
+        icon: <CaseSensitiveIcon width={16} height={16} />,
+        active: searchState.caseSensitiveMatches,
+        onClick: () =>
+          setSearchState((current) =>
+            current.regexMatches
+              ? current
+              : {
+                  ...current,
+                  caseSensitiveMatches: !current.caseSensitiveMatches,
+                }
+          ),
+        title: 'Case-sensitive search',
+        ariaLabel: 'Case-sensitive search',
+        disabled: searchState.regexMatches,
+      },
+      {
+        type: 'toggle',
+        id: 'regex-search',
+        icon: <RegexSearchIcon />,
+        active: searchState.regexMatches,
+        onClick: () =>
+          setSearchState((current) => ({
+            ...current,
+            regexMatches: !current.regexMatches,
+            caseSensitiveMatches: !current.regexMatches ? false : current.caseSensitiveMatches,
+          })),
+        title: 'Enable regular expression search',
+        ariaLabel: 'Enable regular expression search',
+      },
+      { type: 'separator' },
+      {
+        type: 'toggle',
+        id: 'managed-fields',
+        icon: <YamlManagedFieldsIcon />,
+        active: showManagedFields,
+        onClick: handleToggleManagedFields,
+        title: showManagedFields ? 'Hide managedFields' : 'Show managedFields',
+        ariaLabel: showManagedFields ? 'Hide managedFields' : 'Show managedFields',
+      },
+      ...(isEditing
+        ? [
+            {
+              type: 'action' as const,
+              id: 'cancel-edit',
+              icon: <YamlCancelIcon />,
+              onClick: handleCancelClick,
+              title: 'Cancel edit',
+              ariaLabel: 'Cancel edit',
+              disabled: isSaving,
+            },
+            {
+              type: 'action' as const,
+              id: 'save-yaml',
+              icon: <YamlSaveIcon />,
+              onClick: handleSaveClick,
+              title: isSaving ? 'Saving YAML' : 'Save YAML',
+              ariaLabel: 'Save YAML',
+              disabled: disableSave,
+            },
+          ]
+        : canEdit
+          ? [
+              {
+                type: 'action' as const,
+                id: 'edit-yaml',
+                icon: <YamlEditIcon />,
+                onClick: handleEnterEdit,
+                title: 'Edit YAML',
+                ariaLabel: 'Edit YAML',
+              },
+            ]
+          : []),
+    ],
+    [
+      canEdit,
+      disableSave,
+      handleCancelClick,
+      handleEnterEdit,
+      handleFindNext,
+      handleFindPrevious,
+      handleSaveClick,
+      handleToggleManagedFields,
+      isEditing,
+      isSaving,
+      searchTerm,
+      searchState,
+      showManagedFields,
+    ]
+  );
+
   if (yamlLoading) {
     return (
       <div className="object-panel-tab-content">
@@ -1374,15 +1515,12 @@ const YamlTab: React.FC<YamlTabProps> = ({
   const showReloadMergeConflict = Boolean(backendDriftCurrentYaml) || driftForced;
   const driftDiffKey = backendDriftCurrentYaml ? 'drift-backend' : 'drift-live';
   const postApplyDiffKey = postApplyNotice ? `post-apply-${postApplyNotice.kind}` : 'post-apply';
-  const hasYamlError = Boolean(lintError) || hasServerYamlError;
-  const disableSave = isSaving || hasYamlError;
-  const saveDisabledReason = hasYamlError ? (lintError ?? actionError ?? undefined) : undefined;
   const isLargeManifest = activeYaml.length > LARGE_MANIFEST_THRESHOLD;
   return (
     <div className="object-panel-tab-content">
       <div className="yaml-display">
         <div className="yaml-header">
-          <div className="yaml-controls">
+          <div className="yaml-search-controls">
             <div className="find-controls">
               <input
                 ref={searchInputRef}
@@ -1397,64 +1535,21 @@ const YamlTab: React.FC<YamlTabProps> = ({
                 onChange={handleSearchChange}
                 onKeyDown={handleSearchKeyDown}
               />
-              <div className="find-nav">
-                <button
-                  className="button generic"
-                  onClick={handleFindPrevious}
-                  disabled={!searchTerm}
-                  aria-label="Previous match"
-                  title="Previous match"
-                >
-                  {'<'}
-                </button>
-                <button
-                  className="button generic"
-                  onClick={handleFindNext}
-                  disabled={!searchTerm}
-                  aria-label="Next match"
-                  title="Next match"
-                >
-                  {'>'}
-                </button>
-              </div>
             </div>
-            {!isEditing ? (
-              <>
-                <button className="button generic" onClick={handleToggleManagedFields}>
-                  {showManagedFields ? 'Hide' : 'Show'} managedFields
-                </button>
-                {canEdit && (
-                  <button className="button generic" onClick={handleEnterEdit}>
-                    Edit
-                  </button>
-                )}
-              </>
-            ) : (
-              <>
-                <button className="button cancel" onClick={handleCancelClick} disabled={isSaving}>
-                  Cancel
-                </button>
-                {hasRemoteDrift && (
-                  <button
-                    className="button secondary"
-                    type="button"
-                    onClick={handleReloadAndMerge}
-                    disabled={isSaving}
-                  >
-                    Reload &amp; merge
-                  </button>
-                )}
-                <button
-                  className="button save"
-                  onClick={handleSaveClick}
-                  disabled={disableSave}
-                  title={saveDisabledReason}
-                >
-                  {isSaving ? 'Saving…' : 'Save'}
-                </button>
-              </>
-            )}
+            <IconBar items={searchIconBarItems} />
           </div>
+          {isEditing && hasRemoteDrift && (
+            <div className="yaml-controls">
+              <button
+                className="button secondary"
+                type="button"
+                onClick={handleReloadAndMerge}
+                disabled={isSaving}
+              >
+                Reload &amp; merge
+              </button>
+            </div>
+          )}
         </div>
         {isEditing && (lintError || actionError || showReloadMergeConflict) && (
           <div className="yaml-validation-message">

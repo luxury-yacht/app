@@ -15,7 +15,7 @@
   justify-content: space-between;
   gap: var(--spacing-md);
   flex-wrap: wrap;
-  padding: 0.3rem;
+  padding: 0.75rem;
   background-color: var(--color-bg-secondary);
   /* border-radius: var(--border-radius-sm); */
   /* box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08); */
@@ -26,6 +26,44 @@
   align-items: center;
   gap: var(--spacing-sm);
   margin-left: auto;
+}
+
+.yaml-search-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+}
+
+.yaml-search-controls .find-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: 0;
+}
+
+.yaml-search-controls .find-controls .find-input {
+  width: 175px;
+  min-width: 175px;
+  height: auto;
+  padding: 4px 8px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  color: var(--color-text);
+  font-size: var(--font-size-normal);
+  outline: none;
+}
+
+.yaml-search-controls .find-controls .find-input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: var(--dropdown-trigger-focus-shadow);
+}
+
+.yaml-search-controls .find-controls .find-input::placeholder {
+  color: var(--color-text-secondary);
+  opacity: 0.6;
 }
 
 .yaml-content {

@@ -361,6 +361,9 @@ const waitForUpdates = async () => {
   });
 };
 
+const getIconButton = (container: ParentNode, label: string) =>
+  container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
+
 const renderYamlTab = async (
   props: Partial<{
     scope: string | null;
@@ -438,9 +441,7 @@ describe('YamlTab', () => {
 
     expect(codeMirrorState.value).not.toContain('managedFields');
 
-    const toggleButton = Array.from(container.querySelectorAll('button')).find((btn) =>
-      btn.textContent?.includes('managedFields')
-    );
+    const toggleButton = getIconButton(container, 'Show managedFields');
     expect(toggleButton).toBeTruthy();
 
     await act(async () => {
@@ -540,9 +541,7 @@ describe('YamlTab', () => {
   it('pastes native menu text into the editor while editing', async () => {
     const { container, unmount } = await renderYamlTab();
 
-    const editButton = Array.from(container.querySelectorAll('button')).find((btn) =>
-      btn.textContent?.includes('Edit')
-    );
+    const editButton = getIconButton(container, 'Edit YAML');
     await act(async () => {
       editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
@@ -584,9 +583,7 @@ describe('YamlTab', () => {
 
     const { container, unmount } = await renderYamlTab();
 
-    const editButton = Array.from(container.querySelectorAll('button')).find((btn) =>
-      btn.textContent?.includes('Edit')
-    );
+    const editButton = getIconButton(container, 'Edit YAML');
     expect(editButton).toBeTruthy();
 
     await act(async () => {
@@ -597,9 +594,7 @@ describe('YamlTab', () => {
       codeMirrorState.latestProps.current.onChange(UPDATED_YAML);
     });
 
-    const saveButton = Array.from(container.querySelectorAll('button')).find((btn) =>
-      btn.textContent?.includes('Save')
-    );
+    const saveButton = getIconButton(container, 'Save YAML');
     expect(saveButton).toBeTruthy();
 
     await act(async () => {
@@ -630,9 +625,7 @@ describe('YamlTab', () => {
       expect.objectContaining({ isManual: true })
     );
 
-    const editButtonAfterSave = Array.from(container.querySelectorAll('button')).find((btn) =>
-      btn.textContent?.includes('Edit')
-    );
+    const editButtonAfterSave = getIconButton(container, 'Edit YAML');
     expect(editButtonAfterSave).toBeTruthy();
 
     await unmount();
@@ -644,9 +637,7 @@ describe('YamlTab', () => {
 
     const { container, unmount } = await renderYamlTab();
 
-    const editButton = Array.from(container.querySelectorAll('button')).find((btn) =>
-      btn.textContent?.includes('Edit')
-    );
+    const editButton = getIconButton(container, 'Edit YAML');
     await act(async () => {
       editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
@@ -655,9 +646,8 @@ describe('YamlTab', () => {
       codeMirrorState.latestProps.current.onChange(UPDATED_YAML);
     });
 
-    const saveButton = Array.from(container.querySelectorAll('button')).find((btn) =>
-      btn.textContent?.includes('Save')
-    );
+    const saveButton = getIconButton(container, 'Save YAML');
+    expect(saveButton).toBeTruthy();
     await act(async () => {
       saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
@@ -693,9 +683,7 @@ describe('YamlTab', () => {
 
     const { container, unmount } = await renderYamlTab();
 
-    const editButton = Array.from(container.querySelectorAll('button')).find((btn) =>
-      btn.textContent?.includes('Edit')
-    );
+    const editButton = getIconButton(container, 'Edit YAML');
     await act(async () => {
       editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
@@ -704,9 +692,7 @@ describe('YamlTab', () => {
       codeMirrorState.latestProps.current.onChange(UPDATED_YAML);
     });
 
-    const saveButton = Array.from(container.querySelectorAll('button')).find((btn) =>
-      btn.textContent?.includes('Save')
-    );
+    const saveButton = getIconButton(container, 'Save YAML');
     await act(async () => {
       saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
@@ -731,9 +717,7 @@ describe('YamlTab', () => {
 
     const { container, unmount } = await renderYamlTab();
 
-    const editButton = Array.from(container.querySelectorAll('button')).find((btn) =>
-      btn.textContent?.includes('Edit')
-    );
+    const editButton = getIconButton(container, 'Edit YAML');
     await act(async () => {
       editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
@@ -742,9 +726,7 @@ describe('YamlTab', () => {
       codeMirrorState.latestProps.current.onChange(UPDATED_YAML);
     });
 
-    const saveButton = Array.from(container.querySelectorAll('button')).find((btn) =>
-      btn.textContent?.includes('Save')
-    );
+    const saveButton = getIconButton(container, 'Save YAML');
     await act(async () => {
       saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
@@ -768,9 +750,7 @@ describe('YamlTab', () => {
 
     const { container, rerender, unmount } = await renderYamlTab();
 
-    const editButton = Array.from(container.querySelectorAll('button')).find((btn) =>
-      btn.textContent?.includes('Edit')
-    );
+    const editButton = getIconButton(container, 'Edit YAML');
     await act(async () => {
       editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
@@ -779,9 +759,7 @@ describe('YamlTab', () => {
       codeMirrorState.latestProps.current.onChange(UPDATED_YAML);
     });
 
-    const saveButton = Array.from(container.querySelectorAll('button')).find((btn) =>
-      btn.textContent?.includes('Save')
-    );
+    const saveButton = getIconButton(container, 'Save YAML');
     await act(async () => {
       saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
@@ -807,6 +785,7 @@ describe('YamlTab', () => {
 
     await rerender();
     await waitForUpdates();
+    await waitForUpdates();
 
     expect(container.querySelector('.yaml-post-apply-notice-stale')?.textContent).toContain(
       'changed again after save'
@@ -828,9 +807,7 @@ describe('YamlTab', () => {
 
     const { container, rerender, unmount } = await renderYamlTab();
 
-    const editButton = Array.from(container.querySelectorAll('button')).find((btn) =>
-      btn.textContent?.includes('Edit')
-    );
+    const editButton = getIconButton(container, 'Edit YAML');
     expect(editButton).toBeTruthy();
 
     await act(async () => {
@@ -841,18 +818,14 @@ describe('YamlTab', () => {
       codeMirrorState.latestProps.current.onChange(UPDATED_YAML);
     });
 
-    let saveButton = Array.from(container.querySelectorAll('button')).find((btn) =>
-      btn.textContent?.includes('Save')
-    );
+    let saveButton = getIconButton(container, 'Save YAML');
     await act(async () => {
       saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
     await waitForUpdates();
 
-    const editButtonAgain = Array.from(container.querySelectorAll('button')).find((btn) =>
-      btn.textContent?.includes('Edit')
-    );
+    const editButtonAgain = getIconButton(container, 'Edit YAML');
     await act(async () => {
       editButtonAgain?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
@@ -861,9 +834,7 @@ describe('YamlTab', () => {
       codeMirrorState.latestProps.current.onChange(SECOND_UPDATED_YAML);
     });
 
-    saveButton = Array.from(container.querySelectorAll('button')).find((btn) =>
-      btn.textContent?.includes('Save')
-    );
+    saveButton = getIconButton(container, 'Save YAML');
     await act(async () => {
       saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
@@ -903,9 +874,7 @@ describe('YamlTab', () => {
 
     const { container, rerender, unmount } = await renderYamlTab();
 
-    const editButton = Array.from(container.querySelectorAll('button')).find((btn) =>
-      btn.textContent?.includes('Edit')
-    );
+    const editButton = getIconButton(container, 'Edit YAML');
     await act(async () => {
       editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
@@ -914,9 +883,7 @@ describe('YamlTab', () => {
       codeMirrorState.latestProps.current.onChange(UPDATED_YAML);
     });
 
-    const saveButton = Array.from(container.querySelectorAll('button')).find((btn) =>
-      btn.textContent?.includes('Save')
-    );
+    const saveButton = getIconButton(container, 'Save YAML');
     await act(async () => {
       saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
@@ -963,9 +930,7 @@ describe('YamlTab', () => {
     refreshMocks.setScopedDomainEnabled.mockClear();
     refreshMocks.fetchScopedDomain.mockClear();
 
-    const editButton = Array.from(container.querySelectorAll('button')).find((btn) =>
-      btn.textContent?.includes('Edit')
-    );
+    const editButton = getIconButton(container, 'Edit YAML');
     await act(async () => {
       editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
@@ -980,9 +945,7 @@ describe('YamlTab', () => {
     refreshMocks.setScopedDomainEnabled.mockClear();
     refreshMocks.fetchScopedDomain.mockClear();
 
-    const cancelButton = Array.from(container.querySelectorAll('button')).find((btn) =>
-      btn.textContent?.includes('Cancel')
-    );
+    const cancelButton = getIconButton(container, 'Cancel edit');
     await act(async () => {
       cancelButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
@@ -1007,9 +970,7 @@ describe('YamlTab', () => {
 
     const { container, rerender, unmount } = await renderYamlTab();
 
-    const editButton = Array.from(container.querySelectorAll('button')).find((btn) =>
-      btn.textContent?.includes('Edit')
-    );
+    const editButton = getIconButton(container, 'Edit YAML');
     await act(async () => {
       editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
@@ -1033,9 +994,7 @@ describe('YamlTab', () => {
     );
     expect(reloadButton).toBeTruthy();
 
-    const saveButton = Array.from(container.querySelectorAll('button')).find((btn) =>
-      btn.textContent?.includes('Save')
-    ) as HTMLButtonElement | undefined;
+    const saveButton = getIconButton(container, 'Save YAML') as HTMLButtonElement | undefined;
     expect(saveButton).toBeTruthy();
     expect(saveButton?.disabled).toBe(false);
 
@@ -1077,7 +1036,8 @@ describe('YamlTab', () => {
     });
     expect(input.value).toBe('demo');
 
-    const navButtons = container.querySelectorAll('.find-nav button');
+    const previousMatchButton = getIconButton(container, 'Previous match');
+    const nextMatchButton = getIconButton(container, 'Next match');
 
     await act(async () => {
       Object.defineProperty(input, 'value', { value: '', configurable: true, writable: true });
@@ -1085,7 +1045,7 @@ describe('YamlTab', () => {
     });
     const initialNextCalls = codemirrorSearchMocks.findNext.mock.calls.length;
     await act(async () => {
-      navButtons[1].dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      nextMatchButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     expect(codemirrorSearchMocks.findNext.mock.calls.length).toBe(initialNextCalls);
 
@@ -1096,12 +1056,12 @@ describe('YamlTab', () => {
     expect(codemirrorSearchMocks.setSearchQuery.of).toHaveBeenCalled();
 
     await act(async () => {
-      navButtons[1].dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      nextMatchButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     expect(codemirrorSearchMocks.findNext).toHaveBeenCalled();
 
     await act(async () => {
-      navButtons[0].dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      previousMatchButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     expect(codemirrorSearchMocks.findPrevious).toHaveBeenCalled();
 
@@ -1150,6 +1110,64 @@ describe('YamlTab', () => {
     });
     expect(codemirrorSearchMocks.findPrevious).toHaveBeenCalledTimes(3);
 
+    const textButtons = Array.from(container.querySelectorAll('button')).map((button) =>
+      button.textContent?.trim()
+    );
+    expect(textButtons).not.toContain('Edit');
+    expect(textButtons).not.toContain('Cancel');
+    expect(textButtons).not.toContain('Show managedFields');
+
+    const managedFieldsButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Show managedFields"]'
+    );
+    const editButton = getIconButton(container, 'Edit YAML');
+    const saveButton = getIconButton(container, 'Save YAML');
+    const caseSensitiveButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Case-sensitive search"]'
+    );
+    const regexButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Enable regular expression search"]'
+    );
+    expect(previousMatchButton).toBeTruthy();
+    expect(nextMatchButton).toBeTruthy();
+    expect(managedFieldsButton).toBeTruthy();
+    expect(editButton).toBeTruthy();
+    expect(saveButton).toBeNull();
+    expect(caseSensitiveButton).toBeTruthy();
+    expect(regexButton).toBeTruthy();
+
+    await act(async () => {
+      previousMatchButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(codemirrorSearchMocks.findPrevious).toHaveBeenCalledTimes(4);
+
+    await act(async () => {
+      nextMatchButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(codemirrorSearchMocks.findNext).toHaveBeenCalledTimes(4);
+
+    await act(async () => {
+      caseSensitiveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(codemirrorSearchMocks.setSearchQuery.of).toHaveBeenCalledWith(
+      expect.objectContaining({
+        caseSensitive: true,
+        regexp: false,
+      })
+    );
+
+    await act(async () => {
+      regexButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(codemirrorSearchMocks.setSearchQuery.of).toHaveBeenCalledWith(
+      expect.objectContaining({
+        caseSensitive: false,
+        regexp: true,
+      })
+    );
+    expect(caseSensitiveButton?.getAttribute('aria-pressed')).toBe('false');
+    expect(caseSensitiveButton?.hasAttribute('disabled')).toBe(true);
+
     const blurSpy = vi.spyOn(input, 'blur');
     const escapeEvent = new KeyboardEvent('keydown', {
       key: 'Escape',
@@ -1184,9 +1202,7 @@ describe('YamlTab', () => {
   it('stops save when client-side validation fails', async () => {
     const { container, unmount } = await renderYamlTab();
 
-    const editButton = Array.from(container.querySelectorAll('button')).find((btn) =>
-      btn.textContent?.includes('Edit')
-    );
+    const editButton = getIconButton(container, 'Edit YAML');
     await act(async () => {
       editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
@@ -1195,9 +1211,7 @@ describe('YamlTab', () => {
       codeMirrorState.latestProps.current.onChange('');
     });
 
-    const saveButton = Array.from(container.querySelectorAll('button')).find((btn) =>
-      btn.textContent?.includes('Save')
-    );
+    const saveButton = getIconButton(container, 'Save YAML');
     await act(async () => {
       saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
@@ -1222,16 +1236,12 @@ describe('YamlTab', () => {
 
     const { container, unmount } = await renderYamlTab();
 
-    const editButton = Array.from(container.querySelectorAll('button')).find((btn) =>
-      btn.textContent?.includes('Edit')
-    );
+    const editButton = getIconButton(container, 'Edit YAML');
     await act(async () => {
       editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
-    const saveButton = Array.from(container.querySelectorAll('button')).find((btn) =>
-      btn.textContent?.includes('Save')
-    );
+    const saveButton = getIconButton(container, 'Save YAML');
     await act(async () => {
       saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
@@ -1266,9 +1276,7 @@ describe('YamlTab', () => {
 
     const { container, unmount } = await renderYamlTab();
 
-    const editButton = Array.from(container.querySelectorAll('button')).find((btn) =>
-      btn.textContent?.includes('Edit')
-    );
+    const editButton = getIconButton(container, 'Edit YAML');
     await act(async () => {
       editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
@@ -1277,9 +1285,7 @@ describe('YamlTab', () => {
       codeMirrorState.latestProps.current.onChange(UPDATED_YAML);
     });
 
-    const saveButton = Array.from(container.querySelectorAll('button')).find((btn) =>
-      btn.textContent?.includes('Save')
-    );
+    const saveButton = getIconButton(container, 'Save YAML');
     await act(async () => {
       saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
@@ -1300,9 +1306,7 @@ describe('YamlTab', () => {
 
     const { container, unmount } = await renderYamlTab();
 
-    const editButton = Array.from(container.querySelectorAll('button')).find((btn) =>
-      btn.textContent?.includes('Edit')
-    );
+    const editButton = getIconButton(container, 'Edit YAML');
     await act(async () => {
       editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
@@ -1311,9 +1315,7 @@ describe('YamlTab', () => {
       codeMirrorState.latestProps.current.onChange(UPDATED_YAML);
     });
 
-    const saveButton = Array.from(container.querySelectorAll('button')).find((btn) =>
-      btn.textContent?.includes('Save')
-    );
+    const saveButton = getIconButton(container, 'Save YAML');
     await act(async () => {
       saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
@@ -1331,9 +1333,7 @@ describe('YamlTab', () => {
 
     const { container, unmount } = await renderYamlTab();
 
-    const editButton = Array.from(container.querySelectorAll('button')).find((btn) =>
-      btn.textContent?.includes('Edit')
-    );
+    const editButton = getIconButton(container, 'Edit YAML');
     await act(async () => {
       editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
@@ -1342,12 +1342,12 @@ describe('YamlTab', () => {
       codeMirrorState.latestProps.current.onChange(UPDATED_YAML);
     });
 
-    const saveButton = Array.from(container.querySelectorAll('button')).find((btn) =>
-      btn.textContent?.includes('Save')
-    );
+    const saveButton = getIconButton(container, 'Save YAML');
     await act(async () => {
       saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
+
+    await waitForUpdates();
 
     expect(container.textContent).toContain('network down');
     expect(errorHandlerMock.handle).toHaveBeenCalledWith(expect.any(Error), {
@@ -1382,12 +1382,11 @@ describe('YamlTab', () => {
     });
     expect(saveResult).toBe(false);
 
-    const editButton = Array.from(container.querySelectorAll('button')).find((btn) =>
-      btn.textContent?.includes('Edit')
-    );
+    const editButton = getIconButton(container, 'Edit YAML');
     await act(async () => {
       editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
+    await waitForUpdates();
 
     const updatedManagedShortcut = shortcutMocks.useShortcut.mock.calls
       .filter(([config]) => (config as { key: string }).key === 'm')
