@@ -173,12 +173,12 @@ describe('BrowseView', () => {
 
       expect(refreshMocks.orchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
         'catalog',
-        'cluster-1|limit=25000&namespace=cluster',
+        'cluster-1|limit=1000&namespace=cluster',
         true
       );
       expect(refreshMocks.orchestrator.fetchScopedDomain).toHaveBeenCalledWith(
         'catalog',
-        'cluster-1|limit=25000&namespace=cluster',
+        'cluster-1|limit=1000&namespace=cluster',
         expect.objectContaining({ isManual: true })
       );
     });
@@ -237,7 +237,7 @@ describe('BrowseView', () => {
       // The scope should include the pinned namespace
       expect(refreshMocks.orchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
         'catalog',
-        'cluster-1|limit=25000&namespace=kube-system',
+        'cluster-1|limit=1000&namespace=kube-system',
         true
       );
     });
@@ -266,15 +266,9 @@ describe('BrowseView', () => {
     });
   });
 
-  describe('Pagination', () => {
-    it('appends items when requesting more pages', async () => {
-      await act(async () => {
-        root.render(<BrowseView namespace={undefined} />);
-        await Promise.resolve();
-      });
-
-      // Use cluster-scoped items since cluster scope filters to only cluster-scoped objects
-      refreshMocks.catalogDomain.scope = 'cluster-1|limit=25000&namespace=cluster';
+  describe('Row cap UI', () => {
+    it('does not expose a load-more action when a catalog response is truncated', async () => {
+      refreshMocks.catalogDomain.scope = 'cluster-1|limit=1000&namespace=cluster';
       refreshMocks.catalogDomain.data = {
         items: [
           {
@@ -302,53 +296,8 @@ describe('BrowseView', () => {
       });
 
       expect(gridTablePropsRef.current.data).toHaveLength(1);
-
-      await act(async () => {
-        // Load More is now an IconBarItem in postActions, not a customActions JSX button.
-        const postActions = gridTablePropsRef.current.filters.options.postActions;
-        const loadMore = postActions.find((a: { id: string }) => a.id === 'load-more');
-        loadMore.onClick();
-        await Promise.resolve();
-      });
-
-      expect(refreshMocks.orchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
-        'catalog',
-        'cluster-1|limit=25000&namespace=cluster&continue=200',
-        true
-      );
-      expect(refreshMocks.orchestrator.fetchScopedDomain).toHaveBeenCalledWith(
-        'catalog',
-        'cluster-1|limit=25000&namespace=cluster&continue=200',
-        expect.objectContaining({ isManual: true })
-      );
-
-      refreshMocks.catalogDomain.scope = 'cluster-1|limit=25000&namespace=cluster&continue=200';
-      refreshMocks.catalogDomain.data = {
-        items: [
-          {
-            uid: '2',
-            kind: 'PersistentVolume',
-            name: 'pv-a',
-            namespace: null,
-            scope: 'Cluster',
-            resource: 'persistentvolumes',
-            group: '',
-            version: 'v1',
-            resourceVersion: '1',
-            creationTimestamp: new Date().toISOString(),
-            clusterId: 'cluster-1',
-          },
-        ],
-        continue: '',
-        batchSize: 200,
-      };
-
-      await act(async () => {
-        root.render(<BrowseView namespace={undefined} />);
-        await Promise.resolve();
-      });
-
-      expect(gridTablePropsRef.current.data).toHaveLength(2);
+      expect(gridTablePropsRef.current.filters.options.postActions ?? []).toEqual([]);
+      expect(refreshMocks.orchestrator.fetchScopedDomain).toHaveBeenCalledTimes(1);
     });
   });
 });

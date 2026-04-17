@@ -263,6 +263,8 @@ export function SetLogTargetPerScopeLimit(arg1:number):Promise<void>;
 
 export function SetLogsPanelVisible(arg1:boolean):Promise<void>;
 
+export function SetMaxTableRows(arg1:number):Promise<void>;
+
 export function SetObjectPanelLayout(arg1:number,arg2:number,arg3:number,arg4:number,arg5:number,arg6:number):Promise<void>;
 
 export function SetPaletteTint(arg1:string,arg2:number,arg3:number,arg4:number):Promise<void>;

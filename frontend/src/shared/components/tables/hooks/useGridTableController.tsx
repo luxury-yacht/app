@@ -11,6 +11,8 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ReactElement, ReactNode, RefObject } from 'react';
+import { eventBus } from '@/core/events';
+import { getMaxTableRows } from '@/core/settings/appPreferences';
 import { useGridTableHoverSync } from '@shared/components/tables/hooks/useGridTableHoverSync';
 import type { HoverState } from '@shared/components/tables/hooks/useGridTableHoverSync';
 import { useGridTableColumnVirtualization } from '@shared/components/tables/hooks/useGridTableColumnVirtualization';
@@ -200,10 +202,14 @@ export function useGridTableController<T>({
   disableCellNativeTitle = false,
   isKindColumnKey = defaultIsKindColumnKey,
 }: GridTableProps<T>): GridTableControllerResult<T> {
-  const sourceData = useMemo<T[]>(
-    () => (Array.isArray(inputData) ? inputData : ([] as T[])),
-    [inputData]
-  );
+  const [maxTableRows, setMaxTableRows] = useState<number>(() => getMaxTableRows());
+  const totalDataCount = Array.isArray(inputData) ? inputData.length : 0;
+  const sourceData = useMemo<T[]>(() => {
+    if (!Array.isArray(inputData)) {
+      return [] as T[];
+    }
+    return inputData.slice(0, maxTableRows);
+  }, [inputData, maxTableRows]);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const tableRef = useRef<HTMLDivElement>(null);
   const tableRefMutable = tableRef as RefObject<HTMLElement | null>;
@@ -218,6 +224,12 @@ export function useGridTableController<T>({
     y: number;
   } | null>(null);
   const [headerContextMenuColumnKey, setHeaderContextMenuColumnKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    return eventBus.on('settings:max-table-rows', (value) => {
+      setMaxTableRows(value);
+    });
+  }, []);
 
   const isShortcutOptOutTarget = useCallback((target: EventTarget | null) => {
     if (!(target instanceof HTMLElement)) {
@@ -281,6 +293,7 @@ export function useGridTableController<T>({
     handleFilterReset,
   } = useGridTableFiltersWiring<T>({
     data: sourceData,
+    totalDataCount,
     filters,
     columnsDropdown: columnsDropdownConfig ?? undefined,
   });

@@ -11,7 +11,7 @@
  *
  * Instead, this view:
  * - Drives the backend catalog snapshot via the refresh orchestrator scope, and uses
- *   explicit manual refreshes for query changes and pagination.
+ *   explicit manual refreshes for query changes.
  * - Keeps pagination state locally and only appends on explicit "load more" requests.
  *
  * This keeps Browse stable without modifying the shared GridTable component.
@@ -46,7 +46,6 @@ import {
   type BrowseTableRow,
 } from '@modules/browse/hooks/useBrowseColumns';
 import type { BrowseViewProps, BrowseScope } from './BrowseView.types';
-import { LoadMoreIcon } from '@shared/components/icons/MenuIcons';
 import { useFavToggle } from '@ui/favorites/FavToggle';
 
 const VIRTUALIZATION_THRESHOLD = 80;
@@ -354,16 +353,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
       };
 
   // Get catalog data
-  const {
-    items,
-    loading,
-    hasLoadedOnce,
-    continueToken,
-    isRequestingMore,
-    handleLoadMore,
-    filterOptions,
-    totalCount,
-  } = useBrowseCatalog({
+  const { items, loading, hasLoadedOnce, filterOptions, totalCount } = useBrowseCatalog({
     clusterId: selectedClusterId,
     pinnedNamespaces,
     clusterScopedOnly,
@@ -415,20 +405,6 @@ const BrowseView: React.FC<BrowseViewProps> = ({
         includeClusterScopedSyntheticNamespace: false,
         totalCount,
         preActions: [favToggle],
-        postActions: [
-          {
-            type: 'action' as const,
-            id: 'load-more',
-            icon: <LoadMoreIcon />,
-            onClick: handleLoadMore,
-            title: !continueToken
-              ? 'All items loaded'
-              : isRequestingMore
-                ? 'Loading…'
-                : 'Load more',
-            disabled: !continueToken || isRequestingMore,
-          },
-        ],
       },
     }),
     [
@@ -439,23 +415,9 @@ const BrowseView: React.FC<BrowseViewProps> = ({
       filterOptions.namespaces,
       showNamespaceColumn,
       favToggle,
-      handleLoadMore,
-      continueToken,
-      isRequestingMore,
       totalCount,
     ]
   );
-
-  // Loading overlay for pagination
-  const loadingOverlay = useMemo(() => {
-    if (!isRequestingMore) {
-      return undefined;
-    }
-    return {
-      show: true,
-      message: 'Loading more…',
-    };
-  }, [isRequestingMore]);
 
   // Resolve class names and messages
   const resolvedTableClassName =
@@ -497,7 +459,6 @@ const BrowseView: React.FC<BrowseViewProps> = ({
           onColumnWidthsChange={persistence.setColumnWidths}
           columnVisibility={persistence.columnVisibility}
           onColumnVisibilityChange={persistence.setColumnVisibility}
-          loadingOverlay={loadingOverlay}
         />
       </ResourceLoadingBoundary>
       <ConfirmationModal

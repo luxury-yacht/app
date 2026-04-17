@@ -13,6 +13,7 @@ import {
   getLogApiTimestampFormat,
   getLogApiTimestampUseLocalTimeZone,
   getLogBufferMaxSize,
+  getMaxTableRows,
   getLogTargetGlobalLimit,
   getLogTargetPerScopeLimit,
   getMetricsRefreshIntervalMs,
@@ -23,6 +24,9 @@ import {
   LOG_BUFFER_DEFAULT_SIZE,
   LOG_BUFFER_MAX_SIZE,
   LOG_BUFFER_MIN_SIZE,
+  MAX_TABLE_ROWS_DEFAULT,
+  MAX_TABLE_ROWS_MAX,
+  MAX_TABLE_ROWS_MIN,
   LOG_TARGET_GLOBAL_DEFAULT,
   LOG_TARGET_GLOBAL_MAX,
   LOG_TARGET_PER_SCOPE_DEFAULT,
@@ -35,6 +39,7 @@ import {
   setLogApiTimestampFormat,
   setLogApiTimestampUseLocalTimeZone,
   setLogBufferMaxSize,
+  setMaxTableRows,
   setLogTargetGlobalLimit,
   setLogTargetPerScopeLimit,
   setPaletteTint,
@@ -48,6 +53,7 @@ const appMocks = vi.hoisted(() => ({
   SetUseShortResourceNames: vi.fn(),
   SetLogAPITimestampFormat: vi.fn(),
   SetLogAPITimestampUseLocalTimeZone: vi.fn(),
+  SetMaxTableRows: vi.fn(),
   SetLogBufferMaxSize: vi.fn(),
   SetLogTargetPerScopeLimit: vi.fn(),
   SetLogTargetGlobalLimit: vi.fn(),
@@ -60,6 +66,7 @@ vi.mock('@wailsjs/go/backend/App', () => ({
   SetLogAPITimestampFormat: (...args: unknown[]) => appMocks.SetLogAPITimestampFormat(...args),
   SetLogAPITimestampUseLocalTimeZone: (...args: unknown[]) =>
     appMocks.SetLogAPITimestampUseLocalTimeZone(...args),
+  SetMaxTableRows: (...args: unknown[]) => appMocks.SetMaxTableRows(...args),
   SetLogBufferMaxSize: (...args: unknown[]) => appMocks.SetLogBufferMaxSize(...args),
   SetLogTargetPerScopeLimit: (...args: unknown[]) => appMocks.SetLogTargetPerScopeLimit(...args),
   SetLogTargetGlobalLimit: (...args: unknown[]) => appMocks.SetLogTargetGlobalLimit(...args),
@@ -73,11 +80,13 @@ describe('appPreferences', () => {
     appMocks.SetUseShortResourceNames.mockReset();
     appMocks.SetLogAPITimestampFormat.mockReset();
     appMocks.SetLogAPITimestampUseLocalTimeZone.mockReset();
+    appMocks.SetMaxTableRows.mockReset();
     appMocks.SetLogBufferMaxSize.mockReset();
     appMocks.SetLogTargetPerScopeLimit.mockReset();
     appMocks.SetLogTargetGlobalLimit.mockReset();
     appMocks.SetLogAPITimestampFormat.mockResolvedValue(undefined);
     appMocks.SetLogAPITimestampUseLocalTimeZone.mockResolvedValue(undefined);
+    appMocks.SetMaxTableRows.mockResolvedValue(undefined);
     appMocks.SetLogBufferMaxSize.mockResolvedValue(undefined);
     appMocks.SetLogTargetPerScopeLimit.mockResolvedValue(undefined);
     appMocks.SetLogTargetGlobalLimit.mockResolvedValue(undefined);
@@ -89,6 +98,7 @@ describe('appPreferences', () => {
           SetGridTablePersistenceMode: vi.fn().mockResolvedValue(undefined),
           SetLogAPITimestampFormat: vi.fn().mockResolvedValue(undefined),
           SetLogAPITimestampUseLocalTimeZone: vi.fn().mockResolvedValue(undefined),
+          SetMaxTableRows: vi.fn().mockResolvedValue(undefined),
           SetLogBufferMaxSize: vi.fn().mockResolvedValue(undefined),
           SetLogTargetPerScopeLimit: vi.fn().mockResolvedValue(undefined),
           SetLogTargetGlobalLimit: vi.fn().mockResolvedValue(undefined),
@@ -110,6 +120,7 @@ describe('appPreferences', () => {
       autoRefreshEnabled: false,
       refreshBackgroundClustersEnabled: false,
       metricsRefreshIntervalMs: 7000,
+      maxTableRows: 2500,
       logApiTimestampFormat: 'HH:mm:ss.SSS',
       logApiTimestampUseLocalTimeZone: true,
       logTargetPerScopeLimit: 144,
@@ -132,6 +143,7 @@ describe('appPreferences', () => {
     expect(getAutoRefreshEnabled()).toBe(false);
     expect(getBackgroundRefreshEnabled()).toBe(false);
     expect(getMetricsRefreshIntervalMs()).toBe(7000);
+    expect(getMaxTableRows()).toBe(2500);
     expect(getLogApiTimestampFormat()).toBe('HH:mm:ss.SSS');
     expect(getLogApiTimestampUseLocalTimeZone()).toBe(true);
     expect(getLogTargetPerScopeLimit()).toBe(144);
@@ -183,6 +195,7 @@ describe('appPreferences', () => {
     await setUseShortResourceNames(true);
     setLogApiTimestampFormat('HH:mm:ss.SSS');
     setLogApiTimestampUseLocalTimeZone(true);
+    setMaxTableRows(2500);
     setAutoRefreshEnabled(false);
     setBackgroundRefreshEnabled(false);
     setGridTablePersistenceMode('namespaced');
@@ -191,6 +204,7 @@ describe('appPreferences', () => {
     expect(appMocks.SetUseShortResourceNames).toHaveBeenCalledWith(true);
     expect(appMocks.SetLogAPITimestampFormat).toHaveBeenCalledWith('HH:mm:ss.SSS');
     expect(appMocks.SetLogAPITimestampUseLocalTimeZone).toHaveBeenCalledWith(true);
+    expect(appMocks.SetMaxTableRows).toHaveBeenCalledWith(2500);
     expect((window as any).go.backend.App.SetAutoRefreshEnabled).toHaveBeenCalledWith(false);
     expect((window as any).go.backend.App.SetBackgroundRefreshEnabled).toHaveBeenCalledWith(false);
     expect((window as any).go.backend.App.SetGridTablePersistenceMode).toHaveBeenCalledWith(
@@ -201,6 +215,7 @@ describe('appPreferences', () => {
     expect(getUseShortResourceNames()).toBe(true);
     expect(getLogApiTimestampFormat()).toBe('HH:mm:ss.SSS');
     expect(getLogApiTimestampUseLocalTimeZone()).toBe(true);
+    expect(getMaxTableRows()).toBe(2500);
     expect(getAutoRefreshEnabled()).toBe(false);
     expect(getBackgroundRefreshEnabled()).toBe(false);
     expect(getMetricsRefreshIntervalMs()).toBe(6000);
@@ -299,6 +314,45 @@ describe('appPreferences', () => {
     });
     await hydrateAppPreferences({ force: true });
     expect(getLogBufferMaxSize()).toBe(2500);
+  });
+
+  it('hydrates maxTableRows from backend settings', async () => {
+    appMocks.GetAppSettings.mockResolvedValue({
+      theme: 'system',
+      maxTableRows: 2500,
+    });
+    await hydrateAppPreferences({ force: true });
+    expect(getMaxTableRows()).toBe(2500);
+  });
+
+  it('defaults maxTableRows when the backend payload is missing the field', async () => {
+    appMocks.GetAppSettings.mockResolvedValue({ theme: 'system' });
+    await hydrateAppPreferences({ force: true });
+    expect(getMaxTableRows()).toBe(MAX_TABLE_ROWS_DEFAULT);
+  });
+
+  it('setMaxTableRows round-trips an in-range value through the cache and backend', async () => {
+    appMocks.GetAppSettings.mockResolvedValue({
+      theme: 'system',
+      maxTableRows: MAX_TABLE_ROWS_DEFAULT,
+    });
+    await hydrateAppPreferences({ force: true });
+
+    setMaxTableRows(2500);
+    expect(getMaxTableRows()).toBe(2500);
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    expect(appMocks.SetMaxTableRows).toHaveBeenCalledWith(2500);
+  });
+
+  it('setMaxTableRows clamps values outside the allowed range', async () => {
+    appMocks.GetAppSettings.mockResolvedValue({ theme: 'system' });
+    await hydrateAppPreferences({ force: true });
+
+    setMaxTableRows(1);
+    expect(getMaxTableRows()).toBe(MAX_TABLE_ROWS_MIN);
+
+    setMaxTableRows(999_999);
+    expect(getMaxTableRows()).toBe(MAX_TABLE_ROWS_MAX);
   });
 
   it('defaults logBufferMaxSize when the backend payload is missing the field', async () => {

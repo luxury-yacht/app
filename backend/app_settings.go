@@ -35,6 +35,7 @@ type settingsPreferences struct {
 	Theme                         string           `json:"theme"`
 	UseShortResourceNames         bool             `json:"useShortResourceNames"`
 	Refresh                       *settingsRefresh `json:"refresh"`
+	MaxTableRows                  int              `json:"maxTableRows"`
 	Logs                          *settingsLogs    `json:"logs,omitempty"`
 	GridTablePersistenceMode      string           `json:"gridTablePersistenceMode"`
 	DefaultObjectPanelPosition    string           `json:"defaultObjectPanelPosition"`
@@ -89,6 +90,9 @@ const (
 	defaultLogBufferMaxSize       = 1000
 	minLogBufferMaxSize           = 100
 	maxLogBufferMaxSize           = 10000
+	defaultMaxTableRows           = 1000
+	minMaxTableRows               = 100
+	maxMaxTableRows               = 10000
 	defaultLogAPITimestampFormat  = "YYYY-MM-DDTHH:mm:ss.SSS[Z]"
 	defaultLogTargetPerScopeLimit = podlogs.DefaultPerScopeTargetLimit
 	minLogTargetPerScopeLimit     = podlogs.MinPerScopeTargetLimit
@@ -97,6 +101,16 @@ const (
 	minLogTargetGlobalLimit       = 1
 	maxLogTargetGlobalLimit       = 1000
 )
+
+func clampMaxTableRows(size int) int {
+	if size < minMaxTableRows {
+		return minMaxTableRows
+	}
+	if size > maxMaxTableRows {
+		return maxMaxTableRows
+	}
+	return size
+}
 
 func clampLogBufferMaxSize(size int) int {
 	if size < minLogBufferMaxSize {
@@ -150,6 +164,7 @@ func defaultSettingsFile() *settingsFile {
 		Preferences: settingsPreferences{
 			Theme:   "system",
 			Refresh: &settingsRefresh{Auto: true, Background: true, MetricsIntervalMs: defaultMetricsIntervalMs()},
+			MaxTableRows: defaultMaxTableRows,
 			Logs: &settingsLogs{
 				BufferMaxSize:       defaultLogBufferMaxSize,
 				TargetPerScopeLimit: defaultLogTargetPerScopeLimit,
@@ -185,6 +200,11 @@ func normalizeSettingsFile(settings *settingsFile) *settingsFile {
 	}
 	if settings.Preferences.Refresh.MetricsIntervalMs <= 0 {
 		settings.Preferences.Refresh.MetricsIntervalMs = defaultMetricsIntervalMs()
+	}
+	if settings.Preferences.MaxTableRows <= 0 {
+		settings.Preferences.MaxTableRows = defaultMaxTableRows
+	} else {
+		settings.Preferences.MaxTableRows = clampMaxTableRows(settings.Preferences.MaxTableRows)
 	}
 	if settings.Preferences.Logs == nil {
 		settings.Preferences.Logs = &settingsLogs{
@@ -385,6 +405,7 @@ func getDefaultAppSettings() *AppSettings {
 		AutoRefreshEnabled:               true,
 		RefreshBackgroundClustersEnabled: true,
 		MetricsRefreshIntervalMs:         defaultMetricsIntervalMs(),
+		MaxTableRows:                     defaultMaxTableRows,
 		LogBufferMaxSize:                 defaultLogBufferMaxSize,
 		LogTargetPerScopeLimit:           defaultLogTargetPerScopeLimit,
 		LogTargetGlobalLimit:             defaultLogTargetGlobalLimit,
@@ -405,6 +426,10 @@ func (a *App) loadAppSettings() error {
 	logTargetGlobalLimit := defaultLogTargetGlobalLimit
 	logAPITimestampFormat := defaultLogAPITimestampFormat
 	logAPITimestampUseLocalTimeZone := false
+	maxTableRows := defaultMaxTableRows
+	if settings.Preferences.MaxTableRows > 0 {
+		maxTableRows = clampMaxTableRows(settings.Preferences.MaxTableRows)
+	}
 	if settings.Preferences.Logs != nil && settings.Preferences.Logs.BufferMaxSize > 0 {
 		logBufferMaxSize = clampLogBufferMaxSize(settings.Preferences.Logs.BufferMaxSize)
 	}
@@ -428,6 +453,7 @@ func (a *App) loadAppSettings() error {
 		AutoRefreshEnabled:               settings.Preferences.Refresh.Auto,
 		RefreshBackgroundClustersEnabled: settings.Preferences.Refresh.Background,
 		MetricsRefreshIntervalMs:         settings.Preferences.Refresh.MetricsIntervalMs,
+		MaxTableRows:                     maxTableRows,
 		LogBufferMaxSize:                 logBufferMaxSize,
 		LogTargetPerScopeLimit:           logTargetPerScopeLimit,
 		LogTargetGlobalLimit:             logTargetGlobalLimit,
@@ -478,6 +504,7 @@ func (a *App) saveAppSettings() error {
 	settings.Preferences.Refresh.Auto = a.appSettings.AutoRefreshEnabled
 	settings.Preferences.Refresh.Background = a.appSettings.RefreshBackgroundClustersEnabled
 	settings.Preferences.Refresh.MetricsIntervalMs = a.appSettings.MetricsRefreshIntervalMs
+	settings.Preferences.MaxTableRows = clampMaxTableRows(a.appSettings.MaxTableRows)
 	if settings.Preferences.Logs == nil {
 		settings.Preferences.Logs = &settingsLogs{}
 	}
@@ -643,6 +670,24 @@ func (a *App) SetBackgroundRefreshEnabled(enabled bool) error {
 
 	a.logger.Info(fmt.Sprintf("Background refresh enabled changed to: %v", enabled), "Settings")
 	a.appSettings.RefreshBackgroundClustersEnabled = enabled
+	return a.saveAppSettings()
+}
+
+// SetMaxTableRows persists the max number of rows shown in a data table.
+// Values are clamped to [minMaxTableRows, maxMaxTableRows].
+func (a *App) SetMaxTableRows(size int) error {
+	a.settingsMu.Lock()
+	defer a.settingsMu.Unlock()
+
+	if a.appSettings == nil {
+		if err := a.loadAppSettings(); err != nil {
+			return err
+		}
+	}
+
+	clamped := clampMaxTableRows(size)
+	a.logger.Info(fmt.Sprintf("Max table rows changed to: %d", clamped), "Settings")
+	a.appSettings.MaxTableRows = clamped
 	return a.saveAppSettings()
 }
 

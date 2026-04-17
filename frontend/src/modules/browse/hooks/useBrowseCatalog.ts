@@ -6,7 +6,9 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { eventBus } from '@/core/events';
 import { refreshOrchestrator, useRefreshScopedDomain } from '@/core/refresh';
+import { getMaxTableRows } from '@/core/settings/appPreferences';
 import { getScopedDomainState, setScopedDomainState } from '@/core/refresh/store';
 import { useCatalogDiagnostics } from '@/core/refresh/diagnostics/useCatalogDiagnostics';
 import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
@@ -22,8 +24,6 @@ import {
   splitClusterScope,
   upsertByUID,
 } from '@modules/browse/utils/browseUtils';
-
-const DEFAULT_LIMIT = 25000;
 
 type PageRequestMode = 'reset' | 'append' | null;
 
@@ -99,14 +99,20 @@ export function useBrowseCatalog({
   const [isRequestingMore, setIsRequestingMore] = useState(false);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
+  const [pageLimit, setPageLimit] = useState<number>(() => getMaxTableRows());
 
   const requestModeRef = useRef<PageRequestMode>(null);
   const lastAppliedScopeRef = useRef<string>('');
   const itemsRef = useRef<CatalogItem[]>([]);
   const indexByUidRef = useRef<Map<string, number>>(new Map());
 
-  const pageLimit = DEFAULT_LIMIT;
   const isNamespaceScoped = pinnedNamespaces.length > 0;
+
+  useEffect(() => {
+    return eventBus.on('settings:max-table-rows', (value) => {
+      setPageLimit(value);
+    });
+  }, []);
 
   // Track available namespaces from the catalog snapshot.
   // Used to query all namespaces when no filter is selected in all-namespaces mode.

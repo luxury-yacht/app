@@ -514,6 +514,10 @@ export function SetLogsPanelVisible(arg1) {
   return window['go']['backend']['App']['SetLogsPanelVisible'](arg1);
 }
 
+export function SetMaxTableRows(arg1) {
+  return window['go']['backend']['App']['SetMaxTableRows'](arg1);
+}
+
 export function SetObjectPanelLayout(arg1, arg2, arg3, arg4, arg5, arg6) {
   return window['go']['backend']['App']['SetObjectPanelLayout'](arg1, arg2, arg3, arg4, arg5, arg6);
 }

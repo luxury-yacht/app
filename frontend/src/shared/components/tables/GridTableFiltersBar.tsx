@@ -9,6 +9,7 @@ import React, { useRef, useMemo } from 'react';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import SearchInput from '@shared/components/inputs/SearchInput';
+import Tooltip from '@shared/components/Tooltip';
 import type {
   GridTableFilterState,
   InternalFilterOptions,
@@ -50,7 +51,7 @@ interface GridTableFiltersBarProps {
   /** Arbitrary content rendered after the IconBar (e.g. text toggle buttons). */
   customActions?: React.ReactNode;
   /** Displayed vs total item count shown to the right of actions. */
-  resultCount?: { displayed: number; total: number };
+  resultCount?: { displayed: number; total: number; capped?: boolean };
 }
 
 const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
@@ -220,6 +221,23 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
                 {resultCount.displayed === resultCount.total
                   ? `${resultCount.total} items`
                   : `${resultCount.displayed} of ${resultCount.total} items`}
+                {resultCount.capped && (
+                  <Tooltip
+                    content={
+                      <>
+                        <p className="gridtable-filter-result-tooltip-paragraph">
+                          The total number of objects exceeds the maximum table size. Use search
+                          filters to reduce the number of objects in the data set.
+                        </p>
+                        <p className="gridtable-filter-result-tooltip-paragraph">
+                          You can change the maximum table size in Settings, but larger values can
+                          impact the app&apos;s performance.
+                        </p>
+                      </>
+                    }
+                    variant="dark"
+                  />
+                )}
               </span>
             )}
           </div>

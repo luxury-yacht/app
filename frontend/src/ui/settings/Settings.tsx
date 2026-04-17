@@ -21,6 +21,11 @@ import './Settings.css';
 import { clearAllGridTableState } from '@shared/components/tables/persistence/gridTablePersistenceReset';
 import {
   hydrateAppPreferences,
+  getMaxTableRows,
+  MAX_TABLE_ROWS_DEFAULT,
+  MAX_TABLE_ROWS_MAX,
+  MAX_TABLE_ROWS_MIN,
+  setMaxTableRows,
   setUseShortResourceNames as persistUseShortResourceNames,
   setPaletteTint as persistPaletteTint,
   getPaletteTint,
@@ -87,6 +92,9 @@ function Settings({ onClose }: SettingsProps) {
   const { resolvedTheme } = useTheme();
   const { applyLayoutDefaultsAcrossClusters } = useDockablePanelContext();
   const [useShortResourceNames, setUseShortResourceNames] = useState<boolean>(false);
+  const [maxTableRowsInput, setMaxTableRowsInput] = useState<string>(() =>
+    String(getMaxTableRows())
+  );
   const [persistenceMode, setPersistenceMode] = useState<GridTablePersistenceMode>(() =>
     getGridTablePersistenceMode()
   );
@@ -229,6 +237,7 @@ function Settings({ onClose }: SettingsProps) {
     try {
       const preferences = await hydrateAppPreferences({ force: true });
       setUseShortResourceNames(preferences.useShortResourceNames);
+      setMaxTableRowsInput(String(preferences.maxTableRows ?? MAX_TABLE_ROWS_DEFAULT));
       // Refresh panel defaults from the freshly hydrated cache.
       setObjectPanelPositionState(getDefaultObjectPanelPosition());
       const freshLayout = getObjectPanelLayoutDefaults();
@@ -303,6 +312,16 @@ function Settings({ onClose }: SettingsProps) {
     const mode: GridTablePersistenceMode = checked ? 'namespaced' : 'shared';
     setPersistenceMode(mode);
     setGridTablePersistenceMode(mode);
+  };
+
+  const commitMaxTableRows = (raw: string) => {
+    const parsed = parseInt(raw, 10);
+    const normalized =
+      Number.isNaN(parsed) || parsed <= 0
+        ? MAX_TABLE_ROWS_DEFAULT
+        : Math.max(MAX_TABLE_ROWS_MIN, Math.min(MAX_TABLE_ROWS_MAX, parsed));
+    setMaxTableRowsInput(String(normalized));
+    setMaxTableRows(normalized);
   };
 
   const handleObjectPanelPositionChange = (position: ObjectPanelPosition) => {
@@ -1615,6 +1634,34 @@ function Settings({ onClose }: SettingsProps) {
                   variant="dark"
                 />
               </label>
+            </div>
+          </div>
+        </div>
+        <div className="settings-subsection">
+          <h4>Tables</h4>
+          <div className="settings-items">
+            <div className="setting-item setting-item-inline">
+              <label htmlFor="settings-max-table-rows">Max Rows</label>
+              <input
+                type="number"
+                id="settings-max-table-rows"
+                min={MAX_TABLE_ROWS_MIN}
+                max={MAX_TABLE_ROWS_MAX}
+                step={100}
+                value={maxTableRowsInput}
+                onChange={(e) => setMaxTableRowsInput(e.target.value)}
+                onBlur={(e) => commitMaxTableRows(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    e.currentTarget.blur();
+                  }
+                }}
+              />
+              <Tooltip
+                content="Max number of rows in a data table. Larger values will show more data, but app performance may be impacted."
+                variant="dark"
+              />
             </div>
           </div>
         </div>

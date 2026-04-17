@@ -22,6 +22,10 @@
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  resetAppPreferencesCacheForTesting,
+  setAppPreferencesForTesting,
+} from '@/core/settings/appPreferences';
 
 import GridTable, {
   GridColumnDefinition,
@@ -143,6 +147,7 @@ describe('GridTable virtualization', () => {
 
   beforeEach(() => {
     vi.useRealTimers();
+    resetAppPreferencesCacheForTesting();
     originalClientHeightDescriptor = Object.getOwnPropertyDescriptor(
       HTMLElement.prototype,
       'clientHeight'
@@ -211,6 +216,21 @@ describe('GridTable virtualization', () => {
     expect(renderedRows.length).toBeLessThan(100);
     expect(renderedRows.length).toBe(12);
     expect(renderedRows[0]?.textContent).toContain('Row 0');
+  });
+
+  it('caps rendered rows using the max table rows setting', () => {
+    setAppPreferencesForTesting({ maxTableRows: 3 });
+    const { container, cleanup } = renderGridTable({
+      data: createRows(8),
+      virtualization: { enabled: true, threshold: 1, overscan: 1, estimateRowHeight: 40 },
+    });
+    cleanupRoot = cleanup;
+
+    const renderedRows = container.querySelectorAll('.gridtable-row');
+    expect(renderedRows).toHaveLength(3);
+    expect(container.textContent).toContain('Row 0');
+    expect(container.textContent).toContain('Row 2');
+    expect(container.textContent).not.toContain('Row 3');
   });
 
   it('updates the rendered slice when scrolling', async () => {
@@ -1652,6 +1672,49 @@ it('renders filter UI when enabled', () => {
 
   expect(container.querySelector('.gridtable-filter-bar')).not.toBeNull();
   expect(container.querySelector('input[name="gridtable-filter-search"]')).not.toBeNull();
+
+  cleanup();
+});
+
+it('shows displayed and total item counts when the table is capped', () => {
+  setAppPreferencesForTesting({ maxTableRows: 3 });
+  const { container, cleanup } = renderGridTable({
+    data: createRows(8),
+    virtualization: { enabled: false },
+    filters: {
+      enabled: true,
+      accessors: {
+        getKind: (row) => row.label,
+        getNamespace: () => '',
+        getSearchText: (row) => [row.label],
+      },
+    },
+  });
+
+  const resultCount = container.querySelector('[data-gridtable-filter-role="result-count"]');
+  expect(resultCount?.textContent).toBe('3 of 8 items');
+  expect(resultCount?.querySelector('.tooltip-trigger')).not.toBeNull();
+
+  cleanup();
+});
+
+it('does not show the capped-results tooltip when the table is not capped', () => {
+  const { container, cleanup } = renderGridTable({
+    data: createRows(3),
+    virtualization: { enabled: false },
+    filters: {
+      enabled: true,
+      accessors: {
+        getKind: (row) => row.label,
+        getNamespace: () => '',
+        getSearchText: (row) => [row.label],
+      },
+    },
+  });
+
+  const resultCount = container.querySelector('[data-gridtable-filter-role="result-count"]');
+  expect(resultCount?.textContent).toBe('3 items');
+  expect(resultCount?.querySelector('.tooltip-trigger')).toBeNull();
 
   cleanup();
 });

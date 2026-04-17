@@ -83,6 +83,7 @@ export interface AppEvents {
   'settings:short-names': boolean;
   'settings:theme': string;
   'settings:metrics-interval': number;
+  'settings:max-table-rows': number;
   'settings:log-buffer-size': number;
   'settings:log-api-timestamp-format': string;
   'settings:log-api-timestamp-use-local-time-zone': boolean;

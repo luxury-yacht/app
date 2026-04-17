@@ -674,6 +674,17 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
   font-size: 0.75rem;
   color: var(--color-text-secondary);
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.gridtable-filter-result-tooltip-paragraph {
+  margin: 0;
+}
+
+.gridtable-filter-result-tooltip-paragraph + .gridtable-filter-result-tooltip-paragraph {
+  margin-top: 0.75rem;
 }
 
 .gridtable-filter-group label {
