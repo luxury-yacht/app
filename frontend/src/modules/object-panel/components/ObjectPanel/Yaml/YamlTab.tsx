@@ -521,8 +521,17 @@ const YamlTab: React.FC<YamlTabProps> = ({
   const handleSearchChange = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
       const value = event.target.value;
+      const view = editorViewRef.current;
       setSearchTerm(value);
-      applySearchQuery(editorViewRef.current, value);
+      if (view) {
+        view.dispatch({
+          selection: EditorSelection.cursor(value ? 0 : view.state.selection.main.from),
+        });
+      }
+      applySearchQuery(view, value);
+      if (view && value) {
+        findNext(view);
+      }
     },
     [applySearchQuery]
   );

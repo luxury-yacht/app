@@ -1038,10 +1038,14 @@ describe('YamlTab', () => {
 
     const previousMatchButton = getIconButton(container, 'Previous match');
     const nextMatchButton = getIconButton(container, 'Next match');
+    codeMirrorState.editorView.dispatch.mockClear();
 
     await act(async () => {
       Object.defineProperty(input, 'value', { value: '', configurable: true, writable: true });
       input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    expect(codeMirrorState.editorView.dispatch).toHaveBeenCalledWith({
+      selection: { cursor: 0 },
     });
     const initialNextCalls = codemirrorSearchMocks.findNext.mock.calls.length;
     await act(async () => {
@@ -1053,17 +1057,32 @@ describe('YamlTab', () => {
       Object.defineProperty(input, 'value', { value: 'pod', configurable: true, writable: true });
       input.dispatchEvent(new Event('input', { bubbles: true }));
     });
+    expect(codeMirrorState.editorView.dispatch).toHaveBeenCalledWith({
+      selection: { cursor: 0 },
+    });
     expect(codemirrorSearchMocks.setSearchQuery.of).toHaveBeenCalled();
+    expect(codemirrorSearchMocks.findNext).toHaveBeenCalledTimes(1);
 
     await act(async () => {
       nextMatchButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
-    expect(codemirrorSearchMocks.findNext).toHaveBeenCalled();
+    expect(codemirrorSearchMocks.findNext).toHaveBeenCalledTimes(2);
 
     await act(async () => {
       previousMatchButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     expect(codemirrorSearchMocks.findPrevious).toHaveBeenCalled();
+
+    await act(async () => {
+      Object.defineProperty(input, 'value', { value: 'pods', configurable: true, writable: true });
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    expect(
+      codeMirrorState.editorView.dispatch.mock.calls.filter(
+        ([payload]) => payload?.selection?.cursor === 0
+      )
+    ).toHaveLength(3);
+    expect(codemirrorSearchMocks.findNext).toHaveBeenCalledTimes(3);
 
     const enterEvent = new KeyboardEvent('keydown', {
       key: 'Enter',
@@ -1074,7 +1093,7 @@ describe('YamlTab', () => {
     await act(async () => {
       input.dispatchEvent(enterEvent);
     });
-    expect(codemirrorSearchMocks.findNext).toHaveBeenCalledTimes(2);
+    expect(codemirrorSearchMocks.findNext).toHaveBeenCalledTimes(4);
 
     const shiftEnterEvent = new KeyboardEvent('keydown', {
       key: 'Enter',
@@ -1097,7 +1116,7 @@ describe('YamlTab', () => {
     await act(async () => {
       input.dispatchEvent(downEvent);
     });
-    expect(codemirrorSearchMocks.findNext).toHaveBeenCalledTimes(3);
+    expect(codemirrorSearchMocks.findNext).toHaveBeenCalledTimes(5);
 
     const upEvent = new KeyboardEvent('keydown', {
       key: 'ArrowUp',
@@ -1144,7 +1163,7 @@ describe('YamlTab', () => {
     await act(async () => {
       nextMatchButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
-    expect(codemirrorSearchMocks.findNext).toHaveBeenCalledTimes(4);
+    expect(codemirrorSearchMocks.findNext).toHaveBeenCalledTimes(6);
 
     await act(async () => {
       caseSensitiveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
