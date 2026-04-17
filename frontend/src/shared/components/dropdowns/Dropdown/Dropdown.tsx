@@ -13,6 +13,33 @@ import { useAriaAnnouncements } from './hooks/useAriaAnnouncements';
 import '@styles/components/dropdowns.css';
 import { useKeyboardSurface } from '@ui/shortcuts';
 
+const SelectAllIcon: React.FC = () => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 16 16"
+    width={16}
+    height={16}
+    aria-hidden="true"
+  >
+    <rect x="2.25" y="2.25" width="11.5" height="11.5" rx="2" fill="none" stroke="currentColor" />
+    <path d="M8 4.5v7" stroke="currentColor" strokeLinecap="round" />
+    <path d="M4.5 8h7" stroke="currentColor" strokeLinecap="round" />
+  </svg>
+);
+
+const SelectNoneIcon: React.FC = () => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 16 16"
+    width={16}
+    height={16}
+    aria-hidden="true"
+  >
+    <rect x="2.25" y="2.25" width="11.5" height="11.5" rx="2" fill="none" stroke="currentColor" />
+    <path d="M4.75 8h6.5" stroke="currentColor" strokeLinecap="round" />
+  </svg>
+);
+
 const Dropdown: React.FC<DropdownProps> = ({
   options,
   value,
@@ -370,46 +397,54 @@ const Dropdown: React.FC<DropdownProps> = ({
           aria-multiselectable={multiple}
           id={`${id || 'dropdown'}-menu`}
         >
-          {searchable && (
-            <div className="search-container">
-              <input
-                type="text"
-                className="search-input"
-                placeholder={searchPlaceholder}
-                value={effectiveSearchQuery}
-                onChange={(e) => handleSearchInputChange(e.target.value)}
-                onClick={(e) => e.stopPropagation()}
-                onFocus={() => setIsSearchFocused(true)}
-                onBlur={() => setIsSearchFocused(false)}
-                autoFocus
-              />
-            </div>
-          )}
+          {(searchable || (multiple && showBulkActions && selectableFilteredValues.length > 0)) && (
+            <div className="dropdown-menu-controls">
+              {searchable && (
+                <div className="search-container">
+                  <input
+                    type="text"
+                    className="search-input"
+                    placeholder={searchPlaceholder}
+                    value={effectiveSearchQuery}
+                    onChange={(e) => handleSearchInputChange(e.target.value)}
+                    onClick={(e) => e.stopPropagation()}
+                    onFocus={() => setIsSearchFocused(true)}
+                    onBlur={() => setIsSearchFocused(false)}
+                    autoFocus
+                  />
+                </div>
+              )}
 
-          {multiple && showBulkActions && selectableFilteredValues.length > 0 && (
-            <div className="dropdown-bulk-actions">
-              <button
-                type="button"
-                className="dropdown-bulk-action"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleSelectAll();
-                }}
-                disabled={selectableSelectedCount === selectableFilteredValues.length}
-              >
-                Select all
-              </button>
-              <button
-                type="button"
-                className="dropdown-bulk-action"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleSelectNone();
-                }}
-                disabled={selectableSelectedCount === 0}
-              >
-                Select none
-              </button>
+              {multiple && showBulkActions && selectableFilteredValues.length > 0 && (
+                <div className="dropdown-bulk-actions icon-bar">
+                  <button
+                    type="button"
+                    className="dropdown-bulk-action icon-bar-button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleSelectAll();
+                    }}
+                    disabled={selectableSelectedCount === selectableFilteredValues.length}
+                    title="Select all"
+                    aria-label="Select all"
+                  >
+                    <SelectAllIcon />
+                  </button>
+                  <button
+                    type="button"
+                    className="dropdown-bulk-action icon-bar-button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleSelectNone();
+                    }}
+                    disabled={selectableSelectedCount === 0}
+                    title="Select none"
+                    aria-label="Select none"
+                  >
+                    <SelectNoneIcon />
+                  </button>
+                </div>
+              )}
             </div>
           )}
 

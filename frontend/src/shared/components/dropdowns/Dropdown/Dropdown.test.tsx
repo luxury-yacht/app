@@ -448,8 +448,8 @@ describe('Dropdown', () => {
 
     const bulkButtons = container.querySelectorAll<HTMLButtonElement>('.dropdown-bulk-action');
     expect(bulkButtons).toHaveLength(2);
-    expect(bulkButtons[0]?.textContent).toBe('Select all');
-    expect(bulkButtons[1]?.textContent).toBe('Select none');
+    expect(bulkButtons[0]?.getAttribute('aria-label')).toBe('Select all');
+    expect(bulkButtons[1]?.getAttribute('aria-label')).toBe('Select none');
 
     click(bulkButtons[0]);
     expect(onChange).toHaveBeenCalledWith(['postgres', 'mongo', 'sqlite']);
@@ -458,6 +458,19 @@ describe('Dropdown', () => {
       container.querySelectorAll<HTMLButtonElement>('.dropdown-bulk-action')[1];
     click(selectNoneButton);
     expect(onChange).toHaveBeenCalledWith([]);
+  });
+
+  it('renders the searchable input and bulk actions on the same control row', async () => {
+    await mount(
+      <Dropdown options={OPTIONS} value={[]} onChange={vi.fn()} multiple searchable showBulkActions />
+    );
+
+    click(container.querySelector('.dropdown-trigger'));
+
+    const controls = container.querySelector('.dropdown-menu-controls');
+    expect(controls).not.toBeNull();
+    expect(controls?.querySelector('.search-input')).not.toBeNull();
+    expect(controls?.querySelectorAll('.dropdown-bulk-action')).toHaveLength(2);
   });
 
   it('adjusts menu position when space below trigger is limited', async () => {
