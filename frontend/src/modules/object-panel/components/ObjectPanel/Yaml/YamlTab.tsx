@@ -10,12 +10,7 @@ import { EditorSelection, type Extension } from '@codemirror/state';
 import * as YAML from 'yaml';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import ContextMenu, { type ContextMenuItem } from '@shared/components/ContextMenu';
-import {
-  CaseSensitiveIcon,
-  CloseIcon,
-  CollapseIcon,
-  OpenIcon,
-} from '@shared/components/icons/MenuIcons';
+import { CaseSensitiveIcon, CloseIcon } from '@shared/components/icons/MenuIcons';
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
 import { RegexSearchIcon } from '@shared/components/icons/LogIcons';
 import { deriveCopyText } from '@ui/shortcuts/context';
@@ -62,7 +57,14 @@ import {
   mergeYamlWithLatestOnServer,
   sanitizeYamlForSemanticCompare,
 } from './yamlTabUtils';
-import { YamlCancelIcon, YamlEditIcon, YamlManagedFieldsIcon, YamlSaveIcon } from './YamlTabIcons';
+import {
+  YamlCancelIcon,
+  YamlEditIcon,
+  YamlManagedFieldsIcon,
+  YamlNextIcon,
+  YamlPreviousIcon,
+  YamlSaveIcon,
+} from './YamlTabIcons';
 
 export type { YamlTabProps } from './yamlTabTypes';
 
@@ -1376,7 +1378,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
       {
         type: 'action',
         id: 'search-previous',
-        icon: <CollapseIcon />,
+        icon: <YamlPreviousIcon />,
         onClick: handleFindPrevious,
         title: 'Previous match',
         ariaLabel: 'Previous match',
@@ -1385,7 +1387,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
       {
         type: 'action',
         id: 'search-next',
-        icon: <OpenIcon />,
+        icon: <YamlNextIcon />,
         onClick: handleFindNext,
         title: 'Next match',
         ariaLabel: 'Next match',

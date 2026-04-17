@@ -6,38 +6,26 @@ type IconProps = {
 };
 
 export const YamlManagedFieldsIcon: React.FC<IconProps> = ({ width = 16, height = 16 }) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 16 16"
-    width={width}
-    height={height}
-    fill="none"
-    stroke="currentColor"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    strokeWidth="1.25"
-  >
-    <rect x="2.5" y="2.5" width="4" height="4" rx="0.75" />
-    <rect x="9.5" y="2.5" width="4" height="4" rx="0.75" />
-    <rect x="2.5" y="9.5" width="4" height="4" rx="0.75" />
-    <path d="M6.5 4.5h3M4.5 6.5v3" />
+  <svg xmlns="http://www.w3.org/2000/svg" width={width} height={height} viewBox="0 0 16 16">
+    <path
+      fill="currentColor"
+      fillRule="evenodd"
+      d="M10.315 5.032a2.11 2.11 0 0 0 2.064-1.678h1.833a.425.425 0 0 0 .3-.723a.43.43 0 0 0-.3-.124h-1.83a2.11 2.11 0 0 0-4.136 0H1.79a.424.424 0 0 0 0 .847h6.46a2.11 2.11 0 0 0 2.066 1.678m0-.88a1.23 1.23 0 1 1 0-2.46a1.23 1.23 0 0 1 0 2.46m-4.404 5.977A2.11 2.11 0 0 0 7.98 8.443l6.233-.007a.425.425 0 0 0 .3-.722a.43.43 0 0 0-.3-.124l-6.233.006a2.11 2.11 0 0 0-4.133 0L1.79 7.59a.423.423 0 0 0 0 .846l2.057.007a2.11 2.11 0 0 0 2.066 1.686m0-.88a1.23 1.23 0 1 1 0-2.46a1.23 1.23 0 0 1 0 2.46m4.398 5.938a2.11 2.11 0 0 0 2.068-1.694l1.833.026a.425.425 0 0 0 .3-.723a.43.43 0 0 0-.3-.124l-1.836-.027a2.11 2.11 0 0 0-4.13 0l-6.457.027a.424.424 0 0 0 0 .847l6.454-.026a2.11 2.11 0 0 0 2.068 1.694m0-.88a1.23 1.23 0 1 1 0-2.46a1.23 1.23 0 0 1 0 2.46"
+      clipRule="evenodd"
+    />
   </svg>
 );
 
-export const YamlEditIcon: React.FC<IconProps> = ({ width = 16, height = 16 }) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 16 16"
-    width={width}
-    height={height}
-    fill="none"
-    stroke="currentColor"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    strokeWidth="1.25"
-  >
-    <path d="M3 11.75V13h1.25l6.9-6.9l-1.25-1.25z" />
-    <path d="M9.75 4.85l1.25 1.25M3 13h10.5" />
+export const YamlEditIcon: React.FC<IconProps> = ({ width = 18, height = 18 }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width={width} height={height} viewBox="0 0 24 24">
+    <path
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="2"
+      d="m5 16l-1 4l4-1L19.586 7.414a2 2 0 0 0 0-2.828l-.172-.172a2 2 0 0 0-2.828 0zM15 6l3 3m-5 11h8"
+    />
   </svg>
 );
 
@@ -71,5 +59,17 @@ export const YamlSaveIcon: React.FC<IconProps> = ({ width = 16, height = 16 }) =
   >
     <path d="M3 2.75h8l2 2V13.25H3z" />
     <path d="M5 2.75v3.5h4v-3.5M5.25 13.25v-3h5.5v3" />
+  </svg>
+);
+
+export const YamlPreviousIcon: React.FC<IconProps> = ({ width = 14, height = 14 }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" width={width} height={height}>
+    <path fill="currentColor" d="m4 10l9 9l1.4-1.5L7 10l7.4-7.5L13 1z" />
+  </svg>
+);
+
+export const YamlNextIcon: React.FC<IconProps> = ({ width = 14, height = 14 }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" width={width} height={height}>
+    <path fill="currentColor" d="M7 1L5.6 2.5L13 10l-7.4 7.5L7 19l9-9z" />
   </svg>
 );
