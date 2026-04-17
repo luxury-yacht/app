@@ -226,11 +226,11 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
                     content={
                       <>
                         <p className="gridtable-filter-result-tooltip-paragraph">
-                          The total number of objects exceeds the maximum table size. Use search
-                          filters to reduce the number of objects in the data set.
+                          The total number of objects exceeds the max table size. Use search filters
+                          to reduce the size of the data set.
                         </p>
                         <p className="gridtable-filter-result-tooltip-paragraph">
-                          You can change the maximum table size in Settings, but larger values can
+                          You can change the max table size in Settings, but larger values can
                           impact the app&apos;s performance.
                         </p>
                       </>
