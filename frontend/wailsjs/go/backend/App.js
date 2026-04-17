@@ -10,6 +10,10 @@ export function ApplyObjectYaml(arg1, arg2) {
   return window['go']['backend']['App']['ApplyObjectYaml'](arg1, arg2);
 }
 
+export function MergeObjectYamlWithLatest(arg1, arg2) {
+  return window['go']['backend']['App']['MergeObjectYamlWithLatest'](arg1, arg2);
+}
+
 export function ApplyTheme(arg1) {
   return window['go']['backend']['App']['ApplyTheme'](arg1);
 }

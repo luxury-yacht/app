@@ -16,8 +16,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	yamlutil "k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/apimachinery/pkg/util/validation/field"
+	yamlutil "k8s.io/apimachinery/pkg/util/yaml"
 	fakediscovery "k8s.io/client-go/discovery/fake"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	clientfake "k8s.io/client-go/kubernetes/fake"
@@ -40,6 +40,7 @@ func setupYAMLTestApp(t *testing.T) (*App, *dynamicfake.FakeDynamicClient, strin
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            "demo",
 			Namespace:       "default",
+			UID:             types.UID("demo-uid"),
 			ResourceVersion: "42",
 			Labels:          map[string]string{"app": "demo"},
 		},
@@ -140,6 +141,7 @@ kind: Deployment
 metadata:
   name: demo
   namespace: default
+  uid: demo-uid
   resourceVersion: "42"
 spec:
   replicas: 2
@@ -159,6 +161,7 @@ spec:
 		APIVersion:      "apps/v1",
 		Namespace:       "default",
 		Name:            "demo",
+		UID:             "demo-uid",
 		ResourceVersion: "42",
 	}
 
@@ -194,6 +197,7 @@ kind: Deployment
 metadata:
   name: demo
   namespace: default
+  uid: demo-uid
   resourceVersion: "42"
 spec:
   replicas: 3
@@ -202,6 +206,7 @@ spec:
 		APIVersion:      "apps/v1",
 		Namespace:       "default",
 		Name:            "demo",
+		UID:             "demo-uid",
 		ResourceVersion: "42",
 	}
 
@@ -233,6 +238,7 @@ kind: Deployment
 metadata:
   name: demo
   namespace: default
+  uid: demo-uid
   resourceVersion: "42"
 spec:
   replicas: 4
@@ -252,6 +258,7 @@ spec:
 		APIVersion:      "apps/v1",
 		Namespace:       "default",
 		Name:            "demo",
+		UID:             "demo-uid",
 		ResourceVersion: "42",
 	}
 
@@ -269,6 +276,107 @@ spec:
 	}
 	if response.ResourceVersion == "" {
 		t.Fatalf("expected new resourceVersion in apply response")
+	}
+}
+
+func TestMergeObjectYamlWithLatestStrategicMergesBuiltInLists(t *testing.T) {
+	app, dynamicClient, clusterID := setupYAMLTestApp(t)
+	resource := dynamicClient.Resource(appsv1.SchemeGroupVersion.WithResource("deployments")).Namespace("default")
+	liveDeployment, err := resource.Get(context.Background(), "demo", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("failed to fetch deployment: %v", err)
+	}
+	liveDeployment.SetResourceVersion("99")
+	liveDeployment.SetAnnotations(map[string]string{"syncedAt": "now"})
+	if err := unstructured.SetNestedSlice(liveDeployment.Object, []interface{}{
+		map[string]interface{}{
+			"name":  "app",
+			"image": "nginx:1.25",
+			"resources": map[string]interface{}{
+				"limits": map[string]interface{}{
+					"cpu": "1",
+				},
+			},
+		},
+	}, "spec", "template", "spec", "containers"); err != nil {
+		t.Fatalf("failed to set containers: %v", err)
+	}
+	if err := dynamicClient.Tracker().Update(appsv1.SchemeGroupVersion.WithResource("deployments"), liveDeployment, "default"); err != nil {
+		t.Fatalf("failed to seed live deployment: %v", err)
+	}
+
+	response, err := app.MergeObjectYamlWithLatest(clusterID, ObjectYAMLReloadMergeRequest{
+		BaseYAML:   deploymentYAML("42", "nginx:1.25"),
+		DraftYAML:  deploymentYAML("42", "nginx:1.26"),
+		Kind:       "Deployment",
+		APIVersion: "apps/v1",
+		Namespace:  "default",
+		Name:       "demo",
+	})
+	if err != nil {
+		t.Fatalf("MergeObjectYamlWithLatest returned error: %v", err)
+	}
+	if response.ResourceVersion != "99" {
+		t.Fatalf("expected merged response to use live resourceVersion 99, got %q", response.ResourceVersion)
+	}
+	if !strings.Contains(response.CurrentYAML, "syncedAt: now") {
+		t.Fatalf("expected current YAML to include latest annotations, got %q", response.CurrentYAML)
+	}
+	if !strings.Contains(response.MergedYAML, "image: nginx:1.26") {
+		t.Fatalf("expected merged YAML to keep local image edit, got %q", response.MergedYAML)
+	}
+	if !strings.Contains(response.MergedYAML, "cpu: \"1\"") {
+		t.Fatalf("expected merged YAML to keep live container resources, got %q", response.MergedYAML)
+	}
+	if !strings.Contains(response.MergedYAML, "resourceVersion: \"99\"") {
+		t.Fatalf("expected merged YAML to use live resourceVersion, got %q", response.MergedYAML)
+	}
+}
+
+func TestMergeObjectYamlWithLatestRejectsConflictingBuiltInListEdits(t *testing.T) {
+	app, dynamicClient, clusterID := setupYAMLTestApp(t)
+	resource := dynamicClient.Resource(appsv1.SchemeGroupVersion.WithResource("deployments")).Namespace("default")
+	liveDeployment, err := resource.Get(context.Background(), "demo", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("failed to fetch deployment: %v", err)
+	}
+	liveDeployment.SetResourceVersion("99")
+	if err := unstructured.SetNestedSlice(liveDeployment.Object, []interface{}{
+		map[string]interface{}{
+			"name":  "app",
+			"image": "nginx:1.27",
+		},
+	}, "spec", "template", "spec", "containers"); err != nil {
+		t.Fatalf("failed to set containers: %v", err)
+	}
+	if err := dynamicClient.Tracker().Update(appsv1.SchemeGroupVersion.WithResource("deployments"), liveDeployment, "default"); err != nil {
+		t.Fatalf("failed to seed live deployment: %v", err)
+	}
+
+	_, err = app.MergeObjectYamlWithLatest(clusterID, ObjectYAMLReloadMergeRequest{
+		BaseYAML:   deploymentYAML("42", "nginx:1.25"),
+		DraftYAML:  deploymentYAML("42", "nginx:1.26"),
+		Kind:       "Deployment",
+		APIVersion: "apps/v1",
+		Namespace:  "default",
+		Name:       "demo",
+	})
+	if err == nil {
+		t.Fatalf("expected reload merge conflict")
+	}
+
+	var objErr *objectYAMLError
+	if !errors.As(err, &objErr) {
+		t.Fatalf("expected objectYAMLError, got %T", err)
+	}
+	if objErr.Code != objectYAMLMergeConflictCode {
+		t.Fatalf("expected merge conflict code %q, got %q", objectYAMLMergeConflictCode, objErr.Code)
+	}
+	if objErr.CurrentResourceVersion != "99" {
+		t.Fatalf("expected live resourceVersion 99, got %q", objErr.CurrentResourceVersion)
+	}
+	if !strings.Contains(objErr.CurrentYAML, "image: nginx:1.27") {
+		t.Fatalf("expected conflict payload to include live YAML, got %q", objErr.CurrentYAML)
 	}
 }
 
@@ -290,6 +398,7 @@ func TestValidateObjectYamlForbiddenError(t *testing.T) {
 		APIVersion:      "apps/v1",
 		Namespace:       "default",
 		Name:            "demo",
+		UID:             "demo-uid",
 		ResourceVersion: "42",
 	}
 
@@ -317,6 +426,55 @@ func TestNamespaceLabel(t *testing.T) {
 	}
 	if got := namespaceLabel("ns"); got != "ns" {
 		t.Fatalf("expected namespace passthrough, got %q", got)
+	}
+}
+
+func TestValidateObjectYamlDetectsUIDDrift(t *testing.T) {
+	app, dynamicClient, clusterID := setupYAMLTestApp(t)
+
+	resource := dynamicClient.Resource(appsv1.SchemeGroupVersion.WithResource("deployments")).Namespace("default")
+	live, err := resource.Get(context.Background(), "demo", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("failed to get live object: %v", err)
+	}
+	live.SetUID(types.UID("replacement-uid"))
+	live.SetResourceVersion("99")
+	if err := dynamicClient.Tracker().Update(appsv1.SchemeGroupVersion.WithResource("deployments"), live, "default"); err != nil {
+		t.Fatalf("failed to update live object: %v", err)
+	}
+
+	request := ObjectYAMLMutationRequest{
+		YAML: `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo
+  namespace: default
+  uid: demo-uid
+  resourceVersion: "42"
+spec:
+  replicas: 3
+`,
+		Kind:            "Deployment",
+		APIVersion:      "apps/v1",
+		Namespace:       "default",
+		Name:            "demo",
+		UID:             "demo-uid",
+		ResourceVersion: "42",
+	}
+
+	_, err = app.ValidateObjectYaml(clusterID, request)
+	if err == nil {
+		t.Fatalf("expected validation to fail due to uid drift")
+	}
+	var objErr *objectYAMLError
+	if !errors.As(err, &objErr) {
+		t.Fatalf("expected objectYAMLError, got %T", err)
+	}
+	if objErr.Code != "ObjectUIDMismatch" {
+		t.Fatalf("expected ObjectUIDMismatch code, got %s", objErr.Code)
+	}
+	if !strings.Contains(objErr.Message, "current uid is replacement-uid") {
+		t.Fatalf("unexpected uid mismatch message: %q", objErr.Message)
 	}
 }
 
@@ -354,6 +512,49 @@ func TestNormalizeObjectYAMLStripsMetadata(t *testing.T) {
 	}
 }
 
+func TestSanitizeForUpdateStripsServerManagedMetadata(t *testing.T) {
+	obj := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"kind":       "ConfigMap",
+			"apiVersion": "v1",
+			"metadata": map[string]interface{}{
+				"name":                       "cfg",
+				"uid":                        "uid",
+				"managedFields":              "x",
+				"selfLink":                   "link",
+				"creationTimestamp":          "now",
+				"deletionTimestamp":          "soon",
+				"deletionGracePeriodSeconds": int64(5),
+				"generation":                 int64(2),
+			},
+			"status": map[string]interface{}{"state": "ignore"},
+			"data":   map[string]interface{}{"a": "b"},
+		},
+	}
+
+	sanitized := sanitizeForUpdate(obj, "77")
+	metadata, _, err := unstructured.NestedMap(sanitized.Object, "metadata")
+	if err != nil {
+		t.Fatalf("failed to read metadata: %v", err)
+	}
+	for _, key := range []string{
+		"uid",
+		"managedFields",
+		"selfLink",
+		"creationTimestamp",
+		"deletionTimestamp",
+		"deletionGracePeriodSeconds",
+		"generation",
+	} {
+		if _, exists := metadata[key]; exists {
+			t.Fatalf("expected %s to be stripped, got %#v", key, metadata)
+		}
+	}
+	if sanitized.GetResourceVersion() != "77" {
+		t.Fatalf("expected resourceVersion 77, got %q", sanitized.GetResourceVersion())
+	}
+}
+
 func TestWrapKubernetesErrorFormatsStatusErrors(t *testing.T) {
 	statusErr := apierrors.NewInvalid(
 		schema.GroupKind{Group: "apps", Kind: "Deployment"},
@@ -376,6 +577,38 @@ func TestWrapKubernetesErrorFormatsStatusErrors(t *testing.T) {
 	}
 	if !strings.Contains(objErr.Causes[0], "spec.replicas") {
 		t.Fatalf("expected field in causes, got %#v", objErr.Causes)
+	}
+}
+
+func TestWrapKubernetesErrorFormatsFieldManagerConflicts(t *testing.T) {
+	statusErr := apierrors.NewApplyConflict(
+		[]metav1.StatusCause{
+			{
+				Type:    metav1.CauseTypeFieldManagerConflict,
+				Field:   "spec.replicas",
+				Message: `conflict with "deployment-controller" using apps/v1 at 2026-04-16T00:00:00Z`,
+			},
+		},
+		`Apply failed with 1 conflict: conflict with "deployment-controller": .spec.replicas`,
+	)
+
+	wrapped := wrapKubernetesError(statusErr, "apply failed")
+	objErr, ok := wrapped.(*objectYAMLError)
+	if !ok {
+		t.Fatalf("expected objectYAMLError, got %T", wrapped)
+	}
+	if objErr.Code != string(metav1.StatusReasonConflict) {
+		t.Fatalf("unexpected error code: %s", objErr.Code)
+	}
+	expectedMessage := "Server-side apply found field ownership conflicts. Reload the latest object or remove the conflicting field edits listed below."
+	if objErr.Message != expectedMessage {
+		t.Fatalf("expected conflict summary %q, got %q", expectedMessage, objErr.Message)
+	}
+	if len(objErr.Causes) != 1 {
+		t.Fatalf("expected one conflict cause, got %#v", objErr.Causes)
+	}
+	if objErr.Causes[0] != `spec.replicas: conflict with "deployment-controller" using apps/v1 at 2026-04-16T00:00:00Z` {
+		t.Fatalf("unexpected formatted conflict cause: %#v", objErr.Causes)
 	}
 }
 
@@ -420,6 +653,7 @@ func baseYAML() string {
 		"metadata:\n" +
 		"  name: demo\n" +
 		"  namespace: default\n" +
+		"  uid: demo-uid\n" +
 		"  resourceVersion: \"42\"\n" +
 		"spec:\n" +
 		"  replicas: 2\n" +
@@ -434,4 +668,26 @@ func baseYAML() string {
 		"      containers:\n" +
 		"        - name: app\n" +
 		"          image: nginx:1.26\n"
+}
+
+func deploymentYAML(resourceVersion, image string) string {
+	return "apiVersion: apps/v1\n" +
+		"kind: Deployment\n" +
+		"metadata:\n" +
+		"  name: demo\n" +
+		"  namespace: default\n" +
+		fmt.Sprintf("  resourceVersion: %q\n", resourceVersion) +
+		"spec:\n" +
+		"  replicas: 1\n" +
+		"  selector:\n" +
+		"    matchLabels:\n" +
+		"      app: demo\n" +
+		"  template:\n" +
+		"    metadata:\n" +
+		"      labels:\n" +
+		"        app: demo\n" +
+		"    spec:\n" +
+		"      containers:\n" +
+		"        - name: app\n" +
+		fmt.Sprintf("          image: %s\n", image)
 }

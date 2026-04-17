@@ -47,9 +47,9 @@ import {
   prepareDraftYaml,
   applyResourceVersionToYaml,
   applyYamlOnServer,
+  mergeYamlWithLatestOnServer,
   sanitizeYamlForSemanticCompare,
 } from './yamlTabUtils';
-import { mergeYamlDraftWithLive } from './yamlMerge';
 
 export type { YamlTabProps } from './yamlTabTypes';
 
@@ -60,10 +60,21 @@ type YamlTabDiffResult = {
 };
 
 type PostApplyNotice = {
-  kind: 'diff' | 'warning';
+  kind: 'diff' | 'warning' | 'stale';
   message: string;
   diff: YamlTabDiffResult | null;
 };
+
+type VerifiedPostApplyState = {
+  identity: ObjectIdentity;
+  semanticYaml: string;
+};
+
+const isSameObjectReference = (left: ObjectIdentity, right: ObjectIdentity): boolean =>
+  left.apiVersion === right.apiVersion &&
+  left.kind === right.kind &&
+  left.name === right.name &&
+  (left.namespace ?? '') === (right.namespace ?? '');
 
 const normalizeYamlTabDiff = (diff: YamlTabDiffResult): YamlTabDiffResult => {
   if (diff.tooLarge) {
@@ -155,6 +166,10 @@ const YamlTab: React.FC<YamlTabProps> = ({
   const [driftForced, setDriftForced] = useState(false);
   const [backendDriftCurrentYaml, setBackendDriftCurrentYaml] = useState<string | null>(null);
   const [postApplyNotice, setPostApplyNotice] = useState<PostApplyNotice | null>(null);
+  const [verifiedPostApply, setVerifiedPostApply] = useState<VerifiedPostApplyState | null>(null);
+  const [pendingSnapshotAdoptionYaml, setPendingSnapshotAdoptionYaml] = useState<string | null>(
+    null
+  );
   const [latestObjectIdentity, setLatestObjectIdentity] = useState<ObjectIdentity | null>(null);
   const [manualYamlOverride, setManualYamlOverride] = useState<{
     yaml: string;
@@ -284,14 +299,28 @@ const YamlTab: React.FC<YamlTabProps> = ({
     if (!manualYamlOverride || !latestObjectIdentity) {
       return;
     }
-    const snapshotIdentity = parseObjectIdentity(yamlContent);
+    const snapshotNormalizedYaml = normalizeYamlString(yamlContent);
+    const snapshotIdentity = parseObjectIdentity(snapshotNormalizedYaml);
+    const overrideIdentity = parseObjectIdentity(manualYamlOverride.yaml);
+    if (
+      snapshotIdentity &&
+      overrideIdentity &&
+      isSameObjectReference(snapshotIdentity, overrideIdentity) &&
+      pendingSnapshotAdoptionYaml &&
+      snapshotNormalizedYaml !== pendingSnapshotAdoptionYaml
+    ) {
+      setManualYamlOverride(null);
+      setPendingSnapshotAdoptionYaml(null);
+      return;
+    }
     if (
       snapshotIdentity?.resourceVersion &&
       snapshotIdentity.resourceVersion === latestObjectIdentity.resourceVersion
     ) {
       setManualYamlOverride(null);
+      setPendingSnapshotAdoptionYaml(null);
     }
-  }, [latestObjectIdentity, manualYamlOverride, yamlContent]);
+  }, [latestObjectIdentity, manualYamlOverride, pendingSnapshotAdoptionYaml, yamlContent]);
 
   const activeYaml = isEditing ? draftYaml : (displayYaml ?? '');
 
@@ -417,24 +446,49 @@ const YamlTab: React.FC<YamlTabProps> = ({
   );
 
   useEffect(() => {
-    if (!manualYamlOverride) {
-      return;
-    }
-    const snapshotIdentity = parseObjectIdentity(yamlContent);
-    if (
-      snapshotIdentity?.resourceVersion &&
-      snapshotIdentity.resourceVersion === manualYamlOverride.resourceVersion
-    ) {
-      setManualYamlOverride(null);
-    }
-  }, [manualYamlOverride, yamlContent]);
-
-  useEffect(() => {
     if (!postApplyNotice || postApplyNotice.kind !== 'warning' || manualYamlOverride) {
       return;
     }
     setPostApplyNotice(null);
   }, [manualYamlOverride, postApplyNotice]);
+
+  useEffect(() => {
+    if (!verifiedPostApply || isEditing || manualYamlOverride || !yamlContent) {
+      return;
+    }
+
+    const snapshotYaml = normalizeYamlString(yamlContent);
+    const snapshotIdentity = parseObjectIdentity(snapshotYaml);
+    if (!snapshotIdentity || !isSameObjectReference(snapshotIdentity, verifiedPostApply.identity)) {
+      setVerifiedPostApply(null);
+      setPostApplyNotice((current) => (current?.kind === 'stale' ? null : current));
+      return;
+    }
+
+    const verifiedResourceVersion = verifiedPostApply.identity.resourceVersion ?? null;
+    const snapshotResourceVersion = snapshotIdentity.resourceVersion ?? null;
+    if (
+      !verifiedResourceVersion ||
+      !snapshotResourceVersion ||
+      snapshotResourceVersion === verifiedResourceVersion
+    ) {
+      setPostApplyNotice((current) => (current?.kind === 'stale' ? null : current));
+      return;
+    }
+
+    const snapshotSemanticYaml = sanitizeYamlForSemanticCompare(snapshotYaml);
+    if (snapshotSemanticYaml === verifiedPostApply.semanticYaml) {
+      setPostApplyNotice((current) => (current?.kind === 'stale' ? null : current));
+      return;
+    }
+
+    setPostApplyNotice({
+      kind: 'stale',
+      message:
+        'The live object changed again after save. Review the diff below for later controller mutations or concurrent edits.',
+      diff: buildYamlTabDiff(verifiedPostApply.semanticYaml, snapshotSemanticYaml),
+    });
+  }, [isEditing, manualYamlOverride, verifiedPostApply, yamlContent]);
 
   const hydrateLatestObject = useCallback(
     async (identity: ObjectIdentity) => {
@@ -468,6 +522,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
             kind: identity.kind,
             name: identity.name,
             namespace: identity.namespace ?? null,
+            uid: identity.uid ?? null,
             resourceVersion: identity.resourceVersion ?? null,
           };
 
@@ -529,20 +584,6 @@ const YamlTab: React.FC<YamlTabProps> = ({
       return selectCodeMirrorContent(editorViewRef.current);
     },
   });
-
-  useEffect(() => {
-    if (!manualYamlOverride) {
-      return;
-    }
-    const snapshotIdentity = parseObjectIdentity(yamlContent);
-    if (
-      snapshotIdentity?.resourceVersion &&
-      manualYamlOverride.resourceVersion &&
-      snapshotIdentity.resourceVersion === manualYamlOverride.resourceVersion
-    ) {
-      setManualYamlOverride(null);
-    }
-  }, [manualYamlOverride, yamlContent]);
 
   useEffect(() => {
     if (!isEditing) {
@@ -679,6 +720,8 @@ const YamlTab: React.FC<YamlTabProps> = ({
     setDriftForced(false);
     setBackendDriftCurrentYaml(null);
     setPostApplyNotice(null);
+    setVerifiedPostApply(null);
+    setPendingSnapshotAdoptionYaml(null);
     setHasServerYamlError(false);
     setLatestObjectIdentity(identityForEditing);
     setManualYamlOverride(
@@ -712,6 +755,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
     setBackendDriftCurrentYaml(null);
     setIsSaving(false);
     setHasServerYamlError(false);
+    setPendingSnapshotAdoptionYaml(null);
   }, []);
 
   const previousScopeRef = useRef(scope);
@@ -747,33 +791,44 @@ const YamlTab: React.FC<YamlTabProps> = ({
     }
 
     try {
-      const { latestIdentity, normalizedYaml } = await hydrateLatestObject(effectiveIdentity);
-      const preparedLatestYaml = prepareDraftYaml(normalizedYaml, showManagedFields);
       const mergeBaseYaml =
         baselineMergeYaml ||
         prepareDraftYaml(
           normalizeYamlString(manualYamlOverride?.yaml ?? displayYaml ?? ''),
           showManagedFields
         );
-      const mergeResult = mergeYamlDraftWithLive(mergeBaseYaml, draftYaml, preparedLatestYaml);
-
-      if (!mergeResult.mergedYaml) {
-        setActionError(
-          'Automatic merge found conflicting changes. Review the conflict list and re-apply those edits on top of the latest YAML.'
-        );
-        setActionDetails(mergeResult.conflicts);
-        setHasRemoteDrift(true);
-        setDriftForced(true);
-        setHasServerYamlError(false);
-        setBackendDriftCurrentYaml(preparedLatestYaml);
-        return;
-      }
+      const mergeResult = await mergeYamlWithLatestOnServer(
+        resolvedClusterId,
+        mergeBaseYaml,
+        draftYaml,
+        effectiveIdentity
+      );
+      const normalizedLatestYaml = normalizeYamlString(mergeResult.currentYAML);
+      const preparedLatestYaml = prepareDraftYaml(normalizedLatestYaml, showManagedFields);
+      const mergedDraftYaml = prepareDraftYaml(
+        normalizeYamlString(mergeResult.mergedYAML),
+        showManagedFields
+      );
+      const parsedIdentity = parseObjectIdentity(normalizedLatestYaml);
+      const latestIdentity: ObjectIdentity = parsedIdentity
+        ? {
+            ...parsedIdentity,
+            resourceVersion: parsedIdentity.resourceVersion ?? mergeResult.resourceVersion ?? null,
+          }
+        : {
+            apiVersion: effectiveIdentity.apiVersion,
+            kind: effectiveIdentity.kind,
+            name: effectiveIdentity.name,
+            namespace: effectiveIdentity.namespace ?? null,
+            uid: effectiveIdentity.uid ?? null,
+            resourceVersion: mergeResult.resourceVersion ?? null,
+          };
 
       skipNextOverrideDraftSyncRef.current = true;
       setBaselineIdentity(latestIdentity);
       setBaselineResourceVersion(latestIdentity.resourceVersion ?? null);
       setBaselineMergeYaml(preparedLatestYaml);
-      setDraftYaml(mergeResult.mergedYaml);
+      setDraftYaml(mergedDraftYaml);
       setLintError(null);
       setActionError(null);
       setActionDetails([]);
@@ -781,15 +836,31 @@ const YamlTab: React.FC<YamlTabProps> = ({
       setDriftForced(false);
       setBackendDriftCurrentYaml(null);
       setPostApplyNotice(null);
+      setVerifiedPostApply(null);
+      setPendingSnapshotAdoptionYaml(null);
       setHasServerYamlError(false);
 
       if (scope) {
         await refreshOrchestrator.fetchScopedDomain('object-yaml', scope, { isManual: true });
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to reload latest YAML.';
-      setActionError(message);
-      setActionDetails([]);
+      const objectYamlError = parseObjectYamlError(err);
+      if (objectYamlError) {
+        setActionError(objectYamlError.message);
+        setActionDetails(objectYamlError.causes ?? []);
+        setHasRemoteDrift(true);
+        setDriftForced(true);
+        setHasServerYamlError(false);
+        if (objectYamlError.currentYaml) {
+          setBackendDriftCurrentYaml(
+            prepareDraftYaml(normalizeYamlString(objectYamlError.currentYaml), showManagedFields)
+          );
+        }
+      } else {
+        const message = err instanceof Error ? err.message : 'Failed to reload latest YAML.';
+        setActionError(message);
+        setActionDetails([]);
+      }
       errorHandler.handle(err, { action: 'reloadAndMerge' });
     }
   }, [
@@ -797,9 +868,9 @@ const YamlTab: React.FC<YamlTabProps> = ({
     displayYaml,
     draftYaml,
     effectiveIdentity,
-    hydrateLatestObject,
     isSaving,
     manualYamlOverride,
+    resolvedClusterId,
     scope,
     showManagedFields,
   ]);
@@ -836,6 +907,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
     setActionError(null);
 
     try {
+      setPendingSnapshotAdoptionYaml(normalizeYamlString(yamlContent));
       const applyResponse = await applyYamlOnServer(
         resolvedClusterId,
         validation.normalizedYAML,
@@ -857,9 +929,13 @@ const YamlTab: React.FC<YamlTabProps> = ({
       });
 
       try {
-        const { normalizedYaml } = await hydrateLatestObject(identity);
+        const { latestIdentity, normalizedYaml } = await hydrateLatestObject(identity);
         const submittedYaml = sanitizeYamlForSemanticCompare(immediateYaml);
         const storedYaml = sanitizeYamlForSemanticCompare(normalizedYaml);
+        setVerifiedPostApply({
+          identity: latestIdentity,
+          semanticYaml: storedYaml,
+        });
         if (submittedYaml !== storedYaml) {
           setPostApplyNotice({
             kind: 'diff',
@@ -871,6 +947,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
           setPostApplyNotice(null);
         }
       } catch (fetchErr) {
+        setVerifiedPostApply(null);
         setPostApplyNotice({
           kind: 'warning',
           message:
@@ -906,6 +983,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
           setHasServerYamlError(true);
         }
         errorHandler.handle(err, { action: 'saveObjectYAML' });
+        setPendingSnapshotAdoptionYaml(null);
         setIsSaving(false);
         return;
       }
@@ -914,6 +992,8 @@ const YamlTab: React.FC<YamlTabProps> = ({
       setActionError(message);
       setActionDetails([]);
       setPostApplyNotice(null);
+      setVerifiedPostApply(null);
+      setPendingSnapshotAdoptionYaml(null);
       setHasServerYamlError(false);
       errorHandler.handle(err, { action: 'saveObjectYAML' });
     } finally {
@@ -930,6 +1010,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
     isSaving,
     resolvedClusterId,
     scope,
+    yamlContent,
   ]);
 
   const editorKeyBindings = useMemo<KeyBinding[]>(() => {

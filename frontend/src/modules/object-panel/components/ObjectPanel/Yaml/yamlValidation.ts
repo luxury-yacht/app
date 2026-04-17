@@ -9,6 +9,7 @@ export interface ObjectIdentity {
   kind: string;
   name: string;
   namespace: string | null;
+  uid: string | null;
   resourceVersion: string | null;
 }
 
@@ -62,6 +63,13 @@ const normalizeResourceVersion = (value: unknown): string | null => {
   return value;
 };
 
+const normalizeUID = (value: unknown): string | null => {
+  if (!ensureNonEmptyString(value)) {
+    return null;
+  }
+  return value;
+};
+
 export const parseObjectIdentity = (yamlContent: string): ObjectIdentity | null => {
   if (!ensureNonEmptyString(yamlContent)) {
     return null;
@@ -89,6 +97,7 @@ export const parseObjectIdentity = (yamlContent: string): ObjectIdentity | null 
     | undefined;
   const name = metadata?.name;
   const namespace = normalizeNamespace(metadata?.namespace);
+  const uid = normalizeUID(metadata?.uid);
   const resourceVersion = normalizeResourceVersion(metadata?.resourceVersion);
 
   if (
@@ -104,6 +113,7 @@ export const parseObjectIdentity = (yamlContent: string): ObjectIdentity | null 
     kind,
     name,
     namespace,
+    uid,
     resourceVersion,
   };
 };
@@ -161,6 +171,7 @@ export const validateYamlDraft = (
       : undefined) ?? {};
   const name = metadata.name;
   const namespace = normalizeNamespace(metadata.namespace);
+  const uid = normalizeUID(metadata.uid);
   const resourceVersion = normalizeResourceVersion(metadata.resourceVersion);
 
   if (!ensureNonEmptyString(apiVersion)) {
@@ -208,6 +219,13 @@ export const validateYamlDraft = (
       return {
         isValid: false,
         message: `metadata.namespace mismatch. Expected ${expectedLabel}, found ${actualLabel}.`,
+      };
+    }
+
+    if (expectedIdentity.uid && uid && expectedIdentity.uid !== uid) {
+      return {
+        isValid: false,
+        message: `metadata.uid mismatch. Expected ${expectedIdentity.uid}, found ${uid}.`,
       };
     }
   }

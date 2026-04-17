@@ -6,7 +6,11 @@
  */
 
 import * as YAML from 'yaml';
-import { ValidateObjectYaml, ApplyObjectYaml } from '@wailsjs/go/backend/App';
+import {
+  ValidateObjectYaml,
+  ApplyObjectYaml,
+  MergeObjectYamlWithLatest,
+} from '@wailsjs/go/backend/App';
 import type { ObjectIdentity } from './yamlValidation';
 import type { ObjectYamlMutationResponse } from './yamlErrors';
 import { YAML_STRINGIFY_OPTIONS } from './yamlTabConfig';
@@ -95,6 +99,7 @@ export const validateYamlOnServer = async (
     apiVersion: identity.apiVersion,
     namespace: identity.namespace ?? '',
     name: identity.name,
+    uid: identity.uid ?? '',
     resourceVersion,
   });
 };
@@ -111,6 +116,29 @@ export const applyYamlOnServer = async (
     apiVersion: identity.apiVersion,
     namespace: identity.namespace ?? '',
     name: identity.name,
+    uid: identity.uid ?? '',
     resourceVersion,
+  });
+};
+
+export interface ObjectYamlReloadMergeResponse {
+  mergedYAML: string;
+  currentYAML: string;
+  resourceVersion: string;
+}
+
+export const mergeYamlWithLatestOnServer = async (
+  clusterId: string,
+  baseYAML: string,
+  draftYAML: string,
+  identity: ObjectIdentity
+): Promise<ObjectYamlReloadMergeResponse> => {
+  return MergeObjectYamlWithLatest(clusterId, {
+    baseYAML,
+    draftYAML,
+    kind: identity.kind,
+    apiVersion: identity.apiVersion,
+    namespace: identity.namespace ?? '',
+    name: identity.name,
   });
 };

@@ -71,6 +71,7 @@ const wailsMocks = vi.hoisted(() => ({
   ValidateObjectYaml: vi.fn(),
   ApplyObjectYaml: vi.fn(),
   GetObjectYAMLByGVK: vi.fn(),
+  MergeObjectYamlWithLatest: vi.fn(),
 }));
 
 const errorHandlerMock = vi.hoisted(() => ({
@@ -197,6 +198,7 @@ vi.mock('@wailsjs/go/backend/App', () => ({
   ValidateObjectYaml: wailsMocks.ValidateObjectYaml,
   ApplyObjectYaml: wailsMocks.ApplyObjectYaml,
   GetObjectYAMLByGVK: wailsMocks.GetObjectYAMLByGVK,
+  MergeObjectYamlWithLatest: wailsMocks.MergeObjectYamlWithLatest,
 }));
 
 const YAML = `
@@ -227,7 +229,7 @@ spec:
       image: demo:v2
 `.trim();
 
-const LIVE_RELOAD_YAML = `
+const LIVE_STRATEGIC_RELOAD_YAML = `
 apiVersion: v1
 kind: Pod
 metadata:
@@ -239,7 +241,28 @@ metadata:
 spec:
   containers:
     - name: demo
-      image: demo:v3
+      image: demo:v1
+      resources:
+        limits:
+          cpu: "1"
+`.trim();
+
+const LIVE_STRATEGIC_MERGED_YAML = `
+apiVersion: v1
+kind: Pod
+metadata:
+  name: demo
+  namespace: default
+  resourceVersion: "999"
+  annotations:
+    syncedAt: now
+spec:
+  containers:
+    - name: demo
+      image: demo:v2
+      resources:
+        limits:
+          cpu: "1"
 `.trim();
 
 const POST_APPLY_MUTATED_YAML = `
@@ -249,6 +272,33 @@ metadata:
   name: demo
   namespace: default
   resourceVersion: "789"
+spec:
+  containers:
+    - name: demo
+      image: demo:v2
+  restartPolicy: Always
+`.trim();
+
+const VERIFIED_APPLIED_YAML = `
+apiVersion: v1
+kind: Pod
+metadata:
+  name: demo
+  namespace: default
+  resourceVersion: "789"
+spec:
+  containers:
+    - name: demo
+      image: demo:v2
+`.trim();
+
+const LATER_MUTATED_YAML = `
+apiVersion: v1
+kind: Pod
+metadata:
+  name: demo
+  namespace: default
+  resourceVersion: "790"
 spec:
   containers:
     - name: demo
@@ -320,6 +370,12 @@ const renderYamlTab = async (
   return {
     container,
     root,
+    rerender: async (propsOverride: Partial<typeof defaultProps> = {}) => {
+      await act(async () => {
+        const { default: YamlTab } = await import('./YamlTab');
+        root.render(<YamlTab {...defaultProps} {...props} {...propsOverride} />);
+      });
+    },
     unmount: async () => {
       await act(async () => {
         root.unmount();
@@ -348,6 +404,7 @@ describe('YamlTab', () => {
     wailsMocks.ValidateObjectYaml.mockReset();
     wailsMocks.ApplyObjectYaml.mockReset();
     wailsMocks.GetObjectYAMLByGVK.mockReset();
+    wailsMocks.MergeObjectYamlWithLatest.mockReset();
     yamlErrorsMocks.parseObjectYamlError.mockReset();
     errorHandlerMock.handle.mockClear();
   });
@@ -514,6 +571,62 @@ describe('YamlTab', () => {
     await unmount();
   });
 
+  it('warns when the live object changes again after a verified save', async () => {
+    wailsMocks.ApplyObjectYaml.mockResolvedValue({ resourceVersion: '789' });
+    wailsMocks.GetObjectYAMLByGVK.mockResolvedValue(VERIFIED_APPLIED_YAML);
+
+    const { container, rerender, unmount } = await renderYamlTab();
+
+    const editButton = Array.from(container.querySelectorAll('button')).find((btn) =>
+      btn.textContent?.includes('Edit')
+    );
+    await act(async () => {
+      editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    await act(async () => {
+      codeMirrorState.latestProps.current.onChange(UPDATED_YAML);
+    });
+
+    const saveButton = Array.from(container.querySelectorAll('button')).find((btn) =>
+      btn.textContent?.includes('Save')
+    );
+    await act(async () => {
+      saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    await waitForUpdates();
+
+    expect(container.querySelector('.yaml-post-apply-notice')).toBeNull();
+
+    snapshotState.current = {
+      status: 'ready',
+      data: { yaml: VERIFIED_APPLIED_YAML },
+      error: null,
+    };
+
+    await rerender();
+    await waitForUpdates();
+
+    snapshotState.current = {
+      status: 'ready',
+      data: { yaml: LATER_MUTATED_YAML },
+      error: null,
+    };
+
+    await rerender();
+    await waitForUpdates();
+
+    expect(container.querySelector('.yaml-post-apply-notice-stale')?.textContent).toContain(
+      'changed again after save'
+    );
+    expect(container.querySelector('.yaml-post-apply-notice-stale')?.textContent).toContain(
+      'restartPolicy: Always'
+    );
+
+    await unmount();
+  });
+
   it('pauses YAML auto-refresh while editing and resumes it after cancel', async () => {
     const { container, unmount } = await renderYamlTab();
 
@@ -617,7 +730,7 @@ describe('YamlTab', () => {
 
     await waitForUpdates();
 
-    expect(wailsMocks.GetObjectYAMLByGVK).toHaveBeenCalled();
+    expect(wailsMocks.MergeObjectYamlWithLatest).toHaveBeenCalled();
     expect(refreshMocks.fetchScopedDomain).toHaveBeenCalledWith(
       'object-yaml',
       'default:pod:demo',
@@ -627,16 +740,20 @@ describe('YamlTab', () => {
     await unmount();
   });
 
-  it('merges non-conflicting local edits with the latest YAML on reload', async () => {
+  it('merges container-list edits with kubernetes-aware semantics on reload', async () => {
     yamlErrorsMocks.parseObjectYamlError.mockReturnValue({
       code: 'ResourceVersionMismatch',
       message: 'Object changed upstream',
       causes: ['Remote diff detected'],
-      currentYaml: LIVE_RELOAD_YAML,
+      currentYaml: LIVE_STRATEGIC_RELOAD_YAML,
       currentResourceVersion: '999',
     });
     wailsMocks.ApplyObjectYaml.mockRejectedValue(new Error('mismatch'));
-    wailsMocks.GetObjectYAMLByGVK.mockResolvedValue(LIVE_RELOAD_YAML);
+    wailsMocks.MergeObjectYamlWithLatest.mockResolvedValue({
+      currentYAML: LIVE_STRATEGIC_RELOAD_YAML,
+      mergedYAML: LIVE_STRATEGIC_MERGED_YAML,
+      resourceVersion: '999',
+    });
 
     const { container, unmount } = await renderYamlTab();
 
@@ -656,8 +773,7 @@ metadata:
 spec:
   containers:
     - name: demo
-      image: demo:v1
-  nodeName: worker-a`;
+      image: demo:v2`;
 
     await act(async () => {
       codeMirrorState.latestProps.current.onChange(localDraft);
@@ -681,10 +797,28 @@ spec:
 
     await waitForUpdates();
 
+    expect(wailsMocks.MergeObjectYamlWithLatest).toHaveBeenCalledWith('alpha:ctx', {
+      apiVersion: 'v1',
+      baseYAML: `apiVersion: v1
+kind: Pod
+metadata:
+  name: demo
+  namespace: default
+  resourceVersion: "123"
+spec:
+  containers:
+    - name: demo
+      image: demo:v1
+`,
+      draftYAML: localDraft,
+      kind: 'Pod',
+      name: 'demo',
+      namespace: 'default',
+    });
     expect(codeMirrorState.value).toContain('resourceVersion: "999"');
     expect(codeMirrorState.value).toContain('syncedAt: now');
-    expect(codeMirrorState.value).toContain('image: demo:v3');
-    expect(codeMirrorState.value).toContain('nodeName: worker-a');
+    expect(codeMirrorState.value).toContain('image: demo:v2');
+    expect(codeMirrorState.value).toContain('cpu: "1"');
 
     await unmount();
   });
@@ -733,14 +867,16 @@ spec:
   });
 
   it('reports reload errors when merge fails', async () => {
-    yamlErrorsMocks.parseObjectYamlError.mockReturnValue({
-      code: 'ResourceVersionMismatch',
-      message: 'Conflict detected',
-      currentYaml: UPDATED_YAML,
-      causes: [],
-    });
+    yamlErrorsMocks.parseObjectYamlError
+      .mockReturnValueOnce({
+        code: 'ResourceVersionMismatch',
+        message: 'Conflict detected',
+        currentYaml: UPDATED_YAML,
+        causes: [],
+      })
+      .mockReturnValueOnce(null);
     wailsMocks.ApplyObjectYaml.mockRejectedValue(new Error('mismatch'));
-    wailsMocks.GetObjectYAMLByGVK.mockRejectedValue(new Error('reload failed'));
+    wailsMocks.MergeObjectYamlWithLatest.mockRejectedValue(new Error('reload failed'));
 
     const { container, unmount } = await renderYamlTab();
 
@@ -974,6 +1110,42 @@ spec:
 
     expect(container.textContent).toContain('Invalid YAML payload');
     expect(container.textContent).toContain('disallowed field');
+    await unmount();
+  });
+
+  it('surfaces server-side apply ownership conflicts with field details', async () => {
+    yamlErrorsMocks.parseObjectYamlError.mockReturnValue({
+      code: 'Conflict',
+      message:
+        'Server-side apply found field ownership conflicts. Reload the latest object or remove the conflicting field edits listed below.',
+      causes: ['spec.replicas: conflict with "deployment-controller" using apps/v1'],
+    });
+    wailsMocks.ApplyObjectYaml.mockRejectedValue(new Error('conflict'));
+
+    const { container, unmount } = await renderYamlTab();
+
+    const editButton = Array.from(container.querySelectorAll('button')).find((btn) =>
+      btn.textContent?.includes('Edit')
+    );
+    await act(async () => {
+      editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    await act(async () => {
+      codeMirrorState.latestProps.current.onChange(UPDATED_YAML);
+    });
+
+    const saveButton = Array.from(container.querySelectorAll('button')).find((btn) =>
+      btn.textContent?.includes('Save')
+    );
+    await act(async () => {
+      saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(container.textContent).toContain('field ownership conflicts');
+    expect(container.textContent).toContain('spec.replicas');
+    expect(container.textContent).toContain('deployment-controller');
+
     await unmount();
   });
 

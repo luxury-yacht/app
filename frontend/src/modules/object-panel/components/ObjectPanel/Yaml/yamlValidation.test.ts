@@ -10,6 +10,7 @@ const baseIdentity: ObjectIdentity = {
   kind: 'Deployment',
   name: 'demo',
   namespace: 'default',
+  uid: null,
   resourceVersion: '42',
 };
 
@@ -73,6 +74,28 @@ describe('validateYamlDraft', () => {
     expect(result.isValid).toBe(false);
     if (!result.isValid) {
       expect(result.message).toMatch(/differs from the value when edit mode began/i);
+    }
+  });
+
+  it('rejects uid drift when the baseline identity includes a uid', () => {
+    const identityWithUID: ObjectIdentity = {
+      ...baseIdentity,
+      uid: 'tracked-uid',
+    };
+    const yaml = `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo
+  namespace: default
+  uid: other-uid
+  resourceVersion: "42"
+spec:
+  replicas: 1
+`;
+    const result = validateYamlDraft(yaml, identityWithUID, '42');
+    expect(result.isValid).toBe(false);
+    if (!result.isValid) {
+      expect(result.message).toMatch(/uid mismatch/i);
     }
   });
 });

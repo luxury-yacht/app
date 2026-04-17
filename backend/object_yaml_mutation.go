@@ -48,6 +48,7 @@ type ObjectYAMLMutationRequest struct {
 	APIVersion      string `json:"apiVersion"`
 	Namespace       string `json:"namespace"`
 	Name            string `json:"name"`
+	UID             string `json:"uid"`
 	ResourceVersion string `json:"resourceVersion"`
 }
 
@@ -205,6 +206,10 @@ func prepareMutationContextWithDependencies(
 		return nil, fmt.Errorf("metadata.resourceVersion must be present in the YAML to prevent overwrites")
 	}
 
+	if req.UID != "" && desired.GetUID() != "" && string(desired.GetUID()) != req.UID {
+		return nil, fmt.Errorf("metadata.uid mismatch: YAML has %s but editor tracked %s", desired.GetUID(), req.UID)
+	}
+
 	if desired.GetResourceVersion() != req.ResourceVersion {
 		return nil, fmt.Errorf("metadata.resourceVersion mismatch: YAML has %s but editor tracked %s", desired.GetResourceVersion(), req.ResourceVersion)
 	}
@@ -234,6 +239,19 @@ func prepareMutationContextWithDependencies(
 
 	if current.GetResourceVersion() == "" {
 		return nil, fmt.Errorf("live object is missing resourceVersion; cannot safely edit")
+	}
+
+	if req.UID != "" && string(current.GetUID()) != req.UID {
+		currentYAML, err := normalizeObjectYAML(current)
+		if err != nil {
+			return nil, err
+		}
+		return nil, &objectYAMLError{
+			Code:                   "ObjectUIDMismatch",
+			Message:                fmt.Sprintf("object identity changed since editing began: current uid is %s, editor tracked %s", current.GetUID(), req.UID),
+			CurrentYAML:            currentYAML,
+			CurrentResourceVersion: current.GetResourceVersion(),
+		}
 	}
 
 	if current.GetResourceVersion() != req.ResourceVersion {
@@ -334,6 +352,11 @@ func sanitizeForUpdate(obj *unstructured.Unstructured, resourceVersion string) *
 	if meta, ok := sanitized.Object["metadata"].(map[string]interface{}); ok {
 		delete(meta, "managedFields")
 		delete(meta, "selfLink")
+		delete(meta, "uid")
+		delete(meta, "creationTimestamp")
+		delete(meta, "deletionTimestamp")
+		delete(meta, "deletionGracePeriodSeconds")
+		delete(meta, "generation")
 		sanitized.Object["metadata"] = meta
 	}
 
@@ -385,33 +408,81 @@ func wrapKubernetesError(err error, defaultMessage string) error {
 		causes := make([]string, 0)
 		if statusErr.ErrStatus.Details != nil {
 			for _, cause := range statusErr.ErrStatus.Details.Causes {
-				if cause.Message == "" && cause.Field == "" {
+				formatted := formatStatusCause(cause)
+				if formatted == "" {
 					continue
 				}
-
-				builder := strings.Builder{}
-				if cause.Field != "" {
-					builder.WriteString(cause.Field)
-					builder.WriteString(": ")
-				}
-				if cause.Message != "" {
-					builder.WriteString(cause.Message)
-				}
-				if cause.Type != "" {
-					builder.WriteString(fmt.Sprintf(" (%s)", cause.Type))
-				}
-				causes = append(causes, builder.String())
+				causes = append(causes, formatted)
 			}
 		}
 
 		return &objectYAMLError{
 			Code:    code,
-			Message: statusErr.Error(),
+			Message: summarizeStatusError(statusErr),
 			Causes:  causes,
 		}
 	}
 
 	return fmt.Errorf("%s: %w", defaultMessage, err)
+}
+
+func summarizeStatusError(statusErr *apierrors.StatusError) string {
+	if statusErr == nil {
+		return ""
+	}
+
+	if statusErr.ErrStatus.Reason == metav1.StatusReasonConflict &&
+		statusHasCauseType(statusErr.ErrStatus.Details, metav1.CauseTypeFieldManagerConflict) {
+		return "Server-side apply found field ownership conflicts. Reload the latest object or remove the conflicting field edits listed below."
+	}
+
+	if statusErr.ErrStatus.Message != "" {
+		return statusErr.ErrStatus.Message
+	}
+
+	return statusErr.Error()
+}
+
+func statusHasCauseType(details *metav1.StatusDetails, expected metav1.CauseType) bool {
+	if details == nil {
+		return false
+	}
+	for _, cause := range details.Causes {
+		if cause.Type == expected {
+			return true
+		}
+	}
+	return false
+}
+
+func formatStatusCause(cause metav1.StatusCause) string {
+	if cause.Message == "" && cause.Field == "" {
+		return ""
+	}
+
+	if cause.Type == metav1.CauseTypeFieldManagerConflict {
+		switch {
+		case cause.Field != "" && cause.Message != "":
+			return fmt.Sprintf("%s: %s", cause.Field, cause.Message)
+		case cause.Field != "":
+			return fmt.Sprintf("%s: owned by another field manager", cause.Field)
+		default:
+			return cause.Message
+		}
+	}
+
+	builder := strings.Builder{}
+	if cause.Field != "" {
+		builder.WriteString(cause.Field)
+		builder.WriteString(": ")
+	}
+	if cause.Message != "" {
+		builder.WriteString(cause.Message)
+	}
+	if cause.Type != "" {
+		builder.WriteString(fmt.Sprintf(" (%s)", cause.Type))
+	}
+	return builder.String()
 }
 
 func (a *App) getGVRForGVK(ctx context.Context, clusterID string, gvk schema.GroupVersionKind) (schema.GroupVersionResource, bool, error) {

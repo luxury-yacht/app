@@ -136,6 +136,12 @@
   color: var(--color-error, #ff6b6b);
 }
 
+.yaml-post-apply-notice-stale {
+  background: var(--yaml-validation-bg);
+  border-color: var(--yaml-validation-border);
+  color: var(--color-error, #ff6b6b);
+}
+
 .yaml-drift-diff {
   margin-top: 0.75rem;
   border-radius: var(--border-radius-sm);
