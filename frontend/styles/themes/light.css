@@ -109,8 +109,10 @@
   --code-caret: var(--color-accent-light-600);
   --code-selection-bg: rgba(13, 148, 136, 0.15);
   --code-selection-match-bg: rgba(245, 158, 11, 0.25);
+  --code-selection-match-text: var(--color-base-900);
   --code-selection-match-outline: rgba(245, 158, 11, 0.5);
   --code-selection-match-selected-bg: rgba(245, 158, 11, 0.35);
+  --code-selection-match-selected-text: var(--color-base-900);
   --code-active-line-bg: rgba(0, 0, 0, 0.02);
   --code-active-gutter-bg: rgba(0, 0, 0, 0.04);
   --code-focus-ring: rgba(13, 148, 136, 0.5);
