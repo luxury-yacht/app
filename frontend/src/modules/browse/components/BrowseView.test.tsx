@@ -35,6 +35,10 @@ vi.mock('@ui/favorites/FavToggle', () => ({
 }));
 
 const gridTablePropsRef: { current: any } = { current: null };
+const persistenceArgsRef: { cluster: any | null; namespace: any | null } = {
+  cluster: null,
+  namespace: null,
+};
 
 vi.mock('@shared/components/tables/GridTable', async () => {
   const actual = await vi.importActual<typeof import('@shared/components/tables/GridTable')>(
@@ -105,34 +109,40 @@ vi.mock('@/core/refresh', () => ({
 }));
 
 vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => ({
-  useGridTablePersistence: () => ({
-    sortConfig: { key: 'kind', direction: 'asc' },
-    setSortConfig: vi.fn(),
-    columnWidths: null,
-    setColumnWidths: vi.fn(),
-    columnVisibility: null,
-    setColumnVisibility: vi.fn(),
-    filters: { search: '', kinds: [], namespaces: [], caseSensitive: false },
-    setFilters: vi.fn(),
-    resetState: vi.fn(),
-    hydrated: true,
-    storageKey: 'gridtable:v1:test',
-  }),
+  useGridTablePersistence: (params: any) => {
+    persistenceArgsRef.cluster = params;
+    return {
+      sortConfig: { key: 'kind', direction: 'asc' },
+      setSortConfig: vi.fn(),
+      columnWidths: null,
+      setColumnWidths: vi.fn(),
+      columnVisibility: null,
+      setColumnVisibility: vi.fn(),
+      filters: { search: '', kinds: [], namespaces: [], caseSensitive: false },
+      setFilters: vi.fn(),
+      resetState: vi.fn(),
+      hydrated: true,
+      storageKey: 'gridtable:v1:test',
+    };
+  },
 }));
 
 vi.mock('@modules/namespace/hooks/useNamespaceGridTablePersistence', () => ({
-  useNamespaceGridTablePersistence: () => ({
-    sortConfig: { key: 'kind', direction: 'asc' },
-    onSortChange: vi.fn(),
-    columnWidths: null,
-    setColumnWidths: vi.fn(),
-    columnVisibility: null,
-    setColumnVisibility: vi.fn(),
-    filters: { search: '', kinds: [], namespaces: [], caseSensitive: false },
-    setFilters: vi.fn(),
-    isNamespaceScoped: true,
-    resetState: vi.fn(),
-  }),
+  useNamespaceGridTablePersistence: (params: any) => {
+    persistenceArgsRef.namespace = params;
+    return {
+      sortConfig: { key: 'kind', direction: 'asc' },
+      onSortChange: vi.fn(),
+      columnWidths: null,
+      setColumnWidths: vi.fn(),
+      columnVisibility: null,
+      setColumnVisibility: vi.fn(),
+      filters: { search: '', kinds: [], namespaces: [], caseSensitive: false },
+      setFilters: vi.fn(),
+      isNamespaceScoped: true,
+      resetState: vi.fn(),
+    };
+  },
 }));
 
 describe('BrowseView', () => {
@@ -155,6 +165,8 @@ describe('BrowseView', () => {
     refreshMocks.catalogDomain.status = 'idle';
     refreshMocks.catalogDomain.data = null;
     refreshMocks.catalogDomain.scope = undefined;
+    persistenceArgsRef.cluster = null;
+    persistenceArgsRef.namespace = null;
   });
 
   afterEach(() => {
@@ -213,6 +225,15 @@ describe('BrowseView', () => {
 
       expect(gridTablePropsRef.current?.filters?.options?.kindDropdownBulkActions).toBe(true);
     });
+
+    it('uses the cluster browse persistence id', async () => {
+      await act(async () => {
+        root.render(<BrowseView namespace={undefined} />);
+        await Promise.resolve();
+      });
+
+      expect(persistenceArgsRef.cluster?.viewId).toBe('browse');
+    });
   });
 
   describe('Namespace scope (namespace=specific)', () => {
@@ -253,6 +274,15 @@ describe('BrowseView', () => {
   });
 
   describe('All Namespaces scope', () => {
+    it('uses a distinct persistence id from cluster browse', async () => {
+      await act(async () => {
+        root.render(<BrowseView namespace={ALL_NAMESPACES_SCOPE} />);
+        await Promise.resolve();
+      });
+
+      expect(persistenceArgsRef.cluster?.viewId).toBe('all-namespaces-browse');
+    });
+
     it('shows namespace column for all-namespaces scope', async () => {
       await act(async () => {
         root.render(<BrowseView namespace={ALL_NAMESPACES_SCOPE} />);

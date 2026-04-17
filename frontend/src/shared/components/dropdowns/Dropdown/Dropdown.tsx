@@ -5,7 +5,7 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import React, { useMemo, useEffect, useRef, useState } from 'react';
+import React, { useMemo, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { DropdownProps } from './types';
 import { useDropdownState } from './hooks/useDropdownState';
 import { useKeyboardNavigation } from './hooks/useKeyboardNavigation';
@@ -88,6 +88,7 @@ const Dropdown: React.FC<DropdownProps> = ({
 
   const [isFocused, setIsFocused] = useState(false);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const menuScrollTopRef = useRef(0);
 
   useEffect(() => {
     const node = dropdownRef.current;
@@ -260,6 +261,38 @@ const Dropdown: React.FC<DropdownProps> = ({
       }
     }
   }, [highlightedIndex, isOpen, menuRef]);
+
+  useEffect(() => {
+    const menu = menuRef.current;
+    if (!isOpen || !menu) {
+      return;
+    }
+
+    const handleMenuScroll = () => {
+      menuScrollTopRef.current = menu.scrollTop;
+    };
+
+    menu.addEventListener('scroll', handleMenuScroll, { passive: true });
+    return () => {
+      menuScrollTopRef.current = menu.scrollTop;
+      menu.removeEventListener('scroll', handleMenuScroll);
+    };
+  }, [isOpen, menuRef]);
+
+  useLayoutEffect(() => {
+    if (!isOpen || !menuRef.current) {
+      return;
+    }
+    if (menuRef.current.scrollTop !== menuScrollTopRef.current) {
+      menuRef.current.scrollTop = menuScrollTopRef.current;
+    }
+  });
+
+  useEffect(() => {
+    if (!isOpen) {
+      menuScrollTopRef.current = 0;
+    }
+  }, [isOpen]);
 
   // Calculate dropdown position to avoid viewport edges
   const [dropdownPosition, setDropdownPosition] = React.useState<'bottom' | 'top'>('bottom');
@@ -437,7 +470,9 @@ const Dropdown: React.FC<DropdownProps> = ({
                     aria-label="Select all"
                   >
                     <SelectAllIcon />
-                    {showBulkActionLabels && <span className="dropdown-bulk-action-label">Select All</span>}
+                    {showBulkActionLabels && (
+                      <span className="dropdown-bulk-action-label">Select All</span>
+                    )}
                   </button>
                   <button
                     type="button"

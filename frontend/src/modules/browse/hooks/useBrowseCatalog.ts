@@ -105,6 +105,7 @@ export function useBrowseCatalog({
   const lastAppliedScopeRef = useRef<string>('');
   const itemsRef = useRef<CatalogItem[]>([]);
   const indexByUidRef = useRef<Map<string, number>>(new Map());
+  const hasLoadedOnceRef = useRef(false);
 
   const isNamespaceScoped = pinnedNamespaces.length > 0;
 
@@ -117,6 +118,15 @@ export function useBrowseCatalog({
   // Track available namespaces from the catalog snapshot.
   // Used to query all namespaces when no filter is selected in all-namespaces mode.
   const [availableNamespaces, setAvailableNamespaces] = useState<string[]>([]);
+  const scopeIdentityKey = useMemo(
+    () =>
+      JSON.stringify({
+        clusterId: clusterId ?? '',
+        clusterScopedOnly,
+        pinnedNamespaces: pinnedNamespaces.map((ns) => ns.trim()).sort(),
+      }),
+    [clusterId, clusterScopedOnly, pinnedNamespaces]
+  );
 
   // Determine namespaces to query:
   // - Cluster scope: 'cluster' special value (to get cluster-scoped objects only)
@@ -187,19 +197,28 @@ export function useBrowseCatalog({
   }, [catalogScope]);
 
   // Apply query scope and refresh page 0 when the query changes
+  const previousScopeIdentityRef = useRef(scopeIdentityKey);
   useEffect(() => {
+    const scopeIdentityChanged = previousScopeIdentityRef.current !== scopeIdentityKey;
+    previousScopeIdentityRef.current = scopeIdentityKey;
+
     // Reset pagination state on query change
     requestModeRef.current = 'reset';
     setIsRequestingMore(false);
     setContinueToken(null);
-    // Clear items immediately to prevent stale data from previous scope showing
-    itemsRef.current = [];
-    indexByUidRef.current = new Map();
-    setItems([]);
+    // Preserve the current dataset while filter-only queries refresh so the
+    // filter bar/dropdowns stay mounted and open menus don't lose their scroll
+    // position. We still clear eagerly when the structural scope changes
+    // (cluster/namespace mode) or before the first load.
+    if (scopeIdentityChanged || !hasLoadedOnceRef.current) {
+      itemsRef.current = [];
+      indexByUidRef.current = new Map();
+      setItems([]);
+    }
 
     lastAppliedScopeRef.current = catalogScope;
     void refreshOrchestrator.fetchScopedDomain('catalog', catalogScope, { isManual: true });
-  }, [catalogScope]);
+  }, [catalogScope, scopeIdentityKey]);
 
   // Apply incoming snapshots to local pagination state
   useEffect(() => {
@@ -282,6 +301,7 @@ export function useBrowseCatalog({
     if (hasLoadedOnce || !domain.data) {
       return;
     }
+    hasLoadedOnceRef.current = true;
     setHasLoadedOnce(true);
   }, [domain.data, hasLoadedOnce]);
 

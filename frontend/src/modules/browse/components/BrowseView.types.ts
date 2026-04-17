@@ -18,7 +18,10 @@ export interface BrowseViewProps {
 
   /**
    * View ID for persistence.
-   * Defaults to 'browse' for cluster scope or 'namespace-browse' for namespace scope.
+   * Defaults to:
+   * - 'browse' for cluster scope
+   * - 'all-namespaces-browse' for all-namespaces scope
+   * - 'namespace-browse' for namespace scope
    */
   viewId?: string;
 

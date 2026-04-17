@@ -63,6 +63,24 @@ const deriveBrowseScope = (namespace: string | null | undefined): BrowseScope =>
   return 'namespace';
 };
 
+const BROWSE_PERSISTENCE_VIEW_IDS = {
+  cluster: { viewId: 'browse' },
+  allNamespaces: { viewId: 'all-namespaces-browse' },
+  namespace: { viewId: 'namespace-browse' },
+} as const;
+
+const getBrowsePersistenceViewId = (scope: BrowseScope): string => {
+  switch (scope) {
+    case 'namespace':
+      return BROWSE_PERSISTENCE_VIEW_IDS.namespace.viewId;
+    case 'all-namespaces':
+      return BROWSE_PERSISTENCE_VIEW_IDS.allNamespaces.viewId;
+    case 'cluster':
+    default:
+      return BROWSE_PERSISTENCE_VIEW_IDS.cluster.viewId;
+  }
+};
+
 /**
  * BrowseView component that handles all browse view scopes.
  *
@@ -102,8 +120,9 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     return [];
   }, [isNamespaceScoped, namespace]);
 
-  // Determine view ID for persistence
-  const resolvedViewId = viewId ?? (isNamespaceScoped ? 'namespace-browse' : 'browse');
+  // Keep persistence isolated per Browse scope so cluster and
+  // all-namespaces views do not share filters/state.
+  const resolvedViewId = viewId ?? getBrowsePersistenceViewId(scope);
 
   // Virtualization options - kept stable to avoid retrigger effects
   const virtualizationOptions = useMemo(
