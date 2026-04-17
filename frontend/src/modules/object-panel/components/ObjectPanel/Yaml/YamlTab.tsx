@@ -1087,7 +1087,9 @@ const YamlTab: React.FC<YamlTabProps> = ({
   // --- Right-click context menu for the CodeMirror editor ---
   // Use a ref so the CM extension callback always sees the latest isEditing value.
   const isEditingRef = useRef(isEditing);
-  isEditingRef.current = isEditing;
+  useEffect(() => {
+    isEditingRef.current = isEditing;
+  }, [isEditing]);
 
   const handleContextMenuClose = useCallback(() => setContextMenu(null), []);
 

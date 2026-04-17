@@ -312,6 +312,7 @@ func TestMergeObjectYamlWithLatestStrategicMergesBuiltInLists(t *testing.T) {
 		APIVersion: "apps/v1",
 		Namespace:  "default",
 		Name:       "demo",
+		UID:        "demo-uid",
 	})
 	if err != nil {
 		t.Fatalf("MergeObjectYamlWithLatest returned error: %v", err)
@@ -360,6 +361,7 @@ func TestMergeObjectYamlWithLatestRejectsConflictingBuiltInListEdits(t *testing.
 		APIVersion: "apps/v1",
 		Namespace:  "default",
 		Name:       "demo",
+		UID:        "demo-uid",
 	})
 	if err == nil {
 		t.Fatalf("expected reload merge conflict")
@@ -377,6 +379,44 @@ func TestMergeObjectYamlWithLatestRejectsConflictingBuiltInListEdits(t *testing.
 	}
 	if !strings.Contains(objErr.CurrentYAML, "image: nginx:1.27") {
 		t.Fatalf("expected conflict payload to include live YAML, got %q", objErr.CurrentYAML)
+	}
+}
+
+func TestMergeObjectYamlWithLatestDetectsUIDMismatch(t *testing.T) {
+	app, dynamicClient, clusterID := setupYAMLTestApp(t)
+	resource := dynamicClient.Resource(appsv1.SchemeGroupVersion.WithResource("deployments")).Namespace("default")
+	liveDeployment, err := resource.Get(context.Background(), "demo", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("failed to fetch deployment: %v", err)
+	}
+	liveDeployment.SetUID(types.UID("replacement-uid"))
+	liveDeployment.SetResourceVersion("99")
+	if err := dynamicClient.Tracker().Update(appsv1.SchemeGroupVersion.WithResource("deployments"), liveDeployment, "default"); err != nil {
+		t.Fatalf("failed to seed replacement deployment: %v", err)
+	}
+
+	_, err = app.MergeObjectYamlWithLatest(clusterID, ObjectYAMLReloadMergeRequest{
+		BaseYAML:   deploymentYAML("42", "nginx:1.25"),
+		DraftYAML:  deploymentYAML("42", "nginx:1.26"),
+		Kind:       "Deployment",
+		APIVersion: "apps/v1",
+		Namespace:  "default",
+		Name:       "demo",
+		UID:        "demo-uid",
+	})
+	if err == nil {
+		t.Fatalf("expected reload merge uid mismatch")
+	}
+
+	var objErr *objectYAMLError
+	if !errors.As(err, &objErr) {
+		t.Fatalf("expected objectYAMLError, got %T", err)
+	}
+	if objErr.Code != "ObjectUIDMismatch" {
+		t.Fatalf("expected ObjectUIDMismatch code, got %q", objErr.Code)
+	}
+	if !strings.Contains(objErr.Message, "current uid is replacement-uid") {
+		t.Fatalf("unexpected uid mismatch message: %q", objErr.Message)
 	}
 }
 

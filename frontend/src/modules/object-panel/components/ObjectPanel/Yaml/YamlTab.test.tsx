@@ -814,6 +814,7 @@ spec:
       kind: 'Pod',
       name: 'demo',
       namespace: 'default',
+      uid: '',
     });
     expect(codeMirrorState.value).toContain('resourceVersion: "999"');
     expect(codeMirrorState.value).toContain('syncedAt: now');

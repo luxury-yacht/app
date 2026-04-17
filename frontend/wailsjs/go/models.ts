@@ -347,6 +347,7 @@ export namespace backend {
 	    apiVersion: string;
 	    namespace: string;
 	    name: string;
+	    uid: string;
 
 	    static createFrom(source: any = {}) {
 	        return new ObjectYAMLReloadMergeRequest(source);
@@ -360,6 +361,7 @@ export namespace backend {
 	        this.apiVersion = source["apiVersion"];
 	        this.namespace = source["namespace"];
 	        this.name = source["name"];
+	        this.uid = source["uid"];
 	    }
 	}
 	export class ObjectYAMLReloadMergeResponse {

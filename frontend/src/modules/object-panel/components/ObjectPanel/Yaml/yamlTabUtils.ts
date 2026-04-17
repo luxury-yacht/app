@@ -140,5 +140,6 @@ export const mergeYamlWithLatestOnServer = async (
     apiVersion: identity.apiVersion,
     namespace: identity.namespace ?? '',
     name: identity.name,
+    uid: identity.uid ?? '',
   });
 };
