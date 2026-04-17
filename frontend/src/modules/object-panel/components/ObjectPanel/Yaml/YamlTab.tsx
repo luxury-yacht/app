@@ -536,6 +536,12 @@ const YamlTab: React.FC<YamlTabProps> = ({
         } else {
           handleFindNext();
         }
+      } else if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') {
+        event.preventDefault();
+        handleFindPrevious();
+      } else if (event.key === 'ArrowDown' || event.key === 'ArrowRight') {
+        event.preventDefault();
+        handleFindNext();
       } else if (event.key === 'Escape') {
         event.preventDefault();
         searchInputRef.current?.blur();

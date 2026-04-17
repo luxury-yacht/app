@@ -1128,6 +1128,28 @@ describe('YamlTab', () => {
     });
     expect(codemirrorSearchMocks.findPrevious).toHaveBeenCalledTimes(2);
 
+    const downEvent = new KeyboardEvent('keydown', {
+      key: 'ArrowDown',
+      bubbles: true,
+      cancelable: true,
+    });
+    Object.defineProperty(downEvent, 'preventDefault', { value: vi.fn() });
+    await act(async () => {
+      input.dispatchEvent(downEvent);
+    });
+    expect(codemirrorSearchMocks.findNext).toHaveBeenCalledTimes(3);
+
+    const upEvent = new KeyboardEvent('keydown', {
+      key: 'ArrowUp',
+      bubbles: true,
+      cancelable: true,
+    });
+    Object.defineProperty(upEvent, 'preventDefault', { value: vi.fn() });
+    await act(async () => {
+      input.dispatchEvent(upEvent);
+    });
+    expect(codemirrorSearchMocks.findPrevious).toHaveBeenCalledTimes(3);
+
     const blurSpy = vi.spyOn(input, 'blur');
     const escapeEvent = new KeyboardEvent('keydown', {
       key: 'Escape',
