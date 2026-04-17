@@ -37,15 +37,16 @@ interface KeyboardProviderValue {
   hasActiveBlockingSurface: () => boolean;
 
   // Native action bridge
-  dispatchNativeAction: (action: KeyboardNativeAction) => boolean;
+  dispatchNativeAction: (action: KeyboardNativeAction, text?: string) => boolean;
 }
 
-export type KeyboardNativeAction = 'copy' | 'selectAll';
+export type KeyboardNativeAction = 'copy' | 'selectAll' | 'paste';
 
 export interface KeyboardSurfaceNativeActionContext {
   action: KeyboardNativeAction;
   activeElement: Element | null;
   selection: Selection | null;
+  text?: string;
 }
 
 export type KeyboardSurfaceKeyResult = boolean | 'handled-no-prevent' | void;
@@ -325,7 +326,7 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
   );
 
   const dispatchNativeAction = useCallback(
-    (action: KeyboardNativeAction): boolean => {
+    (action: KeyboardNativeAction, text?: string): boolean => {
       const targetSurface = getTargetSurface(document.activeElement);
       if (!targetSurface?.onNativeAction) {
         return false;
@@ -336,11 +337,34 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
           action,
           activeElement: document.activeElement,
           selection: window.getSelection(),
+          text,
         }) === true
       );
     },
     [getTargetSurface]
   );
+
+  const applyNativePasteFallback = useCallback((text: string): boolean => {
+    const activeElement = document.activeElement;
+    if (activeElement instanceof HTMLInputElement || activeElement instanceof HTMLTextAreaElement) {
+      if (activeElement.readOnly || activeElement.disabled) {
+        return false;
+      }
+      const start = activeElement.selectionStart ?? activeElement.value.length;
+      const end = activeElement.selectionEnd ?? start;
+      activeElement.setRangeText(text, start, end, 'end');
+      activeElement.dispatchEvent(new Event('input', { bubbles: true }));
+      return true;
+    }
+
+    if (activeElement instanceof HTMLElement && activeElement.isContentEditable) {
+      if (typeof document.execCommand === 'function') {
+        return document.execCommand('insertText', false, text);
+      }
+    }
+
+    return false;
+  }, []);
 
   // Handle keyboard events
   useEffect(() => {
@@ -475,16 +499,26 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
       applySelectAll(window.getSelection(), document.activeElement as Element | null);
     };
 
+    const handleMenuPaste = (text?: string) => {
+      const content = typeof text === 'string' ? text : '';
+      if (dispatchNativeAction('paste', content)) {
+        return;
+      }
+      applyNativePasteFallback(content);
+    };
+
     // Register event listeners
     EventsOn('menu:copy', handleMenuCopy);
+    EventsOn('menu:paste', handleMenuPaste);
     EventsOn('menu:selectAll', handleMenuSelectAll);
 
     // Cleanup
     return () => {
       EventsOff('menu:copy');
+      EventsOff('menu:paste');
       EventsOff('menu:selectAll');
     };
-  }, [dispatchNativeAction]);
+  }, [applyNativePasteFallback, dispatchNativeAction]);
 
   // Get available shortcuts for current context
   const getAvailableShortcuts = useCallback((): ShortcutGroup[] => {

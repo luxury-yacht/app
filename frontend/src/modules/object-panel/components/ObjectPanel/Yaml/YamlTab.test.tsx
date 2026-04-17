@@ -462,6 +462,45 @@ describe('YamlTab', () => {
     await unmount();
   });
 
+  it('pastes native menu text into the editor while editing', async () => {
+    const { container, unmount } = await renderYamlTab();
+
+    const editButton = Array.from(container.querySelectorAll('button')).find((btn) =>
+      btn.textContent?.includes('Edit')
+    );
+    await act(async () => {
+      editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    codeMirrorState.editorView.state.selection.main = { from: 0, to: 0 } as any;
+
+    const surfaceConfig = shortcutMocks.useKeyboardSurface.mock.calls
+      .map(([config]) => config as { onNativeAction?: (context: any) => boolean })
+      .filter((config) => typeof config.onNativeAction === 'function')
+      .pop();
+
+    let handled = false;
+    await act(async () => {
+      handled =
+        surfaceConfig?.onNativeAction?.({
+          action: 'paste',
+          activeElement: null,
+          selection: null,
+          text: 'apiVersion: v1\n',
+        }) ?? false;
+    });
+
+    expect(handled).toBe(true);
+    expect(codeMirrorState.editorView.dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        changes: { from: 0, to: 0, insert: 'apiVersion: v1\n' },
+      })
+    );
+    expect(codeMirrorState.editorView.focus).toHaveBeenCalled();
+
+    await unmount();
+  });
+
   it('saves edited YAML and refreshes the snapshot', async () => {
     wailsMocks.ApplyObjectYaml.mockResolvedValue({ resourceVersion: '789' });
     // hydrateLatestObject routes through GetObjectYAMLByGVK now that the

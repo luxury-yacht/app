@@ -680,11 +680,24 @@ const YamlTab: React.FC<YamlTabProps> = ({
       handleCancelClick();
       return true;
     },
-    onNativeAction: ({ action }) => {
-      if (action !== 'selectAll') {
+    onNativeAction: ({ action, text }) => {
+      if (action === 'selectAll') {
+        return selectCodeMirrorContent(editorViewRef.current);
+      }
+      if (action !== 'paste' || !isEditing || isSaving || typeof text !== 'string') {
         return false;
       }
-      return selectCodeMirrorContent(editorViewRef.current);
+      const view = editorViewRef.current;
+      if (!view) {
+        return false;
+      }
+      const { from, to } = view.state.selection.main;
+      view.dispatch({
+        changes: { from, to, insert: text },
+        selection: EditorSelection.cursor(from + text.length),
+      });
+      view.focus();
+      return true;
     },
   });
 
@@ -1148,37 +1161,6 @@ const YamlTab: React.FC<YamlTabProps> = ({
             return false;
           }
           handleSaveClick();
-          return true;
-        },
-      },
-      {
-        key: 'Mod-v',
-        preventDefault: true,
-        run: (view) => {
-          if (!isEditing || isSaving) {
-            return false;
-          }
-          if (typeof navigator === 'undefined' || !navigator.clipboard?.readText) {
-            return false;
-          }
-          void navigator.clipboard
-            .readText()
-            .then((text) => {
-              if (!isEditing || isSaving) {
-                return;
-              }
-              const content = text ?? '';
-              view.dispatch(
-                view.state.changeByRange((range) => ({
-                  changes: { from: range.from, to: range.to, insert: content },
-                  range: EditorSelection.cursor(range.from + content.length),
-                }))
-              );
-              view.focus();
-            })
-            .catch(() => {
-              // Ignore clipboard read failures; default paste already prevented.
-            });
           return true;
         },
       },
