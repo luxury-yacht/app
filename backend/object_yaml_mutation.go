@@ -10,18 +10,25 @@ import (
 	"strings"
 	"time"
 
+	"github.com/evanphx/json-patch/v5"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/mergepatch"
+	"k8s.io/apimachinery/pkg/util/strategicpatch"
 	yamlutil "k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/dynamic"
+	kubescheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/yaml"
 )
 
 const objectYAMLErrorPrefix = "ObjectYAMLError:"
 const mutationRequestTimeout = 15 * time.Second
+const objectYAMLFieldManager = "luxury-yacht-yaml-editor"
 
 type objectYAMLError struct {
 	Code                   string   `json:"code"`
@@ -41,11 +48,13 @@ func (e *objectYAMLError) Error() string {
 
 // ObjectYAMLMutationRequest captures the payload required to validate or apply object YAML.
 type ObjectYAMLMutationRequest struct {
+	BaseYAML        string `json:"baseYAML"`
 	YAML            string `json:"yaml"`
 	Kind            string `json:"kind"`
 	APIVersion      string `json:"apiVersion"`
 	Namespace       string `json:"namespace"`
 	Name            string `json:"name"`
+	UID             string `json:"uid"`
 	ResourceVersion string `json:"resourceVersion"`
 }
 
@@ -56,12 +65,14 @@ type ObjectYAMLMutationResponse struct {
 
 type mutationContext struct {
 	request      ObjectYAMLMutationRequest
+	base         *unstructured.Unstructured
 	desired      *unstructured.Unstructured
-	sanitized    *unstructured.Unstructured
 	resource     dynamic.ResourceInterface
 	current      *unstructured.Unstructured
 	gvr          schema.GroupVersionResource
 	isNamespaced bool
+	patch        []byte
+	patchType    types.PatchType
 }
 
 func (a *App) mutationContext() (context.Context, context.CancelFunc) {
@@ -75,7 +86,7 @@ func (a *App) mutationContext() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(base, mutationRequestTimeout)
 }
 
-// ValidateObjectYaml performs a dry-run server-side apply to ensure the YAML is valid and safe to apply.
+// ValidateObjectYaml performs a dry-run kubectl-edit-style patch to ensure the YAML is valid and safe to apply.
 func (a *App) ValidateObjectYaml(clusterID string, req ObjectYAMLMutationRequest) (*ObjectYAMLMutationResponse, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
@@ -90,10 +101,15 @@ func (a *App) ValidateObjectYaml(clusterID string, req ObjectYAMLMutationRequest
 		return nil, err
 	}
 
-	result, err := mc.resource.Update(
+	result, err := mc.resource.Patch(
 		ctx,
-		mc.sanitized.DeepCopy(),
-		metav1.UpdateOptions{DryRun: []string{metav1.DryRunAll}},
+		req.Name,
+		mc.patchType,
+		mc.patch,
+		metav1.PatchOptions{
+			DryRun:       []string{metav1.DryRunAll},
+			FieldManager: objectYAMLFieldManager,
+		},
 	)
 	if err != nil {
 		return nil, wrapKubernetesError(err, "validation failed")
@@ -104,7 +120,8 @@ func (a *App) ValidateObjectYaml(clusterID string, req ObjectYAMLMutationRequest
 	}, nil
 }
 
-// ApplyObjectYaml performs a guarded update using the validated YAML.
+// ApplyObjectYaml performs a kubectl-edit-style patch using the original editor
+// baseline plus the user's edited YAML.
 func (a *App) ApplyObjectYaml(clusterID string, req ObjectYAMLMutationRequest) (*ObjectYAMLMutationResponse, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
@@ -119,10 +136,14 @@ func (a *App) ApplyObjectYaml(clusterID string, req ObjectYAMLMutationRequest) (
 		return nil, err
 	}
 
-	result, err := mc.resource.Update(
+	result, err := mc.resource.Patch(
 		ctx,
-		mc.sanitized.DeepCopy(),
-		metav1.UpdateOptions{},
+		req.Name,
+		mc.patchType,
+		mc.patch,
+		metav1.PatchOptions{
+			FieldManager: objectYAMLFieldManager,
+		},
 	)
 	if err != nil {
 		return nil, wrapKubernetesError(err, "apply failed")
@@ -149,9 +170,10 @@ func prepareMutationContextWithDependencies(
 		}
 	}
 
+	trimmedBaseYAML := strings.TrimSpace(req.BaseYAML)
 	trimmedYAML := strings.TrimSpace(req.YAML)
-	if trimmedYAML == "" {
-		return nil, fmt.Errorf("YAML content is required")
+	if trimmedBaseYAML == "" || trimmedYAML == "" {
+		return nil, fmt.Errorf("baseline YAML and edited YAML are required")
 	}
 
 	if strings.TrimSpace(req.Kind) == "" || strings.TrimSpace(req.APIVersion) == "" {
@@ -160,44 +182,21 @@ func prepareMutationContextWithDependencies(
 	if strings.TrimSpace(req.Name) == "" {
 		return nil, fmt.Errorf("metadata.name is required")
 	}
-	if strings.TrimSpace(req.ResourceVersion) == "" {
-		return nil, fmt.Errorf("metadata.resourceVersion is required")
-	}
 
+	base, err := parseYAMLToUnstructured(trimmedBaseYAML)
+	if err != nil {
+		return nil, err
+	}
 	desired, err := parseYAMLToUnstructured(trimmedYAML)
 	if err != nil {
 		return nil, err
 	}
 
-	// Identity validation
-	if !strings.EqualFold(req.Kind, desired.GetKind()) {
-		return nil, fmt.Errorf("kind mismatch: expected %s, found %s", req.Kind, desired.GetKind())
+	if err := validateMutationObject(base, req, "baseline YAML"); err != nil {
+		return nil, err
 	}
-	if req.APIVersion != desired.GetAPIVersion() {
-		return nil, fmt.Errorf("apiVersion mismatch: expected %s, found %s", req.APIVersion, desired.GetAPIVersion())
-	}
-	if req.Name != desired.GetName() {
-		return nil, fmt.Errorf("metadata.name mismatch: expected %s, found %s", req.Name, desired.GetName())
-	}
-
-	if req.Namespace != "" && desired.GetNamespace() != req.Namespace {
-		return nil, fmt.Errorf(
-			"metadata.namespace mismatch: expected %s, found %s",
-			namespaceLabel(req.Namespace),
-			namespaceLabel(desired.GetNamespace()),
-		)
-	}
-
-	if desired.GetKind() == "List" {
-		return nil, fmt.Errorf("list objects are not supported in YAML editor")
-	}
-
-	if desired.GetResourceVersion() == "" {
-		return nil, fmt.Errorf("metadata.resourceVersion must be present in the YAML to prevent overwrites")
-	}
-
-	if desired.GetResourceVersion() != req.ResourceVersion {
-		return nil, fmt.Errorf("metadata.resourceVersion mismatch: YAML has %s but editor tracked %s", desired.GetResourceVersion(), req.ResourceVersion)
+	if err := validateMutationObject(desired, req, "edited YAML"); err != nil {
+		return nil, err
 	}
 
 	gvk := schema.FromAPIVersionAndKind(req.APIVersion, req.Kind)
@@ -227,14 +226,14 @@ func prepareMutationContextWithDependencies(
 		return nil, fmt.Errorf("live object is missing resourceVersion; cannot safely edit")
 	}
 
-	if current.GetResourceVersion() != req.ResourceVersion {
+	if req.UID != "" && string(current.GetUID()) != req.UID {
 		currentYAML, err := normalizeObjectYAML(current)
 		if err != nil {
 			return nil, err
 		}
 		return nil, &objectYAMLError{
-			Code:                   "ResourceVersionMismatch",
-			Message:                fmt.Sprintf("object has changed since editing began: current resourceVersion is %s, editor tracked %s", current.GetResourceVersion(), req.ResourceVersion),
+			Code:                   "ObjectUIDMismatch",
+			Message:                fmt.Sprintf("object identity changed since editing began: current uid is %s, editor tracked %s", current.GetUID(), req.UID),
 			CurrentYAML:            currentYAML,
 			CurrentResourceVersion: current.GetResourceVersion(),
 		}
@@ -244,17 +243,103 @@ func prepareMutationContextWithDependencies(
 		return nil, fmt.Errorf("live object namespace %s does not match YAML namespace %s", namespaceLabel(current.GetNamespace()), namespaceLabel(desired.GetNamespace()))
 	}
 
-	sanitized := sanitizeForUpdate(desired, req.ResourceVersion)
+	patch, patchType, err := buildKubectlEditPatch(gvk, base, desired)
+	if err != nil {
+		return nil, err
+	}
 
 	return &mutationContext{
 		request:      req,
+		base:         base,
 		desired:      desired,
-		sanitized:    sanitized,
 		resource:     resource,
 		current:      current,
 		gvr:          gvr,
 		isNamespaced: isNamespaced,
+		patch:        patch,
+		patchType:    patchType,
 	}, nil
+}
+
+func validateMutationObject(obj *unstructured.Unstructured, req ObjectYAMLMutationRequest, label string) error {
+	if obj == nil {
+		return fmt.Errorf("%s is required", label)
+	}
+	if obj.GetKind() == "List" {
+		return fmt.Errorf("list objects are not supported in YAML editor")
+	}
+	if !strings.EqualFold(req.Kind, obj.GetKind()) {
+		return fmt.Errorf("%s kind mismatch: expected %s, found %s", label, req.Kind, obj.GetKind())
+	}
+	if req.APIVersion != obj.GetAPIVersion() {
+		return fmt.Errorf("%s apiVersion mismatch: expected %s, found %s", label, req.APIVersion, obj.GetAPIVersion())
+	}
+	if req.Name != obj.GetName() {
+		return fmt.Errorf("%s metadata.name mismatch: expected %s, found %s", label, req.Name, obj.GetName())
+	}
+	if req.Namespace != obj.GetNamespace() {
+		return fmt.Errorf(
+			"%s metadata.namespace mismatch: expected %s, found %s",
+			label,
+			namespaceLabel(req.Namespace),
+			namespaceLabel(obj.GetNamespace()),
+		)
+	}
+	if req.UID != "" && string(obj.GetUID()) != "" && string(obj.GetUID()) != req.UID {
+		return fmt.Errorf("%s metadata.uid mismatch: expected %s, found %s", label, req.UID, obj.GetUID())
+	}
+	return nil
+}
+
+func buildKubectlEditPatch(
+	gvk schema.GroupVersionKind,
+	baseObj, desiredObj *unstructured.Unstructured,
+) ([]byte, types.PatchType, error) {
+	baseJSON, err := json.Marshal(baseObj.Object)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to encode baseline object: %w", err)
+	}
+	desiredJSON, err := json.Marshal(desiredObj.Object)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to encode edited object: %w", err)
+	}
+
+	preconditions := []mergepatch.PreconditionFunc{
+		mergepatch.RequireKeyUnchanged("apiVersion"),
+		mergepatch.RequireKeyUnchanged("kind"),
+		mergepatch.RequireMetadataKeyUnchanged("name"),
+		mergepatch.RequireKeyUnchanged("managedFields"),
+	}
+
+	versionedObject, err := kubescheme.Scheme.New(gvk)
+	switch {
+	case runtime.IsNotRegisteredError(err):
+		patch, patchErr := jsonpatch.CreateMergePatch(baseJSON, desiredJSON)
+		if patchErr != nil {
+			return nil, "", fmt.Errorf("failed to build merge patch: %w", patchErr)
+		}
+		var patchMap map[string]interface{}
+		if err := json.Unmarshal(patch, &patchMap); err != nil {
+			return nil, "", fmt.Errorf("failed to decode merge patch: %w", err)
+		}
+		for _, precondition := range preconditions {
+			if !precondition(patchMap) {
+				return nil, "", fmt.Errorf("at least one of apiVersion, kind, name, or managedFields was changed")
+			}
+		}
+		return patch, types.MergePatchType, nil
+	case err != nil:
+		return nil, "", err
+	default:
+		patch, patchErr := strategicpatch.CreateTwoWayMergePatch(baseJSON, desiredJSON, versionedObject, preconditions...)
+		if patchErr != nil {
+			if mergepatch.IsPreconditionFailed(patchErr) {
+				return nil, "", fmt.Errorf("at least one of apiVersion, kind, name, or managedFields was changed")
+			}
+			return nil, "", fmt.Errorf("failed to build strategic merge patch: %w", patchErr)
+		}
+		return patch, types.StrategicMergePatchType, nil
+	}
 }
 
 func parseYAMLToUnstructured(content string) (*unstructured.Unstructured, error) {
@@ -304,6 +389,11 @@ func sanitizeForUpdate(obj *unstructured.Unstructured, resourceVersion string) *
 	if meta, ok := sanitized.Object["metadata"].(map[string]interface{}); ok {
 		delete(meta, "managedFields")
 		delete(meta, "selfLink")
+		delete(meta, "uid")
+		delete(meta, "creationTimestamp")
+		delete(meta, "deletionTimestamp")
+		delete(meta, "deletionGracePeriodSeconds")
+		delete(meta, "generation")
 		sanitized.Object["metadata"] = meta
 	}
 
@@ -355,33 +445,81 @@ func wrapKubernetesError(err error, defaultMessage string) error {
 		causes := make([]string, 0)
 		if statusErr.ErrStatus.Details != nil {
 			for _, cause := range statusErr.ErrStatus.Details.Causes {
-				if cause.Message == "" && cause.Field == "" {
+				formatted := formatStatusCause(cause)
+				if formatted == "" {
 					continue
 				}
-
-				builder := strings.Builder{}
-				if cause.Field != "" {
-					builder.WriteString(cause.Field)
-					builder.WriteString(": ")
-				}
-				if cause.Message != "" {
-					builder.WriteString(cause.Message)
-				}
-				if cause.Type != "" {
-					builder.WriteString(fmt.Sprintf(" (%s)", cause.Type))
-				}
-				causes = append(causes, builder.String())
+				causes = append(causes, formatted)
 			}
 		}
 
 		return &objectYAMLError{
 			Code:    code,
-			Message: statusErr.Error(),
+			Message: summarizeStatusError(statusErr),
 			Causes:  causes,
 		}
 	}
 
 	return fmt.Errorf("%s: %w", defaultMessage, err)
+}
+
+func summarizeStatusError(statusErr *apierrors.StatusError) string {
+	if statusErr == nil {
+		return ""
+	}
+
+	if statusErr.ErrStatus.Reason == metav1.StatusReasonConflict &&
+		statusHasCauseType(statusErr.ErrStatus.Details, metav1.CauseTypeFieldManagerConflict) {
+		return "Server-side apply found field ownership conflicts. Reload the latest object or remove the conflicting field edits listed below."
+	}
+
+	if statusErr.ErrStatus.Message != "" {
+		return statusErr.ErrStatus.Message
+	}
+
+	return statusErr.Error()
+}
+
+func statusHasCauseType(details *metav1.StatusDetails, expected metav1.CauseType) bool {
+	if details == nil {
+		return false
+	}
+	for _, cause := range details.Causes {
+		if cause.Type == expected {
+			return true
+		}
+	}
+	return false
+}
+
+func formatStatusCause(cause metav1.StatusCause) string {
+	if cause.Message == "" && cause.Field == "" {
+		return ""
+	}
+
+	if cause.Type == metav1.CauseTypeFieldManagerConflict {
+		switch {
+		case cause.Field != "" && cause.Message != "":
+			return fmt.Sprintf("%s: %s", cause.Field, cause.Message)
+		case cause.Field != "":
+			return fmt.Sprintf("%s: owned by another field manager", cause.Field)
+		default:
+			return cause.Message
+		}
+	}
+
+	builder := strings.Builder{}
+	if cause.Field != "" {
+		builder.WriteString(cause.Field)
+		builder.WriteString(": ")
+	}
+	if cause.Message != "" {
+		builder.WriteString(cause.Message)
+	}
+	if cause.Type != "" {
+		builder.WriteString(fmt.Sprintf(" (%s)", cause.Type))
+	}
+	return builder.String()
 }
 
 func (a *App) getGVRForGVK(ctx context.Context, clusterID string, gvk schema.GroupVersionKind) (schema.GroupVersionResource, bool, error) {

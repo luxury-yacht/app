@@ -48,6 +48,7 @@ vi.mock('@wailsjs/go/backend/App', () => ({
     yaml: 'apiVersion: v1\nkind: Pod\nmetadata:\n  name: demo',
     resourceVersion: '123',
   }),
+  MergeObjectYamlWithLatest: vi.fn(),
 }));
 
 describe('YamlTab shortcuts', () => {

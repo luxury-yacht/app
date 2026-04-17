@@ -15,7 +15,7 @@
   justify-content: space-between;
   gap: var(--spacing-md);
   flex-wrap: wrap;
-  padding: 0.3rem;
+  padding: 0.75rem;
   background-color: var(--color-bg-secondary);
   /* border-radius: var(--border-radius-sm); */
   /* box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08); */
@@ -26,6 +26,44 @@
   align-items: center;
   gap: var(--spacing-sm);
   margin-left: auto;
+}
+
+.yaml-search-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+}
+
+.yaml-search-controls .find-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: 0;
+}
+
+.yaml-search-controls .find-controls .find-input {
+  width: 175px;
+  min-width: 175px;
+  height: auto;
+  padding: 4px 8px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  color: var(--color-text);
+  font-size: var(--font-size-normal);
+  outline: none;
+}
+
+.yaml-search-controls .find-controls .find-input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: var(--dropdown-trigger-focus-shadow);
+}
+
+.yaml-search-controls .find-controls .find-input::placeholder {
+  color: var(--color-text-secondary);
+  opacity: 0.6;
 }
 
 .yaml-content {
@@ -95,7 +133,6 @@
   border-radius: var(--border-radius-sm);
   background: var(--yaml-validation-bg);
   color: var(--color-error, #ff6b6b);
-  border: 1px solid var(--yaml-validation-border);
 }
 
 .yaml-validation-message p {
@@ -114,6 +151,64 @@
   background: var(--yaml-notice-bg);
   border: 1px solid var(--yaml-notice-border);
   color: var(--color-text-secondary);
+}
+
+.yaml-post-apply-notice {
+  margin: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--border-radius-sm);
+  background: var(--yaml-notice-bg);
+  border: 1px solid var(--yaml-notice-border);
+  color: var(--color-text-secondary);
+}
+
+.yaml-post-apply-notice p {
+  margin: 0;
+  line-height: 1.4;
+}
+
+.yaml-notice-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.yaml-notice-header p {
+  flex: 1;
+}
+
+.yaml-notice-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.yaml-notice-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.yaml-notice-close:hover {
+  opacity: 0.8;
+}
+
+.yaml-post-apply-notice-warning {
+  background: var(--yaml-notice-bg);
+  border-color: var(--yaml-notice-border);
+  color: var(--color-text-secondary);
+}
+
+.yaml-post-apply-notice-stale {
+  background: var(--yaml-notice-bg);
+  border-color: var(--yaml-notice-border);
+  color: var(--yaml-notice-text);
 }
 
 .yaml-drift-diff {
@@ -148,6 +243,12 @@
 
 .yaml-drift-diff-line-context {
   color: inherit;
+}
+
+.yaml-diff-controls {
+  margin-top: 0.75rem;
+  display: flex;
+  justify-content: flex-end;
 }
 
 .yaml-drift-warning {
