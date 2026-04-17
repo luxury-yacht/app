@@ -203,6 +203,8 @@ export function LogFrontend(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function MatchThemeForCluster(arg1:string):Promise<types.Theme>;
 
+export function MergeObjectYamlWithLatest(arg1:string,arg2:backend.ObjectYAMLReloadMergeRequest):Promise<backend.ObjectYAMLReloadMergeResponse>;
+
 export function OpenKubeconfigSearchPathDialog():Promise<string>;
 
 export function QueryPermissions(arg1:Array<capabilities.PermissionQuery>):Promise<capabilities.QueryPermissionsResponse>;

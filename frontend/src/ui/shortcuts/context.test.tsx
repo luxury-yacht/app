@@ -304,13 +304,17 @@ describe('keyboard handling edge cases', () => {
     });
 
     const registeredEvents = runtimeMocks.eventsOn.mock.calls.map(([event]) => event);
-    expect(registeredEvents).toEqual(expect.arrayContaining(['menu:copy', 'menu:selectAll']));
+    expect(registeredEvents).toEqual(
+      expect.arrayContaining(['menu:copy', 'menu:paste', 'menu:selectAll'])
+    );
 
     act(() => {
       root.unmount();
     });
 
     const unregisteredEvents = runtimeMocks.eventsOff.mock.calls.map(([event]) => event);
-    expect(unregisteredEvents).toEqual(expect.arrayContaining(['menu:copy', 'menu:selectAll']));
+    expect(unregisteredEvents).toEqual(
+      expect.arrayContaining(['menu:copy', 'menu:paste', 'menu:selectAll'])
+    );
   });
 });

@@ -305,11 +305,13 @@ export namespace backend {
 	    }
 	}
 	export class ObjectYAMLMutationRequest {
+	    baseYAML: string;
 	    yaml: string;
 	    kind: string;
 	    apiVersion: string;
 	    namespace: string;
 	    name: string;
+	    uid: string;
 	    resourceVersion: string;
 	
 	    static createFrom(source: any = {}) {
@@ -318,11 +320,13 @@ export namespace backend {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.baseYAML = source["baseYAML"];
 	        this.yaml = source["yaml"];
 	        this.kind = source["kind"];
 	        this.apiVersion = source["apiVersion"];
 	        this.namespace = source["namespace"];
 	        this.name = source["name"];
+	        this.uid = source["uid"];
 	        this.resourceVersion = source["resourceVersion"];
 	    }
 	}
@@ -335,6 +339,46 @@ export namespace backend {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.resourceVersion = source["resourceVersion"];
+	    }
+	}
+	export class ObjectYAMLReloadMergeRequest {
+	    baseYAML: string;
+	    draftYAML: string;
+	    kind: string;
+	    apiVersion: string;
+	    namespace: string;
+	    name: string;
+	    uid: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ObjectYAMLReloadMergeRequest(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.baseYAML = source["baseYAML"];
+	        this.draftYAML = source["draftYAML"];
+	        this.kind = source["kind"];
+	        this.apiVersion = source["apiVersion"];
+	        this.namespace = source["namespace"];
+	        this.name = source["name"];
+	        this.uid = source["uid"];
+	    }
+	}
+	export class ObjectYAMLReloadMergeResponse {
+	    mergedYAML: string;
+	    currentYAML: string;
+	    resourceVersion: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ObjectYAMLReloadMergeResponse(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.mergedYAML = source["mergedYAML"];
+	        this.currentYAML = source["currentYAML"];
 	        this.resourceVersion = source["resourceVersion"];
 	    }
 	}

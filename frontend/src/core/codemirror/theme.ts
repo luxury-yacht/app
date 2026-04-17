@@ -58,30 +58,35 @@ const viewStyleSpec = {
     backgroundColor: 'var(--code-active-line-bg)',
   },
   '.cm-selectionBackground, .cm-content ::selection': {
-    backgroundColor: 'var(--code-selection-bg)',
+    backgroundColor: 'var(--color-accent)',
   },
-  // '.cm-selectionMatch': {
-  //   backgroundColor: 'var(--code-selection-match-bg)',
-  //   outline: '1px solid var(--code-selection-match-outline)',
-  // },
-  // '.cm-searchMatch': {
-  //   backgroundColor: 'var(--code-selection-match-bg) !important',
-  //   outline: '1px solid var(--code-selection-match-outline)',
-  // },
-  // '.cm-searchMatch.cm-searchMatch-selected': {
-  //   backgroundColor: 'var(--code-selection-match-selected-bg) !important',
-  //   outline: '1px solid var(--code-selection-match-outline)',
-  // },
-  // '.cm-activeLine .cm-searchMatch': {
-  //   backgroundColor: 'var(--code-selection-match-bg) !important',
-  //   outline: '1px solid var(--code-selection-match-outline)',
-  //   boxShadow: '0 0 0 1px var(--code-selection-match-outline) inset',
-  // },
-  // '.cm-activeLine .cm-selectionMatch': {
-  //   backgroundColor: 'var(--code-selection-match-bg)',
-  //   outline: '1px solid var(--code-selection-match-outline)',
-  //   boxShadow: '0 0 0 1px var(--code-selection-match-outline) inset',
-  // },
+  '.cm-selectionMatch': {
+    backgroundColor: 'var(--code-selection-match-bg)',
+    color: 'var(--code-selection-match-text)',
+    outline: '1px solid var(--code-selection-match-outline)',
+  },
+  '.cm-searchMatch': {
+    backgroundColor: 'var(--code-selection-match-bg) !important',
+    color: 'var(--code-selection-match-text)',
+    outline: '1px solid var(--code-selection-match-outline)',
+  },
+  '.cm-searchMatch.cm-searchMatch-selected': {
+    backgroundColor: 'var(--code-selection-match-selected-bg) !important',
+    color: 'var(--code-selection-match-selected-text)',
+    outline: '1px solid var(--code-selection-match-outline)',
+  },
+  '.cm-activeLine .cm-searchMatch': {
+    backgroundColor: 'var(--code-selection-match-bg) !important',
+    color: 'var(--code-selection-match-text)',
+    outline: '1px solid var(--code-selection-match-outline)',
+    boxShadow: '0 0 0 1px var(--code-selection-match-outline) inset',
+  },
+  '.cm-activeLine .cm-selectionMatch': {
+    backgroundColor: 'var(--code-selection-match-bg)',
+    color: 'var(--code-selection-match-text)',
+    outline: '1px solid var(--code-selection-match-outline)',
+    boxShadow: '0 0 0 1px var(--code-selection-match-outline) inset',
+  },
   '.cm-matchingBracket, .cm-nonmatchingBracket': {
     backgroundColor: 'var(--code-matching-bracket-bg)',
     outline: '1px solid var(--code-matching-bracket-outline)',
