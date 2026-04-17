@@ -4,12 +4,30 @@ import (
 	"context"
 	"testing"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes/fake"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
+
+	"k8s.io/client-go/kubernetes/fake"
 )
+
+func testPortForwardTarget(kind, namespace, name string) portForwardTargetRef {
+	group := ""
+	version := "v1"
+	if kind == "Deployment" || kind == "StatefulSet" || kind == "DaemonSet" {
+		group = "apps"
+	}
+	return portForwardTargetRef{
+		Namespace: namespace,
+		Kind:      kind,
+		Group:     group,
+		Version:   version,
+		Name:      name,
+	}
+}
 
 // TestResolvePodForTarget_Pod verifies that a ready pod resolves to itself.
 func TestResolvePodForTarget_Pod(t *testing.T) {
@@ -26,7 +44,7 @@ func TestResolvePodForTarget_Pod(t *testing.T) {
 		},
 	})
 
-	podName, err := resolvePodForTarget(context.Background(), client, "default", "Pod", "my-pod")
+	podName, err := resolvePodForTarget(context.Background(), client, testPortForwardTarget("Pod", "default", "my-pod"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -35,14 +53,93 @@ func TestResolvePodForTarget_Pod(t *testing.T) {
 	}
 }
 
-// TestResolvePodForTarget_Deployment verifies that a deployment resolves to a ready pod with matching prefix.
-func TestResolvePodForTarget_Deployment(t *testing.T) {
+func TestResolvePodForTarget_DeploymentUsesOwnedPods(t *testing.T) {
+	deploymentUID := types.UID("deploy-uid")
+	replicaSetUID := types.UID("rs-uid")
+	controller := true
+
 	client := fake.NewClientset(
+		&appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "nginx",
+				Namespace: "default",
+				UID:       deploymentUID,
+			},
+			Spec: appsv1.DeploymentSpec{
+				Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "nginx"}},
+			},
+		},
+		&appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "nginx-worker",
+				Namespace: "default",
+				UID:       types.UID("other-deploy"),
+			},
+			Spec: appsv1.DeploymentSpec{
+				Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "nginx-worker"}},
+			},
+		},
+		&appsv1.ReplicaSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "nginx-rs",
+				Namespace: "default",
+				UID:       replicaSetUID,
+				Labels:    map[string]string{"app": "nginx"},
+				OwnerReferences: []metav1.OwnerReference{{
+					APIVersion: "apps/v1",
+					Kind:       "Deployment",
+					Name:       "nginx",
+					UID:        deploymentUID,
+					Controller: &controller,
+				}},
+			},
+			Spec: appsv1.ReplicaSetSpec{
+				Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "nginx"}},
+			},
+		},
+		&appsv1.ReplicaSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "nginx-worker-rs",
+				Namespace: "default",
+				UID:       types.UID("other-rs"),
+				Labels:    map[string]string{"app": "nginx-worker"},
+				OwnerReferences: []metav1.OwnerReference{{
+					APIVersion: "apps/v1",
+					Kind:       "Deployment",
+					Name:       "nginx-worker",
+					UID:        types.UID("other-deploy"),
+					Controller: &controller,
+				}},
+			},
+			Spec: appsv1.ReplicaSetSpec{
+				Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "nginx-worker"}},
+			},
+		},
 		&corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "nginx-abc123",
 				Namespace: "default",
 				Labels:    map[string]string{"app": "nginx"},
+				OwnerReferences: []metav1.OwnerReference{{
+					APIVersion: "apps/v1",
+					Kind:       "ReplicaSet",
+					Name:       "nginx-rs",
+					UID:        replicaSetUID,
+					Controller: &controller,
+				}},
+			},
+			Status: corev1.PodStatus{
+				Phase: corev1.PodRunning,
+				Conditions: []corev1.PodCondition{
+					{Type: corev1.PodReady, Status: corev1.ConditionTrue},
+				},
+			},
+		},
+		&corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "nginx-worker-abc123",
+				Namespace: "default",
+				Labels:    map[string]string{"app": "nginx-worker"},
 			},
 			Status: corev1.PodStatus{
 				Phase: corev1.PodRunning,
@@ -53,22 +150,40 @@ func TestResolvePodForTarget_Deployment(t *testing.T) {
 		},
 	)
 
-	podName, err := resolvePodForTarget(context.Background(), client, "default", "Deployment", "nginx")
+	podName, err := resolvePodForTarget(context.Background(), client, testPortForwardTarget("Deployment", "default", "nginx"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if podName != "nginx-abc123" {
-		t.Errorf("expected pod name 'nginx-abc123', got '%s'", podName)
+		t.Errorf("expected owned pod 'nginx-abc123', got '%s'", podName)
 	}
 }
 
-// TestResolvePodForTarget_StatefulSet verifies that a statefulset resolves to a ready pod with matching prefix.
 func TestResolvePodForTarget_StatefulSet(t *testing.T) {
+	controller := true
 	client := fake.NewClientset(
+		&appsv1.StatefulSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "mysql",
+				Namespace: "database",
+				UID:       types.UID("mysql-uid"),
+			},
+			Spec: appsv1.StatefulSetSpec{
+				Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "mysql"}},
+			},
+		},
 		&corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "mysql-0",
 				Namespace: "database",
+				Labels:    map[string]string{"app": "mysql"},
+				OwnerReferences: []metav1.OwnerReference{{
+					APIVersion: "apps/v1",
+					Kind:       "StatefulSet",
+					Name:       "mysql",
+					UID:        types.UID("mysql-uid"),
+					Controller: &controller,
+				}},
 			},
 			Status: corev1.PodStatus{
 				Phase: corev1.PodRunning,
@@ -79,7 +194,7 @@ func TestResolvePodForTarget_StatefulSet(t *testing.T) {
 		},
 	)
 
-	podName, err := resolvePodForTarget(context.Background(), client, "database", "StatefulSet", "mysql")
+	podName, err := resolvePodForTarget(context.Background(), client, testPortForwardTarget("StatefulSet", "database", "mysql"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -88,13 +203,31 @@ func TestResolvePodForTarget_StatefulSet(t *testing.T) {
 	}
 }
 
-// TestResolvePodForTarget_DaemonSet verifies that a daemonset resolves to a ready pod with matching prefix.
 func TestResolvePodForTarget_DaemonSet(t *testing.T) {
+	controller := true
 	client := fake.NewClientset(
+		&appsv1.DaemonSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "fluentd",
+				Namespace: "kube-system",
+				UID:       types.UID("fluentd-uid"),
+			},
+			Spec: appsv1.DaemonSetSpec{
+				Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "fluentd"}},
+			},
+		},
 		&corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "fluentd-xyz99",
 				Namespace: "kube-system",
+				Labels:    map[string]string{"app": "fluentd"},
+				OwnerReferences: []metav1.OwnerReference{{
+					APIVersion: "apps/v1",
+					Kind:       "DaemonSet",
+					Name:       "fluentd",
+					UID:        types.UID("fluentd-uid"),
+					Controller: &controller,
+				}},
 			},
 			Status: corev1.PodStatus{
 				Phase: corev1.PodRunning,
@@ -105,7 +238,7 @@ func TestResolvePodForTarget_DaemonSet(t *testing.T) {
 		},
 	)
 
-	podName, err := resolvePodForTarget(context.Background(), client, "kube-system", "DaemonSet", "fluentd")
+	podName, err := resolvePodForTarget(context.Background(), client, testPortForwardTarget("DaemonSet", "kube-system", "fluentd"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -126,7 +259,7 @@ func TestResolvePodForTarget_PodNotReady(t *testing.T) {
 		},
 	})
 
-	_, err := resolvePodForTarget(context.Background(), client, "default", "Pod", "my-pod")
+	_, err := resolvePodForTarget(context.Background(), client, testPortForwardTarget("Pod", "default", "my-pod"))
 	if err == nil {
 		t.Error("expected error for non-ready pod")
 	}
@@ -136,7 +269,7 @@ func TestResolvePodForTarget_PodNotReady(t *testing.T) {
 func TestResolvePodForTarget_PodNotFound(t *testing.T) {
 	client := fake.NewClientset()
 
-	_, err := resolvePodForTarget(context.Background(), client, "default", "Pod", "nonexistent")
+	_, err := resolvePodForTarget(context.Background(), client, testPortForwardTarget("Pod", "default", "nonexistent"))
 	if err == nil {
 		t.Error("expected error for non-existent pod")
 	}
@@ -180,7 +313,7 @@ func TestResolvePodForTarget_Service(t *testing.T) {
 		},
 	)
 
-	podName, err := resolvePodForTarget(context.Background(), client, "default", "Service", "my-service")
+	podName, err := resolvePodForTarget(context.Background(), client, testPortForwardTarget("Service", "default", "my-service"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -224,7 +357,7 @@ func TestResolvePodForTarget_ServiceNoReadyPods(t *testing.T) {
 		},
 	)
 
-	_, err := resolvePodForTarget(context.Background(), client, "default", "Service", "my-service")
+	_, err := resolvePodForTarget(context.Background(), client, testPortForwardTarget("Service", "default", "my-service"))
 	if err == nil {
 		t.Error("expected error when service has no ready pods")
 	}
@@ -234,7 +367,7 @@ func TestResolvePodForTarget_ServiceNoReadyPods(t *testing.T) {
 func TestResolvePodForTarget_ServiceNotFound(t *testing.T) {
 	client := fake.NewClientset()
 
-	_, err := resolvePodForTarget(context.Background(), client, "default", "Service", "nonexistent")
+	_, err := resolvePodForTarget(context.Background(), client, testPortForwardTarget("Service", "default", "nonexistent"))
 	if err == nil {
 		t.Error("expected error for non-existent service")
 	}
@@ -244,7 +377,13 @@ func TestResolvePodForTarget_ServiceNotFound(t *testing.T) {
 func TestResolvePodForTarget_UnsupportedKind(t *testing.T) {
 	client := fake.NewClientset()
 
-	_, err := resolvePodForTarget(context.Background(), client, "default", "ConfigMap", "my-cm")
+	_, err := resolvePodForTarget(context.Background(), client, portForwardTargetRef{
+		Namespace: "default",
+		Kind:      "ConfigMap",
+		Group:     "",
+		Version:   "v1",
+		Name:      "my-cm",
+	})
 	if err == nil {
 		t.Error("expected error for unsupported kind")
 	}
@@ -252,11 +391,48 @@ func TestResolvePodForTarget_UnsupportedKind(t *testing.T) {
 
 // TestResolvePodForTarget_WorkloadNoReadyPod verifies error when workload has no ready pods.
 func TestResolvePodForTarget_WorkloadNoReadyPod(t *testing.T) {
+	controller := true
 	client := fake.NewClientset(
+		&appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "nginx",
+				Namespace: "default",
+				UID:       types.UID("deploy-uid"),
+			},
+			Spec: appsv1.DeploymentSpec{
+				Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "nginx"}},
+			},
+		},
+		&appsv1.ReplicaSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "nginx-rs",
+				Namespace: "default",
+				UID:       types.UID("rs-uid"),
+				Labels:    map[string]string{"app": "nginx"},
+				OwnerReferences: []metav1.OwnerReference{{
+					APIVersion: "apps/v1",
+					Kind:       "Deployment",
+					Name:       "nginx",
+					UID:        types.UID("deploy-uid"),
+					Controller: &controller,
+				}},
+			},
+			Spec: appsv1.ReplicaSetSpec{
+				Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "nginx"}},
+			},
+		},
 		&corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "nginx-abc123",
 				Namespace: "default",
+				Labels:    map[string]string{"app": "nginx"},
+				OwnerReferences: []metav1.OwnerReference{{
+					APIVersion: "apps/v1",
+					Kind:       "ReplicaSet",
+					Name:       "nginx-rs",
+					UID:        types.UID("rs-uid"),
+					Controller: &controller,
+				}},
 			},
 			Status: corev1.PodStatus{
 				Phase: corev1.PodPending,
@@ -264,7 +440,7 @@ func TestResolvePodForTarget_WorkloadNoReadyPod(t *testing.T) {
 		},
 	)
 
-	_, err := resolvePodForTarget(context.Background(), client, "default", "Deployment", "nginx")
+	_, err := resolvePodForTarget(context.Background(), client, testPortForwardTarget("Deployment", "default", "nginx"))
 	if err == nil {
 		t.Error("expected error when deployment has no ready pods")
 	}
@@ -272,9 +448,18 @@ func TestResolvePodForTarget_WorkloadNoReadyPod(t *testing.T) {
 
 // TestResolvePodForTarget_WorkloadNoPods verifies error when workload has no matching pods.
 func TestResolvePodForTarget_WorkloadNoPods(t *testing.T) {
-	client := fake.NewClientset()
+	client := fake.NewClientset(&appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "nginx",
+			Namespace: "default",
+			UID:       types.UID("deploy-uid"),
+		},
+		Spec: appsv1.DeploymentSpec{
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "nginx"}},
+		},
+	})
 
-	_, err := resolvePodForTarget(context.Background(), client, "default", "Deployment", "nginx")
+	_, err := resolvePodForTarget(context.Background(), client, testPortForwardTarget("Deployment", "default", "nginx"))
 	if err == nil {
 		t.Error("expected error when deployment has no pods")
 	}

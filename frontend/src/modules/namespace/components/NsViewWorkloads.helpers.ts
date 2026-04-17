@@ -20,6 +20,7 @@ export interface WorkloadData {
   memUsage?: number | string;
   memRequest?: number | string;
   memLimit?: number | string;
+  portForwardAvailable?: boolean;
   age?: string;
   [key: string]: any;
 }

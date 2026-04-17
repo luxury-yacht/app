@@ -25,6 +25,8 @@ export interface ContainerPort {
  */
 export interface PortForwardTarget {
   kind: string;
+  group: string;
+  version: string;
   name: string;
   namespace: string;
   clusterId: string;
@@ -98,7 +100,7 @@ const PortForwardModal = ({ target, onClose, onStarted }: PortForwardModalProps)
     ? target.ports.map((port) => `${port.port}:${port.name || ''}:${port.protocol || ''}`).join('|')
     : '';
   const targetKey = target
-    ? `${target.clusterId}:${target.namespace}:${target.kind}:${target.name}:${portsKey}`
+    ? `${target.clusterId}:${target.namespace}:${target.group}:${target.version}:${target.kind}:${target.name}:${portsKey}`
     : '';
 
   // Reset form state when target changes, fetch ports if not provided
@@ -134,6 +136,8 @@ const PortForwardModal = ({ target, onClose, onStarted }: PortForwardModalProps)
         currentTarget.clusterId,
         currentTarget.namespace,
         currentTarget.kind,
+        currentTarget.group,
+        currentTarget.version,
         currentTarget.name
       )
         .then((ports) => {
@@ -224,6 +228,8 @@ const PortForwardModal = ({ target, onClose, onStarted }: PortForwardModalProps)
       const sessionId = await StartPortForward(target.clusterId, {
         namespace: target.namespace,
         targetKind: target.kind,
+        targetGroup: target.group,
+        targetVersion: target.version,
         targetName: target.name,
         containerPort,
         localPort,

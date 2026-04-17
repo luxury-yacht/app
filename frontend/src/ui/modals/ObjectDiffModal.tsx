@@ -5,7 +5,7 @@
  * Provides a global, side-by-side YAML diff viewer for Kubernetes objects.
  */
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './modals.css';
 import './ObjectDiffModal.css';
 import Dropdown from '@shared/components/dropdowns/Dropdown/Dropdown';
@@ -17,18 +17,20 @@ import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { buildClusterScope, buildObjectScope } from '@core/refresh/clusterScope';
 import { refreshOrchestrator, useRefreshScopedDomain } from '@core/refresh';
 import type { CatalogItem, CatalogSnapshotPayload } from '@core/refresh/types';
+import { computeBudgetedLineDiff, type LineDiffResult } from '@shared/components/diff/lineDiff';
+import { OBJECT_DIFF_BUDGETS } from '@shared/components/diff/diffBudgets';
 import {
-  computeLineDiff,
-  MAX_DIFF_LINES,
-  type DiffResult,
-} from '@modules/object-panel/components/ObjectPanel/Yaml/yamlDiff';
-import { mergeDiffLines } from '@shared/components/diff/diffUtils';
+  countVisibleDiffRows,
+  formatTooLargeDiffMessage,
+  mergeDiffLines,
+} from '@shared/components/diff/diffUtils';
 import DiffViewer from '@shared/components/diff/DiffViewer';
 import {
   buildIgnoredMetadataLineSet,
   maskMutedMetadataLines,
   sanitizeYamlForDiff,
 } from './objectDiffUtils';
+import { FindCatalogObjectMatch } from '@wailsjs/go/backend/App';
 import {
   CLUSTER_SCOPE,
   INACTIVE_SCOPE,
@@ -36,23 +38,28 @@ import {
 import { getDisplayKind } from '@/utils/kindAliasMap';
 import { formatAge, formatFullDate } from '@/utils/ageFormatter';
 import { useShortNames } from '@/hooks/useShortNames';
+import type {
+  ObjectDiffOpenRequest,
+  ObjectDiffSelectionSeed,
+} from '@shared/components/diff/objectDiffSelection';
 
 interface ObjectDiffModalProps {
   isOpen: boolean;
+  initialRequest?: ObjectDiffOpenRequest | null;
   onClose: () => void;
-}
-
-interface MatchRequest {
-  namespace: string;
-  kind: string;
-  name: string;
 }
 
 const CATALOG_QUERY_LIMIT = 200;
 const CLUSTER_SCOPE_LABEL = 'cluster-scoped';
 const NAMESPACE_SEPARATOR_VALUE = '__namespace-separator__';
+const OBJECT_DIFF_TOO_LARGE_MESSAGE = 'This diff is too large to display in the current view.';
 
-const buildCatalogScope = (params: { limit: number; namespace?: string; kind?: string }) => {
+const buildCatalogScope = (params: {
+  limit: number;
+  namespace?: string;
+  kind?: string;
+  search?: string;
+}) => {
   const query = new URLSearchParams();
   query.set('limit', String(params.limit));
 
@@ -65,6 +72,10 @@ const buildCatalogScope = (params: { limit: number; namespace?: string; kind?: s
   if (kind) {
     query.append('kind', kind);
   }
+  const search = params.search?.trim();
+  if (search) {
+    query.append('search', search);
+  }
   return query.toString();
 };
 
@@ -72,6 +83,7 @@ const buildCatalogDiffScope = (params: {
   clusterId: string;
   namespace?: string;
   kind?: string;
+  search?: string;
 }): string | null => {
   const trimmedCluster = params.clusterId.trim();
   if (!trimmedCluster) {
@@ -84,6 +96,7 @@ const buildCatalogDiffScope = (params: {
     limit: CATALOG_QUERY_LIMIT,
     namespace: namespaceFilter,
     kind: params.kind,
+    search: params.search,
   });
   return buildClusterScope(trimmedCluster, query);
 };
@@ -133,12 +146,62 @@ const normalizeMatchNamespace = (namespace?: string | null): string => {
   return trimmed ? trimmed : CLUSTER_SCOPE;
 };
 
+const toCatalogItem = (value: unknown): CatalogItem | null => {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+  const item = value as Partial<CatalogItem>;
+  if (
+    typeof item.clusterId !== 'string' ||
+    typeof item.kind !== 'string' ||
+    typeof item.group !== 'string' ||
+    typeof item.version !== 'string' ||
+    typeof item.name !== 'string' ||
+    typeof item.uid !== 'string'
+  ) {
+    return null;
+  }
+  return item as CatalogItem;
+};
+
 const buildObjectOptions = (items: CatalogItem[]): DropdownOption[] =>
   items.map((item) => ({
     value: item.uid,
     label: item.name,
     metadata: item,
   }));
+
+const mergeSelectedObject = (
+  items: CatalogItem[],
+  selection: CatalogItem | null
+): CatalogItem[] => {
+  if (!selection) {
+    return items;
+  }
+  if (items.some((item) => item.uid === selection.uid)) {
+    return items;
+  }
+  return [selection, ...items];
+};
+
+const sameCatalogItem = (left: CatalogItem | null, right: CatalogItem | null) => {
+  if (left === right) {
+    return true;
+  }
+  if (!left || !right) {
+    return false;
+  }
+  return (
+    left.uid === right.uid &&
+    left.name === right.name &&
+    left.namespace === right.namespace &&
+    left.kind === right.kind &&
+    left.group === right.group &&
+    left.version === right.version &&
+    left.clusterId === right.clusterId &&
+    left.clusterName === right.clusterName
+  );
+};
 
 const buildNamespaceOptions = (namespaces: string[]): DropdownOption[] => {
   const options = new Map<string, DropdownOption>();
@@ -197,14 +260,15 @@ const useCatalogDiffSnapshot = (
   clusterId: string,
   namespace: string | undefined,
   kind: string | undefined,
+  search: string | undefined,
   enabled: boolean
 ) => {
   const scope = useMemo(() => {
     if (!enabled) {
       return null;
     }
-    return buildCatalogDiffScope({ clusterId, namespace, kind });
-  }, [clusterId, enabled, kind, namespace]);
+    return buildCatalogDiffScope({ clusterId, namespace, kind, search });
+  }, [clusterId, enabled, kind, namespace, search]);
   const effectiveScope = scope ?? INACTIVE_SCOPE;
   const state = useRefreshScopedDomain('catalog-diff', effectiveScope);
 
@@ -268,7 +332,11 @@ const useObjectYamlSnapshot = (selection: CatalogItem | null, enabled: boolean) 
   return { scope, state };
 };
 
-const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) => {
+const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
+  isOpen,
+  initialRequest = null,
+  onClose,
+}) => {
   const { selectedKubeconfigs, getClusterMeta } = useKubeconfig();
   const [isClosing, setIsClosing] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);
@@ -280,6 +348,10 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
   const [rightKind, setRightKind] = useState('');
   const [leftObjectUid, setLeftObjectUid] = useState('');
   const [rightObjectUid, setRightObjectUid] = useState('');
+  const [leftObjectSearch, setLeftObjectSearch] = useState('');
+  const [rightObjectSearch, setRightObjectSearch] = useState('');
+  const [leftSelectedObject, setLeftSelectedObject] = useState<CatalogItem | null>(null);
+  const [rightSelectedObject, setRightSelectedObject] = useState<CatalogItem | null>(null);
   const [leftChangedAt, setLeftChangedAt] = useState<number | null>(null);
   const [rightChangedAt, setRightChangedAt] = useState<number | null>(null);
   const [leftYamlStable, setLeftYamlStable] = useState('');
@@ -287,12 +359,20 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
   const [showDiffOnly, setShowDiffOnly] = useState(false);
   const [leftNoMatch, setLeftNoMatch] = useState(false);
   const [rightNoMatch, setRightNoMatch] = useState(false);
-  const [pendingLeftMatch, setPendingLeftMatch] = useState<MatchRequest | null>(null);
-  const [pendingRightMatch, setPendingRightMatch] = useState<MatchRequest | null>(null);
+  const [leftMatching, setLeftMatching] = useState(false);
+  const [rightMatching, setRightMatching] = useState(false);
   const leftChecksumRef = useRef<string | null>(null);
   const rightChecksumRef = useRef<string | null>(null);
   const leftNoMatchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rightNoMatchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const leftClusterIdRef = useRef(leftClusterId);
+  const rightClusterIdRef = useRef(rightClusterId);
+  const leftObjectUidRef = useRef(leftObjectUid);
+  const rightObjectUidRef = useRef(rightObjectUid);
+  const leftMatchRequestRef = useRef(0);
+  const rightMatchRequestRef = useRef(0);
+  const appliedInitialRequestIdRef = useRef<number | null>(null);
+  const leftInitialSelectionRequestRef = useRef(0);
   const modalRef = useRef<HTMLDivElement>(null);
   const useShortNamesSetting = useShortNames();
 
@@ -333,6 +413,22 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
     };
   }, [isOpen]);
 
+  useEffect(() => {
+    leftClusterIdRef.current = leftClusterId;
+  }, [leftClusterId]);
+
+  useEffect(() => {
+    rightClusterIdRef.current = rightClusterId;
+  }, [rightClusterId]);
+
+  useEffect(() => {
+    leftObjectUidRef.current = leftObjectUid;
+  }, [leftObjectUid]);
+
+  useEffect(() => {
+    rightObjectUidRef.current = rightObjectUid;
+  }, [rightObjectUid]);
+
   useEffect(
     () => () => {
       if (leftNoMatchTimerRef.current) {
@@ -368,10 +464,12 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
     leftClusterId,
     undefined,
     undefined,
+    undefined,
     leftBaseEnabled
   );
   const rightBaseCatalog = useCatalogDiffSnapshot(
     rightClusterId,
+    undefined,
     undefined,
     undefined,
     rightBaseEnabled
@@ -380,11 +478,13 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
     leftClusterId,
     leftNamespace || undefined,
     undefined,
+    undefined,
     leftNamespaceEnabled
   );
   const rightNamespaceCatalog = useCatalogDiffSnapshot(
     rightClusterId,
     rightNamespace || undefined,
+    undefined,
     undefined,
     rightNamespaceEnabled
   );
@@ -392,12 +492,14 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
     leftClusterId,
     leftNamespace || undefined,
     leftKind || undefined,
+    leftObjectSearch || undefined,
     leftObjectEnabled
   );
   const rightObjectCatalog = useCatalogDiffSnapshot(
     rightClusterId,
     rightNamespace || undefined,
     rightKind || undefined,
+    rightObjectSearch || undefined,
     rightObjectEnabled
   );
 
@@ -407,6 +509,14 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
   const rightNamespacePayload = rightNamespaceCatalog.state.data as CatalogSnapshotPayload | null;
   const leftObjectPayload = leftObjectCatalog.state.data as CatalogSnapshotPayload | null;
   const rightObjectPayload = rightObjectCatalog.state.data as CatalogSnapshotPayload | null;
+  const leftVisibleItems = useMemo(
+    () => mergeSelectedObject(leftObjectPayload?.items ?? [], leftSelectedObject),
+    [leftObjectPayload?.items, leftSelectedObject]
+  );
+  const rightVisibleItems = useMemo(
+    () => mergeSelectedObject(rightObjectPayload?.items ?? [], rightSelectedObject),
+    [rightObjectPayload?.items, rightSelectedObject]
+  );
 
   const leftNamespaceOptions = useMemo(
     () =>
@@ -438,24 +548,30 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
     if (!leftObjectEnabled) {
       return [];
     }
-    return buildObjectOptions(leftObjectPayload?.items ?? []);
-  }, [leftObjectEnabled, leftObjectPayload?.items]);
+    return buildObjectOptions(leftVisibleItems);
+  }, [leftObjectEnabled, leftVisibleItems]);
   const rightObjectOptions = useMemo(() => {
     if (!rightObjectEnabled) {
       return [];
     }
-    return buildObjectOptions(rightObjectPayload?.items ?? []);
-  }, [rightObjectEnabled, rightObjectPayload?.items]);
+    return buildObjectOptions(rightVisibleItems);
+  }, [rightObjectEnabled, rightVisibleItems]);
   const leftObjectMap = useMemo(
-    () => new Map((leftObjectPayload?.items ?? []).map((item) => [item.uid, item])),
-    [leftObjectPayload?.items]
+    () => new Map(leftVisibleItems.map((item) => [item.uid, item])),
+    [leftVisibleItems]
   );
   const rightObjectMap = useMemo(
-    () => new Map((rightObjectPayload?.items ?? []).map((item) => [item.uid, item])),
-    [rightObjectPayload?.items]
+    () => new Map(rightVisibleItems.map((item) => [item.uid, item])),
+    [rightVisibleItems]
   );
-  const leftSelection = leftObjectUid ? (leftObjectMap.get(leftObjectUid) ?? null) : null;
-  const rightSelection = rightObjectUid ? (rightObjectMap.get(rightObjectUid) ?? null) : null;
+  const leftSelection = leftObjectUid
+    ? (leftObjectMap.get(leftObjectUid) ??
+      (leftSelectedObject?.uid === leftObjectUid ? leftSelectedObject : null))
+    : null;
+  const rightSelection = rightObjectUid
+    ? (rightObjectMap.get(rightObjectUid) ??
+      (rightSelectedObject?.uid === rightObjectUid ? rightSelectedObject : null))
+    : null;
 
   const leftNamespaceLoading = leftBaseEnabled && isSnapshotLoading(leftBaseCatalog.state.status);
   const rightNamespaceLoading =
@@ -476,7 +592,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
   const leftCatalogError = leftObjectError ?? leftKindError ?? leftNamespaceError;
   const rightCatalogError = rightObjectError ?? rightKindError ?? rightNamespaceError;
 
-  const showNoMatch = (side: 'left' | 'right') => {
+  const showNoMatch = useCallback((side: 'left' | 'right') => {
     const setMessage = side === 'left' ? setLeftNoMatch : setRightNoMatch;
     const timerRef = side === 'left' ? leftNoMatchTimerRef : rightNoMatchTimerRef;
     setMessage(true);
@@ -486,7 +602,58 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
     timerRef.current = setTimeout(() => {
       setMessage(false);
     }, 2000);
-  };
+  }, []);
+
+  const cancelPendingMatches = useCallback(() => {
+    leftMatchRequestRef.current += 1;
+    rightMatchRequestRef.current += 1;
+    setLeftMatching(false);
+    setRightMatching(false);
+  }, []);
+
+  const applyInitialLeftSelection = useCallback(
+    async (selection: ObjectDiffSelectionSeed) => {
+      const requestId = leftInitialSelectionRequestRef.current + 1;
+      leftInitialSelectionRequestRef.current = requestId;
+      cancelPendingMatches();
+      setLeftNoMatch(false);
+      setLeftClusterId(selection.clusterId);
+      setLeftNamespace(normalizeMatchNamespace(selection.namespace));
+      setLeftKind(selection.kind);
+      setLeftObjectSearch('');
+      setLeftSelectedObject(null);
+      setLeftObjectUid('');
+
+      try {
+        const match = toCatalogItem(
+          await FindCatalogObjectMatch(
+            selection.clusterId,
+            selection.namespace ?? '',
+            selection.group,
+            selection.version,
+            selection.kind,
+            selection.name
+          )
+        );
+        if (leftInitialSelectionRequestRef.current !== requestId) {
+          return;
+        }
+        if (!match) {
+          showNoMatch('left');
+          return;
+        }
+        setLeftNamespace(normalizeMatchNamespace(match.namespace));
+        setLeftKind(match.kind);
+        setLeftSelectedObject(match);
+        setLeftObjectUid(match.uid);
+      } catch {
+        if (leftInitialSelectionRequestRef.current === requestId) {
+          showNoMatch('left');
+        }
+      }
+    },
+    [cancelPendingMatches, showNoMatch]
+  );
 
   const leftYaml = useObjectYamlSnapshot(leftSelection, isOpen);
   const rightYaml = useObjectYamlSnapshot(rightSelection, isOpen);
@@ -522,21 +689,32 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
     () => maskMutedMetadataLines(rightYamlNormalized, rightMutedLines),
     [rightMutedLines, rightYamlNormalized]
   );
-  const leftDisplayLines = useMemo(() => leftYamlNormalized.split(/\r?\n/), [leftYamlNormalized]);
-  const rightDisplayLines = useMemo(
-    () => rightYamlNormalized.split(/\r?\n/),
-    [rightYamlNormalized]
-  );
-
-  const diffResult = useMemo<DiffResult | null>(() => {
+  const diffResult = useMemo<LineDiffResult | null>(() => {
     if (!leftMaskedYaml || !rightMaskedYaml) {
       return null;
     }
-    return computeLineDiff(leftMaskedYaml, rightMaskedYaml);
+    return computeBudgetedLineDiff(leftMaskedYaml, rightMaskedYaml, OBJECT_DIFF_BUDGETS);
   }, [leftMaskedYaml, rightMaskedYaml]);
 
   const displayDiffLines = useMemo(() => mergeDiffLines(diffResult?.lines ?? []), [diffResult]);
-  const diffTruncated = diffResult?.truncated ?? false;
+  const diffTooLarge = diffResult?.tooLarge ?? false;
+  const renderableRowCount = useMemo(
+    () => countVisibleDiffRows(displayDiffLines, showDiffOnly),
+    [displayDiffLines, showDiffOnly]
+  );
+  const renderTooLarge = renderableRowCount > OBJECT_DIFF_BUDGETS.maxRenderableRows;
+  const diffTooLargeMessage = useMemo(() => {
+    if (renderTooLarge) {
+      return formatTooLargeDiffMessage(renderableRowCount, OBJECT_DIFF_BUDGETS.maxRenderableRows);
+    }
+    if (diffResult?.tooLargeReason === 'input') {
+      return formatTooLargeDiffMessage(
+        Math.max(diffResult.leftLineCount, diffResult.rightLineCount),
+        OBJECT_DIFF_BUDGETS.maxLinesPerSide
+      );
+    }
+    return OBJECT_DIFF_TOO_LARGE_MESSAGE;
+  }, [diffResult, renderTooLarge, renderableRowCount]);
   const leftYamlError = leftYaml.state.error ?? null;
   const rightYamlError = rightYaml.state.error ?? null;
   const leftYamlInitialLoading =
@@ -558,6 +736,32 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
   }, [rightObjectUid]);
 
   useEffect(() => {
+    if (!leftObjectUid) {
+      if (leftSelectedObject !== null) {
+        setLeftSelectedObject(null);
+      }
+      return;
+    }
+    const refreshed = leftObjectMap.get(leftObjectUid);
+    if (refreshed && !sameCatalogItem(refreshed, leftSelectedObject)) {
+      setLeftSelectedObject(refreshed);
+    }
+  }, [leftObjectMap, leftObjectUid, leftSelectedObject]);
+
+  useEffect(() => {
+    if (!rightObjectUid) {
+      if (rightSelectedObject !== null) {
+        setRightSelectedObject(null);
+      }
+      return;
+    }
+    const refreshed = rightObjectMap.get(rightObjectUid);
+    if (refreshed && !sameCatalogItem(refreshed, rightSelectedObject)) {
+      setRightSelectedObject(refreshed);
+    }
+  }, [rightObjectMap, rightObjectUid, rightSelectedObject]);
+
+  useEffect(() => {
     if (leftYamlRaw.trim()) {
       setLeftYamlStable(leftYamlRaw);
       return;
@@ -577,91 +781,19 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
     }
   }, [rightYamlRaw, rightYamlReady]);
 
-  // Resolve pending match requests after the opposite side loads its object list.
   useEffect(() => {
-    if (!pendingRightMatch || !rightObjectEnabled) {
+    if (!isOpen || !initialRequest) {
       return;
     }
-    if (rightNamespace !== pendingRightMatch.namespace || rightKind !== pendingRightMatch.kind) {
+    if (appliedInitialRequestIdRef.current === initialRequest.requestId) {
       return;
     }
-    if (rightObjectCatalog.state.status === 'error') {
-      showNoMatch('right');
-      setPendingRightMatch(null);
+    appliedInitialRequestIdRef.current = initialRequest.requestId;
+    if (!initialRequest.left) {
       return;
     }
-    if (rightObjectCatalog.state.status !== 'ready') {
-      return;
-    }
-
-    const match = (rightObjectPayload?.items ?? []).find((item) => {
-      const namespaceMatch =
-        pendingRightMatch.namespace === CLUSTER_SCOPE
-          ? !item.namespace
-          : item.namespace?.toLowerCase() === pendingRightMatch.namespace.toLowerCase();
-      return (
-        namespaceMatch &&
-        item.kind === pendingRightMatch.kind &&
-        item.name === pendingRightMatch.name
-      );
-    });
-
-    if (match) {
-      setRightObjectUid(match.uid);
-    } else {
-      showNoMatch('right');
-    }
-    setPendingRightMatch(null);
-  }, [
-    pendingRightMatch,
-    rightKind,
-    rightNamespace,
-    rightObjectCatalog.state.status,
-    rightObjectEnabled,
-    rightObjectPayload?.items,
-  ]);
-
-  // Resolve pending match requests after the opposite side loads its object list.
-  useEffect(() => {
-    if (!pendingLeftMatch || !leftObjectEnabled) {
-      return;
-    }
-    if (leftNamespace !== pendingLeftMatch.namespace || leftKind !== pendingLeftMatch.kind) {
-      return;
-    }
-    if (leftObjectCatalog.state.status === 'error') {
-      showNoMatch('left');
-      setPendingLeftMatch(null);
-      return;
-    }
-    if (leftObjectCatalog.state.status !== 'ready') {
-      return;
-    }
-
-    const match = (leftObjectPayload?.items ?? []).find((item) => {
-      const namespaceMatch =
-        pendingLeftMatch.namespace === CLUSTER_SCOPE
-          ? !item.namespace
-          : item.namespace?.toLowerCase() === pendingLeftMatch.namespace.toLowerCase();
-      return (
-        namespaceMatch && item.kind === pendingLeftMatch.kind && item.name === pendingLeftMatch.name
-      );
-    });
-
-    if (match) {
-      setLeftObjectUid(match.uid);
-    } else {
-      showNoMatch('left');
-    }
-    setPendingLeftMatch(null);
-  }, [
-    leftKind,
-    leftNamespace,
-    leftObjectCatalog.state.status,
-    leftObjectEnabled,
-    leftObjectPayload?.items,
-    pendingLeftMatch,
-  ]);
+    void applyInitialLeftSelection(initialRequest.left);
+  }, [applyInitialLeftSelection, initialRequest, isOpen]);
 
   // Surface change events without clearing the existing diff view.
   useEffect(() => {
@@ -690,112 +822,228 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
     if (typeof value !== 'string') {
       return;
     }
+    cancelPendingMatches();
     setLeftClusterId(value);
     setLeftNamespace('');
     setLeftKind('');
     setLeftObjectUid('');
+    setLeftObjectSearch('');
+    setLeftSelectedObject(null);
   };
 
   const handleRightClusterChange = (value: string | string[]) => {
     if (typeof value !== 'string') {
       return;
     }
+    cancelPendingMatches();
     setRightClusterId(value);
     setRightNamespace('');
     setRightKind('');
     setRightObjectUid('');
+    setRightObjectSearch('');
+    setRightSelectedObject(null);
   };
 
   const handleLeftNamespaceChange = (value: string | string[]) => {
+    cancelPendingMatches();
     if (typeof value !== 'string' || !value) {
       setLeftNamespace('');
       setLeftKind('');
       setLeftObjectUid('');
+      setLeftObjectSearch('');
+      setLeftSelectedObject(null);
       return;
     }
     setLeftNamespace(value);
     setLeftKind('');
     setLeftObjectUid('');
+    setLeftObjectSearch('');
+    setLeftSelectedObject(null);
   };
 
   const handleRightNamespaceChange = (value: string | string[]) => {
+    cancelPendingMatches();
     if (typeof value !== 'string' || !value) {
       setRightNamespace('');
       setRightKind('');
       setRightObjectUid('');
+      setRightObjectSearch('');
+      setRightSelectedObject(null);
       return;
     }
     setRightNamespace(value);
     setRightKind('');
     setRightObjectUid('');
+    setRightObjectSearch('');
+    setRightSelectedObject(null);
   };
 
   const handleLeftKindChange = (value: string | string[]) => {
+    cancelPendingMatches();
     if (typeof value !== 'string' || !value) {
       setLeftKind('');
       setLeftObjectUid('');
+      setLeftObjectSearch('');
+      setLeftSelectedObject(null);
       return;
     }
     setLeftKind(value);
     setLeftObjectUid('');
+    setLeftObjectSearch('');
+    setLeftSelectedObject(null);
   };
 
   const handleRightKindChange = (value: string | string[]) => {
+    cancelPendingMatches();
     if (typeof value !== 'string' || !value) {
       setRightKind('');
       setRightObjectUid('');
+      setRightObjectSearch('');
+      setRightSelectedObject(null);
       return;
     }
     setRightKind(value);
     setRightObjectUid('');
+    setRightObjectSearch('');
+    setRightSelectedObject(null);
   };
 
   const handleLeftSelectionChange = (value: string | string[]) => {
+    cancelPendingMatches();
     if (typeof value !== 'string' || !value) {
       setLeftObjectUid('');
+      setLeftSelectedObject(null);
       return;
     }
     setLeftObjectUid(value);
+    setLeftSelectedObject(leftObjectMap.get(value) ?? null);
   };
 
   const handleRightSelectionChange = (value: string | string[]) => {
+    cancelPendingMatches();
     if (typeof value !== 'string' || !value) {
       setRightObjectUid('');
+      setRightSelectedObject(null);
       return;
     }
     setRightObjectUid(value);
+    setRightSelectedObject(rightObjectMap.get(value) ?? null);
   };
 
-  const handleLeftMatch = () => {
+  const handleLeftMatch = async () => {
     if (!leftSelection || !leftClusterId || !rightClusterId) {
       return;
     }
-    const namespace = normalizeMatchNamespace(leftSelection.namespace);
-    setRightNamespace(namespace);
-    setRightKind(leftSelection.kind);
-    setRightObjectUid('');
+    const targetClusterId = rightClusterId;
+    const sourceUid = leftSelection.uid;
+    const requestId = rightMatchRequestRef.current + 1;
+    rightMatchRequestRef.current = requestId;
+    setRightMatching(true);
     setRightNoMatch(false);
-    setPendingRightMatch({
-      namespace,
-      kind: leftSelection.kind,
-      name: leftSelection.name,
-    });
+
+    try {
+      const match = toCatalogItem(
+        await FindCatalogObjectMatch(
+          targetClusterId,
+          leftSelection.namespace ?? '',
+          leftSelection.group,
+          leftSelection.version,
+          leftSelection.kind,
+          leftSelection.name
+        )
+      );
+      if (
+        rightMatchRequestRef.current !== requestId ||
+        rightClusterIdRef.current !== targetClusterId ||
+        leftObjectUidRef.current !== sourceUid
+      ) {
+        return;
+      }
+      if (!match) {
+        showNoMatch('right');
+        return;
+      }
+
+      setRightNamespace(normalizeMatchNamespace(match.namespace));
+      setRightKind(match.kind);
+      setRightObjectSearch('');
+      setRightSelectedObject(match);
+      setRightObjectUid(match.uid);
+    } catch {
+      if (
+        rightMatchRequestRef.current === requestId &&
+        rightClusterIdRef.current === targetClusterId &&
+        leftObjectUidRef.current === sourceUid
+      ) {
+        showNoMatch('right');
+      }
+    } finally {
+      if (
+        rightMatchRequestRef.current === requestId &&
+        rightClusterIdRef.current === targetClusterId &&
+        leftObjectUidRef.current === sourceUid
+      ) {
+        setRightMatching(false);
+      }
+    }
   };
 
-  const handleRightMatch = () => {
+  const handleRightMatch = async () => {
     if (!rightSelection || !leftClusterId || !rightClusterId) {
       return;
     }
-    const namespace = normalizeMatchNamespace(rightSelection.namespace);
-    setLeftNamespace(namespace);
-    setLeftKind(rightSelection.kind);
-    setLeftObjectUid('');
+    const targetClusterId = leftClusterId;
+    const sourceUid = rightSelection.uid;
+    const requestId = leftMatchRequestRef.current + 1;
+    leftMatchRequestRef.current = requestId;
+    setLeftMatching(true);
     setLeftNoMatch(false);
-    setPendingLeftMatch({
-      namespace,
-      kind: rightSelection.kind,
-      name: rightSelection.name,
-    });
+
+    try {
+      const match = toCatalogItem(
+        await FindCatalogObjectMatch(
+          targetClusterId,
+          rightSelection.namespace ?? '',
+          rightSelection.group,
+          rightSelection.version,
+          rightSelection.kind,
+          rightSelection.name
+        )
+      );
+      if (
+        leftMatchRequestRef.current !== requestId ||
+        leftClusterIdRef.current !== targetClusterId ||
+        rightObjectUidRef.current !== sourceUid
+      ) {
+        return;
+      }
+      if (!match) {
+        showNoMatch('left');
+        return;
+      }
+
+      setLeftNamespace(normalizeMatchNamespace(match.namespace));
+      setLeftKind(match.kind);
+      setLeftObjectSearch('');
+      setLeftSelectedObject(match);
+      setLeftObjectUid(match.uid);
+    } catch {
+      if (
+        leftMatchRequestRef.current === requestId &&
+        leftClusterIdRef.current === targetClusterId &&
+        rightObjectUidRef.current === sourceUid
+      ) {
+        showNoMatch('left');
+      }
+    } finally {
+      if (
+        leftMatchRequestRef.current === requestId &&
+        leftClusterIdRef.current === targetClusterId &&
+        rightObjectUidRef.current === sourceUid
+      ) {
+        setLeftMatching(false);
+      }
+    }
   };
 
   // Render a selection label with object name emphasized and metadata muted.
@@ -841,25 +1089,8 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
     if (!leftYamlNormalized || !rightYamlNormalized) {
       return <div className="object-diff-empty">YAML is not available for both objects.</div>;
     }
-    if (diffTruncated) {
-      const leftLineCount = leftDisplayLines.length;
-      const rightLineCount = rightDisplayLines.length;
-      const leftTooLarge = leftLineCount > MAX_DIFF_LINES;
-      const rightTooLarge = rightLineCount > MAX_DIFF_LINES;
-      const targetName =
-        leftTooLarge && rightTooLarge
-          ? leftLineCount >= rightLineCount
-            ? leftSelection?.name
-            : rightSelection?.name
-          : leftTooLarge
-            ? leftSelection?.name
-            : rightSelection?.name;
-      const objectName = targetName?.trim() || 'Object';
-      return (
-        <div className="object-diff-empty object-diff-warning">
-          {objectName} exceeds {MAX_DIFF_LINES} lines and cannot be diffed.
-        </div>
-      );
+    if (diffTooLarge || renderTooLarge) {
+      return <div className="object-diff-empty object-diff-warning">{diffTooLargeMessage}</div>;
     }
     if (
       showDiffOnly &&
@@ -916,14 +1147,18 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
                   type="button"
                   className="button generic object-diff-match"
                   onClick={handleLeftMatch}
-                  disabled={!leftSelection || !leftClusterId || !rightClusterId}
+                  disabled={!leftSelection || !leftClusterId || !rightClusterId || rightMatching}
                 >
                   Match
                 </button>
                 <button
                   type="button"
                   className="button generic object-diff-clear"
-                  onClick={() => setLeftObjectUid('')}
+                  onClick={() => {
+                    cancelPendingMatches();
+                    setLeftObjectUid('');
+                    setLeftSelectedObject(null);
+                  }}
                   disabled={!leftSelection}
                 >
                   Clear
@@ -986,6 +1221,11 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
                 options={leftObjectOptions}
                 value={leftObjectUid}
                 onChange={handleLeftSelectionChange}
+                searchable
+                searchMode="remote"
+                searchValue={leftObjectSearch}
+                searchPlaceholder="Search objects"
+                onSearchChange={setLeftObjectSearch}
                 placeholder="Select object"
                 loading={leftObjectLoading}
                 disabled={!leftClusterId || !leftNamespace || !leftKind}
@@ -1006,14 +1246,18 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
                   type="button"
                   className="button generic object-diff-match"
                   onClick={handleRightMatch}
-                  disabled={!rightSelection || !leftClusterId || !rightClusterId}
+                  disabled={!rightSelection || !leftClusterId || !rightClusterId || leftMatching}
                 >
                   Match
                 </button>
                 <button
                   type="button"
                   className="button generic object-diff-clear"
-                  onClick={() => setRightObjectUid('')}
+                  onClick={() => {
+                    cancelPendingMatches();
+                    setRightObjectUid('');
+                    setRightSelectedObject(null);
+                  }}
                   disabled={!rightSelection}
                 >
                   Clear
@@ -1076,6 +1320,11 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
                 options={rightObjectOptions}
                 value={rightObjectUid}
                 onChange={handleRightSelectionChange}
+                searchable
+                searchMode="remote"
+                searchValue={rightObjectSearch}
+                searchPlaceholder="Search objects"
+                onSearchChange={setRightObjectSearch}
                 placeholder="Select object"
                 loading={rightObjectLoading}
                 disabled={!rightClusterId || !rightNamespace || !rightKind}

@@ -9,6 +9,15 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
+
+vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
+  useNamespaceColumnLink: () => ({
+    onClick: vi.fn(),
+    getClassName: () => 'object-panel-link',
+    isInteractive: () => true,
+  }),
+}));
+
 import useWorkloadTableColumns from '@modules/namespace/components/useWorkloadTableColumns';
 import type { WorkloadData } from '@modules/namespace/components/NsViewWorkloads.helpers';
 

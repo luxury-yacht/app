@@ -13,6 +13,14 @@ import type { PodSnapshotEntry, PodMetricsInfo } from '@/core/refresh/types';
 import { getPodsUnhealthyStorageKey } from '@modules/namespace/components/podsFilterSignals';
 import { eventBus } from '@/core/events';
 
+vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
+  useNamespaceColumnLink: () => ({
+    onClick: vi.fn(),
+    getClassName: () => 'object-panel-link',
+    isInteractive: () => true,
+  }),
+}));
+
 const {
   gridTablePropsRef,
   confirmationPropsRef,
@@ -188,6 +196,7 @@ const createPod = (override: Partial<PodSnapshotEntry> = {}): PodSnapshotEntry =
   age: '1h',
   ownerKind: 'Deployment',
   ownerName: 'owner',
+  portForwardAvailable: true,
   cpuUsage: '0m',
   cpuRequest: '0m',
   cpuLimit: '0m',
@@ -226,6 +235,7 @@ describe('NsViewPods', () => {
       new Map([
         ['Pod:delete:team-a', { allowed: true, pending: false }],
         ['Pod:delete:', { allowed: true, pending: false }],
+        ['Pod:create:team-a', { allowed: true, pending: false }],
       ])
     );
     clusterMetricsMock.current = null;
@@ -413,6 +423,21 @@ describe('NsViewPods', () => {
       gridTablePropsRef.current.data[0]
     );
     expect(items.find((item: any) => item.label === 'Delete')).toBeUndefined();
+  });
+
+  it('disables port forward in the context menu when the pod exposes no forwardable ports', async () => {
+    await renderPods({
+      data: [createPod({ name: 'no-ports', portForwardAvailable: false })],
+    });
+
+    const items = gridTablePropsRef.current.getCustomContextMenuItems(
+      gridTablePropsRef.current.data[0]
+    );
+    const portForwardItem = items.find((item: any) => item.label?.includes('Port Forward'));
+    expect(portForwardItem).toMatchObject({
+      label: 'Port Forward',
+      disabled: true,
+    });
   });
 
   it('suppresses delete action when permission is pending or denied', async () => {

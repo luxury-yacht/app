@@ -323,6 +323,8 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
             name: resource.name,
             clusterId: resource.clusterId,
             clusterName: resource.clusterName,
+            group: resource.apiGroup ?? undefined,
+            version: resource.apiVersion ?? undefined,
           },
           context: 'gridtable',
           handlers: {

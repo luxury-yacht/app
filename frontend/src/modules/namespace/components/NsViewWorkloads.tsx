@@ -435,6 +435,7 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
             clusterId: row.clusterId,
             clusterName: row.clusterName,
             status: row.status,
+            portForwardAvailable: row.portForwardAvailable,
             hpaManaged: Boolean(row.hpaManaged),
           },
           context: 'gridtable',
@@ -455,8 +456,11 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
                 );
                 return;
               }
+              const targetGVK = resolveBuiltinGroupVersion(row.kind);
               setPortForwardTarget({
                 kind: row.kind,
+                group: targetGVK.group ?? '',
+                version: targetGVK.version ?? 'v1',
                 name: row.name,
                 namespace: row.namespace,
                 clusterId: row.clusterId,

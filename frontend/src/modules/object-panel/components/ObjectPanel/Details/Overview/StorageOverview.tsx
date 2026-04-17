@@ -7,6 +7,9 @@ import { OverviewItem } from '@modules/object-panel/components/ObjectPanel/Detai
 import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
 import { ResourceStatus } from '@shared/components/kubernetes/ResourceStatus';
+import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
+import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
+import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
 
 interface StorageOverviewProps {
   kind?: string;
@@ -36,8 +39,13 @@ interface StorageOverviewProps {
 
 // Storage resources Overview
 export const StorageOverview: React.FC<StorageOverviewProps> = (props) => {
+  const { objectData } = useObjectPanel();
   const { kind, name, namespace, age, status } = props;
   const normalizedKind = kind?.toLowerCase();
+  const clusterMeta = {
+    clusterId: objectData?.clusterId ?? undefined,
+    clusterName: objectData?.clusterName ?? undefined,
+  };
 
   return (
     <>
@@ -50,13 +58,74 @@ export const StorageOverview: React.FC<StorageOverviewProps> = (props) => {
       {/* PVC-specific fields */}
       {normalizedKind === 'persistentvolumeclaim' && (
         <>
-          <OverviewItem label="Volume" value={props.volumeName} />
+          <OverviewItem
+            label="Volume"
+            value={
+              props.volumeName ? (
+                <ObjectPanelLink
+                  objectRef={{
+                    kind: 'persistentvolume',
+                    ...resolveBuiltinGroupVersion('PersistentVolume'),
+                    name: props.volumeName,
+                    ...clusterMeta,
+                  }}
+                  title={`Click to view volume: ${props.volumeName}`}
+                >
+                  {props.volumeName}
+                </ObjectPanelLink>
+              ) : (
+                props.volumeName
+              )
+            }
+          />
           <OverviewItem label="Capacity" value={props.capacity} />
           <OverviewItem label="Access Modes" value={props.accessModes?.join(', ')} />
-          <OverviewItem label="Storage Class" value={props.storageClass} />
+          <OverviewItem
+            label="Storage Class"
+            value={
+              props.storageClass ? (
+                <ObjectPanelLink
+                  objectRef={{
+                    kind: 'storageclass',
+                    ...resolveBuiltinGroupVersion('StorageClass'),
+                    name: props.storageClass,
+                    ...clusterMeta,
+                  }}
+                  title={`Click to view storage class: ${props.storageClass}`}
+                >
+                  {props.storageClass}
+                </ObjectPanelLink>
+              ) : (
+                props.storageClass
+              )
+            }
+          />
           <OverviewItem label="Volume Mode" value={props.volumeMode} />
           {props.mountedBy && props.mountedBy.length > 0 && (
-            <OverviewItem label="Mounted By" value={props.mountedBy.join(', ')} fullWidth />
+            <OverviewItem
+              label="Mounted By"
+              value={
+                <div>
+                  {props.mountedBy.map((podName, index) => (
+                    <div key={`${podName}-${index}`}>
+                      <ObjectPanelLink
+                        objectRef={{
+                          kind: 'pod',
+                          ...resolveBuiltinGroupVersion('Pod'),
+                          name: podName,
+                          namespace: namespace,
+                          ...clusterMeta,
+                        }}
+                        title={`Click to view pod: ${podName}`}
+                      >
+                        {podName}
+                      </ObjectPanelLink>
+                    </div>
+                  ))}
+                </div>
+              }
+              fullWidth
+            />
           )}
           {/* Match ConfigMap/Secret metadata layout for PVCs. */}
           <ResourceMetadata labels={props.labels} annotations={props.annotations} />
@@ -69,12 +138,44 @@ export const StorageOverview: React.FC<StorageOverviewProps> = (props) => {
           <OverviewItem label="Capacity" value={props.capacity} />
           <OverviewItem label="Access Modes" value={props.accessModes?.join(', ')} />
           <OverviewItem label="Reclaim Policy" value={props.reclaimPolicy} />
-          <OverviewItem label="Storage Class" value={props.storageClass} />
+          <OverviewItem
+            label="Storage Class"
+            value={
+              props.storageClass ? (
+                <ObjectPanelLink
+                  objectRef={{
+                    kind: 'storageclass',
+                    ...resolveBuiltinGroupVersion('StorageClass'),
+                    name: props.storageClass,
+                    ...clusterMeta,
+                  }}
+                  title={`Click to view storage class: ${props.storageClass}`}
+                >
+                  {props.storageClass}
+                </ObjectPanelLink>
+              ) : (
+                props.storageClass
+              )
+            }
+          />
           <OverviewItem label="Volume Mode" value={props.volumeMode} />
           {props.claimRef && (
             <OverviewItem
               label="Claim"
-              value={`${props.claimRef.namespace}/${props.claimRef.name}`}
+              value={
+                <ObjectPanelLink
+                  objectRef={{
+                    kind: 'persistentvolumeclaim',
+                    ...resolveBuiltinGroupVersion('PersistentVolumeClaim'),
+                    name: props.claimRef.name,
+                    namespace: props.claimRef.namespace,
+                    ...clusterMeta,
+                  }}
+                  title={`Click to view claim: ${props.claimRef.namespace}/${props.claimRef.name}`}
+                >
+                  {`${props.claimRef.namespace}/${props.claimRef.name}`}
+                </ObjectPanelLink>
+              }
             />
           )}
           {/* Match ConfigMap/Secret metadata layout for PersistentVolumes. */}

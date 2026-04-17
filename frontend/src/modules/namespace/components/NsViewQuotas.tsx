@@ -33,6 +33,7 @@ import { DeleteResourceByGVK } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 import { useFavToggle } from '@ui/favorites/FavToggle';
+import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
 
 // Data interface for quota resources (ResourceQuotas, LimitRanges, PodDisruptionBudgets)
 export interface QuotaData {
@@ -78,6 +79,7 @@ const QuotasViewGrid: React.FC<QuotasViewProps> = React.memo(
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const useShortResourceNames = useShortNames();
+    const namespaceColumnLink = useNamespaceColumnLink<QuotaData>('quotas');
     const permissionMap = useUserPermissions();
     const [deleteConfirm, setDeleteConfirm] = useState<{
       show: boolean;
@@ -153,11 +155,18 @@ const QuotasViewGrid: React.FC<QuotasViewProps> = React.memo(
         cf.upsertNamespaceColumn(baseColumns, {
           accessor: (resource) => resource.namespace,
           sortValue: (resource) => (resource.namespace || '').toLowerCase(),
+          ...namespaceColumnLink,
         });
       }
 
       return baseColumns;
-    }, [handleResourceClick, navigateToView, showNamespaceColumn, useShortResourceNames]);
+    }, [
+      handleResourceClick,
+      namespaceColumnLink,
+      navigateToView,
+      showNamespaceColumn,
+      useShortResourceNames,
+    ]);
 
     const showNamespaceFilter = namespace === ALL_NAMESPACES_SCOPE;
 

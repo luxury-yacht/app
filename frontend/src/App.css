@@ -12,13 +12,27 @@
   background-color: var(--color-bg);
   color: var(--color-text);
   position: relative;
-  /* Prevent text selection by default */
+  /* Prevent text selection by default. Apply the same rule to descendants so
+     browser/webview differences do not leak selectable text into non-copyable
+     UI in development. */
   user-select: none;
+  -webkit-user-select: none;
+}
+
+.app * {
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 /* Utility class to allow text selection on specific elements */
-.selectable {
+.selectable,
+.selectable *,
+input,
+textarea,
+[contenteditable="true"],
+[contenteditable=""] {
   user-select: text;
+  -webkit-user-select: text;
 }
 
 .app-container {

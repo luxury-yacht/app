@@ -106,6 +106,10 @@ export function FetchNodeLogs(arg1, arg2, arg3) {
   return window['go']['backend']['App']['FetchNodeLogs'](arg1, arg2, arg3);
 }
 
+export function FindCatalogObjectMatch(arg1, arg2, arg3, arg4, arg5, arg6) {
+  return window['go']['backend']['App']['FindCatalogObjectMatch'](arg1, arg2, arg3, arg4, arg5, arg6);
+}
+
 export function ForceDeleteNode(arg1, arg2) {
   return window['go']['backend']['App']['ForceDeleteNode'](arg1, arg2);
 }
@@ -334,8 +338,8 @@ export function GetStorageClass(arg1, arg2) {
   return window['go']['backend']['App']['GetStorageClass'](arg1, arg2);
 }
 
-export function GetTargetPorts(arg1, arg2, arg3, arg4) {
-  return window['go']['backend']['App']['GetTargetPorts'](arg1, arg2, arg3, arg4);
+export function GetTargetPorts(arg1, arg2, arg3, arg4, arg5, arg6) {
+  return window['go']['backend']['App']['GetTargetPorts'](arg1, arg2, arg3, arg4, arg5, arg6);
 }
 
 export function GetThemeInfo() {
@@ -396,6 +400,10 @@ export function LogFrontend(arg1, arg2, arg3) {
 
 export function MatchThemeForCluster(arg1) {
   return window['go']['backend']['App']['MatchThemeForCluster'](arg1);
+}
+
+export function MergeObjectYamlWithLatest(arg1, arg2) {
+  return window['go']['backend']['App']['MergeObjectYamlWithLatest'](arg1, arg2);
 }
 
 export function OpenKubeconfigSearchPathDialog() {

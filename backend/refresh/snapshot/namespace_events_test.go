@@ -27,9 +27,10 @@ func TestNamespaceEventsBuilderUsesEventTimestamps(t *testing.T) {
 		Message: "Retrying workload",
 		Source:  corev1.EventSource{Component: "kubelet"},
 		InvolvedObject: corev1.ObjectReference{
-			Kind:      "Pod",
-			Name:      "api-123",
-			Namespace: "team-a",
+			Kind:       "Pod",
+			Name:       "api-123",
+			Namespace:  "team-a",
+			APIVersion: "v1",
 		},
 		LastTimestamp: metav1.NewTime(now.Add(-2 * time.Minute)),
 	}
@@ -45,9 +46,10 @@ func TestNamespaceEventsBuilderUsesEventTimestamps(t *testing.T) {
 		Reason: "Scheduled",
 		Source: corev1.EventSource{Component: "scheduler"},
 		InvolvedObject: corev1.ObjectReference{
-			Kind:      "Pod",
-			Name:      "api-122",
-			Namespace: "team-a",
+			Kind:       "Pod",
+			Name:       "api-122",
+			Namespace:  "team-a",
+			APIVersion: "v1",
 		},
 		LastTimestamp: metav1.NewTime(now.Add(-30 * time.Minute)),
 	}
@@ -71,6 +73,7 @@ func TestNamespaceEventsBuilderUsesEventTimestamps(t *testing.T) {
 	require.Equal(t, "event-new", first.Name)
 	require.Equal(t, eventNew.LastTimestamp.UnixMilli(), first.AgeTimestamp)
 	require.Equal(t, "Pod/api-123", first.Object)
+	require.Equal(t, "v1", first.ObjectAPIVersion)
 
 	require.Equal(t, "event-old", second.Name)
 	require.Equal(t, eventOld.LastTimestamp.UnixMilli(), second.AgeTimestamp)
@@ -89,9 +92,10 @@ func TestNamespaceEventsBuilderUsesDeterministicTieBreakers(t *testing.T) {
 			CreationTimestamp: timestamp,
 		},
 		InvolvedObject: corev1.ObjectReference{
-			Kind:      "Pod",
-			Name:      "api-b",
-			Namespace: "team-a",
+			Kind:       "Pod",
+			Name:       "api-b",
+			Namespace:  "team-a",
+			APIVersion: "v1",
 		},
 		LastTimestamp: timestamp,
 	}
@@ -105,9 +109,10 @@ func TestNamespaceEventsBuilderUsesDeterministicTieBreakers(t *testing.T) {
 			CreationTimestamp: timestamp,
 		},
 		InvolvedObject: corev1.ObjectReference{
-			Kind:      "Pod",
-			Name:      "api-a",
-			Namespace: "team-a",
+			Kind:       "Pod",
+			Name:       "api-a",
+			Namespace:  "team-a",
+			APIVersion: "v1",
 		},
 		LastTimestamp: timestamp,
 	}

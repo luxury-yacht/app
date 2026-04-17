@@ -9,6 +9,14 @@ import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
+  useNamespaceColumnLink: () => ({
+    onClick: vi.fn(),
+    getClassName: () => 'object-panel-link',
+    isInteractive: () => true,
+  }),
+}));
+
 import NsViewQuotas, { type QuotaData } from '@modules/namespace/components/NsViewQuotas';
 
 const {
@@ -127,6 +135,7 @@ vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
 }));
 
 vi.mock('@shared/components/icons/MenuIcons', () => ({
+  DiffIcon: () => <span>diff</span>,
   OpenIcon: () => <span>open</span>,
   DeleteIcon: () => <span>delete</span>,
 }));

@@ -297,6 +297,7 @@ export interface ClusterEventEntry extends ClusterMeta {
   resourceVersion?: string;
   namespace: string;
   objectNamespace?: string;
+  objectApiVersion?: string;
   type: string;
   source: string;
   reason: string;
@@ -385,6 +386,7 @@ export interface PodSnapshotEntry extends ClusterMeta {
   age: string;
   ownerKind: string;
   ownerName: string;
+  portForwardAvailable?: boolean;
   /**
    * Wire-form apiVersion of the controlling owner (e.g. "apps/v1",
    * "argoproj.io/v1alpha1"). Threaded from
@@ -472,6 +474,7 @@ export interface NamespaceWorkloadSummary extends ClusterMeta {
   status: string;
   restarts: number;
   age: string;
+  portForwardAvailable?: boolean;
   cpuUsage?: string;
   cpuRequest?: string;
   cpuLimit?: string;
@@ -587,6 +590,7 @@ export interface NamespaceEventSummary extends ClusterMeta {
   resourceVersion?: string;
   namespace: string;
   objectNamespace?: string;
+  objectApiVersion?: string;
   type: string;
   source: string;
   reason: string;

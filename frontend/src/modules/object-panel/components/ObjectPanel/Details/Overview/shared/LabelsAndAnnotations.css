@@ -53,6 +53,13 @@
   font-size: 0.7rem;
   color: var(--color-text);
   word-break: break-all;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.metadata-value * {
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .metadata-value.clickable {

@@ -230,6 +230,64 @@ describe('DetailsTab', () => {
     cleanup();
   });
 
+  it('passes port-forward availability false for pods with no forwardable ports', async () => {
+    const props = createBaseProps({
+      podDetails: {
+        name: 'pod-1',
+        age: '1h',
+        node: 'node-a',
+        ownerKind: 'Deployment',
+        ownerName: 'web',
+        status: 'Running',
+        ready: '1/1',
+        restarts: 0,
+        qosClass: 'Burstable',
+        serviceAccount: 'default',
+        hostNetwork: false,
+        containers: [{ name: 'app', image: 'example/app:1.0.0', ports: ['53/UDP'] }],
+        initContainers: [],
+        cpuUsage: '100m',
+        cpuRequest: '50m',
+        cpuLimit: '200m',
+        memUsage: '128Mi',
+        memRequest: '64Mi',
+        memLimit: '256Mi',
+        labels: {},
+        annotations: {},
+      } as any,
+    });
+
+    const { cleanup } = await renderDetailsTab(props);
+    expect(overviewMock).toHaveBeenCalledWith(
+      expect.objectContaining({ portForwardAvailable: false })
+    );
+    cleanup();
+  });
+
+  it('passes port-forward availability false for services with no TCP ports', async () => {
+    const props = createBaseProps({
+      objectData: { kind: 'Service', name: 'svc-1', namespace: 'default', age: '1h' },
+      serviceDetails: {
+        kind: 'Service',
+        name: 'svc-1',
+        namespace: 'default',
+        age: '1h',
+        type: 'ClusterIP',
+        clusterIP: '10.0.0.10',
+        ports: [{ name: 'dns', port: 53, protocol: 'UDP' }],
+        selector: {},
+        labels: {},
+        annotations: {},
+      } as any,
+    });
+
+    const { cleanup } = await renderDetailsTab(props);
+    expect(overviewMock).toHaveBeenCalledWith(
+      expect.objectContaining({ portForwardAvailable: false })
+    );
+    cleanup();
+  });
+
   it('renders data section for config maps', async () => {
     const props = createBaseProps({
       objectData: { kind: 'ConfigMap', name: 'cfg', namespace: 'default', age: '2d' },

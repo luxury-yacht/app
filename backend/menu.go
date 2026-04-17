@@ -136,6 +136,18 @@ func createEditMenu(appMenu *menu.Menu, app *App) {
 		}
 	})
 
+	// Paste
+	editMenu.AddText("Paste", keys.CmdOrCtrl("v"), func(_ *menu.CallbackData) {
+		if app.Ctx == nil {
+			return
+		}
+		text, err := wailsRuntime.ClipboardGetText(app.Ctx)
+		if err != nil {
+			return
+		}
+		app.emitEvent("menu:paste", text)
+	})
+
 	// Select All
 	editMenu.AddText("Select All", keys.CmdOrCtrl("a"), func(_ *menu.CallbackData) {
 		// This will be handled by the frontend

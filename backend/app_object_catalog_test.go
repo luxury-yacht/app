@@ -169,6 +169,46 @@ func TestGetCatalogDiagnosticsFromTelemetryRecorder(t *testing.T) {
 	require.Len(t, diag.Domains, 1)
 	require.Equal(t, "pods", diag.Domains[0].Domain)
 }
+
+func TestFindCatalogObjectMatchUsesExactCatalogIdentity(t *testing.T) {
+	app := NewApp()
+	svc := objectcatalog.NewService(objectcatalog.Dependencies{}, nil)
+	setCatalogServiceItems(t, svc, map[string]objectcatalog.Summary{
+		"apps/v1, Resource=deployments/apps/alpha": {
+			ClusterID: "cluster-b",
+			Kind:      "Deployment",
+			Group:     "apps",
+			Version:   "v1",
+			Resource:  "deployments",
+			Namespace: "apps",
+			Name:      "alpha",
+			UID:       "alpha-uid",
+			Scope:     objectcatalog.ScopeNamespace,
+		},
+		"apps/v1, Resource=deployments/apps/alpha-canary": {
+			ClusterID: "cluster-b",
+			Kind:      "Deployment",
+			Group:     "apps",
+			Version:   "v1",
+			Resource:  "deployments",
+			Namespace: "apps",
+			Name:      "alpha-canary",
+			UID:       "alpha-canary-uid",
+			Scope:     objectcatalog.ScopeNamespace,
+		},
+	})
+	app.storeObjectCatalogEntry("cluster-b", &objectCatalogEntry{service: svc})
+
+	match, err := app.FindCatalogObjectMatch("cluster-b", "apps", "apps", "v1", "Deployment", "alpha")
+	require.NoError(t, err)
+	require.NotNil(t, match)
+	require.Equal(t, "alpha-uid", match.UID)
+
+	noMatch, err := app.FindCatalogObjectMatch("cluster-b", "apps", "apps", "v1", "Deployment", "alp")
+	require.NoError(t, err)
+	require.Nil(t, noMatch)
+}
+
 func TestWaitForFactorySyncHandlesNilFactory(t *testing.T) {
 	if !waitForFactorySync(context.Background(), nil) {
 		t.Fatal("nil factory should return true")
@@ -196,4 +236,23 @@ func TestWaitForFactoriesRespectContextCancellation(t *testing.T) {
 	if waitForAPIExtensionsFactorySync(ctx, apiExtFactory) {
 		t.Fatal("expected apiextensions factory sync to stop when context is canceled")
 	}
+}
+
+func setCatalogServiceItems(
+	t *testing.T,
+	svc *objectcatalog.Service,
+	items map[string]objectcatalog.Summary,
+) {
+	t.Helper()
+
+	value := reflect.ValueOf(svc).Elem().FieldByName("items")
+	if !value.IsValid() {
+		t.Fatalf("items field not found")
+	}
+
+	copyItems := make(map[string]objectcatalog.Summary, len(items))
+	for key, item := range items {
+		copyItems[key] = item
+	}
+	reflect.NewAt(value.Type(), unsafe.Pointer(value.UnsafeAddr())).Elem().Set(reflect.ValueOf(copyItems))
 }

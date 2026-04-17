@@ -4,6 +4,7 @@ import {backend} from '../models';
 import {types} from '../models';
 import {context} from '../models';
 import {capabilities} from '../models';
+import {objectcatalog} from '../models';
 import {json} from '../models';
 import {templates} from '../models';
 
@@ -58,6 +59,8 @@ export function DrainNode(arg1:string,arg2:string,arg3:types.DrainNodeOptions):P
 export function EvaluateCapabilities(arg1:Array<capabilities.CheckRequest>):Promise<Array<capabilities.CheckResult>>;
 
 export function FetchNodeLogs(arg1:string,arg2:string,arg3:types.NodeLogFetchRequest):Promise<types.NodeLogFetchResponse>;
+
+export function FindCatalogObjectMatch(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string):Promise<objectcatalog.Summary>;
 
 export function ForceDeleteNode(arg1:string,arg2:string):Promise<void>;
 
@@ -173,7 +176,7 @@ export function GetStatefulSet(arg1:string,arg2:string,arg3:string):Promise<type
 
 export function GetStorageClass(arg1:string,arg2:string):Promise<types.StorageClassDetails>;
 
-export function GetTargetPorts(arg1:string,arg2:string,arg3:string,arg4:string):Promise<Array<backend.ContainerPortInfo>>;
+export function GetTargetPorts(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string):Promise<Array<backend.ContainerPortInfo>>;
 
 export function GetThemeInfo():Promise<types.ThemeInfo>;
 
@@ -204,6 +207,8 @@ export function LogFetcher(arg1:string,arg2:types.LogFetchRequest):Promise<types
 export function LogFrontend(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function MatchThemeForCluster(arg1:string):Promise<types.Theme>;
+
+export function MergeObjectYamlWithLatest(arg1:string,arg2:backend.ObjectYAMLReloadMergeRequest):Promise<backend.ObjectYAMLReloadMergeResponse>;
 
 export function OpenKubeconfigSearchPathDialog():Promise<string>;
 

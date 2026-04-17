@@ -10,6 +10,14 @@ import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
+  useNamespaceColumnLink: () => ({
+    onClick: vi.fn(),
+    getClassName: () => 'object-panel-link',
+    isInteractive: () => true,
+  }),
+}));
+
 import NsViewCustom, { type CustomResourceData } from '@modules/namespace/components/NsViewCustom';
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
@@ -292,8 +300,11 @@ describe('NsViewCustom', () => {
 
     const gridProps = gridTableMock.mock.calls[0][0];
     const contextItems = gridProps.getCustomContextMenuItems(resourceWithGVK, 'kind');
+    const deleteItem = contextItems.find(
+      (item: { label?: string; onClick?: () => void }) => item.label === 'Delete'
+    );
     await act(async () => {
-      contextItems[2].onClick();
+      deleteItem?.onClick?.();
       await Promise.resolve();
     });
     expect(modalProps.current?.isOpen).toBe(true);
@@ -340,8 +351,11 @@ describe('NsViewCustom', () => {
 
     const gridProps = gridTableMock.mock.calls[0][0];
     const contextItems = gridProps.getCustomContextMenuItems(dbInstance, 'kind');
+    const deleteItem = contextItems.find(
+      (item: { label?: string; onClick?: () => void }) => item.label === 'Delete'
+    );
     await act(async () => {
-      contextItems[2].onClick();
+      deleteItem?.onClick?.();
       await Promise.resolve();
     });
     expect(modalProps.current?.isOpen).toBe(true);
@@ -377,8 +391,11 @@ describe('NsViewCustom', () => {
 
     const gridProps = gridTableMock.mock.calls[0][0];
     const contextItems = gridProps.getCustomContextMenuItems(baseResource, 'kind');
+    const deleteItem = contextItems.find(
+      (item: { label?: string; onClick?: () => void }) => item.label === 'Delete'
+    );
     await act(async () => {
-      contextItems[2].onClick();
+      deleteItem?.onClick?.();
       await Promise.resolve();
     });
 
@@ -412,8 +429,11 @@ describe('NsViewCustom', () => {
     });
 
     const gridProps = gridTableMock.mock.calls[0][0];
+    const deleteItem = gridProps
+      .getCustomContextMenuItems(resourceWithGVK, 'kind')
+      .find((item: { label?: string; onClick?: () => void }) => item.label === 'Delete');
     await act(async () => {
-      gridProps.getCustomContextMenuItems(resourceWithGVK, 'kind')[2].onClick();
+      deleteItem?.onClick?.();
       await Promise.resolve();
     });
 

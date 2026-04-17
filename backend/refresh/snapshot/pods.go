@@ -40,15 +40,16 @@ type PodSnapshot struct {
 // PodSummary captures essential pod information for UI tables.
 type PodSummary struct {
 	ClusterMeta
-	Name      string `json:"name"`
-	Namespace string `json:"namespace"`
-	Node      string `json:"node"`
-	Status    string `json:"status"`
-	Ready     string `json:"ready"`
-	Restarts  int32  `json:"restarts"`
-	Age       string `json:"age"`
-	OwnerKind string `json:"ownerKind"`
-	OwnerName string `json:"ownerName"`
+	Name                 string `json:"name"`
+	Namespace            string `json:"namespace"`
+	Node                 string `json:"node"`
+	Status               string `json:"status"`
+	Ready                string `json:"ready"`
+	Restarts             int32  `json:"restarts"`
+	Age                  string `json:"age"`
+	OwnerKind            string `json:"ownerKind"`
+	OwnerName            string `json:"ownerName"`
+	PortForwardAvailable bool   `json:"portForwardAvailable"`
 	// OwnerAPIVersion is the wire-form apiVersion of the controlling owner
 	// (e.g. "apps/v1", "argoproj.io/v1alpha1"). Threaded so the panel can
 	// open CRD-as-Pod-owner targets correctly. See PodSimpleInfo.
@@ -346,24 +347,43 @@ func buildPodSummary(
 	metricsUsage := usage[metricKey]
 
 	return PodSummary{
-		ClusterMeta:     meta,
-		Name:            pod.Name,
-		Namespace:       pod.Namespace,
-		Node:            pod.Spec.NodeName,
-		Status:          status,
-		Ready:           fmt.Sprintf("%d/%d", ready, total),
-		Restarts:        restarts,
-		Age:             formatAge(pod.CreationTimestamp.Time),
-		OwnerKind:       ownerKind,
-		OwnerName:       ownerName,
-		OwnerAPIVersion: ownerAPIVersion,
-		CPURequest:      formatCPUMilli(cpuReq),
-		CPULimit:        formatCPUMilli(cpuLim),
-		CPUUsage:        formatCPUMilli(metricsUsage.CPUUsageMilli),
-		MemRequest:      formatMemoryBytes(memReq),
-		MemLimit:        formatMemoryBytes(memLim),
-		MemUsage:        formatMemoryBytes(metricsUsage.MemoryUsageBytes),
+		ClusterMeta:          meta,
+		Name:                 pod.Name,
+		Namespace:            pod.Namespace,
+		Node:                 pod.Spec.NodeName,
+		Status:               status,
+		Ready:                fmt.Sprintf("%d/%d", ready, total),
+		Restarts:             restarts,
+		Age:                  formatAge(pod.CreationTimestamp.Time),
+		OwnerKind:            ownerKind,
+		OwnerName:            ownerName,
+		PortForwardAvailable: hasForwardablePodPorts(pod),
+		OwnerAPIVersion:      ownerAPIVersion,
+		CPURequest:           formatCPUMilli(cpuReq),
+		CPULimit:             formatCPUMilli(cpuLim),
+		CPUUsage:             formatCPUMilli(metricsUsage.CPUUsageMilli),
+		MemRequest:           formatMemoryBytes(memReq),
+		MemLimit:             formatMemoryBytes(memLim),
+		MemUsage:             formatMemoryBytes(metricsUsage.MemoryUsageBytes),
 	}
+}
+
+func hasForwardablePodPorts(pod *corev1.Pod) bool {
+	if pod == nil {
+		return false
+	}
+	return hasForwardableContainerPorts(pod.Spec.Containers)
+}
+
+func hasForwardableContainerPorts(containers []corev1.Container) bool {
+	for _, container := range containers {
+		for _, port := range container.Ports {
+			if port.Protocol == "" || port.Protocol == corev1.ProtocolTCP {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func podReadiness(pod *corev1.Pod) (ready int32, total int32, restarts int32) {

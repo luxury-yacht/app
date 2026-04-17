@@ -31,19 +31,20 @@ type NamespaceEventsSnapshot struct {
 // EventSummary captures the essential event fields for display.
 type EventSummary struct {
 	ClusterMeta
-	Kind            string `json:"kind"`
-	Name            string `json:"name"`
-	UID             string `json:"uid"`
-	ResourceVersion string `json:"resourceVersion"`
-	Namespace       string `json:"namespace"`
-	ObjectNamespace string `json:"objectNamespace"`
-	Type            string `json:"type"`
-	Source          string `json:"source"`
-	Reason          string `json:"reason"`
-	Object          string `json:"object"`
-	Message         string `json:"message"`
-	Age             string `json:"age"`
-	AgeTimestamp    int64  `json:"ageTimestamp"`
+	Kind             string `json:"kind"`
+	Name             string `json:"name"`
+	UID              string `json:"uid"`
+	ResourceVersion  string `json:"resourceVersion"`
+	Namespace        string `json:"namespace"`
+	ObjectNamespace  string `json:"objectNamespace"`
+	ObjectAPIVersion string `json:"objectApiVersion"`
+	Type             string `json:"type"`
+	Source           string `json:"source"`
+	Reason           string `json:"reason"`
+	Object           string `json:"object"`
+	Message          string `json:"message"`
+	Age              string `json:"age"`
+	AgeTimestamp     int64  `json:"ageTimestamp"`
 }
 
 // RegisterNamespaceEventsDomain registers the events domain.
@@ -138,20 +139,21 @@ func (b *NamespaceEventsBuilder) Build(ctx context.Context, scope string) (*refr
 		}
 		timestamp := eventTimestamp(event)
 		summary := EventSummary{
-			ClusterMeta:     meta,
-			Kind:            event.InvolvedObject.Kind,
-			Name:            event.Name,
-			UID:             string(event.UID),
-			ResourceVersion: event.ResourceVersion,
-			Namespace:       event.InvolvedObject.Namespace,
-			ObjectNamespace: event.InvolvedObject.Namespace,
-			Type:            event.Type,
-			Source:          namespaceEventSource(event),
-			Reason:          event.Reason,
-			Object:          namespaceInvolvedObject(event),
-			Message:         event.Message,
-			Age:             formatAge(timestamp),
-			AgeTimestamp:    timestamp.UnixMilli(),
+			ClusterMeta:      meta,
+			Kind:             event.InvolvedObject.Kind,
+			Name:             event.Name,
+			UID:              string(event.UID),
+			ResourceVersion:  event.ResourceVersion,
+			Namespace:        event.InvolvedObject.Namespace,
+			ObjectNamespace:  event.InvolvedObject.Namespace,
+			ObjectAPIVersion: event.InvolvedObject.APIVersion,
+			Type:             event.Type,
+			Source:           namespaceEventSource(event),
+			Reason:           event.Reason,
+			Object:           namespaceInvolvedObject(event),
+			Message:          event.Message,
+			Age:              formatAge(timestamp),
+			AgeTimestamp:     timestamp.UnixMilli(),
 		}
 		summaries = append(summaries, summary)
 		if v := resourceVersionOrTimestamp(event); v > version {

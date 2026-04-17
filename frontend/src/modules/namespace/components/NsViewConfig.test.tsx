@@ -9,6 +9,14 @@ import React, { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
+  useNamespaceColumnLink: () => ({
+    onClick: vi.fn(),
+    getClassName: () => 'object-panel-link',
+    isInteractive: () => true,
+  }),
+}));
+
 const objectPanelMock = vi.hoisted(() => ({
   openWithObject: vi.fn(),
 }));
@@ -143,6 +151,7 @@ vi.mock('@/core/capabilities', () => ({
 }));
 
 vi.mock('@shared/components/icons/MenuIcons', () => ({
+  DiffIcon: () => <span>diff</span>,
   OpenIcon: () => <span>open</span>,
   DeleteIcon: () => <span>delete</span>,
 }));

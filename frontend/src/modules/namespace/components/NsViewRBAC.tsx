@@ -33,6 +33,7 @@ import { errorHandler } from '@utils/errorHandler';
 import { getPermissionKey, useUserPermissions } from '@/core/capabilities';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 import { useFavToggle } from '@ui/favorites/FavToggle';
+import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
 
 // Data interface for RBAC resources
 export interface RBACData {
@@ -84,6 +85,7 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const useShortResourceNames = useShortNames();
+    const namespaceColumnLink = useNamespaceColumnLink<RBACData>('rbac');
     const permissionMap = useUserPermissions();
     const [deleteConfirm, setDeleteConfirm] = useState<{
       show: boolean;
@@ -160,11 +162,18 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
         cf.upsertNamespaceColumn(baseColumns, {
           accessor: (resource) => resource.namespace,
           sortValue: (resource) => (resource.namespace || '').toLowerCase(),
+          ...namespaceColumnLink,
         });
       }
 
       return baseColumns;
-    }, [handleResourceClick, navigateToView, showNamespaceColumn, useShortResourceNames]);
+    }, [
+      handleResourceClick,
+      namespaceColumnLink,
+      navigateToView,
+      showNamespaceColumn,
+      useShortResourceNames,
+    ]);
 
     const showNamespaceFilter = namespace === ALL_NAMESPACES_SCOPE;
 

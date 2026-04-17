@@ -10,6 +10,8 @@ import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import ClusterViewEvents from '@modules/cluster/components/ClusterViewEvents';
 
+const openWithObjectMock = vi.fn();
+
 vi.mock('@core/contexts/FavoritesContext', () => ({
   useFavorites: () => ({
     favorites: [],
@@ -49,7 +51,7 @@ vi.mock('@shared/components/tables/GridTable', async () => {
 });
 
 vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
-  useObjectPanel: () => ({ openWithObject: vi.fn() }),
+  useObjectPanel: () => ({ openWithObject: openWithObjectMock }),
 }));
 
 vi.mock('@shared/hooks/useNavigateToView', () => ({
@@ -101,6 +103,7 @@ const baseEvent = {
   source: 'kubelet',
   reason: 'Failed',
   object: 'Pod/foo',
+  objectApiVersion: 'v1',
   message: 'Something happened',
   ageTimestamp: 123,
   clusterId: 'test-cluster',
@@ -119,6 +122,7 @@ describe('ClusterViewEvents', () => {
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
     gridTablePropsRef.current = null;
+    openWithObjectMock.mockReset();
   });
 
   afterEach(() => {
@@ -148,5 +152,32 @@ describe('ClusterViewEvents', () => {
     const key = props.keyExtractor(baseEvent, 0);
     expect(key).toContain('team-a');
     expect(props.columnWidths).toBe(null);
+  });
+
+  it('opens the involved object with group/version when object name is clicked', async () => {
+    await act(async () => {
+      root.render(<ClusterViewEvents data={[baseEvent]} loaded={true} />);
+      await Promise.resolve();
+    });
+
+    const props = gridTablePropsRef.current;
+    const objectNameColumn = props.columns.find((column: any) => column.key === 'objectName');
+    expect(objectNameColumn).toBeTruthy();
+
+    const cell = objectNameColumn.render(baseEvent);
+
+    act(() => {
+      cell.props.onClick({ altKey: false });
+    });
+
+    expect(openWithObjectMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'Pod',
+        name: 'foo',
+        group: '',
+        version: 'v1',
+        clusterId: 'test-cluster',
+      })
+    );
   });
 });

@@ -9,6 +9,10 @@ import './ClusterViewEvents.css';
 import { formatAge } from '@/utils/ageFormatter';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
+import {
+  parseApiVersion,
+  resolveBuiltinGroupVersion,
+} from '@/shared/constants/builtinGroupVersions';
 import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
@@ -35,6 +39,7 @@ interface EventData {
   clusterId?: string;
   clusterName?: string;
   objectNamespace?: string;
+  objectApiVersion?: string;
   type: string; // Event severity (Normal, Warning)
   source: string;
   reason: string;
@@ -104,10 +109,15 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
           event.objectNamespace && event.objectNamespace.length > 0
             ? event.objectNamespace
             : undefined;
+        const objectVersionParts = event.objectApiVersion
+          ? parseApiVersion(event.objectApiVersion)
+          : resolveBuiltinGroupVersion(parsed.objectType);
         return {
           kind: parsed.objectType,
           name: parsed.objectName,
           namespace,
+          group: objectVersionParts.group,
+          version: objectVersionParts.version,
           clusterId: event.clusterId ?? undefined,
           clusterName: event.clusterName ?? undefined,
         };
@@ -156,6 +166,7 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
           },
           {
             ...objectLink(getEventObjectRef),
+            getClassName: () => 'object-panel-link',
             isInteractive: (event) => splitEventObject(event.object).isLinkable,
           }
         ),

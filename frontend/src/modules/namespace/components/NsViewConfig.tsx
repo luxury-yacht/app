@@ -33,6 +33,7 @@ import { DeleteResourceByGVK } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 import { useFavToggle } from '@ui/favorites/FavToggle';
+import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
 
 // Data interface for configuration resources (ConfigMaps, Secrets)
 export interface ConfigData {
@@ -63,6 +64,7 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const useShortResourceNames = useShortNames();
+    const namespaceColumnLink = useNamespaceColumnLink<ConfigData>('config');
     const permissionMap = useUserPermissions();
     const [deleteConfirm, setDeleteConfirm] = useState<{
       show: boolean;
@@ -151,11 +153,18 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
         cf.upsertNamespaceColumn(baseColumns, {
           accessor: (resource) => resource.namespace,
           sortValue: (resource) => (resource.namespace || '').toLowerCase(),
+          ...namespaceColumnLink,
         });
       }
 
       return baseColumns;
-    }, [handleResourceClick, navigateToView, showNamespaceColumn, useShortResourceNames]);
+    }, [
+      handleResourceClick,
+      namespaceColumnLink,
+      navigateToView,
+      showNamespaceColumn,
+      useShortResourceNames,
+    ]);
 
     const showNamespaceFilter = namespace === ALL_NAMESPACES_SCOPE;
 

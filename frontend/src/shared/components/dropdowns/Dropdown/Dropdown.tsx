@@ -50,6 +50,10 @@ const Dropdown: React.FC<DropdownProps> = ({
   error = false,
   multiple = false,
   searchable = false,
+  searchMode = 'local',
+  searchValue,
+  searchPlaceholder = 'Search...',
+  onSearchChange,
   clearable = false,
   showBulkActions = false,
   renderOption,
@@ -104,18 +108,39 @@ const Dropdown: React.FC<DropdownProps> = ({
     };
   }, [dropdownRef]);
 
+  const effectiveSearchQuery = searchValue ?? searchQuery;
+
+  // Filter options based on search query
+  const filteredOptions = useMemo(() => {
+    if (!searchable || !effectiveSearchQuery || searchMode === 'remote') {
+      return options;
+    }
+    return options.filter((option) =>
+      option.label.toLowerCase().includes(effectiveSearchQuery.toLowerCase())
+    );
+  }, [effectiveSearchQuery, options, searchMode, searchable]);
+
   // Set initial highlighted index when dropdown opens
   useEffect(() => {
     if (isOpen && !multiple && value && highlightedIndex === -1) {
-      const selectedIndex = options.findIndex((opt) => opt.value === value);
+      const selectedIndex = filteredOptions.findIndex((opt) => opt.value === value);
       if (selectedIndex >= 0) {
         setHighlightedIndex(selectedIndex);
       }
     }
-  }, [isOpen, value, options, multiple, highlightedIndex, setHighlightedIndex]);
+  }, [filteredOptions, highlightedIndex, isOpen, multiple, setHighlightedIndex, value]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+    if (highlightedIndex >= filteredOptions.length) {
+      setHighlightedIndex(-1);
+    }
+  }, [filteredOptions.length, highlightedIndex, isOpen, setHighlightedIndex]);
 
   const { handleKeyAction } = useKeyboardNavigation({
-    options,
+    options: filteredOptions,
     isOpen,
     highlightedIndex,
     setHighlightedIndex,
@@ -127,7 +152,7 @@ const Dropdown: React.FC<DropdownProps> = ({
 
   const { announcementRef } = useAriaAnnouncements({
     value,
-    options,
+    options: filteredOptions,
     isOpen,
     highlightedIndex,
   });
@@ -139,19 +164,12 @@ const Dropdown: React.FC<DropdownProps> = ({
     }
     if (previousOpenRef.current && !isOpen) {
       onClose?.(value);
+      if (searchable && onSearchChange && effectiveSearchQuery !== '') {
+        onSearchChange('');
+      }
     }
     previousOpenRef.current = isOpen;
-  }, [isOpen, onOpen, onClose, value]);
-
-  // Filter options based on search query
-  const filteredOptions = useMemo(() => {
-    if (!searchable || !searchQuery) {
-      return options;
-    }
-    return options.filter((option) =>
-      option.label.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-  }, [options, searchQuery, searchable]);
+  }, [effectiveSearchQuery, isOpen, onClose, onOpen, onSearchChange, searchable, value]);
 
   const selectableFilteredValues = useMemo(
     () =>
@@ -310,6 +328,14 @@ const Dropdown: React.FC<DropdownProps> = ({
     },
   });
 
+  const handleSearchInputChange = (nextValue: string) => {
+    if (searchValue === undefined) {
+      setSearchQuery(nextValue);
+    }
+    onSearchChange?.(nextValue);
+    setHighlightedIndex(-1);
+  };
+
   return (
     <div ref={dropdownRef} className={containerClasses}>
       {/* Trigger */}
@@ -374,9 +400,9 @@ const Dropdown: React.FC<DropdownProps> = ({
               <input
                 type="text"
                 className="search-input"
-                placeholder="Search..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder={searchPlaceholder}
+                value={effectiveSearchQuery}
+                onChange={(e) => handleSearchInputChange(e.target.value)}
                 onClick={(e) => e.stopPropagation()}
                 autoFocus
               />

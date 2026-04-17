@@ -113,10 +113,12 @@
   --code-text-muted: var(--color-base-400);
   --code-gutter-text: var(--color-base-500);
   --code-caret: var(--color-accent-dark-500);
-  --code-selection-bg: rgba(245, 158, 11, 0.2);
+  --code-selection-bg: rgb(38, 201, 255);
   --code-selection-match-bg: rgba(245, 158, 11, 0.25);
+  --code-selection-match-text: var(--color-base-50);
   --code-selection-match-outline: rgba(245, 158, 11, 0.5);
   --code-selection-match-selected-bg: rgba(245, 158, 11, 0.35);
+  --code-selection-match-selected-text: var(--color-base-50);
   --code-active-line-bg: rgba(255, 255, 255, 0.03);
   --code-active-gutter-bg: rgba(255, 255, 255, 0.05);
   --code-focus-ring: rgba(245, 158, 11, 0.5);
@@ -298,9 +300,9 @@
   /* YAML tab */
   --yaml-validation-bg: rgba(239, 68, 68, 0.15);
   --yaml-validation-border: rgba(239, 68, 68, 0.35);
-  --yaml-notice-bg: rgba(245, 158, 11, 0.1);
-  --yaml-notice-border: rgba(245, 158, 11, 0.25);
-  --yaml-notice-text: var(--color-base-300);
+  --yaml-notice-bg: var(--color-bg);
+  --yaml-notice-border: var(--color-bg);
+  --yaml-notice-text: var(--color-text-secondary);
   --yaml-drift-bg: rgba(0, 0, 0, 0.25);
 
   /* Utilization indicators */

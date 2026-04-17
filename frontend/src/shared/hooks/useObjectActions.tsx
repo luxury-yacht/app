@@ -7,8 +7,10 @@
 
 import { useMemo } from 'react';
 import { getPermissionKey, useUserPermissions } from '@/core/capabilities';
+import { eventBus } from '@/core/events';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import {
+  DiffIcon,
   OpenIcon,
   RestartIcon,
   RollbackIcon,
@@ -16,6 +18,8 @@ import {
   DeleteIcon,
   PortForwardIcon,
 } from '@shared/components/icons/MenuIcons';
+import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
+import type { ObjectDiffSelectionSeed } from '@shared/components/diff/objectDiffSelection';
 
 // Normalized kind mapping for permission checks
 const WORKLOAD_KIND_MAP: Record<string, string> = {
@@ -56,6 +60,8 @@ export interface ObjectActionData {
   // For workload-specific actions
   status?: string;
   ready?: string;
+  // Whether the target exposes any forwardable TCP ports.
+  portForwardAvailable?: boolean;
   // Whether a HorizontalPodAutoscaler targets this workload (disables manual scaling)
   hpaManaged?: boolean;
   // For Event-specific actions - the involved object reference (e.g., "Pod/my-pod")
@@ -83,11 +89,25 @@ export interface PermissionStatus {
   pending: boolean;
 }
 
+interface PortForwardAvailability {
+  show: boolean;
+  enabled: boolean;
+  label: string;
+}
+
 // Kinds that support each action
 export const RESTARTABLE_KINDS = ['Deployment', 'StatefulSet', 'DaemonSet'];
 export const ROLLBACKABLE_KINDS = ['Deployment', 'StatefulSet', 'DaemonSet'];
 export const SCALABLE_KINDS = ['Deployment', 'StatefulSet', 'ReplicaSet'];
-const PORT_FORWARDABLE_KINDS = ['Pod', 'Deployment', 'StatefulSet', 'DaemonSet', 'Service'];
+let nextObjectDiffRequestId = 1;
+
+const PORT_FORWARDABLE_TARGETS: Record<string, { group: string; version: string }> = {
+  Pod: { group: '', version: 'v1' },
+  Deployment: { group: 'apps', version: 'v1' },
+  StatefulSet: { group: 'apps', version: 'v1' },
+  DaemonSet: { group: 'apps', version: 'v1' },
+  Service: { group: '', version: 'v1' },
+};
 
 // Options for building action items
 export interface BuildObjectActionsOptions {
@@ -104,6 +124,81 @@ export interface BuildObjectActionsOptions {
   actionLoading?: boolean;
 }
 
+const buildObjectDiffSelection = (
+  object: ObjectActionData,
+  _context: 'gridtable' | 'object-panel',
+  _handlers: ObjectActionHandlers
+): ObjectDiffSelectionSeed | null => {
+  if (!object.clusterId) {
+    return null;
+  }
+  if (object.kind === 'Event' && object.involvedObject) {
+    return null;
+  }
+
+  const builtin = resolveBuiltinGroupVersion(object.kind);
+  const group = object.group ?? builtin.group;
+  const version = object.version ?? builtin.version;
+  if (!version) {
+    return null;
+  }
+
+  return {
+    clusterId: object.clusterId,
+    namespace: object.namespace,
+    group: group ?? '',
+    version,
+    kind: object.kind,
+    name: object.name,
+  };
+};
+
+function getPortForwardAvailability(
+  object: ObjectActionData,
+  handlers: ObjectActionHandlers
+): PortForwardAvailability {
+  const normalizedKind = normalizeKind(object.kind);
+  const expectedTarget = PORT_FORWARDABLE_TARGETS[normalizedKind];
+
+  if (!expectedTarget || !handlers.onPortForward) {
+    return { show: false, enabled: false, label: 'Port Forward' };
+  }
+
+  const builtin = resolveBuiltinGroupVersion(object.kind);
+  const group = object.group ?? builtin.group;
+  const version = object.version ?? builtin.version;
+
+  if (!object.clusterId || !object.namespace) {
+    return {
+      show: true,
+      enabled: false,
+      label: 'Port Forward',
+    };
+  }
+
+  if (group !== expectedTarget.group || version !== expectedTarget.version) {
+    return {
+      show: true,
+      enabled: false,
+      label: 'Port Forward',
+    };
+  }
+
+  if (object.portForwardAvailable === false) {
+    return {
+      show: true,
+      enabled: false,
+      label: 'Port Forward',
+    };
+  }
+
+  return {
+    show: true,
+    enabled: true,
+    label: 'Port Forward',
+  };
+}
+
 /**
  * Build menu items for an object. Can be used directly or via the useObjectActions hook.
  */
@@ -116,6 +211,8 @@ export function buildObjectActionItems({
 }: BuildObjectActionsOptions): ContextMenuItem[] {
   const menuItems: ContextMenuItem[] = [];
   const normalizedKind = normalizeKind(object.kind);
+  const diffSelection = buildObjectDiffSelection(object, context, handlers);
+  const portForwardAvailability = getPortForwardAvailability(object, handlers);
 
   const {
     restart: restartStatus,
@@ -125,24 +222,25 @@ export function buildObjectActionItems({
     portForward: portForwardStatus,
   } = permissions;
 
-  // Permission pending header
-  const anyPending =
-    restartStatus?.pending ||
-    rollbackStatus?.pending ||
-    scaleStatus?.pending ||
-    deleteStatus?.pending ||
-    portForwardStatus?.pending;
-
-  if (anyPending) {
-    menuItems.push({ header: true, label: 'Awaiting permissions...' });
-  }
-
   // Open - only for gridtable context
   if (context === 'gridtable' && handlers.onOpen) {
     menuItems.push({
       label: 'Open',
       icon: <OpenIcon />,
       onClick: handlers.onOpen,
+    });
+  }
+
+  if (diffSelection) {
+    menuItems.push({
+      label: 'Diff',
+      icon: <DiffIcon />,
+      onClick: () => {
+        eventBus.emit('view:open-object-diff', {
+          requestId: nextObjectDiffRequestId++,
+          left: diffSelection,
+        });
+      },
     });
   }
 
@@ -157,6 +255,32 @@ export function buildObjectActionItems({
         onClick: handlers.onViewInvolvedObject,
       });
     }
+  }
+
+  // Permission pending header
+  const anyPending =
+    restartStatus?.pending ||
+    rollbackStatus?.pending ||
+    scaleStatus?.pending ||
+    deleteStatus?.pending ||
+    portForwardStatus?.pending;
+
+  const hasFollowUpSection =
+    anyPending ||
+    normalizedKind === 'CronJob' ||
+    (RESTARTABLE_KINDS.includes(normalizedKind) && Boolean(handlers.onRestart)) ||
+    (ROLLBACKABLE_KINDS.includes(normalizedKind) && Boolean(handlers.onRollback)) ||
+    (SCALABLE_KINDS.includes(normalizedKind) &&
+      (Boolean(object.hpaManaged) || Boolean(handlers.onScale))) ||
+    portForwardAvailability.show ||
+    Boolean(handlers.onDelete);
+
+  if (menuItems.length > 0 && hasFollowUpSection) {
+    menuItems.push({ divider: true });
+  }
+
+  if (anyPending) {
+    menuItems.push({ header: true, label: 'Awaiting permissions...' });
   }
 
   // CronJob-specific actions
@@ -231,14 +355,20 @@ export function buildObjectActionItems({
   }
 
   // Port Forward
-  if (
-    PORT_FORWARDABLE_KINDS.includes(normalizedKind) &&
+  if (portForwardAvailability.show && !portForwardAvailability.enabled) {
+    menuItems.push({
+      label: portForwardAvailability.label,
+      icon: <PortForwardIcon />,
+      disabled: true,
+    });
+  } else if (
+    portForwardAvailability.show &&
     portForwardStatus?.allowed &&
     !portForwardStatus.pending &&
     handlers.onPortForward
   ) {
     menuItems.push({
-      label: 'Port Forward',
+      label: portForwardAvailability.label,
       icon: <PortForwardIcon />,
       onClick: handlers.onPortForward,
       disabled: actionLoading,
