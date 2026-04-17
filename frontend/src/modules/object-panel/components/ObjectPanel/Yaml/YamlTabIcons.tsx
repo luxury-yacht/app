@@ -45,20 +45,12 @@ export const YamlCancelIcon: React.FC<IconProps> = ({ width = 16, height = 16 })
   </svg>
 );
 
-export const YamlSaveIcon: React.FC<IconProps> = ({ width = 16, height = 16 }) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 16 16"
-    width={width}
-    height={height}
-    fill="none"
-    stroke="currentColor"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    strokeWidth="1.25"
-  >
-    <path d="M3 2.75h8l2 2V13.25H3z" />
-    <path d="M5 2.75v3.5h4v-3.5M5.25 13.25v-3h5.5v3" />
+export const YamlSaveIcon: React.FC<IconProps> = ({ width = 20, height = 20 }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width={width} height={height} viewBox="0 0 24 24">
+    <path
+      fill="currentColor"
+      d="M5 21h14c1.1 0 2-.9 2-2V8c0-.27-.11-.52-.29-.71l-4-4A1 1 0 0 0 16 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2m10-2H9v-5h6zM11 5h2v2h-2zM5 5h2v4h8V5h.59L19 8.41V19h-2v-5c0-1.1-.9-2-2-2H9c-1.1 0-2 .9-2 2v5H5z"
+    />
   </svg>
 );
 
