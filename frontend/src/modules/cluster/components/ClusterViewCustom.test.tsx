@@ -188,6 +188,18 @@ describe('ClusterViewCustom', () => {
     );
   });
 
+  it('enables searchable kind dropdown bulk actions for custom resources', async () => {
+    await act(async () => {
+      root.render(<ClusterViewCustom data={[baseCustom]} loaded={true} />);
+      await Promise.resolve();
+    });
+
+    const props = gridTablePropsRef.current;
+    expect(props?.filters?.options?.showKindDropdown).toBe(true);
+    expect(props?.filters?.options?.kindDropdownSearchable).toBe(true);
+    expect(props?.filters?.options?.kindDropdownBulkActions).toBe(true);
+  });
+
   // Regression test mirroring NsViewCustom's colliding-CRD guardrail.
   // The cluster-scoped custom view has
   // the same bug potential: if handleResourceClick drops apiGroup/apiVersion,

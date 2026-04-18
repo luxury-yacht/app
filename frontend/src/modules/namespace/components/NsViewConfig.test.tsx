@@ -308,6 +308,7 @@ describe('NsViewConfig ConfigViewGrid', () => {
 
     expect(gridTablePropsRef.current?.filters?.options?.showNamespaceDropdown).toBe(true);
     expect(gridTablePropsRef.current?.filters?.options?.namespaceDropdownSearchable).toBe(true);
+    expect(gridTablePropsRef.current?.filters?.options?.namespaceDropdownBulkActions).toBe(true);
 
     await unmount();
   });

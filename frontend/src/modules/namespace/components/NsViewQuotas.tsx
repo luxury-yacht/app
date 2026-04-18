@@ -325,6 +325,7 @@ const QuotasViewGrid: React.FC<QuotasViewProps> = React.memo(
                 showKindDropdown: true,
                 showNamespaceDropdown: showNamespaceFilter,
                 namespaceDropdownSearchable: showNamespaceFilter,
+                namespaceDropdownBulkActions: showNamespaceFilter,
                 preActions: [favToggle],
               },
             }}

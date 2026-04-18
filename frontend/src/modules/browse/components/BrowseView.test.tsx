@@ -39,6 +39,11 @@ const persistenceArgsRef: { cluster: any | null; namespace: any | null } = {
   cluster: null,
   namespace: null,
 };
+const persistenceFiltersRef: {
+  current: { search: string; kinds: string[]; namespaces: string[]; caseSensitive: boolean };
+} = {
+  current: { search: '', kinds: [], namespaces: [], caseSensitive: false },
+};
 
 vi.mock('@shared/components/tables/GridTable', async () => {
   const actual = await vi.importActual<typeof import('@shared/components/tables/GridTable')>(
@@ -95,17 +100,19 @@ const refreshMocks = vi.hoisted(() => ({
     setScopedDomainEnabled: vi.fn(),
     fetchScopedDomain: vi.fn().mockResolvedValue(undefined),
   },
+  useRefreshScopedDomain: vi.fn(),
   catalogDomain: {
     status: 'idle' as any,
     data: null as any,
     scope: undefined as string | undefined,
   },
+  scopedDomains: new Map<string, any>(),
 }));
 
 vi.mock('@/core/refresh', () => ({
   refreshManager: refreshMocks.manager,
   refreshOrchestrator: refreshMocks.orchestrator,
-  useRefreshScopedDomain: () => refreshMocks.catalogDomain,
+  useRefreshScopedDomain: (...args: unknown[]) => refreshMocks.useRefreshScopedDomain(...args),
 }));
 
 vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => ({
@@ -118,7 +125,7 @@ vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => (
       setColumnWidths: vi.fn(),
       columnVisibility: null,
       setColumnVisibility: vi.fn(),
-      filters: { search: '', kinds: [], namespaces: [], caseSensitive: false },
+      filters: persistenceFiltersRef.current,
       setFilters: vi.fn(),
       resetState: vi.fn(),
       hydrated: true,
@@ -137,7 +144,7 @@ vi.mock('@modules/namespace/hooks/useNamespaceGridTablePersistence', () => ({
       setColumnWidths: vi.fn(),
       columnVisibility: null,
       setColumnVisibility: vi.fn(),
-      filters: { search: '', kinds: [], namespaces: [], caseSensitive: false },
+      filters: persistenceFiltersRef.current,
       setFilters: vi.fn(),
       isNamespaceScoped: true,
       resetState: vi.fn(),
@@ -162,11 +169,18 @@ describe('BrowseView', () => {
     refreshMocks.orchestrator.setScopedDomainEnabled.mockReset();
     refreshMocks.orchestrator.fetchScopedDomain.mockReset().mockResolvedValue(undefined);
     refreshMocks.manager.disable.mockReset();
+    refreshMocks.useRefreshScopedDomain.mockReset();
     refreshMocks.catalogDomain.status = 'idle';
     refreshMocks.catalogDomain.data = null;
     refreshMocks.catalogDomain.scope = undefined;
+    refreshMocks.scopedDomains.clear();
+    refreshMocks.useRefreshScopedDomain.mockImplementation((domain: string, scope: string) => {
+      void domain;
+      return refreshMocks.scopedDomains.get(scope) ?? refreshMocks.catalogDomain;
+    });
     persistenceArgsRef.cluster = null;
     persistenceArgsRef.namespace = null;
+    persistenceFiltersRef.current = { search: '', kinds: [], namespaces: [], caseSensitive: false };
   });
 
   afterEach(() => {
@@ -303,6 +317,47 @@ describe('BrowseView', () => {
 
       expect(gridTablePropsRef.current?.filters?.options?.showNamespaceDropdown).toBe(true);
     });
+
+    it('keeps kind and namespace filter options stable while active browse filters change', async () => {
+      persistenceFiltersRef.current = {
+        search: 'api',
+        kinds: ['Pod'],
+        namespaces: ['default'],
+        caseSensitive: false,
+      };
+      refreshMocks.scopedDomains.set('cluster-1|limit=1000&search=api&kind=Pod&namespace=default', {
+        status: 'ready',
+        data: {
+          items: [],
+          kinds: [{ kind: 'Pod', namespaced: true }],
+          namespaces: ['default'],
+        },
+        scope: 'cluster-1|limit=1000&search=api&kind=Pod&namespace=default',
+      });
+      refreshMocks.scopedDomains.set('cluster-1|limit=1', {
+        status: 'ready',
+        data: {
+          items: [],
+          kinds: [
+            { kind: 'Deployment', namespaced: true },
+            { kind: 'Pod', namespaced: true },
+          ],
+          namespaces: ['default', 'kube-system'],
+        },
+        scope: 'cluster-1|limit=1',
+      });
+
+      await act(async () => {
+        root.render(<BrowseView namespace={ALL_NAMESPACES_SCOPE} />);
+        await Promise.resolve();
+      });
+
+      expect(gridTablePropsRef.current?.filters?.options?.kinds).toEqual(['Deployment', 'Pod']);
+      expect(gridTablePropsRef.current?.filters?.options?.namespaces).toEqual([
+        'default',
+        'kube-system',
+      ]);
+    });
   });
 
   describe('Row cap UI', () => {
@@ -336,7 +391,19 @@ describe('BrowseView', () => {
 
       expect(gridTablePropsRef.current.data).toHaveLength(1);
       expect(gridTablePropsRef.current.filters.options.postActions ?? []).toEqual([]);
-      expect(refreshMocks.orchestrator.fetchScopedDomain).toHaveBeenCalledTimes(1);
+      expect(refreshMocks.orchestrator.fetchScopedDomain).toHaveBeenCalledTimes(2);
+      expect(refreshMocks.orchestrator.fetchScopedDomain).toHaveBeenNthCalledWith(
+        1,
+        'catalog',
+        'cluster-1|limit=1000&namespace=cluster',
+        expect.objectContaining({ isManual: true })
+      );
+      expect(refreshMocks.orchestrator.fetchScopedDomain).toHaveBeenNthCalledWith(
+        2,
+        'catalog',
+        'cluster-1|limit=1&namespace=cluster',
+        expect.objectContaining({ isManual: true })
+      );
     });
   });
 });

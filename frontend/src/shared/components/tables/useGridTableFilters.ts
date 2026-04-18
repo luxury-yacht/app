@@ -176,6 +176,7 @@ export function useGridTableFilters<T>({
     const kindDropdownSearchable = filters?.options?.kindDropdownSearchable ?? false;
     const kindDropdownBulkActions = filters?.options?.kindDropdownBulkActions ?? false;
     const namespaceDropdownSearchable = filters?.options?.namespaceDropdownSearchable ?? false;
+    const namespaceDropdownBulkActions = filters?.options?.namespaceDropdownBulkActions ?? false;
     const preActions = filters?.options?.preActions;
     const postActions = filters?.options?.postActions;
     const customActions = filters?.options?.customActions;
@@ -185,6 +186,7 @@ export function useGridTableFilters<T>({
         kindDropdownSearchable,
         kindDropdownBulkActions,
         namespaceDropdownSearchable,
+        namespaceDropdownBulkActions,
         kinds: [],
         namespaces: [],
         preActions,
@@ -270,6 +272,7 @@ export function useGridTableFilters<T>({
       kindDropdownSearchable,
       kindDropdownBulkActions,
       namespaceDropdownSearchable,
+      namespaceDropdownBulkActions,
       kinds,
       namespaces: namespaceOptions,
       preActions,

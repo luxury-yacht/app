@@ -177,8 +177,42 @@ export function useBrowseCatalog({
     );
   }, [baseScope, pageLimit, pinnedNamespaces, clusterId]);
 
+  const metadataNamespaces = useMemo(() => {
+    if (clusterScopedOnly) {
+      return ['cluster'];
+    }
+    if (isNamespaceScoped) {
+      return pinnedNamespaces;
+    }
+    return [];
+  }, [clusterScopedOnly, isNamespaceScoped, pinnedNamespaces]);
+
+  const metadataBaseScope = useMemo(
+    () =>
+      buildCatalogScope({
+        limit: 1,
+        search: '',
+        kinds: [],
+        namespaces: metadataNamespaces,
+      }),
+    [metadataNamespaces]
+  );
+
+  const metadataScope = useMemo(() => {
+    return (
+      normalizeCatalogScope(metadataBaseScope, 1, pinnedNamespaces, clusterId) ??
+      buildClusterScope(clusterId ?? undefined, metadataBaseScope)
+    );
+  }, [metadataBaseScope, pinnedNamespaces, clusterId]);
+
+  const metadataUsesActiveScope = metadataScope === catalogScope;
+
   // Read scoped state for the current catalog scope.
   const domain = useRefreshScopedDomain('catalog', catalogScope);
+  const metadataDomain = useRefreshScopedDomain(
+    'catalog',
+    metadataUsesActiveScope ? catalogScope : metadataScope
+  );
   useCatalogDiagnostics(domain, diagnosticLabel);
 
   // Enable catalog domain on mount, disable on unmount.
@@ -195,6 +229,22 @@ export function useBrowseCatalog({
       refreshOrchestrator.setScopedDomainEnabled('catalog', catalogScope, false);
     };
   }, [catalogScope]);
+
+  const prevMetadataScopeRef = useRef<string>(metadataScope);
+  useEffect(() => {
+    if (metadataUsesActiveScope) {
+      return;
+    }
+    const prevScope = prevMetadataScopeRef.current;
+    if (prevScope && prevScope !== metadataScope) {
+      refreshOrchestrator.setScopedDomainEnabled('catalog', prevScope, false);
+    }
+    prevMetadataScopeRef.current = metadataScope;
+    refreshOrchestrator.setScopedDomainEnabled('catalog', metadataScope, true);
+    return () => {
+      refreshOrchestrator.setScopedDomainEnabled('catalog', metadataScope, false);
+    };
+  }, [metadataScope, metadataUsesActiveScope]);
 
   // Apply query scope and refresh page 0 when the query changes
   const previousScopeIdentityRef = useRef(scopeIdentityKey);
@@ -218,7 +268,10 @@ export function useBrowseCatalog({
 
     lastAppliedScopeRef.current = catalogScope;
     void refreshOrchestrator.fetchScopedDomain('catalog', catalogScope, { isManual: true });
-  }, [catalogScope, scopeIdentityKey]);
+    if (!metadataUsesActiveScope) {
+      void refreshOrchestrator.fetchScopedDomain('catalog', metadataScope, { isManual: true });
+    }
+  }, [catalogScope, metadataScope, metadataUsesActiveScope, scopeIdentityKey]);
 
   // Apply incoming snapshots to local pagination state
   useEffect(() => {
@@ -372,7 +425,9 @@ export function useBrowseCatalog({
 
   // Derive filter options from the catalog snapshot
   const filterOptions = useMemo<BrowseFilterOptions>(() => {
-    const payload = domain.data as CatalogSnapshotPayload | null;
+    const payload = (
+      metadataUsesActiveScope ? domain.data : (metadataDomain.data ?? domain.data)
+    ) as CatalogSnapshotPayload | null;
     const kindInfos = payload?.kinds ?? [];
 
     // Filter kinds based on scope:
@@ -389,7 +444,13 @@ export function useBrowseCatalog({
       namespaces: isNamespaceScoped ? [] : (payload?.namespaces ?? []).slice().sort(),
       isNamespaceScoped,
     };
-  }, [domain.data, isNamespaceScoped, clusterScopedOnly]);
+  }, [
+    clusterScopedOnly,
+    domain.data,
+    isNamespaceScoped,
+    metadataDomain.data,
+    metadataUsesActiveScope,
+  ]);
 
   // Update available namespaces when the snapshot includes them.
   // This enables querying all namespaces when no filter is selected in all-namespaces mode.

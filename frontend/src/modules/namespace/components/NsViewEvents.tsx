@@ -344,6 +344,7 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
               options: {
                 showNamespaceDropdown: showNamespaceFilter,
                 namespaceDropdownSearchable: showNamespaceFilter,
+                namespaceDropdownBulkActions: showNamespaceFilter,
                 preActions: [favToggle],
               },
             }}

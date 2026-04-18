@@ -9,6 +9,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 
 vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
   useNamespaceColumnLink: () => ({
@@ -219,6 +220,20 @@ describe('NsViewCustom', () => {
         clusterId: 'alpha:ctx',
       })
     );
+  });
+
+  it('enables searchable kind dropdown bulk actions in all-namespaces custom view', async () => {
+    await renderComponent({
+      namespace: ALL_NAMESPACES_SCOPE,
+      data: [baseResource],
+      loaded: true,
+      showNamespaceColumn: true,
+    });
+
+    const gridProps = gridTableMock.mock.calls[0][0];
+    expect(gridProps.filters.options.showKindDropdown).toBe(true);
+    expect(gridProps.filters.options.kindDropdownSearchable).toBe(true);
+    expect(gridProps.filters.options.kindDropdownBulkActions).toBe(true);
   });
 
   // Regression test for the kind-only-objects bug. When the user clicks a custom

@@ -204,6 +204,24 @@ describe('GridTableFiltersBar', () => {
     ).toBe('true');
   });
 
+  it('passes bulk actions through to the namespace dropdown when enabled', async () => {
+    await renderFilters({
+      showNamespaceDropdown: true,
+      resolvedFilterOptions: {
+        kinds: [],
+        namespaces: [
+          { label: 'team-a', value: 'team-a' },
+          { label: 'team-b', value: 'team-b' },
+        ],
+        namespaceDropdownBulkActions: true,
+      },
+    });
+
+    expect(
+      container.querySelector('[data-testid="namespaces"]')?.getAttribute('data-bulk-actions')
+    ).toBe('true');
+  });
+
   it('registers search shortcut and focuses the input when invoked', async () => {
     await renderFilters({
       searchShortcutActive: true,

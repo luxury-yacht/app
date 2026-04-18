@@ -383,6 +383,7 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
                 showKindDropdown: true,
                 showNamespaceDropdown: showNamespaceColumn,
                 namespaceDropdownSearchable: showNamespaceColumn,
+                namespaceDropdownBulkActions: showNamespaceColumn,
                 preActions: [favToggle],
               },
             }}
