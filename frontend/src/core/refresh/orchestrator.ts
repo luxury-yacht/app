@@ -42,6 +42,7 @@ import type {
   ClusterNodeSnapshotPayload,
   DomainPayloadMap,
   NamespaceSnapshotPayload,
+  NamespaceWorkloadSummary,
   NamespaceWorkloadSnapshotPayload,
   NodeMaintenanceSnapshotPayload,
   PodSnapshotPayload,
@@ -158,6 +159,45 @@ const mergeListByKey = <T extends object>(
     return item;
   });
   return reused ? merged : incoming;
+};
+
+const mergeWorkloadMetricRows = (
+  previous: NamespaceWorkloadSummary[],
+  incoming: NamespaceWorkloadSummary[],
+  fallbackClusterId: string
+): NamespaceWorkloadSummary[] => {
+  if (previous.length === 0 || incoming.length === 0) {
+    return previous;
+  }
+
+  const incomingByKey = new Map(
+    incoming.map((workload) => [
+      `${workload.clusterId ?? fallbackClusterId}::${workload.namespace}::${workload.kind}::${workload.name}`,
+      workload,
+    ])
+  );
+
+  let changed = false;
+  const next = previous.map((existing) => {
+    const key = `${existing.clusterId ?? fallbackClusterId}::${existing.namespace}::${existing.kind}::${existing.name}`;
+    const candidate = incomingByKey.get(key);
+    if (!candidate) {
+      return existing;
+    }
+
+    if (existing.cpuUsage === candidate.cpuUsage && existing.memUsage === candidate.memUsage) {
+      return existing;
+    }
+
+    changed = true;
+    return {
+      ...existing,
+      cpuUsage: candidate.cpuUsage,
+      memUsage: candidate.memUsage,
+    };
+  });
+
+  return changed ? next : previous;
 };
 
 class RefreshOrchestrator {
@@ -1669,29 +1709,19 @@ class RefreshOrchestrator {
         return false;
       }
       const payload = snapshot.payload as NamespaceWorkloadSnapshotPayload;
-      const incomingByKey = new Map(
-        payload.workloads.map((workload) => [
-          `${workload.clusterId ?? clusterId}::${workload.namespace}::${workload.kind}::${workload.name}`,
-          workload,
-        ])
-      );
       const existingWorkloads = previous.data.workloads ?? [];
-      const nextWorkloads = existingWorkloads.map((existing) => {
-        const key = `${existing.clusterId ?? clusterId}::${existing.namespace}::${existing.kind}::${existing.name}`;
-        const incoming = incomingByKey.get(key);
-        if (!incoming) {
-          return existing;
-        }
-        return {
-          ...existing,
-          cpuUsage: incoming.cpuUsage,
-          memUsage: incoming.memUsage,
-        };
-      });
-      const nextPayload: NamespaceWorkloadSnapshotPayload = {
-        ...previous.data,
-        workloads: nextWorkloads,
-      };
+      const nextWorkloads = mergeWorkloadMetricRows(
+        existingWorkloads,
+        payload.workloads ?? [],
+        clusterId
+      );
+      const nextPayload: NamespaceWorkloadSnapshotPayload =
+        nextWorkloads === existingWorkloads
+          ? previous.data
+          : {
+              ...previous.data,
+              workloads: nextWorkloads,
+            };
       setScopedDomainState('namespace-workloads', scope, (prev) => ({
         ...prev,
         status: 'ready',

@@ -74,6 +74,43 @@ describe('useStableSelectedValue', () => {
     hook.cleanup();
   });
 
+  it('reuses keyed rows when nested metadata objects are rebuilt with the same fields', () => {
+    let nextValue = [
+      {
+        clusterId: 'c1',
+        namespace: 'team-a',
+        kind: 'DBInstance',
+        name: 'orders-db',
+        labels: { team: 'payments' },
+        annotations: { owner: 'platform' },
+      },
+    ];
+
+    const hook = renderHook(() =>
+      useStableKeyedArray(
+        nextValue,
+        (item) => `${item.clusterId}::${item.namespace}::${item.kind}::${item.name}`
+      )
+    );
+    const first = hook.get();
+
+    nextValue = [
+      {
+        clusterId: 'c1',
+        namespace: 'team-a',
+        kind: 'DBInstance',
+        name: 'orders-db',
+        labels: { team: 'payments' },
+        annotations: { owner: 'platform' },
+      },
+    ];
+    hook.rerender();
+
+    expect(hook.get()).toBe(first);
+    expect(hook.get()[0]).toBe(first[0]);
+    hook.cleanup();
+  });
+
   it('returns a new reference when array contents change', () => {
     const sharedRows = [{ name: 'one' }, { name: 'two' }];
     let nextValue = [...sharedRows];

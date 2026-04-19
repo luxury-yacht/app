@@ -2002,3 +2002,53 @@ it('sets col-resize cursor on body during a column drag resize', () => {
   // Cursor should be restored.
   expect(document.body.style.cursor).not.toBe('col-resize');
 });
+
+it('defers external column width notifications until drag end', () => {
+  const resizableColumns: GridColumnDefinition<SimpleRow>[] = [
+    { key: 'label', header: 'Label', render: (row) => row.label },
+    { key: 'name', header: 'Name', render: (row) => row.name ?? '' },
+  ];
+  const onColumnWidthsChange = vi.fn();
+  const requestAnimationFrameSpy = vi
+    .spyOn(window, 'requestAnimationFrame')
+    .mockImplementation((callback: FrameRequestCallback) => {
+      callback(0);
+      return 1;
+    });
+  const cancelAnimationFrameSpy = vi
+    .spyOn(window, 'cancelAnimationFrame')
+    .mockImplementation(() => {});
+
+  const { container, cleanup } = renderGridTable({
+    data: createRows(3),
+    columns: resizableColumns,
+    enableColumnResizing: true,
+    virtualization: { enabled: false },
+    onColumnWidthsChange,
+  });
+  cleanupRoot = cleanup;
+
+  onColumnWidthsChange.mockClear();
+
+  const handle = container.querySelector('.resize-handle') as HTMLElement;
+  expect(handle).not.toBeNull();
+
+  act(() => {
+    handle.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: 100 }));
+  });
+
+  act(() => {
+    document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: 140 }));
+  });
+
+  expect(onColumnWidthsChange).not.toHaveBeenCalled();
+
+  act(() => {
+    document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+  });
+
+  expect(onColumnWidthsChange).toHaveBeenCalledTimes(1);
+
+  requestAnimationFrameSpy.mockRestore();
+  cancelAnimationFrameSpy.mockRestore();
+});

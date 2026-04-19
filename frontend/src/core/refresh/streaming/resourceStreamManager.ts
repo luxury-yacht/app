@@ -356,6 +356,26 @@ export const normalizeResourceScope = (domain: ResourceDomain, scope: string): s
 
 const normalizeSortKey = (value: string | undefined): string => (value ?? '').toLowerCase();
 
+const shallowEqualRecord = (left: Record<string, unknown>, right: Record<string, unknown>) => {
+  if (left === right) {
+    return true;
+  }
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  if (leftKeys.length !== rightKeys.length) {
+    return false;
+  }
+  for (const key of leftKeys) {
+    if (left[key] !== right[key]) {
+      return false;
+    }
+  }
+  return true;
+};
+
+const hasSameArrayItems = <T>(previous: T[], next: T[]): boolean =>
+  previous.length === next.length && previous.every((item, index) => Object.is(item, next[index]));
+
 export const sortPodRows = (rows: PodSnapshotEntry[]): void => {
   rows.sort((a, b) => {
     const ns = normalizeSortKey(a.namespace).localeCompare(normalizeSortKey(b.namespace));
@@ -857,14 +877,28 @@ export const mergeWorkloadMetricsRow = (
   incoming: NamespaceWorkloadSummary,
   preserveMetrics: boolean
 ): NamespaceWorkloadSummary => {
-  if (!existing || !preserveMetrics) {
+  if (!existing) {
     return incoming;
   }
-  return {
+  if (!preserveMetrics) {
+    return shallowEqualRecord(
+      existing as unknown as Record<string, unknown>,
+      incoming as unknown as Record<string, unknown>
+    )
+      ? existing
+      : incoming;
+  }
+  const merged = {
     ...incoming,
     cpuUsage: existing.cpuUsage ?? incoming.cpuUsage,
     memUsage: existing.memUsage ?? incoming.memUsage,
   };
+  return shallowEqualRecord(
+    existing as unknown as Record<string, unknown>,
+    merged as unknown as Record<string, unknown>
+  )
+    ? existing
+    : merged;
 };
 
 export const mergeNodeMetricsRow = (
@@ -905,6 +939,44 @@ const mergeClusterRows = <T extends { clusterId?: string | null }>(
     next.push(...incoming);
   }
   return next;
+};
+
+const mergeClusterRowsByKey = <T extends { clusterId?: string | null }>(
+  existing: T[] | null | undefined,
+  incoming: T[] | null | undefined,
+  clusterId: string,
+  keyFor: (item: T, fallbackClusterId: string) => string
+): T[] => {
+  const targetCluster = clusterId.trim();
+  const previousRows = existing ?? [];
+  const incomingRows = incoming ?? [];
+
+  const previousClusterRows = previousRows.filter((row) => {
+    const rowCluster = (row.clusterId ?? targetCluster).trim();
+    return rowCluster === targetCluster;
+  });
+  const previousByKey = new Map<string, T>();
+  previousClusterRows.forEach((row) => {
+    previousByKey.set(keyFor(row, targetCluster), row);
+  });
+
+  const mergedClusterRows = incomingRows.map((row) => {
+    const cached = previousByKey.get(keyFor(row, targetCluster));
+    return cached &&
+      shallowEqualRecord(cached as Record<string, unknown>, row as Record<string, unknown>)
+      ? cached
+      : row;
+  });
+
+  const next = previousRows.filter((row) => {
+    const rowCluster = (row.clusterId ?? targetCluster).trim();
+    return rowCluster !== targetCluster;
+  });
+  if (mergedClusterRows.length > 0) {
+    next.push(...mergedClusterRows);
+  }
+
+  return hasSameArrayItems(previousRows, next) ? previousRows : next;
 };
 
 type StreamSubscription = {
@@ -1779,11 +1851,18 @@ export class ResourceStreamManager {
 
         const nextRows = Array.from(byKey.values());
         sortWorkloadRows(nextRows);
+        const stableRows = hasSameArrayItems(existingRows, nextRows) ? existingRows : nextRows;
+        if (stableRows === existingRows && previous.data === currentPayload) {
+          return previous;
+        }
         return {
           ...previous,
           status: 'ready',
-          data: { ...currentPayload, workloads: nextRows },
-          stats: updateStats(previous.stats, nextRows.length),
+          data:
+            stableRows === existingRows
+              ? currentPayload
+              : { ...currentPayload, workloads: stableRows },
+          stats: updateStats(previous.stats, stableRows.length),
           lastUpdated: now,
           lastAutoRefresh: now,
           error: null,
@@ -1990,16 +2069,34 @@ export class ResourceStreamManager {
           if (!update.row) {
             return;
           }
-          byKey.set(key, update.row as NamespaceCustomSummary);
+          const nextRow = update.row as NamespaceCustomSummary;
+          const existingRow = byKey.get(key);
+          byKey.set(
+            key,
+            existingRow &&
+              shallowEqualRecord(
+                existingRow as unknown as Record<string, unknown>,
+                nextRow as unknown as Record<string, unknown>
+              )
+              ? existingRow
+              : nextRow
+          );
         });
 
         const nextRows = Array.from(byKey.values());
         sortCustomRows(nextRows);
+        const stableRows = hasSameArrayItems(existingRows, nextRows) ? existingRows : nextRows;
+        if (stableRows === existingRows && previous.data === currentPayload) {
+          return previous;
+        }
         return {
           ...previous,
           status: 'ready',
-          data: { ...currentPayload, resources: nextRows },
-          stats: updateStats(previous.stats, nextRows.length),
+          data:
+            currentPayload.resources === stableRows
+              ? currentPayload
+              : { ...currentPayload, resources: stableRows },
+          stats: updateStats(previous.stats, stableRows.length),
           lastUpdated: now,
           lastAutoRefresh: now,
           error: null,
@@ -2925,20 +3022,26 @@ export class ResourceStreamManager {
 
     if (subscription.domain === 'namespace-workloads') {
       const payload = snapshot.payload as NamespaceWorkloadSnapshotPayload;
-      // Multi-cluster snapshots must merge per-cluster rows into the shared scope.
-      const shouldMerge = isMultiClusterScope(subscription.reportScope);
+      // Reconcile incoming workload snapshots by object identity so identical
+      // snapshots do not replace the entire table input on every refresh.
+      const shouldSort = isMultiClusterScope(subscription.reportScope);
       setScopedDomainState('namespace-workloads', subscription.reportScope, (previous) => {
         const incoming = payload.workloads ?? [];
-        const merged = shouldMerge
-          ? mergeClusterRows(previous.data?.workloads, incoming, subscription.clusterId)
-          : incoming;
-        if (shouldMerge) {
+        const merged = mergeClusterRowsByKey(
+          previous.data?.workloads,
+          incoming,
+          subscription.clusterId,
+          (row, fallbackClusterId) =>
+            buildWorkloadKey(row.clusterId ?? fallbackClusterId, row.namespace, row.kind, row.name)
+        );
+        if (shouldSort) {
           sortWorkloadRows(merged);
         }
         return {
           ...previous,
           status: 'ready',
-          data: shouldMerge ? { ...payload, workloads: merged } : payload,
+          data:
+            previous.data?.workloads === merged ? previous.data : { ...payload, workloads: merged },
           stats: updateStats(snapshot.stats ?? previous.stats ?? null, merged.length),
           version: snapshot.version,
           checksum: snapshot.checksum,
@@ -3016,10 +3119,26 @@ export class ResourceStreamManager {
 
     if (subscription.domain === 'namespace-custom') {
       const payload = snapshot.payload as NamespaceCustomSnapshotPayload;
+      const shouldSort = isMultiClusterScope(subscription.reportScope);
       setScopedDomainState('namespace-custom', subscription.reportScope, (previous) => ({
         ...previous,
         status: 'ready',
-        data: payload,
+        data: (() => {
+          const incoming = payload.resources ?? [];
+          const merged = mergeClusterRowsByKey(
+            previous.data?.resources,
+            incoming,
+            subscription.clusterId,
+            (row, fallbackClusterId) =>
+              buildCustomKey(row.clusterId ?? fallbackClusterId, row.namespace, row.kind, row.name)
+          );
+          if (shouldSort) {
+            sortCustomRows(merged);
+          }
+          return previous.data?.resources === merged
+            ? previous.data
+            : { ...payload, resources: merged };
+        })(),
         stats: snapshot.stats ?? null,
         version: snapshot.version,
         checksum: snapshot.checksum,

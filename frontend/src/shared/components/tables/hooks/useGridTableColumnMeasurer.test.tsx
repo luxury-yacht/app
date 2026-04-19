@@ -170,6 +170,44 @@ describe('useGridTableColumnMeasurer', () => {
     await harness.cleanup();
   });
 
+  it('measures distinct kind badges instead of missing rare long kinds in large datasets', async () => {
+    Object.defineProperty(HTMLElement.prototype, 'scrollWidth', {
+      configurable: true,
+      get() {
+        return 120;
+      },
+    });
+    HTMLElement.prototype.getBoundingClientRect = function () {
+      const text = this.textContent ?? '';
+      const width = text.length * 10;
+      return {
+        width,
+        height: 0,
+        top: 0,
+        left: 0,
+        bottom: 0,
+        right: width,
+        x: 0,
+        y: 0,
+        toJSON() {
+          return {};
+        },
+      } as DOMRect;
+    };
+
+    const tableData: SampleRow[] = Array.from({ length: 401 }, (_value, index) => ({
+      name: `row-${index}`,
+      kind: index === 201 ? 'ExtremelyVerboseCustomResourceKind' : 'Pod',
+    }));
+
+    const harness = await renderHarness(tableData);
+
+    const measurement = harness.measure(columns[1]);
+    expect(measurement).toBeGreaterThanOrEqual('ExtremelyVerboseCustomResourceKind'.length * 10);
+
+    await harness.cleanup();
+  });
+
   it('does not throw when the previous measurer host was detached before reuse', async () => {
     const harness = await renderHarness([{ name: 'alpha', kind: 'Deployment' }]);
 

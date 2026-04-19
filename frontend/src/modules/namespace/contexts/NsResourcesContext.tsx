@@ -594,7 +594,9 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     [],
     isResourceActive('custom'),
     currentNamespace,
-    namespaceClusterId
+    namespaceClusterId,
+    (item) =>
+      `${item.clusterId ?? namespaceClusterId ?? ''}::${item.namespace}::${item.apiGroup ?? ''}::${item.apiVersion ?? ''}::${item.kind}::${item.name}`
   );
 
   const helm = useRefreshBackedResource<any[]>(

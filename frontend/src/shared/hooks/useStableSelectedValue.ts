@@ -6,6 +6,16 @@ const hasSameArrayItems = <T>(previous: T[], next: T[]): boolean =>
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
+const areEquivalentValues = (previous: unknown, next: unknown): boolean => {
+  if (Object.is(previous, next)) {
+    return true;
+  }
+  if (isPlainObject(previous) && isPlainObject(next)) {
+    return hasSameShallowObjectShape(previous, next);
+  }
+  return false;
+};
+
 const hasSameShallowObjectShape = (
   previous: Record<string, unknown>,
   next: Record<string, unknown>
@@ -16,7 +26,8 @@ const hasSameShallowObjectShape = (
     previousKeys.length === nextKeys.length &&
     previousKeys.every(
       (key) =>
-        Object.prototype.hasOwnProperty.call(next, key) && Object.is(previous[key], next[key])
+        Object.prototype.hasOwnProperty.call(next, key) &&
+        areEquivalentValues(previous[key], next[key])
     )
   );
 };

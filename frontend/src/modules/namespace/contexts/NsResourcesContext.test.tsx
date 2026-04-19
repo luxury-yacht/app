@@ -651,4 +651,92 @@ describe('NamespaceResourcesProvider', () => {
     expect(contextRef.current?.workloads.data?.[0]).toBe(firstApiRow);
     expect(contextRef.current?.workloads.data?.[1]).toBe(firstDbRow);
   });
+
+  it('preserves custom resource row references when refreshed rows are rebuilt with unchanged fields', async () => {
+    const scope = `${testClusterId}|namespace:team-a`;
+
+    scopedStates[scope] = {
+      status: 'ready',
+      data: {
+        resources: [
+          {
+            kind: 'DBInstance',
+            name: 'orders-db',
+            namespace: 'team-a',
+            clusterId: testClusterId,
+            apiGroup: 'rds.services.k8s.aws',
+            apiVersion: 'v1alpha1',
+            crdName: 'dbinstances.rds.services.k8s.aws',
+            age: '1h',
+            labels: { team: 'payments' },
+          },
+          {
+            kind: 'DBInstance',
+            name: 'orders-db',
+            namespace: 'team-a',
+            clusterId: testClusterId,
+            apiGroup: 'documentdb.services.k8s.aws',
+            apiVersion: 'v1alpha1',
+            crdName: 'dbinstances.documentdb.services.k8s.aws',
+            age: '1h',
+            labels: { team: 'analytics' },
+          },
+        ],
+      },
+      error: null,
+      lastUpdated: null,
+    };
+
+    await render(
+      <NamespaceResourcesProvider namespace="team-a" activeView="custom">
+        <TestConsumer />
+      </NamespaceResourcesProvider>
+    );
+
+    const firstDataRef = contextRef.current?.custom.data;
+    const firstRdsRow = firstDataRef?.[0];
+    const firstDocDbRow = firstDataRef?.[1];
+
+    scopedStates[scope] = {
+      status: 'ready',
+      data: {
+        resources: [
+          {
+            kind: 'DBInstance',
+            name: 'orders-db',
+            namespace: 'team-a',
+            clusterId: testClusterId,
+            apiGroup: 'rds.services.k8s.aws',
+            apiVersion: 'v1alpha1',
+            crdName: 'dbinstances.rds.services.k8s.aws',
+            age: '1h',
+            labels: { team: 'payments' },
+          },
+          {
+            kind: 'DBInstance',
+            name: 'orders-db',
+            namespace: 'team-a',
+            clusterId: testClusterId,
+            apiGroup: 'documentdb.services.k8s.aws',
+            apiVersion: 'v1alpha1',
+            crdName: 'dbinstances.documentdb.services.k8s.aws',
+            age: '1h',
+            labels: { team: 'analytics' },
+          },
+        ],
+      },
+      error: null,
+      lastUpdated: null,
+    };
+
+    await render(
+      <NamespaceResourcesProvider namespace="team-a" activeView="custom">
+        <TestConsumer />
+      </NamespaceResourcesProvider>
+    );
+
+    expect(contextRef.current?.custom.data).toBe(firstDataRef);
+    expect(contextRef.current?.custom.data?.[0]).toBe(firstRdsRow);
+    expect(contextRef.current?.custom.data?.[1]).toBe(firstDocDbRow);
+  });
 });

@@ -143,6 +143,8 @@ const baseResource: CustomResourceData = {
   annotations: { owner: 'ops' },
 };
 
+const getLastGridProps = () => gridTableMock.mock.calls[gridTableMock.mock.calls.length - 1]?.[0];
+
 describe('NsViewCustom', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
@@ -238,6 +240,50 @@ describe('NsViewCustom', () => {
     expect(gridProps.filters.options.showKindDropdown).toBe(true);
     expect(gridProps.filters.options.kindDropdownSearchable).toBe(true);
     expect(gridProps.filters.options.kindDropdownBulkActions).toBe(true);
+  });
+
+  it('preserves the column definitions across rerenders with unchanged inputs', async () => {
+    const data = [baseResource];
+
+    await renderComponent({
+      namespace: 'team-a',
+      data,
+      loaded: true,
+      showNamespaceColumn: true,
+    });
+
+    const firstColumnsRef = getLastGridProps()?.columns;
+
+    await renderComponent({
+      namespace: 'team-a',
+      data,
+      loaded: true,
+      showNamespaceColumn: true,
+    });
+
+    expect(getLastGridProps()?.columns).toBe(firstColumnsRef);
+  });
+
+  it('preserves the filters config across rerenders with unchanged inputs', async () => {
+    const data = [baseResource];
+
+    await renderComponent({
+      namespace: 'team-a',
+      data,
+      loaded: true,
+      showNamespaceColumn: true,
+    });
+
+    const firstFiltersRef = getLastGridProps()?.filters;
+
+    await renderComponent({
+      namespace: 'team-a',
+      data,
+      loaded: true,
+      showNamespaceColumn: true,
+    });
+
+    expect(getLastGridProps()?.filters).toBe(firstFiltersRef);
   });
 
   // Regression test for the kind-only-objects bug. When the user clicks a custom

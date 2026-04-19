@@ -275,6 +275,10 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
     ]);
 
     const showNamespaceFilter = namespace === ALL_NAMESPACES_SCOPE;
+    const diagnosticsLabel =
+      namespace === ALL_NAMESPACES_SCOPE
+        ? 'All Namespaces Custom Resources'
+        : 'Namespace Custom Resources';
 
     const {
       sortConfig: persistedSort,
@@ -301,10 +305,7 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
       columns,
       controlledSort: persistedSort,
       onChange: onSortChange,
-      diagnosticsLabel:
-        namespace === ALL_NAMESPACES_SCOPE
-          ? 'All Namespaces Custom Resources'
-          : 'Namespace Custom Resources',
+      diagnosticsLabel,
     });
 
     // Derive available kinds and namespaces from the data for the favorites modal dropdowns.
@@ -327,6 +328,36 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
       availableKinds,
       availableFilterNamespaces,
     });
+
+    const filtersConfig = useMemo(
+      () => ({
+        enabled: true,
+        value: persistedFilters,
+        onChange: setPersistedFilters,
+        onReset: resetPersistedState,
+        options: {
+          searchPlaceholder: 'Search custom resources',
+          kinds: availableKinds,
+          namespaces: availableFilterNamespaces,
+          showKindDropdown: true,
+          kindDropdownSearchable: true,
+          kindDropdownBulkActions: true,
+          showNamespaceDropdown: showNamespaceFilter,
+          namespaceDropdownSearchable: showNamespaceFilter,
+          namespaceDropdownBulkActions: showNamespaceFilter,
+          preActions: [favToggle],
+        },
+      }),
+      [
+        availableFilterNamespaces,
+        availableKinds,
+        favToggle,
+        persistedFilters,
+        resetPersistedState,
+        setPersistedFilters,
+        showNamespaceFilter,
+      ]
+    );
 
     const handleDeleteConfirm = useCallback(async () => {
       if (!deleteConfirm.resource) return;
@@ -446,11 +477,7 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
           <GridTable
             data={sortedData}
             columns={columns}
-            diagnosticsLabel={
-              namespace === ALL_NAMESPACES_SCOPE
-                ? 'All Namespaces Custom Resources'
-                : 'Namespace Custom Resources'
-            }
+            diagnosticsLabel={diagnosticsLabel}
             loading={loading}
             keyExtractor={keyExtractor}
             onRowClick={handleResourceClick}
@@ -461,24 +488,7 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
             getCustomContextMenuItems={getContextMenuItems}
             useShortNames={useShortResourceNames}
             emptyMessage={emptyMessage}
-            filters={{
-              enabled: true,
-              value: persistedFilters,
-              onChange: setPersistedFilters,
-              onReset: resetPersistedState,
-              options: {
-                searchPlaceholder: 'Search custom resources',
-                kinds: availableKinds,
-                namespaces: availableFilterNamespaces,
-                showKindDropdown: true,
-                kindDropdownSearchable: true,
-                kindDropdownBulkActions: true,
-                showNamespaceDropdown: showNamespaceFilter,
-                namespaceDropdownSearchable: showNamespaceFilter,
-                namespaceDropdownBulkActions: showNamespaceFilter,
-                preActions: [favToggle],
-              },
-            }}
+            filters={filtersConfig}
             virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}
             columnWidths={columnWidths}
             onColumnWidthsChange={setColumnWidths}

@@ -1833,6 +1833,67 @@ describe('refreshOrchestrator', () => {
     resetAllScopedDomainStates('namespace-workloads');
   });
 
+  it('reuses the existing workload rows when workload metrics snapshots are unchanged', () => {
+    const scope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    const existingWorkload = {
+      clusterId: 'cluster-a',
+      kind: 'Deployment',
+      name: 'web',
+      namespace: 'default',
+      ready: '1/1',
+      status: 'Running',
+      restarts: 0,
+      age: '5m',
+      cpuUsage: '20m',
+      memUsage: '30Mi',
+      cpuRequest: '10m',
+      cpuLimit: '40m',
+      memRequest: '15Mi',
+      memLimit: '60Mi',
+    };
+
+    setScopedDomainState('namespace-workloads', scope, () => ({
+      status: 'ready',
+      data: {
+        clusterId: 'test-cluster',
+        workloads: [existingWorkload],
+      },
+      stats: null,
+      error: null,
+      droppedAutoRefreshes: 0,
+      scope,
+    }));
+
+    const previousState = getScopedDomainState('namespace-workloads', scope);
+    const previousRows = previousState.data?.workloads;
+
+    const applied = orchestratorInternals.applyMetricsSnapshot(
+      'namespace-workloads',
+      {
+        domain: 'namespace-workloads',
+        scope,
+        version: 4,
+        checksum: 'etag-workload-stable',
+        generatedAt: Date.now(),
+        sequence: 2,
+        payload: {
+          workloads: [{ ...existingWorkload }],
+        },
+        stats: { itemCount: 1, buildDurationMs: 0 },
+      },
+      'etag-workload-stable',
+      false,
+      scope
+    );
+
+    expect(applied).toBe(true);
+    const nextState = getScopedDomainState('namespace-workloads', scope);
+    expect(nextState.data?.workloads).toBe(previousRows);
+    expect(nextState.data?.workloads?.[0]).toBe(existingWorkload);
+
+    resetAllScopedDomainStates('namespace-workloads');
+  });
+
   it('handles global reset and kubeconfig transitions by cancelling inflight work', () => {
     const scope = 'cluster-a';
     const teardownSpy = vi.spyOn(orchestratorInternals as Record<string, any>, 'teardownInFlight');

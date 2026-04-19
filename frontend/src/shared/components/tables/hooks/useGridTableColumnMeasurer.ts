@@ -26,6 +26,12 @@ interface KindBadgeMeasurer {
   badge: HTMLSpanElement;
 }
 
+interface KindBadgeSample {
+  canonicalKind: string;
+  displayText: string;
+  interactive: boolean;
+}
+
 const detachNode = (node: HTMLElement | null) => {
   if (!node) {
     return;
@@ -138,6 +144,31 @@ export function useGridTableColumnMeasurer<T>({
 
       const isKindColumn = isKindColumnKey(column.key);
       const kindMeasurer = isKindColumn ? ensureKindBadgeMeasurer() : null;
+      const measureLimit = 400;
+      const buildKindBadgeSample = (contentNode: React.ReactNode): KindBadgeSample => {
+        const displayText = getTextContent(contentNode).trim();
+        let canonicalKind = displayText;
+        let interactive = false;
+
+        if (React.isValidElement(contentNode)) {
+          const props = contentNode.props as Record<string, unknown>;
+          const explicit = props?.['data-kind-value'];
+          if (typeof explicit === 'string' && explicit.trim().length > 0) {
+            canonicalKind = explicit.trim();
+          }
+          interactive =
+            props?.['data-kind-interactive'] === 'true' ||
+            typeof props?.onClick === 'function' ||
+            typeof props?.onKeyDown === 'function' ||
+            props?.role === 'button';
+        }
+
+        return {
+          canonicalKind,
+          displayText,
+          interactive,
+        };
+      };
 
       // Create an off-screen measurer node for DOM-based width checks.
       // Use static markup for React elements instead of mounting a nested
@@ -159,59 +190,71 @@ export function useGridTableColumnMeasurer<T>({
             })()
           : null;
 
-      const measureLimit = 400;
       const sampleItems: T[] = [];
-      if (tableData.length <= measureLimit) {
-        sampleItems.push(...tableData);
-      } else {
-        const step = Math.max(1, Math.ceil(tableData.length / measureLimit));
-        for (let index = 0; index < tableData.length; index += step) {
-          sampleItems.push(tableData[index]);
-        }
-        const last = tableData[tableData.length - 1];
-        if (sampleItems[sampleItems.length - 1] !== last) {
-          sampleItems.push(last);
+      if (!isKindColumn || !kindMeasurer) {
+        if (tableData.length <= measureLimit) {
+          sampleItems.push(...tableData);
+        } else {
+          const step = Math.max(1, Math.ceil(tableData.length / measureLimit));
+          for (let index = 0; index < tableData.length; index += step) {
+            sampleItems.push(tableData[index]);
+          }
+          const last = tableData[tableData.length - 1];
+          if (sampleItems[sampleItems.length - 1] !== last) {
+            sampleItems.push(last);
+          }
         }
       }
 
       // Wrap measurement loop in try/finally so cellMeasurer and kindMeasurer
       // are cleaned up even if column.render() or renderToString() throws.
       try {
-        sampleItems.forEach((item) => {
-          const contentNode = column.render(item);
+        if (kindMeasurer) {
+          const seenBadges = new Set<string>();
+          let measuredKinds = 0;
 
-          if (kindMeasurer) {
-            const displayText = getTextContent(contentNode).trim();
-            let canonicalKind = displayText;
-
-            if (React.isValidElement(contentNode)) {
-              const explicit = (contentNode.props as Record<string, unknown>)?.['data-kind-value'];
-              if (typeof explicit === 'string' && explicit.trim().length > 0) {
-                canonicalKind = explicit.trim();
-              }
+          for (const item of tableData) {
+            const contentNode = column.render(item);
+            const badge = buildKindBadgeSample(contentNode);
+            const sampleKey = `${badge.canonicalKind}::${badge.displayText}::${badge.interactive ? '1' : '0'}`;
+            if (seenBadges.has(sampleKey)) {
+              continue;
             }
+            seenBadges.add(sampleKey);
+            measuredKinds += 1;
 
-            kindMeasurer.badge.className = `kind-badge ${normalizeKindClass(canonicalKind)}`;
-            kindMeasurer.badge.textContent = displayText;
+            const badgeClasses = ['kind-badge', normalizeKindClass(badge.canonicalKind)];
+            if (badge.interactive) {
+              badgeClasses.push('clickable');
+            }
+            kindMeasurer.badge.className = badgeClasses.join(' ');
+            kindMeasurer.badge.textContent = badge.displayText;
 
             const badgeWidth = kindMeasurer.container.getBoundingClientRect().width;
             maxWidth = Math.max(maxWidth, badgeWidth);
-            return;
-          }
 
-          if (!cellMeasurer) {
-            return;
+            if (measuredKinds >= measureLimit) {
+              break;
+            }
           }
+        } else {
+          sampleItems.forEach((item) => {
+            const contentNode = column.render(item);
 
-          if (React.isValidElement(contentNode)) {
-            cellMeasurer.node.innerHTML = renderToStaticMarkup(contentNode);
-          } else {
-            cellMeasurer.node.textContent = String(contentNode ?? '');
-          }
+            if (!cellMeasurer) {
+              return;
+            }
 
-          const width = cellMeasurer.node.getBoundingClientRect().width;
-          maxWidth = Math.max(maxWidth, width);
-        });
+            if (React.isValidElement(contentNode)) {
+              cellMeasurer.node.innerHTML = renderToStaticMarkup(contentNode);
+            } else {
+              cellMeasurer.node.textContent = String(contentNode ?? '');
+            }
+
+            const width = cellMeasurer.node.getBoundingClientRect().width;
+            maxWidth = Math.max(maxWidth, width);
+          });
+        }
       } finally {
         if (cellMeasurer) {
           detachNode(cellMeasurer.node);
