@@ -339,6 +339,8 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
           <GridTable
             data={sortedData}
             columns={tableColumns}
+            diagnosticsLabel="Cluster Nodes"
+            diagnosticsMode="live"
             loading={loading}
             keyExtractor={keyExtractor}
             onRowClick={handleNodeClick}

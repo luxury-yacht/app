@@ -246,8 +246,8 @@ Current status:
   reset control so profiling can be isolated to a single interaction run
 - ✅ Table Performance diagnostics can now narrow to flagged tables only and
   surface the dominant measured stage per table during a profiling run
-- ✅ Browse, all-namespaces typed table views, and object-panel Pods/Jobs are
-  instrumented with explicit diagnostics labels
+- ✅ Browse, cluster/all-namespaces typed table views, and object-panel Pods/Jobs
+  are instrumented with explicit diagnostics labels
 - ✅ Table Performance diagnostics now carry explicit table-mode metadata so
   query-backed, local, and live-updating views can be interpreted under a
   shared contract during the broader migration

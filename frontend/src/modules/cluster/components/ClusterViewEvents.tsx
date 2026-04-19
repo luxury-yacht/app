@@ -298,6 +298,8 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
           <GridTable
             data={sortedData}
             columns={columns}
+            diagnosticsLabel="Cluster Events"
+            diagnosticsMode="live"
             loading={loading}
             keyExtractor={keyExtractor}
             onRowClick={handleEventClick}

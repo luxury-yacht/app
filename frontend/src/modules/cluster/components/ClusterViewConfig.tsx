@@ -259,6 +259,7 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
           <GridTable
             data={sortedData}
             columns={columns}
+            diagnosticsLabel="Cluster Configuration"
             loading={loading}
             keyExtractor={keyExtractor}
             onRowClick={handleResourceClick}
