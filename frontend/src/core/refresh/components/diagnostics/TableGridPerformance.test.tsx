@@ -1,8 +1,15 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
-import { TableGridPerformance, buildTablePerformanceSignals } from './TableGridPerformance';
+import {
+  TableGridPerformance,
+  buildDominantTimingMetric,
+  buildTablePerformanceOverview,
+  buildTablePerformanceSignals,
+} from './TableGridPerformance';
 import type { GridTablePerformanceEntry } from '@shared/components/tables/performance/gridTablePerformanceStore';
+import ReactDOM from 'react-dom/client';
+import { act } from 'react';
 
 const createTimingStats = (samples = 0, averageMs = 0, maxMs = 0, latestMs = 0) => ({
   samples,
@@ -49,6 +56,7 @@ describe('TableGridPerformance', () => {
   it('renders the most suspicious rows first with signal labels and churn ratios', () => {
     const markup = renderToStaticMarkup(
       <TableGridPerformance
+        onReset={() => undefined}
         summary="Rolling GridTable measurements for the instrumented large-data views."
         rows={[
           createRow({
@@ -72,5 +80,90 @@ describe('TableGridPerformance', () => {
     expect(markup).toContain('Filter options slow');
     expect(markup).toContain('Render slow');
     expect(markup).toContain('9 / 10 (90%)');
+    expect(markup).toContain('Reset Samples');
+    expect(markup).toContain('Instrumented Tables');
+    expect(markup).toContain('Worst Offender');
+  });
+
+  it('builds a compact profiling overview for the current sample set', () => {
+    const overview = buildTablePerformanceOverview([
+      createRow({
+        label: 'Namespace Config',
+      }),
+      createRow({
+        label: 'All Namespaces Browse',
+        inputReferenceChanges: 9,
+        render: createTimingStats(6, 9, 18, 10),
+      }),
+    ]);
+
+    expect(overview).toEqual({
+      instrumentedTables: 2,
+      flaggedTables: 1,
+      worstOffenderLabel: 'All Namespaces Browse',
+      worstOffenderSignals: 2,
+    });
+  });
+
+  it('identifies the dominant measured stage for a row', () => {
+    const dominantMetric = buildDominantTimingMetric(
+      createRow({
+        filterPass: createTimingStats(3, 7.5, 10, 8),
+        render: createTimingStats(4, 12, 20, 15),
+      })
+    );
+
+    expect(dominantMetric).toEqual({
+      label: 'Render (12.00ms avg)',
+      title:
+        'Render is the heaviest measured stage for this table. Average 12.00ms, max 20.00ms, latest 15.00ms.',
+    });
+  });
+
+  it('can narrow the view to flagged tables only', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const root = ReactDOM.createRoot(host);
+
+    await act(async () => {
+      root.render(
+        <TableGridPerformance
+          onReset={() => undefined}
+          summary="Rolling GridTable measurements for the instrumented large-data views."
+          rows={[
+            createRow({
+              label: 'Namespace Config',
+              inputReferenceChanges: 1,
+            }),
+            createRow({
+              label: 'All Namespaces Browse',
+              inputReferenceChanges: 9,
+              filterOptions: createTimingStats(4, 5, 11, 4),
+            }),
+          ]}
+        />
+      );
+      await Promise.resolve();
+    });
+
+    const toggle = Array.from(host.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Show Flagged Only'
+    );
+    expect(toggle).toBeInstanceOf(HTMLButtonElement);
+
+    await act(async () => {
+      toggle?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    const bodyText = host.querySelector('tbody')?.textContent ?? '';
+    expect(bodyText).toContain('All Namespaces Browse');
+    expect(bodyText).not.toContain('Namespace Config');
+
+    await act(async () => {
+      root.unmount();
+      await Promise.resolve();
+    });
+    host.remove();
   });
 });

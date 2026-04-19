@@ -153,8 +153,44 @@ function Sidebar() {
       return [];
     }
 
-    return activeGroups
-      .filter((group): group is CatalogNamespaceGroup & { clusterId: string } => !!group.clusterId)
+    const mergedGroups = new Map<
+      string,
+      {
+        clusterId: string;
+        clusterName: string;
+        namespaces: string[];
+      }
+    >();
+
+    for (const group of activeGroups) {
+      if (!group.clusterId) {
+        continue;
+      }
+
+      const existing = mergedGroups.get(group.clusterId) ?? {
+        clusterId: group.clusterId,
+        clusterName: group.clusterName || group.clusterId,
+        namespaces: [],
+      };
+
+      const seenNamespaces = new Set(existing.namespaces.map((name) => name.toLowerCase()));
+      for (const name of group.namespaces) {
+        const trimmed = name?.trim();
+        if (!trimmed) {
+          continue;
+        }
+        const normalized = trimmed.toLowerCase();
+        if (seenNamespaces.has(normalized)) {
+          continue;
+        }
+        seenNamespaces.add(normalized);
+        existing.namespaces.push(trimmed);
+      }
+
+      mergedGroups.set(group.clusterId, existing);
+    }
+
+    return Array.from(mergedGroups.values())
       .map((group) => {
         const useDetails = group.clusterId === selectedClusterId;
         // Catalog groups only include names, so borrow rich metadata for the active cluster only.

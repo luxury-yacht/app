@@ -10,6 +10,10 @@ import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { useTableSort } from './useTableSort';
+import {
+  getGridTablePerformanceSnapshot,
+  resetGridTablePerformanceDiagnostics,
+} from '@shared/components/tables/performance/gridTablePerformanceStore';
 
 type Row = {
   name: string;
@@ -60,6 +64,7 @@ describe('useTableSort', () => {
       root.unmount();
     });
     container.remove();
+    resetGridTablePerformanceDiagnostics();
   });
 
   const renderHarness = async (data = rows) => {
@@ -164,5 +169,22 @@ describe('useTableSort', () => {
     });
     expect(getText('names')).toBe('charlie,alpha,bravo');
     expect(getText('direction')).toBe('desc');
+  });
+
+  it('records sort diagnostics after commit instead of during render', async () => {
+    const DiagnosticsHarness = () => {
+      useTableSort<Row>(rows, 'name', 'asc', { diagnosticsLabel: 'Test Sort' });
+      return null;
+    };
+
+    await act(async () => {
+      root.render(<DiagnosticsHarness />);
+      await Promise.resolve();
+    });
+
+    const [entry] = getGridTablePerformanceSnapshot();
+    expect(entry?.label).toBe('Test Sort');
+    expect(entry?.sort.samples).toBe(1);
+    expect(entry?.sort.latestMs).toBeGreaterThanOrEqual(0);
   });
 });

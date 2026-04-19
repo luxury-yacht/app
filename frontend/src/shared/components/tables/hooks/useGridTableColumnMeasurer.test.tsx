@@ -46,7 +46,7 @@ afterEach(() => {
 const renderHarness = async (tableData: SampleRow[]) => {
   const container = document.createElement('div');
   document.body.appendChild(container);
-  const tableHost = document.createElement('div');
+  let tableHost = document.createElement('div');
   document.body.appendChild(tableHost);
   const root = ReactDOM.createRoot(container);
 
@@ -54,6 +54,7 @@ const renderHarness = async (tableData: SampleRow[]) => {
 
   const Harness: React.FC = () => {
     const tableRef = React.useRef<HTMLElement | null>(tableHost);
+    tableRef.current = tableHost;
     const { measureColumnWidth: measure } = useGridTableColumnMeasurer<SampleRow>({
       tableRef,
       tableData,
@@ -109,6 +110,16 @@ const renderHarness = async (tableData: SampleRow[]) => {
       container.remove();
       tableHost.remove();
     },
+    swapHost: async () => {
+      const nextHost = document.createElement('div');
+      document.body.appendChild(nextHost);
+      tableHost = nextHost;
+      await act(async () => {
+        root.render(<Harness />);
+      });
+      return nextHost;
+    },
+    getHost: () => tableHost,
   };
 };
 
@@ -155,6 +166,22 @@ describe('useGridTableColumnMeasurer', () => {
 
     const measurement = harness.measure(columns[1]);
     expect(measurement).toBeGreaterThanOrEqual(240);
+
+    await harness.cleanup();
+  });
+
+  it('does not throw when the previous measurer host was detached before reuse', async () => {
+    const harness = await renderHarness([{ name: 'alpha', kind: 'Deployment' }]);
+
+    harness.measure(columns[1]);
+    const originalHost = harness.getHost();
+    const measurerNode = originalHost.querySelector('.grid-cell') as HTMLElement | null;
+    measurerNode?.remove();
+    originalHost.remove();
+
+    await harness.swapHost();
+
+    expect(() => harness.measure(columns[1])).not.toThrow();
 
     await harness.cleanup();
   });

@@ -7,8 +7,7 @@
 
 import { useCallback, useEffect, useRef } from 'react';
 import React from 'react';
-import { createRoot } from 'react-dom/client';
-import { flushSync } from 'react-dom';
+import { renderToStaticMarkup } from 'react-dom/server';
 
 import type {
   ColumnWidthInput,
@@ -26,6 +25,17 @@ interface KindBadgeMeasurer {
   content: HTMLSpanElement;
   badge: HTMLSpanElement;
 }
+
+const detachNode = (node: HTMLElement | null) => {
+  if (!node) {
+    return;
+  }
+  if (node.parentNode) {
+    node.parentNode.removeChild(node);
+    return;
+  }
+  node.remove();
+};
 
 export interface ColumnMeasurerOptions<T> {
   tableRef: React.RefObject<HTMLElement | null>;
@@ -79,7 +89,7 @@ export function useGridTableColumnMeasurer<T>({
       measurer = { host, container, content, badge };
       kindBadgeMeasureRef.current = measurer;
     } else if (measurer.host !== host) {
-      measurer.host?.removeChild(measurer.container);
+      detachNode(measurer.container);
       host.appendChild(measurer.container);
       measurer.host = host;
     }
@@ -89,7 +99,7 @@ export function useGridTableColumnMeasurer<T>({
   useEffect(() => {
     return () => {
       if (kindBadgeMeasureRef.current?.container) {
-        kindBadgeMeasureRef.current.container.remove();
+        detachNode(kindBadgeMeasureRef.current.container);
       }
       kindBadgeMeasureRef.current = null;
     };
@@ -123,15 +133,17 @@ export function useGridTableColumnMeasurer<T>({
         }
         maxWidth = Math.max(maxWidth, headerWidth);
       } finally {
-        document.body.removeChild(headerMeasurer);
+        detachNode(headerMeasurer);
       }
 
       const isKindColumn = isKindColumnKey(column.key);
       const kindMeasurer = isKindColumn ? ensureKindBadgeMeasurer() : null;
 
-      // Create an off-screen measurer node with a React root for direct DOM
-      // rendering. This avoids the serialize→parse round-trip of renderToString/
-      // renderToStaticMarkup — React elements are rendered straight into the DOM.
+      // Create an off-screen measurer node for DOM-based width checks.
+      // Use static markup for React elements instead of mounting a nested
+      // React root during another component's layout work. That avoids
+      // commit-time DOM ownership issues when measurement happens while
+      // the main tree is reconciling.
       const cellMeasurer =
         !isKindColumn || !kindMeasurer
           ? (() => {
@@ -143,7 +155,7 @@ export function useGridTableColumnMeasurer<T>({
               node.style.whiteSpace = 'nowrap';
               node.style.width = 'auto';
               document.body.appendChild(node);
-              return { node, root: createRoot(node) };
+              return { node };
             })()
           : null;
 
@@ -192,11 +204,7 @@ export function useGridTableColumnMeasurer<T>({
           }
 
           if (React.isValidElement(contentNode)) {
-            // Render directly into the DOM — avoids the synchronous
-            // serialize→parse round-trip of renderToString/renderToStaticMarkup.
-            flushSync(() => {
-              cellMeasurer.root.render(contentNode);
-            });
+            cellMeasurer.node.innerHTML = renderToStaticMarkup(contentNode);
           } else {
             cellMeasurer.node.textContent = String(contentNode ?? '');
           }
@@ -206,8 +214,7 @@ export function useGridTableColumnMeasurer<T>({
         });
       } finally {
         if (cellMeasurer) {
-          cellMeasurer.root.unmount();
-          cellMeasurer.node.remove();
+          detachNode(cellMeasurer.node);
         }
         if (kindMeasurer) {
           kindMeasurer.badge.textContent = '';

@@ -202,6 +202,13 @@
   white-space: normal;
 }
 
+.diagnostics-table-performance-overview {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem 1rem;
+  padding: 0 0.5rem;
+}
+
 .diagnostics-table-performance-signal {
   display: inline-flex;
   align-items: center;

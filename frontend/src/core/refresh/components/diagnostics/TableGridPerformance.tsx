@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import type { GridTablePerformanceEntry } from '@shared/components/tables/performance/gridTablePerformanceStore';
 
 interface TableGridPerformanceProps {
   rows: GridTablePerformanceEntry[];
   emptyMessage?: string;
+  onReset?: () => void;
   summary: string;
 }
 
@@ -11,6 +12,18 @@ type TablePerformanceSignal = {
   label: string;
   title: string;
   severity: 'warning';
+};
+
+type TablePerformanceOverview = {
+  instrumentedTables: number;
+  flaggedTables: number;
+  worstOffenderLabel: string | null;
+  worstOffenderSignals: number;
+};
+
+type DominantTimingMetric = {
+  label: string;
+  title: string;
 };
 
 const formatTiming = (samples: number, averageMs: number, maxMs: number, latestMs: number) =>
@@ -99,14 +112,82 @@ const sortRowsBySeverity = (rows: GridTablePerformanceEntry[]) =>
     return a.label.localeCompare(b.label);
   });
 
+export const buildTablePerformanceOverview = (
+  rows: GridTablePerformanceEntry[]
+): TablePerformanceOverview => {
+  const sortedRows = sortRowsBySeverity(rows);
+  const flaggedTables = rows.filter((row) => buildTablePerformanceSignals(row).length > 0).length;
+  const worstSignals = sortedRows.length > 0 ? buildTablePerformanceSignals(sortedRows[0]) : [];
+
+  return {
+    instrumentedTables: rows.length,
+    flaggedTables,
+    worstOffenderLabel: worstSignals.length > 0 ? (sortedRows[0]?.label ?? null) : null,
+    worstOffenderSignals: worstSignals.length,
+  };
+};
+
+export const buildDominantTimingMetric = (
+  row: GridTablePerformanceEntry
+): DominantTimingMetric | null => {
+  const metrics = [
+    {
+      key: 'filterOptions',
+      label: 'Filter options',
+      stats: row.filterOptions,
+    },
+    {
+      key: 'filterPass',
+      label: 'Filter pass',
+      stats: row.filterPass,
+    },
+    {
+      key: 'sort',
+      label: 'Sort',
+      stats: row.sort,
+    },
+    {
+      key: 'render',
+      label: 'Render',
+      stats: row.render,
+    },
+  ].filter((metric) => metric.stats.samples > 0);
+
+  if (metrics.length === 0) {
+    return null;
+  }
+
+  const dominant = metrics.reduce((current, candidate) =>
+    candidate.stats.averageMs > current.stats.averageMs ? candidate : current
+  );
+
+  return {
+    label: `${dominant.label} (${dominant.stats.averageMs.toFixed(2)}ms avg)`,
+    title: `${dominant.label} is the heaviest measured stage for this table. Average ${dominant.stats.averageMs.toFixed(2)}ms, max ${dominant.stats.maxMs.toFixed(2)}ms, latest ${dominant.stats.latestMs.toFixed(2)}ms.`,
+  };
+};
+
 export const TableGridPerformance: React.FC<TableGridPerformanceProps> = ({
   rows,
   emptyMessage,
+  onReset,
   summary,
 }) => {
+  const [showFlaggedOnly, setShowFlaggedOnly] = useState(false);
   const resolvedEmptyMessage =
     emptyMessage || 'No instrumented GridTable performance diagnostics have been recorded yet.';
   const sortedRows = sortRowsBySeverity(rows);
+  const overview = buildTablePerformanceOverview(rows);
+  const visibleRows = useMemo(
+    () =>
+      showFlaggedOnly
+        ? sortedRows.filter((row) => buildTablePerformanceSignals(row).length > 0)
+        : sortedRows,
+    [showFlaggedOnly, sortedRows]
+  );
+  const visibleEmptyMessage = showFlaggedOnly
+    ? 'No flagged tables in the current sample set.'
+    : resolvedEmptyMessage;
 
   return (
     <div className="diagnostics-section">
@@ -114,7 +195,48 @@ export const TableGridPerformance: React.FC<TableGridPerformanceProps> = ({
         <div className="diagnostics-section-title-group">
           <span className="diagnostics-section-subtitle">{summary}</span>
         </div>
+        {onReset ? (
+          <div className="diagnostics-section-actions">
+            <button
+              className="diagnostics-section-toggle"
+              onClick={() => setShowFlaggedOnly((current) => !current)}
+              type="button"
+            >
+              {showFlaggedOnly ? 'Show All Tables' : 'Show Flagged Only'}
+            </button>
+            <button className="diagnostics-section-toggle" onClick={onReset} type="button">
+              Reset Samples
+            </button>
+          </div>
+        ) : null}
       </div>
+      {rows.length > 0 ? (
+        <div className="diagnostics-table-performance-overview" role="presentation">
+          <div className="diagnostics-summary-card">
+            <span className="diagnostics-summary-heading">Instrumented Tables</span>
+            <span className="diagnostics-summary-primary">{overview.instrumentedTables}</span>
+            <span className="diagnostics-summary-secondary">Tables currently emitting samples</span>
+          </div>
+          <div className="diagnostics-summary-card">
+            <span className="diagnostics-summary-heading">Flagged Tables</span>
+            <span className="diagnostics-summary-primary">{overview.flaggedTables}</span>
+            <span className="diagnostics-summary-secondary">
+              Tables with suspicious churn or timing signals
+            </span>
+          </div>
+          <div className="diagnostics-summary-card">
+            <span className="diagnostics-summary-heading">Worst Offender</span>
+            <span className="diagnostics-summary-primary">
+              {overview.worstOffenderLabel ?? 'None'}
+            </span>
+            <span className="diagnostics-summary-secondary">
+              {overview.worstOffenderLabel
+                ? `${overview.worstOffenderSignals} signals currently active`
+                : 'No active warning signals'}
+            </span>
+          </div>
+        </div>
+      ) : null}
       <div className="diagnostics-table-wrapper">
         <table className="diagnostics-table">
           <thead>
@@ -125,6 +247,7 @@ export const TableGridPerformance: React.FC<TableGridPerformanceProps> = ({
               <th>Displayed</th>
               <th>Updates</th>
               <th>Ref Changes / Updates</th>
+              <th>Dominant Cost</th>
               <th>Signals</th>
               <th>Filter Options Avg / Max / Latest (ms)</th>
               <th>Filter Pass Avg / Max / Latest (ms)</th>
@@ -134,14 +257,15 @@ export const TableGridPerformance: React.FC<TableGridPerformanceProps> = ({
             </tr>
           </thead>
           <tbody>
-            {rows.length === 0 ? (
+            {visibleRows.length === 0 ? (
               <tr className="diagnostics-empty">
-                <td colSpan={12}>{resolvedEmptyMessage}</td>
+                <td colSpan={13}>{visibleEmptyMessage}</td>
               </tr>
             ) : (
-              sortedRows.map((row) => {
+              visibleRows.map((row) => {
                 const signals = buildTablePerformanceSignals(row);
                 const signalsTitle = signals.map((signal) => signal.title).join('\n');
+                const dominantTiming = buildDominantTimingMetric(row);
 
                 return (
                   <tr key={row.label}>
@@ -165,6 +289,9 @@ export const TableGridPerformance: React.FC<TableGridPerformanceProps> = ({
                       }
                     >
                       {formatReferenceChurn(row.inputReferenceChanges, row.updates)}
+                    </td>
+                    <td title={dominantTiming?.title ?? undefined}>
+                      {dominantTiming?.label ?? '—'}
                     </td>
                     <td
                       className="diagnostics-table-performance-signals"

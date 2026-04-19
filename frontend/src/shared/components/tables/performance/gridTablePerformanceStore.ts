@@ -41,6 +41,9 @@ const listeners = new Set<Listener>();
 const entries = new Map<string, MutableEntry>();
 let snapshotCache: GridTablePerformanceEntry[] = [];
 let snapshotDirty = true;
+let notifyScheduled = false;
+let scheduledNotifyHandle: number | null = null;
+let scheduledNotifyMode: 'animation-frame' | 'timeout' | null = null;
 
 const createTimingStats = (): MutableTimingStats => ({
   samples: 0,
@@ -75,11 +78,51 @@ const getEntry = (label: string): MutableEntry => {
   return created;
 };
 
-const notify = () => {
+const flushNotify = () => {
+  notifyScheduled = false;
+  scheduledNotifyHandle = null;
+  scheduledNotifyMode = null;
   snapshotDirty = true;
   for (const listener of listeners) {
     listener();
   }
+};
+
+const cancelScheduledNotify = () => {
+  if (scheduledNotifyHandle == null) {
+    notifyScheduled = false;
+    return;
+  }
+  if (
+    scheduledNotifyMode === 'animation-frame' &&
+    typeof window !== 'undefined' &&
+    typeof window.cancelAnimationFrame === 'function'
+  ) {
+    window.cancelAnimationFrame(scheduledNotifyHandle);
+  } else {
+    clearTimeout(scheduledNotifyHandle);
+  }
+  scheduledNotifyHandle = null;
+  scheduledNotifyMode = null;
+  notifyScheduled = false;
+};
+
+const scheduleNotify = () => {
+  if (notifyScheduled) {
+    return;
+  }
+  notifyScheduled = true;
+  if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+    scheduledNotifyMode = 'animation-frame';
+    scheduledNotifyHandle = window.requestAnimationFrame(() => {
+      flushNotify();
+    });
+    return;
+  }
+  scheduledNotifyMode = 'timeout';
+  scheduledNotifyHandle = setTimeout(() => {
+    flushNotify();
+  }, 0) as unknown as number;
 };
 
 const updateTimingStats = (stats: MutableTimingStats, durationMs: number) => {
@@ -120,7 +163,7 @@ export const recordGridTablePerformanceSnapshot = (
   entry.sourceRows = snapshot.sourceRows;
   entry.displayedRows = snapshot.displayedRows;
   entry.lastUpdated = Date.now();
-  notify();
+  scheduleNotify();
 };
 
 export const recordGridTablePerformanceSample = (
@@ -141,7 +184,7 @@ export const recordGridTablePerformanceSample = (
     entry.lastRenderPhase = options?.renderPhase ?? null;
   }
   entry.lastUpdated = Date.now();
-  notify();
+  scheduleNotify();
 };
 
 export const subscribeGridTablePerformance = (listener: Listener): (() => void) => {
@@ -184,5 +227,6 @@ export const useGridTablePerformanceDiagnostics = (): GridTablePerformanceEntry[
 export const resetGridTablePerformanceDiagnostics = () => {
   entries.clear();
   snapshotCache = [];
-  notify();
+  cancelScheduledNotify();
+  flushNotify();
 };

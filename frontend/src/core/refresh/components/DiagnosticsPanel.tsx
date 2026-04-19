@@ -67,7 +67,10 @@ import { DiagnosticsStreamsTable } from './diagnostics/TableStreams';
 import { CapabilityChecksTable } from './diagnostics/TableCapabilitesChecks';
 import { EffectivePermissionsTable } from './diagnostics/TableEffectivePermissions';
 import { TableGridPerformance } from './diagnostics/TableGridPerformance';
-import { useGridTablePerformanceDiagnostics } from '@shared/components/tables/performance/gridTablePerformanceStore';
+import {
+  resetGridTablePerformanceDiagnostics,
+  useGridTablePerformanceDiagnostics,
+} from '@shared/components/tables/performance/gridTablePerformanceStore';
 
 // Re-export for backwards compatibility
 export { resolveDomainNamespace } from './diagnostics';
@@ -2063,6 +2066,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
 
   const tablePerformanceContent = (
     <TableGridPerformance
+      onReset={resetGridTablePerformanceDiagnostics}
       rows={gridTablePerformanceRows}
       summary="Rolling GridTable measurements for the instrumented large-data views."
     />

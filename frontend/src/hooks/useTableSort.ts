@@ -5,7 +5,7 @@
  * Provides sorting functionality for tables, including special handling for age and timestamp columns.
  * Supports both controlled and uncontrolled sorting states.
  */
-import { useState, useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { recordGridTablePerformanceSample } from '@shared/components/tables/performance/gridTablePerformanceStore';
 
 export type SortDirection = 'asc' | 'desc' | null;
@@ -39,6 +39,7 @@ export function useTableSort<T>(
     key: defaultSortKey || '',
     direction: defaultSortKey ? defaultDirection : null,
   });
+  const sortDurationRef = useRef<number | null>(null);
 
   const effectiveSort = options?.controlledSort ?? sortConfig;
 
@@ -124,6 +125,7 @@ export function useTableSort<T>(
     }
 
     if (!effectiveSort.key || !effectiveSort.direction) {
+      sortDurationRef.current = null;
       return data;
     }
 
@@ -174,12 +176,17 @@ export function useTableSort<T>(
       return effectiveSort.direction === 'asc' ? comparison : -comparison;
     });
 
-    if (options?.diagnosticsLabel) {
-      recordGridTablePerformanceSample(options.diagnosticsLabel, 'sort', getNow() - startedAt);
-    }
+    sortDurationRef.current = getNow() - startedAt;
 
     return sorted;
-  }, [data, effectiveSort, options?.diagnosticsLabel, sortValueExtractors]);
+  }, [data, effectiveSort, sortValueExtractors]);
+
+  useEffect(() => {
+    if (!options?.diagnosticsLabel || sortDurationRef.current == null) {
+      return;
+    }
+    recordGridTablePerformanceSample(options.diagnosticsLabel, 'sort', sortDurationRef.current);
+  }, [options?.diagnosticsLabel, sortedData]);
 
   return {
     sortedData,

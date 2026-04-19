@@ -242,6 +242,10 @@ Current status:
   GridTable measurements
 - ✅ Table Performance diagnostics now surface suspicious update-path signals
   directly, including broad replacement churn and slow filter/sort/render work
+- ✅ Table Performance diagnostics now include a compact session overview and a
+  reset control so profiling can be isolated to a single interaction run
+- ✅ Table Performance diagnostics can now narrow to flagged tables only and
+  surface the dominant measured stage per table during a profiling run
 - ✅ Browse, all-namespaces typed table views, and object-panel Pods/Jobs are
   instrumented with explicit diagnostics labels
 - ⏳ next step: use the recorded measurements to identify the worst broad

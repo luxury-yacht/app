@@ -1,10 +1,11 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   getGridTablePerformanceSnapshot,
   recordGridTablePerformanceSample,
   recordGridTablePerformanceSnapshot,
   resetGridTablePerformanceDiagnostics,
+  subscribeGridTablePerformance,
 } from './gridTablePerformanceStore';
 
 describe('gridTablePerformanceStore', () => {
@@ -62,5 +63,38 @@ describe('gridTablePerformanceStore', () => {
       'All Namespaces Pods',
       'Namespace Pods',
     ]);
+  });
+
+  it('notifies subscribers asynchronously and coalesces bursts', async () => {
+    vi.useFakeTimers();
+    const originalRaf = globalThis.window?.requestAnimationFrame;
+    if (globalThis.window) {
+      globalThis.window.requestAnimationFrame = ((callback: FrameRequestCallback) =>
+        setTimeout(() => callback(0), 0)) as unknown as typeof window.requestAnimationFrame;
+    }
+    const listener = vi.fn();
+    const unsubscribe = subscribeGridTablePerformance(listener);
+
+    recordGridTablePerformanceSnapshot('All Namespaces Pods', {
+      inputRows: 10,
+      sourceRows: 10,
+      displayedRows: 10,
+      inputReferenceChanged: false,
+    });
+    recordGridTablePerformanceSample('All Namespaces Pods', 'render', 4.25, {
+      renderPhase: 'update',
+    });
+
+    expect(listener).not.toHaveBeenCalled();
+
+    await vi.runAllTimersAsync();
+
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    unsubscribe();
+    if (globalThis.window && originalRaf) {
+      globalThis.window.requestAnimationFrame = originalRaf;
+    }
+    vi.useRealTimers();
   });
 });
