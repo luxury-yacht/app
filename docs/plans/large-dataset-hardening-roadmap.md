@@ -69,7 +69,7 @@ measurement.
 - eliminating capped tables
 - making every view share one identical query model
 
-## Phase 1: Canonical Object Identity
+## Phase 1: ✅ Canonical Object Identity
 
 Make canonical identity explicit everywhere an object row appears.
 
@@ -89,63 +89,63 @@ primary row key.
 
 ### Tasks
 
-- Audit `GridTable` object rows across Browse, cluster views, namespace views,
-  and object-panel tables.
-- Identify rows that still infer or omit any part of canonical identity.
-- Standardize object-row helpers so actions, selection, and navigation use one
-  shared identity shape.
-- Standardize `keyExtractor` usage for object rows.
-- Confirm favorites, object opening, context menus, and cross-view actions all
-  use the same identity contract.
+- ✅ Audit `GridTable` object rows across Browse, cluster views, namespace
+  views, and object-panel tables.
+- ✅ Identify rows that still infer or omit any part of canonical identity.
+- ✅ Standardize object-row helpers so actions, selection, and navigation use
+  one shared identity shape.
+- ✅ Standardize `keyExtractor` usage for object rows.
+- ✅ Confirm favorites, object opening, context menus, and cross-view actions
+  all use the same identity contract.
 
 ### Exit Criteria
 
-- every object row carries full canonical identity
-- no view relies on partial object identity for row keys or object actions
-- object-opening and action flows remain explicitly `clusterId` + GVK aware
-- synthetic non-GVK surfaces such as `HelmRelease` remain explicitly documented
-  exceptions rather than silently using fake GVKs
+- ✅ every object row carries full canonical identity
+- ✅ no view relies on partial object identity for row keys or object actions
+- ✅ object-opening and action flows remain explicitly `clusterId` + GVK aware
+- ✅ synthetic non-GVK surfaces such as `HelmRelease` remain explicitly
+  documented exceptions rather than silently using fake GVKs
 
-## Phase 2: Shared Table Object Contract
+## Phase 2: ✅ Shared Table Object Contract
 
 Reduce per-view drift in how object tables are wired.
 
 ### Tasks
 
-- Define one shared object-row contract for `GridTable` consumers.
-- Add shared helpers for:
-  - building object row keys
-  - mapping object rows into panel/action references
-  - common object-table filter option wiring
-- Replace ad hoc view-local object key/reference building where practical.
-- Document when a table is an object table versus a non-object table.
+- ✅ Define one shared object-row contract for `GridTable` consumers.
+- ✅ Add shared helpers for:
+  - ✅ building object row keys
+  - ✅ mapping object rows into panel/action references
+  - ✅ common object-table filter option wiring
+- ✅ Replace ad hoc view-local object key/reference building where practical.
+- ✅ Document when a table is an object table versus a non-object table.
 
 ### Exit Criteria
 
-- object tables follow one recognizable wiring pattern
-- common object actions no longer depend on view-local identity glue
+- ✅ object tables follow one recognizable wiring pattern
+- ✅ common object actions no longer depend on view-local identity glue
 
-## Phase 3: Metadata Sourcing Strategy
+## Phase 3: ✅ Metadata Sourcing Strategy
 
 Make filter/sidebar metadata intentionally sourced instead of inferred from
 whatever rows happen to be loaded.
 
 ### Tasks
 
-- Classify each table family:
-  - local metadata is acceptable
-  - explicit metadata source is required
-  - query-scoped metadata source is required
-- Keep Browse on stable scope-level metadata.
-- Review all-namespaces typed views for namespace and kind option stability.
-- Review sidebar/category metadata sourcing against the catalog contract.
-- Document where metadata is allowed to come from loaded rows and where it is
-  not.
+- ✅ Classify each table family:
+  - ✅ local metadata is acceptable
+  - ✅ explicit metadata source is required
+  - ✅ query-scoped metadata source is required
+- ✅ Keep Browse on stable scope-level metadata.
+- ✅ Review all-namespaces typed views for namespace and kind option stability.
+- ✅ Review sidebar/category metadata sourcing against the catalog contract.
+- ✅ Document where metadata is allowed to come from loaded rows and where it
+  is not.
 
 ### Exit Criteria
 
-- filter menus do not reshape themselves from transient filtered row payloads
-- metadata sourcing is explicit per view family
+- ✅ filter menus do not reshape themselves from transient filtered row payloads
+- ✅ metadata sourcing is explicit per view family
 
 Current status:
 
@@ -179,6 +179,19 @@ semantics match.
 
 - each major table family has a clear interaction model
 - users can tell what search and filters actually apply to
+
+Current status:
+
+- ✅ Browse uses query-shaped search and kind/namespace filters, with local sort
+  on the returned row set and query-backed total counts
+- ✅ cluster and all-namespaces typed views use local search/filter/sort over
+  the loaded row set, with explicit filter metadata where Phase 3 introduced it
+- ✅ object-panel Pods and Jobs use local search/filter/sort over the loaded row
+  set
+- ✅ object-panel Events currently uses local sort only and does not expose the
+  shared filter/search bar
+- ✅ shared empty-state language now makes filter-empty tables read as “no
+  matching items” instead of looking identical to truly empty datasets
 
 ## Phase 5: Measured Update-Path Improvements
 

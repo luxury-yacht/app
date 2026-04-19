@@ -1676,6 +1676,30 @@ it('renders filter UI when enabled', () => {
   cleanup();
 });
 
+it('shows a filter-specific empty state when active filters exclude all rows', () => {
+  const { container, cleanup } = renderGridTable({
+    data: createRows(5),
+    virtualization: { enabled: false },
+    emptyMessage: 'No rows available',
+    filters: {
+      enabled: true,
+      initial: { search: 'does-not-match' },
+      accessors: {
+        getKind: (row) => row.label,
+        getNamespace: () => '',
+        getSearchText: (row) => [row.label],
+      },
+    },
+  });
+
+  const empty = container.querySelector('.gridtable-empty');
+  expect(empty?.textContent).toContain('No matching items');
+  expect(empty?.textContent).toContain('Clear filters');
+  expect(empty?.textContent).not.toContain('No rows available');
+
+  cleanup();
+});
+
 it('shows displayed and total item counts when the table is capped', () => {
   setAppPreferencesForTesting({ maxTableRows: 3 });
   const { container, cleanup } = renderGridTable({
