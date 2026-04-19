@@ -589,6 +589,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
               onChange: setPersistedFilters,
               onReset: resetPersistedState,
               options: {
+                namespaces: availableFilterNamespaces,
                 showNamespaceDropdown: showNamespaceFilter,
                 namespaceDropdownSearchable: showNamespaceFilter,
                 namespaceDropdownBulkActions: showNamespaceFilter,

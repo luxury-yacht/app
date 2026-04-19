@@ -345,6 +345,8 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
               onChange: setPersistedFilters,
               onReset: resetPersistedState,
               options: {
+                kinds: availableKinds,
+                namespaces: availableFilterNamespaces,
                 showKindDropdown: true,
                 showNamespaceDropdown: showNamespaceFilter,
                 namespaceDropdownSearchable: showNamespaceFilter,

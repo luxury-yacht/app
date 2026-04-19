@@ -380,6 +380,7 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
               onChange: setPersistedFilters,
               onReset: resetPersistedState,
               options: {
+                namespaces: availableFilterNamespaces,
                 showKindDropdown: true,
                 showNamespaceDropdown: showNamespaceColumn,
                 namespaceDropdownSearchable: showNamespaceColumn,

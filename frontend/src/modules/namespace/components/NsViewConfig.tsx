@@ -320,6 +320,8 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
               onChange: setPersistedFilters,
               onReset: resetPersistedState,
               options: {
+                kinds: availableKinds,
+                namespaces: availableFilterNamespaces,
                 showKindDropdown: true,
                 showNamespaceDropdown: showNamespaceFilter,
                 namespaceDropdownSearchable: showNamespaceFilter,

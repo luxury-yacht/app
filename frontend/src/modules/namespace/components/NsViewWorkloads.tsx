@@ -25,7 +25,7 @@ import RollbackModal from '@shared/components/modals/RollbackModal';
 import { PortForwardModal, PortForwardTarget } from '@modules/port-forward';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
-import GridTable from '@shared/components/tables/GridTable';
+import GridTable, { GRIDTABLE_VIRTUALIZATION_DEFAULT } from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import {
   formatBuiltinApiVersion,
@@ -534,6 +534,8 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
               onChange: setPersistedFilters,
               onReset: resetPersistedState,
               options: {
+                kinds: availableKinds,
+                namespaces: availableFilterNamespaces,
                 showNamespaceDropdown: showNamespaceFilter,
                 namespaceDropdownSearchable: showNamespaceFilter,
                 namespaceDropdownBulkActions: showNamespaceFilter,
@@ -541,7 +543,7 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
                 preActions: [favToggle],
               },
             }}
-            virtualization={{ enabled: true, threshold: 40, overscan: 8, estimateRowHeight: 44 }}
+            virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}
             columnWidths={columnWidths}
             onColumnWidthsChange={setColumnWidths}
             columnVisibility={columnVisibility}

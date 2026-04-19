@@ -316,6 +316,7 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
               onChange: setPersistedFilters,
               onReset: resetPersistedState,
               options: {
+                kinds: availableKinds,
                 showKindDropdown: true,
                 preActions: [favToggle],
               },

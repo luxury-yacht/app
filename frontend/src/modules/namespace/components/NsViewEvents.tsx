@@ -342,6 +342,7 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
                 getSearchText,
               },
               options: {
+                namespaces: availableFilterNamespaces,
                 showNamespaceDropdown: showNamespaceFilter,
                 namespaceDropdownSearchable: showNamespaceFilter,
                 namespaceDropdownBulkActions: showNamespaceFilter,

@@ -375,6 +375,7 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
               onChange: setPersistedFilters,
               onReset: resetPersistedState,
               options: {
+                kinds: availableKinds,
                 showKindDropdown: true,
                 preActions: [favToggle],
               },

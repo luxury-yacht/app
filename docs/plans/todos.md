@@ -12,6 +12,9 @@
 
 ## Feature Ideas
 
+- Object relationships map
+- Traffic flow map
+
 - Gridtable improvements
   - Allow column order change via drag
     - should reset button also reset to default column order?

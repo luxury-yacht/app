@@ -271,6 +271,7 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
               onChange: setPersistedFilters,
               onReset: resetPersistedState,
               options: {
+                kinds: availableKinds,
                 showKindDropdown: true,
                 preActions: [favToggle],
               },

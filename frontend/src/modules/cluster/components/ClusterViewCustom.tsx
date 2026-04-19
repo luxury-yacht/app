@@ -372,6 +372,7 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
               onChange: setPersistedFilters,
               onReset: resetPersistedState,
               options: {
+                kinds: availableKinds,
                 showKindDropdown: true,
                 kindDropdownSearchable: true,
                 kindDropdownBulkActions: true,
