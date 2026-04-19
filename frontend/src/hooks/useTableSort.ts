@@ -42,6 +42,7 @@ export function useTableSort<T>(
   const sortDurationRef = useRef<number | null>(null);
 
   const effectiveSort = options?.controlledSort ?? sortConfig;
+  const stringCollator = useMemo(() => new Intl.Collator(undefined, { numeric: true }), []);
 
   // Sort a column. When `targetDirection` is provided the sort jumps directly
   // to that state (used by context-menu "Sort Desc" / "Clear Sort"). When
@@ -135,56 +136,58 @@ export function useTableSort<T>(
     }
 
     const extractor = sortValueExtractors?.[effectiveSort.key];
-
-    const sorted = [...data].sort((a, b) => {
-      const aValue = extractor ? extractor(a) : (a as any)[effectiveSort.key];
-      const bValue = extractor ? extractor(b) : (b as any)[effectiveSort.key];
-
-      // Handle null/undefined values
-      if (aValue == null && bValue == null) return 0;
-      if (aValue == null) return 1;
-      if (bValue == null) return -1;
-
-      // Special handling for age columns (only if they contain age strings, not numbers)
-      if (
-        effectiveSort.key.toLowerCase() === 'age' &&
-        typeof aValue === 'string' &&
-        typeof bValue === 'string'
-      ) {
-        const aSeconds = parseAge(aValue);
-        const bSeconds = parseAge(bValue);
-        const comparison = aSeconds - bSeconds;
-        return effectiveSort.direction === 'asc' ? comparison : -comparison;
-      }
-
-      // Special handling for timestamp columns (if they exist)
-      if (
-        effectiveSort.key === 'timestamp' &&
-        typeof aValue === 'number' &&
-        typeof bValue === 'number'
-      ) {
-        const comparison = aValue - bValue;
-        return effectiveSort.direction === 'asc' ? comparison : -comparison;
-      }
-
-      // Compare values
-      let comparison = 0;
-      if (typeof aValue === 'string' && typeof bValue === 'string') {
-        comparison = aValue.localeCompare(bValue, undefined, { numeric: true });
-      } else if (typeof aValue === 'number' && typeof bValue === 'number') {
-        comparison = aValue - bValue;
-      } else {
-        // Convert to string for comparison
-        comparison = String(aValue).localeCompare(String(bValue), undefined, { numeric: true });
-      }
-
-      return effectiveSort.direction === 'asc' ? comparison : -comparison;
+    const directionMultiplier = effectiveSort.direction === 'asc' ? 1 : -1;
+    const decorated = data.map((item, index) => {
+      const rawValue = extractor ? extractor(item) : (item as any)[effectiveSort.key];
+      const normalizedValue =
+        effectiveSort.key.toLowerCase() === 'age' && typeof rawValue === 'string'
+          ? parseAge(rawValue)
+          : rawValue;
+      return {
+        item,
+        index,
+        value: normalizedValue,
+      };
     });
+
+    const sorted = decorated
+      .sort((a, b) => {
+        const aValue = a.value;
+        const bValue = b.value;
+
+        // Handle null/undefined values
+        if (aValue == null && bValue == null) return a.index - b.index;
+        if (aValue == null) return 1;
+        if (bValue == null) return -1;
+
+        // Special handling for timestamp columns (if they exist)
+        if (
+          effectiveSort.key === 'timestamp' &&
+          typeof aValue === 'number' &&
+          typeof bValue === 'number'
+        ) {
+          const comparison = aValue - bValue;
+          return comparison !== 0 ? directionMultiplier * comparison : a.index - b.index;
+        }
+
+        // Compare values
+        let comparison = 0;
+        if (typeof aValue === 'string' && typeof bValue === 'string') {
+          comparison = stringCollator.compare(aValue, bValue);
+        } else if (typeof aValue === 'number' && typeof bValue === 'number') {
+          comparison = aValue - bValue;
+        } else {
+          comparison = stringCollator.compare(String(aValue), String(bValue));
+        }
+
+        return comparison !== 0 ? directionMultiplier * comparison : a.index - b.index;
+      })
+      .map(({ item }) => item);
 
     sortDurationRef.current = getNow() - startedAt;
 
     return sorted;
-  }, [data, effectiveSort, sortValueExtractors]);
+  }, [data, effectiveSort, sortValueExtractors, stringCollator]);
 
   useEffect(() => {
     if (!options?.diagnosticsLabel || sortDurationRef.current == null) {

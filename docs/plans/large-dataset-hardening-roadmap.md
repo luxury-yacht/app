@@ -260,7 +260,7 @@ Current status:
 - ✅ shared GridTable performance diagnostics store records:
   - update count
   - input-reference changes
-  - input/capped/displayed row counts
+  - input/post-cap/visible row counts
   - filter-option timing
   - filter-pass timing
   - sort timing
@@ -292,8 +292,18 @@ Current status:
   - parts of Workloads and Events
 - ✅ cluster typed tables are now instrumented alongside all-namespaces and
   object-panel surfaces
-- ⏳ next step: move from shared/family consistency work into the first major
-  family-specific optimization target, which is now Pods
+- ✅ the first major heavy-family optimization pass has landed for Pods:
+  - pod feed rows now reuse stable references across unchanged live updates
+  - metrics-only pod snapshots preserve row, array, and metrics references
+    when usage data is unchanged
+  - pod columns stay stable across metrics-only rerenders
+  - shared table sort now uses a decorate/sort/undecorate path with stable
+    tie ordering, which reduces repeated sort work on heavy tables
+- ✅ Phase 5 is complete: diagnostics are trustworthy, shared/family churn work
+  is exhausted, and the first heavy-family optimization target has been
+  measured and improved
+- ⏭ next phase: move into Phase 6 catalog alignment work instead of further
+  diagnostics-driven cleanup by default
 
 ## Phase 6: Catalog Alignment for Generic Object Workflows
 

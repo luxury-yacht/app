@@ -13,18 +13,12 @@ import type { PodSnapshotEntry, PodMetricsInfo } from '@/core/refresh/types';
 import { getPodsUnhealthyStorageKey } from '@modules/namespace/components/podsFilterSignals';
 import { eventBus } from '@/core/events';
 
-vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
-  useNamespaceColumnLink: () => ({
-    onClick: vi.fn(),
-    getClassName: () => 'object-panel-link',
-    isInteractive: () => true,
-  }),
-}));
-
 const {
   gridTablePropsRef,
   confirmationPropsRef,
   openWithObjectMock,
+  navigateToViewMock,
+  namespaceColumnLinkMock,
   useTableSortMock,
   useUserPermissionsMock,
   deletePodMock,
@@ -33,10 +27,20 @@ const {
   gridTablePropsRef: { current: null as any },
   confirmationPropsRef: { current: null as any },
   openWithObjectMock: vi.fn(),
+  navigateToViewMock: vi.fn(),
+  namespaceColumnLinkMock: {
+    onClick: vi.fn(),
+    getClassName: () => 'object-panel-link',
+    isInteractive: () => true,
+  },
   useTableSortMock: vi.fn(),
   useUserPermissionsMock: vi.fn(),
   deletePodMock: vi.fn().mockResolvedValue(undefined),
   errorHandlerMock: { handle: vi.fn() },
+}));
+
+vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
+  useNamespaceColumnLink: () => namespaceColumnLinkMock,
 }));
 
 const clusterMetricsMock = vi.hoisted(() => ({ current: null as any }));
@@ -140,7 +144,7 @@ vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
 }));
 
 vi.mock('@shared/hooks/useNavigateToView', () => ({
-  useNavigateToView: () => ({ navigateToView: vi.fn() }),
+  useNavigateToView: () => ({ navigateToView: navigateToViewMock }),
 }));
 
 vi.mock('@/hooks/useTableSort', () => ({
@@ -221,6 +225,7 @@ describe('NsViewPods', () => {
     gridTablePropsRef.current = null;
     confirmationPropsRef.current = null;
     openWithObjectMock.mockReset();
+    navigateToViewMock.mockReset();
     deletePodMock.mockClear();
     useTableSortMock.mockReset();
     useUserPermissionsMock.mockReset();
@@ -493,6 +498,32 @@ describe('NsViewPods', () => {
     expect(React.isValidElement(memoryRender)).toBe(true);
     expect(memoryRender.props.metricsError).toBeUndefined();
     expect(memoryRender.props.metricsStale).toBe(false);
+  });
+
+  it('keeps the column definitions stable across metrics-only rerenders', async () => {
+    await renderPods({
+      metrics: {
+        stale: false,
+        lastError: '',
+        collectedAt: 1700001000,
+        successCount: 1,
+        failureCount: 0,
+      },
+    });
+
+    const firstColumnsRef = gridTablePropsRef.current.columns;
+
+    await renderPods({
+      metrics: {
+        stale: true,
+        lastError: 'metrics stale',
+        collectedAt: 1700001001,
+        successCount: 1,
+        failureCount: 1,
+      },
+    });
+
+    expect(gridTablePropsRef.current.columns).toBe(firstColumnsRef);
   });
 
   it('filters pods when the unhealthy toggle is enabled', async () => {

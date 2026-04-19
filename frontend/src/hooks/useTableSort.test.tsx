@@ -171,6 +171,27 @@ describe('useTableSort', () => {
     expect(getText('direction')).toBe('desc');
   });
 
+  it('preserves input order for equal sort values', async () => {
+    type Item = { id: string; value: number };
+    const items: Item[] = [
+      { id: 'first', value: 1 },
+      { id: 'second', value: 1 },
+      { id: 'third', value: 1 },
+    ];
+
+    const StableHarness = () => {
+      const { sortedData } = useTableSort<Item>(items, 'value', 'asc');
+      return <div data-testid="ids">{sortedData.map((item) => item.id).join(',')}</div>;
+    };
+
+    await act(async () => {
+      root.render(<StableHarness />);
+      await Promise.resolve();
+    });
+
+    expect(getText('ids')).toBe('first,second,third');
+  });
+
   it('records sort diagnostics after commit instead of during render', async () => {
     const DiagnosticsHarness = () => {
       useTableSort<Row>(rows, 'name', 'asc', { diagnosticsLabel: 'Test Sort' });

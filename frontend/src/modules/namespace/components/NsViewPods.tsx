@@ -17,7 +17,7 @@ import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useTableSort } from '@/hooks/useTableSort';
 import * as cf from '@shared/components/tables/columnFactories';
 import { getMetricsBannerInfo } from '@shared/utils/metricsAvailability';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
@@ -210,6 +210,23 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       }
       return new Date(effectiveMetrics.collectedAt * 1000);
     }, [effectiveMetrics?.collectedAt]);
+    const metricsStateRef = useRef<{
+      stale: boolean;
+      lastError?: string;
+      lastUpdated?: Date;
+    }>({
+      stale: Boolean(effectiveMetrics?.stale),
+      lastError: effectiveMetrics?.lastError || undefined,
+      lastUpdated: metricsLastUpdated,
+    });
+
+    useEffect(() => {
+      metricsStateRef.current = {
+        stale: Boolean(effectiveMetrics?.stale),
+        lastError: effectiveMetrics?.lastError || undefined,
+        lastUpdated: metricsLastUpdated,
+      };
+    }, [effectiveMetrics?.lastError, effectiveMetrics?.stale, metricsLastUpdated]);
 
     const columns: GridColumnDefinition<PodSnapshotEntry>[] = useMemo(() => {
       // Use the same warning styling as workloads when restarts are non-zero.
@@ -311,9 +328,9 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
           getUsage: (pod) => pod.cpuUsage,
           getRequest: (pod) => pod.cpuRequest,
           getLimit: (pod) => pod.cpuLimit,
-          getMetricsStale: () => Boolean(effectiveMetrics?.stale),
-          getMetricsError: () => effectiveMetrics?.lastError || undefined,
-          getMetricsLastUpdated: () => metricsLastUpdated,
+          getMetricsStale: () => metricsStateRef.current.stale,
+          getMetricsError: () => metricsStateRef.current.lastError,
+          getMetricsLastUpdated: () => metricsStateRef.current.lastUpdated,
           getAnimationKey: (pod) => `pod:${pod.namespace}/${pod.name}:cpu`,
         }),
         cf.createResourceBarColumn<PodSnapshotEntry>({
@@ -323,9 +340,9 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
           getUsage: (pod) => pod.memUsage,
           getRequest: (pod) => pod.memRequest,
           getLimit: (pod) => pod.memLimit,
-          getMetricsStale: () => Boolean(effectiveMetrics?.stale),
-          getMetricsError: () => effectiveMetrics?.lastError || undefined,
-          getMetricsLastUpdated: () => metricsLastUpdated,
+          getMetricsStale: () => metricsStateRef.current.stale,
+          getMetricsError: () => metricsStateRef.current.lastError,
+          getMetricsLastUpdated: () => metricsStateRef.current.lastUpdated,
           getAnimationKey: (pod) => `pod:${pod.namespace}/${pod.name}:memory`,
         }),
         cf.createAgeColumn(),
@@ -356,12 +373,9 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
 
       return baseColumns;
     }, [
-      effectiveMetrics?.lastError,
-      effectiveMetrics?.stale,
       handleNodeOpen,
       handleOwnerOpen,
       handlePodOpen,
-      metricsLastUpdated,
       namespaceColumnLink,
       navigateToView,
       showNamespaceColumn,
