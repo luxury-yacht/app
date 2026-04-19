@@ -54,6 +54,17 @@ describe('GridTablePerformance', () => {
     ]);
   });
 
+  it('ignores one-off timing spikes until a metric has multiple samples', () => {
+    const signals = buildTablePerformanceSignals(
+      createRow({
+        sort: createTimingStats(1, 12, 12, 12),
+        render: createTimingStats(2, 15, 20, 20),
+      })
+    );
+
+    expect(signals).toEqual([]);
+  });
+
   it('down-ranks broad replacement for live tables into an informational signal', () => {
     const signals = buildTablePerformanceSignals(
       createRow({
@@ -98,6 +109,8 @@ describe('GridTablePerformance', () => {
     expect(markup).toContain('Render slow');
     expect(markup).toContain('Mode');
     expect(markup).toContain('Local');
+    expect(markup).toContain('Post-Cap');
+    expect(markup).toContain('Visible');
     expect(markup).toContain('9 (90%)');
     expect(markup).toContain('Reset Samples');
     expect(markup).toContain('Worst Offender');

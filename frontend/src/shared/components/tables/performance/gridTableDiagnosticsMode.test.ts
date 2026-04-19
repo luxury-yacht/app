@@ -18,7 +18,9 @@ describe('gridTableDiagnosticsMode', () => {
   });
 
   it('provides mode-specific row count semantics', () => {
-    expect(getGridTableRowCountTitle('local', 'source')).toContain('post-cap row count');
+    expect(getGridTableRowCountTitle('local', 'source')).toContain(
+      'Post-Cap is the row count after the shared cap is applied'
+    );
     expect(getGridTableRowCountTitle('query', 'input')).toContain('upstream query result size');
     expect(getGridTableRowCountTitle('live', 'input')).toContain('Frequent updates are expected');
   });

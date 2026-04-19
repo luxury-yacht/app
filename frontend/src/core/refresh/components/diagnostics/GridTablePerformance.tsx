@@ -4,6 +4,7 @@ import {
   buildGridTableReferenceChurnSignal,
   getGridTableModeLabel,
   getGridTableModeTitle,
+  getGridTableRowCountLabel,
   getGridTableRowCountTitle,
   type GridTablePerformanceSignal,
 } from '@shared/components/tables/performance/gridTableDiagnosticsMode';
@@ -26,6 +27,8 @@ type DominantTimingMetric = {
   label: string;
   title: string;
 };
+
+const MIN_TIMING_SIGNAL_SAMPLES = 3;
 
 const TimingHeader: React.FC<{ label: string }> = ({ label }) => (
   <span className="diagnostics-table-heading-metric">
@@ -67,7 +70,7 @@ export const buildTablePerformanceSignals = (
   }
 
   if (
-    row.filterOptions.samples > 0 &&
+    row.filterOptions.samples >= MIN_TIMING_SIGNAL_SAMPLES &&
     isTimingSignal(row.filterOptions.averageMs, row.filterOptions.maxMs, 4)
   ) {
     signals.push({
@@ -78,7 +81,7 @@ export const buildTablePerformanceSignals = (
   }
 
   if (
-    row.filterPass.samples > 0 &&
+    row.filterPass.samples >= MIN_TIMING_SIGNAL_SAMPLES &&
     isTimingSignal(row.filterPass.averageMs, row.filterPass.maxMs, 6)
   ) {
     signals.push({
@@ -88,7 +91,10 @@ export const buildTablePerformanceSignals = (
     });
   }
 
-  if (row.sort.samples > 0 && isTimingSignal(row.sort.averageMs, row.sort.maxMs, 6)) {
+  if (
+    row.sort.samples >= MIN_TIMING_SIGNAL_SAMPLES &&
+    isTimingSignal(row.sort.averageMs, row.sort.maxMs, 6)
+  ) {
     signals.push({
       label: 'Sort slow',
       severity: 'warning',
@@ -96,7 +102,10 @@ export const buildTablePerformanceSignals = (
     });
   }
 
-  if (row.render.samples > 0 && isTimingSignal(row.render.averageMs, row.render.maxMs, 8)) {
+  if (
+    row.render.samples >= MIN_TIMING_SIGNAL_SAMPLES &&
+    isTimingSignal(row.render.averageMs, row.render.maxMs, 8)
+  ) {
     signals.push({
       label: 'Render slow',
       severity: 'warning',
@@ -239,9 +248,9 @@ export const GridTablePerformance: React.FC<GridTablePerformanceProps> = ({
             <tr>
               <th>Table</th>
               <th>Mode</th>
-              <th>Input</th>
-              <th>Capped</th>
-              <th>Displayed</th>
+              <th>{getGridTableRowCountLabel('input')}</th>
+              <th>{getGridTableRowCountLabel('source')}</th>
+              <th>{getGridTableRowCountLabel('displayed')}</th>
               <th>Updates</th>
               <th>Ref Changes</th>
               <th>Dominant Cost</th>
