@@ -342,6 +342,9 @@ Current status:
 - ✅ alt-click navigation / GridTable focus requests now use a shared
   focus-request helper that prefers canonical row-key identity for real
   Kubernetes objects and falls back only for synthetic non-GVK kinds
+- ✅ additional generic entry points now use shared identity builders rather
+  than hand-built refs, including Browse alt-click navigation, shell-session
+  jumps from SessionsStatus, and the shared ResourceHeader namespace link
 - ⏭ next step: continue auditing remaining generic entry points so object
   opening, diff, and command-style navigation all share the same helper-backed
   identity conventions

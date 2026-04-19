@@ -14,8 +14,7 @@ import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { requestObjectPanelTab } from '@modules/object-panel/objectPanelTabRequests';
 import { objectPanelId } from '@/core/contexts/ObjectPanelStateContext';
-import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
-import type { KubernetesObjectReference } from '@/types/view-state';
+import { buildObjectReference } from '@shared/utils/objectIdentity';
 import '@modules/port-forward/PortForwardsPanel.css';
 import './SessionsStatus.css';
 
@@ -174,14 +173,13 @@ const SessionsStatus: React.FC = () => {
 
   const openShellSessionTab = useCallback(
     (session: ShellSessionInfo) => {
-      const targetRef: KubernetesObjectReference = {
+      const targetRef = buildObjectReference({
         kind: 'Pod',
         name: session.podName,
         namespace: session.namespace,
-        ...resolveBuiltinGroupVersion('Pod'),
         clusterId: session.clusterId?.trim() || selectedClusterId?.trim() || undefined,
         clusterName: session.clusterName?.trim() || undefined,
-      };
+      });
       const panelId = objectPanelId(targetRef);
       openWithObject(targetRef);
       requestObjectPanelTab(panelId, 'shell');
