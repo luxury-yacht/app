@@ -25,7 +25,7 @@ const CLUSTER_FEATURE_MAP: Record<ClusterViewType, readonly string[]> = {
   storage: ['Storage view', 'Storage actions'],
   config: ['Cluster config'],
   crds: ['Cluster CRDs'],
-  custom: ['Cluster custom resources'],
+  custom: ['Cluster custom'],
   events: ['Cluster events'],
   browse: [], // Empty = show all cluster-scoped permissions (browse spans all resource types).
 };

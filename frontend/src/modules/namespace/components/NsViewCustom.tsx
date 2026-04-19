@@ -276,9 +276,7 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
 
     const showNamespaceFilter = namespace === ALL_NAMESPACES_SCOPE;
     const diagnosticsLabel =
-      namespace === ALL_NAMESPACES_SCOPE
-        ? 'All Namespaces Custom Resources'
-        : 'Namespace Custom Resources';
+      namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Custom' : 'Namespace Custom';
 
     const {
       sortConfig: persistedSort,

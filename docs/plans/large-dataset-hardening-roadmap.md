@@ -251,6 +251,9 @@ Current status:
 - ✅ Table Performance diagnostics now carry explicit table-mode metadata so
   query-backed, local, and live-updating views can be interpreted under a
   shared contract during the broader migration
+- ✅ Table Performance diagnostics now treat warning signals as mode-aware:
+  live-table churn is informational, query tables explain upstream semantics,
+  and flagged-only views focus on warning-level issues
 - ⏳ next step: use the recorded measurements to identify the worst broad
   replacement/recompute paths in real large-cluster sessions before changing
   update behavior

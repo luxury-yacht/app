@@ -373,7 +373,7 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
           <GridTable
             data={sortedData}
             columns={columns}
-            diagnosticsLabel="Cluster Custom Resources"
+            diagnosticsLabel="Cluster Custom"
             loading={loading}
             keyExtractor={keyExtractor}
             onRowClick={handleResourceClick}

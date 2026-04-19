@@ -439,7 +439,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         },
         {
           domain: 'cluster-custom' as RefreshDomain,
-          label: 'Cluster Custom Resources',
+          label: 'Cluster Custom',
           entries: clusterCustomScopeEntries,
         },
         {

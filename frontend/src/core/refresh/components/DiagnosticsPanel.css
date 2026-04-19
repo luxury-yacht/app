@@ -229,6 +229,12 @@
   color: var(--color-warning, #f59e0b);
 }
 
+.diagnostics-table-performance-signal--info {
+  border-color: color-mix(in srgb, var(--color-info, #60a5fa) 45%, var(--color-border));
+  background: color-mix(in srgb, var(--color-info, #60a5fa) 10%, var(--color-bg-secondary));
+  color: var(--color-info, #60a5fa);
+}
+
 .diagnostics-table-mode {
   display: inline-flex;
   align-items: center;

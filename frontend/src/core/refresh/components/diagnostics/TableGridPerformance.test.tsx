@@ -54,6 +54,22 @@ describe('TableGridPerformance', () => {
     ]);
   });
 
+  it('down-ranks broad replacement for live tables into an informational signal', () => {
+    const signals = buildTablePerformanceSignals(
+      createRow({
+        mode: 'live',
+        inputReferenceChanges: 9,
+      })
+    );
+
+    expect(signals).toEqual([
+      expect.objectContaining({
+        label: 'Live churn',
+        severity: 'info',
+      }),
+    ]);
+  });
+
   it('renders the most suspicious rows first with signal labels and churn ratios', () => {
     const markup = renderToStaticMarkup(
       <TableGridPerformance
@@ -110,6 +126,9 @@ describe('TableGridPerformance', () => {
 
     expect(markup).toContain('Query');
     expect(markup).toContain('Live');
+    expect(markup).toContain(
+      'Query-backed table: Input is the upstream query result size before the shared cap is applied.'
+    );
   });
 
   it('builds a compact profiling overview for the current sample set', () => {
@@ -129,6 +148,23 @@ describe('TableGridPerformance', () => {
       flaggedTables: 1,
       worstOffenderLabel: 'All Namespaces Browse',
       worstOffenderSignals: 2,
+    });
+  });
+
+  it('excludes informational live-churn notes from flagged-table counts', () => {
+    const overview = buildTablePerformanceOverview([
+      createRow({
+        label: 'All Namespaces Workloads',
+        mode: 'live',
+        inputReferenceChanges: 9,
+      }),
+    ]);
+
+    expect(overview).toEqual({
+      instrumentedTables: 1,
+      flaggedTables: 0,
+      worstOffenderLabel: null,
+      worstOffenderSignals: 0,
     });
   });
 

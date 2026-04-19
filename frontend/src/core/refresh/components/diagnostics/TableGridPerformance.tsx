@@ -11,7 +11,7 @@ interface TableGridPerformanceProps {
 type TablePerformanceSignal = {
   label: string;
   title: string;
-  severity: 'warning';
+  severity: 'warning' | 'info';
 };
 
 const MODE_LABELS: Record<GridTablePerformanceEntry['mode'], string> = {
@@ -39,6 +39,8 @@ type DominantTimingMetric = {
   title: string;
 };
 
+type RowCountKind = 'input' | 'source' | 'displayed';
+
 const TimingHeader: React.FC<{ label: string }> = ({ label }) => (
   <span className="diagnostics-table-heading-metric">
     <span>{label} (ms)</span>
@@ -62,6 +64,77 @@ const formatReferenceChurn = (inputReferenceChanges: number, updates: number) =>
 const isTimingSignal = (averageMs: number, maxMs: number, averageThresholdMs: number) =>
   averageMs >= averageThresholdMs || maxMs >= averageThresholdMs * 2;
 
+const getWarningSignals = (signals: TablePerformanceSignal[]) =>
+  signals.filter((signal) => signal.severity === 'warning');
+
+const getWarningSignalCount = (row: GridTablePerformanceEntry) =>
+  getWarningSignals(buildTablePerformanceSignals(row)).length;
+
+const buildReferenceChurnSignal = (
+  row: GridTablePerformanceEntry,
+  replacementRatio: number
+): TablePerformanceSignal | null => {
+  if (row.mode === 'live') {
+    if (replacementRatio < 0.8) {
+      return null;
+    }
+
+    return {
+      label: 'Live churn',
+      severity: 'info',
+      title: `Input rows were replaced on ${row.inputReferenceChanges} of ${row.updates} updates (${formatPercent(replacementRatio)}). Live tables are expected to churn; prioritize sort and render warnings before treating this as a feed bug.`,
+    };
+  }
+
+  if (replacementRatio < 0.8) {
+    return null;
+  }
+
+  if (row.mode === 'query') {
+    return {
+      label: 'Broad replacement',
+      severity: 'warning',
+      title: `Input rows were replaced on ${row.inputReferenceChanges} of ${row.updates} updates (${formatPercent(replacementRatio)}). Query-backed tables replace input rows when upstream query results change, so this is only suspicious when the query itself is stable.`,
+    };
+  }
+
+  return {
+    label: 'Broad replacement',
+    severity: 'warning',
+    title: `Input rows were replaced on ${row.inputReferenceChanges} of ${row.updates} updates (${formatPercent(replacementRatio)}). Local tables should usually reuse the input array when the effective row set is unchanged.`,
+  };
+};
+
+const buildRowCountTitle = (row: GridTablePerformanceEntry, kind: RowCountKind) => {
+  if (row.mode === 'query') {
+    if (kind === 'input') {
+      return 'Query-backed table: Input is the upstream query result size before the shared cap is applied.';
+    }
+    if (kind === 'source') {
+      return 'Query-backed table: Capped is the query result size after the shared max-row cap is applied.';
+    }
+    return 'Query-backed table: Displayed is the post-cap row count after any remaining local filters run in GridTable.';
+  }
+
+  if (row.mode === 'live') {
+    if (kind === 'input') {
+      return 'Live table: Input is the incoming row count before the shared cap is applied. Frequent updates are expected.';
+    }
+    if (kind === 'source') {
+      return 'Live table: Capped is the post-cap row count that GridTable works over before local filtering.';
+    }
+    return 'Live table: Displayed is the post-cap row count after local filters run in GridTable.';
+  }
+
+  if (kind === 'input') {
+    return 'Local table: Input is the incoming row count before the shared cap is applied.';
+  }
+  if (kind === 'source') {
+    return 'Local table: Capped is the post-cap row count that GridTable works over before local filtering.';
+  }
+  return 'Local table: Displayed is the post-cap row count after local filters run in GridTable.';
+};
+
 export const buildTablePerformanceSignals = (
   row: GridTablePerformanceEntry
 ): TablePerformanceSignal[] => {
@@ -69,12 +142,9 @@ export const buildTablePerformanceSignals = (
 
   if (row.updates >= 3) {
     const replacementRatio = row.inputReferenceChanges / row.updates;
-    if (replacementRatio >= 0.8) {
-      signals.push({
-        label: 'Broad replacement',
-        severity: 'warning',
-        title: `Input rows were replaced on ${row.inputReferenceChanges} of ${row.updates} updates (${formatPercent(replacementRatio)}).`,
-      });
+    const churnSignal = buildReferenceChurnSignal(row, replacementRatio);
+    if (churnSignal) {
+      signals.push(churnSignal);
     }
   }
 
@@ -123,6 +193,11 @@ const sortRowsBySeverity = (rows: GridTablePerformanceEntry[]) =>
   [...rows].sort((a, b) => {
     const aSignals = buildTablePerformanceSignals(a);
     const bSignals = buildTablePerformanceSignals(b);
+    const aWarningCount = getWarningSignals(aSignals).length;
+    const bWarningCount = getWarningSignals(bSignals).length;
+    if (bWarningCount !== aWarningCount) {
+      return bWarningCount - aWarningCount;
+    }
     if (bSignals.length !== aSignals.length) {
       return bSignals.length - aSignals.length;
     }
@@ -136,13 +211,14 @@ export const buildTablePerformanceOverview = (
   rows: GridTablePerformanceEntry[]
 ): TablePerformanceOverview => {
   const sortedRows = sortRowsBySeverity(rows);
-  const flaggedTables = rows.filter((row) => buildTablePerformanceSignals(row).length > 0).length;
-  const worstSignals = sortedRows.length > 0 ? buildTablePerformanceSignals(sortedRows[0]) : [];
+  const flaggedTables = rows.filter((row) => getWarningSignalCount(row) > 0).length;
+  const worstRow = sortedRows.find((row) => getWarningSignalCount(row) > 0) ?? null;
+  const worstSignals = worstRow ? getWarningSignals(buildTablePerformanceSignals(worstRow)) : [];
 
   return {
     instrumentedTables: rows.length,
     flaggedTables,
-    worstOffenderLabel: worstSignals.length > 0 ? (sortedRows[0]?.label ?? null) : null,
+    worstOffenderLabel: worstSignals.length > 0 ? (worstRow?.label ?? null) : null,
     worstOffenderSignals: worstSignals.length,
   };
 };
@@ -200,13 +276,11 @@ export const TableGridPerformance: React.FC<TableGridPerformanceProps> = ({
   const overview = buildTablePerformanceOverview(rows);
   const visibleRows = useMemo(
     () =>
-      showFlaggedOnly
-        ? sortedRows.filter((row) => buildTablePerformanceSignals(row).length > 0)
-        : sortedRows,
+      showFlaggedOnly ? sortedRows.filter((row) => getWarningSignalCount(row) > 0) : sortedRows,
     [showFlaggedOnly, sortedRows]
   );
   const visibleEmptyMessage = showFlaggedOnly
-    ? 'No flagged tables in the current sample set.'
+    ? 'No warning-level table signals in the current sample set.'
     : resolvedEmptyMessage;
 
   return (
@@ -241,7 +315,7 @@ export const TableGridPerformance: React.FC<TableGridPerformanceProps> = ({
             <span className="diagnostics-summary-heading">Flagged Tables</span>
             <span className="diagnostics-summary-primary">{overview.flaggedTables}</span>
             <span className="diagnostics-summary-secondary">
-              Tables with suspicious churn or timing signals
+              Tables with warning-level churn or timing signals
             </span>
           </div>
           <div className="diagnostics-summary-card">
@@ -308,13 +382,16 @@ export const TableGridPerformance: React.FC<TableGridPerformanceProps> = ({
                         {MODE_LABELS[row.mode]}
                       </span>
                     </td>
-                    <td>{row.inputRows}</td>
-                    <td>{row.sourceRows}</td>
-                    <td>{row.displayedRows}</td>
+                    <td title={buildRowCountTitle(row, 'input')}>{row.inputRows}</td>
+                    <td title={buildRowCountTitle(row, 'source')}>{row.sourceRows}</td>
+                    <td title={buildRowCountTitle(row, 'displayed')}>{row.displayedRows}</td>
                     <td>{row.updates}</td>
                     <td
                       className={
-                        signals.some((signal) => signal.label === 'Broad replacement')
+                        signals.some(
+                          (signal) =>
+                            signal.severity === 'warning' && signal.label === 'Broad replacement'
+                        )
                           ? 'diagnostics-count-warning'
                           : undefined
                       }

@@ -693,7 +693,7 @@ export const queryKindPermissions = (
     name: '',
   }));
 
-  const feature = namespace ? 'Namespace custom resources' : 'Cluster custom resources';
+  const feature = namespace ? 'Namespace custom' : 'Cluster custom';
 
   // Register pending specs so the permission map immediately contains
   // pending entries. This lets the context menu show "Awaiting permissions"
