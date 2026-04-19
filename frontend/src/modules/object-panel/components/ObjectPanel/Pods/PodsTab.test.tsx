@@ -145,4 +145,14 @@ describe('PodsTab', () => {
 
     expect(gridTablePropsRef.current.keyExtractor(pod)).toBe('panel-cluster-A|/v1/Pod/team-a/api');
   });
+
+  it('uses an explicit pod search placeholder for the local table filter', () => {
+    act(() => {
+      root.render(
+        <PodsTab pods={[]} metrics={null} loading={false} error={null} isActive={true} />
+      );
+    });
+
+    expect(gridTablePropsRef.current.filters.options.searchPlaceholder).toBe('Search pods');
+  });
 });

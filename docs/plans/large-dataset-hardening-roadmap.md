@@ -156,29 +156,29 @@ Current status:
 - ✅ custom-resource views remain intentional local-metadata exceptions until a
   stronger custom-domain metadata source exists
 
-## Phase 4: Sort, Filter, and Search Ownership
+## Phase 4: ✅ Sort, Filter, and Search Ownership
 
 Decide where interaction truth lives for each table family and make the UI
 semantics match.
 
 ### Tasks
 
-- Define behavior for each major table family:
-  - Browse
-  - all-namespaces typed views
-  - cluster typed views
-  - object-panel tables
-- For each family, document whether search/filter/sort operate on:
-  - capped local rows
-  - backend/query-shaped results
-  - a hybrid model
-- Align count text, empty states, and tooltip language with those semantics.
-- Identify views where current behavior is ambiguous to users.
+- ✅ Define behavior for each major table family:
+  - ✅ Browse
+  - ✅ all-namespaces typed views
+  - ✅ cluster typed views
+  - ✅ object-panel tables
+- ✅ For each family, document whether search/filter/sort operate on:
+  - ✅ capped local rows
+  - ✅ backend/query-shaped results
+  - ✅ a hybrid model
+- ✅ Align count text, empty states, and tooltip language with those semantics.
+- ✅ Identify views where current behavior is ambiguous to users.
 
 ### Exit Criteria
 
-- each major table family has a clear interaction model
-- users can tell what search and filters actually apply to
+- ✅ each major table family has a clear interaction model
+- ✅ users can tell what search and filters actually apply to
 
 Current status:
 
@@ -195,6 +195,10 @@ Current status:
 - ✅ shared filter bars now expose search semantics explicitly: Browse marks
   search as query-backed, while other table families default to local table
   search
+- ✅ major Browse, cluster, and namespace `GridTable` views now use explicit
+  scoped search placeholders instead of a generic `Search` label
+- ✅ object-panel Pods and Jobs now use explicit local-search placeholders
+  instead of a generic search label
 
 ## Phase 5: Measured Update-Path Improvements
 

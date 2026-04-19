@@ -193,4 +193,12 @@ describe('JobsTab', () => {
       'panel-cluster-A|batch/v1/Job/ops/nightly'
     );
   });
+
+  it('uses an explicit job search placeholder for the local table filter', () => {
+    act(() => {
+      root.render(<JobsTab jobs={[]} loading={false} isActive={true} />);
+    });
+
+    expect(gridTablePropsRef.current.filters.options.searchPlaceholder).toBe('Search jobs');
+  });
 });

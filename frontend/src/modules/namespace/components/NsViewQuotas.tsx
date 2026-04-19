@@ -335,6 +335,7 @@ const QuotasViewGrid: React.FC<QuotasViewProps> = React.memo(
               onChange: setPersistedFilters,
               onReset: resetPersistedState,
               options: {
+                searchPlaceholder: 'Search quotas',
                 kinds: availableKinds,
                 namespaces: availableFilterNamespaces,
                 showKindDropdown: true,

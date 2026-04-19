@@ -471,6 +471,7 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
               onChange: setPersistedFilters,
               onReset: resetPersistedState,
               options: {
+                searchPlaceholder: 'Search autoscaling resources',
                 kinds: availableKinds,
                 namespaces: availableFilterNamespaces,
                 showKindDropdown: true,

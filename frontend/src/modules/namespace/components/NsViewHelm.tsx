@@ -391,6 +391,7 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
               onChange: setPersistedFilters,
               onReset: resetPersistedState,
               options: {
+                searchPlaceholder: 'Search Helm releases',
                 namespaces: availableFilterNamespaces,
                 showKindDropdown: true,
                 showNamespaceDropdown: showNamespaceColumn,

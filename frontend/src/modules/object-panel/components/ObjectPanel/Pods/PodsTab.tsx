@@ -337,6 +337,9 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
               value: filters,
               onChange: setFilters,
               onReset: resetState,
+              options: {
+                searchPlaceholder: 'Search pods',
+              },
               accessors: {
                 getKind: () => 'Pod',
                 getNamespace: (pod) => pod.namespace,

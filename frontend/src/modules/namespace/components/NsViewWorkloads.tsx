@@ -549,6 +549,7 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
               onChange: setPersistedFilters,
               onReset: resetPersistedState,
               options: {
+                searchPlaceholder: 'Search workloads',
                 kinds: availableKinds,
                 namespaces: availableFilterNamespaces,
                 showNamespaceDropdown: showNamespaceFilter,

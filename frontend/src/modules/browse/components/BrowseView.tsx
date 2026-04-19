@@ -423,6 +423,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
       onReset: persistence.resetState,
       options: {
         searchBehavior: 'query' as const,
+        searchPlaceholder: 'Search resources',
         kinds: filterOptions.kinds,
         namespaces: filterOptions.namespaces,
         showKindDropdown: true,

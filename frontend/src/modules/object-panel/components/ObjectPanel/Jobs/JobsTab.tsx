@@ -290,6 +290,9 @@ export const JobsTab: React.FC<JobsTabProps> = ({
               value: filters,
               onChange: setFilters,
               onReset: resetState,
+              options: {
+                searchPlaceholder: 'Search jobs',
+              },
               accessors: {
                 getKind: () => 'Job',
                 getNamespace: (job) => job.namespace,
