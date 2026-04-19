@@ -1,31 +1,19 @@
 import React, { useMemo, useState } from 'react';
 import type { GridTablePerformanceEntry } from '@shared/components/tables/performance/gridTablePerformanceStore';
+import {
+  buildGridTableReferenceChurnSignal,
+  getGridTableModeLabel,
+  getGridTableModeTitle,
+  getGridTableRowCountTitle,
+  type GridTablePerformanceSignal,
+} from '@shared/components/tables/performance/gridTableDiagnosticsMode';
 
-interface TableGridPerformanceProps {
+interface GridTablePerformanceProps {
   rows: GridTablePerformanceEntry[];
   emptyMessage?: string;
   onReset?: () => void;
   summary: string;
 }
-
-type TablePerformanceSignal = {
-  label: string;
-  title: string;
-  severity: 'warning' | 'info';
-};
-
-const MODE_LABELS: Record<GridTablePerformanceEntry['mode'], string> = {
-  local: 'Local',
-  query: 'Query',
-  live: 'Live',
-};
-
-const MODE_TITLES: Record<GridTablePerformanceEntry['mode'], string> = {
-  local: 'Local table behavior: search/filter/sort run over the loaded row set.',
-  query:
-    'Query-backed table behavior: search and/or filtering narrow the upstream dataset before it reaches the table.',
-  live: 'Live table behavior: rows are expected to update frequently because key fields are time-varying or stream-driven.',
-};
 
 type TablePerformanceOverview = {
   instrumentedTables: number;
@@ -38,8 +26,6 @@ type DominantTimingMetric = {
   label: string;
   title: string;
 };
-
-type RowCountKind = 'input' | 'source' | 'displayed';
 
 const TimingHeader: React.FC<{ label: string }> = ({ label }) => (
   <span className="diagnostics-table-heading-metric">
@@ -64,88 +50,20 @@ const formatReferenceChurn = (inputReferenceChanges: number, updates: number) =>
 const isTimingSignal = (averageMs: number, maxMs: number, averageThresholdMs: number) =>
   averageMs >= averageThresholdMs || maxMs >= averageThresholdMs * 2;
 
-const getWarningSignals = (signals: TablePerformanceSignal[]) =>
+const getWarningSignals = (signals: GridTablePerformanceSignal[]) =>
   signals.filter((signal) => signal.severity === 'warning');
 
 const getWarningSignalCount = (row: GridTablePerformanceEntry) =>
   getWarningSignals(buildTablePerformanceSignals(row)).length;
 
-const buildReferenceChurnSignal = (
-  row: GridTablePerformanceEntry,
-  replacementRatio: number
-): TablePerformanceSignal | null => {
-  if (row.mode === 'live') {
-    if (replacementRatio < 0.8) {
-      return null;
-    }
-
-    return {
-      label: 'Live churn',
-      severity: 'info',
-      title: `Input rows were replaced on ${row.inputReferenceChanges} of ${row.updates} updates (${formatPercent(replacementRatio)}). Live tables are expected to churn; prioritize sort and render warnings before treating this as a feed bug.`,
-    };
-  }
-
-  if (replacementRatio < 0.8) {
-    return null;
-  }
-
-  if (row.mode === 'query') {
-    return {
-      label: 'Broad replacement',
-      severity: 'warning',
-      title: `Input rows were replaced on ${row.inputReferenceChanges} of ${row.updates} updates (${formatPercent(replacementRatio)}). Query-backed tables replace input rows when upstream query results change, so this is only suspicious when the query itself is stable.`,
-    };
-  }
-
-  return {
-    label: 'Broad replacement',
-    severity: 'warning',
-    title: `Input rows were replaced on ${row.inputReferenceChanges} of ${row.updates} updates (${formatPercent(replacementRatio)}). Local tables should usually reuse the input array when the effective row set is unchanged.`,
-  };
-};
-
-const buildRowCountTitle = (row: GridTablePerformanceEntry, kind: RowCountKind) => {
-  if (row.mode === 'query') {
-    if (kind === 'input') {
-      return 'Query-backed table: Input is the upstream query result size before the shared cap is applied.';
-    }
-    if (kind === 'source') {
-      return 'Query-backed table: Capped is the query result size after the shared max-row cap is applied.';
-    }
-    return 'Query-backed table: Displayed is the post-cap row count after any remaining local filters run in GridTable.';
-  }
-
-  if (row.mode === 'live') {
-    if (kind === 'input') {
-      return 'Live table: Input is the incoming row count before the shared cap is applied. Frequent updates are expected.';
-    }
-    if (kind === 'source') {
-      return 'Live table: Capped is the post-cap row count that GridTable works over before local filtering.';
-    }
-    return 'Live table: Displayed is the post-cap row count after local filters run in GridTable.';
-  }
-
-  if (kind === 'input') {
-    return 'Local table: Input is the incoming row count before the shared cap is applied.';
-  }
-  if (kind === 'source') {
-    return 'Local table: Capped is the post-cap row count that GridTable works over before local filtering.';
-  }
-  return 'Local table: Displayed is the post-cap row count after local filters run in GridTable.';
-};
-
 export const buildTablePerformanceSignals = (
   row: GridTablePerformanceEntry
-): TablePerformanceSignal[] => {
-  const signals: TablePerformanceSignal[] = [];
+): GridTablePerformanceSignal[] => {
+  const signals: GridTablePerformanceSignal[] = [];
 
-  if (row.updates >= 3) {
-    const replacementRatio = row.inputReferenceChanges / row.updates;
-    const churnSignal = buildReferenceChurnSignal(row, replacementRatio);
-    if (churnSignal) {
-      signals.push(churnSignal);
-    }
+  const churnSignal = buildGridTableReferenceChurnSignal(row);
+  if (churnSignal) {
+    signals.push(churnSignal);
   }
 
   if (
@@ -263,7 +181,7 @@ export const buildDominantTimingMetric = (
   };
 };
 
-export const TableGridPerformance: React.FC<TableGridPerformanceProps> = ({
+export const GridTablePerformance: React.FC<GridTablePerformanceProps> = ({
   rows,
   emptyMessage,
   onReset,
@@ -375,16 +293,18 @@ export const TableGridPerformance: React.FC<TableGridPerformanceProps> = ({
                     <td>
                       <span className="diagnostics-domain">{row.label}</span>
                     </td>
-                    <td title={MODE_TITLES[row.mode]}>
+                    <td title={getGridTableModeTitle(row.mode)}>
                       <span
                         className={`diagnostics-table-mode diagnostics-table-mode--${row.mode}`}
                       >
-                        {MODE_LABELS[row.mode]}
+                        {getGridTableModeLabel(row.mode)}
                       </span>
                     </td>
-                    <td title={buildRowCountTitle(row, 'input')}>{row.inputRows}</td>
-                    <td title={buildRowCountTitle(row, 'source')}>{row.sourceRows}</td>
-                    <td title={buildRowCountTitle(row, 'displayed')}>{row.displayedRows}</td>
+                    <td title={getGridTableRowCountTitle(row.mode, 'input')}>{row.inputRows}</td>
+                    <td title={getGridTableRowCountTitle(row.mode, 'source')}>{row.sourceRows}</td>
+                    <td title={getGridTableRowCountTitle(row.mode, 'displayed')}>
+                      {row.displayedRows}
+                    </td>
                     <td>{row.updates}</td>
                     <td
                       className={

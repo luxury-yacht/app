@@ -2,11 +2,11 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
 import {
-  TableGridPerformance,
+  GridTablePerformance,
   buildDominantTimingMetric,
   buildTablePerformanceOverview,
   buildTablePerformanceSignals,
-} from './TableGridPerformance';
+} from './GridTablePerformance';
 import type { GridTablePerformanceEntry } from '@shared/components/tables/performance/gridTablePerformanceStore';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
@@ -37,7 +37,7 @@ const createRow = (
   ...overrides,
 });
 
-describe('TableGridPerformance', () => {
+describe('GridTablePerformance', () => {
   it('flags suspicious broad replacement and recompute signals', () => {
     const signals = buildTablePerformanceSignals(
       createRow({
@@ -72,7 +72,7 @@ describe('TableGridPerformance', () => {
 
   it('renders the most suspicious rows first with signal labels and churn ratios', () => {
     const markup = renderToStaticMarkup(
-      <TableGridPerformance
+      <GridTablePerformance
         onReset={() => undefined}
         summary="Rolling GridTable measurements for the instrumented large-data views."
         rows={[
@@ -108,7 +108,7 @@ describe('TableGridPerformance', () => {
 
   it('renders explicit table modes for divergent view families', () => {
     const markup = renderToStaticMarkup(
-      <TableGridPerformance
+      <GridTablePerformance
         onReset={() => undefined}
         summary="Rolling GridTable measurements for the instrumented large-data views."
         rows={[
@@ -190,7 +190,7 @@ describe('TableGridPerformance', () => {
 
     await act(async () => {
       root.render(
-        <TableGridPerformance
+        <GridTablePerformance
           onReset={() => undefined}
           summary="Rolling GridTable measurements for the instrumented large-data views."
           rows={[

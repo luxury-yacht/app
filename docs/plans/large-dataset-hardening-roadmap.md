@@ -204,6 +204,17 @@ Current status:
 
 Improve hot update paths only after measuring them.
 
+In practice, this phase expanded beyond "add measurements, then fix a couple hot
+paths." The work actually broke into four steps:
+
+1. stabilize the app enough that profiling itself is trustworthy
+2. build shared diagnostics and instrument the major table families
+3. formalize the first pass of `local` / `query` / `live` table-mode semantics
+4. use those measurements to reduce obvious churn in shared feed families
+   before taking on heavier family-specific optimization work
+
+That shift is now part of the plan, not an accidental detour.
+
 ### Tasks
 
 - Instrument the largest/highest-churn surfaces first:
@@ -215,21 +226,37 @@ Improve hot update paths only after measuring them.
   - filter-option derivation cost
   - sort/filter recomputation cost
   - rerender cost during updates
+- Stabilize render/update paths that make measurements untrustworthy:
+  - render-time store writes
+  - re-entrant external-store notifications
+  - table measurement/resize feedback loops
 - Prioritize the worst offenders for incremental update work.
 - Prefer:
   - upsert/delete by canonical identity
   - batched publication
   - narrower recomputation boundaries
+- Normalize shared semantics before per-table tuning:
+  - explicit `local` / `query` / `live` diagnostics modes
+  - consistent interpretation of churn signals by mode
+  - shared feed-level reuse before view-local special cases
 - Avoid speculative caching in hot paths without measurement.
 
 ### Exit Criteria
 
+- diagnostics are trustworthy enough to guide real changes
 - identified hot views no longer do obvious broad dataset replacement for small
   updates
+- easy shared/family-level churn fixes are exhausted before per-table tuning
 - performance work is backed by before/after measurements
 
 Current status:
 
+- ✅ render/update-path stability issues uncovered during profiling have been
+  fixed, including:
+  - render-time diagnostics/store write loops
+  - permission-store/external-store re-entrancy loops
+  - table measurement `NotFoundError` paths
+  - shared resize feedback loops during column drags
 - ✅ shared GridTable performance diagnostics store records:
   - update count
   - input-reference changes
@@ -254,9 +281,19 @@ Current status:
 - ✅ Table Performance diagnostics now treat warning signals as mode-aware:
   live-table churn is informational, query tables explain upstream semantics,
   and flagged-only views focus on warning-level issues
-- ⏳ next step: use the recorded measurements to identify the worst broad
-  replacement/recompute paths in real large-cluster sessions before changing
-  update behavior
+- ✅ the first-pass `local` / `query` / `live` contract now lives in shared
+  table diagnostics helpers instead of only inside the Diagnostics panel
+- ✅ shared feed-level churn reductions have already landed for several families,
+  including:
+  - all-namespaces Configuration
+  - all-namespaces Custom Resources
+  - Browse
+  - Helm
+  - parts of Workloads and Events
+- ✅ cluster typed tables are now instrumented alongside all-namespaces and
+  object-panel surfaces
+- ⏳ next step: move from shared/family consistency work into the first major
+  family-specific optimization target, which is now Pods
 
 ## Phase 6: Catalog Alignment for Generic Object Workflows
 
@@ -288,14 +325,24 @@ Implement the remaining work in this order:
 3. Phase 3: metadata sourcing strategy
 4. Phase 4: sort/filter/search ownership
 5. Phase 5: measured update-path improvements
+   Actual sub-order now proven by the work:
+   stabilize -> instrument -> classify modes -> fix shared churn -> optimize heavy families
 6. Phase 6: catalog alignment for generic workflows
 
-Use this view-family rollout inside each phase:
+Use this view-family rollout inside the remaining performance work, but treat
+it as a guideline rather than a strict sequence:
 
 1. Browse
 2. all-namespaces typed views
 3. cluster typed views
 4. object-panel tables
+
+The work has already shown that some tasks cut across those families first:
+
+- shared table/runtime stability fixes
+- shared diagnostics behavior
+- shared feed reuse helpers
+- family-level optimization for genuinely heavier tables such as Pods
 
 ## Validation
 
@@ -323,6 +370,9 @@ This roadmap is complete when:
 - object rows use one canonical identity model across the app
 - metadata-driven controls are stable and intentionally sourced
 - table interaction semantics are explicit per view family
+- diagnostics semantics are explicit per table mode, not just per view family
 - large-table updates are measured and improved where the data shows real cost
+- heavy live families such as Pods have been evaluated after the shared
+  groundwork, not before it
 - generic object workflows align to catalog identity without forcing a
   catalog-only UI model

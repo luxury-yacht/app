@@ -108,6 +108,14 @@ export interface GridTableFilterConfig<T> {
   onReset?: () => void;
 }
 
+/**
+ * Declares how GridTable diagnostics should interpret row counts and churn for
+ * a table family.
+ *
+ * - `local`: search/filter/sort run over a loaded local row set
+ * - `query`: upstream query/filtering shapes the dataset before it reaches the table
+ * - `live`: frequent row updates are expected because key fields are time-varying
+ */
 export type GridTableDiagnosticsMode = 'local' | 'query' | 'live';
 
 export interface GridTableProps<T> {

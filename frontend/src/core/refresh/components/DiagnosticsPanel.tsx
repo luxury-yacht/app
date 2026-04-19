@@ -66,7 +66,7 @@ import { DiagnosticsTable, DiagnosticsSummaryCards } from './diagnostics/TableRe
 import { DiagnosticsStreamsTable } from './diagnostics/TableStreams';
 import { CapabilityChecksTable } from './diagnostics/TableCapabilitesChecks';
 import { EffectivePermissionsTable } from './diagnostics/TableEffectivePermissions';
-import { TableGridPerformance } from './diagnostics/TableGridPerformance';
+import { GridTablePerformance } from './diagnostics/GridTablePerformance';
 import {
   resetGridTablePerformanceDiagnostics,
   useGridTablePerformanceDiagnostics,
@@ -2065,7 +2065,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
   );
 
   const tablePerformanceContent = (
-    <TableGridPerformance
+    <GridTablePerformance
       onReset={resetGridTablePerformanceDiagnostics}
       rows={gridTablePerformanceRows}
       summary="Rolling GridTable measurements for the instrumented large-data views."
