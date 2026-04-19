@@ -22,7 +22,6 @@ import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
-import { useKindFilterOptions } from '@shared/components/tables/hooks/useKindFilterOptions';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { DeleteResourceByGVK } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
@@ -81,6 +80,7 @@ export interface CustomResourceData {
 interface CustomViewProps {
   namespace: string;
   data: CustomResourceData[];
+  availableKinds?: string[];
   loading?: boolean;
   loaded?: boolean;
   showNamespaceColumn?: boolean;
@@ -90,7 +90,14 @@ interface CustomViewProps {
  * GridTable component for namespace custom resources (instances of CRDs)
  */
 const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
-  ({ namespace, data, loading = false, loaded = false, showNamespaceColumn = false }) => {
+  ({
+    namespace,
+    data,
+    availableKinds: kindOptions,
+    loading = false,
+    loaded = false,
+    showNamespaceColumn = false,
+  }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const useShortResourceNames = useShortNames();
@@ -307,7 +314,7 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
     });
 
     // Derive available kinds and namespaces from the data for the favorites modal dropdowns.
-    const availableKinds = useKindFilterOptions(data);
+    const availableKinds = useMemo(() => kindOptions ?? [], [kindOptions]);
     const fallbackNamespaces = useMemo(
       () => [...new Set(data.map((r) => r.namespace).filter(Boolean))].sort(),
       [data]

@@ -232,6 +232,7 @@ describe('NsViewCustom', () => {
     await renderComponent({
       namespace: ALL_NAMESPACES_SCOPE,
       data: [baseResource],
+      availableKinds: ['DBCluster', 'Widget'],
       loaded: true,
       showNamespaceColumn: true,
     });
@@ -240,6 +241,17 @@ describe('NsViewCustom', () => {
     expect(gridProps.filters.options.showKindDropdown).toBe(true);
     expect(gridProps.filters.options.kindDropdownSearchable).toBe(true);
     expect(gridProps.filters.options.kindDropdownBulkActions).toBe(true);
+  });
+
+  it('uses the provided kind metadata instead of deriving kinds from loaded rows', async () => {
+    await renderComponent({
+      data: [baseResource],
+      availableKinds: ['DBCluster', 'Widget'],
+      loaded: true,
+    });
+
+    const gridProps = getLastGridProps();
+    expect(gridProps?.filters?.options?.kinds).toEqual(['DBCluster', 'Widget']);
   });
 
   it('preserves the column definitions across rerenders with unchanged inputs', async () => {

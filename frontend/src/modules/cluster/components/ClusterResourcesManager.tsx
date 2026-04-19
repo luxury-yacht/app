@@ -158,6 +158,7 @@ export function ClusterResourcesManager({
       crdsLoaded={(crds?.hasLoaded ?? false) || Boolean(crdsErrorMessage)}
       // Custom
       custom={customData || []}
+      customKinds={(custom?.meta as { kinds?: string[] } | undefined)?.kinds}
       customLoading={customLoading || false}
       customError={customErrorMessage}
       customLoaded={(custom?.hasLoaded ?? false) || Boolean(customErrorMessage)}

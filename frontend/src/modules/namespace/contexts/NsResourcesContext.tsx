@@ -597,7 +597,7 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
           annotations: item.annotations,
         })
       ),
-    undefined,
+    (payload?: NamespaceCustomSnapshotPayload) => ({ kinds: payload?.kinds ?? [] }),
     [],
     isResourceActive('custom'),
     currentNamespace,

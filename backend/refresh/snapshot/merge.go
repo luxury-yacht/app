@@ -263,6 +263,7 @@ func mergeNamespaceRBAC(domain, scope string, snapshots []*refresh.Snapshot) (*r
 // mergeNamespaceCustom concatenates custom resource summaries and merges stats.
 func mergeNamespaceCustom(domain, scope string, snapshots []*refresh.Snapshot) (*refresh.Snapshot, error) {
 	items := make([]NamespaceCustomSummary, 0)
+	kinds := make([]string, 0)
 	stats := make([]refresh.SnapshotStats, 0, len(snapshots))
 	var version uint64
 
@@ -272,11 +273,15 @@ func mergeNamespaceCustom(domain, scope string, snapshots []*refresh.Snapshot) (
 			return nil, fmt.Errorf("%s payload mismatch", domain)
 		}
 		items = append(items, payload.Resources...)
+		kinds = append(kinds, payload.Kinds...)
 		stats = append(stats, snap.Stats)
 		version = maxSnapshotVersion(version, snap)
 	}
 
-	merged := NamespaceCustomSnapshot{Resources: items}
+	merged := NamespaceCustomSnapshot{
+		Resources: items,
+		Kinds:     snapshotSortedUniqueStrings(kinds),
+	}
 	mergedStats := mergeListStats(stats, len(items))
 	return buildMergedSnapshot(domain, scope, version, merged, mergedStats, snapshots)
 }
@@ -402,7 +407,7 @@ func mergeNodeSnapshots(domain, scope string, snapshots []*refresh.Snapshot) (*r
 
 	metrics := mergeMetricFields(metricInputs)
 	merged := NodeSnapshot{
-		Nodes:   items,
+		Nodes: items,
 		Metrics: NodeMetricsInfo{
 			CollectedAt:         metrics.collectedAt,
 			Stale:               metrics.stale,
@@ -586,6 +591,7 @@ func mergeClusterCRDs(domain, scope string, snapshots []*refresh.Snapshot) (*ref
 // mergeClusterCustom concatenates cluster custom summaries and merges stats.
 func mergeClusterCustom(domain, scope string, snapshots []*refresh.Snapshot) (*refresh.Snapshot, error) {
 	items := make([]ClusterCustomSummary, 0)
+	kinds := make([]string, 0)
 	stats := make([]refresh.SnapshotStats, 0, len(snapshots))
 	var version uint64
 
@@ -595,11 +601,15 @@ func mergeClusterCustom(domain, scope string, snapshots []*refresh.Snapshot) (*r
 			return nil, fmt.Errorf("%s payload mismatch", domain)
 		}
 		items = append(items, payload.Resources...)
+		kinds = append(kinds, payload.Kinds...)
 		stats = append(stats, snap.Stats)
 		version = maxSnapshotVersion(version, snap)
 	}
 
-	merged := ClusterCustomSnapshot{Resources: items}
+	merged := ClusterCustomSnapshot{
+		Resources: items,
+		Kinds:     snapshotSortedUniqueStrings(kinds),
+	}
 	mergedStats := mergeListStats(stats, len(items))
 	return buildMergedSnapshot(domain, scope, version, merged, mergedStats, snapshots)
 }

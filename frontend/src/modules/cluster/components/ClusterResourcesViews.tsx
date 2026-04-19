@@ -34,6 +34,7 @@ interface ClusterResourcesViewsProps {
   crdsLoaded?: boolean;
 
   custom?: any[];
+  customKinds?: string[];
   customLoading?: boolean;
   customError?: string | null;
   customLoaded?: boolean;
@@ -80,6 +81,7 @@ function ClusterResourcesViews({
   crdsLoaded = false,
 
   custom = [],
+  customKinds,
   customLoading = false,
   customError = null,
   customLoaded = false,
@@ -145,6 +147,7 @@ function ClusterResourcesViews({
         return (
           <ClusterViewCustom
             data={custom}
+            availableKinds={customKinds}
             loading={customLoading}
             loaded={customLoaded}
             error={customError}

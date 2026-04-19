@@ -27,7 +27,6 @@ import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
-import { useKindFilterOptions } from '@shared/components/tables/hooks/useKindFilterOptions';
 import { useFavToggle } from '@ui/favorites/FavToggle';
 import { buildCanonicalObjectRowKey, buildObjectReference } from '@shared/utils/objectIdentity';
 
@@ -58,6 +57,7 @@ interface ClusterCustomData {
 // Define props for ClusterViewCustom component
 interface ClusterCustomViewProps {
   data: ClusterCustomData[];
+  availableKinds?: string[];
   loading?: boolean;
   loaded?: boolean;
   error?: string | null;
@@ -68,7 +68,7 @@ interface ClusterCustomViewProps {
  * Displays various custom resources in the cluster
  */
 const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
-  ({ data, loading = false, loaded = false, error }) => {
+  ({ data, availableKinds: kindOptions, loading = false, loaded = false, error }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
@@ -257,7 +257,7 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
       onChange: setPersistedSort,
     });
 
-    const availableKinds = useKindFilterOptions(data);
+    const availableKinds = useMemo(() => kindOptions ?? [], [kindOptions]);
 
     const { item: favToggle, modal: favModal } = useFavToggle({
       filters: persistedFilters,

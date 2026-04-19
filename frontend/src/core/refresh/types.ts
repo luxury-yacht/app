@@ -289,6 +289,7 @@ export interface ClusterCustomEntry extends ClusterMeta {
 
 export interface ClusterCustomSnapshotPayload extends ClusterMeta {
   resources: ClusterCustomEntry[];
+  kinds?: string[];
 }
 
 export interface ClusterEventEntry extends ClusterMeta {
@@ -638,6 +639,7 @@ export interface NamespaceCustomSummary extends ClusterMeta {
 
 export interface NamespaceCustomSnapshotPayload extends ClusterMeta {
   resources: NamespaceCustomSummary[];
+  kinds?: string[];
 }
 
 export interface NamespaceHelmSummary extends ClusterMeta {

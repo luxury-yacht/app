@@ -105,6 +105,7 @@ interface NamespaceResourcesViewsProps {
 
   // Custom resources data
   nsCustom?: any[];
+  nsCustomKinds?: string[];
   nsCustomLoading?: boolean;
   nsCustomError?: string | null;
   loadCustom?: () => Promise<void>;
@@ -178,6 +179,7 @@ const NamespaceResourcesViews: React.FC<NamespaceResourcesViewsProps> = ({
   nsQuotasLoaded = false,
 
   nsCustom = [],
+  nsCustomKinds,
   nsCustomLoading = false,
   nsCustomLoaded = false,
 
@@ -341,6 +343,7 @@ const NamespaceResourcesViews: React.FC<NamespaceResourcesViewsProps> = ({
             <NsViewCustom
               namespace={namespace}
               data={nsCustom}
+              availableKinds={nsCustomKinds}
               loading={nsCustomLoading}
               loaded={nsCustomLoaded}
             />

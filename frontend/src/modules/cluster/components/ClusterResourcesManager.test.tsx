@@ -132,6 +132,7 @@ describe('ClusterResourcesManager', () => {
     clusterResourceStates.config.meta = {
       kinds: ['IngressClass', 'MutatingWebhookConfiguration', 'StorageClass'],
     };
+    clusterResourceStates.custom.meta = { kinds: ['DBCluster', 'Widget'] };
     clusterResourceStates.rbac.meta = { kinds: ['ClusterRole', 'ClusterRoleBinding'] };
 
     await renderManager('storage');
@@ -147,6 +148,7 @@ describe('ClusterResourcesManager', () => {
       'MutatingWebhookConfiguration',
       'StorageClass',
     ]);
+    expect(props.customKinds).toEqual(['DBCluster', 'Widget']);
     expect(props.rbacKinds).toEqual(['ClusterRole', 'ClusterRoleBinding']);
   });
 

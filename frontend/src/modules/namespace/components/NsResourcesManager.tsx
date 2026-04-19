@@ -326,6 +326,7 @@ export function NamespaceResourcesManager({
       nsQuotasLoaded={quotas?.hasLoaded ?? false}
       // Custom resources data
       nsCustom={custom?.data || []}
+      nsCustomKinds={(custom?.meta as { kinds?: string[] } | undefined)?.kinds}
       nsCustomLoading={custom?.loading || false}
       nsCustomError={custom?.error?.message || null}
       loadCustom={manualLoaders.custom}

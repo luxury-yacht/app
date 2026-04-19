@@ -251,6 +251,7 @@ describe('NamespaceResourcesViews', () => {
       tab: 'custom' as const,
       props: {
         nsCustom: [{ name: 'crd' }],
+        nsCustomKinds: ['DBCluster', 'Widget'],
         nsCustomLoading: false,
         nsCustomLoaded: true,
       },
@@ -258,6 +259,7 @@ describe('NamespaceResourcesViews', () => {
       expected: {
         namespace: 'team-a',
         data: [{ name: 'crd' }],
+        availableKinds: ['DBCluster', 'Widget'],
         loading: false,
         loaded: true,
       },

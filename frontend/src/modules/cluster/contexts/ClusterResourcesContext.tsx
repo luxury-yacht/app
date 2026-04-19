@@ -582,6 +582,10 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
       filterByClusterId(payload?.resources ?? null, selectedClusterId),
     [selectedClusterId]
   );
+  const customMetaExtractor = useCallback(
+    (payload: DomainPayloadMap['cluster-custom'] | null) => ({ kinds: payload?.kinds ?? [] }),
+    []
+  );
   const eventsExtractor = useCallback(
     (payload: DomainPayloadMap['cluster-events'] | null) =>
       filterByClusterId(payload?.events ?? null, selectedClusterId),
@@ -613,7 +617,8 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
     'cluster-custom',
     customDomain,
     customExtractor,
-    clusterScope
+    clusterScope,
+    customMetaExtractor
   );
   const events = useClusterDomainResource(
     'cluster-events',
