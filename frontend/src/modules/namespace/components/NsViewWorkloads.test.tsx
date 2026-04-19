@@ -44,6 +44,7 @@ vi.mock('@ui/favorites/FavToggle', () => ({
 
 const gridTablePropsRef: { current: any } = { current: null };
 const openWithObjectMock = vi.fn();
+const navigateToViewMock = vi.fn();
 
 vi.mock('@shared/components/tables/GridTable', async () => {
   const actual = await vi.importActual<typeof import('@shared/components/tables/GridTable')>(
@@ -63,7 +64,7 @@ vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
 }));
 
 vi.mock('@shared/hooks/useNavigateToView', () => ({
-  useNavigateToView: () => ({ navigateToView: vi.fn() }),
+  useNavigateToView: () => ({ navigateToView: navigateToViewMock }),
 }));
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
@@ -174,6 +175,7 @@ describe('NsViewWorkloads', () => {
     root = ReactDOM.createRoot(container);
     gridTablePropsRef.current = null;
     openWithObjectMock.mockReset();
+    navigateToViewMock.mockReset();
   });
 
   afterEach(() => {
@@ -208,6 +210,53 @@ describe('NsViewWorkloads', () => {
     });
     expect(props.columnVisibility).toBe(null);
     expect(props.columnWidths).toBe(null);
+  });
+
+  it('preserves the column definitions across rerenders with unchanged inputs', async () => {
+    const workload = {
+      kind: 'Deployment',
+      name: 'api',
+      namespace: 'team-a',
+      status: 'Running',
+      ready: '1/1',
+      restarts: 0,
+      cpuUsage: '10m',
+      memUsage: '20Mi',
+      age: '5m',
+      clusterId: 'alpha:ctx',
+      clusterName: 'alpha',
+    };
+    const data = [workload];
+
+    await act(async () => {
+      root.render(
+        <NsViewWorkloads
+          namespace="team-a"
+          data={data as any}
+          loading={false}
+          loaded={true}
+          metrics={null}
+        />
+      );
+      await Promise.resolve();
+    });
+
+    const firstColumnsRef = gridTablePropsRef.current?.columns;
+
+    await act(async () => {
+      root.render(
+        <NsViewWorkloads
+          namespace="team-a"
+          data={data as any}
+          loading={false}
+          loaded={true}
+          metrics={null}
+        />
+      );
+      await Promise.resolve();
+    });
+
+    expect(gridTablePropsRef.current?.columns).toBe(firstColumnsRef);
   });
 
   it('routes workload clicks through the object panel with cluster metadata', async () => {

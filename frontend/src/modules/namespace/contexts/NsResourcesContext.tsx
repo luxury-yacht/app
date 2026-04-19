@@ -42,7 +42,7 @@ import { resetScopedDomainState } from '@/core/refresh/store';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
-import { useStableSelectedValue } from '@shared/hooks/useStableSelectedValue';
+import { useStableKeyedArray, useStableSelectedValue } from '@shared/hooks/useStableSelectedValue';
 
 export interface PodsResourceDataReturn extends ResourceDataReturn<PodSnapshotEntry[]> {
   metrics: PodMetricsInfo | null;
@@ -196,6 +196,8 @@ const useNamespacePodsResource = (
     }
     return domainState.data.pods;
   }, [domainState?.data?.pods]);
+  const stableData = useStableSelectedValue(data);
+  const stableMetrics = useStableSelectedValue(domainState?.data?.metrics ?? null);
 
   const initialising =
     enabled &&
@@ -212,11 +214,11 @@ const useNamespacePodsResource = (
     domainState?.status === 'ready' ||
     domainState?.status === 'error' ||
     (domainState?.status === 'updating' && Boolean(domainState?.data));
-  const metrics = domainState?.data?.metrics ?? null;
+  const metrics = stableMetrics;
 
   return useMemo(
     () => ({
-      data,
+      data: stableData,
       loading,
       refreshing,
       error: domainState?.error ? new Error(domainState.error) : null,
@@ -233,7 +235,6 @@ const useNamespacePodsResource = (
     }),
     [
       baseLoad,
-      data,
       domainState?.error,
       domainState?.lastUpdated,
       hasLoaded,
@@ -242,6 +243,7 @@ const useNamespacePodsResource = (
       refresh,
       refreshing,
       reset,
+      stableData,
     ]
   );
 };
@@ -254,7 +256,8 @@ function useRefreshBackedResource<T>(
   fallback: T,
   enabled: boolean,
   namespace?: string | null,
-  clusterId?: string | null
+  clusterId?: string | null,
+  keyedRowIdentity?: ((item: any) => string) | undefined
 ): ResourceDataReturn<T> {
   // Build the cluster-scoped namespace scope for this domain.
   const namespaceScope = useMemo(
@@ -314,7 +317,13 @@ function useRefreshBackedResource<T>(
     () => (!domainData ? fallback : (selector(domainData) ?? fallback)),
     [domainData, selector, fallback]
   );
-  const data = useStableSelectedValue(selectedData);
+  const shallowStableData = useStableSelectedValue(selectedData);
+  const stableKeyedRows = useStableKeyedArray(
+    Array.isArray(selectedData) ? selectedData : [],
+    keyedRowIdentity ?? (() => '')
+  );
+  const data =
+    Array.isArray(selectedData) && keyedRowIdentity ? (stableKeyedRows as T) : shallowStableData;
 
   const selectedMeta = useMemo(() => {
     if (!domainData || !metaSelector) {
@@ -448,7 +457,9 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     [],
     isResourceActive('workloads'),
     currentNamespace,
-    namespaceClusterId
+    namespaceClusterId,
+    (item) =>
+      `${item.clusterId ?? namespaceClusterId ?? ''}::${item.namespace}::${item.kind}::${item.name}`
   );
 
   const config = useRefreshBackedResource<any[]>(

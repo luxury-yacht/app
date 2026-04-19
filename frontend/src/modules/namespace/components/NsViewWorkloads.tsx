@@ -136,6 +136,21 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
       [openWithObject]
     );
 
+    const handleWorkloadAltClick = useCallback(
+      (workload: WorkloadData) => {
+        navigateToView(
+          buildObjectReference({
+            kind: workload.kind,
+            name: workload.name,
+            namespace: workload.namespace,
+            clusterId: workload.clusterId ?? undefined,
+            clusterName: workload.clusterName ?? undefined,
+          })
+        );
+      },
+      [navigateToView]
+    );
+
     const keyExtractor = useCallback(
       (row: WorkloadData) =>
         buildCanonicalObjectRowKey({
@@ -151,16 +166,7 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
 
     const tableColumns = useWorkloadTableColumns({
       handleWorkloadClick,
-      onAltClick: (workload) =>
-        navigateToView(
-          buildObjectReference({
-            kind: workload.kind,
-            name: workload.name,
-            namespace: workload.namespace,
-            clusterId: workload.clusterId ?? undefined,
-            clusterName: workload.clusterName ?? undefined,
-          })
-        ),
+      onAltClick: handleWorkloadAltClick,
       showNamespaceColumn,
       useShortResourceNames,
       metrics: metricsInfo ?? null,

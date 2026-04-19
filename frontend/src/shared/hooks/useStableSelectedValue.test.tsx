@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { beforeAll, describe, expect, it } from 'vitest';
 
-import { useStableSelectedValue } from './useStableSelectedValue';
+import { useStableKeyedArray, useStableSelectedValue } from './useStableSelectedValue';
 
 const renderHook = <T,>(hook: () => T) => {
   const result: { current: T | undefined } = { current: undefined };
@@ -85,6 +85,58 @@ describe('useStableSelectedValue', () => {
     hook.rerender();
 
     expect(hook.get()).not.toBe(first);
+    hook.cleanup();
+  });
+
+  it('reuses keyed row references when the next array rebuilds equal objects', () => {
+    let nextValue = [
+      { clusterId: 'c1', namespace: 'team-a', kind: 'Deployment', name: 'api', ready: '1/1' },
+      { clusterId: 'c1', namespace: 'team-a', kind: 'StatefulSet', name: 'db', ready: '1/1' },
+    ];
+
+    const hook = renderHook(() =>
+      useStableKeyedArray(
+        nextValue,
+        (item) => `${item.clusterId}::${item.namespace}::${item.kind}::${item.name}`
+      )
+    );
+    const first = hook.get();
+
+    nextValue = [
+      { clusterId: 'c1', namespace: 'team-a', kind: 'Deployment', name: 'api', ready: '1/1' },
+      { clusterId: 'c1', namespace: 'team-a', kind: 'StatefulSet', name: 'db', ready: '1/1' },
+    ];
+    hook.rerender();
+
+    expect(hook.get()).toBe(first);
+    expect(hook.get()[0]).toBe(first[0]);
+    expect(hook.get()[1]).toBe(first[1]);
+    hook.cleanup();
+  });
+
+  it('keeps unchanged keyed rows stable while replacing changed rows', () => {
+    let nextValue = [
+      { clusterId: 'c1', namespace: 'team-a', kind: 'Deployment', name: 'api', ready: '1/1' },
+      { clusterId: 'c1', namespace: 'team-a', kind: 'StatefulSet', name: 'db', ready: '1/1' },
+    ];
+
+    const hook = renderHook(() =>
+      useStableKeyedArray(
+        nextValue,
+        (item) => `${item.clusterId}::${item.namespace}::${item.kind}::${item.name}`
+      )
+    );
+    const first = hook.get();
+
+    nextValue = [
+      { clusterId: 'c1', namespace: 'team-a', kind: 'Deployment', name: 'api', ready: '2/2' },
+      { clusterId: 'c1', namespace: 'team-a', kind: 'StatefulSet', name: 'db', ready: '1/1' },
+    ];
+    hook.rerender();
+
+    expect(hook.get()).not.toBe(first);
+    expect(hook.get()[0]).not.toBe(first[0]);
+    expect(hook.get()[1]).toBe(first[1]);
     hook.cleanup();
   });
 });

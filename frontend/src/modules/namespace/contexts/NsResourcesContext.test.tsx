@@ -520,4 +520,135 @@ describe('NamespaceResourcesProvider', () => {
     expect(contextRef.current?.config.data).toBe(firstDataRef);
     expect(contextRef.current?.config.meta).toBe(firstMetaRef);
   });
+
+  it('preserves pods data and metrics references when the scoped payload is unchanged', async () => {
+    const scope = `${testClusterId}|namespace:team-a`;
+    const sharedPods = [
+      {
+        kind: 'Pod',
+        name: 'pod-a',
+        namespace: 'team-a',
+        clusterId: testClusterId,
+      },
+    ];
+    const sharedMetrics = {
+      cpuUsageAvailable: true,
+      memoryUsageAvailable: true,
+      stale: false,
+    };
+
+    scopedStates[scope] = {
+      status: 'ready',
+      data: {
+        pods: sharedPods,
+        metrics: sharedMetrics,
+      },
+      error: null,
+      lastUpdated: null,
+    };
+
+    await render(
+      <NamespaceResourcesProvider namespace="team-a" activeView="pods">
+        <TestConsumer />
+      </NamespaceResourcesProvider>
+    );
+
+    const firstDataRef = contextRef.current?.pods.data;
+    const firstMetricsRef = contextRef.current?.pods.metrics;
+
+    await render(
+      <NamespaceResourcesProvider namespace="team-a" activeView="pods">
+        <TestConsumer />
+      </NamespaceResourcesProvider>
+    );
+
+    expect(contextRef.current?.pods.data).toBe(firstDataRef);
+    expect(contextRef.current?.pods.metrics).toBe(firstMetricsRef);
+  });
+
+  it('preserves workload row references when refreshed rows are rebuilt with unchanged fields', async () => {
+    const scope = `${testClusterId}|namespace:team-a`;
+
+    scopedStates[scope] = {
+      status: 'ready',
+      data: {
+        workloads: [
+          {
+            kind: 'Deployment',
+            name: 'api',
+            namespace: 'team-a',
+            clusterId: testClusterId,
+            ready: '1/1',
+            status: 'Running',
+            restarts: 0,
+            age: '1h',
+          },
+          {
+            kind: 'StatefulSet',
+            name: 'db',
+            namespace: 'team-a',
+            clusterId: testClusterId,
+            ready: '1/1',
+            status: 'Running',
+            restarts: 0,
+            age: '1h',
+          },
+        ],
+        kinds: ['Deployment', 'StatefulSet'],
+      },
+      error: null,
+      lastUpdated: null,
+    };
+
+    await render(
+      <NamespaceResourcesProvider namespace="team-a" activeView="workloads">
+        <TestConsumer />
+      </NamespaceResourcesProvider>
+    );
+
+    const firstDataRef = contextRef.current?.workloads.data;
+    const firstApiRow = firstDataRef?.[0];
+    const firstDbRow = firstDataRef?.[1];
+
+    scopedStates[scope] = {
+      status: 'ready',
+      data: {
+        workloads: [
+          {
+            kind: 'Deployment',
+            name: 'api',
+            namespace: 'team-a',
+            clusterId: testClusterId,
+            ready: '1/1',
+            status: 'Running',
+            restarts: 0,
+            age: '1h',
+          },
+          {
+            kind: 'StatefulSet',
+            name: 'db',
+            namespace: 'team-a',
+            clusterId: testClusterId,
+            ready: '1/1',
+            status: 'Running',
+            restarts: 0,
+            age: '1h',
+          },
+        ],
+        kinds: ['Deployment', 'StatefulSet'],
+      },
+      error: null,
+      lastUpdated: null,
+    };
+
+    await render(
+      <NamespaceResourcesProvider namespace="team-a" activeView="workloads">
+        <TestConsumer />
+      </NamespaceResourcesProvider>
+    );
+
+    expect(contextRef.current?.workloads.data).toBe(firstDataRef);
+    expect(contextRef.current?.workloads.data?.[0]).toBe(firstApiRow);
+    expect(contextRef.current?.workloads.data?.[1]).toBe(firstDbRow);
+  });
 });

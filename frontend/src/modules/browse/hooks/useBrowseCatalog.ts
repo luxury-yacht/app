@@ -15,15 +15,16 @@ import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import {
   buildCatalogScope,
-  dedupeByUID,
   filterClusterScopedItems,
   filterNamespaceScopedItems,
   normalizeCatalogScope,
   parseContinueToken,
+  reconcileByUID,
   rebuildIndexByUID,
   splitClusterScope,
   upsertByUID,
 } from '@modules/browse/utils/browseUtils';
+import { useStableSelectedValue } from '@shared/hooks/useStableSelectedValue';
 
 type PageRequestMode = 'reset' | 'append' | null;
 
@@ -321,13 +322,17 @@ export function useBrowseCatalog({
       }
     } else {
       // Reset or streaming refresh (mode === 'reset' or null): replace all items
-      // so that additions, deletions, and updates are reflected immediately.
-      // upsertByUID cannot handle deletions — it only adds/updates from incoming,
-      // so stale items would persist until the next scope change.
-      const { items: nextItems, indexByUid } = dedupeByUID(payload.items ?? []);
-      itemsRef.current = nextItems;
-      indexByUidRef.current = indexByUid.size ? indexByUid : rebuildIndexByUID(nextItems);
-      setItems(nextItems);
+      // so that additions, deletions, and updates are reflected immediately,
+      // while still reusing unchanged item references by UID/resourceVersion.
+      const { nextItems, changed } = reconcileByUID(itemsRef.current, payload.items ?? []);
+      const nextIndexByUid = rebuildIndexByUID(nextItems);
+      if (changed || itemsRef.current.length === 0) {
+        itemsRef.current = nextItems;
+        indexByUidRef.current = nextIndexByUid;
+        setItems(nextItems);
+      } else {
+        indexByUidRef.current = nextIndexByUid;
+      }
     }
 
     setContinueToken(parseContinueToken(payload.continue));
@@ -422,6 +427,7 @@ export function useBrowseCatalog({
     // For namespace and all-namespaces scopes, filter to namespace-scoped items only
     return filterNamespaceScopedItems(items);
   }, [items, clusterScopedOnly]);
+  const stableFilteredItems = useStableSelectedValue(filteredItems);
 
   // Derive filter options from the catalog snapshot
   const filterOptions = useMemo<BrowseFilterOptions>(() => {
@@ -477,7 +483,7 @@ export function useBrowseCatalog({
     (items.length === 0 && !domain.data);
 
   return {
-    items: filteredItems,
+    items: stableFilteredItems,
     loading,
     hasLoadedOnce,
     continueToken,
