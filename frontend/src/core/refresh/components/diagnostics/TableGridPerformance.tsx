@@ -7,8 +7,97 @@ interface TableGridPerformanceProps {
   summary: string;
 }
 
+type TablePerformanceSignal = {
+  label: string;
+  title: string;
+  severity: 'warning';
+};
+
 const formatTiming = (samples: number, averageMs: number, maxMs: number, latestMs: number) =>
   samples > 0 ? `${averageMs.toFixed(2)} / ${maxMs.toFixed(2)} / ${latestMs.toFixed(2)}` : '—';
+
+const formatPercent = (value: number) => `${(value * 100).toFixed(0)}%`;
+
+const formatReferenceChurn = (inputReferenceChanges: number, updates: number) => {
+  if (updates <= 0) {
+    return '—';
+  }
+
+  return `${inputReferenceChanges} / ${updates} (${formatPercent(inputReferenceChanges / updates)})`;
+};
+
+const isTimingSignal = (averageMs: number, maxMs: number, averageThresholdMs: number) =>
+  averageMs >= averageThresholdMs || maxMs >= averageThresholdMs * 2;
+
+export const buildTablePerformanceSignals = (
+  row: GridTablePerformanceEntry
+): TablePerformanceSignal[] => {
+  const signals: TablePerformanceSignal[] = [];
+
+  if (row.updates >= 3) {
+    const replacementRatio = row.inputReferenceChanges / row.updates;
+    if (replacementRatio >= 0.8) {
+      signals.push({
+        label: 'Broad replacement',
+        severity: 'warning',
+        title: `Input rows were replaced on ${row.inputReferenceChanges} of ${row.updates} updates (${formatPercent(replacementRatio)}).`,
+      });
+    }
+  }
+
+  if (
+    row.filterOptions.samples > 0 &&
+    isTimingSignal(row.filterOptions.averageMs, row.filterOptions.maxMs, 4)
+  ) {
+    signals.push({
+      label: 'Filter options slow',
+      severity: 'warning',
+      title: `Filter option derivation averages ${row.filterOptions.averageMs.toFixed(2)}ms and peaked at ${row.filterOptions.maxMs.toFixed(2)}ms.`,
+    });
+  }
+
+  if (
+    row.filterPass.samples > 0 &&
+    isTimingSignal(row.filterPass.averageMs, row.filterPass.maxMs, 6)
+  ) {
+    signals.push({
+      label: 'Filter pass slow',
+      severity: 'warning',
+      title: `Filter pass averages ${row.filterPass.averageMs.toFixed(2)}ms and peaked at ${row.filterPass.maxMs.toFixed(2)}ms.`,
+    });
+  }
+
+  if (row.sort.samples > 0 && isTimingSignal(row.sort.averageMs, row.sort.maxMs, 6)) {
+    signals.push({
+      label: 'Sort slow',
+      severity: 'warning',
+      title: `Sort averages ${row.sort.averageMs.toFixed(2)}ms and peaked at ${row.sort.maxMs.toFixed(2)}ms.`,
+    });
+  }
+
+  if (row.render.samples > 0 && isTimingSignal(row.render.averageMs, row.render.maxMs, 8)) {
+    signals.push({
+      label: 'Render slow',
+      severity: 'warning',
+      title: `Render averages ${row.render.averageMs.toFixed(2)}ms and peaked at ${row.render.maxMs.toFixed(2)}ms.`,
+    });
+  }
+
+  return signals;
+};
+
+const sortRowsBySeverity = (rows: GridTablePerformanceEntry[]) =>
+  [...rows].sort((a, b) => {
+    const aSignals = buildTablePerformanceSignals(a);
+    const bSignals = buildTablePerformanceSignals(b);
+    if (bSignals.length !== aSignals.length) {
+      return bSignals.length - aSignals.length;
+    }
+    if (b.inputRows !== a.inputRows) {
+      return b.inputRows - a.inputRows;
+    }
+    return a.label.localeCompare(b.label);
+  });
 
 export const TableGridPerformance: React.FC<TableGridPerformanceProps> = ({
   rows,
@@ -17,6 +106,7 @@ export const TableGridPerformance: React.FC<TableGridPerformanceProps> = ({
 }) => {
   const resolvedEmptyMessage =
     emptyMessage || 'No instrumented GridTable performance diagnostics have been recorded yet.';
+  const sortedRows = sortRowsBySeverity(rows);
 
   return (
     <div className="diagnostics-section">
@@ -34,7 +124,8 @@ export const TableGridPerformance: React.FC<TableGridPerformanceProps> = ({
               <th>Capped</th>
               <th>Displayed</th>
               <th>Updates</th>
-              <th>Ref Changes</th>
+              <th>Ref Changes / Updates</th>
+              <th>Signals</th>
               <th>Filter Options Avg / Max / Latest (ms)</th>
               <th>Filter Pass Avg / Max / Latest (ms)</th>
               <th>Sort Avg / Max / Latest (ms)</th>
@@ -45,54 +136,87 @@ export const TableGridPerformance: React.FC<TableGridPerformanceProps> = ({
           <tbody>
             {rows.length === 0 ? (
               <tr className="diagnostics-empty">
-                <td colSpan={11}>{resolvedEmptyMessage}</td>
+                <td colSpan={12}>{resolvedEmptyMessage}</td>
               </tr>
             ) : (
-              rows.map((row) => (
-                <tr key={row.label}>
-                  <td>
-                    <span className="diagnostics-domain">{row.label}</span>
-                  </td>
-                  <td>{row.inputRows}</td>
-                  <td>{row.sourceRows}</td>
-                  <td>{row.displayedRows}</td>
-                  <td>{row.updates}</td>
-                  <td>{row.inputReferenceChanges}</td>
-                  <td>
-                    {formatTiming(
-                      row.filterOptions.samples,
-                      row.filterOptions.averageMs,
-                      row.filterOptions.maxMs,
-                      row.filterOptions.latestMs
-                    )}
-                  </td>
-                  <td>
-                    {formatTiming(
-                      row.filterPass.samples,
-                      row.filterPass.averageMs,
-                      row.filterPass.maxMs,
-                      row.filterPass.latestMs
-                    )}
-                  </td>
-                  <td>
-                    {formatTiming(
-                      row.sort.samples,
-                      row.sort.averageMs,
-                      row.sort.maxMs,
-                      row.sort.latestMs
-                    )}
-                  </td>
-                  <td>
-                    {formatTiming(
-                      row.render.samples,
-                      row.render.averageMs,
-                      row.render.maxMs,
-                      row.render.latestMs
-                    )}
-                  </td>
-                  <td>{row.lastRenderPhase ?? '—'}</td>
-                </tr>
-              ))
+              sortedRows.map((row) => {
+                const signals = buildTablePerformanceSignals(row);
+                const signalsTitle = signals.map((signal) => signal.title).join('\n');
+
+                return (
+                  <tr key={row.label}>
+                    <td>
+                      <span className="diagnostics-domain">{row.label}</span>
+                    </td>
+                    <td>{row.inputRows}</td>
+                    <td>{row.sourceRows}</td>
+                    <td>{row.displayedRows}</td>
+                    <td>{row.updates}</td>
+                    <td
+                      className={
+                        signals.some((signal) => signal.label === 'Broad replacement')
+                          ? 'diagnostics-count-warning'
+                          : undefined
+                      }
+                      title={
+                        row.updates > 0
+                          ? `Input rows changed reference on ${row.inputReferenceChanges} of ${row.updates} updates.`
+                          : undefined
+                      }
+                    >
+                      {formatReferenceChurn(row.inputReferenceChanges, row.updates)}
+                    </td>
+                    <td
+                      className="diagnostics-table-performance-signals"
+                      title={signalsTitle || undefined}
+                    >
+                      {signals.length > 0
+                        ? signals.map((signal) => (
+                            <span
+                              key={signal.label}
+                              className={`diagnostics-table-performance-signal diagnostics-table-performance-signal--${signal.severity}`}
+                            >
+                              {signal.label}
+                            </span>
+                          ))
+                        : '—'}
+                    </td>
+                    <td>
+                      {formatTiming(
+                        row.filterOptions.samples,
+                        row.filterOptions.averageMs,
+                        row.filterOptions.maxMs,
+                        row.filterOptions.latestMs
+                      )}
+                    </td>
+                    <td>
+                      {formatTiming(
+                        row.filterPass.samples,
+                        row.filterPass.averageMs,
+                        row.filterPass.maxMs,
+                        row.filterPass.latestMs
+                      )}
+                    </td>
+                    <td>
+                      {formatTiming(
+                        row.sort.samples,
+                        row.sort.averageMs,
+                        row.sort.maxMs,
+                        row.sort.latestMs
+                      )}
+                    </td>
+                    <td>
+                      {formatTiming(
+                        row.render.samples,
+                        row.render.averageMs,
+                        row.render.maxMs,
+                        row.render.latestMs
+                      )}
+                    </td>
+                    <td>{row.lastRenderPhase ?? '—'}</td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>

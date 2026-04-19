@@ -240,10 +240,13 @@ Current status:
   - render timing
 - ✅ Diagnostics panel now exposes a Table Performance tab for the rolling
   GridTable measurements
+- ✅ Table Performance diagnostics now surface suspicious update-path signals
+  directly, including broad replacement churn and slow filter/sort/render work
 - ✅ Browse, all-namespaces typed table views, and object-panel Pods/Jobs are
   instrumented with explicit diagnostics labels
 - ⏳ next step: use the recorded measurements to identify the worst broad
-  replacement/recompute paths before changing update behavior
+  replacement/recompute paths in real large-cluster sessions before changing
+  update behavior
 
 ## Phase 6: Catalog Alignment for Generic Object Workflows
 
