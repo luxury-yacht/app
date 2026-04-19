@@ -4,6 +4,7 @@ import {
   getGridTablePerformanceSnapshot,
   recordGridTablePerformanceSample,
   recordGridTablePerformanceSnapshot,
+  recordGridTableScrollFrameSample,
   resetGridTablePerformanceDiagnostics,
   subscribeGridTablePerformance,
 } from './gridTablePerformanceStore';
@@ -59,6 +60,37 @@ describe('gridTablePerformanceStore', () => {
 
     expect(entry.label).toBe('All Namespaces Browse');
     expect(entry.mode).toBe('query');
+  });
+
+  it('records latest scroll-frame diagnostics in the shared store', () => {
+    recordGridTablePerformanceSnapshot('All Namespaces Pods', {
+      inputRows: 10,
+      sourceRows: 10,
+      displayedRows: 10,
+      inputReferenceChanged: false,
+    });
+    recordGridTableScrollFrameSample('All Namespaces Pods', {
+      frames: 118,
+      avgMs: 12.34,
+      p95Ms: 18.76,
+      maxMs: 24.56,
+      latestMs: 15.43,
+      overBudgetFrames: 14,
+      estFps: 81.2,
+    });
+
+    const [entry] = getGridTablePerformanceSnapshot();
+
+    expect(entry.scrollFrame).toEqual({
+      windows: 1,
+      frameSamples: 118,
+      avgMs: 12.34,
+      p95Ms: 18.76,
+      maxMs: 24.56,
+      latestMs: 15.43,
+      overBudgetFrames: 14,
+      estFps: 81.2,
+    });
   });
 
   it('keeps entries sorted by label', () => {

@@ -16,6 +16,7 @@ import { getMaxTableRows } from '@/core/settings/appPreferences';
 import {
   recordGridTablePerformanceSample,
   recordGridTablePerformanceSnapshot,
+  recordGridTableScrollFrameSample,
 } from '@shared/components/tables/performance/gridTablePerformanceStore';
 import { useGridTableHoverSync } from '@shared/components/tables/hooks/useGridTableHoverSync';
 import type { HoverState } from '@shared/components/tables/hooks/useGridTableHoverSync';
@@ -269,6 +270,11 @@ export function useGridTableController<T>({
       sampleLabel: diagnosticsLabel ? `${diagnosticsLabel} scroll` : 'GridTable scroll',
       sampleWindowMs: 2000,
       minSampleCount: 10,
+      onFrameSample: diagnosticsLabel
+        ? (sample) => {
+            recordGridTableScrollFrameSample(diagnosticsLabel, sample);
+          }
+        : undefined,
       onRenderSample: diagnosticsLabel
         ? (phase, actualDuration) => {
             recordGridTablePerformanceSample(diagnosticsLabel, 'render', actualDuration, {

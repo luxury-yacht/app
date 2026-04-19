@@ -34,6 +34,7 @@ const createRow = (
   filterPass: createTimingStats(),
   sort: createTimingStats(),
   render: createTimingStats(),
+  scrollFrame: null,
   ...overrides,
 });
 
@@ -81,6 +82,30 @@ describe('GridTablePerformance', () => {
     ]);
   });
 
+  it('flags slow scroll-frame samples in diagnostics', () => {
+    const signals = buildTablePerformanceSignals(
+      createRow({
+        scrollFrame: {
+          windows: 1,
+          frameSamples: 120,
+          avgMs: 17.2,
+          p95Ms: 24.4,
+          maxMs: 39.8,
+          latestMs: 18.1,
+          overBudgetFrames: 31,
+          estFps: 58.1,
+        },
+      })
+    );
+
+    expect(signals).toEqual([
+      expect.objectContaining({
+        label: 'Scroll jank',
+        severity: 'warning',
+      }),
+    ]);
+  });
+
   it('renders the most suspicious rows first with signal labels and churn ratios', () => {
     const markup = renderToStaticMarkup(
       <GridTablePerformance
@@ -96,6 +121,16 @@ describe('GridTablePerformance', () => {
             inputReferenceChanges: 9,
             filterOptions: createTimingStats(4, 5, 11, 4),
             render: createTimingStats(6, 9, 18, 10),
+            scrollFrame: {
+              windows: 1,
+              frameSamples: 114,
+              avgMs: 15.2,
+              p95Ms: 21.4,
+              maxMs: 33.2,
+              latestMs: 12.7,
+              overBudgetFrames: 18,
+              estFps: 65.6,
+            },
           }),
         ]}
       />
@@ -116,6 +151,9 @@ describe('GridTablePerformance', () => {
     expect(markup).toContain('Worst Offender');
     expect(markup).toContain('Filter Options (ms)');
     expect(markup).toContain('Avg / Max / Latest');
+    expect(markup).toContain('Scroll Frame (ms)');
+    expect(markup).toContain('Avg / P95 / Max / Latest');
+    expect(markup).toContain('15.20 / 21.40 / 33.20 / 12.70');
     expect(markup).not.toContain(
       'Rolling GridTable measurements for the instrumented large-data views.'
     );

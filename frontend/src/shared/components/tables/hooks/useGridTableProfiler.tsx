@@ -7,7 +7,10 @@
 
 import { Profiler, useCallback, useMemo, useRef } from 'react';
 
-import { useFrameSampler } from '@shared/components/tables/hooks/useFrameSampler';
+import {
+  useFrameSampler,
+  type FrameSamplerSample,
+} from '@shared/components/tables/hooks/useFrameSampler';
 
 // Optional perf helper for GridTable: wraps content in React Profiler, samples
 // frame timings, and surfaces one-time dev warnings when thresholds are hit.
@@ -16,6 +19,7 @@ interface GridTableProfilerOptions {
   sampleLabel?: string;
   sampleWindowMs?: number;
   minSampleCount?: number;
+  onFrameSample?: (sample: FrameSamplerSample) => void;
   onRenderSample?: (
     phase: 'mount' | 'update' | 'nested-update',
     actualDuration: number,
@@ -35,6 +39,7 @@ export function useGridTableProfiler({
   sampleLabel = 'GridTable scroll',
   sampleWindowMs = 2000,
   minSampleCount = 10,
+  onFrameSample,
   onRenderSample,
 }: GridTableProfilerOptions = {}): GridTableProfilerApi {
   const isJSDOM =
@@ -106,6 +111,7 @@ export function useGridTableProfiler({
     sampleLabel,
     sampleWindowMs,
     minSampleCount,
+    onSample: onFrameSample,
   });
 
   return useMemo(

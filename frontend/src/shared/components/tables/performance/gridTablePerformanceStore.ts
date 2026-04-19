@@ -10,6 +10,17 @@ export interface GridTableTimingStats {
   maxMs: number;
 }
 
+export interface GridTableScrollFrameStats {
+  windows: number;
+  frameSamples: number;
+  avgMs: number;
+  p95Ms: number;
+  maxMs: number;
+  latestMs: number;
+  overBudgetFrames: number;
+  estFps: number;
+}
+
 export interface GridTablePerformanceEntry {
   label: string;
   mode: GridTableDiagnosticsMode;
@@ -24,6 +35,7 @@ export interface GridTablePerformanceEntry {
   filterPass: GridTableTimingStats;
   sort: GridTableTimingStats;
   render: GridTableTimingStats;
+  scrollFrame: GridTableScrollFrameStats | null;
 }
 
 type Listener = () => void;
@@ -69,6 +81,7 @@ const createEntry = (label: string): MutableEntry => ({
   filterPass: createTimingStats(),
   sort: createTimingStats(),
   render: createTimingStats(),
+  scrollFrame: null,
 });
 
 const getEntry = (label: string): MutableEntry => {
@@ -192,6 +205,37 @@ export const recordGridTablePerformanceSample = (
   scheduleNotify();
 };
 
+export const recordGridTableScrollFrameSample = (
+  label: string,
+  sample: {
+    frames: number;
+    avgMs: number;
+    p95Ms: number;
+    maxMs: number;
+    latestMs: number;
+    overBudgetFrames: number;
+    estFps: number;
+  }
+) => {
+  if (!label) {
+    return;
+  }
+
+  const entry = getEntry(label);
+  entry.scrollFrame = {
+    windows: (entry.scrollFrame?.windows ?? 0) + 1,
+    frameSamples: sample.frames,
+    avgMs: Number(sample.avgMs.toFixed(2)),
+    p95Ms: Number(sample.p95Ms.toFixed(2)),
+    maxMs: Number(sample.maxMs.toFixed(2)),
+    latestMs: Number(sample.latestMs.toFixed(2)),
+    overBudgetFrames: sample.overBudgetFrames,
+    estFps: Number(sample.estFps.toFixed(1)),
+  };
+  entry.lastUpdated = Date.now();
+  scheduleNotify();
+};
+
 export const subscribeGridTablePerformance = (listener: Listener): (() => void) => {
   listeners.add(listener);
   return () => listeners.delete(listener);
@@ -217,6 +261,7 @@ export const getGridTablePerformanceSnapshot = (): GridTablePerformanceEntry[] =
       filterPass: cloneTimingStats(entry.filterPass),
       sort: cloneTimingStats(entry.sort),
       render: cloneTimingStats(entry.render),
+      scrollFrame: entry.scrollFrame ? { ...entry.scrollFrame } : null,
     }))
     .sort((a, b) => a.label.localeCompare(b.label));
   snapshotDirty = false;

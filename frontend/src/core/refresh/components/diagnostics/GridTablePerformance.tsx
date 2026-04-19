@@ -30,10 +30,13 @@ type DominantTimingMetric = {
 
 const MIN_TIMING_SIGNAL_SAMPLES = 3;
 
-const TimingHeader: React.FC<{ label: string }> = ({ label }) => (
+const TimingHeader: React.FC<{ label: string; detail?: string }> = ({
+  label,
+  detail = 'Avg / Max / Latest',
+}) => (
   <span className="diagnostics-table-heading-metric">
     <span>{label} (ms)</span>
-    <span>Avg / Max / Latest</span>
+    <span>{detail}</span>
   </span>
 );
 
@@ -48,6 +51,14 @@ const formatReferenceChurn = (inputReferenceChanges: number, updates: number) =>
   }
 
   return `${inputReferenceChanges} (${formatPercent(inputReferenceChanges / updates)})`;
+};
+
+const formatScrollFrameTiming = (row: GridTablePerformanceEntry) => {
+  if (!row.scrollFrame) {
+    return '—';
+  }
+
+  return `${row.scrollFrame.avgMs.toFixed(2)} / ${row.scrollFrame.p95Ms.toFixed(2)} / ${row.scrollFrame.maxMs.toFixed(2)} / ${row.scrollFrame.latestMs.toFixed(2)}`;
 };
 
 const isTimingSignal = (averageMs: number, maxMs: number, averageThresholdMs: number) =>
@@ -110,6 +121,19 @@ export const buildTablePerformanceSignals = (
       label: 'Render slow',
       severity: 'warning',
       title: `Render averages ${row.render.averageMs.toFixed(2)}ms and peaked at ${row.render.maxMs.toFixed(2)}ms.`,
+    });
+  }
+
+  if (
+    row.scrollFrame &&
+    (row.scrollFrame.avgMs >= 16.7 ||
+      row.scrollFrame.p95Ms >= 16.7 ||
+      row.scrollFrame.maxMs >= 33.4)
+  ) {
+    signals.push({
+      label: 'Scroll jank',
+      severity: 'warning',
+      title: `Latest scroll sample averaged ${row.scrollFrame.avgMs.toFixed(2)}ms per frame with p95 ${row.scrollFrame.p95Ms.toFixed(2)}ms, max ${row.scrollFrame.maxMs.toFixed(2)}ms, and ${row.scrollFrame.overBudgetFrames} over-budget frames.`,
     });
   }
 
@@ -267,13 +291,16 @@ export const GridTablePerformance: React.FC<GridTablePerformanceProps> = ({
               <th>
                 <TimingHeader label="Render" />
               </th>
+              <th>
+                <TimingHeader label="Scroll Frame" detail="Avg / P95 / Max / Latest" />
+              </th>
               <th>Last Render</th>
             </tr>
           </thead>
           <tbody>
             {visibleRows.length === 0 ? (
               <tr className="diagnostics-empty">
-                <td colSpan={14}>{visibleEmptyMessage}</td>
+                <td colSpan={15}>{visibleEmptyMessage}</td>
               </tr>
             ) : (
               visibleRows.map((row) => {
@@ -365,6 +392,15 @@ export const GridTablePerformance: React.FC<GridTablePerformanceProps> = ({
                         row.render.maxMs,
                         row.render.latestMs
                       )}
+                    </td>
+                    <td
+                      title={
+                        row.scrollFrame
+                          ? `Latest scroll sample: ${row.scrollFrame.frameSamples} frames, ${row.scrollFrame.overBudgetFrames} over budget, est ${row.scrollFrame.estFps.toFixed(1)} FPS across ${row.scrollFrame.windows} window(s).`
+                          : undefined
+                      }
+                    >
+                      {formatScrollFrameTiming(row)}
                     </td>
                     <td>{row.lastRenderPhase ?? '—'}</td>
                   </tr>
