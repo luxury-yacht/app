@@ -19,7 +19,7 @@ import {
   PortForwardIcon,
 } from '@shared/components/icons/MenuIcons';
 import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
-import type { ObjectDiffSelectionSeed } from '@shared/components/diff/objectDiffSelection';
+import { buildObjectDiffSelection } from '@shared/components/diff/objectDiffSelection';
 
 // Normalized kind mapping for permission checks
 const WORKLOAD_KIND_MAP: Record<string, string> = {
@@ -57,6 +57,8 @@ export interface ObjectActionData {
   // queryKindPermissions and the Delete action silently disappears.
   group?: string;
   version?: string;
+  resource?: string;
+  uid?: string;
   // For workload-specific actions
   status?: string;
   ready?: string;
@@ -124,35 +126,6 @@ export interface BuildObjectActionsOptions {
   actionLoading?: boolean;
 }
 
-const buildObjectDiffSelection = (
-  object: ObjectActionData,
-  _context: 'gridtable' | 'object-panel',
-  _handlers: ObjectActionHandlers
-): ObjectDiffSelectionSeed | null => {
-  if (!object.clusterId) {
-    return null;
-  }
-  if (object.kind === 'Event' && object.involvedObject) {
-    return null;
-  }
-
-  const builtin = resolveBuiltinGroupVersion(object.kind);
-  const group = object.group ?? builtin.group;
-  const version = object.version ?? builtin.version;
-  if (!version) {
-    return null;
-  }
-
-  return {
-    clusterId: object.clusterId,
-    namespace: object.namespace,
-    group: group ?? '',
-    version,
-    kind: object.kind,
-    name: object.name,
-  };
-};
-
 function getPortForwardAvailability(
   object: ObjectActionData,
   handlers: ObjectActionHandlers
@@ -211,7 +184,8 @@ export function buildObjectActionItems({
 }: BuildObjectActionsOptions): ContextMenuItem[] {
   const menuItems: ContextMenuItem[] = [];
   const normalizedKind = normalizeKind(object.kind);
-  const diffSelection = buildObjectDiffSelection(object, context, handlers);
+  const diffSelection =
+    object.kind === 'Event' && object.involvedObject ? null : buildObjectDiffSelection(object);
   const portForwardAvailability = getPortForwardAvailability(object, handlers);
 
   const {

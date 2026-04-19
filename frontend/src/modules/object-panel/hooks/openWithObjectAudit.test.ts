@@ -283,17 +283,19 @@ describe('openWithObject audit (kind-only-objects guardrail)', () => {
   });
 
   it('discovers at least one literal call site so the walker is wired up', () => {
-    // Sanity check: if the walker silently finds nothing, the suite above
-    // would pass vacuously. Keep the assertion loose so identity-helper
-    // migrations can reduce literal call sites without breaking the audit.
+    // Sanity check: helper-backed migrations intentionally removed the last
+    // inline `openWithObject({ ... })` literal, so the walker may now see
+    // zero literal sites. Still assert that production sources contain at
+    // least one openWithObject entry point so this audit does not become
+    // dead code after a broad refactor.
     const frontendSrc = path.resolve(__dirname, '../../..');
-    let total = 0;
+    let totalCalls = 0;
     for (const file of walkSourceFiles(frontendSrc)) {
       const source = fs.readFileSync(file, 'utf8');
       if (!source.includes('openWithObject')) continue;
-      total += findOpenWithObjectLiterals(source).length;
+      totalCalls += source.match(/openWithObject(?:Ref\.current)?\s*\(/g)?.length ?? 0;
     }
-    expect(total).toBeGreaterThan(0);
+    expect(totalCalls).toBeGreaterThan(0);
   });
 });
 

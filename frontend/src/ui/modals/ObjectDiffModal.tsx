@@ -164,6 +164,29 @@ const toCatalogItem = (value: unknown): CatalogItem | null => {
   return item as CatalogItem;
 };
 
+const buildCatalogItemFromSelectionSeed = (
+  selection: ObjectDiffSelectionSeed
+): CatalogItem | null => {
+  if (!selection.uid) {
+    return null;
+  }
+
+  return {
+    kind: selection.kind,
+    group: selection.group,
+    version: selection.version,
+    resource: selection.resource ?? '',
+    namespace: selection.namespace,
+    name: selection.name,
+    uid: selection.uid,
+    resourceVersion: '',
+    creationTimestamp: '',
+    scope: selection.namespace ? 'Namespace' : 'Cluster',
+    clusterId: selection.clusterId,
+    clusterName: selection.clusterName,
+  };
+};
+
 const buildObjectOptions = (items: CatalogItem[]): DropdownOption[] =>
   items.map((item) => ({
     value: item.uid,
@@ -617,12 +640,17 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
       leftInitialSelectionRequestRef.current = requestId;
       cancelPendingMatches();
       setLeftNoMatch(false);
+      const seededSelection = buildCatalogItemFromSelectionSeed(selection);
       setLeftClusterId(selection.clusterId);
       setLeftNamespace(normalizeMatchNamespace(selection.namespace));
       setLeftKind(selection.kind);
       setLeftObjectSearch('');
-      setLeftSelectedObject(null);
-      setLeftObjectUid('');
+      setLeftSelectedObject(seededSelection);
+      setLeftObjectUid(selection.uid ?? '');
+
+      if (seededSelection) {
+        return;
+      }
 
       try {
         const match = toCatalogItem(

@@ -631,6 +631,54 @@ describe('ObjectDiffModal', () => {
     expect(leftKindSelect?.value).toBe('Deployment');
     expect(leftObjectSelect?.value).toBe('alpha-uid');
   });
+
+  it('uses catalog-backed identity from the initial request without re-matching', async () => {
+    await act(async () => {
+      root.render(
+        <KeyboardProvider>
+          <ObjectDiffModal
+            isOpen
+            initialRequest={{
+              requestId: 8,
+              left: {
+                clusterId: 'cluster-a',
+                clusterName: 'Cluster A',
+                namespace: 'apps',
+                group: 'apps',
+                version: 'v1',
+                kind: 'Deployment',
+                name: 'alpha',
+                resource: 'deployments',
+                uid: 'alpha-uid',
+              },
+            }}
+            onClose={vi.fn()}
+          />
+        </KeyboardProvider>
+      );
+      await Promise.resolve();
+    });
+
+    expect(appMocks.FindCatalogObjectMatch).not.toHaveBeenCalled();
+
+    const leftClusterSelect = document.querySelector(
+      'select[aria-label="Left cluster"]'
+    ) as HTMLSelectElement | null;
+    const leftNamespaceSelect = document.querySelector(
+      'select[aria-label="Left namespace"]'
+    ) as HTMLSelectElement | null;
+    const leftKindSelect = document.querySelector(
+      'select[aria-label="Left kind"]'
+    ) as HTMLSelectElement | null;
+    const leftObjectSelect = document.querySelector(
+      'select[aria-label="Left object"]'
+    ) as HTMLSelectElement | null;
+
+    expect(leftClusterSelect?.value).toBe('cluster-a');
+    expect(leftNamespaceSelect?.value).toBe('apps');
+    expect(leftKindSelect?.value).toBe('Deployment');
+    expect(leftObjectSelect?.value).toBe('alpha-uid');
+  });
 });
 
 const setTextInputValue = async (input: HTMLInputElement | null, nextValue: string) => {

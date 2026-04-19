@@ -326,6 +326,26 @@ catalog rows.
 - generic object workflows share one identity backbone
 - typed views do not invent competing identity models
 
+Current status:
+
+- ✅ generic diff selection now uses a shared identity helper instead of a
+  view-local custom shape
+- ✅ diff requests can preserve optional catalog identity (`uid`, `resource`,
+  `clusterName`) instead of immediately throwing that information away
+- ✅ the object diff modal now accepts catalog-backed initial selections
+  directly and skips the backend catalog re-match when a request already
+  carries the catalog `uid`
+- ✅ command-palette object opening now routes catalog rows through the shared
+  object-reference builder instead of hand-building a parallel ref literal
+- ✅ Browse context-menu diff/open flows now preserve catalog `uid`/`resource`
+  when they enter the generic workflow layer
+- ✅ alt-click navigation / GridTable focus requests now use a shared
+  focus-request helper that prefers canonical row-key identity for real
+  Kubernetes objects and falls back only for synthetic non-GVK kinds
+- ⏭ next step: continue auditing remaining generic entry points so object
+  opening, diff, and command-style navigation all share the same helper-backed
+  identity conventions
+
 ## Rollout Order
 
 Implement the remaining work in this order:
