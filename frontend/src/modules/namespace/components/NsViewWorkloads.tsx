@@ -436,18 +436,20 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
           ) ?? null;
 
         return buildObjectActionItems({
-          object: {
-            ...buildObjectReference({
+          object: buildObjectReference(
+            {
               kind: row.kind,
               name: row.name,
               namespace: row.namespace,
               clusterId: row.clusterId,
               clusterName: row.clusterName,
-            }),
-            status: row.status,
-            portForwardAvailable: row.portForwardAvailable,
-            hpaManaged: Boolean(row.hpaManaged),
-          },
+            },
+            {
+              status: row.status,
+              portForwardAvailable: row.portForwardAvailable,
+              hpaManaged: Boolean(row.hpaManaged),
+            }
+          ),
           context: 'gridtable',
           handlers: {
             onOpen: () => handleWorkloadClick(row),

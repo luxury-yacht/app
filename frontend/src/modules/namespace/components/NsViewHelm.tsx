@@ -26,6 +26,7 @@ import GridTable, {
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
+import { buildSyntheticObjectReference } from '@shared/utils/objectIdentity';
 
 // Data interface for Helm releases
 export interface HelmData {
@@ -77,13 +78,15 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
     const namespaceColumnLink = useNamespaceColumnLink<HelmData>('helm');
     const handleResourceClick = useCallback(
       (resource: HelmData) => {
-        openWithObject({
-          kind: 'HelmRelease',
-          name: resource.name,
-          namespace: resource.namespace,
-          clusterId: resource.clusterId ?? undefined,
-          clusterName: resource.clusterName ?? undefined,
-        });
+        openWithObject(
+          buildSyntheticObjectReference({
+            kind: 'HelmRelease',
+            name: resource.name,
+            namespace: resource.namespace,
+            clusterId: resource.clusterId ?? undefined,
+            clusterName: resource.clusterName ?? undefined,
+          })
+        );
       },
       [openWithObject]
     );
@@ -105,25 +108,29 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
           getDisplayText: () => getDisplayKind('HelmRelease', useShortResourceNames),
           onClick: handleResourceClick,
           onAltClick: (resource) =>
-            navigateToView({
-              kind: 'HelmRelease',
-              name: resource.name,
-              namespace: resource.namespace,
-              clusterId: resource.clusterId,
-              clusterName: resource.clusterName,
-            }),
+            navigateToView(
+              buildSyntheticObjectReference({
+                kind: 'HelmRelease',
+                name: resource.name,
+                namespace: resource.namespace,
+                clusterId: resource.clusterId,
+                clusterName: resource.clusterName,
+              })
+            ),
           isInteractive: () => true,
         }),
         cf.createTextColumn<HelmData>('name', 'Name', {
           onClick: handleResourceClick,
           onAltClick: (resource) =>
-            navigateToView({
-              kind: 'HelmRelease',
-              name: resource.name,
-              namespace: resource.namespace,
-              clusterId: resource.clusterId,
-              clusterName: resource.clusterName,
-            }),
+            navigateToView(
+              buildSyntheticObjectReference({
+                kind: 'HelmRelease',
+                name: resource.name,
+                namespace: resource.namespace,
+                clusterId: resource.clusterId,
+                clusterName: resource.clusterName,
+              })
+            ),
           getClassName: () => 'object-panel-link',
         }),
       ];
@@ -326,14 +333,16 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
         const status = resource.status || resource.info?.status;
 
         return buildObjectActionItems({
-          object: {
-            kind: 'HelmRelease',
-            name: resource.name,
-            namespace: resource.namespace,
-            clusterId: resource.clusterId,
-            clusterName: resource.clusterName,
-            status,
-          },
+          object: buildSyntheticObjectReference(
+            {
+              kind: 'HelmRelease',
+              name: resource.name,
+              namespace: resource.namespace,
+              clusterId: resource.clusterId,
+              clusterName: resource.clusterName,
+            },
+            { status }
+          ),
           context: 'gridtable',
           handlers: {
             onOpen: () => handleResourceClick(resource),

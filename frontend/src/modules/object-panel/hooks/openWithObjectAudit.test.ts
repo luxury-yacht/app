@@ -307,6 +307,9 @@ describe('ObjectPanelLink audit (kind-only-objects guardrail)', () => {
   });
 
   it('discovers at least one ObjectPanelLink literal so the walker is wired up', () => {
+    // Sanity check: shared identity helpers intentionally removed most
+    // inline objectRef literals. Keep the assertion loose so the audit
+    // still proves the walker works without pinning an obsolete count.
     const frontendSrc = path.resolve(__dirname, '../../..');
     let total = 0;
     for (const file of walkSourceFiles(frontendSrc)) {
@@ -314,6 +317,6 @@ describe('ObjectPanelLink audit (kind-only-objects guardrail)', () => {
       if (!source.includes('ObjectPanelLink')) continue;
       total += findObjectPanelLinkLiterals(source).length;
     }
-    expect(total).toBeGreaterThan(5);
+    expect(total).toBeGreaterThan(0);
   });
 });

@@ -523,16 +523,18 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
           ) ?? null;
 
         return buildObjectActionItems({
-          object: {
-            ...buildObjectReference({
+          object: buildObjectReference(
+            {
               kind: 'Pod',
               name: pod.name,
               namespace: pod.namespace,
               clusterId: pod.clusterId,
               clusterName: pod.clusterName,
-            }),
-            portForwardAvailable: pod.portForwardAvailable,
-          },
+            },
+            {
+              portForwardAvailable: pod.portForwardAvailable,
+            }
+          ),
           context: 'gridtable',
           handlers: {
             onOpen: () => handlePodOpen(pod),

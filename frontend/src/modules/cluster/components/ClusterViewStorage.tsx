@@ -337,12 +337,12 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
           ) ?? null;
 
         return buildObjectActionItems({
-          object: {
+          object: buildObjectReference({
             kind: 'PersistentVolume',
             name: pv.name,
             clusterId: pv.clusterId,
             clusterName: pv.clusterName,
-          },
+          }),
           context: 'gridtable',
           handlers: {
             onOpen: () => handleResourceClick(pv),

@@ -28,6 +28,17 @@ export interface ResolvedObjectReference extends KubernetesObjectReference {
   uid?: string;
 }
 
+export interface ResolvedSyntheticObjectReference {
+  kind: string;
+  name: string;
+  kindAlias?: string;
+  namespace?: string;
+  clusterId?: string;
+  clusterName?: string;
+  resource?: string;
+  uid?: string;
+}
+
 const normalizeRequired = (value: string | null | undefined, field: string): string => {
   const trimmed = value?.trim() ?? '';
   if (!trimmed) {
@@ -41,10 +52,10 @@ const normalizeOptional = (value: string | null | undefined): string | undefined
   return trimmed || undefined;
 };
 
-export const buildObjectReference = (
+export const buildObjectReference = <TExtras extends object = {}>(
   input: ObjectIdentityInput,
-  extras?: Omit<KubernetesObjectReference, keyof ObjectIdentityInput>
-): ResolvedObjectReference => {
+  extras?: TExtras
+): ResolvedObjectReference & TExtras => {
   const kind = normalizeRequired(input.kind, 'kind');
   const name = normalizeRequired(input.name, 'name');
   const builtinGVK = resolveBuiltinGroupVersion(kind);
@@ -71,7 +82,24 @@ export const buildObjectReference = (
     resource: normalizeOptional(input.resource),
     uid: normalizeOptional(input.uid),
     ...extras,
-  };
+  } as ResolvedObjectReference & TExtras;
+};
+
+export const buildSyntheticObjectReference = <TExtras extends object = {}>(
+  input: ObjectIdentityInput,
+  extras?: TExtras
+): ResolvedSyntheticObjectReference & TExtras => {
+  return {
+    kind: normalizeRequired(input.kind, 'kind'),
+    kindAlias: normalizeOptional(input.kindAlias),
+    name: normalizeRequired(input.name, 'name'),
+    namespace: normalizeOptional(input.namespace),
+    clusterId: normalizeOptional(input.clusterId),
+    clusterName: normalizeOptional(input.clusterName),
+    resource: normalizeOptional(input.resource),
+    uid: normalizeOptional(input.uid),
+    ...extras,
+  } as ResolvedSyntheticObjectReference & TExtras;
 };
 
 export const buildCanonicalObjectRowKey = (input: ObjectIdentityInput): string => {

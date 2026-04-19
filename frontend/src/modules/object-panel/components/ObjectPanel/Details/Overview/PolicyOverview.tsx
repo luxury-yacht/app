@@ -8,10 +8,8 @@ import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
-import {
-  parseApiVersion,
-  resolveBuiltinGroupVersion,
-} from '@shared/constants/builtinGroupVersions';
+import { parseApiVersion } from '@shared/constants/builtinGroupVersions';
+import { buildObjectReference } from '@shared/utils/objectIdentity';
 import { types } from '@wailsjs/go/models';
 import './PolicyOverview.css';
 
@@ -54,6 +52,27 @@ export const PolicyOverview: React.FC<PolicyOverviewProps> = (props) => {
     clusterId: objectData?.clusterId ?? undefined,
     clusterName: objectData?.clusterName ?? undefined,
   };
+  const scaleTargetRef = props.scaleTargetRef
+    ? (() => {
+        try {
+          return buildObjectReference({
+            kind: props.scaleTargetRef.kind,
+            // Prefer the apiVersion the HPA explicitly references
+            // (correct for any kind, including CRDs); fall back to
+            // plain text when malformed legacy data omits it for a
+            // non-built-in target kind.
+            ...(props.scaleTargetRef.apiVersion
+              ? parseApiVersion(props.scaleTargetRef.apiVersion)
+              : {}),
+            name: props.scaleTargetRef.name,
+            namespace,
+            ...clusterMeta,
+          });
+        } catch {
+          return null;
+        }
+      })()
+    : null;
 
   // handleTargetClick removed — ObjectPanelLink handles click + alt+click.
 
@@ -297,22 +316,13 @@ export const PolicyOverview: React.FC<PolicyOverviewProps> = (props) => {
             label="Target"
             value={
               props.scaleTargetRef ? (
-                <ObjectPanelLink
-                  objectRef={{
-                    kind: props.scaleTargetRef.kind,
-                    // Prefer the apiVersion the HPA explicitly references
-                    // (correct for any kind, including CRDs); fall back to
-                    // the built-in lookup when the HPA spec lacks one.
-                    ...(props.scaleTargetRef.apiVersion
-                      ? parseApiVersion(props.scaleTargetRef.apiVersion)
-                      : resolveBuiltinGroupVersion(props.scaleTargetRef.kind)),
-                    name: props.scaleTargetRef.name,
-                    namespace,
-                    ...clusterMeta,
-                  }}
-                >
-                  {`${props.scaleTargetRef.kind}/${props.scaleTargetRef.name}`}
-                </ObjectPanelLink>
+                scaleTargetRef ? (
+                  <ObjectPanelLink objectRef={scaleTargetRef}>
+                    {`${props.scaleTargetRef.kind}/${props.scaleTargetRef.name}`}
+                  </ObjectPanelLink>
+                ) : (
+                  `${props.scaleTargetRef.kind}/${props.scaleTargetRef.name}`
+                )
               ) : undefined
             }
           />

@@ -270,13 +270,13 @@ const QuotasViewGrid: React.FC<QuotasViewProps> = React.memo(
           ) ?? null;
 
         return buildObjectActionItems({
-          object: {
+          object: buildObjectReference({
             kind: resource.kind,
             name: resource.name,
             namespace: resource.namespace,
             clusterId: resource.clusterId,
             clusterName: resource.clusterName,
-          },
+          }),
           context: 'gridtable',
           handlers: {
             onOpen: () => handleResourceClick(resource),

@@ -128,6 +128,26 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
       []
     );
 
+    const buildScaleTargetReference = useCallback((resource: AutoscalingData) => {
+      if (!resource.scaleTargetRef) {
+        return null;
+      }
+      try {
+        return buildObjectReference({
+          kind: resource.scaleTargetRef.kind,
+          name: resource.scaleTargetRef.name,
+          namespace: resource.namespace,
+          ...(resource.scaleTargetRef.apiVersion
+            ? parseApiVersion(resource.scaleTargetRef.apiVersion)
+            : resolveBuiltinGroupVersion(resource.scaleTargetRef.kind)),
+          clusterId: resource.clusterId ?? undefined,
+          clusterName: resource.clusterName ?? undefined,
+        });
+      } catch {
+        return null;
+      }
+    }, []);
+
     const columns: GridColumnDefinition<AutoscalingData>[] = useMemo(() => {
       const baseColumns: GridColumnDefinition<AutoscalingData>[] = [];
 
@@ -188,42 +208,16 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
           },
           {
             onClick: (resource) => {
-              if (!resource.scaleTargetRef) {
-                return;
+              const targetRef = buildScaleTargetReference(resource);
+              if (targetRef) {
+                openWithObject(targetRef);
               }
-              // Prefer the apiVersion the HPA explicitly references (correct
-              // for any kind, including CRDs with a scale subresource); fall
-              // back to the built-in lookup when the backend snapshot lacks
-              // one (legacy data, or HPA with malformed scaleTargetRef).
-              openWithObject({
-                ...buildObjectReference({
-                  kind: resource.scaleTargetRef.kind,
-                  name: resource.scaleTargetRef.name,
-                  namespace: resource.namespace,
-                  ...(resource.scaleTargetRef.apiVersion
-                    ? parseApiVersion(resource.scaleTargetRef.apiVersion)
-                    : resolveBuiltinGroupVersion(resource.scaleTargetRef.kind)),
-                  clusterId: resource.clusterId ?? undefined,
-                  clusterName: resource.clusterName ?? undefined,
-                }),
-              });
             },
             onAltClick: (resource) => {
-              if (!resource.scaleTargetRef) {
-                return;
+              const targetRef = buildScaleTargetReference(resource);
+              if (targetRef) {
+                navigateToView(targetRef);
               }
-              navigateToView(
-                buildObjectReference({
-                  kind: resource.scaleTargetRef.kind,
-                  name: resource.scaleTargetRef.name,
-                  namespace: resource.namespace,
-                  ...(resource.scaleTargetRef.apiVersion
-                    ? parseApiVersion(resource.scaleTargetRef.apiVersion)
-                    : resolveBuiltinGroupVersion(resource.scaleTargetRef.kind)),
-                  clusterId: resource.clusterId ?? undefined,
-                  clusterName: resource.clusterName ?? undefined,
-                })
-              );
             },
             isInteractive: (resource) => Boolean(resource.scaleTargetRef),
             getClassName: (resource) =>
@@ -306,6 +300,7 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
 
       return baseColumns;
     }, [
+      buildScaleTargetReference,
       handleResourceClick,
       namespaceColumnLink,
       navigateToView,

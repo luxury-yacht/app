@@ -255,16 +255,16 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
         }
 
         return buildObjectActionItems({
-          object: {
-            ...buildObjectReference({
+          object: buildObjectReference(
+            {
               kind: 'Event',
               name: event.name,
               namespace: event.namespace,
               clusterId: event.clusterId,
               clusterName: event.clusterName,
-            }),
-            involvedObject: event.object,
-          },
+            },
+            { involvedObject: event.object }
+          ),
           context: 'gridtable',
           handlers: {
             onViewInvolvedObject: () => handleEventClick(event),

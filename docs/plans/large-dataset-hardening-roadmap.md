@@ -30,6 +30,11 @@ The following foundation is already in place:
   namespace views, and object-panel Pods/Jobs tables
 - ✅ event views use the shared identity helper for involved-object references
   while keeping event row keys event-specific
+- ✅ object-table action menus now build shared object/synthetic-object
+  references instead of hand-rolling per-view `object:` payloads
+- ✅ object-panel overview links now build shared object references, with
+  explicit plain-text fallback for malformed legacy refs that still lack full
+  GVK data
 
 Those were the easy wins. The remaining work is architectural and touches row
 identity, metadata strategy, refresh/update behavior, and performance

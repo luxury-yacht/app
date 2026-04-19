@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildCanonicalObjectRowKey, buildObjectReference } from './objectIdentity';
+import {
+  buildCanonicalObjectRowKey,
+  buildObjectReference,
+  buildSyntheticObjectReference,
+} from './objectIdentity';
 
 describe('objectIdentity', () => {
   it('builds a canonical object reference for built-in kinds', () => {
@@ -65,5 +69,50 @@ describe('objectIdentity', () => {
         clusterId: 'alpha:ctx',
       })
     ).toThrow(/missing apiVersion/);
+  });
+
+  it('carries non-identity extras through real object references', () => {
+    expect(
+      buildObjectReference(
+        {
+          kind: 'Pod',
+          name: 'api',
+          namespace: 'team-a',
+          clusterId: 'alpha:ctx',
+        },
+        { portForwardAvailable: true }
+      )
+    ).toEqual(
+      expect.objectContaining({
+        kind: 'Pod',
+        group: '',
+        version: 'v1',
+        portForwardAvailable: true,
+      })
+    );
+  });
+
+  it('builds synthetic references without forcing a fake GVK', () => {
+    expect(
+      buildSyntheticObjectReference(
+        {
+          kind: 'HelmRelease',
+          name: 'demo',
+          namespace: 'default',
+          clusterId: 'alpha:ctx',
+        },
+        { status: 'deployed' }
+      )
+    ).toEqual({
+      kind: 'HelmRelease',
+      kindAlias: undefined,
+      name: 'demo',
+      namespace: 'default',
+      clusterId: 'alpha:ctx',
+      clusterName: undefined,
+      resource: undefined,
+      uid: undefined,
+      status: 'deployed',
+    });
   });
 });

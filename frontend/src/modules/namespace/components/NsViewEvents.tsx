@@ -289,14 +289,16 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
         }
 
         return buildObjectActionItems({
-          object: {
-            kind: 'Event',
-            name: event.reason,
-            namespace: event.namespace,
-            clusterId: event.clusterId,
-            clusterName: event.clusterName,
-            involvedObject: event.object,
-          },
+          object: buildObjectReference(
+            {
+              kind: 'Event',
+              name: event.reason,
+              namespace: event.namespace,
+              clusterId: event.clusterId,
+              clusterName: event.clusterName,
+            },
+            { involvedObject: event.object }
+          ),
           context: 'gridtable',
           handlers: {
             onViewInvolvedObject: () => handleEventClick(event),

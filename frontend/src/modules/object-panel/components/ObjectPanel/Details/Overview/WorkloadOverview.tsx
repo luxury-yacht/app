@@ -9,7 +9,7 @@ import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceStatus } from '@shared/components/kubernetes/ResourceStatus';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
-import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
+import { buildObjectReference } from '@shared/utils/objectIdentity';
 
 interface WorkloadOverviewProps {
   kind: string;
@@ -239,13 +239,12 @@ export const WorkloadOverview: React.FC<WorkloadOverviewProps> = ({
             value={
               serviceName ? (
                 <ObjectPanelLink
-                  objectRef={{
+                  objectRef={buildObjectReference({
                     kind: 'Service',
-                    ...resolveBuiltinGroupVersion('Service'),
                     name: serviceName,
                     namespace: namespace,
                     ...clusterMeta,
-                  }}
+                  })}
                   title="Click to view service"
                 >
                   {serviceName}
