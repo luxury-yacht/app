@@ -9,10 +9,6 @@ import './NsViewEvents.css';
 import { formatAge } from '@/utils/ageFormatter';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
-import {
-  parseApiVersion,
-  resolveBuiltinGroupVersion,
-} from '@/shared/constants/builtinGroupVersions';
 import { useNamespaceGridTablePersistence } from '@modules/namespace/hooks/useNamespaceGridTablePersistence';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useObjectLink } from '@shared/hooks/useObjectLink';
@@ -32,6 +28,10 @@ import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 import { useFavToggle } from '@ui/favorites/FavToggle';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
 import { useNamespaceFilterOptions } from '@modules/namespace/hooks/useNamespaceFilterOptions';
+import {
+  buildEventObjectReference,
+  splitEventObjectTarget,
+} from '@shared/utils/eventObjectIdentity';
 import { buildObjectReference } from '@shared/utils/objectIdentity';
 
 export interface EventData {
@@ -72,23 +72,6 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
         ? event.objectNamespace
         : event.namespace
     );
-    // Parse the involved object reference into its type and name for display/navigation.
-    const splitEventObject = useCallback((value?: string | null) => {
-      const raw = (value ?? '').trim();
-      if (!raw || raw === '-') {
-        return { objectType: '-', objectName: '-', isLinkable: false };
-      }
-      const [objectType, objectName] = raw.split('/', 2);
-      if (!objectName) {
-        return { objectType: raw, objectName: '-', isLinkable: false };
-      }
-      return {
-        objectType: objectType || '-',
-        objectName: objectName || '-',
-        isLinkable: Boolean(objectType && objectName),
-      };
-    }, []);
-
     // Include all visible columns in search: type, source, reason, object, message.
     const getSearchText = useCallback(
       (event: EventData): string[] =>
@@ -107,33 +90,17 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
     // Build an object reference from an event's involved object for navigation.
     const getEventObjectRef = useCallback(
       (event: EventData) => {
-        const parsed = splitEventObject(event.object);
-        if (!parsed.isLinkable) {
-          return undefined;
-        }
-        const resolvedNamespace =
-          event.objectNamespace && event.objectNamespace.length > 0
-            ? event.objectNamespace
-            : event.namespace && event.namespace.length > 0
-              ? event.namespace
-              : namespace;
-        const objectVersionParts = event.objectApiVersion
-          ? parseApiVersion(event.objectApiVersion)
-          : resolveBuiltinGroupVersion(parsed.objectType);
-        if (!objectVersionParts.version) {
-          return undefined;
-        }
-        return buildObjectReference({
-          kind: parsed.objectType,
-          name: parsed.objectName,
-          namespace: resolvedNamespace,
-          group: objectVersionParts.group,
-          version: objectVersionParts.version,
+        return buildEventObjectReference({
+          object: event.object,
+          objectApiVersion: event.objectApiVersion,
+          objectNamespace: event.objectNamespace,
+          eventNamespace: event.namespace,
+          defaultNamespace: namespace,
           clusterId: event.clusterId ?? undefined,
           clusterName: event.clusterName ?? undefined,
         });
       },
-      [namespace, splitEventObject]
+      [namespace]
     );
 
     const handleEventClick = useCallback(
@@ -187,14 +154,14 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
       baseColumns.push(
         cf.createTextColumn('source', 'Source', (event) => event.source || '-'),
         cf.createTextColumn<EventData>('objectType', 'Object Type', (event) => {
-          const parsed = splitEventObject(event.object);
+          const parsed = splitEventObjectTarget(event.object);
           return parsed.objectType;
         }),
         cf.createTextColumn<EventData>(
           'objectName',
           'Object Name',
           (event) => {
-            const parsed = splitEventObject(event.object);
+            const parsed = splitEventObjectTarget(event.object);
             return parsed.objectName;
           },
           {
@@ -231,7 +198,6 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
       namespaceColumnLink,
       objectLink,
       showNamespaceColumn,
-      splitEventObject,
       useShortResourceNames,
     ]);
 
@@ -287,7 +253,7 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
     // Get context menu items
     const getContextMenuItems = useCallback(
       (event: EventData): ContextMenuItem[] => {
-        const parsed = splitEventObject(event.object);
+        const parsed = splitEventObjectTarget(event.object);
         if (!parsed.isLinkable) {
           return [];
         }
@@ -310,7 +276,7 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
           permissions: {},
         });
       },
-      [handleEventClick, splitEventObject]
+      [handleEventClick]
     );
 
     const emptyMessage = useMemo(

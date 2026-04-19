@@ -345,6 +345,9 @@ Current status:
 - ✅ additional generic entry points now use shared identity builders rather
   than hand-built refs, including Browse alt-click navigation, shell-session
   jumps from SessionsStatus, and the shared ResourceHeader namespace link
+- ✅ event-driven object open/navigation flows now share one involved-object
+  identity helper across namespace events, cluster events, and object-panel
+  events instead of reconstructing GVK fallback logic separately in each view
 - ⏭ next step: continue auditing remaining generic entry points so object
   opening, diff, and command-style navigation all share the same helper-backed
   identity conventions
