@@ -110,10 +110,7 @@
 }
 
 .diagnostics-section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
+  display: block;
   padding: 0 0.5rem;
   color: var(--color-text-secondary);
   font-size: 0.75rem;
@@ -145,6 +142,7 @@
   display: flex;
   align-items: center;
   gap: 0.35rem;
+  justify-content: flex-end;
 }
 
 .diagnostics-section-toggle {
@@ -202,11 +200,45 @@
   white-space: normal;
 }
 
-.diagnostics-table-performance-overview {
+.diagnostics-table-performance-summary {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: minmax(0, max-content) minmax(0, 1fr) auto;
   gap: 0.75rem 1rem;
-  padding: 0 0.5rem;
+  align-items: center;
+}
+
+.diagnostics-table-performance-summary-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.diagnostics-table-performance-summary-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
+
+.diagnostics-table-performance-summary-value {
+  font-size: 0.82rem;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.35;
+  min-width: 0;
+}
+
+@media (max-width: 960px) {
+  .diagnostics-table-performance-summary {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .diagnostics-section-actions {
+    justify-content: flex-start;
+  }
 }
 
 .diagnostics-table-performance-signal {

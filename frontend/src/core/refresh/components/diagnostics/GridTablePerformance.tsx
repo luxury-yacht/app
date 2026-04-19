@@ -185,7 +185,7 @@ export const GridTablePerformance: React.FC<GridTablePerformanceProps> = ({
   rows,
   emptyMessage,
   onReset,
-  summary,
+  summary: _summary,
 }) => {
   const [showFlaggedOnly, setShowFlaggedOnly] = useState(false);
   const resolvedEmptyMessage =
@@ -204,51 +204,35 @@ export const GridTablePerformance: React.FC<GridTablePerformanceProps> = ({
   return (
     <div className="diagnostics-section">
       <div className="diagnostics-section-header">
-        <div className="diagnostics-section-title-group">
-          <span className="diagnostics-section-subtitle">{summary}</span>
-        </div>
-        {onReset ? (
-          <div className="diagnostics-section-actions">
-            <button
-              className="diagnostics-section-toggle"
-              onClick={() => setShowFlaggedOnly((current) => !current)}
-              type="button"
-            >
-              {showFlaggedOnly ? 'Show All Tables' : 'Show Flagged Only'}
-            </button>
-            <button className="diagnostics-section-toggle" onClick={onReset} type="button">
-              Reset Samples
-            </button>
-          </div>
-        ) : null}
-      </div>
-      {rows.length > 0 ? (
-        <div className="diagnostics-table-performance-overview" role="presentation">
-          <div className="diagnostics-summary-card">
-            <span className="diagnostics-summary-heading">Instrumented Tables</span>
-            <span className="diagnostics-summary-primary">{overview.instrumentedTables}</span>
-            <span className="diagnostics-summary-secondary">Tables currently emitting samples</span>
-          </div>
-          <div className="diagnostics-summary-card">
-            <span className="diagnostics-summary-heading">Flagged Tables</span>
-            <span className="diagnostics-summary-primary">{overview.flaggedTables}</span>
-            <span className="diagnostics-summary-secondary">
-              Tables with warning-level churn or timing signals
+        <div className="diagnostics-table-performance-summary">
+          <div className="diagnostics-table-performance-summary-item">
+            <span className="diagnostics-table-performance-summary-label">Flagged:</span>
+            <span className="diagnostics-table-performance-summary-value">
+              {overview.flaggedTables}
             </span>
           </div>
-          <div className="diagnostics-summary-card">
-            <span className="diagnostics-summary-heading">Worst Offender</span>
-            <span className="diagnostics-summary-primary">
+          <div className="diagnostics-table-performance-summary-item">
+            <span className="diagnostics-table-performance-summary-label">Worst Offender:</span>
+            <span className="diagnostics-table-performance-summary-value">
               {overview.worstOffenderLabel ?? 'None'}
             </span>
-            <span className="diagnostics-summary-secondary">
-              {overview.worstOffenderLabel
-                ? `${overview.worstOffenderSignals} signals currently active`
-                : 'No active warning signals'}
-            </span>
           </div>
+          {onReset ? (
+            <div className="diagnostics-section-actions">
+              <button
+                className="diagnostics-section-toggle"
+                onClick={() => setShowFlaggedOnly((current) => !current)}
+                type="button"
+              >
+                {showFlaggedOnly ? 'Show All Tables' : 'Show Flagged Only'}
+              </button>
+              <button className="diagnostics-section-toggle" onClick={onReset} type="button">
+                Reset Samples
+              </button>
+            </div>
+          ) : null}
         </div>
-      ) : null}
+      </div>
       <div className="diagnostics-table-wrapper">
         <table className="diagnostics-table">
           <thead>

@@ -100,10 +100,12 @@ describe('GridTablePerformance', () => {
     expect(markup).toContain('Local');
     expect(markup).toContain('9 (90%)');
     expect(markup).toContain('Reset Samples');
-    expect(markup).toContain('Instrumented Tables');
     expect(markup).toContain('Worst Offender');
     expect(markup).toContain('Filter Options (ms)');
     expect(markup).toContain('Avg / Max / Latest');
+    expect(markup).not.toContain(
+      'Rolling GridTable measurements for the instrumented large-data views.'
+    );
   });
 
   it('renders explicit table modes for divergent view families', () => {
