@@ -20,7 +20,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import './BrowseView.css';
 import GridTable, { GRIDTABLE_VIRTUALIZATION_DEFAULT } from '@shared/components/tables/GridTable';
-import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import RollbackModal from '@shared/components/modals/RollbackModal';
@@ -45,6 +44,7 @@ import {
   toTableRows,
   type BrowseTableRow,
 } from '@modules/browse/hooks/useBrowseColumns';
+import { buildCanonicalObjectRowKey, buildObjectReference } from '@shared/utils/objectIdentity';
 import type { BrowseViewProps, BrowseScope } from './BrowseView.types';
 import { useFavToggle } from '@ui/favorites/FavToggle';
 
@@ -151,17 +151,19 @@ const BrowseView: React.FC<BrowseViewProps> = ({
   // Handler to open an object in the object panel
   const handleOpen = useCallback(
     (row: BrowseTableRow) => {
-      openWithObject({
-        kind: row.item.kind,
-        name: row.item.name,
-        namespace: row.item.namespace ?? undefined,
-        group: row.item.group,
-        version: row.item.version,
-        resource: row.item.resource,
-        uid: row.item.uid,
-        clusterId: row.item.clusterId ?? undefined,
-        clusterName: row.item.clusterName ?? undefined,
-      });
+      openWithObject(
+        buildObjectReference({
+          kind: row.item.kind,
+          name: row.item.name,
+          namespace: row.item.namespace ?? undefined,
+          group: row.item.group,
+          version: row.item.version,
+          resource: row.item.resource,
+          uid: row.item.uid,
+          clusterId: row.item.clusterId ?? undefined,
+          clusterName: row.item.clusterName ?? undefined,
+        })
+      );
     },
     [openWithObject]
   );
@@ -275,7 +277,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
       }
 
       return buildObjectActionItems({
-        object: {
+        object: buildObjectReference({
           kind: row.item.kind,
           name: row.item.name,
           namespace: row.item.namespace,
@@ -283,7 +285,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
           clusterName: row.item.clusterName,
           group: row.item.group,
           version: row.item.version,
-        },
+        }),
         context: 'gridtable',
         handlers: {
           onOpen: () => handleOpen(row),
@@ -312,12 +314,15 @@ const BrowseView: React.FC<BrowseViewProps> = ({
 
   // Key extractor for the table
   const keyExtractor = useCallback(
-    (row: BrowseTableRow, index: number) =>
-      buildClusterScopedKey(
-        row,
-        row.uid ||
-          `catalog:${row.item.namespace ?? 'cluster'}:${row.item.kind}:${row.item.name}:${index}`
-      ),
+    (row: BrowseTableRow) =>
+      buildCanonicalObjectRowKey({
+        kind: row.item.kind,
+        name: row.item.name,
+        namespace: row.item.namespace,
+        clusterId: row.item.clusterId,
+        group: row.item.group,
+        version: row.item.version,
+      }),
     []
   );
 

@@ -23,7 +23,11 @@ import { useRefreshWatcher } from '@/core/refresh/hooks/useRefreshWatcher';
 import type { ObjectEventsRefresherName } from '@/core/refresh/refresherTypes';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
-import { parseApiVersion } from '@/shared/constants/builtinGroupVersions';
+import {
+  parseApiVersion,
+  resolveBuiltinGroupVersion,
+} from '@/shared/constants/builtinGroupVersions';
+import { buildObjectReference } from '@shared/utils/objectIdentity';
 import type { PanelObjectData } from '../types';
 import { CLUSTER_SCOPE, INACTIVE_SCOPE } from '../constants';
 import './EventsTab.css';
@@ -190,7 +194,7 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
         // for object-events: the event is about THIS object).
         const apiVersionParts = event.involvedObjectApiVersion
           ? parseApiVersion(event.involvedObjectApiVersion)
-          : undefined;
+          : resolveBuiltinGroupVersion(objectKind);
         const sameKindAsPanel = objectData?.kind === objectKind;
         const objectGroup =
           apiVersionParts?.group ?? (sameKindAsPanel ? objectData?.group : undefined);
@@ -240,7 +244,7 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
 
   const openRelatedObject = useCallback(
     (item: EventDisplay) => {
-      if (!item.objectKind || !item.objectName) {
+      if (!item.objectKind || !item.objectName || !item.objectVersion) {
         return;
       }
 
@@ -250,18 +254,20 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
           : undefined;
 
       // Prefer per-event cluster identity; fall back to parent panel cluster.
-      openWithObjectRef.current({
-        kind: item.objectKind,
-        name: item.objectName,
-        namespace: resolvedNamespace,
-        // group/version come from the event's involvedObject apiVersion
-        // (parsed in the events memo above) so the panel can disambiguate
-        // colliding kinds across CRD groups.
-        group: item.objectGroup,
-        version: item.objectVersion,
-        clusterId: item.clusterId ?? objectData?.clusterId ?? undefined,
-        clusterName: item.clusterName ?? objectData?.clusterName ?? undefined,
-      });
+      openWithObjectRef.current(
+        buildObjectReference({
+          kind: item.objectKind,
+          name: item.objectName,
+          namespace: resolvedNamespace,
+          // group/version come from the event's involvedObject apiVersion
+          // (parsed in the events memo above) so the panel can disambiguate
+          // colliding kinds across CRD groups.
+          group: item.objectGroup,
+          version: item.objectVersion,
+          clusterId: item.clusterId ?? objectData?.clusterId ?? undefined,
+          clusterName: item.clusterName ?? objectData?.clusterName ?? undefined,
+        })
+      );
     },
     [objectData?.clusterId, objectData?.clusterName]
   );
@@ -269,7 +275,7 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
   // Alt+click: navigate to the related object's view and focus it.
   const navigateToRelatedObject = useCallback(
     (item: EventDisplay) => {
-      if (!item.objectKind || !item.objectName) {
+      if (!item.objectKind || !item.objectName || !item.objectVersion) {
         return;
       }
 
@@ -278,15 +284,17 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
           ? item.objectNamespace
           : undefined;
 
-      navigateToView({
-        kind: item.objectKind,
-        name: item.objectName,
-        namespace: resolvedNamespace,
-        group: item.objectGroup,
-        version: item.objectVersion,
-        clusterId: item.clusterId ?? objectData?.clusterId ?? undefined,
-        clusterName: item.clusterName ?? objectData?.clusterName ?? undefined,
-      });
+      navigateToView(
+        buildObjectReference({
+          kind: item.objectKind,
+          name: item.objectName,
+          namespace: resolvedNamespace,
+          group: item.objectGroup,
+          version: item.objectVersion,
+          clusterId: item.clusterId ?? objectData?.clusterId ?? undefined,
+          clusterName: item.clusterName ?? objectData?.clusterName ?? undefined,
+        })
+      );
     },
     [navigateToView, objectData?.clusterId, objectData?.clusterName]
   );
@@ -311,7 +319,8 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
         {
           onClick: openRelatedObject,
           onAltClick: navigateToRelatedObject,
-          isInteractive: (item) => Boolean(item.objectKind && item.objectName),
+          isInteractive: (item) =>
+            Boolean(item.objectKind && item.objectName && item.objectVersion),
         }
       ),
       (() => {

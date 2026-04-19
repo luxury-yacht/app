@@ -465,7 +465,7 @@ describe('NsViewPods', () => {
     const columns = gridTablePropsRef.current.columns;
     expect(columns.find((col: any) => col.key === 'namespace')).toBeTruthy();
     const key = gridTablePropsRef.current.keyExtractor(pods[0]);
-    expect(key).toBe('alpha:ctx|pod:team-a/api');
+    expect(key).toBe('alpha:ctx|/v1/Pod/team-a/api');
   });
 
   it('derives metrics helper values for resource columns', async () => {

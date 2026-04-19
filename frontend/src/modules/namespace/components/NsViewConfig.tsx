@@ -23,17 +23,14 @@ import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
-import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
-import {
-  formatBuiltinApiVersion,
-  resolveBuiltinGroupVersion,
-} from '@shared/constants/builtinGroupVersions';
+import { formatBuiltinApiVersion } from '@shared/constants/builtinGroupVersions';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { DeleteResourceByGVK } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 import { useFavToggle } from '@ui/favorites/FavToggle';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
+import { buildCanonicalObjectRowKey, buildObjectReference } from '@shared/utils/objectIdentity';
 
 // Data interface for configuration resources (ConfigMaps, Secrets)
 export interface ConfigData {
@@ -74,26 +71,27 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
     const handleResourceClick = useCallback(
       (resource: ConfigData) => {
         const resolvedKind = resource.kind || resource.kindAlias;
-        openWithObject({
-          kind: resolvedKind,
-          name: resource.name,
-          namespace: resource.namespace,
-          ...resolveBuiltinGroupVersion(resolvedKind),
-          clusterId: resource.clusterId ?? undefined,
-          clusterName: resource.clusterName ?? undefined,
-        });
+        openWithObject(
+          buildObjectReference({
+            kind: resolvedKind,
+            name: resource.name,
+            namespace: resource.namespace,
+            clusterId: resource.clusterId ?? undefined,
+            clusterName: resource.clusterName ?? undefined,
+          })
+        );
       },
       [openWithObject]
     );
 
     const keyExtractor = useCallback(
       (resource: ConfigData) =>
-        buildClusterScopedKey(
-          resource,
-          [resource.namespace, resource.kindAlias ?? resource.kind, resource.name]
-            .filter(Boolean)
-            .join('/')
-        ),
+        buildCanonicalObjectRowKey({
+          kind: resource.kindAlias ?? resource.kind,
+          name: resource.name,
+          namespace: resource.namespace,
+          clusterId: resource.clusterId,
+        }),
       []
     );
 
@@ -106,24 +104,28 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
           getDisplayText: (resource) => getDisplayKind(resource.kind, useShortResourceNames),
           onClick: handleResourceClick,
           onAltClick: (resource) =>
-            navigateToView({
-              kind: resource.kind,
-              name: resource.name,
-              namespace: resource.namespace,
-              clusterId: resource.clusterId ?? undefined,
-              clusterName: resource.clusterName ?? undefined,
-            }),
+            navigateToView(
+              buildObjectReference({
+                kind: resource.kind,
+                name: resource.name,
+                namespace: resource.namespace,
+                clusterId: resource.clusterId ?? undefined,
+                clusterName: resource.clusterName ?? undefined,
+              })
+            ),
         }),
         cf.createTextColumn<ConfigData>('name', 'Name', {
           onClick: handleResourceClick,
           onAltClick: (resource) =>
-            navigateToView({
-              kind: resource.kind,
-              name: resource.name,
-              namespace: resource.namespace,
-              clusterId: resource.clusterId ?? undefined,
-              clusterName: resource.clusterName ?? undefined,
-            }),
+            navigateToView(
+              buildObjectReference({
+                kind: resource.kind,
+                name: resource.name,
+                namespace: resource.namespace,
+                clusterId: resource.clusterId ?? undefined,
+                clusterName: resource.clusterName ?? undefined,
+              })
+            ),
           getClassName: () => 'object-panel-link',
         }),
         cf.createTextColumn<ConfigData>(
@@ -264,13 +266,13 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
           ) ?? null;
 
         return buildObjectActionItems({
-          object: {
+          object: buildObjectReference({
             kind: resource.kind,
             name: resource.name,
             namespace: resource.namespace,
             clusterId: resource.clusterId,
             clusterName: resource.clusterName,
-          },
+          }),
           context: 'gridtable',
           handlers: {
             onOpen: () => handleResourceClick(resource),

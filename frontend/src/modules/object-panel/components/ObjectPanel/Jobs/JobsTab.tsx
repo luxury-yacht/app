@@ -10,7 +10,6 @@ import GridTable, {
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
   type GridColumnDefinition,
 } from '@shared/components/tables/GridTable';
-import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import {
   applyColumnSizing,
   createAgeColumn,
@@ -29,7 +28,7 @@ import { useViewState } from '@core/contexts/ViewStateContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import '../shared.css';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
-import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
+import { buildCanonicalObjectRowKey, buildObjectReference } from '@shared/utils/objectIdentity';
 
 // Row type for the jobs table, combining job info with cluster context.
 interface JobRow {
@@ -106,7 +105,13 @@ export const JobsTab: React.FC<JobsTabProps> = ({
   );
 
   const keyExtractor = useCallback(
-    (job: JobRow) => buildClusterScopedKey(job, `${job.namespace}:${job.name}`),
+    (job: JobRow) =>
+      buildCanonicalObjectRowKey({
+        kind: 'Job',
+        name: job.name,
+        namespace: job.namespace,
+        clusterId: job.clusterId,
+      }),
     []
   );
 
@@ -116,6 +121,19 @@ export const JobsTab: React.FC<JobsTabProps> = ({
       clusterName: job.clusterName ?? undefined,
     }),
     []
+  );
+  const handleJobOpen = useCallback(
+    (job: JobRow) => {
+      openWithObject(
+        buildObjectReference({
+          kind: 'Job',
+          name: job.name,
+          namespace: job.namespace,
+          ...getJobClusterMeta(job),
+        })
+      );
+    },
+    [getJobClusterMeta, openWithObject]
   );
 
   const handleNamespaceSelect = useCallback(
@@ -134,41 +152,31 @@ export const JobsTab: React.FC<JobsTabProps> = ({
     const base: GridColumnDefinition<JobRow>[] = [
       createKindColumn<JobRow>({
         getKind: () => 'Job',
-        onClick: (job) =>
-          openWithObject({
-            kind: 'Job',
-            name: job.name,
-            namespace: job.namespace,
-            ...resolveBuiltinGroupVersion('Job'),
-            ...getJobClusterMeta(job),
-          }),
+        onClick: handleJobOpen,
         onAltClick: (job) =>
-          navigateToView({
-            kind: 'Job',
-            name: job.name,
-            namespace: job.namespace,
-            clusterId: job.clusterId,
-            clusterName: job.clusterName,
-          }),
+          navigateToView(
+            buildObjectReference({
+              kind: 'Job',
+              name: job.name,
+              namespace: job.namespace,
+              clusterId: job.clusterId,
+              clusterName: job.clusterName,
+            })
+          ),
         sortable: false,
       }),
       createTextColumn<JobRow>('name', 'Name', {
-        onClick: (job) =>
-          openWithObject({
-            kind: 'Job',
-            name: job.name,
-            namespace: job.namespace,
-            ...resolveBuiltinGroupVersion('Job'),
-            ...getJobClusterMeta(job),
-          }),
+        onClick: handleJobOpen,
         onAltClick: (job) =>
-          navigateToView({
-            kind: 'Job',
-            name: job.name,
-            namespace: job.namespace,
-            clusterId: job.clusterId,
-            clusterName: job.clusterName,
-          }),
+          navigateToView(
+            buildObjectReference({
+              kind: 'Job',
+              name: job.name,
+              namespace: job.namespace,
+              clusterId: job.clusterId,
+              clusterName: job.clusterName,
+            })
+          ),
         getClassName: () => 'object-panel-link',
         getTitle: (job) => job.name,
       }),
@@ -201,7 +209,7 @@ export const JobsTab: React.FC<JobsTabProps> = ({
 
     applyColumnSizing(base, COLUMN_SIZING);
     return base;
-  }, [handleNamespaceSelect, navigateToView, getJobClusterMeta, openWithObject]);
+  }, [handleJobOpen, handleNamespaceSelect, navigateToView]);
 
   const {
     sortConfig,
@@ -259,34 +267,19 @@ export const JobsTab: React.FC<JobsTabProps> = ({
             onSort={handleSort}
             sortConfig={tableSort}
             keyExtractor={keyExtractor}
-            onRowClick={(job) =>
-              openWithObject({
-                kind: 'Job',
-                name: job.name,
-                namespace: job.namespace,
-                ...resolveBuiltinGroupVersion('Job'),
-                ...getJobClusterMeta(job),
-              })
-            }
+            onRowClick={handleJobOpen}
             enableContextMenu
             getCustomContextMenuItems={(job) =>
               buildObjectActionItems({
-                object: {
+                object: buildObjectReference({
                   kind: 'Job',
                   name: job.name,
                   namespace: job.namespace,
                   ...getJobClusterMeta(job),
-                },
+                }),
                 context: 'gridtable',
                 handlers: {
-                  onOpen: () =>
-                    openWithObject({
-                      kind: 'Job',
-                      name: job.name,
-                      namespace: job.namespace,
-                      ...resolveBuiltinGroupVersion('Job'),
-                      ...getJobClusterMeta(job),
-                    }),
+                  onOpen: () => handleJobOpen(job),
                 },
                 permissions: {},
               })

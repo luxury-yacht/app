@@ -12,6 +12,7 @@ import { JobsTab } from './JobsTab';
 import { types } from '@wailsjs/go/models';
 
 // Track calls to useGridTablePersistence so we can inspect clusterIdentity.
+const gridTablePropsRef: { current: any } = { current: null };
 const mockUseGridTablePersistence = vi.fn().mockReturnValue({
   sortConfig: null,
   setSortConfig: vi.fn(),
@@ -73,7 +74,10 @@ vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
 }));
 
 vi.mock('@shared/components/tables/GridTable', () => ({
-  default: () => <div data-testid="grid-table" />,
+  default: (props: any) => {
+    gridTablePropsRef.current = props;
+    return <div data-testid="grid-table" />;
+  },
   GRIDTABLE_VIRTUALIZATION_DEFAULT: {},
 }));
 
@@ -113,6 +117,7 @@ describe('JobsTab', () => {
   beforeEach(() => {
     mockUseGridTablePersistence.mockClear();
     mockOpenWithObject.mockClear();
+    gridTablePropsRef.current = null;
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
@@ -173,5 +178,19 @@ describe('JobsTab', () => {
     expect(mockUseGridTablePersistence).toHaveBeenCalled();
     const params = mockUseGridTablePersistence.mock.calls[0][0];
     expect(params.viewId).toBe('object-panel-jobs');
+  });
+
+  it('uses canonical job row keys', () => {
+    const job = makeJob({ name: 'nightly', namespace: 'ops' });
+
+    act(() => {
+      root.render(
+        <JobsTab jobs={[job]} loading={false} isActive={true} clusterId={PANEL_CLUSTER_ID} />
+      );
+    });
+
+    expect(gridTablePropsRef.current.keyExtractor({ ...job, clusterId: PANEL_CLUSTER_ID })).toBe(
+      'panel-cluster-A|batch/v1/Job/ops/nightly'
+    );
   });
 });

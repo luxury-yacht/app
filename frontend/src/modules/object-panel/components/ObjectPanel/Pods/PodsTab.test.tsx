@@ -11,6 +11,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { PodsTab } from './PodsTab';
 
 // Track calls to useGridTablePersistence so we can inspect clusterIdentity.
+const gridTablePropsRef: { current: any } = { current: null };
 const mockUseGridTablePersistence = vi.fn().mockReturnValue({
   sortConfig: null,
   setSortConfig: vi.fn(),
@@ -70,7 +71,10 @@ vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
 }));
 
 vi.mock('@shared/components/tables/GridTable', () => ({
-  default: () => <div data-testid="grid-table" />,
+  default: (props: any) => {
+    gridTablePropsRef.current = props;
+    return <div data-testid="grid-table" />;
+  },
   GRIDTABLE_VIRTUALIZATION_DEFAULT: {},
 }));
 
@@ -94,6 +98,7 @@ describe('PodsTab', () => {
 
   beforeEach(() => {
     mockUseGridTablePersistence.mockClear();
+    gridTablePropsRef.current = null;
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
@@ -115,5 +120,29 @@ describe('PodsTab', () => {
     const params = mockUseGridTablePersistence.mock.calls[0][0];
     expect(params.clusterIdentity).toBe(PANEL_CLUSTER_ID);
     expect(params.clusterIdentity).not.toBe(SIDEBAR_CLUSTER_ID);
+  });
+
+  it('uses canonical pod row keys', () => {
+    const pod = {
+      name: 'api',
+      namespace: 'team-a',
+      clusterId: PANEL_CLUSTER_ID,
+      clusterName: 'Panel Cluster A',
+      ownerKind: 'Deployment',
+      ownerName: 'api',
+      node: 'node-a',
+      status: 'Running',
+      ready: '1/1',
+      restarts: 0,
+      age: '1m',
+    } as any;
+
+    act(() => {
+      root.render(
+        <PodsTab pods={[pod]} metrics={null} loading={false} error={null} isActive={true} />
+      );
+    });
+
+    expect(gridTablePropsRef.current.keyExtractor(pod)).toBe('panel-cluster-A|/v1/Pod/team-a/api');
   });
 });

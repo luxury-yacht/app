@@ -31,6 +31,7 @@ import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 import { useFavToggle } from '@ui/favorites/FavToggle';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
+import { buildObjectReference } from '@shared/utils/objectIdentity';
 
 export interface EventData {
   kind: string;
@@ -118,7 +119,10 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
         const objectVersionParts = event.objectApiVersion
           ? parseApiVersion(event.objectApiVersion)
           : resolveBuiltinGroupVersion(parsed.objectType);
-        return {
+        if (!objectVersionParts.version) {
+          return undefined;
+        }
+        return buildObjectReference({
           kind: parsed.objectType,
           name: parsed.objectName,
           namespace: resolvedNamespace,
@@ -126,7 +130,7 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
           version: objectVersionParts.version,
           clusterId: event.clusterId ?? undefined,
           clusterName: event.clusterName ?? undefined,
-        };
+        });
       },
       [namespace, splitEventObject]
     );
@@ -194,7 +198,7 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
           },
           {
             ...objectLink(getEventObjectRef),
-            isInteractive: (event) => splitEventObject(event.object).isLinkable,
+            isInteractive: (event) => Boolean(getEventObjectRef(event)),
           }
         ),
         cf.createTextColumn('reason', 'Reason', (event) => event.reason || '-'),

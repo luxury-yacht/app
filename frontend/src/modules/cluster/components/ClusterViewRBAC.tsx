@@ -25,13 +25,10 @@ import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
-import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
-import {
-  formatBuiltinApiVersion,
-  resolveBuiltinGroupVersion,
-} from '@shared/constants/builtinGroupVersions';
+import { formatBuiltinApiVersion } from '@shared/constants/builtinGroupVersions';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 import { useFavToggle } from '@ui/favorites/FavToggle';
+import { buildCanonicalObjectRowKey, buildObjectReference } from '@shared/utils/objectIdentity';
 
 // Define the data structure for RBAC resources
 interface RBACData {
@@ -69,23 +66,25 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
 
     const handleResourceClick = useCallback(
       (resource: RBACData) => {
-        openWithObject({
-          kind: resource.kind,
-          name: resource.name,
-          ...resolveBuiltinGroupVersion(resource.kind),
-          clusterId: resource.clusterId ?? undefined,
-          clusterName: resource.clusterName ?? undefined,
-        });
+        openWithObject(
+          buildObjectReference({
+            kind: resource.kind,
+            name: resource.name,
+            clusterId: resource.clusterId ?? undefined,
+            clusterName: resource.clusterName ?? undefined,
+          })
+        );
       },
       [openWithObject]
     );
 
     const keyExtractor = useCallback(
       (resource: RBACData) =>
-        buildClusterScopedKey(
-          resource,
-          ['rbac', resource.kind, resource.name].filter(Boolean).join('/')
-        ),
+        buildCanonicalObjectRowKey({
+          kind: resource.kind,
+          name: resource.name,
+          clusterId: resource.clusterId,
+        }),
       []
     );
 
@@ -99,23 +98,27 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
           getDisplayText: (resource) => getDisplayKind(resource.kind, useShortResourceNames),
           onClick: handleResourceClick,
           onAltClick: (resource) =>
-            navigateToView({
-              kind: resource.kind,
-              name: resource.name,
-              clusterId: resource.clusterId,
-              clusterName: resource.clusterName,
-            }),
+            navigateToView(
+              buildObjectReference({
+                kind: resource.kind,
+                name: resource.name,
+                clusterId: resource.clusterId,
+                clusterName: resource.clusterName,
+              })
+            ),
         }),
         cf.createTextColumn<RBACData>('name', 'Name', (resource) => resource.name, {
           sortable: true,
           onClick: handleResourceClick,
           onAltClick: (resource) =>
-            navigateToView({
-              kind: resource.kind,
-              name: resource.name,
-              clusterId: resource.clusterId,
-              clusterName: resource.clusterName,
-            }),
+            navigateToView(
+              buildObjectReference({
+                kind: resource.kind,
+                name: resource.name,
+                clusterId: resource.clusterId,
+                clusterName: resource.clusterName,
+              })
+            ),
           getClassName: () => 'object-panel-link',
         }),
         cf.createAgeColumn(),
@@ -219,12 +222,12 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
           ) ?? null;
 
         return buildObjectActionItems({
-          object: {
+          object: buildObjectReference({
             kind: resource.kind,
             name: resource.name,
             clusterId: resource.clusterId,
             clusterName: resource.clusterName,
-          },
+          }),
           context: 'gridtable',
           handlers: {
             onOpen: () => handleResourceClick(resource),

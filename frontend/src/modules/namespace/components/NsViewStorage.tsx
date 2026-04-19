@@ -23,11 +23,7 @@ import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
-import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
-import {
-  formatBuiltinApiVersion,
-  resolveBuiltinGroupVersion,
-} from '@shared/constants/builtinGroupVersions';
+import { formatBuiltinApiVersion } from '@shared/constants/builtinGroupVersions';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { DeleteResourceByGVK } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
@@ -35,6 +31,7 @@ import { getPermissionKey, useUserPermissions } from '@/core/capabilities';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 import { useFavToggle } from '@ui/favorites/FavToggle';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
+import { buildCanonicalObjectRowKey, buildObjectReference } from '@shared/utils/objectIdentity';
 
 // Data interface for storage resources (PVCs, VolumeAttachments, etc.)
 export interface StorageData {
@@ -78,26 +75,27 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
     const handleResourceClick = useCallback(
       (resource: StorageData) => {
         const resolvedKind = resource.kind || resource.kindAlias;
-        openWithObject({
-          kind: resolvedKind,
-          name: resource.name,
-          namespace: resource.namespace,
-          ...resolveBuiltinGroupVersion(resolvedKind),
-          clusterId: resource.clusterId ?? undefined,
-          clusterName: resource.clusterName ?? undefined,
-        });
+        openWithObject(
+          buildObjectReference({
+            kind: resolvedKind,
+            name: resource.name,
+            namespace: resource.namespace,
+            clusterId: resource.clusterId ?? undefined,
+            clusterName: resource.clusterName ?? undefined,
+          })
+        );
       },
       [openWithObject]
     );
 
     const keyExtractor = useCallback(
       (resource: StorageData) =>
-        buildClusterScopedKey(
-          resource,
-          [resource.namespace, resource.kind || resource.kindAlias, resource.name]
-            .filter(Boolean)
-            .join('/')
-        ),
+        buildCanonicalObjectRowKey({
+          kind: resource.kindAlias ?? resource.kind,
+          name: resource.name,
+          namespace: resource.namespace,
+          clusterId: resource.clusterId,
+        }),
       []
     );
 
@@ -110,24 +108,28 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
           getDisplayText: (resource) => getDisplayKind(resource.kind, useShortResourceNames),
           onClick: handleResourceClick,
           onAltClick: (resource) =>
-            navigateToView({
-              kind: resource.kind,
-              name: resource.name,
-              namespace: resource.namespace,
-              clusterId: resource.clusterId ?? undefined,
-              clusterName: resource.clusterName ?? undefined,
-            }),
+            navigateToView(
+              buildObjectReference({
+                kind: resource.kind,
+                name: resource.name,
+                namespace: resource.namespace,
+                clusterId: resource.clusterId ?? undefined,
+                clusterName: resource.clusterName ?? undefined,
+              })
+            ),
         }),
         cf.createTextColumn<StorageData>('name', 'Name', {
           onClick: handleResourceClick,
           onAltClick: (resource) =>
-            navigateToView({
-              kind: resource.kind,
-              name: resource.name,
-              namespace: resource.namespace,
-              clusterId: resource.clusterId ?? undefined,
-              clusterName: resource.clusterName ?? undefined,
-            }),
+            navigateToView(
+              buildObjectReference({
+                kind: resource.kind,
+                name: resource.name,
+                namespace: resource.namespace,
+                clusterId: resource.clusterId ?? undefined,
+                clusterName: resource.clusterName ?? undefined,
+              })
+            ),
           getClassName: () => 'object-panel-link',
         }),
         cf.createTextColumn<StorageData>(
@@ -158,12 +160,12 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
           {
             ...objectLink((resource) =>
               resource.storageClass
-                ? {
+                ? buildObjectReference({
                     kind: 'StorageClass',
                     name: resource.storageClass,
                     clusterId: resource.clusterId ?? undefined,
                     clusterName: resource.clusterName ?? undefined,
-                  }
+                  })
                 : undefined
             ),
             isInteractive: (resource) => Boolean(resource.storageClass),

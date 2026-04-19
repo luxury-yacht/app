@@ -30,6 +30,7 @@ import GridTable, {
 } from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import { useFavToggle } from '@ui/favorites/FavToggle';
+import { buildObjectReference } from '@shared/utils/objectIdentity';
 
 interface EventData {
   kind: string;
@@ -112,7 +113,10 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
         const objectVersionParts = event.objectApiVersion
           ? parseApiVersion(event.objectApiVersion)
           : resolveBuiltinGroupVersion(parsed.objectType);
-        return {
+        if (!objectVersionParts.version) {
+          return undefined;
+        }
+        return buildObjectReference({
           kind: parsed.objectType,
           name: parsed.objectName,
           namespace,
@@ -120,7 +124,7 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
           version: objectVersionParts.version,
           clusterId: event.clusterId ?? undefined,
           clusterName: event.clusterName ?? undefined,
-        };
+        });
       },
       [splitEventObject]
     );
@@ -167,7 +171,7 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
           {
             ...objectLink(getEventObjectRef),
             getClassName: () => 'object-panel-link',
-            isInteractive: (event) => splitEventObject(event.object).isLinkable,
+            isInteractive: (event) => Boolean(getEventObjectRef(event)),
           }
         ),
         cf.createTextColumn('reason', 'Reason', (event) => event.reason || '-'),
@@ -252,11 +256,13 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
 
         return buildObjectActionItems({
           object: {
-            kind: 'Event',
-            name: event.reason,
-            namespace: event.namespace,
-            clusterId: event.clusterId,
-            clusterName: event.clusterName,
+            ...buildObjectReference({
+              kind: 'Event',
+              name: event.name,
+              namespace: event.namespace,
+              clusterId: event.clusterId,
+              clusterName: event.clusterName,
+            }),
             involvedObject: event.object,
           },
           context: 'gridtable',

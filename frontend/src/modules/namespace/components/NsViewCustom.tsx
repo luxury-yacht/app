@@ -22,15 +22,14 @@ import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
-import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { DeleteResourceByGVK } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
 import { getPermissionKey, queryKindPermissions, useUserPermissions } from '@/core/capabilities';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 import { useFavToggle } from '@ui/favorites/FavToggle';
-import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
+import { buildCanonicalObjectRowKey, buildObjectReference } from '@shared/utils/objectIdentity';
 
 // Data interface for custom resources
 export interface CustomResourceData {
@@ -108,19 +107,25 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
         // CRDs from different operators). Without these, the object panel
         // falls back to first-match-wins discovery and opens the wrong
         // resource.
-        openWithObject({
-          kind: resource.kind || resource.kindAlias || 'CustomResource',
-          kindAlias: resource.kindAlias,
-          name: resource.name,
-          namespace: resource.namespace,
-          group: resource.apiGroup,
-          version: resource.apiVersion,
-          age: resource.age,
-          labels: resource.labels,
-          annotations: resource.annotations,
-          clusterId: resource.clusterId ?? undefined,
-          clusterName: resource.clusterName ?? undefined,
-        });
+        openWithObject(
+          buildObjectReference(
+            {
+              kind: resource.kind || resource.kindAlias || 'CustomResource',
+              kindAlias: resource.kindAlias,
+              name: resource.name,
+              namespace: resource.namespace,
+              group: resource.apiGroup,
+              version: resource.apiVersion,
+              clusterId: resource.clusterId ?? undefined,
+              clusterName: resource.clusterName ?? undefined,
+            },
+            {
+              age: resource.age,
+              labels: resource.labels,
+              annotations: resource.annotations,
+            }
+          )
+        );
       },
       [openWithObject]
     );
@@ -134,25 +139,28 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
         if (!resource.crdName) {
           return;
         }
-        openWithObject({
-          kind: 'CustomResourceDefinition',
-          ...resolveBuiltinGroupVersion('CustomResourceDefinition'),
-          name: resource.crdName,
-          clusterId: resource.clusterId ?? undefined,
-          clusterName: resource.clusterName ?? undefined,
-        });
+        openWithObject(
+          buildObjectReference({
+            kind: 'CustomResourceDefinition',
+            name: resource.crdName,
+            clusterId: resource.clusterId ?? undefined,
+            clusterName: resource.clusterName ?? undefined,
+          })
+        );
       },
       [openWithObject]
     );
 
     const keyExtractor = useCallback(
       (resource: CustomResourceData) =>
-        buildClusterScopedKey(
-          resource,
-          [resource.namespace, resource.kindAlias ?? resource.kind ?? 'custom', resource.name]
-            .filter(Boolean)
-            .join('/')
-        ),
+        buildCanonicalObjectRowKey({
+          kind: resource.kind || resource.kindAlias || 'CustomResource',
+          name: resource.name,
+          namespace: resource.namespace,
+          clusterId: resource.clusterId,
+          group: resource.apiGroup,
+          version: resource.apiVersion,
+        }),
       []
     );
 
@@ -165,24 +173,34 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
             getDisplayKind(resource.kind || resource.kindAlias || 'Custom', useShortResourceNames),
           onClick: handleResourceClick,
           onAltClick: (resource) =>
-            navigateToView({
-              kind: resource.kind || resource.kindAlias || 'CustomResource',
-              name: resource.name,
-              namespace: resource.namespace,
-              clusterId: resource.clusterId,
-              clusterName: resource.clusterName,
-            }),
+            navigateToView(
+              buildObjectReference({
+                kind: resource.kind || resource.kindAlias || 'CustomResource',
+                kindAlias: resource.kindAlias,
+                name: resource.name,
+                namespace: resource.namespace,
+                clusterId: resource.clusterId,
+                clusterName: resource.clusterName,
+                group: resource.apiGroup,
+                version: resource.apiVersion,
+              })
+            ),
         }),
         cf.createTextColumn<CustomResourceData>('name', 'Name', {
           onClick: handleResourceClick,
           onAltClick: (resource) =>
-            navigateToView({
-              kind: resource.kind || resource.kindAlias || 'CustomResource',
-              name: resource.name,
-              namespace: resource.namespace,
-              clusterId: resource.clusterId,
-              clusterName: resource.clusterName,
-            }),
+            navigateToView(
+              buildObjectReference({
+                kind: resource.kind || resource.kindAlias || 'CustomResource',
+                kindAlias: resource.kindAlias,
+                name: resource.name,
+                namespace: resource.namespace,
+                clusterId: resource.clusterId,
+                clusterName: resource.clusterName,
+                group: resource.apiGroup,
+                version: resource.apiVersion,
+              })
+            ),
           getClassName: () => 'object-panel-link',
         }),
         // CRD column: each cell is a clickable link back to the CRD
@@ -207,12 +225,14 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
                 if (!resource.crdName) {
                   return;
                 }
-                navigateToView({
-                  kind: 'CustomResourceDefinition',
-                  name: resource.crdName,
-                  clusterId: resource.clusterId,
-                  clusterName: resource.clusterName,
-                });
+                navigateToView(
+                  buildObjectReference({
+                    kind: 'CustomResourceDefinition',
+                    name: resource.crdName,
+                    clusterId: resource.clusterId,
+                    clusterName: resource.clusterName,
+                  })
+                );
               },
               isInteractive: (resource) => Boolean(resource.crdName),
               getClassName: (resource) => (resource.crdName ? 'object-panel-link' : undefined),
@@ -379,15 +399,16 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
         }
 
         return buildObjectActionItems({
-          object: {
+          object: buildObjectReference({
             kind,
+            kindAlias: resource.kindAlias,
             name: resource.name,
             namespace: resource.namespace,
             clusterId: resource.clusterId,
             clusterName: resource.clusterName,
             group: resource.apiGroup ?? undefined,
             version: resource.apiVersion ?? undefined,
-          },
+          }),
           context: 'gridtable',
           handlers: {
             onOpen: () => handleResourceClick(resource),

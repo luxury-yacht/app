@@ -25,7 +25,6 @@ import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
-import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import type { PodSnapshotEntry, PodMetricsInfo } from '@/core/refresh/types';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { getPodsUnhealthyStorageKey } from '@modules/namespace/components/podsFilterSignals';
@@ -37,6 +36,7 @@ import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useFavToggle } from '@ui/favorites/FavToggle';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
+import { buildCanonicalObjectRowKey, buildObjectReference } from '@shared/utils/objectIdentity';
 
 interface PodsViewProps {
   namespace: string;
@@ -136,14 +136,15 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
     // Include cluster metadata so object details stay scoped to the active tab.
     const handlePodOpen = useCallback(
       (pod: PodSnapshotEntry) => {
-        openWithObject({
-          kind: 'Pod',
-          name: pod.name,
-          namespace: pod.namespace,
-          ...resolveBuiltinGroupVersion('Pod'),
-          clusterId: pod.clusterId ?? undefined,
-          clusterName: pod.clusterName ?? undefined,
-        });
+        openWithObject(
+          buildObjectReference({
+            kind: 'Pod',
+            name: pod.name,
+            namespace: pod.namespace,
+            clusterId: pod.clusterId ?? undefined,
+            clusterName: pod.clusterName ?? undefined,
+          })
+        );
       },
       [openWithObject]
     );
@@ -153,14 +154,18 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
         if (!pod.ownerKind || !pod.ownerName) {
           return;
         }
-        openWithObject({
-          kind: pod.ownerKind,
-          name: pod.ownerName,
-          namespace: pod.namespace,
-          ...resolveBuiltinGroupVersion(pod.ownerKind),
-          clusterId: pod.clusterId ?? undefined,
-          clusterName: pod.clusterName ?? undefined,
-        });
+        const ownerGVK = resolveBuiltinGroupVersion(pod.ownerKind);
+        openWithObject(
+          buildObjectReference({
+            kind: pod.ownerKind,
+            name: pod.ownerName,
+            namespace: pod.namespace,
+            group: ownerGVK.group,
+            version: ownerGVK.version,
+            clusterId: pod.clusterId ?? undefined,
+            clusterName: pod.clusterName ?? undefined,
+          })
+        );
       },
       [openWithObject]
     );
@@ -170,20 +175,26 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
         if (!pod.node) {
           return;
         }
-        openWithObject({
-          kind: 'Node',
-          name: pod.node,
-          ...resolveBuiltinGroupVersion('Node'),
-          clusterId: pod.clusterId ?? undefined,
-          clusterName: pod.clusterName ?? undefined,
-        });
+        openWithObject(
+          buildObjectReference({
+            kind: 'Node',
+            name: pod.node,
+            clusterId: pod.clusterId ?? undefined,
+            clusterName: pod.clusterName ?? undefined,
+          })
+        );
       },
       [openWithObject]
     );
 
     const keyExtractor = useCallback(
       (pod: PodSnapshotEntry) =>
-        buildClusterScopedKey(pod, `pod:${pod.namespace || ''}/${pod.name}`),
+        buildCanonicalObjectRowKey({
+          kind: 'Pod',
+          name: pod.name,
+          namespace: pod.namespace,
+          clusterId: pod.clusterId,
+        }),
       []
     );
 
@@ -209,25 +220,29 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
           getKind: () => 'Pod',
           onClick: handlePodOpen,
           onAltClick: (pod) =>
-            navigateToView({
-              kind: 'Pod',
-              name: pod.name,
-              namespace: pod.namespace,
-              clusterId: pod.clusterId ?? undefined,
-              clusterName: pod.clusterName ?? undefined,
-            }),
+            navigateToView(
+              buildObjectReference({
+                kind: 'Pod',
+                name: pod.name,
+                namespace: pod.namespace,
+                clusterId: pod.clusterId ?? undefined,
+                clusterName: pod.clusterName ?? undefined,
+              })
+            ),
           sortable: false,
         }),
         cf.createTextColumn<PodSnapshotEntry>('name', 'Name', {
           onClick: handlePodOpen,
           onAltClick: (pod) =>
-            navigateToView({
-              kind: 'Pod',
-              name: pod.name,
-              namespace: pod.namespace,
-              clusterId: pod.clusterId ?? undefined,
-              clusterName: pod.clusterName ?? undefined,
-            }),
+            navigateToView(
+              buildObjectReference({
+                kind: 'Pod',
+                name: pod.name,
+                namespace: pod.namespace,
+                clusterId: pod.clusterId ?? undefined,
+                clusterName: pod.clusterName ?? undefined,
+              })
+            ),
           getTitle: (pod) => pod.name,
           getClassName: () => 'object-panel-link',
         }),
@@ -253,13 +268,15 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
             onClick: handleOwnerOpen,
             onAltClick: (pod) => {
               if (pod.ownerKind && pod.ownerName) {
-                navigateToView({
-                  kind: pod.ownerKind,
-                  name: pod.ownerName,
-                  namespace: pod.namespace,
-                  clusterId: pod.clusterId ?? undefined,
-                  clusterName: pod.clusterName ?? undefined,
-                });
+                navigateToView(
+                  buildObjectReference({
+                    kind: pod.ownerKind,
+                    name: pod.ownerName,
+                    namespace: pod.namespace,
+                    clusterId: pod.clusterId ?? undefined,
+                    clusterName: pod.clusterName ?? undefined,
+                  })
+                );
               }
             },
             isInteractive: (pod) => Boolean(pod.ownerKind && pod.ownerName),
@@ -273,12 +290,14 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
           onClick: handleNodeOpen,
           onAltClick: (pod) => {
             if (pod.node) {
-              navigateToView({
-                kind: 'Node',
-                name: pod.node,
-                clusterId: pod.clusterId ?? undefined,
-                clusterName: pod.clusterName ?? undefined,
-              });
+              navigateToView(
+                buildObjectReference({
+                  kind: 'Node',
+                  name: pod.node,
+                  clusterId: pod.clusterId ?? undefined,
+                  clusterName: pod.clusterName ?? undefined,
+                })
+              );
             }
           },
           isInteractive: (pod) => Boolean(pod.node),
@@ -505,11 +524,13 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
 
         return buildObjectActionItems({
           object: {
-            kind: 'Pod',
-            name: pod.name,
-            namespace: pod.namespace,
-            clusterId: pod.clusterId,
-            clusterName: pod.clusterName,
+            ...buildObjectReference({
+              kind: 'Pod',
+              name: pod.name,
+              namespace: pod.namespace,
+              clusterId: pod.clusterId,
+              clusterName: pod.clusterName,
+            }),
             portForwardAvailable: pod.portForwardAvailable,
           },
           context: 'gridtable',

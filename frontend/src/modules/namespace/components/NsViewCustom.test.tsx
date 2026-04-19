@@ -136,6 +136,8 @@ const baseResource: CustomResourceData = {
   namespace: 'ops',
   clusterId: 'alpha:ctx',
   clusterName: 'alpha',
+  apiGroup: 'batch',
+  apiVersion: 'v1',
   age: '10m',
   labels: { team: 'platform' },
   annotations: { owner: 'ops' },
@@ -202,7 +204,9 @@ describe('NsViewCustom', () => {
 
     const gridProps = gridTableMock.mock.calls[0][0];
     expect(gridProps.data).toEqual([baseResource]);
-    expect(gridProps.keyExtractor(baseResource)).toBe('alpha:ctx|ops/CronJob/nightly-cleanup');
+    expect(gridProps.keyExtractor(baseResource)).toBe(
+      'alpha:ctx|batch/v1/CronJob/ops/nightly-cleanup'
+    );
     gridProps.onSort?.('name');
     expect(sortHandlerMock).toHaveBeenCalledWith('name');
 
@@ -402,10 +406,16 @@ describe('NsViewCustom', () => {
   // must fail loud rather than silently fall back to first-match-wins
   // discovery. The errorHandler should see the thrown error.
   it('throws instead of falling back when apiGroup/apiVersion are missing', async () => {
-    await renderComponent({ data: [baseResource], loaded: true, showNamespaceColumn: true });
+    const missingGVK: CustomResourceData = {
+      ...baseResource,
+      apiGroup: undefined,
+      apiVersion: undefined,
+    };
+
+    await renderComponent({ data: [missingGVK], loaded: true, showNamespaceColumn: true });
 
     const gridProps = gridTableMock.mock.calls[0][0];
-    const contextItems = gridProps.getCustomContextMenuItems(baseResource, 'kind');
+    const contextItems = gridProps.getCustomContextMenuItems(missingGVK, 'kind');
     const deleteItem = contextItems.find(
       (item: { label?: string; onClick?: () => void }) => item.label === 'Delete'
     );
@@ -485,12 +495,15 @@ describe('NsViewCustom', () => {
     const gridProps = gridTableMock.mock.calls[0][0];
 
     const generatedKey = gridProps.keyExtractor({
+      kind: 'CronJob',
       name: 'svc',
       namespace: 'tools',
       kindAlias: 'CR',
       clusterId: 'alpha:ctx',
+      apiGroup: 'batch',
+      apiVersion: 'v1',
     } as CustomResourceData);
-    expect(generatedKey).toBe('alpha:ctx|tools/CR/svc');
+    expect(generatedKey).toBe('alpha:ctx|batch/v1/CronJob/tools/svc');
   });
 
   // CRD column: each row gets a clickable cell that opens the owning

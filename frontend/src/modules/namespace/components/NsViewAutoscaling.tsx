@@ -23,7 +23,6 @@ import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
-import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import {
   formatBuiltinApiVersion,
   parseApiVersion,
@@ -35,6 +34,7 @@ import { errorHandler } from '@utils/errorHandler';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 import { useFavToggle } from '@ui/favorites/FavToggle';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
+import { buildCanonicalObjectRowKey, buildObjectReference } from '@shared/utils/objectIdentity';
 
 // Data interface for autoscaling resources
 export interface AutoscalingData {
@@ -104,24 +104,27 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
     const handleResourceClick = useCallback(
       (resource: AutoscalingData) => {
         const resolvedKind = resource.kind || resource.kindAlias;
-        openWithObject({
-          kind: resolvedKind,
-          name: resource.name,
-          namespace: resource.namespace,
-          ...resolveBuiltinGroupVersion(resolvedKind),
-          clusterId: resource.clusterId ?? undefined,
-          clusterName: resource.clusterName ?? undefined,
-        });
+        openWithObject(
+          buildObjectReference({
+            kind: resolvedKind,
+            name: resource.name,
+            namespace: resource.namespace,
+            clusterId: resource.clusterId ?? undefined,
+            clusterName: resource.clusterName ?? undefined,
+          })
+        );
       },
       [openWithObject]
     );
 
     const keyExtractor = useCallback(
       (resource: AutoscalingData) =>
-        buildClusterScopedKey(
-          resource,
-          [resource.namespace, resource.kind, resource.name].filter(Boolean).join('/')
-        ),
+        buildCanonicalObjectRowKey({
+          kind: resource.kind,
+          name: resource.name,
+          namespace: resource.namespace,
+          clusterId: resource.clusterId,
+        }),
       []
     );
 
@@ -140,13 +143,15 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
             ),
           onClick: handleResourceClick,
           onAltClick: (resource) =>
-            navigateToView({
-              kind: resource.kind,
-              name: resource.name,
-              namespace: resource.namespace,
-              clusterId: resource.clusterId ?? undefined,
-              clusterName: resource.clusterName ?? undefined,
-            }),
+            navigateToView(
+              buildObjectReference({
+                kind: resource.kind,
+                name: resource.name,
+                namespace: resource.namespace,
+                clusterId: resource.clusterId ?? undefined,
+                clusterName: resource.clusterName ?? undefined,
+              })
+            ),
         })
       );
 
@@ -154,13 +159,15 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
         cf.createTextColumn<AutoscalingData>('name', 'Name', {
           onClick: handleResourceClick,
           onAltClick: (resource) =>
-            navigateToView({
-              kind: resource.kind,
-              name: resource.name,
-              namespace: resource.namespace,
-              clusterId: resource.clusterId ?? undefined,
-              clusterName: resource.clusterName ?? undefined,
-            }),
+            navigateToView(
+              buildObjectReference({
+                kind: resource.kind,
+                name: resource.name,
+                namespace: resource.namespace,
+                clusterId: resource.clusterId ?? undefined,
+                clusterName: resource.clusterName ?? undefined,
+              })
+            ),
           getClassName: () => 'object-panel-link',
         })
       );
@@ -189,27 +196,34 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
               // back to the built-in lookup when the backend snapshot lacks
               // one (legacy data, or HPA with malformed scaleTargetRef).
               openWithObject({
-                kind: resource.scaleTargetRef.kind,
-                name: resource.scaleTargetRef.name,
-                namespace: resource.namespace,
-                ...(resource.scaleTargetRef.apiVersion
-                  ? parseApiVersion(resource.scaleTargetRef.apiVersion)
-                  : resolveBuiltinGroupVersion(resource.scaleTargetRef.kind)),
-                clusterId: resource.clusterId ?? undefined,
-                clusterName: resource.clusterName ?? undefined,
+                ...buildObjectReference({
+                  kind: resource.scaleTargetRef.kind,
+                  name: resource.scaleTargetRef.name,
+                  namespace: resource.namespace,
+                  ...(resource.scaleTargetRef.apiVersion
+                    ? parseApiVersion(resource.scaleTargetRef.apiVersion)
+                    : resolveBuiltinGroupVersion(resource.scaleTargetRef.kind)),
+                  clusterId: resource.clusterId ?? undefined,
+                  clusterName: resource.clusterName ?? undefined,
+                }),
               });
             },
             onAltClick: (resource) => {
               if (!resource.scaleTargetRef) {
                 return;
               }
-              navigateToView({
-                kind: resource.scaleTargetRef.kind,
-                name: resource.scaleTargetRef.name,
-                namespace: resource.namespace,
-                clusterId: resource.clusterId ?? undefined,
-                clusterName: resource.clusterName ?? undefined,
-              });
+              navigateToView(
+                buildObjectReference({
+                  kind: resource.scaleTargetRef.kind,
+                  name: resource.scaleTargetRef.name,
+                  namespace: resource.namespace,
+                  ...(resource.scaleTargetRef.apiVersion
+                    ? parseApiVersion(resource.scaleTargetRef.apiVersion)
+                    : resolveBuiltinGroupVersion(resource.scaleTargetRef.kind)),
+                  clusterId: resource.clusterId ?? undefined,
+                  clusterName: resource.clusterName ?? undefined,
+                })
+              );
             },
             isInteractive: (resource) => Boolean(resource.scaleTargetRef),
             getClassName: (resource) =>
@@ -396,13 +410,13 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
           ) ?? null;
 
         return buildObjectActionItems({
-          object: {
+          object: buildObjectReference({
             kind: resource.kind,
             name: resource.name,
             namespace: resource.namespace,
             clusterId: resource.clusterId,
             clusterName: resource.clusterName,
-          },
+          }),
           context: 'gridtable',
           handlers: {
             onOpen: () => handleResourceClick(resource),

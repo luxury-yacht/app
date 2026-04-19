@@ -27,9 +27,8 @@ import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
-import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import { useFavToggle } from '@ui/favorites/FavToggle';
-import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
+import { buildCanonicalObjectRowKey, buildObjectReference } from '@shared/utils/objectIdentity';
 
 // Define the data structure for cluster custom resources
 interface ClusterCustomData {
@@ -85,17 +84,23 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
         // CRITICAL: pass apiGroup/apiVersion so downstream scope/capability
         // resolution can disambiguate colliding Kinds. See
         //  step 1.
-        openWithObject({
-          kind: resource.kind,
-          name: resource.name,
-          group: resource.apiGroup,
-          version: resource.apiVersion,
-          age: resource.age,
-          labels: resource.labels,
-          annotations: resource.annotations,
-          clusterId: resource.clusterId ?? undefined,
-          clusterName: resource.clusterName ?? undefined,
-        });
+        openWithObject(
+          buildObjectReference(
+            {
+              kind: resource.kind,
+              name: resource.name,
+              group: resource.apiGroup,
+              version: resource.apiVersion,
+              clusterId: resource.clusterId ?? undefined,
+              clusterName: resource.clusterName ?? undefined,
+            },
+            {
+              age: resource.age,
+              labels: resource.labels,
+              annotations: resource.annotations,
+            }
+          )
+        );
       },
       [openWithObject]
     );
@@ -109,23 +114,27 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
         if (!resource.crdName) {
           return;
         }
-        openWithObject({
-          kind: 'CustomResourceDefinition',
-          ...resolveBuiltinGroupVersion('CustomResourceDefinition'),
-          name: resource.crdName,
-          clusterId: resource.clusterId ?? undefined,
-          clusterName: resource.clusterName ?? undefined,
-        });
+        openWithObject(
+          buildObjectReference({
+            kind: 'CustomResourceDefinition',
+            name: resource.crdName,
+            clusterId: resource.clusterId ?? undefined,
+            clusterName: resource.clusterName ?? undefined,
+          })
+        );
       },
       [openWithObject]
     );
 
     const keyExtractor = useCallback(
       (resource: ClusterCustomData) =>
-        buildClusterScopedKey(
-          resource,
-          ['custom', resource.kind, resource.name].filter(Boolean).join('/')
-        ),
+        buildCanonicalObjectRowKey({
+          kind: resource.kind,
+          name: resource.name,
+          clusterId: resource.clusterId,
+          group: resource.apiGroup,
+          version: resource.apiVersion,
+        }),
       []
     );
 
@@ -139,23 +148,31 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
           getDisplayText: (resource) => getDisplayKind(resource.kind, useShortResourceNames),
           onClick: handleResourceClick,
           onAltClick: (resource) =>
-            navigateToView({
-              kind: resource.kind,
-              name: resource.name,
-              clusterId: resource.clusterId,
-              clusterName: resource.clusterName,
-            }),
+            navigateToView(
+              buildObjectReference({
+                kind: resource.kind,
+                name: resource.name,
+                clusterId: resource.clusterId,
+                clusterName: resource.clusterName,
+                group: resource.apiGroup,
+                version: resource.apiVersion,
+              })
+            ),
         }),
         cf.createTextColumn<ClusterCustomData>('name', 'Name', {
           sortable: true,
           onClick: handleResourceClick,
           onAltClick: (resource) =>
-            navigateToView({
-              kind: resource.kind,
-              name: resource.name,
-              clusterId: resource.clusterId,
-              clusterName: resource.clusterName,
-            }),
+            navigateToView(
+              buildObjectReference({
+                kind: resource.kind,
+                name: resource.name,
+                clusterId: resource.clusterId,
+                clusterName: resource.clusterName,
+                group: resource.apiGroup,
+                version: resource.apiVersion,
+              })
+            ),
           getClassName: () => 'object-panel-link',
         }),
         // CRD column: each cell is a clickable link back to the CRD
@@ -178,12 +195,14 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
                 if (!resource.crdName) {
                   return;
                 }
-                navigateToView({
-                  kind: 'CustomResourceDefinition',
-                  name: resource.crdName,
-                  clusterId: resource.clusterId,
-                  clusterName: resource.clusterName,
-                });
+                navigateToView(
+                  buildObjectReference({
+                    kind: 'CustomResourceDefinition',
+                    name: resource.crdName,
+                    clusterId: resource.clusterId,
+                    clusterName: resource.clusterName,
+                  })
+                );
               },
               isInteractive: (resource) => Boolean(resource.crdName),
               getClassName: (resource) => (resource.crdName ? 'object-panel-link' : undefined),
@@ -318,14 +337,14 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
         }
 
         return buildObjectActionItems({
-          object: {
+          object: buildObjectReference({
             kind: resource.kind,
             name: resource.name,
             clusterId: resource.clusterId,
             clusterName: resource.clusterName,
             group: resource.apiGroup ?? undefined,
             version: resource.apiVersion ?? undefined,
-          },
+          }),
           context: 'gridtable',
           handlers: {
             onOpen: () => handleResourceClick(resource),

@@ -26,7 +26,6 @@ import { PortForwardModal, PortForwardTarget } from '@modules/port-forward';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import GridTable, { GRIDTABLE_VIRTUALIZATION_DEFAULT } from '@shared/components/tables/GridTable';
-import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import {
   formatBuiltinApiVersion,
   resolveBuiltinGroupVersion,
@@ -38,7 +37,6 @@ import {
   WorkloadData,
   clampReplicas,
   extractDesiredReplicas,
-  buildWorkloadKey,
   appendWorkloadTokens,
 } from '@modules/namespace/components/NsViewWorkloads.helpers';
 import {
@@ -55,6 +53,7 @@ import {
   RESTARTABLE_KINDS,
 } from '@shared/hooks/useObjectActions';
 import { useFavToggle } from '@ui/favorites/FavToggle';
+import { buildCanonicalObjectRowKey, buildObjectReference } from '@shared/utils/objectIdentity';
 
 interface WorkloadsViewProps {
   namespace: string;
@@ -120,20 +119,27 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
 
     const handleWorkloadClick = useCallback(
       (workload: WorkloadData) => {
-        openWithObject({
-          kind: workload.kind,
-          name: workload.name,
-          namespace: workload.namespace,
-          ...resolveBuiltinGroupVersion(workload.kind),
-          clusterId: workload.clusterId ?? undefined,
-          clusterName: workload.clusterName ?? undefined,
-        });
+        openWithObject(
+          buildObjectReference({
+            kind: workload.kind,
+            name: workload.name,
+            namespace: workload.namespace,
+            clusterId: workload.clusterId ?? undefined,
+            clusterName: workload.clusterName ?? undefined,
+          })
+        );
       },
       [openWithObject]
     );
 
     const keyExtractor = useCallback(
-      (row: WorkloadData) => buildClusterScopedKey(row, `workload:${buildWorkloadKey(row)}`),
+      (row: WorkloadData) =>
+        buildCanonicalObjectRowKey({
+          kind: row.kind,
+          name: row.name,
+          namespace: row.namespace,
+          clusterId: row.clusterId,
+        }),
       []
     );
 
@@ -142,13 +148,15 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
     const tableColumns = useWorkloadTableColumns({
       handleWorkloadClick,
       onAltClick: (workload) =>
-        navigateToView({
-          kind: workload.kind,
-          name: workload.name,
-          namespace: workload.namespace,
-          clusterId: workload.clusterId ?? undefined,
-          clusterName: workload.clusterName ?? undefined,
-        }),
+        navigateToView(
+          buildObjectReference({
+            kind: workload.kind,
+            name: workload.name,
+            namespace: workload.namespace,
+            clusterId: workload.clusterId ?? undefined,
+            clusterName: workload.clusterName ?? undefined,
+          })
+        ),
       showNamespaceColumn,
       useShortResourceNames,
       metrics: metricsInfo ?? null,
@@ -429,11 +437,13 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
 
         return buildObjectActionItems({
           object: {
-            kind: row.kind,
-            name: row.name,
-            namespace: row.namespace,
-            clusterId: row.clusterId,
-            clusterName: row.clusterName,
+            ...buildObjectReference({
+              kind: row.kind,
+              name: row.name,
+              namespace: row.namespace,
+              clusterId: row.clusterId,
+              clusterName: row.clusterName,
+            }),
             status: row.status,
             portForwardAvailable: row.portForwardAvailable,
             hpaManaged: Boolean(row.hpaManaged),

@@ -134,6 +134,7 @@ const baseCustom = {
   kind: 'Widget',
   name: 'gizmo',
   apiGroup: 'example.com',
+  apiVersion: 'v1',
   age: '1d',
   clusterId: 'alpha:ctx',
   clusterName: 'alpha',
