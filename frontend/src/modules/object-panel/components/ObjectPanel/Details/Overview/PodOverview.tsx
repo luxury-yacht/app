@@ -9,8 +9,7 @@ import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceStatus } from '@shared/components/kubernetes/ResourceStatus';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
-import { parseApiVersion } from '@shared/constants/builtinGroupVersions';
-import { buildObjectReference } from '@shared/utils/objectIdentity';
+import { buildObjectReference, buildRelatedObjectReference } from '@shared/utils/objectIdentity';
 
 interface PodOverviewProps {
   name: string;
@@ -60,14 +59,11 @@ export const PodOverview: React.FC<PodOverviewProps> = ({
     owner && typeof owner !== 'string'
       ? (() => {
           try {
-            return buildObjectReference({
+            return buildRelatedObjectReference({
               kind: owner.kind.toLowerCase(),
-              // Prefer the apiVersion the OwnerReference explicitly
-              // declared (correct for any kind, including CRD-as-Pod-
-              // owner like Argo Rollout, KubeVirt VMI, Tekton TaskRun);
-              // fall back to plain text when legacy snapshots omitted it
-              // for a non-built-in owner kind.
-              ...(owner.apiVersion ? parseApiVersion(owner.apiVersion) : {}),
+              // Prefer the OwnerReference apiVersion when present so
+              // CRD-backed owners keep their real GVK.
+              apiVersion: owner.apiVersion,
               name: owner.name,
               namespace,
               ...clusterMeta,

@@ -10,8 +10,7 @@ import { ResourceStatus } from '@shared/components/kubernetes/ResourceStatus';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
-import { parseApiVersion } from '@shared/constants/builtinGroupVersions';
-import { buildObjectReference } from '@shared/utils/objectIdentity';
+import { buildRelatedObjectReference } from '@shared/utils/objectIdentity';
 import './shared/LabelsAndAnnotations.css';
 import './HelmOverview.css';
 
@@ -119,13 +118,11 @@ export const HelmOverview: React.FC<HelmOverviewProps> = ({
               .map((resource: types.HelmResource, idx: number) => {
                 const resourceRef = (() => {
                   try {
-                    return buildObjectReference({
+                    return buildRelatedObjectReference({
                       kind: resource.kind.toLowerCase(),
-                      // Prefer the apiVersion the Helm manifest explicitly
-                      // declared (correct for CRDs); fall back to plain
-                      // text when older release data omitted it for a
-                      // non-built-in managed resource.
-                      ...(resource.apiVersion ? parseApiVersion(resource.apiVersion) : {}),
+                      // Prefer the manifest apiVersion so CRD-backed
+                      // managed resources keep their real GVK.
+                      apiVersion: resource.apiVersion,
                       name: resource.name,
                       namespace: resource.namespace,
                       ...clusterMeta,

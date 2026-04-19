@@ -351,9 +351,13 @@ Current status:
 - ✅ related-object links now share a helper-backed reference path for typed
   data sources as well, including pod owner links and HPA scale-target links,
   instead of each view manually resolving built-in target GVKs
-- ⏭ next step: continue auditing remaining generic entry points so object
-  opening, diff, and command-style navigation all share the same helper-backed
-  identity conventions
+- ✅ object-panel overview relationships now use the same helper-backed
+  related-object path for embedded `apiVersion` data, including pod owners,
+  HPA targets, and Helm-managed resources
+- ✅ exit criteria met: generic object workflows now share one identity
+  backbone, and typed views no longer carry separate ad hoc identity
+  conventions for open/diff/navigation flows
+- ✅ Phase 6 complete
 
 ## Rollout Order
 

@@ -8,8 +8,7 @@ import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
-import { parseApiVersion } from '@shared/constants/builtinGroupVersions';
-import { buildObjectReference } from '@shared/utils/objectIdentity';
+import { buildRelatedObjectReference } from '@shared/utils/objectIdentity';
 import { types } from '@wailsjs/go/models';
 import './PolicyOverview.css';
 
@@ -55,15 +54,11 @@ export const PolicyOverview: React.FC<PolicyOverviewProps> = (props) => {
   const scaleTargetRef = props.scaleTargetRef
     ? (() => {
         try {
-          return buildObjectReference({
+          return buildRelatedObjectReference({
             kind: props.scaleTargetRef.kind,
-            // Prefer the apiVersion the HPA explicitly references
-            // (correct for any kind, including CRDs); fall back to
-            // plain text when malformed legacy data omits it for a
-            // non-built-in target kind.
-            ...(props.scaleTargetRef.apiVersion
-              ? parseApiVersion(props.scaleTargetRef.apiVersion)
-              : {}),
+            // Prefer the apiVersion the HPA explicitly references so
+            // CRD scale targets keep their real GVK.
+            apiVersion: props.scaleTargetRef.apiVersion,
             name: props.scaleTargetRef.name,
             namespace,
             ...clusterMeta,
