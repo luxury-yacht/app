@@ -58,6 +58,7 @@ type NamespaceWorkloadsBuilder struct {
 type NamespaceWorkloadsSnapshot struct {
 	ClusterMeta
 	Workloads []WorkloadSummary `json:"workloads"`
+	Kinds     []string          `json:"kinds,omitempty"`
 }
 
 // WorkloadSummary mirrors the data required by the workloads table.
@@ -333,7 +334,11 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 		Domain:  namespaceWorkloadsDomainName,
 		Scope:   scope,
 		Version: version,
-		Payload: NamespaceWorkloadsSnapshot{ClusterMeta: meta, Workloads: items},
+		Payload: NamespaceWorkloadsSnapshot{
+			ClusterMeta: meta,
+			Workloads:   items,
+			Kinds:       snapshotSortedKinds(items, func(item WorkloadSummary) string { return item.Kind }),
+		},
 		Stats: refresh.SnapshotStats{
 			ItemCount: len(items),
 		},

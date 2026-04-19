@@ -30,6 +30,8 @@ import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 import { useFavToggle } from '@ui/favorites/FavToggle';
 import { buildCanonicalObjectRowKey, buildObjectReference } from '@shared/utils/objectIdentity';
 
+const CLUSTER_STORAGE_KIND_OPTIONS = ['PersistentVolume'];
+
 // Define the data structure for Persistent Volumes
 interface StorageData {
   kind: string;
@@ -272,10 +274,7 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
       onChange: setPersistedSort,
     });
 
-    const availableKinds = useMemo(
-      () => [...new Set(data.map((r) => r.kind).filter(Boolean) as string[])].sort(),
-      [data]
-    );
+    const availableKinds = CLUSTER_STORAGE_KIND_OPTIONS;
 
     const { item: favToggle, modal: favModal } = useFavToggle({
       filters: persistedFilters,

@@ -81,17 +81,19 @@ function Sidebar() {
     selectedNamespaceClusterId,
   } = useNamespace();
   const { selectedClusterId } = useKubeconfig();
-  // Catalog is scoped — read all active scopes and find data for the active cluster.
+  // Catalog is scoped — aggregate namespace metadata across active scopes, then
+  // select the active cluster's groups explicitly instead of trusting whichever
+  // scope happened to populate first.
   const catalogScopedStates = useRefreshScopedDomainStates('catalog');
-  const catalogDomain = useMemo(() => {
-    // Find the first scope entry that has data (the active catalog scope for this cluster).
-    const entries = Object.values(catalogScopedStates);
-    for (const entry of entries) {
-      if (entry?.data) {
-        return entry;
+  const catalogNamespaceGroups = useMemo<CatalogNamespaceGroup[]>(() => {
+    const groups: CatalogNamespaceGroup[] = [];
+    for (const entry of Object.values(catalogScopedStates)) {
+      const namespaceGroups = entry?.data?.namespaceGroups;
+      if (namespaceGroups?.length) {
+        groups.push(...namespaceGroups);
       }
     }
-    return { data: null, status: 'idle' as const };
+    return groups;
   }, [catalogScopedStates]);
   const viewState = useViewState();
   const [expandedNamespaceKey, setExpandedNamespaceKey] = useState<string | null>(null);
@@ -140,12 +142,13 @@ function Sidebar() {
   const hasNamespaceData = !namespaceLoading && namespaces.some((item) => !item.isSynthetic);
 
   const namespaceGroups = useMemo<NamespaceGroup[]>(() => {
-    const groups = catalogDomain.data?.namespaceGroups ?? [];
     const activeClusterId = selectedClusterId?.trim();
-    if (!activeClusterId || groups.length === 0) {
+    if (!activeClusterId || catalogNamespaceGroups.length === 0) {
       return [];
     }
-    const activeGroups = groups.filter((group) => group.clusterId === activeClusterId);
+    const activeGroups = catalogNamespaceGroups.filter(
+      (group) => group.clusterId === activeClusterId
+    );
     if (activeGroups.length === 0) {
       return [];
     }
@@ -191,7 +194,7 @@ function Sidebar() {
       .sort((a, b) => a.clusterName.localeCompare(b.clusterName));
   }, [
     allNamespacesItem,
-    catalogDomain.data?.namespaceGroups,
+    catalogNamespaceGroups,
     hasNamespaceData,
     namespaceDetailsByScope,
     selectedClusterId,

@@ -26,6 +26,7 @@ import GridTable, {
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
+import { useNamespaceFilterOptions } from '@modules/namespace/hooks/useNamespaceFilterOptions';
 import { buildSyntheticObjectReference } from '@shared/utils/objectIdentity';
 
 // Data interface for Helm releases
@@ -311,10 +312,11 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
       onChange: onSortChange,
     });
 
-    const availableFilterNamespaces = useMemo(
+    const fallbackNamespaces = useMemo(
       () => [...new Set(data.map((r) => r.namespace).filter(Boolean))].sort(),
       [data]
     );
+    const availableFilterNamespaces = useNamespaceFilterOptions(namespace, fallbackNamespaces);
 
     const { item: favToggle, modal: favModal } = useFavToggle({
       filters: persistedFilters,

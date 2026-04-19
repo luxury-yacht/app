@@ -27,6 +27,7 @@ import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
+import { useKindFilterOptions } from '@shared/components/tables/hooks/useKindFilterOptions';
 import { useFavToggle } from '@ui/favorites/FavToggle';
 import { buildCanonicalObjectRowKey, buildObjectReference } from '@shared/utils/objectIdentity';
 
@@ -256,10 +257,7 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
       onChange: setPersistedSort,
     });
 
-    const availableKinds = useMemo(
-      () => [...new Set(data.map((r) => r.kind).filter(Boolean) as string[])].sort(),
-      [data]
-    );
+    const availableKinds = useKindFilterOptions(data);
 
     const { item: favToggle, modal: favModal } = useFavToggle({
       filters: persistedFilters,

@@ -134,6 +134,7 @@ describe('NamespaceResourcesViews', () => {
       tab: 'workloads' as const,
       props: {
         nsWorkloads: [{ name: 'deploy', namespace: 'team-a' }],
+        nsWorkloadsKinds: ['Deployment', 'StatefulSet'],
         nsWorkloadsLoading: true,
         nsWorkloadsLoaded: false,
       },
@@ -141,6 +142,7 @@ describe('NamespaceResourcesViews', () => {
       expected: {
         namespace: 'team-a',
         data: [{ name: 'deploy', namespace: 'team-a' }],
+        availableKinds: ['Deployment', 'StatefulSet'],
         loading: true,
         loaded: false,
       },
@@ -149,6 +151,7 @@ describe('NamespaceResourcesViews', () => {
       tab: 'config' as const,
       props: {
         nsConfig: [{ name: 'cm' }],
+        nsConfigKinds: ['ConfigMap', 'Secret'],
         nsConfigLoading: false,
         nsConfigLoaded: true,
       },
@@ -156,6 +159,7 @@ describe('NamespaceResourcesViews', () => {
       expected: {
         namespace: 'team-a',
         data: [{ name: 'cm' }],
+        availableKinds: ['ConfigMap', 'Secret'],
         loading: false,
         loaded: true,
       },
@@ -164,6 +168,7 @@ describe('NamespaceResourcesViews', () => {
       tab: 'network' as const,
       props: {
         nsNetwork: [{ name: 'np' }],
+        nsNetworkKinds: ['Ingress', 'NetworkPolicy', 'Service'],
         nsNetworkLoading: false,
         nsNetworkLoaded: true,
       },
@@ -171,6 +176,7 @@ describe('NamespaceResourcesViews', () => {
       expected: {
         namespace: 'team-a',
         data: [{ name: 'np' }],
+        availableKinds: ['Ingress', 'NetworkPolicy', 'Service'],
         loading: false,
         loaded: true,
       },
@@ -179,6 +185,7 @@ describe('NamespaceResourcesViews', () => {
       tab: 'rbac' as const,
       props: {
         nsRBAC: [{ name: 'role' }],
+        nsRBACKinds: ['Role', 'RoleBinding', 'ServiceAccount'],
         nsRBACLoading: true,
         nsRBACLoaded: false,
       },
@@ -186,6 +193,7 @@ describe('NamespaceResourcesViews', () => {
       expected: {
         namespace: 'team-a',
         data: [{ name: 'role' }],
+        availableKinds: ['Role', 'RoleBinding', 'ServiceAccount'],
         loading: true,
         loaded: false,
       },
@@ -209,6 +217,7 @@ describe('NamespaceResourcesViews', () => {
       tab: 'autoscaling' as const,
       props: {
         nsAutoscaling: [{ name: 'hpa' }],
+        nsAutoscalingKinds: ['HorizontalPodAutoscaler'],
         nsAutoscalingLoading: false,
         nsAutoscalingLoaded: true,
       },
@@ -216,6 +225,7 @@ describe('NamespaceResourcesViews', () => {
       expected: {
         namespace: 'team-a',
         data: [{ name: 'hpa' }],
+        availableKinds: ['HorizontalPodAutoscaler'],
         loading: false,
         loaded: true,
       },
@@ -224,6 +234,7 @@ describe('NamespaceResourcesViews', () => {
       tab: 'quotas' as const,
       props: {
         nsQuotas: [{ name: 'rq' }],
+        nsQuotasKinds: ['LimitRange', 'PodDisruptionBudget', 'ResourceQuota'],
         nsQuotasLoading: true,
         nsQuotasLoaded: true,
       },
@@ -231,6 +242,7 @@ describe('NamespaceResourcesViews', () => {
       expected: {
         namespace: 'team-a',
         data: [{ name: 'rq' }],
+        availableKinds: ['LimitRange', 'PodDisruptionBudget', 'ResourceQuota'],
         loading: true,
         loaded: true,
       },

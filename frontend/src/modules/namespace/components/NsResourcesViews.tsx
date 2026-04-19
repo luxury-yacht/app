@@ -50,6 +50,7 @@ interface NamespaceResourcesViewsProps {
 
   // Workloads data and loading states
   nsWorkloads?: any[];
+  nsWorkloadsKinds?: string[];
   nsWorkloadsLoading?: boolean;
   nsWorkloadsError?: string | null;
   loadWorkloads?: () => Promise<void>;
@@ -57,6 +58,7 @@ interface NamespaceResourcesViewsProps {
 
   // Config data
   nsConfig?: any[];
+  nsConfigKinds?: string[];
   nsConfigLoading?: boolean;
   nsConfigError?: string | null;
   loadConfig?: () => Promise<void>;
@@ -64,6 +66,7 @@ interface NamespaceResourcesViewsProps {
 
   // Network data
   nsNetwork?: any[];
+  nsNetworkKinds?: string[];
   nsNetworkLoading?: boolean;
   nsNetworkError?: string | null;
   loadNetwork?: () => Promise<void>;
@@ -71,6 +74,7 @@ interface NamespaceResourcesViewsProps {
 
   // RBAC data
   nsRBAC?: any[];
+  nsRBACKinds?: string[];
   nsRBACLoading?: boolean;
   nsRBACError?: string | null;
   loadRBAC?: () => Promise<void>;
@@ -85,6 +89,7 @@ interface NamespaceResourcesViewsProps {
 
   // Autoscaling data
   nsAutoscaling?: any[];
+  nsAutoscalingKinds?: string[];
   nsAutoscalingLoading?: boolean;
   nsAutoscalingError?: string | null;
   loadAutoscaling?: () => Promise<void>;
@@ -92,6 +97,7 @@ interface NamespaceResourcesViewsProps {
 
   // Quotas data
   nsQuotas?: any[];
+  nsQuotasKinds?: string[];
   nsQuotasLoading?: boolean;
   nsQuotasError?: string | null;
   loadQuotas?: () => Promise<void>;
@@ -138,18 +144,22 @@ const NamespaceResourcesViews: React.FC<NamespaceResourcesViewsProps> = ({
   nsPodsMetrics = null,
 
   nsWorkloads = [],
+  nsWorkloadsKinds,
   nsWorkloadsLoading = false,
   nsWorkloadsLoaded = false,
 
   nsConfig = [],
+  nsConfigKinds,
   nsConfigLoading = false,
   nsConfigLoaded = false,
 
   nsNetwork = [],
+  nsNetworkKinds,
   nsNetworkLoading = false,
   nsNetworkLoaded = false,
 
   nsRBAC = [],
+  nsRBACKinds,
   nsRBACLoading = false,
   nsRBACLoaded = false,
 
@@ -158,10 +168,12 @@ const NamespaceResourcesViews: React.FC<NamespaceResourcesViewsProps> = ({
   nsStorageLoaded = false,
 
   nsAutoscaling = [],
+  nsAutoscalingKinds,
   nsAutoscalingLoading = false,
   nsAutoscalingLoaded = false,
 
   nsQuotas = [],
+  nsQuotasKinds,
   nsQuotasLoading = false,
   nsQuotasLoaded = false,
 
@@ -217,6 +229,7 @@ const NamespaceResourcesViews: React.FC<NamespaceResourcesViewsProps> = ({
             <NsViewWorkloads
               namespace={namespace}
               data={nsWorkloads}
+              availableKinds={nsWorkloadsKinds}
               loading={nsWorkloadsLoading}
               loaded={nsWorkloadsLoaded}
               metrics={nsPodsMetrics}
@@ -233,6 +246,7 @@ const NamespaceResourcesViews: React.FC<NamespaceResourcesViewsProps> = ({
             <NsViewConfig
               namespace={namespace}
               data={nsConfig}
+              availableKinds={nsConfigKinds}
               loading={nsConfigLoading}
               loaded={nsConfigLoaded}
             />
@@ -248,6 +262,7 @@ const NamespaceResourcesViews: React.FC<NamespaceResourcesViewsProps> = ({
             <NsViewNetwork
               namespace={namespace}
               data={nsNetwork}
+              availableKinds={nsNetworkKinds}
               loading={nsNetworkLoading}
               loaded={nsNetworkLoaded}
             />
@@ -263,6 +278,7 @@ const NamespaceResourcesViews: React.FC<NamespaceResourcesViewsProps> = ({
             <NsViewRBAC
               namespace={namespace}
               data={nsRBAC}
+              availableKinds={nsRBACKinds}
               loading={nsRBACLoading}
               loaded={nsRBACLoaded}
             />
@@ -293,6 +309,7 @@ const NamespaceResourcesViews: React.FC<NamespaceResourcesViewsProps> = ({
             <NsViewAutoscaling
               namespace={namespace}
               data={nsAutoscaling}
+              availableKinds={nsAutoscalingKinds}
               loading={nsAutoscalingLoading}
               loaded={nsAutoscalingLoaded}
             />
@@ -308,6 +325,7 @@ const NamespaceResourcesViews: React.FC<NamespaceResourcesViewsProps> = ({
             <NsViewQuotas
               namespace={namespace}
               data={nsQuotas}
+              availableKinds={nsQuotasKinds}
               loading={nsQuotasLoading}
               loaded={nsQuotasLoaded}
             />

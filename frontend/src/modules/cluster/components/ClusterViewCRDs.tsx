@@ -30,6 +30,8 @@ import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 import { useFavToggle } from '@ui/favorites/FavToggle';
 import { buildCanonicalObjectRowKey, buildObjectReference } from '@shared/utils/objectIdentity';
 
+const CLUSTER_CRD_KIND_OPTIONS = ['CustomResourceDefinition'];
+
 // Define the data structure for Custom Resource Definitions
 interface CRDsData {
   kind: string;
@@ -208,10 +210,7 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
       onChange: setPersistedSort,
     });
 
-    const availableKinds = useMemo(
-      () => [...new Set(data.map((r) => r.kind).filter(Boolean) as string[])].sort(),
-      [data]
-    );
+    const availableKinds = CLUSTER_CRD_KIND_OPTIONS;
 
     const { item: favToggle, modal: favModal } = useFavToggle({
       filters: persistedFilters,

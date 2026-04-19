@@ -57,6 +57,7 @@ func TestNamespaceConfigBuilder(t *testing.T) {
 	payload, ok := snapshot.Payload.(NamespaceConfigSnapshot)
 	require.True(t, ok)
 	require.Len(t, payload.Resources, 2)
+	require.Equal(t, []string{"ConfigMap", "Secret"}, payload.Kinds)
 	for _, entry := range payload.Resources {
 		require.NotEmpty(t, entry.Age)
 	}
@@ -119,6 +120,7 @@ func TestNamespaceConfigBuilderAllNamespaces(t *testing.T) {
 	payload, ok := snapshot.Payload.(NamespaceConfigSnapshot)
 	require.True(t, ok)
 	require.Len(t, payload.Resources, 4)
+	require.Equal(t, []string{"ConfigMap", "Secret"}, payload.Kinds)
 
 	namespaces := make(map[string]struct{})
 	for _, entry := range payload.Resources {
@@ -293,6 +295,7 @@ func TestNamespaceNetworkBuilder(t *testing.T) {
 	payload, ok := snapshot.Payload.(NamespaceNetworkSnapshot)
 	require.True(t, ok)
 	require.Len(t, payload.Resources, 4)
+	require.Equal(t, []string{"EndpointSlice", "Ingress", "NetworkPolicy", "Service"}, payload.Kinds)
 	for _, entry := range payload.Resources {
 		require.NotEmpty(t, entry.Age)
 	}
@@ -386,6 +389,7 @@ func TestNamespaceNetworkBuilderAllNamespaces(t *testing.T) {
 	payload, ok := snapshot.Payload.(NamespaceNetworkSnapshot)
 	require.True(t, ok)
 	require.True(t, len(payload.Resources) >= 4)
+	require.Equal(t, []string{"EndpointSlice", "Ingress", "NetworkPolicy", "Service"}, payload.Kinds)
 
 	namespaces := make(map[string]struct{})
 	for _, entry := range payload.Resources {
@@ -538,6 +542,7 @@ func TestNamespaceQuotasBuilder(t *testing.T) {
 	payload, ok := snapshot.Payload.(NamespaceQuotasSnapshot)
 	require.True(t, ok)
 	require.Len(t, payload.Resources, 3)
+	require.Equal(t, []string{"LimitRange", "PodDisruptionBudget", "ResourceQuota"}, payload.Kinds)
 	for _, summary := range payload.Resources {
 		require.NotEmpty(t, summary.Age)
 	}
@@ -610,6 +615,7 @@ func TestNamespaceQuotasBuilderAllNamespaces(t *testing.T) {
 	payload, ok := snapshot.Payload.(NamespaceQuotasSnapshot)
 	require.True(t, ok)
 	require.Len(t, payload.Resources, 4)
+	require.Equal(t, []string{"LimitRange", "PodDisruptionBudget", "ResourceQuota"}, payload.Kinds)
 
 	namespaces := make(map[string]struct{})
 	for _, entry := range payload.Resources {
@@ -650,6 +656,7 @@ func TestNamespaceAutoscalingBuilder(t *testing.T) {
 	payload, ok := snapshot.Payload.(NamespaceAutoscalingSnapshot)
 	require.True(t, ok)
 	require.Len(t, payload.Resources, 1)
+	require.Equal(t, []string{"HorizontalPodAutoscaler"}, payload.Kinds)
 
 	entry := payload.Resources[0]
 	require.Equal(t, "HorizontalPodAutoscaler", entry.Kind)
@@ -707,6 +714,7 @@ func TestNamespaceAutoscalingBuilderAllNamespaces(t *testing.T) {
 	payload, ok := snapshot.Payload.(NamespaceAutoscalingSnapshot)
 	require.True(t, ok)
 	require.Len(t, payload.Resources, 2)
+	require.Equal(t, []string{"HorizontalPodAutoscaler"}, payload.Kinds)
 
 	namespaces := make(map[string]struct{})
 	for _, entry := range payload.Resources {
@@ -898,6 +906,7 @@ func TestNamespaceRBACBuilder(t *testing.T) {
 	payload, ok := snapshot.Payload.(NamespaceRBACSnapshot)
 	require.True(t, ok)
 	require.Len(t, payload.Resources, 3)
+	require.Equal(t, []string{"Role", "RoleBinding", "ServiceAccount"}, payload.Kinds)
 
 	resources := map[string]RBACSummary{}
 	for _, summary := range payload.Resources {
@@ -961,6 +970,7 @@ func TestNamespaceRBACBuilderAllNamespaces(t *testing.T) {
 	payload, ok := snapshot.Payload.(NamespaceRBACSnapshot)
 	require.True(t, ok)
 	require.Len(t, payload.Resources, 4)
+	require.Equal(t, []string{"Role", "RoleBinding", "ServiceAccount"}, payload.Kinds)
 
 	namespaces := make(map[string]struct{})
 	for _, entry := range payload.Resources {
@@ -1098,6 +1108,7 @@ func TestNamespaceWorkloadsBuilder(t *testing.T) {
 	payload, ok := snapshot.Payload.(NamespaceWorkloadsSnapshot)
 	require.True(t, ok)
 	require.Len(t, payload.Workloads, 1)
+	require.Equal(t, []string{"Deployment"}, payload.Kinds)
 
 	summaries := map[string]WorkloadSummary{}
 	for _, summary := range payload.Workloads {
@@ -1213,6 +1224,7 @@ func TestNamespaceWorkloadsBuilderAllNamespaces(t *testing.T) {
 	payload, ok := snapshot.Payload.(NamespaceWorkloadsSnapshot)
 	require.True(t, ok)
 	require.Len(t, payload.Workloads, 2)
+	require.Equal(t, []string{"Deployment"}, payload.Kinds)
 
 	namespaces := map[string]struct{}{}
 	for _, summary := range payload.Workloads {

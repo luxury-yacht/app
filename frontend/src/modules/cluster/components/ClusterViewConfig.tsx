@@ -25,6 +25,7 @@ import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
+import { useKindFilterOptions } from '@shared/components/tables/hooks/useKindFilterOptions';
 import { formatBuiltinApiVersion } from '@shared/constants/builtinGroupVersions';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 import { useFavToggle } from '@ui/favorites/FavToggle';
@@ -43,6 +44,7 @@ interface ConfigData {
 // Define props for ConfigViewGrid component
 interface ConfigViewProps {
   data: ConfigData[];
+  availableKinds?: string[];
   loading?: boolean;
   loaded?: boolean;
   error?: string | null;
@@ -53,7 +55,7 @@ interface ConfigViewProps {
  * Displays Storage Classes, Ingress Classes, and Admission Control resources
  */
 const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
-  ({ data, loading = false, loaded = false, error }) => {
+  ({ data, availableKinds: kindOptions, loading = false, loaded = false, error }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
@@ -164,10 +166,8 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
       onChange: setPersistedSort,
     });
 
-    const availableKinds = useMemo(
-      () => [...new Set(data.map((r) => r.kind).filter(Boolean) as string[])].sort(),
-      [data]
-    );
+    const fallbackKinds = useKindFilterOptions(data);
+    const availableKinds = kindOptions && kindOptions.length > 0 ? kindOptions : fallbackKinds;
 
     const { item: favToggle, modal: favModal } = useFavToggle({
       filters: persistedFilters,

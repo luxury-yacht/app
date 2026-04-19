@@ -38,6 +38,7 @@ type NamespaceConfigBuilder struct {
 type NamespaceConfigSnapshot struct {
 	ClusterMeta
 	Resources []ConfigSummary `json:"resources"`
+	Kinds     []string        `json:"kinds,omitempty"`
 }
 
 // ConfigSummary describes a ConfigMap or Secret entry.
@@ -175,7 +176,11 @@ func (b *NamespaceConfigBuilder) buildSnapshot(
 		Domain:  namespaceConfigDomainName,
 		Scope:   scope,
 		Version: version,
-		Payload: NamespaceConfigSnapshot{ClusterMeta: meta, Resources: resources},
+		Payload: NamespaceConfigSnapshot{
+			ClusterMeta: meta,
+			Resources:   resources,
+			Kinds:       snapshotSortedKinds(resources, func(resource ConfigSummary) string { return resource.Kind }),
+		},
 		Stats:   refresh.SnapshotStats{ItemCount: len(resources)},
 	}, nil
 }

@@ -35,6 +35,19 @@ The following foundation is already in place:
 - ✅ object-panel overview links now build shared object references, with
   explicit plain-text fallback for malformed legacy refs that still lack full
   GVK data
+- ✅ all-namespaces table namespace filters now prefer explicit namespace
+  metadata over rescanning loaded row payloads, with row-derived fallback only
+  when metadata is unavailable
+- ✅ typed-view kind filters now use a shared local-metadata hook, making the
+  current row-derived kind-option policy explicit until richer domain metadata
+  exists
+- ✅ single-kind typed domains now use explicit kind metadata instead of
+  deriving kind filters from the loaded row payload
+- ✅ mixed-kind typed domains now thread explicit backend `kinds` metadata
+  through the refresh payload, resource context, and view layers so their
+  `Kinds` filters no longer depend on capped row sets
+- ✅ sidebar namespace groups now aggregate catalog metadata across active
+  scoped domains before filtering to the selected cluster
 
 Those were the easy wins. The remaining work is architectural and touches row
 identity, metadata strategy, refresh/update behavior, and performance
@@ -133,6 +146,15 @@ whatever rows happen to be loaded.
 
 - filter menus do not reshape themselves from transient filtered row payloads
 - metadata sourcing is explicit per view family
+
+Current status:
+
+- ✅ Browse uses stable scope-level metadata
+- ✅ all-namespaces namespace filters prefer explicit namespace metadata
+- ✅ mixed-kind typed domains use explicit backend `kinds` metadata
+- ✅ single-kind typed domains use explicit kind metadata constants
+- ✅ custom-resource views remain intentional local-metadata exceptions until a
+  stronger custom-domain metadata source exists
 
 ## Phase 4: Sort, Filter, and Search Ownership
 

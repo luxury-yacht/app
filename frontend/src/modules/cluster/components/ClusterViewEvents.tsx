@@ -29,6 +29,8 @@ import GridTable, {
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
+import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
+import { useNamespaceFilterOptions } from '@modules/namespace/hooks/useNamespaceFilterOptions';
 import { useFavToggle } from '@ui/favorites/FavToggle';
 import { buildObjectReference } from '@shared/utils/objectIdentity';
 
@@ -229,9 +231,13 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
       onChange: setPersistedSort,
     });
 
-    const availableFilterNamespaces = useMemo(
+    const fallbackNamespaces = useMemo(
       () => [...new Set(data.map((r) => r.namespace).filter(Boolean))].sort(),
       [data]
+    );
+    const availableFilterNamespaces = useNamespaceFilterOptions(
+      ALL_NAMESPACES_SCOPE,
+      fallbackNamespaces
     );
 
     const { item: favToggle, modal: favModal } = useFavToggle({

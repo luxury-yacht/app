@@ -249,6 +249,7 @@ function useRefreshBackedResource<T>(
   resourceKey: NamespaceRefresherKey,
   domain: RefreshDomain,
   selector: (payload: any) => T,
+  metaSelector: ((payload: any) => unknown) | undefined,
   fallback: T,
   enabled: boolean,
   namespace?: string | null,
@@ -316,6 +317,13 @@ function useRefreshBackedResource<T>(
     return result ?? fallback;
   }, [domainData, selector, fallback]);
 
+  const meta = useMemo(() => {
+    if (!domainData || !metaSelector) {
+      return undefined;
+    }
+    return metaSelector(domainData);
+  }, [domainData, metaSelector]);
+
   const initialising =
     enabled &&
     Boolean(namespaceScope) &&
@@ -344,6 +352,7 @@ function useRefreshBackedResource<T>(
         domainState.status === 'ready' ||
         domainState.status === 'error' ||
         (domainState.status === 'updating' && Boolean(domainData)),
+      meta,
     }),
     [
       data,
@@ -357,6 +366,7 @@ function useRefreshBackedResource<T>(
       domain,
       enabled,
       loadingStatus,
+      meta,
       namespaceScope,
     ]
   );
@@ -434,6 +444,7 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     'workloads',
     'namespace-workloads',
     (payload) => filterByClusterId(payload?.workloads, namespaceClusterId),
+    (payload?: { kinds?: string[] }) => ({ kinds: payload?.kinds ?? [] }),
     [],
     isResourceActive('workloads'),
     currentNamespace,
@@ -444,6 +455,7 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     'config',
     'namespace-config',
     (payload) => filterByClusterId(payload?.resources, namespaceClusterId),
+    (payload?: { kinds?: string[] }) => ({ kinds: payload?.kinds ?? [] }),
     [],
     isResourceActive('config'),
     currentNamespace,
@@ -454,6 +466,7 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     'network',
     'namespace-network',
     (payload) => filterByClusterId(payload?.resources, namespaceClusterId),
+    (payload?: { kinds?: string[] }) => ({ kinds: payload?.kinds ?? [] }),
     [],
     isResourceActive('network'),
     currentNamespace,
@@ -464,6 +477,7 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     'rbac',
     'namespace-rbac',
     (payload) => filterByClusterId(payload?.resources, namespaceClusterId),
+    (payload?: { kinds?: string[] }) => ({ kinds: payload?.kinds ?? [] }),
     [],
     isResourceActive('rbac'),
     currentNamespace,
@@ -474,6 +488,7 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     'storage',
     'namespace-storage',
     (payload) => filterByClusterId(payload?.resources, namespaceClusterId),
+    undefined,
     [],
     isResourceActive('storage'),
     currentNamespace,
@@ -507,6 +522,7 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
           };
         }
       ),
+    (payload?: NamespaceAutoscalingSnapshotPayload) => ({ kinds: payload?.kinds ?? [] }),
     [],
     isResourceActive('autoscaling'),
     currentNamespace,
@@ -517,6 +533,7 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     'quotas',
     'namespace-quotas',
     (payload) => filterByClusterId(payload?.resources, namespaceClusterId),
+    (payload?: { kinds?: string[] }) => ({ kinds: payload?.kinds ?? [] }),
     [],
     isResourceActive('quotas'),
     currentNamespace,
@@ -527,6 +544,7 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     'events',
     'namespace-events',
     (payload) => filterByClusterId(payload?.events, namespaceClusterId),
+    undefined,
     [],
     isResourceActive('events'),
     currentNamespace,
@@ -561,6 +579,7 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
           annotations: item.annotations,
         })
       ),
+    undefined,
     [],
     isResourceActive('custom'),
     currentNamespace,
@@ -589,6 +608,7 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
           age: release.age,
         })
       ),
+    undefined,
     [],
     isResourceActive('helm'),
     currentNamespace,

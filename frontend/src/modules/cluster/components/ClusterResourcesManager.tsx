@@ -147,6 +147,7 @@ export function ClusterResourcesManager({
       nodesLoaded={(nodes?.hasLoaded ?? false) || Boolean(nodesErrorMessage)}
       // Config
       config={configData || []}
+      configKinds={(config?.meta as { kinds?: string[] } | undefined)?.kinds}
       configLoading={configLoading || false}
       configError={configErrorMessage}
       configLoaded={(config?.hasLoaded ?? false) || Boolean(configErrorMessage)}
@@ -167,6 +168,7 @@ export function ClusterResourcesManager({
       eventsLoaded={(events?.hasLoaded ?? false) || Boolean(eventsErrorMessage)}
       // RBAC
       rbac={rbacData || []}
+      rbacKinds={(rbac?.meta as { kinds?: string[] } | undefined)?.kinds}
       rbacLoading={rbacLoading || false}
       rbacError={rbacErrorMessage}
       rbacLoaded={(rbac?.hasLoaded ?? false) || Boolean(rbacErrorMessage)}

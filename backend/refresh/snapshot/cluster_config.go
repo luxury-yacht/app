@@ -39,6 +39,7 @@ type ClusterConfigPermissions struct {
 type ClusterConfigSnapshot struct {
 	ClusterMeta
 	Resources []ClusterConfigEntry `json:"resources"`
+	Kinds     []string             `json:"kinds,omitempty"`
 }
 
 // ClusterConfigEntry covers a storage class, ingress class, or webhook config.
@@ -177,7 +178,11 @@ func (b *ClusterConfigBuilder) buildFromListers(ctx context.Context) (*refresh.S
 	return &refresh.Snapshot{
 		Domain:  clusterConfigDomainName,
 		Version: version,
-		Payload: ClusterConfigSnapshot{ClusterMeta: meta, Resources: entries},
+		Payload: ClusterConfigSnapshot{
+			ClusterMeta: meta,
+			Resources:   entries,
+			Kinds:       snapshotSortedKinds(entries, func(entry ClusterConfigEntry) string { return entry.Kind }),
+		},
 		Stats:   refresh.SnapshotStats{ItemCount: len(entries)},
 	}, nil
 }

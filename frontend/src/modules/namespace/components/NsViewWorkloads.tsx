@@ -26,6 +26,7 @@ import { PortForwardModal, PortForwardTarget } from '@modules/port-forward';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import GridTable, { GRIDTABLE_VIRTUALIZATION_DEFAULT } from '@shared/components/tables/GridTable';
+import { useKindFilterOptions } from '@shared/components/tables/hooks/useKindFilterOptions';
 import {
   formatBuiltinApiVersion,
   resolveBuiltinGroupVersion,
@@ -53,11 +54,13 @@ import {
   RESTARTABLE_KINDS,
 } from '@shared/hooks/useObjectActions';
 import { useFavToggle } from '@ui/favorites/FavToggle';
+import { useNamespaceFilterOptions } from '@modules/namespace/hooks/useNamespaceFilterOptions';
 import { buildCanonicalObjectRowKey, buildObjectReference } from '@shared/utils/objectIdentity';
 
 interface WorkloadsViewProps {
   namespace: string;
   data: WorkloadData[];
+  availableKinds?: string[];
   loading?: boolean;
   loaded?: boolean;
   showNamespaceColumn?: boolean;
@@ -71,6 +74,7 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
   ({
     namespace,
     data,
+    availableKinds: kindOptions,
     loading = false,
     loaded = false,
     showNamespaceColumn = false,
@@ -195,14 +199,13 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
       onChange: onSortChange,
     });
 
-    const availableKinds = useMemo(
-      () => [...new Set(data.map((r) => r.kind).filter(Boolean) as string[])].sort(),
-      [data]
-    );
-    const availableFilterNamespaces = useMemo(
+    const fallbackKinds = useKindFilterOptions(data);
+    const availableKinds = kindOptions && kindOptions.length > 0 ? kindOptions : fallbackKinds;
+    const fallbackNamespaces = useMemo(
       () => [...new Set(data.map((r) => r.namespace).filter(Boolean))].sort(),
       [data]
     );
+    const availableFilterNamespaces = useNamespaceFilterOptions(namespace, fallbackNamespaces);
 
     const { item: favToggle, modal: favModal } = useFavToggle({
       filters: persistedFilters,

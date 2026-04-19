@@ -47,6 +47,7 @@ type NamespaceNetworkBuilder struct {
 type NamespaceNetworkSnapshot struct {
 	ClusterMeta
 	Resources []NetworkSummary `json:"resources"`
+	Kinds     []string         `json:"kinds,omitempty"`
 }
 
 // NetworkSummary mirrors the UI requirements for namespace network resources.
@@ -243,7 +244,11 @@ func (b *NamespaceNetworkBuilder) buildSnapshot(
 		Domain:  namespaceNetworkDomainName,
 		Scope:   scope,
 		Version: version,
-		Payload: NamespaceNetworkSnapshot{ClusterMeta: meta, Resources: resources},
+		Payload: NamespaceNetworkSnapshot{
+			ClusterMeta: meta,
+			Resources:   resources,
+			Kinds:       snapshotSortedKinds(resources, func(resource NetworkSummary) string { return resource.Kind }),
+		},
 		Stats:   refresh.SnapshotStats{ItemCount: len(resources)},
 	}, nil
 }

@@ -108,6 +108,7 @@ describe('ClusterResourcesManager', () => {
       (state as any).loading = false;
       (state as any).error = null;
       (state as any).data = index === 0 ? [`${key}-row`] : null;
+      (state as any).meta = undefined;
       state.loading = false;
     });
   });
@@ -127,6 +128,12 @@ describe('ClusterResourcesManager', () => {
   };
 
   it('loads the active tab data and passes props downstream', async () => {
+    clusterResourceStates.storage.meta = { kinds: ['PersistentVolume'] };
+    clusterResourceStates.config.meta = {
+      kinds: ['IngressClass', 'MutatingWebhookConfiguration', 'StorageClass'],
+    };
+    clusterResourceStates.rbac.meta = { kinds: ['ClusterRole', 'ClusterRoleBinding'] };
+
     await renderManager('storage');
 
     expect(setActiveResourceTypeMock).toHaveBeenCalledWith('storage');
@@ -135,6 +142,12 @@ describe('ClusterResourcesManager', () => {
     expect(props.storage).toEqual([]);
     expect(props.storageLoaded).toBe(false);
     expect(props.nodes).toEqual(['nodes-row']);
+    expect(props.configKinds).toEqual([
+      'IngressClass',
+      'MutatingWebhookConfiguration',
+      'StorageClass',
+    ]);
+    expect(props.rbacKinds).toEqual(['ClusterRole', 'ClusterRoleBinding']);
   });
 
   it('respects permission denials and avoids loading', async () => {

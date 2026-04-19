@@ -32,6 +32,7 @@ type ClusterRBACBuilder struct {
 type ClusterRBACSnapshot struct {
 	ClusterMeta
 	Resources []ClusterRBACEntry `json:"resources"`
+	Kinds     []string           `json:"kinds,omitempty"`
 }
 
 // ClusterRBACEntry represents either a ClusterRole or ClusterRoleBinding.
@@ -125,7 +126,11 @@ func (b *ClusterRBACBuilder) Build(ctx context.Context, scope string) (*refresh.
 	return &refresh.Snapshot{
 		Domain:  clusterRBACDomainName,
 		Version: version,
-		Payload: ClusterRBACSnapshot{ClusterMeta: meta, Resources: entries},
+		Payload: ClusterRBACSnapshot{
+			ClusterMeta: meta,
+			Resources:   entries,
+			Kinds:       snapshotSortedKinds(entries, func(entry ClusterRBACEntry) string { return entry.Kind }),
+		},
 		Stats:   refresh.SnapshotStats{ItemCount: len(entries)},
 	}, nil
 }

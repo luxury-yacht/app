@@ -76,6 +76,9 @@ func TestBuildSnapshotPopulatesTargetAPIVersion(t *testing.T) {
 	if len(payload.Resources) != 3 {
 		t.Fatalf("expected 3 resources, got %d", len(payload.Resources))
 	}
+	if got := payload.Kinds; len(got) != 1 || got[0] != "HorizontalPodAutoscaler" {
+		t.Fatalf("Kinds=%v, want [HorizontalPodAutoscaler]", got)
+	}
 
 	// Index by HPA name (sorted by namespace then name).
 	byName := make(map[string]AutoscalingSummary, len(payload.Resources))

@@ -23,6 +23,7 @@ interface ClusterResourcesViewsProps {
   nodesLoaded?: boolean;
 
   config?: any[];
+  configKinds?: string[];
   configLoading?: boolean;
   configError?: string | null;
   configLoaded?: boolean;
@@ -43,6 +44,7 @@ interface ClusterResourcesViewsProps {
   eventsLoaded?: boolean;
 
   rbac?: any[];
+  rbacKinds?: string[];
   rbacLoading?: boolean;
   rbacError?: string | null;
   rbacLoaded?: boolean;
@@ -67,6 +69,7 @@ function ClusterResourcesViews({
   nodesLoaded = false,
 
   config = [],
+  configKinds,
   configLoading = false,
   configError = null,
   configLoaded = false,
@@ -87,6 +90,7 @@ function ClusterResourcesViews({
   eventsLoaded = false,
 
   rbac = [],
+  rbacKinds,
   rbacLoading = false,
   rbacError = null,
   rbacLoaded = false,
@@ -122,6 +126,7 @@ function ClusterResourcesViews({
         return (
           <ClusterViewConfig
             data={config}
+            availableKinds={configKinds}
             loading={configLoading}
             loaded={configLoaded}
             error={configError}
@@ -158,6 +163,7 @@ function ClusterResourcesViews({
         return (
           <ClusterViewRBAC
             data={rbac}
+            availableKinds={rbacKinds}
             loading={rbacLoading}
             loaded={rbacLoaded}
             error={rbacError}
