@@ -462,6 +462,7 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
                 ? 'All Namespaces Autoscaling'
                 : 'Namespace Autoscaling'
             }
+            diagnosticsMode="live"
             loading={loading}
             keyExtractor={keyExtractor}
             onRowClick={handleResourceClick}

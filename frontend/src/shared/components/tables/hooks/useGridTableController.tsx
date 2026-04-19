@@ -203,6 +203,7 @@ export function useGridTableController<T>({
   loadingOverlay,
   filters,
   diagnosticsLabel,
+  diagnosticsMode = 'local',
   allowHorizontalOverflow = true,
   disableCellNativeTitle = false,
   isKindColumnKey = defaultIsKindColumnKey,
@@ -320,13 +321,21 @@ export function useGridTableController<T>({
 
     const inputReferenceChanged = previousInputDataRef.current !== inputData;
     recordGridTablePerformanceSnapshot(diagnosticsLabel, {
+      mode: diagnosticsMode,
       inputRows: totalDataCount,
       sourceRows: sourceData.length,
       displayedRows: tableData.length,
       inputReferenceChanged,
     });
     previousInputDataRef.current = inputData;
-  }, [diagnosticsLabel, inputData, sourceData.length, tableData.length, totalDataCount]);
+  }, [
+    diagnosticsLabel,
+    diagnosticsMode,
+    inputData,
+    sourceData.length,
+    tableData.length,
+    totalDataCount,
+  ]);
 
   // Whether any filter is actively narrowing results (search text, kind, or namespace selections).
   const hasActiveFilters =

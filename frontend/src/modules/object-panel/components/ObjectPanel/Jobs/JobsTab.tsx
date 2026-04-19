@@ -266,6 +266,7 @@ export const JobsTab: React.FC<JobsTabProps> = ({
             data={sortedData}
             columns={columns}
             diagnosticsLabel="Object Panel Jobs"
+            diagnosticsMode="live"
             onSort={handleSort}
             sortConfig={tableSort}
             keyExtractor={keyExtractor}

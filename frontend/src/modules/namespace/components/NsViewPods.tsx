@@ -605,6 +605,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
             diagnosticsLabel={
               namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Pods' : 'Namespace Pods'
             }
+            diagnosticsMode="live"
             loading={loading && displayedPods.length === 0}
             keyExtractor={keyExtractor}
             onRowClick={handlePodOpen}

@@ -22,6 +22,7 @@ const createRow = (
   overrides: Partial<GridTablePerformanceEntry> = {}
 ): GridTablePerformanceEntry => ({
   label: 'All Namespaces Pods',
+  mode: 'local',
   updates: 10,
   inputReferenceChanges: 1,
   inputRows: 2000,
@@ -79,12 +80,36 @@ describe('TableGridPerformance', () => {
     expect(markup).toContain('Broad replacement');
     expect(markup).toContain('Filter options slow');
     expect(markup).toContain('Render slow');
+    expect(markup).toContain('Mode');
+    expect(markup).toContain('Local');
     expect(markup).toContain('9 (90%)');
     expect(markup).toContain('Reset Samples');
     expect(markup).toContain('Instrumented Tables');
     expect(markup).toContain('Worst Offender');
     expect(markup).toContain('Filter Options (ms)');
     expect(markup).toContain('Avg / Max / Latest');
+  });
+
+  it('renders explicit table modes for divergent view families', () => {
+    const markup = renderToStaticMarkup(
+      <TableGridPerformance
+        onReset={() => undefined}
+        summary="Rolling GridTable measurements for the instrumented large-data views."
+        rows={[
+          createRow({
+            label: 'All Namespaces Browse',
+            mode: 'query',
+          }),
+          createRow({
+            label: 'All Namespaces Workloads',
+            mode: 'live',
+          }),
+        ]}
+      />
+    );
+
+    expect(markup).toContain('Query');
+    expect(markup).toContain('Live');
   });
 
   it('builds a compact profiling overview for the current sample set', () => {

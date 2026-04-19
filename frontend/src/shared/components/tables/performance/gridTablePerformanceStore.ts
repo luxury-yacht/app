@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import type { GridTableDiagnosticsMode } from '../GridTable.types';
 
 export type GridTablePerformanceMetricKind = 'filterOptions' | 'filterPass' | 'sort' | 'render';
 
@@ -11,6 +12,7 @@ export interface GridTableTimingStats {
 
 export interface GridTablePerformanceEntry {
   label: string;
+  mode: GridTableDiagnosticsMode;
   updates: number;
   inputReferenceChanges: number;
   inputRows: number;
@@ -55,6 +57,7 @@ const createTimingStats = (): MutableTimingStats => ({
 
 const createEntry = (label: string): MutableEntry => ({
   label,
+  mode: 'local',
   updates: 0,
   inputReferenceChanges: 0,
   inputRows: 0,
@@ -144,6 +147,7 @@ const cloneTimingStats = (stats: MutableTimingStats): GridTableTimingStats => ({
 export const recordGridTablePerformanceSnapshot = (
   label: string,
   snapshot: {
+    mode?: GridTableDiagnosticsMode;
     inputRows: number;
     sourceRows: number;
     displayedRows: number;
@@ -155,6 +159,7 @@ export const recordGridTablePerformanceSnapshot = (
   }
 
   const entry = getEntry(label);
+  entry.mode = snapshot.mode ?? entry.mode;
   entry.updates += 1;
   if (snapshot.inputReferenceChanged) {
     entry.inputReferenceChanges += 1;
@@ -200,6 +205,7 @@ export const getGridTablePerformanceSnapshot = (): GridTablePerformanceEntry[] =
   snapshotCache = Array.from(entries.values())
     .map((entry) => ({
       label: entry.label,
+      mode: entry.mode,
       updates: entry.updates,
       inputReferenceChanges: entry.inputReferenceChanges,
       inputRows: entry.inputRows,

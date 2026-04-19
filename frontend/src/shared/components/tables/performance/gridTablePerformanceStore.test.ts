@@ -31,6 +31,7 @@ describe('gridTablePerformanceStore', () => {
     const [entry] = getGridTablePerformanceSnapshot();
 
     expect(entry.label).toBe('All Namespaces Pods');
+    expect(entry.mode).toBe('local');
     expect(entry.updates).toBe(1);
     expect(entry.inputReferenceChanges).toBe(1);
     expect(entry.inputRows).toBe(5000);
@@ -43,6 +44,21 @@ describe('gridTablePerformanceStore', () => {
     expect(entry.sort.latestMs).toBe(4.5);
     expect(entry.render.latestMs).toBe(5.5);
     expect(entry.lastRenderPhase).toBe('update');
+  });
+
+  it('records explicit diagnostics mode labels with the snapshot', () => {
+    recordGridTablePerformanceSnapshot('All Namespaces Browse', {
+      mode: 'query',
+      inputRows: 25,
+      sourceRows: 25,
+      displayedRows: 25,
+      inputReferenceChanged: false,
+    });
+
+    const [entry] = getGridTablePerformanceSnapshot();
+
+    expect(entry.label).toBe('All Namespaces Browse');
+    expect(entry.mode).toBe('query');
   });
 
   it('keeps entries sorted by label', () => {

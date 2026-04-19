@@ -313,6 +313,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
             data={sortedData}
             columns={columns}
             diagnosticsLabel="Object Panel Pods"
+            diagnosticsMode="live"
             onSort={handleSort}
             sortConfig={tableSort}
             keyExtractor={keyExtractor}

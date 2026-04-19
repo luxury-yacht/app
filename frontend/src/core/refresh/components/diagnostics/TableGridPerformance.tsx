@@ -14,6 +14,19 @@ type TablePerformanceSignal = {
   severity: 'warning';
 };
 
+const MODE_LABELS: Record<GridTablePerformanceEntry['mode'], string> = {
+  local: 'Local',
+  query: 'Query',
+  live: 'Live',
+};
+
+const MODE_TITLES: Record<GridTablePerformanceEntry['mode'], string> = {
+  local: 'Local table behavior: search/filter/sort run over the loaded row set.',
+  query:
+    'Query-backed table behavior: search and/or filtering narrow the upstream dataset before it reaches the table.',
+  live: 'Live table behavior: rows are expected to update frequently because key fields are time-varying or stream-driven.',
+};
+
 type TablePerformanceOverview = {
   instrumentedTables: number;
   flaggedTables: number;
@@ -249,6 +262,7 @@ export const TableGridPerformance: React.FC<TableGridPerformanceProps> = ({
           <thead>
             <tr>
               <th>Table</th>
+              <th>Mode</th>
               <th>Input</th>
               <th>Capped</th>
               <th>Displayed</th>
@@ -274,7 +288,7 @@ export const TableGridPerformance: React.FC<TableGridPerformanceProps> = ({
           <tbody>
             {visibleRows.length === 0 ? (
               <tr className="diagnostics-empty">
-                <td colSpan={13}>{visibleEmptyMessage}</td>
+                <td colSpan={14}>{visibleEmptyMessage}</td>
               </tr>
             ) : (
               visibleRows.map((row) => {
@@ -286,6 +300,13 @@ export const TableGridPerformance: React.FC<TableGridPerformanceProps> = ({
                   <tr key={row.label}>
                     <td>
                       <span className="diagnostics-domain">{row.label}</span>
+                    </td>
+                    <td title={MODE_TITLES[row.mode]}>
+                      <span
+                        className={`diagnostics-table-mode diagnostics-table-mode--${row.mode}`}
+                      >
+                        {MODE_LABELS[row.mode]}
+                      </span>
                     </td>
                     <td>{row.inputRows}</td>
                     <td>{row.sourceRows}</td>

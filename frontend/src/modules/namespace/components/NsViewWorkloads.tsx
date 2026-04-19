@@ -542,6 +542,7 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
                 ? 'All Namespaces Workloads'
                 : 'Namespace Workloads'
             }
+            diagnosticsMode="live"
             loading={loading && sortedWorkloads.length === 0}
             keyExtractor={keyExtractor}
             onRowClick={handleWorkloadClick}

@@ -108,11 +108,14 @@ export interface GridTableFilterConfig<T> {
   onReset?: () => void;
 }
 
+export type GridTableDiagnosticsMode = 'local' | 'query' | 'live';
+
 export interface GridTableProps<T> {
   data: T[];
   columns: GridColumnDefinition<T>[];
   keyExtractor: (item: T, index: number) => string;
   diagnosticsLabel?: string;
+  diagnosticsMode?: GridTableDiagnosticsMode;
   /**
    * Override which column keys should be treated as special "kind badge"
    * columns by shared table helpers. Use this when a consumer needs plain

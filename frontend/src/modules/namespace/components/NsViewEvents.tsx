@@ -336,6 +336,7 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
             diagnosticsLabel={
               namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Events' : 'Namespace Events'
             }
+            diagnosticsMode="live"
             loading={loading}
             keyExtractor={keyExtractor}
             onRowClick={handleEventClick}

@@ -485,6 +485,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
                 ? 'Cluster Browse'
                 : 'All Namespaces Browse'
           }
+          diagnosticsMode="query"
           keyExtractor={keyExtractor}
           onRowClick={handleOpen}
           onSort={handleSort}
