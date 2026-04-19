@@ -46,6 +46,7 @@ import type { ClusterViewType } from '@/types/navigation/views';
 import { useUserPermission } from '@/core/capabilities';
 import type { PermissionStatus } from '@/core/capabilities';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import { useStableSelectedValue } from '@shared/hooks/useStableSelectedValue';
 
 export type { ClusterNodeRow } from '@/core/refresh/types';
 
@@ -120,11 +121,16 @@ function useClusterDomainResource<K extends RefreshDomain, TResult>(
     refreshOrchestrator.resetScopedDomain(domainName, scope);
   }, [domainName, scope]);
 
+  const selectedData = useMemo(() => extractFn(state.data ?? null), [extractFn, state.data]);
+  const stableData = useStableSelectedValue(selectedData);
+  const selectedMeta = useMemo(
+    () => (metaExtractor ? metaExtractor(state.data ?? null) : undefined),
+    [metaExtractor, state.data]
+  );
+  const stableMeta = useStableSelectedValue(selectedMeta);
+
   return useMemo(() => {
-    const payload = state.data ?? null;
-    const data = extractFn(payload);
-    const meta = metaExtractor ? metaExtractor(payload) : undefined;
-    const hasData = data !== null && data !== undefined;
+    const hasData = stableData !== null && stableData !== undefined;
     const hasLoaded = hasData || state.status === 'error';
     const loadingStatus = state.status === 'loading' || state.status === 'initialising';
     const loading = loadingStatus && !hasLoaded;
@@ -133,7 +139,7 @@ function useClusterDomainResource<K extends RefreshDomain, TResult>(
     const lastFetchTime = state.lastUpdated ? new Date(state.lastUpdated) : null;
 
     return {
-      data,
+      data: stableData,
       loading,
       refreshing,
       error,
@@ -143,9 +149,9 @@ function useClusterDomainResource<K extends RefreshDomain, TResult>(
       cancel: noop,
       lastFetchTime,
       hasLoaded,
-      meta,
+      meta: stableMeta,
     };
-  }, [extractFn, load, metaExtractor, refresh, reset, state]);
+  }, [load, refresh, reset, stableData, stableMeta, state]);
 }
 
 export const useClusterResources = () => {

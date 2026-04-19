@@ -42,6 +42,7 @@ import { resetScopedDomainState } from '@/core/refresh/store';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
+import { useStableSelectedValue } from '@shared/hooks/useStableSelectedValue';
 
 export interface PodsResourceDataReturn extends ResourceDataReturn<PodSnapshotEntry[]> {
   metrics: PodMetricsInfo | null;
@@ -309,20 +310,19 @@ function useRefreshBackedResource<T>(
     }
   }, [enabled, domainState.status, domainData, load, namespaceScope]);
 
-  const data = useMemo(() => {
-    if (!domainData) {
-      return fallback;
-    }
-    const result = selector(domainData);
-    return result ?? fallback;
-  }, [domainData, selector, fallback]);
+  const selectedData = useMemo(
+    () => (!domainData ? fallback : (selector(domainData) ?? fallback)),
+    [domainData, selector, fallback]
+  );
+  const data = useStableSelectedValue(selectedData);
 
-  const meta = useMemo(() => {
+  const selectedMeta = useMemo(() => {
     if (!domainData || !metaSelector) {
       return undefined;
     }
     return metaSelector(domainData);
   }, [domainData, metaSelector]);
+  const meta = useStableSelectedValue(selectedMeta);
 
   const initialising =
     enabled &&

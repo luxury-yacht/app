@@ -470,4 +470,54 @@ describe('NamespaceResourcesProvider', () => {
     // registerNamespaceCapabilityDefinitions is now a no-op.
     expect(capabilityMocks.queryNamespacePermissions).toHaveBeenCalledWith('alpha', testClusterId);
   });
+
+  it('preserves config data and metadata references when the scoped payload is unchanged', async () => {
+    const scope = `${testClusterId}|namespace:team-a`;
+    const sharedResources = [
+      {
+        kind: 'ConfigMap',
+        name: 'app-config',
+        namespace: 'team-a',
+        clusterId: testClusterId,
+      },
+      {
+        kind: 'Secret',
+        name: 'app-secret',
+        namespace: 'team-a',
+        clusterId: testClusterId,
+      },
+    ];
+    const sharedKinds = ['ConfigMap', 'Secret'];
+
+    scopedStates[scope] = {
+      status: 'ready',
+      data: {
+        resources: sharedResources,
+        kinds: sharedKinds,
+      },
+      error: null,
+      lastUpdated: null,
+    };
+
+    await render(
+      <NamespaceResourcesProvider namespace="team-a" activeView="config">
+        <TestConsumer />
+      </NamespaceResourcesProvider>
+    );
+
+    const firstDataRef = contextRef.current?.config.data;
+    const firstMetaRef = contextRef.current?.config.meta;
+
+    expect(firstDataRef).toBeTruthy();
+    expect(firstMetaRef).toEqual({ kinds: sharedKinds });
+
+    await render(
+      <NamespaceResourcesProvider namespace="team-a" activeView="config">
+        <TestConsumer />
+      </NamespaceResourcesProvider>
+    );
+
+    expect(contextRef.current?.config.data).toBe(firstDataRef);
+    expect(contextRef.current?.config.meta).toBe(firstMetaRef);
+  });
 });
