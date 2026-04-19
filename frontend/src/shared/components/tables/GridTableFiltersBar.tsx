@@ -148,6 +148,38 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
     postActions,
   ]);
 
+  const searchBehavior = resolvedFilterOptions.searchBehavior ?? 'local';
+
+  const searchBehaviorTooltip = useMemo(() => {
+    if (searchBehavior === 'query') {
+      return (
+        <>
+          <p className="gridtable-filter-result-tooltip-paragraph">
+            Search updates the active query for this view.
+          </p>
+          <p className="gridtable-filter-result-tooltip-paragraph">
+            Counts and results reflect matching objects for the current scope, up to the max table
+            size.
+          </p>
+        </>
+      );
+    }
+
+    return (
+      <>
+        <p className="gridtable-filter-result-tooltip-paragraph">
+          Search filters the rows currently loaded in this table.
+        </p>
+        {resultCount?.capped && (
+          <p className="gridtable-filter-result-tooltip-paragraph">
+            This table is capped, so some matching rows may still be hidden until you narrow the
+            dataset.
+          </p>
+        )}
+      </>
+    );
+  }, [searchBehavior, resultCount?.capped]);
+
   return (
     <div className="gridtable-filter-bar" ref={containerRef}>
       <div className="gridtable-filter-cluster" data-gridtable-filter-cluster="primary">
@@ -206,6 +238,9 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
               onChange={onSearchChange}
               onKeyDown={handleSearchKeyDown}
             />
+            <span className="gridtable-filter-search-hint" data-gridtable-filter-role="search-hint">
+              <Tooltip content={searchBehaviorTooltip} variant="dark" />
+            </span>
           </div>
           <div className="gridtable-filter-actions">
             <IconBar items={iconBarItems} />

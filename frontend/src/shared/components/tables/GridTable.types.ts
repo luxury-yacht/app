@@ -77,6 +77,7 @@ export interface GridTableFilterAccessors<T> {
 }
 
 export interface GridTableFilterOptions {
+  searchBehavior?: 'local' | 'query';
   searchPlaceholder?: string;
   kinds?: string[];
   namespaces?: string[];
@@ -164,6 +165,7 @@ export interface GridTableProps<T> {
 }
 
 export interface InternalFilterOptions {
+  searchBehavior?: 'local' | 'query';
   kinds: DropdownOption[];
   namespaces: DropdownOption[];
   searchPlaceholder?: string;

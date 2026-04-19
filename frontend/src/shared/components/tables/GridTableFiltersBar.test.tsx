@@ -11,6 +11,7 @@ import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import GridTableFiltersBar from '@shared/components/tables/GridTableFiltersBar';
+import { ZoomProvider } from '@core/contexts/ZoomContext';
 
 const searchShortcutMock = vi.hoisted(() => ({
   register: vi.fn(),
@@ -18,6 +19,11 @@ const searchShortcutMock = vi.hoisted(() => ({
 
 vi.mock('@ui/shortcuts', () => ({
   useSearchShortcutTarget: (config: unknown) => searchShortcutMock.register(config),
+}));
+
+vi.mock('@wailsjs/go/backend/App', () => ({
+  GetZoomLevel: vi.fn().mockResolvedValue(100),
+  SetZoomLevel: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('@shared/components/dropdowns/Dropdown', () => ({
@@ -68,6 +74,7 @@ describe('GridTableFiltersBar', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     act(() => {
       root.unmount();
     });
@@ -79,37 +86,40 @@ describe('GridTableFiltersBar', () => {
   ) => {
     await act(async () => {
       root.render(
-        <GridTableFiltersBar
-          activeFilters={{
-            search: '',
-            kinds: [],
-            namespaces: [],
-            caseSensitive: false,
-            includeMetadata: false,
-          }}
-          resolvedFilterOptions={{
-            kinds: [
-              { label: 'Pods', value: 'Pod' },
-              { label: 'Deployments', value: 'Deployment' },
-            ],
-            namespaces: [
-              { label: 'team-a', value: 'team-a' },
-              { label: 'team-b', value: 'team-b' },
-            ],
-          }}
-          kindDropdownId="kinds"
-          namespaceDropdownId="namespaces"
-          searchInputId="search"
-          onKindsChange={vi.fn()}
-          onNamespacesChange={vi.fn()}
-          onSearchChange={vi.fn()}
-          onReset={vi.fn()}
-          onToggleCaseSensitive={vi.fn()}
-          renderOption={(option) => option.label}
-          renderKindsValue={() => 'Kinds'}
-          renderNamespacesValue={() => 'Namespaces'}
-          {...props}
-        />
+        <ZoomProvider>
+          <GridTableFiltersBar
+            activeFilters={{
+              search: '',
+              kinds: [],
+              namespaces: [],
+              caseSensitive: false,
+              includeMetadata: false,
+            }}
+            resolvedFilterOptions={{
+              searchBehavior: 'local',
+              kinds: [
+                { label: 'Pods', value: 'Pod' },
+                { label: 'Deployments', value: 'Deployment' },
+              ],
+              namespaces: [
+                { label: 'team-a', value: 'team-a' },
+                { label: 'team-b', value: 'team-b' },
+              ],
+            }}
+            kindDropdownId="kinds"
+            namespaceDropdownId="namespaces"
+            searchInputId="search"
+            onKindsChange={vi.fn()}
+            onNamespacesChange={vi.fn()}
+            onSearchChange={vi.fn()}
+            onReset={vi.fn()}
+            onToggleCaseSensitive={vi.fn()}
+            renderOption={(option) => option.label}
+            renderKindsValue={() => 'Kinds'}
+            renderNamespacesValue={() => 'Namespaces'}
+            {...props}
+          />
+        </ZoomProvider>
       );
       await Promise.resolve();
     });
@@ -220,6 +230,54 @@ describe('GridTableFiltersBar', () => {
     expect(
       container.querySelector('[data-testid="namespaces"]')?.getAttribute('data-bulk-actions')
     ).toBe('true');
+  });
+
+  it('shows local-search semantics by default', async () => {
+    vi.useFakeTimers();
+
+    await renderFilters({});
+
+    const trigger = container.querySelector(
+      '[data-gridtable-filter-role="search-hint"] .tooltip-trigger'
+    ) as HTMLElement | null;
+    expect(trigger).toBeTruthy();
+
+    await act(async () => {
+      trigger?.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+      vi.advanceTimersByTime(250);
+    });
+
+    expect(document.body.textContent).toContain(
+      'Search filters the rows currently loaded in this table.'
+    );
+  });
+
+  it('shows query-search semantics for query-backed tables', async () => {
+    vi.useFakeTimers();
+
+    await renderFilters({
+      resolvedFilterOptions: {
+        kinds: [],
+        namespaces: [],
+        searchBehavior: 'query',
+      },
+      resultCount: { displayed: 1000, total: 4200, capped: true },
+    });
+
+    const trigger = container.querySelector(
+      '[data-gridtable-filter-role="search-hint"] .tooltip-trigger'
+    ) as HTMLElement | null;
+    expect(trigger).toBeTruthy();
+
+    await act(async () => {
+      trigger?.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+      vi.advanceTimersByTime(250);
+    });
+
+    expect(document.body.textContent).toContain('Search updates the active query for this view.');
+    expect(document.body.textContent).toContain(
+      'Counts and results reflect matching objects for the current scope, up to the max table size.'
+    );
   });
 
   it('registers search shortcut and focuses the input when invoked', async () => {

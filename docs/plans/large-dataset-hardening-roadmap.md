@@ -192,6 +192,9 @@ Current status:
   shared filter/search bar
 - ✅ shared empty-state language now makes filter-empty tables read as “no
   matching items” instead of looking identical to truly empty datasets
+- ✅ shared filter bars now expose search semantics explicitly: Browse marks
+  search as query-backed, while other table families default to local table
+  search
 
 ## Phase 5: Measured Update-Path Improvements
 

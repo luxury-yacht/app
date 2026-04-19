@@ -422,6 +422,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
       onChange: persistence.setFilters,
       onReset: persistence.resetState,
       options: {
+        searchBehavior: 'query' as const,
         kinds: filterOptions.kinds,
         namespaces: filterOptions.namespaces,
         showKindDropdown: true,

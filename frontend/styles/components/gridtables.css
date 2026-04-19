@@ -649,6 +649,17 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
   gap: 0.35rem;
 }
 
+.gridtable-filter-group[data-gridtable-filter-role="search"] {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.gridtable-filter-search-hint {
+  display: inline-flex;
+  align-items: center;
+}
+
 .dropdown-filter-option--action {
   padding-left: 0;
 }
