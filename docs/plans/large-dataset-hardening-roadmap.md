@@ -13,7 +13,7 @@ It assumes the current product model:
 - users narrow oversized views with filters
 
 This roadmap does **not** try to restore the older "always load the full active
-dataset" approach from `app-wide-large-dataset-performance.md`.
+dataset" approach that predated the current capped-table model.
 
 ## Current Baseline
 
@@ -398,6 +398,13 @@ Minimum validation surfaces:
 - representative all-namespaces typed views
 - representative cluster typed views
 
+Synthetic validation should also probe beyond current real-cluster sizes.
+Target scales should include at least:
+
+- `25k` rows where practical
+- `50k` rows where practical
+- `100k` rows for the heaviest generic table paths where practical
+
 Validation should check:
 
 - filter stability
@@ -405,6 +412,13 @@ Validation should check:
 - responsiveness during refresh churn
 - stable object actions and object opening
 - multi-cluster-safe object identity behavior
+
+The performance bar for validation is:
+
+- no user-visible pagination
+- smooth scrolling
+- responsive sorting and filtering
+- no obvious UI stalls during ordinary updates
 
 ## Success Criteria
 
