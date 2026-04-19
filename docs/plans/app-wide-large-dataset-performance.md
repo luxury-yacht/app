@@ -16,8 +16,9 @@ This is broader than Browse. It applies to all list and table surfaces across
 the app.
 
 This plan does **not** replace the catalog architecture note in
-`catalog-and-data-retrieval.md`. That document describes identity and retrieval
-layering. This plan describes the app-wide runtime performance model.
+`docs/development/catalog-architecture.md`. That document describes identity
+and retrieval layering. This plan describes the app-wide runtime performance
+model.
 
 ## Product Goal
 
