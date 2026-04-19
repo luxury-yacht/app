@@ -235,6 +235,8 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
       columns,
       controlledSort: persistedSort,
       onChange: onSortChange,
+      diagnosticsLabel:
+        namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Storage' : 'Namespace Storage',
     });
 
     const availableKinds = NAMESPACE_STORAGE_KIND_OPTIONS;
@@ -342,6 +344,9 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
           <GridTable
             data={sortedData}
             columns={columns}
+            diagnosticsLabel={
+              namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Storage' : 'Namespace Storage'
+            }
             loading={loading}
             keyExtractor={keyExtractor}
             onRowClick={handleResourceClick}

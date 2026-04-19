@@ -6,6 +6,7 @@
  * Supports both controlled and uncontrolled sorting states.
  */
 import { useState, useMemo } from 'react';
+import { recordGridTablePerformanceSample } from '@shared/components/tables/performance/gridTablePerformanceStore';
 
 export type SortDirection = 'asc' | 'desc' | null;
 
@@ -17,10 +18,16 @@ export interface SortConfig {
 export interface UseTableSortOptions {
   controlledSort?: SortConfig | null;
   onChange?: (config: SortConfig) => void;
+  diagnosticsLabel?: string;
   // When provided, columns with a `sortValue` accessor are used to extract
   // comparison values instead of direct property access on the row.
   columns?: ReadonlyArray<{ key: string; sortValue?: (item: any) => any }>;
 }
+
+const getNow = (): number =>
+  typeof performance !== 'undefined' && typeof performance.now === 'function'
+    ? performance.now()
+    : Date.now();
 
 export function useTableSort<T>(
   data: T[],
@@ -109,6 +116,8 @@ export function useTableSort<T>(
   }, [options?.columns]);
 
   const sortedData = useMemo(() => {
+    const startedAt = getNow();
+
     // Handle null or undefined data
     if (!data) {
       return [];
@@ -120,7 +129,7 @@ export function useTableSort<T>(
 
     const extractor = sortValueExtractors?.[effectiveSort.key];
 
-    return [...data].sort((a, b) => {
+    const sorted = [...data].sort((a, b) => {
       const aValue = extractor ? extractor(a) : (a as any)[effectiveSort.key];
       const bValue = extractor ? extractor(b) : (b as any)[effectiveSort.key];
 
@@ -164,7 +173,13 @@ export function useTableSort<T>(
 
       return effectiveSort.direction === 'asc' ? comparison : -comparison;
     });
-  }, [data, effectiveSort, sortValueExtractors]);
+
+    if (options?.diagnosticsLabel) {
+      recordGridTablePerformanceSample(options.diagnosticsLabel, 'sort', getNow() - startedAt);
+    }
+
+    return sorted;
+  }, [data, effectiveSort, options?.diagnosticsLabel, sortValueExtractors]);
 
   return {
     sortedData,

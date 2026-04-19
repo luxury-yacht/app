@@ -197,6 +197,8 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
       columns: tableColumns,
       controlledSort: persistedSort,
       onChange: onSortChange,
+      diagnosticsLabel:
+        namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Workloads' : 'Namespace Workloads',
     });
 
     const fallbackKinds = useKindFilterOptions(data);
@@ -529,6 +531,11 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
           <GridTable
             data={sortedWorkloads}
             columns={tableColumns}
+            diagnosticsLabel={
+              namespace === ALL_NAMESPACES_SCOPE
+                ? 'All Namespaces Workloads'
+                : 'Namespace Workloads'
+            }
             loading={loading && sortedWorkloads.length === 0}
             keyExtractor={keyExtractor}
             onRowClick={handleWorkloadClick}

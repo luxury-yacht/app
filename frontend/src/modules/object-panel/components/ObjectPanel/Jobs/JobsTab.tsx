@@ -245,6 +245,7 @@ export const JobsTab: React.FC<JobsTabProps> = ({
     columns,
     controlledSort: sortConfig,
     onChange: setSortConfig,
+    diagnosticsLabel: 'Object Panel Jobs',
   });
 
   const getSearchTokens = useCallback((job: JobRow) => {
@@ -264,6 +265,7 @@ export const JobsTab: React.FC<JobsTabProps> = ({
           <GridTable<JobRow>
             data={sortedData}
             columns={columns}
+            diagnosticsLabel="Object Panel Jobs"
             onSort={handleSort}
             sortConfig={tableSort}
             keyExtractor={keyExtractor}

@@ -262,6 +262,8 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
       columns,
       controlledSort: persistedSort,
       onChange: onSortChange,
+      diagnosticsLabel:
+        namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Events' : 'Namespace Events',
     });
 
     const fallbackNamespaces = useMemo(
@@ -331,6 +333,9 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
           <GridTable
             data={sortedData}
             columns={columns}
+            diagnosticsLabel={
+              namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Events' : 'Namespace Events'
+            }
             loading={loading}
             keyExtractor={keyExtractor}
             onRowClick={handleEventClick}

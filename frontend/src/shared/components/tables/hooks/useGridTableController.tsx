@@ -13,6 +13,10 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import type { ReactElement, ReactNode, RefObject } from 'react';
 import { eventBus } from '@/core/events';
 import { getMaxTableRows } from '@/core/settings/appPreferences';
+import {
+  recordGridTablePerformanceSample,
+  recordGridTablePerformanceSnapshot,
+} from '@shared/components/tables/performance/gridTablePerformanceStore';
 import { useGridTableHoverSync } from '@shared/components/tables/hooks/useGridTableHoverSync';
 import type { HoverState } from '@shared/components/tables/hooks/useGridTableHoverSync';
 import { useGridTableColumnVirtualization } from '@shared/components/tables/hooks/useGridTableColumnVirtualization';
@@ -198,6 +202,7 @@ export function useGridTableController<T>({
   virtualization,
   loadingOverlay,
   filters,
+  diagnosticsLabel,
   allowHorizontalOverflow = true,
   disableCellNativeTitle = false,
   isKindColumnKey = defaultIsKindColumnKey,
@@ -214,6 +219,7 @@ export function useGridTableController<T>({
   const tableRef = useRef<HTMLDivElement>(null);
   const tableRefMutable = tableRef as RefObject<HTMLElement | null>;
   const headerInnerRef = useRef<HTMLDivElement | null>(null);
+  const previousInputDataRef = useRef(inputData);
   const paginationEnabled = Boolean(onRequestMore);
   const contextMenuActiveRef = useRef(false);
   const [tableViewportWidth, setTableViewportWidth] = useState(0);
@@ -259,9 +265,16 @@ export function useGridTableController<T>({
 
   const { wrapWithProfiler, warnDevOnce, startFrameSampler, stopFrameSampler } =
     useGridTableProfiler({
-      sampleLabel: 'GridTable scroll',
+      sampleLabel: diagnosticsLabel ? `${diagnosticsLabel} scroll` : 'GridTable scroll',
       sampleWindowMs: 2000,
       minSampleCount: 10,
+      onRenderSample: diagnosticsLabel
+        ? (phase, actualDuration) => {
+            recordGridTablePerformanceSample(diagnosticsLabel, 'render', actualDuration, {
+              renderPhase: phase,
+            });
+          }
+        : undefined,
     });
 
   const { renderedColumns, isColumnVisible, applyVisibilityChanges, lockedColumns } =
@@ -295,8 +308,25 @@ export function useGridTableController<T>({
     data: sourceData,
     totalDataCount,
     filters,
+    diagnosticsLabel,
     columnsDropdown: columnsDropdownConfig ?? undefined,
   });
+
+  useEffect(() => {
+    if (!diagnosticsLabel) {
+      previousInputDataRef.current = inputData;
+      return;
+    }
+
+    const inputReferenceChanged = previousInputDataRef.current !== inputData;
+    recordGridTablePerformanceSnapshot(diagnosticsLabel, {
+      inputRows: totalDataCount,
+      sourceRows: sourceData.length,
+      displayedRows: tableData.length,
+      inputReferenceChanged,
+    });
+    previousInputDataRef.current = inputData;
+  }, [diagnosticsLabel, inputData, sourceData.length, tableData.length, totalDataCount]);
 
   // Whether any filter is actively narrowing results (search text, kind, or namespace selections).
   const hasActiveFilters =

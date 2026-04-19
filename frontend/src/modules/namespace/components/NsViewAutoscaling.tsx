@@ -347,6 +347,8 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
       columns,
       controlledSort: persistedSort,
       onChange: onSortChange,
+      diagnosticsLabel:
+        namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Autoscaling' : 'Namespace Autoscaling',
     });
 
     const availableKinds =
@@ -455,6 +457,11 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
           <GridTable
             data={sortedData}
             columns={columns}
+            diagnosticsLabel={
+              namespace === ALL_NAMESPACES_SCOPE
+                ? 'All Namespaces Autoscaling'
+                : 'Namespace Autoscaling'
+            }
             loading={loading}
             keyExtractor={keyExtractor}
             onRowClick={handleResourceClick}

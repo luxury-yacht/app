@@ -285,6 +285,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
     columns,
     controlledSort: sortConfig,
     onChange: setSortConfig,
+    diagnosticsLabel: 'Object Panel Pods',
   });
 
   const getSearchTokens = useCallback((pod: PodSnapshotEntry) => {
@@ -311,6 +312,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
           <GridTable<PodSnapshotEntry>
             data={sortedData}
             columns={columns}
+            diagnosticsLabel="Object Panel Pods"
             onSort={handleSort}
             sortConfig={tableSort}
             keyExtractor={keyExtractor}

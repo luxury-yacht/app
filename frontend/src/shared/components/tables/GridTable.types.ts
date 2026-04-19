@@ -112,6 +112,7 @@ export interface GridTableProps<T> {
   data: T[];
   columns: GridColumnDefinition<T>[];
   keyExtractor: (item: T, index: number) => string;
+  diagnosticsLabel?: string;
   /**
    * Override which column keys should be treated as special "kind badge"
    * columns by shared table helpers. Use this when a consumer needs plain

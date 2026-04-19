@@ -208,6 +208,8 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
       columns,
       controlledSort: persistedSort,
       onChange: onSortChange,
+      diagnosticsLabel:
+        namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Network' : 'Namespace Network',
     });
 
     const fallbackKinds = useKindFilterOptions(data);
@@ -345,6 +347,9 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
           <GridTable
             data={sortedData}
             columns={columns}
+            diagnosticsLabel={
+              namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Network' : 'Namespace Network'
+            }
             loading={loading}
             keyExtractor={keyExtractor}
             onRowClick={handleResourceClick}

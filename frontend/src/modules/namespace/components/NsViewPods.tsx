@@ -394,6 +394,8 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       columns,
       controlledSort: persistedSort,
       onChange: onSortChange,
+      diagnosticsLabel:
+        namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Pods' : 'Namespace Pods',
     });
 
     const fallbackNamespaces = useMemo(
@@ -600,6 +602,9 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
           <GridTable
             data={displayedPods}
             columns={columns}
+            diagnosticsLabel={
+              namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Pods' : 'Namespace Pods'
+            }
             loading={loading && displayedPods.length === 0}
             keyExtractor={keyExtractor}
             onRowClick={handlePodOpen}

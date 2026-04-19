@@ -205,6 +205,10 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
       columns,
       controlledSort: persistedSort,
       onChange: onSortChange,
+      diagnosticsLabel:
+        namespace === ALL_NAMESPACES_SCOPE
+          ? 'All Namespaces Configuration'
+          : 'Namespace Configuration',
     });
 
     const fallbackKinds = useKindFilterOptions(data);
@@ -315,6 +319,11 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
           <GridTable
             data={sortedData}
             columns={columns}
+            diagnosticsLabel={
+              namespace === ALL_NAMESPACES_SCOPE
+                ? 'All Namespaces Configuration'
+                : 'Namespace Configuration'
+            }
             loading={loading}
             keyExtractor={keyExtractor}
             onRowClick={handleResourceClick}

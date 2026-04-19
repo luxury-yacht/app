@@ -40,6 +40,7 @@ type UseGridTableFiltersWiringOptions<T> = {
   data: T[];
   totalDataCount?: number;
   filters: GridTableFilterConfig<T> | undefined;
+  diagnosticsLabel?: string;
   columnsDropdown?: ColumnsDropdownConfig;
   searchShortcut?: SearchShortcutConfig;
   /** IconBar items rendered before the built-in Reset action. */
@@ -56,6 +57,7 @@ export function useGridTableFiltersWiring<T>({
   data,
   totalDataCount,
   filters,
+  diagnosticsLabel,
   columnsDropdown,
   searchShortcut,
   preActions,
@@ -78,6 +80,7 @@ export function useGridTableFiltersWiring<T>({
   } = useGridTableFilters({
     data,
     filters,
+    diagnosticsLabel,
     defaultGetKind,
     defaultGetNamespace,
     defaultGetSearchText,

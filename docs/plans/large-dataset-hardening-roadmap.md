@@ -228,6 +228,23 @@ Improve hot update paths only after measuring them.
   updates
 - performance work is backed by before/after measurements
 
+Current status:
+
+- ✅ shared GridTable performance diagnostics store records:
+  - update count
+  - input-reference changes
+  - input/capped/displayed row counts
+  - filter-option timing
+  - filter-pass timing
+  - sort timing
+  - render timing
+- ✅ Diagnostics panel now exposes a Table Performance tab for the rolling
+  GridTable measurements
+- ✅ Browse, all-namespaces typed table views, and object-panel Pods/Jobs are
+  instrumented with explicit diagnostics labels
+- ⏳ next step: use the recorded measurements to identify the worst broad
+  replacement/recompute paths before changing update behavior
+
 ## Phase 6: Catalog Alignment for Generic Object Workflows
 
 Strengthen catalog-backed identity without forcing typed views to become

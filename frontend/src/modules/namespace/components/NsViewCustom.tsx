@@ -301,6 +301,10 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
       columns,
       controlledSort: persistedSort,
       onChange: onSortChange,
+      diagnosticsLabel:
+        namespace === ALL_NAMESPACES_SCOPE
+          ? 'All Namespaces Custom Resources'
+          : 'Namespace Custom Resources',
     });
 
     // Derive available kinds and namespaces from the data for the favorites modal dropdowns.
@@ -442,6 +446,11 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
           <GridTable
             data={sortedData}
             columns={columns}
+            diagnosticsLabel={
+              namespace === ALL_NAMESPACES_SCOPE
+                ? 'All Namespaces Custom Resources'
+                : 'Namespace Custom Resources'
+            }
             loading={loading}
             keyExtractor={keyExtractor}
             onRowClick={handleResourceClick}

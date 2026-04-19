@@ -399,6 +399,12 @@ const BrowseView: React.FC<BrowseViewProps> = ({
   const { sortedData, sortConfig, handleSort } = useTableSort<BrowseTableRow>(rows, 'kind', 'asc', {
     controlledSort: persistence.sortConfig,
     onChange: persistence.setSortConfig,
+    diagnosticsLabel:
+      scope === 'namespace'
+        ? 'Namespace Browse'
+        : isClusterScoped
+          ? 'Cluster Browse'
+          : 'All Namespaces Browse',
   });
 
   const { item: favToggle, modal: favModal } = useFavToggle({
@@ -472,6 +478,13 @@ const BrowseView: React.FC<BrowseViewProps> = ({
         <GridTable<BrowseTableRow>
           data={sortedData}
           columns={columns}
+          diagnosticsLabel={
+            scope === 'namespace'
+              ? 'Namespace Browse'
+              : isClusterScoped
+                ? 'Cluster Browse'
+                : 'All Namespaces Browse'
+          }
           keyExtractor={keyExtractor}
           onRowClick={handleOpen}
           onSort={handleSort}

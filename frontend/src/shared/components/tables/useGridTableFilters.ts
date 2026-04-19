@@ -13,6 +13,7 @@ import type {
   GridTableFilterState,
   InternalFilterOptions,
 } from '@shared/components/tables/GridTable.types';
+import { recordGridTablePerformanceSample } from '@shared/components/tables/performance/gridTablePerformanceStore';
 
 const DEFAULT_FILTER_STATE: GridTableFilterState = {
   search: '',
@@ -71,6 +72,7 @@ const areFilterStatesEqual = (a: GridTableFilterState, b: GridTableFilterState):
 export interface UseGridTableFiltersParams<T> {
   data: T[];
   filters?: GridTableFilterConfig<T>;
+  diagnosticsLabel?: string;
   defaultGetKind: (row: T) => string | null;
   defaultGetNamespace: (row: T) => string | null;
   defaultGetSearchText: (row: T) => string[];
@@ -95,6 +97,7 @@ export interface UseGridTableFiltersResult<T> {
 export function useGridTableFilters<T>({
   data,
   filters,
+  diagnosticsLabel,
   defaultGetKind,
   defaultGetNamespace,
   defaultGetSearchText,
@@ -110,6 +113,16 @@ export function useGridTableFilters<T>({
   // reference with identical content doesn't reset user-typed search text.
   const lastAppliedInitialRef = useRef<string>(
     filters?.initial ? JSON.stringify(normalizeFilterState(filters.initial)) : ''
+  );
+  const filterOptionsDurationRef = useRef<number | null>(null);
+  const filterPassDurationRef = useRef<number | null>(null);
+
+  const getNow = useCallback(
+    () =>
+      typeof performance !== 'undefined' && typeof performance.now === 'function'
+        ? performance.now()
+        : Date.now(),
+    []
   );
 
   useEffect(() => {
@@ -172,6 +185,7 @@ export function useGridTableFilters<T>({
   }, [filters?.accessors, defaultGetKind, defaultGetNamespace, defaultGetSearchText]);
 
   const resolvedFilterOptions = useMemo<InternalFilterOptions>(() => {
+    const startedAt = getNow();
     const searchBehavior = filters?.options?.searchBehavior ?? 'local';
     const searchPlaceholder = filters?.options?.searchPlaceholder;
     const kindDropdownSearchable = filters?.options?.kindDropdownSearchable ?? false;
@@ -182,7 +196,7 @@ export function useGridTableFilters<T>({
     const postActions = filters?.options?.postActions;
     const customActions = filters?.options?.customActions;
     if (!filteringEnabled) {
-      return {
+      const resolved = {
         searchBehavior,
         searchPlaceholder,
         kindDropdownSearchable,
@@ -195,6 +209,8 @@ export function useGridTableFilters<T>({
         postActions,
         customActions,
       };
+      filterOptionsDurationRef.current = getNow() - startedAt;
+      return resolved;
     }
 
     const kindMap = new Map<string, DropdownOption>();
@@ -269,7 +285,7 @@ export function useGridTableFilters<T>({
     }
     namespaceOptions.push(...namespaces);
 
-    return {
+    const resolved = {
       searchBehavior,
       searchPlaceholder,
       kindDropdownSearchable,
@@ -282,6 +298,8 @@ export function useGridTableFilters<T>({
       postActions,
       customActions,
     };
+    filterOptionsDurationRef.current = getNow() - startedAt;
+    return resolved;
   }, [
     filteringEnabled,
     filters?.options,
@@ -289,10 +307,13 @@ export function useGridTableFilters<T>({
     filterAccessors,
     defaultGetKind,
     defaultGetNamespace,
+    getNow,
   ]);
 
   const tableData = useMemo(() => {
+    const startedAt = getNow();
     if (!filteringEnabled || data.length === 0) {
+      filterPassDurationRef.current = getNow() - startedAt;
       return data;
     }
 
@@ -305,7 +326,7 @@ export function useGridTableFilters<T>({
     const shouldFilterKinds = kindSet.size > 0;
     const shouldFilterNamespaces = namespaceSet.size > 0;
 
-    return data.filter((row) => {
+    const filtered = data.filter((row) => {
       const kindValueRaw = filterAccessors.getKind?.(row) ?? defaultGetKind(row);
       const kindValue = typeof kindValueRaw === 'string' ? kindValueRaw.trim() : '';
       if (shouldFilterKinds && (!kindValue || !kindSet.has(kindValue.toLowerCase()))) {
@@ -347,6 +368,8 @@ export function useGridTableFilters<T>({
             : candidate.toLowerCase().includes(searchNeedle))
       );
     });
+    filterPassDurationRef.current = getNow() - startedAt;
+    return filtered;
   }, [
     filteringEnabled,
     data,
@@ -355,7 +378,26 @@ export function useGridTableFilters<T>({
     defaultGetKind,
     defaultGetNamespace,
     defaultGetSearchText,
+    getNow,
   ]);
+
+  useEffect(() => {
+    if (!diagnosticsLabel || filterOptionsDurationRef.current == null) {
+      return;
+    }
+    recordGridTablePerformanceSample(
+      diagnosticsLabel,
+      'filterOptions',
+      filterOptionsDurationRef.current
+    );
+  }, [diagnosticsLabel, resolvedFilterOptions]);
+
+  useEffect(() => {
+    if (!diagnosticsLabel || filterPassDurationRef.current == null) {
+      return;
+    }
+    recordGridTablePerformanceSample(diagnosticsLabel, 'filterPass', filterPassDurationRef.current);
+  }, [diagnosticsLabel, tableData, filterSignature]);
 
   const updateFilters = useCallback(
     (changes: Partial<GridTableFilterState>) => {

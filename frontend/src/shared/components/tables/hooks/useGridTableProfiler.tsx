@@ -16,6 +16,11 @@ interface GridTableProfilerOptions {
   sampleLabel?: string;
   sampleWindowMs?: number;
   minSampleCount?: number;
+  onRenderSample?: (
+    phase: 'mount' | 'update' | 'nested-update',
+    actualDuration: number,
+    baseDuration: number
+  ) => void;
 }
 
 interface GridTableProfilerApi {
@@ -30,6 +35,7 @@ export function useGridTableProfiler({
   sampleLabel = 'GridTable scroll',
   sampleWindowMs = 2000,
   minSampleCount = 10,
+  onRenderSample,
 }: GridTableProfilerOptions = {}): GridTableProfilerApi {
   const isJSDOM =
     typeof navigator !== 'undefined' &&
@@ -62,6 +68,8 @@ export function useGridTableProfiler({
       startTime: number,
       commitTime: number
     ) => {
+      onRenderSample?.(phase, actualDuration, baseDuration);
+
       if (!profilerEnabled || !profilerLoggingEnabled) {
         return;
       }
@@ -78,7 +86,7 @@ export function useGridTableProfiler({
         },
       ]);
     },
-    [profilerEnabled, profilerLoggingEnabled]
+    [onRenderSample, profilerEnabled, profilerLoggingEnabled]
   );
 
   const wrapWithProfiler = useCallback(
