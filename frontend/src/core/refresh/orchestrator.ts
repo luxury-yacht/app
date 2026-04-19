@@ -1664,23 +1664,52 @@ class RefreshOrchestrator {
         ])
       );
       const existingPods = previous.data.pods ?? [];
-      const nextPods = existingPods.map((existing) => {
+      const mappedPods = existingPods.map((existing) => {
         const key = `${existing.clusterId ?? clusterId}::${existing.namespace}::${existing.name}`;
         const incoming = incomingByKey.get(key);
         if (!incoming) {
           return existing;
         }
+        const nextCpuUsage = incoming.cpuUsage ?? existing.cpuUsage;
+        const nextMemUsage = incoming.memUsage ?? existing.memUsage;
+        if (nextCpuUsage === existing.cpuUsage && nextMemUsage === existing.memUsage) {
+          return existing;
+        }
         return {
           ...existing,
-          cpuUsage: incoming.cpuUsage ?? existing.cpuUsage,
-          memUsage: incoming.memUsage ?? existing.memUsage,
+          cpuUsage: nextCpuUsage,
+          memUsage: nextMemUsage,
         };
       });
-      const nextPayload: PodSnapshotPayload = {
-        ...previous.data,
-        pods: nextPods,
-        metrics: payload.metrics ?? previous.data.metrics,
-      };
+      const nextPods = mappedPods.every((pod, index) => pod === existingPods[index])
+        ? existingPods
+        : mappedPods;
+      const nextMetrics = (() => {
+        const incomingMetrics = payload.metrics;
+        const previousMetrics = previous.data.metrics;
+        if (!incomingMetrics) {
+          return previousMetrics;
+        }
+        if (!previousMetrics) {
+          return incomingMetrics;
+        }
+        return incomingMetrics.stale === previousMetrics.stale &&
+          incomingMetrics.lastError === previousMetrics.lastError &&
+          incomingMetrics.collectedAt === previousMetrics.collectedAt &&
+          incomingMetrics.consecutiveFailures === previousMetrics.consecutiveFailures &&
+          incomingMetrics.successCount === previousMetrics.successCount &&
+          incomingMetrics.failureCount === previousMetrics.failureCount
+          ? previousMetrics
+          : incomingMetrics;
+      })();
+      const nextPayload: PodSnapshotPayload =
+        nextPods === existingPods && nextMetrics === previous.data.metrics
+          ? previous.data
+          : {
+              ...previous.data,
+              pods: nextPods,
+              metrics: nextMetrics,
+            };
       setScopedDomainState('pods', scope, (prev) => ({
         ...prev,
         status: 'ready',

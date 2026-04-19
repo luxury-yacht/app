@@ -196,7 +196,10 @@ const useNamespacePodsResource = (
     }
     return domainState.data.pods;
   }, [domainState?.data?.pods]);
-  const stableData = useStableSelectedValue(data);
+  const stableData = useStableKeyedArray(
+    data,
+    (pod) => `${pod.clusterId ?? clusterId ?? ''}::${pod.namespace}::${pod.name}`
+  );
   const stableMetrics = useStableSelectedValue(domainState?.data?.metrics ?? null);
 
   const initialising =

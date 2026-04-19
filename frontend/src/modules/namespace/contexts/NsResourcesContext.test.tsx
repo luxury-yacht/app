@@ -566,6 +566,82 @@ describe('NamespaceResourcesProvider', () => {
     expect(contextRef.current?.pods.metrics).toBe(firstMetricsRef);
   });
 
+  it('preserves pod row references when refreshed rows are rebuilt with unchanged fields', async () => {
+    const scope = `${testClusterId}|namespace:team-a`;
+
+    scopedStates[scope] = {
+      status: 'ready',
+      data: {
+        pods: [
+          {
+            kind: 'Pod',
+            name: 'pod-a',
+            namespace: 'team-a',
+            clusterId: testClusterId,
+            status: 'Running',
+            ready: '1/1',
+            restarts: 0,
+            age: '1m',
+            cpuUsage: '10m',
+            memUsage: '20Mi',
+          },
+        ],
+        metrics: {
+          cpuUsageAvailable: true,
+          memoryUsageAvailable: true,
+          stale: false,
+        },
+      },
+      error: null,
+      lastUpdated: null,
+    };
+
+    await render(
+      <NamespaceResourcesProvider namespace="team-a" activeView="pods">
+        <TestConsumer />
+      </NamespaceResourcesProvider>
+    );
+
+    const firstPodRef = contextRef.current?.pods.data?.[0];
+    const firstDataRef = contextRef.current?.pods.data;
+
+    scopedStates[scope] = {
+      status: 'ready',
+      data: {
+        pods: [
+          {
+            kind: 'Pod',
+            name: 'pod-a',
+            namespace: 'team-a',
+            clusterId: testClusterId,
+            status: 'Running',
+            ready: '1/1',
+            restarts: 0,
+            age: '1m',
+            cpuUsage: '10m',
+            memUsage: '20Mi',
+          },
+        ],
+        metrics: {
+          cpuUsageAvailable: true,
+          memoryUsageAvailable: true,
+          stale: false,
+        },
+      },
+      error: null,
+      lastUpdated: null,
+    };
+
+    await render(
+      <NamespaceResourcesProvider namespace="team-a" activeView="pods">
+        <TestConsumer />
+      </NamespaceResourcesProvider>
+    );
+
+    expect(contextRef.current?.pods.data).toBe(firstDataRef);
+    expect(contextRef.current?.pods.data?.[0]).toBe(firstPodRef);
+  });
+
   it('preserves workload row references when refreshed rows are rebuilt with unchanged fields', async () => {
     const scope = `${testClusterId}|namespace:team-a`;
 

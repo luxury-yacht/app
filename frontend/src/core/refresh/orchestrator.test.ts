@@ -1764,6 +1764,83 @@ describe('refreshOrchestrator', () => {
     resetAllScopedDomainStates('nodes');
   });
 
+  it('reuses existing pod rows when pod metrics snapshots are unchanged', () => {
+    const scope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    const existingPod = {
+      clusterId: 'cluster-a',
+      name: 'pod-a',
+      namespace: 'default',
+      status: 'Running',
+      ready: '1/1',
+      restarts: 0,
+      age: '1m',
+      ownerKind: 'Deployment',
+      ownerName: 'web',
+      node: 'node-a',
+      cpuRequest: '10m',
+      cpuLimit: '20m',
+      cpuUsage: '20m',
+      memRequest: '10Mi',
+      memLimit: '20Mi',
+      memUsage: '30Mi',
+    };
+
+    setScopedDomainState('pods', scope, () => ({
+      status: 'ready',
+      data: {
+        clusterId: 'cluster-a',
+        pods: [existingPod],
+        metrics: {
+          stale: false,
+          collectedAt: 123,
+          successCount: 1,
+          failureCount: 0,
+        },
+      },
+      stats: null,
+      error: null,
+      droppedAutoRefreshes: 0,
+      scope,
+    }));
+
+    const previousState = getScopedDomainState('pods', scope);
+    const previousRows = previousState.data?.pods;
+    const previousMetrics = previousState.data?.metrics;
+
+    const applied = orchestratorInternals.applyMetricsSnapshot(
+      'pods',
+      {
+        domain: 'pods',
+        scope,
+        version: 2,
+        checksum: 'etag-pods-stable',
+        generatedAt: Date.now(),
+        sequence: 1,
+        payload: {
+          pods: [{ ...existingPod }],
+          metrics: {
+            stale: false,
+            collectedAt: 123,
+            successCount: 1,
+            failureCount: 0,
+          },
+        },
+        stats: { itemCount: 1, buildDurationMs: 0 },
+      },
+      'etag-pods-stable',
+      false,
+      scope
+    );
+
+    expect(applied).toBe(true);
+    const nextState = getScopedDomainState('pods', scope);
+    expect(nextState.data?.pods).toBe(previousRows);
+    expect(nextState.data?.pods?.[0]).toBe(existingPod);
+    expect(nextState.data?.metrics).toBe(previousMetrics);
+
+    resetAllScopedDomainStates('pods');
+  });
+
   it('preserves workload readiness when applying metrics-only snapshots', () => {
     const scope = buildClusterScopeList(['cluster-a'], 'namespace:default');
     const existingWorkload = {
