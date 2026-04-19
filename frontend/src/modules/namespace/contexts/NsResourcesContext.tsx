@@ -537,7 +537,9 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     [],
     isResourceActive('autoscaling'),
     currentNamespace,
-    namespaceClusterId
+    namespaceClusterId,
+    (item: NamespaceAutoscalingSummary) =>
+      `${item.clusterId ?? namespaceClusterId ?? ''}::${item.namespace}::${item.kind}::${item.name}`
   );
 
   const quotas = useRefreshBackedResource<any[]>(
@@ -625,7 +627,9 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     [],
     isResourceActive('helm'),
     currentNamespace,
-    namespaceClusterId
+    namespaceClusterId,
+    (release: NamespaceHelmSummary) =>
+      `${release.clusterId ?? namespaceClusterId ?? ''}::${release.namespace}::${release.name}`
   );
 
   useEffect(() => {

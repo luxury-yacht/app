@@ -953,6 +953,119 @@ describe('ResourceStreamManager', () => {
     expect(state.data?.releases?.[0]?.name).toBe('release-a');
   });
 
+  test('reuses namespace helm rows when an unchanged update is applied', () => {
+    vi.useFakeTimers();
+    (window as any).setTimeout = globalThis.setTimeout;
+    (window as any).clearTimeout = globalThis.clearTimeout;
+    const manager = new ResourceStreamManager();
+    const storeScope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    (
+      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
+    ).ensureSubscriptions('namespace-helm', storeScope);
+
+    const sharedRow = {
+      clusterId: 'cluster-a',
+      clusterName: 'cluster-a',
+      name: 'release-a',
+      namespace: 'default',
+      chart: 'demo-1.0.0',
+      appVersion: '1.0.0',
+      status: 'deployed',
+      revision: 1,
+      updated: '2024-01-01T00:00:00Z',
+      age: '1m',
+    };
+
+    setScopedDomainState('namespace-helm', storeScope, () => ({
+      status: 'ready',
+      data: { releases: [sharedRow], clusterId: 'cluster-a' },
+      stats: null,
+      error: null,
+      droppedAutoRefreshes: 0,
+      scope: storeScope,
+    }));
+    const previousRows = getScopedDomainState('namespace-helm', storeScope).data?.releases;
+
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({
+        type: 'MODIFIED',
+        domain: 'namespace-helm',
+        scope: 'namespace:default',
+        resourceVersion: '4',
+        name: 'release-a',
+        namespace: 'default',
+        row: { ...sharedRow },
+      })
+    );
+
+    vi.advanceTimersByTime(200);
+
+    const state = getScopedDomainState('namespace-helm', storeScope);
+    expect(state.data?.releases).toBe(previousRows);
+    expect(state.data?.releases?.[0]).toBe(sharedRow);
+  });
+
+  test('reuses namespace helm rows when an identical helm snapshot is applied', () => {
+    const manager = new ResourceStreamManager();
+    const storeScope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    (
+      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
+    ).ensureSubscriptions('namespace-helm', storeScope);
+
+    const sharedRow = {
+      clusterId: 'cluster-a',
+      clusterName: 'cluster-a',
+      name: 'release-a',
+      namespace: 'default',
+      chart: 'demo-1.0.0',
+      appVersion: '1.0.0',
+      status: 'deployed',
+      revision: 1,
+      updated: '2024-01-01T00:00:00Z',
+      age: '1m',
+    };
+
+    setScopedDomainState('namespace-helm', storeScope, () => ({
+      status: 'ready',
+      data: { releases: [sharedRow], clusterId: 'cluster-a' },
+      stats: null,
+      error: null,
+      droppedAutoRefreshes: 0,
+      scope: storeScope,
+    }));
+    const previousRows = getScopedDomainState('namespace-helm', storeScope).data?.releases;
+
+    (
+      manager as unknown as {
+        applySnapshot: (
+          subscription: Record<string, unknown>,
+          snapshot: Record<string, unknown>
+        ) => void;
+      }
+    ).applySnapshot(
+      {
+        domain: 'namespace-helm',
+        reportScope: storeScope,
+        clusterId: 'cluster-a',
+      },
+      {
+        generatedAt: Date.now(),
+        version: 7,
+        checksum: 'helm-checksum',
+        payload: {
+          releases: [{ ...sharedRow }],
+          clusterId: 'cluster-a',
+        },
+        stats: { itemCount: 1, buildDurationMs: 0 },
+      }
+    );
+
+    const state = getScopedDomainState('namespace-helm', storeScope);
+    expect(state.data?.releases).toBe(previousRows);
+    expect(state.data?.releases?.[0]).toBe(sharedRow);
+  });
+
   test('applies namespace autoscaling updates', () => {
     vi.useFakeTimers();
     (window as any).setTimeout = globalThis.setTimeout;
@@ -1001,6 +1114,128 @@ describe('ResourceStreamManager', () => {
 
     const state = getScopedDomainState('namespace-autoscaling', storeScope);
     expect(state.data?.resources?.[0]?.name).toBe('hpa-a');
+  });
+
+  test('reuses namespace autoscaling rows when an unchanged update is applied', () => {
+    vi.useFakeTimers();
+    (window as any).setTimeout = globalThis.setTimeout;
+    (window as any).clearTimeout = globalThis.clearTimeout;
+    const manager = new ResourceStreamManager();
+    const storeScope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    (
+      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
+    ).ensureSubscriptions('namespace-autoscaling', storeScope);
+
+    const sharedRow = {
+      clusterId: 'cluster-a',
+      clusterName: 'cluster-a',
+      kind: 'HorizontalPodAutoscaler',
+      name: 'hpa-a',
+      namespace: 'default',
+      target: 'Deployment/web',
+      min: 1,
+      max: 4,
+      current: 2,
+      age: '1m',
+    };
+
+    setScopedDomainState('namespace-autoscaling', storeScope, () => ({
+      status: 'ready',
+      data: { resources: [sharedRow], clusterId: 'cluster-a' },
+      stats: null,
+      error: null,
+      droppedAutoRefreshes: 0,
+      scope: storeScope,
+    }));
+    const previousRows = getScopedDomainState('namespace-autoscaling', storeScope).data?.resources;
+
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({
+        type: 'MODIFIED',
+        domain: 'namespace-autoscaling',
+        scope: 'namespace:default',
+        resourceVersion: '5',
+        name: 'hpa-a',
+        namespace: 'default',
+        kind: 'HorizontalPodAutoscaler',
+        row: { ...sharedRow },
+      })
+    );
+
+    vi.advanceTimersByTime(200);
+
+    const state = getScopedDomainState('namespace-autoscaling', storeScope);
+    expect(state.data?.resources).toBeDefined();
+    expect(state.data?.resources).toHaveLength(1);
+    expect(state.data?.resources).toBe(previousRows);
+    expect(state.data?.resources?.[0]).toBe(sharedRow);
+  });
+
+  test('reuses namespace autoscaling rows when an identical autoscaling snapshot is applied', async () => {
+    const manager = new ResourceStreamManager();
+    const storeScope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    (
+      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
+    ).ensureSubscriptions('namespace-autoscaling', storeScope);
+
+    const sharedRow = {
+      clusterId: 'cluster-a',
+      clusterName: 'cluster-a',
+      kind: 'HorizontalPodAutoscaler',
+      name: 'hpa-a',
+      namespace: 'default',
+      target: 'Deployment/web',
+      min: 1,
+      max: 4,
+      current: 2,
+      age: '1m',
+    };
+
+    setScopedDomainState('namespace-autoscaling', storeScope, () => ({
+      status: 'ready',
+      data: {
+        resources: [sharedRow],
+        kinds: ['HorizontalPodAutoscaler'],
+        clusterId: 'cluster-a',
+      },
+      stats: null,
+      error: null,
+      droppedAutoRefreshes: 0,
+      scope: storeScope,
+    }));
+
+    const previousRows = getScopedDomainState('namespace-autoscaling', storeScope).data?.resources;
+
+    await (
+      manager as unknown as {
+        applySnapshot: (
+          subscription: Record<string, unknown>,
+          snapshot: Record<string, unknown>
+        ) => Promise<void>;
+      }
+    ).applySnapshot(
+      {
+        domain: 'namespace-autoscaling',
+        reportScope: storeScope,
+        clusterId: 'cluster-a',
+      },
+      {
+        payload: {
+          resources: [{ ...sharedRow }],
+          kinds: ['HorizontalPodAutoscaler'],
+          clusterId: 'cluster-a',
+        },
+        stats: { total: 1, returned: 1, totalAvailable: 1 },
+        version: 7,
+        checksum: 'autoscaling-checksum',
+        generatedAt: Date.now(),
+      }
+    );
+
+    const state = getScopedDomainState('namespace-autoscaling', storeScope);
+    expect(state.data?.resources).toBe(previousRows);
+    expect(state.data?.resources?.[0]).toBe(sharedRow);
   });
 
   test('applies namespace quotas updates', () => {

@@ -2135,16 +2135,34 @@ export class ResourceStreamManager {
           if (!update.row) {
             return;
           }
-          byKey.set(key, update.row as NamespaceHelmSummary);
+          const nextRow = update.row as NamespaceHelmSummary;
+          const existingRow = byKey.get(key);
+          byKey.set(
+            key,
+            existingRow &&
+              shallowEqualRecord(
+                existingRow as unknown as Record<string, unknown>,
+                nextRow as unknown as Record<string, unknown>
+              )
+              ? existingRow
+              : nextRow
+          );
         });
 
         const nextRows = Array.from(byKey.values());
         sortHelmRows(nextRows);
+        const stableRows = hasSameArrayItems(existingRows, nextRows) ? existingRows : nextRows;
+        if (stableRows === existingRows && previous.data === currentPayload) {
+          return previous;
+        }
         return {
           ...previous,
           status: 'ready',
-          data: { ...currentPayload, releases: nextRows },
-          stats: updateStats(previous.stats, nextRows.length),
+          data:
+            currentPayload.releases === stableRows
+              ? currentPayload
+              : { ...currentPayload, releases: stableRows },
+          stats: updateStats(previous.stats, stableRows.length),
           lastUpdated: now,
           lastAutoRefresh: now,
           error: null,
@@ -2189,16 +2207,34 @@ export class ResourceStreamManager {
           if (!update.row) {
             return;
           }
-          byKey.set(key, update.row as NamespaceAutoscalingSummary);
+          const nextRow = update.row as NamespaceAutoscalingSummary;
+          const existingRow = byKey.get(key);
+          byKey.set(
+            key,
+            existingRow &&
+              shallowEqualRecord(
+                existingRow as unknown as Record<string, unknown>,
+                nextRow as unknown as Record<string, unknown>
+              )
+              ? existingRow
+              : nextRow
+          );
         });
 
         const nextRows = Array.from(byKey.values());
         sortAutoscalingRows(nextRows);
+        const stableRows = hasSameArrayItems(existingRows, nextRows) ? existingRows : nextRows;
+        if (stableRows === existingRows && previous.data === currentPayload) {
+          return previous;
+        }
         return {
           ...previous,
           status: 'ready',
-          data: { ...currentPayload, resources: nextRows },
-          stats: updateStats(previous.stats, nextRows.length),
+          data:
+            currentPayload.resources === stableRows
+              ? currentPayload
+              : { ...currentPayload, resources: stableRows },
+          stats: updateStats(previous.stats, stableRows.length),
           lastUpdated: now,
           lastAutoRefresh: now,
           error: null,
@@ -3155,10 +3191,26 @@ export class ResourceStreamManager {
 
     if (subscription.domain === 'namespace-helm') {
       const payload = snapshot.payload as NamespaceHelmSnapshotPayload;
+      const shouldSort = isMultiClusterScope(subscription.reportScope);
       setScopedDomainState('namespace-helm', subscription.reportScope, (previous) => ({
         ...previous,
         status: 'ready',
-        data: payload,
+        data: (() => {
+          const incoming = payload.releases ?? [];
+          const merged = mergeClusterRowsByKey(
+            previous.data?.releases,
+            incoming,
+            subscription.clusterId,
+            (row, fallbackClusterId) =>
+              buildHelmKey(row.clusterId ?? fallbackClusterId, row.namespace, row.name)
+          );
+          if (shouldSort) {
+            sortHelmRows(merged);
+          }
+          return previous.data?.releases === merged
+            ? previous.data
+            : { ...payload, releases: merged };
+        })(),
         stats: snapshot.stats ?? null,
         version: snapshot.version,
         checksum: snapshot.checksum,
@@ -3175,20 +3227,40 @@ export class ResourceStreamManager {
 
     if (subscription.domain === 'namespace-autoscaling') {
       const payload = snapshot.payload as NamespaceAutoscalingSnapshotPayload;
-      setScopedDomainState('namespace-autoscaling', subscription.reportScope, (previous) => ({
-        ...previous,
-        status: 'ready',
-        data: payload,
-        stats: snapshot.stats ?? null,
-        version: snapshot.version,
-        checksum: snapshot.checksum,
-        etag: snapshot.checksum ?? previous.etag,
-        lastUpdated: generatedAt,
-        lastAutoRefresh: generatedAt,
-        error: null,
-        isManual: false,
-        scope: subscription.reportScope,
-      }));
+      const shouldSort = isMultiClusterScope(subscription.reportScope);
+      setScopedDomainState('namespace-autoscaling', subscription.reportScope, (previous) => {
+        const incoming = payload.resources ?? [];
+        const merged = mergeClusterRowsByKey(
+          previous.data?.resources,
+          incoming,
+          subscription.clusterId,
+          (row, fallbackClusterId) =>
+            buildAutoscalingKey(
+              row.clusterId ?? fallbackClusterId,
+              row.namespace,
+              row.kind,
+              row.name
+            )
+        );
+        if (shouldSort) {
+          sortAutoscalingRows(merged);
+        }
+        return {
+          ...previous,
+          status: 'ready',
+          data:
+            previous.data?.resources === merged ? previous.data : { ...payload, resources: merged },
+          stats: updateStats(snapshot.stats ?? previous.stats ?? null, merged.length),
+          version: snapshot.version,
+          checksum: snapshot.checksum,
+          etag: snapshot.checksum ?? previous.etag,
+          lastUpdated: generatedAt,
+          lastAutoRefresh: generatedAt,
+          error: null,
+          isManual: false,
+          scope: subscription.reportScope,
+        };
+      });
       this.clearStreamError(subscription.clusterId);
       return;
     }

@@ -652,6 +652,74 @@ describe('NamespaceResourcesProvider', () => {
     expect(contextRef.current?.workloads.data?.[1]).toBe(firstDbRow);
   });
 
+  it('preserves autoscaling row references when refreshed rows are rebuilt with unchanged fields', async () => {
+    const scope = `${testClusterId}|namespace:team-a`;
+
+    scopedStates[scope] = {
+      status: 'ready',
+      data: {
+        resources: [
+          {
+            kind: 'HorizontalPodAutoscaler',
+            name: 'api',
+            namespace: 'team-a',
+            clusterId: testClusterId,
+            target: 'Deployment/api',
+            targetApiVersion: 'apps/v1',
+            min: 1,
+            max: 5,
+            current: 2,
+            age: '1h',
+          },
+        ],
+        kinds: ['HorizontalPodAutoscaler'],
+      },
+      error: null,
+      lastUpdated: null,
+    };
+
+    await render(
+      <NamespaceResourcesProvider namespace="team-a" activeView="autoscaling">
+        <TestConsumer />
+      </NamespaceResourcesProvider>
+    );
+
+    const firstDataRef = contextRef.current?.autoscaling.data;
+    const firstRow = firstDataRef?.[0];
+
+    scopedStates[scope] = {
+      status: 'ready',
+      data: {
+        resources: [
+          {
+            kind: 'HorizontalPodAutoscaler',
+            name: 'api',
+            namespace: 'team-a',
+            clusterId: testClusterId,
+            target: 'Deployment/api',
+            targetApiVersion: 'apps/v1',
+            min: 1,
+            max: 5,
+            current: 2,
+            age: '1h',
+          },
+        ],
+        kinds: ['HorizontalPodAutoscaler'],
+      },
+      error: null,
+      lastUpdated: null,
+    };
+
+    await render(
+      <NamespaceResourcesProvider namespace="team-a" activeView="autoscaling">
+        <TestConsumer />
+      </NamespaceResourcesProvider>
+    );
+
+    expect(contextRef.current?.autoscaling.data).toBe(firstDataRef);
+    expect(contextRef.current?.autoscaling.data?.[0]).toBe(firstRow);
+  });
+
   it('preserves custom resource row references when refreshed rows are rebuilt with unchanged fields', async () => {
     const scope = `${testClusterId}|namespace:team-a`;
 
@@ -738,5 +806,71 @@ describe('NamespaceResourcesProvider', () => {
     expect(contextRef.current?.custom.data).toBe(firstDataRef);
     expect(contextRef.current?.custom.data?.[0]).toBe(firstRdsRow);
     expect(contextRef.current?.custom.data?.[1]).toBe(firstDocDbRow);
+  });
+
+  it('preserves helm row references when refreshed rows are rebuilt with unchanged fields', async () => {
+    const scope = `${testClusterId}|namespace:team-a`;
+
+    scopedStates[scope] = {
+      status: 'ready',
+      data: {
+        releases: [
+          {
+            name: 'payments',
+            namespace: 'team-a',
+            clusterId: testClusterId,
+            chart: 'payments-1.2.3',
+            appVersion: '1.2.3',
+            status: 'deployed',
+            revision: 4,
+            updated: '2024-01-01T00:00:00Z',
+            description: 'Payments service',
+            age: '1h',
+          },
+        ],
+      },
+      error: null,
+      lastUpdated: null,
+    };
+
+    await render(
+      <NamespaceResourcesProvider namespace="team-a" activeView="helm">
+        <TestConsumer />
+      </NamespaceResourcesProvider>
+    );
+
+    const firstDataRef = contextRef.current?.helm.data;
+    const firstRow = firstDataRef?.[0];
+
+    scopedStates[scope] = {
+      status: 'ready',
+      data: {
+        releases: [
+          {
+            name: 'payments',
+            namespace: 'team-a',
+            clusterId: testClusterId,
+            chart: 'payments-1.2.3',
+            appVersion: '1.2.3',
+            status: 'deployed',
+            revision: 4,
+            updated: '2024-01-01T00:00:00Z',
+            description: 'Payments service',
+            age: '1h',
+          },
+        ],
+      },
+      error: null,
+      lastUpdated: null,
+    };
+
+    await render(
+      <NamespaceResourcesProvider namespace="team-a" activeView="helm">
+        <TestConsumer />
+      </NamespaceResourcesProvider>
+    );
+
+    expect(contextRef.current?.helm.data).toBe(firstDataRef);
+    expect(contextRef.current?.helm.data?.[0]).toBe(firstRow);
   });
 });
