@@ -187,4 +187,29 @@ describe('useTableSort', () => {
     expect(entry?.sort.samples).toBe(1);
     expect(entry?.sort.latestMs).toBeGreaterThanOrEqual(0);
   });
+
+  it('preserves the input reference for empty sorted data', async () => {
+    const emptyRows: Row[] = [];
+    const refs: Array<Row[]> = [];
+
+    const EmptyHarness = ({ data }: { data: Row[] }) => {
+      const { sortedData } = useTableSort<Row>(data, 'name', 'asc');
+      refs.push(sortedData);
+      return null;
+    };
+
+    await act(async () => {
+      root.render(<EmptyHarness data={emptyRows} />);
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      root.render(<EmptyHarness data={emptyRows} />);
+      await Promise.resolve();
+    });
+
+    expect(refs[0]).toBe(emptyRows);
+    expect(refs[1]).toBe(emptyRows);
+    expect(refs[1]).toBe(refs[0]);
+  });
 });

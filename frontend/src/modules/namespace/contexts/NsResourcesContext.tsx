@@ -561,7 +561,9 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     [],
     isResourceActive('events'),
     currentNamespace,
-    namespaceClusterId
+    namespaceClusterId,
+    (item) =>
+      `${item.clusterId ?? namespaceClusterId ?? ''}::${item.objectNamespace ?? item.namespace ?? ''}::${item.uid || item.name || `${item.object ?? ''}:${item.source ?? ''}:${item.reason ?? ''}:${item.type ?? ''}`}`
   );
 
   const podsEnabled =

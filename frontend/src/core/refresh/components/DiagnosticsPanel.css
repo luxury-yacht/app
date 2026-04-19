@@ -309,6 +309,14 @@
   z-index: 1;
 }
 
+.diagnostics-table-heading-metric {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
 .diagnostics-table td {
   border-bottom: 1px solid var(--color-table-border);
   line-height: 1.5;

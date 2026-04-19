@@ -79,10 +79,12 @@ describe('TableGridPerformance', () => {
     expect(markup).toContain('Broad replacement');
     expect(markup).toContain('Filter options slow');
     expect(markup).toContain('Render slow');
-    expect(markup).toContain('9 / 10 (90%)');
+    expect(markup).toContain('9 (90%)');
     expect(markup).toContain('Reset Samples');
     expect(markup).toContain('Instrumented Tables');
     expect(markup).toContain('Worst Offender');
+    expect(markup).toContain('Filter Options (ms)');
+    expect(markup).toContain('Avg / Max / Latest');
   });
 
   it('builds a compact profiling overview for the current sample set', () => {

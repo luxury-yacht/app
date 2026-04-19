@@ -873,4 +873,78 @@ describe('NamespaceResourcesProvider', () => {
     expect(contextRef.current?.helm.data).toBe(firstDataRef);
     expect(contextRef.current?.helm.data?.[0]).toBe(firstRow);
   });
+
+  it('preserves event row references when refreshed rows are rebuilt with unchanged fields', async () => {
+    const scope = `${testClusterId}|namespace:team-a`;
+
+    scopedStates[scope] = {
+      status: 'ready',
+      data: {
+        events: [
+          {
+            kind: 'Event',
+            kindAlias: 'Event',
+            name: 'deploy.123',
+            uid: 'event-uid',
+            namespace: 'team-a',
+            objectNamespace: 'team-a',
+            clusterId: testClusterId,
+            type: 'Normal',
+            source: 'deployment-controller',
+            reason: 'ScalingReplicaSet',
+            object: 'Deployment/api',
+            message: 'Scaled up replica set api',
+            age: '1m',
+            ageTimestamp: 1_700_000_001_000,
+          },
+        ],
+      },
+      error: null,
+      lastUpdated: null,
+    };
+
+    await render(
+      <NamespaceResourcesProvider namespace="team-a" activeView="events">
+        <TestConsumer />
+      </NamespaceResourcesProvider>
+    );
+
+    const firstDataRef = contextRef.current?.events.data;
+    const firstRow = firstDataRef?.[0];
+
+    scopedStates[scope] = {
+      status: 'ready',
+      data: {
+        events: [
+          {
+            kind: 'Event',
+            kindAlias: 'Event',
+            name: 'deploy.123',
+            uid: 'event-uid',
+            namespace: 'team-a',
+            objectNamespace: 'team-a',
+            clusterId: testClusterId,
+            type: 'Normal',
+            source: 'deployment-controller',
+            reason: 'ScalingReplicaSet',
+            object: 'Deployment/api',
+            message: 'Scaled up replica set api',
+            age: '1m',
+            ageTimestamp: 1_700_000_001_000,
+          },
+        ],
+      },
+      error: null,
+      lastUpdated: null,
+    };
+
+    await render(
+      <NamespaceResourcesProvider namespace="team-a" activeView="events">
+        <TestConsumer />
+      </NamespaceResourcesProvider>
+    );
+
+    expect(contextRef.current?.events.data).toBe(firstDataRef);
+    expect(contextRef.current?.events.data?.[0]).toBe(firstRow);
+  });
 });

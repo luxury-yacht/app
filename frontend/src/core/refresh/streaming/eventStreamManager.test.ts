@@ -289,6 +289,147 @@ describe('EventStreamManager', () => {
     expect(state.data?.events?.[0].clusterName).toBe('bravo');
   });
 
+  test('reuses namespace event rows when an unchanged update is applied', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-04-19T12:00:00Z'));
+
+    const { EventStreamManager } = await import('./eventStreamManager');
+    const manager = new EventStreamManager();
+    const createdAt = 1_700_000_001_000;
+
+    manager.applyPayload('namespace-events', 'namespace:default', {
+      domain: 'namespace-events',
+      scope: 'namespace:default',
+      sequence: 1,
+      generatedAt: 100,
+      reset: true,
+      events: [
+        {
+          clusterId: 'cluster-b',
+          clusterName: 'bravo',
+          kind: 'Event',
+          name: 'ns-event',
+          uid: 'event-uid',
+          namespace: 'default',
+          objectNamespace: 'default',
+          type: 'Warning',
+          source: 'controller',
+          reason: 'Backoff',
+          object: 'Job/foo',
+          message: 'Retrying',
+          createdAt,
+        },
+      ],
+    });
+
+    await vi.runOnlyPendingTimersAsync();
+
+    const firstState = getScopedDomainState('namespace-events', 'namespace:default');
+    const firstEventsRef = firstState.data?.events;
+    const firstRowRef = firstEventsRef?.[0];
+
+    manager.applyPayload('namespace-events', 'namespace:default', {
+      domain: 'namespace-events',
+      scope: 'namespace:default',
+      sequence: 2,
+      generatedAt: 200,
+      events: [
+        {
+          clusterId: 'cluster-b',
+          clusterName: 'bravo',
+          kind: 'Event',
+          name: 'ns-event',
+          uid: 'event-uid',
+          namespace: 'default',
+          objectNamespace: 'default',
+          type: 'Warning',
+          source: 'controller',
+          reason: 'Backoff',
+          object: 'Job/foo',
+          message: 'Retrying',
+          createdAt,
+        },
+      ],
+    });
+
+    await vi.runOnlyPendingTimersAsync();
+
+    const secondState = getScopedDomainState('namespace-events', 'namespace:default');
+    expect(secondState.data?.events).toBe(firstEventsRef);
+    expect(secondState.data?.events?.[0]).toBe(firstRowRef);
+  });
+
+  test('reuses namespace event rows for an identical reconnect snapshot', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-04-19T12:00:00Z'));
+
+    const { EventStreamManager } = await import('./eventStreamManager');
+    const manager = new EventStreamManager();
+    const createdAt = 1_700_000_001_000;
+
+    manager.applyPayload('namespace-events', 'namespace:default', {
+      domain: 'namespace-events',
+      scope: 'namespace:default',
+      sequence: 1,
+      generatedAt: 100,
+      reset: true,
+      events: [
+        {
+          clusterId: 'cluster-b',
+          clusterName: 'bravo',
+          kind: 'Event',
+          name: 'ns-event',
+          uid: 'event-uid',
+          namespace: 'default',
+          objectNamespace: 'default',
+          type: 'Warning',
+          source: 'controller',
+          reason: 'Backoff',
+          object: 'Job/foo',
+          message: 'Retrying',
+          createdAt,
+        },
+      ],
+    });
+
+    await vi.runOnlyPendingTimersAsync();
+
+    const firstState = getScopedDomainState('namespace-events', 'namespace:default');
+    const firstEventsRef = firstState.data?.events;
+    const firstRowRef = firstEventsRef?.[0];
+
+    manager.applyPayload('namespace-events', 'namespace:default', {
+      domain: 'namespace-events',
+      scope: 'namespace:default',
+      sequence: 2,
+      generatedAt: 200,
+      reset: true,
+      events: [
+        {
+          clusterId: 'cluster-b',
+          clusterName: 'bravo',
+          kind: 'Event',
+          name: 'ns-event',
+          uid: 'event-uid',
+          namespace: 'default',
+          objectNamespace: 'default',
+          type: 'Warning',
+          source: 'controller',
+          reason: 'Backoff',
+          object: 'Job/foo',
+          message: 'Retrying',
+          createdAt,
+        },
+      ],
+    });
+
+    await vi.runOnlyPendingTimersAsync();
+
+    const secondState = getScopedDomainState('namespace-events', 'namespace:default');
+    expect(secondState.data?.events).toBe(firstEventsRef);
+    expect(secondState.data?.events?.[0]).toBe(firstRowRef);
+  });
+
   test('applyPayload ignores empty updates when no reset or error', async () => {
     const { EventStreamManager } = await import('./eventStreamManager');
     const manager = new EventStreamManager();

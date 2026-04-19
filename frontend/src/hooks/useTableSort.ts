@@ -129,6 +129,11 @@ export function useTableSort<T>(
       return data;
     }
 
+    if (data.length <= 1) {
+      sortDurationRef.current = 0;
+      return data;
+    }
+
     const extractor = sortValueExtractors?.[effectiveSort.key];
 
     const sorted = [...data].sort((a, b) => {

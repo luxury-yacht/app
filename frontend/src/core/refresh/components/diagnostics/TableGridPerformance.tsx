@@ -26,6 +26,13 @@ type DominantTimingMetric = {
   title: string;
 };
 
+const TimingHeader: React.FC<{ label: string }> = ({ label }) => (
+  <span className="diagnostics-table-heading-metric">
+    <span>{label} (ms)</span>
+    <span>Avg / Max / Latest</span>
+  </span>
+);
+
 const formatTiming = (samples: number, averageMs: number, maxMs: number, latestMs: number) =>
   samples > 0 ? `${averageMs.toFixed(2)} / ${maxMs.toFixed(2)} / ${latestMs.toFixed(2)}` : '—';
 
@@ -36,7 +43,7 @@ const formatReferenceChurn = (inputReferenceChanges: number, updates: number) =>
     return '—';
   }
 
-  return `${inputReferenceChanges} / ${updates} (${formatPercent(inputReferenceChanges / updates)})`;
+  return `${inputReferenceChanges} (${formatPercent(inputReferenceChanges / updates)})`;
 };
 
 const isTimingSignal = (averageMs: number, maxMs: number, averageThresholdMs: number) =>
@@ -246,13 +253,21 @@ export const TableGridPerformance: React.FC<TableGridPerformanceProps> = ({
               <th>Capped</th>
               <th>Displayed</th>
               <th>Updates</th>
-              <th>Ref Changes / Updates</th>
+              <th>Ref Changes</th>
               <th>Dominant Cost</th>
               <th>Signals</th>
-              <th>Filter Options Avg / Max / Latest (ms)</th>
-              <th>Filter Pass Avg / Max / Latest (ms)</th>
-              <th>Sort Avg / Max / Latest (ms)</th>
-              <th>Render Avg / Max / Latest (ms)</th>
+              <th>
+                <TimingHeader label="Filter Options" />
+              </th>
+              <th>
+                <TimingHeader label="Filter Pass" />
+              </th>
+              <th>
+                <TimingHeader label="Sort" />
+              </th>
+              <th>
+                <TimingHeader label="Render" />
+              </th>
               <th>Last Render</th>
             </tr>
           </thead>
