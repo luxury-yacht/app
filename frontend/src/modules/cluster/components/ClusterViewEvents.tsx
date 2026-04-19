@@ -283,7 +283,6 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
                 getSearchText,
               },
               options: {
-                searchPlaceholder: 'Search events',
                 namespaces: availableFilterNamespaces,
                 preActions: [favToggle],
               },

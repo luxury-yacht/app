@@ -359,7 +359,6 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
                 getSearchText,
               },
               options: {
-                searchPlaceholder: 'Search nodes',
                 preActions: [metadataToggle, favToggle],
               },
             }}

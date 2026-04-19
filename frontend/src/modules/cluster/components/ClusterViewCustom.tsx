@@ -390,7 +390,6 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
               onChange: setPersistedFilters,
               onReset: resetPersistedState,
               options: {
-                searchPlaceholder: 'Search custom resources',
                 kinds: availableKinds,
                 showKindDropdown: true,
                 kindDropdownSearchable: true,

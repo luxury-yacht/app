@@ -237,6 +237,9 @@ describe('GridTableFiltersBar', () => {
 
     await renderFilters({});
 
+    const input = container.querySelector('#search') as HTMLInputElement | null;
+    expect(input?.getAttribute('placeholder')).toBe('Filter');
+
     const trigger = container.querySelector(
       '[data-gridtable-filter-role="search-hint"] .tooltip-trigger'
     ) as HTMLElement | null;
@@ -248,7 +251,7 @@ describe('GridTableFiltersBar', () => {
     });
 
     expect(document.body.textContent).toContain(
-      'Search filters the rows currently loaded in this table.'
+      'Filter narrows the rows currently loaded in this table.'
     );
   });
 
@@ -274,7 +277,7 @@ describe('GridTableFiltersBar', () => {
       vi.advanceTimersByTime(250);
     });
 
-    expect(document.body.textContent).toContain('Search updates the active query for this view.');
+    expect(document.body.textContent).toContain('Filter updates the active query for this view.');
     expect(document.body.textContent).toContain(
       'Counts and results reflect matching objects for the current scope, up to the max table size.'
     );

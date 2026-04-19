@@ -334,7 +334,6 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
         onChange: setPersistedFilters,
         onReset: resetPersistedState,
         options: {
-          searchPlaceholder: 'Search custom resources',
           kinds: availableKinds,
           namespaces: availableFilterNamespaces,
           showKindDropdown: true,

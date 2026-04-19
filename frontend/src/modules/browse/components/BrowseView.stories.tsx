@@ -83,7 +83,6 @@ function MockBrowseView({ isFavorited = false }: { isFavorited?: boolean }) {
       resolvedFilterOptions={{
         kinds: KINDS,
         namespaces: [],
-        searchPlaceholder: 'Search resources',
       }}
       kindDropdownId="kind"
       namespaceDropdownId="ns"

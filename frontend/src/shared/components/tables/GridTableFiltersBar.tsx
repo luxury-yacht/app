@@ -155,7 +155,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
       return (
         <>
           <p className="gridtable-filter-result-tooltip-paragraph">
-            Search updates the active query for this view.
+            Filter updates the active query for this view.
           </p>
           <p className="gridtable-filter-result-tooltip-paragraph">
             Counts and results reflect matching objects for the current scope, up to the max table
@@ -168,7 +168,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
     return (
       <>
         <p className="gridtable-filter-result-tooltip-paragraph">
-          Search filters the rows currently loaded in this table.
+          Filter narrows the rows currently loaded in this table.
         </p>
         {resultCount?.capped && (
           <p className="gridtable-filter-result-tooltip-paragraph">
@@ -233,7 +233,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
               inputRef={searchInputRef}
               id={searchInputId}
               name="gridtable-filter-search"
-              placeholder={resolvedFilterOptions.searchPlaceholder ?? 'Search'}
+              placeholder={resolvedFilterOptions.searchPlaceholder ?? 'Filter'}
               value={activeFilters.search}
               onChange={onSearchChange}
               onKeyDown={handleSearchKeyDown}

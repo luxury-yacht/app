@@ -363,7 +363,6 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
               onChange: setPersistedFilters,
               onReset: resetPersistedState,
               options: {
-                searchPlaceholder: 'Search storage resources',
                 kinds: availableKinds,
                 namespaces: availableFilterNamespaces,
                 showKindDropdown: true,

@@ -340,7 +340,6 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
               onChange: setPersistedFilters,
               onReset: resetPersistedState,
               options: {
-                searchPlaceholder: 'Search configuration resources',
                 kinds: availableKinds,
                 namespaces: availableFilterNamespaces,
                 showKindDropdown: true,
