@@ -209,6 +209,35 @@ func TestFindCatalogObjectMatchUsesExactCatalogIdentity(t *testing.T) {
 	require.Nil(t, noMatch)
 }
 
+func TestFindCatalogObjectByUIDUsesCatalogIdentity(t *testing.T) {
+	app := NewApp()
+	svc := objectcatalog.NewService(objectcatalog.Dependencies{}, nil)
+	setCatalogServiceItems(t, svc, map[string]objectcatalog.Summary{
+		"apps/v1, Resource=deployments/apps/alpha": {
+			ClusterID: "cluster-b",
+			Kind:      "Deployment",
+			Group:     "apps",
+			Version:   "v1",
+			Resource:  "deployments",
+			Namespace: "apps",
+			Name:      "alpha",
+			UID:       "alpha-uid",
+			Scope:     objectcatalog.ScopeNamespace,
+		},
+	})
+	app.storeObjectCatalogEntry("cluster-b", &objectCatalogEntry{service: svc})
+
+	match, err := app.FindCatalogObjectByUID("cluster-b", "alpha-uid")
+	require.NoError(t, err)
+	require.NotNil(t, match)
+	require.Equal(t, "Deployment", match.Kind)
+	require.Equal(t, "apps", match.Namespace)
+
+	noMatch, err := app.FindCatalogObjectByUID("cluster-b", "missing-uid")
+	require.NoError(t, err)
+	require.Nil(t, noMatch)
+}
+
 func TestWaitForFactorySyncHandlesNilFactory(t *testing.T) {
 	if !waitForFactorySync(context.Background(), nil) {
 		t.Fatal("nil factory should return true")

@@ -11,7 +11,7 @@ import { getDisplayKind } from '@/utils/kindAliasMap';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
 import { useNamespaceGridTablePersistence } from '@modules/namespace/hooks/useNamespaceGridTablePersistence';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
-import { useObjectLink } from '@shared/hooks/useObjectLink';
+import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useShortNames } from '@/hooks/useShortNames';
 import { useTableSort } from '@/hooks/useTableSort';
 import * as cf from '@shared/components/tables/columnFactories';
@@ -29,7 +29,8 @@ import { useFavToggle } from '@ui/favorites/FavToggle';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
 import { useNamespaceFilterOptions } from '@modules/namespace/hooks/useNamespaceFilterOptions';
 import {
-  buildEventObjectReference,
+  canResolveEventObjectReference,
+  resolveEventObjectReference,
   splitEventObjectTarget,
 } from '@shared/utils/eventObjectIdentity';
 import { buildObjectReference } from '@shared/utils/objectIdentity';
@@ -45,6 +46,7 @@ export interface EventData {
   clusterId?: string;
   clusterName?: string;
   objectNamespace?: string;
+  objectUid?: string;
   objectApiVersion?: string;
   namespace?: string;
   age?: string;
@@ -65,7 +67,7 @@ interface EventViewProps {
 const NsEventsTable: React.FC<EventViewProps> = React.memo(
   ({ namespace, data, loading = false, loaded = false, showNamespaceColumn = false }) => {
     const { openWithObject } = useObjectPanel();
-    const objectLink = useObjectLink();
+    const { navigateToView } = useNavigateToView();
     const useShortResourceNames = useShortNames();
     const namespaceColumnLink = useNamespaceColumnLink<EventData>('events', (event) =>
       event.objectNamespace && event.objectNamespace.length > 0
@@ -88,27 +90,43 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
     );
 
     // Build an object reference from an event's involved object for navigation.
-    const getEventObjectRef = useCallback(
-      (event: EventData) => {
-        return buildEventObjectReference({
-          object: event.object,
-          objectApiVersion: event.objectApiVersion,
-          objectNamespace: event.objectNamespace,
-          eventNamespace: event.namespace,
-          defaultNamespace: namespace,
-          clusterId: event.clusterId ?? undefined,
-          clusterName: event.clusterName ?? undefined,
-        });
-      },
+    const getEventObjectRefInput = useCallback(
+      (event: EventData) => ({
+        object: event.object,
+        objectUid: event.objectUid,
+        objectApiVersion: event.objectApiVersion,
+        objectNamespace: event.objectNamespace,
+        eventNamespace: event.namespace,
+        defaultNamespace: namespace,
+        clusterId: event.clusterId ?? undefined,
+        clusterName: event.clusterName ?? undefined,
+      }),
       [namespace]
     );
 
+    const canOpenEventObject = useCallback(
+      (event: EventData) => canResolveEventObjectReference(getEventObjectRefInput(event)),
+      [getEventObjectRefInput]
+    );
+
     const handleEventClick = useCallback(
-      (event: EventData) => {
-        const ref = getEventObjectRef(event);
-        if (ref) openWithObject(ref);
+      async (event: EventData) => {
+        const ref = await resolveEventObjectReference(getEventObjectRefInput(event));
+        if (ref) {
+          openWithObject(ref);
+        }
       },
-      [getEventObjectRef, openWithObject]
+      [getEventObjectRefInput, openWithObject]
+    );
+
+    const handleEventAltClick = useCallback(
+      async (event: EventData) => {
+        const ref = await resolveEventObjectReference(getEventObjectRefInput(event));
+        if (ref) {
+          navigateToView(ref);
+        }
+      },
+      [getEventObjectRefInput, navigateToView]
     );
 
     const keyExtractor = useCallback(
@@ -165,8 +183,13 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
             return parsed.objectName;
           },
           {
-            ...objectLink(getEventObjectRef),
-            isInteractive: (event) => Boolean(getEventObjectRef(event)),
+            onClick: (event) => {
+              void handleEventClick(event);
+            },
+            onAltClick: (event) => {
+              void handleEventAltClick(event);
+            },
+            isInteractive: canOpenEventObject,
           }
         ),
         cf.createTextColumn('reason', 'Reason', (event) => event.reason || '-'),
@@ -194,9 +217,10 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
 
       return baseColumns;
     }, [
-      getEventObjectRef,
+      canOpenEventObject,
+      handleEventAltClick,
+      handleEventClick,
       namespaceColumnLink,
-      objectLink,
       showNamespaceColumn,
       useShortResourceNames,
     ]);
@@ -254,7 +278,7 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
     const getContextMenuItems = useCallback(
       (event: EventData): ContextMenuItem[] => {
         const parsed = splitEventObjectTarget(event.object);
-        if (!parsed.isLinkable) {
+        if (!parsed.isLinkable || !canOpenEventObject(event)) {
           return [];
         }
 
@@ -271,12 +295,14 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
           ),
           context: 'gridtable',
           handlers: {
-            onViewInvolvedObject: () => handleEventClick(event),
+            onViewInvolvedObject: () => {
+              void handleEventClick(event);
+            },
           },
           permissions: {},
         });
       },
-      [handleEventClick]
+      [canOpenEventObject, handleEventClick]
     );
 
     const emptyMessage = useMemo(

@@ -37,6 +37,8 @@ interface StreamEventPayload {
     namespace?: string;
     type?: string;
     objectNamespace?: string;
+    objectUid?: string;
+    objectApiVersion?: string;
     source?: string;
     reason?: string;
     object?: string;
@@ -832,6 +834,8 @@ function transformClusterEvent(
     resourceVersion: event?.resourceVersion || '',
     namespace: event?.namespace || '',
     objectNamespace: event?.objectNamespace ?? '',
+    objectUid: event?.objectUid || '',
+    objectApiVersion: event?.objectApiVersion || '',
     type: event?.type || '-',
     source: event?.source || '-',
     reason: event?.reason || '-',
@@ -859,6 +863,8 @@ function transformNamespaceEvent(
     resourceVersion: event?.resourceVersion || '',
     namespace: event?.namespace || '',
     objectNamespace: event?.objectNamespace ?? '',
+    objectUid: event?.objectUid || '',
+    objectApiVersion: event?.objectApiVersion || '',
     type: event?.type || '-',
     source: event?.source || '-',
     reason: event?.reason || '-',

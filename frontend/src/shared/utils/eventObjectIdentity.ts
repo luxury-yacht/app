@@ -3,6 +3,7 @@ import {
   resolveBuiltinGroupVersion,
 } from '@shared/constants/builtinGroupVersions';
 import { buildObjectReference, type ResolvedObjectReference } from '@shared/utils/objectIdentity';
+import { FindCatalogObjectByUID } from '@wailsjs/go/backend/App';
 
 export interface ParsedEventObjectTarget {
   objectType: string;
@@ -12,6 +13,7 @@ export interface ParsedEventObjectTarget {
 
 export interface EventObjectReferenceInput {
   object: string | null | undefined;
+  objectUid?: string | null;
   objectApiVersion?: string | null;
   objectNamespace?: string | null;
   eventNamespace?: string | null;
@@ -76,5 +78,35 @@ export function buildEventObjectReference(
     version,
     clusterId: input.clusterId,
     clusterName: input.clusterName,
+    uid: input.objectUid,
   });
+}
+
+export function canResolveEventObjectReference(input: EventObjectReferenceInput): boolean {
+  return Boolean(
+    buildEventObjectReference(input) ||
+    (normalizeOptional(input.clusterId) && normalizeOptional(input.objectUid))
+  );
+}
+
+export async function resolveEventObjectReference(
+  input: EventObjectReferenceInput
+): Promise<ResolvedObjectReference | undefined> {
+  const direct = buildEventObjectReference(input);
+  if (direct) {
+    return direct;
+  }
+
+  const clusterId = normalizeOptional(input.clusterId);
+  const objectUid = normalizeOptional(input.objectUid);
+  if (!clusterId || !objectUid) {
+    return undefined;
+  }
+
+  const match = await FindCatalogObjectByUID(clusterId, objectUid);
+  if (!match) {
+    return undefined;
+  }
+
+  return buildObjectReference(match);
 }

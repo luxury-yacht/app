@@ -35,9 +35,11 @@ func TestManagerBroadcastsToSubscribers(t *testing.T) {
 			Namespace: "default",
 		},
 		InvolvedObject: corev1.ObjectReference{
-			Kind:      "Pod",
-			Name:      "web-123",
-			Namespace: "default",
+			Kind:       "Pod",
+			Name:       "web-123",
+			Namespace:  "default",
+			UID:        "pod-uid-1",
+			APIVersion: "v1",
 		},
 		Message: "Pod restarted",
 		Type:    "Warning",
@@ -57,6 +59,12 @@ func TestManagerBroadcastsToSubscribers(t *testing.T) {
 		}
 		if streamEvent.Entry.Name != "test-event" || streamEvent.Entry.Namespace != "default" {
 			t.Fatalf("unexpected entry: %+v", streamEvent.Entry)
+		}
+		if streamEvent.Entry.ObjectUID != "pod-uid-1" {
+			t.Fatalf("expected object uid to be preserved, got %+v", streamEvent.Entry)
+		}
+		if streamEvent.Entry.ObjectAPIVersion != "v1" {
+			t.Fatalf("expected object apiVersion to be preserved, got %+v", streamEvent.Entry)
 		}
 	}
 }

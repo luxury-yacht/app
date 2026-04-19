@@ -75,6 +75,8 @@ describe('EventStreamManager', () => {
           kind: 'Event',
           name: 'test',
           namespace: 'default',
+          objectUid: 'pod-uid-1',
+          objectApiVersion: 'v1',
           type: 'Normal',
           source: 'kubelet',
           reason: 'Started',
@@ -93,6 +95,8 @@ describe('EventStreamManager', () => {
     // Cluster metadata must be preserved so the cluster events view can filter correctly.
     expect(state.data?.events?.[0].clusterId).toBe('cluster-a');
     expect(state.data?.events?.[0].clusterName).toBe('alpha');
+    expect(state.data?.events?.[0].objectUid).toBe('pod-uid-1');
+    expect(state.data?.events?.[0].objectApiVersion).toBe('v1');
   });
 
   test('applyPayload preserves backend createdAt for initial snapshot events', async () => {
@@ -269,6 +273,8 @@ describe('EventStreamManager', () => {
           kind: 'Event',
           name: 'ns-event',
           namespace: 'default',
+          objectUid: 'job-uid-1',
+          objectApiVersion: 'batch/v1',
           type: 'Warning',
           source: 'controller',
           reason: 'Backoff',
@@ -286,6 +292,8 @@ describe('EventStreamManager', () => {
     expect(state.data?.events?.[0].reason).toBe('Backoff');
     // Cluster metadata must be preserved so namespace events filter per-cluster selections.
     expect(state.data?.events?.[0].clusterId).toBe('cluster-b');
+    expect(state.data?.events?.[0].objectUid).toBe('job-uid-1');
+    expect(state.data?.events?.[0].objectApiVersion).toBe('batch/v1');
     expect(state.data?.events?.[0].clusterName).toBe('bravo');
   });
 

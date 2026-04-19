@@ -19,11 +19,18 @@ vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
 
 import NsViewEvents, { type EventData } from '@modules/namespace/components/NsViewEvents';
 
-const { gridTablePropsRef, openWithObjectMock, shortNamesMock, formatAgeMock } = vi.hoisted(() => ({
+const {
+  gridTablePropsRef,
+  openWithObjectMock,
+  shortNamesMock,
+  formatAgeMock,
+  findCatalogObjectByUIDMock,
+} = vi.hoisted(() => ({
   gridTablePropsRef: { current: null as any },
   openWithObjectMock: vi.fn(),
   shortNamesMock: vi.fn(() => false),
   formatAgeMock: vi.fn((timestamp: number) => `${timestamp}s`),
+  findCatalogObjectByUIDMock: vi.fn(),
 }));
 
 vi.mock('@core/contexts/FavoritesContext', () => ({
@@ -80,6 +87,10 @@ vi.mock('@shared/hooks/useNavigateToView', () => ({
   useNavigateToView: () => ({ navigateToView: vi.fn() }),
 }));
 
+vi.mock('@wailsjs/go/backend/App', () => ({
+  FindCatalogObjectByUID: (...args: unknown[]) => findCatalogObjectByUIDMock(...args),
+}));
+
 vi.mock('@/hooks/useTableSort', () => ({
   useTableSort: (data: unknown[]) => ({
     sortedData: data,
@@ -129,6 +140,7 @@ describe('NsViewEvents', () => {
     root = ReactDOM.createRoot(container);
     gridTablePropsRef.current = null;
     openWithObjectMock.mockReset();
+    findCatalogObjectByUIDMock.mockReset();
     shortNamesMock.mockReturnValue(false);
     formatAgeMock.mockClear();
   });
@@ -183,8 +195,9 @@ describe('NsViewEvents', () => {
     expect(menu).toHaveLength(1);
     expect(menu[0].label).toBe('View Pod');
 
-    act(() => {
+    await act(async () => {
       menu[0].onClick?.();
+      await Promise.resolve();
     });
 
     expect(openWithObjectMock).toHaveBeenCalledWith(
@@ -208,8 +221,9 @@ describe('NsViewEvents', () => {
 
     const cell = objectNameColumn.render(event);
 
-    act(() => {
+    await act(async () => {
       cell.props.onClick({ stopPropagation: () => {} });
+      await Promise.resolve();
     });
 
     expect(openWithObjectMock).toHaveBeenCalledWith(
@@ -220,6 +234,44 @@ describe('NsViewEvents', () => {
         group: '',
         version: 'v1',
         clusterId: 'alpha:ctx',
+      })
+    );
+  });
+
+  it('resolves CRD involved objects by UID when the event omits apiVersion', async () => {
+    findCatalogObjectByUIDMock.mockResolvedValue({
+      kind: 'Database',
+      name: 'primary',
+      namespace: 'team-a',
+      clusterId: 'alpha:ctx',
+      clusterName: 'alpha',
+      group: 'db.example.io',
+      version: 'v1',
+      resource: 'databases',
+      uid: 'database-uid',
+    });
+    const event = baseEvent({
+      object: 'Database/primary',
+      objectUid: 'database-uid',
+      objectApiVersion: undefined,
+    });
+    const props = await renderEventsView([event]);
+    const objectNameColumn = props.columns.find((column: any) => column.key === 'objectName');
+    const cell = objectNameColumn.render(event);
+
+    await act(async () => {
+      cell.props.onClick({ stopPropagation: () => {} });
+      await Promise.resolve();
+    });
+
+    expect(findCatalogObjectByUIDMock).toHaveBeenCalledWith('alpha:ctx', 'database-uid');
+    expect(openWithObjectMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'Database',
+        name: 'primary',
+        group: 'db.example.io',
+        version: 'v1',
+        uid: 'database-uid',
       })
     );
   });
@@ -252,8 +304,9 @@ describe('NsViewEvents', () => {
     const noNamespaceEvent = baseEvent({ objectNamespace: undefined, namespace: undefined });
     const props = await renderEventsView([noNamespaceEvent]);
     const menu = props.getCustomContextMenuItems(noNamespaceEvent, 'objectName');
-    act(() => {
+    await act(async () => {
       menu[0].onClick?.();
+      await Promise.resolve();
     });
     expect(openWithObjectMock).toHaveBeenCalledWith(
       expect.objectContaining({

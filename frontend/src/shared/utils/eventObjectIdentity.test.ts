@@ -1,5 +1,23 @@
-import { describe, expect, it } from 'vitest';
-import { buildEventObjectReference, splitEventObjectTarget } from './eventObjectIdentity';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const { findCatalogObjectByUIDMock } = vi.hoisted(() => ({
+  findCatalogObjectByUIDMock: vi.fn(),
+}));
+
+vi.mock('@wailsjs/go/backend/App', () => ({
+  FindCatalogObjectByUID: (...args: unknown[]) => findCatalogObjectByUIDMock(...args),
+}));
+
+import {
+  buildEventObjectReference,
+  canResolveEventObjectReference,
+  resolveEventObjectReference,
+  splitEventObjectTarget,
+} from './eventObjectIdentity';
+
+beforeEach(() => {
+  findCatalogObjectByUIDMock.mockReset();
+});
 
 describe('splitEventObjectTarget', () => {
   it('parses linkable involved-object values', () => {
@@ -24,6 +42,7 @@ describe('buildEventObjectReference', () => {
     expect(
       buildEventObjectReference({
         object: 'Widget/sample',
+        objectUid: 'widget-uid',
         objectApiVersion: 'widgets.example.io/v1alpha1',
         objectNamespace: 'default',
         clusterId: 'cluster-a',
@@ -38,7 +57,7 @@ describe('buildEventObjectReference', () => {
       clusterName: undefined,
       kindAlias: undefined,
       resource: undefined,
-      uid: undefined,
+      uid: 'widget-uid',
     });
   });
 
@@ -46,6 +65,7 @@ describe('buildEventObjectReference', () => {
     expect(
       buildEventObjectReference({
         object: 'Database/primary',
+        objectUid: 'db-uid',
         eventNamespace: 'databases',
         fallbackKind: 'Database',
         fallbackGroup: 'db.example.io',
@@ -61,7 +81,7 @@ describe('buildEventObjectReference', () => {
       clusterName: undefined,
       kindAlias: undefined,
       resource: undefined,
-      uid: undefined,
+      uid: 'db-uid',
     });
   });
 
@@ -71,5 +91,51 @@ describe('buildEventObjectReference', () => {
         object: 'Database/primary',
       })
     ).toBeUndefined();
+  });
+});
+
+describe('resolveEventObjectReference', () => {
+  it('reports UID-backed targets as resolvable even when apiVersion is missing', () => {
+    expect(
+      canResolveEventObjectReference({
+        object: 'Database/primary',
+        objectUid: 'db-uid',
+        clusterId: 'cluster-a',
+      })
+    ).toBe(true);
+  });
+
+  it('falls back to catalog lookup by UID when direct GVK resolution is unavailable', async () => {
+    findCatalogObjectByUIDMock.mockResolvedValue({
+      kind: 'Database',
+      name: 'primary',
+      namespace: 'databases',
+      clusterId: 'cluster-a',
+      clusterName: 'alpha',
+      group: 'db.example.io',
+      version: 'v1',
+      resource: 'databases',
+      uid: 'db-uid',
+    });
+
+    await expect(
+      resolveEventObjectReference({
+        object: 'Database/primary',
+        objectUid: 'db-uid',
+        clusterId: 'cluster-a',
+      })
+    ).resolves.toEqual(
+      expect.objectContaining({
+        kind: 'Database',
+        name: 'primary',
+        namespace: 'databases',
+        clusterId: 'cluster-a',
+        group: 'db.example.io',
+        version: 'v1',
+        uid: 'db-uid',
+      })
+    );
+
+    expect(findCatalogObjectByUIDMock).toHaveBeenCalledWith('cluster-a', 'db-uid');
   });
 });

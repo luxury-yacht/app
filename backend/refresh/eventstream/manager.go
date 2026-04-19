@@ -244,17 +244,19 @@ func (m *Manager) handleEvent(obj interface{}) {
 	}
 
 	entry := Entry{
-		Kind:            evt.InvolvedObject.Kind,
-		Name:            evt.Name,
-		UID:             string(evt.UID),
-		ResourceVersion: evt.ResourceVersion,
-		Namespace:       evt.InvolvedObject.Namespace,
-		ObjectNamespace: evt.InvolvedObject.Namespace,
-		Type:            evt.Type,
-		Source:          formatSource(evt),
-		Reason:          evt.Reason,
-		Object:          formatObject(evt),
-		Message:         evt.Message,
+		Kind:             evt.InvolvedObject.Kind,
+		Name:             evt.Name,
+		UID:              string(evt.UID),
+		ResourceVersion:  evt.ResourceVersion,
+		Namespace:        evt.InvolvedObject.Namespace,
+		ObjectNamespace:  evt.InvolvedObject.Namespace,
+		ObjectUID:        string(evt.InvolvedObject.UID),
+		ObjectAPIVersion: evt.InvolvedObject.APIVersion,
+		Type:             evt.Type,
+		Source:           formatSource(evt),
+		Reason:           evt.Reason,
+		Object:           formatObject(evt),
+		Message:          evt.Message,
 	}
 
 	lastSeen := timeutil.LatestEventTimestamp(evt)

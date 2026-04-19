@@ -12,7 +12,7 @@ import { resolveEmptyStateMessage } from '@/utils/emptyState';
 import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
-import { useObjectLink } from '@shared/hooks/useObjectLink';
+import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useShortNames } from '@/hooks/useShortNames';
 import { useTableSort } from '@/hooks/useTableSort';
 import * as cf from '@shared/components/tables/columnFactories';
@@ -29,7 +29,8 @@ import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useNamespaceFilterOptions } from '@modules/namespace/hooks/useNamespaceFilterOptions';
 import { useFavToggle } from '@ui/favorites/FavToggle';
 import {
-  buildEventObjectReference,
+  canResolveEventObjectReference,
+  resolveEventObjectReference,
   splitEventObjectTarget,
 } from '@shared/utils/eventObjectIdentity';
 import { buildObjectReference } from '@shared/utils/objectIdentity';
@@ -42,6 +43,7 @@ interface EventData {
   clusterId?: string;
   clusterName?: string;
   objectNamespace?: string;
+  objectUid?: string;
   objectApiVersion?: string;
   type: string; // Event severity (Normal, Warning)
   source: string;
@@ -66,7 +68,7 @@ interface EventViewProps {
 const ClusterEventsView: React.FC<EventViewProps> = React.memo(
   ({ data, loading = false, loaded, error }) => {
     const { openWithObject } = useObjectPanel();
-    const objectLink = useObjectLink();
+    const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
     const useShortResourceNames = useShortNames();
     // Include all visible columns in search: type, source, reason, object, message.
@@ -85,22 +87,40 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
     }, []);
 
     // Build an object reference from an event's involved object for navigation.
-    const getEventObjectRef = useCallback((event: EventData) => {
-      return buildEventObjectReference({
+    const getEventObjectRefInput = useCallback((event: EventData) => {
+      return {
         object: event.object,
+        objectUid: event.objectUid,
         objectApiVersion: event.objectApiVersion,
         objectNamespace: event.objectNamespace,
         clusterId: event.clusterId ?? undefined,
         clusterName: event.clusterName ?? undefined,
-      });
+      };
     }, []);
 
+    const canOpenEventObject = useCallback(
+      (event: EventData) => canResolveEventObjectReference(getEventObjectRefInput(event)),
+      [getEventObjectRefInput]
+    );
+
     const handleEventClick = useCallback(
-      (event: EventData) => {
-        const ref = getEventObjectRef(event);
-        if (ref) openWithObject(ref);
+      async (event: EventData) => {
+        const ref = await resolveEventObjectReference(getEventObjectRefInput(event));
+        if (ref) {
+          openWithObject(ref);
+        }
       },
-      [getEventObjectRef, openWithObject]
+      [getEventObjectRefInput, openWithObject]
+    );
+
+    const handleEventAltClick = useCallback(
+      async (event: EventData) => {
+        const ref = await resolveEventObjectReference(getEventObjectRefInput(event));
+        if (ref) {
+          navigateToView(ref);
+        }
+      },
+      [getEventObjectRefInput, navigateToView]
     );
 
     const keyExtractor = useCallback(
@@ -135,9 +155,14 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
             return parsed.objectName;
           },
           {
-            ...objectLink(getEventObjectRef),
+            onClick: (event) => {
+              void handleEventClick(event);
+            },
+            onAltClick: (event) => {
+              void handleEventAltClick(event);
+            },
             getClassName: () => 'object-panel-link',
-            isInteractive: (event) => Boolean(getEventObjectRef(event)),
+            isInteractive: canOpenEventObject,
           }
         ),
         cf.createTextColumn('reason', 'Reason', (event) => event.reason || '-'),
@@ -163,7 +188,7 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
       cf.applyColumnSizing(baseColumns, sizing);
 
       return baseColumns;
-    }, [getEventObjectRef, objectLink, useShortResourceNames]);
+    }, [canOpenEventObject, handleEventAltClick, handleEventClick, useShortResourceNames]);
 
     // Set up grid table persistence
     const {
@@ -220,7 +245,7 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
     const getContextMenuItems = useCallback(
       (event: EventData): ContextMenuItem[] => {
         const parsed = splitEventObjectTarget(event.object);
-        if (!parsed.isLinkable) {
+        if (!parsed.isLinkable || !canOpenEventObject(event)) {
           return [];
         }
 
@@ -237,12 +262,14 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
           ),
           context: 'gridtable',
           handlers: {
-            onViewInvolvedObject: () => handleEventClick(event),
+            onViewInvolvedObject: () => {
+              void handleEventClick(event);
+            },
           },
           permissions: {},
         });
       },
-      [handleEventClick]
+      [canOpenEventObject, handleEventClick]
     );
 
     // Resolve empty state message

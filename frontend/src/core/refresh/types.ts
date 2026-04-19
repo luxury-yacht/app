@@ -299,6 +299,7 @@ export interface ClusterEventEntry extends ClusterMeta {
   resourceVersion?: string;
   namespace: string;
   objectNamespace?: string;
+  objectUid?: string;
   objectApiVersion?: string;
   type: string;
   source: string;
@@ -442,6 +443,7 @@ export interface ObjectEventSummary extends ClusterMeta {
   involvedObjectName: string;
   involvedObjectKind: string;
   involvedObjectNamespace?: string;
+  involvedObjectUid?: string;
   // apiVersion of the event's involvedObject (e.g. "apps/v1", "v1",
   // "documentdb.services.k8s.aws/v1alpha1"). Required for GVK
   // disambiguation when opening the related object — see
@@ -598,6 +600,7 @@ export interface NamespaceEventSummary extends ClusterMeta {
   resourceVersion?: string;
   namespace: string;
   objectNamespace?: string;
+  objectUid?: string;
   objectApiVersion?: string;
   type: string;
   source: string;

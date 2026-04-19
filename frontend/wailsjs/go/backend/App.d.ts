@@ -57,6 +57,8 @@ export function EvaluateCapabilities(arg1:Array<capabilities.CheckRequest>):Prom
 
 export function FetchNodeLogs(arg1:string,arg2:string,arg3:types.NodeLogFetchRequest):Promise<types.NodeLogFetchResponse>;
 
+export function FindCatalogObjectByUID(arg1:string,arg2:string):Promise<objectcatalog.Summary>;
+
 export function FindCatalogObjectMatch(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string):Promise<objectcatalog.Summary>;
 
 export function ForceDeleteNode(arg1:string,arg2:string):Promise<void>;

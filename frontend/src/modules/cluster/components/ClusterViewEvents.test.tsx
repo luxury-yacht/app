@@ -11,6 +11,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import ClusterViewEvents from '@modules/cluster/components/ClusterViewEvents';
 
 const openWithObjectMock = vi.fn();
+const findCatalogObjectByUIDMock = vi.fn();
 
 vi.mock('@core/contexts/FavoritesContext', () => ({
   useFavorites: () => ({
@@ -56,6 +57,10 @@ vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
 
 vi.mock('@shared/hooks/useNavigateToView', () => ({
   useNavigateToView: () => ({ navigateToView: vi.fn() }),
+}));
+
+vi.mock('@wailsjs/go/backend/App', () => ({
+  FindCatalogObjectByUID: (...args: unknown[]) => findCatalogObjectByUIDMock(...args),
 }));
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
@@ -123,6 +128,7 @@ describe('ClusterViewEvents', () => {
     root = ReactDOM.createRoot(container);
     gridTablePropsRef.current = null;
     openWithObjectMock.mockReset();
+    findCatalogObjectByUIDMock.mockReset();
   });
 
   afterEach(() => {
@@ -166,8 +172,9 @@ describe('ClusterViewEvents', () => {
 
     const cell = objectNameColumn.render(baseEvent);
 
-    act(() => {
+    await act(async () => {
       cell.props.onClick({ altKey: false });
+      await Promise.resolve();
     });
 
     expect(openWithObjectMock).toHaveBeenCalledWith(
@@ -177,6 +184,51 @@ describe('ClusterViewEvents', () => {
         group: '',
         version: 'v1',
         clusterId: 'test-cluster',
+      })
+    );
+  });
+
+  it('resolves CRD involved objects by UID when the stream omits apiVersion', async () => {
+    findCatalogObjectByUIDMock.mockResolvedValue({
+      kind: 'Database',
+      name: 'primary',
+      namespace: 'team-a',
+      clusterId: 'test-cluster',
+      clusterName: 'alpha',
+      group: 'db.example.io',
+      version: 'v1',
+      resource: 'databases',
+      uid: 'database-uid',
+    });
+    const event = {
+      ...baseEvent,
+      object: 'Database/primary',
+      objectUid: 'database-uid',
+      objectApiVersion: undefined,
+    };
+
+    await act(async () => {
+      root.render(<ClusterViewEvents data={[event]} loaded={true} />);
+      await Promise.resolve();
+    });
+
+    const props = gridTablePropsRef.current;
+    const objectNameColumn = props.columns.find((column: any) => column.key === 'objectName');
+    const cell = objectNameColumn.render(event);
+
+    await act(async () => {
+      cell.props.onClick({ altKey: false });
+      await Promise.resolve();
+    });
+
+    expect(findCatalogObjectByUIDMock).toHaveBeenCalledWith('test-cluster', 'database-uid');
+    expect(openWithObjectMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'Database',
+        name: 'primary',
+        group: 'db.example.io',
+        version: 'v1',
+        uid: 'database-uid',
       })
     );
   });

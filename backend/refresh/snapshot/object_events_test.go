@@ -40,9 +40,11 @@ func TestObjectEventsBuilderUsesCacheWhenSynced(t *testing.T) {
 			ResourceVersion: "123",
 		},
 		InvolvedObject: corev1.ObjectReference{
-			Name:      "demo",
-			Namespace: "default",
-			Kind:      "Pod",
+			Name:       "demo",
+			Namespace:  "default",
+			Kind:       "Pod",
+			UID:        "demo-pod-uid",
+			APIVersion: "v1",
 		},
 		Type:    "Warning",
 		Reason:  "Failed",
@@ -66,6 +68,9 @@ func TestObjectEventsBuilderUsesCacheWhenSynced(t *testing.T) {
 	}
 	if payload.Events[0].InvolvedObjectName != "demo" {
 		t.Fatalf("expected event for demo object")
+	}
+	if payload.Events[0].InvolvedObjectUID != "demo-pod-uid" {
+		t.Fatalf("expected involved object uid to be preserved")
 	}
 	if snap.Version != 123 {
 		t.Fatalf("expected version 123, got %d", snap.Version)
