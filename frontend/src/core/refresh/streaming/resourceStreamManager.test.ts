@@ -1380,6 +1380,63 @@ describe('ResourceStreamManager', () => {
     expect(state.data?.resources?.[0]?.name).toBe('cluster-role');
   });
 
+  test('preserves rows with missing clusterId when merging cluster rbac updates', () => {
+    vi.useFakeTimers();
+    (window as any).setTimeout = globalThis.setTimeout;
+    (window as any).clearTimeout = globalThis.clearTimeout;
+    const manager = new ResourceStreamManager();
+    const storeScope = buildClusterScopeList(['cluster-a'], '');
+    (
+      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
+    ).ensureSubscriptions('cluster-rbac', storeScope);
+
+    setScopedDomainState('cluster-rbac', storeScope, () => ({
+      status: 'ready',
+      data: {
+        resources: [
+          {
+            kind: 'ClusterRole',
+            name: 'legacy-row',
+            details: 'Rules: 1',
+            age: '2m',
+            typeAlias: 'CR',
+          } as any,
+        ],
+        clusterId: 'test-cluster',
+      },
+      stats: null,
+      error: null,
+      droppedAutoRefreshes: 0,
+      scope: storeScope,
+    }));
+
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({
+        type: 'ADDED',
+        domain: 'cluster-rbac',
+        scope: '',
+        resourceVersion: '8',
+        name: 'cluster-role',
+        kind: 'ClusterRole',
+        row: {
+          clusterId: 'cluster-a',
+          clusterName: 'cluster-a',
+          kind: 'ClusterRole',
+          name: 'cluster-role',
+          details: 'Rules: 2',
+          age: '1m',
+          typeAlias: 'CR',
+        },
+      })
+    );
+
+    vi.advanceTimersByTime(200);
+
+    const state = getScopedDomainState('cluster-rbac', storeScope);
+    expect(state.data?.resources?.map((row) => row.name)).toEqual(['cluster-role', 'legacy-row']);
+  });
+
   test('applies cluster storage updates', () => {
     vi.useFakeTimers();
     (window as any).setTimeout = globalThis.setTimeout;

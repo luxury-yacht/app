@@ -39,6 +39,7 @@ type SearchShortcutConfig = {
 type UseGridTableFiltersWiringOptions<T> = {
   data: T[];
   totalDataCount?: number;
+  maxDisplayRows?: number;
   filters: GridTableFilterConfig<T> | undefined;
   diagnosticsLabel?: string;
   columnsDropdown?: ColumnsDropdownConfig;
@@ -56,6 +57,7 @@ type UseGridTableFiltersWiringOptions<T> = {
 export function useGridTableFiltersWiring<T>({
   data,
   totalDataCount,
+  maxDisplayRows,
   filters,
   diagnosticsLabel,
   columnsDropdown,
@@ -151,15 +153,20 @@ export function useGridTableFiltersWiring<T>({
   const resultCount = useMemo(() => {
     if (!filteringEnabled) return undefined;
     const total = filters?.options?.totalCount ?? totalDataCount ?? data.length;
+    const displayed =
+      typeof maxDisplayRows === 'number' && maxDisplayRows > 0
+        ? Math.min(tableData.length, maxDisplayRows)
+        : tableData.length;
     return {
-      displayed: tableData.length,
+      displayed,
       total,
-      capped: total > data.length,
+      capped: displayed < tableData.length || total > data.length,
     };
   }, [
     filteringEnabled,
     filters?.options?.totalCount,
     totalDataCount,
+    maxDisplayRows,
     data.length,
     tableData.length,
   ]);

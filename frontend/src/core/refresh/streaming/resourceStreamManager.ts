@@ -932,7 +932,7 @@ const mergeClusterRows = <T extends { clusterId?: string | null }>(
 ): T[] => {
   const targetCluster = clusterId.trim();
   const next = (existing ?? []).filter((row) => {
-    const rowCluster = (row.clusterId ?? targetCluster).trim();
+    const rowCluster = row.clusterId?.trim() ?? '';
     return rowCluster !== targetCluster;
   });
   if (incoming && incoming.length > 0) {
@@ -952,7 +952,7 @@ const mergeClusterRowsByKey = <T extends { clusterId?: string | null }>(
   const incomingRows = incoming ?? [];
 
   const previousClusterRows = previousRows.filter((row) => {
-    const rowCluster = (row.clusterId ?? targetCluster).trim();
+    const rowCluster = row.clusterId?.trim() ?? '';
     return rowCluster === targetCluster;
   });
   const previousByKey = new Map<string, T>();
@@ -969,7 +969,7 @@ const mergeClusterRowsByKey = <T extends { clusterId?: string | null }>(
   });
 
   const next = previousRows.filter((row) => {
-    const rowCluster = (row.clusterId ?? targetCluster).trim();
+    const rowCluster = row.clusterId?.trim() ?? '';
     return rowCluster !== targetCluster;
   });
   if (mergedClusterRows.length > 0) {

@@ -129,7 +129,7 @@ describe('EventStreamManager', () => {
     expect(state.data?.events?.[0].ageTimestamp).toBe(createdAt);
   });
 
-  test('reset payload keeps existing events that are temporarily absent during reconnect', async () => {
+  test('reset payload replaces existing cluster events with the incoming snapshot', async () => {
     const { EventStreamManager } = await import('./eventStreamManager');
     const manager = new EventStreamManager();
 
@@ -192,7 +192,7 @@ describe('EventStreamManager', () => {
     await flushTimers();
 
     const state = getScopedDomainState('cluster-events', 'cluster');
-    expect(state.data?.events?.map((event) => event.name)).toEqual(['event-newer', 'event-older']);
+    expect(state.data?.events?.map((event) => event.name)).toEqual(['event-newer']);
   });
 
   test('updates replace the existing row for the same event object name', async () => {

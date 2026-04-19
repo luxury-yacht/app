@@ -187,6 +187,26 @@ function findObjectPanelLinkLiterals(source: string): Array<{ start: number; bod
   return findObjectLiteralsAfter(source, /objectRef\s*=\s*\{\s*\{/g, 'objectRef={{...}}');
 }
 
+function findOpenWithObjectHelperBackedLiterals(
+  source: string
+): Array<{ start: number; body: string }> {
+  return findObjectLiteralsAfter(
+    source,
+    /openWithObject(?:Ref\.current)?\s*\(\s*build(?:Related|Synthetic)?ObjectReference\s*\(\s*\{/g,
+    'openWithObject(buildObjectReference)'
+  );
+}
+
+function findObjectPanelLinkHelperBackedLiterals(
+  source: string
+): Array<{ start: number; body: string }> {
+  return findObjectLiteralsAfter(
+    source,
+    /objectRef\s*=\s*\{\s*build(?:Related|Synthetic)?ObjectReference\s*\(\s*\{/g,
+    'objectRef={buildObjectReference({...})}'
+  );
+}
+
 function lineNumberAtOffset(source: string, offset: number): number {
   let line = 1;
   for (let i = 0; i < offset && i < source.length; i++) {
@@ -282,20 +302,17 @@ describe('openWithObject audit (kind-only-objects guardrail)', () => {
     expect(violations).toEqual([]);
   });
 
-  it('discovers at least one literal call site so the walker is wired up', () => {
-    // Sanity check: helper-backed migrations intentionally removed the last
-    // inline `openWithObject({ ... })` literal, so the walker may now see
-    // zero literal sites. Still assert that production sources contain at
-    // least one openWithObject entry point so this audit does not become
-    // dead code after a broad refactor.
+  it('discovers at least one literal or helper-backed call site so the walker is wired up', () => {
     const frontendSrc = path.resolve(__dirname, '../../..');
-    let totalCalls = 0;
+    let totalLiterals = 0;
     for (const file of walkSourceFiles(frontendSrc)) {
       const source = fs.readFileSync(file, 'utf8');
       if (!source.includes('openWithObject')) continue;
-      totalCalls += source.match(/openWithObject(?:Ref\.current)?\s*\(/g)?.length ?? 0;
+      totalLiterals +=
+        findOpenWithObjectLiterals(source).length +
+        findOpenWithObjectHelperBackedLiterals(source).length;
     }
-    expect(totalCalls).toBeGreaterThan(0);
+    expect(totalLiterals).toBeGreaterThan(0);
   });
 });
 
@@ -308,18 +325,16 @@ describe('ObjectPanelLink audit (kind-only-objects guardrail)', () => {
     expect(violations).toEqual([]);
   });
 
-  it('discovers at least one ObjectPanelLink literal so the walker is wired up', () => {
-    // Sanity check: helper-backed migrations may remove all inline
-    // `objectRef={{ ... }}` literals. Still assert that production sources
-    // contain ObjectPanelLink entry points so this audit does not become
-    // dead code after a broad refactor.
+  it('discovers at least one ObjectPanelLink literal or helper-backed call site so the walker is wired up', () => {
     const frontendSrc = path.resolve(__dirname, '../../..');
-    let totalCalls = 0;
+    let totalLiterals = 0;
     for (const file of walkSourceFiles(frontendSrc)) {
       const source = fs.readFileSync(file, 'utf8');
       if (!source.includes('ObjectPanelLink')) continue;
-      totalCalls += source.match(/ObjectPanelLink/g)?.length ?? 0;
+      totalLiterals +=
+        findObjectPanelLinkLiterals(source).length +
+        findObjectPanelLinkHelperBackedLiterals(source).length;
     }
-    expect(totalCalls).toBeGreaterThan(0);
+    expect(totalLiterals).toBeGreaterThan(0);
   });
 });

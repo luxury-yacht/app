@@ -423,6 +423,7 @@ func mergeNodeSnapshots(domain, scope string, snapshots []*refresh.Snapshot) (*r
 func mergeClusterOverview(domain, scope string, snapshots []*refresh.Snapshot) (*refresh.Snapshot, error) {
 	payloads := make([]ClusterOverviewSnapshot, 0, len(snapshots))
 	metricsInputs := make([]metricFields, 0, len(snapshots))
+	stats := make([]refresh.SnapshotStats, 0, len(snapshots))
 	overviewByCluster := make(map[string]ClusterOverviewPayload)
 	metricsByCluster := make(map[string]ClusterOverviewMetrics)
 	var version uint64
@@ -433,6 +434,7 @@ func mergeClusterOverview(domain, scope string, snapshots []*refresh.Snapshot) (
 			return nil, fmt.Errorf("%s payload mismatch", domain)
 		}
 		payloads = append(payloads, payload)
+		stats = append(stats, snap.Stats)
 		if len(payload.OverviewByCluster) > 0 {
 			for id, info := range payload.OverviewByCluster {
 				if strings.TrimSpace(id) == "" {
@@ -483,7 +485,7 @@ func mergeClusterOverview(domain, scope string, snapshots []*refresh.Snapshot) (
 	if len(metricsByCluster) > 0 {
 		merged.MetricsByCluster = metricsByCluster
 	}
-	mergedStats := refresh.SnapshotStats{ItemCount: overview.TotalNodes}
+	mergedStats := mergeListStats(stats, overview.TotalNodes)
 	return buildMergedSnapshot(domain, scope, version, merged, mergedStats, snapshots)
 }
 

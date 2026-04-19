@@ -448,7 +448,7 @@ export class EventStreamManager {
     if (domain === CLUSTER_DOMAIN) {
       const incoming = events.map((event) => transformClusterEvent(event, fallbackClusterId));
       const { items, total, truncated } = mergeEvents(
-        payload.reset ? this.clusterEvents : this.clusterEvents,
+        payload.reset ? [] : this.clusterEvents,
         incoming,
         MAX_CLUSTER_EVENTS
       );

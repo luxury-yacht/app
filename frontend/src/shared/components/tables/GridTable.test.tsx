@@ -1722,6 +1722,31 @@ it('shows displayed and total item counts when the table is capped', () => {
   cleanup();
 });
 
+it('applies local search before the table cap so matches beyond the first page stay reachable', () => {
+  setAppPreferencesForTesting({ maxTableRows: 3 });
+  const { container, cleanup } = renderGridTable({
+    data: createRows(8),
+    virtualization: { enabled: false },
+    filters: {
+      enabled: true,
+      initial: { search: 'Row 7' },
+      accessors: {
+        getKind: (row) => row.label,
+        getNamespace: () => '',
+        getSearchText: (row) => [row.label],
+      },
+    },
+  });
+
+  expect(container.textContent).toContain('Row 7');
+  expect(container.textContent).not.toContain('Row 0');
+
+  const resultCount = container.querySelector('[data-gridtable-filter-role="result-count"]');
+  expect(resultCount?.textContent).toBe('1 of 8 items');
+
+  cleanup();
+});
+
 it('does not show the capped-results tooltip when the table is not capped', () => {
   const { container, cleanup } = renderGridTable({
     data: createRows(3),

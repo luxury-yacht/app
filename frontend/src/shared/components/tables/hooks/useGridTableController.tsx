@@ -211,12 +211,10 @@ export function useGridTableController<T>({
 }: GridTableProps<T>): GridTableControllerResult<T> {
   const [maxTableRows, setMaxTableRows] = useState<number>(() => getMaxTableRows());
   const totalDataCount = Array.isArray(inputData) ? inputData.length : 0;
-  const sourceData = useMemo<T[]>(() => {
-    if (!Array.isArray(inputData)) {
-      return [] as T[];
-    }
-    return inputData.slice(0, maxTableRows);
-  }, [inputData, maxTableRows]);
+  const sourceData = useMemo<T[]>(
+    () => (Array.isArray(inputData) ? inputData : ([] as T[])),
+    [inputData]
+  );
   const wrapperRef = useRef<HTMLDivElement>(null);
   const tableRef = useRef<HTMLDivElement>(null);
   const tableRefMutable = tableRef as RefObject<HTMLElement | null>;
@@ -302,7 +300,7 @@ export function useGridTableController<T>({
 
   const {
     filteringEnabled,
-    tableData,
+    tableData: filteredData,
     activeFilters,
     filterSignature,
     filtersContainerRef,
@@ -314,10 +312,16 @@ export function useGridTableController<T>({
   } = useGridTableFiltersWiring<T>({
     data: sourceData,
     totalDataCount,
+    maxDisplayRows: maxTableRows,
     filters,
     diagnosticsLabel,
     columnsDropdown: columnsDropdownConfig ?? undefined,
   });
+
+  const tableData = useMemo<T[]>(
+    () => filteredData.slice(0, maxTableRows),
+    [filteredData, maxTableRows]
+  );
 
   useEffect(() => {
     if (!diagnosticsLabel) {
@@ -329,7 +333,7 @@ export function useGridTableController<T>({
     recordGridTablePerformanceSnapshot(diagnosticsLabel, {
       mode: diagnosticsMode,
       inputRows: totalDataCount,
-      sourceRows: sourceData.length,
+      sourceRows: Math.min(totalDataCount, maxTableRows),
       displayedRows: tableData.length,
       inputReferenceChanged,
     });
@@ -338,7 +342,7 @@ export function useGridTableController<T>({
     diagnosticsLabel,
     diagnosticsMode,
     inputData,
-    sourceData.length,
+    maxTableRows,
     tableData.length,
     totalDataCount,
   ]);
