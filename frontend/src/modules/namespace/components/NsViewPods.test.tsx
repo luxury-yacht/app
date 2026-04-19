@@ -315,6 +315,25 @@ describe('NsViewPods', () => {
     );
   });
 
+  it('passes keyed sort reuse and numeric pod sort values into useTableSort', async () => {
+    const pods = await renderPods();
+
+    expect(useTableSortMock).toHaveBeenCalled();
+    const [, , , options] = useTableSortMock.mock.calls[0];
+    expect(options.rowIdentity(pods[0], 0)).toBe('alpha:ctx|/v1/Pod/team-a/api');
+
+    const columns = options.columns as Array<{
+      key: string;
+      sortValue?: (item: PodSnapshotEntry) => unknown;
+    }>;
+    const cpuColumn = columns.find((column) => column.key === 'cpu');
+    const memoryColumn = columns.find((column) => column.key === 'memory');
+    const readyColumn = columns.find((column) => column.key === 'ready');
+    expect(cpuColumn?.sortValue?.(pods[0])).toBe(500);
+    expect(memoryColumn?.sortValue?.(pods[0])).toBe(200);
+    expect(readyColumn?.sortValue?.(pods[0])).toBe(2000002);
+  });
+
   it('opens the object panel when a row name is clicked', async () => {
     await renderPods();
     const gridProps = gridTablePropsRef.current;

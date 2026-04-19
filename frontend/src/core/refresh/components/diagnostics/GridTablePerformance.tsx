@@ -64,6 +64,9 @@ const formatScrollFrameTiming = (row: GridTablePerformanceEntry) => {
 const isTimingSignal = (averageMs: number, maxMs: number, averageThresholdMs: number) =>
   averageMs >= averageThresholdMs || maxMs >= averageThresholdMs * 2;
 
+const isSustainedTimingSignal = (averageMs: number, averageThresholdMs: number) =>
+  averageMs >= averageThresholdMs;
+
 const getWarningSignals = (signals: GridTablePerformanceSignal[]) =>
   signals.filter((signal) => signal.severity === 'warning');
 
@@ -115,7 +118,7 @@ export const buildTablePerformanceSignals = (
 
   if (
     row.render.samples >= MIN_TIMING_SIGNAL_SAMPLES &&
-    isTimingSignal(row.render.averageMs, row.render.maxMs, 8)
+    isSustainedTimingSignal(row.render.averageMs, 8)
   ) {
     signals.push({
       label: 'Render slow',

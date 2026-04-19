@@ -22,6 +22,9 @@ export interface UseTableSortOptions {
   // When provided, columns with a `sortValue` accessor are used to extract
   // comparison values instead of direct property access on the row.
   columns?: ReadonlyArray<{ key: string; sortValue?: (item: any) => any }>;
+  // Optional stable row identity used to skip full resorting when a live table
+  // rerenders but the active sort values and row set are unchanged.
+  rowIdentity?: (item: any, index: number) => string;
 }
 
 const getNow = (): number =>
@@ -29,19 +32,35 @@ const getNow = (): number =>
     ? performance.now()
     : Date.now();
 
+const areSortValuesEqual = (a: unknown, b: unknown): boolean => Object.is(a, b);
+
+interface SortCacheEntry<T> {
+  key: string;
+  direction: SortDirection;
+  order: string[];
+  valuesByKey: Map<string, unknown>;
+  sortedRows: T[];
+}
+
 export function useTableSort<T>(
   data: T[],
   defaultSortKey?: string,
   defaultDirection: SortDirection = 'asc',
   options?: UseTableSortOptions
 ) {
+  const controlledSort = options?.controlledSort;
+  const onChange = options?.onChange;
+  const diagnosticsLabel = options?.diagnosticsLabel;
+  const columns = options?.columns;
+  const rowIdentity = options?.rowIdentity;
   const [sortConfig, setSortConfig] = useState<SortConfig>({
     key: defaultSortKey || '',
     direction: defaultSortKey ? defaultDirection : null,
   });
   const sortDurationRef = useRef<number | null>(null);
+  const sortCacheRef = useRef<SortCacheEntry<T> | null>(null);
 
-  const effectiveSort = options?.controlledSort ?? sortConfig;
+  const effectiveSort = controlledSort ?? sortConfig;
   const stringCollator = useMemo(() => new Intl.Collator(undefined, { numeric: true }), []);
 
   // Sort a column. When `targetDirection` is provided the sort jumps directly
@@ -60,9 +79,9 @@ export function useTableSort<T>(
       return { key, direction: defaultDirection };
     };
 
-    if (options?.controlledSort) {
-      const next = computeNext(options.controlledSort);
-      options.onChange?.(next);
+    if (controlledSort) {
+      const next = computeNext(controlledSort);
+      onChange?.(next);
       return;
     }
 
@@ -107,15 +126,15 @@ export function useTableSort<T>(
   // Build a lookup from column key → sortValue extractor. When a column
   // defines sortValue, that function is used instead of row[key].
   const sortValueExtractors = useMemo(() => {
-    if (!options?.columns) return null;
+    if (!columns) return null;
     const map: Record<string, (item: T) => any> = {};
-    for (const col of options.columns) {
+    for (const col of columns) {
       if (col.sortValue) {
         map[col.key] = col.sortValue as (item: T) => any;
       }
     }
     return Object.keys(map).length > 0 ? map : null;
-  }, [options?.columns]);
+  }, [columns]);
 
   const sortedData = useMemo(() => {
     const startedAt = getNow();
@@ -127,28 +146,92 @@ export function useTableSort<T>(
 
     if (!effectiveSort.key || !effectiveSort.direction) {
       sortDurationRef.current = null;
+      sortCacheRef.current = null;
       return data;
     }
 
     if (data.length <= 1) {
       sortDurationRef.current = 0;
+      sortCacheRef.current = null;
       return data;
     }
 
     const extractor = sortValueExtractors?.[effectiveSort.key];
     const directionMultiplier = effectiveSort.direction === 'asc' ? 1 : -1;
+    const keyByItem = new Map<T, string>();
     const decorated = data.map((item, index) => {
       const rawValue = extractor ? extractor(item) : (item as any)[effectiveSort.key];
       const normalizedValue =
         effectiveSort.key.toLowerCase() === 'age' && typeof rawValue === 'string'
           ? parseAge(rawValue)
           : rawValue;
+      const key = rowIdentity?.(item, index);
+      if (key) {
+        keyByItem.set(item, key);
+      }
       return {
         item,
         index,
+        key,
         value: normalizedValue,
       };
     });
+
+    const previousCache = sortCacheRef.current;
+    if (
+      rowIdentity &&
+      previousCache &&
+      previousCache.key === effectiveSort.key &&
+      previousCache.direction === effectiveSort.direction &&
+      previousCache.order.length === decorated.length
+    ) {
+      const currentByKey = new Map<string, { item: T; value: unknown }>();
+      let canReusePreviousOrder = true;
+
+      for (const entry of decorated) {
+        if (!entry.key || currentByKey.has(entry.key)) {
+          canReusePreviousOrder = false;
+          break;
+        }
+        currentByKey.set(entry.key, { item: entry.item, value: entry.value });
+        if (!areSortValuesEqual(previousCache.valuesByKey.get(entry.key), entry.value)) {
+          canReusePreviousOrder = false;
+        }
+      }
+
+      if (canReusePreviousOrder) {
+        const orderedRows: T[] = [];
+        const nextValuesByKey = new Map<string, unknown>();
+
+        for (const key of previousCache.order) {
+          const current = currentByKey.get(key);
+          if (!current) {
+            canReusePreviousOrder = false;
+            break;
+          }
+          orderedRows.push(current.item);
+          nextValuesByKey.set(key, current.value);
+        }
+
+        if (canReusePreviousOrder) {
+          const reusedRows =
+            orderedRows.length === previousCache.sortedRows.length &&
+            orderedRows.every((item, index) => item === previousCache.sortedRows[index])
+              ? previousCache.sortedRows
+              : orderedRows;
+
+          sortCacheRef.current = {
+            key: effectiveSort.key,
+            direction: effectiveSort.direction,
+            order: previousCache.order,
+            valuesByKey: nextValuesByKey,
+            sortedRows: reusedRows,
+          };
+          sortDurationRef.current = getNow() - startedAt;
+          return reusedRows;
+        }
+      }
+    }
 
     const sorted = decorated
       .sort((a, b) => {
@@ -184,17 +267,54 @@ export function useTableSort<T>(
       })
       .map(({ item }) => item);
 
+    if (rowIdentity) {
+      const order: string[] = [];
+      const valuesByKey = new Map<string, unknown>();
+      let cacheable = true;
+
+      for (const entry of decorated) {
+        if (!entry.key || valuesByKey.has(entry.key)) {
+          cacheable = false;
+          break;
+        }
+        valuesByKey.set(entry.key, entry.value);
+      }
+
+      if (cacheable) {
+        for (const row of sorted) {
+          const key = keyByItem.get(row);
+          if (!key || !valuesByKey.has(key)) {
+            cacheable = false;
+            break;
+          }
+          order.push(key);
+        }
+      }
+
+      sortCacheRef.current = cacheable
+        ? {
+            key: effectiveSort.key,
+            direction: effectiveSort.direction,
+            order,
+            valuesByKey,
+            sortedRows: sorted,
+          }
+        : null;
+    } else {
+      sortCacheRef.current = null;
+    }
+
     sortDurationRef.current = getNow() - startedAt;
 
     return sorted;
-  }, [data, effectiveSort, sortValueExtractors, stringCollator]);
+  }, [data, effectiveSort, rowIdentity, sortValueExtractors, stringCollator]);
 
   useEffect(() => {
-    if (!options?.diagnosticsLabel || sortDurationRef.current == null) {
+    if (!diagnosticsLabel || sortDurationRef.current == null) {
       return;
     }
-    recordGridTablePerformanceSample(options.diagnosticsLabel, 'sort', sortDurationRef.current);
-  }, [options?.diagnosticsLabel, sortedData]);
+    recordGridTablePerformanceSample(diagnosticsLabel, 'sort', sortDurationRef.current);
+  }, [diagnosticsLabel, sortedData]);
 
   return {
     sortedData,

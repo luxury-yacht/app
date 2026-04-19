@@ -66,6 +66,16 @@ describe('GridTablePerformance', () => {
     expect(signals).toEqual([]);
   });
 
+  it('does not flag render slow for a low average with a single high spike', () => {
+    const signals = buildTablePerformanceSignals(
+      createRow({
+        render: createTimingStats(6, 2.1, 19, 1.3),
+      })
+    );
+
+    expect(signals).toEqual([]);
+  });
+
   it('down-ranks broad replacement for live tables into an informational signal', () => {
     const signals = buildTablePerformanceSignals(
       createRow({

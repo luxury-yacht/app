@@ -42,6 +42,7 @@ import {
   buildObjectReference,
   buildRelatedObjectReference,
 } from '@shared/utils/objectIdentity';
+import { parseCpuToMillicores, parseMemToMB } from '@utils/resourceCalculations';
 
 interface PodsViewProps {
   namespace: string;
@@ -83,6 +84,14 @@ const parseReadyCounts = (value?: string | null): { ready: number; total: number
     ready: Number(match[1]),
     total: Number(match[2]),
   };
+};
+
+const getReadySortValue = (value?: string | null): number => {
+  const counts = parseReadyCounts(value);
+  if (!counts) {
+    return -1;
+  }
+  return counts.ready * 1000000 + counts.total;
 };
 
 // Determine if a pod is unhealthy based on its status, restarts, and ready counts.
@@ -333,6 +342,8 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
           getMetricsError: () => metricsStateRef.current.lastError,
           getMetricsLastUpdated: () => metricsStateRef.current.lastUpdated,
           getAnimationKey: (pod) => `pod:${pod.namespace}/${pod.name}:cpu`,
+          sortable: true,
+          sortValue: (pod) => parseCpuToMillicores(pod.cpuUsage),
         }),
         cf.createResourceBarColumn<PodSnapshotEntry>({
           header: 'Memory',
@@ -345,9 +356,32 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
           getMetricsError: () => metricsStateRef.current.lastError,
           getMetricsLastUpdated: () => metricsStateRef.current.lastUpdated,
           getAnimationKey: (pod) => `pod:${pod.namespace}/${pod.name}:memory`,
+          sortable: true,
+          sortValue: (pod) => parseMemToMB(pod.memUsage),
         }),
         cf.createAgeColumn(),
       ];
+
+      const statusColumn = baseColumns.find((column) => column.key === 'status');
+      if (statusColumn) {
+        statusColumn.sortValue = (pod: PodSnapshotEntry) => (pod.status || '').toLowerCase();
+      }
+      const readyColumn = baseColumns.find((column) => column.key === 'ready');
+      if (readyColumn) {
+        readyColumn.sortValue = (pod: PodSnapshotEntry) => getReadySortValue(pod.ready);
+      }
+      const nameColumn = baseColumns.find((column) => column.key === 'name');
+      if (nameColumn) {
+        nameColumn.sortValue = (pod: PodSnapshotEntry) => (pod.name || '').toLowerCase();
+      }
+      const ownerColumn = baseColumns.find((column) => column.key === 'owner');
+      if (ownerColumn) {
+        ownerColumn.sortValue = (pod: PodSnapshotEntry) => (pod.ownerName || '').toLowerCase();
+      }
+      const nodeColumn = baseColumns.find((column) => column.key === 'node');
+      if (nodeColumn) {
+        nodeColumn.sortValue = (pod: PodSnapshotEntry) => (pod.node || '').toLowerCase();
+      }
 
       const sizing: cf.ColumnSizingMap = {
         kind: { autoWidth: true },
@@ -411,6 +445,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       onChange: onSortChange,
       diagnosticsLabel:
         namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Pods' : 'Namespace Pods',
+      rowIdentity: keyExtractor,
     });
 
     const fallbackNamespaces = useMemo(

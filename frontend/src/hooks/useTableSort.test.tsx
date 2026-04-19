@@ -233,4 +233,46 @@ describe('useTableSort', () => {
     expect(refs[1]).toBe(emptyRows);
     expect(refs[1]).toBe(refs[0]);
   });
+
+  it('skips a full resort when keyed live rows keep the same active sort values', async () => {
+    type LiveRow = { id: string; value: number; metric: number };
+
+    const refs: LiveRow[][] = [];
+
+    const LiveHarness = ({ data }: { data: LiveRow[] }) => {
+      const { sortedData } = useTableSort<LiveRow>(data, 'value', 'asc', {
+        rowIdentity: (item) => item.id,
+      });
+      refs.push(sortedData);
+      return (
+        <div data-testid="rows">
+          {sortedData.map((item) => `${item.id}:${item.metric}`).join(',')}
+        </div>
+      );
+    };
+
+    const firstRows: LiveRow[] = [
+      { id: 'b', value: 1, metric: 1 },
+      { id: 'a', value: 1, metric: 1 },
+    ];
+    const secondRows: LiveRow[] = [
+      { id: 'a', value: 1, metric: 1 },
+      { id: 'b', value: 1, metric: 2 },
+    ];
+
+    await act(async () => {
+      root.render(<LiveHarness data={firstRows} />);
+      await Promise.resolve();
+    });
+
+    expect(getText('rows')).toBe('b:1,a:1');
+
+    await act(async () => {
+      root.render(<LiveHarness data={secondRows} />);
+      await Promise.resolve();
+    });
+
+    expect(getText('rows')).toBe('b:2,a:1');
+    expect(refs[1]).not.toBe(refs[0]);
+  });
 });
