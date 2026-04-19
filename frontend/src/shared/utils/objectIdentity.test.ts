@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildCanonicalObjectRowKey,
   buildObjectReference,
+  buildRelatedObjectReference,
   buildSyntheticObjectReference,
 } from './objectIdentity';
 
@@ -88,6 +89,39 @@ describe('objectIdentity', () => {
         group: '',
         version: 'v1',
         portForwardAvailable: true,
+      })
+    );
+  });
+
+  it('builds related-object references from explicit apiVersion', () => {
+    expect(
+      buildRelatedObjectReference({
+        kind: 'HorizontalPodAutoscaler',
+        name: 'web',
+        namespace: 'apps',
+        clusterId: 'alpha:ctx',
+        apiVersion: 'autoscaling/v2',
+      })
+    ).toEqual(
+      expect.objectContaining({
+        group: 'autoscaling',
+        version: 'v2',
+      })
+    );
+  });
+
+  it('falls back to built-in GVK when related-object apiVersion is omitted', () => {
+    expect(
+      buildRelatedObjectReference({
+        kind: 'Pod',
+        name: 'api',
+        namespace: 'team-a',
+        clusterId: 'alpha:ctx',
+      })
+    ).toEqual(
+      expect.objectContaining({
+        group: '',
+        version: 'v1',
       })
     );
   });

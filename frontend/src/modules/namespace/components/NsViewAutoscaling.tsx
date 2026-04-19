@@ -23,11 +23,7 @@ import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
-import {
-  formatBuiltinApiVersion,
-  parseApiVersion,
-  resolveBuiltinGroupVersion,
-} from '@shared/constants/builtinGroupVersions';
+import { formatBuiltinApiVersion } from '@shared/constants/builtinGroupVersions';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { DeleteResourceByGVK } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
@@ -35,7 +31,11 @@ import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 import { useFavToggle } from '@ui/favorites/FavToggle';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
 import { useNamespaceFilterOptions } from '@modules/namespace/hooks/useNamespaceFilterOptions';
-import { buildCanonicalObjectRowKey, buildObjectReference } from '@shared/utils/objectIdentity';
+import {
+  buildCanonicalObjectRowKey,
+  buildObjectReference,
+  buildRelatedObjectReference,
+} from '@shared/utils/objectIdentity';
 
 const NAMESPACE_AUTOSCALING_KIND_OPTIONS = ['HorizontalPodAutoscaler'];
 
@@ -144,13 +144,11 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
         return null;
       }
       try {
-        return buildObjectReference({
+        return buildRelatedObjectReference({
           kind: resource.scaleTargetRef.kind,
           name: resource.scaleTargetRef.name,
           namespace: resource.namespace,
-          ...(resource.scaleTargetRef.apiVersion
-            ? parseApiVersion(resource.scaleTargetRef.apiVersion)
-            : resolveBuiltinGroupVersion(resource.scaleTargetRef.kind)),
+          apiVersion: resource.scaleTargetRef.apiVersion,
           clusterId: resource.clusterId ?? undefined,
           clusterName: resource.clusterName ?? undefined,
         });

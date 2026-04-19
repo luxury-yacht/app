@@ -29,8 +29,11 @@ import { useViewState } from '@core/contexts/ViewStateContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import '../shared.css';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
-import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
-import { buildCanonicalObjectRowKey, buildObjectReference } from '@shared/utils/objectIdentity';
+import {
+  buildCanonicalObjectRowKey,
+  buildObjectReference,
+  buildRelatedObjectReference,
+} from '@shared/utils/objectIdentity';
 
 interface PodsTabProps {
   pods: PodSnapshotEntry[];
@@ -167,12 +170,10 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
       createTextColumn<PodSnapshotEntry>('owner', 'Owner', (pod) => workloadNameFromOwner(pod), {
         ...objectLink((pod) =>
           pod.ownerKind && pod.ownerName
-            ? buildObjectReference({
+            ? buildRelatedObjectReference({
                 kind: pod.ownerKind,
                 name: pod.ownerName,
                 namespace: pod.namespace,
-                group: resolveBuiltinGroupVersion(pod.ownerKind).group,
-                version: resolveBuiltinGroupVersion(pod.ownerKind).version,
                 ...getPodClusterMeta(pod),
               })
             : undefined

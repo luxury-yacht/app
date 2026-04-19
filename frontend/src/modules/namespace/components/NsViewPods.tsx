@@ -37,7 +37,11 @@ import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useFavToggle } from '@ui/favorites/FavToggle';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
 import { useNamespaceFilterOptions } from '@modules/namespace/hooks/useNamespaceFilterOptions';
-import { buildCanonicalObjectRowKey, buildObjectReference } from '@shared/utils/objectIdentity';
+import {
+  buildCanonicalObjectRowKey,
+  buildObjectReference,
+  buildRelatedObjectReference,
+} from '@shared/utils/objectIdentity';
 
 interface PodsViewProps {
   namespace: string;
@@ -155,14 +159,11 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
         if (!pod.ownerKind || !pod.ownerName) {
           return;
         }
-        const ownerGVK = resolveBuiltinGroupVersion(pod.ownerKind);
         openWithObject(
-          buildObjectReference({
+          buildRelatedObjectReference({
             kind: pod.ownerKind,
             name: pod.ownerName,
             namespace: pod.namespace,
-            group: ownerGVK.group,
-            version: ownerGVK.version,
             clusterId: pod.clusterId ?? undefined,
             clusterName: pod.clusterName ?? undefined,
           })

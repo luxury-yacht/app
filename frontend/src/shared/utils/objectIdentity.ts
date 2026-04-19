@@ -1,5 +1,8 @@
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
-import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
+import {
+  parseApiVersion,
+  resolveBuiltinGroupVersion,
+} from '@shared/constants/builtinGroupVersions';
 import type { KubernetesObjectReference } from '@/types/view-state';
 
 export interface ObjectIdentityInput {
@@ -37,6 +40,10 @@ export interface ResolvedSyntheticObjectReference {
   clusterName?: string;
   resource?: string;
   uid?: string;
+}
+
+export interface RelatedObjectReferenceInput extends ObjectIdentityInput {
+  apiVersion?: string | null;
 }
 
 const normalizeRequired = (value: string | null | undefined, field: string): string => {
@@ -83,6 +90,24 @@ export const buildObjectReference = <TExtras extends object = {}>(
     uid: normalizeOptional(input.uid),
     ...extras,
   } as ResolvedObjectReference & TExtras;
+};
+
+export const buildRelatedObjectReference = <TExtras extends object = {}>(
+  input: RelatedObjectReferenceInput,
+  extras?: TExtras
+): ResolvedObjectReference & TExtras => {
+  const parsedApiVersion = normalizeOptional(input.apiVersion)
+    ? parseApiVersion(input.apiVersion!)
+    : undefined;
+
+  return buildObjectReference(
+    {
+      ...input,
+      group: normalizeOptional(input.group) ?? parsedApiVersion?.group,
+      version: normalizeOptional(input.version) ?? parsedApiVersion?.version,
+    },
+    extras
+  );
 };
 
 export const buildSyntheticObjectReference = <TExtras extends object = {}>(

@@ -348,6 +348,9 @@ Current status:
 - ✅ event-driven object open/navigation flows now share one involved-object
   identity helper across namespace events, cluster events, and object-panel
   events instead of reconstructing GVK fallback logic separately in each view
+- ✅ related-object links now share a helper-backed reference path for typed
+  data sources as well, including pod owner links and HPA scale-target links,
+  instead of each view manually resolving built-in target GVKs
 - ⏭ next step: continue auditing remaining generic entry points so object
   opening, diff, and command-style navigation all share the same helper-backed
   identity conventions
