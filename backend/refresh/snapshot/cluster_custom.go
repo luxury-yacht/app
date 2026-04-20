@@ -59,6 +59,7 @@ type ClusterCustomSummary struct {
 type ClusterCustomSnapshot struct {
 	ClusterMeta
 	Resources []ClusterCustomSummary `json:"resources"`
+	Kinds     []string               `json:"kinds,omitempty"`
 }
 
 // RegisterClusterCustomDomain registers the cluster custom domain.
@@ -113,10 +114,23 @@ func (b *ClusterCustomBuilder) Build(ctx context.Context, scope string) (*refres
 		return &refresh.Snapshot{
 			Domain:  clusterCustomDomainName,
 			Version: 0,
-			Payload: ClusterCustomSnapshot{ClusterMeta: meta, Resources: []ClusterCustomSummary{}},
-			Stats:   refresh.SnapshotStats{ItemCount: 0},
+			Payload: ClusterCustomSnapshot{
+				ClusterMeta: meta,
+				Resources:   []ClusterCustomSummary{},
+				Kinds:       []string{},
+			},
+			Stats: refresh.SnapshotStats{ItemCount: 0},
 		}, nil
 	}
+
+	kinds := make([]string, 0, len(clusterCRDs))
+	for _, crd := range clusterCRDs {
+		if crd == nil {
+			continue
+		}
+		kinds = append(kinds, crd.Spec.Names.Kind)
+	}
+	kinds = snapshotSortedUniqueStrings(kinds)
 
 	var (
 		summaries []ClusterCustomSummary
@@ -230,7 +244,7 @@ func (b *ClusterCustomBuilder) Build(ctx context.Context, scope string) (*refres
 		return summaries[i].Kind < summaries[j].Kind
 	})
 
-	payload := ClusterCustomSnapshot{ClusterMeta: meta, Resources: summaries}
+	payload := ClusterCustomSnapshot{ClusterMeta: meta, Resources: summaries, Kinds: kinds}
 	stats := refresh.SnapshotStats{ItemCount: len(summaries)}
 	if len(warnings) > 0 {
 		stats.Warnings = append(stats.Warnings, warnings...)

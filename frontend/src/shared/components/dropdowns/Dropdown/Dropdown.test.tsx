@@ -295,6 +295,33 @@ describe('Dropdown', () => {
     expect(container.querySelector('.dropdown-option.highlighted')?.textContent).toContain('Beta');
   });
 
+  it('removes the trigger highlight while the internal search input is focused', async () => {
+    await mount(
+      <Dropdown options={OPTIONS} value="" onChange={vi.fn()} searchable placeholder="Searchable" />
+    );
+
+    click(container.querySelector('.dropdown-trigger'));
+
+    const dropdown = container.querySelector('.dropdown') as HTMLElement | null;
+    const searchInput = container.querySelector<HTMLInputElement>('.search-input');
+    expect(dropdown).not.toBeNull();
+    expect(searchInput).not.toBeNull();
+
+    await act(async () => {
+      searchInput?.focus();
+      await Promise.resolve();
+    });
+
+    expect(dropdown?.classList.contains('search-focused')).toBe(true);
+
+    await act(async () => {
+      searchInput?.blur();
+      await Promise.resolve();
+    });
+
+    expect(dropdown?.classList.contains('search-focused')).toBe(false);
+  });
+
   it('closes on Tab without preventing the browser focus move', async () => {
     await mount(
       <Dropdown options={OPTIONS} value="" onChange={vi.fn()} searchable placeholder="Searchable" />
@@ -421,8 +448,8 @@ describe('Dropdown', () => {
 
     const bulkButtons = container.querySelectorAll<HTMLButtonElement>('.dropdown-bulk-action');
     expect(bulkButtons).toHaveLength(2);
-    expect(bulkButtons[0]?.textContent).toBe('Select all');
-    expect(bulkButtons[1]?.textContent).toBe('Select none');
+    expect(bulkButtons[0]?.getAttribute('aria-label')).toBe('Select all');
+    expect(bulkButtons[1]?.getAttribute('aria-label')).toBe('Select none');
 
     click(bulkButtons[0]);
     expect(onChange).toHaveBeenCalledWith(['postgres', 'mongo', 'sqlite']);
@@ -431,6 +458,83 @@ describe('Dropdown', () => {
       container.querySelectorAll<HTMLButtonElement>('.dropdown-bulk-action')[1];
     click(selectNoneButton);
     expect(onChange).toHaveBeenCalledWith([]);
+  });
+
+  it('renders the searchable input and bulk actions on the same control row', async () => {
+    await mount(
+      <Dropdown
+        options={OPTIONS}
+        value={[]}
+        onChange={vi.fn()}
+        multiple
+        searchable
+        showBulkActions
+      />
+    );
+
+    click(container.querySelector('.dropdown-trigger'));
+
+    const controls = container.querySelector('.dropdown-menu-controls');
+    expect(controls).not.toBeNull();
+    expect(controls?.querySelector('.search-input')).not.toBeNull();
+    expect(controls?.querySelectorAll('.dropdown-bulk-action')).toHaveLength(2);
+  });
+
+  it('shows text labels beside bulk-action icons when search is disabled', async () => {
+    await mount(
+      <Dropdown options={OPTIONS} value={[]} onChange={vi.fn()} multiple showBulkActions />
+    );
+
+    click(container.querySelector('.dropdown-trigger'));
+
+    const bulkButtons = container.querySelectorAll<HTMLButtonElement>('.dropdown-bulk-action');
+    expect(bulkButtons).toHaveLength(2);
+    expect(bulkButtons[0]?.textContent).toContain('Select All');
+    expect(bulkButtons[1]?.textContent).toContain('Select None');
+    expect(container.querySelector('.search-input')).toBeNull();
+  });
+
+  it('preserves menu scroll position across multi-select updates', async () => {
+    const manyOptions = Array.from({ length: 40 }, (_, index) => ({
+      value: `opt-${index}`,
+      label: `Option ${index}`,
+    }));
+
+    const Harness = () => {
+      const [value, setValue] = useState<string[]>([]);
+      return (
+        <Dropdown
+          options={manyOptions}
+          value={value}
+          onChange={(next) => {
+            setValue(Array.isArray(next) ? next : [next]);
+          }}
+          multiple
+        />
+      );
+    };
+
+    await mount(<Harness />);
+    click(container.querySelector('.dropdown-trigger'));
+
+    const menu = container.querySelector('.dropdown-menu') as HTMLDivElement | null;
+    expect(menu).not.toBeNull();
+    if (!menu) {
+      return;
+    }
+
+    menu.scrollTop = 180;
+    await act(async () => {
+      menu.dispatchEvent(new Event('scroll'));
+      await Promise.resolve();
+    });
+
+    const targetOption = container.querySelectorAll('.dropdown-option')[25];
+    click(targetOption);
+
+    const updatedMenu = container.querySelector('.dropdown-menu') as HTMLDivElement | null;
+    expect(updatedMenu).not.toBeNull();
+    expect(updatedMenu?.scrollTop).toBe(180);
   });
 
   it('adjusts menu position when space below trigger is limited', async () => {

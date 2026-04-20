@@ -104,7 +104,7 @@ function GridTableBody<T>({
     if (tableData.length === 0) {
       return (
         <div className="gridtable-empty">
-          {emptyMessage}
+          {hasActiveFilters ? 'No matching items' : emptyMessage}
           {hasActiveFilters && (
             <div className="gridtable-empty-filter-hint">
               Filters are enabled that may be hiding objects.{' '}

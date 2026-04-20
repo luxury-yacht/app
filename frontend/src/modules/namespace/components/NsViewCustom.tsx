@@ -22,15 +22,15 @@ import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
-import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { DeleteResourceByGVK } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
 import { getPermissionKey, queryKindPermissions, useUserPermissions } from '@/core/capabilities';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 import { useFavToggle } from '@ui/favorites/FavToggle';
-import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
+import { useNamespaceFilterOptions } from '@modules/namespace/hooks/useNamespaceFilterOptions';
+import { buildCanonicalObjectRowKey, buildObjectReference } from '@shared/utils/objectIdentity';
 
 // Data interface for custom resources
 export interface CustomResourceData {
@@ -80,6 +80,7 @@ export interface CustomResourceData {
 interface CustomViewProps {
   namespace: string;
   data: CustomResourceData[];
+  availableKinds?: string[];
   loading?: boolean;
   loaded?: boolean;
   showNamespaceColumn?: boolean;
@@ -89,7 +90,14 @@ interface CustomViewProps {
  * GridTable component for namespace custom resources (instances of CRDs)
  */
 const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
-  ({ namespace, data, loading = false, loaded = false, showNamespaceColumn = false }) => {
+  ({
+    namespace,
+    data,
+    availableKinds: kindOptions,
+    loading = false,
+    loaded = false,
+    showNamespaceColumn = false,
+  }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const useShortResourceNames = useShortNames();
@@ -108,19 +116,25 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
         // CRDs from different operators). Without these, the object panel
         // falls back to first-match-wins discovery and opens the wrong
         // resource.
-        openWithObject({
-          kind: resource.kind || resource.kindAlias || 'CustomResource',
-          kindAlias: resource.kindAlias,
-          name: resource.name,
-          namespace: resource.namespace,
-          group: resource.apiGroup,
-          version: resource.apiVersion,
-          age: resource.age,
-          labels: resource.labels,
-          annotations: resource.annotations,
-          clusterId: resource.clusterId ?? undefined,
-          clusterName: resource.clusterName ?? undefined,
-        });
+        openWithObject(
+          buildObjectReference(
+            {
+              kind: resource.kind || resource.kindAlias || 'CustomResource',
+              kindAlias: resource.kindAlias,
+              name: resource.name,
+              namespace: resource.namespace,
+              group: resource.apiGroup,
+              version: resource.apiVersion,
+              clusterId: resource.clusterId ?? undefined,
+              clusterName: resource.clusterName ?? undefined,
+            },
+            {
+              age: resource.age,
+              labels: resource.labels,
+              annotations: resource.annotations,
+            }
+          )
+        );
       },
       [openWithObject]
     );
@@ -134,25 +148,28 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
         if (!resource.crdName) {
           return;
         }
-        openWithObject({
-          kind: 'CustomResourceDefinition',
-          ...resolveBuiltinGroupVersion('CustomResourceDefinition'),
-          name: resource.crdName,
-          clusterId: resource.clusterId ?? undefined,
-          clusterName: resource.clusterName ?? undefined,
-        });
+        openWithObject(
+          buildObjectReference({
+            kind: 'CustomResourceDefinition',
+            name: resource.crdName,
+            clusterId: resource.clusterId ?? undefined,
+            clusterName: resource.clusterName ?? undefined,
+          })
+        );
       },
       [openWithObject]
     );
 
     const keyExtractor = useCallback(
       (resource: CustomResourceData) =>
-        buildClusterScopedKey(
-          resource,
-          [resource.namespace, resource.kindAlias ?? resource.kind ?? 'custom', resource.name]
-            .filter(Boolean)
-            .join('/')
-        ),
+        buildCanonicalObjectRowKey({
+          kind: resource.kind || resource.kindAlias || 'CustomResource',
+          name: resource.name,
+          namespace: resource.namespace,
+          clusterId: resource.clusterId,
+          group: resource.apiGroup,
+          version: resource.apiVersion,
+        }),
       []
     );
 
@@ -165,24 +182,34 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
             getDisplayKind(resource.kind || resource.kindAlias || 'Custom', useShortResourceNames),
           onClick: handleResourceClick,
           onAltClick: (resource) =>
-            navigateToView({
-              kind: resource.kind || resource.kindAlias || 'CustomResource',
-              name: resource.name,
-              namespace: resource.namespace,
-              clusterId: resource.clusterId,
-              clusterName: resource.clusterName,
-            }),
+            navigateToView(
+              buildObjectReference({
+                kind: resource.kind || resource.kindAlias || 'CustomResource',
+                kindAlias: resource.kindAlias,
+                name: resource.name,
+                namespace: resource.namespace,
+                clusterId: resource.clusterId,
+                clusterName: resource.clusterName,
+                group: resource.apiGroup,
+                version: resource.apiVersion,
+              })
+            ),
         }),
         cf.createTextColumn<CustomResourceData>('name', 'Name', {
           onClick: handleResourceClick,
           onAltClick: (resource) =>
-            navigateToView({
-              kind: resource.kind || resource.kindAlias || 'CustomResource',
-              name: resource.name,
-              namespace: resource.namespace,
-              clusterId: resource.clusterId,
-              clusterName: resource.clusterName,
-            }),
+            navigateToView(
+              buildObjectReference({
+                kind: resource.kind || resource.kindAlias || 'CustomResource',
+                kindAlias: resource.kindAlias,
+                name: resource.name,
+                namespace: resource.namespace,
+                clusterId: resource.clusterId,
+                clusterName: resource.clusterName,
+                group: resource.apiGroup,
+                version: resource.apiVersion,
+              })
+            ),
           getClassName: () => 'object-panel-link',
         }),
         // CRD column: each cell is a clickable link back to the CRD
@@ -207,12 +234,14 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
                 if (!resource.crdName) {
                   return;
                 }
-                navigateToView({
-                  kind: 'CustomResourceDefinition',
-                  name: resource.crdName,
-                  clusterId: resource.clusterId,
-                  clusterName: resource.clusterName,
-                });
+                navigateToView(
+                  buildObjectReference({
+                    kind: 'CustomResourceDefinition',
+                    name: resource.crdName,
+                    clusterId: resource.clusterId,
+                    clusterName: resource.clusterName,
+                  })
+                );
               },
               isInteractive: (resource) => Boolean(resource.crdName),
               getClassName: (resource) => (resource.crdName ? 'object-panel-link' : undefined),
@@ -253,6 +282,8 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
     ]);
 
     const showNamespaceFilter = namespace === ALL_NAMESPACES_SCOPE;
+    const diagnosticsLabel =
+      namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Custom' : 'Namespace Custom';
 
     const {
       sortConfig: persistedSort,
@@ -279,17 +310,16 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
       columns,
       controlledSort: persistedSort,
       onChange: onSortChange,
+      diagnosticsLabel,
     });
 
     // Derive available kinds and namespaces from the data for the favorites modal dropdowns.
-    const availableKinds = useMemo(
-      () => [...new Set(data.map((r) => r.kind).filter(Boolean) as string[])].sort(),
-      [data]
-    );
-    const availableFilterNamespaces = useMemo(
+    const availableKinds = useMemo(() => kindOptions ?? [], [kindOptions]);
+    const fallbackNamespaces = useMemo(
       () => [...new Set(data.map((r) => r.namespace).filter(Boolean))].sort(),
       [data]
     );
+    const availableFilterNamespaces = useNamespaceFilterOptions(namespace, fallbackNamespaces);
 
     const { item: favToggle, modal: favModal } = useFavToggle({
       filters: persistedFilters,
@@ -303,6 +333,35 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
       availableKinds,
       availableFilterNamespaces,
     });
+
+    const filtersConfig = useMemo(
+      () => ({
+        enabled: true,
+        value: persistedFilters,
+        onChange: setPersistedFilters,
+        onReset: resetPersistedState,
+        options: {
+          kinds: availableKinds,
+          namespaces: availableFilterNamespaces,
+          showKindDropdown: true,
+          kindDropdownSearchable: true,
+          kindDropdownBulkActions: true,
+          showNamespaceDropdown: showNamespaceFilter,
+          namespaceDropdownSearchable: showNamespaceFilter,
+          namespaceDropdownBulkActions: showNamespaceFilter,
+          preActions: [favToggle],
+        },
+      }),
+      [
+        availableFilterNamespaces,
+        availableKinds,
+        favToggle,
+        persistedFilters,
+        resetPersistedState,
+        setPersistedFilters,
+        showNamespaceFilter,
+      ]
+    );
 
     const handleDeleteConfirm = useCallback(async () => {
       if (!deleteConfirm.resource) return;
@@ -379,15 +438,16 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
         }
 
         return buildObjectActionItems({
-          object: {
+          object: buildObjectReference({
             kind,
+            kindAlias: resource.kindAlias,
             name: resource.name,
             namespace: resource.namespace,
             clusterId: resource.clusterId,
             clusterName: resource.clusterName,
             group: resource.apiGroup ?? undefined,
             version: resource.apiVersion ?? undefined,
-          },
+          }),
           context: 'gridtable',
           handlers: {
             onOpen: () => handleResourceClick(resource),
@@ -421,6 +481,7 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
           <GridTable
             data={sortedData}
             columns={columns}
+            diagnosticsLabel={diagnosticsLabel}
             loading={loading}
             keyExtractor={keyExtractor}
             onRowClick={handleResourceClick}
@@ -431,17 +492,7 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
             getCustomContextMenuItems={getContextMenuItems}
             useShortNames={useShortResourceNames}
             emptyMessage={emptyMessage}
-            filters={{
-              enabled: true,
-              value: persistedFilters,
-              onChange: setPersistedFilters,
-              onReset: resetPersistedState,
-              options: {
-                showKindDropdown: true,
-                showNamespaceDropdown: showNamespaceFilter,
-                preActions: [favToggle],
-              },
-            }}
+            filters={filtersConfig}
             virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}
             columnWidths={columnWidths}
             onColumnWidthsChange={setColumnWidths}

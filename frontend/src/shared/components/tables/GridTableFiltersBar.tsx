@@ -9,6 +9,7 @@ import React, { useRef, useMemo } from 'react';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import SearchInput from '@shared/components/inputs/SearchInput';
+import Tooltip from '@shared/components/Tooltip';
 import type {
   GridTableFilterState,
   InternalFilterOptions,
@@ -50,7 +51,7 @@ interface GridTableFiltersBarProps {
   /** Arbitrary content rendered after the IconBar (e.g. text toggle buttons). */
   customActions?: React.ReactNode;
   /** Displayed vs total item count shown to the right of actions. */
-  resultCount?: { displayed: number; total: number };
+  resultCount?: { displayed: number; total: number; capped?: boolean };
 }
 
 const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
@@ -147,6 +148,38 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
     postActions,
   ]);
 
+  const searchBehavior = resolvedFilterOptions.searchBehavior ?? 'local';
+
+  const searchBehaviorTooltip = useMemo(() => {
+    if (searchBehavior === 'query') {
+      return (
+        <>
+          <p className="gridtable-filter-result-tooltip-paragraph">
+            Filter updates the active query for this view.
+          </p>
+          <p className="gridtable-filter-result-tooltip-paragraph">
+            Counts and results reflect matching objects for the current scope, up to the max table
+            size.
+          </p>
+        </>
+      );
+    }
+
+    return (
+      <>
+        <p className="gridtable-filter-result-tooltip-paragraph">
+          Filter narrows the rows currently loaded in this table.
+        </p>
+        {resultCount?.capped && (
+          <p className="gridtable-filter-result-tooltip-paragraph">
+            This table is capped, so some matching rows may still be hidden until you narrow the
+            dataset.
+          </p>
+        )}
+      </>
+    );
+  }, [searchBehavior, resultCount?.capped]);
+
   return (
     <div className="gridtable-filter-bar" ref={containerRef}>
       <div className="gridtable-filter-cluster" data-gridtable-filter-cluster="primary">
@@ -159,6 +192,8 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
                   name="gridtable-filter-kind"
                   multiple
                   size="compact"
+                  searchable={resolvedFilterOptions.kindDropdownSearchable}
+                  showBulkActions={resolvedFilterOptions.kindDropdownBulkActions}
                   placeholder="All kinds"
                   value={activeFilters.kinds}
                   options={resolvedFilterOptions.kinds}
@@ -177,6 +212,8 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
                   name="gridtable-filter-namespace"
                   multiple
                   size="compact"
+                  searchable={resolvedFilterOptions.namespaceDropdownSearchable}
+                  showBulkActions={resolvedFilterOptions.namespaceDropdownBulkActions}
                   placeholder="All namespaces"
                   value={activeFilters.namespaces}
                   options={resolvedFilterOptions.namespaces}
@@ -196,11 +233,14 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
               inputRef={searchInputRef}
               id={searchInputId}
               name="gridtable-filter-search"
-              placeholder={resolvedFilterOptions.searchPlaceholder ?? 'Search'}
+              placeholder={resolvedFilterOptions.searchPlaceholder ?? 'Filter'}
               value={activeFilters.search}
               onChange={onSearchChange}
               onKeyDown={handleSearchKeyDown}
             />
+            <span className="gridtable-filter-search-hint" data-gridtable-filter-role="search-hint">
+              <Tooltip content={searchBehaviorTooltip} variant="dark" />
+            </span>
           </div>
           <div className="gridtable-filter-actions">
             <IconBar items={iconBarItems} />
@@ -220,6 +260,23 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
                 {resultCount.displayed === resultCount.total
                   ? `${resultCount.total} items`
                   : `${resultCount.displayed} of ${resultCount.total} items`}
+                {resultCount.capped && (
+                  <Tooltip
+                    content={
+                      <>
+                        <p className="gridtable-filter-result-tooltip-paragraph">
+                          The total number of objects exceeds the max table size. Use search filters
+                          to reduce the size of the data set.
+                        </p>
+                        <p className="gridtable-filter-result-tooltip-paragraph">
+                          You can change the max table size in Settings, but larger values can
+                          impact the app&apos;s performance.
+                        </p>
+                      </>
+                    }
+                    variant="dark"
+                  />
+                )}
               </span>
             )}
           </div>

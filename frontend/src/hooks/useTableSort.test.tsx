@@ -10,6 +10,10 @@ import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { useTableSort } from './useTableSort';
+import {
+  getGridTablePerformanceSnapshot,
+  resetGridTablePerformanceDiagnostics,
+} from '@shared/components/tables/performance/gridTablePerformanceStore';
 
 type Row = {
   name: string;
@@ -60,6 +64,7 @@ describe('useTableSort', () => {
       root.unmount();
     });
     container.remove();
+    resetGridTablePerformanceDiagnostics();
   });
 
   const renderHarness = async (data = rows) => {
@@ -164,5 +169,110 @@ describe('useTableSort', () => {
     });
     expect(getText('names')).toBe('charlie,alpha,bravo');
     expect(getText('direction')).toBe('desc');
+  });
+
+  it('preserves input order for equal sort values', async () => {
+    type Item = { id: string; value: number };
+    const items: Item[] = [
+      { id: 'first', value: 1 },
+      { id: 'second', value: 1 },
+      { id: 'third', value: 1 },
+    ];
+
+    const StableHarness = () => {
+      const { sortedData } = useTableSort<Item>(items, 'value', 'asc');
+      return <div data-testid="ids">{sortedData.map((item) => item.id).join(',')}</div>;
+    };
+
+    await act(async () => {
+      root.render(<StableHarness />);
+      await Promise.resolve();
+    });
+
+    expect(getText('ids')).toBe('first,second,third');
+  });
+
+  it('records sort diagnostics after commit instead of during render', async () => {
+    const DiagnosticsHarness = () => {
+      useTableSort<Row>(rows, 'name', 'asc', { diagnosticsLabel: 'Test Sort' });
+      return null;
+    };
+
+    await act(async () => {
+      root.render(<DiagnosticsHarness />);
+      await Promise.resolve();
+    });
+
+    const [entry] = getGridTablePerformanceSnapshot();
+    expect(entry?.label).toBe('Test Sort');
+    expect(entry?.sort.samples).toBe(1);
+    expect(entry?.sort.latestMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it('preserves the input reference for empty sorted data', async () => {
+    const emptyRows: Row[] = [];
+    const refs: Array<Row[]> = [];
+
+    const EmptyHarness = ({ data }: { data: Row[] }) => {
+      const { sortedData } = useTableSort<Row>(data, 'name', 'asc');
+      refs.push(sortedData);
+      return null;
+    };
+
+    await act(async () => {
+      root.render(<EmptyHarness data={emptyRows} />);
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      root.render(<EmptyHarness data={emptyRows} />);
+      await Promise.resolve();
+    });
+
+    expect(refs[0]).toBe(emptyRows);
+    expect(refs[1]).toBe(emptyRows);
+    expect(refs[1]).toBe(refs[0]);
+  });
+
+  it('skips a full resort when keyed live rows keep the same active sort values', async () => {
+    type LiveRow = { id: string; value: number; metric: number };
+
+    const refs: LiveRow[][] = [];
+
+    const LiveHarness = ({ data }: { data: LiveRow[] }) => {
+      const { sortedData } = useTableSort<LiveRow>(data, 'value', 'asc', {
+        rowIdentity: (item) => item.id,
+      });
+      refs.push(sortedData);
+      return (
+        <div data-testid="rows">
+          {sortedData.map((item) => `${item.id}:${item.metric}`).join(',')}
+        </div>
+      );
+    };
+
+    const firstRows: LiveRow[] = [
+      { id: 'b', value: 1, metric: 1 },
+      { id: 'a', value: 1, metric: 1 },
+    ];
+    const secondRows: LiveRow[] = [
+      { id: 'a', value: 1, metric: 1 },
+      { id: 'b', value: 1, metric: 2 },
+    ];
+
+    await act(async () => {
+      root.render(<LiveHarness data={firstRows} />);
+      await Promise.resolve();
+    });
+
+    expect(getText('rows')).toBe('b:1,a:1');
+
+    await act(async () => {
+      root.render(<LiveHarness data={secondRows} />);
+      await Promise.resolve();
+    });
+
+    expect(getText('rows')).toBe('b:2,a:1');
+    expect(refs[1]).not.toBe(refs[0]);
   });
 });

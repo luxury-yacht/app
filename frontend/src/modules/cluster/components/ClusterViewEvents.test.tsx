@@ -10,7 +10,18 @@ import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import ClusterViewEvents from '@modules/cluster/components/ClusterViewEvents';
 
+const { useTableSortMock } = vi.hoisted(() => ({
+  useTableSortMock: vi.fn(
+    (data: unknown[], _defaultKey?: string, _defaultDir?: any, opts?: any) => ({
+      sortedData: data,
+      sortConfig: opts?.controlledSort ?? { key: 'ageTimestamp', direction: 'desc' },
+      handleSort: vi.fn(),
+    })
+  ),
+}));
+
 const openWithObjectMock = vi.fn();
+const findCatalogObjectByUIDMock = vi.fn();
 
 vi.mock('@core/contexts/FavoritesContext', () => ({
   useFavorites: () => ({
@@ -58,6 +69,10 @@ vi.mock('@shared/hooks/useNavigateToView', () => ({
   useNavigateToView: () => ({ navigateToView: vi.fn() }),
 }));
 
+vi.mock('@wailsjs/go/backend/App', () => ({
+  FindCatalogObjectByUID: (...args: unknown[]) => findCatalogObjectByUIDMock(...args),
+}));
+
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: () => ({ selectedKubeconfig: 'path:context' }),
 }));
@@ -68,11 +83,7 @@ vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
 }));
 
 vi.mock('@/hooks/useTableSort', () => ({
-  useTableSort: (data: unknown[]) => ({
-    sortedData: data,
-    sortConfig: { key: 'ageTimestamp', direction: 'desc' },
-    handleSort: vi.fn(),
-  }),
+  useTableSort: (...args: any[]) => (useTableSortMock as any)(...args),
 }));
 
 vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => ({
@@ -123,6 +134,8 @@ describe('ClusterViewEvents', () => {
     root = ReactDOM.createRoot(container);
     gridTablePropsRef.current = null;
     openWithObjectMock.mockReset();
+    findCatalogObjectByUIDMock.mockReset();
+    useTableSortMock.mockClear();
   });
 
   afterEach(() => {
@@ -166,8 +179,9 @@ describe('ClusterViewEvents', () => {
 
     const cell = objectNameColumn.render(baseEvent);
 
-    act(() => {
+    await act(async () => {
       cell.props.onClick({ altKey: false });
+      await Promise.resolve();
     });
 
     expect(openWithObjectMock).toHaveBeenCalledWith(
@@ -179,5 +193,87 @@ describe('ClusterViewEvents', () => {
         clusterId: 'test-cluster',
       })
     );
+  });
+
+  it('passes stable event row identity into useTableSort', async () => {
+    await act(async () => {
+      root.render(<ClusterViewEvents data={[baseEvent]} loaded={true} />);
+      await Promise.resolve();
+    });
+
+    const options = useTableSortMock.mock.calls[0]?.[3];
+    expect(options?.rowIdentity).toBeTypeOf('function');
+    expect(options.rowIdentity(baseEvent, 0)).toBe('test-cluster|/v1/Event/team-a/test');
+  });
+
+  it('resolves CRD involved objects by UID when the stream omits apiVersion', async () => {
+    findCatalogObjectByUIDMock.mockResolvedValue({
+      kind: 'Database',
+      name: 'primary',
+      namespace: 'team-a',
+      clusterId: 'test-cluster',
+      clusterName: 'alpha',
+      group: 'db.example.io',
+      version: 'v1',
+      resource: 'databases',
+      uid: 'database-uid',
+    });
+    const event = {
+      ...baseEvent,
+      object: 'Database/primary',
+      objectUid: 'database-uid',
+      objectApiVersion: undefined,
+    };
+
+    await act(async () => {
+      root.render(<ClusterViewEvents data={[event]} loaded={true} />);
+      await Promise.resolve();
+    });
+
+    const props = gridTablePropsRef.current;
+    const objectNameColumn = props.columns.find((column: any) => column.key === 'objectName');
+    const cell = objectNameColumn.render(event);
+
+    await act(async () => {
+      cell.props.onClick({ altKey: false });
+      await Promise.resolve();
+    });
+
+    expect(findCatalogObjectByUIDMock).toHaveBeenCalledWith('test-cluster', 'database-uid');
+    expect(openWithObjectMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'Database',
+        name: 'primary',
+        group: 'db.example.io',
+        version: 'v1',
+        uid: 'database-uid',
+      })
+    );
+  });
+
+  it('fails closed when catalog lookup rejects during involved object resolution', async () => {
+    findCatalogObjectByUIDMock.mockRejectedValue(new Error('catalog unavailable'));
+    const event = {
+      ...baseEvent,
+      object: 'Database/primary',
+      objectUid: 'database-uid',
+      objectApiVersion: undefined,
+    };
+
+    await act(async () => {
+      root.render(<ClusterViewEvents data={[event]} loaded={true} />);
+      await Promise.resolve();
+    });
+
+    const props = gridTablePropsRef.current;
+    const objectNameColumn = props.columns.find((column: any) => column.key === 'objectName');
+    const cell = objectNameColumn.render(event);
+
+    await act(async () => {
+      cell.props.onClick({ altKey: false });
+      await Promise.resolve();
+    });
+
+    expect(openWithObjectMock).not.toHaveBeenCalled();
   });
 });

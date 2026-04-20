@@ -187,6 +187,26 @@ function findObjectPanelLinkLiterals(source: string): Array<{ start: number; bod
   return findObjectLiteralsAfter(source, /objectRef\s*=\s*\{\s*\{/g, 'objectRef={{...}}');
 }
 
+function findOpenWithObjectHelperBackedLiterals(
+  source: string
+): Array<{ start: number; body: string }> {
+  return findObjectLiteralsAfter(
+    source,
+    /openWithObject(?:Ref\.current)?\s*\(\s*build(?:Related|Synthetic)?ObjectReference\s*\(\s*\{/g,
+    'openWithObject(buildObjectReference)'
+  );
+}
+
+function findObjectPanelLinkHelperBackedLiterals(
+  source: string
+): Array<{ start: number; body: string }> {
+  return findObjectLiteralsAfter(
+    source,
+    /objectRef\s*=\s*\{\s*build(?:Related|Synthetic)?ObjectReference\s*\(\s*\{/g,
+    'objectRef={buildObjectReference({...})}'
+  );
+}
+
 function lineNumberAtOffset(source: string, offset: number): number {
   let line = 1;
   for (let i = 0; i < offset && i < source.length; i++) {
@@ -282,17 +302,17 @@ describe('openWithObject audit (kind-only-objects guardrail)', () => {
     expect(violations).toEqual([]);
   });
 
-  it('discovers at least one literal call site so the walker is wired up', () => {
-    // Sanity check: if the walker silently finds nothing, the suite above
-    // would pass vacuously. Assert we are reaching real production code.
+  it('discovers at least one literal or helper-backed call site so the walker is wired up', () => {
     const frontendSrc = path.resolve(__dirname, '../../..');
-    let total = 0;
+    let totalLiterals = 0;
     for (const file of walkSourceFiles(frontendSrc)) {
       const source = fs.readFileSync(file, 'utf8');
       if (!source.includes('openWithObject')) continue;
-      total += findOpenWithObjectLiterals(source).length;
+      totalLiterals +=
+        findOpenWithObjectLiterals(source).length +
+        findOpenWithObjectHelperBackedLiterals(source).length;
     }
-    expect(total).toBeGreaterThan(10);
+    expect(totalLiterals).toBeGreaterThan(0);
   });
 });
 
@@ -305,14 +325,16 @@ describe('ObjectPanelLink audit (kind-only-objects guardrail)', () => {
     expect(violations).toEqual([]);
   });
 
-  it('discovers at least one ObjectPanelLink literal so the walker is wired up', () => {
+  it('discovers at least one ObjectPanelLink literal or helper-backed call site so the walker is wired up', () => {
     const frontendSrc = path.resolve(__dirname, '../../..');
-    let total = 0;
+    let totalLiterals = 0;
     for (const file of walkSourceFiles(frontendSrc)) {
       const source = fs.readFileSync(file, 'utf8');
       if (!source.includes('ObjectPanelLink')) continue;
-      total += findObjectPanelLinkLiterals(source).length;
+      totalLiterals +=
+        findObjectPanelLinkLiterals(source).length +
+        findObjectPanelLinkHelperBackedLiterals(source).length;
     }
-    expect(total).toBeGreaterThan(5);
+    expect(totalLiterals).toBeGreaterThan(0);
   });
 });

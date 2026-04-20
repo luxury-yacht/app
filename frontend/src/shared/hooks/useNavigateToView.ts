@@ -14,6 +14,7 @@ import { useSidebarState } from '@/core/contexts/SidebarStateContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import { eventBus } from '@/core/events';
 import { setPendingFocusRequest } from '@shared/components/tables/hooks/useGridTableExternalFocus';
+import { buildGridTableFocusRequest } from '@shared/components/tables/hooks/gridTableFocusRequest';
 import { getViewForKind, isNamespaceScopedKind } from '@/utils/kindViewMap';
 import type { KubernetesObjectReference } from '@/types/view-state';
 import type { NamespaceViewType, ClusterViewType } from '@/types/navigation/views';
@@ -41,7 +42,6 @@ export function useNavigateToView(): NavigateToViewResult {
       // empty string would silently conflate "no cluster" with "cluster
       // named ''" and break cluster-scoped navigation.
       const clusterId = objectRef.clusterId ?? undefined;
-      const name = (objectRef.name ?? objectRef.metadata?.name ?? '') as string;
       const namespace = (objectRef.namespace ?? objectRef.metadata?.namespace ?? undefined) as
         | string
         | undefined;
@@ -70,10 +70,11 @@ export function useNavigateToView(): NavigateToViewResult {
       }
 
       // 5. Emit focus request so the target GridTable highlights the row.
-      //    Skipped when clusterId is missing — the focus-request consumer
-      //    needs a cluster identity to route to the right table.
-      if (clusterId && name) {
-        const focusRequest = { kind, name, namespace, clusterId };
+      //    Use the same canonical identity backbone as object opening where
+      //    possible. Synthetic/non-GVK refs still fall back to legacy
+      //    name/namespace matching via buildGridTableFocusRequest().
+      const focusRequest = buildGridTableFocusRequest(objectRef);
+      if (focusRequest) {
         setPendingFocusRequest(focusRequest);
         eventBus.emit('gridtable:focus-request', focusRequest);
       }

@@ -88,6 +88,7 @@ func TestAppSaveAndLoadAppSettingsRoundTrip(t *testing.T) {
 		AutoRefreshEnabled:               false,
 		RefreshBackgroundClustersEnabled: false,
 		MetricsRefreshIntervalMs:         7000,
+		MaxTableRows:                     2500,
 		LogBufferMaxSize:                 2500,
 		LogTargetPerScopeLimit:           144,
 		LogTargetGlobalLimit:             180,
@@ -115,6 +116,7 @@ func TestAppSaveAndLoadAppSettingsRoundTrip(t *testing.T) {
 	require.False(t, app.appSettings.AutoRefreshEnabled)
 	require.False(t, app.appSettings.RefreshBackgroundClustersEnabled)
 	require.Equal(t, 7000, app.appSettings.MetricsRefreshIntervalMs)
+	require.Equal(t, 2500, app.appSettings.MaxTableRows)
 	require.Equal(t, 2500, app.appSettings.LogBufferMaxSize)
 	require.Equal(t, 144, app.appSettings.LogTargetPerScopeLimit)
 	require.Equal(t, 180, app.appSettings.LogTargetGlobalLimit)
@@ -246,6 +248,34 @@ func TestAppSetLogBufferMaxSizePersistsAndClamps(t *testing.T) {
 	require.Equal(t, defaultLogTargetGlobalLimit, settings.LogTargetGlobalLimit)
 	require.Equal(t, defaultLogAPITimestampFormat, settings.LogAPITimestampFormat)
 	require.False(t, settings.LogAPITimestampUseLocalTimeZone)
+}
+
+func TestAppSetMaxTableRowsPersistsAndClamps(t *testing.T) {
+	setTestConfigEnv(t)
+
+	app := newTestAppWithDefaults(t)
+	require.NoError(t, app.SetMaxTableRows(2500))
+	require.Equal(t, 2500, app.appSettings.MaxTableRows)
+
+	app.appSettings = nil
+	require.NoError(t, app.loadAppSettings())
+	require.Equal(t, 2500, app.appSettings.MaxTableRows)
+
+	entries := app.logger.GetEntries()
+	require.NotEmpty(t, entries)
+	require.Contains(t, entries[len(entries)-1].Message, "Max table rows changed to: 2500")
+
+	require.NoError(t, app.SetMaxTableRows(50))
+	require.Equal(t, minMaxTableRows, app.appSettings.MaxTableRows)
+
+	require.NoError(t, app.SetMaxTableRows(50000))
+	require.Equal(t, maxMaxTableRows, app.appSettings.MaxTableRows)
+
+	setTestConfigEnv(t)
+	freshApp := newTestAppWithDefaults(t)
+	settings, err := freshApp.GetAppSettings()
+	require.NoError(t, err)
+	require.Equal(t, defaultMaxTableRows, settings.MaxTableRows)
 }
 
 func TestAppSetLogTargetPerScopeLimitPersistsAndClamps(t *testing.T) {

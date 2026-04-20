@@ -9,6 +9,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 
 vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
   useNamespaceColumnLink: () => ({
@@ -135,10 +136,14 @@ const baseResource: CustomResourceData = {
   namespace: 'ops',
   clusterId: 'alpha:ctx',
   clusterName: 'alpha',
+  apiGroup: 'batch',
+  apiVersion: 'v1',
   age: '10m',
   labels: { team: 'platform' },
   annotations: { owner: 'ops' },
 };
+
+const getLastGridProps = () => gridTableMock.mock.calls[gridTableMock.mock.calls.length - 1]?.[0];
 
 describe('NsViewCustom', () => {
   let container: HTMLDivElement;
@@ -201,7 +206,9 @@ describe('NsViewCustom', () => {
 
     const gridProps = gridTableMock.mock.calls[0][0];
     expect(gridProps.data).toEqual([baseResource]);
-    expect(gridProps.keyExtractor(baseResource)).toBe('alpha:ctx|ops/CronJob/nightly-cleanup');
+    expect(gridProps.keyExtractor(baseResource)).toBe(
+      'alpha:ctx|batch/v1/CronJob/ops/nightly-cleanup'
+    );
     gridProps.onSort?.('name');
     expect(sortHandlerMock).toHaveBeenCalledWith('name');
 
@@ -219,6 +226,76 @@ describe('NsViewCustom', () => {
         clusterId: 'alpha:ctx',
       })
     );
+  });
+
+  it('enables searchable kind dropdown bulk actions in all-namespaces custom view', async () => {
+    await renderComponent({
+      namespace: ALL_NAMESPACES_SCOPE,
+      data: [baseResource],
+      availableKinds: ['DBCluster', 'Widget'],
+      loaded: true,
+      showNamespaceColumn: true,
+    });
+
+    const gridProps = gridTableMock.mock.calls[0][0];
+    expect(gridProps.filters.options.showKindDropdown).toBe(true);
+    expect(gridProps.filters.options.kindDropdownSearchable).toBe(true);
+    expect(gridProps.filters.options.kindDropdownBulkActions).toBe(true);
+  });
+
+  it('uses the provided kind metadata instead of deriving kinds from loaded rows', async () => {
+    await renderComponent({
+      data: [baseResource],
+      availableKinds: ['DBCluster', 'Widget'],
+      loaded: true,
+    });
+
+    const gridProps = getLastGridProps();
+    expect(gridProps?.filters?.options?.kinds).toEqual(['DBCluster', 'Widget']);
+  });
+
+  it('preserves the column definitions across rerenders with unchanged inputs', async () => {
+    const data = [baseResource];
+
+    await renderComponent({
+      namespace: 'team-a',
+      data,
+      loaded: true,
+      showNamespaceColumn: true,
+    });
+
+    const firstColumnsRef = getLastGridProps()?.columns;
+
+    await renderComponent({
+      namespace: 'team-a',
+      data,
+      loaded: true,
+      showNamespaceColumn: true,
+    });
+
+    expect(getLastGridProps()?.columns).toBe(firstColumnsRef);
+  });
+
+  it('preserves the filters config across rerenders with unchanged inputs', async () => {
+    const data = [baseResource];
+
+    await renderComponent({
+      namespace: 'team-a',
+      data,
+      loaded: true,
+      showNamespaceColumn: true,
+    });
+
+    const firstFiltersRef = getLastGridProps()?.filters;
+
+    await renderComponent({
+      namespace: 'team-a',
+      data,
+      loaded: true,
+      showNamespaceColumn: true,
+    });
+
+    expect(getLastGridProps()?.filters).toBe(firstFiltersRef);
   });
 
   // Regression test for the kind-only-objects bug. When the user clicks a custom
@@ -387,10 +464,16 @@ describe('NsViewCustom', () => {
   // must fail loud rather than silently fall back to first-match-wins
   // discovery. The errorHandler should see the thrown error.
   it('throws instead of falling back when apiGroup/apiVersion are missing', async () => {
-    await renderComponent({ data: [baseResource], loaded: true, showNamespaceColumn: true });
+    const missingGVK: CustomResourceData = {
+      ...baseResource,
+      apiGroup: undefined,
+      apiVersion: undefined,
+    };
+
+    await renderComponent({ data: [missingGVK], loaded: true, showNamespaceColumn: true });
 
     const gridProps = gridTableMock.mock.calls[0][0];
-    const contextItems = gridProps.getCustomContextMenuItems(baseResource, 'kind');
+    const contextItems = gridProps.getCustomContextMenuItems(missingGVK, 'kind');
     const deleteItem = contextItems.find(
       (item: { label?: string; onClick?: () => void }) => item.label === 'Delete'
     );
@@ -470,12 +553,15 @@ describe('NsViewCustom', () => {
     const gridProps = gridTableMock.mock.calls[0][0];
 
     const generatedKey = gridProps.keyExtractor({
+      kind: 'CronJob',
       name: 'svc',
       namespace: 'tools',
       kindAlias: 'CR',
       clusterId: 'alpha:ctx',
+      apiGroup: 'batch',
+      apiVersion: 'v1',
     } as CustomResourceData);
-    expect(generatedKey).toBe('alpha:ctx|tools/CR/svc');
+    expect(generatedKey).toBe('alpha:ctx|batch/v1/CronJob/tools/svc');
   });
 
   // CRD column: each row gets a clickable cell that opens the owning

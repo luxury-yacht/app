@@ -31,6 +31,7 @@ func TestClusterEventsBuilder(t *testing.T) {
 		InvolvedObject: corev1.ObjectReference{
 			Kind:       "Node",
 			Name:       "node-new",
+			UID:        types.UID("node-uid-new"),
 			APIVersion: "v1",
 		},
 		LastTimestamp: metav1.NewTime(now.Add(-2 * time.Minute)),
@@ -96,6 +97,7 @@ func TestClusterEventsBuilder(t *testing.T) {
 	require.Equal(t, "event-new", first.Name)
 	require.Equal(t, "Normal", first.Type)
 	require.Equal(t, "scheduler", first.Source)
+	require.Equal(t, "node-uid-new", first.ObjectUID)
 	require.Equal(t, "v1", first.ObjectAPIVersion)
 	require.Equal(t, clusterEventNew.LastTimestamp.UnixMilli(), first.AgeTimestamp)
 	require.Equal(t, "", first.Namespace)

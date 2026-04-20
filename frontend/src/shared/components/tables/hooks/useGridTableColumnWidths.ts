@@ -281,6 +281,7 @@ export function useGridTableColumnWidths<T>(
   useWidthsChangeNotifier({
     enableColumnResizing,
     onColumnWidthsChange,
+    suspendNotifications: phaseState === 'dragging',
     isApplyingExternalUpdateRef,
     columnsRef,
     columnWidths,

@@ -13,6 +13,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 
 import GridTableFiltersBar from '@shared/components/tables/GridTableFiltersBar';
 import { useGridTableKeyboardScopes } from '@shared/components/tables/GridTableKeys';
+import { ZoomProvider } from '@core/contexts/ZoomContext';
 
 const registeredSurfaces: Array<{
   kind: string;
@@ -47,6 +48,11 @@ vi.mock('@ui/shortcuts', async (importOriginal) => {
     },
   };
 });
+
+vi.mock('@wailsjs/go/backend/App', () => ({
+  GetZoomLevel: vi.fn().mockResolvedValue(100),
+  SetZoomLevel: vi.fn().mockResolvedValue(undefined),
+}));
 
 describe('GridTableKeys filter target selectors', () => {
   let container: HTMLDivElement;
@@ -113,7 +119,11 @@ describe('GridTableKeys filter target selectors', () => {
     };
 
     await act(async () => {
-      root.render(<GridTableFiltersBar {...defaultProps} />);
+      root.render(
+        <ZoomProvider>
+          <GridTableFiltersBar {...defaultProps} />
+        </ZoomProvider>
+      );
     });
 
     return container;
@@ -257,7 +267,11 @@ describe('GridTableKeys filter target selectors', () => {
     };
 
     await act(async () => {
-      root.render(<HookHarness />);
+      root.render(
+        <ZoomProvider>
+          <HookHarness />
+        </ZoomProvider>
+      );
       await Promise.resolve();
     });
 

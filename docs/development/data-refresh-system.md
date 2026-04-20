@@ -234,7 +234,7 @@ Streaming domains use long-lived connections instead of polling. There are three
 
 **Log stream (SSE)** — pushes container logs for the object panel. Uses `logStreamManager`. Has a polling fallback (`objectLogFallbackManager`) used by the log viewer when streaming is unavailable or disabled.
 
-**Catalog stream (SSE)** — pushes browse view catalog snapshots. Uses `catalogStreamManager`. The catalog SSE delivers full snapshots (not deltas), with `snapshotMode: full|partial` for multi-batch pagination.
+**Catalog stream (SSE)** — pushes browse view catalog snapshots. Uses `catalogStreamManager`. The catalog SSE delivers full snapshots (not deltas). `snapshotMode: full|partial` reflects backend batching of a snapshot payload, not a user-visible pagination model.
 
 Streaming is wired in `frontend/src/core/refresh/orchestrator.ts` and uses `/api/v2/stream/*` endpoints on the backend.
 
@@ -493,7 +493,7 @@ See `frontend/src/core/refresh/client.ts` and `orchestrator.ts`.
 
 ### Catalog browse
 
-The `catalog` domain uses SSE streaming via `catalogStreamManager`. On mount, `useBrowseCatalog` enables the catalog scope and triggers an initial manual fetch. The catalog SSE stream delivers full snapshots as the backend catalog updates. The browse view applies incoming snapshots by replacing the local item list (for refresh/reset) or merging via `upsertByUID` (for load-more pagination).
+The `catalog` domain uses SSE streaming via `catalogStreamManager`. On mount, `useBrowseCatalog` enables the catalog scope and triggers an initial manual fetch. The catalog SSE stream delivers full snapshots as the backend catalog updates. The browse view reconciles those incoming snapshots against the current local item list so additions, deletions, and updates are reflected immediately while unchanged items keep stable references.
 
 The `ClusterResourcesContext` explicitly excludes the catalog domain from its lifecycle management — the browse view manages its own domain enable/disable via `useBrowseCatalog`.
 

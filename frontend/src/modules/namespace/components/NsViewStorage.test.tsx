@@ -243,8 +243,22 @@ describe('NsViewStorage', () => {
         name: 'pvc-data',
         namespace: 'team-a',
         clusterId: 'alpha:ctx',
+        group: '',
+        version: 'v1',
       })
     );
+  });
+
+  it('uses explicit kind metadata instead of deriving kinds from rows', async () => {
+    const props = await renderStorageView([], { namespace: 'team-a' });
+    expect(props.filters?.options?.kinds).toEqual(['PersistentVolumeClaim']);
+  });
+
+  it('uses canonical object identity for row keys', async () => {
+    const entry = baseStorage();
+    const props = await renderStorageView([entry]);
+
+    expect(props.keyExtractor(entry)).toBe('alpha:ctx|/v1/PersistentVolumeClaim/team-a/pvc-data');
   });
 
   it('exposes delete action and calls backend on confirmation', async () => {

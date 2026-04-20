@@ -66,6 +66,11 @@ import { DiagnosticsTable, DiagnosticsSummaryCards } from './diagnostics/TableRe
 import { DiagnosticsStreamsTable } from './diagnostics/TableStreams';
 import { CapabilityChecksTable } from './diagnostics/TableCapabilitesChecks';
 import { EffectivePermissionsTable } from './diagnostics/TableEffectivePermissions';
+import { GridTablePerformance } from './diagnostics/GridTablePerformance';
+import {
+  resetGridTablePerformanceDiagnostics,
+  useGridTablePerformanceDiagnostics,
+} from '@shared/components/tables/performance/gridTablePerformanceStore';
 
 // Re-export for backwards compatibility
 export { resolveDomainNamespace } from './diagnostics';
@@ -121,6 +126,7 @@ const PERMISSION_ERROR_HINTS = ['forbidden', 'permission', 'unauthorized', 'acce
 type DiagnosticsTabId =
   | 'refresh-domains'
   | 'streams'
+  | 'table-performance'
   | 'capability-checks'
   | 'effective-permissions';
 
@@ -136,6 +142,7 @@ const DIAGNOSTICS_FOCUSABLE_PROPS = {
 const DIAGNOSTICS_TAB_DESCRIPTORS: TabDescriptor[] = [
   { id: 'refresh-domains', label: 'Refresh Domains', extraProps: DIAGNOSTICS_FOCUSABLE_PROPS },
   { id: 'streams', label: 'Streams', extraProps: DIAGNOSTICS_FOCUSABLE_PROPS },
+  { id: 'table-performance', label: 'Table Performance', extraProps: DIAGNOSTICS_FOCUSABLE_PROPS },
   {
     id: 'capability-checks',
     label: 'Capabilities Checks',
@@ -231,6 +238,7 @@ const formatHealthLabel = (status: HealthStatus, reason: string): string =>
 
 export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isOpen }) => {
   const [activeTab, setActiveTab] = useState<DiagnosticsTabId>('refresh-domains');
+  const gridTablePerformanceRows = useGridTablePerformanceDiagnostics();
   const refreshState = useRefreshState();
   // Scoped domains — read all scope entries for diagnostics.
   const objectMaintenanceScopeEntries = useRefreshScopedDomainEntries('object-maintenance');
@@ -431,7 +439,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         },
         {
           domain: 'cluster-custom' as RefreshDomain,
-          label: 'Cluster Custom Resources',
+          label: 'Cluster Custom',
           entries: clusterCustomScopeEntries,
         },
         {
@@ -2056,6 +2064,14 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     />
   );
 
+  const tablePerformanceContent = (
+    <GridTablePerformance
+      onReset={resetGridTablePerformanceDiagnostics}
+      rows={gridTablePerformanceRows}
+      summary="Rolling GridTable measurements for the instrumented large-data views."
+    />
+  );
+
   // Split capability batch rows into current (Cluster + selected namespace + in-flight)
   // and previous (everything else).
   const { currentCapabilityRows, previousCapabilityRows } = useMemo(() => {
@@ -2197,9 +2213,11 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
           ? refreshDomainsContent
           : activeTab === 'streams'
             ? streamsContent
-            : activeTab === 'capability-checks'
-              ? capabilityChecksContent
-              : effectivePermissionsContent}
+            : activeTab === 'table-performance'
+              ? tablePerformanceContent
+              : activeTab === 'capability-checks'
+                ? capabilityChecksContent
+                : effectivePermissionsContent}
       </div>
     </DockablePanel>
   );

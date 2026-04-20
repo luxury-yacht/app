@@ -25,13 +25,11 @@ import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
-import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
-import {
-  formatBuiltinApiVersion,
-  resolveBuiltinGroupVersion,
-} from '@shared/constants/builtinGroupVersions';
+import { useKindFilterOptions } from '@shared/components/tables/hooks/useKindFilterOptions';
+import { formatBuiltinApiVersion } from '@shared/constants/builtinGroupVersions';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 import { useFavToggle } from '@ui/favorites/FavToggle';
+import { buildCanonicalObjectRowKey, buildObjectReference } from '@shared/utils/objectIdentity';
 
 // Define the data structure for configuration resources
 interface ConfigData {
@@ -46,6 +44,7 @@ interface ConfigData {
 // Define props for ConfigViewGrid component
 interface ConfigViewProps {
   data: ConfigData[];
+  availableKinds?: string[];
   loading?: boolean;
   loaded?: boolean;
   error?: string | null;
@@ -56,7 +55,7 @@ interface ConfigViewProps {
  * Displays Storage Classes, Ingress Classes, and Admission Control resources
  */
 const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
-  ({ data, loading = false, loaded = false, error }) => {
+  ({ data, availableKinds: kindOptions, loading = false, loaded = false, error }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
@@ -69,23 +68,25 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
 
     const handleResourceClick = useCallback(
       (resource: ConfigData) => {
-        openWithObject({
-          kind: resource.kind,
-          name: resource.name,
-          ...resolveBuiltinGroupVersion(resource.kind),
-          clusterId: resource.clusterId ?? undefined,
-          clusterName: resource.clusterName ?? undefined,
-        });
+        openWithObject(
+          buildObjectReference({
+            kind: resource.kind,
+            name: resource.name,
+            clusterId: resource.clusterId ?? undefined,
+            clusterName: resource.clusterName ?? undefined,
+          })
+        );
       },
       [openWithObject]
     );
 
     const keyExtractor = useCallback(
       (resource: ConfigData) =>
-        buildClusterScopedKey(
-          resource,
-          ['config', resource.kind, resource.name].filter(Boolean).join('/')
-        ),
+        buildCanonicalObjectRowKey({
+          kind: resource.kind,
+          name: resource.name,
+          clusterId: resource.clusterId,
+        }),
       []
     );
 
@@ -99,23 +100,27 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
           getDisplayText: (resource) => getDisplayKind(resource.kind, useShortResourceNames),
           onClick: handleResourceClick,
           onAltClick: (resource) =>
-            navigateToView({
-              kind: resource.kind,
-              name: resource.name,
-              clusterId: resource.clusterId,
-              clusterName: resource.clusterName,
-            }),
+            navigateToView(
+              buildObjectReference({
+                kind: resource.kind,
+                name: resource.name,
+                clusterId: resource.clusterId,
+                clusterName: resource.clusterName,
+              })
+            ),
         }),
         cf.createTextColumn<ConfigData>('name', 'Name', (resource) => resource.name, {
           sortable: true,
           onClick: handleResourceClick,
           onAltClick: (resource) =>
-            navigateToView({
-              kind: resource.kind,
-              name: resource.name,
-              clusterId: resource.clusterId,
-              clusterName: resource.clusterName,
-            }),
+            navigateToView(
+              buildObjectReference({
+                kind: resource.kind,
+                name: resource.name,
+                clusterId: resource.clusterId,
+                clusterName: resource.clusterName,
+              })
+            ),
           getClassName: () => 'object-panel-link',
         }),
         cf.createAgeColumn(),
@@ -161,10 +166,8 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
       onChange: setPersistedSort,
     });
 
-    const availableKinds = useMemo(
-      () => [...new Set(data.map((r) => r.kind).filter(Boolean) as string[])].sort(),
-      [data]
-    );
+    const fallbackKinds = useKindFilterOptions(data);
+    const availableKinds = kindOptions && kindOptions.length > 0 ? kindOptions : fallbackKinds;
 
     const { item: favToggle, modal: favModal } = useFavToggle({
       filters: persistedFilters,
@@ -220,12 +223,12 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
           ) ?? null;
 
         return buildObjectActionItems({
-          object: {
+          object: buildObjectReference({
             kind: resource.kind,
             name: resource.name,
             clusterId: resource.clusterId,
             clusterName: resource.clusterName,
-          },
+          }),
           context: 'gridtable',
           handlers: {
             onOpen: () => handleResourceClick(resource),
@@ -256,6 +259,7 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
           <GridTable
             data={sortedData}
             columns={columns}
+            diagnosticsLabel="Cluster Configuration"
             loading={loading}
             keyExtractor={keyExtractor}
             onRowClick={handleResourceClick}
@@ -272,6 +276,7 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
               onChange: setPersistedFilters,
               onReset: resetPersistedState,
               options: {
+                kinds: availableKinds,
                 showKindDropdown: true,
                 preActions: [favToggle],
               },

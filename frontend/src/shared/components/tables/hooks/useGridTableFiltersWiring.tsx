@@ -38,7 +38,10 @@ type SearchShortcutConfig = {
 
 type UseGridTableFiltersWiringOptions<T> = {
   data: T[];
+  totalDataCount?: number;
+  maxDisplayRows?: number;
   filters: GridTableFilterConfig<T> | undefined;
+  diagnosticsLabel?: string;
   columnsDropdown?: ColumnsDropdownConfig;
   searchShortcut?: SearchShortcutConfig;
   /** IconBar items rendered before the built-in Reset action. */
@@ -53,7 +56,10 @@ type UseGridTableFiltersWiringOptions<T> = {
 // the shared GridTableFiltersBar component.
 export function useGridTableFiltersWiring<T>({
   data,
+  totalDataCount,
+  maxDisplayRows,
   filters,
+  diagnosticsLabel,
   columnsDropdown,
   searchShortcut,
   preActions,
@@ -76,6 +82,7 @@ export function useGridTableFiltersWiring<T>({
   } = useGridTableFilters({
     data,
     filters,
+    diagnosticsLabel,
     defaultGetKind,
     defaultGetNamespace,
     defaultGetSearchText,
@@ -145,9 +152,24 @@ export function useGridTableFiltersWiring<T>({
   // If the consumer provides a totalCount override (e.g. server-side paginated total), use it.
   const resultCount = useMemo(() => {
     if (!filteringEnabled) return undefined;
-    const total = filters?.options?.totalCount ?? data.length;
-    return { displayed: tableData.length, total };
-  }, [filteringEnabled, filters?.options?.totalCount, data.length, tableData.length]);
+    const total = filters?.options?.totalCount ?? totalDataCount ?? data.length;
+    const displayed =
+      typeof maxDisplayRows === 'number' && maxDisplayRows > 0
+        ? Math.min(tableData.length, maxDisplayRows)
+        : tableData.length;
+    return {
+      displayed,
+      total,
+      capped: displayed < tableData.length || total > data.length,
+    };
+  }, [
+    filteringEnabled,
+    filters?.options?.totalCount,
+    totalDataCount,
+    maxDisplayRows,
+    data.length,
+    tableData.length,
+  ]);
 
   const filtersBarProps = useMemo<ComponentProps<typeof GridTableFiltersBar>>(
     () => ({

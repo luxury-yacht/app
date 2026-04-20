@@ -24,21 +24,23 @@ func (noopLogger) Error(string, ...string) {}
 
 // Entry represents a single Kubernetes event emitted to streaming subscribers.
 type Entry struct {
-	ClusterID       string `json:"clusterId,omitempty"`
-	ClusterName     string `json:"clusterName,omitempty"`
-	Kind            string `json:"kind"`
-	Name            string `json:"name"`
-	UID             string `json:"uid,omitempty"`
-	ResourceVersion string `json:"resourceVersion,omitempty"`
-	Namespace       string `json:"namespace"`
-	ObjectNamespace string `json:"objectNamespace"`
-	Type            string `json:"type"`
-	Source          string `json:"source"`
-	Reason          string `json:"reason"`
-	Object          string `json:"object"`
-	Message         string `json:"message"`
-	Age             string `json:"age"`
-	CreatedAt       int64  `json:"createdAt"`
+	ClusterID        string `json:"clusterId,omitempty"`
+	ClusterName      string `json:"clusterName,omitempty"`
+	Kind             string `json:"kind"`
+	Name             string `json:"name"`
+	UID              string `json:"uid,omitempty"`
+	ResourceVersion  string `json:"resourceVersion,omitempty"`
+	Namespace        string `json:"namespace"`
+	ObjectNamespace  string `json:"objectNamespace"`
+	ObjectUID        string `json:"objectUid,omitempty"`
+	ObjectAPIVersion string `json:"objectApiVersion,omitempty"`
+	Type             string `json:"type"`
+	Source           string `json:"source"`
+	Reason           string `json:"reason"`
+	Object           string `json:"object"`
+	Message          string `json:"message"`
+	Age              string `json:"age"`
+	CreatedAt        int64  `json:"createdAt"`
 }
 
 // StreamEvent wraps an Entry with its stream sequence identifier.

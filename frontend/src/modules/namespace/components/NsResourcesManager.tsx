@@ -278,24 +278,28 @@ export function NamespaceResourcesManager({
       nsPodsMetrics={podsMetrics}
       // Workloads data
       nsWorkloads={workloads?.data || []}
+      nsWorkloadsKinds={(workloads?.meta as { kinds?: string[] } | undefined)?.kinds}
       nsWorkloadsLoading={workloads?.loading || false}
       nsWorkloadsError={workloads?.error?.message || null}
       loadWorkloads={manualLoaders.workloads}
       nsWorkloadsLoaded={workloads?.hasLoaded ?? false}
       // Config data
       nsConfig={config?.data || []}
+      nsConfigKinds={(config?.meta as { kinds?: string[] } | undefined)?.kinds}
       nsConfigLoading={config?.loading || false}
       nsConfigError={config?.error?.message || null}
       loadConfig={manualLoaders.config}
       nsConfigLoaded={config?.hasLoaded ?? false}
       // Network data
       nsNetwork={network?.data || []}
+      nsNetworkKinds={(network?.meta as { kinds?: string[] } | undefined)?.kinds}
       nsNetworkLoading={network?.loading || false}
       nsNetworkError={network?.error?.message || null}
       loadNetwork={manualLoaders.network}
       nsNetworkLoaded={network?.hasLoaded ?? false}
       // RBAC data
       nsRBAC={rbac?.data || []}
+      nsRBACKinds={(rbac?.meta as { kinds?: string[] } | undefined)?.kinds}
       nsRBACLoading={rbac?.loading || false}
       nsRBACError={rbac?.error?.message || null}
       loadRBAC={manualLoaders.rbac}
@@ -308,18 +312,21 @@ export function NamespaceResourcesManager({
       nsStorageLoaded={storage?.hasLoaded ?? false}
       // Autoscaling data
       nsAutoscaling={autoscaling?.data || []}
+      nsAutoscalingKinds={(autoscaling?.meta as { kinds?: string[] } | undefined)?.kinds}
       nsAutoscalingLoading={autoscaling?.loading || false}
       nsAutoscalingError={autoscaling?.error?.message || null}
       loadAutoscaling={manualLoaders.autoscaling}
       nsAutoscalingLoaded={autoscaling?.hasLoaded ?? false}
       // Quotas data
       nsQuotas={quotas?.data || []}
+      nsQuotasKinds={(quotas?.meta as { kinds?: string[] } | undefined)?.kinds}
       nsQuotasLoading={quotas?.loading || false}
       nsQuotasError={quotas?.error?.message || null}
       loadQuotas={manualLoaders.quotas}
       nsQuotasLoaded={quotas?.hasLoaded ?? false}
       // Custom resources data
       nsCustom={custom?.data || []}
+      nsCustomKinds={(custom?.meta as { kinds?: string[] } | undefined)?.kinds}
       nsCustomLoading={custom?.loading || false}
       nsCustomError={custom?.error?.message || null}
       loadCustom={manualLoaders.custom}

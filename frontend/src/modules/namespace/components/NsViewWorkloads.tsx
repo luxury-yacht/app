@@ -25,8 +25,8 @@ import RollbackModal from '@shared/components/modals/RollbackModal';
 import { PortForwardModal, PortForwardTarget } from '@modules/port-forward';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
-import GridTable from '@shared/components/tables/GridTable';
-import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
+import GridTable, { GRIDTABLE_VIRTUALIZATION_DEFAULT } from '@shared/components/tables/GridTable';
+import { useKindFilterOptions } from '@shared/components/tables/hooks/useKindFilterOptions';
 import {
   formatBuiltinApiVersion,
   resolveBuiltinGroupVersion,
@@ -38,7 +38,6 @@ import {
   WorkloadData,
   clampReplicas,
   extractDesiredReplicas,
-  buildWorkloadKey,
   appendWorkloadTokens,
 } from '@modules/namespace/components/NsViewWorkloads.helpers';
 import {
@@ -55,10 +54,13 @@ import {
   RESTARTABLE_KINDS,
 } from '@shared/hooks/useObjectActions';
 import { useFavToggle } from '@ui/favorites/FavToggle';
+import { useNamespaceFilterOptions } from '@modules/namespace/hooks/useNamespaceFilterOptions';
+import { buildCanonicalObjectRowKey, buildObjectReference } from '@shared/utils/objectIdentity';
 
 interface WorkloadsViewProps {
   namespace: string;
   data: WorkloadData[];
+  availableKinds?: string[];
   loading?: boolean;
   loaded?: boolean;
   showNamespaceColumn?: boolean;
@@ -72,6 +74,7 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
   ({
     namespace,
     data,
+    availableKinds: kindOptions,
     loading = false,
     loaded = false,
     showNamespaceColumn = false,
@@ -120,20 +123,42 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
 
     const handleWorkloadClick = useCallback(
       (workload: WorkloadData) => {
-        openWithObject({
-          kind: workload.kind,
-          name: workload.name,
-          namespace: workload.namespace,
-          ...resolveBuiltinGroupVersion(workload.kind),
-          clusterId: workload.clusterId ?? undefined,
-          clusterName: workload.clusterName ?? undefined,
-        });
+        openWithObject(
+          buildObjectReference({
+            kind: workload.kind,
+            name: workload.name,
+            namespace: workload.namespace,
+            clusterId: workload.clusterId ?? undefined,
+            clusterName: workload.clusterName ?? undefined,
+          })
+        );
       },
       [openWithObject]
     );
 
+    const handleWorkloadAltClick = useCallback(
+      (workload: WorkloadData) => {
+        navigateToView(
+          buildObjectReference({
+            kind: workload.kind,
+            name: workload.name,
+            namespace: workload.namespace,
+            clusterId: workload.clusterId ?? undefined,
+            clusterName: workload.clusterName ?? undefined,
+          })
+        );
+      },
+      [navigateToView]
+    );
+
     const keyExtractor = useCallback(
-      (row: WorkloadData) => buildClusterScopedKey(row, `workload:${buildWorkloadKey(row)}`),
+      (row: WorkloadData) =>
+        buildCanonicalObjectRowKey({
+          kind: row.kind,
+          name: row.name,
+          namespace: row.namespace,
+          clusterId: row.clusterId,
+        }),
       []
     );
 
@@ -141,14 +166,7 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
 
     const tableColumns = useWorkloadTableColumns({
       handleWorkloadClick,
-      onAltClick: (workload) =>
-        navigateToView({
-          kind: workload.kind,
-          name: workload.name,
-          namespace: workload.namespace,
-          clusterId: workload.clusterId ?? undefined,
-          clusterName: workload.clusterName ?? undefined,
-        }),
+      onAltClick: handleWorkloadAltClick,
       showNamespaceColumn,
       useShortResourceNames,
       metrics: metricsInfo ?? null,
@@ -185,16 +203,18 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
       columns: tableColumns,
       controlledSort: persistedSort,
       onChange: onSortChange,
+      rowIdentity: keyExtractor,
+      diagnosticsLabel:
+        namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Workloads' : 'Namespace Workloads',
     });
 
-    const availableKinds = useMemo(
-      () => [...new Set(data.map((r) => r.kind).filter(Boolean) as string[])].sort(),
-      [data]
-    );
-    const availableFilterNamespaces = useMemo(
+    const fallbackKinds = useKindFilterOptions(data);
+    const availableKinds = kindOptions && kindOptions.length > 0 ? kindOptions : fallbackKinds;
+    const fallbackNamespaces = useMemo(
       () => [...new Set(data.map((r) => r.namespace).filter(Boolean))].sort(),
       [data]
     );
+    const availableFilterNamespaces = useNamespaceFilterOptions(namespace, fallbackNamespaces);
 
     const { item: favToggle, modal: favModal } = useFavToggle({
       filters: persistedFilters,
@@ -428,16 +448,20 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
           ) ?? null;
 
         return buildObjectActionItems({
-          object: {
-            kind: row.kind,
-            name: row.name,
-            namespace: row.namespace,
-            clusterId: row.clusterId,
-            clusterName: row.clusterName,
-            status: row.status,
-            portForwardAvailable: row.portForwardAvailable,
-            hpaManaged: Boolean(row.hpaManaged),
-          },
+          object: buildObjectReference(
+            {
+              kind: row.kind,
+              name: row.name,
+              namespace: row.namespace,
+              clusterId: row.clusterId,
+              clusterName: row.clusterName,
+            },
+            {
+              status: row.status,
+              portForwardAvailable: row.portForwardAvailable,
+              hpaManaged: Boolean(row.hpaManaged),
+            }
+          ),
           context: 'gridtable',
           handlers: {
             onOpen: () => handleWorkloadClick(row),
@@ -514,6 +538,12 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
           <GridTable
             data={sortedWorkloads}
             columns={tableColumns}
+            diagnosticsLabel={
+              namespace === ALL_NAMESPACES_SCOPE
+                ? 'All Namespaces Workloads'
+                : 'Namespace Workloads'
+            }
+            diagnosticsMode="live"
             loading={loading && sortedWorkloads.length === 0}
             keyExtractor={keyExtractor}
             onRowClick={handleWorkloadClick}
@@ -534,12 +564,16 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
               onChange: setPersistedFilters,
               onReset: resetPersistedState,
               options: {
+                kinds: availableKinds,
+                namespaces: availableFilterNamespaces,
                 showNamespaceDropdown: showNamespaceFilter,
+                namespaceDropdownSearchable: showNamespaceFilter,
+                namespaceDropdownBulkActions: showNamespaceFilter,
                 showKindDropdown: true,
                 preActions: [favToggle],
               },
             }}
-            virtualization={{ enabled: true, threshold: 40, overscan: 8, estimateRowHeight: 44 }}
+            virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}
             columnWidths={columnWidths}
             onColumnWidthsChange={setColumnWidths}
             columnVisibility={columnVisibility}

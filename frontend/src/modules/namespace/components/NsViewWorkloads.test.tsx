@@ -9,6 +9,16 @@ import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+const { useTableSortMock } = vi.hoisted(() => ({
+  useTableSortMock: vi.fn(
+    (data: unknown[], _defaultKey?: string, _defaultDir?: any, opts?: any) => ({
+      sortedData: data,
+      sortConfig: opts?.controlledSort ?? { key: '', direction: null },
+      handleSort: vi.fn(),
+    })
+  ),
+}));
+
 vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
   useNamespaceColumnLink: () => ({
     onClick: vi.fn(),
@@ -44,6 +54,7 @@ vi.mock('@ui/favorites/FavToggle', () => ({
 
 const gridTablePropsRef: { current: any } = { current: null };
 const openWithObjectMock = vi.fn();
+const navigateToViewMock = vi.fn();
 
 vi.mock('@shared/components/tables/GridTable', async () => {
   const actual = await vi.importActual<typeof import('@shared/components/tables/GridTable')>(
@@ -63,7 +74,7 @@ vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
 }));
 
 vi.mock('@shared/hooks/useNavigateToView', () => ({
-  useNavigateToView: () => ({ navigateToView: vi.fn() }),
+  useNavigateToView: () => ({ navigateToView: navigateToViewMock }),
 }));
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
@@ -80,11 +91,7 @@ vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
 }));
 
 vi.mock('@/hooks/useTableSort', () => ({
-  useTableSort: (data: unknown[], _defaultKey?: string, _defaultDir?: any, opts?: any) => ({
-    sortedData: data,
-    sortConfig: opts?.controlledSort ?? { key: '', direction: null },
-    handleSort: vi.fn(),
-  }),
+  useTableSort: (...args: any[]) => (useTableSortMock as any)(...args),
 }));
 
 vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => ({
@@ -174,6 +181,8 @@ describe('NsViewWorkloads', () => {
     root = ReactDOM.createRoot(container);
     gridTablePropsRef.current = null;
     openWithObjectMock.mockReset();
+    navigateToViewMock.mockReset();
+    useTableSortMock.mockClear();
   });
 
   afterEach(() => {
@@ -208,6 +217,79 @@ describe('NsViewWorkloads', () => {
     });
     expect(props.columnVisibility).toBe(null);
     expect(props.columnWidths).toBe(null);
+  });
+
+  it('preserves the column definitions across rerenders with unchanged inputs', async () => {
+    const workload = {
+      kind: 'Deployment',
+      name: 'api',
+      namespace: 'team-a',
+      status: 'Running',
+      ready: '1/1',
+      restarts: 0,
+      cpuUsage: '10m',
+      memUsage: '20Mi',
+      age: '5m',
+      clusterId: 'alpha:ctx',
+      clusterName: 'alpha',
+    };
+    const data = [workload];
+
+    await act(async () => {
+      root.render(
+        <NsViewWorkloads
+          namespace="team-a"
+          data={data as any}
+          loading={false}
+          loaded={true}
+          metrics={null}
+        />
+      );
+      await Promise.resolve();
+    });
+
+    const firstColumnsRef = gridTablePropsRef.current?.columns;
+
+    await act(async () => {
+      root.render(
+        <NsViewWorkloads
+          namespace="team-a"
+          data={data as any}
+          loading={false}
+          loaded={true}
+          metrics={null}
+        />
+      );
+      await Promise.resolve();
+    });
+
+    expect(gridTablePropsRef.current?.columns).toBe(firstColumnsRef);
+  });
+
+  it('passes rowIdentity into useTableSort for workload reuse', async () => {
+    const workload = {
+      kind: 'Deployment',
+      name: 'api',
+      namespace: 'team-a',
+      clusterId: 'alpha:ctx',
+    } as any;
+
+    await act(async () => {
+      root.render(
+        <NsViewWorkloads
+          namespace="team-a"
+          data={[workload]}
+          loading={false}
+          loaded={true}
+          metrics={null}
+        />
+      );
+      await Promise.resolve();
+    });
+
+    const options = useTableSortMock.mock.calls[0]?.[3];
+    expect(options?.rowIdentity).toBeTypeOf('function');
+    expect(options.rowIdentity(workload, 0)).toBe('alpha:ctx|apps/v1/Deployment/team-a/api');
   });
 
   it('routes workload clicks through the object panel with cluster metadata', async () => {

@@ -72,6 +72,57 @@ describe('buildObjectActionItems', () => {
     expect(diffItem).toBeTruthy();
   });
 
+  it('preserves optional catalog identity on emitted diff requests', () => {
+    const items = buildObjectActionItems({
+      object: {
+        kind: 'Deployment',
+        name: 'api',
+        namespace: 'apps',
+        clusterId: 'cluster-a',
+        clusterName: 'Cluster A',
+        group: 'apps',
+        version: 'v1',
+        resource: 'deployments',
+        uid: 'deploy-uid',
+      },
+      context: 'gridtable',
+      handlers: {
+        onOpen: () => undefined,
+      },
+      permissions: {},
+    });
+
+    const diffItem = items.find((item) => 'label' in item && item.label === 'Diff');
+    expect(diffItem).toBeTruthy();
+
+    let payload: unknown;
+    const unsubscribe = eventBus.on('view:open-object-diff', (next) => {
+      payload = next;
+    });
+    try {
+      if (!diffItem || !('onClick' in diffItem)) {
+        throw new Error('Diff item missing onClick handler');
+      }
+      diffItem.onClick?.();
+    } finally {
+      unsubscribe();
+    }
+
+    expect(payload).toMatchObject({
+      left: {
+        clusterId: 'cluster-a',
+        clusterName: 'Cluster A',
+        namespace: 'apps',
+        group: 'apps',
+        version: 'v1',
+        kind: 'Deployment',
+        name: 'api',
+        resource: 'deployments',
+        uid: 'deploy-uid',
+      },
+    });
+  });
+
   it('places the divider below the ungated Open/Diff section', () => {
     const items = buildObjectActionItems({
       object: {

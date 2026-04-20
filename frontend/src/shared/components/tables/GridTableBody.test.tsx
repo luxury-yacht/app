@@ -182,4 +182,30 @@ describe('GridTableBody', () => {
     const empty = container.querySelector('.gridtable-empty');
     expect(empty?.textContent).toBe('No rows');
   });
+
+  it('shows a filtered-empty message and clear-filters affordance when filters are active', async () => {
+    const onClearFilters = vi.fn();
+    const { container } = await renderTableBody({
+      tableData: [],
+      virtualRows: [],
+      shouldVirtualize: false,
+      hasActiveFilters: true,
+      onClearFilters,
+    });
+
+    const empty = container.querySelector('.gridtable-empty');
+    expect(empty?.textContent).toContain('No matching items');
+    expect(empty?.textContent).toContain('Filters are enabled that may be hiding objects.');
+
+    const clearLink = container.querySelector<HTMLAnchorElement>(
+      '.gridtable-empty-filter-hint__link'
+    );
+    expect(clearLink?.textContent).toBe('Clear filters');
+
+    await act(async () => {
+      clearLink?.click();
+    });
+
+    expect(onClearFilters).toHaveBeenCalledTimes(1);
+  });
 });

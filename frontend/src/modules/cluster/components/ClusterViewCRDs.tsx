@@ -25,13 +25,12 @@ import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
-import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
-import {
-  formatBuiltinApiVersion,
-  resolveBuiltinGroupVersion,
-} from '@shared/constants/builtinGroupVersions';
+import { formatBuiltinApiVersion } from '@shared/constants/builtinGroupVersions';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 import { useFavToggle } from '@ui/favorites/FavToggle';
+import { buildCanonicalObjectRowKey, buildObjectReference } from '@shared/utils/objectIdentity';
+
+const CLUSTER_CRD_KIND_OPTIONS = ['CustomResourceDefinition'];
 
 // Define the data structure for Custom Resource Definitions
 interface CRDsData {
@@ -93,20 +92,25 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
 
     const handleResourceClick = useCallback(
       (crd: CRDsData) => {
-        openWithObject({
-          kind: 'CustomResourceDefinition',
-          name: crd.name,
-          ...resolveBuiltinGroupVersion('CustomResourceDefinition'),
-          clusterId: crd.clusterId ?? undefined,
-          clusterName: crd.clusterName ?? undefined,
-        });
+        openWithObject(
+          buildObjectReference({
+            kind: 'CustomResourceDefinition',
+            name: crd.name,
+            clusterId: crd.clusterId ?? undefined,
+            clusterName: crd.clusterName ?? undefined,
+          })
+        );
       },
       [openWithObject]
     );
 
     const keyExtractor = useCallback(
       (crd: CRDsData) =>
-        buildClusterScopedKey(crd, ['crd', crd.group, crd.name].filter(Boolean).join('/')),
+        buildCanonicalObjectRowKey({
+          kind: 'CustomResourceDefinition',
+          name: crd.name,
+          clusterId: crd.clusterId,
+        }),
       []
     );
 
@@ -120,23 +124,27 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
             getDisplayKind(crd.kind || 'CustomResourceDefinition', useShortResourceNames),
           onClick: handleResourceClick,
           onAltClick: (crd) =>
-            navigateToView({
-              kind: 'CustomResourceDefinition',
-              name: crd.name,
-              clusterId: crd.clusterId,
-              clusterName: crd.clusterName,
-            }),
+            navigateToView(
+              buildObjectReference({
+                kind: 'CustomResourceDefinition',
+                name: crd.name,
+                clusterId: crd.clusterId,
+                clusterName: crd.clusterName,
+              })
+            ),
         }),
         cf.createTextColumn<CRDsData>('name', 'Name', (crd) => crd.name, {
           sortable: true,
           onClick: handleResourceClick,
           onAltClick: (crd) =>
-            navigateToView({
-              kind: 'CustomResourceDefinition',
-              name: crd.name,
-              clusterId: crd.clusterId,
-              clusterName: crd.clusterName,
-            }),
+            navigateToView(
+              buildObjectReference({
+                kind: 'CustomResourceDefinition',
+                name: crd.name,
+                clusterId: crd.clusterId,
+                clusterName: crd.clusterName,
+              })
+            ),
           getTitle: (crd) => `Open ${crd.name}`,
           getClassName: () => 'object-panel-link',
         }),
@@ -202,10 +210,7 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
       onChange: setPersistedSort,
     });
 
-    const availableKinds = useMemo(
-      () => [...new Set(data.map((r) => r.kind).filter(Boolean) as string[])].sort(),
-      [data]
-    );
+    const availableKinds = CLUSTER_CRD_KIND_OPTIONS;
 
     const { item: favToggle, modal: favModal } = useFavToggle({
       filters: persistedFilters,
@@ -267,12 +272,12 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
           ) ?? null;
 
         return buildObjectActionItems({
-          object: {
+          object: buildObjectReference({
             kind: 'CustomResourceDefinition',
             name: crd.name,
             clusterId: crd.clusterId,
             clusterName: crd.clusterName,
-          },
+          }),
           context: 'gridtable',
           handlers: {
             onOpen: () => handleResourceClick(crd),
@@ -300,6 +305,7 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
           <GridTable
             data={sortedData}
             columns={columns}
+            diagnosticsLabel="Cluster CRDs"
             loading={loading}
             keyExtractor={keyExtractor}
             onRowClick={handleResourceClick}
@@ -316,6 +322,7 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
               onChange: setPersistedFilters,
               onReset: resetPersistedState,
               options: {
+                kinds: availableKinds,
                 showKindDropdown: true,
                 preActions: [favToggle],
               },

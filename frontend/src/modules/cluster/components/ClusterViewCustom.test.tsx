@@ -134,6 +134,7 @@ const baseCustom = {
   kind: 'Widget',
   name: 'gizmo',
   apiGroup: 'example.com',
+  apiVersion: 'v1',
   age: '1d',
   clusterId: 'alpha:ctx',
   clusterName: 'alpha',
@@ -186,6 +187,40 @@ describe('ClusterViewCustom', () => {
         clusterId: 'alpha:ctx',
       })
     );
+  });
+
+  it('enables searchable kind dropdown bulk actions for custom resources', async () => {
+    await act(async () => {
+      root.render(
+        <ClusterViewCustom
+          data={[baseCustom]}
+          availableKinds={['DBCluster', 'Widget']}
+          loaded={true}
+        />
+      );
+      await Promise.resolve();
+    });
+
+    const props = gridTablePropsRef.current;
+    expect(props?.filters?.options?.showKindDropdown).toBe(true);
+    expect(props?.filters?.options?.kindDropdownSearchable).toBe(true);
+    expect(props?.filters?.options?.kindDropdownBulkActions).toBe(true);
+  });
+
+  it('uses the provided kind metadata instead of deriving kinds from loaded rows', async () => {
+    await act(async () => {
+      root.render(
+        <ClusterViewCustom
+          data={[baseCustom]}
+          availableKinds={['DBCluster', 'Widget']}
+          loaded={true}
+        />
+      );
+      await Promise.resolve();
+    });
+
+    const props = gridTablePropsRef.current;
+    expect(props?.filters?.options?.kinds).toEqual(['DBCluster', 'Widget']);
   });
 
   // Regression test mirroring NsViewCustom's colliding-CRD guardrail.

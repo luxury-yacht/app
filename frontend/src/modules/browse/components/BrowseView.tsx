@@ -11,7 +11,7 @@
  *
  * Instead, this view:
  * - Drives the backend catalog snapshot via the refresh orchestrator scope, and uses
- *   explicit manual refreshes for query changes and pagination.
+ *   explicit manual refreshes for query changes.
  * - Keeps pagination state locally and only appends on explicit "load more" requests.
  *
  * This keeps Browse stable without modifying the shared GridTable component.
@@ -20,7 +20,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import './BrowseView.css';
 import GridTable, { GRIDTABLE_VIRTUALIZATION_DEFAULT } from '@shared/components/tables/GridTable';
-import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import RollbackModal from '@shared/components/modals/RollbackModal';
@@ -45,8 +44,8 @@ import {
   toTableRows,
   type BrowseTableRow,
 } from '@modules/browse/hooks/useBrowseColumns';
+import { buildCanonicalObjectRowKey, buildObjectReference } from '@shared/utils/objectIdentity';
 import type { BrowseViewProps, BrowseScope } from './BrowseView.types';
-import { LoadMoreIcon } from '@shared/components/icons/MenuIcons';
 import { useFavToggle } from '@ui/favorites/FavToggle';
 
 const VIRTUALIZATION_THRESHOLD = 80;
@@ -62,6 +61,24 @@ const deriveBrowseScope = (namespace: string | null | undefined): BrowseScope =>
     return 'all-namespaces';
   }
   return 'namespace';
+};
+
+const BROWSE_PERSISTENCE_VIEW_IDS = {
+  cluster: { viewId: 'browse' },
+  allNamespaces: { viewId: 'all-namespaces-browse' },
+  namespace: { viewId: 'namespace-browse' },
+} as const;
+
+const getBrowsePersistenceViewId = (scope: BrowseScope): string => {
+  switch (scope) {
+    case 'namespace':
+      return BROWSE_PERSISTENCE_VIEW_IDS.namespace.viewId;
+    case 'all-namespaces':
+      return BROWSE_PERSISTENCE_VIEW_IDS.allNamespaces.viewId;
+    case 'cluster':
+    default:
+      return BROWSE_PERSISTENCE_VIEW_IDS.cluster.viewId;
+  }
 };
 
 /**
@@ -103,8 +120,9 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     return [];
   }, [isNamespaceScoped, namespace]);
 
-  // Determine view ID for persistence
-  const resolvedViewId = viewId ?? (isNamespaceScoped ? 'namespace-browse' : 'browse');
+  // Keep persistence isolated per Browse scope so cluster and
+  // all-namespaces views do not share filters/state.
+  const resolvedViewId = viewId ?? getBrowsePersistenceViewId(scope);
 
   // Virtualization options - kept stable to avoid retrigger effects
   const virtualizationOptions = useMemo(
@@ -133,17 +151,19 @@ const BrowseView: React.FC<BrowseViewProps> = ({
   // Handler to open an object in the object panel
   const handleOpen = useCallback(
     (row: BrowseTableRow) => {
-      openWithObject({
-        kind: row.item.kind,
-        name: row.item.name,
-        namespace: row.item.namespace ?? undefined,
-        group: row.item.group,
-        version: row.item.version,
-        resource: row.item.resource,
-        uid: row.item.uid,
-        clusterId: row.item.clusterId ?? undefined,
-        clusterName: row.item.clusterName ?? undefined,
-      });
+      openWithObject(
+        buildObjectReference({
+          kind: row.item.kind,
+          name: row.item.name,
+          namespace: row.item.namespace ?? undefined,
+          group: row.item.group,
+          version: row.item.version,
+          resource: row.item.resource,
+          uid: row.item.uid,
+          clusterId: row.item.clusterId ?? undefined,
+          clusterName: row.item.clusterName ?? undefined,
+        })
+      );
     },
     [openWithObject]
   );
@@ -257,7 +277,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
       }
 
       return buildObjectActionItems({
-        object: {
+        object: buildObjectReference({
           kind: row.item.kind,
           name: row.item.name,
           namespace: row.item.namespace,
@@ -265,7 +285,9 @@ const BrowseView: React.FC<BrowseViewProps> = ({
           clusterName: row.item.clusterName,
           group: row.item.group,
           version: row.item.version,
-        },
+          resource: row.item.resource,
+          uid: row.item.uid,
+        }),
         context: 'gridtable',
         handlers: {
           onOpen: () => handleOpen(row),
@@ -294,12 +316,15 @@ const BrowseView: React.FC<BrowseViewProps> = ({
 
   // Key extractor for the table
   const keyExtractor = useCallback(
-    (row: BrowseTableRow, index: number) =>
-      buildClusterScopedKey(
-        row,
-        row.uid ||
-          `catalog:${row.item.namespace ?? 'cluster'}:${row.item.kind}:${row.item.name}:${index}`
-      ),
+    (row: BrowseTableRow) =>
+      buildCanonicalObjectRowKey({
+        kind: row.item.kind,
+        name: row.item.name,
+        namespace: row.item.namespace,
+        clusterId: row.item.clusterId,
+        group: row.item.group,
+        version: row.item.version,
+      }),
     []
   );
 
@@ -354,16 +379,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
       };
 
   // Get catalog data
-  const {
-    items,
-    loading,
-    hasLoadedOnce,
-    continueToken,
-    isRequestingMore,
-    handleLoadMore,
-    filterOptions,
-    totalCount,
-  } = useBrowseCatalog({
+  const { items, loading, hasLoadedOnce, filterOptions, totalCount } = useBrowseCatalog({
     clusterId: selectedClusterId,
     pinnedNamespaces,
     clusterScopedOnly,
@@ -385,6 +401,12 @@ const BrowseView: React.FC<BrowseViewProps> = ({
   const { sortedData, sortConfig, handleSort } = useTableSort<BrowseTableRow>(rows, 'kind', 'asc', {
     controlledSort: persistence.sortConfig,
     onChange: persistence.setSortConfig,
+    diagnosticsLabel:
+      scope === 'namespace'
+        ? 'Namespace Browse'
+        : isClusterScoped
+          ? 'Cluster Browse'
+          : 'All Namespaces Browse',
   });
 
   const { item: favToggle, modal: favModal } = useFavToggle({
@@ -408,27 +430,17 @@ const BrowseView: React.FC<BrowseViewProps> = ({
       onChange: persistence.setFilters,
       onReset: persistence.resetState,
       options: {
+        searchBehavior: 'query' as const,
         kinds: filterOptions.kinds,
         namespaces: filterOptions.namespaces,
         showKindDropdown: true,
         showNamespaceDropdown: showNamespaceColumn,
+        kindDropdownSearchable: true,
+        kindDropdownBulkActions: true,
+        namespaceDropdownSearchable: true,
         includeClusterScopedSyntheticNamespace: false,
         totalCount,
         preActions: [favToggle],
-        postActions: [
-          {
-            type: 'action' as const,
-            id: 'load-more',
-            icon: <LoadMoreIcon />,
-            onClick: handleLoadMore,
-            title: !continueToken
-              ? 'All items loaded'
-              : isRequestingMore
-                ? 'Loading…'
-                : 'Load more',
-            disabled: !continueToken || isRequestingMore,
-          },
-        ],
       },
     }),
     [
@@ -439,23 +451,9 @@ const BrowseView: React.FC<BrowseViewProps> = ({
       filterOptions.namespaces,
       showNamespaceColumn,
       favToggle,
-      handleLoadMore,
-      continueToken,
-      isRequestingMore,
       totalCount,
     ]
   );
-
-  // Loading overlay for pagination
-  const loadingOverlay = useMemo(() => {
-    if (!isRequestingMore) {
-      return undefined;
-    }
-    return {
-      show: true,
-      message: 'Loading more…',
-    };
-  }, [isRequestingMore]);
 
   // Resolve class names and messages
   const resolvedTableClassName =
@@ -481,6 +479,14 @@ const BrowseView: React.FC<BrowseViewProps> = ({
         <GridTable<BrowseTableRow>
           data={sortedData}
           columns={columns}
+          diagnosticsLabel={
+            scope === 'namespace'
+              ? 'Namespace Browse'
+              : isClusterScoped
+                ? 'Cluster Browse'
+                : 'All Namespaces Browse'
+          }
+          diagnosticsMode="query"
           keyExtractor={keyExtractor}
           onRowClick={handleOpen}
           onSort={handleSort}
@@ -497,7 +503,6 @@ const BrowseView: React.FC<BrowseViewProps> = ({
           onColumnWidthsChange={persistence.setColumnWidths}
           columnVisibility={persistence.columnVisibility}
           onColumnVisibilityChange={persistence.setColumnVisibility}
-          loadingOverlay={loadingOverlay}
         />
       </ResourceLoadingBoundary>
       <ConfirmationModal

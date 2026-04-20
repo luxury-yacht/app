@@ -347,6 +347,7 @@ export function useExternalWidthsSync<T>({
 export function useWidthsChangeNotifier<T>({
   enableColumnResizing,
   onColumnWidthsChange,
+  suspendNotifications,
   isApplyingExternalUpdateRef,
   columnsRef,
   columnWidths,
@@ -355,6 +356,7 @@ export function useWidthsChangeNotifier<T>({
 }: {
   enableColumnResizing: boolean;
   onColumnWidthsChange?: (payload: Record<string, ColumnWidthState>) => void;
+  suspendNotifications: boolean;
   isApplyingExternalUpdateRef: RefObject<boolean>;
   columnsRef: RefObject<GridColumnDefinition<T>[]>;
   columnWidths: Record<string, number>;
@@ -362,7 +364,12 @@ export function useWidthsChangeNotifier<T>({
   lastNotifiedWidthsRef: RefObject<string>;
 }) {
   useEffect(() => {
-    if (!enableColumnResizing || !onColumnWidthsChange || isApplyingExternalUpdateRef.current) {
+    if (
+      !enableColumnResizing ||
+      !onColumnWidthsChange ||
+      suspendNotifications ||
+      isApplyingExternalUpdateRef.current
+    ) {
       return;
     }
 
@@ -393,6 +400,7 @@ export function useWidthsChangeNotifier<T>({
     isApplyingExternalUpdateRef,
     lastNotifiedWidthsRef,
     onColumnWidthsChange,
+    suspendNotifications,
   ]);
 }
 

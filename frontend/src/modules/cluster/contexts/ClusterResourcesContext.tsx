@@ -46,6 +46,7 @@ import type { ClusterViewType } from '@/types/navigation/views';
 import { useUserPermission } from '@/core/capabilities';
 import type { PermissionStatus } from '@/core/capabilities';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import { useStableSelectedValue } from '@shared/hooks/useStableSelectedValue';
 
 export type { ClusterNodeRow } from '@/core/refresh/types';
 
@@ -100,7 +101,8 @@ function useClusterDomainResource<K extends RefreshDomain, TResult>(
   domainName: K,
   state: DomainSnapshotState<DomainPayloadMap[K]>,
   extractFn: (payload: DomainPayloadMap[K] | null) => TResult | null,
-  scope: string
+  scope: string,
+  metaExtractor?: (payload: DomainPayloadMap[K] | null) => unknown
 ): ResourceDataReturn<TResult> {
   const load = useCallback(
     async (_showSpinner: boolean = true) => {
@@ -119,10 +121,16 @@ function useClusterDomainResource<K extends RefreshDomain, TResult>(
     refreshOrchestrator.resetScopedDomain(domainName, scope);
   }, [domainName, scope]);
 
+  const selectedData = useMemo(() => extractFn(state.data ?? null), [extractFn, state.data]);
+  const stableData = useStableSelectedValue(selectedData);
+  const selectedMeta = useMemo(
+    () => (metaExtractor ? metaExtractor(state.data ?? null) : undefined),
+    [metaExtractor, state.data]
+  );
+  const stableMeta = useStableSelectedValue(selectedMeta);
+
   return useMemo(() => {
-    const payload = state.data ?? null;
-    const data = extractFn(payload);
-    const hasData = data !== null && data !== undefined;
+    const hasData = stableData !== null && stableData !== undefined;
     const hasLoaded = hasData || state.status === 'error';
     const loadingStatus = state.status === 'loading' || state.status === 'initialising';
     const loading = loadingStatus && !hasLoaded;
@@ -131,7 +139,7 @@ function useClusterDomainResource<K extends RefreshDomain, TResult>(
     const lastFetchTime = state.lastUpdated ? new Date(state.lastUpdated) : null;
 
     return {
-      data,
+      data: stableData,
       loading,
       refreshing,
       error,
@@ -141,8 +149,9 @@ function useClusterDomainResource<K extends RefreshDomain, TResult>(
       cancel: noop,
       lastFetchTime,
       hasLoaded,
+      meta: stableMeta,
     };
-  }, [extractFn, load, refresh, reset, state]);
+  }, [load, refresh, reset, stableData, stableMeta, state]);
 }
 
 export const useClusterResources = () => {
@@ -545,6 +554,10 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
       filterByClusterId(payload?.resources ?? null, selectedClusterId),
     [selectedClusterId]
   );
+  const rbacMetaExtractor = useCallback(
+    (payload: DomainPayloadMap['cluster-rbac'] | null) => ({ kinds: payload?.kinds ?? [] }),
+    []
+  );
   const storageExtractor = useCallback(
     (payload: DomainPayloadMap['cluster-storage'] | null) =>
       filterByClusterId(payload?.volumes ?? null, selectedClusterId),
@@ -554,6 +567,10 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
     (payload: DomainPayloadMap['cluster-config'] | null) =>
       filterByClusterId(payload?.resources ?? null, selectedClusterId),
     [selectedClusterId]
+  );
+  const configMetaExtractor = useCallback(
+    (payload: DomainPayloadMap['cluster-config'] | null) => ({ kinds: payload?.kinds ?? [] }),
+    []
   );
   const crdExtractor = useCallback(
     (payload: DomainPayloadMap['cluster-crds'] | null) =>
@@ -565,13 +582,23 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
       filterByClusterId(payload?.resources ?? null, selectedClusterId),
     [selectedClusterId]
   );
+  const customMetaExtractor = useCallback(
+    (payload: DomainPayloadMap['cluster-custom'] | null) => ({ kinds: payload?.kinds ?? [] }),
+    []
+  );
   const eventsExtractor = useCallback(
     (payload: DomainPayloadMap['cluster-events'] | null) =>
       filterByClusterId(payload?.events ?? null, selectedClusterId),
     [selectedClusterId]
   );
 
-  const rbac = useClusterDomainResource('cluster-rbac', rbacDomain, rbacExtractor, clusterScope);
+  const rbac = useClusterDomainResource(
+    'cluster-rbac',
+    rbacDomain,
+    rbacExtractor,
+    clusterScope,
+    rbacMetaExtractor
+  );
   const storage = useClusterDomainResource(
     'cluster-storage',
     storageDomain,
@@ -582,14 +609,16 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
     'cluster-config',
     configDomain,
     configExtractor,
-    clusterScope
+    clusterScope,
+    configMetaExtractor
   );
   const crds = useClusterDomainResource('cluster-crds', crdDomain, crdExtractor, clusterScope);
   const custom = useClusterDomainResource(
     'cluster-custom',
     customDomain,
     customExtractor,
-    clusterScope
+    clusterScope,
+    customMetaExtractor
   );
   const events = useClusterDomainResource(
     'cluster-events',

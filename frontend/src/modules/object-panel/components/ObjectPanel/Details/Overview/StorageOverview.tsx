@@ -9,7 +9,7 @@ import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata
 import { ResourceStatus } from '@shared/components/kubernetes/ResourceStatus';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
-import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
+import { buildObjectReference } from '@shared/utils/objectIdentity';
 
 interface StorageOverviewProps {
   kind?: string;
@@ -63,12 +63,11 @@ export const StorageOverview: React.FC<StorageOverviewProps> = (props) => {
             value={
               props.volumeName ? (
                 <ObjectPanelLink
-                  objectRef={{
+                  objectRef={buildObjectReference({
                     kind: 'persistentvolume',
-                    ...resolveBuiltinGroupVersion('PersistentVolume'),
                     name: props.volumeName,
                     ...clusterMeta,
-                  }}
+                  })}
                   title={`Click to view volume: ${props.volumeName}`}
                 >
                   {props.volumeName}
@@ -85,12 +84,11 @@ export const StorageOverview: React.FC<StorageOverviewProps> = (props) => {
             value={
               props.storageClass ? (
                 <ObjectPanelLink
-                  objectRef={{
+                  objectRef={buildObjectReference({
                     kind: 'storageclass',
-                    ...resolveBuiltinGroupVersion('StorageClass'),
                     name: props.storageClass,
                     ...clusterMeta,
-                  }}
+                  })}
                   title={`Click to view storage class: ${props.storageClass}`}
                 >
                   {props.storageClass}
@@ -109,13 +107,12 @@ export const StorageOverview: React.FC<StorageOverviewProps> = (props) => {
                   {props.mountedBy.map((podName, index) => (
                     <div key={`${podName}-${index}`}>
                       <ObjectPanelLink
-                        objectRef={{
+                        objectRef={buildObjectReference({
                           kind: 'pod',
-                          ...resolveBuiltinGroupVersion('Pod'),
                           name: podName,
                           namespace: namespace,
                           ...clusterMeta,
-                        }}
+                        })}
                         title={`Click to view pod: ${podName}`}
                       >
                         {podName}
@@ -143,12 +140,11 @@ export const StorageOverview: React.FC<StorageOverviewProps> = (props) => {
             value={
               props.storageClass ? (
                 <ObjectPanelLink
-                  objectRef={{
+                  objectRef={buildObjectReference({
                     kind: 'storageclass',
-                    ...resolveBuiltinGroupVersion('StorageClass'),
                     name: props.storageClass,
                     ...clusterMeta,
-                  }}
+                  })}
                   title={`Click to view storage class: ${props.storageClass}`}
                 >
                   {props.storageClass}
@@ -164,13 +160,12 @@ export const StorageOverview: React.FC<StorageOverviewProps> = (props) => {
               label="Claim"
               value={
                 <ObjectPanelLink
-                  objectRef={{
+                  objectRef={buildObjectReference({
                     kind: 'persistentvolumeclaim',
-                    ...resolveBuiltinGroupVersion('PersistentVolumeClaim'),
                     name: props.claimRef.name,
                     namespace: props.claimRef.namespace,
                     ...clusterMeta,
-                  }}
+                  })}
                   title={`Click to view claim: ${props.claimRef.namespace}/${props.claimRef.name}`}
                 >
                   {`${props.claimRef.namespace}/${props.claimRef.name}`}

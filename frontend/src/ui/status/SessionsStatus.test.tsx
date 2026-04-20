@@ -153,6 +153,8 @@ describe('SessionsStatus shell session jump action', () => {
         namespace: 'default',
         clusterId: 'cluster-a',
         clusterName: 'cluster-a',
+        group: '',
+        version: 'v1',
       })
     );
     expect(objectPanelIdMock).toHaveBeenCalledWith(

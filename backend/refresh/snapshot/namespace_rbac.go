@@ -37,6 +37,7 @@ type NamespaceRBACBuilder struct {
 type NamespaceRBACSnapshot struct {
 	ClusterMeta
 	Resources []RBACSummary `json:"resources"`
+	Kinds     []string      `json:"kinds,omitempty"`
 }
 
 // RBACSummary describes a Role/RoleBinding/ServiceAccount entry.
@@ -203,7 +204,11 @@ func buildNamespaceRBACSnapshot(
 		Domain:  namespaceRBACDomainName,
 		Scope:   scope,
 		Version: version,
-		Payload: NamespaceRBACSnapshot{ClusterMeta: meta, Resources: resources},
+		Payload: NamespaceRBACSnapshot{
+			ClusterMeta: meta,
+			Resources:   resources,
+			Kinds:       snapshotSortedKinds(resources, func(resource RBACSummary) string { return resource.Kind }),
+		},
 		Stats: refresh.SnapshotStats{
 			ItemCount: len(resources),
 		},

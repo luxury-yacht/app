@@ -9,7 +9,7 @@ import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
-import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
+import { buildObjectReference } from '@shared/utils/objectIdentity';
 
 interface ConfigMapOverviewProps {
   configMapDetails: types.ConfigMapDetails | null;
@@ -60,13 +60,12 @@ export const ConfigMapOverview: React.FC<ConfigMapOverviewProps> = ({ configMapD
                 {configMapDetails.usedBy.map((podName: string, index: number) => (
                   <div key={`${podName}-${index}`} style={{ marginTop: index > 0 ? '4px' : 0 }}>
                     <ObjectPanelLink
-                      objectRef={{
+                      objectRef={buildObjectReference({
                         kind: 'pod',
-                        ...resolveBuiltinGroupVersion('Pod'),
                         name: podName,
                         namespace: configMapDetails.namespace,
                         ...clusterMeta,
-                      }}
+                      })}
                       title={`Click to view pod: ${podName}`}
                     >
                       {podName}

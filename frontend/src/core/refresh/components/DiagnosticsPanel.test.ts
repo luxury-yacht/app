@@ -1288,8 +1288,8 @@ describe('DiagnosticsPanel component', () => {
 
     const tabButtons = rendered.container.querySelectorAll<HTMLElement>('[role="tab"]');
     await act(async () => {
-      // Skip the new streams tab to reach capability checks.
-      tabButtons[2].click();
+      // Skip Streams and Table Performance to reach Capability Checks.
+      tabButtons[3].click();
       await Promise.resolve();
     });
     await flushAsync();
@@ -1321,7 +1321,7 @@ describe('DiagnosticsPanel component', () => {
     expect(expandedCells[13].textContent).toContain('deployments');
 
     await act(async () => {
-      tabButtons[3].click();
+      tabButtons[4].click();
       await Promise.resolve();
     });
     await flushAsync();
@@ -1369,8 +1369,8 @@ describe('DiagnosticsPanel component', () => {
     await flushAsync();
 
     const focusableEls = rendered.container.querySelectorAll('[data-diagnostics-focusable="true"]');
-    // Expect exactly four focusable tab elements (one per tab descriptor).
-    expect(focusableEls.length).toBe(4);
+    // Expect exactly five focusable tab elements (one per tab descriptor).
+    expect(focusableEls.length).toBe(5);
     // Each should also carry role="tab" — confirming they are the tab divs.
     for (const el of Array.from(focusableEls)) {
       expect(el.getAttribute('role')).toBe('tab');

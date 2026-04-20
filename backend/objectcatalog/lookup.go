@@ -43,6 +43,30 @@ func (s *Service) FindExactMatch(namespace, group, version, kind, name string) (
 	return Summary{}, false
 }
 
+// FindByUID resolves a single catalog item by UID within this cluster's
+// catalog snapshot.
+func (s *Service) FindByUID(uid string) (Summary, bool) {
+	if s == nil {
+		return Summary{}, false
+	}
+
+	normalizedUID := strings.TrimSpace(uid)
+	if normalizedUID == "" {
+		return Summary{}, false
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	for _, item := range s.items {
+		if item.UID == normalizedUID {
+			return item, true
+		}
+	}
+
+	return Summary{}, false
+}
+
 func normalizeLookupNamespace(namespace string) string {
 	trimmed := strings.TrimSpace(namespace)
 	if trimmed == "" {

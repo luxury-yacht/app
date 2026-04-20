@@ -837,6 +837,7 @@ export namespace types {
 	    autoRefreshEnabled: boolean;
 	    refreshBackgroundClustersEnabled: boolean;
 	    metricsRefreshIntervalMs: number;
+	    maxTableRows: number;
 	    logBufferMaxSize: number;
 	    logTargetPerScopeLimit: number;
 	    logTargetGlobalLimit: number;
@@ -874,6 +875,7 @@ export namespace types {
 	        this.autoRefreshEnabled = source["autoRefreshEnabled"];
 	        this.refreshBackgroundClustersEnabled = source["refreshBackgroundClustersEnabled"];
 	        this.metricsRefreshIntervalMs = source["metricsRefreshIntervalMs"];
+	        this.maxTableRows = source["maxTableRows"];
 	        this.logBufferMaxSize = source["logBufferMaxSize"];
 	        this.logTargetPerScopeLimit = source["logTargetPerScopeLimit"];
 	        this.logTargetGlobalLimit = source["logTargetGlobalLimit"];

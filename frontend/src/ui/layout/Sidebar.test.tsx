@@ -379,6 +379,110 @@ describe('Sidebar', () => {
     expect(viewStateMock.onNamespaceSelect).not.toHaveBeenCalled();
   });
 
+  it('aggregates catalog namespace groups across scoped states before filtering to the active cluster', () => {
+    refreshMocks.catalogScopedStates = {
+      'cluster-b-scope': {
+        status: 'success',
+        data: {
+          namespaceGroups: [
+            {
+              clusterId: 'cluster-b',
+              clusterName: 'Cluster B',
+              namespaces: ['other'],
+            },
+          ],
+        },
+        stats: null,
+        error: null,
+        droppedAutoRefreshes: 0,
+        scope: 'cluster-b-scope',
+      },
+      'cluster-a-scope': {
+        status: 'success',
+        data: {
+          namespaceGroups: [
+            {
+              clusterId: testClusterId,
+              clusterName: 'Cluster A',
+              namespaces: ['default'],
+            },
+          ],
+        },
+        stats: null,
+        error: null,
+        droppedAutoRefreshes: 0,
+        scope: 'cluster-a-scope',
+      },
+    };
+
+    renderSidebar();
+
+    const namespaceToggle = container!.querySelector<HTMLDivElement>(
+      `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(
+        'default'
+      )}"]`
+    );
+    expect(namespaceToggle).not.toBeNull();
+
+    const otherClusterToggle = container!.querySelector<HTMLDivElement>(
+      '[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="cluster-b|other"]'
+    );
+    expect(otherClusterToggle).toBeNull();
+  });
+
+  it('deduplicates repeated namespace groups and namespaces from multiple catalog scopes', () => {
+    refreshMocks.catalogScopedStates = {
+      'scope-a': {
+        status: 'success',
+        data: {
+          namespaceGroups: [
+            {
+              clusterId: testClusterId,
+              clusterName: 'Cluster A',
+              namespaces: ['default', 'fusionauth-prod-us-east-1'],
+            },
+          ],
+        },
+        stats: null,
+        error: null,
+        droppedAutoRefreshes: 0,
+        scope: 'scope-a',
+      },
+      'scope-b': {
+        status: 'success',
+        data: {
+          namespaceGroups: [
+            {
+              clusterId: testClusterId,
+              clusterName: 'Cluster A',
+              namespaces: ['fusionauth-prod-us-east-1', 'default'],
+            },
+          ],
+        },
+        stats: null,
+        error: null,
+        droppedAutoRefreshes: 0,
+        scope: 'scope-b',
+      },
+    };
+
+    renderSidebar();
+
+    const defaultToggles = container!.querySelectorAll(
+      `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(
+        'default'
+      )}"]`
+    );
+    expect(defaultToggles).toHaveLength(1);
+
+    const fusionAuthToggles = container!.querySelectorAll(
+      `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(
+        'fusionauth-prod-us-east-1'
+      )}"]`
+    );
+    expect(fusionAuthToggles).toHaveLength(1);
+  });
+
   it('collapses a namespace when clicked repeatedly', () => {
     renderSidebar();
     const namespaceToggle = container!.querySelector<HTMLDivElement>(

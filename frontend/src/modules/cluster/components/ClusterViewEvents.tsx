@@ -9,14 +9,10 @@ import './ClusterViewEvents.css';
 import { formatAge } from '@/utils/ageFormatter';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
-import {
-  parseApiVersion,
-  resolveBuiltinGroupVersion,
-} from '@/shared/constants/builtinGroupVersions';
 import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
-import { useObjectLink } from '@shared/hooks/useObjectLink';
+import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useShortNames } from '@/hooks/useShortNames';
 import { useTableSort } from '@/hooks/useTableSort';
 import * as cf from '@shared/components/tables/columnFactories';
@@ -29,7 +25,15 @@ import GridTable, {
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
+import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
+import { useNamespaceFilterOptions } from '@modules/namespace/hooks/useNamespaceFilterOptions';
 import { useFavToggle } from '@ui/favorites/FavToggle';
+import {
+  canResolveEventObjectReference,
+  resolveEventObjectReference,
+  splitEventObjectTarget,
+} from '@shared/utils/eventObjectIdentity';
+import { buildCanonicalObjectRowKey, buildObjectReference } from '@shared/utils/objectIdentity';
 
 interface EventData {
   kind: string;
@@ -39,6 +43,7 @@ interface EventData {
   clusterId?: string;
   clusterName?: string;
   objectNamespace?: string;
+  objectUid?: string;
   objectApiVersion?: string;
   type: string; // Event severity (Normal, Warning)
   source: string;
@@ -63,26 +68,9 @@ interface EventViewProps {
 const ClusterEventsView: React.FC<EventViewProps> = React.memo(
   ({ data, loading = false, loaded, error }) => {
     const { openWithObject } = useObjectPanel();
-    const objectLink = useObjectLink();
+    const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
     const useShortResourceNames = useShortNames();
-    // Parse the involved object reference into its type and name for display/navigation.
-    const splitEventObject = useCallback((value?: string | null) => {
-      const raw = (value ?? '').trim();
-      if (!raw || raw === '-') {
-        return { objectType: '-', objectName: '-', isLinkable: false };
-      }
-      const [objectType, objectName] = raw.split('/', 2);
-      if (!objectName) {
-        return { objectType: raw, objectName: '-', isLinkable: false };
-      }
-      return {
-        objectType: objectType || '-',
-        objectName: objectName || '-',
-        isLinkable: Boolean(objectType && objectName),
-      };
-    }, []);
-
     // Include all visible columns in search: type, source, reason, object, message.
     const getSearchText = useCallback((event: EventData): string[] => {
       const values = [
@@ -99,38 +87,40 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
     }, []);
 
     // Build an object reference from an event's involved object for navigation.
-    const getEventObjectRef = useCallback(
-      (event: EventData) => {
-        const parsed = splitEventObject(event.object);
-        if (!parsed.isLinkable) {
-          return undefined;
-        }
-        const namespace =
-          event.objectNamespace && event.objectNamespace.length > 0
-            ? event.objectNamespace
-            : undefined;
-        const objectVersionParts = event.objectApiVersion
-          ? parseApiVersion(event.objectApiVersion)
-          : resolveBuiltinGroupVersion(parsed.objectType);
-        return {
-          kind: parsed.objectType,
-          name: parsed.objectName,
-          namespace,
-          group: objectVersionParts.group,
-          version: objectVersionParts.version,
-          clusterId: event.clusterId ?? undefined,
-          clusterName: event.clusterName ?? undefined,
-        };
-      },
-      [splitEventObject]
+    const getEventObjectRefInput = useCallback((event: EventData) => {
+      return {
+        object: event.object,
+        objectUid: event.objectUid,
+        objectApiVersion: event.objectApiVersion,
+        objectNamespace: event.objectNamespace,
+        clusterId: event.clusterId ?? undefined,
+        clusterName: event.clusterName ?? undefined,
+      };
+    }, []);
+
+    const canOpenEventObject = useCallback(
+      (event: EventData) => canResolveEventObjectReference(getEventObjectRefInput(event)),
+      [getEventObjectRefInput]
     );
 
     const handleEventClick = useCallback(
-      (event: EventData) => {
-        const ref = getEventObjectRef(event);
-        if (ref) openWithObject(ref);
+      async (event: EventData) => {
+        const ref = await resolveEventObjectReference(getEventObjectRefInput(event));
+        if (ref) {
+          openWithObject(ref);
+        }
       },
-      [getEventObjectRef, openWithObject]
+      [getEventObjectRefInput, openWithObject]
+    );
+
+    const handleEventAltClick = useCallback(
+      async (event: EventData) => {
+        const ref = await resolveEventObjectReference(getEventObjectRefInput(event));
+        if (ref) {
+          navigateToView(ref);
+        }
+      },
+      [getEventObjectRefInput, navigateToView]
     );
 
     const keyExtractor = useCallback(
@@ -139,6 +129,17 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
           event,
           `${event.namespace}-${event.reason}-${event.source}-${event.object}-${event.ageTimestamp ?? event.age ?? '0'}-${index}`
         ),
+      []
+    );
+
+    const sortRowIdentity = useCallback(
+      (event: EventData) =>
+        buildCanonicalObjectRowKey({
+          kind: 'Event',
+          name: event.name,
+          namespace: event.namespace,
+          clusterId: event.clusterId,
+        }),
       []
     );
 
@@ -154,20 +155,25 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
         }),
         cf.createTextColumn('source', 'Source', (event) => event.source || '-'),
         cf.createTextColumn<EventData>('objectType', 'Object Type', (event) => {
-          const parsed = splitEventObject(event.object);
+          const parsed = splitEventObjectTarget(event.object);
           return parsed.objectType;
         }),
         cf.createTextColumn<EventData>(
           'objectName',
           'Object Name',
           (event) => {
-            const parsed = splitEventObject(event.object);
+            const parsed = splitEventObjectTarget(event.object);
             return parsed.objectName;
           },
           {
-            ...objectLink(getEventObjectRef),
+            onClick: (event) => {
+              void handleEventClick(event);
+            },
+            onAltClick: (event) => {
+              void handleEventAltClick(event);
+            },
             getClassName: () => 'object-panel-link',
-            isInteractive: (event) => splitEventObject(event.object).isLinkable,
+            isInteractive: canOpenEventObject,
           }
         ),
         cf.createTextColumn('reason', 'Reason', (event) => event.reason || '-'),
@@ -193,7 +199,7 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
       cf.applyColumnSizing(baseColumns, sizing);
 
       return baseColumns;
-    }, [getEventObjectRef, objectLink, splitEventObject, useShortResourceNames]);
+    }, [canOpenEventObject, handleEventAltClick, handleEventClick, useShortResourceNames]);
 
     // Set up grid table persistence
     const {
@@ -223,11 +229,16 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
       columns,
       controlledSort: persistedSort,
       onChange: setPersistedSort,
+      rowIdentity: sortRowIdentity,
     });
 
-    const availableFilterNamespaces = useMemo(
+    const fallbackNamespaces = useMemo(
       () => [...new Set(data.map((r) => r.namespace).filter(Boolean))].sort(),
       [data]
+    );
+    const availableFilterNamespaces = useNamespaceFilterOptions(
+      ALL_NAMESPACES_SCOPE,
+      fallbackNamespaces
     );
 
     const { item: favToggle, modal: favModal } = useFavToggle({
@@ -245,28 +256,32 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
     // Get context menu items
     const getContextMenuItems = useCallback(
       (event: EventData): ContextMenuItem[] => {
-        const parsed = splitEventObject(event.object);
-        if (!parsed.isLinkable) {
+        const parsed = splitEventObjectTarget(event.object);
+        if (!parsed.isLinkable || !canOpenEventObject(event)) {
           return [];
         }
 
         return buildObjectActionItems({
-          object: {
-            kind: 'Event',
-            name: event.reason,
-            namespace: event.namespace,
-            clusterId: event.clusterId,
-            clusterName: event.clusterName,
-            involvedObject: event.object,
-          },
+          object: buildObjectReference(
+            {
+              kind: 'Event',
+              name: event.name,
+              namespace: event.namespace,
+              clusterId: event.clusterId,
+              clusterName: event.clusterName,
+            },
+            { involvedObject: event.object }
+          ),
           context: 'gridtable',
           handlers: {
-            onViewInvolvedObject: () => handleEventClick(event),
+            onViewInvolvedObject: () => {
+              void handleEventClick(event);
+            },
           },
           permissions: {},
         });
       },
-      [handleEventClick, splitEventObject]
+      [canOpenEventObject, handleEventClick]
     );
 
     // Resolve empty state message
@@ -286,6 +301,8 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
           <GridTable
             data={sortedData}
             columns={columns}
+            diagnosticsLabel="Cluster Events"
+            diagnosticsMode="live"
             loading={loading}
             keyExtractor={keyExtractor}
             onRowClick={handleEventClick}
@@ -305,6 +322,7 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
                 getSearchText,
               },
               options: {
+                namespaces: availableFilterNamespaces,
                 preActions: [favToggle],
               },
             }}

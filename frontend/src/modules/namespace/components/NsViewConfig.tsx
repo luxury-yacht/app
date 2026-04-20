@@ -23,17 +23,16 @@ import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
-import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
-import {
-  formatBuiltinApiVersion,
-  resolveBuiltinGroupVersion,
-} from '@shared/constants/builtinGroupVersions';
+import { useKindFilterOptions } from '@shared/components/tables/hooks/useKindFilterOptions';
+import { formatBuiltinApiVersion } from '@shared/constants/builtinGroupVersions';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { DeleteResourceByGVK } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 import { useFavToggle } from '@ui/favorites/FavToggle';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
+import { useNamespaceFilterOptions } from '@modules/namespace/hooks/useNamespaceFilterOptions';
+import { buildCanonicalObjectRowKey, buildObjectReference } from '@shared/utils/objectIdentity';
 
 // Data interface for configuration resources (ConfigMaps, Secrets)
 export interface ConfigData {
@@ -50,6 +49,7 @@ export interface ConfigData {
 interface ConfigViewProps {
   namespace: string;
   data: ConfigData[];
+  availableKinds?: string[];
   loading?: boolean;
   loaded?: boolean;
   showNamespaceColumn?: boolean;
@@ -60,7 +60,14 @@ interface ConfigViewProps {
  * Aggregates ConfigMaps and Secrets
  */
 const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
-  ({ namespace, data, loading = false, loaded = false, showNamespaceColumn = false }) => {
+  ({
+    namespace,
+    data,
+    availableKinds: kindOptions,
+    loading = false,
+    loaded = false,
+    showNamespaceColumn = false,
+  }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const useShortResourceNames = useShortNames();
@@ -74,26 +81,27 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
     const handleResourceClick = useCallback(
       (resource: ConfigData) => {
         const resolvedKind = resource.kind || resource.kindAlias;
-        openWithObject({
-          kind: resolvedKind,
-          name: resource.name,
-          namespace: resource.namespace,
-          ...resolveBuiltinGroupVersion(resolvedKind),
-          clusterId: resource.clusterId ?? undefined,
-          clusterName: resource.clusterName ?? undefined,
-        });
+        openWithObject(
+          buildObjectReference({
+            kind: resolvedKind,
+            name: resource.name,
+            namespace: resource.namespace,
+            clusterId: resource.clusterId ?? undefined,
+            clusterName: resource.clusterName ?? undefined,
+          })
+        );
       },
       [openWithObject]
     );
 
     const keyExtractor = useCallback(
       (resource: ConfigData) =>
-        buildClusterScopedKey(
-          resource,
-          [resource.namespace, resource.kindAlias ?? resource.kind, resource.name]
-            .filter(Boolean)
-            .join('/')
-        ),
+        buildCanonicalObjectRowKey({
+          kind: resource.kindAlias ?? resource.kind,
+          name: resource.name,
+          namespace: resource.namespace,
+          clusterId: resource.clusterId,
+        }),
       []
     );
 
@@ -106,24 +114,28 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
           getDisplayText: (resource) => getDisplayKind(resource.kind, useShortResourceNames),
           onClick: handleResourceClick,
           onAltClick: (resource) =>
-            navigateToView({
-              kind: resource.kind,
-              name: resource.name,
-              namespace: resource.namespace,
-              clusterId: resource.clusterId ?? undefined,
-              clusterName: resource.clusterName ?? undefined,
-            }),
+            navigateToView(
+              buildObjectReference({
+                kind: resource.kind,
+                name: resource.name,
+                namespace: resource.namespace,
+                clusterId: resource.clusterId ?? undefined,
+                clusterName: resource.clusterName ?? undefined,
+              })
+            ),
         }),
         cf.createTextColumn<ConfigData>('name', 'Name', {
           onClick: handleResourceClick,
           onAltClick: (resource) =>
-            navigateToView({
-              kind: resource.kind,
-              name: resource.name,
-              namespace: resource.namespace,
-              clusterId: resource.clusterId ?? undefined,
-              clusterName: resource.clusterName ?? undefined,
-            }),
+            navigateToView(
+              buildObjectReference({
+                kind: resource.kind,
+                name: resource.name,
+                namespace: resource.namespace,
+                clusterId: resource.clusterId ?? undefined,
+                clusterName: resource.clusterName ?? undefined,
+              })
+            ),
           getClassName: () => 'object-panel-link',
         }),
         cf.createTextColumn<ConfigData>(
@@ -193,16 +205,19 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
       columns,
       controlledSort: persistedSort,
       onChange: onSortChange,
+      diagnosticsLabel:
+        namespace === ALL_NAMESPACES_SCOPE
+          ? 'All Namespaces Configuration'
+          : 'Namespace Configuration',
     });
 
-    const availableKinds = useMemo(
-      () => [...new Set(data.map((r) => r.kind).filter(Boolean) as string[])].sort(),
-      [data]
-    );
-    const availableFilterNamespaces = useMemo(
+    const fallbackKinds = useKindFilterOptions(data);
+    const availableKinds = kindOptions && kindOptions.length > 0 ? kindOptions : fallbackKinds;
+    const fallbackNamespaces = useMemo(
       () => [...new Set(data.map((r) => r.namespace).filter(Boolean))].sort(),
       [data]
     );
+    const availableFilterNamespaces = useNamespaceFilterOptions(namespace, fallbackNamespaces);
 
     const { item: favToggle, modal: favModal } = useFavToggle({
       filters: persistedFilters,
@@ -264,13 +279,13 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
           ) ?? null;
 
         return buildObjectActionItems({
-          object: {
+          object: buildObjectReference({
             kind: resource.kind,
             name: resource.name,
             namespace: resource.namespace,
             clusterId: resource.clusterId,
             clusterName: resource.clusterName,
-          },
+          }),
           context: 'gridtable',
           handlers: {
             onOpen: () => handleResourceClick(resource),
@@ -304,6 +319,11 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
           <GridTable
             data={sortedData}
             columns={columns}
+            diagnosticsLabel={
+              namespace === ALL_NAMESPACES_SCOPE
+                ? 'All Namespaces Configuration'
+                : 'Namespace Configuration'
+            }
             loading={loading}
             keyExtractor={keyExtractor}
             onRowClick={handleResourceClick}
@@ -320,8 +340,12 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
               onChange: setPersistedFilters,
               onReset: resetPersistedState,
               options: {
+                kinds: availableKinds,
+                namespaces: availableFilterNamespaces,
                 showKindDropdown: true,
                 showNamespaceDropdown: showNamespaceFilter,
+                namespaceDropdownSearchable: showNamespaceFilter,
+                namespaceDropdownBulkActions: showNamespaceFilter,
                 preActions: [favToggle],
               },
             }}

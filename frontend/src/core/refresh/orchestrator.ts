@@ -42,6 +42,7 @@ import type {
   ClusterNodeSnapshotPayload,
   DomainPayloadMap,
   NamespaceSnapshotPayload,
+  NamespaceWorkloadSummary,
   NamespaceWorkloadSnapshotPayload,
   NodeMaintenanceSnapshotPayload,
   PodSnapshotPayload,
@@ -158,6 +159,45 @@ const mergeListByKey = <T extends object>(
     return item;
   });
   return reused ? merged : incoming;
+};
+
+const mergeWorkloadMetricRows = (
+  previous: NamespaceWorkloadSummary[],
+  incoming: NamespaceWorkloadSummary[],
+  fallbackClusterId: string
+): NamespaceWorkloadSummary[] => {
+  if (previous.length === 0 || incoming.length === 0) {
+    return previous;
+  }
+
+  const incomingByKey = new Map(
+    incoming.map((workload) => [
+      `${workload.clusterId ?? fallbackClusterId}::${workload.namespace}::${workload.kind}::${workload.name}`,
+      workload,
+    ])
+  );
+
+  let changed = false;
+  const next = previous.map((existing) => {
+    const key = `${existing.clusterId ?? fallbackClusterId}::${existing.namespace}::${existing.kind}::${existing.name}`;
+    const candidate = incomingByKey.get(key);
+    if (!candidate) {
+      return existing;
+    }
+
+    if (existing.cpuUsage === candidate.cpuUsage && existing.memUsage === candidate.memUsage) {
+      return existing;
+    }
+
+    changed = true;
+    return {
+      ...existing,
+      cpuUsage: candidate.cpuUsage,
+      memUsage: candidate.memUsage,
+    };
+  });
+
+  return changed ? next : previous;
 };
 
 class RefreshOrchestrator {
@@ -1624,23 +1664,52 @@ class RefreshOrchestrator {
         ])
       );
       const existingPods = previous.data.pods ?? [];
-      const nextPods = existingPods.map((existing) => {
+      const mappedPods = existingPods.map((existing) => {
         const key = `${existing.clusterId ?? clusterId}::${existing.namespace}::${existing.name}`;
         const incoming = incomingByKey.get(key);
         if (!incoming) {
           return existing;
         }
+        const nextCpuUsage = incoming.cpuUsage ?? existing.cpuUsage;
+        const nextMemUsage = incoming.memUsage ?? existing.memUsage;
+        if (nextCpuUsage === existing.cpuUsage && nextMemUsage === existing.memUsage) {
+          return existing;
+        }
         return {
           ...existing,
-          cpuUsage: incoming.cpuUsage ?? existing.cpuUsage,
-          memUsage: incoming.memUsage ?? existing.memUsage,
+          cpuUsage: nextCpuUsage,
+          memUsage: nextMemUsage,
         };
       });
-      const nextPayload: PodSnapshotPayload = {
-        ...previous.data,
-        pods: nextPods,
-        metrics: payload.metrics ?? previous.data.metrics,
-      };
+      const nextPods = mappedPods.every((pod, index) => pod === existingPods[index])
+        ? existingPods
+        : mappedPods;
+      const nextMetrics = (() => {
+        const incomingMetrics = payload.metrics;
+        const previousMetrics = previous.data.metrics;
+        if (!incomingMetrics) {
+          return previousMetrics;
+        }
+        if (!previousMetrics) {
+          return incomingMetrics;
+        }
+        return incomingMetrics.stale === previousMetrics.stale &&
+          incomingMetrics.lastError === previousMetrics.lastError &&
+          incomingMetrics.collectedAt === previousMetrics.collectedAt &&
+          incomingMetrics.consecutiveFailures === previousMetrics.consecutiveFailures &&
+          incomingMetrics.successCount === previousMetrics.successCount &&
+          incomingMetrics.failureCount === previousMetrics.failureCount
+          ? previousMetrics
+          : incomingMetrics;
+      })();
+      const nextPayload: PodSnapshotPayload =
+        nextPods === existingPods && nextMetrics === previous.data.metrics
+          ? previous.data
+          : {
+              ...previous.data,
+              pods: nextPods,
+              metrics: nextMetrics,
+            };
       setScopedDomainState('pods', scope, (prev) => ({
         ...prev,
         status: 'ready',
@@ -1669,29 +1738,19 @@ class RefreshOrchestrator {
         return false;
       }
       const payload = snapshot.payload as NamespaceWorkloadSnapshotPayload;
-      const incomingByKey = new Map(
-        payload.workloads.map((workload) => [
-          `${workload.clusterId ?? clusterId}::${workload.namespace}::${workload.kind}::${workload.name}`,
-          workload,
-        ])
-      );
       const existingWorkloads = previous.data.workloads ?? [];
-      const nextWorkloads = existingWorkloads.map((existing) => {
-        const key = `${existing.clusterId ?? clusterId}::${existing.namespace}::${existing.kind}::${existing.name}`;
-        const incoming = incomingByKey.get(key);
-        if (!incoming) {
-          return existing;
-        }
-        return {
-          ...existing,
-          cpuUsage: incoming.cpuUsage,
-          memUsage: incoming.memUsage,
-        };
-      });
-      const nextPayload: NamespaceWorkloadSnapshotPayload = {
-        ...previous.data,
-        workloads: nextWorkloads,
-      };
+      const nextWorkloads = mergeWorkloadMetricRows(
+        existingWorkloads,
+        payload.workloads ?? [],
+        clusterId
+      );
+      const nextPayload: NamespaceWorkloadSnapshotPayload =
+        nextWorkloads === existingWorkloads
+          ? previous.data
+          : {
+              ...previous.data,
+              workloads: nextWorkloads,
+            };
       setScopedDomainState('namespace-workloads', scope, (prev) => ({
         ...prev,
         status: 'ready',

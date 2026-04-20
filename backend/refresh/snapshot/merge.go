@@ -89,6 +89,7 @@ func mergeNamespaceSnapshots(domain, scope string, snapshots []*refresh.Snapshot
 // mergeNamespaceWorkloads concatenates workload summaries and merges stats.
 func mergeNamespaceWorkloads(domain, scope string, snapshots []*refresh.Snapshot) (*refresh.Snapshot, error) {
 	items := make([]WorkloadSummary, 0)
+	kinds := make([]string, 0)
 	stats := make([]refresh.SnapshotStats, 0, len(snapshots))
 	var version uint64
 
@@ -98,11 +99,15 @@ func mergeNamespaceWorkloads(domain, scope string, snapshots []*refresh.Snapshot
 			return nil, fmt.Errorf("%s payload mismatch", domain)
 		}
 		items = append(items, payload.Workloads...)
+		kinds = append(kinds, payload.Kinds...)
 		stats = append(stats, snap.Stats)
 		version = maxSnapshotVersion(version, snap)
 	}
 
-	merged := NamespaceWorkloadsSnapshot{Workloads: items}
+	merged := NamespaceWorkloadsSnapshot{
+		Workloads: items,
+		Kinds:     snapshotSortedUniqueStrings(kinds),
+	}
 	mergedStats := mergeListStats(stats, len(items))
 	return buildMergedSnapshot(domain, scope, version, merged, mergedStats, snapshots)
 }
@@ -110,6 +115,7 @@ func mergeNamespaceWorkloads(domain, scope string, snapshots []*refresh.Snapshot
 // mergeNamespaceConfig concatenates config summaries and merges stats.
 func mergeNamespaceConfig(domain, scope string, snapshots []*refresh.Snapshot) (*refresh.Snapshot, error) {
 	items := make([]ConfigSummary, 0)
+	kinds := make([]string, 0)
 	stats := make([]refresh.SnapshotStats, 0, len(snapshots))
 	var version uint64
 
@@ -119,11 +125,15 @@ func mergeNamespaceConfig(domain, scope string, snapshots []*refresh.Snapshot) (
 			return nil, fmt.Errorf("%s payload mismatch", domain)
 		}
 		items = append(items, payload.Resources...)
+		kinds = append(kinds, payload.Kinds...)
 		stats = append(stats, snap.Stats)
 		version = maxSnapshotVersion(version, snap)
 	}
 
-	merged := NamespaceConfigSnapshot{Resources: items}
+	merged := NamespaceConfigSnapshot{
+		Resources: items,
+		Kinds:     snapshotSortedUniqueStrings(kinds),
+	}
 	mergedStats := mergeListStats(stats, len(items))
 	return buildMergedSnapshot(domain, scope, version, merged, mergedStats, snapshots)
 }
@@ -131,6 +141,7 @@ func mergeNamespaceConfig(domain, scope string, snapshots []*refresh.Snapshot) (
 // mergeNamespaceNetwork concatenates network summaries and merges stats.
 func mergeNamespaceNetwork(domain, scope string, snapshots []*refresh.Snapshot) (*refresh.Snapshot, error) {
 	items := make([]NetworkSummary, 0)
+	kinds := make([]string, 0)
 	stats := make([]refresh.SnapshotStats, 0, len(snapshots))
 	var version uint64
 
@@ -140,11 +151,15 @@ func mergeNamespaceNetwork(domain, scope string, snapshots []*refresh.Snapshot) 
 			return nil, fmt.Errorf("%s payload mismatch", domain)
 		}
 		items = append(items, payload.Resources...)
+		kinds = append(kinds, payload.Kinds...)
 		stats = append(stats, snap.Stats)
 		version = maxSnapshotVersion(version, snap)
 	}
 
-	merged := NamespaceNetworkSnapshot{Resources: items}
+	merged := NamespaceNetworkSnapshot{
+		Resources: items,
+		Kinds:     snapshotSortedUniqueStrings(kinds),
+	}
 	mergedStats := mergeListStats(stats, len(items))
 	return buildMergedSnapshot(domain, scope, version, merged, mergedStats, snapshots)
 }
@@ -173,6 +188,7 @@ func mergeNamespaceStorage(domain, scope string, snapshots []*refresh.Snapshot) 
 // mergeNamespaceAutoscaling concatenates autoscaling summaries and merges stats.
 func mergeNamespaceAutoscaling(domain, scope string, snapshots []*refresh.Snapshot) (*refresh.Snapshot, error) {
 	items := make([]AutoscalingSummary, 0)
+	kinds := make([]string, 0)
 	stats := make([]refresh.SnapshotStats, 0, len(snapshots))
 	var version uint64
 
@@ -182,11 +198,12 @@ func mergeNamespaceAutoscaling(domain, scope string, snapshots []*refresh.Snapsh
 			return nil, fmt.Errorf("%s payload mismatch", domain)
 		}
 		items = append(items, payload.Resources...)
+		kinds = append(kinds, payload.Kinds...)
 		stats = append(stats, snap.Stats)
 		version = maxSnapshotVersion(version, snap)
 	}
 
-	merged := NamespaceAutoscalingSnapshot{Resources: items}
+	merged := NamespaceAutoscalingSnapshot{Resources: items, Kinds: snapshotSortedUniqueStrings(kinds)}
 	mergedStats := mergeListStats(stats, len(items))
 	return buildMergedSnapshot(domain, scope, version, merged, mergedStats, snapshots)
 }
@@ -194,6 +211,7 @@ func mergeNamespaceAutoscaling(domain, scope string, snapshots []*refresh.Snapsh
 // mergeNamespaceQuotas concatenates quota summaries and merges stats.
 func mergeNamespaceQuotas(domain, scope string, snapshots []*refresh.Snapshot) (*refresh.Snapshot, error) {
 	items := make([]QuotaSummary, 0)
+	kinds := make([]string, 0)
 	stats := make([]refresh.SnapshotStats, 0, len(snapshots))
 	var version uint64
 
@@ -203,11 +221,15 @@ func mergeNamespaceQuotas(domain, scope string, snapshots []*refresh.Snapshot) (
 			return nil, fmt.Errorf("%s payload mismatch", domain)
 		}
 		items = append(items, payload.Resources...)
+		kinds = append(kinds, payload.Kinds...)
 		stats = append(stats, snap.Stats)
 		version = maxSnapshotVersion(version, snap)
 	}
 
-	merged := NamespaceQuotasSnapshot{Resources: items}
+	merged := NamespaceQuotasSnapshot{
+		Resources: items,
+		Kinds:     snapshotSortedUniqueStrings(kinds),
+	}
 	mergedStats := mergeListStats(stats, len(items))
 	return buildMergedSnapshot(domain, scope, version, merged, mergedStats, snapshots)
 }
@@ -215,6 +237,7 @@ func mergeNamespaceQuotas(domain, scope string, snapshots []*refresh.Snapshot) (
 // mergeNamespaceRBAC concatenates RBAC summaries and merges stats.
 func mergeNamespaceRBAC(domain, scope string, snapshots []*refresh.Snapshot) (*refresh.Snapshot, error) {
 	items := make([]RBACSummary, 0)
+	kinds := make([]string, 0)
 	stats := make([]refresh.SnapshotStats, 0, len(snapshots))
 	var version uint64
 
@@ -224,11 +247,15 @@ func mergeNamespaceRBAC(domain, scope string, snapshots []*refresh.Snapshot) (*r
 			return nil, fmt.Errorf("%s payload mismatch", domain)
 		}
 		items = append(items, payload.Resources...)
+		kinds = append(kinds, payload.Kinds...)
 		stats = append(stats, snap.Stats)
 		version = maxSnapshotVersion(version, snap)
 	}
 
-	merged := NamespaceRBACSnapshot{Resources: items}
+	merged := NamespaceRBACSnapshot{
+		Resources: items,
+		Kinds:     snapshotSortedUniqueStrings(kinds),
+	}
 	mergedStats := mergeListStats(stats, len(items))
 	return buildMergedSnapshot(domain, scope, version, merged, mergedStats, snapshots)
 }
@@ -236,6 +263,7 @@ func mergeNamespaceRBAC(domain, scope string, snapshots []*refresh.Snapshot) (*r
 // mergeNamespaceCustom concatenates custom resource summaries and merges stats.
 func mergeNamespaceCustom(domain, scope string, snapshots []*refresh.Snapshot) (*refresh.Snapshot, error) {
 	items := make([]NamespaceCustomSummary, 0)
+	kinds := make([]string, 0)
 	stats := make([]refresh.SnapshotStats, 0, len(snapshots))
 	var version uint64
 
@@ -245,11 +273,15 @@ func mergeNamespaceCustom(domain, scope string, snapshots []*refresh.Snapshot) (
 			return nil, fmt.Errorf("%s payload mismatch", domain)
 		}
 		items = append(items, payload.Resources...)
+		kinds = append(kinds, payload.Kinds...)
 		stats = append(stats, snap.Stats)
 		version = maxSnapshotVersion(version, snap)
 	}
 
-	merged := NamespaceCustomSnapshot{Resources: items}
+	merged := NamespaceCustomSnapshot{
+		Resources: items,
+		Kinds:     snapshotSortedUniqueStrings(kinds),
+	}
 	mergedStats := mergeListStats(stats, len(items))
 	return buildMergedSnapshot(domain, scope, version, merged, mergedStats, snapshots)
 }
@@ -375,7 +407,7 @@ func mergeNodeSnapshots(domain, scope string, snapshots []*refresh.Snapshot) (*r
 
 	metrics := mergeMetricFields(metricInputs)
 	merged := NodeSnapshot{
-		Nodes:   items,
+		Nodes: items,
 		Metrics: NodeMetricsInfo{
 			CollectedAt:         metrics.collectedAt,
 			Stale:               metrics.stale,
@@ -396,6 +428,7 @@ func mergeNodeSnapshots(domain, scope string, snapshots []*refresh.Snapshot) (*r
 func mergeClusterOverview(domain, scope string, snapshots []*refresh.Snapshot) (*refresh.Snapshot, error) {
 	payloads := make([]ClusterOverviewSnapshot, 0, len(snapshots))
 	metricsInputs := make([]metricFields, 0, len(snapshots))
+	stats := make([]refresh.SnapshotStats, 0, len(snapshots))
 	overviewByCluster := make(map[string]ClusterOverviewPayload)
 	metricsByCluster := make(map[string]ClusterOverviewMetrics)
 	var version uint64
@@ -406,6 +439,7 @@ func mergeClusterOverview(domain, scope string, snapshots []*refresh.Snapshot) (
 			return nil, fmt.Errorf("%s payload mismatch", domain)
 		}
 		payloads = append(payloads, payload)
+		stats = append(stats, snap.Stats)
 		if len(payload.OverviewByCluster) > 0 {
 			for id, info := range payload.OverviewByCluster {
 				if strings.TrimSpace(id) == "" {
@@ -456,13 +490,14 @@ func mergeClusterOverview(domain, scope string, snapshots []*refresh.Snapshot) (
 	if len(metricsByCluster) > 0 {
 		merged.MetricsByCluster = metricsByCluster
 	}
-	mergedStats := refresh.SnapshotStats{ItemCount: overview.TotalNodes}
+	mergedStats := mergeListStats(stats, overview.TotalNodes)
 	return buildMergedSnapshot(domain, scope, version, merged, mergedStats, snapshots)
 }
 
 // mergeClusterRBAC concatenates cluster RBAC entries and merges stats.
 func mergeClusterRBAC(domain, scope string, snapshots []*refresh.Snapshot) (*refresh.Snapshot, error) {
 	items := make([]ClusterRBACEntry, 0)
+	kinds := make([]string, 0)
 	stats := make([]refresh.SnapshotStats, 0, len(snapshots))
 	var version uint64
 
@@ -472,11 +507,15 @@ func mergeClusterRBAC(domain, scope string, snapshots []*refresh.Snapshot) (*ref
 			return nil, fmt.Errorf("%s payload mismatch", domain)
 		}
 		items = append(items, payload.Resources...)
+		kinds = append(kinds, payload.Kinds...)
 		stats = append(stats, snap.Stats)
 		version = maxSnapshotVersion(version, snap)
 	}
 
-	merged := ClusterRBACSnapshot{Resources: items}
+	merged := ClusterRBACSnapshot{
+		Resources: items,
+		Kinds:     snapshotSortedUniqueStrings(kinds),
+	}
 	mergedStats := mergeListStats(stats, len(items))
 	return buildMergedSnapshot(domain, scope, version, merged, mergedStats, snapshots)
 }
@@ -505,6 +544,7 @@ func mergeClusterStorage(domain, scope string, snapshots []*refresh.Snapshot) (*
 // mergeClusterConfig concatenates cluster config entries and merges stats.
 func mergeClusterConfig(domain, scope string, snapshots []*refresh.Snapshot) (*refresh.Snapshot, error) {
 	items := make([]ClusterConfigEntry, 0)
+	kinds := make([]string, 0)
 	stats := make([]refresh.SnapshotStats, 0, len(snapshots))
 	var version uint64
 
@@ -514,11 +554,15 @@ func mergeClusterConfig(domain, scope string, snapshots []*refresh.Snapshot) (*r
 			return nil, fmt.Errorf("%s payload mismatch", domain)
 		}
 		items = append(items, payload.Resources...)
+		kinds = append(kinds, payload.Kinds...)
 		stats = append(stats, snap.Stats)
 		version = maxSnapshotVersion(version, snap)
 	}
 
-	merged := ClusterConfigSnapshot{Resources: items}
+	merged := ClusterConfigSnapshot{
+		Resources: items,
+		Kinds:     snapshotSortedUniqueStrings(kinds),
+	}
 	mergedStats := mergeListStats(stats, len(items))
 	return buildMergedSnapshot(domain, scope, version, merged, mergedStats, snapshots)
 }
@@ -547,6 +591,7 @@ func mergeClusterCRDs(domain, scope string, snapshots []*refresh.Snapshot) (*ref
 // mergeClusterCustom concatenates cluster custom summaries and merges stats.
 func mergeClusterCustom(domain, scope string, snapshots []*refresh.Snapshot) (*refresh.Snapshot, error) {
 	items := make([]ClusterCustomSummary, 0)
+	kinds := make([]string, 0)
 	stats := make([]refresh.SnapshotStats, 0, len(snapshots))
 	var version uint64
 
@@ -556,11 +601,15 @@ func mergeClusterCustom(domain, scope string, snapshots []*refresh.Snapshot) (*r
 			return nil, fmt.Errorf("%s payload mismatch", domain)
 		}
 		items = append(items, payload.Resources...)
+		kinds = append(kinds, payload.Kinds...)
 		stats = append(stats, snap.Stats)
 		version = maxSnapshotVersion(version, snap)
 	}
 
-	merged := ClusterCustomSnapshot{Resources: items}
+	merged := ClusterCustomSnapshot{
+		Resources: items,
+		Kinds:     snapshotSortedUniqueStrings(kinds),
+	}
 	mergedStats := mergeListStats(stats, len(items))
 	return buildMergedSnapshot(domain, scope, version, merged, mergedStats, snapshots)
 }

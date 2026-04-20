@@ -2224,10 +2224,6 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                     ref={filterInputRef}
                     value={textFilter}
                     onChange={(e) => dispatch({ type: 'SET_TEXT_FILTER', payload: e.target.value })}
-                    autoComplete="off"
-                    autoCorrect="off"
-                    autoCapitalize="none"
-                    spellCheck={false}
                     placeholder="Filter logs..."
                     className="pod-logs-text-filter"
                     title="Filter logs by text (searches in log lines, pods, and containers)"

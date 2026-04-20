@@ -82,6 +82,12 @@ func TestClusterConfigBuilder(t *testing.T) {
 	payload, ok := snapshot.Payload.(ClusterConfigSnapshot)
 	require.True(t, ok)
 	require.Len(t, payload.Resources, 4)
+	require.Equal(t, []string{
+		"IngressClass",
+		"MutatingWebhookConfiguration",
+		"StorageClass",
+		"ValidatingWebhookConfiguration",
+	}, payload.Kinds)
 
 	resources := map[string]ClusterConfigEntry{}
 	for _, entry := range payload.Resources {

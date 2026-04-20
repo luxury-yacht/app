@@ -10,10 +10,7 @@ import { ResourceStatus } from '@shared/components/kubernetes/ResourceStatus';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
-import {
-  parseApiVersion,
-  resolveBuiltinGroupVersion,
-} from '@shared/constants/builtinGroupVersions';
+import { buildRelatedObjectReference } from '@shared/utils/objectIdentity';
 import './shared/LabelsAndAnnotations.css';
 import './HelmOverview.css';
 
@@ -118,32 +115,49 @@ export const HelmOverview: React.FC<HelmOverviewProps> = ({
           <div className="metadata-pairs">
             {helmReleaseDetails.resources
               .sort((a: types.HelmResource, b: types.HelmResource) => a.kind.localeCompare(b.kind))
-              .map((resource: types.HelmResource, idx: number) => (
-                <div
-                  key={`${resource.kind}-${resource.namespace ?? ''}-${resource.name}-${idx}`}
-                  className="metadata-pair"
-                >
-                  <span className="metadata-key">{resource.kind}:</span>
-                  <ObjectPanelLink
-                    className="metadata-value"
-                    objectRef={{
+              .map((resource: types.HelmResource, idx: number) => {
+                const resourceRef = (() => {
+                  try {
+                    return buildRelatedObjectReference({
                       kind: resource.kind.toLowerCase(),
-                      // Prefer the apiVersion the Helm manifest explicitly
-                      // declared (correct for CRDs); fall back to the
-                      // built-in lookup if older releases somehow lack one.
-                      ...(resource.apiVersion
-                        ? parseApiVersion(resource.apiVersion)
-                        : resolveBuiltinGroupVersion(resource.kind)),
+                      // Prefer the manifest apiVersion so CRD-backed
+                      // managed resources keep their real GVK.
+                      apiVersion: resource.apiVersion,
                       name: resource.name,
                       namespace: resource.namespace,
                       ...clusterMeta,
-                    }}
-                    title={`Click to view ${resource.kind}: ${resource.name}`}
+                    });
+                  } catch {
+                    return null;
+                  }
+                })();
+
+                return (
+                  <div
+                    key={`${resource.kind}-${resource.namespace ?? ''}-${resource.name}-${idx}`}
+                    className="metadata-pair"
                   >
-                    {resource.namespace ? `${resource.namespace}/${resource.name}` : resource.name}
-                  </ObjectPanelLink>
-                </div>
-              ))}
+                    <span className="metadata-key">{resource.kind}:</span>
+                    {resourceRef ? (
+                      <ObjectPanelLink
+                        className="metadata-value"
+                        objectRef={resourceRef}
+                        title={`Click to view ${resource.kind}: ${resource.name}`}
+                      >
+                        {resource.namespace
+                          ? `${resource.namespace}/${resource.name}`
+                          : resource.name}
+                      </ObjectPanelLink>
+                    ) : (
+                      <span className="metadata-value">
+                        {resource.namespace
+                          ? `${resource.namespace}/${resource.name}`
+                          : resource.name}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
           </div>
         </div>
       )}

@@ -60,7 +60,7 @@ interface NamespaceContextType {
   getClusterNamespace: (clusterId: string) => string | undefined;
 }
 
-const NamespaceContext = createContext<NamespaceContextType | undefined>(undefined);
+export const NamespaceContext = createContext<NamespaceContextType | undefined>(undefined);
 
 export const useNamespace = () => {
   const context = useContext(NamespaceContext);

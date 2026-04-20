@@ -37,6 +37,7 @@ type NamespaceCustomBuilder struct {
 type NamespaceCustomSnapshot struct {
 	ClusterMeta
 	Resources []NamespaceCustomSummary `json:"resources"`
+	Kinds     []string                 `json:"kinds,omitempty"`
 }
 
 // NamespaceCustomSummary captures key CR instance fields.
@@ -140,10 +141,23 @@ func (b *NamespaceCustomBuilder) Build(ctx context.Context, scope string) (*refr
 			Domain:  namespaceCustomDomainName,
 			Scope:   snapshotScope,
 			Version: 0,
-			Payload: NamespaceCustomSnapshot{ClusterMeta: meta, Resources: []NamespaceCustomSummary{}},
-			Stats:   refresh.SnapshotStats{ItemCount: 0},
+			Payload: NamespaceCustomSnapshot{
+				ClusterMeta: meta,
+				Resources:   []NamespaceCustomSummary{},
+				Kinds:       []string{},
+			},
+			Stats: refresh.SnapshotStats{ItemCount: 0},
 		}, nil
 	}
+
+	kinds := make([]string, 0, len(namespacedCRDs))
+	for _, crd := range namespacedCRDs {
+		if crd == nil {
+			continue
+		}
+		kinds = append(kinds, crd.Spec.Names.Kind)
+	}
+	kinds = snapshotSortedUniqueStrings(kinds)
 
 	summaries := make([]NamespaceCustomSummary, 0)
 	var version uint64
@@ -249,7 +263,7 @@ func (b *NamespaceCustomBuilder) Build(ctx context.Context, scope string) (*refr
 
 	sortNamespaceCustomSummaries(summaries)
 
-	payload := NamespaceCustomSnapshot{ClusterMeta: meta, Resources: summaries}
+	payload := NamespaceCustomSnapshot{ClusterMeta: meta, Resources: summaries, Kinds: kinds}
 	if payload.Resources == nil {
 		payload.Resources = []NamespaceCustomSummary{}
 	}

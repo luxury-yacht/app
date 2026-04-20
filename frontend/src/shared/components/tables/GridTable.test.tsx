@@ -22,6 +22,10 @@
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  resetAppPreferencesCacheForTesting,
+  setAppPreferencesForTesting,
+} from '@/core/settings/appPreferences';
 
 import GridTable, {
   GridColumnDefinition,
@@ -143,6 +147,7 @@ describe('GridTable virtualization', () => {
 
   beforeEach(() => {
     vi.useRealTimers();
+    resetAppPreferencesCacheForTesting();
     originalClientHeightDescriptor = Object.getOwnPropertyDescriptor(
       HTMLElement.prototype,
       'clientHeight'
@@ -211,6 +216,21 @@ describe('GridTable virtualization', () => {
     expect(renderedRows.length).toBeLessThan(100);
     expect(renderedRows.length).toBe(12);
     expect(renderedRows[0]?.textContent).toContain('Row 0');
+  });
+
+  it('caps rendered rows using the max table rows setting', () => {
+    setAppPreferencesForTesting({ maxTableRows: 3 });
+    const { container, cleanup } = renderGridTable({
+      data: createRows(8),
+      virtualization: { enabled: true, threshold: 1, overscan: 1, estimateRowHeight: 40 },
+    });
+    cleanupRoot = cleanup;
+
+    const renderedRows = container.querySelectorAll('.gridtable-row');
+    expect(renderedRows).toHaveLength(3);
+    expect(container.textContent).toContain('Row 0');
+    expect(container.textContent).toContain('Row 2');
+    expect(container.textContent).not.toContain('Row 3');
   });
 
   it('updates the rendered slice when scrolling', async () => {
@@ -1656,6 +1676,98 @@ it('renders filter UI when enabled', () => {
   cleanup();
 });
 
+it('shows a filter-specific empty state when active filters exclude all rows', () => {
+  const { container, cleanup } = renderGridTable({
+    data: createRows(5),
+    virtualization: { enabled: false },
+    emptyMessage: 'No rows available',
+    filters: {
+      enabled: true,
+      initial: { search: 'does-not-match' },
+      accessors: {
+        getKind: (row) => row.label,
+        getNamespace: () => '',
+        getSearchText: (row) => [row.label],
+      },
+    },
+  });
+
+  const empty = container.querySelector('.gridtable-empty');
+  expect(empty?.textContent).toContain('No matching items');
+  expect(empty?.textContent).toContain('Clear filters');
+  expect(empty?.textContent).not.toContain('No rows available');
+
+  cleanup();
+});
+
+it('shows displayed and total item counts when the table is capped', () => {
+  setAppPreferencesForTesting({ maxTableRows: 3 });
+  const { container, cleanup } = renderGridTable({
+    data: createRows(8),
+    virtualization: { enabled: false },
+    filters: {
+      enabled: true,
+      accessors: {
+        getKind: (row) => row.label,
+        getNamespace: () => '',
+        getSearchText: (row) => [row.label],
+      },
+    },
+  });
+
+  const resultCount = container.querySelector('[data-gridtable-filter-role="result-count"]');
+  expect(resultCount?.textContent).toBe('3 of 8 items');
+  expect(resultCount?.querySelector('.tooltip-trigger')).not.toBeNull();
+
+  cleanup();
+});
+
+it('applies local search before the table cap so matches beyond the first page stay reachable', () => {
+  setAppPreferencesForTesting({ maxTableRows: 3 });
+  const { container, cleanup } = renderGridTable({
+    data: createRows(8),
+    virtualization: { enabled: false },
+    filters: {
+      enabled: true,
+      initial: { search: 'Row 7' },
+      accessors: {
+        getKind: (row) => row.label,
+        getNamespace: () => '',
+        getSearchText: (row) => [row.label],
+      },
+    },
+  });
+
+  expect(container.textContent).toContain('Row 7');
+  expect(container.textContent).not.toContain('Row 0');
+
+  const resultCount = container.querySelector('[data-gridtable-filter-role="result-count"]');
+  expect(resultCount?.textContent).toBe('1 of 8 items');
+
+  cleanup();
+});
+
+it('does not show the capped-results tooltip when the table is not capped', () => {
+  const { container, cleanup } = renderGridTable({
+    data: createRows(3),
+    virtualization: { enabled: false },
+    filters: {
+      enabled: true,
+      accessors: {
+        getKind: (row) => row.label,
+        getNamespace: () => '',
+        getSearchText: (row) => [row.label],
+      },
+    },
+  });
+
+  const resultCount = container.querySelector('[data-gridtable-filter-role="result-count"]');
+  expect(resultCount?.textContent).toBe('3 items');
+  expect(resultCount?.querySelector('.tooltip-trigger')).toBeNull();
+
+  cleanup();
+});
+
 // Standalone tests below are outside the `describe` block and need their own
 // afterEach to flush React's async scheduler and call cleanupRoot. Without
 // this, pending scheduler work fires after jsdom teardown → "window is not
@@ -1914,4 +2026,54 @@ it('sets col-resize cursor on body during a column drag resize', () => {
 
   // Cursor should be restored.
   expect(document.body.style.cursor).not.toBe('col-resize');
+});
+
+it('defers external column width notifications until drag end', () => {
+  const resizableColumns: GridColumnDefinition<SimpleRow>[] = [
+    { key: 'label', header: 'Label', render: (row) => row.label },
+    { key: 'name', header: 'Name', render: (row) => row.name ?? '' },
+  ];
+  const onColumnWidthsChange = vi.fn();
+  const requestAnimationFrameSpy = vi
+    .spyOn(window, 'requestAnimationFrame')
+    .mockImplementation((callback: FrameRequestCallback) => {
+      callback(0);
+      return 1;
+    });
+  const cancelAnimationFrameSpy = vi
+    .spyOn(window, 'cancelAnimationFrame')
+    .mockImplementation(() => {});
+
+  const { container, cleanup } = renderGridTable({
+    data: createRows(3),
+    columns: resizableColumns,
+    enableColumnResizing: true,
+    virtualization: { enabled: false },
+    onColumnWidthsChange,
+  });
+  cleanupRoot = cleanup;
+
+  onColumnWidthsChange.mockClear();
+
+  const handle = container.querySelector('.resize-handle') as HTMLElement;
+  expect(handle).not.toBeNull();
+
+  act(() => {
+    handle.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: 100 }));
+  });
+
+  act(() => {
+    document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: 140 }));
+  });
+
+  expect(onColumnWidthsChange).not.toHaveBeenCalled();
+
+  act(() => {
+    document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+  });
+
+  expect(onColumnWidthsChange).toHaveBeenCalledTimes(1);
+
+  requestAnimationFrameSpy.mockRestore();
+  cancelAnimationFrameSpy.mockRestore();
 });

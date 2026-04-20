@@ -45,6 +45,7 @@ type ObjectEventSummary struct {
 	InvolvedObjectName       string    `json:"involvedObjectName"`
 	InvolvedObjectKind       string    `json:"involvedObjectKind"`
 	InvolvedObjectNamespace  string    `json:"involvedObjectNamespace"`
+	InvolvedObjectUID        string    `json:"involvedObjectUid"`
 	InvolvedObjectAPIVersion string    `json:"involvedObjectApiVersion"`
 	Namespace                string    `json:"namespace"`
 }
@@ -345,6 +346,7 @@ func convertObjectEvent(meta ClusterMeta, evt corev1.Event) ObjectEventSummary {
 		InvolvedObjectName:       evt.InvolvedObject.Name,
 		InvolvedObjectKind:       evt.InvolvedObject.Kind,
 		InvolvedObjectNamespace:  evt.InvolvedObject.Namespace,
+		InvolvedObjectUID:        string(evt.InvolvedObject.UID),
 		InvolvedObjectAPIVersion: evt.InvolvedObject.APIVersion,
 		Namespace:                evt.Namespace,
 	}

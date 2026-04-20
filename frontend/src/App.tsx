@@ -55,6 +55,7 @@ import { AppErrorBoundary } from '@ui/errors';
 import { useBackendErrorHandler } from '@/hooks/useBackendErrorHandler';
 import { useWailsRuntimeEvents, useConnectionStatusListener } from '@/hooks/useWailsRuntimeEvents';
 import { useSidebarResize } from '@/hooks/useSidebarResize';
+import { installTypingAssistPolicyObserver } from '@utils/inputAssistPolicy';
 
 // Resolve the current active theme from the document attribute.
 const resolveTheme = (): 'light' | 'dark' => {
@@ -138,6 +139,13 @@ function AppContent() {
       active = false;
       unsubThemeResolved();
     };
+  }, []);
+
+  // Disable browser typing assistance for every current and future input-like
+  // field in the app. This keeps search boxes, forms, and editable surfaces
+  // consistent without requiring per-component opt-in.
+  useEffect(() => {
+    return installTypingAssistPolicyObserver();
   }, []);
 
   // Auto-apply a matching theme when the active cluster changes.

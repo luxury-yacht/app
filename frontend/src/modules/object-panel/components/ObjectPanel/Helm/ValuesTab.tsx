@@ -455,10 +455,6 @@ const ValuesTab: React.FC<ValuesTabProps> = ({ scope, isActive = false }) => {
               ref={searchInputRef}
               className="find-input"
               type="text"
-              autoComplete="off"
-              autoCapitalize="off"
-              autoCorrect="off"
-              spellCheck={false}
               placeholder="Find…"
               value={searchTerm}
               onChange={handleSearchChange}

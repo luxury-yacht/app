@@ -26,6 +26,8 @@ import GridTable, {
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
+import { useNamespaceFilterOptions } from '@modules/namespace/hooks/useNamespaceFilterOptions';
+import { buildSyntheticObjectReference } from '@shared/utils/objectIdentity';
 
 // Data interface for Helm releases
 export interface HelmData {
@@ -77,13 +79,15 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
     const namespaceColumnLink = useNamespaceColumnLink<HelmData>('helm');
     const handleResourceClick = useCallback(
       (resource: HelmData) => {
-        openWithObject({
-          kind: 'HelmRelease',
-          name: resource.name,
-          namespace: resource.namespace,
-          clusterId: resource.clusterId ?? undefined,
-          clusterName: resource.clusterName ?? undefined,
-        });
+        openWithObject(
+          buildSyntheticObjectReference({
+            kind: 'HelmRelease',
+            name: resource.name,
+            namespace: resource.namespace,
+            clusterId: resource.clusterId ?? undefined,
+            clusterName: resource.clusterName ?? undefined,
+          })
+        );
       },
       [openWithObject]
     );
@@ -105,25 +109,29 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
           getDisplayText: () => getDisplayKind('HelmRelease', useShortResourceNames),
           onClick: handleResourceClick,
           onAltClick: (resource) =>
-            navigateToView({
-              kind: 'HelmRelease',
-              name: resource.name,
-              namespace: resource.namespace,
-              clusterId: resource.clusterId,
-              clusterName: resource.clusterName,
-            }),
+            navigateToView(
+              buildSyntheticObjectReference({
+                kind: 'HelmRelease',
+                name: resource.name,
+                namespace: resource.namespace,
+                clusterId: resource.clusterId,
+                clusterName: resource.clusterName,
+              })
+            ),
           isInteractive: () => true,
         }),
         cf.createTextColumn<HelmData>('name', 'Name', {
           onClick: handleResourceClick,
           onAltClick: (resource) =>
-            navigateToView({
-              kind: 'HelmRelease',
-              name: resource.name,
-              namespace: resource.namespace,
-              clusterId: resource.clusterId,
-              clusterName: resource.clusterName,
-            }),
+            navigateToView(
+              buildSyntheticObjectReference({
+                kind: 'HelmRelease',
+                name: resource.name,
+                namespace: resource.namespace,
+                clusterId: resource.clusterId,
+                clusterName: resource.clusterName,
+              })
+            ),
           getClassName: () => 'object-panel-link',
         }),
       ];
@@ -302,12 +310,15 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
       columns,
       controlledSort: persistedSort,
       onChange: onSortChange,
+      diagnosticsLabel:
+        namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Helm' : 'Namespace Helm',
     });
 
-    const availableFilterNamespaces = useMemo(
+    const fallbackNamespaces = useMemo(
       () => [...new Set(data.map((r) => r.namespace).filter(Boolean))].sort(),
       [data]
     );
+    const availableFilterNamespaces = useNamespaceFilterOptions(namespace, fallbackNamespaces);
 
     const { item: favToggle, modal: favModal } = useFavToggle({
       filters: persistedFilters,
@@ -326,14 +337,16 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
         const status = resource.status || resource.info?.status;
 
         return buildObjectActionItems({
-          object: {
-            kind: 'HelmRelease',
-            name: resource.name,
-            namespace: resource.namespace,
-            clusterId: resource.clusterId,
-            clusterName: resource.clusterName,
-            status,
-          },
+          object: buildSyntheticObjectReference(
+            {
+              kind: 'HelmRelease',
+              name: resource.name,
+              namespace: resource.namespace,
+              clusterId: resource.clusterId,
+              clusterName: resource.clusterName,
+            },
+            { status }
+          ),
           context: 'gridtable',
           handlers: {
             onOpen: () => handleResourceClick(resource),
@@ -364,6 +377,9 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
           <GridTable
             data={sortedData}
             columns={columns}
+            diagnosticsLabel={
+              namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Helm' : 'Namespace Helm'
+            }
             loading={loading}
             keyExtractor={keyExtractor}
             onRowClick={handleResourceClick}
@@ -380,8 +396,11 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
               onChange: setPersistedFilters,
               onReset: resetPersistedState,
               options: {
+                namespaces: availableFilterNamespaces,
                 showKindDropdown: true,
                 showNamespaceDropdown: showNamespaceColumn,
+                namespaceDropdownSearchable: showNamespaceColumn,
+                namespaceDropdownBulkActions: showNamespaceColumn,
                 preActions: [favToggle],
               },
             }}
