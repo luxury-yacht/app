@@ -7,6 +7,7 @@
  */
 
 import { eventBus, type UnsubscribeFn } from '@/core/events';
+import { requestData } from '@/core/data-access';
 import { resolveBuiltinGroupVersion } from '@/shared/constants/builtinGroupVersions';
 import type {
   PermissionEntry,
@@ -119,7 +120,16 @@ declare const window: {
 };
 
 function QueryPermissions(queries: QueryPayloadItem[]): Promise<QueryPermissionsResponse> {
-  return window['go']['backend']['App']['QueryPermissions'](queries);
+  return requestData<QueryPermissionsResponse>({
+    resource: 'query-permissions',
+    reason: 'startup',
+    read: () => window['go']['backend']['App']['QueryPermissions'](queries),
+  }).then((result) => {
+    if (result.status !== 'executed' || !result.data) {
+      throw new Error(result.blockedReason ?? 'query-permissions-blocked');
+    }
+    return result.data;
+  });
 }
 
 // ---------------------------------------------------------------------------

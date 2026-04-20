@@ -8,6 +8,7 @@
 
 import { EvaluateCapabilities } from '@wailsjs/go/backend/App';
 import type { capabilities } from '@wailsjs/go/models';
+import { requestData } from '@/core/data-access';
 
 import type {
   CapabilityEntry,
@@ -338,7 +339,15 @@ const queueFlush = () => {
       let raisedError: unknown = null;
 
       try {
-        response = await EvaluateCapabilities(payload);
+        const result = await requestData<capabilities.CheckResult[]>({
+          resource: 'evaluate-capabilities',
+          reason: 'startup',
+          read: () => EvaluateCapabilities(payload),
+        });
+        if (result.status !== 'executed') {
+          throw new Error(result.blockedReason ?? 'evaluate-capabilities-blocked');
+        }
+        response = result.data ?? [];
       } catch (error) {
         raisedError = error;
       }

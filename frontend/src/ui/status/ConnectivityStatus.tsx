@@ -8,7 +8,7 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import StatusIndicator from '@shared/components/status/StatusIndicator';
-import { refreshOrchestrator } from '@/core/refresh';
+import { requestContextRefresh } from '@/core/data-access';
 import { useClusterHealthListener } from '@/hooks/useWailsRuntimeEvents';
 import { useAuthError, useActiveClusterAuthState } from '@/core/contexts/AuthErrorContext';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
@@ -64,7 +64,7 @@ const ConnectivityStatus: React.FC = () => {
       void handleRetry(selectedClusterId);
       return;
     }
-    void refreshOrchestrator.triggerManualRefreshForContext();
+    void requestContextRefresh({ reason: 'user' });
   }, [authState, selectedClusterId, handleRetry]);
 
   const handleToggleAutoRefresh = useCallback(() => {

@@ -7,6 +7,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { requestData } from '@/core/data-access';
 
 import type { CapabilityDescriptor, CapabilityState } from './types';
 import { normalizeDescriptor } from './utils';
@@ -68,7 +69,16 @@ declare const window: {
 };
 
 function callQueryPermissions(queries: QueryPayloadItem[]): Promise<QueryPermissionsResponse> {
-  return window['go']['backend']['App']['QueryPermissions'](queries);
+  return requestData<QueryPermissionsResponse>({
+    resource: 'query-permissions',
+    reason: 'startup',
+    read: () => window['go']['backend']['App']['QueryPermissions'](queries),
+  }).then((result) => {
+    if (result.status !== 'executed' || !result.data) {
+      throw new Error(result.blockedReason ?? 'query-permissions-blocked');
+    }
+    return result.data;
+  });
 }
 
 // ---------------------------------------------------------------------------

@@ -6,6 +6,7 @@
  */
 import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
 import { RetryClusterAuth, GetAllClusterAuthStates } from '@wailsjs/go/backend/App';
+import { requestAppState } from '@/core/app-state-access';
 import { eventBus } from '@/core/events';
 
 /**
@@ -106,7 +107,10 @@ export const AuthErrorProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   useEffect(() => {
     const fetchInitialState = async () => {
       try {
-        const states = await GetAllClusterAuthStates();
+        const states = await requestAppState({
+          resource: 'cluster-auth-states',
+          read: () => GetAllClusterAuthStates(),
+        });
         if (!states) return;
 
         const initialErrors = new Map<string, ClusterAuthState>();

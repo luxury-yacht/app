@@ -7,6 +7,7 @@
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import ResourceBar from '@shared/components/ResourceBar';
+import { requestAppState } from '@/core/app-state-access';
 import { requestRefreshDomain } from '@/core/data-access';
 import { refreshOrchestrator, useRefreshScopedDomain } from '@/core/refresh';
 import { buildClusterScopeList } from '@/core/refresh/clusterScope';
@@ -206,7 +207,10 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
 
   useEffect(() => {
     let isActive = true;
-    GetAppInfo()
+    requestAppState({
+      resource: 'app-info',
+      read: () => GetAppInfo(),
+    })
       .then((info) => {
         if (!isActive) {
           return;

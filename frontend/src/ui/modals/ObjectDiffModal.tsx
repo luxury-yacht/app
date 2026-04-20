@@ -13,6 +13,8 @@ import { CloseIcon } from '@shared/components/icons/MenuIcons';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown/types';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
 import ModalSurface from '@shared/components/modals/ModalSurface';
+import { requestRefreshDomain } from '@/core/data-access';
+import { requestData } from '@/core/data-access';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { buildClusterScope, buildObjectScope } from '@core/refresh/clusterScope';
 import { refreshOrchestrator, useRefreshScopedDomain } from '@core/refresh';
@@ -301,7 +303,11 @@ const useCatalogDiffSnapshot = (
     }
 
     refreshOrchestrator.setScopedDomainEnabled('catalog-diff', scope, true);
-    void refreshOrchestrator.fetchScopedDomain('catalog-diff', scope, { isManual: true });
+    void requestRefreshDomain({
+      domain: 'catalog-diff',
+      scope,
+      reason: 'user',
+    });
 
     return () => {
       // Clean up the previous scope to prevent background refreshes.
@@ -344,7 +350,11 @@ const useObjectYamlSnapshot = (selection: CatalogItem | null, enabled: boolean) 
     }
 
     refreshOrchestrator.setScopedDomainEnabled('object-yaml', scope, true);
-    void refreshOrchestrator.fetchScopedDomain('object-yaml', scope, { isManual: true });
+    void requestRefreshDomain({
+      domain: 'object-yaml',
+      scope,
+      reason: 'user',
+    });
 
     return () => {
       refreshOrchestrator.setScopedDomainEnabled('object-yaml', scope, false);
@@ -653,16 +663,20 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
       }
 
       try {
-        const match = toCatalogItem(
-          await FindCatalogObjectMatch(
-            selection.clusterId,
-            selection.namespace ?? '',
-            selection.group,
-            selection.version,
-            selection.kind,
-            selection.name
-          )
-        );
+        const result = await requestData({
+          resource: 'catalog-object-match',
+          reason: 'user',
+          read: () =>
+            FindCatalogObjectMatch(
+              selection.clusterId,
+              selection.namespace ?? '',
+              selection.group,
+              selection.version,
+              selection.kind,
+              selection.name
+            ),
+        });
+        const match = toCatalogItem(result.status === 'executed' ? result.data : null);
         if (leftInitialSelectionRequestRef.current !== requestId) {
           return;
         }
@@ -970,16 +984,20 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
     setRightNoMatch(false);
 
     try {
-      const match = toCatalogItem(
-        await FindCatalogObjectMatch(
-          targetClusterId,
-          leftSelection.namespace ?? '',
-          leftSelection.group,
-          leftSelection.version,
-          leftSelection.kind,
-          leftSelection.name
-        )
-      );
+      const result = await requestData({
+        resource: 'catalog-object-match',
+        reason: 'user',
+        read: () =>
+          FindCatalogObjectMatch(
+            targetClusterId,
+            leftSelection.namespace ?? '',
+            leftSelection.group,
+            leftSelection.version,
+            leftSelection.kind,
+            leftSelection.name
+          ),
+      });
+      const match = toCatalogItem(result.status === 'executed' ? result.data : null);
       if (
         rightMatchRequestRef.current !== requestId ||
         rightClusterIdRef.current !== targetClusterId ||
@@ -1028,16 +1046,20 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
     setLeftNoMatch(false);
 
     try {
-      const match = toCatalogItem(
-        await FindCatalogObjectMatch(
-          targetClusterId,
-          rightSelection.namespace ?? '',
-          rightSelection.group,
-          rightSelection.version,
-          rightSelection.kind,
-          rightSelection.name
-        )
-      );
+      const result = await requestData({
+        resource: 'catalog-object-match',
+        reason: 'user',
+        read: () =>
+          FindCatalogObjectMatch(
+            targetClusterId,
+            rightSelection.namespace ?? '',
+            rightSelection.group,
+            rightSelection.version,
+            rightSelection.kind,
+            rightSelection.name
+          ),
+      });
+      const match = toCatalogItem(result.status === 'executed' ? result.data : null);
       if (
         leftMatchRequestRef.current !== requestId ||
         leftClusterIdRef.current !== targetClusterId ||

@@ -5,6 +5,7 @@
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
+import { requestData } from '@/core/data-access';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { overviewRegistry } from './registry';
 import { ActionsMenu } from '@shared/components/kubernetes/ActionsMenu';
@@ -50,9 +51,15 @@ const Overview: React.FC<OverviewProps> = (props) => {
       return;
     }
     let cancelled = false;
-    IsWorkloadHPAManaged(clusterId, props.namespace, props.kind, props.name)
-      .then((managed) => {
-        if (!cancelled) setHpaManaged(managed);
+    requestData({
+      resource: 'workload-hpa-managed',
+      reason: 'startup',
+      read: () => IsWorkloadHPAManaged(clusterId, props.namespace!, props.kind, props.name),
+    })
+      .then((result) => {
+        if (!cancelled) {
+          setHpaManaged(result.status === 'executed' ? Boolean(result.data) : false);
+        }
       })
       .catch(() => {
         if (!cancelled) setHpaManaged(false);

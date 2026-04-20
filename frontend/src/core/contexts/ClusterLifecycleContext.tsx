@@ -7,6 +7,7 @@
  * runtime events. Cleans up entries when clusters are deselected.
  */
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import { requestAppState } from '@/core/app-state-access';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 
 // ---------- Types ----------
@@ -79,7 +80,10 @@ export const ClusterLifecycleProvider: React.FC<ClusterLifecycleProviderProps> =
     //    hydrated state with any events already received so newer events win.
     const runtimeApp = (window as any)?.go?.backend?.App;
     if (runtimeApp?.GetAllClusterLifecycleStates) {
-      runtimeApp.GetAllClusterLifecycleStates().then((result: Record<string, string> | null) => {
+      void requestAppState<Record<string, string> | null>({
+        resource: 'cluster-lifecycle-states',
+        read: () => runtimeApp.GetAllClusterLifecycleStates(),
+      }).then((result: Record<string, string> | null) => {
         if (active && result) {
           setStates((prev) => {
             const merged = new Map(Object.entries(result) as [string, ClusterLifecycleState][]);

@@ -32,10 +32,15 @@ Reference inventory:
 
 - Phase 1 is complete.
 - Phase 2 is in progress.
-- Phase 3 refresh-domain conversion is partially complete through the current object-panel batch.
+- Phase 3 refresh-domain conversion is complete for the currently identified direct refresh-domain UI callers.
+- Phase 4 manual refresh fan-out conversion is complete for the targeted UI entrypoints.
+- Phase 5 bootstrap/app-state conversion is complete for the planned non-deferred readers.
+- Phase 6 is partially complete: cluster-derived direct RPC readers now go through `dataAccess`; permission/capability adapters and deferred operational/session readers remain.
 - Completed:
   - initial `dataAccess` broker skeleton
+  - initial `appStateAccess` broker skeleton
   - centralized paused-policy gate for cluster-data requests
+  - brokered manual refresh/context refresh wrapper
   - converted callers:
     - `NamespaceContext`
     - `NsResourcesContext`
@@ -50,14 +55,36 @@ Reference inventory:
     - `ManifestTab`
     - `ValuesTab`
     - `NodeMaintenanceTab`
+    - `ObjectDiffModal`
+    - `KubeconfigContext`
+    - `appPreferences`
+    - `ZoomContext`
+    - `favorites`
+    - `gridTablePersistence`
+    - `clusterTabOrder`
+    - `AuthErrorContext`
+    - `ClusterLifecycleContext`
+    - `AboutModal`
+    - `Settings`
+    - `RollbackModal`
+    - `ShellTab` cluster-data reads
+    - `LogViewer` cluster-data reads
+    - `PortForwardModal` target-port discovery
+    - `eventObjectIdentity`
+    - workload overview HPA-managed check
   - supporting object-panel callers updated to use request reasons instead of boolean manual flags
 - Verified so far:
-  - targeted Vitest coverage for broker behavior and converted callers, including the object-panel batch
+  - targeted Vitest coverage for broker behavior and converted callers, including bootstrap and cluster-data RPC readers
   - `frontend` typecheck
   - `mage qc:prerelease`
 - Remaining in this slice:
-  - `ObjectDiffModal`
   - diagnostics and adapter work from later phases
+  - permission/capability broker integration
+  - deferred operational/session readers:
+    - `SessionsStatus`
+    - `PortForwardsPanel`
+    - `ClusterTabs`
+    - `AppLogsPanel`
 
 ## Non-Goals
 
@@ -586,7 +613,7 @@ This is the highest-priority migration because it fixes the current refresh conf
 - [x] `frontend/src/modules/object-panel/components/ObjectPanel/Helm/ManifestTab.tsx`
 - [x] `frontend/src/modules/object-panel/components/ObjectPanel/Helm/ValuesTab.tsx`
 - [x] `frontend/src/modules/object-panel/components/ObjectPanel/Maintenance/NodeMaintenanceTab.tsx`
-- [ ] `frontend/src/ui/modals/ObjectDiffModal.tsx`
+- [x] `frontend/src/ui/modals/ObjectDiffModal.tsx`
 
 Rules for this phase:
 
@@ -598,22 +625,22 @@ Deliverable:
 
 - no UI component directly calls `fetchScopedDomain(...)`
 - current progress:
-  - all currently identified object-panel refresh-domain readers except `ObjectDiffModal` now go through `dataAccess`
+  - all currently identified direct refresh-domain UI readers in this slice now go through `dataAccess`
   - supporting object-panel action callers now pass explicit request reasons
 
 ## Phase 4: Convert Manual Refresh Fan-Out
 
-- [ ] Wrap `triggerManualRefreshForContext(...)` with the broker
-- [ ] Route global refresh shortcut through broker `reason: user`
-- [ ] Route view-switch startup fetch through broker `reason: startup`
-- [ ] Stop using `triggerManualRefreshForContext(...)` as a generic escape hatch
+- [x] Wrap `triggerManualRefreshForContext(...)` with the broker
+- [x] Route global refresh shortcut through broker `reason: user`
+- [x] Route view-switch startup fetch through broker `reason: startup`
+- [x] Stop using `triggerManualRefreshForContext(...)` as a generic escape hatch
 
 Files to convert first:
 
-- [ ] `frontend/src/App.tsx`
-- [ ] `frontend/src/core/contexts/ViewStateContext.tsx`
-- [ ] `frontend/src/ui/command-palette/CommandPaletteCommands.tsx`
-- [ ] `frontend/src/ui/status/ConnectivityStatus.tsx`
+- [x] `frontend/src/App.tsx`
+- [x] `frontend/src/core/contexts/ViewStateContext.tsx`
+- [x] `frontend/src/ui/command-palette/CommandPaletteCommands.tsx`
+- [x] `frontend/src/ui/status/ConnectivityStatus.tsx`
 
 Deliverable:
 
@@ -621,25 +648,25 @@ Deliverable:
 
 ## Phase 5: Convert Bootstrap/App-State Reads
 
-- [ ] Add `appStateAccess` adapters for bootstrap/config reads
-- [ ] Convert app bootstrap/state readers to `appStateAccess`
+- [x] Add `appStateAccess` adapters for bootstrap/config reads
+- [x] Convert app bootstrap/state readers to `appStateAccess`
 - [ ] Add diagnostics coverage where appropriate
 
 Recommended order:
 
 1. persisted app shell state
-   - [ ] `KubeconfigContext`
-   - [ ] `appPreferences`
-   - [ ] `ZoomContext`
-   - [ ] `favorites`
-   - [ ] `gridTablePersistence`
-   - [ ] `clusterTabOrder`
+   - [x] `KubeconfigContext`
+   - [x] `appPreferences`
+   - [x] `ZoomContext`
+   - [x] `favorites`
+   - [x] `gridTablePersistence`
+   - [x] `clusterTabOrder`
 2. app shell bootstrap providers
-   - [ ] `AuthErrorContext`
-   - [ ] `ClusterLifecycleContext`
+   - [x] `AuthErrorContext`
+   - [x] `ClusterLifecycleContext`
 3. app metadata/settings surfaces
-   - [ ] `AboutModal`
-   - [ ] `Settings`
+   - [x] `AboutModal`
+   - [x] `Settings`
 
 Deliverable:
 
@@ -647,7 +674,7 @@ Deliverable:
 
 ## Phase 6: Convert Cluster-Data-Adjacent RPC Reads and Permission/Capability Reads
 
-- [ ] Add `dataAccess` adapters for cluster-data-adjacent RPC reads where the data is Kubernetes-derived or cluster-scoped
+- [x] Add `dataAccess` adapters for cluster-data-adjacent RPC reads where the data is Kubernetes-derived or cluster-scoped
 - [ ] Add `permission-read` adapter
 - [ ] Add `capability-read` adapter
 - [ ] Wrap `queryNamespacePermissions(...)`
@@ -657,13 +684,13 @@ Deliverable:
 
 Likely `dataAccess` readers in this phase:
 
-- [ ] `RollbackModal`
-- [ ] `ShellTab`
-- [ ] `LogViewer`
-- [ ] `PortForwardModal`
-- [ ] `ObjectDiffModal`
-- [ ] `eventObjectIdentity.ts`
-- [ ] workload overview HPA-managed check
+- [x] `RollbackModal`
+- [x] `ShellTab`
+- [x] `LogViewer`
+- [x] `PortForwardModal`
+- [x] `ObjectDiffModal`
+- [x] `eventObjectIdentity.ts`
+- [x] workload overview HPA-managed check
 
 Deferred from this phase:
 

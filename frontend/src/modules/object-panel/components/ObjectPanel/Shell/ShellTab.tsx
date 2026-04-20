@@ -3,6 +3,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { requestData } from '@/core/data-access';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { ClipboardAddon } from '@xterm/addon-clipboard';
@@ -585,7 +586,12 @@ const ShellTab: React.FC<ShellTabProps> = ({
       return;
     }
     try {
-      const containerNames = await GetPodContainers(resolvedClusterId, namespace, resourceName);
+      const result = await requestData({
+        resource: 'pod-containers',
+        reason: 'user',
+        read: () => GetPodContainers(resolvedClusterId, namespace, resourceName),
+      });
+      const containerNames = result.status === 'executed' ? (result.data ?? []) : [];
       const normalized = Array.from(
         new Set(
           containerNames

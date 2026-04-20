@@ -16,7 +16,7 @@ import { RegexSearchIcon } from '@shared/components/icons/LogIcons';
 import { deriveCopyText } from '@ui/shortcuts/context';
 import { useKeyboardSurface, useShortcut, useSearchShortcutTarget } from '@ui/shortcuts';
 import { errorHandler } from '@utils/errorHandler';
-import { requestRefreshDomain } from '@/core/data-access';
+import { requestData, requestRefreshDomain } from '@/core/data-access';
 import { refreshOrchestrator } from '@/core/refresh';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
@@ -663,13 +663,20 @@ const YamlTab: React.FC<YamlTabProps> = ({
           `Cannot fetch latest YAML for ${identity.kind}/${identity.name}: apiVersion missing`
         );
       }
-      const latestYamlRaw = await GetObjectYAMLByGVK(
-        resolvedClusterId,
-        identity.apiVersion,
-        identity.kind,
-        identity.namespace ?? '',
-        identity.name
-      );
+      const latestYamlResult = await requestData({
+        resource: 'object-yaml-by-gvk',
+        reason: 'user',
+        read: () =>
+          GetObjectYAMLByGVK(
+            resolvedClusterId,
+            identity.apiVersion,
+            identity.kind,
+            identity.namespace ?? '',
+            identity.name
+          ),
+      });
+      const latestYamlRaw =
+        latestYamlResult.status === 'executed' ? (latestYamlResult.data ?? '') : '';
       const normalizedYaml = normalizeYamlString(latestYamlRaw);
       const parsedIdentity = parseObjectIdentity(normalizedYaml);
       const resolvedIdentity: ObjectIdentity = parsedIdentity

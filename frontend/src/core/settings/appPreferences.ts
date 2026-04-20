@@ -22,6 +22,7 @@ import {
   SetLogTargetPerScopeLimit as SetLogTargetPerScopeLimitBackend,
 } from '@wailsjs/go/backend/App';
 import { types } from '@wailsjs/go/models';
+import { requestAppState } from '@/core/app-state-access';
 import { eventBus } from '@/core/events';
 import {
   DEFAULT_LOG_API_TIMESTAMP_FORMAT,
@@ -355,7 +356,10 @@ const persistObjectPanelPosition = async (position: ObjectPanelPosition): Promis
 
 const fetchAppSettings = async (): Promise<AppSettingsPayload | null> => {
   try {
-    const settings = (await GetAppSettings()) as AppSettingsPayload | null;
+    const settings = (await requestAppState({
+      resource: 'app-settings',
+      read: () => GetAppSettings(),
+    })) as AppSettingsPayload | null;
     return settings ?? null;
   } catch {
     return null;
@@ -801,7 +805,10 @@ export const setPaletteTint = (
 
 // Fetches all saved themes from the backend.
 export const getThemes = async (): Promise<types.Theme[]> => {
-  const result = await GetThemes();
+  const result = await requestAppState({
+    resource: 'themes',
+    read: () => GetThemes(),
+  });
   return result || [];
 };
 

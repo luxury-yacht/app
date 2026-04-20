@@ -5,6 +5,7 @@
  */
 
 import { eventBus } from '@/core/events';
+import { requestAppState } from '@/core/app-state-access';
 
 let cachedOrder: string[] = [];
 let hydrated = false;
@@ -63,7 +64,10 @@ export const hydrateClusterTabOrder = async (options?: { force?: boolean }): Pro
       return;
     }
     try {
-      const order = await runtimeApp.GetClusterTabOrder();
+      const order = await requestAppState({
+        resource: 'cluster-tab-order',
+        read: () => runtimeApp.GetClusterTabOrder(),
+      });
       updateOrderCache(Array.isArray(order) ? order : []);
     } catch (error) {
       console.error('Failed to hydrate cluster tab order:', error);

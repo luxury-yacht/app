@@ -7,6 +7,7 @@
  */
 import React, { useReducer, useEffect, useRef, useMemo, useCallback } from 'react';
 import { GetLogScopeContainers, LogFetcher } from '@wailsjs/go/backend/App';
+import { requestData } from '@/core/data-access';
 import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
@@ -1676,7 +1677,12 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     let isCancelled = false;
     const fetchContainers = async () => {
       try {
-        const containerList = await GetLogScopeContainers(resolvedClusterId, logScope);
+        const result = await requestData({
+          resource: 'log-scope-containers',
+          reason: 'user',
+          read: () => GetLogScopeContainers(resolvedClusterId, logScope),
+        });
+        const containerList = result.status === 'executed' ? (result.data ?? []) : [];
 
         if (isCancelled) return;
 
