@@ -245,6 +245,56 @@ const resolveStreamTelemetryHealth = (
 const formatHealthLabel = (status: HealthStatus, reason: string): string =>
   reason ? `${status} (${reason})` : status;
 
+const BROKER_READ_TOKEN_LABELS: Record<string, string> = {
+  api: 'API',
+  crds: 'CRDs',
+  gvk: 'GVK',
+  hpa: 'HPA',
+  rbac: 'RBAC',
+  uid: 'UID',
+  yaml: 'YAML',
+};
+
+const formatBrokerReadLabel = (value: string): string => {
+  return value
+    .split(/[-_:/]+/)
+    .filter(Boolean)
+    .map((token) => {
+      const lower = token.toLowerCase();
+      if (BROKER_READ_TOKEN_LABELS[lower]) {
+        return BROKER_READ_TOKEN_LABELS[lower];
+      }
+      return token.charAt(0).toUpperCase() + token.slice(1);
+    })
+    .join(' ');
+};
+
+const resolveBrokerReadScope = (
+  scopes: string[],
+  activeClusterId: string,
+  getClusterMeta: (config: string) => { id: string; name: string }
+): { display: string; tooltip?: string } => {
+  const trimmedScopes = scopes.map((scope) => scope.trim()).filter(Boolean);
+  const trimmed = trimmedScopes[0] ?? '';
+  if (!trimmed) {
+    return { display: '—' };
+  }
+
+  const scopeDetails = resolveScopeDetails(trimmed, activeClusterId, getClusterMeta);
+  const recentScopeCount = trimmedScopes.length;
+  if (recentScopeCount <= 1) {
+    return {
+      display: scopeDetails.display,
+      tooltip: scopeDetails.tooltip ?? trimmed,
+    };
+  }
+
+  return {
+    display: `${scopeDetails.display} (+${recentScopeCount - 1} more)`,
+    tooltip: trimmedScopes.join(' || '),
+  };
+};
+
 export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isOpen }) => {
   const [activeTab, setActiveTab] = useState<DiagnosticsTabId>('refresh-domains');
   const gridTablePerformanceRows = useGridTablePerformanceDiagnostics();
@@ -2142,13 +2192,22 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
                 ? 'Error'
                 : 'Success';
       const broker = entry.broker === 'data-access' ? 'Cluster Data' : 'App State';
+      const label = entry.label ?? formatBrokerReadLabel(entry.resource);
+      const scopeInfo = resolveBrokerReadScope(
+        entry.recentScopes,
+        selectedClusterId,
+        getClusterMeta
+      );
 
       return {
         key: entry.key,
         broker,
+        label,
         resource: entry.resource,
         adapter: entry.adapter,
         reason: entry.reason ?? '—',
+        scope: scopeInfo.display,
+        scopeTooltip: scopeInfo.tooltip,
         inFlightCount: entry.inFlightCount,
         totalRequests: entry.totalRequests,
         successCount: entry.successCount,
@@ -2161,12 +2220,14 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         lastError: entry.lastBlockedReason ?? entry.lastError ?? '—',
       };
     });
-  }, [brokerReadDiagnostics]);
+  }, [brokerReadDiagnostics, getClusterMeta, selectedClusterId]);
 
   const brokerReadsSummary = useMemo(() => {
     const inFlight = brokerReadRows.reduce((total, row) => total + row.inFlightCount, 0);
     const totalRequests = brokerReadRows.reduce((total, row) => total + row.totalRequests, 0);
-    return `Rows: ${brokerReadRows.length} • In Flight: ${inFlight} • Requests: ${totalRequests}`;
+    const blocked = brokerReadRows.reduce((total, row) => total + row.blockedCount, 0);
+    const errors = brokerReadRows.reduce((total, row) => total + row.errorCount, 0);
+    return `Rows: ${brokerReadRows.length} • In Flight: ${inFlight} • Requests: ${totalRequests} • Blocked: ${blocked} • Errors: ${errors}`;
   }, [brokerReadRows]);
 
   const brokerReadsContent = (

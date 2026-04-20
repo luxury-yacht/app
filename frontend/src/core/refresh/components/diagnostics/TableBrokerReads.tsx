@@ -20,7 +20,8 @@ export const BrokerReadsTable: React.FC<BrokerReadsTableProps> = ({ rows, summar
           <thead>
             <tr>
               <th>Broker</th>
-              <th>Resource</th>
+              <th>Read</th>
+              <th>Scope</th>
               <th>Adapter</th>
               <th>Reason</th>
               <th>In Flight</th>
@@ -37,15 +38,19 @@ export const BrokerReadsTable: React.FC<BrokerReadsTableProps> = ({ rows, summar
           <tbody>
             {rows.length === 0 ? (
               <tr className="diagnostics-empty">
-                <td colSpan={13}>No brokered reads recorded yet.</td>
+                <td colSpan={14}>No brokered reads recorded yet.</td>
               </tr>
             ) : (
               rows.map((row) => (
                 <tr key={row.key}>
                   <td>{row.broker}</td>
                   <td>
-                    <span className="diagnostics-domain">{row.resource}</span>
+                    <div className="diagnostics-table-stack">
+                      <span className="diagnostics-domain">{row.label}</span>
+                      <span className="diagnostics-table-secondary">{row.resource}</span>
+                    </div>
                   </td>
+                  <td title={row.scopeTooltip}>{row.scope}</td>
                   <td>{row.adapter}</td>
                   <td>{row.reason}</td>
                   <td>{row.inFlightCount}</td>

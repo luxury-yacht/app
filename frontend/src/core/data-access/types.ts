@@ -16,6 +16,7 @@ export interface RefreshDomainRequest {
   scope: string;
   reason: DataRequestReason;
   resource?: string;
+  label?: string;
 }
 
 export interface DataRequestResult {
@@ -27,6 +28,8 @@ export interface DataReadRequest<T> {
   resource: string;
   reason: DataRequestReason;
   adapter?: DataAccessAdapter;
+  label?: string;
+  scope?: string;
   read: () => Promise<T>;
 }
 
@@ -37,4 +40,7 @@ export interface DataReadResult<T> extends DataRequestResult {
 export interface ContextRefreshRequest {
   reason: DataRequestReason;
   context?: Partial<RefreshContext>;
+  resource?: string;
+  label?: string;
+  scope?: string;
 }

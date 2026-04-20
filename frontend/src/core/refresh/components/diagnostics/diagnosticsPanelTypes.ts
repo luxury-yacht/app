@@ -151,9 +151,12 @@ export interface SummaryCardData {
 export interface BrokerReadRow {
   key: string;
   broker: string;
+  label: string;
   resource: string;
   adapter: string;
   reason: string;
+  scope: string;
+  scopeTooltip?: string;
   inFlightCount: number;
   totalRequests: number;
   successCount: number;

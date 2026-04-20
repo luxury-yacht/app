@@ -48,6 +48,7 @@ export default [
                 'FindCatalogObjectByUID',
                 'FindCatalogObjectMatch',
                 'GetAllClusterAuthStates',
+                'GetAllClusterLifecycleStates',
                 'GetAppInfo',
                 'GetAppSettings',
                 'GetClusterPortForwardCount',
@@ -78,6 +79,11 @@ export default [
       ],
       'no-restricted-syntax': [
         'error',
+        {
+          selector: "MemberExpression[property.name='GetAllClusterLifecycleStates']",
+          message:
+            'Route lifecycle state reads through appStateAccess adapters instead of calling runtime methods directly.',
+        },
         {
           selector: "CallExpression[callee.name='fetch']",
           message: 'Use the refresh orchestrator client instead of direct fetch calls.',
@@ -111,7 +117,7 @@ export default [
       'src/**/*.test.ts',
       'src/**/*.test.tsx',
     ],
-    rules: { 'no-restricted-imports': 'off' },
+    rules: { 'no-restricted-imports': 'off', 'no-restricted-syntax': 'off' },
   },
   {
     files: ['src/core/refresh/**/*', 'src/core/data-access/**/*'],

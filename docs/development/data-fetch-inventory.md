@@ -141,46 +141,46 @@ These decisions align the inventory with the two-path migration plan.
 
 These are app-shell, persisted-state, and app-runtime reads and should migrate through `appStateAccess`.
 
-| File                                                                        | RPC(s)                             | Why |
-| --------------------------------------------------------------------------- | ---------------------------------- | --- |
-| `frontend/src/modules/kubernetes/config/KubeconfigContext.tsx`              | `GetKubeconfigs`, `GetSelectedKubeconfigs` | Bootstrap app shell cluster selection state |
-| `frontend/src/core/settings/appPreferences.ts`                              | `GetAppSettings`, `GetThemes`      | Persisted app configuration |
-| `frontend/src/ui/settings/Settings.tsx`                                     | `GetThemeInfo`, `GetKubeconfigSearchPaths` | App settings/config metadata |
-| `frontend/src/core/contexts/AuthErrorContext.tsx`                           | `GetAllClusterAuthStates`          | App-shell cluster auth state, not resource data |
-| `frontend/src/core/contexts/ClusterLifecycleContext.tsx`                    | `GetAllClusterLifecycleStates`     | App-shell cluster lifecycle state, not resource data |
-| `frontend/src/ui/modals/AboutModal.tsx`                                     | `GetAppInfo`                       | App metadata |
-| `frontend/src/modules/cluster/components/ClusterOverview.tsx`               | `GetAppInfo`                       | App metadata reused in a cluster view |
-| `frontend/src/core/persistence/favorites.ts`                                | `GetFavorites`                     | Persisted app/user state |
-| `frontend/src/shared/components/tables/persistence/gridTablePersistence.ts` | `GetGridTablePersistence`          | Persisted app/user state |
-| `frontend/src/core/persistence/clusterTabOrder.ts`                          | `GetClusterTabOrder`               | Persisted app/user state |
-| `frontend/src/core/contexts/ZoomContext.tsx`                                | `GetZoomLevel`                     | Persisted app/user state |
-| `frontend/src/ui/panels/app-logs/AppLogsPanel.tsx`                          | `GetLogs`                          | App runtime log buffer, not cluster resource data |
-| `frontend/src/modules/port-forward/PortForwardsPanel.tsx`                   | `ListPortForwards`                 | Runtime port-forward session inventory |
-| `frontend/src/ui/status/SessionsStatus.tsx`                                 | `ListShellSessions`, `ListPortForwards` | Runtime shell/port-forward session inventory |
-| `frontend/src/ui/layout/ClusterTabs.tsx`                                    | `GetClusterPortForwardCount`       | Runtime cluster-scoped session count |
-| `frontend/src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.tsx` | `ListShellSessions`, `GetShellSessionBacklog` | Runtime shell session lookup and backlog replay |
+| File                                                                          | RPC(s)                                        | Why                                                  |
+| ----------------------------------------------------------------------------- | --------------------------------------------- | ---------------------------------------------------- |
+| `frontend/src/modules/kubernetes/config/KubeconfigContext.tsx`                | `GetKubeconfigs`, `GetSelectedKubeconfigs`    | Bootstrap app shell cluster selection state          |
+| `frontend/src/core/settings/appPreferences.ts`                                | `GetAppSettings`, `GetThemes`                 | Persisted app configuration                          |
+| `frontend/src/ui/settings/Settings.tsx`                                       | `GetThemeInfo`, `GetKubeconfigSearchPaths`    | App settings/config metadata                         |
+| `frontend/src/core/contexts/AuthErrorContext.tsx`                             | `GetAllClusterAuthStates`                     | App-shell cluster auth state, not resource data      |
+| `frontend/src/core/contexts/ClusterLifecycleContext.tsx`                      | `GetAllClusterLifecycleStates`                | App-shell cluster lifecycle state, not resource data |
+| `frontend/src/ui/modals/AboutModal.tsx`                                       | `GetAppInfo`                                  | App metadata                                         |
+| `frontend/src/modules/cluster/components/ClusterOverview.tsx`                 | `GetAppInfo`                                  | App metadata reused in a cluster view                |
+| `frontend/src/core/persistence/favorites.ts`                                  | `GetFavorites`                                | Persisted app/user state                             |
+| `frontend/src/shared/components/tables/persistence/gridTablePersistence.ts`   | `GetGridTablePersistence`                     | Persisted app/user state                             |
+| `frontend/src/core/persistence/clusterTabOrder.ts`                            | `GetClusterTabOrder`                          | Persisted app/user state                             |
+| `frontend/src/core/contexts/ZoomContext.tsx`                                  | `GetZoomLevel`                                | Persisted app/user state                             |
+| `frontend/src/ui/panels/app-logs/AppLogsPanel.tsx`                            | `GetLogs`                                     | App runtime log buffer, not cluster resource data    |
+| `frontend/src/modules/port-forward/PortForwardsPanel.tsx`                     | `ListPortForwards`                            | Runtime port-forward session inventory               |
+| `frontend/src/ui/status/SessionsStatus.tsx`                                   | `ListShellSessions`, `ListPortForwards`       | Runtime shell/port-forward session inventory         |
+| `frontend/src/ui/layout/ClusterTabs.tsx`                                      | `GetClusterPortForwardCount`                  | Runtime cluster-scoped session count                 |
+| `frontend/src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.tsx` | `ListShellSessions`, `GetShellSessionBacklog` | Runtime shell session lookup and backlog replay      |
 
 ### `dataAccess` ownership
 
 These are cluster-derived reads and should migrate through `dataAccess`, even when they currently use direct RPCs.
 
-| File                                                                                  | RPC(s)                                    | Why |
-| ------------------------------------------------------------------------------------- | ----------------------------------------- | --- |
-| `frontend/src/modules/object-panel/components/ObjectPanel/Yaml/YamlTab.tsx`           | `GetObjectYAMLByGVK`                      | Strict-GVK object read for cluster data recovery |
-| `frontend/src/ui/modals/ObjectDiffModal.tsx`                                          | `FindCatalogObjectMatch`                  | Cluster object resolution |
-| `frontend/src/shared/utils/eventObjectIdentity.ts`                                    | `FindCatalogObjectByUID`                  | Cluster object resolution |
-| `frontend/src/shared/components/modals/RollbackModal.tsx`                             | `GetRevisionHistory`                      | Cluster workload revision data |
-| `frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/index.tsx` | `IsWorkloadHPAManaged`                    | Cluster workload capability/state read |
-| `frontend/src/modules/object-panel/components/ObjectPanel/Logs/LogViewer.tsx`         | `GetLogScopeContainers`                   | Container inventory derived from cluster object scope |
-| `frontend/src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.tsx`         | `GetPodContainers`                        | Container inventory derived from cluster object scope |
-| `frontend/src/modules/port-forward/PortForwardModal.tsx`                              | `GetTargetPorts`                          | Cluster object/service port discovery |
+| File                                                                                  | RPC(s)                   | Why                                                   |
+| ------------------------------------------------------------------------------------- | ------------------------ | ----------------------------------------------------- |
+| `frontend/src/modules/object-panel/components/ObjectPanel/Yaml/YamlTab.tsx`           | `GetObjectYAMLByGVK`     | Strict-GVK object read for cluster data recovery      |
+| `frontend/src/ui/modals/ObjectDiffModal.tsx`                                          | `FindCatalogObjectMatch` | Cluster object resolution                             |
+| `frontend/src/shared/utils/eventObjectIdentity.ts`                                    | `FindCatalogObjectByUID` | Cluster object resolution                             |
+| `frontend/src/shared/components/modals/RollbackModal.tsx`                             | `GetRevisionHistory`     | Cluster workload revision data                        |
+| `frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/index.tsx` | `IsWorkloadHPAManaged`   | Cluster workload capability/state read                |
+| `frontend/src/modules/object-panel/components/ObjectPanel/Logs/LogViewer.tsx`         | `GetLogScopeContainers`  | Container inventory derived from cluster object scope |
+| `frontend/src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.tsx`         | `GetPodContainers`       | Container inventory derived from cluster object scope |
+| `frontend/src/modules/port-forward/PortForwardModal.tsx`                              | `GetTargetPorts`         | Cluster object/service port discovery                 |
 
 ### Internal infrastructure reads
 
 These stay internal to infrastructure/adapters and are not component-level broker targets.
 
-| File                                  | RPC(s)                                     | Why |
-| ------------------------------------- | ------------------------------------------ | --- |
+| File                                  | RPC(s)                                         | Why                                                     |
+| ------------------------------------- | ---------------------------------------------- | ------------------------------------------------------- |
 | `frontend/src/core/refresh/client.ts` | `GetRefreshBaseURL`, `GetSelectionDiagnostics` | Transport/bootstrap plumbing for refresh infrastructure |
 
 ## Capability and Permission Read Inventory
@@ -209,7 +209,7 @@ Underlying transports still vary:
 - direct Wails RPC bindings remain behind `appStateAccess` or `dataAccess` adapters
 - permission/capability RPCs are now brokered through `dataAccess`
 
-The remaining architectural follow-up is incremental diagnostics refinement, not caller migration.
+There is no remaining caller-migration work in this slice; follow-up is limited to future incremental polish if diagnostics needs grow.
 
 ## Migration Constraints For Two Read Paths
 

@@ -13,6 +13,7 @@ export interface BrokerReadDiagnosticsEntry {
   key: string;
   broker: BrokerKind;
   resource: string;
+  label?: string;
   adapter: BrokerAdapter;
   reason?: DataRequestReason;
   totalRequests: number;
@@ -26,6 +27,8 @@ export interface BrokerReadDiagnosticsEntry {
   lastDurationMs?: number;
   lastBlockedReason?: string | null;
   lastError?: string | null;
+  lastScope?: string | null;
+  recentScopes: string[];
 }
 
 interface BeginBrokerReadOptions {
@@ -33,6 +36,8 @@ interface BeginBrokerReadOptions {
   resource: string;
   adapter: BrokerAdapter;
   reason?: DataRequestReason;
+  label?: string;
+  scope?: string;
 }
 
 interface CompleteBrokerReadOptions {
@@ -95,6 +100,8 @@ const getOrCreateEntry = (options: BeginBrokerReadOptions): BrokerReadDiagnostic
     lastStatus: 'never',
     lastBlockedReason: null,
     lastError: null,
+    lastScope: null,
+    recentScopes: [],
   };
   entries.set(key, entry);
   return entry;
@@ -113,9 +120,41 @@ const normalizeError = (error: unknown): string | null => {
   return String(error);
 };
 
+const normalizeLabel = (label?: string): string | undefined => {
+  const trimmed = label?.trim();
+  return trimmed ? trimmed : undefined;
+};
+
+const normalizeScope = (scope?: string): string | null => {
+  const trimmed = scope?.trim();
+  return trimmed ? trimmed : null;
+};
+
+const applyEntryMetadata = (
+  entry: BrokerReadDiagnosticsEntry,
+  options: Pick<BeginBrokerReadOptions, 'label' | 'scope'>
+): void => {
+  const label = normalizeLabel(options.label);
+  if (label) {
+    entry.label = label;
+  }
+
+  const scope = normalizeScope(options.scope);
+  if (!scope) {
+    return;
+  }
+
+  entry.lastScope = scope;
+  entry.recentScopes = [scope, ...entry.recentScopes.filter((value) => value !== scope)].slice(
+    0,
+    3
+  );
+};
+
 export const beginBrokerRead = (options: BeginBrokerReadOptions): string => {
   const entry = getOrCreateEntry(options);
   const startedAt = Date.now();
+  applyEntryMetadata(entry, options);
   entry.totalRequests += 1;
   entry.inFlightCount += 1;
   entry.lastStartedAt = startedAt;
@@ -171,6 +210,7 @@ export const recordBlockedBrokerRead = (
   blockedReason: string
 ): void => {
   const entry = getOrCreateEntry(options);
+  applyEntryMetadata(entry, options);
   entry.totalRequests += 1;
   entry.blockedCount += 1;
   entry.lastStatus = 'blocked';
@@ -192,11 +232,18 @@ export const getBrokerReadDiagnosticsSnapshot = (): BrokerReadDiagnosticsEntry[]
       if (left.inFlightCount !== right.inFlightCount) {
         return right.inFlightCount - left.inFlightCount;
       }
+      const leftIssues = left.errorCount + left.blockedCount;
+      const rightIssues = right.errorCount + right.blockedCount;
+      if (leftIssues !== rightIssues) {
+        return rightIssues - leftIssues;
+      }
       if (left.broker !== right.broker) {
         return left.broker.localeCompare(right.broker);
       }
-      if (left.resource !== right.resource) {
-        return left.resource.localeCompare(right.resource);
+      const leftLabel = left.label ?? left.resource;
+      const rightLabel = right.label ?? right.resource;
+      if (leftLabel !== rightLabel) {
+        return leftLabel.localeCompare(rightLabel);
       }
       return left.key.localeCompare(right.key);
     });

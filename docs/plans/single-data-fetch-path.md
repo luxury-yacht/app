@@ -37,15 +37,19 @@ Reference inventory:
 - Phase 5 bootstrap/app-state conversion is complete for the planned app-state and runtime-state readers.
 - Phase 6 cluster-data-adjacent RPC and permission/capability conversion is complete for the planned readers.
 - Phase 7 deprecation/enforcement work is complete.
+- Optional follow-up diagnostics/enforcement polish is complete.
 - Completed:
   - initial `dataAccess` broker skeleton
   - initial `appStateAccess` broker skeleton
   - shared broker-read diagnostics store for `dataAccess` and `appStateAccess`
   - diagnostics panel broker-read tab
+  - broker-read labels, scope summaries, and stronger row ordering in diagnostics
   - centralized paused-policy gate for cluster-data requests
   - brokered manual refresh/context refresh wrapper
   - read-only Wails adapter modules for `appStateAccess` and `dataAccess`
+  - remaining lifecycle hydration read moved behind `appStateAccess` adapters
   - lint restrictions blocking direct read-only Wails imports outside broker adapters
+  - lint restriction blocking direct `GetAllClusterLifecycleStates` runtime reads outside broker adapters
   - lint restrictions blocking direct `fetchScopedDomain(...)` / `triggerManualRefreshForContext(...)` use outside broker/refresh internals
   - converted callers:
     - `NamespaceContext`
@@ -91,7 +95,7 @@ Reference inventory:
   - `frontend` typecheck
   - `mage qc:prerelease`
 - Remaining in this slice:
-  - none for the migration itself; future work is optional diagnostics refinement
+  - none
 
 ## Non-Goals
 
@@ -188,15 +192,15 @@ Every cluster/resource read must go through this entrypoint.
 
 ### Required cluster-data request fields
 
-| Field | Purpose |
-| --- | --- |
-| `resource` | Stable logical resource ID, for example `cluster-overview`, `namespaces`, `object-yaml`, `namespace-permissions` |
-| `scope` | Multi-cluster-aware request scope; must include `clusterId` where applicable |
-| `reason` | Why the read is happening |
-| `adapter` | Which transport implementation services the request |
-| `cachePolicy` | Whether cached data is acceptable and how long it stays fresh |
-| `pausedPolicy` | Whether paused auto-refresh blocks this request |
-| `diagnostics` | User-facing label and machine-readable metadata for diagnostics |
+| Field          | Purpose                                                                                                          |
+| -------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `resource`     | Stable logical resource ID, for example `cluster-overview`, `namespaces`, `object-yaml`, `namespace-permissions` |
+| `scope`        | Multi-cluster-aware request scope; must include `clusterId` where applicable                                     |
+| `reason`       | Why the read is happening                                                                                        |
+| `adapter`      | Which transport implementation services the request                                                              |
+| `cachePolicy`  | Whether cached data is acceptable and how long it stays fresh                                                    |
+| `pausedPolicy` | Whether paused auto-refresh blocks this request                                                                  |
+| `diagnostics`  | User-facing label and machine-readable metadata for diagnostics                                                  |
 
 ### Request reasons
 
@@ -216,11 +220,11 @@ Definitions:
 
 This plan assumes the following rules:
 
-| Reason | Allowed when auto-refresh is paused? |
-| --- | --- |
-| `background` | No |
-| `startup` | No |
-| `user` | Yes |
+| Reason       | Allowed when auto-refresh is paused? |
+| ------------ | ------------------------------------ |
+| `background` | No                                   |
+| `startup`    | No                                   |
+| `user`       | Yes                                  |
 
 That means:
 
@@ -330,14 +334,11 @@ They should not use cluster refresh semantics like `refreshing` or `blocked`.
 ## Proposed Broker Shape
 
 ```ts
-type DataRequestReason = 'background' | 'startup' | 'user';
+type DataRequestReason = "background" | "startup" | "user";
 
-type DataAdapterKind =
-  | 'refresh-domain'
-  | 'permission-read'
-  | 'capability-read';
+type DataAdapterKind = "refresh-domain" | "permission-read" | "capability-read";
 
-type AppStateAdapterKind = 'rpc-read' | 'persistence-read';
+type AppStateAdapterKind = "rpc-read" | "persistence-read";
 
 interface DataScope {
   clusterId?: string;
@@ -364,10 +365,10 @@ interface DataRequest<T> {
 }
 
 interface DataRequestResult<T> {
-  status: 'idle' | 'loading' | 'refreshing' | 'ready' | 'error' | 'blocked';
+  status: "idle" | "loading" | "refreshing" | "ready" | "error" | "blocked";
   data: T | null;
   error: Error | null;
-  blockedReason?: 'auto-refresh-disabled';
+  blockedReason?: "auto-refresh-disabled";
   lastUpdated?: number;
 }
 
@@ -380,7 +381,7 @@ interface AppStateRequest<T> {
 }
 
 interface AppStateRequestResult<T> {
-  status: 'idle' | 'loading' | 'ready' | 'error';
+  status: "idle" | "loading" | "ready" | "error";
   data: T | null;
   error: Error | null;
   lastUpdated?: number;
@@ -715,7 +716,7 @@ Deferred from this phase:
 Special case:
 
 - [x] `ShellTab`
-  `GetPodContainers` goes through `dataAccess`; session/backlog reads go through `appStateAccess`
+      `GetPodContainers` goes through `dataAccess`; session/backlog reads go through `appStateAccess`
 
 Deliverable:
 
@@ -825,3 +826,25 @@ The correct fix is:
 - adapters underneath for refresh domains, app-state RPC reads/persistence, and permissions/capabilities
 
 That is the only approach that will make the system understandable again without continuing to patch behavior piecemeal.
+
+## Optional Follow-Up
+
+The optional refinement work listed here has been completed as part of the migration close-out.
+
+### Diagnostics refinement
+
+- broker-read rows now show stable labels plus machine resource IDs
+- broker-read rows now carry recent scope summaries where broker callers provide scope
+- broker-read ordering now surfaces in-flight and problematic reads before quiet historical rows
+
+### Enforcement hardening
+
+- direct lifecycle hydration reads are routed through `appStateAccess` reader helpers
+- lint now blocks direct lifecycle runtime reads outside broker adapter files
+- read-only backend import restrictions remain the default path for new reads
+
+### Cleanup and polish
+
+- broker diagnostics metadata now captures labels and recent scope history centrally
+- legacy direct lifecycle hydration access was removed from the context provider
+- diagnostics presentation is clearer for app-state/runtime versus cluster-data rows without changing broker semantics

@@ -127,6 +127,8 @@ describe('dataAccess', () => {
       resource: 'namespaces',
       reason: 'startup',
       adapter: 'refresh-domain',
+      label: 'Namespaces',
+      scope: 'cluster:alpha',
       read: vi.fn(),
     });
 
@@ -135,6 +137,8 @@ describe('dataAccess', () => {
       resource: 'query-permissions',
       reason: 'startup',
       adapter: 'permission-read',
+      label: 'Query Permissions',
+      scope: 'cluster:alpha',
       read: vi.fn().mockResolvedValue([]),
     });
 
@@ -144,18 +148,24 @@ describe('dataAccess', () => {
         expect.objectContaining({
           broker: 'data-access',
           resource: 'namespaces',
+          label: 'Namespaces',
           adapter: 'refresh-domain',
           reason: 'startup',
           blockedCount: 1,
           lastStatus: 'blocked',
+          lastScope: 'cluster:alpha',
+          recentScopes: ['cluster:alpha'],
         }),
         expect.objectContaining({
           broker: 'data-access',
           resource: 'query-permissions',
+          label: 'Query Permissions',
           adapter: 'permission-read',
           reason: 'startup',
           successCount: 1,
           lastStatus: 'success',
+          lastScope: 'cluster:alpha',
+          recentScopes: ['cluster:alpha'],
         }),
       ])
     );

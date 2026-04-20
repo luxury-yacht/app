@@ -312,6 +312,19 @@
   color: var(--color-text);
 }
 
+.diagnostics-table-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+  min-width: 0;
+}
+
+.diagnostics-table-secondary {
+  color: var(--color-text-secondary);
+  font-size: 0.7rem;
+  white-space: nowrap;
+}
+
 .diagnostics-permissions-actions {
   display: flex;
   align-items: center;

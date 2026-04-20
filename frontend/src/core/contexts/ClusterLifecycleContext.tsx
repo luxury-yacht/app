@@ -7,7 +7,7 @@
  * runtime events. Cleans up entries when clusters are deselected.
  */
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { requestAppState } from '@/core/app-state-access';
+import { requestAppState, readAllClusterLifecycleStates } from '@/core/app-state-access';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 
 // ---------- Types ----------
@@ -78,22 +78,19 @@ export const ClusterLifecycleProvider: React.FC<ClusterLifecycleProviderProps> =
     // 2. Hydrate current state from backend. Events that arrive between the RPC
     //    and its resolution are handled by the subscription above. We merge
     //    hydrated state with any events already received so newer events win.
-    const runtimeApp = (window as any)?.go?.backend?.App;
-    if (runtimeApp?.GetAllClusterLifecycleStates) {
-      void requestAppState<Record<string, string> | null>({
-        resource: 'cluster-lifecycle-states',
-        read: () => runtimeApp.GetAllClusterLifecycleStates(),
-      }).then((result: Record<string, string> | null) => {
-        if (active && result) {
-          setStates((prev) => {
-            const merged = new Map(Object.entries(result) as [string, ClusterLifecycleState][]);
-            // Events received after the RPC was sent take precedence.
-            prev.forEach((state, id) => merged.set(id, state));
-            return merged;
-          });
-        }
-      });
-    }
+    void requestAppState<Record<string, string> | null>({
+      resource: 'cluster-lifecycle-states',
+      read: readAllClusterLifecycleStates,
+    }).then((result: Record<string, string> | null) => {
+      if (active && result) {
+        setStates((prev) => {
+          const merged = new Map(Object.entries(result) as [string, ClusterLifecycleState][]);
+          // Events received after the RPC was sent take precedence.
+          prev.forEach((state, id) => merged.set(id, state));
+          return merged;
+        });
+      }
+    });
 
     return () => {
       active = false;

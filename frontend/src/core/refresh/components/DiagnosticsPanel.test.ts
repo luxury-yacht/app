@@ -64,6 +64,7 @@ let brokerReadDiagnosticsData: Array<{
   key: string;
   broker: 'data-access' | 'app-state-access';
   resource: string;
+  label?: string;
   adapter: string;
   reason?: 'background' | 'startup' | 'user';
   totalRequests: number;
@@ -77,6 +78,8 @@ let brokerReadDiagnosticsData: Array<{
   lastDurationMs?: number;
   lastBlockedReason?: string | null;
   lastError?: string | null;
+  lastScope?: string | null;
+  recentScopes: string[];
 }> = [];
 
 vi.mock('@/core/capabilities', async () => {
@@ -351,6 +354,7 @@ describe('broker read diagnostics', () => {
         key: 'data-access::query-permissions::permission-read::startup',
         broker: 'data-access',
         resource: 'query-permissions',
+        label: 'Query Permissions',
         adapter: 'permission-read',
         reason: 'startup',
         totalRequests: 3,
@@ -362,6 +366,8 @@ describe('broker read diagnostics', () => {
         lastCompletedAt: Date.now(),
         lastDurationMs: 12,
         lastBlockedReason: 'auto-refresh-disabled',
+        lastScope: 'cluster:test-cluster',
+        recentScopes: ['cluster:test-cluster'],
       },
     ];
 
@@ -376,7 +382,9 @@ describe('broker read diagnostics', () => {
     await flushAsync();
 
     expect(rendered.container.textContent).toContain('Broker Reads');
+    expect(rendered.container.textContent).toContain('Query Permissions');
     expect(rendered.container.textContent).toContain('query-permissions');
+    expect(rendered.container.textContent).toContain('cluster:test-cluster');
     expect(rendered.container.textContent).toContain('permission-read');
     expect(rendered.container.textContent).toContain('auto-refresh-disabled');
   });

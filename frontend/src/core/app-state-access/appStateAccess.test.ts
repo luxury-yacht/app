@@ -13,6 +13,7 @@ describe('appStateAccess', () => {
     await requestAppState({
       resource: 'app-info',
       adapter: 'rpc-read',
+      label: 'App Info',
       read: vi.fn().mockResolvedValue({ version: '1.0.0' }),
     });
 
@@ -20,9 +21,11 @@ describe('appStateAccess', () => {
       expect.objectContaining({
         broker: 'app-state-access',
         resource: 'app-info',
+        label: 'App Info',
         adapter: 'rpc-read',
         successCount: 1,
         lastStatus: 'success',
+        recentScopes: [],
       }),
     ]);
   });

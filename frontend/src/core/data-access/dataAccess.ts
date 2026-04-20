@@ -30,6 +30,8 @@ export const requestData = async <T>({
   resource,
   reason,
   adapter = 'rpc-read',
+  label,
+  scope,
   read,
 }: DataReadRequest<T>): Promise<DataReadResult<T>> => {
   if (isDataAccessBlocked(reason)) {
@@ -39,6 +41,8 @@ export const requestData = async <T>({
         resource,
         adapter,
         reason,
+        label,
+        scope,
       },
       'auto-refresh-disabled'
     );
@@ -53,6 +57,8 @@ export const requestData = async <T>({
     resource,
     adapter,
     reason,
+    label,
+    scope,
   });
 
   try {
@@ -72,11 +78,14 @@ export const requestRefreshDomain = async ({
   domain,
   scope,
   reason,
+  label,
 }: RefreshDomainRequest): Promise<DataRequestResult> => {
   const result = await requestData<void>({
     resource: domain,
     reason,
     adapter: 'refresh-domain',
+    label: label ?? domain,
+    scope,
     read: async () => {
       await refreshOrchestrator.fetchScopedDomain(domain, scope, {
         isManual: reason === 'user',
@@ -93,11 +102,16 @@ export const requestRefreshDomain = async ({
 export const requestContextRefresh = async ({
   reason,
   context,
+  resource = 'refresh-context',
+  label,
+  scope,
 }: ContextRefreshRequest): Promise<DataRequestResult> => {
   const result = await requestData<void>({
-    resource: 'refresh-context',
+    resource,
     reason,
     adapter: 'context-refresh',
+    label: label ?? 'refresh-context',
+    scope,
     read: async () => {
       await refreshOrchestrator.triggerManualRefreshForContext(context);
     },
