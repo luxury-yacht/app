@@ -161,53 +161,16 @@
 }
 
 .resource-group {
-  margin-bottom: 2rem;
+  margin-bottom: 1.5rem;
 }
 
 .resource-group:last-child {
   margin-bottom: 0;
 }
 
-.resource-item {
-  margin-bottom: 1rem;
-}
-
-.resource-details {
-  margin-top: 1rem;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: auto auto;
-  gap: 0.75rem 0.5rem;
-}
-
-.detail-row {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.utilization-detail-label {
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  color: var(--color-text-secondary);
-  letter-spacing: 0.5px;
-}
-
-.utilization-detail-value {
-  font-size: var(--font-size-normal);
-  color: var(--color-text);
-}
-
-.utilization-detail-value.is-loading {
-  color: var(--color-warning, #f59e0b);
-}
-
-.resource-usage-placeholder {
-  display: flex;
-  justify-content: flex-start;
-  align-items: center;
-  min-height: 160px;
-  padding: 1rem 0;
+.resource-usage .resource-bar,
+.resource-usage .resource-bar-track {
+  height: 10px;
 }
 
 .stats-grid {

@@ -531,82 +531,86 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
           )}
 
           <div className="resource-group">
-            <h3>CPU</h3>
-            <div className="resource-item">
-              <div className={`resource-bar-placeholder${skeletonBlockClass}`}>
-                <ResourceBar
-                  usage={displayOverview.cpuUsage}
-                  request={displayOverview.cpuRequests}
-                  limit={displayOverview.cpuAllocatable}
-                  type="cpu"
-                  variant="default"
-                />
+            <div className="pod-status__header">
+              <h3>CPU</h3>
+              <div className="pod-phase-legend__total">
+                <span className={`pod-phase-legend__total-value${skeletonTextClass}`}>
+                  {displayOverview.cpuAllocatable || '0'}
+                </span>
+                <span className="pod-phase-legend__total-label"> allocatable</span>
               </div>
-              <div className="resource-details">
-                <div className="detail-row">
-                  <span className="utilization-detail-label">Usage</span>
-                  <span className={`utilization-detail-value${skeletonTextClass}`}>
+            </div>
+            <div className={`resource-bar-placeholder${skeletonBlockClass}`}>
+              <ResourceBar
+                usage={displayOverview.cpuUsage}
+                request={displayOverview.cpuRequests}
+                limit={displayOverview.cpuAllocatable}
+                type="cpu"
+                variant="default"
+              />
+            </div>
+            <div className="pod-phase-legend">
+              <div className="pod-phase-legend__items">
+                <div className="pod-phase-legend__item">
+                  <span className={`pod-phase-legend__count${skeletonTextClass}`}>
                     {displayOverview.cpuUsage || '0'}
                   </span>
+                  <span className="pod-phase-legend__label">usage</span>
                 </div>
-                <div className="detail-row">
-                  <span className="utilization-detail-label">Allocatable</span>
-                  <span className={`utilization-detail-value${skeletonTextClass}`}>
-                    {displayOverview.cpuAllocatable || '0'}
-                  </span>
-                </div>
-                <div className="detail-row">
-                  <span className="utilization-detail-label">Requests</span>
-                  <span className={`utilization-detail-value${skeletonTextClass}`}>
+                <div className="pod-phase-legend__item">
+                  <span className={`pod-phase-legend__count${skeletonTextClass}`}>
                     {displayOverview.cpuRequests || '0'}
                   </span>
+                  <span className="pod-phase-legend__label">requests</span>
                 </div>
-                <div className="detail-row">
-                  <span className="utilization-detail-label">Limits</span>
-                  <span className={`utilization-detail-value${skeletonTextClass}`}>
+                <div className="pod-phase-legend__item">
+                  <span className={`pod-phase-legend__count${skeletonTextClass}`}>
                     {displayOverview.cpuLimits || '0'}
                   </span>
+                  <span className="pod-phase-legend__label">limits</span>
                 </div>
               </div>
             </div>
           </div>
 
           <div className="resource-group">
-            <h3>Memory</h3>
-            <div className="resource-item">
-              <div className={`resource-bar-placeholder${skeletonBlockClass}`}>
-                <ResourceBar
-                  usage={displayOverview.memoryUsage}
-                  request={displayOverview.memoryRequests}
-                  limit={displayOverview.memoryAllocatable}
-                  type="memory"
-                  variant="default"
-                />
+            <div className="pod-status__header">
+              <h3>Memory</h3>
+              <div className="pod-phase-legend__total">
+                <span className={`pod-phase-legend__total-value${skeletonTextClass}`}>
+                  {displayOverview.memoryAllocatable || '0'}
+                </span>
+                <span className="pod-phase-legend__total-label"> allocatable</span>
               </div>
-              <div className="resource-details">
-                <div className="detail-row">
-                  <span className="utilization-detail-label">Usage</span>
-                  <span className={`utilization-detail-value${skeletonTextClass}`}>
+            </div>
+            <div className={`resource-bar-placeholder${skeletonBlockClass}`}>
+              <ResourceBar
+                usage={displayOverview.memoryUsage}
+                request={displayOverview.memoryRequests}
+                limit={displayOverview.memoryAllocatable}
+                type="memory"
+                variant="default"
+              />
+            </div>
+            <div className="pod-phase-legend">
+              <div className="pod-phase-legend__items">
+                <div className="pod-phase-legend__item">
+                  <span className={`pod-phase-legend__count${skeletonTextClass}`}>
                     {displayOverview.memoryUsage || '0'}
                   </span>
+                  <span className="pod-phase-legend__label">usage</span>
                 </div>
-                <div className="detail-row">
-                  <span className="utilization-detail-label">Allocatable</span>
-                  <span className={`utilization-detail-value${skeletonTextClass}`}>
-                    {displayOverview.memoryAllocatable || '0'}
-                  </span>
-                </div>
-                <div className="detail-row">
-                  <span className="utilization-detail-label">Requests</span>
-                  <span className={`utilization-detail-value${skeletonTextClass}`}>
+                <div className="pod-phase-legend__item">
+                  <span className={`pod-phase-legend__count${skeletonTextClass}`}>
                     {displayOverview.memoryRequests || '0'}
                   </span>
+                  <span className="pod-phase-legend__label">requests</span>
                 </div>
-                <div className="detail-row">
-                  <span className="utilization-detail-label">Limits</span>
-                  <span className={`utilization-detail-value${skeletonTextClass}`}>
+                <div className="pod-phase-legend__item">
+                  <span className={`pod-phase-legend__count${skeletonTextClass}`}>
                     {displayOverview.memoryLimits || '0'}
                   </span>
+                  <span className="pod-phase-legend__label">limits</span>
                 </div>
               </div>
             </div>
