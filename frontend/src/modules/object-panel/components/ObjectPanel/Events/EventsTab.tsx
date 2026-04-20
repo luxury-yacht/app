@@ -18,6 +18,8 @@ import { formatAge, formatFullDate } from '@utils/ageFormatter';
 import { errorHandler } from '@/utils/errorHandler';
 import type { ObjectEventSummary } from '@/core/refresh/types';
 import { refreshManager, refreshOrchestrator } from '@/core/refresh';
+import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
+import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
 import { useRefreshScopedDomain } from '@/core/refresh/store';
 import { useRefreshWatcher } from '@/core/refresh/hooks/useRefreshWatcher';
 import type { ObjectEventsRefresherName } from '@/core/refresh/refresherTypes';
@@ -83,6 +85,7 @@ interface EventDisplay {
 }
 
 const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope }) => {
+  const { isPaused, isManualRefreshActive } = useAutoRefreshLoadingState();
   const { openWithObject } = useObjectPanel();
   const { navigateToView } = useNavigateToView();
   const openWithObjectRef = useRef(openWithObject);
@@ -128,10 +131,10 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
   );
 
   useEffect(() => {
-    if (isActive && objectData && eventsScope) {
+    if (isActive && objectData && eventsScope && !isPaused) {
       void fetchEvents(true);
     }
-  }, [fetchEvents, isActive, objectData, eventsScope]);
+  }, [fetchEvents, isActive, isPaused, objectData, eventsScope]);
 
   const eventsRefresherName = useMemo(
     () =>
@@ -252,12 +255,18 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
     [buildEventObjectRefInput, rawEvents, objectData?.kind, objectData?.name, objectData?.namespace]
   );
 
-  const eventsLoading = eventsScope
-    ? !eventsSnapshot.data?.events &&
-      (eventsSnapshot.status === 'loading' ||
-        eventsSnapshot.status === 'initialising' ||
-        eventsSnapshot.status === 'updating')
-    : false;
+  const eventsLoadingState = applyPassiveLoadingPolicy({
+    loading: eventsScope
+      ? !eventsSnapshot.data?.events &&
+        (eventsSnapshot.status === 'loading' ||
+          eventsSnapshot.status === 'initialising' ||
+          eventsSnapshot.status === 'updating')
+      : false,
+    hasLoaded: Boolean(eventsSnapshot.data?.events),
+    isPaused,
+    isManualRefreshActive,
+  });
+  const eventsLoading = eventsLoadingState.loading;
   const eventsError = eventsScope ? (eventsSnapshot.error ?? null) : null;
 
   const keyExtractor = useCallback((item: EventDisplay, index: number) => {

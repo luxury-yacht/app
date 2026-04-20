@@ -328,6 +328,9 @@ describe('ClusterOverview', () => {
     cleanupRoot = cleanup;
     await flushEffects();
 
+    expect(container.querySelector('.cluster-overview')?.classList.contains('is-skeleton')).toBe(
+      false
+    );
     expect(container.textContent).toContain('Status:');
     expect(container.textContent).toContain('Auto-refresh paused');
     expect(container.textContent).not.toContain('Ready');

@@ -11,6 +11,14 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 
 import ResourceLoadingBoundary from './ResourceLoadingBoundary';
 
+const autoRefreshLoadingState = vi.hoisted(() => ({
+  suppressPassiveLoading: false,
+}));
+
+vi.mock('@/core/refresh/hooks/useAutoRefreshLoadingState', () => ({
+  useAutoRefreshLoadingState: () => autoRefreshLoadingState,
+}));
+
 describe('ResourceLoadingBoundary', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
@@ -20,6 +28,7 @@ describe('ResourceLoadingBoundary', () => {
   });
 
   beforeEach(() => {
+    autoRefreshLoadingState.suppressPassiveLoading = false;
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
@@ -104,5 +113,20 @@ describe('ResourceLoadingBoundary', () => {
 
     expect(warnSpy).not.toHaveBeenCalled();
     warnSpy.mockRestore();
+  });
+
+  it('shows an auto-refresh disabled message when passive loading is suppressed before first load', () => {
+    autoRefreshLoadingState.suppressPassiveLoading = true;
+
+    act(() => {
+      root.render(
+        <ResourceLoadingBoundary loading={false} dataLength={0} hasLoaded={false}>
+          <div data-testid="content">content</div>
+        </ResourceLoadingBoundary>
+      );
+    });
+
+    expect(container.textContent).toContain('Auto-refresh is disabled');
+    expect(container.querySelector('[data-testid="content"]')).toBeNull();
   });
 });

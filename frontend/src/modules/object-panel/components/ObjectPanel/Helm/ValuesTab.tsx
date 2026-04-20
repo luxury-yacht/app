@@ -10,6 +10,8 @@ import * as YAML from 'yaml';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import SegmentedButton from '@shared/components/SegmentedButton';
 import { refreshOrchestrator } from '@/core/refresh';
+import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
+import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
 import { useRefreshScopedDomain } from '@/core/refresh/store';
 import { errorHandler } from '@utils/errorHandler';
 import './ValuesTab.css';
@@ -47,6 +49,7 @@ interface ValuesTabProps {
 }
 
 const ValuesTab: React.FC<ValuesTabProps> = ({ scope, isActive = false }) => {
+  const { isPaused, isManualRefreshActive } = useAutoRefreshLoadingState();
   const editorRef = useRef<ReactCodeMirrorRef>(null);
   const editorViewRef = useRef<EditorView | null>(null);
   const editorSurfaceRef = useRef<HTMLDivElement>(null);
@@ -85,7 +88,7 @@ const ValuesTab: React.FC<ValuesTabProps> = ({ scope, isActive = false }) => {
 
     const enabled = isActive;
     refreshOrchestrator.setScopedDomainEnabled('object-helm-values', scope, enabled);
-    if (enabled) {
+    if (enabled && !isPaused) {
       void refreshOrchestrator.fetchScopedDomain('object-helm-values', scope, { isManual: true });
     }
 
@@ -94,13 +97,19 @@ const ValuesTab: React.FC<ValuesTabProps> = ({ scope, isActive = false }) => {
         preserveState: true,
       });
     };
-  }, [scope, isActive]);
+  }, [scope, isActive, isPaused]);
 
   const valuesData = snapshot.data?.values as HelmValuesData | undefined;
-  const valuesLoading =
-    snapshot.status === 'loading' ||
-    snapshot.status === 'initialising' ||
-    (snapshot.status === 'updating' && !valuesData);
+  const valuesLoadingState = applyPassiveLoadingPolicy({
+    loading:
+      snapshot.status === 'loading' ||
+      snapshot.status === 'initialising' ||
+      (snapshot.status === 'updating' && !valuesData),
+    hasLoaded: Boolean(snapshot.data),
+    isPaused,
+    isManualRefreshActive,
+  });
+  const valuesLoading = valuesLoadingState.loading;
   const valuesError = snapshot.error ?? null;
 
   const hasPath = useCallback((obj: HelmValue | undefined, path: string[]): boolean => {

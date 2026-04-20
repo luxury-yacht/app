@@ -6,6 +6,7 @@
  */
 
 import React, { useEffect } from 'react';
+import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import LoadingSpinner from './LoadingSpinner';
 
 interface ResourceLoadingBoundaryProps {
@@ -27,8 +28,13 @@ const ResourceLoadingBoundary: React.FC<ResourceLoadingBoundaryProps> = ({
   suppressEmptyWarning = false,
   children,
 }) => {
+  const { suppressPassiveLoading } = useAutoRefreshLoadingState();
+  const shouldShowPausedMessage = suppressPassiveLoading && dataLength === 0 && !hasLoaded;
   // Compute inline to avoid memo overhead for a simple boolean.
   const shouldShowSpinner = (() => {
+    if (shouldShowPausedMessage) {
+      return false;
+    }
     if (!allowPartial) {
       return !hasLoaded || (loading && dataLength === 0);
     }
@@ -43,15 +49,19 @@ const ResourceLoadingBoundary: React.FC<ResourceLoadingBoundaryProps> = ({
       return;
     }
 
-    if (!loading && dataLength === 0 && !hasLoaded) {
+    if (!loading && dataLength === 0 && !hasLoaded && !suppressPassiveLoading) {
       console.warn(
         '[ResourceLoadingBoundary] allowPartial is enabled but the dataset is empty after loading completed. Set hasLoaded=true when the empty state is intentional to avoid a persistent spinner.'
       );
     }
-  }, [allowPartial, loading, dataLength, hasLoaded, suppressEmptyWarning]);
+  }, [allowPartial, loading, dataLength, hasLoaded, suppressEmptyWarning, suppressPassiveLoading]);
 
   if (shouldShowSpinner) {
     return <LoadingSpinner message={spinnerMessage ?? 'Loading resources...'} />;
+  }
+
+  if (shouldShowPausedMessage) {
+    return <div role="status">Auto-refresh is disabled</div>;
   }
 
   return <>{children}</>;

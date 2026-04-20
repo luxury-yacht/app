@@ -24,6 +24,7 @@ import { queryNamespacePermissions } from '@/core/capabilities';
 import { refreshOrchestrator, useRefreshScopedDomain } from '@/core/refresh';
 import { buildClusterScopeList } from '@/core/refresh/clusterScope';
 import { eventBus } from '@/core/events';
+import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import {
   ALL_NAMESPACES_DISPLAY_NAME,
   ALL_NAMESPACES_DETAILS,
@@ -85,6 +86,7 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
   );
 
   const namespaceDomain = useRefreshScopedDomain('namespaces', namespacesScope);
+  const { suppressPassiveLoading } = useAutoRefreshLoadingState();
   const activeClusterId = selectedClusterId?.trim() || '';
   // Track namespace selection per cluster tab to avoid cross-tab selection bleed.
   const [namespaceSelections, setNamespaceSelections] = useState<
@@ -187,7 +189,10 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
 
   const hasActiveClusterNamespaces = scopedNamespaces.length > 0;
   const namespaceLoading =
-    Boolean(activeClusterId) && !hasActiveClusterNamespaces && namespaceDomain.status !== 'error';
+    Boolean(activeClusterId) &&
+    !hasActiveClusterNamespaces &&
+    namespaceDomain.status !== 'error' &&
+    !suppressPassiveLoading;
   const namespaceRefreshing = hasActiveClusterNamespaces && namespaceDomain.status === 'updating';
   // The active cluster is usable for namespace-driven UI once we have at least
   // one real namespace row for it. Consumers use this to avoid showing "Ready"

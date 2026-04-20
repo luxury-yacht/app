@@ -8,6 +8,8 @@
 import { useCallback, useEffect, useMemo } from 'react';
 
 import { refreshManager, refreshOrchestrator } from '@/core/refresh';
+import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
+import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
 import { useRefreshScopedDomain } from '@/core/refresh/store';
 import { useRefreshWatcher } from '@/core/refresh/hooks/useRefreshWatcher';
 
@@ -36,15 +38,22 @@ export const useObjectPanelRefresh = ({
   isOpen,
   resourceDeleted,
 }: UseObjectPanelRefreshArgs): ObjectPanelRefreshResult => {
+  const { isPaused, isManualRefreshActive } = useAutoRefreshLoadingState();
   // Refresh context sync lives in RefreshSyncProvider; this hook only manages object-detail refreshes.
   const detailSnapshot = useRefreshScopedDomain('object-details', detailScope ?? INACTIVE_SCOPE);
 
   const detailPayload = detailScope ? (detailSnapshot.data?.details ?? null) : null;
   const detailStatus = detailScope ? detailSnapshot.status : 'idle';
 
-  const detailsLoading = detailScope
-    ? !detailPayload && (detailStatus === 'loading' || detailStatus === 'updating')
-    : false;
+  const detailsLoadingState = applyPassiveLoadingPolicy({
+    loading: detailScope
+      ? !detailPayload && (detailStatus === 'loading' || detailStatus === 'updating')
+      : false,
+    hasLoaded: Boolean(detailPayload),
+    isPaused,
+    isManualRefreshActive,
+  });
+  const detailsLoading = detailsLoadingState.loading;
 
   const detailsError = detailScope
     ? (() => {
@@ -128,10 +137,10 @@ export const useObjectPanelRefresh = ({
   });
 
   useEffect(() => {
-    if (isOpen && detailScope && !resourceDeleted) {
+    if (isOpen && detailScope && !resourceDeleted && !isPaused) {
       void fetchResourceDetails(true);
     }
-  }, [fetchResourceDetails, isOpen, detailScope, resourceDeleted]);
+  }, [fetchResourceDetails, isOpen, detailScope, resourceDeleted, isPaused]);
 
   return {
     detailPayload,

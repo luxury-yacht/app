@@ -31,6 +31,7 @@ import type { CatalogNamespaceGroup } from '@/core/refresh/types';
 import { useRefreshScopedDomainStates } from '@/core/refresh';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
+import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { useSidebarKeyboardControls, SidebarCursorTarget } from './SidebarKeys';
 
 // Static cluster view list to avoid re-creating the array each render.
@@ -80,6 +81,7 @@ function Sidebar() {
     selectedNamespace,
     selectedNamespaceClusterId,
   } = useNamespace();
+  const { suppressPassiveLoading } = useAutoRefreshLoadingState();
   const { selectedClusterId } = useKubeconfig();
   // Catalog is scoped — aggregate namespace metadata across active scopes, then
   // select the active cluster's groups explicitly instead of trusting whichever
@@ -395,6 +397,8 @@ function Sidebar() {
         ];
   const showClusterLabels = namespaceGroups.length > 1;
   const showNamespaceLoading = namespaceLoading;
+  const showNamespacePausedMessage =
+    suppressPassiveLoading && !showNamespaceLoading && !hasNamespaceData;
 
   return (
     <div
@@ -494,6 +498,10 @@ function Sidebar() {
               <h3>Namespaces</h3>
               {showNamespaceLoading ? (
                 <LoadingSpinner message="Loading namespaces..." />
+              ) : showNamespacePausedMessage ? (
+                <div className="sidebar-empty-message" role="status">
+                  Auto-refresh is disabled
+                </div>
               ) : (
                 <div className="namespace-items">
                   {namespaceGroupsToRender.map((group) => {

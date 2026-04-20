@@ -23,6 +23,11 @@ const hoistedMocks = vi.hoisted(() => ({
   },
   useRefreshScopedDomain: vi.fn(),
   useRefreshWatcher: vi.fn(),
+  autoRefreshLoadingState: {
+    isPaused: false,
+    isManualRefreshActive: false,
+    suppressPassiveLoading: false,
+  },
 }));
 
 vi.mock('@/core/refresh', () => ({
@@ -38,10 +43,15 @@ vi.mock('@/core/refresh/hooks/useRefreshWatcher', () => ({
   useRefreshWatcher: (...args: unknown[]) => hoistedMocks.useRefreshWatcher(...args),
 }));
 
+vi.mock('@/core/refresh/hooks/useAutoRefreshLoadingState', () => ({
+  useAutoRefreshLoadingState: () => hoistedMocks.autoRefreshLoadingState,
+}));
+
 const mockRefreshManager = hoistedMocks.refreshManager;
 const mockRefreshOrchestrator = hoistedMocks.refreshOrchestrator;
 const mockUseRefreshScopedDomain = hoistedMocks.useRefreshScopedDomain;
 const mockUseRefreshWatcher = hoistedMocks.useRefreshWatcher;
+const autoRefreshLoadingState = hoistedMocks.autoRefreshLoadingState;
 
 describe('useObjectPanelRefresh', () => {
   let container: HTMLDivElement;
@@ -108,6 +118,9 @@ describe('useObjectPanelRefresh', () => {
     mockRefreshOrchestrator.updateContext.mockClear();
     mockUseRefreshWatcher.mockClear();
     mockUseRefreshScopedDomain.mockReset();
+    autoRefreshLoadingState.isPaused = false;
+    autoRefreshLoadingState.isManualRefreshActive = false;
+    autoRefreshLoadingState.suppressPassiveLoading = false;
     mockUseRefreshScopedDomain.mockReturnValue({
       data: { details: { replicas: 3 } },
       status: 'ready',
@@ -178,5 +191,20 @@ describe('useObjectPanelRefresh', () => {
       'team-a:deployment:api',
       expect.objectContaining({ isManual: true })
     );
+  });
+
+  it('suppresses passive detail loading while auto-refresh is paused', async () => {
+    autoRefreshLoadingState.isPaused = true;
+    autoRefreshLoadingState.suppressPassiveLoading = true;
+    mockUseRefreshScopedDomain.mockReturnValue({
+      data: null,
+      status: 'loading',
+      error: null,
+    });
+
+    const { getResult } = await renderHook();
+
+    expect(getResult().detailsLoading).toBe(false);
+    expect(mockRefreshOrchestrator.fetchScopedDomain).not.toHaveBeenCalled();
   });
 });

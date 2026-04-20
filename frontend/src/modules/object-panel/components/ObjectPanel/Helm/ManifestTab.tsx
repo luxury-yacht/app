@@ -8,6 +8,8 @@ import { yaml as yamlLang } from '@codemirror/lang-yaml';
 import { EditorView } from '@codemirror/view';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import { refreshOrchestrator } from '@/core/refresh';
+import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
+import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
 import { useRefreshScopedDomain } from '@/core/refresh/store';
 import '../Yaml/YamlTab.css';
 import { buildCodeTheme } from '@/core/codemirror/theme';
@@ -30,6 +32,7 @@ interface ManifestTabProps {
 }
 
 const ManifestTab: React.FC<ManifestTabProps> = ({ scope, isActive = false }) => {
+  const { isPaused, isManualRefreshActive } = useAutoRefreshLoadingState();
   const editorRef = useRef<ReactCodeMirrorRef>(null);
   const editorViewRef = useRef<EditorView | null>(null);
   const editorSurfaceRef = useRef<HTMLDivElement>(null);
@@ -67,7 +70,7 @@ const ManifestTab: React.FC<ManifestTabProps> = ({ scope, isActive = false }) =>
 
     const enabled = isActive;
     refreshOrchestrator.setScopedDomainEnabled('object-helm-manifest', scope, enabled);
-    if (enabled) {
+    if (enabled && !isPaused) {
       void refreshOrchestrator.fetchScopedDomain('object-helm-manifest', scope, { isManual: true });
     }
 
@@ -76,13 +79,19 @@ const ManifestTab: React.FC<ManifestTabProps> = ({ scope, isActive = false }) =>
         preserveState: true,
       });
     };
-  }, [scope, isActive]);
+  }, [scope, isActive, isPaused]);
 
   const manifestContent = snapshot.data?.manifest ?? '';
-  const manifestLoading =
-    snapshot.status === 'loading' ||
-    snapshot.status === 'initialising' ||
-    (snapshot.status === 'updating' && !manifestContent);
+  const manifestLoadingState = applyPassiveLoadingPolicy({
+    loading:
+      snapshot.status === 'loading' ||
+      snapshot.status === 'initialising' ||
+      (snapshot.status === 'updating' && !manifestContent),
+    hasLoaded: Boolean(snapshot.data),
+    isPaused,
+    isManualRefreshActive,
+  });
+  const manifestLoading = manifestLoadingState.loading;
   const manifestError = snapshot.error ?? null;
 
   const { theme: codeMirrorTheme, highlight: highlightExtension } = useMemo(

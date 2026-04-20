@@ -27,7 +27,7 @@ import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useClusterHealthListener } from '@/hooks/useWailsRuntimeEvents';
 import { useActiveClusterAuthState } from '@/core/contexts/AuthErrorContext';
 import { buildConnectivityPresentation } from '@/core/connection/connectivityPresentation';
-import { getAutoRefreshEnabled } from '@/core/settings/appPreferences';
+import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 
 interface ClusterOverviewProps {
   clusterContext: string;
@@ -77,7 +77,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
   const { getActiveClusterHealth } = useClusterHealthListener(selectedClusterId);
   const authState = useActiveClusterAuthState(selectedClusterId);
   const { namespaceReady, setSelectedNamespace } = useNamespace();
-  const [isPaused, setIsPaused] = useState(() => !getAutoRefreshEnabled());
+  const { isPaused, suppressPassiveLoading } = useAutoRefreshLoadingState();
   const lifecycleState = selectedClusterId ? getClusterState(selectedClusterId) : '';
 
   // Build scope covering all connected clusters for the cluster-overview domain.
@@ -248,17 +248,8 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
   const showSkeleton =
     !errorMessage &&
     !isHydratedForCluster &&
+    !suppressPassiveLoading &&
     (isSwitching || isLoading || overviewDomain.status === 'idle');
-
-  useEffect(() => {
-    setIsPaused(!getAutoRefreshEnabled());
-
-    const unsubAutoRefresh = eventBus.on('settings:auto-refresh', (enabled) => {
-      setIsPaused(!enabled);
-    });
-
-    return unsubAutoRefresh;
-  }, []);
 
   useEffect(() => {
     // Skip scoped calls when no clusters are connected (scope is empty).

@@ -117,6 +117,12 @@
   min-height: 0;
 }
 
+.sidebar-empty-message {
+  padding: 0.25rem 0.5rem;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-small);
+}
+
 /* Cluster group headers within the Namespaces section. */
 .namespace-cluster-group + .namespace-cluster-group {
   margin-top: 0.75rem;

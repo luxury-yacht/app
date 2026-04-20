@@ -17,6 +17,8 @@ import { deriveCopyText } from '@ui/shortcuts/context';
 import { useKeyboardSurface, useShortcut, useSearchShortcutTarget } from '@ui/shortcuts';
 import { errorHandler } from '@utils/errorHandler';
 import { refreshOrchestrator } from '@/core/refresh';
+import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
+import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
 import { useRefreshScopedDomain } from '@/core/refresh/store';
 import { GetObjectYAMLByGVK } from '@wailsjs/go/backend/App';
 import type { DiffLine } from '@shared/components/diff/lineDiff';
@@ -230,6 +232,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
   canEdit = false,
   clusterId,
 }) => {
+  const { isPaused, isManualRefreshActive } = useAutoRefreshLoadingState();
   const [isEditing, setIsEditing] = useState(false);
   const [showManagedFields, setShowManagedFields] = useState(false);
   const [draftYaml, setDraftYaml] = useState('');
@@ -306,7 +309,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
 
     const enabled = isActive && !isEditing;
     refreshOrchestrator.setScopedDomainEnabled('object-yaml', scope, enabled);
-    if (enabled) {
+    if (enabled && !isPaused) {
       void refreshOrchestrator.fetchScopedDomain('object-yaml', scope, { isManual: true });
     }
 
@@ -315,7 +318,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
         preserveState: true,
       });
     };
-  }, [scope, isActive, isEditing]);
+  }, [scope, isActive, isEditing, isPaused]);
 
   useShortcut({
     key: 'm',
@@ -331,10 +334,16 @@ const YamlTab: React.FC<YamlTabProps> = ({
   });
 
   const yamlContent = snapshot.data?.yaml ?? '';
-  const yamlLoading =
-    snapshot.status === 'loading' ||
-    snapshot.status === 'initialising' ||
-    (snapshot.status === 'updating' && !yamlContent);
+  const yamlLoadingState = applyPassiveLoadingPolicy({
+    loading:
+      snapshot.status === 'loading' ||
+      snapshot.status === 'initialising' ||
+      (snapshot.status === 'updating' && !yamlContent),
+    hasLoaded: Boolean(snapshot.data),
+    isPaused,
+    isManualRefreshActive,
+  });
+  const yamlLoading = yamlLoadingState.loading;
   const yamlError = snapshot.error ?? null;
 
   const effectiveYamlContent = manualYamlOverride?.yaml ?? yamlContent;
