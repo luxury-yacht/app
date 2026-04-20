@@ -2,6 +2,8 @@
 
 ## Issues
 
+Select all/none in log viewer is broken
+
 - Issue 40 Support object creation
 
 - Issue 135 Enable text select/copy in more places

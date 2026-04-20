@@ -346,16 +346,27 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
     [handlePodStatusNavigate]
   );
 
-  const podStatusCards = [
-    { key: 'running', label: 'Running', value: displayOverview.runningPods, className: 'running' },
-    { key: 'pending', label: 'Pending', value: displayOverview.pendingPods, className: 'pending' },
-    { key: 'failed', label: 'Failing', value: displayOverview.failedPods, className: 'failed' },
+  const podStatusItems = [
+    { key: 'running', label: 'running', value: displayOverview.runningPods, variant: 'running' },
     {
       key: 'restarted',
-      label: 'Restarted',
+      label: 'restarted',
       value: displayOverview.restartedPods,
-      className: 'restarted',
+      variant: 'restarted',
     },
+    { key: 'pending', label: 'pending', value: displayOverview.pendingPods, variant: 'pending' },
+    { key: 'failed', label: 'failing', value: displayOverview.failedPods, variant: 'failing' },
+  ];
+
+  // Phase-only total for bar segment widths (restarted overlaps with running,
+  // so including it would double-count).
+  const phaseTotal =
+    displayOverview.runningPods + displayOverview.pendingPods + displayOverview.failedPods;
+  const phasePct = (value: number) => (phaseTotal > 0 ? (value / phaseTotal) * 100 : 0);
+  const phaseSegments = [
+    { key: 'running', value: displayOverview.runningPods },
+    { key: 'pending', value: displayOverview.pendingPods },
+    { key: 'failing', value: displayOverview.failedPods },
   ];
 
   const rootClassName = ['cluster-overview', showSkeleton ? 'is-skeleton' : '']
@@ -595,36 +606,71 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
           </div>
 
           <div className="pod-status">
-            <h3>Pod Status</h3>
-            <div className="stats-grid">
-              {podStatusCards.map((card) => {
-                const clickable = card.value > 0;
-                const cardClass = `stat-card${skeletonBlockClass}${
-                  clickable ? ' stat-card--clickable' : ''
-                }`;
-                const valueClass = `stat-value ${card.className}${skeletonTextClass}`;
-                return (
-                  <div
-                    key={card.key}
-                    className={cardClass}
-                    role={clickable ? 'button' : undefined}
-                    tabIndex={clickable ? 0 : undefined}
-                    onClick={
-                      clickable ? () => handlePodStatusNavigate(card.key, card.value) : undefined
-                    }
-                    onKeyDown={
-                      clickable
-                        ? (event) => handlePodStatusKeyDown(event, card.key, card.value)
-                        : undefined
-                    }
-                    aria-disabled={!clickable}
-                    data-testid={`cluster-pod-status-${card.key}`}
-                  >
-                    <div className={valueClass}>{card.value}</div>
-                    <div className="stat-label">{card.label}</div>
-                  </div>
-                );
-              })}
+            <div className="pod-status__header">
+              <h3>Pod Status</h3>
+              <div className="pod-phase-legend__total">
+                <span className={`pod-phase-legend__total-value${skeletonTextClass}`}>
+                  {displayOverview.totalPods}
+                </span>
+                <span className="pod-phase-legend__total-label"> total</span>
+              </div>
+            </div>
+            <div
+              className={`pod-phase-bar${skeletonBlockClass}`}
+              role="presentation"
+              aria-hidden="true"
+            >
+              {!showSkeleton &&
+                phaseSegments.map((segment) => {
+                  const width = phasePct(segment.value);
+                  if (width <= 0) {
+                    return null;
+                  }
+                  return (
+                    <div
+                      key={segment.key}
+                      className={`pod-phase-bar__segment pod-phase-bar__segment--${segment.key}`}
+                      style={{ width: `${width}%` }}
+                    />
+                  );
+                })}
+            </div>
+            <div className="pod-phase-legend">
+              <div className="pod-phase-legend__items">
+                {podStatusItems.map((item) => {
+                  const clickable = item.value > 0;
+                  const itemClass = `pod-phase-legend__item${
+                    clickable ? ' pod-phase-legend__item--clickable' : ''
+                  }`;
+                  return (
+                    <div
+                      key={item.key}
+                      className={itemClass}
+                      role={clickable ? 'button' : undefined}
+                      tabIndex={clickable ? 0 : undefined}
+                      onClick={
+                        clickable ? () => handlePodStatusNavigate(item.key, item.value) : undefined
+                      }
+                      onKeyDown={
+                        clickable
+                          ? (event) => handlePodStatusKeyDown(event, item.key, item.value)
+                          : undefined
+                      }
+                      aria-disabled={!clickable}
+                      data-testid={`cluster-pod-status-${item.key}`}
+                    >
+                      <span
+                        className={`pod-phase-legend__dot pod-phase-legend__dot--${item.variant}`}
+                        aria-hidden="true"
+                      />
+                      <span className={`pod-phase-legend__count${skeletonTextClass}`}>
+                        {item.value}
+                      </span>
+                      <span className="pod-phase-legend__label">{item.label}</span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </div>
