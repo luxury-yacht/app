@@ -4,6 +4,9 @@
   padding: 1.5rem;
   height: 100%;
   overflow-y: auto;
+  width: 100%;
+  max-width: 1400px;
+  margin-inline: auto;
 }
 
 .overview-hero {
