@@ -13,7 +13,8 @@ export interface PassiveLoadingPolicyResult {
   showPausedEmptyState: boolean;
 }
 
-export const CLUSTER_DATA_AUTO_REFRESH_DISABLED_MESSAGE = 'Auto-refresh is disabled';
+export const CLUSTER_DATA_AUTO_REFRESH_DISABLED_MESSAGE =
+  'Auto-refresh is disabled. Enable it to load data automatically, or press ctrl+R to refresh manually.';
 
 export const applyPassiveLoadingPolicy = ({
   loading,

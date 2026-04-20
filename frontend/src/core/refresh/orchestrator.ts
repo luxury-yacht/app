@@ -54,7 +54,7 @@ import { resourceStreamManager } from './streaming/resourceStreamManager';
 import { catalogStreamManager } from './streaming/catalogStreamManager';
 import { errorHandler } from '@utils/errorHandler';
 import { logAppInfo, logAppWarn } from '@/core/logging/appLogClient';
-import { getMetricsRefreshIntervalMs } from '@/core/settings/appPreferences';
+import { getAutoRefreshEnabled, getMetricsRefreshIntervalMs } from '@/core/settings/appPreferences';
 import {
   buildClusterScope,
   buildClusterScopeList,
@@ -247,6 +247,7 @@ class RefreshOrchestrator {
     eventBus.on('kubeconfig:changing', this.handleKubeconfigChanging);
     eventBus.on('kubeconfig:changed', this.handleKubeconfigChanged);
     eventBus.on('kubeconfig:selection-changed', this.handleKubeconfigSelectionChanged);
+    eventBus.on('settings:auto-refresh', this.handleAutoRefreshChanged);
     eventBus.on('refresh:resource-stream-drift', this.handleResourceStreamDrift);
     eventBus.on('refresh:resource-stream-health', this.handleResourceStreamHealth);
     eventBus.on('cluster:auth:failed', this.handleClusterAuthFailed);
@@ -881,6 +882,9 @@ class RefreshOrchestrator {
   private shouldStreamScope(domain: RefreshDomain, scope?: string): boolean {
     const trimmed = scope?.trim() ?? '';
     if (!trimmed) {
+      return false;
+    }
+    if (!getAutoRefreshEnabled()) {
       return false;
     }
     if (!this.isResourceStreamDomain(domain)) {
@@ -2046,6 +2050,10 @@ class RefreshOrchestrator {
     this.suppressNetworkErrors(6000);
     this.blockedStreaming.clear();
     this.lastMetricsRefreshAt.clear();
+  };
+
+  private handleAutoRefreshChanged = () => {
+    this.handleStreamingScopeChanges();
   };
 }
 
