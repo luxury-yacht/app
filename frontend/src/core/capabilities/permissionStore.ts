@@ -122,6 +122,7 @@ declare const window: {
 function QueryPermissions(queries: QueryPayloadItem[]): Promise<QueryPermissionsResponse> {
   return requestData<QueryPermissionsResponse>({
     resource: 'query-permissions',
+    adapter: 'permission-read',
     reason: 'startup',
     read: () => window['go']['backend']['App']['QueryPermissions'](queries),
   }).then((result) => {

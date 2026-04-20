@@ -6,8 +6,8 @@
  * Uses a reducer for state management.
  */
 import React, { useReducer, useEffect, useRef, useMemo, useCallback } from 'react';
-import { GetLogScopeContainers, LogFetcher } from '@wailsjs/go/backend/App';
-import { requestData } from '@/core/data-access';
+import { LogFetcher } from '@wailsjs/go/backend/App';
+import { readLogScopeContainers, requestData } from '@/core/data-access';
 import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
@@ -1680,7 +1680,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
         const result = await requestData({
           resource: 'log-scope-containers',
           reason: 'user',
-          read: () => GetLogScopeContainers(resolvedClusterId, logScope),
+          read: () => readLogScopeContainers(resolvedClusterId, logScope),
         });
         const containerList = result.status === 'executed' ? (result.data ?? []) : [];
 

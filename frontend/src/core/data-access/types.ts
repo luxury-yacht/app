@@ -2,6 +2,12 @@ import type { RefreshDomain } from '@/core/refresh/types';
 import type { RefreshContext } from '@/core/refresh/RefreshManager';
 
 export type DataRequestReason = 'background' | 'startup' | 'user';
+export type DataAccessAdapter =
+  | 'refresh-domain'
+  | 'context-refresh'
+  | 'rpc-read'
+  | 'permission-read'
+  | 'capability-read';
 
 export type DataBlockedReason = 'auto-refresh-disabled';
 
@@ -20,6 +26,7 @@ export interface DataRequestResult {
 export interface DataReadRequest<T> {
   resource: string;
   reason: DataRequestReason;
+  adapter?: DataAccessAdapter;
   read: () => Promise<T>;
 }
 

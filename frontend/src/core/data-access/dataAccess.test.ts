@@ -1,4 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  getBrokerReadDiagnosticsSnapshot,
+  resetBrokerReadDiagnosticsForTesting,
+} from '@/core/read-diagnostics';
 
 const hoisted = vi.hoisted(() => ({
   fetchScopedDomain: vi.fn(),
@@ -28,6 +32,7 @@ import {
 describe('dataAccess', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetBrokerReadDiagnosticsForTesting();
     hoisted.fetchScopedDomain.mockResolvedValue(undefined);
     hoisted.triggerManualRefreshForContext.mockResolvedValue(undefined);
     hoisted.getAutoRefreshEnabled.mockReturnValue(true);
@@ -113,6 +118,47 @@ describe('dataAccess', () => {
     });
 
     expect(read).toHaveBeenCalledTimes(1);
+  });
+
+  it('records diagnostics for blocked and executed cluster-data reads', async () => {
+    hoisted.getAutoRefreshEnabled.mockReturnValue(false);
+
+    await requestData({
+      resource: 'namespaces',
+      reason: 'startup',
+      adapter: 'refresh-domain',
+      read: vi.fn(),
+    });
+
+    hoisted.getAutoRefreshEnabled.mockReturnValue(true);
+    await requestData({
+      resource: 'query-permissions',
+      reason: 'startup',
+      adapter: 'permission-read',
+      read: vi.fn().mockResolvedValue([]),
+    });
+
+    const snapshot = getBrokerReadDiagnosticsSnapshot();
+    expect(snapshot).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          broker: 'data-access',
+          resource: 'namespaces',
+          adapter: 'refresh-domain',
+          reason: 'startup',
+          blockedCount: 1,
+          lastStatus: 'blocked',
+        }),
+        expect.objectContaining({
+          broker: 'data-access',
+          resource: 'query-permissions',
+          adapter: 'permission-read',
+          reason: 'startup',
+          successCount: 1,
+          lastStatus: 'success',
+        }),
+      ])
+    );
   });
 
   it('routes user context refreshes through the shared refresh wrapper', async () => {

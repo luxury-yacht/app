@@ -3,8 +3,12 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { requestAppState } from '@/core/app-state-access';
-import { requestData } from '@/core/data-access';
+import {
+  readShellSessionBacklog,
+  readShellSessions,
+  requestAppState,
+} from '@/core/app-state-access';
+import { readPodContainers, requestData } from '@/core/data-access';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { ClipboardAddon } from '@xterm/addon-clipboard';
@@ -14,9 +18,6 @@ import { EventsOn } from '@wailsjs/runtime/runtime';
 import {
   CloseShellSession,
   CreateDebugContainer,
-  GetPodContainers,
-  GetShellSessionBacklog,
-  ListShellSessions,
   ResizeShellSession,
   SendShellInput,
   StartShellSession,
@@ -590,7 +591,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
       const result = await requestData({
         resource: 'pod-containers',
         reason: 'user',
-        read: () => GetPodContainers(resolvedClusterId, namespace, resourceName),
+        read: () => readPodContainers(resolvedClusterId, namespace, resourceName),
       });
       const containerNames = result.status === 'executed' ? (result.data ?? []) : [];
       const normalized = Array.from(
@@ -623,7 +624,8 @@ const ShellTab: React.FC<ShellTabProps> = ({
     try {
       const sessions = await requestAppState({
         resource: 'shell-sessions',
-        read: () => ListShellSessions(),
+        adapter: 'runtime-read',
+        read: () => readShellSessions(),
       });
       const matching = sessions.filter(
         (tracked) =>
@@ -664,7 +666,8 @@ const ShellTab: React.FC<ShellTabProps> = ({
         // Replay buffered output captured while this tab was detached.
         backlog = await requestAppState({
           resource: 'shell-session-backlog',
-          read: () => GetShellSessionBacklog(latest.sessionId),
+          adapter: 'runtime-read',
+          read: () => readShellSessionBacklog(latest.sessionId),
         });
         if (backlog) {
           renderedSessionIdRef.current = latest.sessionId;

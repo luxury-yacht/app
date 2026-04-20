@@ -5,8 +5,8 @@
  * Subscribes to backend auth events and provides auth state to all consumers.
  */
 import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
-import { RetryClusterAuth, GetAllClusterAuthStates } from '@wailsjs/go/backend/App';
-import { requestAppState } from '@/core/app-state-access';
+import { RetryClusterAuth } from '@wailsjs/go/backend/App';
+import { readAllClusterAuthStates, requestAppState } from '@/core/app-state-access';
 import { eventBus } from '@/core/events';
 
 /**
@@ -109,7 +109,7 @@ export const AuthErrorProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       try {
         const states = await requestAppState({
           resource: 'cluster-auth-states',
-          read: () => GetAllClusterAuthStates(),
+          read: () => readAllClusterAuthStates(),
         });
         if (!states) return;
 

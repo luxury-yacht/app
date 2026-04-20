@@ -16,12 +16,11 @@ import { RegexSearchIcon } from '@shared/components/icons/LogIcons';
 import { deriveCopyText } from '@ui/shortcuts/context';
 import { useKeyboardSurface, useShortcut, useSearchShortcutTarget } from '@ui/shortcuts';
 import { errorHandler } from '@utils/errorHandler';
-import { requestData, requestRefreshDomain } from '@/core/data-access';
+import { readObjectYAMLByGVK, requestData, requestRefreshDomain } from '@/core/data-access';
 import { refreshOrchestrator } from '@/core/refresh';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
 import { useRefreshScopedDomain } from '@/core/refresh/store';
-import { GetObjectYAMLByGVK } from '@wailsjs/go/backend/App';
 import type { DiffLine } from '@shared/components/diff/lineDiff';
 import { computeBudgetedLineDiff } from '@shared/components/diff/lineDiff';
 import { YAML_TAB_DIFF_BUDGETS } from '@shared/components/diff/diffBudgets';
@@ -667,7 +666,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
         resource: 'object-yaml-by-gvk',
         reason: 'user',
         read: () =>
-          GetObjectYAMLByGVK(
+          readObjectYAMLByGVK(
             resolvedClusterId,
             identity.apiVersion,
             identity.kind,

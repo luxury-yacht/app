@@ -36,11 +36,17 @@ Reference inventory:
 - Phase 4 manual refresh fan-out conversion is complete for the targeted UI entrypoints.
 - Phase 5 bootstrap/app-state conversion is complete for the planned app-state and runtime-state readers.
 - Phase 6 cluster-data-adjacent RPC and permission/capability conversion is complete for the planned readers.
+- Phase 7 deprecation/enforcement work is complete.
 - Completed:
   - initial `dataAccess` broker skeleton
   - initial `appStateAccess` broker skeleton
+  - shared broker-read diagnostics store for `dataAccess` and `appStateAccess`
+  - diagnostics panel broker-read tab
   - centralized paused-policy gate for cluster-data requests
   - brokered manual refresh/context refresh wrapper
+  - read-only Wails adapter modules for `appStateAccess` and `dataAccess`
+  - lint restrictions blocking direct read-only Wails imports outside broker adapters
+  - lint restrictions blocking direct `fetchScopedDomain(...)` / `triggerManualRefreshForContext(...)` use outside broker/refresh internals
   - converted callers:
     - `NamespaceContext`
     - `NsResourcesContext`
@@ -85,8 +91,7 @@ Reference inventory:
   - `frontend` typecheck
   - `mage qc:prerelease`
 - Remaining in this slice:
-  - diagnostics and adapter work from later phases
-  - deprecation and enforcement work from Phase 7
+  - none for the migration itself; future work is optional diagnostics refinement
 
 ## Non-Goals
 
@@ -652,7 +657,7 @@ Deliverable:
 - [x] Add `appStateAccess` adapters for bootstrap/config reads
 - [x] Convert app bootstrap/state readers to `appStateAccess`
 - [x] Convert app runtime operational/session readers to `appStateAccess`
-- [ ] Add diagnostics coverage where appropriate
+- [x] Add diagnostics coverage where appropriate
 
 Recommended order:
 
@@ -688,7 +693,7 @@ Deliverable:
 - [x] Wrap `queryNamespacePermissions(...)`
 - [x] Wrap `EvaluateCapabilities(...)`
 - [x] Decide destination for remaining one-off task-local RPC readers
-- [ ] Add diagnostics entries for these request types
+- [x] Add diagnostics entries for these request types
 
 Likely `dataAccess` readers in this phase:
 
@@ -720,11 +725,11 @@ Deliverable:
 
 ## Phase 7: Deprecate Old Entrypoints
 
-- [ ] Mark direct `fetchScopedDomain(...)` UI usage as deprecated
-- [ ] Add lint enforcement or import restrictions
-- [ ] Mark direct bootstrap/config/state Wails RPC imports as deprecated outside `appStateAccess`
-- [ ] Mark direct cluster-data Wails RPC imports as deprecated outside `dataAccess` adapters
-- [ ] Restrict direct refresh transport usage to adapters only
+- [x] Mark direct `fetchScopedDomain(...)` UI usage as deprecated
+- [x] Add lint enforcement or import restrictions
+- [x] Mark direct bootstrap/config/state Wails RPC imports as deprecated outside `appStateAccess`
+- [x] Mark direct cluster-data Wails RPC imports as deprecated outside `dataAccess` adapters
+- [x] Restrict direct refresh transport usage to adapters only
 
 Deliverable:
 
@@ -741,6 +746,7 @@ The migration is complete when all of the following are true:
 - all cluster-data requests appear in diagnostics
 - no component directly imports `fetchScopedDomain(...)` for reads
 - permission and capability reads use the same request/diagnostic model
+- direct read-only Wails imports are confined to broker adapter files and infrastructure exceptions
 
 Refined interpretation:
 

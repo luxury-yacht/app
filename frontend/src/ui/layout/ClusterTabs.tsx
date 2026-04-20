@@ -18,16 +18,12 @@ import {
   setClusterTabOrder,
   subscribeClusterTabOrder,
 } from '@core/persistence/clusterTabOrder';
-import {
-  GetClusterPortForwardCount,
-  StopClusterPortForwards,
-  StopClusterShellSessions,
-} from '@wailsjs/go/backend/App';
+import { StopClusterPortForwards, StopClusterShellSessions } from '@wailsjs/go/backend/App';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import { CloseIcon } from '@shared/components/icons/MenuIcons';
 import { Tabs, type TabDescriptor } from '@shared/components/tabs';
 import { useTabDragSourceFactory, useTabDropTarget } from '@shared/components/tabs/dragCoordinator';
-import { requestAppState } from '@/core/app-state-access';
+import { readClusterPortForwardCount, requestAppState } from '@/core/app-state-access';
 import './ClusterTabs.css';
 
 const ordersMatch = (left: string[], right: string[]) =>
@@ -144,7 +140,8 @@ const ClusterTabs: React.FC = () => {
       try {
         const count = await requestAppState({
           resource: 'cluster-port-forward-count',
-          read: () => GetClusterPortForwardCount(selection),
+          adapter: 'runtime-read',
+          read: () => readClusterPortForwardCount(selection),
         });
         if (count > 0) {
           // Show confirmation modal with the count.

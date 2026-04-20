@@ -1,2 +1,3 @@
 export { requestAppState } from './appStateAccess';
-export type { AppStateRequest } from './types';
+export * from './readers';
+export type { AppStateAdapter, AppStateRequest } from './types';

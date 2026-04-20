@@ -13,8 +13,7 @@ import { CloseIcon } from '@shared/components/icons/MenuIcons';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown/types';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
 import ModalSurface from '@shared/components/modals/ModalSurface';
-import { requestRefreshDomain } from '@/core/data-access';
-import { requestData } from '@/core/data-access';
+import { readCatalogObjectMatch, requestData, requestRefreshDomain } from '@/core/data-access';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { buildClusterScope, buildObjectScope } from '@core/refresh/clusterScope';
 import { refreshOrchestrator, useRefreshScopedDomain } from '@core/refresh';
@@ -32,7 +31,6 @@ import {
   maskMutedMetadataLines,
   sanitizeYamlForDiff,
 } from './objectDiffUtils';
-import { FindCatalogObjectMatch } from '@wailsjs/go/backend/App';
 import {
   CLUSTER_SCOPE,
   INACTIVE_SCOPE,
@@ -667,7 +665,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
           resource: 'catalog-object-match',
           reason: 'user',
           read: () =>
-            FindCatalogObjectMatch(
+            readCatalogObjectMatch(
               selection.clusterId,
               selection.namespace ?? '',
               selection.group,
@@ -988,7 +986,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
         resource: 'catalog-object-match',
         reason: 'user',
         read: () =>
-          FindCatalogObjectMatch(
+          readCatalogObjectMatch(
             targetClusterId,
             leftSelection.namespace ?? '',
             leftSelection.group,
@@ -1050,7 +1048,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
         resource: 'catalog-object-match',
         reason: 'user',
         read: () =>
-          FindCatalogObjectMatch(
+          readCatalogObjectMatch(
             targetClusterId,
             rightSelection.namespace ?? '',
             rightSelection.group,

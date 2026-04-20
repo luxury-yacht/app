@@ -41,6 +41,7 @@ import {
   useCapabilityDiagnostics,
   useUserPermissions,
 } from '@/core/capabilities';
+import { useBrokerReadDiagnostics } from '@/core/read-diagnostics';
 import { Tabs, type TabDescriptor } from '@shared/components/tabs';
 import { useViewState } from '@/core/contexts/ViewStateContext';
 import { useNamespace } from '@/modules/namespace/contexts/NamespaceContext';
@@ -50,6 +51,7 @@ import {
   type DiagnosticsRow,
   type DiagnosticsPanelProps,
   type DiagnosticsStreamRow,
+  type BrokerReadRow,
   type CapabilityDescriptorActivityDetails,
   formatInterval,
   formatLastUpdated,
@@ -64,6 +66,7 @@ import {
 } from './diagnostics';
 import { DiagnosticsTable, DiagnosticsSummaryCards } from './diagnostics/TableRefreshDomains';
 import { DiagnosticsStreamsTable } from './diagnostics/TableStreams';
+import { BrokerReadsTable } from './diagnostics/TableBrokerReads';
 import { CapabilityChecksTable } from './diagnostics/TableCapabilitesChecks';
 import { EffectivePermissionsTable } from './diagnostics/TableEffectivePermissions';
 import { GridTablePerformance } from './diagnostics/GridTablePerformance';
@@ -128,7 +131,8 @@ type DiagnosticsTabId =
   | 'streams'
   | 'table-performance'
   | 'capability-checks'
-  | 'effective-permissions';
+  | 'effective-permissions'
+  | 'broker-reads';
 
 // Applied to every diagnostics tab via extraProps. The panel's custom focus
 // walker (querySelectorAll below) locates tabs through this marker — if it
@@ -151,6 +155,11 @@ const DIAGNOSTICS_TAB_DESCRIPTORS: TabDescriptor[] = [
   {
     id: 'effective-permissions',
     label: 'Effective Permissions',
+    extraProps: DIAGNOSTICS_FOCUSABLE_PROPS,
+  },
+  {
+    id: 'broker-reads',
+    label: 'Broker Reads',
     extraProps: DIAGNOSTICS_FOCUSABLE_PROPS,
   },
 ];
@@ -239,6 +248,7 @@ const formatHealthLabel = (status: HealthStatus, reason: string): string =>
 export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isOpen }) => {
   const [activeTab, setActiveTab] = useState<DiagnosticsTabId>('refresh-domains');
   const gridTablePerformanceRows = useGridTablePerformanceDiagnostics();
+  const brokerReadDiagnostics = useBrokerReadDiagnostics();
   const refreshState = useRefreshState();
   // Scoped domains — read all scope entries for diagnostics.
   const objectMaintenanceScopeEntries = useRefreshScopedDomainEntries('object-maintenance');
@@ -2118,6 +2128,51 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     />
   );
 
+  const brokerReadRows = useMemo<BrokerReadRow[]>(() => {
+    return brokerReadDiagnostics.map((entry) => {
+      const updatedInfo = formatLastUpdated(entry.lastCompletedAt);
+      const lastStatus =
+        entry.inFlightCount > 0
+          ? 'In Flight'
+          : entry.lastStatus === 'never'
+            ? '—'
+            : entry.lastStatus === 'blocked'
+              ? 'Blocked'
+              : entry.lastStatus === 'error'
+                ? 'Error'
+                : 'Success';
+      const broker = entry.broker === 'data-access' ? 'Cluster Data' : 'App State';
+
+      return {
+        key: entry.key,
+        broker,
+        resource: entry.resource,
+        adapter: entry.adapter,
+        reason: entry.reason ?? '—',
+        inFlightCount: entry.inFlightCount,
+        totalRequests: entry.totalRequests,
+        successCount: entry.successCount,
+        errorCount: entry.errorCount,
+        blockedCount: entry.blockedCount,
+        lastStatus,
+        lastDuration: formatDurationMs(entry.lastDurationMs),
+        lastUpdated: updatedInfo.display,
+        lastUpdatedTooltip: updatedInfo.tooltip,
+        lastError: entry.lastBlockedReason ?? entry.lastError ?? '—',
+      };
+    });
+  }, [brokerReadDiagnostics]);
+
+  const brokerReadsSummary = useMemo(() => {
+    const inFlight = brokerReadRows.reduce((total, row) => total + row.inFlightCount, 0);
+    const totalRequests = brokerReadRows.reduce((total, row) => total + row.totalRequests, 0);
+    return `Rows: ${brokerReadRows.length} • In Flight: ${inFlight} • Requests: ${totalRequests}`;
+  }, [brokerReadRows]);
+
+  const brokerReadsContent = (
+    <BrokerReadsTable rows={brokerReadRows} summary={brokerReadsSummary} />
+  );
+
   const panelRef = useRef<HTMLDivElement>(null);
 
   const focusables = useCallback(() => {
@@ -2217,7 +2272,9 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
               ? tablePerformanceContent
               : activeTab === 'capability-checks'
                 ? capabilityChecksContent
-                : effectivePermissionsContent}
+                : activeTab === 'effective-permissions'
+                  ? effectivePermissionsContent
+                  : brokerReadsContent}
       </div>
     </DockablePanel>
   );

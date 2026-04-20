@@ -1,5 +1,10 @@
 import { refreshOrchestrator } from '@/core/refresh';
 import { getAutoRefreshEnabled } from '@/core/settings/appPreferences';
+import {
+  beginBrokerRead,
+  completeBrokerRead,
+  recordBlockedBrokerRead,
+} from '@/core/read-diagnostics';
 
 import type {
   ContextRefreshRequest,
@@ -22,21 +27,45 @@ export const isDataAccessBlocked = (
 };
 
 export const requestData = async <T>({
+  resource,
   reason,
+  adapter = 'rpc-read',
   read,
 }: DataReadRequest<T>): Promise<DataReadResult<T>> => {
   if (isDataAccessBlocked(reason)) {
+    recordBlockedBrokerRead(
+      {
+        broker: 'data-access',
+        resource,
+        adapter,
+        reason,
+      },
+      'auto-refresh-disabled'
+    );
     return {
       status: 'blocked',
       blockedReason: 'auto-refresh-disabled',
     };
   }
 
-  const data = await read();
-  return {
-    status: 'executed',
-    data,
-  };
+  const token = beginBrokerRead({
+    broker: 'data-access',
+    resource,
+    adapter,
+    reason,
+  });
+
+  try {
+    const data = await read();
+    completeBrokerRead({ token, status: 'success' });
+    return {
+      status: 'executed',
+      data,
+    };
+  } catch (error) {
+    completeBrokerRead({ token, status: 'error', error });
+    throw error;
+  }
 };
 
 export const requestRefreshDomain = async ({
@@ -47,6 +76,7 @@ export const requestRefreshDomain = async ({
   const result = await requestData<void>({
     resource: domain,
     reason,
+    adapter: 'refresh-domain',
     read: async () => {
       await refreshOrchestrator.fetchScopedDomain(domain, scope, {
         isManual: reason === 'user',
@@ -67,6 +97,7 @@ export const requestContextRefresh = async ({
   const result = await requestData<void>({
     resource: 'refresh-context',
     reason,
+    adapter: 'context-refresh',
     read: async () => {
       await refreshOrchestrator.triggerManualRefreshForContext(context);
     },

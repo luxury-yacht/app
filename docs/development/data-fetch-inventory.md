@@ -209,7 +209,7 @@ Underlying transports still vary:
 - direct Wails RPC bindings remain behind `appStateAccess` or `dataAccess` adapters
 - permission/capability RPCs are now brokered through `dataAccess`
 
-The remaining architectural follow-up is diagnostics/enforcement, not caller migration.
+The remaining architectural follow-up is incremental diagnostics refinement, not caller migration.
 
 ## Migration Constraints For Two Read Paths
 

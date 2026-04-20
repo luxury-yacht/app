@@ -11,9 +11,8 @@ import './AboutModal.css';
 import logo from '@assets/luxury-yacht-logo.png';
 import captainK8s from '@assets/captain-k8s-color.png';
 import { BrowserOpenURL } from '@wailsjs/runtime/runtime';
-import { GetAppInfo } from '@wailsjs/go/backend/App';
 import { backend } from '@wailsjs/go/models';
-import { requestAppState } from '@/core/app-state-access';
+import { readAppInfo, requestAppState } from '@/core/app-state-access';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
 import ModalSurface from '@shared/components/modals/ModalSurface';
 import { CloseIcon } from '@shared/components/icons/MenuIcons';
@@ -35,7 +34,7 @@ const AboutModal: React.FC<AboutModalProps> = React.memo(({ isOpen, onClose }) =
       // Fetch app info when modal opens
       requestAppState({
         resource: 'app-info',
-        read: () => GetAppInfo(),
+        read: () => readAppInfo(),
       })
         .then((info) => {
           setAppInfo(info);

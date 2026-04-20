@@ -151,6 +151,7 @@ const fetchGridTablePersistence = async (): Promise<GridTablePersistenceMap> => 
   try {
     const entries = await requestAppState({
       resource: 'grid-table-persistence',
+      adapter: 'persistence-read',
       read: () => runtimeApp.GetGridTablePersistence(),
     });
     if (!entries || typeof entries !== 'object') {

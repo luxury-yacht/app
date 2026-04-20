@@ -5,10 +5,8 @@
  */
 
 import {
-  GetAppSettings,
   SetTheme,
   SetUseShortResourceNames,
-  GetThemes,
   SaveTheme,
   DeleteTheme,
   ReorderThemes,
@@ -22,7 +20,7 @@ import {
   SetLogTargetPerScopeLimit as SetLogTargetPerScopeLimitBackend,
 } from '@wailsjs/go/backend/App';
 import { types } from '@wailsjs/go/models';
-import { requestAppState } from '@/core/app-state-access';
+import { readAppSettings, readThemes, requestAppState } from '@/core/app-state-access';
 import { eventBus } from '@/core/events';
 import {
   DEFAULT_LOG_API_TIMESTAMP_FORMAT,
@@ -358,7 +356,7 @@ const fetchAppSettings = async (): Promise<AppSettingsPayload | null> => {
   try {
     const settings = (await requestAppState({
       resource: 'app-settings',
-      read: () => GetAppSettings(),
+      read: () => readAppSettings(),
     })) as AppSettingsPayload | null;
     return settings ?? null;
   } catch {
@@ -807,7 +805,7 @@ export const setPaletteTint = (
 export const getThemes = async (): Promise<types.Theme[]> => {
   const result = await requestAppState({
     resource: 'themes',
-    read: () => GetThemes(),
+    read: () => readThemes(),
   });
   return result || [];
 };

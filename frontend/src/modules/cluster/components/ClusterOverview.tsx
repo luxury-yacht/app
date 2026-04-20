@@ -7,7 +7,7 @@
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import ResourceBar from '@shared/components/ResourceBar';
-import { requestAppState } from '@/core/app-state-access';
+import { readAppInfo, requestAppState } from '@/core/app-state-access';
 import { requestRefreshDomain } from '@/core/data-access';
 import { refreshOrchestrator, useRefreshScopedDomain } from '@/core/refresh';
 import { buildClusterScopeList } from '@/core/refresh/clusterScope';
@@ -23,7 +23,6 @@ import { useViewState } from '@/core/contexts/ViewStateContext';
 import { emitPodsUnhealthySignal } from '@modules/namespace/components/podsFilterSignals';
 import { BrowserOpenURL } from '@wailsjs/runtime/runtime';
 import { useClusterLifecycle } from '@core/contexts/ClusterLifecycleContext';
-import { GetAppInfo } from '@wailsjs/go/backend/App';
 import { backend } from '@wailsjs/go/models';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useClusterHealthListener } from '@/hooks/useWailsRuntimeEvents';
@@ -209,7 +208,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
     let isActive = true;
     requestAppState({
       resource: 'app-info',
-      read: () => GetAppInfo(),
+      read: () => readAppInfo(),
     })
       .then((info) => {
         if (!isActive) {

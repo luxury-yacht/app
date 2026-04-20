@@ -5,7 +5,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ListPortForwards, ListShellSessions, StopPortForward } from '@wailsjs/go/backend/App';
+import { StopPortForward } from '@wailsjs/go/backend/App';
 import { BrowserOpenURL } from '@wailsjs/runtime/runtime';
 import { errorHandler } from '@utils/errorHandler';
 import StatusIndicator, { type StatusState } from '@shared/components/status/StatusIndicator';
@@ -13,7 +13,11 @@ import { CloseIcon, OpenIcon, RestartIcon } from '@shared/components/icons/MenuI
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { requestObjectPanelTab } from '@modules/object-panel/objectPanelTabRequests';
-import { requestAppState } from '@/core/app-state-access';
+import {
+  readPortForwardSessions,
+  readShellSessions,
+  requestAppState,
+} from '@/core/app-state-access';
 import { objectPanelId } from '@/core/contexts/ObjectPanelStateContext';
 import { buildObjectReference } from '@shared/utils/objectIdentity';
 import '@modules/port-forward/PortForwardsPanel.css';
@@ -139,7 +143,8 @@ const SessionsStatus: React.FC = () => {
       try {
         const shellList = await requestAppState({
           resource: 'shell-sessions',
-          read: () => ListShellSessions(),
+          adapter: 'runtime-read',
+          read: () => readShellSessions(),
         });
         setShellSessions(shellList || []);
       } catch {
@@ -148,7 +153,8 @@ const SessionsStatus: React.FC = () => {
       try {
         const portForwardList = await requestAppState({
           resource: 'port-forward-sessions',
-          read: () => ListPortForwards(),
+          adapter: 'runtime-read',
+          read: () => readPortForwardSessions(),
         });
         setPortForwardSessions(portForwardList || []);
       } catch {

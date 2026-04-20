@@ -5,7 +5,9 @@ export {
   isReasonAllowedWhilePaused,
   requestRefreshDomain,
 } from './dataAccess';
+export * from './readers';
 export type {
+  DataAccessAdapter,
   ContextRefreshRequest,
   DataBlockedReason,
   DataReadRequest,

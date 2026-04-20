@@ -6,15 +6,10 @@
  */
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import {
-  GetKubeconfigSearchPaths,
-  GetThemeInfo,
-  OpenKubeconfigSearchPathDialog,
-  SetKubeconfigSearchPaths,
-} from '@wailsjs/go/backend/App';
+import { OpenKubeconfigSearchPathDialog, SetKubeconfigSearchPaths } from '@wailsjs/go/backend/App';
 import { types } from '@wailsjs/go/models';
 import { errorHandler } from '@utils/errorHandler';
-import { requestAppState } from '@/core/app-state-access';
+import { readKubeconfigSearchPaths, readThemeInfo, requestAppState } from '@/core/app-state-access';
 import { useAutoRefresh, useBackgroundRefresh } from '@/core/refresh';
 import { changeTheme, initSystemThemeListener } from '@/utils/themes';
 import Tooltip from '@shared/components/Tooltip';
@@ -229,7 +224,7 @@ function Settings({ onClose }: SettingsProps) {
     try {
       const info = await requestAppState({
         resource: 'theme-info',
-        read: () => GetThemeInfo(),
+        read: () => readThemeInfo(),
       });
       setThemeInfo(info);
     } catch (error) {
@@ -265,7 +260,7 @@ function Settings({ onClose }: SettingsProps) {
     try {
       const paths = await requestAppState({
         resource: 'kubeconfig-search-paths',
-        read: () => GetKubeconfigSearchPaths(),
+        read: () => readKubeconfigSearchPaths(),
       });
       const normalized = paths || [];
       setKubeconfigPaths(normalized);

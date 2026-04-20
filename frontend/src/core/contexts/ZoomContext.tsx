@@ -13,8 +13,8 @@ import React, {
   useEffect,
   ReactNode,
 } from 'react';
-import { GetZoomLevel, SetZoomLevel } from '@wailsjs/go/backend/App';
-import { requestAppState } from '@/core/app-state-access';
+import { SetZoomLevel } from '@wailsjs/go/backend/App';
+import { readZoomLevel, requestAppState } from '@/core/app-state-access';
 import { isWindowsPlatform } from '@utils/platform';
 
 // Zoom constraints
@@ -103,7 +103,7 @@ export const ZoomProvider: React.FC<ZoomProviderProps> = ({ children }) => {
   useEffect(() => {
     requestAppState({
       resource: 'zoom-level',
-      read: () => GetZoomLevel(),
+      read: () => readZoomLevel(),
     })
       .then((level) => {
         const validLevel = level >= MIN_ZOOM && level <= MAX_ZOOM ? level : DEFAULT_ZOOM;

@@ -6,14 +6,14 @@
  */
 
 import { useState, useEffect, useCallback, useRef, useMemo, useLayoutEffect } from 'react';
-import { GetLogs, ClearLogs, SetLogsPanelVisible } from '@wailsjs/go/backend/App';
+import { ClearLogs, SetLogsPanelVisible } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import { useShortcut, useKeyboardSurface } from '@ui/shortcuts';
 import { KeyboardScopePriority, KeyboardShortcutPriority } from '@ui/shortcuts/priorities';
 import { DockablePanel } from '@ui/dockable';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
-import { requestAppState } from '@/core/app-state-access';
+import { readAppLogs, requestAppState } from '@/core/app-state-access';
 import './AppLogsPanel.css';
 
 interface LogEntry {
@@ -142,7 +142,8 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
       }
       const logEntries = await requestAppState({
         resource: 'app-logs',
-        read: () => GetLogs(),
+        adapter: 'runtime-read',
+        read: () => readAppLogs(),
       });
       setLogs(logEntries);
     } catch (error) {

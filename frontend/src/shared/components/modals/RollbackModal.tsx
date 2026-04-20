@@ -7,8 +7,8 @@
  */
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import * as app from '@wailsjs/go/backend/App';
-import { requestData } from '@/core/data-access';
+import { RollbackWorkload } from '@wailsjs/go/backend/App';
+import { readRevisionHistory, requestData } from '@/core/data-access';
 import type { backend } from '@wailsjs/go/models';
 import { computeBudgetedLineDiff } from '@shared/components/diff/lineDiff';
 import { ROLLBACK_DIFF_BUDGETS } from '@shared/components/diff/diffBudgets';
@@ -102,7 +102,7 @@ const RollbackModal = ({
     requestData({
       resource: 'revision-history',
       reason: 'user',
-      read: () => app.GetRevisionHistory(clusterId, namespace, name, kind),
+      read: () => readRevisionHistory(clusterId, namespace, name, kind),
     })
       .then((result) => {
         const entries = result.status === 'executed' ? (result.data ?? []) : [];
@@ -209,8 +209,7 @@ const RollbackModal = ({
     setRollbackLoading(true);
     setRollbackError(null);
 
-    app
-      .RollbackWorkload(clusterId, namespace, name, kind, selectedRevision)
+    RollbackWorkload(clusterId, namespace, name, kind, selectedRevision)
       .then(() => {
         setConfirmOpen(false);
         onClose();

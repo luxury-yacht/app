@@ -15,15 +15,11 @@ import React, {
   useRef,
   ReactNode,
 } from 'react';
-import {
-  GetKubeconfigs,
-  GetSelectedKubeconfigs,
-  SetSelectedKubeconfigs,
-} from '@wailsjs/go/backend/App';
+import { SetSelectedKubeconfigs } from '@wailsjs/go/backend/App';
 import { EventsOn } from '@wailsjs/runtime/runtime';
 import { errorHandler } from '@utils/errorHandler';
 import { types } from '@wailsjs/go/models';
-import { requestAppState } from '@/core/app-state-access';
+import { readKubeconfigs, readSelectedKubeconfigs, requestAppState } from '@/core/app-state-access';
 import {
   computeClusterHashes,
   runGridTableGC,
@@ -221,11 +217,11 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
       const [configs, currentSelection] = await Promise.all([
         requestAppState({
           resource: 'kubeconfigs',
-          read: () => GetKubeconfigs(),
+          read: () => readKubeconfigs(),
         }),
         requestAppState({
           resource: 'selected-kubeconfigs',
-          read: () => GetSelectedKubeconfigs(),
+          read: () => readSelectedKubeconfigs(),
         }),
       ]);
 
@@ -335,7 +331,7 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
           const confirmed = normalizeSelections(
             (await requestAppState({
               resource: 'selected-kubeconfigs',
-              read: () => GetSelectedKubeconfigs(),
+              read: () => readSelectedKubeconfigs(),
             })) || []
           );
           rollbackSelections = confirmed;

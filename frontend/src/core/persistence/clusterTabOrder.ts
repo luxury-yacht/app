@@ -66,6 +66,7 @@ export const hydrateClusterTabOrder = async (options?: { force?: boolean }): Pro
     try {
       const order = await requestAppState({
         resource: 'cluster-tab-order',
+        adapter: 'persistence-read',
         read: () => runtimeApp.GetClusterTabOrder(),
       });
       updateOrderCache(Array.isArray(order) ? order : []);

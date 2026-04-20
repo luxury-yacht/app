@@ -77,6 +77,7 @@ export const hydrateFavorites = async (options?: { force?: boolean }): Promise<F
     try {
       const result = await requestAppState({
         resource: 'favorites',
+        adapter: 'persistence-read',
         read: () => runtimeApp.GetFavorites(),
       });
       cachedFavorites = Array.isArray(result) ? result : [];

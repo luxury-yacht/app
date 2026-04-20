@@ -338,6 +338,7 @@ const queueFlush = () => {
           try {
             const result = await requestData<capabilities.CheckResult[]>({
               resource: 'evaluate-capabilities',
+              adapter: 'capability-read',
               reason: 'startup',
               read: () => EvaluateCapabilities(payload),
             });
