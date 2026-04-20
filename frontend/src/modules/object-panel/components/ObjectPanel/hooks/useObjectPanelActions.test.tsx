@@ -175,7 +175,7 @@ describe('useObjectPanelActions', () => {
 
     expect(scaleMock).toHaveBeenCalledWith('alpha:ctx', 'team-a', 'api', 'Deployment', 2);
     expect(dispatchMock).toHaveBeenCalledWith({ type: 'SHOW_SCALE_INPUT', payload: false });
-    expect(fetchDetailsMock).toHaveBeenCalledWith(true);
+    expect(fetchDetailsMock).toHaveBeenCalledWith('user');
 
     dispatchMock.mockClear();
     // Simulate rerender with updated replicas

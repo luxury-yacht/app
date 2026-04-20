@@ -7,6 +7,7 @@
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import ResourceBar from '@shared/components/ResourceBar';
+import { requestRefreshDomain } from '@/core/data-access';
 import { refreshOrchestrator, useRefreshScopedDomain } from '@/core/refresh';
 import { buildClusterScopeList } from '@/core/refresh/clusterScope';
 import { eventBus } from '@/core/events';
@@ -259,13 +260,15 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
 
     const enableOverview = () => {
       refreshOrchestrator.setScopedDomainEnabled('cluster-overview', overviewScope, true);
-      refreshOrchestrator
-        .fetchScopedDomain('cluster-overview', overviewScope, { isManual: true })
-        .catch(() => {
-          setOverviewData(EMPTY_OVERVIEW);
-          setIsHydrated(false);
-          setIsSwitching(true);
-        });
+      requestRefreshDomain({
+        domain: 'cluster-overview',
+        scope: overviewScope,
+        reason: 'startup',
+      }).catch(() => {
+        setOverviewData(EMPTY_OVERVIEW);
+        setIsHydrated(false);
+        setIsSwitching(true);
+      });
     };
 
     // Clear local component state without touching the domain lifecycle.

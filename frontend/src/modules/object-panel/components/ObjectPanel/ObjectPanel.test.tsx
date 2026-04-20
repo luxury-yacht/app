@@ -420,7 +420,7 @@ describe('ObjectPanel tab availability', () => {
     expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
       'object-details',
       detailScope,
-      expect.objectContaining({ isManual: true })
+      expect.objectContaining({ isManual: false })
     );
     expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
       'object-details',

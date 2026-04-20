@@ -6,6 +6,7 @@
  */
 import { useCallback, type Dispatch } from 'react';
 
+import type { DataRequestReason } from '@/core/data-access';
 import * as app from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
 
@@ -17,7 +18,7 @@ interface UseObjectPanelActionsArgs {
   state: PanelState;
   dispatch: Dispatch<PanelAction>;
   close: () => void;
-  fetchResourceDetails: (isManualRefresh?: boolean) => Promise<void>;
+  fetchResourceDetails: (reason?: DataRequestReason) => Promise<void>;
 }
 
 interface ObjectPanelActions {
@@ -195,7 +196,7 @@ export const useObjectPanelActions = ({
               await app.ScaleWorkload(clusterId, namespace, name, workloadKind, replicas);
             }
             hideScaleInput();
-            await fetchResourceDetails(true);
+            await fetchResourceDetails('user');
             break;
           }
           default:

@@ -228,6 +228,11 @@ describe('ClusterOverview', () => {
     cleanupRoot = cleanup;
     await flushEffects();
 
+    expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
+      'cluster-overview',
+      expect.any(String),
+      expect.objectContaining({ isManual: false })
+    );
     expect(container.querySelector('.overview-header h1')?.textContent).toBe('Cluster Overview');
     expect(container.querySelector('.cluster-overview')?.classList.contains('is-skeleton')).toBe(
       true
@@ -328,6 +333,7 @@ describe('ClusterOverview', () => {
     cleanupRoot = cleanup;
     await flushEffects();
 
+    expect(mockRefreshOrchestrator.fetchScopedDomain).not.toHaveBeenCalled();
     expect(container.querySelector('.cluster-overview')?.classList.contains('is-skeleton')).toBe(
       false
     );

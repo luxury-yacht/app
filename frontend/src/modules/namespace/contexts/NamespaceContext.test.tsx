@@ -348,6 +348,26 @@ describe('NamespaceProvider selection behaviour', () => {
     );
     cleanup();
   });
+
+  it('uses a startup request for the initial namespace load', () => {
+    namespaceDomainRef.current = {
+      status: 'idle',
+      data: null,
+      error: null,
+    } as any;
+
+    const { cleanup } = renderWithProvider();
+    act(() => {
+      vi.runAllTimers();
+    });
+
+    expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
+      'namespaces',
+      expect.any(String),
+      { isManual: false }
+    );
+    cleanup();
+  });
 });
 
 function getSelected(): string {

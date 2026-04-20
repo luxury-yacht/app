@@ -394,7 +394,7 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
         objectData.name,
         !isSuspended
       );
-      await fetchResourceDetails(true);
+      await fetchResourceDetails('user');
     } catch (err) {
       errorHandler.handle(err, {
         action: isSuspended ? 'resume' : 'suspend',

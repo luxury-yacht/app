@@ -47,6 +47,10 @@ vi.mock('@/core/refresh/hooks/useAutoRefreshLoadingState', () => ({
   useAutoRefreshLoadingState: () => hoistedMocks.autoRefreshLoadingState,
 }));
 
+vi.mock('@/core/settings/appPreferences', () => ({
+  getAutoRefreshEnabled: () => !hoistedMocks.autoRefreshLoadingState.isPaused,
+}));
+
 const mockRefreshManager = hoistedMocks.refreshManager;
 const mockRefreshOrchestrator = hoistedMocks.refreshOrchestrator;
 const mockUseRefreshScopedDomain = hoistedMocks.useRefreshScopedDomain;
@@ -149,6 +153,11 @@ describe('useObjectPanelRefresh', () => {
       'team-a:deployment:api',
       true
     );
+    expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
+      'object-details',
+      'team-a:deployment:api',
+      expect.objectContaining({ isManual: false })
+    );
     expect(mockRefreshOrchestrator.updateContext).not.toHaveBeenCalled();
   });
 
@@ -185,7 +194,7 @@ describe('useObjectPanelRefresh', () => {
     expect(detailsError).toBeNull();
     expect(detailPayload).toEqual({ replicas: 3 });
 
-    await fetchResourceDetails(true);
+    await fetchResourceDetails('user');
     expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
       'object-details',
       'team-a:deployment:api',

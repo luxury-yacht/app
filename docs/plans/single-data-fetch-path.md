@@ -26,6 +26,28 @@ Reference inventory:
 
 - See [data-fetch-inventory.md](/Volumes/git/luxury-yacht/app/docs/development/data-fetch-inventory.md)
 
+## Current Status
+
+2026-04-19:
+
+- Phase 1 is complete.
+- Phase 2 / Phase 3 first-batch migration is in progress.
+- Completed:
+  - initial `dataAccess` broker skeleton
+  - centralized paused-policy gate for cluster-data requests
+  - first four converted callers:
+    - `NamespaceContext`
+    - `ClusterOverview`
+    - `ClusterResourcesContext`
+    - `useObjectPanelRefresh`
+  - supporting object-panel callers updated to use request reasons instead of boolean manual flags
+- Verified so far:
+  - targeted Vitest coverage for broker behavior and converted callers
+  - `frontend` typecheck
+  - `mage qc:prerelease`
+- Remaining in this slice:
+  - follow-on caller conversions and diagnostics work from later phases
+
 ## Non-Goals
 
 - Do not force every backend read onto the same transport.
@@ -501,10 +523,10 @@ Output:
 
 ## Phase 1: Introduce Request Reason Model
 
-- [ ] Add `DataRequestReason` type
-- [ ] Add paused-policy enforcement in one place
-- [ ] Replace internal use of `isManual` at the broker boundary
-- [ ] Preserve transport internals temporarily, but require reason mapping before execution
+- [x] Add `DataRequestReason` type
+- [x] Add paused-policy enforcement in one place
+- [x] Replace internal use of `isManual` at the broker boundary
+- [x] Preserve transport internals temporarily, but require reason mapping before execution
 
 Deliverable:
 
@@ -512,11 +534,11 @@ Deliverable:
 
 ## Phase 2: Add Data Access Broker
 
-- [ ] Create `frontend/src/core/data-access/`
-- [ ] Add broker request/response types
+- [x] Create `frontend/src/core/data-access/`
+- [x] Add broker request/response types
 - [ ] Add diagnostics events/state for all requests
 - [ ] Add adapter registration mechanism
-- [ ] Add broker-level paused-policy enforcement
+- [x] Add broker-level paused-policy enforcement
 - [ ] Add broker-level cache-key semantics
 
 Deliverable:
@@ -540,13 +562,13 @@ This is the highest-priority migration because it fixes the current refresh conf
 
 ### First conversion batch
 
-- [ ] `frontend/src/modules/namespace/contexts/NamespaceContext.tsx`
+- [x] `frontend/src/modules/namespace/contexts/NamespaceContext.tsx`
 - [ ] `frontend/src/modules/namespace/contexts/NsResourcesContext.tsx`
 - [ ] `frontend/src/modules/browse/hooks/useBrowseCatalog.ts`
-- [ ] `frontend/src/modules/cluster/components/ClusterOverview.tsx`
+- [x] `frontend/src/modules/cluster/components/ClusterOverview.tsx`
 - [ ] `frontend/src/core/refresh/hooks/useMetricsAvailability.ts`
-- [ ] `frontend/src/modules/cluster/contexts/ClusterResourcesContext.tsx`
-- [ ] `frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelRefresh.ts`
+- [x] `frontend/src/modules/cluster/contexts/ClusterResourcesContext.tsx`
+- [x] `frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelRefresh.ts`
 - [ ] `frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelPods.ts`
 - [ ] `frontend/src/modules/object-panel/components/ObjectPanel/Events/EventsTab.tsx`
 - [ ] `frontend/src/modules/object-panel/components/ObjectPanel/Yaml/YamlTab.tsx`
@@ -564,6 +586,9 @@ Rules for this phase:
 Deliverable:
 
 - no UI component directly calls `fetchScopedDomain(...)`
+- current progress:
+  - the initial four cluster-data callers now go through `dataAccess`
+  - supporting object-panel action callers now pass explicit request reasons
 
 ## Phase 4: Convert Manual Refresh Fan-Out
 

@@ -21,6 +21,7 @@ import { formatAge } from '@utils/ageFormatter';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { errorHandler } from '@utils/errorHandler';
 import { queryNamespacePermissions } from '@/core/capabilities';
+import { requestRefreshDomain } from '@/core/data-access';
 import { refreshOrchestrator, useRefreshScopedDomain } from '@/core/refresh';
 import { buildClusterScopeList } from '@/core/refresh/clusterScope';
 import { eventBus } from '@/core/events';
@@ -202,8 +203,10 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
   const loadNamespaces = useCallback(
     async (_showSpinner: boolean = true) => {
       if (!namespacesScope) return;
-      await refreshOrchestrator.fetchScopedDomain('namespaces', namespacesScope, {
-        isManual: true,
+      await requestRefreshDomain({
+        domain: 'namespaces',
+        scope: namespacesScope,
+        reason: 'user',
       });
     },
     [namespacesScope]
@@ -270,7 +273,11 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
     }
 
     if (namespaceDomain.status === 'idle' && !namespaceDomain.data) {
-      void refreshOrchestrator.fetchScopedDomain('namespaces', namespacesScope, { isManual: true });
+      void requestRefreshDomain({
+        domain: 'namespaces',
+        scope: namespacesScope,
+        reason: 'startup',
+      });
     }
   }, [
     allNamespaceItem,
@@ -386,8 +393,10 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
     const handleKubeconfigChanged = () => {
       if (namespacesScope) {
         refreshOrchestrator.setScopedDomainEnabled('namespaces', namespacesScope, true);
-        void refreshOrchestrator.fetchScopedDomain('namespaces', namespacesScope, {
-          isManual: true,
+        void requestRefreshDomain({
+          domain: 'namespaces',
+          scope: namespacesScope,
+          reason: 'startup',
         });
       }
     };
