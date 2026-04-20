@@ -10,7 +10,7 @@ import ResourceBar from '@shared/components/ResourceBar';
 import { readAppInfo, requestAppState } from '@/core/app-state-access';
 import { requestRefreshDomain } from '@/core/data-access';
 import { refreshOrchestrator, useRefreshScopedDomain } from '@/core/refresh';
-import { buildClusterScopeList } from '@/core/refresh/clusterScope';
+import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { eventBus } from '@/core/events';
 import type { ClusterOverviewPayload } from '@/core/refresh/types';
 import logo from '@assets/luxury-yacht-logo.png';
@@ -73,7 +73,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
     return clusterContext.substring(lastColonIndex + 1) || 'default';
   }, [clusterContext]);
 
-  const { selectedClusterId, selectedClusterName, selectedClusterIds } = useKubeconfig();
+  const { selectedClusterId, selectedClusterName } = useKubeconfig();
   const { getClusterState } = useClusterLifecycle();
   const { getActiveClusterHealth } = useClusterHealthListener(selectedClusterId);
   const authState = useActiveClusterAuthState(selectedClusterId);
@@ -81,10 +81,11 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
   const { isPaused, suppressPassiveLoading } = useAutoRefreshLoadingState();
   const lifecycleState = selectedClusterId ? getClusterState(selectedClusterId) : '';
 
-  // Build scope covering all connected clusters for the cluster-overview domain.
+  // Cluster Overview is a foreground per-cluster page, so it must never
+  // reuse a multi-cluster overview scope from other selected tabs.
   const overviewScope = useMemo(
-    () => buildClusterScopeList(selectedClusterIds, ''),
-    [selectedClusterIds]
+    () => buildClusterScope(selectedClusterId ?? undefined, ''),
+    [selectedClusterId]
   );
   const overviewDomain = useRefreshScopedDomain('cluster-overview', overviewScope);
   const health = getActiveClusterHealth();

@@ -17,6 +17,7 @@ import ClusterOverview from './ClusterOverview';
 const {
   mockRefreshOrchestrator,
   domainStateRef,
+  kubeconfigStateRef,
   setSelectedNamespaceMock,
   setActiveNamespaceTabMock,
   setSidebarSelectionMock,
@@ -33,6 +34,22 @@ const {
     },
     domainStateRef: {
       current: createDomainState('loading'),
+    },
+    kubeconfigStateRef: {
+      current: {
+        kubeconfigs: [],
+        selectedKubeconfigs: ['cluster-1'],
+        selectedKubeconfig: 'cluster-1',
+        selectedClusterId: 'cluster-1',
+        selectedClusterName: 'cluster-1',
+        selectedClusterIds: ['cluster-1'],
+        kubeconfigsLoading: false,
+        setSelectedKubeconfigs: vi.fn(),
+        setSelectedKubeconfig: vi.fn(),
+        setActiveKubeconfig: vi.fn(),
+        getClusterMeta: vi.fn(),
+        loadKubeconfigs: vi.fn(),
+      },
     },
     setSelectedNamespaceMock: vi.fn(),
     setActiveNamespaceTabMock: vi.fn(),
@@ -64,20 +81,7 @@ vi.mock('@/core/refresh', () => ({
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   __esModule: true,
-  useKubeconfig: () => ({
-    kubeconfigs: [],
-    selectedKubeconfigs: ['cluster-1'],
-    selectedKubeconfig: 'cluster-1',
-    selectedClusterId: 'cluster-1',
-    selectedClusterName: 'cluster-1',
-    selectedClusterIds: ['cluster-1'],
-    kubeconfigsLoading: false,
-    setSelectedKubeconfigs: vi.fn(),
-    setSelectedKubeconfig: vi.fn(),
-    setActiveKubeconfig: vi.fn(),
-    getClusterMeta: vi.fn(),
-    loadKubeconfigs: vi.fn(),
-  }),
+  useKubeconfig: () => kubeconfigStateRef.current,
 }));
 
 vi.mock('@shared/components/ResourceBar', () => ({
@@ -192,6 +196,15 @@ describe('ClusterOverview', () => {
 
   beforeEach(() => {
     domainStateRef.current = createDomainState('loading');
+    kubeconfigStateRef.current = {
+      ...kubeconfigStateRef.current,
+      selectedKubeconfigs: ['cluster-1'],
+      selectedKubeconfig: 'cluster-1',
+      selectedClusterId: 'cluster-1',
+      selectedClusterName: 'cluster-1',
+      selectedClusterIds: ['cluster-1'],
+      kubeconfigsLoading: false,
+    };
     vi.clearAllMocks();
     mockLifecycleState = 'ready';
     mockNamespaceReady = true;
@@ -230,8 +243,13 @@ describe('ClusterOverview', () => {
 
     expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
       'cluster-overview',
-      expect.any(String),
+      'cluster-1|',
       expect.objectContaining({ isManual: false })
+    );
+    expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
+      'cluster-overview',
+      'cluster-1|',
+      true
     );
     expect(container.querySelector('.overview-header h1')?.textContent).toBe('Cluster Overview');
     expect(container.querySelector('.cluster-overview')?.classList.contains('is-skeleton')).toBe(
@@ -340,6 +358,31 @@ describe('ClusterOverview', () => {
     expect(container.textContent).toContain('Status:');
     expect(container.textContent).toContain('Auto-refresh paused');
     expect(container.textContent).not.toContain('Ready');
+  });
+
+  it('uses only the active cluster scope even when multiple clusters are selected', async () => {
+    kubeconfigStateRef.current = {
+      ...kubeconfigStateRef.current,
+      selectedKubeconfigs: ['cluster-1', 'cluster-2'],
+      selectedClusterIds: ['cluster-1', 'cluster-2'],
+      selectedClusterId: 'cluster-1',
+      selectedClusterName: 'cluster-1',
+    };
+
+    const { cleanup } = renderClusterOverview();
+    cleanupRoot = cleanup;
+    await flushEffects();
+
+    expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
+      'cluster-overview',
+      'cluster-1|',
+      true
+    );
+    expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
+      'cluster-overview',
+      'cluster-1|',
+      expect.objectContaining({ isManual: false })
+    );
   });
 
   it('updates the overview status when auto-refresh is toggled off', async () => {
