@@ -9,7 +9,7 @@ import './NsViewWorkloads.css';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
 import { getPermissionKey, useUserPermissions } from '@/core/capabilities';
 import { useRefreshScopedDomain } from '@/core/refresh';
-import { buildClusterScopeList } from '@/core/refresh/clusterScope';
+import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useNamespaceGridTablePersistence } from '@modules/namespace/hooks/useNamespaceGridTablePersistence';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
@@ -84,11 +84,11 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
     const { navigateToView } = useNavigateToView();
     const useShortResourceNames = useShortNames();
     const permissionMap = useUserPermissions();
-    const { selectedClusterIds } = useKubeconfig();
-    // Build scoped key for multi-cluster node metrics lookup.
+    const { selectedClusterId } = useKubeconfig();
+    // Foreground namespace views should resolve node metrics from the active cluster only.
     const nodesScope = useMemo(
-      () => buildClusterScopeList(selectedClusterIds, ''),
-      [selectedClusterIds]
+      () => buildClusterScope(selectedClusterId ?? undefined, ''),
+      [selectedClusterId]
     );
     const nodesDomain = useRefreshScopedDomain('nodes', nodesScope);
     const metricsInfo = metrics ?? nodesDomain.data?.metrics ?? null;

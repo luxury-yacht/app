@@ -385,6 +385,40 @@ describe('ClusterOverview', () => {
     );
   });
 
+  it('stays empty and paused on a new cluster tab even if overview data exists for another cluster', async () => {
+    mockAutoRefreshEnabled = false;
+    kubeconfigStateRef.current = {
+      ...kubeconfigStateRef.current,
+      selectedKubeconfigs: ['cluster-1', 'cluster-2'],
+      selectedClusterIds: ['cluster-1', 'cluster-2'],
+      selectedClusterId: 'cluster-1',
+      selectedClusterName: 'cluster-1',
+    };
+    domainStateRef.current = {
+      status: 'ready',
+      data: {
+        clusterId: 'cluster-2',
+        overview: {
+          ...EMPTY_OVERVIEW_DATA,
+          totalNodes: 9,
+          totalNamespaces: 4,
+          totalPods: 99,
+        },
+      } as any,
+      error: null,
+    };
+
+    const { container, cleanup } = renderClusterOverview();
+    cleanupRoot = cleanup;
+    await flushEffects();
+
+    expect(container.textContent).toContain('Auto-refresh paused');
+    expect(container.textContent).not.toContain('Ready');
+    expect(statValueFor(container, 'Total')).toBe('0');
+    expect(statValueFor(container, 'Namespaces')).toBe('0');
+    expect(statValueFor(container, 'Pods')).toBe('0');
+  });
+
   it('updates the overview status when auto-refresh is toggled off', async () => {
     const { container, cleanup } = renderClusterOverview();
     cleanupRoot = cleanup;
