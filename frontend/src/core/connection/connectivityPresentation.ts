@@ -157,8 +157,8 @@ export const buildConnectivityPresentation = ({
   if (isRefreshing) {
     return {
       status: 'refreshing',
-      summary: 'Refreshing cluster data',
-      detail: `The app is syncing the latest cluster state for ${clusterLabel}.`,
+      summary: 'Ready',
+      detail: `${clusterLabel} is connected and its namespace list is ready to use.`,
     };
   }
 

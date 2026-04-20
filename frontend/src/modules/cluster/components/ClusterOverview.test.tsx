@@ -300,6 +300,27 @@ describe('ClusterOverview', () => {
     expect(container.textContent).toContain('Loading namespaces');
   });
 
+  it('keeps the ready label stable while overview data is refreshing', async () => {
+    domainStateRef.current = createDomainState('updating', {
+      overview: {
+        ...EMPTY_OVERVIEW_DATA,
+        clusterType: 'EKS',
+        clusterVersion: '1.26.3',
+        totalNodes: 3,
+        totalNamespaces: 6,
+        totalPods: 42,
+      },
+    });
+
+    const { container, cleanup } = renderClusterOverview();
+    cleanupRoot = cleanup;
+    await flushEffects();
+
+    expect(container.textContent).toContain('Status:');
+    expect(container.textContent).toContain('Ready');
+    expect(container.textContent).not.toContain('Refreshing cluster data');
+  });
+
   it('shows auto-refresh paused when background refresh is disabled', async () => {
     mockAutoRefreshEnabled = false;
 
@@ -560,12 +581,12 @@ function statValueFor(container: HTMLElement, label: string): string {
 }
 
 function createDomainState(
-  status: 'loading' | 'idle' | 'ready' | 'error',
+  status: 'loading' | 'idle' | 'ready' | 'updating' | 'error',
   overrides: Partial<{ overview: ClusterOverviewPayload; error: string }> = {}
 ) {
-  if (status === 'ready') {
+  if (status === 'ready' || status === 'updating') {
     if (!overrides.overview) {
-      throw new Error('createDomainState requires overview data when status is ready');
+      throw new Error('createDomainState requires overview data when status is ready or updating');
     }
     return {
       status,
