@@ -16,6 +16,7 @@ import {
 import { useTableSort } from '@hooks/useTableSort';
 import { formatAge, formatFullDate } from '@utils/ageFormatter';
 import { errorHandler } from '@/utils/errorHandler';
+import { requestRefreshDomain, type DataRequestReason } from '@/core/data-access';
 import type { ObjectEventSummary } from '@/core/refresh/types';
 import { refreshManager, refreshOrchestrator } from '@/core/refresh';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
@@ -113,13 +114,15 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
   }, [eventsScope, isActive, objectData]);
 
   const fetchEvents = useCallback(
-    async (isManualRefresh = false) => {
+    async (reason: DataRequestReason = 'startup') => {
       if (!eventsScope) {
         return;
       }
       try {
-        await refreshOrchestrator.fetchScopedDomain('object-events', eventsScope, {
-          isManual: isManualRefresh,
+        await requestRefreshDomain({
+          domain: 'object-events',
+          scope: eventsScope,
+          reason,
         });
       } catch (error) {
         errorHandler.handle(error instanceof Error ? error : new Error(String(error)), {
@@ -131,10 +134,10 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
   );
 
   useEffect(() => {
-    if (isActive && objectData && eventsScope && !isPaused) {
-      void fetchEvents(true);
+    if (isActive && objectData && eventsScope) {
+      void fetchEvents('startup');
     }
-  }, [fetchEvents, isActive, isPaused, objectData, eventsScope]);
+  }, [fetchEvents, isActive, objectData, eventsScope]);
 
   const eventsRefresherName = useMemo(
     () =>
@@ -163,7 +166,7 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
     refresherName: eventsRefresherName,
     onRefresh: useCallback(
       async (isManual: boolean) => {
-        await fetchEvents(isManual);
+        await fetchEvents(isManual ? 'user' : 'background');
       },
       [fetchEvents]
     ),

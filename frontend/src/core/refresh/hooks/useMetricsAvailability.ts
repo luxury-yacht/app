@@ -6,6 +6,7 @@
  */
 
 import { useEffect, useMemo } from 'react';
+import { requestRefreshDomain } from '@/core/data-access';
 import { refreshOrchestrator, useRefreshScopedDomain } from '@/core/refresh';
 import { buildClusterScopeList } from '@/core/refresh/clusterScope';
 import { useViewState } from '@/core/contexts/ViewStateContext';
@@ -39,8 +40,10 @@ export const useClusterMetricsAvailability = (): ClusterOverviewMetrics | null =
     const shouldTrigger = shouldEnable && viewType !== 'overview';
     // ClusterOverview handles its own initial refresh; only prime from non-overview views.
     if (shouldTrigger && !overviewDomain.data && overviewDomain.status === 'idle') {
-      void refreshOrchestrator.fetchScopedDomain('cluster-overview', overviewScope, {
-        isManual: true,
+      void requestRefreshDomain({
+        domain: 'cluster-overview',
+        scope: overviewScope,
+        reason: 'startup',
       });
     }
   }, [overviewDomain.data, overviewDomain.status, overviewScope, viewType]);

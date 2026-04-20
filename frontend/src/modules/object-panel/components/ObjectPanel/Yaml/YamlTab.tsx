@@ -16,6 +16,7 @@ import { RegexSearchIcon } from '@shared/components/icons/LogIcons';
 import { deriveCopyText } from '@ui/shortcuts/context';
 import { useKeyboardSurface, useShortcut, useSearchShortcutTarget } from '@ui/shortcuts';
 import { errorHandler } from '@utils/errorHandler';
+import { requestRefreshDomain } from '@/core/data-access';
 import { refreshOrchestrator } from '@/core/refresh';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
@@ -309,8 +310,12 @@ const YamlTab: React.FC<YamlTabProps> = ({
 
     const enabled = isActive && !isEditing;
     refreshOrchestrator.setScopedDomainEnabled('object-yaml', scope, enabled);
-    if (enabled && !isPaused) {
-      void refreshOrchestrator.fetchScopedDomain('object-yaml', scope, { isManual: true });
+    if (enabled) {
+      void requestRefreshDomain({
+        domain: 'object-yaml',
+        scope,
+        reason: 'startup',
+      });
     }
 
     return () => {
@@ -318,7 +323,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
         preserveState: true,
       });
     };
-  }, [scope, isActive, isEditing, isPaused]);
+  }, [scope, isActive, isEditing]);
 
   useShortcut({
     key: 'm',
@@ -1023,7 +1028,11 @@ const YamlTab: React.FC<YamlTabProps> = ({
       setHasServerYamlError(false);
 
       if (scope) {
-        await refreshOrchestrator.fetchScopedDomain('object-yaml', scope, { isManual: true });
+        await requestRefreshDomain({
+          domain: 'object-yaml',
+          scope,
+          reason: 'user',
+        });
       }
     } catch (err) {
       const objectYamlError = parseObjectYamlError(err);
@@ -1158,7 +1167,11 @@ const YamlTab: React.FC<YamlTabProps> = ({
       exitEditMode();
       setPendingSnapshotAdoptionYaml(snapshotYamlBeforeSave);
       if (scope) {
-        await refreshOrchestrator.fetchScopedDomain('object-yaml', scope, { isManual: true });
+        await requestRefreshDomain({
+          domain: 'object-yaml',
+          scope,
+          reason: 'user',
+        });
       }
       setActionDetails([]);
     } catch (err) {

@@ -9,6 +9,7 @@ import { EditorView } from '@codemirror/view';
 import * as YAML from 'yaml';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import SegmentedButton from '@shared/components/SegmentedButton';
+import { requestRefreshDomain } from '@/core/data-access';
 import { refreshOrchestrator } from '@/core/refresh';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
@@ -88,8 +89,12 @@ const ValuesTab: React.FC<ValuesTabProps> = ({ scope, isActive = false }) => {
 
     const enabled = isActive;
     refreshOrchestrator.setScopedDomainEnabled('object-helm-values', scope, enabled);
-    if (enabled && !isPaused) {
-      void refreshOrchestrator.fetchScopedDomain('object-helm-values', scope, { isManual: true });
+    if (enabled) {
+      void requestRefreshDomain({
+        domain: 'object-helm-values',
+        scope,
+        reason: 'startup',
+      });
     }
 
     return () => {
@@ -97,7 +102,7 @@ const ValuesTab: React.FC<ValuesTabProps> = ({ scope, isActive = false }) => {
         preserveState: true,
       });
     };
-  }, [scope, isActive, isPaused]);
+  }, [scope, isActive]);
 
   const valuesData = snapshot.data?.values as HelmValuesData | undefined;
   const valuesLoadingState = applyPassiveLoadingPolicy({

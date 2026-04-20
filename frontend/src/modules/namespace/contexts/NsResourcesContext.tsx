@@ -19,6 +19,7 @@ import React, {
 } from 'react';
 import { errorHandler } from '@/utils/errorHandler';
 import { type ResourceDataReturn } from '@hooks/resources';
+import { requestRefreshDomain } from '@/core/data-access';
 import type {
   NamespaceAutoscalingSnapshotPayload,
   NamespaceAutoscalingSummary,
@@ -173,18 +174,15 @@ const useNamespacePodsResource = (
   const scopedStates = useRefreshScopedDomainStates('pods');
   const domainState = scope ? scopedStates[scope] : undefined;
 
-  const baseLoad = useCallback(async () => {
-    if (!enabled || !scope) {
-      return;
-    }
-    await refreshOrchestrator.fetchScopedDomain('pods', scope, { isManual: true });
-  }, [enabled, scope]);
-
   const refresh = useCallback(async () => {
     if (!enabled || !scope) {
       return;
     }
-    await refreshOrchestrator.fetchScopedDomain('pods', scope, { isManual: true });
+    await requestRefreshDomain({
+      domain: 'pods',
+      scope,
+      reason: 'user',
+    });
   }, [enabled, scope]);
 
   const reset = useCallback(() => {
@@ -236,8 +234,14 @@ const useNamespacePodsResource = (
       refreshing,
       error: domainState?.error ? new Error(domainState.error) : null,
       load: async (showSpinner = true) => {
-        void showSpinner;
-        await baseLoad();
+        if (!enabled || !scope) {
+          return;
+        }
+        await requestRefreshDomain({
+          domain: 'pods',
+          scope,
+          reason: showSpinner ? 'user' : 'startup',
+        });
       },
       refresh,
       reset,
@@ -247,15 +251,16 @@ const useNamespacePodsResource = (
       metrics,
     }),
     [
-      baseLoad,
       domainState?.error,
       domainState?.lastUpdated,
+      enabled,
       metrics,
       passiveLoading.hasLoaded,
       passiveLoading.loading,
       refresh,
       refreshing,
       reset,
+      scope,
       stableData,
     ]
   );
@@ -289,7 +294,11 @@ function useRefreshBackedResource<T>(
       }
 
       try {
-        await refreshOrchestrator.fetchScopedDomain(domain, namespaceScope, { isManual: true });
+        await requestRefreshDomain({
+          domain,
+          scope: namespaceScope,
+          reason: _showSpinner ? 'user' : 'startup',
+        });
       } catch (error) {
         errorHandler.handle(error instanceof Error ? error : new Error(String(error)), {
           source: `namespace-resource-load-${resourceKey}`,
@@ -305,7 +314,11 @@ function useRefreshBackedResource<T>(
     }
 
     try {
-      await refreshOrchestrator.fetchScopedDomain(domain, namespaceScope, { isManual: true });
+      await requestRefreshDomain({
+        domain,
+        scope: namespaceScope,
+        reason: 'user',
+      });
     } catch (error) {
       errorHandler.handle(error instanceof Error ? error : new Error(String(error)), {
         source: `namespace-resource-refresh-${resourceKey}`,
@@ -320,13 +333,13 @@ function useRefreshBackedResource<T>(
   }, [domain, namespaceScope]);
 
   useEffect(() => {
-    if (!enabled || !namespaceScope || isPaused) {
+    if (!enabled || !namespaceScope) {
       return;
     }
     if (domainState.status === 'idle' && !domainData) {
-      void load(true);
+      void load(false);
     }
-  }, [enabled, domainState.status, domainData, isPaused, load, namespaceScope]);
+  }, [enabled, domainState.status, domainData, load, namespaceScope]);
 
   const selectedData = useMemo(
     () => (!domainData ? fallback : (selector(domainData) ?? fallback)),
@@ -829,7 +842,7 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
       custom.reset();
       helm.reset();
 
-      if (!isPaused && isNamespaceView && activeResourceType) {
+      if (isNamespaceView && activeResourceType) {
         // Small delay to ensure reset completes before loading.
         // Read from resourcesRef so the callback uses the latest handles.
         timerId = setTimeout(() => {
@@ -839,37 +852,37 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
               // Catalog-backed browse view manages its own refresh cadence.
               break;
             case 'pods':
-              res.pods.load(true);
+              res.pods.load(false);
               break;
             case 'workloads':
-              res.workloads.load(true);
+              res.workloads.load(false);
               break;
             case 'config':
-              res.config.load(true);
+              res.config.load(false);
               break;
             case 'network':
-              res.network.load(true);
+              res.network.load(false);
               break;
             case 'rbac':
-              res.rbac.load(true);
+              res.rbac.load(false);
               break;
             case 'storage':
-              res.storage.load(true);
+              res.storage.load(false);
               break;
             case 'events':
-              res.events.load(true);
+              res.events.load(false);
               break;
             case 'quotas':
-              res.quotas.load(true);
+              res.quotas.load(false);
               break;
             case 'autoscaling':
-              res.autoscaling.load(true);
+              res.autoscaling.load(false);
               break;
             case 'custom':
-              res.custom.load(true);
+              res.custom.load(false);
               break;
             case 'helm':
-              res.helm.load(true);
+              res.helm.load(false);
               break;
           }
         }, 100);
@@ -884,7 +897,6 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
   }, [
     currentNamespace,
     activeResourceType,
-    isPaused,
     pods,
     workloads,
     config,
@@ -901,7 +913,7 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
 
   // Ensure active resource loads when switching views within a namespace
   useEffect(() => {
-    if (!isNamespaceView || !currentNamespace || isPaused) {
+    if (!isNamespaceView || !currentNamespace) {
       return;
     }
 
@@ -910,7 +922,7 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
 
     if (activeKey === 'pods') {
       if (!podsResource.hasLoaded && !podsResource.loading) {
-        void podsResource.load?.(true);
+        void podsResource.load?.(false);
       }
       return;
     }
@@ -927,12 +939,12 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     }
 
     if (!resource.hasLoaded && !resource.loading) {
-      void resource.load?.(true);
+      void resource.load?.(false);
       return;
     }
 
-    resource.refresh && void resource.refresh();
-  }, [activeResourceType, currentNamespace, isNamespaceView, isPaused]);
+    void resource.load?.(false);
+  }, [activeResourceType, currentNamespace, isNamespaceView]);
 
   // Subscribe to view changes to know which resource to auto-refresh
   // Memoize the context value

@@ -107,6 +107,10 @@ vi.mock('@/core/refresh/hooks/useAutoRefreshLoadingState', () => ({
   useAutoRefreshLoadingState: () => autoRefreshLoadingState,
 }));
 
+vi.mock('@/core/settings/appPreferences', () => ({
+  getAutoRefreshEnabled: () => !autoRefreshLoadingState.isPaused,
+}));
+
 const testClusterId = 'test-cluster';
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
@@ -233,7 +237,7 @@ describe('NamespaceResourcesProvider', () => {
     expect(orchestrator.fetchScopedDomain).toHaveBeenCalledWith(
       'namespace-config',
       `${testClusterId}|namespace:team-a`,
-      expect.objectContaining({ isManual: true })
+      expect.objectContaining({ isManual: false })
     );
     expect(capabilityMocks.queryNamespacePermissions).toHaveBeenCalledWith('team-a', testClusterId);
     expect(contextRef.current?.config.data).toEqual([]);
@@ -349,7 +353,7 @@ describe('NamespaceResourcesProvider', () => {
     expect(orchestrator.fetchScopedDomain).toHaveBeenCalledWith(
       'namespace-workloads',
       `${testClusterId}|namespace:team-b`,
-      expect.objectContaining({ isManual: true })
+      expect.objectContaining({ isManual: false })
     );
     expect(orchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
       'pods',

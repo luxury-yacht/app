@@ -7,6 +7,7 @@ import CodeMirror, { type ReactCodeMirrorRef } from '@uiw/react-codemirror';
 import { yaml as yamlLang } from '@codemirror/lang-yaml';
 import { EditorView } from '@codemirror/view';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
+import { requestRefreshDomain } from '@/core/data-access';
 import { refreshOrchestrator } from '@/core/refresh';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
@@ -70,8 +71,12 @@ const ManifestTab: React.FC<ManifestTabProps> = ({ scope, isActive = false }) =>
 
     const enabled = isActive;
     refreshOrchestrator.setScopedDomainEnabled('object-helm-manifest', scope, enabled);
-    if (enabled && !isPaused) {
-      void refreshOrchestrator.fetchScopedDomain('object-helm-manifest', scope, { isManual: true });
+    if (enabled) {
+      void requestRefreshDomain({
+        domain: 'object-helm-manifest',
+        scope,
+        reason: 'startup',
+      });
     }
 
     return () => {
@@ -79,7 +84,7 @@ const ManifestTab: React.FC<ManifestTabProps> = ({ scope, isActive = false }) =>
         preserveState: true,
       });
     };
-  }, [scope, isActive, isPaused]);
+  }, [scope, isActive]);
 
   const manifestContent = snapshot.data?.manifest ?? '';
   const manifestLoadingState = applyPassiveLoadingPolicy({

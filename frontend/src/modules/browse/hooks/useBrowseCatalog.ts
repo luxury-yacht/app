@@ -6,6 +6,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { requestRefreshDomain } from '@/core/data-access';
 import { eventBus } from '@/core/events';
 import { refreshOrchestrator, useRefreshScopedDomain } from '@/core/refresh';
 import { getMaxTableRows } from '@/core/settings/appPreferences';
@@ -270,9 +271,17 @@ export function useBrowseCatalog({
     }
 
     lastAppliedScopeRef.current = catalogScope;
-    void refreshOrchestrator.fetchScopedDomain('catalog', catalogScope, { isManual: true });
+    void requestRefreshDomain({
+      domain: 'catalog',
+      scope: catalogScope,
+      reason: 'startup',
+    });
     if (!metadataUsesActiveScope) {
-      void refreshOrchestrator.fetchScopedDomain('catalog', metadataScope, { isManual: true });
+      void requestRefreshDomain({
+        domain: 'catalog',
+        scope: metadataScope,
+        reason: 'startup',
+      });
     }
   }, [catalogScope, metadataScope, metadataUsesActiveScope, scopeIdentityKey]);
 
@@ -392,22 +401,24 @@ export function useBrowseCatalog({
     // Enable the paginated scope and fetch it directly.
     refreshOrchestrator.setScopedDomainEnabled('catalog', normalizedScope, true);
     lastAppliedScopeRef.current = normalizedScope;
-    void refreshOrchestrator
-      .fetchScopedDomain('catalog', normalizedScope, { isManual: true })
-      .then(() => {
-        // The fetch wrote results to the paginated scope. Copy to the base
-        // scope so the domain watcher (useRefreshScopedDomain) sees the update.
-        const pageResult = getScopedDomainState('catalog', normalizedScope);
-        if (pageResult.data) {
-          const baseScope = catalogScopeRef.current;
-          setScopedDomainState('catalog', baseScope, () => ({
-            ...pageResult,
-            scope: baseScope,
-          }));
-        }
-        // Clean up the temporary paginated scope.
-        refreshOrchestrator.setScopedDomainEnabled('catalog', normalizedScope, false);
-      });
+    void requestRefreshDomain({
+      domain: 'catalog',
+      scope: normalizedScope,
+      reason: 'user',
+    }).then(() => {
+      // The fetch wrote results to the paginated scope. Copy to the base
+      // scope so the domain watcher (useRefreshScopedDomain) sees the update.
+      const pageResult = getScopedDomainState('catalog', normalizedScope);
+      if (pageResult.data) {
+        const baseScope = catalogScopeRef.current;
+        setScopedDomainState('catalog', baseScope, () => ({
+          ...pageResult,
+          scope: baseScope,
+        }));
+      }
+      // Clean up the temporary paginated scope.
+      refreshOrchestrator.setScopedDomainEnabled('catalog', normalizedScope, false);
+    });
   }, [
     continueToken,
     isRequestingMore,

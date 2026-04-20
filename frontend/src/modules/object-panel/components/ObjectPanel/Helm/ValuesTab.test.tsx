@@ -121,6 +121,10 @@ vi.mock('@/core/refresh/hooks/useAutoRefreshLoadingState', () => ({
   useAutoRefreshLoadingState: () => autoRefreshLoadingState,
 }));
 
+vi.mock('@/core/settings/appPreferences', () => ({
+  getAutoRefreshEnabled: () => !autoRefreshLoadingState.isPaused,
+}));
+
 vi.mock('@uiw/react-codemirror', () => ({
   __esModule: true,
   default: CodeMirrorMock,
@@ -404,7 +408,7 @@ describe('ValuesTab', () => {
     expect(refreshMocks.fetchScopedDomain).toHaveBeenCalledWith(
       'object-helm-values',
       'ns:helmrelease:chart',
-      { isManual: true }
+      { isManual: false }
     );
 
     await unmount();

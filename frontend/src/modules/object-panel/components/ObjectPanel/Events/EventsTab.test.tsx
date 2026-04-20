@@ -59,6 +59,10 @@ vi.mock('@/core/refresh/store', () => ({
   useRefreshScopedDomain: () => hoistedSnapshot,
 }));
 
+vi.mock('@/core/settings/appPreferences', () => ({
+  getAutoRefreshEnabled: () => true,
+}));
+
 const mockFetchScopedDomain = vi.fn(() => Promise.resolve());
 
 vi.mock('@/core/refresh', () => ({

@@ -6,6 +6,7 @@
  * - Returns structured pod data, loading states, and error information.
  */
 import { useEffect, useMemo } from 'react';
+import { requestRefreshDomain } from '@/core/data-access';
 import { refreshOrchestrator } from '@/core/refresh/orchestrator';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
@@ -84,15 +85,19 @@ export function useObjectPanelPods({
     }
 
     refreshOrchestrator.setScopedDomainEnabled('pods', refreshScope, shouldEnable);
-    if (shouldEnable && !isPaused) {
-      void refreshOrchestrator.fetchScopedDomain('pods', refreshScope, { isManual: true });
+    if (shouldEnable) {
+      void requestRefreshDomain({
+        domain: 'pods',
+        scope: refreshScope,
+        reason: 'startup',
+      });
     }
 
     return () => {
       refreshOrchestrator.setScopedDomainEnabled('pods', refreshScope, false);
       refreshOrchestrator.resetScopedDomain('pods', refreshScope);
     };
-  }, [isPaused, podsScope?.scope, refreshScope, shouldEnable]);
+  }, [podsScope?.scope, refreshScope, shouldEnable]);
 
   const payload = snapshot.data;
   const pods = (payload?.pods ?? []) as PodSnapshotEntry[];

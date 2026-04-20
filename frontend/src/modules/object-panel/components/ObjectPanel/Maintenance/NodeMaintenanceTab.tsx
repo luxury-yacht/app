@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CordonNode, DrainNode, DeleteNode, UncordonNode } from '@wailsjs/go/backend/App';
 import { types } from '@wailsjs/go/models';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
+import { requestRefreshDomain } from '@/core/data-access';
 import { refreshOrchestrator, useRefreshScopedDomain } from '@/core/refresh';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
@@ -66,8 +67,7 @@ const toScope = (nodeName?: string | null): string | null => {
 const useNodeMaintenanceDomain = (
   nodeName?: string | null,
   enabled?: boolean,
-  clusterId?: string | null,
-  isPaused: boolean = false
+  clusterId?: string | null
 ) => {
   const scope = useMemo(() => {
     const rawScope = toScope(nodeName);
@@ -98,7 +98,11 @@ const useNodeMaintenanceDomain = (
       return;
     }
     try {
-      await refreshOrchestrator.fetchScopedDomain('object-maintenance', scope, { isManual: true });
+      await requestRefreshDomain({
+        domain: 'object-maintenance',
+        scope,
+        reason: 'user',
+      });
     } catch (error) {
       errorHandler.handle(error instanceof Error ? error : new Error(String(error)), {
         source: 'node-maintenance-refresh',
@@ -107,10 +111,14 @@ const useNodeMaintenanceDomain = (
   }, [scope]);
 
   useEffect(() => {
-    if (scope && enabled && !isPaused) {
-      void refresh();
+    if (scope && enabled) {
+      void requestRefreshDomain({
+        domain: 'object-maintenance',
+        scope,
+        reason: 'startup',
+      });
     }
-  }, [enabled, isPaused, scope, refresh]);
+  }, [enabled, scope]);
 
   return {
     scope,
@@ -165,7 +173,7 @@ export function NodeMaintenanceTab({
     scope: maintenanceScope,
     snapshot: maintenanceSnapshot,
     refresh: refreshMaintenance,
-  } = useNodeMaintenanceDomain(nodeName, isActive && Boolean(nodeDetails), clusterId, isPaused);
+  } = useNodeMaintenanceDomain(nodeName, isActive && Boolean(nodeDetails), clusterId);
 
   const drains = useMemo(
     () => (maintenanceScope ? (maintenanceSnapshot.data?.drains ?? []) : []),

@@ -31,22 +31,33 @@ Reference inventory:
 2026-04-19:
 
 - Phase 1 is complete.
-- Phase 2 / Phase 3 first-batch migration is in progress.
+- Phase 2 is in progress.
+- Phase 3 refresh-domain conversion is partially complete through the current object-panel batch.
 - Completed:
   - initial `dataAccess` broker skeleton
   - centralized paused-policy gate for cluster-data requests
-  - first four converted callers:
+  - converted callers:
     - `NamespaceContext`
+    - `NsResourcesContext`
+    - `useBrowseCatalog`
     - `ClusterOverview`
+    - `useMetricsAvailability`
     - `ClusterResourcesContext`
     - `useObjectPanelRefresh`
+    - `useObjectPanelPods`
+    - `EventsTab`
+    - `YamlTab`
+    - `ManifestTab`
+    - `ValuesTab`
+    - `NodeMaintenanceTab`
   - supporting object-panel callers updated to use request reasons instead of boolean manual flags
 - Verified so far:
-  - targeted Vitest coverage for broker behavior and converted callers
+  - targeted Vitest coverage for broker behavior and converted callers, including the object-panel batch
   - `frontend` typecheck
   - `mage qc:prerelease`
 - Remaining in this slice:
-  - follow-on caller conversions and diagnostics work from later phases
+  - `ObjectDiffModal`
+  - diagnostics and adapter work from later phases
 
 ## Non-Goals
 
@@ -563,18 +574,18 @@ This is the highest-priority migration because it fixes the current refresh conf
 ### First conversion batch
 
 - [x] `frontend/src/modules/namespace/contexts/NamespaceContext.tsx`
-- [ ] `frontend/src/modules/namespace/contexts/NsResourcesContext.tsx`
-- [ ] `frontend/src/modules/browse/hooks/useBrowseCatalog.ts`
+- [x] `frontend/src/modules/namespace/contexts/NsResourcesContext.tsx`
+- [x] `frontend/src/modules/browse/hooks/useBrowseCatalog.ts`
 - [x] `frontend/src/modules/cluster/components/ClusterOverview.tsx`
-- [ ] `frontend/src/core/refresh/hooks/useMetricsAvailability.ts`
+- [x] `frontend/src/core/refresh/hooks/useMetricsAvailability.ts`
 - [x] `frontend/src/modules/cluster/contexts/ClusterResourcesContext.tsx`
 - [x] `frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelRefresh.ts`
-- [ ] `frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelPods.ts`
-- [ ] `frontend/src/modules/object-panel/components/ObjectPanel/Events/EventsTab.tsx`
-- [ ] `frontend/src/modules/object-panel/components/ObjectPanel/Yaml/YamlTab.tsx`
-- [ ] `frontend/src/modules/object-panel/components/ObjectPanel/Helm/ManifestTab.tsx`
-- [ ] `frontend/src/modules/object-panel/components/ObjectPanel/Helm/ValuesTab.tsx`
-- [ ] `frontend/src/modules/object-panel/components/ObjectPanel/Maintenance/NodeMaintenanceTab.tsx`
+- [x] `frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelPods.ts`
+- [x] `frontend/src/modules/object-panel/components/ObjectPanel/Events/EventsTab.tsx`
+- [x] `frontend/src/modules/object-panel/components/ObjectPanel/Yaml/YamlTab.tsx`
+- [x] `frontend/src/modules/object-panel/components/ObjectPanel/Helm/ManifestTab.tsx`
+- [x] `frontend/src/modules/object-panel/components/ObjectPanel/Helm/ValuesTab.tsx`
+- [x] `frontend/src/modules/object-panel/components/ObjectPanel/Maintenance/NodeMaintenanceTab.tsx`
 - [ ] `frontend/src/ui/modals/ObjectDiffModal.tsx`
 
 Rules for this phase:
@@ -587,7 +598,7 @@ Deliverable:
 
 - no UI component directly calls `fetchScopedDomain(...)`
 - current progress:
-  - the initial four cluster-data callers now go through `dataAccess`
+  - all currently identified object-panel refresh-domain readers except `ObjectDiffModal` now go through `dataAccess`
   - supporting object-panel action callers now pass explicit request reasons
 
 ## Phase 4: Convert Manual Refresh Fan-Out
