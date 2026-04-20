@@ -33,7 +33,7 @@ import {
   resolveEventObjectReference,
   splitEventObjectTarget,
 } from '@shared/utils/eventObjectIdentity';
-import { buildObjectReference } from '@shared/utils/objectIdentity';
+import { buildCanonicalObjectRowKey, buildObjectReference } from '@shared/utils/objectIdentity';
 
 export interface EventData {
   kind: string;
@@ -140,6 +140,20 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
         const baseKey = `${eventNamespace}-${event.reason}-${event.source}-${event.object}-${event.ageTimestamp ?? event.age ?? '0'}-${index}`;
         return buildClusterScopedKey(event, baseKey);
       },
+      [namespace]
+    );
+
+    const sortRowIdentity = useCallback(
+      (event: EventData) =>
+        buildCanonicalObjectRowKey({
+          kind: 'Event',
+          name: `${event.reason}:${event.source}:${event.object}`,
+          namespace:
+            (event.objectNamespace && event.objectNamespace.length > 0
+              ? event.objectNamespace
+              : event.namespace) ?? namespace,
+          clusterId: event.clusterId,
+        }),
       [namespace]
     );
 
@@ -252,6 +266,7 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
       columns,
       controlledSort: persistedSort,
       onChange: onSortChange,
+      rowIdentity: sortRowIdentity,
       diagnosticsLabel:
         namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Events' : 'Namespace Events',
     });

@@ -138,4 +138,16 @@ describe('resolveEventObjectReference', () => {
 
     expect(findCatalogObjectByUIDMock).toHaveBeenCalledWith('cluster-a', 'db-uid');
   });
+
+  it('fails closed when catalog lookup by UID rejects', async () => {
+    findCatalogObjectByUIDMock.mockRejectedValue(new Error('catalog unavailable'));
+
+    await expect(
+      resolveEventObjectReference({
+        object: 'Database/primary',
+        objectUid: 'db-uid',
+        clusterId: 'cluster-a',
+      })
+    ).resolves.toBeUndefined();
+  });
 });

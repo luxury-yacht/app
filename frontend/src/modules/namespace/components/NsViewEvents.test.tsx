@@ -25,12 +25,20 @@ const {
   shortNamesMock,
   formatAgeMock,
   findCatalogObjectByUIDMock,
+  useTableSortMock,
 } = vi.hoisted(() => ({
   gridTablePropsRef: { current: null as any },
   openWithObjectMock: vi.fn(),
   shortNamesMock: vi.fn(() => false),
   formatAgeMock: vi.fn((timestamp: number) => `${timestamp}s`),
   findCatalogObjectByUIDMock: vi.fn(),
+  useTableSortMock: vi.fn(
+    (data: unknown[], _defaultKey?: string, _defaultDir?: any, opts?: any) => ({
+      sortedData: data,
+      sortConfig: opts?.controlledSort ?? { key: 'ageTimestamp', direction: 'desc' },
+      handleSort: vi.fn(),
+    })
+  ),
 }));
 
 vi.mock('@core/contexts/FavoritesContext', () => ({
@@ -92,11 +100,7 @@ vi.mock('@wailsjs/go/backend/App', () => ({
 }));
 
 vi.mock('@/hooks/useTableSort', () => ({
-  useTableSort: (data: unknown[]) => ({
-    sortedData: data,
-    sortConfig: { key: 'ageTimestamp', direction: 'desc' },
-    handleSort: vi.fn(),
-  }),
+  useTableSort: (...args: any[]) => (useTableSortMock as any)(...args),
 }));
 
 vi.mock('@/hooks/useShortNames', () => ({
@@ -141,6 +145,7 @@ describe('NsViewEvents', () => {
     gridTablePropsRef.current = null;
     openWithObjectMock.mockReset();
     findCatalogObjectByUIDMock.mockReset();
+    useTableSortMock.mockClear();
     shortNamesMock.mockReturnValue(false);
     formatAgeMock.mockClear();
   });
@@ -281,6 +286,17 @@ describe('NsViewEvents', () => {
     const props = await renderEventsView([event]);
     const menu = props.getCustomContextMenuItems(event, 'objectName');
     expect(menu).toHaveLength(0);
+  });
+
+  it('passes stable event row identity into useTableSort', async () => {
+    const event = baseEvent();
+    await renderEventsView([event]);
+
+    const options = useTableSortMock.mock.calls[0]?.[3];
+    expect(options?.rowIdentity).toBeTypeOf('function');
+    expect(options.rowIdentity(event, 0)).toBe(
+      'alpha:ctx|/v1/Event/team-a/FailedScheduling:kubelet:Pod/api'
+    );
   });
 
   it('formats age using timestamp when available and falls back to provided age', async () => {

@@ -286,6 +286,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
     columns,
     controlledSort: sortConfig,
     onChange: setSortConfig,
+    rowIdentity: keyExtractor,
     diagnosticsLabel: 'Object Panel Pods',
   });
 

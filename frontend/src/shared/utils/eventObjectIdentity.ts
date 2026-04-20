@@ -103,10 +103,14 @@ export async function resolveEventObjectReference(
     return undefined;
   }
 
-  const match = await FindCatalogObjectByUID(clusterId, objectUid);
-  if (!match) {
+  try {
+    const match = await FindCatalogObjectByUID(clusterId, objectUid);
+    if (!match) {
+      return undefined;
+    }
+
+    return buildObjectReference(match);
+  } catch {
     return undefined;
   }
-
-  return buildObjectReference(match);
 }

@@ -33,7 +33,7 @@ import {
   resolveEventObjectReference,
   splitEventObjectTarget,
 } from '@shared/utils/eventObjectIdentity';
-import { buildObjectReference } from '@shared/utils/objectIdentity';
+import { buildCanonicalObjectRowKey, buildObjectReference } from '@shared/utils/objectIdentity';
 
 interface EventData {
   kind: string;
@@ -132,6 +132,17 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
       []
     );
 
+    const sortRowIdentity = useCallback(
+      (event: EventData) =>
+        buildCanonicalObjectRowKey({
+          kind: 'Event',
+          name: event.name,
+          namespace: event.namespace,
+          clusterId: event.clusterId,
+        }),
+      []
+    );
+
     // Define columns for Events
     const columns: GridColumnDefinition<EventData>[] = useMemo(() => {
       const baseColumns: GridColumnDefinition<EventData>[] = [
@@ -218,6 +229,7 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
       columns,
       controlledSort: persistedSort,
       onChange: setPersistedSort,
+      rowIdentity: sortRowIdentity,
     });
 
     const fallbackNamespaces = useMemo(

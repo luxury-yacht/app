@@ -10,6 +10,16 @@ import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PodsTab } from './PodsTab';
 
+const { useTableSortMock } = vi.hoisted(() => ({
+  useTableSortMock: vi.fn(
+    (data: unknown[], _defaultKey?: string, _defaultDir?: any, opts?: any) => ({
+      sortedData: data,
+      sortConfig: opts?.controlledSort ?? null,
+      handleSort: vi.fn(),
+    })
+  ),
+}));
+
 // Track calls to useGridTablePersistence so we can inspect clusterIdentity.
 const gridTablePropsRef: { current: any } = { current: null };
 const mockUseGridTablePersistence = vi.fn().mockReturnValue({
@@ -86,6 +96,10 @@ vi.mock('@shared/hooks/useNavigateToView', () => ({
   useNavigateToView: () => ({ navigateToView: vi.fn() }),
 }));
 
+vi.mock('@hooks/useTableSort', () => ({
+  useTableSort: (...args: any[]) => (useTableSortMock as any)(...args),
+}));
+
 vi.mock('../shared.css', () => ({}));
 
 beforeAll(() => {
@@ -99,6 +113,7 @@ describe('PodsTab', () => {
   beforeEach(() => {
     mockUseGridTablePersistence.mockClear();
     gridTablePropsRef.current = null;
+    useTableSortMock.mockClear();
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
@@ -144,6 +159,24 @@ describe('PodsTab', () => {
     });
 
     expect(gridTablePropsRef.current.keyExtractor(pod)).toBe('panel-cluster-A|/v1/Pod/team-a/api');
+  });
+
+  it('passes rowIdentity into useTableSort for live pod reuse', () => {
+    const pod = {
+      name: 'api',
+      namespace: 'team-a',
+      clusterId: PANEL_CLUSTER_ID,
+    } as any;
+
+    act(() => {
+      root.render(
+        <PodsTab pods={[pod]} metrics={null} loading={false} error={null} isActive={true} />
+      );
+    });
+
+    const options = useTableSortMock.mock.calls[0]?.[3];
+    expect(options?.rowIdentity).toBeTypeOf('function');
+    expect(options.rowIdentity(pod, 0)).toBe('panel-cluster-A|/v1/Pod/team-a/api');
   });
 
   it('uses the shared filter placeholder for the local table filter', () => {
