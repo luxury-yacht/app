@@ -294,6 +294,10 @@ describe('ClusterOverview', () => {
         failedPods: 1,
         restartedPods: 7,
         totalNamespaces: 6,
+        totalDeployments: 8,
+        totalStatefulSets: 2,
+        totalDaemonSets: 1,
+        totalCronJobs: 3,
       },
     });
 
@@ -630,6 +634,10 @@ const EMPTY_OVERVIEW_DATA: ClusterOverviewPayload = {
   pendingPods: 0,
   failedPods: 0,
   restartedPods: 0,
+  totalDeployments: 0,
+  totalStatefulSets: 0,
+  totalDaemonSets: 0,
+  totalCronJobs: 0,
   totalNamespaces: 0,
 };
 

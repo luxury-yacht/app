@@ -15,6 +15,8 @@ import (
 	versioned "k8s.io/apimachinery/pkg/version"
 	informers "k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
+	appslisters "k8s.io/client-go/listers/apps/v1"
+	batchlisters "k8s.io/client-go/listers/batch/v1"
 	corelisters "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
@@ -32,12 +34,16 @@ const (
 
 // ClusterOverviewBuilder constructs aggregated cluster statistics using informer caches.
 type ClusterOverviewBuilder struct {
-	client          kubernetes.Interface
-	nodeLister      corelisters.NodeLister
-	podLister       corelisters.PodLister
-	namespaceLister corelisters.NamespaceLister
-	metrics         metrics.Provider
-	serverHost      string
+	client            kubernetes.Interface
+	nodeLister        corelisters.NodeLister
+	podLister         corelisters.PodLister
+	namespaceLister   corelisters.NamespaceLister
+	deploymentLister  appslisters.DeploymentLister
+	statefulSetLister appslisters.StatefulSetLister
+	daemonSetLister   appslisters.DaemonSetLister
+	cronJobLister     batchlisters.CronJobLister
+	metrics           metrics.Provider
+	serverHost        string
 
 	versionMu      sync.RWMutex
 	cachedVersion  string
@@ -99,6 +105,11 @@ type ClusterOverviewPayload struct {
 	RestartedPods       int `json:"restartedPods"`
 
 	TotalNamespaces int `json:"totalNamespaces"`
+
+	TotalDeployments  int `json:"totalDeployments"`
+	TotalStatefulSets int `json:"totalStatefulSets"`
+	TotalDaemonSets   int `json:"totalDaemonSets"`
+	TotalCronJobs     int `json:"totalCronJobs"`
 }
 
 // RegisterClusterOverviewDomain wires the cluster-overview domain into the registry.
@@ -122,18 +133,30 @@ func RegisterClusterOverviewDomain(
 	nodeInformer := factory.Core().V1().Nodes()
 	podInformer := factory.Core().V1().Pods()
 	namespaceInformer := factory.Core().V1().Namespaces()
+	deploymentInformer := factory.Apps().V1().Deployments()
+	statefulSetInformer := factory.Apps().V1().StatefulSets()
+	daemonSetInformer := factory.Apps().V1().DaemonSets()
+	cronJobInformer := factory.Batch().V1().CronJobs()
 
 	builder := &ClusterOverviewBuilder{
-		client:          client,
-		nodeLister:      nodeInformer.Lister(),
-		podLister:       podInformer.Lister(),
-		namespaceLister: namespaceInformer.Lister(),
-		metrics:         provider,
-		serverHost:      serverHost,
+		client:            client,
+		nodeLister:        nodeInformer.Lister(),
+		podLister:         podInformer.Lister(),
+		namespaceLister:   namespaceInformer.Lister(),
+		deploymentLister:  deploymentInformer.Lister(),
+		statefulSetLister: statefulSetInformer.Lister(),
+		daemonSetLister:   daemonSetInformer.Lister(),
+		cronJobLister:     cronJobInformer.Lister(),
+		metrics:           provider,
+		serverHost:        serverHost,
 		hasSyncedFns: []cache.InformerSynced{
 			nodeInformer.Informer().HasSynced,
 			podInformer.Informer().HasSynced,
 			namespaceInformer.Informer().HasSynced,
+			deploymentInformer.Informer().HasSynced,
+			statefulSetInformer.Informer().HasSynced,
+			daemonSetInformer.Informer().HasSynced,
+			cronJobInformer.Informer().HasSynced,
 		},
 	}
 
@@ -620,6 +643,7 @@ func (b *ClusterOverviewBuilder) buildFromListers(ctx context.Context) (*refresh
 		podRes       listResult[corev1.Pod]
 		namespaceRes listResult[corev1.Namespace]
 	)
+	var deploymentCount, statefulSetCount, daemonSetCount, cronJobCount int
 
 	tasks := []func(context.Context) error{
 		func(context.Context) error {
@@ -640,9 +664,49 @@ func (b *ClusterOverviewBuilder) buildFromListers(ctx context.Context) (*refresh
 			namespaceRes.err = err
 			return err
 		},
+		func(context.Context) error {
+			if b.deploymentLister == nil {
+				return nil
+			}
+			list, err := b.deploymentLister.List(labels.Everything())
+			if err == nil {
+				deploymentCount = len(list)
+			}
+			return err
+		},
+		func(context.Context) error {
+			if b.statefulSetLister == nil {
+				return nil
+			}
+			list, err := b.statefulSetLister.List(labels.Everything())
+			if err == nil {
+				statefulSetCount = len(list)
+			}
+			return err
+		},
+		func(context.Context) error {
+			if b.daemonSetLister == nil {
+				return nil
+			}
+			list, err := b.daemonSetLister.List(labels.Everything())
+			if err == nil {
+				daemonSetCount = len(list)
+			}
+			return err
+		},
+		func(context.Context) error {
+			if b.cronJobLister == nil {
+				return nil
+			}
+			list, err := b.cronJobLister.List(labels.Everything())
+			if err == nil {
+				cronJobCount = len(list)
+			}
+			return err
+		},
 	}
 
-	if err := parallel.RunLimited(ctx, 3, tasks...); err != nil {
+	if err := parallel.RunLimited(ctx, 4, tasks...); err != nil {
 		return nil, err
 	}
 	if nodeRes.err != nil {
@@ -655,5 +719,16 @@ func (b *ClusterOverviewBuilder) buildFromListers(ctx context.Context) (*refresh
 		return nil, namespaceRes.err
 	}
 
-	return buildClusterOverviewSnapshot(ctx, nodeRes.items, podRes.items, namespaceRes.items, b.metrics, b.serverVersion, b.serverHost)
+	snapshot, err := buildClusterOverviewSnapshot(ctx, nodeRes.items, podRes.items, namespaceRes.items, b.metrics, b.serverVersion, b.serverHost)
+	if err != nil {
+		return nil, err
+	}
+	if payload, ok := snapshot.Payload.(ClusterOverviewSnapshot); ok {
+		payload.Overview.TotalDeployments = deploymentCount
+		payload.Overview.TotalStatefulSets = statefulSetCount
+		payload.Overview.TotalDaemonSets = daemonSetCount
+		payload.Overview.TotalCronJobs = cronJobCount
+		snapshot.Payload = payload
+	}
+	return snapshot, nil
 }

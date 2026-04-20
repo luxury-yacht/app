@@ -253,7 +253,8 @@
   color: var(--color-text-secondary);
 }
 
-.pod-status {
+.pod-status,
+.workload-breakdown {
   margin-top: 1.5rem;
   padding-top: 1.5rem;
   border-top: 1px solid var(--color-border);
@@ -292,15 +293,31 @@
 }
 
 .pod-phase-bar__segment--healthy {
-  background: #22c55e;
+  background: var(--pod-phase-healthy);
 }
 
 .pod-phase-bar__segment--pending {
-  background: #f59e0b;
+  background: var(--pod-phase-pending);
 }
 
 .pod-phase-bar__segment--failing {
-  background: #ef4444;
+  background: var(--pod-phase-failing);
+}
+
+.pod-phase-bar__segment--deployment {
+  background: var(--workload-deployment);
+}
+
+.pod-phase-bar__segment--statefulset {
+  background: var(--workload-statefulset);
+}
+
+.pod-phase-bar__segment--daemonset {
+  background: var(--workload-daemonset);
+}
+
+.pod-phase-bar__segment--cronjob {
+  background: var(--workload-cronjob);
 }
 
 .pod-phase-legend {
@@ -315,7 +332,7 @@
 .pod-phase-legend__items {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 0.5rem 1rem;
   flex-wrap: wrap;
 }
 
@@ -357,19 +374,35 @@
 }
 
 .pod-phase-legend__dot--healthy {
-  background: #22c55e;
+  background: var(--pod-phase-healthy);
 }
 
 .pod-phase-legend__dot--pending {
-  background: #f59e0b;
+  background: var(--pod-phase-pending);
 }
 
 .pod-phase-legend__dot--failing {
-  background: #ef4444;
+  background: var(--pod-phase-failing);
 }
 
 .pod-phase-legend__dot--restarted {
-  background: #a563f1;
+  background: var(--pod-phase-restarted);
+}
+
+.pod-phase-legend__dot--deployment {
+  background: var(--workload-deployment);
+}
+
+.pod-phase-legend__dot--statefulset {
+  background: var(--workload-statefulset);
+}
+
+.pod-phase-legend__dot--daemonset {
+  background: var(--workload-daemonset);
+}
+
+.pod-phase-legend__dot--cronjob {
+  background: var(--workload-cronjob);
 }
 
 .pod-phase-legend__count {

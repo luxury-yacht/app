@@ -60,6 +60,10 @@ const EMPTY_OVERVIEW: ClusterOverviewPayload = {
   failedPods: 0,
   restartedPods: 0,
   totalNamespaces: 0,
+  totalDeployments: 0,
+  totalStatefulSets: 0,
+  totalDaemonSets: 0,
+  totalCronJobs: 0,
 };
 
 const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => {
@@ -405,6 +409,35 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
     { key: 'failing', value: displayOverview.failedPods },
   ];
 
+  const workloadItems = [
+    {
+      key: 'deployment',
+      label: 'deployments',
+      value: displayOverview.totalDeployments,
+      variant: 'deployment',
+    },
+    {
+      key: 'statefulset',
+      label: 'statefulsets',
+      value: displayOverview.totalStatefulSets,
+      variant: 'statefulset',
+    },
+    {
+      key: 'daemonset',
+      label: 'daemonsets',
+      value: displayOverview.totalDaemonSets,
+      variant: 'daemonset',
+    },
+    {
+      key: 'cronjob',
+      label: 'cronjobs',
+      value: displayOverview.totalCronJobs,
+      variant: 'cronjob',
+    },
+  ];
+  const workloadTotal = workloadItems.reduce((sum, item) => sum + item.value, 0);
+  const workloadPct = (value: number) => (workloadTotal > 0 ? (value / workloadTotal) * 100 : 0);
+
   const rootClassName = ['cluster-overview', showSkeleton ? 'is-skeleton' : '']
     .filter(Boolean)
     .join(' ');
@@ -638,6 +671,59 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
                 {displayOverview.totalContainers}
               </div>
               <div className="stat-label">Containers</div>
+            </div>
+          </div>
+
+          <div className="workload-breakdown">
+            <div className="pod-status__header">
+              <h3>By Type</h3>
+              <div className="pod-phase-legend__total">
+                <span className={`pod-phase-legend__total-value${skeletonTextClass}`}>
+                  {workloadTotal}
+                </span>
+                <span className="pod-phase-legend__total-label"> total</span>
+              </div>
+            </div>
+            <div
+              className={`pod-phase-bar${skeletonBlockClass}`}
+              role="presentation"
+              aria-hidden="true"
+            >
+              {!showSkeleton &&
+                workloadItems.map((item) => {
+                  const width = workloadPct(item.value);
+                  if (width <= 0) {
+                    return null;
+                  }
+                  return (
+                    <div
+                      key={item.key}
+                      className={`pod-phase-bar__segment pod-phase-bar__segment--${item.variant}`}
+                      style={{ width: `${width}%` }}
+                    />
+                  );
+                })}
+            </div>
+            <div className="pod-phase-legend">
+              <div className="pod-phase-legend__items">
+                {workloadItems.map((item) => (
+                  <div
+                    key={item.key}
+                    className="pod-phase-legend__item"
+                    aria-disabled={item.value === 0}
+                    data-testid={`cluster-workload-${item.key}`}
+                  >
+                    <span
+                      className={`pod-phase-legend__dot pod-phase-legend__dot--${item.variant}`}
+                      aria-hidden="true"
+                    />
+                    <span className={`pod-phase-legend__count${skeletonTextClass}`}>
+                      {item.value}
+                    </span>
+                    <span className="pod-phase-legend__label">{item.label}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 

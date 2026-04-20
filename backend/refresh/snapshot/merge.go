@@ -700,6 +700,10 @@ func mergeClusterOverviewPayload(payloads []ClusterOverviewSnapshot) ClusterOver
 		out.FailedPods += overview.FailedPods
 		out.RestartedPods += overview.RestartedPods
 		out.TotalNamespaces += overview.TotalNamespaces
+		out.TotalDeployments += overview.TotalDeployments
+		out.TotalStatefulSets += overview.TotalStatefulSets
+		out.TotalDaemonSets += overview.TotalDaemonSets
+		out.TotalCronJobs += overview.TotalCronJobs
 
 		cpuUsageMilli += parseCPUValue(overview.CPUUsage)
 		cpuRequestsMilli += parseCPUValue(overview.CPURequests)

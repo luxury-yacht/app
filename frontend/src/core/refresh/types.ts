@@ -189,6 +189,10 @@ export interface ClusterOverviewPayload {
   failedPods: number;
   restartedPods: number;
   totalNamespaces: number;
+  totalDeployments: number;
+  totalStatefulSets: number;
+  totalDaemonSets: number;
+  totalCronJobs: number;
 }
 
 export interface ClusterOverviewSnapshotPayload extends ClusterMeta {
