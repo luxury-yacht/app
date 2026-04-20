@@ -211,6 +211,128 @@ Underlying transports still vary:
 
 There is no remaining caller-migration or tracked polish work in this slice. Any future changes here would be new feature work, not migration cleanup.
 
+## Read Path Architecture
+
+The current frontend contract is:
+
+1. `appStateAccess` for bootstrap/app-state reads
+2. `dataAccess` for cluster/resource reads
+
+These public paths are intentionally separate.
+
+### `appStateAccess`
+
+Use `appStateAccess` for:
+
+- settings, themes, zoom, favorites, and persisted layout state
+- kubeconfig inventory/selection state
+- app info / version metadata
+- app-shell auth/lifecycle hydration
+- app-runtime operational/session reads that are not Kubernetes resource data
+
+`appStateAccess` does not participate in cluster refresh policy. It should not know about paused auto-refresh, `background` vs `startup`, or refresh-domain streaming semantics.
+
+### `dataAccess`
+
+Use `dataAccess` for:
+
+- refresh-domain backed cluster/resource data
+- cluster-derived direct RPC reads
+- permission/capability reads
+
+Every cluster/resource read must go through `dataAccess`, regardless of whether the underlying transport is a refresh domain, a direct Wails RPC, or a permission/capability helper.
+
+### Adapter model
+
+The public broker surface is unified, but the transports behind it still vary.
+
+`dataAccess` adapters:
+
+- `refresh-domain`
+- `permission-read`
+- `capability-read`
+- direct cluster-data RPC readers where needed
+
+`appStateAccess` adapters:
+
+- `rpc-read`
+- `persistence-read`
+
+## Cluster-Data Request Model
+
+Cluster/resource reads use explicit request intent instead of boolean “manual” flags.
+
+### Request reasons
+
+- `background`: scheduler-driven upkeep
+- `startup`: passive view/tab/panel activation
+- `user`: explicit user action such as `Refresh Now`
+
+### Paused-policy matrix
+
+When auto-refresh is disabled:
+
+| Reason       | Allowed? |
+| ------------ | -------- |
+| `background` | No       |
+| `startup`    | No       |
+| `user`       | Yes      |
+
+This is the rule that keeps paused cluster-data behavior consistent across the app:
+
+- no passive cluster-data fetches while paused
+- no passive loading spinners while paused
+- explicit user refresh still works
+
+## Design Rules
+
+### No component-level transport calls
+
+Component code must not call transport helpers directly.
+
+- no component-level `fetchScopedDomain(...)`
+- no component-level `triggerManualRefreshForContext(...)`
+- no component-level cluster-data Wails RPC reads
+- no component-level direct `QueryPermissions` / `EvaluateCapabilities`
+
+Components should go through `dataAccess` or `appStateAccess`.
+
+### Scope must stay multi-cluster aware
+
+All request scopes must preserve cluster identity requirements:
+
+- cluster-scoped reads must include `clusterId`
+- namespace-scoped reads must include `clusterId` and namespace
+- object-scoped reads must include `clusterId`, `group`, `version`, `kind`, and object identity
+
+Foreground views must scope reads to the active cluster only. Multi-cluster scopes are valid only for intentionally aggregated/background/system behavior.
+
+### Diagnostics must stay path-aware
+
+Broker diagnostics should answer:
+
+- what requested the data
+- why it was requested
+- whether it was blocked while paused
+- which adapter serviced it
+- whether it hit cache or backend
+- whether it is currently loading / blocked / errored
+
+### Loading state comes from broker request state
+
+Cluster-data UI should derive loading behavior from broker request state, not from transport status alone.
+
+Important cluster-data states are:
+
+- `idle`
+- `loading`
+- `refreshing`
+- `ready`
+- `error`
+- `blocked`
+
+`blocked` is the key paused-startup state for cluster data. `appStateAccess` reads can keep a simpler lifecycle because they do not participate in cluster refresh semantics.
+
 ## Migration Constraints For Two Read Paths
 
 Any migration to the new broker model has to preserve these cases:
