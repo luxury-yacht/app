@@ -24,6 +24,10 @@ import { useClusterLifecycle } from '@core/contexts/ClusterLifecycleContext';
 import { GetAppInfo } from '@wailsjs/go/backend/App';
 import { backend } from '@wailsjs/go/models';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import { useClusterHealthListener } from '@/hooks/useWailsRuntimeEvents';
+import { useActiveClusterAuthState } from '@/core/contexts/AuthErrorContext';
+import { buildConnectivityPresentation } from '@/core/connection/connectivityPresentation';
+import { getAutoRefreshEnabled } from '@/core/settings/appPreferences';
 
 interface ClusterOverviewProps {
   clusterContext: string;
@@ -68,32 +72,13 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
     return clusterContext.substring(lastColonIndex + 1) || 'default';
   }, [clusterContext]);
 
-  const { selectedClusterId, selectedClusterIds } = useKubeconfig();
+  const { selectedClusterId, selectedClusterName, selectedClusterIds } = useKubeconfig();
   const { getClusterState } = useClusterLifecycle();
+  const { getActiveClusterHealth } = useClusterHealthListener(selectedClusterId);
+  const authState = useActiveClusterAuthState(selectedClusterId);
+  const { namespaceReady, setSelectedNamespace } = useNamespace();
+  const [isPaused, setIsPaused] = useState(() => !getAutoRefreshEnabled());
   const lifecycleState = selectedClusterId ? getClusterState(selectedClusterId) : '';
-
-  // Map lifecycle state to a human-readable label.
-  const lifecycleLabel = useMemo(() => {
-    switch (lifecycleState) {
-      case 'connecting':
-        return 'Connecting';
-      case 'auth_failed':
-        return 'Auth Failed';
-      case 'connected':
-      case 'loading':
-        return 'Loading';
-      case 'loading_slow':
-        return 'Loading (slow)';
-      case 'ready':
-        return 'Ready';
-      case 'disconnected':
-        return 'Disconnected';
-      case 'reconnecting':
-        return 'Reconnecting';
-      default:
-        return '';
-    }
-  }, [lifecycleState]);
 
   // Build scope covering all connected clusters for the cluster-overview domain.
   const overviewScope = useMemo(
@@ -101,6 +86,30 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
     [selectedClusterIds]
   );
   const overviewDomain = useRefreshScopedDomain('cluster-overview', overviewScope);
+  const health = getActiveClusterHealth();
+  const overviewStatus = useMemo(
+    () =>
+      buildConnectivityPresentation({
+        clusterId: selectedClusterId,
+        clusterName: selectedClusterName,
+        lifecycleState,
+        namespaceReady,
+        health,
+        isPaused,
+        isRefreshing: overviewDomain.status === 'updating',
+        authState,
+      }),
+    [
+      authState,
+      health,
+      isPaused,
+      lifecycleState,
+      namespaceReady,
+      overviewDomain.status,
+      selectedClusterId,
+      selectedClusterName,
+    ]
+  );
   const [overviewData, setOverviewData] = useState<ClusterOverviewPayload>(EMPTY_OVERVIEW);
   const [isHydrated, setIsHydrated] = useState(false);
   const [hydratedClusterId, setHydratedClusterId] = useState<string | null>(null);
@@ -130,7 +139,6 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
     selectedClusterId,
   ]);
   const metricsBanner = useMemo(() => getMetricsBannerInfo(metricsInfo), [metricsInfo]);
-  const { setSelectedNamespace } = useNamespace();
   const { setActiveNamespaceTab, setSidebarSelection, navigateToNamespace } = useViewState();
 
   const selectedOverview = useMemo(() => {
@@ -241,6 +249,16 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
     !errorMessage &&
     !isHydratedForCluster &&
     (isSwitching || isLoading || overviewDomain.status === 'idle');
+
+  useEffect(() => {
+    setIsPaused(!getAutoRefreshEnabled());
+
+    const unsubAutoRefresh = eventBus.on('settings:auto-refresh', (enabled) => {
+      setIsPaused(!enabled);
+    });
+
+    return unsubAutoRefresh;
+  }, []);
 
   useEffect(() => {
     // Skip scoped calls when no clusters are connected (scope is empty).
@@ -398,12 +416,16 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
               <span className="cluster-info-label">Context:</span>
               <span className="cluster-info-value">{contextLabel}</span>
             </span>
-            {lifecycleLabel && (
+            {overviewStatus.summary && (
               <>
                 <span className="cluster-info-separator">·</span>
                 <span className="cluster-info-item">
                   <span className="cluster-info-label">Status:</span>
-                  <span className="cluster-info-value">{lifecycleLabel}</span>
+                  <span
+                    className={`cluster-info-value cluster-info-value--${overviewStatus.status}`}
+                  >
+                    {overviewStatus.summary}
+                  </span>
                 </span>
               </>
             )}

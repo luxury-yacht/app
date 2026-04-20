@@ -110,3 +110,18 @@
   border-color: rgba(96, 165, 250, 0.5);
   color: #93bbfd;
 }
+
+.connectivity-status-message {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.connectivity-status-summary {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.connectivity-status-detail {
+  color: var(--color-text-secondary);
+}

@@ -1,11 +1,23 @@
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ClusterAuthState } from '@/core/contexts/AuthErrorContext';
+import type { ReactNode } from 'react';
 
 let mockLifecycleState = 'ready';
 let mockNamespaceReady = true;
 let mockHealth: 'healthy' | 'degraded' | 'unknown' = 'healthy';
 let mockSelectedClusterId = 'cluster-a';
+let mockSelectedClusterName = 'alpha';
+let mockAuthState: ClusterAuthState = {
+  hasError: false,
+  isRecovering: false,
+  reason: '',
+  clusterName: '',
+  currentAttempt: 0,
+  maxAttempts: 0,
+  secondsUntilRetry: 0,
+};
 
 vi.mock('@shared/components/status/StatusIndicator', () => ({
   __esModule: true,
@@ -16,17 +28,18 @@ vi.mock('@shared/components/status/StatusIndicator', () => ({
     ariaLabel,
   }: {
     status: string;
-    message: string;
+    message: ReactNode;
     actionLabel?: string;
     ariaLabel: string;
   }) => (
     <div
       data-testid="indicator"
       data-status={status}
-      data-message={message}
       data-action-label={actionLabel ?? ''}
       aria-label={ariaLabel}
-    />
+    >
+      {message}
+    </div>
   ),
 }));
 
@@ -46,16 +59,13 @@ vi.mock('@/core/contexts/AuthErrorContext', () => ({
   useAuthError: () => ({
     handleRetry: vi.fn(),
   }),
-  useActiveClusterAuthState: () => ({
-    hasError: false,
-    isRecovering: false,
-    reason: '',
-  }),
+  useActiveClusterAuthState: () => mockAuthState,
 }));
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: () => ({
     selectedClusterId: mockSelectedClusterId,
+    selectedClusterName: mockSelectedClusterName,
   }),
 }));
 
@@ -99,6 +109,16 @@ describe('ConnectivityStatus', () => {
     mockNamespaceReady = true;
     mockHealth = 'healthy';
     mockSelectedClusterId = 'cluster-a';
+    mockSelectedClusterName = 'alpha';
+    mockAuthState = {
+      hasError: false,
+      isRecovering: false,
+      reason: '',
+      clusterName: '',
+      currentAttempt: 0,
+      maxAttempts: 0,
+      secondsUntilRetry: 0,
+    };
   });
 
   afterEach(() => {
@@ -121,15 +141,37 @@ describe('ConnectivityStatus', () => {
     const indicator = renderStatus();
 
     expect(indicator?.getAttribute('data-status')).toBe('refreshing');
-    expect(indicator?.getAttribute('data-message')).toBe('Loading namespaces...');
-    expect(indicator?.getAttribute('aria-label')).toBe('Connectivity: Loading namespaces...');
+    expect(indicator?.textContent).toContain('Loading namespaces');
+    expect(indicator?.textContent).toContain('alpha is connected');
+    expect(indicator?.getAttribute('aria-label')).toContain('Connectivity: Loading namespaces.');
   });
 
   it('shows ready once namespaces are available', () => {
     const indicator = renderStatus();
 
     expect(indicator?.getAttribute('data-status')).toBe('healthy');
-    expect(indicator?.getAttribute('data-message')).toBe('Ready');
-    expect(indicator?.getAttribute('aria-label')).toBe('Connectivity: Ready');
+    expect(indicator?.textContent).toContain('Ready');
+    expect(indicator?.textContent).toContain('namespace list is ready to use');
+    expect(indicator?.getAttribute('aria-label')).toContain('Connectivity: Ready.');
+  });
+
+  it('shows auth failure details and retry action', () => {
+    mockLifecycleState = 'auth_failed';
+    mockAuthState = {
+      hasError: true,
+      isRecovering: false,
+      reason: 'token expired',
+      clusterName: 'alpha',
+      currentAttempt: 0,
+      maxAttempts: 0,
+      secondsUntilRetry: 0,
+    };
+
+    const indicator = renderStatus();
+
+    expect(indicator?.getAttribute('data-status')).toBe('unhealthy');
+    expect(indicator?.getAttribute('data-action-label')).toBe('Retry Auth');
+    expect(indicator?.textContent).toContain('Authentication failed');
+    expect(indicator?.textContent).toContain('token expired');
   });
 });

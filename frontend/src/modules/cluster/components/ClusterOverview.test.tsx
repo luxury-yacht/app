@@ -9,6 +9,7 @@ import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { eventBus } from '@/core/events';
 import type { ClusterOverviewPayload } from '@/core/refresh/types';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import ClusterOverview from './ClusterOverview';
@@ -42,6 +43,19 @@ const {
     browserOpenURLMock: vi.fn(),
   };
 });
+let mockLifecycleState = 'ready';
+let mockNamespaceReady = true;
+let mockHealth: 'healthy' | 'degraded' | 'unknown' = 'healthy';
+let mockAutoRefreshEnabled = true;
+let mockAuthState = {
+  hasError: false,
+  reason: '',
+  clusterName: '',
+  isRecovering: false,
+  currentAttempt: 0,
+  maxAttempts: 0,
+  secondsUntilRetry: 0,
+};
 
 vi.mock('@/core/refresh', () => ({
   refreshOrchestrator: mockRefreshOrchestrator,
@@ -91,6 +105,7 @@ vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
     selectedNamespace: 'default',
     namespaceLoading: false,
     namespaceRefreshing: false,
+    namespaceReady: mockNamespaceReady,
     setSelectedNamespace: setSelectedNamespaceMock,
     loadNamespaces: vi.fn(),
     refreshNamespaces: vi.fn(),
@@ -149,9 +164,23 @@ vi.mock('@wailsjs/runtime/runtime', () => ({
 
 vi.mock('@core/contexts/ClusterLifecycleContext', () => ({
   useClusterLifecycle: () => ({
-    getClusterState: () => 'ready',
-    isClusterReady: () => true,
+    getClusterState: () => mockLifecycleState,
+    isClusterReady: () => mockLifecycleState === 'ready',
   }),
+}));
+
+vi.mock('@/hooks/useWailsRuntimeEvents', () => ({
+  useClusterHealthListener: () => ({
+    getActiveClusterHealth: () => mockHealth,
+  }),
+}));
+
+vi.mock('@/core/contexts/AuthErrorContext', () => ({
+  useActiveClusterAuthState: () => mockAuthState,
+}));
+
+vi.mock('@/core/settings/appPreferences', () => ({
+  getAutoRefreshEnabled: () => mockAutoRefreshEnabled,
 }));
 
 describe('ClusterOverview', () => {
@@ -164,6 +193,19 @@ describe('ClusterOverview', () => {
   beforeEach(() => {
     domainStateRef.current = createDomainState('loading');
     vi.clearAllMocks();
+    mockLifecycleState = 'ready';
+    mockNamespaceReady = true;
+    mockHealth = 'healthy';
+    mockAutoRefreshEnabled = true;
+    mockAuthState = {
+      hasError: false,
+      reason: '',
+      clusterName: '',
+      isRecovering: false,
+      currentAttempt: 0,
+      maxAttempts: 0,
+      secondsUntilRetry: 0,
+    };
     getAppInfoMock.mockResolvedValue({
       version: '1.0.0',
       buildTime: 'dev',
@@ -243,6 +285,46 @@ describe('ClusterOverview', () => {
     expect(container.textContent).toContain('EKS');
     expect(container.textContent).toContain('1.26.3');
     expect(container.textContent).not.toContain('Loading cluster overview...');
+    expect(container.textContent).toContain('Status:');
+    expect(container.textContent).toContain('Ready');
+  });
+
+  it('shows loading namespaces detail until namespaces are ready', async () => {
+    mockNamespaceReady = false;
+
+    const { container, cleanup } = renderClusterOverview();
+    cleanupRoot = cleanup;
+    await flushEffects();
+
+    expect(container.textContent).toContain('Status:');
+    expect(container.textContent).toContain('Loading namespaces');
+  });
+
+  it('shows auto-refresh paused when background refresh is disabled', async () => {
+    mockAutoRefreshEnabled = false;
+
+    const { container, cleanup } = renderClusterOverview();
+    cleanupRoot = cleanup;
+    await flushEffects();
+
+    expect(container.textContent).toContain('Status:');
+    expect(container.textContent).toContain('Auto-refresh paused');
+    expect(container.textContent).not.toContain('Ready');
+  });
+
+  it('updates the overview status when auto-refresh is toggled off', async () => {
+    const { container, cleanup } = renderClusterOverview();
+    cleanupRoot = cleanup;
+    await flushEffects();
+
+    expect(container.textContent).toContain('Ready');
+
+    await act(async () => {
+      eventBus.emit('settings:auto-refresh', false);
+    });
+
+    expect(container.textContent).toContain('Auto-refresh paused');
+    expect(container.textContent).not.toContain('Ready');
   });
 
   it('shows EC2 and Fargate cards for EKS clusters', async () => {
