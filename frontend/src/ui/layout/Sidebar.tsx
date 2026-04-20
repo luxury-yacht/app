@@ -7,6 +7,7 @@
 
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import './Sidebar.css';
+import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import { useNamespace, type NamespaceListItem } from '@modules/namespace/contexts/NamespaceContext';
 import {
@@ -499,9 +500,7 @@ function Sidebar() {
               {showNamespaceLoading ? (
                 <LoadingSpinner message="Loading namespaces..." />
               ) : showNamespacePausedMessage ? (
-                <div className="sidebar-empty-message" role="status">
-                  Auto-refresh is disabled
-                </div>
+                <ClusterDataPausedState className="sidebar-empty-message" />
               ) : (
                 <div className="namespace-items">
                   {namespaceGroupsToRender.map((group) => {

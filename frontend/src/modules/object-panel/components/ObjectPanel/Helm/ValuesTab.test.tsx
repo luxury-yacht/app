@@ -365,7 +365,7 @@ describe('ValuesTab', () => {
     const { container, unmount } = await renderValuesTab();
 
     expect(container.textContent).not.toContain('Loading values...');
-    expect(container.textContent).toContain('No values available');
+    expect(container.textContent).toContain('Auto-refresh is disabled');
     expect(refreshMocks.fetchScopedDomain).not.toHaveBeenCalled();
 
     await unmount();

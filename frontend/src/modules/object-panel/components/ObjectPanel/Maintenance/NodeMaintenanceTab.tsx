@@ -3,6 +3,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
 import { CordonNode, DrainNode, DeleteNode, UncordonNode } from '@wailsjs/go/backend/App';
 import { types } from '@wailsjs/go/models';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
@@ -185,10 +186,12 @@ export function NodeMaintenanceTab({
         (maintenanceSnapshot.status === 'updating' && !maintenanceSnapshot.data)
       : false,
     hasLoaded: Boolean(maintenanceSnapshot.data),
+    hasData: drains.length > 0,
     isPaused,
     isManualRefreshActive,
   });
   const drainsLoading = drainsLoadingState.loading;
+  const showPausedDrainHistoryState = drainsLoadingState.showPausedEmptyState;
 
   const capabilityDescriptors = useMemo<CapabilityDescriptor[]>(() => {
     if (!nodeName) {
@@ -566,7 +569,10 @@ export function NodeMaintenanceTab({
         {drainError && <div className="node-maintenance-error">{drainError}</div>}
         <div className="node-maintenance-history">
           {drainsLoading && <div className="node-maintenance-helper">Loading drain history…</div>}
-          {!drainsLoading && drains.length === 0 && (
+          {showPausedDrainHistoryState && (
+            <ClusterDataPausedState className="node-maintenance-helper" />
+          )}
+          {!drainsLoading && !showPausedDrainHistoryState && drains.length === 0 && (
             <div className="node-maintenance-helper">No drain activity recorded yet.</div>
           )}
           {drains.map((job) => (

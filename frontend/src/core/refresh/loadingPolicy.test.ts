@@ -7,6 +7,7 @@ describe('applyPassiveLoadingPolicy', () => {
       applyPassiveLoadingPolicy({
         loading: true,
         hasLoaded: false,
+        hasData: false,
         isPaused: true,
         isManualRefreshActive: false,
       })
@@ -14,6 +15,7 @@ describe('applyPassiveLoadingPolicy', () => {
       loading: false,
       hasLoaded: false,
       suppressPassiveLoading: true,
+      showPausedEmptyState: true,
     });
   });
 
@@ -22,6 +24,7 @@ describe('applyPassiveLoadingPolicy', () => {
       applyPassiveLoadingPolicy({
         loading: true,
         hasLoaded: false,
+        hasData: false,
         isPaused: true,
         isManualRefreshActive: true,
       })
@@ -29,6 +32,7 @@ describe('applyPassiveLoadingPolicy', () => {
       loading: true,
       hasLoaded: false,
       suppressPassiveLoading: false,
+      showPausedEmptyState: false,
     });
   });
 });

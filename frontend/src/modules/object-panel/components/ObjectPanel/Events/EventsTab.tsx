@@ -3,6 +3,7 @@
  */
 
 import React, { useEffect, useCallback, useMemo, useRef } from 'react';
+import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
 import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
@@ -266,10 +267,12 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
           eventsSnapshot.status === 'updating')
       : false,
     hasLoaded: Boolean(eventsSnapshot.data?.events),
+    hasData: events.length > 0,
     isPaused,
     isManualRefreshActive,
   });
   const eventsLoading = eventsLoadingState.loading;
+  const showPausedEventsState = eventsLoadingState.showPausedEmptyState;
   const eventsError = eventsScope ? (eventsSnapshot.error ?? null) : null;
 
   const keyExtractor = useCallback((item: EventDisplay, index: number) => {
@@ -400,6 +403,16 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
       <div className="object-panel-tab-content">
         <div className="object-panel-placeholder">
           <p>Loading events...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (showPausedEventsState) {
+    return (
+      <div className="object-panel-tab-content">
+        <div className="object-panel-placeholder">
+          <ClusterDataPausedState />
         </div>
       </div>
     );

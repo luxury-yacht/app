@@ -13,6 +13,7 @@ import { getMaxTableRows } from '@/core/settings/appPreferences';
 import { getScopedDomainState, setScopedDomainState } from '@/core/refresh/store';
 import { useCatalogDiagnostics } from '@/core/refresh/diagnostics/useCatalogDiagnostics';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
+import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
 import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import {
@@ -103,7 +104,7 @@ export function useBrowseCatalog({
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
   const [pageLimit, setPageLimit] = useState<number>(() => getMaxTableRows());
-  const { suppressPassiveLoading } = useAutoRefreshLoadingState();
+  const { isPaused, isManualRefreshActive } = useAutoRefreshLoadingState();
 
   const requestModeRef = useRef<PageRequestMode>(null);
   const lastAppliedScopeRef = useRef<string>('');
@@ -494,13 +495,18 @@ export function useBrowseCatalog({
     domain.status === 'loading' ||
     domain.status === 'initialising' ||
     (items.length === 0 && !domain.data);
-  const effectiveLoading = suppressPassiveLoading ? false : loading;
-  const effectiveHasLoadedOnce = hasLoadedOnce || suppressPassiveLoading;
+  const passiveLoadingState = applyPassiveLoadingPolicy({
+    loading,
+    hasLoaded: hasLoadedOnce,
+    hasData: items.length > 0,
+    isPaused,
+    isManualRefreshActive,
+  });
 
   return {
     items: stableFilteredItems,
-    loading: effectiveLoading,
-    hasLoadedOnce: effectiveHasLoadedOnce,
+    loading: passiveLoadingState.loading,
+    hasLoadedOnce,
     continueToken,
     isRequestingMore,
     handleLoadMore,

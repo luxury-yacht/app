@@ -12,6 +12,8 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import ResourceLoadingBoundary from './ResourceLoadingBoundary';
 
 const autoRefreshLoadingState = vi.hoisted(() => ({
+  isPaused: false,
+  isManualRefreshActive: false,
   suppressPassiveLoading: false,
 }));
 
@@ -28,6 +30,8 @@ describe('ResourceLoadingBoundary', () => {
   });
 
   beforeEach(() => {
+    autoRefreshLoadingState.isPaused = false;
+    autoRefreshLoadingState.isManualRefreshActive = false;
     autoRefreshLoadingState.suppressPassiveLoading = false;
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -116,6 +120,7 @@ describe('ResourceLoadingBoundary', () => {
   });
 
   it('shows an auto-refresh disabled message when passive loading is suppressed before first load', () => {
+    autoRefreshLoadingState.isPaused = true;
     autoRefreshLoadingState.suppressPassiveLoading = true;
 
     act(() => {

@@ -55,12 +55,26 @@ const hoistedSnapshot = vi.hoisted(() => ({
   error: null as string | null,
 }));
 
+const autoRefreshLoadingState = vi.hoisted(() => ({
+  isPaused: false,
+  isManualRefreshActive: false,
+  suppressPassiveLoading: false,
+}));
+
+const appPreferencesMocks = vi.hoisted(() => ({
+  getAutoRefreshEnabled: vi.fn(() => true),
+}));
+
 vi.mock('@/core/refresh/store', () => ({
   useRefreshScopedDomain: () => hoistedSnapshot,
 }));
 
+vi.mock('@/core/refresh/hooks/useAutoRefreshLoadingState', () => ({
+  useAutoRefreshLoadingState: () => autoRefreshLoadingState,
+}));
+
 vi.mock('@/core/settings/appPreferences', () => ({
-  getAutoRefreshEnabled: () => true,
+  getAutoRefreshEnabled: () => appPreferencesMocks.getAutoRefreshEnabled(),
 }));
 
 const mockFetchScopedDomain = vi.fn(() => Promise.resolve());
@@ -137,6 +151,10 @@ describe('EventsTab', () => {
     mockFindCatalogObjectByUID.mockReset();
     mockFetchScopedDomain.mockClear();
     refreshWatcherState.onRefresh = null;
+    autoRefreshLoadingState.isPaused = false;
+    autoRefreshLoadingState.isManualRefreshActive = false;
+    autoRefreshLoadingState.suppressPassiveLoading = false;
+    appPreferencesMocks.getAutoRefreshEnabled.mockReturnValue(true);
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
@@ -222,6 +240,28 @@ describe('EventsTab', () => {
     expect(mockFetchScopedDomain).toHaveBeenCalledWith('object-events', expect.any(String), {
       isManual: false,
     });
+  });
+
+  it('shows the paused message instead of a loading placeholder before first load', async () => {
+    autoRefreshLoadingState.isPaused = true;
+    autoRefreshLoadingState.suppressPassiveLoading = true;
+    appPreferencesMocks.getAutoRefreshEnabled.mockReturnValue(false);
+    hoistedSnapshot.data = null;
+    hoistedSnapshot.status = 'loading';
+
+    act(() => {
+      root.render(
+        <EventsTab
+          objectData={parentObjectData}
+          isActive={true}
+          eventsScope="parent-cluster|default:Deployment:my-deploy"
+        />
+      );
+    });
+
+    expect(container.textContent).toContain('Auto-refresh is disabled');
+    expect(container.textContent).not.toContain('Loading events...');
+    expect(mockFetchScopedDomain).not.toHaveBeenCalled();
   });
 
   it('falls back to parent panel cluster when event has no cluster identity', async () => {

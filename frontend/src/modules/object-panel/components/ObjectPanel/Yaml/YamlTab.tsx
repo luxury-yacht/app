@@ -8,6 +8,7 @@ import { yaml as yamlLang } from '@codemirror/lang-yaml';
 import { EditorView, keymap, type KeyBinding } from '@codemirror/view';
 import { EditorSelection, type Extension } from '@codemirror/state';
 import * as YAML from 'yaml';
+import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import ContextMenu, { type ContextMenuItem } from '@shared/components/ContextMenu';
 import { CaseSensitiveIcon, CloseIcon } from '@shared/components/icons/MenuIcons';
@@ -344,10 +345,12 @@ const YamlTab: React.FC<YamlTabProps> = ({
       snapshot.status === 'initialising' ||
       (snapshot.status === 'updating' && !yamlContent),
     hasLoaded: Boolean(snapshot.data),
+    hasData: Boolean(yamlContent),
     isPaused,
     isManualRefreshActive,
   });
   const yamlLoading = yamlLoadingState.loading;
+  const showPausedYamlState = yamlLoadingState.showPausedEmptyState;
   const yamlError = snapshot.error ?? null;
 
   const effectiveYamlContent = manualYamlOverride?.yaml ?? yamlContent;
@@ -1527,6 +1530,16 @@ const YamlTab: React.FC<YamlTabProps> = ({
     return (
       <div className="object-panel-tab-content">
         <LoadingSpinner message="Loading YAML..." />
+      </div>
+    );
+  }
+
+  if (showPausedYamlState) {
+    return (
+      <div className="object-panel-tab-content">
+        <div className="yaml-display-empty">
+          <ClusterDataPausedState />
+        </div>
       </div>
     );
   }

@@ -221,7 +221,7 @@ describe('ManifestTab', () => {
     const { container, unmount } = await renderManifestTab();
 
     expect(container.textContent).not.toContain('Loading manifest...');
-    expect(container.textContent).toContain('No manifest content available');
+    expect(container.textContent).toContain('Auto-refresh is disabled');
     expect(refreshMocks.fetchScopedDomain).not.toHaveBeenCalled();
 
     await unmount();

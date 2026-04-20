@@ -7,6 +7,7 @@ import CodeMirror, { type ReactCodeMirrorRef } from '@uiw/react-codemirror';
 import { yaml as yamlLang } from '@codemirror/lang-yaml';
 import { EditorView } from '@codemirror/view';
 import * as YAML from 'yaml';
+import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import SegmentedButton from '@shared/components/SegmentedButton';
 import { requestRefreshDomain } from '@/core/data-access';
@@ -111,10 +112,12 @@ const ValuesTab: React.FC<ValuesTabProps> = ({ scope, isActive = false }) => {
       snapshot.status === 'initialising' ||
       (snapshot.status === 'updating' && !valuesData),
     hasLoaded: Boolean(snapshot.data),
+    hasData: Boolean(valuesData),
     isPaused,
     isManualRefreshActive,
   });
   const valuesLoading = valuesLoadingState.loading;
+  const showPausedValuesState = valuesLoadingState.showPausedEmptyState;
   const valuesError = snapshot.error ?? null;
 
   const hasPath = useCallback((obj: HelmValue | undefined, path: string[]): boolean => {
@@ -425,6 +428,16 @@ const ValuesTab: React.FC<ValuesTabProps> = ({ scope, isActive = false }) => {
     return (
       <div className="object-panel-tab-content">
         <LoadingSpinner message="Loading values..." />
+      </div>
+    );
+  }
+
+  if (showPausedValuesState) {
+    return (
+      <div className="object-panel-tab-content">
+        <div className="yaml-display-empty">
+          <ClusterDataPausedState />
+        </div>
       </div>
     );
   }

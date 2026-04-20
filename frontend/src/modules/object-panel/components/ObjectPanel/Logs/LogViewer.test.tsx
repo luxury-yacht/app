@@ -93,6 +93,12 @@ const mockModules = vi.hoisted(() => {
   return { orchestrator, fallbackManager };
 });
 
+const autoRefreshLoadingState = vi.hoisted(() => ({
+  isPaused: false,
+  isManualRefreshActive: false,
+  suppressPassiveLoading: false,
+}));
+
 vi.mock('@wailsjs/go/backend/App', () => ({
   LogFetcher: vi.fn(),
   GetLogScopeContainers: vi.fn(),
@@ -100,6 +106,10 @@ vi.mock('@wailsjs/go/backend/App', () => ({
 
 vi.mock('@/core/refresh/orchestrator', () => ({
   refreshOrchestrator: mockModules.orchestrator,
+}));
+
+vi.mock('@/core/refresh/hooks/useAutoRefreshLoadingState', () => ({
+  useAutoRefreshLoadingState: () => autoRefreshLoadingState,
 }));
 
 vi.mock('@/core/refresh/fallbacks/objectLogFallbackManager', () => ({
@@ -266,6 +276,9 @@ describe('LogViewer active pod synchronisation', () => {
     resetAppPreferencesCacheForTesting();
     resetLogViewerPrefsCacheForTesting();
     resetLogStreamScopeParamsCacheForTesting();
+    autoRefreshLoadingState.isPaused = false;
+    autoRefreshLoadingState.isManualRefreshActive = false;
+    autoRefreshLoadingState.suppressPassiveLoading = false;
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
@@ -2121,6 +2134,34 @@ describe('LogViewer active pod synchronisation', () => {
     });
 
     expect(container.textContent).toContain('Loading logs');
+  });
+
+  it('shows the paused message instead of a loading spinner before logs have loaded', async () => {
+    autoRefreshLoadingState.isPaused = true;
+    autoRefreshLoadingState.suppressPassiveLoading = true;
+    setScopedDomainState('object-logs', activeScope, () => ({
+      status: 'loading',
+      data: {
+        entries: [],
+        sequence: 0,
+        generatedAt: Date.now(),
+        resetCount: 0,
+        error: null,
+      },
+      stats: null,
+      error: null,
+      droppedAutoRefreshes: 0,
+      scope: activeScope,
+      lastUpdated: Date.now(),
+      lastAutoRefresh: undefined,
+      lastManualRefresh: undefined,
+      isManual: false,
+    }));
+
+    await renderViewer({ activePodNames: ['web-1'] });
+
+    expect(container.textContent).toContain('Auto-refresh is disabled');
+    expect(container.textContent).not.toContain('Loading logs');
   });
 
   it('renders a real backend error instead of an empty-log state', async () => {
