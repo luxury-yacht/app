@@ -266,10 +266,12 @@ describe('ClusterOverview', () => {
       true
     );
     expect(
-      container.querySelector('.stat-card .stat-value')?.classList.contains('skeleton-text')
+      container
+        .querySelector('.metric-legend__count')
+        ?.classList.contains('skeleton-text')
     ).toBe(true);
-    expect(statValueFor(container, 'Total')).toBe('0');
-    expect(statValueFor(container, 'Namespaces')).toBe('0');
+    expect(statValueFor(container, 'total')).toBe('0');
+    expect(statValueFor(container, 'namespaces')).toBe('0');
     expect(container.querySelector('.cluster-overview .cluster-overview-error') ?? null).toBeNull();
   });
 
@@ -321,9 +323,9 @@ describe('ClusterOverview', () => {
     expect(container.querySelector('.cluster-overview')?.classList.contains('is-skeleton')).toBe(
       false
     );
-    expect(statValueFor(container, 'Total')).toBe('3');
-    expect(statValueFor(container, 'Namespaces')).toBe('6');
-    expect(statValueFor(container, 'Pods')).toBe('42');
+    expect(statValueFor(container, 'total')).toBe('3');
+    expect(statValueFor(container, 'namespaces')).toBe('6');
+    expect(statValueFor(container, 'pods')).toBe('42');
     expect(container.textContent).toContain('EKS');
     expect(container.textContent).toContain('1.26.3');
     expect(container.textContent).not.toContain('Loading cluster overview...');
@@ -433,9 +435,9 @@ describe('ClusterOverview', () => {
 
     expect(container.textContent).toContain('Auto-refresh paused');
     expect(container.textContent).not.toContain('Ready');
-    expect(statValueFor(container, 'Total')).toBe('0');
-    expect(statValueFor(container, 'Namespaces')).toBe('0');
-    expect(statValueFor(container, 'Pods')).toBe('0');
+    expect(statValueFor(container, 'total')).toBe('0');
+    expect(statValueFor(container, 'namespaces')).toBe('0');
+    expect(statValueFor(container, 'pods')).toBe('0');
   });
 
   it('updates the overview status when auto-refresh is toggled off', async () => {
@@ -468,12 +470,12 @@ describe('ClusterOverview', () => {
     cleanupRoot = cleanup;
     await flushEffects();
 
-    expect(statValueFor(container, 'Total')).toBe('5');
-    expect(statValueFor(container, 'EC2')).toBe('3');
-    expect(statValueFor(container, 'Fargate')).toBe('2');
+    expect(statValueFor(container, 'total')).toBe('5');
+    expect(statValueFor(container, 'ec2')).toBe('3');
+    expect(statValueFor(container, 'fargate')).toBe('2');
     // AKS-specific cards should not appear.
-    expect(statValueFor(container, 'VM')).toBe('');
-    expect(statValueFor(container, 'Virtual')).toBe('');
+    expect(statValueFor(container, 'vm')).toBe('');
+    expect(statValueFor(container, 'virtual')).toBe('');
   });
 
   it('shows VM and Virtual cards for AKS clusters', async () => {
@@ -491,12 +493,12 @@ describe('ClusterOverview', () => {
     cleanupRoot = cleanup;
     await flushEffects();
 
-    expect(statValueFor(container, 'Total')).toBe('4');
-    expect(statValueFor(container, 'VM')).toBe('3');
-    expect(statValueFor(container, 'Virtual')).toBe('1');
+    expect(statValueFor(container, 'total')).toBe('4');
+    expect(statValueFor(container, 'vm')).toBe('3');
+    expect(statValueFor(container, 'virtual')).toBe('1');
     // EKS-specific cards should not appear.
-    expect(statValueFor(container, 'EC2')).toBe('');
-    expect(statValueFor(container, 'Fargate')).toBe('');
+    expect(statValueFor(container, 'ec2')).toBe('');
+    expect(statValueFor(container, 'fargate')).toBe('');
   });
 
   it('shows only Total card for GKE clusters', async () => {
@@ -512,12 +514,12 @@ describe('ClusterOverview', () => {
     cleanupRoot = cleanup;
     await flushEffects();
 
-    expect(statValueFor(container, 'Total')).toBe('6');
+    expect(statValueFor(container, 'total')).toBe('6');
     // No provider-specific breakdown cards.
-    expect(statValueFor(container, 'EC2')).toBe('');
-    expect(statValueFor(container, 'Fargate')).toBe('');
-    expect(statValueFor(container, 'VM')).toBe('');
-    expect(statValueFor(container, 'Virtual')).toBe('');
+    expect(statValueFor(container, 'ec2')).toBe('');
+    expect(statValueFor(container, 'fargate')).toBe('');
+    expect(statValueFor(container, 'vm')).toBe('');
+    expect(statValueFor(container, 'virtual')).toBe('');
   });
 
   it('renders an update banner when a newer release is available', async () => {
@@ -558,7 +560,7 @@ describe('ClusterOverview', () => {
     expect(container.querySelector('.cluster-overview')?.classList.contains('is-skeleton')).toBe(
       false
     );
-    expect(statValueFor(container, 'Total')).toBe('0');
+    expect(statValueFor(container, 'total')).toBe('0');
     expect(container.textContent).not.toContain('Loading cluster overview...');
   });
 
@@ -689,11 +691,11 @@ async function flushEffects() {
 }
 
 function statValueFor(container: HTMLElement, label: string): string {
-  const labelElement = Array.from(container.querySelectorAll('.stat-label')).find(
+  const labelElement = Array.from(container.querySelectorAll('.metric-stat__label')).find(
     (element) => element.textContent === label
   );
-  const statCard = labelElement?.closest('.stat-card');
-  return statCard?.querySelector('.stat-value')?.textContent?.trim() ?? '';
+  const item = labelElement?.closest('.metric-stat');
+  return item?.querySelector('.metric-stat__count')?.textContent?.trim() ?? '';
 }
 
 function createDomainState(

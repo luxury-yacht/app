@@ -382,8 +382,8 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
     variant: string;
   }) => {
     const clickable = item.value > 0;
-    const itemClass = `pod-phase-legend__item${
-      clickable ? ' pod-phase-legend__item--clickable' : ''
+    const itemClass = `metric-legend__item${
+      clickable ? ' metric-legend__item--clickable' : ''
     }`;
     return (
       <div
@@ -399,11 +399,11 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
         data-testid={`cluster-pod-status-${item.key}`}
       >
         <span
-          className={`pod-phase-legend__dot pod-phase-legend__dot--${item.variant}`}
+          className={`metric-legend__dot metric-legend__dot--${item.variant}`}
           aria-hidden="true"
         />
-        <span className={`pod-phase-legend__count${skeletonTextClass}`}>{item.value}</span>
-        <span className="pod-phase-legend__label">{item.label}</span>
+        <span className={`metric-legend__count${skeletonTextClass}`}>{item.value}</span>
+        <span className="metric-legend__label">{item.label}</span>
       </div>
     );
   };
@@ -497,16 +497,16 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
   }) => (
     <div
       key={item.key}
-      className="pod-phase-legend__item"
+      className="metric-legend__item"
       aria-disabled={item.value === 0}
       data-testid={`cluster-node-health-${item.key}`}
     >
       <span
-        className={`pod-phase-legend__dot pod-phase-legend__dot--${item.variant}`}
+        className={`metric-legend__dot metric-legend__dot--${item.variant}`}
         aria-hidden="true"
       />
-      <span className={`pod-phase-legend__count${skeletonTextClass}`}>{item.value}</span>
-      <span className="pod-phase-legend__label">{item.label}</span>
+      <span className={`metric-legend__count${skeletonTextClass}`}>{item.value}</span>
+      <span className="metric-legend__label">{item.label}</span>
     </div>
   );
 
@@ -603,13 +603,13 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
           )}
 
           <div className="resource-group">
-            <div className="pod-status__header">
+            <div className="metric-header">
               <h3>CPU</h3>
-              <div className="pod-phase-legend__total">
-                <span className={`pod-phase-legend__total-value${skeletonTextClass}`}>
+              <div className="metric-legend__total">
+                <span className={`metric-legend__total-value${skeletonTextClass}`}>
                   {displayOverview.cpuAllocatable || '0'}
                 </span>
-                <span className="pod-phase-legend__total-label"> allocatable</span>
+                <span className="metric-legend__total-label"> allocatable</span>
               </div>
             </div>
             <div className={`resource-bar-placeholder${skeletonBlockClass}`}>
@@ -621,38 +621,38 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
                 variant="default"
               />
             </div>
-            <div className="pod-phase-legend">
-              <div className="pod-phase-legend__items">
-                <div className="pod-phase-legend__item">
-                  <span className={`pod-phase-legend__count${skeletonTextClass}`}>
+            <div className="metric-legend">
+              <div className="metric-legend__items">
+                <div className="metric-legend__item">
+                  <span className={`metric-legend__count${skeletonTextClass}`}>
                     {displayOverview.cpuUsage || '0'}
                   </span>
-                  <span className="pod-phase-legend__label">usage</span>
+                  <span className="metric-legend__label">usage</span>
                 </div>
-                <div className="pod-phase-legend__item">
-                  <span className={`pod-phase-legend__count${skeletonTextClass}`}>
+                <div className="metric-legend__item">
+                  <span className={`metric-legend__count${skeletonTextClass}`}>
                     {displayOverview.cpuRequests || '0'}
                   </span>
-                  <span className="pod-phase-legend__label">requests</span>
+                  <span className="metric-legend__label">requests</span>
                 </div>
-                <div className="pod-phase-legend__item">
-                  <span className={`pod-phase-legend__count${skeletonTextClass}`}>
+                <div className="metric-legend__item">
+                  <span className={`metric-legend__count${skeletonTextClass}`}>
                     {displayOverview.cpuLimits || '0'}
                   </span>
-                  <span className="pod-phase-legend__label">limits</span>
+                  <span className="metric-legend__label">limits</span>
                 </div>
               </div>
             </div>
           </div>
 
           <div className="resource-group">
-            <div className="pod-status__header">
+            <div className="metric-header">
               <h3>Memory</h3>
-              <div className="pod-phase-legend__total">
-                <span className={`pod-phase-legend__total-value${skeletonTextClass}`}>
+              <div className="metric-legend__total">
+                <span className={`metric-legend__total-value${skeletonTextClass}`}>
                   {displayOverview.memoryAllocatable || '0'}
                 </span>
-                <span className="pod-phase-legend__total-label"> allocatable</span>
+                <span className="metric-legend__total-label"> allocatable</span>
               </div>
             </div>
             <div className={`resource-bar-placeholder${skeletonBlockClass}`}>
@@ -664,25 +664,25 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
                 variant="default"
               />
             </div>
-            <div className="pod-phase-legend">
-              <div className="pod-phase-legend__items">
-                <div className="pod-phase-legend__item">
-                  <span className={`pod-phase-legend__count${skeletonTextClass}`}>
+            <div className="metric-legend">
+              <div className="metric-legend__items">
+                <div className="metric-legend__item">
+                  <span className={`metric-legend__count${skeletonTextClass}`}>
                     {displayOverview.memoryUsage || '0'}
                   </span>
-                  <span className="pod-phase-legend__label">usage</span>
+                  <span className="metric-legend__label">usage</span>
                 </div>
-                <div className="pod-phase-legend__item">
-                  <span className={`pod-phase-legend__count${skeletonTextClass}`}>
+                <div className="metric-legend__item">
+                  <span className={`metric-legend__count${skeletonTextClass}`}>
                     {displayOverview.memoryRequests || '0'}
                   </span>
-                  <span className="pod-phase-legend__label">requests</span>
+                  <span className="metric-legend__label">requests</span>
                 </div>
-                <div className="pod-phase-legend__item">
-                  <span className={`pod-phase-legend__count${skeletonTextClass}`}>
+                <div className="metric-legend__item">
+                  <span className={`metric-legend__count${skeletonTextClass}`}>
                     {displayOverview.memoryLimits || '0'}
                   </span>
-                  <span className="pod-phase-legend__label">limits</span>
+                  <span className="metric-legend__label">limits</span>
                 </div>
               </div>
             </div>
@@ -691,55 +691,59 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
 
         <div className="overview-section nodes-summary">
           <h2>Nodes</h2>
-          <div className="stats-grid">
-            <div className={`stat-card${skeletonBlockClass}`}>
-              <div className={`stat-value${skeletonTextClass}`}>{displayOverview.totalNodes}</div>
-              <div className="stat-label">Total</div>
+          <div className="metric-stats">
+            <div className="metric-stat" data-testid="cluster-nodes-total">
+              <span className={`metric-stat__count${skeletonTextClass}`}>
+                {displayOverview.totalNodes}
+              </span>
+              <span className="metric-stat__label">total</span>
             </div>
-            {/* EKS clusters: show EC2 and Fargate breakdown */}
             {displayOverview.clusterType === 'EKS' && (
               <>
-                <div className={`stat-card${skeletonBlockClass}`}>
-                  <div className={`stat-value${skeletonTextClass}`}>{displayOverview.ec2Nodes}</div>
-                  <div className="stat-label">EC2</div>
+                <div className="metric-stat" data-testid="cluster-nodes-ec2">
+                  <span className={`metric-stat__count${skeletonTextClass}`}>
+                    {displayOverview.ec2Nodes}
+                  </span>
+                  <span className="metric-stat__label">ec2</span>
                 </div>
-                <div className={`stat-card${skeletonBlockClass}`}>
-                  <div className={`stat-value${skeletonTextClass}`}>
+                <div className="metric-stat" data-testid="cluster-nodes-fargate">
+                  <span className={`metric-stat__count${skeletonTextClass}`}>
                     {displayOverview.fargateNodes}
-                  </div>
-                  <div className="stat-label">Fargate</div>
+                  </span>
+                  <span className="metric-stat__label">fargate</span>
                 </div>
               </>
             )}
-            {/* AKS clusters: show VM and Virtual (ACI) breakdown */}
             {displayOverview.clusterType === 'AKS' && (
               <>
-                <div className={`stat-card${skeletonBlockClass}`}>
-                  <div className={`stat-value${skeletonTextClass}`}>{displayOverview.vmNodes}</div>
-                  <div className="stat-label">VM</div>
+                <div className="metric-stat" data-testid="cluster-nodes-vm">
+                  <span className={`metric-stat__count${skeletonTextClass}`}>
+                    {displayOverview.vmNodes}
+                  </span>
+                  <span className="metric-stat__label">vm</span>
                 </div>
-                <div className={`stat-card${skeletonBlockClass}`}>
-                  <div className={`stat-value${skeletonTextClass}`}>
+                <div className="metric-stat" data-testid="cluster-nodes-virtual">
+                  <span className={`metric-stat__count${skeletonTextClass}`}>
                     {displayOverview.virtualNodes}
-                  </div>
-                  <div className="stat-label">Virtual</div>
+                  </span>
+                  <span className="metric-stat__label">virtual</span>
                 </div>
               </>
             )}
           </div>
 
           <div className="node-health">
-            <div className="pod-status__header">
+            <div className="metric-header">
               <h3>Node Health</h3>
-              <div className="pod-phase-legend__total">
-                <span className={`pod-phase-legend__total-value${skeletonTextClass}`}>
+              <div className="metric-legend__total">
+                <span className={`metric-legend__total-value${skeletonTextClass}`}>
                   {displayOverview.totalNodes}
                 </span>
-                <span className="pod-phase-legend__total-label"> total</span>
+                <span className="metric-legend__total-label"> total</span>
               </div>
             </div>
             <div
-              className={`pod-phase-bar${skeletonBlockClass}`}
+              className={`stacked-bar${skeletonBlockClass}`}
               role="presentation"
               aria-hidden="true"
             >
@@ -752,17 +756,17 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
                   return (
                     <div
                       key={item.key}
-                      className={`pod-phase-bar__segment pod-phase-bar__segment--${item.variant}`}
+                      className={`stacked-bar__segment stacked-bar__segment--${item.variant}`}
                       style={{ width: `${width}%` }}
                     />
                   );
                 })}
             </div>
-            <div className="pod-phase-legend">
-              <div className="pod-phase-legend__items">
+            <div className="metric-legend">
+              <div className="metric-legend__items">
                 {nodeHealthPhaseItems.map((item) => renderNodeHealthLegendItem(item))}
               </div>
-              <div className="pod-phase-legend__items pod-phase-legend__items--restarted">
+              <div className="metric-legend__items metric-legend__items--restarted">
                 {renderNodeHealthLegendItem(nodeCordonedItem)}
               </div>
             </div>
@@ -771,37 +775,39 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
 
         <div className="overview-section workloads-summary">
           <h2>Workloads</h2>
-          <div className="stats-grid">
-            <div className={`stat-card${skeletonBlockClass}`}>
-              <div className={`stat-value${skeletonTextClass}`}>
+          <div className="metric-stats">
+            <div className="metric-stat" data-testid="cluster-workloads-namespaces">
+              <span className={`metric-stat__count${skeletonTextClass}`}>
                 {displayOverview.totalNamespaces}
-              </div>
-              <div className="stat-label">Namespaces</div>
+              </span>
+              <span className="metric-stat__label">namespaces</span>
             </div>
-            <div className={`stat-card${skeletonBlockClass}`}>
-              <div className={`stat-value${skeletonTextClass}`}>{displayOverview.totalPods}</div>
-              <div className="stat-label">Pods</div>
+            <div className="metric-stat" data-testid="cluster-workloads-pods">
+              <span className={`metric-stat__count${skeletonTextClass}`}>
+                {displayOverview.totalPods}
+              </span>
+              <span className="metric-stat__label">pods</span>
             </div>
-            <div className={`stat-card${skeletonBlockClass}`}>
-              <div className={`stat-value${skeletonTextClass}`}>
+            <div className="metric-stat" data-testid="cluster-workloads-containers">
+              <span className={`metric-stat__count${skeletonTextClass}`}>
                 {displayOverview.totalContainers}
-              </div>
-              <div className="stat-label">Containers</div>
+              </span>
+              <span className="metric-stat__label">containers</span>
             </div>
           </div>
 
           <div className="workload-breakdown">
-            <div className="pod-status__header">
+            <div className="metric-header">
               <h3>By Type</h3>
-              <div className="pod-phase-legend__total">
-                <span className={`pod-phase-legend__total-value${skeletonTextClass}`}>
+              <div className="metric-legend__total">
+                <span className={`metric-legend__total-value${skeletonTextClass}`}>
                   {workloadTotal}
                 </span>
-                <span className="pod-phase-legend__total-label"> total</span>
+                <span className="metric-legend__total-label"> total</span>
               </div>
             </div>
             <div
-              className={`pod-phase-bar${skeletonBlockClass}`}
+              className={`stacked-bar${skeletonBlockClass}`}
               role="presentation"
               aria-hidden="true"
             >
@@ -814,29 +820,29 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
                   return (
                     <div
                       key={item.key}
-                      className={`pod-phase-bar__segment pod-phase-bar__segment--${item.variant}`}
+                      className={`stacked-bar__segment stacked-bar__segment--${item.variant}`}
                       style={{ width: `${width}%` }}
                     />
                   );
                 })}
             </div>
-            <div className="pod-phase-legend">
-              <div className="pod-phase-legend__items">
+            <div className="metric-legend">
+              <div className="metric-legend__items">
                 {workloadItems.map((item) => (
                   <div
                     key={item.key}
-                    className="pod-phase-legend__item"
+                    className="metric-legend__item"
                     aria-disabled={item.value === 0}
                     data-testid={`cluster-workload-${item.key}`}
                   >
                     <span
-                      className={`pod-phase-legend__dot pod-phase-legend__dot--${item.variant}`}
+                      className={`metric-legend__dot metric-legend__dot--${item.variant}`}
                       aria-hidden="true"
                     />
-                    <span className={`pod-phase-legend__count${skeletonTextClass}`}>
+                    <span className={`metric-legend__count${skeletonTextClass}`}>
                       {item.value}
                     </span>
-                    <span className="pod-phase-legend__label">{item.label}</span>
+                    <span className="metric-legend__label">{item.label}</span>
                   </div>
                 ))}
               </div>
@@ -844,17 +850,17 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
           </div>
 
           <div className="pod-status">
-            <div className="pod-status__header">
+            <div className="metric-header">
               <h3>Pod Status</h3>
-              <div className="pod-phase-legend__total">
-                <span className={`pod-phase-legend__total-value${skeletonTextClass}`}>
+              <div className="metric-legend__total">
+                <span className={`metric-legend__total-value${skeletonTextClass}`}>
                   {displayOverview.totalPods}
                 </span>
-                <span className="pod-phase-legend__total-label"> total</span>
+                <span className="metric-legend__total-label"> total</span>
               </div>
             </div>
             <div
-              className={`pod-phase-bar${skeletonBlockClass}`}
+              className={`stacked-bar${skeletonBlockClass}`}
               role="presentation"
               aria-hidden="true"
             >
@@ -867,17 +873,17 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
                   return (
                     <div
                       key={segment.key}
-                      className={`pod-phase-bar__segment pod-phase-bar__segment--${segment.key}`}
+                      className={`stacked-bar__segment stacked-bar__segment--${segment.key}`}
                       style={{ width: `${width}%` }}
                     />
                   );
                 })}
             </div>
-            <div className="pod-phase-legend">
-              <div className="pod-phase-legend__items">
+            <div className="metric-legend">
+              <div className="metric-legend__items">
                 {podPhaseItems.map((item) => renderPodPhaseLegendItem(item))}
               </div>
-              <div className="pod-phase-legend__items pod-phase-legend__items--restarted">
+              <div className="metric-legend__items metric-legend__items--restarted">
                 {renderPodPhaseLegendItem(podRestartedItem)}
               </div>
             </div>
@@ -885,12 +891,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
         </div>
 
         <div className="overview-section recent-events">
-          <div className="pod-status__header">
-            <h3>Recent Events</h3>
-            <div className="pod-phase-legend__total">
-              <span className="pod-phase-legend__total-label">warnings · last 24h</span>
-            </div>
-          </div>
+          <h2>Latest Warning Events</h2>
           {recentEvents.length === 0 ? (
             <div className="recent-events__empty">
               {showSkeleton ? '' : 'No warning events in the last 24 hours.'}

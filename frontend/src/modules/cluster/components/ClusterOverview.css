@@ -77,9 +77,11 @@
 }
 
 .overview-header h1 {
-  font-size: 1.4rem;
+  font-size: 1.2rem;
   font-weight: 600;
   margin: 0;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
 }
 
 .cluster-info {
@@ -147,10 +149,11 @@
 }
 
 .overview-section h2 {
-  font-size: 1.1rem;
+  font-size: 0.9rem;
   font-weight: 600;
   margin: 0 0 1rem 0;
-  color: var(--color-text);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
 }
 
 .overview-section h3 {
@@ -244,7 +247,7 @@
   display: grid;
   grid-template-columns: 3rem 8rem 1fr;
   align-items: baseline;
-  padding: 0.4rem 0;
+  padding: 0.4rem;
   border-radius: var(--border-radius-md);
   font-size: 0.75rem;
   border-bottom: 1px solid var(--color-border);
@@ -280,12 +283,13 @@
 .recent-events__message {
   color: var(--color-text-secondary);
   line-height: 1.2rem;
+  padding-left: 0.5rem;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: wrap;
+  white-space: normal;
 }
 
-.pod-status__header {
+.metric-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -293,7 +297,7 @@
   margin-bottom: 0.5rem;
 }
 
-.pod-status__header h3 {
+.metric-header h3 {
   margin: 0;
   font-size: 0.75rem;
   font-weight: 600;
@@ -302,7 +306,7 @@
   color: var(--color-text-secondary);
 }
 
-.pod-phase-bar {
+.stacked-bar {
   display: flex;
   width: 100%;
   height: 10px;
@@ -312,40 +316,40 @@
   margin-top: 0.25rem;
 }
 
-.pod-phase-bar__segment {
+.stacked-bar__segment {
   height: 100%;
   transition: width 0.25s ease;
 }
 
-.pod-phase-bar__segment--healthy {
+.stacked-bar__segment--healthy {
   background: var(--pod-phase-healthy);
 }
 
-.pod-phase-bar__segment--pending {
+.stacked-bar__segment--pending {
   background: var(--pod-phase-pending);
 }
 
-.pod-phase-bar__segment--failing {
+.stacked-bar__segment--failing {
   background: var(--pod-phase-failing);
 }
 
-.pod-phase-bar__segment--deployment {
+.stacked-bar__segment--deployment {
   background: var(--workload-deployment);
 }
 
-.pod-phase-bar__segment--statefulset {
+.stacked-bar__segment--statefulset {
   background: var(--workload-statefulset);
 }
 
-.pod-phase-bar__segment--daemonset {
+.stacked-bar__segment--daemonset {
   background: var(--workload-daemonset);
 }
 
-.pod-phase-bar__segment--cronjob {
+.stacked-bar__segment--cronjob {
   background: var(--workload-cronjob);
 }
 
-.pod-phase-legend {
+.metric-legend {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -354,14 +358,14 @@
   flex-wrap: wrap;
 }
 
-.pod-phase-legend__items {
+.metric-legend__items {
   display: flex;
   align-items: center;
   gap: 0.5rem 1rem;
   flex-wrap: wrap;
 }
 
-.pod-phase-legend__item {
+.metric-legend__item {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
@@ -370,84 +374,108 @@
   border: 1px solid transparent;
 }
 
-.pod-phase-legend__item[aria-disabled="true"] {
+.metric-legend__item[aria-disabled="true"] {
   opacity: 0.55;
 }
 
-.pod-phase-legend__item--clickable {
+.metric-legend__item--clickable {
   cursor: pointer;
   transition:
     border-color 0.15s ease,
     box-shadow 0.15s ease;
 }
 
-/* .pod-phase-legend__item--clickable:hover,
-.pod-phase-legend__item--clickable:focus-visible {
+/* .metric-legend__item--clickable:hover,
+.metric-legend__item--clickable:focus-visible {
   border-color: var(--color-accent);
   box-shadow: 0 0 0 1px var(--color-accent);
 } */
 
-.pod-phase-legend__item--clickable:focus-visible {
+.metric-legend__item--clickable:focus-visible {
   outline: none;
 }
 
-.pod-phase-legend__dot {
+.metric-legend__dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
 }
 
-.pod-phase-legend__dot--healthy {
+.metric-legend__dot--healthy {
   background: var(--pod-phase-healthy);
 }
 
-.pod-phase-legend__dot--pending {
+.metric-legend__dot--pending {
   background: var(--pod-phase-pending);
 }
 
-.pod-phase-legend__dot--failing {
+.metric-legend__dot--failing {
   background: var(--pod-phase-failing);
 }
 
-.pod-phase-legend__dot--restarted {
+.metric-legend__dot--restarted {
   background: var(--pod-phase-restarted);
 }
 
-.pod-phase-legend__dot--deployment {
+.metric-legend__dot--deployment {
   background: var(--workload-deployment);
 }
 
-.pod-phase-legend__dot--statefulset {
+.metric-legend__dot--statefulset {
   background: var(--workload-statefulset);
 }
 
-.pod-phase-legend__dot--daemonset {
+.metric-legend__dot--daemonset {
   background: var(--workload-daemonset);
 }
 
-.pod-phase-legend__dot--cronjob {
+.metric-legend__dot--cronjob {
   background: var(--workload-cronjob);
 }
 
-.pod-phase-legend__count {
+.metric-legend__count {
   font-weight: 600;
   color: var(--color-text);
 }
 
-.pod-phase-legend__label {
+.metric-legend__label {
   color: var(--color-text-secondary);
 }
 
-.pod-phase-legend__total {
+.metric-legend__total {
   font-size: 0.85rem;
   color: var(--color-text-secondary);
   margin-left: auto;
 }
 
-.pod-phase-legend__total-value {
+.metric-legend__total-value {
   color: var(--color-text);
   font-weight: 500;
+}
+
+.metric-stats {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+}
+
+.metric-stat {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+}
+
+.metric-stat__count {
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--color-text);
+}
+
+.metric-stat__label {
+  color: var(--color-text-secondary);
 }
 
 .overview-loading-banner {

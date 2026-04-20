@@ -32,9 +32,9 @@ import (
 const (
 	clusterOverviewDomainName = "cluster-overview"
 	// Recent events on the cluster overview are a signal, not a comprehensive
-	// audit log — capped to the most recent 10 warnings within the last 24h.
-	recentEventsLimit      = 10
-	recentEventsLookback   = 24 * time.Hour
+	// audit log — capped to the most recent 20 warnings within the last 24h.
+	recentEventsLimit    = 20
+	recentEventsLookback = 24 * time.Hour
 )
 
 // ClusterOverviewBuilder constructs aggregated cluster statistics using informer caches.
