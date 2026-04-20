@@ -31,11 +31,11 @@ Reference inventory:
 2026-04-19:
 
 - Phase 1 is complete.
-- Phase 2 is in progress.
+- Phase 2 is complete.
 - Phase 3 refresh-domain conversion is complete for the currently identified direct refresh-domain UI callers.
 - Phase 4 manual refresh fan-out conversion is complete for the targeted UI entrypoints.
-- Phase 5 bootstrap/app-state conversion is complete for the planned non-deferred readers.
-- Phase 6 is partially complete: cluster-derived direct RPC readers now go through `dataAccess`; permission/capability adapters and deferred operational/session readers remain.
+- Phase 5 bootstrap/app-state conversion is complete for the planned app-state and runtime-state readers.
+- Phase 6 cluster-data-adjacent RPC and permission/capability conversion is complete for the planned readers.
 - Completed:
   - initial `dataAccess` broker skeleton
   - initial `appStateAccess` broker skeleton
@@ -66,12 +66,19 @@ Reference inventory:
     - `ClusterLifecycleContext`
     - `AboutModal`
     - `Settings`
+    - `PortForwardsPanel`
+    - `SessionsStatus`
+    - `AppLogsPanel`
+    - `ClusterTabs`
+    - `ShellTab` session inventory/backlog reads
     - `RollbackModal`
     - `ShellTab` cluster-data reads
     - `LogViewer` cluster-data reads
     - `PortForwardModal` target-port discovery
     - `eventObjectIdentity`
     - workload overview HPA-managed check
+    - `queryNamespacePermissions(...)`
+    - `EvaluateCapabilities(...)`
   - supporting object-panel callers updated to use request reasons instead of boolean manual flags
 - Verified so far:
   - targeted Vitest coverage for broker behavior and converted callers, including bootstrap and cluster-data RPC readers
@@ -79,12 +86,7 @@ Reference inventory:
   - `mage qc:prerelease`
 - Remaining in this slice:
   - diagnostics and adapter work from later phases
-  - permission/capability broker integration
-  - deferred operational/session readers:
-    - `SessionsStatus`
-    - `PortForwardsPanel`
-    - `ClusterTabs`
-    - `AppLogsPanel`
+  - deprecation and enforcement work from Phase 7
 
 ## Non-Goals
 
@@ -396,7 +398,7 @@ The following decisions are fixed before implementation to avoid re-litigating b
 
 ### 1. `appStateAccess` stays narrow
 
-Phase 1 `appStateAccess` is limited to bootstrap/config/state hydration and app-shell metadata.
+Phase 1 `appStateAccess` is limited to app-shell state, persisted configuration, and app-runtime operational reads that are not Kubernetes resource data.
 
 Included:
 
@@ -408,14 +410,13 @@ Included:
 - grid/table persistence
 - cluster auth/lifecycle shell state
 - `GetAppInfo` when used as app metadata
+- task-local operational/session inventory and backlog reads
+- app log buffer reads
 
 Excluded from `appStateAccess`:
 
 - cluster-derived object/resource reads
-- task-local operational/session reads
-- shell/session inventory
-- port-forward session inventory
-- log buffer reads
+- refresh-domain backed cluster data
 
 ### 2. `AuthErrorContext` and `ClusterLifecycleContext` belong to `appStateAccess`
 
@@ -650,6 +651,7 @@ Deliverable:
 
 - [x] Add `appStateAccess` adapters for bootstrap/config reads
 - [x] Convert app bootstrap/state readers to `appStateAccess`
+- [x] Convert app runtime operational/session readers to `appStateAccess`
 - [ ] Add diagnostics coverage where appropriate
 
 Recommended order:
@@ -667,19 +669,25 @@ Recommended order:
 3. app metadata/settings surfaces
    - [x] `AboutModal`
    - [x] `Settings`
+4. app runtime operational/session readers
+   - [x] `PortForwardsPanel`
+   - [x] `SessionsStatus`
+   - [x] `AppLogsPanel`
+   - [x] `ClusterTabs`
+   - [x] `ShellTab` session inventory/backlog reads
 
 Deliverable:
 
-- bootstrap/config/state hydration no longer bypasses a shared app-state path
+- bootstrap/config/state and app-runtime reads no longer bypass a shared app-state path
 
 ## Phase 6: Convert Cluster-Data-Adjacent RPC Reads and Permission/Capability Reads
 
 - [x] Add `dataAccess` adapters for cluster-data-adjacent RPC reads where the data is Kubernetes-derived or cluster-scoped
-- [ ] Add `permission-read` adapter
-- [ ] Add `capability-read` adapter
-- [ ] Wrap `queryNamespacePermissions(...)`
-- [ ] Wrap `EvaluateCapabilities(...)`
-- [ ] Decide destination for remaining one-off task-local RPC readers
+- [x] Add `permission-read` adapter
+- [x] Add `capability-read` adapter
+- [x] Wrap `queryNamespacePermissions(...)`
+- [x] Wrap `EvaluateCapabilities(...)`
+- [x] Decide destination for remaining one-off task-local RPC readers
 - [ ] Add diagnostics entries for these request types
 
 Likely `dataAccess` readers in this phase:
@@ -694,21 +702,21 @@ Likely `dataAccess` readers in this phase:
 
 Deferred from this phase:
 
-- [ ] `SessionsStatus`
-- [ ] `PortForwardsPanel`
-- [ ] `ClusterTabs`
-- [ ] `AppLogsPanel`
+- [x] `SessionsStatus`
+- [x] `PortForwardsPanel`
+- [x] `ClusterTabs`
+- [x] `AppLogsPanel`
 
 Special case:
 
-- [ ] `ShellTab`
-  `GetPodContainers` belongs to `dataAccess`; session/backlog reads stay deferred until an operational/session path is designed
+- [x] `ShellTab`
+  `GetPodContainers` goes through `dataAccess`; session/backlog reads go through `appStateAccess`
 
 Deliverable:
 
 - permission/capability reads participate in the same request policy and diagnostics system
 - cluster-derived direct RPC reads have a home in `dataAccess`
-- operational/session RPC reads remain explicitly out of scope instead of being misclassified
+- operational/session RPC reads have a home in `appStateAccess`
 
 ## Phase 7: Deprecate Old Entrypoints
 

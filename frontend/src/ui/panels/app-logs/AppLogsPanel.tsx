@@ -13,6 +13,7 @@ import { useShortcut, useKeyboardSurface } from '@ui/shortcuts';
 import { KeyboardScopePriority, KeyboardShortcutPriority } from '@ui/shortcuts/priorities';
 import { DockablePanel } from '@ui/dockable';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
+import { requestAppState } from '@/core/app-state-access';
 import './AppLogsPanel.css';
 
 interface LogEntry {
@@ -139,7 +140,10 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
       if (showLoadingSpinner) {
         setIsLoading(true);
       }
-      const logEntries = await GetLogs();
+      const logEntries = await requestAppState({
+        resource: 'app-logs',
+        read: () => GetLogs(),
+      });
       setLogs(logEntries);
     } catch (error) {
       errorHandler.handle(error, { action: 'loadLogs' });

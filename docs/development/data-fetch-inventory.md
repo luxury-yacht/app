@@ -115,12 +115,12 @@ These fetch data outside the refresh domain system.
 | `frontend/src/core/contexts/ClusterLifecycleContext.tsx`                              | `GetAllClusterLifecycleStates`                                    | Current lifecycle state for every cluster                    | Direct Wails read on provider mount / sync path              |
 | `frontend/src/ui/modals/AboutModal.tsx`                                               | `GetAppInfo`                                                      | App version/update metadata                                  | Direct Wails read on modal open                              |
 | `frontend/src/modules/cluster/components/ClusterOverview.tsx`                         | `GetAppInfo`                                                      | App version/update metadata for overview banner              | Direct Wails read on overview mount                          |
-| `frontend/src/ui/panels/app-logs/AppLogsPanel.tsx`                                    | `GetLogs`                                                         | App log buffer entries                                       | Direct Wails read via `loadLogs()`                           |
-| `frontend/src/modules/port-forward/PortForwardsPanel.tsx`                             | `ListPortForwards`                                                | Active port-forward sessions                                 | Direct Wails read on panel refresh                           |
-| `frontend/src/ui/status/SessionsStatus.tsx`                                           | `ListShellSessions`, `ListPortForwards`                           | Active shell sessions and port-forward sessions              | Direct Wails reads for status tooltip                        |
+| `frontend/src/ui/panels/app-logs/AppLogsPanel.tsx`                                    | `GetLogs`                                                         | App log buffer entries                                       | Brokered via `appStateAccess.requestAppState(...)`           |
+| `frontend/src/modules/port-forward/PortForwardsPanel.tsx`                             | `ListPortForwards`                                                | Active port-forward sessions                                 | Brokered via `appStateAccess.requestAppState(...)`           |
+| `frontend/src/ui/status/SessionsStatus.tsx`                                           | `ListShellSessions`, `ListPortForwards`                           | Active shell sessions and port-forward sessions              | Brokered via `appStateAccess.requestAppState(...)`           |
 | `frontend/src/modules/port-forward/PortForwardModal.tsx`                              | `GetTargetPorts`                                                  | Candidate target ports for selected workload/pod             | Direct Wails read before starting a port-forward             |
-| `frontend/src/ui/layout/ClusterTabs.tsx`                                              | `GetClusterPortForwardCount`                                      | Active port-forward count for a cluster tab                  | Direct Wails read when closing a cluster tab                 |
-| `frontend/src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.tsx`         | `GetPodContainers`, `ListShellSessions`, `GetShellSessionBacklog` | Pod container list, existing shell sessions, backlog replay  | Direct Wails reads during shell attach/reconnect             |
+| `frontend/src/ui/layout/ClusterTabs.tsx`                                              | `GetClusterPortForwardCount`                                      | Active port-forward count for a cluster tab                  | Brokered via `appStateAccess.requestAppState(...)`           |
+| `frontend/src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.tsx`         | `GetPodContainers`, `ListShellSessions`, `GetShellSessionBacklog` | Pod container list, existing shell sessions, backlog replay  | Mixed brokered reads via `dataAccess` and `appStateAccess`   |
 | `frontend/src/modules/object-panel/components/ObjectPanel/Logs/LogViewer.tsx`         | `GetLogScopeContainers`                                           | Container inventory for the current log scope                | Direct Wails read when log scope changes                     |
 | `frontend/src/modules/object-panel/components/ObjectPanel/Yaml/YamlTab.tsx`           | `GetObjectYAMLByGVK`                                              | Fresh YAML for strict GVK identity                           | Direct Wails read during stale/merge recovery                |
 | `frontend/src/ui/modals/ObjectDiffModal.tsx`                                          | `FindCatalogObjectMatch`                                          | Catalog object resolution for left/right diff selections     | Direct Wails read when diff side search/selection changes    |
@@ -139,7 +139,7 @@ These decisions align the inventory with the two-path migration plan.
 
 ### `appStateAccess` ownership
 
-These are bootstrap/app-state reads and should migrate through `appStateAccess`.
+These are app-shell, persisted-state, and app-runtime reads and should migrate through `appStateAccess`.
 
 | File                                                                        | RPC(s)                             | Why |
 | --------------------------------------------------------------------------- | ---------------------------------- | --- |
@@ -154,6 +154,11 @@ These are bootstrap/app-state reads and should migrate through `appStateAccess`.
 | `frontend/src/shared/components/tables/persistence/gridTablePersistence.ts` | `GetGridTablePersistence`          | Persisted app/user state |
 | `frontend/src/core/persistence/clusterTabOrder.ts`                          | `GetClusterTabOrder`               | Persisted app/user state |
 | `frontend/src/core/contexts/ZoomContext.tsx`                                | `GetZoomLevel`                     | Persisted app/user state |
+| `frontend/src/ui/panels/app-logs/AppLogsPanel.tsx`                          | `GetLogs`                          | App runtime log buffer, not cluster resource data |
+| `frontend/src/modules/port-forward/PortForwardsPanel.tsx`                   | `ListPortForwards`                 | Runtime port-forward session inventory |
+| `frontend/src/ui/status/SessionsStatus.tsx`                                 | `ListShellSessions`, `ListPortForwards` | Runtime shell/port-forward session inventory |
+| `frontend/src/ui/layout/ClusterTabs.tsx`                                    | `GetClusterPortForwardCount`       | Runtime cluster-scoped session count |
+| `frontend/src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.tsx` | `ListShellSessions`, `GetShellSessionBacklog` | Runtime shell session lookup and backlog replay |
 
 ### `dataAccess` ownership
 
@@ -170,18 +175,6 @@ These are cluster-derived reads and should migrate through `dataAccess`, even wh
 | `frontend/src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.tsx`         | `GetPodContainers`                        | Container inventory derived from cluster object scope |
 | `frontend/src/modules/port-forward/PortForwardModal.tsx`                              | `GetTargetPorts`                          | Cluster object/service port discovery |
 
-### Deferred operational/session reads
-
-These should not be forced into `appStateAccess` or `dataAccess` during the first migration. They are runtime operational/session state and need their own follow-up classification.
-
-| File                                                                          | RPC(s)                                          | Why deferred |
-| ----------------------------------------------------------------------------- | ----------------------------------------------- | ------------ |
-| `frontend/src/ui/panels/app-logs/AppLogsPanel.tsx`                            | `GetLogs`                                       | App runtime log buffer, not bootstrap or cluster resource data |
-| `frontend/src/modules/port-forward/PortForwardsPanel.tsx`                     | `ListPortForwards`                              | Runtime session inventory |
-| `frontend/src/ui/status/SessionsStatus.tsx`                                   | `ListShellSessions`, `ListPortForwards`         | Runtime session inventory |
-| `frontend/src/ui/layout/ClusterTabs.tsx`                                      | `GetClusterPortForwardCount`                    | Runtime session count |
-| `frontend/src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.tsx` | `ListShellSessions`, `GetShellSessionBacklog`   | Runtime session state/backlog |
-
 ### Internal infrastructure reads
 
 These stay internal to infrastructure/adapters and are not component-level broker targets.
@@ -196,28 +189,27 @@ These are separate fetch systems today.
 
 | File                                                                       | API                                        | Data pulled                                           | Current implementation                                   |
 | -------------------------------------------------------------------------- | ------------------------------------------ | ----------------------------------------------------- | -------------------------------------------------------- |
-| `frontend/src/core/capabilities/permissionStore.ts`                        | `window.go.backend.App.QueryPermissions()` | Namespace/cluster permission results plus diagnostics | Local typed wrapper around a Wails RPC                   |
-| `frontend/src/core/capabilities/hooks.ts`                                  | `window.go.backend.App.QueryPermissions()` | Hook-level permission query batches                   | Same RPC, separate wrapper path                          |
-| `frontend/src/core/capabilities/store.ts`                                  | `EvaluateCapabilities()`                   | Capability results for feature descriptors            | Generated Wails binding                                  |
+| `frontend/src/core/capabilities/permissionStore.ts`                        | `window.go.backend.App.QueryPermissions()` | Namespace/cluster permission results plus diagnostics | Brokered through `dataAccess.requestData(...)`           |
+| `frontend/src/core/capabilities/hooks.ts`                                  | `window.go.backend.App.QueryPermissions()` | Hook-level permission query batches                   | Brokered through `dataAccess.requestData(...)`           |
+| `frontend/src/core/capabilities/store.ts`                                  | `EvaluateCapabilities()`                   | Capability results for feature descriptors            | Brokered through `dataAccess.requestData(...)`           |
 | `frontend/src/modules/namespace/contexts/NamespaceContext.tsx`             | `queryNamespacePermissions(...)`           | Permissions for selected namespace / all namespaces   | Frontend helper that eventually calls `QueryPermissions` |
 | `frontend/src/modules/namespace/contexts/NsResourcesContext.tsx`           | `queryNamespacePermissions(...)`           | Permissions for active/all namespace resources        | Same helper path                                         |
 | `frontend/src/modules/object-panel/components/ObjectPanel/ObjectPanel.tsx` | `queryNamespacePermissions(...)`           | Permissions for the panel object’s namespace          | Same helper path                                         |
 
 ## Current Fetch Path Summary
 
-Today the frontend has four separate read paths:
+The frontend now routes component-level reads through two brokered paths:
 
-1. RefreshManager-driven refreshers
-2. Direct `refreshOrchestrator.fetchScopedDomain(...)` calls from components/providers
-3. Direct Wails RPC reads
-4. Capability/permission RPC reads
+1. `dataAccess` for cluster/resource reads
+2. `appStateAccess` for app-shell, persisted-state, and runtime operational reads
 
-That is why the app feels inconsistent around concepts like:
+Underlying transports still vary:
 
-- auto-refresh paused
-- startup load vs user refresh
-- view activation
-- direct one-off reads that never enter refresh diagnostics
+- refresh domains and streaming infrastructure remain behind `dataAccess`
+- direct Wails RPC bindings remain behind `appStateAccess` or `dataAccess` adapters
+- permission/capability RPCs are now brokered through `dataAccess`
+
+The remaining architectural follow-up is diagnostics/enforcement, not caller migration.
 
 ## Migration Constraints For Two Read Paths
 

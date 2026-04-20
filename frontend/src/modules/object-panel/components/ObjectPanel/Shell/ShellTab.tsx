@@ -3,6 +3,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { requestAppState } from '@/core/app-state-access';
 import { requestData } from '@/core/data-access';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
@@ -620,7 +621,10 @@ const ShellTab: React.FC<ShellTabProps> = ({
     }
     attachInFlightRef.current = true;
     try {
-      const sessions = await ListShellSessions();
+      const sessions = await requestAppState({
+        resource: 'shell-sessions',
+        read: () => ListShellSessions(),
+      });
       const matching = sessions.filter(
         (tracked) =>
           tracked.clusterId === resolvedClusterId &&
@@ -658,7 +662,10 @@ const ShellTab: React.FC<ShellTabProps> = ({
       let backlog = '';
       try {
         // Replay buffered output captured while this tab was detached.
-        backlog = await GetShellSessionBacklog(latest.sessionId);
+        backlog = await requestAppState({
+          resource: 'shell-session-backlog',
+          read: () => GetShellSessionBacklog(latest.sessionId),
+        });
         if (backlog) {
           renderedSessionIdRef.current = latest.sessionId;
           writeToTerminal(backlog);

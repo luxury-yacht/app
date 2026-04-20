@@ -261,126 +261,127 @@ const queueFlush = () => {
     return;
   }
 
-  pendingFlush = Promise.resolve().then(async () => {
-    const batch = pendingRequests;
-    pendingRequests = new Map();
-    pendingFlush = null;
+  pendingFlush = Promise.resolve()
+    .then(async () => {
+      let changed = false;
 
-    if (batch.size === 0) {
-      return;
-    }
+      while (pendingRequests.size > 0) {
+        const batch = pendingRequests;
+        pendingRequests = new Map();
 
-    const toEvaluate = Array.from(batch.entries());
-    const batches = splitBatches(toEvaluate, MAX_CAPABILITY_BATCH);
-    let changed = false;
+        const toEvaluate = Array.from(batch.entries());
+        const batches = splitBatches(toEvaluate, MAX_CAPABILITY_BATCH);
 
-    for (const chunk of batches) {
-      const namespaceBuckets = new Map<
-        string,
-        {
-          namespace?: string;
-          clusterId?: string;
-          keys: string[];
-          descriptors: NormalizedCapabilityDescriptor[];
-          startedAt: number;
+        for (const chunk of batches) {
+          const namespaceBuckets = new Map<
+            string,
+            {
+              namespace?: string;
+              clusterId?: string;
+              keys: string[];
+              descriptors: NormalizedCapabilityDescriptor[];
+              startedAt: number;
+            }
+          >();
+          const startTime = Date.now();
+
+          const payload: capabilities.CheckRequest[] = chunk.map(([key, descriptor]) => {
+            const bucketKey = normalizeNamespaceKey(descriptor.namespace, descriptor.clusterId);
+            let bucket = namespaceBuckets.get(bucketKey);
+            if (!bucket) {
+              bucket = {
+                namespace: sanitizeNamespace(descriptor.namespace),
+                clusterId: descriptor.clusterId,
+                keys: [],
+                descriptors: [],
+                startedAt: startTime,
+              };
+              namespaceBuckets.set(bucketKey, bucket);
+            }
+            bucket.keys.push(key);
+            bucket.descriptors.push(descriptor);
+
+            return {
+              id: descriptor.id,
+              clusterId: descriptor.clusterId,
+              // group/version on the descriptor are present whenever the call site
+              // knows the GVK (built-ins via resolveBuiltinGroupVersion, customs
+              // via the data source). The backend uses them to route through the
+              // strict GVK resolver and disambiguate colliding kinds. See
+              group: descriptor.group,
+              version: descriptor.version,
+              verb: descriptor.verb,
+              resourceKind: descriptor.resourceKind,
+              namespace: descriptor.namespace,
+              name: descriptor.name,
+              subresource: descriptor.subresource,
+            };
+          });
+
+          // Preserve cluster-scoped keys by reconnecting results to their original descriptors.
+          const descriptorsById = new Map<string, NormalizedCapabilityDescriptor[]>();
+          chunk.forEach(([, descriptor]) => {
+            const idKey = descriptor.id.trim();
+            const existing = descriptorsById.get(idKey);
+            if (existing) {
+              existing.push(descriptor);
+            } else {
+              descriptorsById.set(idKey, [descriptor]);
+            }
+          });
+
+          beginDiagnostics(namespaceBuckets);
+
+          let response: capabilities.CheckResult[] = [];
+          let raisedError: unknown = null;
+
+          try {
+            const result = await requestData<capabilities.CheckResult[]>({
+              resource: 'evaluate-capabilities',
+              reason: 'startup',
+              read: () => EvaluateCapabilities(payload),
+            });
+            if (result.status !== 'executed') {
+              throw new Error(result.blockedReason ?? 'evaluate-capabilities-blocked');
+            }
+            response = result.data ?? [];
+          } catch (error) {
+            raisedError = error;
+          }
+
+          const completionTime = Date.now();
+          const resultMap = new Map<string, CapabilityResult>();
+          response.forEach((item) => {
+            const normalized = toCapabilityResult(item);
+            const matches = descriptorsById.get(normalized.id) ?? [];
+            if (matches.length === 0) {
+              resultMap.set(createCapabilityKey(normalized), normalized);
+              return;
+            }
+            matches.forEach((descriptor) => {
+              const enriched: CapabilityResult = {
+                ...normalized,
+                clusterId: descriptor.clusterId,
+              };
+              resultMap.set(createCapabilityKey(enriched), enriched);
+            });
+          });
+
+          if (applyResults(chunk, resultMap, raisedError, completionTime)) {
+            changed = true;
+          }
+
+          completeDiagnostics(namespaceBuckets, resultMap, raisedError, completionTime);
         }
-      >();
-      const startTime = Date.now();
-
-      const payload: capabilities.CheckRequest[] = chunk.map(([key, descriptor]) => {
-        const bucketKey = normalizeNamespaceKey(descriptor.namespace, descriptor.clusterId);
-        let bucket = namespaceBuckets.get(bucketKey);
-        if (!bucket) {
-          bucket = {
-            namespace: sanitizeNamespace(descriptor.namespace),
-            clusterId: descriptor.clusterId,
-            keys: [],
-            descriptors: [],
-            startedAt: startTime,
-          };
-          namespaceBuckets.set(bucketKey, bucket);
-        }
-        bucket.keys.push(key);
-        bucket.descriptors.push(descriptor);
-
-        return {
-          id: descriptor.id,
-          clusterId: descriptor.clusterId,
-          // group/version on the descriptor are present whenever the call site
-          // knows the GVK (built-ins via resolveBuiltinGroupVersion, customs
-          // via the data source). The backend uses them to route through the
-          // strict GVK resolver and disambiguate colliding kinds. See
-
-          group: descriptor.group,
-          version: descriptor.version,
-          verb: descriptor.verb,
-          resourceKind: descriptor.resourceKind,
-          namespace: descriptor.namespace,
-          name: descriptor.name,
-          subresource: descriptor.subresource,
-        };
-      });
-
-      // Preserve cluster-scoped keys by reconnecting results to their original descriptors.
-      const descriptorsById = new Map<string, NormalizedCapabilityDescriptor[]>();
-      chunk.forEach(([, descriptor]) => {
-        const idKey = descriptor.id.trim();
-        const existing = descriptorsById.get(idKey);
-        if (existing) {
-          existing.push(descriptor);
-        } else {
-          descriptorsById.set(idKey, [descriptor]);
-        }
-      });
-
-      beginDiagnostics(namespaceBuckets);
-
-      let response: capabilities.CheckResult[] = [];
-      let raisedError: unknown = null;
-
-      try {
-        const result = await requestData<capabilities.CheckResult[]>({
-          resource: 'evaluate-capabilities',
-          reason: 'startup',
-          read: () => EvaluateCapabilities(payload),
-        });
-        if (result.status !== 'executed') {
-          throw new Error(result.blockedReason ?? 'evaluate-capabilities-blocked');
-        }
-        response = result.data ?? [];
-      } catch (error) {
-        raisedError = error;
       }
 
-      const completionTime = Date.now();
-      const resultMap = new Map<string, CapabilityResult>();
-      response.forEach((item) => {
-        const normalized = toCapabilityResult(item);
-        const matches = descriptorsById.get(normalized.id) ?? [];
-        if (matches.length === 0) {
-          resultMap.set(createCapabilityKey(normalized), normalized);
-          return;
-        }
-        matches.forEach((descriptor) => {
-          const enriched: CapabilityResult = {
-            ...normalized,
-            clusterId: descriptor.clusterId,
-          };
-          resultMap.set(createCapabilityKey(enriched), enriched);
-        });
-      });
-
-      if (applyResults(chunk, resultMap, raisedError, completionTime)) {
-        changed = true;
+      if (changed) {
+        notify();
       }
-
-      completeDiagnostics(namespaceBuckets, resultMap, raisedError, completionTime);
-    }
-
-    if (changed) {
-      notify();
-    }
-  });
+    })
+    .finally(() => {
+      pendingFlush = null;
+    });
 };
 
 /**
