@@ -289,6 +289,7 @@ describe('ClusterOverview', () => {
         totalContainers: 84,
         totalInitContainers: 3,
         runningPods: 40,
+        succeededPods: 0,
         pendingPods: 1,
         failedPods: 1,
         restartedPods: 7,
@@ -572,11 +573,12 @@ describe('ClusterOverview', () => {
     expect(emitPodsUnhealthySignalMock).toHaveBeenCalledWith('cluster-1', ALL_NAMESPACES_SCOPE);
   });
 
-  it('navigates to the pods view without unhealthy filter when clicking the running card', async () => {
+  it('navigates to the pods view without unhealthy filter when clicking the healthy item', async () => {
     domainStateRef.current = createDomainState('ready', {
       overview: {
         ...EMPTY_OVERVIEW_DATA,
-        runningPods: 5,
+        runningPods: 4,
+        succeededPods: 1,
       },
     });
 
@@ -584,11 +586,12 @@ describe('ClusterOverview', () => {
     cleanupRoot = cleanup;
     await flushEffects();
 
-    const runningCard = container.querySelector('[data-testid="cluster-pod-status-running"]');
-    expect(runningCard).not.toBeNull();
+    const healthyItem = container.querySelector('[data-testid="cluster-pod-status-healthy"]');
+    expect(healthyItem).not.toBeNull();
+    expect(healthyItem?.textContent).toContain('5');
 
     act(() => {
-      runningCard?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      healthyItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
     expect(setSelectedNamespaceMock).toHaveBeenCalledWith(ALL_NAMESPACES_SCOPE);
@@ -623,6 +626,7 @@ const EMPTY_OVERVIEW_DATA: ClusterOverviewPayload = {
   totalContainers: 0,
   totalInitContainers: 0,
   runningPods: 0,
+  succeededPods: 0,
   pendingPods: 0,
   failedPods: 0,
   restartedPods: 0,

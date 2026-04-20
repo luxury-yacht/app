@@ -55,6 +55,7 @@ const EMPTY_OVERVIEW: ClusterOverviewPayload = {
   totalContainers: 0,
   totalInitContainers: 0,
   runningPods: 0,
+  succeededPods: 0,
   pendingPods: 0,
   failedPods: 0,
   restartedPods: 0,
@@ -320,7 +321,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
       setActiveNamespaceTab('pods');
       setSidebarSelection({ type: 'namespace', value: ALL_NAMESPACES_SCOPE });
       navigateToNamespace();
-      if (key !== 'running' && selectedClusterId) {
+      if (key !== 'healthy' && selectedClusterId) {
         emitPodsUnhealthySignal(selectedClusterId, ALL_NAMESPACES_SCOPE);
       }
     },
@@ -346,8 +347,11 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
     [handlePodStatusNavigate]
   );
 
+  // "Healthy" groups pods in the Running and Succeeded phases — CronJob-launched
+  // pods end up Succeeded, so counting only Running would understate the count.
+  const healthyPods = displayOverview.runningPods + displayOverview.succeededPods;
   const podPhaseItems = [
-    { key: 'running', label: 'running', value: displayOverview.runningPods, variant: 'running' },
+    { key: 'healthy', label: 'healthy', value: healthyPods, variant: 'healthy' },
     { key: 'pending', label: 'pending', value: displayOverview.pendingPods, variant: 'pending' },
     { key: 'failed', label: 'failing', value: displayOverview.failedPods, variant: 'failing' },
   ];
@@ -393,11 +397,10 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
 
   // Phase-only total for bar segment widths (restarted overlaps with running,
   // so including it would double-count).
-  const phaseTotal =
-    displayOverview.runningPods + displayOverview.pendingPods + displayOverview.failedPods;
+  const phaseTotal = healthyPods + displayOverview.pendingPods + displayOverview.failedPods;
   const phasePct = (value: number) => (phaseTotal > 0 ? (value / phaseTotal) * 100 : 0);
   const phaseSegments = [
-    { key: 'running', value: displayOverview.runningPods },
+    { key: 'healthy', value: healthyPods },
     { key: 'pending', value: displayOverview.pendingPods },
     { key: 'failing', value: displayOverview.failedPods },
   ];

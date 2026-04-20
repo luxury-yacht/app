@@ -184,6 +184,7 @@ export interface ClusterOverviewPayload {
   totalContainers: number;
   totalInitContainers: number;
   runningPods: number;
+  succeededPods: number;
   pendingPods: number;
   failedPods: number;
   restartedPods: number;

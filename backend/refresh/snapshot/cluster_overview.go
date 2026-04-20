@@ -93,6 +93,7 @@ type ClusterOverviewPayload struct {
 	TotalContainers     int `json:"totalContainers"`
 	TotalInitContainers int `json:"totalInitContainers"`
 	RunningPods         int `json:"runningPods"`
+	SucceededPods       int `json:"succeededPods"`
 	PendingPods         int `json:"pendingPods"`
 	FailedPods          int `json:"failedPods"`
 	RestartedPods       int `json:"restartedPods"`
@@ -348,6 +349,8 @@ func buildClusterOverviewSnapshot(
 		switch pod.Status.Phase {
 		case corev1.PodRunning:
 			overview.RunningPods++
+		case corev1.PodSucceeded:
+			overview.SucceededPods++
 		case corev1.PodPending:
 			overview.PendingPods++
 		case corev1.PodFailed:

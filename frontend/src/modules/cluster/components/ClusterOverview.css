@@ -291,7 +291,7 @@
   transition: width 0.25s ease;
 }
 
-.pod-phase-bar__segment--running {
+.pod-phase-bar__segment--healthy {
   background: #22c55e;
 }
 
@@ -356,7 +356,7 @@
   flex-shrink: 0;
 }
 
-.pod-phase-legend__dot--running {
+.pod-phase-legend__dot--healthy {
   background: #22c55e;
 }
 

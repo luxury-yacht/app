@@ -695,6 +695,7 @@ func mergeClusterOverviewPayload(payloads []ClusterOverviewSnapshot) ClusterOver
 		out.TotalContainers += overview.TotalContainers
 		out.TotalInitContainers += overview.TotalInitContainers
 		out.RunningPods += overview.RunningPods
+		out.SucceededPods += overview.SucceededPods
 		out.PendingPods += overview.PendingPods
 		out.FailedPods += overview.FailedPods
 		out.RestartedPods += overview.RestartedPods
