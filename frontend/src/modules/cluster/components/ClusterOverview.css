@@ -105,6 +105,26 @@
   font-weight: 500;
 }
 
+.cluster-info-value--healthy {
+  color: var(--color-text);
+}
+
+.cluster-info-value--refreshing {
+  color: var(--color-text);
+}
+
+.cluster-info-value--degraded {
+  color: var(--status-degraded);
+}
+
+.cluster-info-value--unhealthy {
+  color: var(--status-unhealthy);
+}
+
+.cluster-info-value--inactive {
+  color: var(--color-warning);
+}
+
 .cluster-info-separator {
   color: var(--color-text-tertiary);
 }

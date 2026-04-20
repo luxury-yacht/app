@@ -7,10 +7,11 @@
  */
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { ListPortForwards, StopPortForward } from '@wailsjs/go/backend/App';
+import { StopPortForward } from '@wailsjs/go/backend/App';
 import { EventsOn, BrowserOpenURL } from '@wailsjs/runtime/runtime';
 import { DockablePanel, useDockablePanelState } from '@ui/dockable';
 import { useKeyboardSurface } from '@ui/shortcuts/surfaces';
+import { readPortForwardSessions, requestAppState } from '@/core/app-state-access';
 import { errorHandler } from '@utils/errorHandler';
 import './PortForwardsPanel.css';
 
@@ -89,7 +90,11 @@ function PortForwardsPanel() {
    */
   const loadSessions = useCallback(async () => {
     try {
-      const sessionList = await ListPortForwards();
+      const sessionList = await requestAppState({
+        resource: 'port-forward-sessions',
+        adapter: 'runtime-read',
+        read: () => readPortForwardSessions(),
+      });
       setSessions(sessionList || []);
     } catch (err) {
       errorHandler.handle(err, { action: 'loadPortForwards' });

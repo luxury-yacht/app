@@ -6,6 +6,7 @@
  */
 
 import { eventBus } from '@/core/events';
+import { requestAppState } from '@/core/app-state-access';
 
 // ---------- Types ----------
 
@@ -74,7 +75,11 @@ export const hydrateFavorites = async (options?: { force?: boolean }): Promise<F
       return;
     }
     try {
-      const result = await runtimeApp.GetFavorites();
+      const result = await requestAppState({
+        resource: 'favorites',
+        adapter: 'persistence-read',
+        read: () => runtimeApp.GetFavorites(),
+      });
       cachedFavorites = Array.isArray(result) ? result : [];
     } catch (error) {
       console.error('Failed to hydrate favorites:', error);

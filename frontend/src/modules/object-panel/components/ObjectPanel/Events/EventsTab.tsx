@@ -3,6 +3,7 @@
  */
 
 import React, { useEffect, useCallback, useMemo, useRef } from 'react';
+import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
 import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
@@ -16,8 +17,11 @@ import {
 import { useTableSort } from '@hooks/useTableSort';
 import { formatAge, formatFullDate } from '@utils/ageFormatter';
 import { errorHandler } from '@/utils/errorHandler';
+import { requestRefreshDomain, type DataRequestReason } from '@/core/data-access';
 import type { ObjectEventSummary } from '@/core/refresh/types';
 import { refreshManager, refreshOrchestrator } from '@/core/refresh';
+import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
+import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
 import { useRefreshScopedDomain } from '@/core/refresh/store';
 import { useRefreshWatcher } from '@/core/refresh/hooks/useRefreshWatcher';
 import type { ObjectEventsRefresherName } from '@/core/refresh/refresherTypes';
@@ -83,6 +87,7 @@ interface EventDisplay {
 }
 
 const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope }) => {
+  const { isPaused, isManualRefreshActive } = useAutoRefreshLoadingState();
   const { openWithObject } = useObjectPanel();
   const { navigateToView } = useNavigateToView();
   const openWithObjectRef = useRef(openWithObject);
@@ -110,13 +115,15 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
   }, [eventsScope, isActive, objectData]);
 
   const fetchEvents = useCallback(
-    async (isManualRefresh = false) => {
+    async (reason: DataRequestReason = 'startup') => {
       if (!eventsScope) {
         return;
       }
       try {
-        await refreshOrchestrator.fetchScopedDomain('object-events', eventsScope, {
-          isManual: isManualRefresh,
+        await requestRefreshDomain({
+          domain: 'object-events',
+          scope: eventsScope,
+          reason,
         });
       } catch (error) {
         errorHandler.handle(error instanceof Error ? error : new Error(String(error)), {
@@ -129,7 +136,7 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
 
   useEffect(() => {
     if (isActive && objectData && eventsScope) {
-      void fetchEvents(true);
+      void fetchEvents('startup');
     }
   }, [fetchEvents, isActive, objectData, eventsScope]);
 
@@ -160,7 +167,7 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
     refresherName: eventsRefresherName,
     onRefresh: useCallback(
       async (isManual: boolean) => {
-        await fetchEvents(isManual);
+        await fetchEvents(isManual ? 'user' : 'background');
       },
       [fetchEvents]
     ),
@@ -252,12 +259,20 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
     [buildEventObjectRefInput, rawEvents, objectData?.kind, objectData?.name, objectData?.namespace]
   );
 
-  const eventsLoading = eventsScope
-    ? !eventsSnapshot.data?.events &&
-      (eventsSnapshot.status === 'loading' ||
-        eventsSnapshot.status === 'initialising' ||
-        eventsSnapshot.status === 'updating')
-    : false;
+  const eventsLoadingState = applyPassiveLoadingPolicy({
+    loading: eventsScope
+      ? !eventsSnapshot.data?.events &&
+        (eventsSnapshot.status === 'loading' ||
+          eventsSnapshot.status === 'initialising' ||
+          eventsSnapshot.status === 'updating')
+      : false,
+    hasLoaded: Boolean(eventsSnapshot.data?.events),
+    hasData: events.length > 0,
+    isPaused,
+    isManualRefreshActive,
+  });
+  const eventsLoading = eventsLoadingState.loading;
+  const showPausedEventsState = eventsLoadingState.showPausedEmptyState;
   const eventsError = eventsScope ? (eventsSnapshot.error ?? null) : null;
 
   const keyExtractor = useCallback((item: EventDisplay, index: number) => {
@@ -388,6 +403,16 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
       <div className="object-panel-tab-content">
         <div className="object-panel-placeholder">
           <p>Loading events...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (showPausedEventsState) {
+    return (
+      <div className="object-panel-tab-content">
+        <div className="object-panel-placeholder">
+          <ClusterDataPausedState />
         </div>
       </div>
     );

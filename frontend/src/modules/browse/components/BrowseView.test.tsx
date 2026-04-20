@@ -75,6 +75,11 @@ vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
   useNamespace: () => ({ setSelectedNamespace: vi.fn() }),
 }));
 
+vi.mock('@/core/settings/appPreferences', () => ({
+  getMaxTableRows: () => 1000,
+  getAutoRefreshEnabled: () => true,
+}));
+
 vi.mock('@core/contexts/ViewStateContext', () => ({
   useViewState: () => ({ onNamespaceSelect: vi.fn(), setActiveNamespaceTab: vi.fn() }),
 }));
@@ -205,7 +210,7 @@ describe('BrowseView', () => {
       expect(refreshMocks.orchestrator.fetchScopedDomain).toHaveBeenCalledWith(
         'catalog',
         'cluster-1|limit=1000&namespace=cluster',
-        expect.objectContaining({ isManual: true })
+        expect.objectContaining({ isManual: false })
       );
     });
 
@@ -396,13 +401,13 @@ describe('BrowseView', () => {
         1,
         'catalog',
         'cluster-1|limit=1000&namespace=cluster',
-        expect.objectContaining({ isManual: true })
+        expect.objectContaining({ isManual: false })
       );
       expect(refreshMocks.orchestrator.fetchScopedDomain).toHaveBeenNthCalledWith(
         2,
         'catalog',
         'cluster-1|limit=1&namespace=cluster',
-        expect.objectContaining({ isManual: true })
+        expect.objectContaining({ isManual: false })
       );
     });
   });

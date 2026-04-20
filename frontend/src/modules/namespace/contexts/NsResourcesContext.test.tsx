@@ -20,6 +20,7 @@ const {
   domainStates,
   scopedStates,
   contextRef,
+  autoRefreshLoadingState,
 } = vi.hoisted(() => {
   const orchestratorMock = {
     updateContext: vi.fn(),
@@ -46,6 +47,11 @@ const {
   const contextHolder: { current: ReturnType<typeof useNamespaceResources> | null } = {
     current: null,
   };
+  const autoRefreshState = {
+    isPaused: false,
+    isManualRefreshActive: false,
+    suppressPassiveLoading: false,
+  };
 
   const createDomainState = () => ({
     status: 'idle',
@@ -69,6 +75,7 @@ const {
     domainStates: domainStateMap,
     scopedStates: scopedStateBag,
     contextRef: contextHolder,
+    autoRefreshLoadingState: autoRefreshState,
     getDomainState,
   };
 });
@@ -94,6 +101,14 @@ vi.mock('@/core/contexts/ViewStateContext', () => ({
 
 vi.mock('@/core/refresh/store', () => ({
   resetScopedDomainState: (...args: unknown[]) => storeMocks.resetScopedDomainState(...args),
+}));
+
+vi.mock('@/core/refresh/hooks/useAutoRefreshLoadingState', () => ({
+  useAutoRefreshLoadingState: () => autoRefreshLoadingState,
+}));
+
+vi.mock('@/core/settings/appPreferences', () => ({
+  getAutoRefreshEnabled: () => !autoRefreshLoadingState.isPaused,
 }));
 
 const testClusterId = 'test-cluster';
@@ -155,6 +170,9 @@ describe('NamespaceResourcesProvider', () => {
 
     viewState.value = 'namespace';
     orchestrator.isStreamingDomain.mockReturnValue(false);
+    autoRefreshLoadingState.isPaused = false;
+    autoRefreshLoadingState.isManualRefreshActive = false;
+    autoRefreshLoadingState.suppressPassiveLoading = false;
   });
 
   afterEach(() => {
@@ -219,10 +237,31 @@ describe('NamespaceResourcesProvider', () => {
     expect(orchestrator.fetchScopedDomain).toHaveBeenCalledWith(
       'namespace-config',
       `${testClusterId}|namespace:team-a`,
-      expect.objectContaining({ isManual: true })
+      expect.objectContaining({ isManual: false })
     );
     expect(capabilityMocks.queryNamespacePermissions).toHaveBeenCalledWith('team-a', testClusterId);
     expect(contextRef.current?.config.data).toEqual([]);
+  });
+
+  it('suppresses passive loading while auto-refresh is paused', async () => {
+    autoRefreshLoadingState.isPaused = true;
+    autoRefreshLoadingState.suppressPassiveLoading = true;
+    scopedStates[`${testClusterId}|namespace:team-a`] = {
+      status: 'idle',
+      data: null,
+      error: null,
+      lastUpdated: null,
+    };
+
+    await render(
+      <NamespaceResourcesProvider namespace="team-a" activeView="config">
+        <TestConsumer />
+      </NamespaceResourcesProvider>
+    );
+
+    expect(contextRef.current?.config.loading).toBe(false);
+    expect(contextRef.current?.config.hasLoaded).toBe(false);
+    expect(orchestrator.fetchScopedDomain).not.toHaveBeenCalled();
   });
 
   it('switches active resources and toggles scoped pods access', async () => {
@@ -314,7 +353,7 @@ describe('NamespaceResourcesProvider', () => {
     expect(orchestrator.fetchScopedDomain).toHaveBeenCalledWith(
       'namespace-workloads',
       `${testClusterId}|namespace:team-b`,
-      expect.objectContaining({ isManual: true })
+      expect.objectContaining({ isManual: false })
     );
     expect(orchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
       'pods',

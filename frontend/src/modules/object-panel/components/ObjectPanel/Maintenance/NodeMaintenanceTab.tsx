@@ -3,10 +3,14 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
 import { CordonNode, DrainNode, DeleteNode, UncordonNode } from '@wailsjs/go/backend/App';
 import { types } from '@wailsjs/go/models';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
+import { requestRefreshDomain } from '@/core/data-access';
 import { refreshOrchestrator, useRefreshScopedDomain } from '@/core/refresh';
+import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
+import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
 import type { NodeMaintenanceSnapshotPayload } from '@/core/refresh/types';
 import { useCapabilities, type CapabilityDescriptor } from '@/core/capabilities';
 import { errorHandler } from '@/utils/errorHandler';
@@ -95,7 +99,11 @@ const useNodeMaintenanceDomain = (
       return;
     }
     try {
-      await refreshOrchestrator.fetchScopedDomain('object-maintenance', scope, { isManual: true });
+      await requestRefreshDomain({
+        domain: 'object-maintenance',
+        scope,
+        reason: 'user',
+      });
     } catch (error) {
       errorHandler.handle(error instanceof Error ? error : new Error(String(error)), {
         source: 'node-maintenance-refresh',
@@ -105,9 +113,13 @@ const useNodeMaintenanceDomain = (
 
   useEffect(() => {
     if (scope && enabled) {
-      void refresh();
+      void requestRefreshDomain({
+        domain: 'object-maintenance',
+        scope,
+        reason: 'startup',
+      });
     }
-  }, [enabled, scope, refresh]);
+  }, [enabled, scope]);
 
   return {
     scope,
@@ -127,6 +139,7 @@ export function NodeMaintenanceTab({
   isActive,
   clusterId,
 }: NodeMaintenanceTabProps) {
+  const { isPaused, isManualRefreshActive } = useAutoRefreshLoadingState();
   const [pendingAction, setPendingAction] = useState<MaintenanceAction | null>(null);
   const [cordonError, setCordonError] = useState<string | null>(null);
   const [drainOptions, setDrainOptions] = useState<types.DrainNodeOptions>({
@@ -167,10 +180,18 @@ export function NodeMaintenanceTab({
     () => (maintenanceScope ? (maintenanceSnapshot.data?.drains ?? []) : []),
     [maintenanceScope, maintenanceSnapshot.data]
   );
-  const drainsLoading = maintenanceScope
-    ? maintenanceSnapshot.status === 'loading' ||
-      (maintenanceSnapshot.status === 'updating' && !maintenanceSnapshot.data)
-    : false;
+  const drainsLoadingState = applyPassiveLoadingPolicy({
+    loading: maintenanceScope
+      ? maintenanceSnapshot.status === 'loading' ||
+        (maintenanceSnapshot.status === 'updating' && !maintenanceSnapshot.data)
+      : false,
+    hasLoaded: Boolean(maintenanceSnapshot.data),
+    hasData: drains.length > 0,
+    isPaused,
+    isManualRefreshActive,
+  });
+  const drainsLoading = drainsLoadingState.loading;
+  const showPausedDrainHistoryState = drainsLoadingState.showPausedEmptyState;
 
   const capabilityDescriptors = useMemo<CapabilityDescriptor[]>(() => {
     if (!nodeName) {
@@ -548,7 +569,10 @@ export function NodeMaintenanceTab({
         {drainError && <div className="node-maintenance-error">{drainError}</div>}
         <div className="node-maintenance-history">
           {drainsLoading && <div className="node-maintenance-helper">Loading drain history…</div>}
-          {!drainsLoading && drains.length === 0 && (
+          {showPausedDrainHistoryState && (
+            <ClusterDataPausedState className="node-maintenance-helper" />
+          )}
+          {!drainsLoading && !showPausedDrainHistoryState && drains.length === 0 && (
             <div className="node-maintenance-helper">No drain activity recorded yet.</div>
           )}
           {drains.map((job) => (

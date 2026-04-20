@@ -2,8 +2,8 @@ import {
   parseApiVersion,
   resolveBuiltinGroupVersion,
 } from '@shared/constants/builtinGroupVersions';
+import { readCatalogObjectByUID, requestData } from '@/core/data-access';
 import { buildObjectReference, type ResolvedObjectReference } from '@shared/utils/objectIdentity';
-import { FindCatalogObjectByUID } from '@wailsjs/go/backend/App';
 
 export interface ParsedEventObjectTarget {
   objectType: string;
@@ -104,7 +104,12 @@ export async function resolveEventObjectReference(
   }
 
   try {
-    const match = await FindCatalogObjectByUID(clusterId, objectUid);
+    const result = await requestData({
+      resource: 'catalog-object-by-uid',
+      reason: 'user',
+      read: () => readCatalogObjectByUID(clusterId, objectUid),
+    });
+    const match = result.status === 'executed' ? result.data : null;
     if (!match) {
       return undefined;
     }

@@ -60,6 +60,27 @@ vi.mock('../client', () => ({
 
 let capabilityDiagnosticsData: CapabilityNamespaceDiagnostics[] = [];
 let permissionMapData: Map<string, PermissionStatus> = new Map();
+let brokerReadDiagnosticsData: Array<{
+  key: string;
+  broker: 'data-access' | 'app-state-access';
+  resource: string;
+  label?: string;
+  adapter: string;
+  reason?: 'background' | 'startup' | 'user';
+  totalRequests: number;
+  inFlightCount: number;
+  successCount: number;
+  errorCount: number;
+  blockedCount: number;
+  lastStatus: 'success' | 'error' | 'blocked' | 'never';
+  lastStartedAt?: number;
+  lastCompletedAt?: number;
+  lastDurationMs?: number;
+  lastBlockedReason?: string | null;
+  lastError?: string | null;
+  lastScope?: string | null;
+  recentScopes: string[];
+}> = [];
 
 vi.mock('@/core/capabilities', async () => {
   const actual = await vi.importActual<typeof import('@/core/capabilities')>('@/core/capabilities');
@@ -69,6 +90,10 @@ vi.mock('@/core/capabilities', async () => {
     useUserPermissions: () => permissionMapData,
   };
 });
+
+vi.mock('@/core/read-diagnostics', () => ({
+  useBrokerReadDiagnostics: () => brokerReadDiagnosticsData,
+}));
 
 type MockViewState = {
   viewType: ViewType;
@@ -262,6 +287,7 @@ beforeEach(() => {
   resetDomainStates();
   capabilityDiagnosticsData = [];
   permissionMapData = new Map();
+  brokerReadDiagnosticsData = [];
   mockViewState = {
     viewType: 'cluster',
     activeClusterTab: null,
@@ -318,6 +344,82 @@ describe('resolveDomainNamespace', () => {
   test('returns dash for cluster scoped domains', async () => {
     const module = await import('./DiagnosticsPanel');
     expect(module.resolveDomainNamespace('cluster-events', 'alpha|cluster')).toBe('-');
+  });
+});
+
+describe('broker read diagnostics', () => {
+  test('renders brokered read rows on the dedicated tab and filters noisy history', async () => {
+    brokerReadDiagnosticsData = [
+      {
+        key: 'data-access::query-permissions::permission-read::startup',
+        broker: 'data-access',
+        resource: 'query-permissions',
+        label: 'Query Permissions',
+        adapter: 'permission-read',
+        reason: 'startup',
+        totalRequests: 3,
+        inFlightCount: 1,
+        successCount: 2,
+        errorCount: 0,
+        blockedCount: 1,
+        lastStatus: 'blocked',
+        lastCompletedAt: Date.now(),
+        lastDurationMs: 12,
+        lastBlockedReason: 'auto-refresh-disabled',
+        lastScope: 'cluster:test-cluster',
+        recentScopes: ['cluster:test-cluster'],
+      },
+      {
+        key: 'app-state-access::app-info::rpc-read::',
+        broker: 'app-state-access',
+        resource: 'app-info',
+        label: 'App Info',
+        adapter: 'rpc-read',
+        totalRequests: 2,
+        inFlightCount: 0,
+        successCount: 2,
+        errorCount: 0,
+        blockedCount: 0,
+        lastStatus: 'success',
+        lastCompletedAt: Date.now(),
+        lastDurationMs: 3,
+        lastScope: null,
+        recentScopes: [],
+      },
+    ];
+
+    const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
+    const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
+
+    const tabButtons = rendered.container.querySelectorAll<HTMLElement>('[role="tab"]');
+    await act(async () => {
+      tabButtons[5].click();
+      await Promise.resolve();
+    });
+    await flushAsync();
+
+    expect(rendered.container.textContent).toContain('Broker Reads');
+    expect(rendered.container.textContent).toContain('Query Permissions');
+    expect(rendered.container.textContent).toContain('query-permissions');
+    expect(rendered.container.textContent).toContain('cluster:test-cluster');
+    expect(rendered.container.textContent).toContain('permission-read');
+    expect(rendered.container.textContent).toContain('auto-refresh-disabled');
+    expect(rendered.container.textContent).toContain('App Info');
+
+    const issuesOnlyButton = Array.from(rendered.container.querySelectorAll('button')).find(
+      (button) => button.textContent?.includes('Issues Only')
+    );
+    expect(issuesOnlyButton).toBeDefined();
+
+    await act(async () => {
+      issuesOnlyButton?.click();
+      await Promise.resolve();
+    });
+    await flushAsync();
+
+    expect(rendered.container.textContent).toContain('Showing Issues');
+    expect(rendered.container.textContent).toContain('Query Permissions');
+    expect(rendered.container.textContent).not.toContain('App Info');
   });
 });
 
@@ -1369,8 +1471,8 @@ describe('DiagnosticsPanel component', () => {
     await flushAsync();
 
     const focusableEls = rendered.container.querySelectorAll('[data-diagnostics-focusable="true"]');
-    // Expect exactly five focusable tab elements (one per tab descriptor).
-    expect(focusableEls.length).toBe(5);
+    // Expect exactly six focusable tab elements (one per tab descriptor).
+    expect(focusableEls.length).toBe(6);
     // Each should also carry role="tab" — confirming they are the tab divs.
     for (const el of Array.from(focusableEls)) {
       expect(el.getAttribute('role')).toBe('tab');

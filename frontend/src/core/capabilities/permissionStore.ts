@@ -7,6 +7,7 @@
  */
 
 import { eventBus, type UnsubscribeFn } from '@/core/events';
+import { readQueryPermissions, requestData } from '@/core/data-access';
 import { resolveBuiltinGroupVersion } from '@/shared/constants/builtinGroupVersions';
 import type {
   PermissionEntry,
@@ -50,17 +51,6 @@ const resolvePermissionGVK = (
   }
   return { group: g, version: ver };
 };
-
-// ---------------------------------------------------------------------------
-// QueryPermissions RPC
-// ---------------------------------------------------------------------------
-
-// Locally-typed wrapper for the QueryPermissions Wails endpoint. Uses the
-// same runtime call path as generated Wails bindings (window.go.backend.App).
-// Once `wails generate module` is run against the Go backend that exposes
-// QueryPermissions, the generated App.js will include the real binding and
-// this wrapper can be replaced with:
-//   import { QueryPermissions } from '@wailsjs/go/backend/App';
 
 interface QueryPayloadItem {
   id: string;
@@ -114,12 +104,28 @@ interface QueryPermissionsResponse {
   diagnostics: QueryResponseDiagnostics[];
 }
 
-declare const window: {
-  go: Record<string, Record<string, Record<string, (...args: any[]) => any>>>;
-};
-
 function QueryPermissions(queries: QueryPayloadItem[]): Promise<QueryPermissionsResponse> {
-  return window['go']['backend']['App']['QueryPermissions'](queries);
+  return requestData<QueryPermissionsResponse>({
+    resource: 'query-permissions',
+    label: 'Query Permissions',
+    adapter: 'permission-read',
+    reason: 'startup',
+    scope: Array.from(
+      new Set(
+        queries.map((query) =>
+          query.namespace
+            ? `cluster:${query.clusterId}|namespace:${query.namespace}`
+            : `cluster:${query.clusterId}`
+        )
+      )
+    ).join(' || '),
+    read: () => readQueryPermissions<QueryPermissionsResponse>(queries),
+  }).then((result) => {
+    if (result.status !== 'executed' || !result.data) {
+      throw new Error(result.blockedReason ?? 'query-permissions-blocked');
+    }
+    return result.data;
+  });
 }
 
 // ---------------------------------------------------------------------------

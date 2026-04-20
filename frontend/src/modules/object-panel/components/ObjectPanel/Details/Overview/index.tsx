@@ -5,12 +5,12 @@
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
+import { readWorkloadHPAManaged, requestData } from '@/core/data-access';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { overviewRegistry } from './registry';
 import { ActionsMenu } from '@shared/components/kubernetes/ActionsMenu';
 import type { ObjectActionData } from '@shared/hooks/useObjectActions';
 import { SCALABLE_KINDS, normalizeKind } from '@shared/hooks/useObjectActions';
-import { IsWorkloadHPAManaged } from '@wailsjs/go/backend/App';
 import '../../shared.css';
 
 // Generic props for resources - simplified without external type dependencies
@@ -50,9 +50,15 @@ const Overview: React.FC<OverviewProps> = (props) => {
       return;
     }
     let cancelled = false;
-    IsWorkloadHPAManaged(clusterId, props.namespace, props.kind, props.name)
-      .then((managed) => {
-        if (!cancelled) setHpaManaged(managed);
+    requestData({
+      resource: 'workload-hpa-managed',
+      reason: 'startup',
+      read: () => readWorkloadHPAManaged(clusterId, props.namespace!, props.kind, props.name),
+    })
+      .then((result) => {
+        if (!cancelled) {
+          setHpaManaged(result.status === 'executed' ? Boolean(result.data) : false);
+        }
       })
       .catch(() => {
         if (!cancelled) setHpaManaged(false);

@@ -7,9 +7,13 @@ import CodeMirror, { type ReactCodeMirrorRef } from '@uiw/react-codemirror';
 import { yaml as yamlLang } from '@codemirror/lang-yaml';
 import { EditorView } from '@codemirror/view';
 import * as YAML from 'yaml';
+import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import SegmentedButton from '@shared/components/SegmentedButton';
+import { requestRefreshDomain } from '@/core/data-access';
 import { refreshOrchestrator } from '@/core/refresh';
+import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
+import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
 import { useRefreshScopedDomain } from '@/core/refresh/store';
 import { errorHandler } from '@utils/errorHandler';
 import './ValuesTab.css';
@@ -47,6 +51,7 @@ interface ValuesTabProps {
 }
 
 const ValuesTab: React.FC<ValuesTabProps> = ({ scope, isActive = false }) => {
+  const { isPaused, isManualRefreshActive } = useAutoRefreshLoadingState();
   const editorRef = useRef<ReactCodeMirrorRef>(null);
   const editorViewRef = useRef<EditorView | null>(null);
   const editorSurfaceRef = useRef<HTMLDivElement>(null);
@@ -86,7 +91,11 @@ const ValuesTab: React.FC<ValuesTabProps> = ({ scope, isActive = false }) => {
     const enabled = isActive;
     refreshOrchestrator.setScopedDomainEnabled('object-helm-values', scope, enabled);
     if (enabled) {
-      void refreshOrchestrator.fetchScopedDomain('object-helm-values', scope, { isManual: true });
+      void requestRefreshDomain({
+        domain: 'object-helm-values',
+        scope,
+        reason: 'startup',
+      });
     }
 
     return () => {
@@ -97,10 +106,18 @@ const ValuesTab: React.FC<ValuesTabProps> = ({ scope, isActive = false }) => {
   }, [scope, isActive]);
 
   const valuesData = snapshot.data?.values as HelmValuesData | undefined;
-  const valuesLoading =
-    snapshot.status === 'loading' ||
-    snapshot.status === 'initialising' ||
-    (snapshot.status === 'updating' && !valuesData);
+  const valuesLoadingState = applyPassiveLoadingPolicy({
+    loading:
+      snapshot.status === 'loading' ||
+      snapshot.status === 'initialising' ||
+      (snapshot.status === 'updating' && !valuesData),
+    hasLoaded: Boolean(snapshot.data),
+    hasData: Boolean(valuesData),
+    isPaused,
+    isManualRefreshActive,
+  });
+  const valuesLoading = valuesLoadingState.loading;
+  const showPausedValuesState = valuesLoadingState.showPausedEmptyState;
   const valuesError = snapshot.error ?? null;
 
   const hasPath = useCallback((obj: HelmValue | undefined, path: string[]): boolean => {
@@ -411,6 +428,16 @@ const ValuesTab: React.FC<ValuesTabProps> = ({ scope, isActive = false }) => {
     return (
       <div className="object-panel-tab-content">
         <LoadingSpinner message="Loading values..." />
+      </div>
+    );
+  }
+
+  if (showPausedValuesState) {
+    return (
+      <div className="object-panel-tab-content">
+        <div className="yaml-display-empty">
+          <ClusterDataPausedState />
+        </div>
       </div>
     );
   }

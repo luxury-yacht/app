@@ -7,6 +7,7 @@
 
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import './Sidebar.css';
+import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import { useNamespace, type NamespaceListItem } from '@modules/namespace/contexts/NamespaceContext';
 import {
@@ -31,6 +32,7 @@ import type { CatalogNamespaceGroup } from '@/core/refresh/types';
 import { useRefreshScopedDomainStates } from '@/core/refresh';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
+import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { useSidebarKeyboardControls, SidebarCursorTarget } from './SidebarKeys';
 
 // Static cluster view list to avoid re-creating the array each render.
@@ -80,6 +82,7 @@ function Sidebar() {
     selectedNamespace,
     selectedNamespaceClusterId,
   } = useNamespace();
+  const { suppressPassiveLoading } = useAutoRefreshLoadingState();
   const { selectedClusterId } = useKubeconfig();
   // Catalog is scoped — aggregate namespace metadata across active scopes, then
   // select the active cluster's groups explicitly instead of trusting whichever
@@ -395,6 +398,8 @@ function Sidebar() {
         ];
   const showClusterLabels = namespaceGroups.length > 1;
   const showNamespaceLoading = namespaceLoading;
+  const showNamespacePausedMessage =
+    suppressPassiveLoading && !showNamespaceLoading && !hasNamespaceData;
 
   return (
     <div
@@ -494,6 +499,8 @@ function Sidebar() {
               <h3>Namespaces</h3>
               {showNamespaceLoading ? (
                 <LoadingSpinner message="Loading namespaces..." />
+              ) : showNamespacePausedMessage ? (
+                <ClusterDataPausedState className="sidebar-empty-message" />
               ) : (
                 <div className="namespace-items">
                   {namespaceGroupsToRender.map((group) => {

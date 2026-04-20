@@ -3,6 +3,12 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  readShellSessionBacklog,
+  readShellSessions,
+  requestAppState,
+} from '@/core/app-state-access';
+import { readPodContainers, requestData } from '@/core/data-access';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { ClipboardAddon } from '@xterm/addon-clipboard';
@@ -12,9 +18,6 @@ import { EventsOn } from '@wailsjs/runtime/runtime';
 import {
   CloseShellSession,
   CreateDebugContainer,
-  GetPodContainers,
-  GetShellSessionBacklog,
-  ListShellSessions,
   ResizeShellSession,
   SendShellInput,
   StartShellSession,
@@ -585,7 +588,12 @@ const ShellTab: React.FC<ShellTabProps> = ({
       return;
     }
     try {
-      const containerNames = await GetPodContainers(resolvedClusterId, namespace, resourceName);
+      const result = await requestData({
+        resource: 'pod-containers',
+        reason: 'user',
+        read: () => readPodContainers(resolvedClusterId, namespace, resourceName),
+      });
+      const containerNames = result.status === 'executed' ? (result.data ?? []) : [];
       const normalized = Array.from(
         new Set(
           containerNames
@@ -614,7 +622,11 @@ const ShellTab: React.FC<ShellTabProps> = ({
     }
     attachInFlightRef.current = true;
     try {
-      const sessions = await ListShellSessions();
+      const sessions = await requestAppState({
+        resource: 'shell-sessions',
+        adapter: 'runtime-read',
+        read: () => readShellSessions(),
+      });
       const matching = sessions.filter(
         (tracked) =>
           tracked.clusterId === resolvedClusterId &&
@@ -652,7 +664,11 @@ const ShellTab: React.FC<ShellTabProps> = ({
       let backlog = '';
       try {
         // Replay buffered output captured while this tab was detached.
-        backlog = await GetShellSessionBacklog(latest.sessionId);
+        backlog = await requestAppState({
+          resource: 'shell-session-backlog',
+          adapter: 'runtime-read',
+          read: () => readShellSessionBacklog(latest.sessionId),
+        });
         if (backlog) {
           renderedSessionIdRef.current = latest.sessionId;
           writeToTerminal(backlog);

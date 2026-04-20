@@ -232,32 +232,7 @@ describe('GridTableFiltersBar', () => {
     ).toBe('true');
   });
 
-  it('shows local-search semantics by default', async () => {
-    vi.useFakeTimers();
-
-    await renderFilters({});
-
-    const input = container.querySelector('#search') as HTMLInputElement | null;
-    expect(input?.getAttribute('placeholder')).toBe('Filter');
-
-    const trigger = container.querySelector(
-      '[data-gridtable-filter-role="search-hint"] .tooltip-trigger'
-    ) as HTMLElement | null;
-    expect(trigger).toBeTruthy();
-
-    await act(async () => {
-      trigger?.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
-      vi.advanceTimersByTime(250);
-    });
-
-    expect(document.body.textContent).toContain(
-      'Filter narrows the rows currently loaded in this table.'
-    );
-  });
-
-  it('shows query-search semantics for query-backed tables', async () => {
-    vi.useFakeTimers();
-
+  it('renders the shared filter input without a search-hint tooltip', async () => {
     await renderFilters({
       resolvedFilterOptions: {
         kinds: [],
@@ -267,20 +242,11 @@ describe('GridTableFiltersBar', () => {
       resultCount: { displayed: 1000, total: 4200, capped: true },
     });
 
-    const trigger = container.querySelector(
-      '[data-gridtable-filter-role="search-hint"] .tooltip-trigger'
-    ) as HTMLElement | null;
-    expect(trigger).toBeTruthy();
-
-    await act(async () => {
-      trigger?.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
-      vi.advanceTimersByTime(250);
-    });
-
-    expect(document.body.textContent).toContain('Filter updates the active query for this view.');
-    expect(document.body.textContent).toContain(
-      'Counts and results reflect matching objects for the current scope, up to the max table size.'
-    );
+    const input = container.querySelector('#search') as HTMLInputElement | null;
+    expect(input?.getAttribute('placeholder')).toBe('Filter');
+    expect(
+      container.querySelector('[data-gridtable-filter-role="search-hint"] .tooltip-trigger')
+    ).toBeNull();
   });
 
   it('registers search shortcut and focuses the input when invoked', async () => {

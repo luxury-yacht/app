@@ -1,0 +1,8 @@
+.resource-loading-boundary-paused {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  min-height: 100%;
+  padding-top: 2rem;
+  text-align: center;
+}

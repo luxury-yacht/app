@@ -6,14 +6,10 @@
  */
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import {
-  GetKubeconfigSearchPaths,
-  GetThemeInfo,
-  OpenKubeconfigSearchPathDialog,
-  SetKubeconfigSearchPaths,
-} from '@wailsjs/go/backend/App';
+import { OpenKubeconfigSearchPathDialog, SetKubeconfigSearchPaths } from '@wailsjs/go/backend/App';
 import { types } from '@wailsjs/go/models';
 import { errorHandler } from '@utils/errorHandler';
+import { readKubeconfigSearchPaths, readThemeInfo, requestAppState } from '@/core/app-state-access';
 import { useAutoRefresh, useBackgroundRefresh } from '@/core/refresh';
 import { changeTheme, initSystemThemeListener } from '@/utils/themes';
 import Tooltip from '@shared/components/Tooltip';
@@ -226,7 +222,10 @@ function Settings({ onClose }: SettingsProps) {
 
   const loadThemeInfo = async () => {
     try {
-      const info = await GetThemeInfo();
+      const info = await requestAppState({
+        resource: 'theme-info',
+        read: () => readThemeInfo(),
+      });
       setThemeInfo(info);
     } catch (error) {
       errorHandler.handle(error, { action: 'loadThemeInfo' });
@@ -259,7 +258,10 @@ function Settings({ onClose }: SettingsProps) {
   const loadKubeconfigPaths = async () => {
     setKubeconfigPathsLoading(true);
     try {
-      const paths = await GetKubeconfigSearchPaths();
+      const paths = await requestAppState({
+        resource: 'kubeconfig-search-paths',
+        read: () => readKubeconfigSearchPaths(),
+      });
       const normalized = paths || [];
       setKubeconfigPaths(normalized);
     } catch (error) {

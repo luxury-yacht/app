@@ -13,7 +13,7 @@ import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useRefreshScopedDomain } from '@/core/refresh';
-import { buildClusterScopeList } from '@/core/refresh/clusterScope';
+import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { useShortNames } from '@/hooks/useShortNames';
 import { useTableSort } from '@/hooks/useTableSort';
 import * as cf from '@shared/components/tables/columnFactories';
@@ -50,12 +50,12 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
   ({ data, loading = false, loaded = false, error }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
-    const { selectedClusterId, selectedClusterIds } = useKubeconfig();
+    const { selectedClusterId } = useKubeconfig();
     const useShortResourceNames = useShortNames();
-    // Build scoped key for multi-cluster node metrics lookup.
+    // Foreground cluster views should resolve node metrics from the active cluster only.
     const nodesScope = useMemo(
-      () => buildClusterScopeList(selectedClusterIds, ''),
-      [selectedClusterIds]
+      () => buildClusterScope(selectedClusterId ?? undefined, ''),
+      [selectedClusterId]
     );
     const nodesDomain = useRefreshScopedDomain('nodes', nodesScope);
     const metricsInfo = useMemo(() => {

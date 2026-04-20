@@ -7,24 +7,27 @@
  */
 
 import React, { useEffect, useState, useCallback } from 'react';
-import StatusIndicator, { type StatusState } from '@shared/components/status/StatusIndicator';
-import { refreshOrchestrator } from '@/core/refresh';
+import StatusIndicator from '@shared/components/status/StatusIndicator';
+import { requestContextRefresh } from '@/core/data-access';
 import { useClusterHealthListener } from '@/hooks/useWailsRuntimeEvents';
 import { useAuthError, useActiveClusterAuthState } from '@/core/contexts/AuthErrorContext';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useClusterLifecycle } from '@core/contexts/ClusterLifecycleContext';
 import { eventBus } from '@/core/events';
-import { getAutoRefreshEnabled } from '@/core/settings/appPreferences';
+import { getAutoRefreshEnabled, setAutoRefreshEnabled } from '@/core/settings/appPreferences';
+import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
+import { buildConnectivityPresentation } from '@/core/connection/connectivityPresentation';
 
 const ConnectivityStatus: React.FC = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
 
-  const { selectedClusterId } = useKubeconfig();
+  const { selectedClusterId, selectedClusterName } = useKubeconfig();
   const { getActiveClusterHealth } = useClusterHealthListener(selectedClusterId);
   const { handleRetry } = useAuthError();
   const authState = useActiveClusterAuthState(selectedClusterId);
   const { getClusterState } = useClusterLifecycle();
+  const { namespaceReady } = useNamespace();
   const lifecycleState = selectedClusterId ? getClusterState(selectedClusterId) : '';
 
   useEffect(() => {
@@ -44,69 +47,58 @@ const ConnectivityStatus: React.FC = () => {
   }, []);
 
   const health = getActiveClusterHealth();
+  const presentation = buildConnectivityPresentation({
+    clusterId: selectedClusterId,
+    clusterName: selectedClusterName,
+    lifecycleState,
+    namespaceReady,
+    health,
+    isPaused,
+    isRefreshing,
+    authState,
+  });
 
-  /** Map domain state to shared status state. */
-  const getStatus = (): StatusState => {
-    if (isPaused) return 'inactive';
-    if (lifecycleState === 'auth_failed') return 'unhealthy';
-    if (lifecycleState === 'disconnected') return 'unhealthy';
-    if (lifecycleState === 'reconnecting') return 'degraded';
-    if (lifecycleState === 'connecting' || lifecycleState === 'loading') return 'refreshing';
-    if (lifecycleState === 'loading_slow') return 'degraded';
-    // Fall through to existing auth/health checks for ready state and edge cases.
-    if (authState.hasError && authState.isRecovering) return 'degraded';
-    if (authState.hasError) return 'unhealthy';
-    if (health === 'degraded') return 'degraded';
-    if (isRefreshing) return 'refreshing';
-    return 'healthy';
-  };
-
-  /** Generate the popover message. */
-  const getMessage = (): string => {
-    if (isPaused) return 'Auto-refresh paused';
-    if (lifecycleState === 'connecting') return 'Connecting...';
-    if (lifecycleState === 'auth_failed') return 'Auth Failed';
-    if (lifecycleState === 'connected' || lifecycleState === 'loading') return 'Loading...';
-    if (lifecycleState === 'loading_slow') return 'Loading (taking longer than expected)...';
-    if (lifecycleState === 'disconnected') return 'Disconnected';
-    if (lifecycleState === 'reconnecting') return 'Reconnecting...';
-    // Fall through to existing checks.
-    if (authState.hasError && authState.isRecovering) return 'Retrying authentication...';
-    if (authState.hasError) return authState.reason || 'Authentication failed';
-    if (health === 'degraded') return 'Reconnecting...';
-    if (isRefreshing) return 'Refreshing...';
-    return 'Ready';
-  };
-
-  /** Determine the action button label. */
-  const getActionLabel = (): string | undefined => {
-    if (isPaused) return undefined;
-    if (authState.hasError && !authState.isRecovering) return 'Retry Auth';
-    if (authState.hasError && authState.isRecovering) return undefined;
-    if (health === 'degraded') return undefined;
-    return 'Refresh';
-  };
-
-  /** Handle the action button click. */
-  const handleAction = useCallback(() => {
+  /** Handle the primary connectivity action button click. */
+  const handlePrimaryAction = useCallback(() => {
     if (authState.hasError && !authState.isRecovering && selectedClusterId) {
       void handleRetry(selectedClusterId);
       return;
     }
-    void refreshOrchestrator.triggerManualRefreshForContext();
+    void requestContextRefresh({ reason: 'user' });
   }, [authState, selectedClusterId, handleRetry]);
 
-  const status = getStatus();
-  const actionLabel = getActionLabel();
+  const handleToggleAutoRefresh = useCallback(() => {
+    setAutoRefreshEnabled(isPaused);
+  }, [isPaused]);
+
+  const actions = [
+    ...(presentation.actionLabel || (isPaused && selectedClusterId)
+      ? [
+          {
+            label: presentation.actionLabel ?? 'Refresh Now',
+            onClick: handlePrimaryAction,
+          },
+        ]
+      : []),
+    {
+      label: isPaused ? 'Enable Auto-Refresh' : 'Disable Auto-Refresh',
+      onClick: handleToggleAutoRefresh,
+    },
+  ];
 
   return (
     <StatusIndicator
-      status={status}
+      status={presentation.status}
       title="Connectivity"
-      message={getMessage()}
-      actionLabel={actionLabel}
-      onAction={actionLabel ? handleAction : undefined}
-      ariaLabel={`Connectivity: ${getMessage()}`}
+      message={
+        <div className="connectivity-status-message">
+          <div className="connectivity-status-summary">{presentation.summary}</div>
+          <div className="connectivity-status-detail">{presentation.detail}</div>
+        </div>
+      }
+      actions={actions}
+      ariaLabel={`Connectivity: ${presentation.summary}. ${presentation.detail}`}
+      tooltipClassName="connectivity-status-popover"
     />
   );
 };

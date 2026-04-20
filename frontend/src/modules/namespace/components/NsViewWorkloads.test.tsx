@@ -55,6 +55,7 @@ vi.mock('@ui/favorites/FavToggle', () => ({
 const gridTablePropsRef: { current: any } = { current: null };
 const openWithObjectMock = vi.fn();
 const navigateToViewMock = vi.fn();
+const scopedDomainCallsRef: { current: Array<[string, string]> } = { current: [] };
 
 vi.mock('@shared/components/tables/GridTable', async () => {
   const actual = await vi.importActual<typeof import('@shared/components/tables/GridTable')>(
@@ -81,7 +82,7 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: () => ({
     selectedKubeconfig: 'path:context',
     selectedClusterId: 'path:context',
-    selectedClusterIds: ['path:context'],
+    selectedClusterIds: ['path:context', 'other:context'],
   }),
 }));
 
@@ -124,11 +125,14 @@ vi.mock('@modules/namespace/hooks/useNamespaceGridTablePersistence', () => ({
 }));
 
 vi.mock('@/core/refresh', () => ({
-  useRefreshScopedDomain: () => ({
-    data: { metrics: null, nodes: [] },
-    status: 'idle',
-    isManual: false,
-  }),
+  useRefreshScopedDomain: (domain: string, scope: string) => {
+    scopedDomainCallsRef.current.push([domain, scope]);
+    return {
+      data: { metrics: null, nodes: [] },
+      status: 'idle',
+      isManual: false,
+    };
+  },
   refreshManager: { triggerManualRefresh: vi.fn() },
 }));
 
@@ -180,6 +184,7 @@ describe('NsViewWorkloads', () => {
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
     gridTablePropsRef.current = null;
+    scopedDomainCallsRef.current = [];
     openWithObjectMock.mockReset();
     navigateToViewMock.mockReset();
     useTableSortMock.mockClear();
@@ -217,6 +222,27 @@ describe('NsViewWorkloads', () => {
     });
     expect(props.columnVisibility).toBe(null);
     expect(props.columnWidths).toBe(null);
+  });
+
+  it('resolves node metrics from the active cluster scope only', async () => {
+    await act(async () => {
+      root.render(
+        <NsViewWorkloads
+          namespace="team-a"
+          data={[]}
+          loading={false}
+          loaded={true}
+          metrics={null}
+        />
+      );
+      await Promise.resolve();
+    });
+
+    expect(scopedDomainCallsRef.current).toContainEqual(['nodes', 'path:context|']);
+    expect(scopedDomainCallsRef.current).not.toContainEqual([
+      'nodes',
+      'clusters=path:context,other:context|',
+    ]);
   });
 
   it('preserves the column definitions across rerenders with unchanged inputs', async () => {

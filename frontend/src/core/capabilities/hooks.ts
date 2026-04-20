@@ -7,6 +7,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { readQueryPermissions, requestData } from '@/core/data-access';
 
 import type { CapabilityDescriptor, CapabilityState } from './types';
 import { normalizeDescriptor } from './utils';
@@ -17,13 +18,6 @@ import {
 } from './permissionStore';
 import { useUserPermissions } from './bootstrap';
 import type { PermissionQueryDiagnostics } from './permissionTypes';
-
-// ---------------------------------------------------------------------------
-// QueryPermissions RPC (local wrapper)
-// ---------------------------------------------------------------------------
-// Locally-typed wrapper for the QueryPermissions Wails endpoint. Uses the
-// same runtime call path as generated Wails bindings (window.go.backend.App).
-// Mirrors the pattern in permissionStore.ts.
 
 interface QueryPayloadItem {
   id: string;
@@ -63,12 +57,28 @@ interface QueryPermissionsResponse {
   results: QueryResponseResult[];
 }
 
-declare const window: {
-  go: Record<string, Record<string, Record<string, (...args: any[]) => any>>>;
-};
-
 function callQueryPermissions(queries: QueryPayloadItem[]): Promise<QueryPermissionsResponse> {
-  return window['go']['backend']['App']['QueryPermissions'](queries);
+  return requestData<QueryPermissionsResponse>({
+    resource: 'query-permissions',
+    label: 'Query Permissions',
+    adapter: 'permission-read',
+    reason: 'startup',
+    scope: Array.from(
+      new Set(
+        queries.map((query) =>
+          query.namespace
+            ? `cluster:${query.clusterId}|namespace:${query.namespace}`
+            : `cluster:${query.clusterId}`
+        )
+      )
+    ).join(' || '),
+    read: () => readQueryPermissions<QueryPermissionsResponse>(queries),
+  }).then((result) => {
+    if (result.status !== 'executed' || !result.data) {
+      throw new Error(result.blockedReason ?? 'query-permissions-blocked');
+    }
+    return result.data;
+  });
 }
 
 // ---------------------------------------------------------------------------

@@ -34,6 +34,10 @@ const refreshMocks = vi.hoisted(() => ({
   >,
 }));
 
+const autoRefreshLoadingState = vi.hoisted(() => ({
+  suppressPassiveLoading: false,
+}));
+
 const testClusterId = 'cluster-a';
 const namespaceKey = (scope: string) => `${testClusterId}|${scope}`;
 
@@ -56,6 +60,10 @@ vi.mock('@core/refresh', () => ({
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: () => ({ selectedClusterId: testClusterId }),
+}));
+
+vi.mock('@/core/refresh/hooks/useAutoRefreshLoadingState', () => ({
+  useAutoRefreshLoadingState: () => autoRefreshLoadingState,
 }));
 
 type NamespaceEntry = {
@@ -169,6 +177,7 @@ describe('Sidebar', () => {
     namespaceState = createNamespaceState();
     viewStateMock = createViewState();
     refreshMocks.catalogScopedStates = {};
+    autoRefreshLoadingState.suppressPassiveLoading = false;
   });
 
   afterEach(() => {
@@ -650,6 +659,16 @@ describe('Sidebar', () => {
     renderSidebar();
     const spinnerText = container!.querySelector('.loading-spinner p')?.textContent;
     expect(spinnerText).toBe('Loading namespaces...');
+  });
+
+  it('shows an auto-refresh disabled message when namespaces have not loaded and refresh is paused', () => {
+    autoRefreshLoadingState.suppressPassiveLoading = true;
+    namespaceState.namespaceLoading = false;
+    namespaceState.namespaces = [];
+
+    renderSidebar();
+
+    expect(container!.textContent).toContain('Auto-refresh is disabled');
   });
 
   it('applies workload status indicators on namespace entries', () => {

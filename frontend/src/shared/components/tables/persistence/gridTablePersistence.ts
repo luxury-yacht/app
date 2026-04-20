@@ -10,6 +10,7 @@ import type {
   GridColumnDefinition,
   GridTableFilterState,
 } from '@shared/components/tables/GridTable.types';
+import { requestAppState } from '@/core/app-state-access';
 
 export interface GridTablePersistedState {
   version: 1;
@@ -148,7 +149,11 @@ const fetchGridTablePersistence = async (): Promise<GridTablePersistenceMap> => 
     return {};
   }
   try {
-    const entries = await runtimeApp.GetGridTablePersistence();
+    const entries = await requestAppState({
+      resource: 'grid-table-persistence',
+      adapter: 'persistence-read',
+      read: () => runtimeApp.GetGridTablePersistence(),
+    });
     if (!entries || typeof entries !== 'object') {
       return {};
     }

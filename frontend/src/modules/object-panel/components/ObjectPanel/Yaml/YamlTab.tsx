@@ -8,6 +8,7 @@ import { yaml as yamlLang } from '@codemirror/lang-yaml';
 import { EditorView, keymap, type KeyBinding } from '@codemirror/view';
 import { EditorSelection, type Extension } from '@codemirror/state';
 import * as YAML from 'yaml';
+import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import ContextMenu, { type ContextMenuItem } from '@shared/components/ContextMenu';
 import { CaseSensitiveIcon, CloseIcon } from '@shared/components/icons/MenuIcons';
@@ -16,9 +17,11 @@ import { RegexSearchIcon } from '@shared/components/icons/LogIcons';
 import { deriveCopyText } from '@ui/shortcuts/context';
 import { useKeyboardSurface, useShortcut, useSearchShortcutTarget } from '@ui/shortcuts';
 import { errorHandler } from '@utils/errorHandler';
+import { readObjectYAMLByGVK, requestData, requestRefreshDomain } from '@/core/data-access';
 import { refreshOrchestrator } from '@/core/refresh';
+import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
+import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
 import { useRefreshScopedDomain } from '@/core/refresh/store';
-import { GetObjectYAMLByGVK } from '@wailsjs/go/backend/App';
 import type { DiffLine } from '@shared/components/diff/lineDiff';
 import { computeBudgetedLineDiff } from '@shared/components/diff/lineDiff';
 import { YAML_TAB_DIFF_BUDGETS } from '@shared/components/diff/diffBudgets';
@@ -230,6 +233,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
   canEdit = false,
   clusterId,
 }) => {
+  const { isPaused, isManualRefreshActive } = useAutoRefreshLoadingState();
   const [isEditing, setIsEditing] = useState(false);
   const [showManagedFields, setShowManagedFields] = useState(false);
   const [draftYaml, setDraftYaml] = useState('');
@@ -307,7 +311,11 @@ const YamlTab: React.FC<YamlTabProps> = ({
     const enabled = isActive && !isEditing;
     refreshOrchestrator.setScopedDomainEnabled('object-yaml', scope, enabled);
     if (enabled) {
-      void refreshOrchestrator.fetchScopedDomain('object-yaml', scope, { isManual: true });
+      void requestRefreshDomain({
+        domain: 'object-yaml',
+        scope,
+        reason: 'startup',
+      });
     }
 
     return () => {
@@ -331,10 +339,18 @@ const YamlTab: React.FC<YamlTabProps> = ({
   });
 
   const yamlContent = snapshot.data?.yaml ?? '';
-  const yamlLoading =
-    snapshot.status === 'loading' ||
-    snapshot.status === 'initialising' ||
-    (snapshot.status === 'updating' && !yamlContent);
+  const yamlLoadingState = applyPassiveLoadingPolicy({
+    loading:
+      snapshot.status === 'loading' ||
+      snapshot.status === 'initialising' ||
+      (snapshot.status === 'updating' && !yamlContent),
+    hasLoaded: Boolean(snapshot.data),
+    hasData: Boolean(yamlContent),
+    isPaused,
+    isManualRefreshActive,
+  });
+  const yamlLoading = yamlLoadingState.loading;
+  const showPausedYamlState = yamlLoadingState.showPausedEmptyState;
   const yamlError = snapshot.error ?? null;
 
   const effectiveYamlContent = manualYamlOverride?.yaml ?? yamlContent;
@@ -649,13 +665,20 @@ const YamlTab: React.FC<YamlTabProps> = ({
           `Cannot fetch latest YAML for ${identity.kind}/${identity.name}: apiVersion missing`
         );
       }
-      const latestYamlRaw = await GetObjectYAMLByGVK(
-        resolvedClusterId,
-        identity.apiVersion,
-        identity.kind,
-        identity.namespace ?? '',
-        identity.name
-      );
+      const latestYamlResult = await requestData({
+        resource: 'object-yaml-by-gvk',
+        reason: 'user',
+        read: () =>
+          readObjectYAMLByGVK(
+            resolvedClusterId,
+            identity.apiVersion,
+            identity.kind,
+            identity.namespace ?? '',
+            identity.name
+          ),
+      });
+      const latestYamlRaw =
+        latestYamlResult.status === 'executed' ? (latestYamlResult.data ?? '') : '';
       const normalizedYaml = normalizeYamlString(latestYamlRaw);
       const parsedIdentity = parseObjectIdentity(normalizedYaml);
       const resolvedIdentity: ObjectIdentity = parsedIdentity
@@ -1014,7 +1037,11 @@ const YamlTab: React.FC<YamlTabProps> = ({
       setHasServerYamlError(false);
 
       if (scope) {
-        await refreshOrchestrator.fetchScopedDomain('object-yaml', scope, { isManual: true });
+        await requestRefreshDomain({
+          domain: 'object-yaml',
+          scope,
+          reason: 'user',
+        });
       }
     } catch (err) {
       const objectYamlError = parseObjectYamlError(err);
@@ -1149,7 +1176,11 @@ const YamlTab: React.FC<YamlTabProps> = ({
       exitEditMode();
       setPendingSnapshotAdoptionYaml(snapshotYamlBeforeSave);
       if (scope) {
-        await refreshOrchestrator.fetchScopedDomain('object-yaml', scope, { isManual: true });
+        await requestRefreshDomain({
+          domain: 'object-yaml',
+          scope,
+          reason: 'user',
+        });
       }
       setActionDetails([]);
     } catch (err) {
@@ -1499,6 +1530,16 @@ const YamlTab: React.FC<YamlTabProps> = ({
     return (
       <div className="object-panel-tab-content">
         <LoadingSpinner message="Loading YAML..." />
+      </div>
+    );
+  }
+
+  if (showPausedYamlState) {
+    return (
+      <div className="object-panel-tab-content">
+        <div className="yaml-display-empty">
+          <ClusterDataPausedState />
+        </div>
       </div>
     );
   }

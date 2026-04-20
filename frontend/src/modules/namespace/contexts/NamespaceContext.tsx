@@ -21,9 +21,11 @@ import { formatAge } from '@utils/ageFormatter';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { errorHandler } from '@utils/errorHandler';
 import { queryNamespacePermissions } from '@/core/capabilities';
+import { requestRefreshDomain } from '@/core/data-access';
 import { refreshOrchestrator, useRefreshScopedDomain } from '@/core/refresh';
 import { buildClusterScopeList } from '@/core/refresh/clusterScope';
 import { eventBus } from '@/core/events';
+import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import {
   ALL_NAMESPACES_DISPLAY_NAME,
   ALL_NAMESPACES_DETAILS,
@@ -53,6 +55,7 @@ interface NamespaceContextType {
   selectedNamespaceClusterId?: string;
   namespaceLoading: boolean;
   namespaceRefreshing: boolean;
+  namespaceReady: boolean;
   setSelectedNamespace: (namespace: string, clusterId?: string) => void;
   loadNamespaces: (showSpinner?: boolean) => Promise<void>;
   refreshNamespaces: () => Promise<void>;
@@ -84,6 +87,7 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
   );
 
   const namespaceDomain = useRefreshScopedDomain('namespaces', namespacesScope);
+  const { suppressPassiveLoading } = useAutoRefreshLoadingState();
   const activeClusterId = selectedClusterId?.trim() || '';
   // Track namespace selection per cluster tab to avoid cross-tab selection bleed.
   const [namespaceSelections, setNamespaceSelections] = useState<
@@ -186,14 +190,23 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
 
   const hasActiveClusterNamespaces = scopedNamespaces.length > 0;
   const namespaceLoading =
-    Boolean(activeClusterId) && !hasActiveClusterNamespaces && namespaceDomain.status !== 'error';
+    Boolean(activeClusterId) &&
+    !hasActiveClusterNamespaces &&
+    namespaceDomain.status !== 'error' &&
+    !suppressPassiveLoading;
   const namespaceRefreshing = hasActiveClusterNamespaces && namespaceDomain.status === 'updating';
+  // The active cluster is usable for namespace-driven UI once we have at least
+  // one real namespace row for it. Consumers use this to avoid showing "Ready"
+  // before the namespace tree can render.
+  const namespaceReady = hasActiveClusterNamespaces;
 
   const loadNamespaces = useCallback(
     async (_showSpinner: boolean = true) => {
       if (!namespacesScope) return;
-      await refreshOrchestrator.fetchScopedDomain('namespaces', namespacesScope, {
-        isManual: true,
+      await requestRefreshDomain({
+        domain: 'namespaces',
+        scope: namespacesScope,
+        reason: 'user',
       });
     },
     [namespacesScope]
@@ -260,7 +273,11 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
     }
 
     if (namespaceDomain.status === 'idle' && !namespaceDomain.data) {
-      void refreshOrchestrator.fetchScopedDomain('namespaces', namespacesScope, { isManual: true });
+      void requestRefreshDomain({
+        domain: 'namespaces',
+        scope: namespacesScope,
+        reason: 'startup',
+      });
     }
   }, [
     allNamespaceItem,
@@ -376,8 +393,10 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
     const handleKubeconfigChanged = () => {
       if (namespacesScope) {
         refreshOrchestrator.setScopedDomainEnabled('namespaces', namespacesScope, true);
-        void refreshOrchestrator.fetchScopedDomain('namespaces', namespacesScope, {
-          isManual: true,
+        void requestRefreshDomain({
+          domain: 'namespaces',
+          scope: namespacesScope,
+          reason: 'startup',
         });
       }
     };
@@ -418,6 +437,7 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
       selectedNamespaceClusterId,
       namespaceLoading,
       namespaceRefreshing,
+      namespaceReady,
       setSelectedNamespace: handleSetSelectedNamespace,
       loadNamespaces,
       refreshNamespaces,
@@ -429,6 +449,7 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
       selectedNamespaceClusterId,
       namespaceLoading,
       namespaceRefreshing,
+      namespaceReady,
       handleSetSelectedNamespace,
       loadNamespaces,
       refreshNamespaces,

@@ -6,7 +6,11 @@
  */
 
 import React, { useEffect } from 'react';
+import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
+import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
 import LoadingSpinner from './LoadingSpinner';
+import ClusterDataPausedState from './ClusterDataPausedState';
+import './ResourceLoadingBoundary.css';
 
 interface ResourceLoadingBoundaryProps {
   loading: boolean;
@@ -27,10 +31,23 @@ const ResourceLoadingBoundary: React.FC<ResourceLoadingBoundaryProps> = ({
   suppressEmptyWarning = false,
   children,
 }) => {
+  const { isPaused, isManualRefreshActive } = useAutoRefreshLoadingState();
+  const passiveLoadingState = applyPassiveLoadingPolicy({
+    loading,
+    hasLoaded,
+    hasData: dataLength > 0,
+    isPaused,
+    isManualRefreshActive,
+  });
+  const effectiveLoading = passiveLoadingState.loading;
+  const shouldShowPausedMessage = passiveLoadingState.showPausedEmptyState;
   // Compute inline to avoid memo overhead for a simple boolean.
   const shouldShowSpinner = (() => {
+    if (shouldShowPausedMessage) {
+      return false;
+    }
     if (!allowPartial) {
-      return !hasLoaded || (loading && dataLength === 0);
+      return !hasLoaded || (effectiveLoading && dataLength === 0);
     }
 
     const hasAnyData = dataLength > 0;
@@ -43,15 +60,35 @@ const ResourceLoadingBoundary: React.FC<ResourceLoadingBoundaryProps> = ({
       return;
     }
 
-    if (!loading && dataLength === 0 && !hasLoaded) {
+    if (
+      !effectiveLoading &&
+      dataLength === 0 &&
+      !hasLoaded &&
+      !passiveLoadingState.suppressPassiveLoading
+    ) {
       console.warn(
         '[ResourceLoadingBoundary] allowPartial is enabled but the dataset is empty after loading completed. Set hasLoaded=true when the empty state is intentional to avoid a persistent spinner.'
       );
     }
-  }, [allowPartial, loading, dataLength, hasLoaded, suppressEmptyWarning]);
+  }, [
+    allowPartial,
+    effectiveLoading,
+    dataLength,
+    hasLoaded,
+    passiveLoadingState.suppressPassiveLoading,
+    suppressEmptyWarning,
+  ]);
 
   if (shouldShowSpinner) {
     return <LoadingSpinner message={spinnerMessage ?? 'Loading resources...'} />;
+  }
+
+  if (shouldShowPausedMessage) {
+    return (
+      <div className="resource-loading-boundary-paused">
+        <ClusterDataPausedState />
+      </div>
+    );
   }
 
   return <>{children}</>;

@@ -7,6 +7,11 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import {
+  resetAppPreferencesCacheForTesting,
+  setAppPreferencesForTesting,
+  setAutoRefreshEnabled,
+} from '@/core/settings/appPreferences';
 import type { RefreshDomain } from './types';
 import {
   getRefreshState,
@@ -115,6 +120,8 @@ describe('refreshOrchestrator', () => {
   const scopedFetch = vi.spyOn(refreshOrchestrator, 'fetchScopedDomain');
 
   beforeEach(() => {
+    resetAppPreferencesCacheForTesting();
+    setAppPreferencesForTesting({ autoRefreshEnabled: true });
     refreshManagerMocks.subscribeMock.mockReset();
     refreshManagerMocks.subscribeMock.mockImplementation((_name, callback) => {
       subscriber = callback;
@@ -993,6 +1000,52 @@ describe('refreshOrchestrator', () => {
 
     expect(catalogStreamMocks.start).not.toHaveBeenCalled();
     expect(refreshManagerMocks.enableMock).not.toHaveBeenCalledWith(CLUSTER_REFRESHERS.browse);
+  });
+
+  it('does not start passive streaming while auto-refresh is disabled', async () => {
+    registerStreamingClusterConfigDomain();
+    refreshOrchestrator.updateContext({
+      currentView: 'cluster',
+      activeClusterView: 'config',
+      selectedClusterId: 'cluster-a',
+      selectedClusterIds: ['cluster-a'],
+    });
+
+    const scope = buildClusterScopeList(['cluster-a'], 'config');
+    setAutoRefreshEnabled(false);
+    refreshOrchestrator.setScopedDomainEnabled('cluster-config', scope, true);
+    await Promise.resolve();
+
+    expect(resourceStreamMocks.start).not.toHaveBeenCalled();
+  });
+
+  it('stops and resumes passive streaming when auto-refresh is toggled', async () => {
+    registerStreamingClusterConfigDomain();
+    refreshOrchestrator.updateContext({
+      currentView: 'cluster',
+      activeClusterView: 'config',
+      selectedClusterId: 'cluster-a',
+      selectedClusterIds: ['cluster-a'],
+    });
+
+    const scope = buildClusterScopeList(['cluster-a'], 'config');
+    refreshOrchestrator.setScopedDomainEnabled('cluster-config', scope, true);
+    await Promise.resolve();
+
+    expect(resourceStreamMocks.start).toHaveBeenCalledWith(scope);
+
+    resourceStreamMocks.stop.mockClear();
+    resourceStreamMocks.start.mockClear();
+
+    setAutoRefreshEnabled(false);
+    await Promise.resolve();
+
+    expect(resourceStreamMocks.stop).toHaveBeenCalledWith(scope, { reset: false });
+
+    setAutoRefreshEnabled(true);
+    await Promise.resolve();
+
+    expect(resourceStreamMocks.start).toHaveBeenCalledWith(scope);
   });
 
   it('restarts streaming when the active scope changes', async () => {
