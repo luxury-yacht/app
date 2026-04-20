@@ -113,7 +113,7 @@ export const buildConnectivityPresentation = ({
     return {
       status: 'refreshing',
       summary: 'Starting data services',
-      detail: `The app is warming refresh services and loading initial data for ${clusterLabel}.`,
+      detail: `The app is loading initial data for ${clusterLabel}.`,
     };
   }
 
@@ -158,14 +158,14 @@ export const buildConnectivityPresentation = ({
     return {
       status: 'refreshing',
       summary: 'Ready',
-      detail: `${clusterLabel} is connected and its namespace list is ready to use.`,
+      detail: `${clusterLabel} is connected is ready to use.`,
     };
   }
 
   return {
     status: 'healthy',
     summary: 'Ready',
-    detail: `${clusterLabel} is connected and its namespace list is ready to use.`,
+    detail: `${clusterLabel} is connected is ready to use.`,
     actionLabel: 'Refresh',
   };
 };
