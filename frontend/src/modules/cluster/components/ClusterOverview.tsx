@@ -346,17 +346,50 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
     [handlePodStatusNavigate]
   );
 
-  const podStatusItems = [
+  const podPhaseItems = [
     { key: 'running', label: 'running', value: displayOverview.runningPods, variant: 'running' },
-    {
-      key: 'restarted',
-      label: 'restarted',
-      value: displayOverview.restartedPods,
-      variant: 'restarted',
-    },
     { key: 'pending', label: 'pending', value: displayOverview.pendingPods, variant: 'pending' },
     { key: 'failed', label: 'failing', value: displayOverview.failedPods, variant: 'failing' },
   ];
+  const podRestartedItem = {
+    key: 'restarted',
+    label: 'restarted',
+    value: displayOverview.restartedPods,
+    variant: 'restarted',
+  };
+
+  const renderPodPhaseLegendItem = (item: {
+    key: string;
+    label: string;
+    value: number;
+    variant: string;
+  }) => {
+    const clickable = item.value > 0;
+    const itemClass = `pod-phase-legend__item${
+      clickable ? ' pod-phase-legend__item--clickable' : ''
+    }`;
+    return (
+      <div
+        key={item.key}
+        className={itemClass}
+        role={clickable ? 'button' : undefined}
+        tabIndex={clickable ? 0 : undefined}
+        onClick={clickable ? () => handlePodStatusNavigate(item.key, item.value) : undefined}
+        onKeyDown={
+          clickable ? (event) => handlePodStatusKeyDown(event, item.key, item.value) : undefined
+        }
+        aria-disabled={!clickable}
+        data-testid={`cluster-pod-status-${item.key}`}
+      >
+        <span
+          className={`pod-phase-legend__dot pod-phase-legend__dot--${item.variant}`}
+          aria-hidden="true"
+        />
+        <span className={`pod-phase-legend__count${skeletonTextClass}`}>{item.value}</span>
+        <span className="pod-phase-legend__label">{item.label}</span>
+      </div>
+    );
+  };
 
   // Phase-only total for bar segment widths (restarted overlaps with running,
   // so including it would double-count).
@@ -637,39 +670,10 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
             </div>
             <div className="pod-phase-legend">
               <div className="pod-phase-legend__items">
-                {podStatusItems.map((item) => {
-                  const clickable = item.value > 0;
-                  const itemClass = `pod-phase-legend__item${
-                    clickable ? ' pod-phase-legend__item--clickable' : ''
-                  }`;
-                  return (
-                    <div
-                      key={item.key}
-                      className={itemClass}
-                      role={clickable ? 'button' : undefined}
-                      tabIndex={clickable ? 0 : undefined}
-                      onClick={
-                        clickable ? () => handlePodStatusNavigate(item.key, item.value) : undefined
-                      }
-                      onKeyDown={
-                        clickable
-                          ? (event) => handlePodStatusKeyDown(event, item.key, item.value)
-                          : undefined
-                      }
-                      aria-disabled={!clickable}
-                      data-testid={`cluster-pod-status-${item.key}`}
-                    >
-                      <span
-                        className={`pod-phase-legend__dot pod-phase-legend__dot--${item.variant}`}
-                        aria-hidden="true"
-                      />
-                      <span className={`pod-phase-legend__count${skeletonTextClass}`}>
-                        {item.value}
-                      </span>
-                      <span className="pod-phase-legend__label">{item.label}</span>
-                    </div>
-                  );
-                })}
+                {podPhaseItems.map((item) => renderPodPhaseLegendItem(item))}
+              </div>
+              <div className="pod-phase-legend__items pod-phase-legend__items--restarted">
+                {renderPodPhaseLegendItem(podRestartedItem)}
               </div>
             </div>
           </div>
