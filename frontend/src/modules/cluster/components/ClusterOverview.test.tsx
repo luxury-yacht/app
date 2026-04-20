@@ -179,6 +179,16 @@ vi.mock('@/hooks/useWailsRuntimeEvents', () => ({
   }),
 }));
 
+vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
+  useObjectPanel: () => ({
+    openWithObject: vi.fn(),
+    close: vi.fn(),
+    isOpen: false,
+    openPanels: [],
+    objectData: null,
+  }),
+}));
+
 vi.mock('@/core/contexts/AuthErrorContext', () => ({
   useActiveClusterAuthState: () => mockAuthState,
 }));
@@ -298,6 +308,10 @@ describe('ClusterOverview', () => {
         totalStatefulSets: 2,
         totalDaemonSets: 1,
         totalCronJobs: 3,
+        readyNodes: 3,
+        notReadyNodes: 0,
+        cordonedNodes: 0,
+        recentEvents: [],
       },
     });
 
@@ -638,7 +652,11 @@ const EMPTY_OVERVIEW_DATA: ClusterOverviewPayload = {
   totalStatefulSets: 0,
   totalDaemonSets: 0,
   totalCronJobs: 0,
+  readyNodes: 0,
+  notReadyNodes: 0,
+  cordonedNodes: 0,
   totalNamespaces: 0,
+  recentEvents: [],
 };
 
 function renderClusterOverview() {

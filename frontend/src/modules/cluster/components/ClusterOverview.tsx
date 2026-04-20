@@ -29,6 +29,10 @@ import { useClusterHealthListener } from '@/hooks/useWailsRuntimeEvents';
 import { useActiveClusterAuthState } from '@/core/contexts/AuthErrorContext';
 import { buildConnectivityPresentation } from '@/core/connection/connectivityPresentation';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
+import { formatAge } from '@/utils/ageFormatter';
+import { parseApiVersion } from '@shared/constants/builtinGroupVersions';
+import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
+import type { RecentEventEntry } from '@/core/refresh/types';
 
 interface ClusterOverviewProps {
   clusterContext: string;
@@ -64,6 +68,10 @@ const EMPTY_OVERVIEW: ClusterOverviewPayload = {
   totalStatefulSets: 0,
   totalDaemonSets: 0,
   totalCronJobs: 0,
+  readyNodes: 0,
+  notReadyNodes: 0,
+  cordonedNodes: 0,
+  recentEvents: [],
 };
 
 const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => {
@@ -79,6 +87,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
   }, [clusterContext]);
 
   const { selectedClusterId, selectedClusterName } = useKubeconfig();
+  const { openWithObject } = useObjectPanel();
   const { getClusterState } = useClusterLifecycle();
   const { getActiveClusterHealth } = useClusterHealthListener(selectedClusterId);
   const authState = useActiveClusterAuthState(selectedClusterId);
@@ -438,6 +447,69 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
   const workloadTotal = workloadItems.reduce((sum, item) => sum + item.value, 0);
   const workloadPct = (value: number) => (workloadTotal > 0 ? (value / workloadTotal) * 100 : 0);
 
+  const nodeHealthPhaseItems = [
+    {
+      key: 'ready',
+      label: 'ready',
+      value: displayOverview.readyNodes,
+      variant: 'healthy',
+    },
+    {
+      key: 'notReady',
+      label: 'not ready',
+      value: displayOverview.notReadyNodes,
+      variant: 'failing',
+    },
+  ];
+  const nodeCordonedItem = {
+    key: 'cordoned',
+    label: 'cordoned',
+    value: displayOverview.cordonedNodes,
+    variant: 'pending',
+  };
+  const nodeHealthTotal = displayOverview.readyNodes + displayOverview.notReadyNodes;
+  const nodeHealthPct = (value: number) =>
+    nodeHealthTotal > 0 ? (value / nodeHealthTotal) * 100 : 0;
+
+  const recentEvents = displayOverview.recentEvents ?? [];
+
+  const handleRecentEventOpen = useCallback(
+    (event: RecentEventEntry) => {
+      const { group, version } = parseApiVersion(event.objectApiVersion);
+      openWithObject({
+        clusterId: event.clusterId ?? selectedClusterId ?? undefined,
+        clusterName: event.clusterName ?? selectedClusterName ?? undefined,
+        kind: event.objectKind,
+        name: event.objectName,
+        namespace: event.objectNamespace || undefined,
+        group: group ?? '',
+        version: version ?? '',
+      });
+    },
+    [openWithObject, selectedClusterId, selectedClusterName]
+  );
+
+  const renderNodeHealthLegendItem = (item: {
+    key: string;
+    label: string;
+    value: number;
+    variant: string;
+  }) => (
+    <div
+      key={item.key}
+      className="pod-phase-legend__item"
+      aria-disabled={item.value === 0}
+      data-testid={`cluster-node-health-${item.key}`}
+    >
+      <span
+        className={`pod-phase-legend__dot pod-phase-legend__dot--${item.variant}`}
+        aria-hidden="true"
+      />
+      <span className={`pod-phase-legend__count${skeletonTextClass}`}>{item.value}</span>
+      <span className="pod-phase-legend__label">{item.label}</span>
+    </div>
+  );
+
   const rootClassName = ['cluster-overview', showSkeleton ? 'is-skeleton' : '']
     .filter(Boolean)
     .join(' ');
@@ -655,6 +727,46 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
               </>
             )}
           </div>
+
+          <div className="node-health">
+            <div className="pod-status__header">
+              <h3>Node Health</h3>
+              <div className="pod-phase-legend__total">
+                <span className={`pod-phase-legend__total-value${skeletonTextClass}`}>
+                  {displayOverview.totalNodes}
+                </span>
+                <span className="pod-phase-legend__total-label"> total</span>
+              </div>
+            </div>
+            <div
+              className={`pod-phase-bar${skeletonBlockClass}`}
+              role="presentation"
+              aria-hidden="true"
+            >
+              {!showSkeleton &&
+                nodeHealthPhaseItems.map((item) => {
+                  const width = nodeHealthPct(item.value);
+                  if (width <= 0) {
+                    return null;
+                  }
+                  return (
+                    <div
+                      key={item.key}
+                      className={`pod-phase-bar__segment pod-phase-bar__segment--${item.variant}`}
+                      style={{ width: `${width}%` }}
+                    />
+                  );
+                })}
+            </div>
+            <div className="pod-phase-legend">
+              <div className="pod-phase-legend__items">
+                {nodeHealthPhaseItems.map((item) => renderNodeHealthLegendItem(item))}
+              </div>
+              <div className="pod-phase-legend__items pod-phase-legend__items--restarted">
+                {renderNodeHealthLegendItem(nodeCordonedItem)}
+              </div>
+            </div>
+          </div>
         </div>
 
         <div className="overview-section workloads-summary">
@@ -770,6 +882,56 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
               </div>
             </div>
           </div>
+        </div>
+
+        <div className="overview-section recent-events">
+          <div className="pod-status__header">
+            <h3>Recent Events</h3>
+            <div className="pod-phase-legend__total">
+              <span className="pod-phase-legend__total-label">warnings · last 24h</span>
+            </div>
+          </div>
+          {recentEvents.length === 0 ? (
+            <div className="recent-events__empty">
+              {showSkeleton ? '' : 'No warning events in the last 24 hours.'}
+            </div>
+          ) : (
+            <ul className="recent-events__list">
+              {recentEvents.map((event) => {
+                const clickable = Boolean(event.objectName && event.objectKind);
+                const rowClass = `recent-events__row${
+                  clickable ? ' recent-events__row--clickable' : ''
+                }`;
+                return (
+                  <li key={`${event.objectUid}-${event.timestamp}-${event.reason}`}>
+                    <div
+                      className={rowClass}
+                      role={clickable ? 'button' : undefined}
+                      tabIndex={clickable ? 0 : undefined}
+                      onClick={clickable ? () => handleRecentEventOpen(event) : undefined}
+                      onKeyDown={
+                        clickable
+                          ? (e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                handleRecentEventOpen(event);
+                              }
+                            }
+                          : undefined
+                      }
+                      title={`${event.objectKind}/${event.objectName}${
+                        event.objectNamespace ? ` · ${event.objectNamespace}` : ''
+                      }`}
+                    >
+                      <span className="recent-events__age">{formatAge(event.timestamp)}</span>
+                      <span className="recent-events__reason">{event.reason}</span>
+                      <span className="recent-events__message">{event.message}</span>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </div>
       </div>
     </div>
