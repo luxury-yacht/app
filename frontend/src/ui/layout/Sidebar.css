@@ -121,6 +121,8 @@
   padding: 0.25rem 0.5rem;
   color: var(--color-text-secondary);
   font-size: var(--font-size-small);
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 /* Cluster group headers within the Namespaces section. */

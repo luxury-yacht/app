@@ -1,3 +1,5 @@
+import { isMacPlatform } from '@/utils/platform';
+
 export interface PassiveLoadingPolicyInput {
   loading: boolean;
   hasLoaded: boolean;
@@ -13,8 +15,16 @@ export interface PassiveLoadingPolicyResult {
   showPausedEmptyState: boolean;
 }
 
+export const getAutoRefreshShortcutLabel = (): string => {
+  return isMacPlatform() ? 'cmd+R' : 'ctrl+R';
+};
+
+export const getClusterDataAutoRefreshDisabledMessage = (): string => {
+  return `Auto-refresh is disabled. Enable it to load data automatically, or press ${getAutoRefreshShortcutLabel()} to refresh manually.`;
+};
+
 export const CLUSTER_DATA_AUTO_REFRESH_DISABLED_MESSAGE =
-  'Auto-refresh is disabled. Enable it to load data automatically, or press ctrl+R to refresh manually.';
+  getClusterDataAutoRefreshDisabledMessage();
 
 export const applyPassiveLoadingPolicy = ({
   loading,

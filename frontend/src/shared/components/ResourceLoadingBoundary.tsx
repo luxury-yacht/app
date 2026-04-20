@@ -10,6 +10,7 @@ import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshL
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
 import LoadingSpinner from './LoadingSpinner';
 import ClusterDataPausedState from './ClusterDataPausedState';
+import './ResourceLoadingBoundary.css';
 
 interface ResourceLoadingBoundaryProps {
   loading: boolean;
@@ -83,7 +84,11 @@ const ResourceLoadingBoundary: React.FC<ResourceLoadingBoundaryProps> = ({
   }
 
   if (shouldShowPausedMessage) {
-    return <ClusterDataPausedState />;
+    return (
+      <div className="resource-loading-boundary-paused">
+        <ClusterDataPausedState />
+      </div>
+    );
   }
 
   return <>{children}</>;

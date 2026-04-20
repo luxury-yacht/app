@@ -132,6 +132,7 @@ describe('ResourceLoadingBoundary', () => {
     });
 
     expect(container.textContent).toContain('Auto-refresh is disabled');
+    expect(container.querySelector('.resource-loading-boundary-paused')).toBeTruthy();
     expect(container.querySelector('[data-testid="content"]')).toBeNull();
   });
 });
