@@ -348,7 +348,7 @@ describe('resolveDomainNamespace', () => {
 });
 
 describe('broker read diagnostics', () => {
-  test('renders brokered read rows on the dedicated tab', async () => {
+  test('renders brokered read rows on the dedicated tab and filters noisy history', async () => {
     brokerReadDiagnosticsData = [
       {
         key: 'data-access::query-permissions::permission-read::startup',
@@ -369,6 +369,23 @@ describe('broker read diagnostics', () => {
         lastScope: 'cluster:test-cluster',
         recentScopes: ['cluster:test-cluster'],
       },
+      {
+        key: 'app-state-access::app-info::rpc-read::',
+        broker: 'app-state-access',
+        resource: 'app-info',
+        label: 'App Info',
+        adapter: 'rpc-read',
+        totalRequests: 2,
+        inFlightCount: 0,
+        successCount: 2,
+        errorCount: 0,
+        blockedCount: 0,
+        lastStatus: 'success',
+        lastCompletedAt: Date.now(),
+        lastDurationMs: 3,
+        lastScope: null,
+        recentScopes: [],
+      },
     ];
 
     const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
@@ -387,6 +404,22 @@ describe('broker read diagnostics', () => {
     expect(rendered.container.textContent).toContain('cluster:test-cluster');
     expect(rendered.container.textContent).toContain('permission-read');
     expect(rendered.container.textContent).toContain('auto-refresh-disabled');
+    expect(rendered.container.textContent).toContain('App Info');
+
+    const issuesOnlyButton = Array.from(rendered.container.querySelectorAll('button')).find(
+      (button) => button.textContent?.includes('Issues Only')
+    );
+    expect(issuesOnlyButton).toBeDefined();
+
+    await act(async () => {
+      issuesOnlyButton?.click();
+      await Promise.resolve();
+    });
+    await flushAsync();
+
+    expect(rendered.container.textContent).toContain('Showing Issues');
+    expect(rendered.container.textContent).toContain('Query Permissions');
+    expect(rendered.container.textContent).not.toContain('App Info');
   });
 });
 

@@ -85,6 +85,11 @@ export default [
             'Route lifecycle state reads through appStateAccess adapters instead of calling runtime methods directly.',
         },
         {
+          selector: "MemberExpression[property.name='QueryPermissions']",
+          message:
+            'Route permission reads through dataAccess adapters instead of calling runtime methods directly.',
+        },
+        {
           selector: "CallExpression[callee.name='fetch']",
           message: 'Use the refresh orchestrator client instead of direct fetch calls.',
         },
@@ -111,7 +116,6 @@ export default [
     files: [
       'src/core/app-state-access/readers.ts',
       'src/core/data-access/readers.ts',
-      'src/core/capabilities/store.ts',
       'src/core/refresh/client.ts',
       'src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelActions.ts',
       'src/**/*.test.ts',

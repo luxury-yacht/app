@@ -44,12 +44,15 @@ Reference inventory:
   - shared broker-read diagnostics store for `dataAccess` and `appStateAccess`
   - diagnostics panel broker-read tab
   - broker-read labels, scope summaries, and stronger row ordering in diagnostics
+  - broker-read filtering controls for broker type, issue-only view, and free-text matching
   - centralized paused-policy gate for cluster-data requests
   - brokered manual refresh/context refresh wrapper
   - read-only Wails adapter modules for `appStateAccess` and `dataAccess`
   - remaining lifecycle hydration read moved behind `appStateAccess` adapters
+  - capability and permission read helpers consolidated behind `dataAccess` readers
   - lint restrictions blocking direct read-only Wails imports outside broker adapters
   - lint restriction blocking direct `GetAllClusterLifecycleStates` runtime reads outside broker adapters
+  - lint restriction blocking direct `QueryPermissions` runtime reads outside broker adapters
   - lint restrictions blocking direct `fetchScopedDomain(...)` / `triggerManualRefreshForContext(...)` use outside broker/refresh internals
   - converted callers:
     - `NamespaceContext`
@@ -827,24 +830,17 @@ The correct fix is:
 
 That is the only approach that will make the system understandable again without continuing to patch behavior piecemeal.
 
-## Optional Follow-Up
+## Polish Close-Out
 
-The optional refinement work listed here has been completed as part of the migration close-out.
+The follow-up refinement pass is complete. The brokered read architecture, diagnostics, and enforcement guardrails are closed out for this migration slice.
 
-### Diagnostics refinement
+Completed polish items:
 
-- broker-read rows now show stable labels plus machine resource IDs
-- broker-read rows now carry recent scope summaries where broker callers provide scope
-- broker-read ordering now surfaces in-flight and problematic reads before quiet historical rows
-
-### Enforcement hardening
-
+- broker-read rows show stable labels plus machine resource IDs
+- broker-read rows carry recent scope summaries where broker callers provide scope
+- broker-read ordering surfaces in-flight and problematic reads before quiet historical rows
+- broker-read filtering supports broker type, issue-only view, and free-text matching
 - direct lifecycle hydration reads are routed through `appStateAccess` reader helpers
-- lint now blocks direct lifecycle runtime reads outside broker adapter files
-- read-only backend import restrictions remain the default path for new reads
-
-### Cleanup and polish
-
-- broker diagnostics metadata now captures labels and recent scope history centrally
-- legacy direct lifecycle hydration access was removed from the context provider
+- capability and permission helper reads are routed through `dataAccess` reader helpers
+- lint blocks direct lifecycle and permission runtime reads outside broker adapter files
 - diagnostics presentation is clearer for app-state/runtime versus cluster-data rows without changing broker semantics

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useDeferredValue, useMemo, useState } from 'react';
 
 import type { BrokerReadRow } from './diagnosticsPanelTypes';
 
@@ -7,12 +7,90 @@ interface BrokerReadsTableProps {
   summary: string;
 }
 
+type BrokerFilter = 'all' | 'Cluster Data' | 'App State';
+
 export const BrokerReadsTable: React.FC<BrokerReadsTableProps> = ({ rows, summary }) => {
+  const [brokerFilter, setBrokerFilter] = useState<BrokerFilter>('all');
+  const [showIssuesOnly, setShowIssuesOnly] = useState(false);
+  const [query, setQuery] = useState('');
+  const deferredQuery = useDeferredValue(query.trim().toLowerCase());
+
+  const filteredRows = useMemo(() => {
+    return rows.filter((row) => {
+      if (brokerFilter !== 'all' && row.broker !== brokerFilter) {
+        return false;
+      }
+      if (
+        showIssuesOnly &&
+        row.inFlightCount <= 0 &&
+        row.blockedCount <= 0 &&
+        row.errorCount <= 0
+      ) {
+        return false;
+      }
+      if (!deferredQuery) {
+        return true;
+      }
+      const haystack = [
+        row.broker,
+        row.label,
+        row.resource,
+        row.scope,
+        row.adapter,
+        row.reason,
+        row.lastStatus,
+        row.lastError,
+      ]
+        .join(' ')
+        .toLowerCase();
+      return haystack.includes(deferredQuery);
+    });
+  }, [brokerFilter, deferredQuery, rows, showIssuesOnly]);
+
+  const filteredSummary =
+    filteredRows.length === rows.length
+      ? summary
+      : `${summary} • Showing: ${filteredRows.length}/${rows.length}`;
+
   return (
     <div className="diagnostics-section">
       <div className="diagnostics-section-header">
         <div className="diagnostics-section-title-group">
-          <span className="diagnostics-section-subtitle">{summary}</span>
+          <span className="diagnostics-section-subtitle">{filteredSummary}</span>
+        </div>
+        <div className="diagnostics-section-actions">
+          <label className="diagnostics-section-filter">
+            <span className="diagnostics-section-filter-label">Filter</span>
+            <input
+              data-diagnostics-focusable="true"
+              className="diagnostics-section-input"
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Filter reads"
+            />
+          </label>
+          <label className="diagnostics-section-filter">
+            <span className="diagnostics-section-filter-label">Broker</span>
+            <select
+              data-diagnostics-focusable="true"
+              className="diagnostics-section-select"
+              value={brokerFilter}
+              onChange={(event) => setBrokerFilter(event.target.value as BrokerFilter)}
+            >
+              <option value="all">All</option>
+              <option value="Cluster Data">Cluster Data</option>
+              <option value="App State">App State</option>
+            </select>
+          </label>
+          <button
+            data-diagnostics-focusable="true"
+            type="button"
+            className={`diagnostics-section-toggle${showIssuesOnly ? ' diagnostics-section-toggle--active' : ''}`}
+            onClick={() => setShowIssuesOnly((previous) => !previous)}
+          >
+            {showIssuesOnly ? 'Showing Issues' : 'Issues Only'}
+          </button>
         </div>
       </div>
       <div className="diagnostics-table-wrapper">
@@ -40,8 +118,12 @@ export const BrokerReadsTable: React.FC<BrokerReadsTableProps> = ({ rows, summar
               <tr className="diagnostics-empty">
                 <td colSpan={14}>No brokered reads recorded yet.</td>
               </tr>
+            ) : filteredRows.length === 0 ? (
+              <tr className="diagnostics-empty">
+                <td colSpan={14}>No brokered reads match the current filters.</td>
+              </tr>
             ) : (
-              rows.map((row) => (
+              filteredRows.map((row) => (
                 <tr key={row.key}>
                   <td>{row.broker}</td>
                   <td>

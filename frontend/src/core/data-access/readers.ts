@@ -1,4 +1,5 @@
 import {
+  EvaluateCapabilities,
   FindCatalogObjectByUID,
   FindCatalogObjectMatch,
   GetLogScopeContainers,
@@ -8,6 +9,7 @@ import {
   GetTargetPorts,
   IsWorkloadHPAManaged,
 } from '@wailsjs/go/backend/App';
+import type { capabilities } from '@wailsjs/go/models';
 
 export const readTargetPorts = (
   clusterId: string,
@@ -57,3 +59,14 @@ export const readWorkloadHPAManaged = (
   kind: string,
   name: string
 ) => IsWorkloadHPAManaged(clusterId, namespace, kind, name);
+
+export const readEvaluateCapabilities = (payload: capabilities.CheckRequest[]) =>
+  EvaluateCapabilities(payload);
+
+export const readQueryPermissions = async <T>(queries: unknown[]): Promise<T> => {
+  const runtimeApp = (window as any)?.go?.backend?.App;
+  if (typeof runtimeApp?.QueryPermissions !== 'function') {
+    throw new Error('QueryPermissions unavailable');
+  }
+  return runtimeApp.QueryPermissions(queries) as Promise<T>;
+};

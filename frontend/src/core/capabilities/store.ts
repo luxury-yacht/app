@@ -6,9 +6,8 @@
  * and the `useCapabilityDiagnostics` hook for accessing diagnostics information.
  */
 
-import { EvaluateCapabilities } from '@wailsjs/go/backend/App';
 import type { capabilities } from '@wailsjs/go/models';
-import { requestData } from '@/core/data-access';
+import { readEvaluateCapabilities, requestData } from '@/core/data-access';
 
 import type {
   CapabilityEntry,
@@ -338,9 +337,18 @@ const queueFlush = () => {
           try {
             const result = await requestData<capabilities.CheckResult[]>({
               resource: 'evaluate-capabilities',
+              label: 'Evaluate Capabilities',
               adapter: 'capability-read',
               reason: 'startup',
-              read: () => EvaluateCapabilities(payload),
+              scope: Array.from(namespaceBuckets.values())
+                .map((bucket) =>
+                  bucket.namespace
+                    ? `cluster:${bucket.clusterId ?? ''}|namespace:${bucket.namespace}`
+                    : `cluster:${bucket.clusterId ?? ''}`
+                )
+                .filter((value, index, values) => value.trim() && values.indexOf(value) === index)
+                .join(' || '),
+              read: () => readEvaluateCapabilities(payload),
             });
             if (result.status !== 'executed') {
               throw new Error(result.blockedReason ?? 'evaluate-capabilities-blocked');
