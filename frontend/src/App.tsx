@@ -11,14 +11,11 @@ import './App.css';
 import { errorHandler } from '@utils/errorHandler';
 import { KeyboardProvider, GlobalShortcuts } from '@ui/shortcuts';
 import TextContextMenu from '@ui/shortcuts/components/TextContextMenu';
-import {
-  refreshOrchestrator,
-  initializeAutoRefresh,
-  initializeMetricsRefreshInterval,
-} from '@/core/refresh';
+import { initializeAutoRefresh, initializeMetricsRefreshInterval } from '@/core/refresh';
 import { eventBus } from '@/core/events';
 import { ConnectionStatusProvider, useConnectionStatus } from '@/core/connection/connectionStatus';
 import { initializeUserPermissionsBootstrap } from '@/core/capabilities';
+import { requestContextRefresh } from '@/core/data-access';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import {
   hydrateAppPreferences,
@@ -55,6 +52,7 @@ import { AppErrorBoundary } from '@ui/errors';
 import { useBackendErrorHandler } from '@/hooks/useBackendErrorHandler';
 import { useWailsRuntimeEvents, useConnectionStatusListener } from '@/hooks/useWailsRuntimeEvents';
 import { useSidebarResize } from '@/hooks/useSidebarResize';
+import { installTypingAssistPolicyObserver } from '@utils/inputAssistPolicy';
 
 // Resolve the current active theme from the document attribute.
 const resolveTheme = (): 'light' | 'dark' => {
@@ -140,6 +138,13 @@ function AppContent() {
     };
   }, []);
 
+  // Disable browser typing assistance for every current and future input-like
+  // field in the app. This keeps search boxes, forms, and editable surfaces
+  // consistent without requiring per-component opt-in.
+  useEffect(() => {
+    return installTypingAssistPolicyObserver();
+  }, []);
+
   // Auto-apply a matching theme when the active cluster changes.
   useEffect(() => {
     if (!selectedClusterName) return;
@@ -217,7 +222,7 @@ function AppContent() {
     if (manualRefreshBlocked) {
       return;
     }
-    refreshOrchestrator.triggerManualRefreshForContext().catch((error) => {
+    requestContextRefresh({ reason: 'user' }).catch((error) => {
       errorHandler.handle(error instanceof Error ? error : new Error(String(error)), {
         source: 'manual-refresh',
       });

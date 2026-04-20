@@ -9,7 +9,7 @@ import React from 'react';
 import { OverviewItem } from '@modules/object-panel/components/ObjectPanel/Details/Overview/shared/OverviewItem';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
-import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
+import { buildObjectReference } from '@shared/utils/objectIdentity';
 
 interface ResourceHeaderProps {
   kind: string;
@@ -37,13 +37,12 @@ export const ResourceHeader: React.FC<ResourceHeaderProps> = ({
           label="Namespace"
           value={
             <ObjectPanelLink
-              objectRef={{
+              objectRef={buildObjectReference({
                 kind: 'Namespace',
-                ...resolveBuiltinGroupVersion('Namespace'),
                 name: namespace,
                 clusterId: objectData?.clusterId ?? undefined,
                 clusterName: objectData?.clusterName ?? undefined,
-              }}
+              })}
             >
               {namespace}
             </ObjectPanelLink>

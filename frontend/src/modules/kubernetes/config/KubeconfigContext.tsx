@@ -15,14 +15,11 @@ import React, {
   useRef,
   ReactNode,
 } from 'react';
-import {
-  GetKubeconfigs,
-  GetSelectedKubeconfigs,
-  SetSelectedKubeconfigs,
-} from '@wailsjs/go/backend/App';
+import { SetSelectedKubeconfigs } from '@wailsjs/go/backend/App';
 import { EventsOn } from '@wailsjs/runtime/runtime';
 import { errorHandler } from '@utils/errorHandler';
 import { types } from '@wailsjs/go/models';
+import { readKubeconfigs, readSelectedKubeconfigs, requestAppState } from '@/core/app-state-access';
 import {
   computeClusterHashes,
   runGridTableGC,
@@ -218,8 +215,14 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
     try {
       // Load both the list of configs and the currently selected list.
       const [configs, currentSelection] = await Promise.all([
-        GetKubeconfigs(),
-        GetSelectedKubeconfigs(),
+        requestAppState({
+          resource: 'kubeconfigs',
+          read: () => readKubeconfigs(),
+        }),
+        requestAppState({
+          resource: 'selected-kubeconfigs',
+          read: () => readSelectedKubeconfigs(),
+        }),
       ]);
 
       setKubeconfigs(configs || []);
@@ -325,7 +328,12 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
         let rollbackSelections = committedSelectionsRef.current;
         let rollbackActive = committedActiveRef.current;
         try {
-          const confirmed = normalizeSelections((await GetSelectedKubeconfigs()) || []);
+          const confirmed = normalizeSelections(
+            (await requestAppState({
+              resource: 'selected-kubeconfigs',
+              read: () => readSelectedKubeconfigs(),
+            })) || []
+          );
           rollbackSelections = confirmed;
           rollbackActive =
             rollbackActive && confirmed.includes(rollbackActive)

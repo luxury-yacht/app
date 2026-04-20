@@ -70,6 +70,7 @@ func TestClusterCustomBuilder(t *testing.T) {
 	payload, ok := snapshot.Payload.(ClusterCustomSnapshot)
 	require.True(t, ok)
 	require.Len(t, payload.Resources, 1)
+	require.Equal(t, []string{"Widget"}, payload.Kinds)
 	require.NotZero(t, snapshot.Version, "cluster resources=%d", len(payload.Resources))
 
 	entry := payload.Resources[0]
@@ -145,6 +146,7 @@ func TestClusterCustomBuilderMultipleCRDs(t *testing.T) {
 	payload, ok := snapshot.Payload.(ClusterCustomSnapshot)
 	require.True(t, ok)
 	require.Len(t, payload.Resources, 1)
+	require.Equal(t, []string{"Widget"}, payload.Kinds)
 	require.NotZero(t, snapshot.Version, "cluster resources=%d", len(payload.Resources))
 
 	entry := payload.Resources[0]

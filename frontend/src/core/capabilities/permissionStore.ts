@@ -7,6 +7,7 @@
  */
 
 import { eventBus, type UnsubscribeFn } from '@/core/events';
+import { readQueryPermissions, requestData } from '@/core/data-access';
 import { resolveBuiltinGroupVersion } from '@/shared/constants/builtinGroupVersions';
 import type {
   PermissionEntry,
@@ -50,17 +51,6 @@ const resolvePermissionGVK = (
   }
   return { group: g, version: ver };
 };
-
-// ---------------------------------------------------------------------------
-// QueryPermissions RPC
-// ---------------------------------------------------------------------------
-
-// Locally-typed wrapper for the QueryPermissions Wails endpoint. Uses the
-// same runtime call path as generated Wails bindings (window.go.backend.App).
-// Once `wails generate module` is run against the Go backend that exposes
-// QueryPermissions, the generated App.js will include the real binding and
-// this wrapper can be replaced with:
-//   import { QueryPermissions } from '@wailsjs/go/backend/App';
 
 interface QueryPayloadItem {
   id: string;
@@ -114,12 +104,28 @@ interface QueryPermissionsResponse {
   diagnostics: QueryResponseDiagnostics[];
 }
 
-declare const window: {
-  go: Record<string, Record<string, Record<string, (...args: any[]) => any>>>;
-};
-
 function QueryPermissions(queries: QueryPayloadItem[]): Promise<QueryPermissionsResponse> {
-  return window['go']['backend']['App']['QueryPermissions'](queries);
+  return requestData<QueryPermissionsResponse>({
+    resource: 'query-permissions',
+    label: 'Query Permissions',
+    adapter: 'permission-read',
+    reason: 'startup',
+    scope: Array.from(
+      new Set(
+        queries.map((query) =>
+          query.namespace
+            ? `cluster:${query.clusterId}|namespace:${query.namespace}`
+            : `cluster:${query.clusterId}`
+        )
+      )
+    ).join(' || '),
+    read: () => readQueryPermissions<QueryPermissionsResponse>(queries),
+  }).then((result) => {
+    if (result.status !== 'executed' || !result.data) {
+      throw new Error(result.blockedReason ?? 'query-permissions-blocked');
+    }
+    return result.data;
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -177,11 +183,15 @@ let version = 0;
 const permissionResults = new Map<string, PermissionEntry>();
 let permissionMap: PermissionMap = new Map();
 const permissionListeners = new Set<Listener>();
+let permissionNotifyScheduled = false;
+let permissionNotifyHandle: number | null = null;
 
 const diagnosticsMap = new Map<string, PermissionQueryDiagnostics>();
 let diagnosticsSnapshot: PermissionQueryDiagnostics[] = [];
 let diagnosticsDirty = true;
 const diagnosticsListeners = new Set<Listener>();
+let diagnosticsNotifyScheduled = false;
+let diagnosticsNotifyHandle: number | null = null;
 
 // Tracks which (clusterId|namespace) pairs have in-flight queries to
 // avoid duplicate Wails RPC round-trips.
@@ -300,12 +310,31 @@ const rebuildPermissionMap = (): void => {
 /**
  * Increments the store version, rebuilds the permission map, and fires listeners.
  */
-const notify = (): void => {
-  version++;
-  rebuildPermissionMap();
+const flushPermissionListeners = (): void => {
+  permissionNotifyScheduled = false;
+  permissionNotifyHandle = null;
   for (const listener of permissionListeners) {
     listener();
   }
+};
+
+const schedulePermissionNotify = (): void => {
+  if (permissionNotifyScheduled) {
+    return;
+  }
+  permissionNotifyScheduled = true;
+  // Deliver external-store notifications in a later task, not the current
+  // render/commit turn. rAF was still too eager here and could trip React's
+  // nested-update guard in large sessions with several permission subscribers.
+  permissionNotifyHandle = setTimeout(() => {
+    flushPermissionListeners();
+  }, 0) as unknown as number;
+};
+
+const notify = (): void => {
+  version++;
+  rebuildPermissionMap();
+  schedulePermissionNotify();
 };
 
 // ---------------------------------------------------------------------------
@@ -670,7 +699,7 @@ export const queryKindPermissions = (
     name: '',
   }));
 
-  const feature = namespace ? 'Namespace custom resources' : 'Cluster custom resources';
+  const feature = namespace ? 'Namespace custom' : 'Cluster custom';
 
   // Register pending specs so the permission map immediately contains
   // pending entries. This lets the context menu show "Awaiting permissions"
@@ -743,11 +772,25 @@ export const getStoreVersion = (): number => version;
 // Diagnostics — populates PermissionQueryDiagnostics per (clusterId|namespace)
 // ---------------------------------------------------------------------------
 
-const notifyDiagnostics = (): void => {
-  diagnosticsDirty = true;
+const flushDiagnosticsListeners = (): void => {
+  diagnosticsNotifyScheduled = false;
+  diagnosticsNotifyHandle = null;
   for (const listener of diagnosticsListeners) {
     listener();
   }
+};
+
+const notifyDiagnostics = (): void => {
+  diagnosticsDirty = true;
+  if (diagnosticsNotifyScheduled) {
+    return;
+  }
+  diagnosticsNotifyScheduled = true;
+  // Match permission notifications: diagnostics subscribers also use
+  // useSyncExternalStore, so keep them out of the current React turn.
+  diagnosticsNotifyHandle = setTimeout(() => {
+    flushDiagnosticsListeners();
+  }, 0) as unknown as number;
 };
 
 /**
@@ -950,6 +993,16 @@ export const setCurrentClusterId = (clusterId: string): void => {
  * Clears all permission state, stops the refresh timer, and notifies listeners.
  */
 export const resetPermissionStore = (): void => {
+  if (permissionNotifyHandle != null) {
+    clearTimeout(permissionNotifyHandle);
+    permissionNotifyHandle = null;
+    permissionNotifyScheduled = false;
+  }
+  if (diagnosticsNotifyHandle != null) {
+    clearTimeout(diagnosticsNotifyHandle);
+    diagnosticsNotifyHandle = null;
+    diagnosticsNotifyScheduled = false;
+  }
   permissionResults.clear();
   pendingSpecs.clear();
   inFlightQueries.clear();

@@ -390,9 +390,6 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                   className="fav-save-input"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  autoComplete="off"
-                  autoCorrect="off"
-                  spellCheck={false}
                   onKeyDown={(e) => {
                     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a') {
                       e.preventDefault();
@@ -536,9 +533,6 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                   className="fav-save-input"
                   value={filterText}
                   onChange={(e) => setFilterText(e.target.value)}
-                  autoComplete="off"
-                  autoCorrect="off"
-                  spellCheck={false}
                   onKeyDown={(e) => {
                     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a') {
                       e.preventDefault();

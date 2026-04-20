@@ -215,6 +215,7 @@ describe('NamespaceProvider selection behaviour', () => {
 
     const visibleNames = namespaceRef.current?.namespaces.map((item) => item.name) ?? [];
     expect(visibleNames).toEqual([ALL_NAMESPACES_DISPLAY_NAME, 'alpha']);
+    expect(namespaceRef.current?.namespaceReady).toBe(true);
     cleanup();
   });
 
@@ -326,6 +327,7 @@ describe('NamespaceProvider selection behaviour', () => {
 
     expect(namespaceRef.current?.namespaces).toEqual([]);
     expect(namespaceRef.current?.namespaceLoading).toBe(true);
+    expect(namespaceRef.current?.namespaceReady).toBe(false);
     cleanup();
   });
 
@@ -343,6 +345,26 @@ describe('NamespaceProvider selection behaviour', () => {
       'namespaces',
       expect.any(String),
       { isManual: true }
+    );
+    cleanup();
+  });
+
+  it('uses a startup request for the initial namespace load', () => {
+    namespaceDomainRef.current = {
+      status: 'idle',
+      data: null,
+      error: null,
+    } as any;
+
+    const { cleanup } = renderWithProvider();
+    act(() => {
+      vi.runAllTimers();
+    });
+
+    expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
+      'namespaces',
+      expect.any(String),
+      { isManual: false }
     );
     cleanup();
   });

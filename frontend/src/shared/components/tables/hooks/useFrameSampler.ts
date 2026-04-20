@@ -12,12 +12,24 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 
 type StopReason = 'timeout' | 'manual' | 'unmount';
 
+export interface FrameSamplerSample {
+  sample: string;
+  frames: number;
+  avgMs: number;
+  p95Ms: number;
+  maxMs: number;
+  latestMs: number;
+  overBudgetFrames: number;
+  estFps: number;
+  timestamp: string;
+}
+
 interface FrameSamplerOptions {
   enabled: boolean;
   sampleLabel?: string;
   sampleWindowMs?: number;
   minSampleCount?: number;
-  logResults?: (rows: Array<Record<string, unknown>>) => void;
+  onSample?: (sample: FrameSamplerSample) => void;
   requestAnimationFrameImpl?: (cb: FrameRequestCallback) => number;
   cancelAnimationFrameImpl?: (handle: number) => void;
   setTimeoutImpl?: (cb: () => void, ms: number) => number;
@@ -34,22 +46,12 @@ export function useFrameSampler({
   sampleLabel = 'FrameSampler',
   sampleWindowMs = 2000,
   minSampleCount = 10,
-  logResults,
+  onSample,
   requestAnimationFrameImpl,
   cancelAnimationFrameImpl,
   setTimeoutImpl,
   clearTimeoutImpl,
 }: FrameSamplerOptions): FrameSamplerApi {
-  const defaultLogResults = useMemo(() => {
-    if (logResults) {
-      return logResults;
-    }
-    if (typeof console !== 'undefined' && typeof console.table === 'function') {
-      return console.table.bind(console);
-    }
-    return () => {};
-  }, [logResults]);
-
   const requestAnimationFrameFn = useMemo(() => {
     if (requestAnimationFrameImpl) {
       return requestAnimationFrameImpl;
@@ -136,31 +138,24 @@ export function useFrameSampler({
         const p95 = sorted[p95Index];
         const overBudget = deltas.filter((delta) => delta > 16.7).length;
         const estimatedFps = average > 0 ? 1000 / average : 0;
+        const latest = deltas[deltas.length - 1] ?? 0;
 
-        defaultLogResults([
-          {
-            sample: sampleLabel,
-            frames: deltas.length,
-            avgMs: Number(average.toFixed(2)),
-            p95Ms: Number(p95.toFixed(2)),
-            maxMs: Number(max.toFixed(2)),
-            overBudgetFrames: overBudget,
-            estFps: Number(estimatedFps.toFixed(1)),
-            timestamp: new Date().toISOString(),
-          },
-        ]);
+        onSample?.({
+          sample: sampleLabel,
+          frames: deltas.length,
+          avgMs: Number(average.toFixed(2)),
+          p95Ms: Number(p95.toFixed(2)),
+          maxMs: Number(max.toFixed(2)),
+          latestMs: Number(latest.toFixed(2)),
+          overBudgetFrames: overBudget,
+          estFps: Number(estimatedFps.toFixed(1)),
+          timestamp: new Date().toISOString(),
+        });
       }
 
       sampler.deltas = [];
     },
-    [
-      cancelAnimationFrameFn,
-      clearTimeoutFn,
-      defaultLogResults,
-      enabled,
-      minSampleCount,
-      sampleLabel,
-    ]
+    [cancelAnimationFrameFn, clearTimeoutFn, enabled, minSampleCount, onSample, sampleLabel]
   );
 
   const start = useCallback(() => {

@@ -40,6 +40,7 @@ type ClusterEventEntry struct {
 	ResourceVersion  string `json:"resourceVersion"`
 	Namespace        string `json:"namespace"`
 	ObjectNamespace  string `json:"objectNamespace"`
+	ObjectUID        string `json:"objectUid"`
 	ObjectAPIVersion string `json:"objectApiVersion"`
 	Type             string `json:"type"`
 	Source           string `json:"source"`
@@ -100,6 +101,7 @@ func (b *ClusterEventsBuilder) Build(ctx context.Context, scope string) (*refres
 			ResourceVersion:  evt.ResourceVersion,
 			Namespace:        objectNamespace,
 			ObjectNamespace:  objectNamespace,
+			ObjectUID:        string(evt.InvolvedObject.UID),
 			ObjectAPIVersion: evt.InvolvedObject.APIVersion,
 			Type:             eventSeverity(evt),
 			Source:           eventSource(evt),

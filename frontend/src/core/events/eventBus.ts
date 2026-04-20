@@ -10,6 +10,7 @@
 
 import type { RefresherState } from '@/core/refresh/RefreshManager';
 import type { ObjectDiffOpenRequest } from '@shared/components/diff/objectDiffSelection';
+import type { GridTableFocusRequest } from '@shared/components/tables/hooks/gridTableFocusRequest';
 
 type ResourceStreamDomain =
   | 'pods'
@@ -83,6 +84,7 @@ export interface AppEvents {
   'settings:short-names': boolean;
   'settings:theme': string;
   'settings:metrics-interval': number;
+  'settings:max-table-rows': number;
   'settings:log-buffer-size': number;
   'settings:log-api-timestamp-format': string;
   'settings:log-api-timestamp-use-local-time-zone': boolean;
@@ -104,12 +106,7 @@ export interface AppEvents {
 
   // Grid table external focus — emitted to request that a visible GridTable
   // finds and focuses a specific row matching the given resource fields.
-  'gridtable:focus-request': {
-    kind: string;
-    name: string;
-    namespace?: string;
-    clusterId: string;
-  };
+  'gridtable:focus-request': GridTableFocusRequest;
 
   // Cluster lifecycle events — bridged from Wails runtime by ClusterLifecycleContext.
   'cluster:lifecycle': { clusterId: string; state: string; previousState: string };

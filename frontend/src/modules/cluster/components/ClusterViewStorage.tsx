@@ -25,13 +25,12 @@ import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
-import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
-import {
-  formatBuiltinApiVersion,
-  resolveBuiltinGroupVersion,
-} from '@shared/constants/builtinGroupVersions';
+import { formatBuiltinApiVersion } from '@shared/constants/builtinGroupVersions';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 import { useFavToggle } from '@ui/favorites/FavToggle';
+import { buildCanonicalObjectRowKey, buildObjectReference } from '@shared/utils/objectIdentity';
+
+const CLUSTER_STORAGE_KIND_OPTIONS = ['PersistentVolume'];
 
 // Define the data structure for Persistent Volumes
 interface StorageData {
@@ -74,13 +73,14 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
 
     const handleResourceClick = useCallback(
       (pv: StorageData) => {
-        openWithObject({
-          kind: 'PersistentVolume',
-          name: pv.name,
-          ...resolveBuiltinGroupVersion('PersistentVolume'),
-          clusterId: pv.clusterId ?? undefined,
-          clusterName: pv.clusterName ?? undefined,
-        });
+        openWithObject(
+          buildObjectReference({
+            kind: 'PersistentVolume',
+            name: pv.name,
+            clusterId: pv.clusterId ?? undefined,
+            clusterName: pv.clusterName ?? undefined,
+          })
+        );
       },
       [openWithObject]
     );
@@ -102,20 +102,26 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
         if (!target) {
           return;
         }
-        openWithObject({
-          kind: 'PersistentVolumeClaim',
-          namespace: target.namespace,
-          name: target.name,
-          ...resolveBuiltinGroupVersion('PersistentVolumeClaim'),
-          clusterId: pv.clusterId ?? undefined,
-          clusterName: pv.clusterName ?? undefined,
-        });
+        openWithObject(
+          buildObjectReference({
+            kind: 'PersistentVolumeClaim',
+            namespace: target.namespace,
+            name: target.name,
+            clusterId: pv.clusterId ?? undefined,
+            clusterName: pv.clusterName ?? undefined,
+          })
+        );
       },
       [getClaimTarget, openWithObject]
     );
 
     const keyExtractor = useCallback(
-      (pv: StorageData) => buildClusterScopedKey(pv, ['pv', pv.name].filter(Boolean).join('/')),
+      (pv: StorageData) =>
+        buildCanonicalObjectRowKey({
+          kind: 'PersistentVolume',
+          name: pv.name,
+          clusterId: pv.clusterId,
+        }),
       []
     );
 
@@ -129,22 +135,26 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
             getDisplayKind(pv.kind || 'PersistentVolume', useShortResourceNames),
           onClick: handleResourceClick,
           onAltClick: (pv) =>
-            navigateToView({
-              kind: pv.kind || 'PersistentVolume',
-              name: pv.name,
-              clusterId: pv.clusterId,
-              clusterName: pv.clusterName,
-            }),
+            navigateToView(
+              buildObjectReference({
+                kind: pv.kind || 'PersistentVolume',
+                name: pv.name,
+                clusterId: pv.clusterId,
+                clusterName: pv.clusterName,
+              })
+            ),
         }),
         cf.createTextColumn<StorageData>('name', 'Name', {
           onClick: handleResourceClick,
           onAltClick: (pv) =>
-            navigateToView({
-              kind: pv.kind || 'PersistentVolume',
-              name: pv.name,
-              clusterId: pv.clusterId,
-              clusterName: pv.clusterName,
-            }),
+            navigateToView(
+              buildObjectReference({
+                kind: pv.kind || 'PersistentVolume',
+                name: pv.name,
+                clusterId: pv.clusterId,
+                clusterName: pv.clusterName,
+              })
+            ),
           getClassName: () => 'object-panel-link',
         }),
         cf.createTextColumn('capacity', 'Capacity', (pv) => pv.capacity || '-'),
@@ -164,24 +174,27 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
               if (!pv.storageClass) {
                 return;
               }
-              openWithObject({
-                kind: 'StorageClass',
-                name: pv.storageClass,
-                ...resolveBuiltinGroupVersion('StorageClass'),
-                clusterId: pv.clusterId ?? undefined,
-                clusterName: pv.clusterName ?? undefined,
-              });
+              openWithObject(
+                buildObjectReference({
+                  kind: 'StorageClass',
+                  name: pv.storageClass,
+                  clusterId: pv.clusterId ?? undefined,
+                  clusterName: pv.clusterName ?? undefined,
+                })
+              );
             },
             onAltClick: (pv) => {
               if (!pv.storageClass) {
                 return;
               }
-              navigateToView({
-                kind: 'StorageClass',
-                name: pv.storageClass,
-                clusterId: pv.clusterId,
-                clusterName: pv.clusterName,
-              });
+              navigateToView(
+                buildObjectReference({
+                  kind: 'StorageClass',
+                  name: pv.storageClass,
+                  clusterId: pv.clusterId,
+                  clusterName: pv.clusterName,
+                })
+              );
             },
             isInteractive: (pv) => Boolean(pv.storageClass),
             getClassName: (pv) =>
@@ -195,13 +208,15 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
             if (!target) {
               return;
             }
-            navigateToView({
-              kind: 'PersistentVolumeClaim',
-              namespace: target.namespace,
-              name: target.name,
-              clusterId: pv.clusterId,
-              clusterName: pv.clusterName,
-            });
+            navigateToView(
+              buildObjectReference({
+                kind: 'PersistentVolumeClaim',
+                namespace: target.namespace,
+                name: target.name,
+                clusterId: pv.clusterId,
+                clusterName: pv.clusterName,
+              })
+            );
           },
           isInteractive: (pv) => Boolean(getClaimTarget(pv)),
           getClassName: (pv) => (getClaimTarget(pv) ? 'object-panel-link' : undefined),
@@ -259,10 +274,7 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
       onChange: setPersistedSort,
     });
 
-    const availableKinds = useMemo(
-      () => [...new Set(data.map((r) => r.kind).filter(Boolean) as string[])].sort(),
-      [data]
-    );
+    const availableKinds = CLUSTER_STORAGE_KIND_OPTIONS;
 
     const { item: favToggle, modal: favModal } = useFavToggle({
       filters: persistedFilters,
@@ -324,12 +336,12 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
           ) ?? null;
 
         return buildObjectActionItems({
-          object: {
+          object: buildObjectReference({
             kind: 'PersistentVolume',
             name: pv.name,
             clusterId: pv.clusterId,
             clusterName: pv.clusterName,
-          },
+          }),
           context: 'gridtable',
           handlers: {
             onOpen: () => handleResourceClick(pv),
@@ -359,6 +371,7 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
           <GridTable
             data={sortedData}
             columns={columns}
+            diagnosticsLabel="Cluster Storage"
             loading={loading}
             keyExtractor={keyExtractor}
             onRowClick={handleResourceClick}
@@ -375,6 +388,7 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
               onChange: setPersistedFilters,
               onReset: resetPersistedState,
               options: {
+                kinds: availableKinds,
                 showKindDropdown: true,
                 preActions: [favToggle],
               },

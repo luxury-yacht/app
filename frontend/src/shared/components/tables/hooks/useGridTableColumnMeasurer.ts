@@ -7,8 +7,7 @@
 
 import { useCallback, useEffect, useRef } from 'react';
 import React from 'react';
-import { createRoot } from 'react-dom/client';
-import { flushSync } from 'react-dom';
+import { renderToStaticMarkup } from 'react-dom/server';
 
 import type {
   ColumnWidthInput,
@@ -26,6 +25,23 @@ interface KindBadgeMeasurer {
   content: HTMLSpanElement;
   badge: HTMLSpanElement;
 }
+
+interface KindBadgeSample {
+  canonicalKind: string;
+  displayText: string;
+  interactive: boolean;
+}
+
+const detachNode = (node: HTMLElement | null) => {
+  if (!node) {
+    return;
+  }
+  if (node.parentNode) {
+    node.parentNode.removeChild(node);
+    return;
+  }
+  node.remove();
+};
 
 export interface ColumnMeasurerOptions<T> {
   tableRef: React.RefObject<HTMLElement | null>;
@@ -79,7 +95,7 @@ export function useGridTableColumnMeasurer<T>({
       measurer = { host, container, content, badge };
       kindBadgeMeasureRef.current = measurer;
     } else if (measurer.host !== host) {
-      measurer.host?.removeChild(measurer.container);
+      detachNode(measurer.container);
       host.appendChild(measurer.container);
       measurer.host = host;
     }
@@ -89,7 +105,7 @@ export function useGridTableColumnMeasurer<T>({
   useEffect(() => {
     return () => {
       if (kindBadgeMeasureRef.current?.container) {
-        kindBadgeMeasureRef.current.container.remove();
+        detachNode(kindBadgeMeasureRef.current.container);
       }
       kindBadgeMeasureRef.current = null;
     };
@@ -123,15 +139,42 @@ export function useGridTableColumnMeasurer<T>({
         }
         maxWidth = Math.max(maxWidth, headerWidth);
       } finally {
-        document.body.removeChild(headerMeasurer);
+        detachNode(headerMeasurer);
       }
 
       const isKindColumn = isKindColumnKey(column.key);
       const kindMeasurer = isKindColumn ? ensureKindBadgeMeasurer() : null;
+      const measureLimit = 400;
+      const buildKindBadgeSample = (contentNode: React.ReactNode): KindBadgeSample => {
+        const displayText = getTextContent(contentNode).trim();
+        let canonicalKind = displayText;
+        let interactive = false;
 
-      // Create an off-screen measurer node with a React root for direct DOM
-      // rendering. This avoids the serialize→parse round-trip of renderToString/
-      // renderToStaticMarkup — React elements are rendered straight into the DOM.
+        if (React.isValidElement(contentNode)) {
+          const props = contentNode.props as Record<string, unknown>;
+          const explicit = props?.['data-kind-value'];
+          if (typeof explicit === 'string' && explicit.trim().length > 0) {
+            canonicalKind = explicit.trim();
+          }
+          interactive =
+            props?.['data-kind-interactive'] === 'true' ||
+            typeof props?.onClick === 'function' ||
+            typeof props?.onKeyDown === 'function' ||
+            props?.role === 'button';
+        }
+
+        return {
+          canonicalKind,
+          displayText,
+          interactive,
+        };
+      };
+
+      // Create an off-screen measurer node for DOM-based width checks.
+      // Use static markup for React elements instead of mounting a nested
+      // React root during another component's layout work. That avoids
+      // commit-time DOM ownership issues when measurement happens while
+      // the main tree is reconciling.
       const cellMeasurer =
         !isKindColumn || !kindMeasurer
           ? (() => {
@@ -143,71 +186,78 @@ export function useGridTableColumnMeasurer<T>({
               node.style.whiteSpace = 'nowrap';
               node.style.width = 'auto';
               document.body.appendChild(node);
-              return { node, root: createRoot(node) };
+              return { node };
             })()
           : null;
 
-      const measureLimit = 400;
       const sampleItems: T[] = [];
-      if (tableData.length <= measureLimit) {
-        sampleItems.push(...tableData);
-      } else {
-        const step = Math.max(1, Math.ceil(tableData.length / measureLimit));
-        for (let index = 0; index < tableData.length; index += step) {
-          sampleItems.push(tableData[index]);
-        }
-        const last = tableData[tableData.length - 1];
-        if (sampleItems[sampleItems.length - 1] !== last) {
-          sampleItems.push(last);
+      if (!isKindColumn || !kindMeasurer) {
+        if (tableData.length <= measureLimit) {
+          sampleItems.push(...tableData);
+        } else {
+          const step = Math.max(1, Math.ceil(tableData.length / measureLimit));
+          for (let index = 0; index < tableData.length; index += step) {
+            sampleItems.push(tableData[index]);
+          }
+          const last = tableData[tableData.length - 1];
+          if (sampleItems[sampleItems.length - 1] !== last) {
+            sampleItems.push(last);
+          }
         }
       }
 
       // Wrap measurement loop in try/finally so cellMeasurer and kindMeasurer
       // are cleaned up even if column.render() or renderToString() throws.
       try {
-        sampleItems.forEach((item) => {
-          const contentNode = column.render(item);
+        if (kindMeasurer) {
+          const seenBadges = new Set<string>();
+          let measuredKinds = 0;
 
-          if (kindMeasurer) {
-            const displayText = getTextContent(contentNode).trim();
-            let canonicalKind = displayText;
-
-            if (React.isValidElement(contentNode)) {
-              const explicit = (contentNode.props as Record<string, unknown>)?.['data-kind-value'];
-              if (typeof explicit === 'string' && explicit.trim().length > 0) {
-                canonicalKind = explicit.trim();
-              }
+          for (const item of tableData) {
+            const contentNode = column.render(item);
+            const badge = buildKindBadgeSample(contentNode);
+            const sampleKey = `${badge.canonicalKind}::${badge.displayText}::${badge.interactive ? '1' : '0'}`;
+            if (seenBadges.has(sampleKey)) {
+              continue;
             }
+            seenBadges.add(sampleKey);
+            measuredKinds += 1;
 
-            kindMeasurer.badge.className = `kind-badge ${normalizeKindClass(canonicalKind)}`;
-            kindMeasurer.badge.textContent = displayText;
+            const badgeClasses = ['kind-badge', normalizeKindClass(badge.canonicalKind)];
+            if (badge.interactive) {
+              badgeClasses.push('clickable');
+            }
+            kindMeasurer.badge.className = badgeClasses.join(' ');
+            kindMeasurer.badge.textContent = badge.displayText;
 
             const badgeWidth = kindMeasurer.container.getBoundingClientRect().width;
             maxWidth = Math.max(maxWidth, badgeWidth);
-            return;
-          }
 
-          if (!cellMeasurer) {
-            return;
+            if (measuredKinds >= measureLimit) {
+              break;
+            }
           }
+        } else {
+          sampleItems.forEach((item) => {
+            const contentNode = column.render(item);
 
-          if (React.isValidElement(contentNode)) {
-            // Render directly into the DOM — avoids the synchronous
-            // serialize→parse round-trip of renderToString/renderToStaticMarkup.
-            flushSync(() => {
-              cellMeasurer.root.render(contentNode);
-            });
-          } else {
-            cellMeasurer.node.textContent = String(contentNode ?? '');
-          }
+            if (!cellMeasurer) {
+              return;
+            }
 
-          const width = cellMeasurer.node.getBoundingClientRect().width;
-          maxWidth = Math.max(maxWidth, width);
-        });
+            if (React.isValidElement(contentNode)) {
+              cellMeasurer.node.innerHTML = renderToStaticMarkup(contentNode);
+            } else {
+              cellMeasurer.node.textContent = String(contentNode ?? '');
+            }
+
+            const width = cellMeasurer.node.getBoundingClientRect().width;
+            maxWidth = Math.max(maxWidth, width);
+          });
+        }
       } finally {
         if (cellMeasurer) {
-          cellMeasurer.root.unmount();
-          cellMeasurer.node.remove();
+          detachNode(cellMeasurer.node);
         }
         if (kindMeasurer) {
           kindMeasurer.badge.textContent = '';

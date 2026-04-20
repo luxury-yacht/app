@@ -11,6 +11,7 @@ import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import GridTableFiltersBar from '@shared/components/tables/GridTableFiltersBar';
+import { ZoomProvider } from '@core/contexts/ZoomContext';
 
 const searchShortcutMock = vi.hoisted(() => ({
   register: vi.fn(),
@@ -20,20 +21,31 @@ vi.mock('@ui/shortcuts', () => ({
   useSearchShortcutTarget: (config: unknown) => searchShortcutMock.register(config),
 }));
 
+vi.mock('@wailsjs/go/backend/App', () => ({
+  GetZoomLevel: vi.fn().mockResolvedValue(100),
+  SetZoomLevel: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock('@shared/components/dropdowns/Dropdown', () => ({
   Dropdown: ({
     id,
     value,
     options,
     onChange,
+    searchable,
+    showBulkActions,
   }: {
     id: string;
     value: string[];
     options: Array<{ label: string; value: string }>;
     onChange: (value: string[]) => void;
+    searchable?: boolean;
+    showBulkActions?: boolean;
   }) => (
     <select
       data-testid={id}
+      data-searchable={searchable ? 'true' : 'false'}
+      data-bulk-actions={showBulkActions ? 'true' : 'false'}
       value={value[0] ?? ''}
       onChange={(event) => onChange([event.target.value])}
     >
@@ -62,6 +74,7 @@ describe('GridTableFiltersBar', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     act(() => {
       root.unmount();
     });
@@ -73,37 +86,40 @@ describe('GridTableFiltersBar', () => {
   ) => {
     await act(async () => {
       root.render(
-        <GridTableFiltersBar
-          activeFilters={{
-            search: '',
-            kinds: [],
-            namespaces: [],
-            caseSensitive: false,
-            includeMetadata: false,
-          }}
-          resolvedFilterOptions={{
-            kinds: [
-              { label: 'Pods', value: 'Pod' },
-              { label: 'Deployments', value: 'Deployment' },
-            ],
-            namespaces: [
-              { label: 'team-a', value: 'team-a' },
-              { label: 'team-b', value: 'team-b' },
-            ],
-          }}
-          kindDropdownId="kinds"
-          namespaceDropdownId="namespaces"
-          searchInputId="search"
-          onKindsChange={vi.fn()}
-          onNamespacesChange={vi.fn()}
-          onSearchChange={vi.fn()}
-          onReset={vi.fn()}
-          onToggleCaseSensitive={vi.fn()}
-          renderOption={(option) => option.label}
-          renderKindsValue={() => 'Kinds'}
-          renderNamespacesValue={() => 'Namespaces'}
-          {...props}
-        />
+        <ZoomProvider>
+          <GridTableFiltersBar
+            activeFilters={{
+              search: '',
+              kinds: [],
+              namespaces: [],
+              caseSensitive: false,
+              includeMetadata: false,
+            }}
+            resolvedFilterOptions={{
+              searchBehavior: 'local',
+              kinds: [
+                { label: 'Pods', value: 'Pod' },
+                { label: 'Deployments', value: 'Deployment' },
+              ],
+              namespaces: [
+                { label: 'team-a', value: 'team-a' },
+                { label: 'team-b', value: 'team-b' },
+              ],
+            }}
+            kindDropdownId="kinds"
+            namespaceDropdownId="namespaces"
+            searchInputId="search"
+            onKindsChange={vi.fn()}
+            onNamespacesChange={vi.fn()}
+            onSearchChange={vi.fn()}
+            onReset={vi.fn()}
+            onToggleCaseSensitive={vi.fn()}
+            renderOption={(option) => option.label}
+            renderKindsValue={() => 'Kinds'}
+            renderNamespacesValue={() => 'Namespaces'}
+            {...props}
+          />
+        </ZoomProvider>
       );
       await Promise.resolve();
     });
@@ -152,6 +168,85 @@ describe('GridTableFiltersBar', () => {
       resetButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     expect(onReset).toHaveBeenCalledTimes(1);
+  });
+
+  it('passes searchable through to kind and namespace dropdowns when enabled', async () => {
+    await renderFilters({
+      showKindDropdown: true,
+      showNamespaceDropdown: true,
+      resolvedFilterOptions: {
+        kinds: [
+          { label: 'Pods', value: 'Pod' },
+          { label: 'Deployments', value: 'Deployment' },
+        ],
+        namespaces: [
+          { label: 'team-a', value: 'team-a' },
+          { label: 'team-b', value: 'team-b' },
+        ],
+        kindDropdownSearchable: true,
+        namespaceDropdownSearchable: true,
+      },
+    });
+
+    expect(container.querySelector('[data-testid="kinds"]')?.getAttribute('data-searchable')).toBe(
+      'true'
+    );
+    expect(
+      container.querySelector('[data-testid="namespaces"]')?.getAttribute('data-searchable')
+    ).toBe('true');
+  });
+
+  it('passes bulk actions through to the kind dropdown when enabled', async () => {
+    await renderFilters({
+      showKindDropdown: true,
+      resolvedFilterOptions: {
+        kinds: [
+          { label: 'Pods', value: 'Pod' },
+          { label: 'Deployments', value: 'Deployment' },
+        ],
+        namespaces: [],
+        kindDropdownBulkActions: true,
+      },
+    });
+
+    expect(
+      container.querySelector('[data-testid="kinds"]')?.getAttribute('data-bulk-actions')
+    ).toBe('true');
+  });
+
+  it('passes bulk actions through to the namespace dropdown when enabled', async () => {
+    await renderFilters({
+      showNamespaceDropdown: true,
+      resolvedFilterOptions: {
+        kinds: [],
+        namespaces: [
+          { label: 'team-a', value: 'team-a' },
+          { label: 'team-b', value: 'team-b' },
+        ],
+        namespaceDropdownBulkActions: true,
+      },
+    });
+
+    expect(
+      container.querySelector('[data-testid="namespaces"]')?.getAttribute('data-bulk-actions')
+    ).toBe('true');
+  });
+
+  it('renders the shared filter input without a search-hint tooltip', async () => {
+    await renderFilters({
+      resolvedFilterOptions: {
+        kinds: [],
+        namespaces: [],
+        searchBehavior: 'query',
+      },
+      resultCount: { displayed: 1000, total: 4200, capped: true },
+    });
+
+    const input = container.querySelector('#search') as HTMLInputElement | null;
+    expect(input?.getAttribute('placeholder')).toBe('Filter');
+    expect(
+      container.querySelector('[data-gridtable-filter-role="search-hint"] .tooltip-trigger')
+    ).toBeNull();
   });
 
   it('registers search shortcut and focuses the input when invoked', async () => {

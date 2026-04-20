@@ -53,6 +53,10 @@ vi.mock('@core/refresh', () => ({
   refreshOrchestrator: refreshMocks.refreshOrchestrator,
 }));
 
+vi.mock('@/core/settings/appPreferences', () => ({
+  getAutoRefreshEnabled: () => true,
+}));
+
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: () => kubeconfigMocks,
 }));
@@ -447,6 +451,50 @@ describe('ObjectDiffModal', () => {
     expect(hasSearchScopedCall).toBe(true);
   });
 
+  it('fetches catalog and yaml diff data through user-intent requests', async () => {
+    act(() => {
+      root.render(
+        <KeyboardProvider>
+          <ObjectDiffModal isOpen onClose={vi.fn()} />
+        </KeyboardProvider>
+      );
+    });
+
+    const changeSelect = async (label: string, nextValue: string) => {
+      const select = document.querySelector(
+        `select[aria-label="${label}"]`
+      ) as HTMLSelectElement | null;
+      expect(select).toBeTruthy();
+      await act(async () => {
+        select!.value = nextValue;
+        select!.dispatchEvent(new Event('change', { bubbles: true }));
+        await Promise.resolve();
+      });
+    };
+
+    await changeSelect('Left cluster', 'cluster-a');
+    await changeSelect('Right cluster', 'cluster-a');
+    await changeSelect('Left namespace', 'apps');
+    await changeSelect('Right namespace', 'apps');
+    await changeSelect('Left kind', 'Deployment');
+    await changeSelect('Right kind', 'Deployment');
+    await changeSelect('Left object', 'alpha-uid');
+    await changeSelect('Right object', 'delta-uid');
+
+    const catalogCalls = refreshMocks.refreshOrchestrator.fetchScopedDomain.mock.calls.filter(
+      (call) => call[0] === 'catalog-diff'
+    );
+    const yamlCalls = refreshMocks.refreshOrchestrator.fetchScopedDomain.mock.calls.filter(
+      (call) => call[0] === 'object-yaml'
+    );
+
+    expect(catalogCalls.length).toBeGreaterThan(0);
+    expect(yamlCalls.length).toBeGreaterThan(0);
+    for (const call of [...catalogCalls, ...yamlCalls]) {
+      expect(call[2]).toEqual({ isManual: true });
+    }
+  });
+
   it('keeps a searched object selected after the search query is cleared', async () => {
     act(() => {
       root.render(
@@ -605,6 +653,54 @@ describe('ObjectDiffModal', () => {
       'Deployment',
       'alpha'
     );
+
+    const leftClusterSelect = document.querySelector(
+      'select[aria-label="Left cluster"]'
+    ) as HTMLSelectElement | null;
+    const leftNamespaceSelect = document.querySelector(
+      'select[aria-label="Left namespace"]'
+    ) as HTMLSelectElement | null;
+    const leftKindSelect = document.querySelector(
+      'select[aria-label="Left kind"]'
+    ) as HTMLSelectElement | null;
+    const leftObjectSelect = document.querySelector(
+      'select[aria-label="Left object"]'
+    ) as HTMLSelectElement | null;
+
+    expect(leftClusterSelect?.value).toBe('cluster-a');
+    expect(leftNamespaceSelect?.value).toBe('apps');
+    expect(leftKindSelect?.value).toBe('Deployment');
+    expect(leftObjectSelect?.value).toBe('alpha-uid');
+  });
+
+  it('uses catalog-backed identity from the initial request without re-matching', async () => {
+    await act(async () => {
+      root.render(
+        <KeyboardProvider>
+          <ObjectDiffModal
+            isOpen
+            initialRequest={{
+              requestId: 8,
+              left: {
+                clusterId: 'cluster-a',
+                clusterName: 'Cluster A',
+                namespace: 'apps',
+                group: 'apps',
+                version: 'v1',
+                kind: 'Deployment',
+                name: 'alpha',
+                resource: 'deployments',
+                uid: 'alpha-uid',
+              },
+            }}
+            onClose={vi.fn()}
+          />
+        </KeyboardProvider>
+      );
+      await Promise.resolve();
+    });
+
+    expect(appMocks.FindCatalogObjectMatch).not.toHaveBeenCalled();
 
     const leftClusterSelect = document.querySelector(
       'select[aria-label="Left cluster"]'

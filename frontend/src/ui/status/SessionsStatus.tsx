@@ -5,7 +5,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ListPortForwards, ListShellSessions, StopPortForward } from '@wailsjs/go/backend/App';
+import { StopPortForward } from '@wailsjs/go/backend/App';
 import { BrowserOpenURL } from '@wailsjs/runtime/runtime';
 import { errorHandler } from '@utils/errorHandler';
 import StatusIndicator, { type StatusState } from '@shared/components/status/StatusIndicator';
@@ -13,9 +13,13 @@ import { CloseIcon, OpenIcon, RestartIcon } from '@shared/components/icons/MenuI
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { requestObjectPanelTab } from '@modules/object-panel/objectPanelTabRequests';
+import {
+  readPortForwardSessions,
+  readShellSessions,
+  requestAppState,
+} from '@/core/app-state-access';
 import { objectPanelId } from '@/core/contexts/ObjectPanelStateContext';
-import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
-import type { KubernetesObjectReference } from '@/types/view-state';
+import { buildObjectReference } from '@shared/utils/objectIdentity';
 import '@modules/port-forward/PortForwardsPanel.css';
 import './SessionsStatus.css';
 
@@ -137,13 +141,21 @@ const SessionsStatus: React.FC = () => {
   useEffect(() => {
     const load = async () => {
       try {
-        const shellList = await ListShellSessions();
+        const shellList = await requestAppState({
+          resource: 'shell-sessions',
+          adapter: 'runtime-read',
+          read: () => readShellSessions(),
+        });
         setShellSessions(shellList || []);
       } catch {
         // Ignore initial load errors; runtime events will repopulate.
       }
       try {
-        const portForwardList = await ListPortForwards();
+        const portForwardList = await requestAppState({
+          resource: 'port-forward-sessions',
+          adapter: 'runtime-read',
+          read: () => readPortForwardSessions(),
+        });
         setPortForwardSessions(portForwardList || []);
       } catch {
         // Ignore initial load errors; runtime events will repopulate.
@@ -174,14 +186,13 @@ const SessionsStatus: React.FC = () => {
 
   const openShellSessionTab = useCallback(
     (session: ShellSessionInfo) => {
-      const targetRef: KubernetesObjectReference = {
+      const targetRef = buildObjectReference({
         kind: 'Pod',
         name: session.podName,
         namespace: session.namespace,
-        ...resolveBuiltinGroupVersion('Pod'),
         clusterId: session.clusterId?.trim() || selectedClusterId?.trim() || undefined,
         clusterName: session.clusterName?.trim() || undefined,
-      };
+      });
       const panelId = objectPanelId(targetRef);
       openWithObject(targetRef);
       requestObjectPanelTab(panelId, 'shell');

@@ -11,6 +11,13 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ReactElement, ReactNode, RefObject } from 'react';
+import { eventBus } from '@/core/events';
+import { getMaxTableRows } from '@/core/settings/appPreferences';
+import {
+  recordGridTablePerformanceSample,
+  recordGridTablePerformanceSnapshot,
+  recordGridTableScrollFrameSample,
+} from '@shared/components/tables/performance/gridTablePerformanceStore';
 import { useGridTableHoverSync } from '@shared/components/tables/hooks/useGridTableHoverSync';
 import type { HoverState } from '@shared/components/tables/hooks/useGridTableHoverSync';
 import { useGridTableColumnVirtualization } from '@shared/components/tables/hooks/useGridTableColumnVirtualization';
@@ -196,10 +203,14 @@ export function useGridTableController<T>({
   virtualization,
   loadingOverlay,
   filters,
+  diagnosticsLabel,
+  diagnosticsMode = 'local',
   allowHorizontalOverflow = true,
   disableCellNativeTitle = false,
   isKindColumnKey = defaultIsKindColumnKey,
 }: GridTableProps<T>): GridTableControllerResult<T> {
+  const [maxTableRows, setMaxTableRows] = useState<number>(() => getMaxTableRows());
+  const totalDataCount = Array.isArray(inputData) ? inputData.length : 0;
   const sourceData = useMemo<T[]>(
     () => (Array.isArray(inputData) ? inputData : ([] as T[])),
     [inputData]
@@ -208,6 +219,7 @@ export function useGridTableController<T>({
   const tableRef = useRef<HTMLDivElement>(null);
   const tableRefMutable = tableRef as RefObject<HTMLElement | null>;
   const headerInnerRef = useRef<HTMLDivElement | null>(null);
+  const previousInputDataRef = useRef(inputData);
   const paginationEnabled = Boolean(onRequestMore);
   const contextMenuActiveRef = useRef(false);
   const [tableViewportWidth, setTableViewportWidth] = useState(0);
@@ -218,6 +230,12 @@ export function useGridTableController<T>({
     y: number;
   } | null>(null);
   const [headerContextMenuColumnKey, setHeaderContextMenuColumnKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    return eventBus.on('settings:max-table-rows', (value) => {
+      setMaxTableRows(value);
+    });
+  }, []);
 
   const isShortcutOptOutTarget = useCallback((target: EventTarget | null) => {
     if (!(target instanceof HTMLElement)) {
@@ -247,9 +265,21 @@ export function useGridTableController<T>({
 
   const { wrapWithProfiler, warnDevOnce, startFrameSampler, stopFrameSampler } =
     useGridTableProfiler({
-      sampleLabel: 'GridTable scroll',
+      sampleLabel: diagnosticsLabel ? `${diagnosticsLabel} scroll` : 'GridTable scroll',
       sampleWindowMs: 2000,
       minSampleCount: 10,
+      onFrameSample: diagnosticsLabel
+        ? (sample) => {
+            recordGridTableScrollFrameSample(diagnosticsLabel, sample);
+          }
+        : undefined,
+      onRenderSample: diagnosticsLabel
+        ? (phase, actualDuration) => {
+            recordGridTablePerformanceSample(diagnosticsLabel, 'render', actualDuration, {
+              renderPhase: phase,
+            });
+          }
+        : undefined,
     });
 
   const { renderedColumns, isColumnVisible, applyVisibilityChanges, lockedColumns } =
@@ -270,7 +300,7 @@ export function useGridTableController<T>({
 
   const {
     filteringEnabled,
-    tableData,
+    tableData: filteredData,
     activeFilters,
     filterSignature,
     filtersContainerRef,
@@ -281,9 +311,41 @@ export function useGridTableController<T>({
     handleFilterReset,
   } = useGridTableFiltersWiring<T>({
     data: sourceData,
+    totalDataCount,
+    maxDisplayRows: maxTableRows,
     filters,
+    diagnosticsLabel,
     columnsDropdown: columnsDropdownConfig ?? undefined,
   });
+
+  const tableData = useMemo<T[]>(
+    () => filteredData.slice(0, maxTableRows),
+    [filteredData, maxTableRows]
+  );
+
+  useEffect(() => {
+    if (!diagnosticsLabel) {
+      previousInputDataRef.current = inputData;
+      return;
+    }
+
+    const inputReferenceChanged = previousInputDataRef.current !== inputData;
+    recordGridTablePerformanceSnapshot(diagnosticsLabel, {
+      mode: diagnosticsMode,
+      inputRows: totalDataCount,
+      sourceRows: Math.min(totalDataCount, maxTableRows),
+      displayedRows: tableData.length,
+      inputReferenceChanged,
+    });
+    previousInputDataRef.current = inputData;
+  }, [
+    diagnosticsLabel,
+    diagnosticsMode,
+    inputData,
+    maxTableRows,
+    tableData.length,
+    totalDataCount,
+  ]);
 
   // Whether any filter is actively narrowing results (search text, kind, or namespace selections).
   const hasActiveFilters =

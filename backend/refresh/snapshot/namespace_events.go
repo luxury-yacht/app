@@ -37,6 +37,7 @@ type EventSummary struct {
 	ResourceVersion  string `json:"resourceVersion"`
 	Namespace        string `json:"namespace"`
 	ObjectNamespace  string `json:"objectNamespace"`
+	ObjectUID        string `json:"objectUid"`
 	ObjectAPIVersion string `json:"objectApiVersion"`
 	Type             string `json:"type"`
 	Source           string `json:"source"`
@@ -146,6 +147,7 @@ func (b *NamespaceEventsBuilder) Build(ctx context.Context, scope string) (*refr
 			ResourceVersion:  event.ResourceVersion,
 			Namespace:        event.InvolvedObject.Namespace,
 			ObjectNamespace:  event.InvolvedObject.Namespace,
+			ObjectUID:        string(event.InvolvedObject.UID),
 			ObjectAPIVersion: event.InvolvedObject.APIVersion,
 			Type:             event.Type,
 			Source:           namespaceEventSource(event),

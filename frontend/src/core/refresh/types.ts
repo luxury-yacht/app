@@ -207,6 +207,7 @@ export interface ClusterRBACEntry extends ClusterMeta {
 
 export interface ClusterRBACSnapshotPayload extends ClusterMeta {
   resources: ClusterRBACEntry[];
+  kinds?: string[];
 }
 
 export interface ClusterStorageEntry extends ClusterMeta {
@@ -234,6 +235,7 @@ export interface ClusterConfigEntry extends ClusterMeta {
 
 export interface ClusterConfigSnapshotPayload extends ClusterMeta {
   resources: ClusterConfigEntry[];
+  kinds?: string[];
 }
 
 export interface ClusterCRDEntry extends ClusterMeta {
@@ -287,6 +289,7 @@ export interface ClusterCustomEntry extends ClusterMeta {
 
 export interface ClusterCustomSnapshotPayload extends ClusterMeta {
   resources: ClusterCustomEntry[];
+  kinds?: string[];
 }
 
 export interface ClusterEventEntry extends ClusterMeta {
@@ -297,6 +300,7 @@ export interface ClusterEventEntry extends ClusterMeta {
   resourceVersion?: string;
   namespace: string;
   objectNamespace?: string;
+  objectUid?: string;
   objectApiVersion?: string;
   type: string;
   source: string;
@@ -440,6 +444,7 @@ export interface ObjectEventSummary extends ClusterMeta {
   involvedObjectName: string;
   involvedObjectKind: string;
   involvedObjectNamespace?: string;
+  involvedObjectUid?: string;
   // apiVersion of the event's involvedObject (e.g. "apps/v1", "v1",
   // "documentdb.services.k8s.aws/v1alpha1"). Required for GVK
   // disambiguation when opening the related object — see
@@ -485,6 +490,7 @@ export interface NamespaceWorkloadSummary extends ClusterMeta {
 
 export interface NamespaceWorkloadSnapshotPayload extends ClusterMeta {
   workloads: NamespaceWorkloadSummary[];
+  kinds?: string[];
 }
 
 export interface NamespaceConfigSummary extends ClusterMeta {
@@ -498,6 +504,7 @@ export interface NamespaceConfigSummary extends ClusterMeta {
 
 export interface NamespaceConfigSnapshotPayload extends ClusterMeta {
   resources: NamespaceConfigSummary[];
+  kinds?: string[];
 }
 
 export interface NamespaceNetworkSummary extends ClusterMeta {
@@ -510,6 +517,7 @@ export interface NamespaceNetworkSummary extends ClusterMeta {
 
 export interface NamespaceNetworkSnapshotPayload extends ClusterMeta {
   resources: NamespaceNetworkSummary[];
+  kinds?: string[];
 }
 
 export interface NamespaceRBACSummary extends ClusterMeta {
@@ -522,6 +530,7 @@ export interface NamespaceRBACSummary extends ClusterMeta {
 
 export interface NamespaceRBACSnapshotPayload extends ClusterMeta {
   resources: NamespaceRBACSummary[];
+  kinds?: string[];
 }
 
 export interface NamespaceStorageSummary extends ClusterMeta {
@@ -560,6 +569,7 @@ export interface NamespaceAutoscalingSummary extends ClusterMeta {
 
 export interface NamespaceAutoscalingSnapshotPayload extends ClusterMeta {
   resources: NamespaceAutoscalingSummary[];
+  kinds?: string[];
 }
 
 export interface NamespaceQuotaSummary extends ClusterMeta {
@@ -580,6 +590,7 @@ export interface NamespaceQuotaSummary extends ClusterMeta {
 
 export interface NamespaceQuotasSnapshotPayload extends ClusterMeta {
   resources: NamespaceQuotaSummary[];
+  kinds?: string[];
 }
 
 export interface NamespaceEventSummary extends ClusterMeta {
@@ -590,6 +601,7 @@ export interface NamespaceEventSummary extends ClusterMeta {
   resourceVersion?: string;
   namespace: string;
   objectNamespace?: string;
+  objectUid?: string;
   objectApiVersion?: string;
   type: string;
   source: string;
@@ -627,6 +639,7 @@ export interface NamespaceCustomSummary extends ClusterMeta {
 
 export interface NamespaceCustomSnapshotPayload extends ClusterMeta {
   resources: NamespaceCustomSummary[];
+  kinds?: string[];
 }
 
 export interface NamespaceHelmSummary extends ClusterMeta {

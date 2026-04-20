@@ -40,6 +40,7 @@ type NamespaceQuotasBuilder struct {
 type NamespaceQuotasSnapshot struct {
 	ClusterMeta
 	Resources []QuotaSummary `json:"resources"`
+	Kinds     []string       `json:"kinds,omitempty"`
 }
 
 // QuotaSummary captures quota/limit range/PDB info.
@@ -220,7 +221,11 @@ func (b *NamespaceQuotasBuilder) buildSnapshot(
 		Domain:  namespaceQuotasDomainName,
 		Scope:   namespace,
 		Version: version,
-		Payload: NamespaceQuotasSnapshot{ClusterMeta: meta, Resources: resources},
+		Payload: NamespaceQuotasSnapshot{
+			ClusterMeta: meta,
+			Resources:   resources,
+			Kinds:       snapshotSortedKinds(resources, func(resource QuotaSummary) string { return resource.Kind }),
+		},
 		Stats:   refresh.SnapshotStats{ItemCount: len(resources)},
 	}, nil
 }

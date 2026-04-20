@@ -19,6 +19,7 @@ import React, {
 } from 'react';
 import { errorHandler } from '@/utils/errorHandler';
 import { type ResourceDataReturn } from '@hooks/resources';
+import { requestRefreshDomain } from '@/core/data-access';
 import type {
   NamespaceAutoscalingSnapshotPayload,
   NamespaceAutoscalingSummary,
@@ -33,6 +34,8 @@ import {
   useRefreshScopedDomain,
   useRefreshScopedDomainStates,
 } from '@/core/refresh';
+import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
+import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
 import type { NamespaceRefresherKey } from '@/core/refresh/refresherTypes';
 import type { RefreshDomain } from '@/core/refresh/types';
 import type { NamespaceViewType } from '@/types/navigation/views';
@@ -42,6 +45,7 @@ import { resetScopedDomainState } from '@/core/refresh/store';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
+import { useStableKeyedArray, useStableSelectedValue } from '@shared/hooks/useStableSelectedValue';
 
 export interface PodsResourceDataReturn extends ResourceDataReturn<PodSnapshotEntry[]> {
   metrics: PodMetricsInfo | null;
@@ -158,7 +162,9 @@ const getCapabilityNamespace = (value?: string | null): string | null => {
 const useNamespacePodsResource = (
   enabled: boolean,
   namespace?: string | null,
-  clusterId?: string | null
+  clusterId?: string | null,
+  isPaused: boolean = false,
+  isManualRefreshActive: boolean = false
 ): PodsResourceDataReturn => {
   const scope = useMemo(
     () => normalizeNamespaceScope(namespace, clusterId),
@@ -168,18 +174,15 @@ const useNamespacePodsResource = (
   const scopedStates = useRefreshScopedDomainStates('pods');
   const domainState = scope ? scopedStates[scope] : undefined;
 
-  const baseLoad = useCallback(async () => {
-    if (!enabled || !scope) {
-      return;
-    }
-    await refreshOrchestrator.fetchScopedDomain('pods', scope, { isManual: true });
-  }, [enabled, scope]);
-
   const refresh = useCallback(async () => {
     if (!enabled || !scope) {
       return;
     }
-    await refreshOrchestrator.fetchScopedDomain('pods', scope, { isManual: true });
+    await requestRefreshDomain({
+      domain: 'pods',
+      scope,
+      reason: 'user',
+    });
   }, [enabled, scope]);
 
   const reset = useCallback(() => {
@@ -195,6 +198,11 @@ const useNamespacePodsResource = (
     }
     return domainState.data.pods;
   }, [domainState?.data?.pods]);
+  const stableData = useStableKeyedArray(
+    data,
+    (pod) => `${pod.clusterId ?? clusterId ?? ''}::${pod.namespace}::${pod.name}`
+  );
+  const stableMetrics = useStableSelectedValue(domainState?.data?.metrics ?? null);
 
   const initialising =
     enabled &&
@@ -211,36 +219,49 @@ const useNamespacePodsResource = (
     domainState?.status === 'ready' ||
     domainState?.status === 'error' ||
     (domainState?.status === 'updating' && Boolean(domainState?.data));
-  const metrics = domainState?.data?.metrics ?? null;
+  const passiveLoading = applyPassiveLoadingPolicy({
+    loading,
+    hasLoaded: Boolean(hasLoaded),
+    isPaused,
+    isManualRefreshActive,
+  });
+  const metrics = stableMetrics;
 
   return useMemo(
     () => ({
-      data,
-      loading,
+      data: stableData,
+      loading: passiveLoading.loading,
       refreshing,
       error: domainState?.error ? new Error(domainState.error) : null,
       load: async (showSpinner = true) => {
-        void showSpinner;
-        await baseLoad();
+        if (!enabled || !scope) {
+          return;
+        }
+        await requestRefreshDomain({
+          domain: 'pods',
+          scope,
+          reason: showSpinner ? 'user' : 'startup',
+        });
       },
       refresh,
       reset,
       cancel: reset,
       lastFetchTime: domainState?.lastUpdated ? new Date(domainState.lastUpdated) : null,
-      hasLoaded: Boolean(hasLoaded),
+      hasLoaded: passiveLoading.hasLoaded,
       metrics,
     }),
     [
-      baseLoad,
-      data,
       domainState?.error,
       domainState?.lastUpdated,
-      hasLoaded,
-      loading,
+      enabled,
       metrics,
+      passiveLoading.hasLoaded,
+      passiveLoading.loading,
       refresh,
       refreshing,
       reset,
+      scope,
+      stableData,
     ]
   );
 };
@@ -249,10 +270,14 @@ function useRefreshBackedResource<T>(
   resourceKey: NamespaceRefresherKey,
   domain: RefreshDomain,
   selector: (payload: any) => T,
+  metaSelector: ((payload: any) => unknown) | undefined,
   fallback: T,
   enabled: boolean,
   namespace?: string | null,
-  clusterId?: string | null
+  clusterId?: string | null,
+  isPaused: boolean = false,
+  isManualRefreshActive: boolean = false,
+  keyedRowIdentity?: ((item: any) => string) | undefined
 ): ResourceDataReturn<T> {
   // Build the cluster-scoped namespace scope for this domain.
   const namespaceScope = useMemo(
@@ -269,7 +294,11 @@ function useRefreshBackedResource<T>(
       }
 
       try {
-        await refreshOrchestrator.fetchScopedDomain(domain, namespaceScope, { isManual: true });
+        await requestRefreshDomain({
+          domain,
+          scope: namespaceScope,
+          reason: _showSpinner ? 'user' : 'startup',
+        });
       } catch (error) {
         errorHandler.handle(error instanceof Error ? error : new Error(String(error)), {
           source: `namespace-resource-load-${resourceKey}`,
@@ -285,7 +314,11 @@ function useRefreshBackedResource<T>(
     }
 
     try {
-      await refreshOrchestrator.fetchScopedDomain(domain, namespaceScope, { isManual: true });
+      await requestRefreshDomain({
+        domain,
+        scope: namespaceScope,
+        reason: 'user',
+      });
     } catch (error) {
       errorHandler.handle(error instanceof Error ? error : new Error(String(error)), {
         source: `namespace-resource-refresh-${resourceKey}`,
@@ -304,17 +337,29 @@ function useRefreshBackedResource<T>(
       return;
     }
     if (domainState.status === 'idle' && !domainData) {
-      void load(true);
+      void load(false);
     }
   }, [enabled, domainState.status, domainData, load, namespaceScope]);
 
-  const data = useMemo(() => {
-    if (!domainData) {
-      return fallback;
+  const selectedData = useMemo(
+    () => (!domainData ? fallback : (selector(domainData) ?? fallback)),
+    [domainData, selector, fallback]
+  );
+  const shallowStableData = useStableSelectedValue(selectedData);
+  const stableKeyedRows = useStableKeyedArray(
+    Array.isArray(selectedData) ? selectedData : [],
+    keyedRowIdentity ?? (() => '')
+  );
+  const data =
+    Array.isArray(selectedData) && keyedRowIdentity ? (stableKeyedRows as T) : shallowStableData;
+
+  const selectedMeta = useMemo(() => {
+    if (!domainData || !metaSelector) {
+      return undefined;
     }
-    const result = selector(domainData);
-    return result ?? fallback;
-  }, [domainData, selector, fallback]);
+    return metaSelector(domainData);
+  }, [domainData, metaSelector]);
+  const meta = useStableSelectedValue(selectedMeta);
 
   const initialising =
     enabled &&
@@ -324,11 +369,21 @@ function useRefreshBackedResource<T>(
   const loadingStatus =
     initialising ||
     (enabled && Boolean(namespaceScope) && domainState.status === 'loading' && !domainData);
+  const hasLoaded =
+    domainState.status === 'ready' ||
+    domainState.status === 'error' ||
+    (domainState.status === 'updating' && Boolean(domainData));
+  const passiveLoading = applyPassiveLoadingPolicy({
+    loading: loadingStatus,
+    hasLoaded,
+    isPaused,
+    isManualRefreshActive,
+  });
 
   return useMemo(
     () => ({
       data,
-      loading: loadingStatus,
+      loading: passiveLoading.loading,
       refreshing: enabled && domainState.status === 'updating',
       error: domainState.error ? new Error(domainState.error) : null,
       load,
@@ -340,14 +395,11 @@ function useRefreshBackedResource<T>(
         }
       },
       lastFetchTime: domainState.lastUpdated ? new Date(domainState.lastUpdated) : null,
-      hasLoaded:
-        domainState.status === 'ready' ||
-        domainState.status === 'error' ||
-        (domainState.status === 'updating' && Boolean(domainData)),
+      hasLoaded: passiveLoading.hasLoaded,
+      meta,
     }),
     [
       data,
-      domainData,
       domainState.status,
       domainState.error,
       domainState.lastUpdated,
@@ -356,8 +408,10 @@ function useRefreshBackedResource<T>(
       reset,
       domain,
       enabled,
-      loadingStatus,
+      meta,
       namespaceScope,
+      passiveLoading.hasLoaded,
+      passiveLoading.loading,
     ]
   );
 }
@@ -395,6 +449,7 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
   const { viewType } = useViewState();
   const { selectedClusterId } = useKubeconfig();
   const { selectedNamespaceClusterId } = useNamespace();
+  const { isPaused, isManualRefreshActive } = useAutoRefreshLoadingState();
   // Prefer the cluster tied to the namespace selection; fall back to the kubeconfig selection.
   const namespaceClusterId = selectedNamespaceClusterId ?? selectedClusterId;
   const isNamespaceView = viewType === 'namespace';
@@ -434,50 +489,67 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     'workloads',
     'namespace-workloads',
     (payload) => filterByClusterId(payload?.workloads, namespaceClusterId),
+    (payload?: { kinds?: string[] }) => ({ kinds: payload?.kinds ?? [] }),
     [],
     isResourceActive('workloads'),
     currentNamespace,
-    namespaceClusterId
+    namespaceClusterId,
+    isPaused,
+    isManualRefreshActive,
+    (item) =>
+      `${item.clusterId ?? namespaceClusterId ?? ''}::${item.namespace}::${item.kind}::${item.name}`
   );
 
   const config = useRefreshBackedResource<any[]>(
     'config',
     'namespace-config',
     (payload) => filterByClusterId(payload?.resources, namespaceClusterId),
+    (payload?: { kinds?: string[] }) => ({ kinds: payload?.kinds ?? [] }),
     [],
     isResourceActive('config'),
     currentNamespace,
-    namespaceClusterId
+    namespaceClusterId,
+    isPaused,
+    isManualRefreshActive
   );
 
   const network = useRefreshBackedResource<any[]>(
     'network',
     'namespace-network',
     (payload) => filterByClusterId(payload?.resources, namespaceClusterId),
+    (payload?: { kinds?: string[] }) => ({ kinds: payload?.kinds ?? [] }),
     [],
     isResourceActive('network'),
     currentNamespace,
-    namespaceClusterId
+    namespaceClusterId,
+    isPaused,
+    isManualRefreshActive
   );
 
   const rbac = useRefreshBackedResource<any[]>(
     'rbac',
     'namespace-rbac',
     (payload) => filterByClusterId(payload?.resources, namespaceClusterId),
+    (payload?: { kinds?: string[] }) => ({ kinds: payload?.kinds ?? [] }),
     [],
     isResourceActive('rbac'),
     currentNamespace,
-    namespaceClusterId
+    namespaceClusterId,
+    isPaused,
+    isManualRefreshActive
   );
 
   const storage = useRefreshBackedResource<any[]>(
     'storage',
     'namespace-storage',
     (payload) => filterByClusterId(payload?.resources, namespaceClusterId),
+    undefined,
     [],
     isResourceActive('storage'),
     currentNamespace,
-    namespaceClusterId
+    namespaceClusterId,
+    isPaused,
+    isManualRefreshActive
   );
 
   const autoscaling = useRefreshBackedResource<any[]>(
@@ -507,35 +579,54 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
           };
         }
       ),
+    (payload?: NamespaceAutoscalingSnapshotPayload) => ({ kinds: payload?.kinds ?? [] }),
     [],
     isResourceActive('autoscaling'),
     currentNamespace,
-    namespaceClusterId
+    namespaceClusterId,
+    isPaused,
+    isManualRefreshActive,
+    (item: NamespaceAutoscalingSummary) =>
+      `${item.clusterId ?? namespaceClusterId ?? ''}::${item.namespace}::${item.kind}::${item.name}`
   );
 
   const quotas = useRefreshBackedResource<any[]>(
     'quotas',
     'namespace-quotas',
     (payload) => filterByClusterId(payload?.resources, namespaceClusterId),
+    (payload?: { kinds?: string[] }) => ({ kinds: payload?.kinds ?? [] }),
     [],
     isResourceActive('quotas'),
     currentNamespace,
-    namespaceClusterId
+    namespaceClusterId,
+    isPaused,
+    isManualRefreshActive
   );
 
   const events = useRefreshBackedResource<any[]>(
     'events',
     'namespace-events',
     (payload) => filterByClusterId(payload?.events, namespaceClusterId),
+    undefined,
     [],
     isResourceActive('events'),
     currentNamespace,
-    namespaceClusterId
+    namespaceClusterId,
+    isPaused,
+    isManualRefreshActive,
+    (item) =>
+      `${item.clusterId ?? namespaceClusterId ?? ''}::${item.objectNamespace ?? item.namespace ?? ''}::${item.uid || item.name || `${item.object ?? ''}:${item.source ?? ''}:${item.reason ?? ''}:${item.type ?? ''}`}`
   );
 
   const podsEnabled =
     Boolean(currentNamespace) && isNamespaceView && activeNamespaceView === 'pods';
-  const pods = useNamespacePodsResource(podsEnabled, currentNamespace, namespaceClusterId);
+  const pods = useNamespacePodsResource(
+    podsEnabled,
+    currentNamespace,
+    namespaceClusterId,
+    isPaused,
+    isManualRefreshActive
+  );
 
   const custom = useRefreshBackedResource<any[]>(
     'custom',
@@ -561,10 +652,15 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
           annotations: item.annotations,
         })
       ),
+    (payload?: NamespaceCustomSnapshotPayload) => ({ kinds: payload?.kinds ?? [] }),
     [],
     isResourceActive('custom'),
     currentNamespace,
-    namespaceClusterId
+    namespaceClusterId,
+    isPaused,
+    isManualRefreshActive,
+    (item) =>
+      `${item.clusterId ?? namespaceClusterId ?? ''}::${item.namespace}::${item.apiGroup ?? ''}::${item.apiVersion ?? ''}::${item.kind}::${item.name}`
   );
 
   const helm = useRefreshBackedResource<any[]>(
@@ -589,10 +685,15 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
           age: release.age,
         })
       ),
+    undefined,
     [],
     isResourceActive('helm'),
     currentNamespace,
-    namespaceClusterId
+    namespaceClusterId,
+    isPaused,
+    isManualRefreshActive,
+    (release: NamespaceHelmSummary) =>
+      `${release.clusterId ?? namespaceClusterId ?? ''}::${release.namespace}::${release.name}`
   );
 
   useEffect(() => {
@@ -751,37 +852,37 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
               // Catalog-backed browse view manages its own refresh cadence.
               break;
             case 'pods':
-              res.pods.load(true);
+              res.pods.load(false);
               break;
             case 'workloads':
-              res.workloads.load(true);
+              res.workloads.load(false);
               break;
             case 'config':
-              res.config.load(true);
+              res.config.load(false);
               break;
             case 'network':
-              res.network.load(true);
+              res.network.load(false);
               break;
             case 'rbac':
-              res.rbac.load(true);
+              res.rbac.load(false);
               break;
             case 'storage':
-              res.storage.load(true);
+              res.storage.load(false);
               break;
             case 'events':
-              res.events.load(true);
+              res.events.load(false);
               break;
             case 'quotas':
-              res.quotas.load(true);
+              res.quotas.load(false);
               break;
             case 'autoscaling':
-              res.autoscaling.load(true);
+              res.autoscaling.load(false);
               break;
             case 'custom':
-              res.custom.load(true);
+              res.custom.load(false);
               break;
             case 'helm':
-              res.helm.load(true);
+              res.helm.load(false);
               break;
           }
         }, 100);
@@ -821,7 +922,7 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
 
     if (activeKey === 'pods') {
       if (!podsResource.hasLoaded && !podsResource.loading) {
-        void podsResource.load?.(true);
+        void podsResource.load?.(false);
       }
       return;
     }
@@ -838,11 +939,11 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     }
 
     if (!resource.hasLoaded && !resource.loading) {
-      void resource.load?.(true);
+      void resource.load?.(false);
       return;
     }
 
-    resource.refresh && void resource.refresh();
+    void resource.load?.(false);
   }, [activeResourceType, currentNamespace, isNamespaceView]);
 
   // Subscribe to view changes to know which resource to auto-refresh

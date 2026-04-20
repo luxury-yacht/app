@@ -12,6 +12,7 @@ import type { ObjectEventSummary } from '@/core/refresh/types';
 
 // Capture the openWithObject calls so we can inspect clusterId.
 const mockOpenWithObject = vi.fn();
+const mockFindCatalogObjectByUID = vi.fn();
 
 vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
   useObjectPanel: () => ({
@@ -21,6 +22,10 @@ vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
 
 vi.mock('@shared/hooks/useNavigateToView', () => ({
   useNavigateToView: () => ({ navigateToView: vi.fn() }),
+}));
+
+vi.mock('@wailsjs/go/backend/App', () => ({
+  FindCatalogObjectByUID: (...args: unknown[]) => mockFindCatalogObjectByUID(...args),
 }));
 
 vi.mock('@/core/refresh/clusterScope', () => ({
@@ -50,8 +55,26 @@ const hoistedSnapshot = vi.hoisted(() => ({
   error: null as string | null,
 }));
 
+const autoRefreshLoadingState = vi.hoisted(() => ({
+  isPaused: false,
+  isManualRefreshActive: false,
+  suppressPassiveLoading: false,
+}));
+
+const appPreferencesMocks = vi.hoisted(() => ({
+  getAutoRefreshEnabled: vi.fn(() => true),
+}));
+
 vi.mock('@/core/refresh/store', () => ({
   useRefreshScopedDomain: () => hoistedSnapshot,
+}));
+
+vi.mock('@/core/refresh/hooks/useAutoRefreshLoadingState', () => ({
+  useAutoRefreshLoadingState: () => autoRefreshLoadingState,
+}));
+
+vi.mock('@/core/settings/appPreferences', () => ({
+  getAutoRefreshEnabled: () => appPreferencesMocks.getAutoRefreshEnabled(),
 }));
 
 const mockFetchScopedDomain = vi.fn(() => Promise.resolve());
@@ -125,8 +148,13 @@ describe('EventsTab', () => {
 
   beforeEach(() => {
     mockOpenWithObject.mockClear();
+    mockFindCatalogObjectByUID.mockReset();
     mockFetchScopedDomain.mockClear();
     refreshWatcherState.onRefresh = null;
+    autoRefreshLoadingState.isPaused = false;
+    autoRefreshLoadingState.isManualRefreshActive = false;
+    autoRefreshLoadingState.suppressPassiveLoading = false;
+    appPreferencesMocks.getAutoRefreshEnabled.mockReturnValue(true);
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
@@ -148,7 +176,7 @@ describe('EventsTab', () => {
     clusterName: PARENT_CLUSTER_NAME,
   };
 
-  it('prefers per-event clusterId over parent panel cluster when opening related objects', () => {
+  it('prefers per-event clusterId over parent panel cluster when opening related objects', async () => {
     // Event has its own cluster identity distinct from the parent panel.
     hoistedSnapshot.data = {
       events: [makeEvent({ clusterId: EVENT_CLUSTER_ID, clusterName: EVENT_CLUSTER_NAME })],
@@ -168,7 +196,10 @@ describe('EventsTab', () => {
     const row = container.querySelector('[data-testid="row-0"]') as HTMLButtonElement;
     expect(row).toBeTruthy();
 
-    act(() => row.click());
+    await act(async () => {
+      row.click();
+      await Promise.resolve();
+    });
 
     expect(mockOpenWithObject).toHaveBeenCalledTimes(1);
     const call = mockOpenWithObject.mock.calls[0][0];
@@ -211,7 +242,29 @@ describe('EventsTab', () => {
     });
   });
 
-  it('falls back to parent panel cluster when event has no cluster identity', () => {
+  it('shows the paused message instead of a loading placeholder before first load', async () => {
+    autoRefreshLoadingState.isPaused = true;
+    autoRefreshLoadingState.suppressPassiveLoading = true;
+    appPreferencesMocks.getAutoRefreshEnabled.mockReturnValue(false);
+    hoistedSnapshot.data = null;
+    hoistedSnapshot.status = 'loading';
+
+    act(() => {
+      root.render(
+        <EventsTab
+          objectData={parentObjectData}
+          isActive={true}
+          eventsScope="parent-cluster|default:Deployment:my-deploy"
+        />
+      );
+    });
+
+    expect(container.textContent).toContain('Auto-refresh is disabled');
+    expect(container.textContent).not.toContain('Loading events...');
+    expect(mockFetchScopedDomain).not.toHaveBeenCalled();
+  });
+
+  it('falls back to parent panel cluster when event has no cluster identity', async () => {
     // Event without cluster fields — should fall back to parent panel.
     hoistedSnapshot.data = {
       events: [makeEvent({ clusterId: undefined, clusterName: undefined })],
@@ -231,7 +284,10 @@ describe('EventsTab', () => {
     const row = container.querySelector('[data-testid="row-0"]') as HTMLButtonElement;
     expect(row).toBeTruthy();
 
-    act(() => row.click());
+    await act(async () => {
+      row.click();
+      await Promise.resolve();
+    });
 
     expect(mockOpenWithObject).toHaveBeenCalledTimes(1);
     const call = mockOpenWithObject.mock.calls[0][0];
@@ -239,7 +295,7 @@ describe('EventsTab', () => {
     expect(call.clusterName).toBe(PARENT_CLUSTER_NAME);
   });
 
-  it('threads the event involvedObject GVK to openWithObject so colliding kinds are disambiguated', () => {
+  it('threads the event involvedObject GVK to openWithObject so colliding kinds are disambiguated', async () => {
     // Two different CRDs both define the kind "DBInstance". Without
     // group/version on the openWithObject reference, the panel cannot
     // tell them apart and the backend's legacy kind-only resolver picks
@@ -271,7 +327,10 @@ describe('EventsTab', () => {
     const row = container.querySelector('[data-testid="row-0"]') as HTMLButtonElement;
     expect(row).toBeTruthy();
 
-    act(() => row.click());
+    await act(async () => {
+      row.click();
+      await Promise.resolve();
+    });
 
     expect(mockOpenWithObject).toHaveBeenCalledTimes(1);
     const call = mockOpenWithObject.mock.calls[0][0];
@@ -282,7 +341,7 @@ describe('EventsTab', () => {
     expect(call.version).toBe('v1alpha1');
   });
 
-  it('parses core/v1 involvedObject apiVersion into an empty group + v1 version', () => {
+  it('parses core/v1 involvedObject apiVersion into an empty group + v1 version', async () => {
     hoistedSnapshot.data = {
       events: [
         makeEvent({
@@ -306,11 +365,69 @@ describe('EventsTab', () => {
     });
 
     const row = container.querySelector('[data-testid="row-0"]') as HTMLButtonElement;
-    act(() => row.click());
+    await act(async () => {
+      row.click();
+      await Promise.resolve();
+    });
 
     expect(mockOpenWithObject).toHaveBeenCalledTimes(1);
     const call = mockOpenWithObject.mock.calls[0][0];
     expect(call.group).toBe('');
     expect(call.version).toBe('v1');
+  });
+
+  it('resolves involved CRDs by UID when the event omits apiVersion', async () => {
+    mockFindCatalogObjectByUID.mockResolvedValue({
+      kind: 'Database',
+      name: 'orders-db',
+      namespace: 'team-a',
+      clusterId: EVENT_CLUSTER_ID,
+      clusterName: EVENT_CLUSTER_NAME,
+      group: 'db.example.io',
+      version: 'v1',
+      resource: 'databases',
+      uid: 'orders-db-uid',
+    });
+    hoistedSnapshot.data = {
+      events: [
+        makeEvent({
+          involvedObjectKind: 'Database',
+          involvedObjectName: 'orders-db',
+          involvedObjectNamespace: 'team-a',
+          involvedObjectUid: 'orders-db-uid',
+          involvedObjectApiVersion: undefined,
+          clusterId: EVENT_CLUSTER_ID,
+          clusterName: EVENT_CLUSTER_NAME,
+        }),
+      ],
+    };
+    hoistedSnapshot.status = 'ready';
+
+    act(() => {
+      root.render(
+        <EventsTab
+          objectData={parentObjectData}
+          isActive={true}
+          eventsScope="parent-cluster|default:Deployment:my-deploy"
+        />
+      );
+    });
+
+    const row = container.querySelector('[data-testid="row-0"]') as HTMLButtonElement;
+    await act(async () => {
+      row.click();
+      await Promise.resolve();
+    });
+
+    expect(mockFindCatalogObjectByUID).toHaveBeenCalledWith(EVENT_CLUSTER_ID, 'orders-db-uid');
+    expect(mockOpenWithObject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'Database',
+        name: 'orders-db',
+        group: 'db.example.io',
+        version: 'v1',
+        uid: 'orders-db-uid',
+      })
+    );
   });
 });

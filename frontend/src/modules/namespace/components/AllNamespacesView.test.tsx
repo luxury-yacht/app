@@ -467,6 +467,7 @@ describe('AllNamespacesView', () => {
       if (resourceKey === 'custom') {
         return {
           data: customData,
+          meta: { kinds: ['DBCluster', 'Widget'] },
           loading: false,
           hasLoaded: true,
           error: new Error('custom down'),
@@ -482,6 +483,7 @@ describe('AllNamespacesView', () => {
     expect(namespaceResourcesMocks.useNamespaceResourceMock).toHaveBeenCalledWith('custom');
     expect(container.textContent).toContain('Failed to load custom resources: custom down');
     expect(getLatestProps('custom-view')?.data).toBe(customData);
+    expect(getLatestProps('custom-view')?.availableKinds).toEqual(['DBCluster', 'Widget']);
   });
 
   it('renders events view using namespace resources provider', async () => {

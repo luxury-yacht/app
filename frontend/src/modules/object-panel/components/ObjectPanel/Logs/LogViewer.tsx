@@ -6,7 +6,9 @@
  * Uses a reducer for state management.
  */
 import React, { useReducer, useEffect, useRef, useMemo, useCallback } from 'react';
-import { GetLogScopeContainers, LogFetcher } from '@wailsjs/go/backend/App';
+import { LogFetcher } from '@wailsjs/go/backend/App';
+import { readLogScopeContainers, requestData } from '@/core/data-access';
+import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
 import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
@@ -39,6 +41,8 @@ import { CaseSensitiveIcon, SettingsIcon } from '@shared/components/icons/MenuIc
 import './LogViewer.css';
 import { refreshOrchestrator } from '@/core/refresh/orchestrator';
 import { eventBus } from '@/core/events';
+import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
+import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
 import { setScopedDomainState, useRefreshScopedDomain } from '@/core/refresh/store';
 import {
   getLogApiTimestampFormat,
@@ -372,6 +376,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   clusterId,
   panelId,
 }) => {
+  const { isPaused, isManualRefreshActive } = useAutoRefreshLoadingState();
   // Lazy reducer init: rehydrate from the panel-scoped prefs cache so a
   // remount caused by a cluster switch picks up the user's previous
   // autoRefresh / textFilter / isParsedView /
@@ -649,6 +654,14 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
         ['loading', 'updating', 'initialising'].includes(snapshotStatus) ||
         fallbackActive ||
         pendingFallback);
+  const logsLoadingState = applyPassiveLoadingPolicy({
+    loading: isPendingLogs,
+    hasLoaded: hasReceivedInitialLogs,
+    hasData: logEntries.length > 0,
+    isPaused,
+    isManualRefreshActive: isManualRefreshActive || showPreviousLogs,
+  });
+  const showPausedLogsState = logsLoadingState.showPausedEmptyState;
 
   const { filteredEntries, parsedCandidates, canParseLogs } = useLogFiltering({
     logEntries,
@@ -1310,6 +1323,11 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
         return '';
     }
   }, [logEmptyState, unavailableLogMessage]);
+  const shouldShowPausedLogsEmptyState =
+    logsLoadingState.suppressPassiveLoading &&
+    logEmptyState === 'no_logs_yet' &&
+    logEntries.length === 0 &&
+    !showPreviousLogs;
 
   const displayLines = useMemo(() => {
     if (filteredEntries.length === 0) {
@@ -1676,7 +1694,12 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     let isCancelled = false;
     const fetchContainers = async () => {
       try {
-        const containerList = await GetLogScopeContainers(resolvedClusterId, logScope);
+        const result = await requestData({
+          resource: 'log-scope-containers',
+          reason: 'user',
+          read: () => readLogScopeContainers(resolvedClusterId, logScope),
+        });
+        const containerList = result.status === 'executed' ? (result.data ?? []) : [];
 
         if (isCancelled) return;
 
@@ -2162,10 +2185,20 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   );
 
   // Loading state
-  if (isPendingLogs) {
+  if (logsLoadingState.loading) {
     return (
       <div className="object-panel-tab-content">
         <LoadingSpinner message="Loading logs..." />
+      </div>
+    );
+  }
+
+  if (showPausedLogsState || shouldShowPausedLogsEmptyState) {
+    return (
+      <div className="object-panel-tab-content">
+        <div className="pod-logs-display-empty">
+          <ClusterDataPausedState />
+        </div>
       </div>
     );
   }
@@ -2224,10 +2257,6 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                     ref={filterInputRef}
                     value={textFilter}
                     onChange={(e) => dispatch({ type: 'SET_TEXT_FILTER', payload: e.target.value })}
-                    autoComplete="off"
-                    autoCorrect="off"
-                    autoCapitalize="none"
-                    spellCheck={false}
                     placeholder="Filter logs..."
                     className="pod-logs-text-filter"
                     title="Filter logs by text (searches in log lines, pods, and containers)"

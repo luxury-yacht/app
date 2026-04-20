@@ -41,6 +41,7 @@ import {
   useCapabilityDiagnostics,
   useUserPermissions,
 } from '@/core/capabilities';
+import { useBrokerReadDiagnostics } from '@/core/read-diagnostics';
 import { Tabs, type TabDescriptor } from '@shared/components/tabs';
 import { useViewState } from '@/core/contexts/ViewStateContext';
 import { useNamespace } from '@/modules/namespace/contexts/NamespaceContext';
@@ -50,6 +51,7 @@ import {
   type DiagnosticsRow,
   type DiagnosticsPanelProps,
   type DiagnosticsStreamRow,
+  type BrokerReadRow,
   type CapabilityDescriptorActivityDetails,
   formatInterval,
   formatLastUpdated,
@@ -64,8 +66,14 @@ import {
 } from './diagnostics';
 import { DiagnosticsTable, DiagnosticsSummaryCards } from './diagnostics/TableRefreshDomains';
 import { DiagnosticsStreamsTable } from './diagnostics/TableStreams';
+import { BrokerReadsTable } from './diagnostics/TableBrokerReads';
 import { CapabilityChecksTable } from './diagnostics/TableCapabilitesChecks';
 import { EffectivePermissionsTable } from './diagnostics/TableEffectivePermissions';
+import { GridTablePerformance } from './diagnostics/GridTablePerformance';
+import {
+  resetGridTablePerformanceDiagnostics,
+  useGridTablePerformanceDiagnostics,
+} from '@shared/components/tables/performance/gridTablePerformanceStore';
 
 // Re-export for backwards compatibility
 export { resolveDomainNamespace } from './diagnostics';
@@ -121,8 +129,10 @@ const PERMISSION_ERROR_HINTS = ['forbidden', 'permission', 'unauthorized', 'acce
 type DiagnosticsTabId =
   | 'refresh-domains'
   | 'streams'
+  | 'table-performance'
   | 'capability-checks'
-  | 'effective-permissions';
+  | 'effective-permissions'
+  | 'broker-reads';
 
 // Applied to every diagnostics tab via extraProps. The panel's custom focus
 // walker (querySelectorAll below) locates tabs through this marker — if it
@@ -136,6 +146,7 @@ const DIAGNOSTICS_FOCUSABLE_PROPS = {
 const DIAGNOSTICS_TAB_DESCRIPTORS: TabDescriptor[] = [
   { id: 'refresh-domains', label: 'Refresh Domains', extraProps: DIAGNOSTICS_FOCUSABLE_PROPS },
   { id: 'streams', label: 'Streams', extraProps: DIAGNOSTICS_FOCUSABLE_PROPS },
+  { id: 'table-performance', label: 'Table Performance', extraProps: DIAGNOSTICS_FOCUSABLE_PROPS },
   {
     id: 'capability-checks',
     label: 'Capabilities Checks',
@@ -144,6 +155,11 @@ const DIAGNOSTICS_TAB_DESCRIPTORS: TabDescriptor[] = [
   {
     id: 'effective-permissions',
     label: 'Effective Permissions',
+    extraProps: DIAGNOSTICS_FOCUSABLE_PROPS,
+  },
+  {
+    id: 'broker-reads',
+    label: 'Broker Reads',
     extraProps: DIAGNOSTICS_FOCUSABLE_PROPS,
   },
 ];
@@ -229,8 +245,60 @@ const resolveStreamTelemetryHealth = (
 const formatHealthLabel = (status: HealthStatus, reason: string): string =>
   reason ? `${status} (${reason})` : status;
 
+const BROKER_READ_TOKEN_LABELS: Record<string, string> = {
+  api: 'API',
+  crds: 'CRDs',
+  gvk: 'GVK',
+  hpa: 'HPA',
+  rbac: 'RBAC',
+  uid: 'UID',
+  yaml: 'YAML',
+};
+
+const formatBrokerReadLabel = (value: string): string => {
+  return value
+    .split(/[-_:/]+/)
+    .filter(Boolean)
+    .map((token) => {
+      const lower = token.toLowerCase();
+      if (BROKER_READ_TOKEN_LABELS[lower]) {
+        return BROKER_READ_TOKEN_LABELS[lower];
+      }
+      return token.charAt(0).toUpperCase() + token.slice(1);
+    })
+    .join(' ');
+};
+
+const resolveBrokerReadScope = (
+  scopes: string[],
+  activeClusterId: string,
+  getClusterMeta: (config: string) => { id: string; name: string }
+): { display: string; tooltip?: string } => {
+  const trimmedScopes = scopes.map((scope) => scope.trim()).filter(Boolean);
+  const trimmed = trimmedScopes[0] ?? '';
+  if (!trimmed) {
+    return { display: '—' };
+  }
+
+  const scopeDetails = resolveScopeDetails(trimmed, activeClusterId, getClusterMeta);
+  const recentScopeCount = trimmedScopes.length;
+  if (recentScopeCount <= 1) {
+    return {
+      display: scopeDetails.display,
+      tooltip: scopeDetails.tooltip ?? trimmed,
+    };
+  }
+
+  return {
+    display: `${scopeDetails.display} (+${recentScopeCount - 1} more)`,
+    tooltip: trimmedScopes.join(' || '),
+  };
+};
+
 export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isOpen }) => {
   const [activeTab, setActiveTab] = useState<DiagnosticsTabId>('refresh-domains');
+  const gridTablePerformanceRows = useGridTablePerformanceDiagnostics();
+  const brokerReadDiagnostics = useBrokerReadDiagnostics();
   const refreshState = useRefreshState();
   // Scoped domains — read all scope entries for diagnostics.
   const objectMaintenanceScopeEntries = useRefreshScopedDomainEntries('object-maintenance');
@@ -431,7 +499,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         },
         {
           domain: 'cluster-custom' as RefreshDomain,
-          label: 'Cluster Custom Resources',
+          label: 'Cluster Custom',
           entries: clusterCustomScopeEntries,
         },
         {
@@ -2056,6 +2124,14 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     />
   );
 
+  const tablePerformanceContent = (
+    <GridTablePerformance
+      onReset={resetGridTablePerformanceDiagnostics}
+      rows={gridTablePerformanceRows}
+      summary="Rolling GridTable measurements for the instrumented large-data views."
+    />
+  );
+
   // Split capability batch rows into current (Cluster + selected namespace + in-flight)
   // and previous (everything else).
   const { currentCapabilityRows, previousCapabilityRows } = useMemo(() => {
@@ -2100,6 +2176,62 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       showAllPermissions={showAllPermissions}
       onToggleShowAll={() => setShowAllPermissions((prev) => !prev)}
     />
+  );
+
+  const brokerReadRows = useMemo<BrokerReadRow[]>(() => {
+    return brokerReadDiagnostics.map((entry) => {
+      const updatedInfo = formatLastUpdated(entry.lastCompletedAt);
+      const lastStatus =
+        entry.inFlightCount > 0
+          ? 'In Flight'
+          : entry.lastStatus === 'never'
+            ? '—'
+            : entry.lastStatus === 'blocked'
+              ? 'Blocked'
+              : entry.lastStatus === 'error'
+                ? 'Error'
+                : 'Success';
+      const broker = entry.broker === 'data-access' ? 'Cluster Data' : 'App State';
+      const label = entry.label ?? formatBrokerReadLabel(entry.resource);
+      const scopeInfo = resolveBrokerReadScope(
+        entry.recentScopes,
+        selectedClusterId,
+        getClusterMeta
+      );
+
+      return {
+        key: entry.key,
+        broker,
+        label,
+        resource: entry.resource,
+        adapter: entry.adapter,
+        reason: entry.reason ?? '—',
+        scope: scopeInfo.display,
+        scopeTooltip: scopeInfo.tooltip,
+        inFlightCount: entry.inFlightCount,
+        totalRequests: entry.totalRequests,
+        successCount: entry.successCount,
+        errorCount: entry.errorCount,
+        blockedCount: entry.blockedCount,
+        lastStatus,
+        lastDuration: formatDurationMs(entry.lastDurationMs),
+        lastUpdated: updatedInfo.display,
+        lastUpdatedTooltip: updatedInfo.tooltip,
+        lastError: entry.lastBlockedReason ?? entry.lastError ?? '—',
+      };
+    });
+  }, [brokerReadDiagnostics, getClusterMeta, selectedClusterId]);
+
+  const brokerReadsSummary = useMemo(() => {
+    const inFlight = brokerReadRows.reduce((total, row) => total + row.inFlightCount, 0);
+    const totalRequests = brokerReadRows.reduce((total, row) => total + row.totalRequests, 0);
+    const blocked = brokerReadRows.reduce((total, row) => total + row.blockedCount, 0);
+    const errors = brokerReadRows.reduce((total, row) => total + row.errorCount, 0);
+    return `Rows: ${brokerReadRows.length} • In Flight: ${inFlight} • Requests: ${totalRequests} • Blocked: ${blocked} • Errors: ${errors}`;
+  }, [brokerReadRows]);
+
+  const brokerReadsContent = (
+    <BrokerReadsTable rows={brokerReadRows} summary={brokerReadsSummary} />
   );
 
   const panelRef = useRef<HTMLDivElement>(null);
@@ -2197,9 +2329,13 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
           ? refreshDomainsContent
           : activeTab === 'streams'
             ? streamsContent
-            : activeTab === 'capability-checks'
-              ? capabilityChecksContent
-              : effectivePermissionsContent}
+            : activeTab === 'table-performance'
+              ? tablePerformanceContent
+              : activeTab === 'capability-checks'
+                ? capabilityChecksContent
+                : activeTab === 'effective-permissions'
+                  ? effectivePermissionsContent
+                  : brokerReadsContent}
       </div>
     </DockablePanel>
   );

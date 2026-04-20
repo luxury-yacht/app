@@ -55,6 +55,7 @@ func TestClusterRBACBuilder(t *testing.T) {
 	payload, ok := snapshot.Payload.(ClusterRBACSnapshot)
 	require.True(t, ok)
 	require.Len(t, payload.Resources, 2)
+	require.Equal(t, []string{"ClusterRole", "ClusterRoleBinding"}, payload.Kinds)
 
 	entries := map[string]ClusterRBACEntry{}
 	for _, entry := range payload.Resources {
@@ -84,4 +85,5 @@ func TestClusterRBACBuilderEmpty(t *testing.T) {
 	payload, ok := snapshot.Payload.(ClusterRBACSnapshot)
 	require.True(t, ok)
 	require.Empty(t, payload.Resources)
+	require.Empty(t, payload.Kinds)
 }

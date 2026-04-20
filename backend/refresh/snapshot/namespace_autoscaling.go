@@ -31,6 +31,7 @@ type NamespaceAutoscalingBuilder struct {
 type NamespaceAutoscalingSnapshot struct {
 	ClusterMeta
 	Resources []AutoscalingSummary `json:"resources"`
+	Kinds     []string             `json:"kinds,omitempty"`
 }
 
 // AutoscalingSummary captures HPA details for display.
@@ -162,7 +163,11 @@ func (b *NamespaceAutoscalingBuilder) buildSnapshot(
 		Domain:  namespaceAutoscalingDomainName,
 		Scope:   scope,
 		Version: version,
-		Payload: NamespaceAutoscalingSnapshot{ClusterMeta: meta, Resources: resources},
+		Payload: NamespaceAutoscalingSnapshot{
+			ClusterMeta: meta,
+			Resources:   resources,
+			Kinds:       snapshotSortedKinds(resources, func(resource AutoscalingSummary) string { return resource.Kind }),
+		},
 		Stats: refresh.SnapshotStats{
 			ItemCount: len(resources),
 		},

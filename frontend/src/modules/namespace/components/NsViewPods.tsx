@@ -17,7 +17,7 @@ import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useTableSort } from '@/hooks/useTableSort';
 import * as cf from '@shared/components/tables/columnFactories';
 import { getMetricsBannerInfo } from '@shared/utils/metricsAvailability';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
@@ -25,7 +25,6 @@ import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
-import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import type { PodSnapshotEntry, PodMetricsInfo } from '@/core/refresh/types';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { getPodsUnhealthyStorageKey } from '@modules/namespace/components/podsFilterSignals';
@@ -37,6 +36,13 @@ import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useFavToggle } from '@ui/favorites/FavToggle';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
+import { useNamespaceFilterOptions } from '@modules/namespace/hooks/useNamespaceFilterOptions';
+import {
+  buildCanonicalObjectRowKey,
+  buildObjectReference,
+  buildRelatedObjectReference,
+} from '@shared/utils/objectIdentity';
+import { parseCpuToMillicores, parseMemToMB } from '@utils/resourceCalculations';
 
 interface PodsViewProps {
   namespace: string;
@@ -78,6 +84,14 @@ const parseReadyCounts = (value?: string | null): { ready: number; total: number
     ready: Number(match[1]),
     total: Number(match[2]),
   };
+};
+
+const getReadySortValue = (value?: string | null): number => {
+  const counts = parseReadyCounts(value);
+  if (!counts) {
+    return -1;
+  }
+  return counts.ready * 1000000 + counts.total;
 };
 
 // Determine if a pod is unhealthy based on its status, restarts, and ready counts.
@@ -136,14 +150,15 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
     // Include cluster metadata so object details stay scoped to the active tab.
     const handlePodOpen = useCallback(
       (pod: PodSnapshotEntry) => {
-        openWithObject({
-          kind: 'Pod',
-          name: pod.name,
-          namespace: pod.namespace,
-          ...resolveBuiltinGroupVersion('Pod'),
-          clusterId: pod.clusterId ?? undefined,
-          clusterName: pod.clusterName ?? undefined,
-        });
+        openWithObject(
+          buildObjectReference({
+            kind: 'Pod',
+            name: pod.name,
+            namespace: pod.namespace,
+            clusterId: pod.clusterId ?? undefined,
+            clusterName: pod.clusterName ?? undefined,
+          })
+        );
       },
       [openWithObject]
     );
@@ -153,14 +168,15 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
         if (!pod.ownerKind || !pod.ownerName) {
           return;
         }
-        openWithObject({
-          kind: pod.ownerKind,
-          name: pod.ownerName,
-          namespace: pod.namespace,
-          ...resolveBuiltinGroupVersion(pod.ownerKind),
-          clusterId: pod.clusterId ?? undefined,
-          clusterName: pod.clusterName ?? undefined,
-        });
+        openWithObject(
+          buildRelatedObjectReference({
+            kind: pod.ownerKind,
+            name: pod.ownerName,
+            namespace: pod.namespace,
+            clusterId: pod.clusterId ?? undefined,
+            clusterName: pod.clusterName ?? undefined,
+          })
+        );
       },
       [openWithObject]
     );
@@ -170,20 +186,26 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
         if (!pod.node) {
           return;
         }
-        openWithObject({
-          kind: 'Node',
-          name: pod.node,
-          ...resolveBuiltinGroupVersion('Node'),
-          clusterId: pod.clusterId ?? undefined,
-          clusterName: pod.clusterName ?? undefined,
-        });
+        openWithObject(
+          buildObjectReference({
+            kind: 'Node',
+            name: pod.node,
+            clusterId: pod.clusterId ?? undefined,
+            clusterName: pod.clusterName ?? undefined,
+          })
+        );
       },
       [openWithObject]
     );
 
     const keyExtractor = useCallback(
       (pod: PodSnapshotEntry) =>
-        buildClusterScopedKey(pod, `pod:${pod.namespace || ''}/${pod.name}`),
+        buildCanonicalObjectRowKey({
+          kind: 'Pod',
+          name: pod.name,
+          namespace: pod.namespace,
+          clusterId: pod.clusterId,
+        }),
       []
     );
 
@@ -198,6 +220,23 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       }
       return new Date(effectiveMetrics.collectedAt * 1000);
     }, [effectiveMetrics?.collectedAt]);
+    const metricsStateRef = useRef<{
+      stale: boolean;
+      lastError?: string;
+      lastUpdated?: Date;
+    }>({
+      stale: Boolean(effectiveMetrics?.stale),
+      lastError: effectiveMetrics?.lastError || undefined,
+      lastUpdated: metricsLastUpdated,
+    });
+
+    useEffect(() => {
+      metricsStateRef.current = {
+        stale: Boolean(effectiveMetrics?.stale),
+        lastError: effectiveMetrics?.lastError || undefined,
+        lastUpdated: metricsLastUpdated,
+      };
+    }, [effectiveMetrics?.lastError, effectiveMetrics?.stale, metricsLastUpdated]);
 
     const columns: GridColumnDefinition<PodSnapshotEntry>[] = useMemo(() => {
       // Use the same warning styling as workloads when restarts are non-zero.
@@ -209,25 +248,29 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
           getKind: () => 'Pod',
           onClick: handlePodOpen,
           onAltClick: (pod) =>
-            navigateToView({
-              kind: 'Pod',
-              name: pod.name,
-              namespace: pod.namespace,
-              clusterId: pod.clusterId ?? undefined,
-              clusterName: pod.clusterName ?? undefined,
-            }),
+            navigateToView(
+              buildObjectReference({
+                kind: 'Pod',
+                name: pod.name,
+                namespace: pod.namespace,
+                clusterId: pod.clusterId ?? undefined,
+                clusterName: pod.clusterName ?? undefined,
+              })
+            ),
           sortable: false,
         }),
         cf.createTextColumn<PodSnapshotEntry>('name', 'Name', {
           onClick: handlePodOpen,
           onAltClick: (pod) =>
-            navigateToView({
-              kind: 'Pod',
-              name: pod.name,
-              namespace: pod.namespace,
-              clusterId: pod.clusterId ?? undefined,
-              clusterName: pod.clusterName ?? undefined,
-            }),
+            navigateToView(
+              buildObjectReference({
+                kind: 'Pod',
+                name: pod.name,
+                namespace: pod.namespace,
+                clusterId: pod.clusterId ?? undefined,
+                clusterName: pod.clusterName ?? undefined,
+              })
+            ),
           getTitle: (pod) => pod.name,
           getClassName: () => 'object-panel-link',
         }),
@@ -253,13 +296,15 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
             onClick: handleOwnerOpen,
             onAltClick: (pod) => {
               if (pod.ownerKind && pod.ownerName) {
-                navigateToView({
-                  kind: pod.ownerKind,
-                  name: pod.ownerName,
-                  namespace: pod.namespace,
-                  clusterId: pod.clusterId ?? undefined,
-                  clusterName: pod.clusterName ?? undefined,
-                });
+                navigateToView(
+                  buildObjectReference({
+                    kind: pod.ownerKind,
+                    name: pod.ownerName,
+                    namespace: pod.namespace,
+                    clusterId: pod.clusterId ?? undefined,
+                    clusterName: pod.clusterName ?? undefined,
+                  })
+                );
               }
             },
             isInteractive: (pod) => Boolean(pod.ownerKind && pod.ownerName),
@@ -273,12 +318,14 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
           onClick: handleNodeOpen,
           onAltClick: (pod) => {
             if (pod.node) {
-              navigateToView({
-                kind: 'Node',
-                name: pod.node,
-                clusterId: pod.clusterId ?? undefined,
-                clusterName: pod.clusterName ?? undefined,
-              });
+              navigateToView(
+                buildObjectReference({
+                  kind: 'Node',
+                  name: pod.node,
+                  clusterId: pod.clusterId ?? undefined,
+                  clusterName: pod.clusterName ?? undefined,
+                })
+              );
             }
           },
           isInteractive: (pod) => Boolean(pod.node),
@@ -291,10 +338,12 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
           getUsage: (pod) => pod.cpuUsage,
           getRequest: (pod) => pod.cpuRequest,
           getLimit: (pod) => pod.cpuLimit,
-          getMetricsStale: () => Boolean(effectiveMetrics?.stale),
-          getMetricsError: () => effectiveMetrics?.lastError || undefined,
-          getMetricsLastUpdated: () => metricsLastUpdated,
+          getMetricsStale: () => metricsStateRef.current.stale,
+          getMetricsError: () => metricsStateRef.current.lastError,
+          getMetricsLastUpdated: () => metricsStateRef.current.lastUpdated,
           getAnimationKey: (pod) => `pod:${pod.namespace}/${pod.name}:cpu`,
+          sortable: true,
+          sortValue: (pod) => parseCpuToMillicores(pod.cpuUsage),
         }),
         cf.createResourceBarColumn<PodSnapshotEntry>({
           header: 'Memory',
@@ -303,13 +352,36 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
           getUsage: (pod) => pod.memUsage,
           getRequest: (pod) => pod.memRequest,
           getLimit: (pod) => pod.memLimit,
-          getMetricsStale: () => Boolean(effectiveMetrics?.stale),
-          getMetricsError: () => effectiveMetrics?.lastError || undefined,
-          getMetricsLastUpdated: () => metricsLastUpdated,
+          getMetricsStale: () => metricsStateRef.current.stale,
+          getMetricsError: () => metricsStateRef.current.lastError,
+          getMetricsLastUpdated: () => metricsStateRef.current.lastUpdated,
           getAnimationKey: (pod) => `pod:${pod.namespace}/${pod.name}:memory`,
+          sortable: true,
+          sortValue: (pod) => parseMemToMB(pod.memUsage),
         }),
         cf.createAgeColumn(),
       ];
+
+      const statusColumn = baseColumns.find((column) => column.key === 'status');
+      if (statusColumn) {
+        statusColumn.sortValue = (pod: PodSnapshotEntry) => (pod.status || '').toLowerCase();
+      }
+      const readyColumn = baseColumns.find((column) => column.key === 'ready');
+      if (readyColumn) {
+        readyColumn.sortValue = (pod: PodSnapshotEntry) => getReadySortValue(pod.ready);
+      }
+      const nameColumn = baseColumns.find((column) => column.key === 'name');
+      if (nameColumn) {
+        nameColumn.sortValue = (pod: PodSnapshotEntry) => (pod.name || '').toLowerCase();
+      }
+      const ownerColumn = baseColumns.find((column) => column.key === 'owner');
+      if (ownerColumn) {
+        ownerColumn.sortValue = (pod: PodSnapshotEntry) => (pod.ownerName || '').toLowerCase();
+      }
+      const nodeColumn = baseColumns.find((column) => column.key === 'node');
+      if (nodeColumn) {
+        nodeColumn.sortValue = (pod: PodSnapshotEntry) => (pod.node || '').toLowerCase();
+      }
 
       const sizing: cf.ColumnSizingMap = {
         kind: { autoWidth: true },
@@ -336,12 +408,9 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
 
       return baseColumns;
     }, [
-      effectiveMetrics?.lastError,
-      effectiveMetrics?.stale,
       handleNodeOpen,
       handleOwnerOpen,
       handlePodOpen,
-      metricsLastUpdated,
       namespaceColumnLink,
       navigateToView,
       showNamespaceColumn,
@@ -374,12 +443,16 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       columns,
       controlledSort: persistedSort,
       onChange: onSortChange,
+      diagnosticsLabel:
+        namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Pods' : 'Namespace Pods',
+      rowIdentity: keyExtractor,
     });
 
-    const availableFilterNamespaces = useMemo(
+    const fallbackNamespaces = useMemo(
       () => [...new Set(data.map((r) => r.namespace).filter(Boolean))].sort(),
       [data]
     );
+    const availableFilterNamespaces = useNamespaceFilterOptions(namespace, fallbackNamespaces);
 
     const { item: favToggle, modal: favModal } = useFavToggle({
       filters: persistedFilters,
@@ -504,14 +577,18 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
           ) ?? null;
 
         return buildObjectActionItems({
-          object: {
-            kind: 'Pod',
-            name: pod.name,
-            namespace: pod.namespace,
-            clusterId: pod.clusterId,
-            clusterName: pod.clusterName,
-            portForwardAvailable: pod.portForwardAvailable,
-          },
+          object: buildObjectReference(
+            {
+              kind: 'Pod',
+              name: pod.name,
+              namespace: pod.namespace,
+              clusterId: pod.clusterId,
+              clusterName: pod.clusterName,
+            },
+            {
+              portForwardAvailable: pod.portForwardAvailable,
+            }
+          ),
           context: 'gridtable',
           handlers: {
             onOpen: () => handlePodOpen(pod),
@@ -575,6 +652,10 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
           <GridTable
             data={displayedPods}
             columns={columns}
+            diagnosticsLabel={
+              namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Pods' : 'Namespace Pods'
+            }
+            diagnosticsMode="live"
             loading={loading && displayedPods.length === 0}
             keyExtractor={keyExtractor}
             onRowClick={handlePodOpen}
@@ -589,7 +670,10 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
               onChange: setPersistedFilters,
               onReset: resetPersistedState,
               options: {
+                namespaces: availableFilterNamespaces,
                 showNamespaceDropdown: showNamespaceFilter,
+                namespaceDropdownSearchable: showNamespaceFilter,
+                namespaceDropdownBulkActions: showNamespaceFilter,
                 preActions: [favToggle, unhealthyToggle].filter(Boolean) as IconBarItem[],
               },
             }}

@@ -18,15 +18,12 @@ import {
   setClusterTabOrder,
   subscribeClusterTabOrder,
 } from '@core/persistence/clusterTabOrder';
-import {
-  GetClusterPortForwardCount,
-  StopClusterPortForwards,
-  StopClusterShellSessions,
-} from '@wailsjs/go/backend/App';
+import { StopClusterPortForwards, StopClusterShellSessions } from '@wailsjs/go/backend/App';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import { CloseIcon } from '@shared/components/icons/MenuIcons';
 import { Tabs, type TabDescriptor } from '@shared/components/tabs';
 import { useTabDragSourceFactory, useTabDropTarget } from '@shared/components/tabs/dragCoordinator';
+import { readClusterPortForwardCount, requestAppState } from '@/core/app-state-access';
 import './ClusterTabs.css';
 
 const ordersMatch = (left: string[], right: string[]) =>
@@ -141,7 +138,11 @@ const ClusterTabs: React.FC = () => {
 
       // Check if there are active port forwards for this cluster.
       try {
-        const count = await GetClusterPortForwardCount(selection);
+        const count = await requestAppState({
+          resource: 'cluster-port-forward-count',
+          adapter: 'runtime-read',
+          read: () => readClusterPortForwardCount(selection),
+        });
         if (count > 0) {
           // Show confirmation modal with the count.
           setCloseConfirm({

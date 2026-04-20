@@ -16,6 +16,7 @@ import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { getDisplayKind, aliasToKindMap, canonicalKinds } from '@/utils/kindAliasMap';
 import { useShortNames } from '@/hooks/useShortNames';
+import { buildObjectReference } from '@shared/utils/objectIdentity';
 import { Command } from './CommandPaletteCommands';
 import { isMacPlatform } from '@/utils/platform';
 import { ErrorBoundary } from '@shared/components/errors/ErrorBoundary';
@@ -505,17 +506,7 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
       const catalogItem = item.item;
       close();
       setTimeout(() => {
-        openWithObject({
-          kind: catalogItem.kind,
-          name: catalogItem.name,
-          namespace: catalogItem.namespace ?? undefined,
-          group: catalogItem.group,
-          version: catalogItem.version,
-          resource: catalogItem.resource,
-          uid: catalogItem.uid,
-          clusterId: catalogItem.clusterId ?? undefined,
-          clusterName: catalogItem.clusterName ?? undefined,
-        });
+        openWithObject(buildObjectReference(catalogItem));
       }, 100);
     },
     [close, openWithObject]
@@ -865,10 +856,6 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
               setSelectedIndex(0);
             }}
             onKeyDown={handleInputKeyDown}
-            autoComplete="off"
-            autoCorrect="off"
-            autoCapitalize="off"
-            spellCheck={false}
           />
         </div>
 

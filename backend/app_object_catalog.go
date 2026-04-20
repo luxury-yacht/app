@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/luxury-yacht/app/backend/capabilities"
@@ -490,6 +491,35 @@ func (a *App) FindCatalogObjectMatch(
 	}
 
 	match, ok := svc.FindExactMatch(namespace, group, version, kind, name)
+	if !ok {
+		return nil, nil
+	}
+
+	return &match, nil
+}
+
+// FindCatalogObjectByUID resolves a single catalog object in the requested
+// cluster by resource UID.
+func (a *App) FindCatalogObjectByUID(clusterID, uid string) (*objectcatalog.Summary, error) {
+	if a == nil {
+		return nil, fmt.Errorf("app is not initialised")
+	}
+
+	trimmedClusterID := clusterID
+	if trimmedClusterID == "" {
+		return nil, fmt.Errorf("cluster ID is required")
+	}
+	trimmedUID := strings.TrimSpace(uid)
+	if trimmedUID == "" {
+		return nil, fmt.Errorf("uid is required")
+	}
+
+	svc := a.objectCatalogServiceForCluster(trimmedClusterID)
+	if svc == nil {
+		return nil, fmt.Errorf("object catalog service unavailable for cluster %q", trimmedClusterID)
+	}
+
+	match, ok := svc.FindByUID(trimmedUID)
 	if !ok {
 		return nil, nil
 	}

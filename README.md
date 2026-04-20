@@ -33,7 +33,7 @@ Here are some of the things that Luxury Yacht offers that you might not find in 
 
 - **Node maintenance.** Cordon, drain, and delete nodes with ease. Simply open a node's panel and select the Maintenance tab.
 
-- **Simple port forwarding.** Right-click on a workload, pod, or service. Select a port and click Start. That's it. Run multiple port forwards simultaneously, and easily track them in a centralized status console.
+- **Simple port forwarding.** Right-click on a workload, pod, or service and click Port Forward. Select a port and click Start. That's it. Run multiple port forwards simultaneously, and easily track them in a centralized status console.
 
 - **Shell support with debug containers.** Of course you expect to be able to get a shell in a container, but what if the container doesn't support shell access? Luxury Yacht gives you a simple way to start an ephemeral debug container in that pod, attached to the container.
 

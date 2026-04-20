@@ -97,6 +97,40 @@ export type UpsertResult = {
 };
 
 /**
+ * Reconciles a full replacement catalog snapshot against the current list.
+ * Reuses existing item references when UID/resourceVersion are unchanged,
+ * while still reflecting additions, deletions, reordering, and updates.
+ */
+export const reconcileByUID = (current: CatalogItem[], incoming: CatalogItem[]): UpsertResult => {
+  const { items: dedupedIncoming } = dedupeByUID(incoming);
+  if (dedupedIncoming.length === 0) {
+    return current.length === 0
+      ? { nextItems: current, changed: false }
+      : { nextItems: [], changed: true };
+  }
+
+  const currentByUid = new Map<string, CatalogItem>();
+  current.forEach((item) => {
+    currentByUid.set(item.uid, item);
+  });
+
+  let changed = current.length !== dedupedIncoming.length;
+  const nextItems = dedupedIncoming.map((item, index) => {
+    const existing = currentByUid.get(item.uid);
+    const nextItem =
+      existing && existing.resourceVersion === item.resourceVersion ? existing : item;
+
+    if (!changed && !Object.is(current[index], nextItem)) {
+      changed = true;
+    }
+
+    return nextItem;
+  });
+
+  return changed ? { nextItems, changed: true } : { nextItems: current, changed: false };
+};
+
+/**
  * Upserts incoming items into the current list by UID.
  * Updates existing items if their resourceVersion differs, appends new items.
  *

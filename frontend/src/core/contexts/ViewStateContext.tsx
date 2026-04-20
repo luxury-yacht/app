@@ -25,6 +25,7 @@ import React, {
   useRef,
 } from 'react';
 import type { ViewType, NamespaceViewType, ClusterViewType } from '@/types/navigation/views';
+import { requestContextRefresh } from '@/core/data-access';
 import { refreshOrchestrator } from '@/core/refresh';
 import { eventBus } from '@/core/events';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
@@ -152,7 +153,7 @@ const NavigationStateProvider: React.FC<NavigationStateProviderProps> = ({ child
       refreshOrchestrator.updateContext({ currentView: view });
 
       if (viewIsChanging) {
-        void refreshOrchestrator.triggerManualRefreshForContext();
+        void requestContextRefresh({ reason: 'startup' });
       }
     },
     [updateActiveState, viewType]

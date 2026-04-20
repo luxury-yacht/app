@@ -6,24 +6,28 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { requestRefreshDomain } from '@/core/data-access';
+import { eventBus } from '@/core/events';
 import { refreshOrchestrator, useRefreshScopedDomain } from '@/core/refresh';
+import { getMaxTableRows } from '@/core/settings/appPreferences';
 import { getScopedDomainState, setScopedDomainState } from '@/core/refresh/store';
 import { useCatalogDiagnostics } from '@/core/refresh/diagnostics/useCatalogDiagnostics';
+import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
+import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
 import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import {
   buildCatalogScope,
-  dedupeByUID,
   filterClusterScopedItems,
   filterNamespaceScopedItems,
   normalizeCatalogScope,
   parseContinueToken,
+  reconcileByUID,
   rebuildIndexByUID,
   splitClusterScope,
   upsertByUID,
 } from '@modules/browse/utils/browseUtils';
-
-const DEFAULT_LIMIT = 200;
+import { useStableSelectedValue } from '@shared/hooks/useStableSelectedValue';
 
 type PageRequestMode = 'reset' | 'append' | null;
 
@@ -99,18 +103,35 @@ export function useBrowseCatalog({
   const [isRequestingMore, setIsRequestingMore] = useState(false);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
+  const [pageLimit, setPageLimit] = useState<number>(() => getMaxTableRows());
+  const { isPaused, isManualRefreshActive } = useAutoRefreshLoadingState();
 
   const requestModeRef = useRef<PageRequestMode>(null);
   const lastAppliedScopeRef = useRef<string>('');
   const itemsRef = useRef<CatalogItem[]>([]);
   const indexByUidRef = useRef<Map<string, number>>(new Map());
+  const hasLoadedOnceRef = useRef(false);
 
-  const pageLimit = DEFAULT_LIMIT;
   const isNamespaceScoped = pinnedNamespaces.length > 0;
+
+  useEffect(() => {
+    return eventBus.on('settings:max-table-rows', (value) => {
+      setPageLimit(value);
+    });
+  }, []);
 
   // Track available namespaces from the catalog snapshot.
   // Used to query all namespaces when no filter is selected in all-namespaces mode.
   const [availableNamespaces, setAvailableNamespaces] = useState<string[]>([]);
+  const scopeIdentityKey = useMemo(
+    () =>
+      JSON.stringify({
+        clusterId: clusterId ?? '',
+        clusterScopedOnly,
+        pinnedNamespaces: pinnedNamespaces.map((ns) => ns.trim()).sort(),
+      }),
+    [clusterId, clusterScopedOnly, pinnedNamespaces]
+  );
 
   // Determine namespaces to query:
   // - Cluster scope: 'cluster' special value (to get cluster-scoped objects only)
@@ -161,8 +182,42 @@ export function useBrowseCatalog({
     );
   }, [baseScope, pageLimit, pinnedNamespaces, clusterId]);
 
+  const metadataNamespaces = useMemo(() => {
+    if (clusterScopedOnly) {
+      return ['cluster'];
+    }
+    if (isNamespaceScoped) {
+      return pinnedNamespaces;
+    }
+    return [];
+  }, [clusterScopedOnly, isNamespaceScoped, pinnedNamespaces]);
+
+  const metadataBaseScope = useMemo(
+    () =>
+      buildCatalogScope({
+        limit: 1,
+        search: '',
+        kinds: [],
+        namespaces: metadataNamespaces,
+      }),
+    [metadataNamespaces]
+  );
+
+  const metadataScope = useMemo(() => {
+    return (
+      normalizeCatalogScope(metadataBaseScope, 1, pinnedNamespaces, clusterId) ??
+      buildClusterScope(clusterId ?? undefined, metadataBaseScope)
+    );
+  }, [metadataBaseScope, pinnedNamespaces, clusterId]);
+
+  const metadataUsesActiveScope = metadataScope === catalogScope;
+
   // Read scoped state for the current catalog scope.
   const domain = useRefreshScopedDomain('catalog', catalogScope);
+  const metadataDomain = useRefreshScopedDomain(
+    'catalog',
+    metadataUsesActiveScope ? catalogScope : metadataScope
+  );
   useCatalogDiagnostics(domain, diagnosticLabel);
 
   // Enable catalog domain on mount, disable on unmount.
@@ -180,20 +235,56 @@ export function useBrowseCatalog({
     };
   }, [catalogScope]);
 
-  // Apply query scope and refresh page 0 when the query changes
+  const prevMetadataScopeRef = useRef<string>(metadataScope);
   useEffect(() => {
+    if (metadataUsesActiveScope) {
+      return;
+    }
+    const prevScope = prevMetadataScopeRef.current;
+    if (prevScope && prevScope !== metadataScope) {
+      refreshOrchestrator.setScopedDomainEnabled('catalog', prevScope, false);
+    }
+    prevMetadataScopeRef.current = metadataScope;
+    refreshOrchestrator.setScopedDomainEnabled('catalog', metadataScope, true);
+    return () => {
+      refreshOrchestrator.setScopedDomainEnabled('catalog', metadataScope, false);
+    };
+  }, [metadataScope, metadataUsesActiveScope]);
+
+  // Apply query scope and refresh page 0 when the query changes
+  const previousScopeIdentityRef = useRef(scopeIdentityKey);
+  useEffect(() => {
+    const scopeIdentityChanged = previousScopeIdentityRef.current !== scopeIdentityKey;
+    previousScopeIdentityRef.current = scopeIdentityKey;
+
     // Reset pagination state on query change
     requestModeRef.current = 'reset';
     setIsRequestingMore(false);
     setContinueToken(null);
-    // Clear items immediately to prevent stale data from previous scope showing
-    itemsRef.current = [];
-    indexByUidRef.current = new Map();
-    setItems([]);
+    // Preserve the current dataset while filter-only queries refresh so the
+    // filter bar/dropdowns stay mounted and open menus don't lose their scroll
+    // position. We still clear eagerly when the structural scope changes
+    // (cluster/namespace mode) or before the first load.
+    if (scopeIdentityChanged || !hasLoadedOnceRef.current) {
+      itemsRef.current = [];
+      indexByUidRef.current = new Map();
+      setItems([]);
+    }
 
     lastAppliedScopeRef.current = catalogScope;
-    void refreshOrchestrator.fetchScopedDomain('catalog', catalogScope, { isManual: true });
-  }, [catalogScope]);
+    void requestRefreshDomain({
+      domain: 'catalog',
+      scope: catalogScope,
+      reason: 'startup',
+    });
+    if (!metadataUsesActiveScope) {
+      void requestRefreshDomain({
+        domain: 'catalog',
+        scope: metadataScope,
+        reason: 'startup',
+      });
+    }
+  }, [catalogScope, metadataScope, metadataUsesActiveScope, scopeIdentityKey]);
 
   // Apply incoming snapshots to local pagination state
   useEffect(() => {
@@ -243,13 +334,17 @@ export function useBrowseCatalog({
       }
     } else {
       // Reset or streaming refresh (mode === 'reset' or null): replace all items
-      // so that additions, deletions, and updates are reflected immediately.
-      // upsertByUID cannot handle deletions — it only adds/updates from incoming,
-      // so stale items would persist until the next scope change.
-      const { items: nextItems, indexByUid } = dedupeByUID(payload.items ?? []);
-      itemsRef.current = nextItems;
-      indexByUidRef.current = indexByUid.size ? indexByUid : rebuildIndexByUID(nextItems);
-      setItems(nextItems);
+      // so that additions, deletions, and updates are reflected immediately,
+      // while still reusing unchanged item references by UID/resourceVersion.
+      const { nextItems, changed } = reconcileByUID(itemsRef.current, payload.items ?? []);
+      const nextIndexByUid = rebuildIndexByUID(nextItems);
+      if (changed || itemsRef.current.length === 0) {
+        itemsRef.current = nextItems;
+        indexByUidRef.current = nextIndexByUid;
+        setItems(nextItems);
+      } else {
+        indexByUidRef.current = nextIndexByUid;
+      }
     }
 
     setContinueToken(parseContinueToken(payload.continue));
@@ -276,6 +371,7 @@ export function useBrowseCatalog({
     if (hasLoadedOnce || !domain.data) {
       return;
     }
+    hasLoadedOnceRef.current = true;
     setHasLoadedOnce(true);
   }, [domain.data, hasLoadedOnce]);
 
@@ -306,22 +402,24 @@ export function useBrowseCatalog({
     // Enable the paginated scope and fetch it directly.
     refreshOrchestrator.setScopedDomainEnabled('catalog', normalizedScope, true);
     lastAppliedScopeRef.current = normalizedScope;
-    void refreshOrchestrator
-      .fetchScopedDomain('catalog', normalizedScope, { isManual: true })
-      .then(() => {
-        // The fetch wrote results to the paginated scope. Copy to the base
-        // scope so the domain watcher (useRefreshScopedDomain) sees the update.
-        const pageResult = getScopedDomainState('catalog', normalizedScope);
-        if (pageResult.data) {
-          const baseScope = catalogScopeRef.current;
-          setScopedDomainState('catalog', baseScope, () => ({
-            ...pageResult,
-            scope: baseScope,
-          }));
-        }
-        // Clean up the temporary paginated scope.
-        refreshOrchestrator.setScopedDomainEnabled('catalog', normalizedScope, false);
-      });
+    void requestRefreshDomain({
+      domain: 'catalog',
+      scope: normalizedScope,
+      reason: 'user',
+    }).then(() => {
+      // The fetch wrote results to the paginated scope. Copy to the base
+      // scope so the domain watcher (useRefreshScopedDomain) sees the update.
+      const pageResult = getScopedDomainState('catalog', normalizedScope);
+      if (pageResult.data) {
+        const baseScope = catalogScopeRef.current;
+        setScopedDomainState('catalog', baseScope, () => ({
+          ...pageResult,
+          scope: baseScope,
+        }));
+      }
+      // Clean up the temporary paginated scope.
+      refreshOrchestrator.setScopedDomainEnabled('catalog', normalizedScope, false);
+    });
   }, [
     continueToken,
     isRequestingMore,
@@ -343,10 +441,13 @@ export function useBrowseCatalog({
     // For namespace and all-namespaces scopes, filter to namespace-scoped items only
     return filterNamespaceScopedItems(items);
   }, [items, clusterScopedOnly]);
+  const stableFilteredItems = useStableSelectedValue(filteredItems);
 
   // Derive filter options from the catalog snapshot
   const filterOptions = useMemo<BrowseFilterOptions>(() => {
-    const payload = domain.data as CatalogSnapshotPayload | null;
+    const payload = (
+      metadataUsesActiveScope ? domain.data : (metadataDomain.data ?? domain.data)
+    ) as CatalogSnapshotPayload | null;
     const kindInfos = payload?.kinds ?? [];
 
     // Filter kinds based on scope:
@@ -363,7 +464,13 @@ export function useBrowseCatalog({
       namespaces: isNamespaceScoped ? [] : (payload?.namespaces ?? []).slice().sort(),
       isNamespaceScoped,
     };
-  }, [domain.data, isNamespaceScoped, clusterScopedOnly]);
+  }, [
+    clusterScopedOnly,
+    domain.data,
+    isNamespaceScoped,
+    metadataDomain.data,
+    metadataUsesActiveScope,
+  ]);
 
   // Update available namespaces when the snapshot includes them.
   // This enables querying all namespaces when no filter is selected in all-namespaces mode.
@@ -388,10 +495,17 @@ export function useBrowseCatalog({
     domain.status === 'loading' ||
     domain.status === 'initialising' ||
     (items.length === 0 && !domain.data);
+  const passiveLoadingState = applyPassiveLoadingPolicy({
+    loading,
+    hasLoaded: hasLoadedOnce,
+    hasData: items.length > 0,
+    isPaused,
+    isManualRefreshActive,
+  });
 
   return {
-    items: filteredItems,
-    loading,
+    items: stableFilteredItems,
+    loading: passiveLoadingState.loading,
     hasLoadedOnce,
     continueToken,
     isRequestingMore,

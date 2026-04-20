@@ -30,6 +30,7 @@ func TestNamespaceEventsBuilderUsesEventTimestamps(t *testing.T) {
 			Kind:       "Pod",
 			Name:       "api-123",
 			Namespace:  "team-a",
+			UID:        types.UID("pod-uid-new"),
 			APIVersion: "v1",
 		},
 		LastTimestamp: metav1.NewTime(now.Add(-2 * time.Minute)),
@@ -73,6 +74,7 @@ func TestNamespaceEventsBuilderUsesEventTimestamps(t *testing.T) {
 	require.Equal(t, "event-new", first.Name)
 	require.Equal(t, eventNew.LastTimestamp.UnixMilli(), first.AgeTimestamp)
 	require.Equal(t, "Pod/api-123", first.Object)
+	require.Equal(t, "pod-uid-new", first.ObjectUID)
 	require.Equal(t, "v1", first.ObjectAPIVersion)
 
 	require.Equal(t, "event-old", second.Name)

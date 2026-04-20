@@ -9,10 +9,7 @@ import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceStatus } from '@shared/components/kubernetes/ResourceStatus';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
-import {
-  parseApiVersion,
-  resolveBuiltinGroupVersion,
-} from '@shared/constants/builtinGroupVersions';
+import { buildObjectReference, buildRelatedObjectReference } from '@shared/utils/objectIdentity';
 
 interface PodOverviewProps {
   name: string;
@@ -58,6 +55,24 @@ export const PodOverview: React.FC<PodOverviewProps> = ({
     clusterId: objectData?.clusterId ?? undefined,
     clusterName: objectData?.clusterName ?? undefined,
   };
+  const ownerRef =
+    owner && typeof owner !== 'string'
+      ? (() => {
+          try {
+            return buildRelatedObjectReference({
+              kind: owner.kind.toLowerCase(),
+              // Prefer the OwnerReference apiVersion when present so
+              // CRD-backed owners keep their real GVK.
+              apiVersion: owner.apiVersion,
+              name: owner.name,
+              namespace,
+              ...clusterMeta,
+            });
+          } catch {
+            return null;
+          }
+        })()
+      : null;
 
   return (
     <>
@@ -82,23 +97,10 @@ export const PodOverview: React.FC<PodOverviewProps> = ({
           value={
             typeof owner === 'string' ? (
               owner
+            ) : !ownerRef ? (
+              `${owner.kind}/${owner.name}`
             ) : (
-              <ObjectPanelLink
-                objectRef={{
-                  kind: owner.kind.toLowerCase(),
-                  // Prefer the apiVersion the OwnerReference explicitly
-                  // declared (correct for any kind, including CRD-as-Pod-
-                  // owner like Argo Rollout, KubeVirt VMI, Tekton TaskRun);
-                  // fall back to the built-in lookup only when the backend
-                  // somehow lacks one (legacy data without ownerApiVersion).
-                  ...(owner.apiVersion
-                    ? parseApiVersion(owner.apiVersion)
-                    : resolveBuiltinGroupVersion(owner.kind)),
-                  name: owner.name,
-                  namespace: namespace,
-                  ...clusterMeta,
-                }}
-              >
+              <ObjectPanelLink objectRef={ownerRef}>
                 {owner.kind}/{owner.name}
               </ObjectPanelLink>
             )
@@ -112,12 +114,11 @@ export const PodOverview: React.FC<PodOverviewProps> = ({
           label="Node"
           value={
             <ObjectPanelLink
-              objectRef={{
+              objectRef={buildObjectReference({
                 kind: 'node',
-                ...resolveBuiltinGroupVersion('Node'),
                 name: node,
                 ...clusterMeta,
-              }}
+              })}
               title="Click to view node"
             >
               {node}
@@ -152,13 +153,12 @@ export const PodOverview: React.FC<PodOverviewProps> = ({
           label="Service Account"
           value={
             <ObjectPanelLink
-              objectRef={{
+              objectRef={buildObjectReference({
                 kind: 'serviceaccount',
-                ...resolveBuiltinGroupVersion('ServiceAccount'),
                 name: serviceAccount,
                 namespace: namespace,
                 ...clusterMeta,
-              }}
+              })}
               title="Click to view service account"
             >
               {serviceAccount}

@@ -153,6 +153,16 @@ describe('ClusterViewCRDs', () => {
     expect(props.columnWidths).toBeFalsy();
   });
 
+  it('uses explicit kind metadata instead of deriving kinds from rows', async () => {
+    await act(async () => {
+      root.render(<ClusterViewCRDs data={[]} loaded={true} />);
+      await Promise.resolve();
+    });
+
+    const props = gridTablePropsRef.current;
+    expect(props.filters?.options?.kinds).toEqual(['CustomResourceDefinition']);
+  });
+
   // Version column rendering. The Version column shows the storage
   // version (the version etcd persists) with a `(+N)` suffix when the
   // CRD also serves additional versions. See

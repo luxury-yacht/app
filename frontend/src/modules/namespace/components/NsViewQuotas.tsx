@@ -23,17 +23,16 @@ import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
-import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
-import {
-  formatBuiltinApiVersion,
-  resolveBuiltinGroupVersion,
-} from '@shared/constants/builtinGroupVersions';
+import { useKindFilterOptions } from '@shared/components/tables/hooks/useKindFilterOptions';
+import { formatBuiltinApiVersion } from '@shared/constants/builtinGroupVersions';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { DeleteResourceByGVK } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 import { useFavToggle } from '@ui/favorites/FavToggle';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
+import { useNamespaceFilterOptions } from '@modules/namespace/hooks/useNamespaceFilterOptions';
+import { buildCanonicalObjectRowKey, buildObjectReference } from '@shared/utils/objectIdentity';
 
 // Data interface for quota resources (ResourceQuotas, LimitRanges, PodDisruptionBudgets)
 export interface QuotaData {
@@ -65,6 +64,7 @@ export interface QuotaData {
 interface QuotasViewProps {
   namespace: string;
   data: QuotaData[];
+  availableKinds?: string[];
   loading?: boolean;
   loaded?: boolean;
   showNamespaceColumn?: boolean;
@@ -75,7 +75,14 @@ interface QuotasViewProps {
  * Aggregates ResourceQuotas, LimitRanges, and PodDisruptionBudgets
  */
 const QuotasViewGrid: React.FC<QuotasViewProps> = React.memo(
-  ({ namespace, data, loading = false, loaded = false, showNamespaceColumn = false }) => {
+  ({
+    namespace,
+    data,
+    availableKinds: kindOptions,
+    loading = false,
+    loaded = false,
+    showNamespaceColumn = false,
+  }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const useShortResourceNames = useShortNames();
@@ -89,24 +96,27 @@ const QuotasViewGrid: React.FC<QuotasViewProps> = React.memo(
     const handleResourceClick = useCallback(
       (resource: QuotaData) => {
         const resolvedKind = resource.kind || resource.kindAlias;
-        openWithObject({
-          kind: resolvedKind,
-          name: resource.name,
-          namespace: resource.namespace,
-          ...resolveBuiltinGroupVersion(resolvedKind),
-          clusterId: resource.clusterId ?? undefined,
-          clusterName: resource.clusterName ?? undefined,
-        });
+        openWithObject(
+          buildObjectReference({
+            kind: resolvedKind,
+            name: resource.name,
+            namespace: resource.namespace,
+            clusterId: resource.clusterId ?? undefined,
+            clusterName: resource.clusterName ?? undefined,
+          })
+        );
       },
       [openWithObject]
     );
 
     const keyExtractor = useCallback(
       (resource: QuotaData) =>
-        buildClusterScopedKey(
-          resource,
-          [resource.namespace, resource.kind, resource.name].filter(Boolean).join('/')
-        ),
+        buildCanonicalObjectRowKey({
+          kind: resource.kindAlias ?? resource.kind,
+          name: resource.name,
+          namespace: resource.namespace,
+          clusterId: resource.clusterId,
+        }),
       []
     );
 
@@ -120,24 +130,28 @@ const QuotasViewGrid: React.FC<QuotasViewProps> = React.memo(
           getDisplayText: (resource) => getDisplayKind(resource.kind, useShortResourceNames),
           onClick: handleResourceClick,
           onAltClick: (resource) =>
-            navigateToView({
-              kind: resource.kind,
-              name: resource.name,
-              namespace: resource.namespace,
-              clusterId: resource.clusterId ?? undefined,
-              clusterName: resource.clusterName ?? undefined,
-            }),
+            navigateToView(
+              buildObjectReference({
+                kind: resource.kind,
+                name: resource.name,
+                namespace: resource.namespace,
+                clusterId: resource.clusterId ?? undefined,
+                clusterName: resource.clusterName ?? undefined,
+              })
+            ),
         }),
         cf.createTextColumn<QuotaData>('name', 'Name', {
           onClick: handleResourceClick,
           onAltClick: (resource) =>
-            navigateToView({
-              kind: resource.kind,
-              name: resource.name,
-              namespace: resource.namespace,
-              clusterId: resource.clusterId ?? undefined,
-              clusterName: resource.clusterName ?? undefined,
-            }),
+            navigateToView(
+              buildObjectReference({
+                kind: resource.kind,
+                name: resource.name,
+                namespace: resource.namespace,
+                clusterId: resource.clusterId ?? undefined,
+                clusterName: resource.clusterName ?? undefined,
+              })
+            ),
           getClassName: () => 'object-panel-link',
         }),
         cf.createAgeColumn(),
@@ -195,16 +209,17 @@ const QuotasViewGrid: React.FC<QuotasViewProps> = React.memo(
       columns,
       controlledSort: persistedSort,
       onChange: onSortChange,
+      diagnosticsLabel:
+        namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Quotas' : 'Namespace Quotas',
     });
 
-    const availableKinds = useMemo(
-      () => [...new Set(data.map((r) => r.kind).filter(Boolean) as string[])].sort(),
-      [data]
-    );
-    const availableFilterNamespaces = useMemo(
+    const fallbackKinds = useKindFilterOptions(data);
+    const availableKinds = kindOptions && kindOptions.length > 0 ? kindOptions : fallbackKinds;
+    const fallbackNamespaces = useMemo(
       () => [...new Set(data.map((r) => r.namespace).filter(Boolean))].sort(),
       [data]
     );
+    const availableFilterNamespaces = useNamespaceFilterOptions(namespace, fallbackNamespaces);
 
     const { item: favToggle, modal: favModal } = useFavToggle({
       filters: persistedFilters,
@@ -266,13 +281,13 @@ const QuotasViewGrid: React.FC<QuotasViewProps> = React.memo(
           ) ?? null;
 
         return buildObjectActionItems({
-          object: {
+          object: buildObjectReference({
             kind: resource.kind,
             name: resource.name,
             namespace: resource.namespace,
             clusterId: resource.clusterId,
             clusterName: resource.clusterName,
-          },
+          }),
           context: 'gridtable',
           handlers: {
             onOpen: () => handleResourceClick(resource),
@@ -306,6 +321,9 @@ const QuotasViewGrid: React.FC<QuotasViewProps> = React.memo(
           <GridTable
             data={sortedData}
             columns={columns}
+            diagnosticsLabel={
+              namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Quotas' : 'Namespace Quotas'
+            }
             loading={loading}
             keyExtractor={keyExtractor}
             onRowClick={handleResourceClick}
@@ -322,8 +340,12 @@ const QuotasViewGrid: React.FC<QuotasViewProps> = React.memo(
               onChange: setPersistedFilters,
               onReset: resetPersistedState,
               options: {
+                kinds: availableKinds,
+                namespaces: availableFilterNamespaces,
                 showKindDropdown: true,
                 showNamespaceDropdown: showNamespaceFilter,
+                namespaceDropdownSearchable: showNamespaceFilter,
+                namespaceDropdownBulkActions: showNamespaceFilter,
                 preActions: [favToggle],
               },
             }}

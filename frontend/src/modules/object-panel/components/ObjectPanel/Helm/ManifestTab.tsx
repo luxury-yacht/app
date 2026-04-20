@@ -6,8 +6,12 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import CodeMirror, { type ReactCodeMirrorRef } from '@uiw/react-codemirror';
 import { yaml as yamlLang } from '@codemirror/lang-yaml';
 import { EditorView } from '@codemirror/view';
+import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
+import { requestRefreshDomain } from '@/core/data-access';
 import { refreshOrchestrator } from '@/core/refresh';
+import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
+import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
 import { useRefreshScopedDomain } from '@/core/refresh/store';
 import '../Yaml/YamlTab.css';
 import { buildCodeTheme } from '@/core/codemirror/theme';
@@ -30,6 +34,7 @@ interface ManifestTabProps {
 }
 
 const ManifestTab: React.FC<ManifestTabProps> = ({ scope, isActive = false }) => {
+  const { isPaused, isManualRefreshActive } = useAutoRefreshLoadingState();
   const editorRef = useRef<ReactCodeMirrorRef>(null);
   const editorViewRef = useRef<EditorView | null>(null);
   const editorSurfaceRef = useRef<HTMLDivElement>(null);
@@ -68,7 +73,11 @@ const ManifestTab: React.FC<ManifestTabProps> = ({ scope, isActive = false }) =>
     const enabled = isActive;
     refreshOrchestrator.setScopedDomainEnabled('object-helm-manifest', scope, enabled);
     if (enabled) {
-      void refreshOrchestrator.fetchScopedDomain('object-helm-manifest', scope, { isManual: true });
+      void requestRefreshDomain({
+        domain: 'object-helm-manifest',
+        scope,
+        reason: 'startup',
+      });
     }
 
     return () => {
@@ -79,10 +88,18 @@ const ManifestTab: React.FC<ManifestTabProps> = ({ scope, isActive = false }) =>
   }, [scope, isActive]);
 
   const manifestContent = snapshot.data?.manifest ?? '';
-  const manifestLoading =
-    snapshot.status === 'loading' ||
-    snapshot.status === 'initialising' ||
-    (snapshot.status === 'updating' && !manifestContent);
+  const manifestLoadingState = applyPassiveLoadingPolicy({
+    loading:
+      snapshot.status === 'loading' ||
+      snapshot.status === 'initialising' ||
+      (snapshot.status === 'updating' && !manifestContent),
+    hasLoaded: Boolean(snapshot.data),
+    hasData: Boolean(manifestContent),
+    isPaused,
+    isManualRefreshActive,
+  });
+  const manifestLoading = manifestLoadingState.loading;
+  const showPausedManifestState = manifestLoadingState.showPausedEmptyState;
   const manifestError = snapshot.error ?? null;
 
   const { theme: codeMirrorTheme, highlight: highlightExtension } = useMemo(
@@ -233,6 +250,16 @@ const ManifestTab: React.FC<ManifestTabProps> = ({ scope, isActive = false }) =>
     );
   }
 
+  if (showPausedManifestState) {
+    return (
+      <div className="object-panel-tab-content">
+        <div className="yaml-display-empty">
+          <ClusterDataPausedState />
+        </div>
+      </div>
+    );
+  }
+
   if (manifestError) {
     return (
       <div className="object-panel-tab-content">
@@ -263,10 +290,6 @@ const ManifestTab: React.FC<ManifestTabProps> = ({ scope, isActive = false }) =>
                 ref={searchInputRef}
                 className="find-input"
                 type="text"
-                autoComplete="off"
-                autoCapitalize="off"
-                autoCorrect="off"
-                spellCheck={false}
                 placeholder="Find…"
                 value={searchTerm}
                 onChange={handleSearchChange}

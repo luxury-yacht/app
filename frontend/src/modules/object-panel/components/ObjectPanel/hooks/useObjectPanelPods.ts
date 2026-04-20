@@ -6,8 +6,11 @@
  * - Returns structured pod data, loading states, and error information.
  */
 import { useEffect, useMemo } from 'react';
+import { requestRefreshDomain } from '@/core/data-access';
 import { refreshOrchestrator } from '@/core/refresh/orchestrator';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
+import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
+import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
 import { useRefreshScopedDomain } from '@/core/refresh/store';
 import type { PodSnapshotEntry, PodMetricsInfo } from '@/core/refresh/types';
 import { INACTIVE_SCOPE } from '../constants';
@@ -39,6 +42,7 @@ export function useObjectPanelPods({
   isOpen,
   activeTab,
 }: UseObjectPanelPodsArgs): ObjectPanelPodsState {
+  const { isPaused, isManualRefreshActive } = useAutoRefreshLoadingState();
   const normalizedKind = objectKind?.toLowerCase() ?? null;
 
   const podsScope = useMemo<PodsScope>(() => {
@@ -82,7 +86,11 @@ export function useObjectPanelPods({
 
     refreshOrchestrator.setScopedDomainEnabled('pods', refreshScope, shouldEnable);
     if (shouldEnable) {
-      void refreshOrchestrator.fetchScopedDomain('pods', refreshScope, { isManual: true });
+      void requestRefreshDomain({
+        domain: 'pods',
+        scope: refreshScope,
+        reason: 'startup',
+      });
     }
 
     return () => {
@@ -101,14 +109,19 @@ export function useObjectPanelPods({
     (snapshot.status === 'idle' ||
       snapshot.status === 'initialising' ||
       snapshot.status === 'loading');
-  const loading = initialising || (shouldEnable && snapshot.status === 'loading' && !payload);
+  const passiveLoading = applyPassiveLoadingPolicy({
+    loading: initialising || (shouldEnable && snapshot.status === 'loading' && !payload),
+    hasLoaded: Boolean(payload),
+    isPaused,
+    isManualRefreshActive,
+  });
 
   const error = shouldEnable ? (snapshot.error ?? null) : null;
 
   return {
     pods,
     metrics,
-    loading,
+    loading: passiveLoading.loading,
     error,
     scope: refreshScope === INACTIVE_SCOPE ? null : refreshScope,
   };

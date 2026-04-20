@@ -60,6 +60,8 @@ export function EvaluateCapabilities(arg1:Array<capabilities.CheckRequest>):Prom
 
 export function FetchNodeLogs(arg1:string,arg2:string,arg3:types.NodeLogFetchRequest):Promise<types.NodeLogFetchResponse>;
 
+export function FindCatalogObjectByUID(arg1:string,arg2:string):Promise<objectcatalog.Summary>;
+
 export function FindCatalogObjectMatch(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string):Promise<objectcatalog.Summary>;
 
 export function ForceDeleteNode(arg1:string,arg2:string):Promise<void>;
@@ -267,6 +269,8 @@ export function SetLogTargetGlobalLimit(arg1:number):Promise<void>;
 export function SetLogTargetPerScopeLimit(arg1:number):Promise<void>;
 
 export function SetLogsPanelVisible(arg1:boolean):Promise<void>;
+
+export function SetMaxTableRows(arg1:number):Promise<void>;
 
 export function SetObjectPanelLayout(arg1:number,arg2:number,arg3:number,arg4:number,arg5:number,arg6:number):Promise<void>;
 

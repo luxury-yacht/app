@@ -34,6 +34,10 @@ const refreshMocks = vi.hoisted(() => ({
   >,
 }));
 
+const autoRefreshLoadingState = vi.hoisted(() => ({
+  suppressPassiveLoading: false,
+}));
+
 const testClusterId = 'cluster-a';
 const namespaceKey = (scope: string) => `${testClusterId}|${scope}`;
 
@@ -56,6 +60,10 @@ vi.mock('@core/refresh', () => ({
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: () => ({ selectedClusterId: testClusterId }),
+}));
+
+vi.mock('@/core/refresh/hooks/useAutoRefreshLoadingState', () => ({
+  useAutoRefreshLoadingState: () => autoRefreshLoadingState,
 }));
 
 type NamespaceEntry = {
@@ -169,6 +177,7 @@ describe('Sidebar', () => {
     namespaceState = createNamespaceState();
     viewStateMock = createViewState();
     refreshMocks.catalogScopedStates = {};
+    autoRefreshLoadingState.suppressPassiveLoading = false;
   });
 
   afterEach(() => {
@@ -379,6 +388,110 @@ describe('Sidebar', () => {
     expect(viewStateMock.onNamespaceSelect).not.toHaveBeenCalled();
   });
 
+  it('aggregates catalog namespace groups across scoped states before filtering to the active cluster', () => {
+    refreshMocks.catalogScopedStates = {
+      'cluster-b-scope': {
+        status: 'success',
+        data: {
+          namespaceGroups: [
+            {
+              clusterId: 'cluster-b',
+              clusterName: 'Cluster B',
+              namespaces: ['other'],
+            },
+          ],
+        },
+        stats: null,
+        error: null,
+        droppedAutoRefreshes: 0,
+        scope: 'cluster-b-scope',
+      },
+      'cluster-a-scope': {
+        status: 'success',
+        data: {
+          namespaceGroups: [
+            {
+              clusterId: testClusterId,
+              clusterName: 'Cluster A',
+              namespaces: ['default'],
+            },
+          ],
+        },
+        stats: null,
+        error: null,
+        droppedAutoRefreshes: 0,
+        scope: 'cluster-a-scope',
+      },
+    };
+
+    renderSidebar();
+
+    const namespaceToggle = container!.querySelector<HTMLDivElement>(
+      `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(
+        'default'
+      )}"]`
+    );
+    expect(namespaceToggle).not.toBeNull();
+
+    const otherClusterToggle = container!.querySelector<HTMLDivElement>(
+      '[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="cluster-b|other"]'
+    );
+    expect(otherClusterToggle).toBeNull();
+  });
+
+  it('deduplicates repeated namespace groups and namespaces from multiple catalog scopes', () => {
+    refreshMocks.catalogScopedStates = {
+      'scope-a': {
+        status: 'success',
+        data: {
+          namespaceGroups: [
+            {
+              clusterId: testClusterId,
+              clusterName: 'Cluster A',
+              namespaces: ['default', 'fusionauth-prod-us-east-1'],
+            },
+          ],
+        },
+        stats: null,
+        error: null,
+        droppedAutoRefreshes: 0,
+        scope: 'scope-a',
+      },
+      'scope-b': {
+        status: 'success',
+        data: {
+          namespaceGroups: [
+            {
+              clusterId: testClusterId,
+              clusterName: 'Cluster A',
+              namespaces: ['fusionauth-prod-us-east-1', 'default'],
+            },
+          ],
+        },
+        stats: null,
+        error: null,
+        droppedAutoRefreshes: 0,
+        scope: 'scope-b',
+      },
+    };
+
+    renderSidebar();
+
+    const defaultToggles = container!.querySelectorAll(
+      `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(
+        'default'
+      )}"]`
+    );
+    expect(defaultToggles).toHaveLength(1);
+
+    const fusionAuthToggles = container!.querySelectorAll(
+      `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(
+        'fusionauth-prod-us-east-1'
+      )}"]`
+    );
+    expect(fusionAuthToggles).toHaveLength(1);
+  });
+
   it('collapses a namespace when clicked repeatedly', () => {
     renderSidebar();
     const namespaceToggle = container!.querySelector<HTMLDivElement>(
@@ -546,6 +659,16 @@ describe('Sidebar', () => {
     renderSidebar();
     const spinnerText = container!.querySelector('.loading-spinner p')?.textContent;
     expect(spinnerText).toBe('Loading namespaces...');
+  });
+
+  it('shows an auto-refresh disabled message when namespaces have not loaded and refresh is paused', () => {
+    autoRefreshLoadingState.suppressPassiveLoading = true;
+    namespaceState.namespaceLoading = false;
+    namespaceState.namespaces = [];
+
+    renderSidebar();
+
+    expect(container!.textContent).toContain('Auto-refresh is disabled');
   });
 
   it('applies workload status indicators on namespace entries', () => {

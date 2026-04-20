@@ -148,4 +148,28 @@ describe('ClusterViewStorage', () => {
     });
     expect(props.columnWidths).toBe(null);
   });
+
+  it('uses canonical object identity for row keys', async () => {
+    await act(async () => {
+      root.render(
+        <ClusterViewStorage data={[{ ...basePV, clusterId: 'alpha:ctx' }]} loaded={true} />
+      );
+      await Promise.resolve();
+    });
+
+    const props = gridTablePropsRef.current;
+    expect(props.keyExtractor({ ...basePV, clusterId: 'alpha:ctx' })).toBe(
+      'alpha:ctx|/v1/PersistentVolume//pv-1'
+    );
+  });
+
+  it('uses explicit kind metadata instead of deriving kinds from rows', async () => {
+    await act(async () => {
+      root.render(<ClusterViewStorage data={[]} loaded={true} />);
+      await Promise.resolve();
+    });
+
+    const props = gridTablePropsRef.current;
+    expect(props.filters?.options?.kinds).toEqual(['PersistentVolume']);
+  });
 });

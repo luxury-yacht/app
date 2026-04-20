@@ -223,6 +223,10 @@ vi.mock('@wailsjs/go/backend/App', () => ({
   MergeObjectYamlWithLatest: wailsMocks.MergeObjectYamlWithLatest,
 }));
 
+vi.mock('@/core/settings/appPreferences', () => ({
+  getAutoRefreshEnabled: () => true,
+}));
+
 const YAML = `
 apiVersion: v1
 kind: Pod
@@ -641,7 +645,7 @@ describe('YamlTab', () => {
     expect(refreshMocks.fetchScopedDomain).toHaveBeenCalledWith(
       'object-yaml',
       'default:pod:demo',
-      expect.objectContaining({ isManual: true })
+      expect.objectContaining({ isManual: false })
     );
 
     const editButtonAfterSave = getIconButton(container, 'Edit YAML');
@@ -943,7 +947,7 @@ describe('YamlTab', () => {
     expect(refreshMocks.fetchScopedDomain).toHaveBeenCalledWith(
       'object-yaml',
       'default:pod:demo',
-      expect.objectContaining({ isManual: true })
+      expect.objectContaining({ isManual: false })
     );
 
     refreshMocks.setScopedDomainEnabled.mockClear();
@@ -977,7 +981,7 @@ describe('YamlTab', () => {
     expect(refreshMocks.fetchScopedDomain).toHaveBeenCalledWith(
       'object-yaml',
       'default:pod:demo',
-      expect.objectContaining({ isManual: true })
+      expect.objectContaining({ isManual: false })
     );
 
     await unmount();

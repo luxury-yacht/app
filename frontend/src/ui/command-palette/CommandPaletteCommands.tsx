@@ -28,7 +28,8 @@ import {
 } from '@shared/components/icons/MenuIcons';
 import { useTheme } from '@core/contexts/ThemeContext';
 import { useZoom } from '@core/contexts/ZoomContext';
-import { refreshOrchestrator, useAutoRefresh } from '@/core/refresh';
+import { requestContextRefresh } from '@/core/data-access';
+import { useAutoRefresh } from '@/core/refresh';
 import { changeTheme } from '@/utils/themes';
 import { isAllNamespaces } from '@modules/namespace/constants';
 import type { ClusterViewType, NamespaceViewType } from '@/types/navigation/views';
@@ -324,7 +325,7 @@ export function useCommandPaletteCommands() {
         description: 'Manually refresh the current view',
         category: 'Navigation',
         action: () => {
-          void refreshOrchestrator.triggerManualRefreshForContext();
+          void requestContextRefresh({ reason: 'user' });
         },
         keywords: ['refresh', 'reload', 'update'],
         shortcut: ['⌘', 'R'],

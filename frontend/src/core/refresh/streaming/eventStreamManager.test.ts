@@ -75,6 +75,8 @@ describe('EventStreamManager', () => {
           kind: 'Event',
           name: 'test',
           namespace: 'default',
+          objectUid: 'pod-uid-1',
+          objectApiVersion: 'v1',
           type: 'Normal',
           source: 'kubelet',
           reason: 'Started',
@@ -93,6 +95,8 @@ describe('EventStreamManager', () => {
     // Cluster metadata must be preserved so the cluster events view can filter correctly.
     expect(state.data?.events?.[0].clusterId).toBe('cluster-a');
     expect(state.data?.events?.[0].clusterName).toBe('alpha');
+    expect(state.data?.events?.[0].objectUid).toBe('pod-uid-1');
+    expect(state.data?.events?.[0].objectApiVersion).toBe('v1');
   });
 
   test('applyPayload preserves backend createdAt for initial snapshot events', async () => {
@@ -129,7 +133,7 @@ describe('EventStreamManager', () => {
     expect(state.data?.events?.[0].ageTimestamp).toBe(createdAt);
   });
 
-  test('reset payload keeps existing events that are temporarily absent during reconnect', async () => {
+  test('reset payload replaces existing cluster events with the incoming snapshot', async () => {
     const { EventStreamManager } = await import('./eventStreamManager');
     const manager = new EventStreamManager();
 
@@ -192,7 +196,7 @@ describe('EventStreamManager', () => {
     await flushTimers();
 
     const state = getScopedDomainState('cluster-events', 'cluster');
-    expect(state.data?.events?.map((event) => event.name)).toEqual(['event-newer', 'event-older']);
+    expect(state.data?.events?.map((event) => event.name)).toEqual(['event-newer']);
   });
 
   test('updates replace the existing row for the same event object name', async () => {
@@ -269,6 +273,8 @@ describe('EventStreamManager', () => {
           kind: 'Event',
           name: 'ns-event',
           namespace: 'default',
+          objectUid: 'job-uid-1',
+          objectApiVersion: 'batch/v1',
           type: 'Warning',
           source: 'controller',
           reason: 'Backoff',
@@ -286,7 +292,150 @@ describe('EventStreamManager', () => {
     expect(state.data?.events?.[0].reason).toBe('Backoff');
     // Cluster metadata must be preserved so namespace events filter per-cluster selections.
     expect(state.data?.events?.[0].clusterId).toBe('cluster-b');
+    expect(state.data?.events?.[0].objectUid).toBe('job-uid-1');
+    expect(state.data?.events?.[0].objectApiVersion).toBe('batch/v1');
     expect(state.data?.events?.[0].clusterName).toBe('bravo');
+  });
+
+  test('reuses namespace event rows when an unchanged update is applied', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-04-19T12:00:00Z'));
+
+    const { EventStreamManager } = await import('./eventStreamManager');
+    const manager = new EventStreamManager();
+    const createdAt = 1_700_000_001_000;
+
+    manager.applyPayload('namespace-events', 'namespace:default', {
+      domain: 'namespace-events',
+      scope: 'namespace:default',
+      sequence: 1,
+      generatedAt: 100,
+      reset: true,
+      events: [
+        {
+          clusterId: 'cluster-b',
+          clusterName: 'bravo',
+          kind: 'Event',
+          name: 'ns-event',
+          uid: 'event-uid',
+          namespace: 'default',
+          objectNamespace: 'default',
+          type: 'Warning',
+          source: 'controller',
+          reason: 'Backoff',
+          object: 'Job/foo',
+          message: 'Retrying',
+          createdAt,
+        },
+      ],
+    });
+
+    await vi.runOnlyPendingTimersAsync();
+
+    const firstState = getScopedDomainState('namespace-events', 'namespace:default');
+    const firstEventsRef = firstState.data?.events;
+    const firstRowRef = firstEventsRef?.[0];
+
+    manager.applyPayload('namespace-events', 'namespace:default', {
+      domain: 'namespace-events',
+      scope: 'namespace:default',
+      sequence: 2,
+      generatedAt: 200,
+      events: [
+        {
+          clusterId: 'cluster-b',
+          clusterName: 'bravo',
+          kind: 'Event',
+          name: 'ns-event',
+          uid: 'event-uid',
+          namespace: 'default',
+          objectNamespace: 'default',
+          type: 'Warning',
+          source: 'controller',
+          reason: 'Backoff',
+          object: 'Job/foo',
+          message: 'Retrying',
+          createdAt,
+        },
+      ],
+    });
+
+    await vi.runOnlyPendingTimersAsync();
+
+    const secondState = getScopedDomainState('namespace-events', 'namespace:default');
+    expect(secondState.data?.events).toBe(firstEventsRef);
+    expect(secondState.data?.events?.[0]).toBe(firstRowRef);
+  });
+
+  test('reuses namespace event rows for an identical reconnect snapshot', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-04-19T12:00:00Z'));
+
+    const { EventStreamManager } = await import('./eventStreamManager');
+    const manager = new EventStreamManager();
+    const createdAt = 1_700_000_001_000;
+
+    manager.applyPayload('namespace-events', 'namespace:default', {
+      domain: 'namespace-events',
+      scope: 'namespace:default',
+      sequence: 1,
+      generatedAt: 100,
+      reset: true,
+      events: [
+        {
+          clusterId: 'cluster-b',
+          clusterName: 'bravo',
+          kind: 'Event',
+          name: 'ns-event',
+          uid: 'event-uid',
+          namespace: 'default',
+          objectNamespace: 'default',
+          type: 'Warning',
+          source: 'controller',
+          reason: 'Backoff',
+          object: 'Job/foo',
+          message: 'Retrying',
+          createdAt,
+        },
+      ],
+    });
+
+    await vi.runOnlyPendingTimersAsync();
+
+    const firstState = getScopedDomainState('namespace-events', 'namespace:default');
+    const firstEventsRef = firstState.data?.events;
+    const firstRowRef = firstEventsRef?.[0];
+
+    manager.applyPayload('namespace-events', 'namespace:default', {
+      domain: 'namespace-events',
+      scope: 'namespace:default',
+      sequence: 2,
+      generatedAt: 200,
+      reset: true,
+      events: [
+        {
+          clusterId: 'cluster-b',
+          clusterName: 'bravo',
+          kind: 'Event',
+          name: 'ns-event',
+          uid: 'event-uid',
+          namespace: 'default',
+          objectNamespace: 'default',
+          type: 'Warning',
+          source: 'controller',
+          reason: 'Backoff',
+          object: 'Job/foo',
+          message: 'Retrying',
+          createdAt,
+        },
+      ],
+    });
+
+    await vi.runOnlyPendingTimersAsync();
+
+    const secondState = getScopedDomainState('namespace-events', 'namespace:default');
+    expect(secondState.data?.events).toBe(firstEventsRef);
+    expect(secondState.data?.events?.[0]).toBe(firstRowRef);
   });
 
   test('applyPayload ignores empty updates when no reset or error', async () => {

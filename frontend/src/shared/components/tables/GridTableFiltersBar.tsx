@@ -9,6 +9,7 @@ import React, { useRef, useMemo } from 'react';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import SearchInput from '@shared/components/inputs/SearchInput';
+import Tooltip from '@shared/components/Tooltip';
 import type {
   GridTableFilterState,
   InternalFilterOptions,
@@ -50,7 +51,7 @@ interface GridTableFiltersBarProps {
   /** Arbitrary content rendered after the IconBar (e.g. text toggle buttons). */
   customActions?: React.ReactNode;
   /** Displayed vs total item count shown to the right of actions. */
-  resultCount?: { displayed: number; total: number };
+  resultCount?: { displayed: number; total: number; capped?: boolean };
 }
 
 const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
@@ -159,6 +160,8 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
                   name="gridtable-filter-kind"
                   multiple
                   size="compact"
+                  searchable={resolvedFilterOptions.kindDropdownSearchable}
+                  showBulkActions={resolvedFilterOptions.kindDropdownBulkActions}
                   placeholder="All kinds"
                   value={activeFilters.kinds}
                   options={resolvedFilterOptions.kinds}
@@ -177,6 +180,8 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
                   name="gridtable-filter-namespace"
                   multiple
                   size="compact"
+                  searchable={resolvedFilterOptions.namespaceDropdownSearchable}
+                  showBulkActions={resolvedFilterOptions.namespaceDropdownBulkActions}
                   placeholder="All namespaces"
                   value={activeFilters.namespaces}
                   options={resolvedFilterOptions.namespaces}
@@ -196,7 +201,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
               inputRef={searchInputRef}
               id={searchInputId}
               name="gridtable-filter-search"
-              placeholder={resolvedFilterOptions.searchPlaceholder ?? 'Search'}
+              placeholder={resolvedFilterOptions.searchPlaceholder ?? 'Filter'}
               value={activeFilters.search}
               onChange={onSearchChange}
               onKeyDown={handleSearchKeyDown}
@@ -220,6 +225,23 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
                 {resultCount.displayed === resultCount.total
                   ? `${resultCount.total} items`
                   : `${resultCount.displayed} of ${resultCount.total} items`}
+                {resultCount.capped && (
+                  <Tooltip
+                    content={
+                      <>
+                        <p className="gridtable-filter-result-tooltip-paragraph">
+                          The total number of objects exceeds the max table size. Use search filters
+                          to reduce the size of the data set.
+                        </p>
+                        <p className="gridtable-filter-result-tooltip-paragraph">
+                          You can change the max table size in Settings, but larger values can
+                          impact the app&apos;s performance.
+                        </p>
+                      </>
+                    }
+                    variant="dark"
+                  />
+                )}
               </span>
             )}
           </div>

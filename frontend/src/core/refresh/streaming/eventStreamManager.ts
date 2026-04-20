@@ -37,6 +37,8 @@ interface StreamEventPayload {
     namespace?: string;
     type?: string;
     objectNamespace?: string;
+    objectUid?: string;
+    objectApiVersion?: string;
     source?: string;
     reason?: string;
     object?: string;
@@ -448,14 +450,18 @@ export class EventStreamManager {
     if (domain === CLUSTER_DOMAIN) {
       const incoming = events.map((event) => transformClusterEvent(event, fallbackClusterId));
       const { items, total, truncated } = mergeEvents(
-        payload.reset ? this.clusterEvents : this.clusterEvents,
+        payload.reset ? [] : this.clusterEvents,
         incoming,
         MAX_CLUSTER_EVENTS
       );
       const resolvedTotal =
         payloadTotal !== undefined ? Math.max(payloadTotal, items.length) : total;
       const resolvedTruncated = payloadTruncated !== undefined ? payloadTruncated : truncated;
-      this.clusterEvents = items.map(normalizeClusterEntry);
+      this.clusterEvents = normalizeAndReuseEvents(
+        this.clusterEvents,
+        items,
+        normalizeClusterEntry
+      );
       this.clusterEventMeta = { total: resolvedTotal, truncated: resolvedTruncated };
       this.scheduleClusterStateUpdate(generatedAt, errorMessage);
       return;
@@ -468,7 +474,10 @@ export class EventStreamManager {
       const resolvedTotal =
         payloadTotal !== undefined ? Math.max(payloadTotal, items.length) : total;
       const resolvedTruncated = payloadTruncated !== undefined ? payloadTruncated : truncated;
-      this.namespaceEvents.set(scope, items.map(normalizeNamespaceEntry));
+      this.namespaceEvents.set(
+        scope,
+        normalizeAndReuseEvents(existing, items, normalizeNamespaceEntry)
+      );
       this.namespaceEventMeta.set(scope, { total: resolvedTotal, truncated: resolvedTruncated });
       this.scheduleNamespaceStateUpdate(scope, generatedAt, errorMessage);
     }
@@ -825,6 +834,8 @@ function transformClusterEvent(
     resourceVersion: event?.resourceVersion || '',
     namespace: event?.namespace || '',
     objectNamespace: event?.objectNamespace ?? '',
+    objectUid: event?.objectUid || '',
+    objectApiVersion: event?.objectApiVersion || '',
     type: event?.type || '-',
     source: event?.source || '-',
     reason: event?.reason || '-',
@@ -852,6 +863,8 @@ function transformNamespaceEvent(
     resourceVersion: event?.resourceVersion || '',
     namespace: event?.namespace || '',
     objectNamespace: event?.objectNamespace ?? '',
+    objectUid: event?.objectUid || '',
+    objectApiVersion: event?.objectApiVersion || '',
     type: event?.type || '-',
     source: event?.source || '-',
     reason: event?.reason || '-',
@@ -901,6 +914,53 @@ function mergeEvents<T extends ClusterEventEntry | NamespaceEventSummary>(
     total,
     truncated,
   };
+}
+
+const hasSameArrayItems = <T>(left: T[], right: T[]): boolean =>
+  left.length === right.length && left.every((item, index) => Object.is(item, right[index]));
+
+const shallowEqualRecord = (left: Record<string, unknown>, right: Record<string, unknown>) => {
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+
+  return (
+    leftKeys.length === rightKeys.length &&
+    leftKeys.every(
+      (key) => Object.prototype.hasOwnProperty.call(right, key) && Object.is(left[key], right[key])
+    )
+  );
+};
+
+function normalizeAndReuseEvents<T extends ClusterEventEntry | NamespaceEventSummary>(
+  previous: T[],
+  next: T[],
+  normalize: (entry: T) => T
+): T[] {
+  if (next.length === 0) {
+    return previous.length === 0 ? previous : next;
+  }
+
+  const previousByKey = new Map<string, T>();
+  previous.forEach((entry) => {
+    previousByKey.set(eventIdentityKey(entry), entry);
+  });
+
+  const normalized = next.map((entry) => {
+    const normalizedEntry = normalize(entry);
+    const previousEntry = previousByKey.get(eventIdentityKey(normalizedEntry));
+    if (
+      previousEntry &&
+      shallowEqualRecord(
+        previousEntry as unknown as Record<string, unknown>,
+        normalizedEntry as unknown as Record<string, unknown>
+      )
+    ) {
+      return previousEntry;
+    }
+    return normalizedEntry;
+  });
+
+  return hasSameArrayItems(previous, normalized) ? previous : normalized;
 }
 
 function deriveEventTimestamp(event?: StreamEventItem): number {

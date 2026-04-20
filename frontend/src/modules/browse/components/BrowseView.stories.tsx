@@ -2,7 +2,7 @@
  * frontend/src/modules/browse/components/BrowseView.stories.tsx
  *
  * Renders a realistic Browse view mockup using real GridTableFiltersBar
- * and GridTableLayout to verify the IconBar integration and heart icon placement.
+ * and GridTableLayout to verify the IconBar integration and favorite action placement.
  */
 
 import type { Meta, StoryObj } from '@storybook/react';
@@ -11,11 +11,7 @@ import './BrowseView.css';
 import GridTableFiltersBar from '@shared/components/tables/GridTableFiltersBar';
 import GridTableLayout from '@shared/components/tables/GridTableLayout';
 import type { IconBarItem } from '@shared/components/IconBar/IconBar';
-import {
-  LoadMoreIcon,
-  FavoriteOutlineIcon,
-  FavoriteFilledIcon,
-} from '@shared/components/icons/MenuIcons';
+import { FavoriteOutlineIcon, FavoriteFilledIcon } from '@shared/components/icons/MenuIcons';
 import { KeyboardProviderDecorator } from '../../../../.storybook/decorators/KeyboardProviderDecorator';
 
 // Column widths matching the real BrowseView (from useBrowseColumns.tsx)
@@ -75,13 +71,6 @@ function MockBrowseView({ isFavorited = false }: { isFavorited?: boolean }) {
     onClick: noOp,
     title: isFavorited ? 'Update or remove favorite' : 'Save as favorite',
   };
-  const loadMoreAction: IconBarItem = {
-    type: 'action',
-    id: 'load-more',
-    icon: <LoadMoreIcon />,
-    onClick: noOp,
-    title: 'Load more',
-  };
   const filtersNode = (
     <GridTableFiltersBar
       activeFilters={{
@@ -94,7 +83,6 @@ function MockBrowseView({ isFavorited = false }: { isFavorited?: boolean }) {
       resolvedFilterOptions={{
         kinds: KINDS,
         namespaces: [],
-        searchPlaceholder: 'Search resources',
       }}
       kindDropdownId="kind"
       namespaceDropdownId="ns"
@@ -115,7 +103,6 @@ function MockBrowseView({ isFavorited = false }: { isFavorited?: boolean }) {
       onColumnsChange={noOp}
       resultCount={{ displayed: ROWS.length, total: ROWS.length }}
       preActions={[favoriteAction]}
-      postActions={[loadMoreAction]}
     />
   );
 

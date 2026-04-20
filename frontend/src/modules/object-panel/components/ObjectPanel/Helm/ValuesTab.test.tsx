@@ -28,6 +28,12 @@ const refreshStoreMocks = vi.hoisted(() => ({
   useRefreshScopedDomain: vi.fn(),
 }));
 
+const autoRefreshLoadingState = vi.hoisted(() => ({
+  isPaused: false,
+  isManualRefreshActive: false,
+  suppressPassiveLoading: false,
+}));
+
 const codeMirrorState = {
   latestProps: { current: null as any },
   editorView: {
@@ -109,6 +115,14 @@ vi.mock('@/core/refresh', () => ({
 
 vi.mock('@/core/refresh/store', () => ({
   useRefreshScopedDomain: refreshStoreMocks.useRefreshScopedDomain,
+}));
+
+vi.mock('@/core/refresh/hooks/useAutoRefreshLoadingState', () => ({
+  useAutoRefreshLoadingState: () => autoRefreshLoadingState,
+}));
+
+vi.mock('@/core/settings/appPreferences', () => ({
+  getAutoRefreshEnabled: () => !autoRefreshLoadingState.isPaused,
 }));
 
 vi.mock('@uiw/react-codemirror', () => ({
@@ -257,6 +271,9 @@ describe('ValuesTab', () => {
     codeMirrorState.editorView.focus.mockClear();
     refreshMocks.setScopedDomainEnabled.mockClear();
     refreshMocks.fetchScopedDomain.mockClear();
+    autoRefreshLoadingState.isPaused = false;
+    autoRefreshLoadingState.isManualRefreshActive = false;
+    autoRefreshLoadingState.suppressPassiveLoading = false;
     searchShortcutMocks.useSearchShortcutTarget.mockClear();
     searchShortcutMocks.useKeyboardSurface.mockClear();
     searchModuleMocks.createSearchExtensions.mockClear();
@@ -341,6 +358,19 @@ describe('ValuesTab', () => {
     await unmount();
   });
 
+  it('suppresses passive loading while auto-refresh is paused', async () => {
+    autoRefreshLoadingState.isPaused = true;
+    autoRefreshLoadingState.suppressPassiveLoading = true;
+    snapshotState.current = { status: 'loading', data: null, error: null };
+    const { container, unmount } = await renderValuesTab();
+
+    expect(container.textContent).not.toContain('Loading values...');
+    expect(container.textContent).toContain('Auto-refresh is disabled');
+    expect(refreshMocks.fetchScopedDomain).not.toHaveBeenCalled();
+
+    await unmount();
+  });
+
   it('shows error message when snapshot has an error', async () => {
     snapshotState.current = {
       status: 'error',
@@ -378,7 +408,7 @@ describe('ValuesTab', () => {
     expect(refreshMocks.fetchScopedDomain).toHaveBeenCalledWith(
       'object-helm-values',
       'ns:helmrelease:chart',
-      { isManual: true }
+      { isManual: false }
     );
 
     await unmount();

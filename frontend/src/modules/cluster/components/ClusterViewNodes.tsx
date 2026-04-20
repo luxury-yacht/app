@@ -13,7 +13,7 @@ import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useRefreshScopedDomain } from '@/core/refresh';
-import { buildClusterScopeList } from '@/core/refresh/clusterScope';
+import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { useShortNames } from '@/hooks/useShortNames';
 import { useTableSort } from '@/hooks/useTableSort';
 import * as cf from '@shared/components/tables/columnFactories';
@@ -25,8 +25,6 @@ import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
-import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
-import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
 import {
   calculateCpuOvercommitted,
   calculateMemoryOvercommitted,
@@ -34,6 +32,7 @@ import {
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 import { useMetadataSearch } from '@shared/components/tables/hooks/useMetadataSearch';
 import { useFavToggle } from '@ui/favorites/FavToggle';
+import { buildCanonicalObjectRowKey, buildObjectReference } from '@shared/utils/objectIdentity';
 
 // Define props for NodesViewGrid component
 interface NodesViewProps {
@@ -51,12 +50,12 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
   ({ data, loading = false, loaded = false, error }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
-    const { selectedClusterId, selectedClusterIds } = useKubeconfig();
+    const { selectedClusterId } = useKubeconfig();
     const useShortResourceNames = useShortNames();
-    // Build scoped key for multi-cluster node metrics lookup.
+    // Foreground cluster views should resolve node metrics from the active cluster only.
     const nodesScope = useMemo(
-      () => buildClusterScopeList(selectedClusterIds, ''),
-      [selectedClusterIds]
+      () => buildClusterScope(selectedClusterId ?? undefined, ''),
+      [selectedClusterId]
     );
     const nodesDomain = useRefreshScopedDomain('nodes', nodesScope);
     const metricsInfo = useMemo(() => {
@@ -70,13 +69,14 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
     // Keep node selections pinned to their source cluster for object details.
     const handleNodeClick = useCallback(
       (node: ClusterNodeRow) => {
-        openWithObject({
-          kind: 'Node',
-          name: node.name,
-          ...resolveBuiltinGroupVersion('Node'),
-          clusterId: node.clusterId ?? undefined,
-          clusterName: node.clusterName ?? undefined,
-        });
+        openWithObject(
+          buildObjectReference({
+            kind: 'Node',
+            name: node.name,
+            clusterId: node.clusterId ?? undefined,
+            clusterName: node.clusterName ?? undefined,
+          })
+        );
       },
       [openWithObject]
     );
@@ -116,24 +116,28 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
           getDisplayText: () => getDisplayKind('Node', useShortResourceNames),
           onClick: (row) => handleNodeClick(row),
           onAltClick: (row) =>
-            navigateToView({
-              kind: 'Node',
-              name: row.name,
-              clusterId: row.clusterId,
-              clusterName: row.clusterName,
-            }),
+            navigateToView(
+              buildObjectReference({
+                kind: 'Node',
+                name: row.name,
+                clusterId: row.clusterId,
+                clusterName: row.clusterName,
+              })
+            ),
           isInteractive: () => true,
           sortValue: () => 'node',
         }),
         cf.createTextColumn<ClusterNodeRow>('name', 'Name', (row) => row.name || '', {
           onClick: (row) => handleNodeClick(row),
           onAltClick: (row) =>
-            navigateToView({
-              kind: 'Node',
-              name: row.name,
-              clusterId: row.clusterId,
-              clusterName: row.clusterName,
-            }),
+            navigateToView(
+              buildObjectReference({
+                kind: 'Node',
+                name: row.name,
+                clusterId: row.clusterId,
+                clusterName: row.clusterName,
+              })
+            ),
           // Use the shared link styling for object panel navigation.
           getClassName: () => 'object-panel-link',
           isInteractive: () => true,
@@ -241,7 +245,12 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
     const emptyMessage = useMemo(() => resolveEmptyStateMessage(error, 'No nodes found'), [error]);
 
     const keyExtractor = useCallback(
-      (row: ClusterNodeRow) => buildClusterScopedKey(row, `node:${row.name}`),
+      (row: ClusterNodeRow) =>
+        buildCanonicalObjectRowKey({
+          kind: 'Node',
+          name: row.name,
+          clusterId: row.clusterId,
+        }),
       []
     );
 
@@ -303,12 +312,12 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
     const getRowContextMenuItems = useCallback(
       (row: ClusterNodeRow, _columnKey: string): ContextMenuItem[] => {
         return buildObjectActionItems({
-          object: {
+          object: buildObjectReference({
             kind: 'Node',
             name: row.name,
             clusterId: row.clusterId,
             clusterName: row.clusterName,
-          },
+          }),
           context: 'gridtable',
           handlers: {
             onOpen: () => handleNodeClick(row),
@@ -330,6 +339,8 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
           <GridTable
             data={sortedData}
             columns={tableColumns}
+            diagnosticsLabel="Cluster Nodes"
+            diagnosticsMode="live"
             loading={loading}
             keyExtractor={keyExtractor}
             onRowClick={handleNodeClick}

@@ -6,20 +6,21 @@
  */
 
 import { useEffect, useMemo } from 'react';
+import { requestRefreshDomain } from '@/core/data-access';
 import { refreshOrchestrator, useRefreshScopedDomain } from '@/core/refresh';
-import { buildClusterScopeList } from '@/core/refresh/clusterScope';
+import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { useViewState } from '@/core/contexts/ViewStateContext';
 import type { ClusterOverviewMetrics } from '@/core/refresh/types';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 
 export const useClusterMetricsAvailability = (): ClusterOverviewMetrics | null => {
-  const { selectedClusterId, selectedClusterIds } = useKubeconfig();
+  const { selectedClusterId } = useKubeconfig();
   const { viewType } = useViewState();
 
-  // Build scope covering all connected clusters for the cluster-overview domain.
+  // Metrics for foreground UI should follow the active cluster only.
   const overviewScope = useMemo(
-    () => buildClusterScopeList(selectedClusterIds, ''),
-    [selectedClusterIds]
+    () => buildClusterScope(selectedClusterId ?? undefined, ''),
+    [selectedClusterId]
   );
 
   const overviewDomain = useRefreshScopedDomain('cluster-overview', overviewScope);
@@ -39,8 +40,10 @@ export const useClusterMetricsAvailability = (): ClusterOverviewMetrics | null =
     const shouldTrigger = shouldEnable && viewType !== 'overview';
     // ClusterOverview handles its own initial refresh; only prime from non-overview views.
     if (shouldTrigger && !overviewDomain.data && overviewDomain.status === 'idle') {
-      void refreshOrchestrator.fetchScopedDomain('cluster-overview', overviewScope, {
-        isManual: true,
+      void requestRefreshDomain({
+        domain: 'cluster-overview',
+        scope: overviewScope,
+        reason: 'startup',
       });
     }
   }, [overviewDomain.data, overviewDomain.status, overviewScope, viewType]);

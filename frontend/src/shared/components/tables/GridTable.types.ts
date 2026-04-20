@@ -77,11 +77,16 @@ export interface GridTableFilterAccessors<T> {
 }
 
 export interface GridTableFilterOptions {
+  searchBehavior?: 'local' | 'query';
   searchPlaceholder?: string;
   kinds?: string[];
   namespaces?: string[];
   showKindDropdown?: boolean;
   showNamespaceDropdown?: boolean;
+  kindDropdownSearchable?: boolean;
+  kindDropdownBulkActions?: boolean;
+  namespaceDropdownSearchable?: boolean;
+  namespaceDropdownBulkActions?: boolean;
   includeClusterScopedSyntheticNamespace?: boolean;
   /** IconBar items rendered before the built-in Reset action (e.g. Favorite toggle). */
   preActions?: IconBarItem[];
@@ -103,10 +108,22 @@ export interface GridTableFilterConfig<T> {
   onReset?: () => void;
 }
 
+/**
+ * Declares how GridTable diagnostics should interpret row counts and churn for
+ * a table family.
+ *
+ * - `local`: search/filter/sort run over a loaded local row set
+ * - `query`: upstream query/filtering shapes the dataset before it reaches the table
+ * - `live`: frequent row updates are expected because key fields are time-varying
+ */
+export type GridTableDiagnosticsMode = 'local' | 'query' | 'live';
+
 export interface GridTableProps<T> {
   data: T[];
   columns: GridColumnDefinition<T>[];
   keyExtractor: (item: T, index: number) => string;
+  diagnosticsLabel?: string;
+  diagnosticsMode?: GridTableDiagnosticsMode;
   /**
    * Override which column keys should be treated as special "kind badge"
    * columns by shared table helpers. Use this when a consumer needs plain
@@ -160,9 +177,14 @@ export interface GridTableProps<T> {
 }
 
 export interface InternalFilterOptions {
+  searchBehavior?: 'local' | 'query';
   kinds: DropdownOption[];
   namespaces: DropdownOption[];
   searchPlaceholder?: string;
+  kindDropdownSearchable?: boolean;
+  kindDropdownBulkActions?: boolean;
+  namespaceDropdownSearchable?: boolean;
+  namespaceDropdownBulkActions?: boolean;
   preActions?: IconBarItem[];
   postActions?: IconBarItem[];
   customActions?: React.ReactNode;

@@ -3,6 +3,7 @@
  */
 
 import React, { useEffect, useCallback, useMemo, useRef } from 'react';
+import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
 import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
@@ -16,14 +17,23 @@ import {
 import { useTableSort } from '@hooks/useTableSort';
 import { formatAge, formatFullDate } from '@utils/ageFormatter';
 import { errorHandler } from '@/utils/errorHandler';
+import { requestRefreshDomain, type DataRequestReason } from '@/core/data-access';
 import type { ObjectEventSummary } from '@/core/refresh/types';
 import { refreshManager, refreshOrchestrator } from '@/core/refresh';
+import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
+import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
 import { useRefreshScopedDomain } from '@/core/refresh/store';
 import { useRefreshWatcher } from '@/core/refresh/hooks/useRefreshWatcher';
 import type { ObjectEventsRefresherName } from '@/core/refresh/refresherTypes';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
-import { parseApiVersion } from '@/shared/constants/builtinGroupVersions';
+import {
+  buildEventObjectReference,
+  canResolveEventObjectReference,
+  resolveEventObjectReference,
+  splitEventObjectTarget,
+} from '@shared/utils/eventObjectIdentity';
+import type { ResolvedObjectReference } from '@shared/utils/objectIdentity';
 import type { PanelObjectData } from '../types';
 import { CLUSTER_SCOPE, INACTIVE_SCOPE } from '../constants';
 import './EventsTab.css';
@@ -68,21 +78,16 @@ interface EventDisplay {
   objectKind: string;
   objectName: string;
   objectNamespace: string;
-  // GVK group/version of the involved object, parsed from the event's
-  // involvedObjectApiVersion. Required so the panel can disambiguate
-  // colliding kinds (two CRDs with the same Kind in different groups)
-  // when the user clicks an event row to open the related object.
-  // Empty string for core/v1 group; undefined or null when the backend
-  // did not populate involvedObjectApiVersion (older snapshots) and the
-  // parent panel doesn't supply a fallback value.
-  objectGroup?: string | null;
-  objectVersion?: string | null;
+  objectUid?: string;
+  objectApiVersion?: string;
+  objectRef?: ResolvedObjectReference;
   // Per-event cluster identity from ObjectEventSummary (extends ClusterMeta).
   clusterId?: string;
   clusterName?: string;
 }
 
 const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope }) => {
+  const { isPaused, isManualRefreshActive } = useAutoRefreshLoadingState();
   const { openWithObject } = useObjectPanel();
   const { navigateToView } = useNavigateToView();
   const openWithObjectRef = useRef(openWithObject);
@@ -110,13 +115,15 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
   }, [eventsScope, isActive, objectData]);
 
   const fetchEvents = useCallback(
-    async (isManualRefresh = false) => {
+    async (reason: DataRequestReason = 'startup') => {
       if (!eventsScope) {
         return;
       }
       try {
-        await refreshOrchestrator.fetchScopedDomain('object-events', eventsScope, {
-          isManual: isManualRefresh,
+        await requestRefreshDomain({
+          domain: 'object-events',
+          scope: eventsScope,
+          reason,
         });
       } catch (error) {
         errorHandler.handle(error instanceof Error ? error : new Error(String(error)), {
@@ -129,7 +136,7 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
 
   useEffect(() => {
     if (isActive && objectData && eventsScope) {
-      void fetchEvents(true);
+      void fetchEvents('startup');
     }
   }, [fetchEvents, isActive, objectData, eventsScope]);
 
@@ -160,7 +167,7 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
     refresherName: eventsRefresherName,
     onRefresh: useCallback(
       async (isManual: boolean) => {
-        await fetchEvents(isManual);
+        await fetchEvents(isManual ? 'user' : 'background');
       },
       [fetchEvents]
     ),
@@ -174,28 +181,62 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
     return (eventsSnapshot.data?.events as ObjectEventSummary[]) ?? [];
   }, [eventsScope, eventsSnapshot.data]);
 
+  const buildEventObjectRefInput = useCallback(
+    (
+      event: Pick<
+        EventDisplay,
+        | 'objectKind'
+        | 'objectName'
+        | 'objectNamespace'
+        | 'objectUid'
+        | 'objectApiVersion'
+        | 'clusterId'
+        | 'clusterName'
+      >
+    ) => ({
+      object: `${event.objectKind}/${event.objectName}`,
+      objectUid: event.objectUid,
+      objectApiVersion: event.objectApiVersion,
+      objectNamespace:
+        event.objectNamespace && event.objectNamespace !== CLUSTER_SCOPE
+          ? event.objectNamespace
+          : undefined,
+      clusterId: event.clusterId ?? objectData?.clusterId ?? undefined,
+      clusterName: event.clusterName ?? objectData?.clusterName ?? undefined,
+      fallbackKind: objectData?.kind,
+      fallbackGroup: objectData?.group,
+      fallbackVersion: objectData?.version,
+    }),
+    [
+      objectData?.clusterId,
+      objectData?.clusterName,
+      objectData?.group,
+      objectData?.kind,
+      objectData?.version,
+    ]
+  );
+
   const events = useMemo<EventDisplay[]>(
     () =>
       rawEvents.map((event) => {
         const lastTime = event.lastTimestamp ? new Date(event.lastTimestamp) : new Date();
         const firstTime = event.firstTimestamp ? new Date(event.firstTimestamp) : new Date();
-        const objectKind = event.involvedObjectKind || objectData?.kind || 'Unknown';
-        const objectName = event.involvedObjectName || objectData?.name || 'Unknown';
+        const fallbackKind = event.involvedObjectKind || objectData?.kind || 'Unknown';
+        const fallbackName = event.involvedObjectName || objectData?.name || 'Unknown';
         const objectNamespace =
           event.involvedObjectNamespace ?? objectData?.namespace ?? CLUSTER_SCOPE;
-        // Carry the GVK from the event's involvedObject so opening the
-        // related object lands on the correct CRD when two CRDs share
-        // a Kind. Falls back to the parent panel's group/version when
-        // the event references the same kind as the parent (common case
-        // for object-events: the event is about THIS object).
-        const apiVersionParts = event.involvedObjectApiVersion
-          ? parseApiVersion(event.involvedObjectApiVersion)
-          : undefined;
-        const sameKindAsPanel = objectData?.kind === objectKind;
-        const objectGroup =
-          apiVersionParts?.group ?? (sameKindAsPanel ? objectData?.group : undefined);
-        const objectVersion =
-          apiVersionParts?.version ?? (sameKindAsPanel ? objectData?.version : undefined);
+        const objectRef = buildEventObjectReference(
+          buildEventObjectRefInput({
+            objectKind: fallbackKind,
+            objectName: fallbackName,
+            objectNamespace,
+            objectUid: event.involvedObjectUid,
+            objectApiVersion: event.involvedObjectApiVersion,
+            clusterId: event.clusterId,
+            clusterName: event.clusterName,
+          })
+        );
+        const parsedObject = splitEventObjectTarget(`${fallbackKind}/${fallbackName}`);
         return {
           type: event.eventType || 'Normal',
           source: normalizeEventSource(event.source),
@@ -205,31 +246,33 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
           ageTimestamp: lastTime,
           firstTime,
           lastTime,
-          objectKind,
-          objectName,
+          objectKind: objectRef?.kind ?? parsedObject.objectType,
+          objectName: objectRef?.name ?? parsedObject.objectName,
           objectNamespace,
-          objectGroup,
-          objectVersion,
+          objectUid: event.involvedObjectUid,
+          objectApiVersion: event.involvedObjectApiVersion,
+          objectRef,
           clusterId: event.clusterId,
           clusterName: event.clusterName,
         };
       }),
-    [
-      rawEvents,
-      objectData?.kind,
-      objectData?.name,
-      objectData?.namespace,
-      objectData?.group,
-      objectData?.version,
-    ]
+    [buildEventObjectRefInput, rawEvents, objectData?.kind, objectData?.name, objectData?.namespace]
   );
 
-  const eventsLoading = eventsScope
-    ? !eventsSnapshot.data?.events &&
-      (eventsSnapshot.status === 'loading' ||
-        eventsSnapshot.status === 'initialising' ||
-        eventsSnapshot.status === 'updating')
-    : false;
+  const eventsLoadingState = applyPassiveLoadingPolicy({
+    loading: eventsScope
+      ? !eventsSnapshot.data?.events &&
+        (eventsSnapshot.status === 'loading' ||
+          eventsSnapshot.status === 'initialising' ||
+          eventsSnapshot.status === 'updating')
+      : false,
+    hasLoaded: Boolean(eventsSnapshot.data?.events),
+    hasData: events.length > 0,
+    isPaused,
+    isManualRefreshActive,
+  });
+  const eventsLoading = eventsLoadingState.loading;
+  const showPausedEventsState = eventsLoadingState.showPausedEmptyState;
   const eventsError = eventsScope ? (eventsSnapshot.error ?? null) : null;
 
   const keyExtractor = useCallback((item: EventDisplay, index: number) => {
@@ -238,57 +281,61 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
     return buildClusterScopedKey(item, `${identifier}:${item.lastTime.getTime()}:${index}`);
   }, []);
 
+  const canOpenRelatedObject = useCallback(
+    (item: EventDisplay) =>
+      canResolveEventObjectReference(
+        buildEventObjectRefInput({
+          objectKind: item.objectKind,
+          objectName: item.objectName,
+          objectNamespace: item.objectNamespace,
+          objectUid: item.objectUid,
+          objectApiVersion: item.objectApiVersion,
+          clusterId: item.clusterId,
+          clusterName: item.clusterName,
+        })
+      ),
+    [buildEventObjectRefInput]
+  );
+
   const openRelatedObject = useCallback(
-    (item: EventDisplay) => {
-      if (!item.objectKind || !item.objectName) {
-        return;
+    async (item: EventDisplay) => {
+      const ref = await resolveEventObjectReference(
+        buildEventObjectRefInput({
+          objectKind: item.objectKind,
+          objectName: item.objectName,
+          objectNamespace: item.objectNamespace,
+          objectUid: item.objectUid,
+          objectApiVersion: item.objectApiVersion,
+          clusterId: item.clusterId,
+          clusterName: item.clusterName,
+        })
+      );
+      if (ref) {
+        openWithObjectRef.current(ref);
       }
-
-      const resolvedNamespace =
-        item.objectNamespace && item.objectNamespace !== CLUSTER_SCOPE
-          ? item.objectNamespace
-          : undefined;
-
-      // Prefer per-event cluster identity; fall back to parent panel cluster.
-      openWithObjectRef.current({
-        kind: item.objectKind,
-        name: item.objectName,
-        namespace: resolvedNamespace,
-        // group/version come from the event's involvedObject apiVersion
-        // (parsed in the events memo above) so the panel can disambiguate
-        // colliding kinds across CRD groups.
-        group: item.objectGroup,
-        version: item.objectVersion,
-        clusterId: item.clusterId ?? objectData?.clusterId ?? undefined,
-        clusterName: item.clusterName ?? objectData?.clusterName ?? undefined,
-      });
     },
-    [objectData?.clusterId, objectData?.clusterName]
+    [buildEventObjectRefInput]
   );
 
   // Alt+click: navigate to the related object's view and focus it.
   const navigateToRelatedObject = useCallback(
-    (item: EventDisplay) => {
-      if (!item.objectKind || !item.objectName) {
-        return;
+    async (item: EventDisplay) => {
+      const ref = await resolveEventObjectReference(
+        buildEventObjectRefInput({
+          objectKind: item.objectKind,
+          objectName: item.objectName,
+          objectNamespace: item.objectNamespace,
+          objectUid: item.objectUid,
+          objectApiVersion: item.objectApiVersion,
+          clusterId: item.clusterId,
+          clusterName: item.clusterName,
+        })
+      );
+      if (ref) {
+        navigateToView(ref);
       }
-
-      const resolvedNamespace =
-        item.objectNamespace && item.objectNamespace !== CLUSTER_SCOPE
-          ? item.objectNamespace
-          : undefined;
-
-      navigateToView({
-        kind: item.objectKind,
-        name: item.objectName,
-        namespace: resolvedNamespace,
-        group: item.objectGroup,
-        version: item.objectVersion,
-        clusterId: item.clusterId ?? objectData?.clusterId ?? undefined,
-        clusterName: item.clusterName ?? objectData?.clusterName ?? undefined,
-      });
     },
-    [navigateToView, objectData?.clusterId, objectData?.clusterName]
+    [buildEventObjectRefInput, navigateToView]
   );
 
   const columns = useMemo<GridColumnDefinition<EventDisplay>[]>(() => {
@@ -309,9 +356,13 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
         'Object Name',
         (item) => item.objectName || '-',
         {
-          onClick: openRelatedObject,
-          onAltClick: navigateToRelatedObject,
-          isInteractive: (item) => Boolean(item.objectKind && item.objectName),
+          onClick: (item) => {
+            void openRelatedObject(item);
+          },
+          onAltClick: (item) => {
+            void navigateToRelatedObject(item);
+          },
+          isInteractive: canOpenRelatedObject,
         }
       ),
       (() => {
@@ -341,7 +392,7 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
     applyColumnSizing(base, sizing);
 
     return base;
-  }, [openRelatedObject, navigateToRelatedObject]);
+  }, [canOpenRelatedObject, navigateToRelatedObject, openRelatedObject]);
 
   const { sortedData, sortConfig, handleSort } = useTableSort(events, 'ageTimestamp', 'desc', {
     columns,
@@ -352,6 +403,16 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
       <div className="object-panel-tab-content">
         <div className="object-panel-placeholder">
           <p>Loading events...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (showPausedEventsState) {
+    return (
+      <div className="object-panel-tab-content">
+        <div className="object-panel-placeholder">
+          <ClusterDataPausedState />
         </div>
       </div>
     );
@@ -385,7 +446,9 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
           columns={columns}
           sortConfig={sortConfig}
           onSort={handleSort}
-          onRowClick={openRelatedObject}
+          onRowClick={(item) => {
+            void openRelatedObject(item);
+          }}
           keyExtractor={keyExtractor}
           className="gridtable-object-events"
           virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}

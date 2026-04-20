@@ -6,14 +6,10 @@
  */
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import {
-  GetKubeconfigSearchPaths,
-  GetThemeInfo,
-  OpenKubeconfigSearchPathDialog,
-  SetKubeconfigSearchPaths,
-} from '@wailsjs/go/backend/App';
+import { OpenKubeconfigSearchPathDialog, SetKubeconfigSearchPaths } from '@wailsjs/go/backend/App';
 import { types } from '@wailsjs/go/models';
 import { errorHandler } from '@utils/errorHandler';
+import { readKubeconfigSearchPaths, readThemeInfo, requestAppState } from '@/core/app-state-access';
 import { useAutoRefresh, useBackgroundRefresh } from '@/core/refresh';
 import { changeTheme, initSystemThemeListener } from '@/utils/themes';
 import Tooltip from '@shared/components/Tooltip';
@@ -21,6 +17,11 @@ import './Settings.css';
 import { clearAllGridTableState } from '@shared/components/tables/persistence/gridTablePersistenceReset';
 import {
   hydrateAppPreferences,
+  getMaxTableRows,
+  MAX_TABLE_ROWS_DEFAULT,
+  MAX_TABLE_ROWS_MAX,
+  MAX_TABLE_ROWS_MIN,
+  setMaxTableRows,
   setUseShortResourceNames as persistUseShortResourceNames,
   setPaletteTint as persistPaletteTint,
   getPaletteTint,
@@ -87,6 +88,9 @@ function Settings({ onClose }: SettingsProps) {
   const { resolvedTheme } = useTheme();
   const { applyLayoutDefaultsAcrossClusters } = useDockablePanelContext();
   const [useShortResourceNames, setUseShortResourceNames] = useState<boolean>(false);
+  const [maxTableRowsInput, setMaxTableRowsInput] = useState<string>(() =>
+    String(getMaxTableRows())
+  );
   const [persistenceMode, setPersistenceMode] = useState<GridTablePersistenceMode>(() =>
     getGridTablePersistenceMode()
   );
@@ -218,7 +222,10 @@ function Settings({ onClose }: SettingsProps) {
 
   const loadThemeInfo = async () => {
     try {
-      const info = await GetThemeInfo();
+      const info = await requestAppState({
+        resource: 'theme-info',
+        read: () => readThemeInfo(),
+      });
       setThemeInfo(info);
     } catch (error) {
       errorHandler.handle(error, { action: 'loadThemeInfo' });
@@ -229,6 +236,7 @@ function Settings({ onClose }: SettingsProps) {
     try {
       const preferences = await hydrateAppPreferences({ force: true });
       setUseShortResourceNames(preferences.useShortResourceNames);
+      setMaxTableRowsInput(String(preferences.maxTableRows ?? MAX_TABLE_ROWS_DEFAULT));
       // Refresh panel defaults from the freshly hydrated cache.
       setObjectPanelPositionState(getDefaultObjectPanelPosition());
       const freshLayout = getObjectPanelLayoutDefaults();
@@ -250,7 +258,10 @@ function Settings({ onClose }: SettingsProps) {
   const loadKubeconfigPaths = async () => {
     setKubeconfigPathsLoading(true);
     try {
-      const paths = await GetKubeconfigSearchPaths();
+      const paths = await requestAppState({
+        resource: 'kubeconfig-search-paths',
+        read: () => readKubeconfigSearchPaths(),
+      });
       const normalized = paths || [];
       setKubeconfigPaths(normalized);
     } catch (error) {
@@ -303,6 +314,16 @@ function Settings({ onClose }: SettingsProps) {
     const mode: GridTablePersistenceMode = checked ? 'namespaced' : 'shared';
     setPersistenceMode(mode);
     setGridTablePersistenceMode(mode);
+  };
+
+  const commitMaxTableRows = (raw: string) => {
+    const parsed = parseInt(raw, 10);
+    const normalized =
+      Number.isNaN(parsed) || parsed <= 0
+        ? MAX_TABLE_ROWS_DEFAULT
+        : Math.max(MAX_TABLE_ROWS_MIN, Math.min(MAX_TABLE_ROWS_MAX, parsed));
+    setMaxTableRowsInput(String(normalized));
+    setMaxTableRows(normalized);
   };
 
   const handleObjectPanelPositionChange = (position: ObjectPanelPosition) => {
@@ -950,7 +971,6 @@ function Settings({ onClose }: SettingsProps) {
           }}
           onBlur={handlePaletteValueCancel}
           maxLength={4}
-          spellCheck={false}
         />
       );
     }
@@ -1085,7 +1105,6 @@ function Settings({ onClose }: SettingsProps) {
               }}
               onBlur={handleAccentHexCancel}
               maxLength={7}
-              spellCheck={false}
             />
           ) : (
             <span
@@ -1133,7 +1152,6 @@ function Settings({ onClose }: SettingsProps) {
               }}
               onBlur={handleLinkHexCancel}
               maxLength={7}
-              spellCheck={false}
             />
           ) : (
             <span
@@ -1615,6 +1633,34 @@ function Settings({ onClose }: SettingsProps) {
                   variant="dark"
                 />
               </label>
+            </div>
+          </div>
+        </div>
+        <div className="settings-subsection">
+          <h4>Tables</h4>
+          <div className="settings-items">
+            <div className="setting-item setting-item-inline">
+              <label htmlFor="settings-max-table-rows">Max Rows</label>
+              <input
+                type="number"
+                id="settings-max-table-rows"
+                min={MAX_TABLE_ROWS_MIN}
+                max={MAX_TABLE_ROWS_MAX}
+                step={100}
+                value={maxTableRowsInput}
+                onChange={(e) => setMaxTableRowsInput(e.target.value)}
+                onBlur={(e) => commitMaxTableRows(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    e.currentTarget.blur();
+                  }
+                }}
+              />
+              <Tooltip
+                content="Max number of rows in a data table. Larger values will show more data, but app performance may be impacted."
+                variant="dark"
+              />
             </div>
           </div>
         </div>

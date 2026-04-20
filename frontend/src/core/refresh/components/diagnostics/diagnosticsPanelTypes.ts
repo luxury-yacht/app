@@ -147,3 +147,24 @@ export interface SummaryCardData {
   className?: string;
   title?: string;
 }
+
+export interface BrokerReadRow {
+  key: string;
+  broker: string;
+  label: string;
+  resource: string;
+  adapter: string;
+  reason: string;
+  scope: string;
+  scopeTooltip?: string;
+  inFlightCount: number;
+  totalRequests: number;
+  successCount: number;
+  errorCount: number;
+  blockedCount: number;
+  lastStatus: string;
+  lastDuration: string;
+  lastUpdated: string;
+  lastUpdatedTooltip: string;
+  lastError: string;
+}

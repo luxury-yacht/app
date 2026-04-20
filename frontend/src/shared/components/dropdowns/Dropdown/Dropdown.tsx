@@ -5,7 +5,7 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import React, { useMemo, useEffect, useRef, useState } from 'react';
+import React, { useMemo, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { DropdownProps } from './types';
 import { useDropdownState } from './hooks/useDropdownState';
 import { useKeyboardNavigation } from './hooks/useKeyboardNavigation';
@@ -13,30 +13,32 @@ import { useAriaAnnouncements } from './hooks/useAriaAnnouncements';
 import '@styles/components/dropdowns.css';
 import { useKeyboardSurface } from '@ui/shortcuts';
 
-const CLIPPING_OVERFLOW_VALUES = new Set(['auto', 'scroll', 'hidden', 'clip']);
+const SelectAllIcon: React.FC = () => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 16 16"
+    width={16}
+    height={16}
+    aria-hidden="true"
+  >
+    <rect x="2.25" y="2.25" width="11.5" height="11.5" rx="2" fill="none" stroke="currentColor" />
+    <path d="M8 4.5v7" stroke="currentColor" strokeLinecap="round" />
+    <path d="M4.5 8h7" stroke="currentColor" strokeLinecap="round" />
+  </svg>
+);
 
-function clipsOverflow(value: string): boolean {
-  return CLIPPING_OVERFLOW_VALUES.has(value);
-}
-
-/**
- * Finds the nearest ancestor that can clip dropdown content.
- * This lets us position menus correctly inside scrollable containers (like modal form panes).
- */
-function getNearestClippingRect(node: HTMLElement): DOMRect | null {
-  let current: HTMLElement | null = node.parentElement;
-  while (current) {
-    const style = window.getComputedStyle(current);
-    const clipsY = clipsOverflow(style.overflowY);
-    const clipsX = clipsOverflow(style.overflowX);
-    const clipsBoth = clipsOverflow(style.overflow);
-    if (clipsY || clipsX || clipsBoth) {
-      return current.getBoundingClientRect();
-    }
-    current = current.parentElement;
-  }
-  return null;
-}
+const SelectNoneIcon: React.FC = () => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 16 16"
+    width={16}
+    height={16}
+    aria-hidden="true"
+  >
+    <rect x="2.25" y="2.25" width="11.5" height="11.5" rx="2" fill="none" stroke="currentColor" />
+    <path d="M4.75 8h6.5" stroke="currentColor" strokeLinecap="round" />
+  </svg>
+);
 
 const Dropdown: React.FC<DropdownProps> = ({
   options,
@@ -85,6 +87,8 @@ const Dropdown: React.FC<DropdownProps> = ({
   } = useDropdownState(value, onChange, multiple, disabled);
 
   const [isFocused, setIsFocused] = useState(false);
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const menuScrollTopRef = useRef(0);
 
   useEffect(() => {
     const node = dropdownRef.current;
@@ -258,6 +262,38 @@ const Dropdown: React.FC<DropdownProps> = ({
     }
   }, [highlightedIndex, isOpen, menuRef]);
 
+  useEffect(() => {
+    const menu = menuRef.current;
+    if (!isOpen || !menu) {
+      return;
+    }
+
+    const handleMenuScroll = () => {
+      menuScrollTopRef.current = menu.scrollTop;
+    };
+
+    menu.addEventListener('scroll', handleMenuScroll, { passive: true });
+    return () => {
+      menuScrollTopRef.current = menu.scrollTop;
+      menu.removeEventListener('scroll', handleMenuScroll);
+    };
+  }, [isOpen, menuRef]);
+
+  useLayoutEffect(() => {
+    if (!isOpen || !menuRef.current) {
+      return;
+    }
+    if (menuRef.current.scrollTop !== menuScrollTopRef.current) {
+      menuRef.current.scrollTop = menuScrollTopRef.current;
+    }
+  });
+
+  useEffect(() => {
+    if (!isOpen) {
+      menuScrollTopRef.current = 0;
+    }
+  }, [isOpen]);
+
   // Calculate dropdown position to avoid viewport edges
   const [dropdownPosition, setDropdownPosition] = React.useState<'bottom' | 'top'>('bottom');
 
@@ -287,6 +323,7 @@ const Dropdown: React.FC<DropdownProps> = ({
     disabled && 'disabled',
     loading && 'loading',
     isOpen && 'open',
+    isSearchFocused && 'search-focused',
     className,
   ]
     .filter(Boolean)
@@ -335,6 +372,8 @@ const Dropdown: React.FC<DropdownProps> = ({
     onSearchChange?.(nextValue);
     setHighlightedIndex(-1);
   };
+
+  const showBulkActionLabels = !searchable;
 
   return (
     <div ref={dropdownRef} className={containerClasses}>
@@ -395,44 +434,68 @@ const Dropdown: React.FC<DropdownProps> = ({
           aria-multiselectable={multiple}
           id={`${id || 'dropdown'}-menu`}
         >
-          {searchable && (
-            <div className="search-container">
-              <input
-                type="text"
-                className="search-input"
-                placeholder={searchPlaceholder}
-                value={effectiveSearchQuery}
-                onChange={(e) => handleSearchInputChange(e.target.value)}
-                onClick={(e) => e.stopPropagation()}
-                autoFocus
-              />
-            </div>
-          )}
+          {(searchable || (multiple && showBulkActions && selectableFilteredValues.length > 0)) && (
+            <div className="dropdown-menu-controls">
+              {searchable && (
+                <div className="search-container">
+                  <input
+                    type="text"
+                    className="search-input"
+                    placeholder={searchPlaceholder}
+                    value={effectiveSearchQuery}
+                    onChange={(e) => handleSearchInputChange(e.target.value)}
+                    onClick={(e) => e.stopPropagation()}
+                    onFocus={() => setIsSearchFocused(true)}
+                    onBlur={() => setIsSearchFocused(false)}
+                    autoFocus
+                  />
+                </div>
+              )}
 
-          {multiple && showBulkActions && selectableFilteredValues.length > 0 && (
-            <div className="dropdown-bulk-actions">
-              <button
-                type="button"
-                className="dropdown-bulk-action"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleSelectAll();
-                }}
-                disabled={selectableSelectedCount === selectableFilteredValues.length}
-              >
-                Select all
-              </button>
-              <button
-                type="button"
-                className="dropdown-bulk-action"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleSelectNone();
-                }}
-                disabled={selectableSelectedCount === 0}
-              >
-                Select none
-              </button>
+              {multiple && showBulkActions && selectableFilteredValues.length > 0 && (
+                <div
+                  className={`dropdown-bulk-actions icon-bar${
+                    showBulkActionLabels ? ' dropdown-bulk-actions--labeled' : ''
+                  }`}
+                >
+                  <button
+                    type="button"
+                    className={`dropdown-bulk-action icon-bar-button${
+                      showBulkActionLabels ? ' dropdown-bulk-action--labeled' : ''
+                    }`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleSelectAll();
+                    }}
+                    disabled={selectableSelectedCount === selectableFilteredValues.length}
+                    title="Select all"
+                    aria-label="Select all"
+                  >
+                    <SelectAllIcon />
+                    {showBulkActionLabels && (
+                      <span className="dropdown-bulk-action-label">Select All</span>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    className={`dropdown-bulk-action icon-bar-button${
+                      showBulkActionLabels ? ' dropdown-bulk-action--labeled' : ''
+                    }`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleSelectNone();
+                    }}
+                    disabled={selectableSelectedCount === 0}
+                    title="Select none"
+                    aria-label="Select none"
+                  >
+                    <SelectNoneIcon />
+                    {showBulkActionLabels && (
+                      <span className="dropdown-bulk-action-label">Select None</span>
+                    )}
+                  </button>
+                </div>
+              )}
             </div>
           )}
 

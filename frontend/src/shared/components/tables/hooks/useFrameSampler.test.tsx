@@ -9,7 +9,10 @@ import React, { act, useImperativeHandle } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { useFrameSampler } from '@shared/components/tables/hooks/useFrameSampler';
+import {
+  useFrameSampler,
+  type FrameSamplerSample,
+} from '@shared/components/tables/hooks/useFrameSampler';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -24,7 +27,7 @@ interface HarnessProps {
   cancelAnimationFrameImpl: (handle: number) => void;
   setTimeoutImpl: (cb: () => void, ms: number) => number;
   clearTimeoutImpl: (handle: number) => void;
-  logResults?: (rows: Array<Record<string, unknown>>) => void;
+  onSample?: (sample: FrameSamplerSample) => void;
 }
 
 const createHarness = async (props: HarnessProps) => {
@@ -38,7 +41,7 @@ const createHarness = async (props: HarnessProps) => {
       sampleLabel: 'GridTable scroll',
       sampleWindowMs: 100,
       minSampleCount: 2,
-      logResults: incomingProps.logResults,
+      onSample: incomingProps.onSample,
       requestAnimationFrameImpl: incomingProps.requestAnimationFrameImpl,
       cancelAnimationFrameImpl: incomingProps.cancelAnimationFrameImpl,
       setTimeoutImpl: incomingProps.setTimeoutImpl,
@@ -117,14 +120,14 @@ describe('useFrameSampler', () => {
     const clearTimeoutImpl = vi.fn((id: number) => {
       timeoutCallbacks.delete(id);
     });
-    const logResults = vi.fn();
+    const onSample = vi.fn();
 
     const harness = await createHarness({
       requestAnimationFrameImpl,
       cancelAnimationFrameImpl,
       setTimeoutImpl,
       clearTimeoutImpl,
-      logResults,
+      onSample,
     });
 
     harness.start();
@@ -147,12 +150,48 @@ describe('useFrameSampler', () => {
     expect(timeoutCb).toBeDefined();
     timeoutCb?.();
 
-    expect(logResults).toHaveBeenCalledTimes(1);
-    const loggedRows = logResults.mock.calls[0][0];
-    expect(loggedRows[0]).toMatchObject({
+    expect(onSample).toHaveBeenCalledTimes(1);
+    expect(onSample.mock.calls[0][0]).toMatchObject({
       sample: 'GridTable scroll',
       frames: 2,
+      latestMs: 17.3,
     });
+
+    await harness.unmount();
+  });
+
+  it('does not emit anything when no sample handler is provided', async () => {
+    const consoleTable = vi.spyOn(console, 'table').mockImplementation(() => undefined);
+    let rafId = 0;
+    const rafCallbacks = new Map<number, FrameRequestCallback>();
+    const timeoutCallbacks = new Map<number, () => void>();
+
+    const harness = await createHarness({
+      requestAnimationFrameImpl: (cb) => {
+        rafId += 1;
+        rafCallbacks.set(rafId, cb);
+        return rafId;
+      },
+      cancelAnimationFrameImpl: (id) => {
+        rafCallbacks.delete(id);
+      },
+      setTimeoutImpl: (cb) => {
+        const id = timeoutCallbacks.size + 1;
+        timeoutCallbacks.set(id, cb);
+        return id;
+      },
+      clearTimeoutImpl: (id) => {
+        timeoutCallbacks.delete(id);
+      },
+    });
+
+    harness.start();
+    rafCallbacks.get(1)?.(0);
+    rafCallbacks.get(2)?.(16.7);
+    rafCallbacks.get(3)?.(34);
+    timeoutCallbacks.get(1)?.();
+
+    expect(consoleTable).not.toHaveBeenCalled();
 
     await harness.unmount();
   });

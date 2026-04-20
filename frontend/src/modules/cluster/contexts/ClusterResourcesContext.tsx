@@ -21,7 +21,10 @@ import React, {
   ReactNode,
 } from 'react';
 import type { ResourceDataReturn } from '@hooks/resources';
+import { requestRefreshDomain } from '@/core/data-access';
 import { refreshOrchestrator, useRefreshScopedDomain } from '@/core/refresh';
+import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
+import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { eventBus } from '@/core/events';
 import {
@@ -46,6 +49,7 @@ import type { ClusterViewType } from '@/types/navigation/views';
 import { useUserPermission } from '@/core/capabilities';
 import type { PermissionStatus } from '@/core/capabilities';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import { useStableSelectedValue } from '@shared/hooks/useStableSelectedValue';
 
 export type { ClusterNodeRow } from '@/core/refresh/types';
 
@@ -100,39 +104,61 @@ function useClusterDomainResource<K extends RefreshDomain, TResult>(
   domainName: K,
   state: DomainSnapshotState<DomainPayloadMap[K]>,
   extractFn: (payload: DomainPayloadMap[K] | null) => TResult | null,
-  scope: string
+  scope: string,
+  metaExtractor?: (payload: DomainPayloadMap[K] | null) => unknown,
+  isPaused: boolean = false,
+  isManualRefreshActive: boolean = false
 ): ResourceDataReturn<TResult> {
   const load = useCallback(
     async (_showSpinner: boolean = true) => {
       // fetchScopedDomain handles streaming domains internally — it will use
       // refreshOnce for active streams or fall back to a snapshot fetch.
-      await refreshOrchestrator.fetchScopedDomain(domainName, scope, { isManual: true });
+      await requestRefreshDomain({
+        domain: domainName,
+        scope,
+        reason: 'user',
+      });
     },
     [domainName, scope]
   );
 
   const refresh = useCallback(async () => {
-    await refreshOrchestrator.fetchScopedDomain(domainName, scope, { isManual: true });
+    await requestRefreshDomain({
+      domain: domainName,
+      scope,
+      reason: 'user',
+    });
   }, [domainName, scope]);
 
   const reset = useCallback(() => {
     refreshOrchestrator.resetScopedDomain(domainName, scope);
   }, [domainName, scope]);
 
+  const selectedData = useMemo(() => extractFn(state.data ?? null), [extractFn, state.data]);
+  const stableData = useStableSelectedValue(selectedData);
+  const selectedMeta = useMemo(
+    () => (metaExtractor ? metaExtractor(state.data ?? null) : undefined),
+    [metaExtractor, state.data]
+  );
+  const stableMeta = useStableSelectedValue(selectedMeta);
+
   return useMemo(() => {
-    const payload = state.data ?? null;
-    const data = extractFn(payload);
-    const hasData = data !== null && data !== undefined;
+    const hasData = stableData !== null && stableData !== undefined;
     const hasLoaded = hasData || state.status === 'error';
     const loadingStatus = state.status === 'loading' || state.status === 'initialising';
-    const loading = loadingStatus && !hasLoaded;
+    const passiveLoading = applyPassiveLoadingPolicy({
+      loading: loadingStatus && !hasLoaded,
+      hasLoaded,
+      isPaused,
+      isManualRefreshActive,
+    });
     const refreshing = state.status === 'updating';
     const error = state.error ? new Error(state.error) : null;
     const lastFetchTime = state.lastUpdated ? new Date(state.lastUpdated) : null;
 
     return {
-      data,
-      loading,
+      data: stableData,
+      loading: passiveLoading.loading,
       refreshing,
       error,
       load,
@@ -140,9 +166,10 @@ function useClusterDomainResource<K extends RefreshDomain, TResult>(
       reset,
       cancel: noop,
       lastFetchTime,
-      hasLoaded,
+      hasLoaded: passiveLoading.hasLoaded,
+      meta: stableMeta,
     };
-  }, [extractFn, load, refresh, reset, state]);
+  }, [isManualRefreshActive, isPaused, load, refresh, reset, stableData, stableMeta, state]);
 }
 
 export const useClusterResources = () => {
@@ -187,6 +214,7 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
   const activeClusterRefresherRef = useRef<ClusterRefresherName | null>(defaultRefresher ?? null);
 
   const { selectedClusterId } = useKubeconfig();
+  const { isPaused, isManualRefreshActive } = useAutoRefreshLoadingState();
 
   // Build scoped keys for cluster-isolated state storage.
   const clusterScope = useMemo(
@@ -327,13 +355,21 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
   const loadNodes = useCallback(
     async (showSpinner: boolean = true) => {
       void showSpinner;
-      await refreshOrchestrator.fetchScopedDomain('nodes', clusterScope, { isManual: true });
+      await requestRefreshDomain({
+        domain: 'nodes',
+        scope: clusterScope,
+        reason: 'user',
+      });
     },
     [clusterScope]
   );
 
   const refreshNodes = useCallback(async () => {
-    await refreshOrchestrator.fetchScopedDomain('nodes', clusterScope, { isManual: true });
+    await requestRefreshDomain({
+      domain: 'nodes',
+      scope: clusterScope,
+      reason: 'user',
+    });
   }, [clusterScope]);
 
   const resetNodes = useCallback(() => {
@@ -376,10 +412,16 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
 
     const isInitialising =
       nodeStatus === 'idle' || nodeStatus === 'initialising' || nodeStatus === 'loading';
+    const passiveLoading = applyPassiveLoadingPolicy({
+      loading: (isInitialising && !nodeSnapshot) || loading,
+      hasLoaded: !!nodeSnapshot && nodeStatus !== 'loading' && nodeStatus !== 'initialising',
+      isPaused,
+      isManualRefreshActive,
+    });
 
     return {
       data,
-      loading: (isInitialising && !nodeSnapshot) || loading,
+      loading: passiveLoading.loading,
       refreshing,
       error,
       load: loadNodes,
@@ -387,7 +429,7 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
       reset: resetNodes,
       cancel: cancelNodes,
       lastFetchTime: lastUpdated,
-      hasLoaded: !!nodeSnapshot && nodeStatus !== 'loading' && nodeStatus !== 'initialising',
+      hasLoaded: passiveLoading.hasLoaded,
       meta: {
         metricsStale: stale,
         metricsLastUpdated: lastUpdated || undefined,
@@ -412,6 +454,8 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
     nodeMetricsInfo?.consecutiveFailures,
     nodeMetricsInfo?.successCount,
     nodeMetricsInfo?.failureCount,
+    isManualRefreshActive,
+    isPaused,
     refreshNodes,
     resetNodes,
     selectedClusterId,
@@ -494,7 +538,11 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
       if (state && !state.data && state.status === 'idle') {
         // fetchScopedDomain handles streaming domains internally — it will
         // start a stream if appropriate, or fall back to a snapshot fetch.
-        void refreshOrchestrator.fetchScopedDomain(nextDomain, scope, { isManual: true });
+        void requestRefreshDomain({
+          domain: nextDomain,
+          scope,
+          reason: 'startup',
+        });
       }
     }
 
@@ -545,6 +593,10 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
       filterByClusterId(payload?.resources ?? null, selectedClusterId),
     [selectedClusterId]
   );
+  const rbacMetaExtractor = useCallback(
+    (payload: DomainPayloadMap['cluster-rbac'] | null) => ({ kinds: payload?.kinds ?? [] }),
+    []
+  );
   const storageExtractor = useCallback(
     (payload: DomainPayloadMap['cluster-storage'] | null) =>
       filterByClusterId(payload?.volumes ?? null, selectedClusterId),
@@ -554,6 +606,10 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
     (payload: DomainPayloadMap['cluster-config'] | null) =>
       filterByClusterId(payload?.resources ?? null, selectedClusterId),
     [selectedClusterId]
+  );
+  const configMetaExtractor = useCallback(
+    (payload: DomainPayloadMap['cluster-config'] | null) => ({ kinds: payload?.kinds ?? [] }),
+    []
   );
   const crdExtractor = useCallback(
     (payload: DomainPayloadMap['cluster-crds'] | null) =>
@@ -565,61 +621,70 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
       filterByClusterId(payload?.resources ?? null, selectedClusterId),
     [selectedClusterId]
   );
+  const customMetaExtractor = useCallback(
+    (payload: DomainPayloadMap['cluster-custom'] | null) => ({ kinds: payload?.kinds ?? [] }),
+    []
+  );
   const eventsExtractor = useCallback(
     (payload: DomainPayloadMap['cluster-events'] | null) =>
       filterByClusterId(payload?.events ?? null, selectedClusterId),
     [selectedClusterId]
   );
 
-  const rbac = useClusterDomainResource('cluster-rbac', rbacDomain, rbacExtractor, clusterScope);
+  const rbac = useClusterDomainResource(
+    'cluster-rbac',
+    rbacDomain,
+    rbacExtractor,
+    clusterScope,
+    rbacMetaExtractor,
+    isPaused,
+    isManualRefreshActive
+  );
   const storage = useClusterDomainResource(
     'cluster-storage',
     storageDomain,
     storageExtractor,
-    clusterScope
+    clusterScope,
+    undefined,
+    isPaused,
+    isManualRefreshActive
   );
   const config = useClusterDomainResource(
     'cluster-config',
     configDomain,
     configExtractor,
-    clusterScope
+    clusterScope,
+    configMetaExtractor,
+    isPaused,
+    isManualRefreshActive
   );
-  const crds = useClusterDomainResource('cluster-crds', crdDomain, crdExtractor, clusterScope);
+  const crds = useClusterDomainResource(
+    'cluster-crds',
+    crdDomain,
+    crdExtractor,
+    clusterScope,
+    undefined,
+    isPaused,
+    isManualRefreshActive
+  );
   const custom = useClusterDomainResource(
     'cluster-custom',
     customDomain,
     customExtractor,
-    clusterScope
+    clusterScope,
+    customMetaExtractor,
+    isPaused,
+    isManualRefreshActive
   );
   const events = useClusterDomainResource(
     'cluster-events',
     eventsDomain,
     eventsExtractor,
-    clusterEventsScope
+    clusterEventsScope,
+    undefined,
+    isPaused,
+    isManualRefreshActive
   );
-
-  const manualLoaders = useMemo<Record<ClusterViewType, () => Promise<void>>>(() => {
-    const wrap = (load?: (showSpinner?: boolean) => Promise<void>) => {
-      if (!load) {
-        return async () => {};
-      }
-
-      return async () => {
-        await load(true);
-      };
-    };
-
-    return {
-      nodes: wrap(nodes.load),
-      rbac: wrap(rbac.load),
-      storage: wrap(storage.load),
-      config: wrap(config.load),
-      crds: wrap(crds.load),
-      custom: wrap(custom.load),
-      events: wrap(events.load),
-      browse: async () => {},
-    };
-  }, [config.load, crds.load, custom.load, events.load, nodes.load, rbac.load, storage.load]);
 
   useEffect(() => {
     if (!activeResourceType) {
@@ -667,7 +732,17 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
       return;
     }
 
-    void manualLoaders[tabToEnsure]();
+    const refresher = clusterViewToRefresher[tabToEnsure];
+    const domain = refresher ? CLUSTER_REFRESHER_TO_DOMAIN[refresher] : undefined;
+    if (!domain) {
+      return;
+    }
+
+    void requestRefreshDomain({
+      domain,
+      scope: getScopeForDomain(domain),
+      reason: 'startup',
+    });
   }, [
     activeResourceType,
     config.data,
@@ -682,7 +757,7 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
     events.data,
     events.error,
     events.loading,
-    manualLoaders,
+    getScopeForDomain,
     nodes.data,
     nodes.error,
     nodes.loading,

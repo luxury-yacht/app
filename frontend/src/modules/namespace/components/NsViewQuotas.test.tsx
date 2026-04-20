@@ -237,8 +237,17 @@ describe('NsViewQuotas', () => {
         name: 'rq-default',
         namespace: 'team-a',
         clusterId: 'alpha:ctx',
+        group: '',
+        version: 'v1',
       })
     );
+  });
+
+  it('uses canonical object identity for row keys', async () => {
+    const entry = baseQuota();
+    const props = await renderQuotaView([entry]);
+
+    expect(props.keyExtractor(entry)).toBe('alpha:ctx|/v1/ResourceQuota/team-a/rq-default');
   });
 
   it('omits Resources, Status, and Scope columns', async () => {

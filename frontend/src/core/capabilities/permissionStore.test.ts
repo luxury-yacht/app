@@ -4,10 +4,21 @@
  * Test suite for getPermissionKey and makePermissionStatus.
  */
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { getPermissionKey, makePermissionStatus } from './permissionStore';
+import {
+  __resetForTests,
+  getPermissionKey,
+  makePermissionStatus,
+  resetPermissionStore,
+  subscribeUserPermissions,
+} from './permissionStore';
 import type { PermissionEntry } from './permissionTypes';
+
+afterEach(() => {
+  __resetForTests();
+  vi.restoreAllMocks();
+});
 
 // ---------------------------------------------------------------------------
 // getPermissionKey
@@ -151,5 +162,42 @@ describe('makePermissionStatus', () => {
     expect(status.entry.status).toBe('error');
     expect(status.error).toBe('cluster unreachable');
     expect(status.allowed).toBe(false);
+  });
+});
+
+describe('permission store notifications', () => {
+  it('notifies permission subscribers asynchronously', async () => {
+    vi.useFakeTimers();
+    const listener = vi.fn();
+    const unsubscribe = subscribeUserPermissions(listener);
+
+    resetPermissionStore();
+
+    expect(listener).not.toHaveBeenCalled();
+
+    await vi.runAllTimersAsync();
+
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    unsubscribe();
+    vi.useRealTimers();
+  });
+
+  it('coalesces multiple synchronous permission-store writes into one notification tick', async () => {
+    vi.useFakeTimers();
+    const listener = vi.fn();
+    const unsubscribe = subscribeUserPermissions(listener);
+
+    resetPermissionStore();
+    resetPermissionStore();
+
+    expect(listener).not.toHaveBeenCalled();
+
+    await vi.runAllTimersAsync();
+
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    unsubscribe();
+    vi.useRealTimers();
   });
 });

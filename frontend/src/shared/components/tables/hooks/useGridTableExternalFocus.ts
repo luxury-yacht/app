@@ -15,13 +15,7 @@
 import { useEffect, useRef } from 'react';
 import type { RefObject } from 'react';
 import { eventBus } from '@/core/events';
-
-interface FocusRequest {
-  kind: string;
-  name: string;
-  namespace?: string;
-  clusterId: string;
-}
+import { type GridTableFocusRequest, matchesGridTableFocusRequest } from './gridTableFocusRequest';
 
 interface UseGridTableExternalFocusOptions<T> {
   tableData: T[];
@@ -34,51 +28,15 @@ interface UseGridTableExternalFocusOptions<T> {
 // cycles so that focus requests emitted during a view switch are not lost.
 // Set by useNavigateToView before emitting the event; cleared by the
 // data-check effect when a match is found.
-let pendingFocusRequest: FocusRequest | null = null;
+let pendingFocusRequest: GridTableFocusRequest | null = null;
 
 /**
  * Sets the pending focus request buffer directly. Called by useNavigateToView
  * before emitting the event, so the buffer is guaranteed to be set regardless
  * of React effect scheduling order.
  */
-export function setPendingFocusRequest(request: FocusRequest | null): void {
+export function setPendingFocusRequest(request: GridTableFocusRequest | null): void {
   pendingFocusRequest = request;
-}
-
-/**
- * Checks if a table row item matches the focus request by comparing
- * standard Kubernetes resource fields on the data object.
- */
-function matchesRequest<T>(item: T, request: FocusRequest): boolean {
-  const row = item as Record<string, unknown>;
-
-  // Name must match (required)
-  const rowName = row.name;
-  if (typeof rowName !== 'string' || rowName !== request.name) {
-    return false;
-  }
-
-  // ClusterId must match (required)
-  const rowClusterId = row.clusterId;
-  if (typeof rowClusterId !== 'string' || rowClusterId !== request.clusterId) {
-    return false;
-  }
-
-  // Kind must match if present on the row (case-insensitive)
-  const rowKind = row.kind;
-  if (typeof rowKind === 'string' && rowKind.toLowerCase() !== request.kind.toLowerCase()) {
-    return false;
-  }
-
-  // Namespace must match if the request specifies one
-  if (request.namespace !== undefined) {
-    const rowNamespace = row.namespace;
-    if (typeof rowNamespace === 'string' && rowNamespace !== request.namespace) {
-      return false;
-    }
-  }
-
-  return true;
 }
 
 /**
@@ -94,14 +52,14 @@ function escapeKey(key: string): string {
  * Returns true if a match was found.
  */
 function tryFocus<T>(
-  request: FocusRequest,
+  request: GridTableFocusRequest,
   tableData: T[],
   keyExtractor: (item: T, index: number) => string,
   setFocusedRowKey: React.Dispatch<React.SetStateAction<string | null>>,
   wrapperRef: RefObject<HTMLDivElement | null>
 ): boolean {
   for (let i = 0; i < tableData.length; i++) {
-    if (matchesRequest(tableData[i], request)) {
+    if (matchesGridTableFocusRequest(tableData[i], i, keyExtractor, request)) {
       const key = keyExtractor(tableData[i], i);
       setFocusedRowKey(key);
       scrollToFocusedRow(key, i, tableData.length, wrapperRef);
@@ -182,7 +140,7 @@ export function useGridTableExternalFocus<T>({
   // data-check effect below knows NOT to consume the module-level buffer
   // for the same request — the buffer must survive for the *target* view's
   // GridTable, which may not have mounted yet.
-  const eventBusMatchRef = useRef<FocusRequest | null>(null);
+  const eventBusMatchRef = useRef<GridTableFocusRequest | null>(null);
 
   // Subscribe to focus-request events. The listener attempts an immediate
   // focus and records the match, but never clears the module-level buffer.

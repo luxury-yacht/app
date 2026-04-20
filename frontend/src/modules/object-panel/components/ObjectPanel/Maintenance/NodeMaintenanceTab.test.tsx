@@ -38,6 +38,10 @@ vi.mock('@/core/refresh', () => ({
   refreshOrchestrator: mockRefreshOrchestrator,
 }));
 
+vi.mock('@/core/settings/appPreferences', () => ({
+  getAutoRefreshEnabled: () => true,
+}));
+
 const createDomainState = (payload?: NodeMaintenanceSnapshotPayload) => ({
   status: 'idle' as const,
   data: payload ?? { drains: [] },

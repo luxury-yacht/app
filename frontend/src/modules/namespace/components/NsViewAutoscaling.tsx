@@ -23,18 +23,21 @@ import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
-import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
-import {
-  formatBuiltinApiVersion,
-  parseApiVersion,
-  resolveBuiltinGroupVersion,
-} from '@shared/constants/builtinGroupVersions';
+import { formatBuiltinApiVersion } from '@shared/constants/builtinGroupVersions';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { DeleteResourceByGVK } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 import { useFavToggle } from '@ui/favorites/FavToggle';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
+import { useNamespaceFilterOptions } from '@modules/namespace/hooks/useNamespaceFilterOptions';
+import {
+  buildCanonicalObjectRowKey,
+  buildObjectReference,
+  buildRelatedObjectReference,
+} from '@shared/utils/objectIdentity';
+
+const NAMESPACE_AUTOSCALING_KIND_OPTIONS = ['HorizontalPodAutoscaler'];
 
 // Data interface for autoscaling resources
 export interface AutoscalingData {
@@ -80,6 +83,7 @@ export interface AutoscalingData {
 interface AutoscalingViewProps {
   namespace: string;
   data: AutoscalingData[];
+  availableKinds?: string[];
   loading?: boolean;
   loaded?: boolean;
   showNamespaceColumn?: boolean;
@@ -90,7 +94,14 @@ interface AutoscalingViewProps {
  * Aggregates HorizontalPodAutoscalers and VerticalPodAutoscalers
  */
 const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
-  ({ namespace, data, loading = false, loaded = false, showNamespaceColumn = false }) => {
+  ({
+    namespace,
+    data,
+    availableKinds: kindOptions,
+    loading = false,
+    loaded = false,
+    showNamespaceColumn = false,
+  }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const useShortResourceNames = useShortNames();
@@ -104,26 +115,47 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
     const handleResourceClick = useCallback(
       (resource: AutoscalingData) => {
         const resolvedKind = resource.kind || resource.kindAlias;
-        openWithObject({
-          kind: resolvedKind,
-          name: resource.name,
-          namespace: resource.namespace,
-          ...resolveBuiltinGroupVersion(resolvedKind),
-          clusterId: resource.clusterId ?? undefined,
-          clusterName: resource.clusterName ?? undefined,
-        });
+        openWithObject(
+          buildObjectReference({
+            kind: resolvedKind,
+            name: resource.name,
+            namespace: resource.namespace,
+            clusterId: resource.clusterId ?? undefined,
+            clusterName: resource.clusterName ?? undefined,
+          })
+        );
       },
       [openWithObject]
     );
 
     const keyExtractor = useCallback(
       (resource: AutoscalingData) =>
-        buildClusterScopedKey(
-          resource,
-          [resource.namespace, resource.kind, resource.name].filter(Boolean).join('/')
-        ),
+        buildCanonicalObjectRowKey({
+          kind: resource.kind,
+          name: resource.name,
+          namespace: resource.namespace,
+          clusterId: resource.clusterId,
+        }),
       []
     );
+
+    const buildScaleTargetReference = useCallback((resource: AutoscalingData) => {
+      if (!resource.scaleTargetRef) {
+        return null;
+      }
+      try {
+        return buildRelatedObjectReference({
+          kind: resource.scaleTargetRef.kind,
+          name: resource.scaleTargetRef.name,
+          namespace: resource.namespace,
+          apiVersion: resource.scaleTargetRef.apiVersion,
+          clusterId: resource.clusterId ?? undefined,
+          clusterName: resource.clusterName ?? undefined,
+        });
+      } catch {
+        return null;
+      }
+    }, []);
 
     const columns: GridColumnDefinition<AutoscalingData>[] = useMemo(() => {
       const baseColumns: GridColumnDefinition<AutoscalingData>[] = [];
@@ -140,13 +172,15 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
             ),
           onClick: handleResourceClick,
           onAltClick: (resource) =>
-            navigateToView({
-              kind: resource.kind,
-              name: resource.name,
-              namespace: resource.namespace,
-              clusterId: resource.clusterId ?? undefined,
-              clusterName: resource.clusterName ?? undefined,
-            }),
+            navigateToView(
+              buildObjectReference({
+                kind: resource.kind,
+                name: resource.name,
+                namespace: resource.namespace,
+                clusterId: resource.clusterId ?? undefined,
+                clusterName: resource.clusterName ?? undefined,
+              })
+            ),
         })
       );
 
@@ -154,13 +188,15 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
         cf.createTextColumn<AutoscalingData>('name', 'Name', {
           onClick: handleResourceClick,
           onAltClick: (resource) =>
-            navigateToView({
-              kind: resource.kind,
-              name: resource.name,
-              namespace: resource.namespace,
-              clusterId: resource.clusterId ?? undefined,
-              clusterName: resource.clusterName ?? undefined,
-            }),
+            navigateToView(
+              buildObjectReference({
+                kind: resource.kind,
+                name: resource.name,
+                namespace: resource.namespace,
+                clusterId: resource.clusterId ?? undefined,
+                clusterName: resource.clusterName ?? undefined,
+              })
+            ),
           getClassName: () => 'object-panel-link',
         })
       );
@@ -181,35 +217,16 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
           },
           {
             onClick: (resource) => {
-              if (!resource.scaleTargetRef) {
-                return;
+              const targetRef = buildScaleTargetReference(resource);
+              if (targetRef) {
+                openWithObject(targetRef);
               }
-              // Prefer the apiVersion the HPA explicitly references (correct
-              // for any kind, including CRDs with a scale subresource); fall
-              // back to the built-in lookup when the backend snapshot lacks
-              // one (legacy data, or HPA with malformed scaleTargetRef).
-              openWithObject({
-                kind: resource.scaleTargetRef.kind,
-                name: resource.scaleTargetRef.name,
-                namespace: resource.namespace,
-                ...(resource.scaleTargetRef.apiVersion
-                  ? parseApiVersion(resource.scaleTargetRef.apiVersion)
-                  : resolveBuiltinGroupVersion(resource.scaleTargetRef.kind)),
-                clusterId: resource.clusterId ?? undefined,
-                clusterName: resource.clusterName ?? undefined,
-              });
             },
             onAltClick: (resource) => {
-              if (!resource.scaleTargetRef) {
-                return;
+              const targetRef = buildScaleTargetReference(resource);
+              if (targetRef) {
+                navigateToView(targetRef);
               }
-              navigateToView({
-                kind: resource.scaleTargetRef.kind,
-                name: resource.scaleTargetRef.name,
-                namespace: resource.namespace,
-                clusterId: resource.clusterId ?? undefined,
-                clusterName: resource.clusterName ?? undefined,
-              });
             },
             isInteractive: (resource) => Boolean(resource.scaleTargetRef),
             getClassName: (resource) =>
@@ -292,6 +309,7 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
 
       return baseColumns;
     }, [
+      buildScaleTargetReference,
       handleResourceClick,
       namespaceColumnLink,
       navigateToView,
@@ -327,16 +345,17 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
       columns,
       controlledSort: persistedSort,
       onChange: onSortChange,
+      diagnosticsLabel:
+        namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Autoscaling' : 'Namespace Autoscaling',
     });
 
-    const availableKinds = useMemo(
-      () => [...new Set(data.map((r) => r.kind).filter(Boolean) as string[])].sort(),
-      [data]
-    );
-    const availableFilterNamespaces = useMemo(
+    const availableKinds =
+      kindOptions && kindOptions.length > 0 ? kindOptions : NAMESPACE_AUTOSCALING_KIND_OPTIONS;
+    const fallbackNamespaces = useMemo(
       () => [...new Set(data.map((r) => r.namespace).filter(Boolean))].sort(),
       [data]
     );
+    const availableFilterNamespaces = useNamespaceFilterOptions(namespace, fallbackNamespaces);
 
     const { item: favToggle, modal: favModal } = useFavToggle({
       filters: persistedFilters,
@@ -396,13 +415,13 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
           ) ?? null;
 
         return buildObjectActionItems({
-          object: {
+          object: buildObjectReference({
             kind: resource.kind,
             name: resource.name,
             namespace: resource.namespace,
             clusterId: resource.clusterId,
             clusterName: resource.clusterName,
-          },
+          }),
           context: 'gridtable',
           handlers: {
             onOpen: () => handleResourceClick(resource),
@@ -436,6 +455,12 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
           <GridTable
             data={sortedData}
             columns={columns}
+            diagnosticsLabel={
+              namespace === ALL_NAMESPACES_SCOPE
+                ? 'All Namespaces Autoscaling'
+                : 'Namespace Autoscaling'
+            }
+            diagnosticsMode="live"
             loading={loading}
             keyExtractor={keyExtractor}
             onRowClick={handleResourceClick}
@@ -452,8 +477,12 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
               onChange: setPersistedFilters,
               onReset: resetPersistedState,
               options: {
+                kinds: availableKinds,
+                namespaces: availableFilterNamespaces,
                 showKindDropdown: true,
                 showNamespaceDropdown: showNamespaceFilter,
+                namespaceDropdownSearchable: showNamespaceFilter,
+                namespaceDropdownBulkActions: showNamespaceFilter,
                 preActions: [favToggle],
               },
             }}

@@ -16,4 +16,5 @@ export interface ResourceDataReturn<T> {
   cancel: () => void;
   lastFetchTime: Date | null;
   hasLoaded: boolean;
+  meta?: unknown;
 }
