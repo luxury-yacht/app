@@ -15,6 +15,7 @@ import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useClusterLifecycle } from '@core/contexts/ClusterLifecycleContext';
 import { eventBus } from '@/core/events';
 import { getAutoRefreshEnabled } from '@/core/settings/appPreferences';
+import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 
 const ConnectivityStatus: React.FC = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -25,7 +26,10 @@ const ConnectivityStatus: React.FC = () => {
   const { handleRetry } = useAuthError();
   const authState = useActiveClusterAuthState(selectedClusterId);
   const { getClusterState } = useClusterLifecycle();
+  const { namespaceReady } = useNamespace();
   const lifecycleState = selectedClusterId ? getClusterState(selectedClusterId) : '';
+  const waitingForNamespaces =
+    Boolean(selectedClusterId) && lifecycleState === 'ready' && !namespaceReady;
 
   useEffect(() => {
     setIsPaused(!getAutoRefreshEnabled());
@@ -53,6 +57,7 @@ const ConnectivityStatus: React.FC = () => {
     if (lifecycleState === 'reconnecting') return 'degraded';
     if (lifecycleState === 'connecting' || lifecycleState === 'loading') return 'refreshing';
     if (lifecycleState === 'loading_slow') return 'degraded';
+    if (waitingForNamespaces) return 'refreshing';
     // Fall through to existing auth/health checks for ready state and edge cases.
     if (authState.hasError && authState.isRecovering) return 'degraded';
     if (authState.hasError) return 'unhealthy';
@@ -70,6 +75,7 @@ const ConnectivityStatus: React.FC = () => {
     if (lifecycleState === 'loading_slow') return 'Loading (taking longer than expected)...';
     if (lifecycleState === 'disconnected') return 'Disconnected';
     if (lifecycleState === 'reconnecting') return 'Reconnecting...';
+    if (waitingForNamespaces) return 'Loading namespaces...';
     // Fall through to existing checks.
     if (authState.hasError && authState.isRecovering) return 'Retrying authentication...';
     if (authState.hasError) return authState.reason || 'Authentication failed';

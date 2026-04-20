@@ -53,6 +53,7 @@ interface NamespaceContextType {
   selectedNamespaceClusterId?: string;
   namespaceLoading: boolean;
   namespaceRefreshing: boolean;
+  namespaceReady: boolean;
   setSelectedNamespace: (namespace: string, clusterId?: string) => void;
   loadNamespaces: (showSpinner?: boolean) => Promise<void>;
   refreshNamespaces: () => Promise<void>;
@@ -188,6 +189,10 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
   const namespaceLoading =
     Boolean(activeClusterId) && !hasActiveClusterNamespaces && namespaceDomain.status !== 'error';
   const namespaceRefreshing = hasActiveClusterNamespaces && namespaceDomain.status === 'updating';
+  // The active cluster is usable for namespace-driven UI once we have at least
+  // one real namespace row for it. Consumers use this to avoid showing "Ready"
+  // before the namespace tree can render.
+  const namespaceReady = hasActiveClusterNamespaces;
 
   const loadNamespaces = useCallback(
     async (_showSpinner: boolean = true) => {
@@ -418,6 +423,7 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
       selectedNamespaceClusterId,
       namespaceLoading,
       namespaceRefreshing,
+      namespaceReady,
       setSelectedNamespace: handleSetSelectedNamespace,
       loadNamespaces,
       refreshNamespaces,
@@ -429,6 +435,7 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
       selectedNamespaceClusterId,
       namespaceLoading,
       namespaceRefreshing,
+      namespaceReady,
       handleSetSelectedNamespace,
       loadNamespaces,
       refreshNamespaces,

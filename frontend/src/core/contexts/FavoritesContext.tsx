@@ -71,6 +71,7 @@ export const FavoritesProvider: React.FC<FavoritesProviderProps> = ({ children }
   const { isClusterReady } = useClusterLifecycle();
   const viewState = useViewState();
   const namespaceCtx = useNamespace();
+  const namespaceReady = namespaceCtx.namespaceReady;
   // Track whether navigation state has been applied for the current pending favorite.
   const navigationAppliedRef = useRef(false);
 
@@ -115,6 +116,7 @@ export const FavoritesProvider: React.FC<FavoritesProviderProps> = ({ children }
       // Generic favorite: wait for the active cluster to be ready.
       if (selectedClusterId && !isClusterReady(selectedClusterId)) return;
     }
+    if (pendingFavorite.viewType === 'namespace' && !namespaceReady) return;
 
     navigationAppliedRef.current = true;
 
@@ -141,6 +143,7 @@ export const FavoritesProvider: React.FC<FavoritesProviderProps> = ({ children }
     selectedKubeconfig,
     selectedClusterId,
     isClusterReady,
+    namespaceReady,
     viewState,
     namespaceCtx,
   ]);

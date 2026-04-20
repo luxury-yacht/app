@@ -37,6 +37,13 @@ let mockViewType = 'namespace';
 let mockActiveNamespaceTab = 'workloads';
 let mockActiveClusterTab: string | null = null;
 let mockSelectedNamespace: string | undefined = 'default';
+let mockNamespaceReady = true;
+const mockSetViewType = vi.fn();
+const mockSetActiveNamespaceTab = vi.fn();
+const mockSetActiveClusterView = vi.fn();
+const mockSetSidebarSelection = vi.fn();
+const mockOnNamespaceSelect = vi.fn();
+const mockSetSelectedNamespace = vi.fn();
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: () => ({
@@ -58,12 +65,19 @@ vi.mock('@core/contexts/ViewStateContext', () => ({
     viewType: mockViewType,
     activeNamespaceTab: mockActiveNamespaceTab,
     activeClusterTab: mockActiveClusterTab,
+    setViewType: mockSetViewType,
+    setActiveNamespaceTab: mockSetActiveNamespaceTab,
+    setActiveClusterView: mockSetActiveClusterView,
+    setSidebarSelection: mockSetSidebarSelection,
+    onNamespaceSelect: mockOnNamespaceSelect,
   }),
 }));
 
 vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
   useNamespace: () => ({
     selectedNamespace: mockSelectedNamespace,
+    namespaceReady: mockNamespaceReady,
+    setSelectedNamespace: mockSetSelectedNamespace,
   }),
 }));
 
@@ -116,6 +130,13 @@ describe('FavoritesContext', () => {
     mockActiveNamespaceTab = 'workloads';
     mockActiveClusterTab = null;
     mockSelectedNamespace = 'default';
+    mockNamespaceReady = true;
+    mockSetViewType.mockReset();
+    mockSetActiveNamespaceTab.mockReset();
+    mockSetActiveClusterView.mockReset();
+    mockSetSidebarSelection.mockReset();
+    mockOnNamespaceSelect.mockReset();
+    mockSetSelectedNamespace.mockReset();
 
     // Reset persistence mocks
     persistenceMocks.hydrateFavorites.mockResolvedValue([]);
@@ -170,6 +191,59 @@ describe('FavoritesContext', () => {
 
     expect(persistenceMocks.hydrateFavorites).toHaveBeenCalled();
     expect(stateRef.current?.favorites).toEqual(favorites);
+  });
+
+  it('waits for namespaces before applying namespace favorite navigation', async () => {
+    mockNamespaceReady = false;
+    await renderProvider();
+
+    act(() => {
+      stateRef.current?.setPendingFavorite(makeFavorite());
+    });
+
+    expect(mockSetViewType).not.toHaveBeenCalled();
+    expect(mockSetSelectedNamespace).not.toHaveBeenCalled();
+
+    mockNamespaceReady = true;
+    await act(async () => {
+      root.render(
+        <FavoritesProvider>
+          <Harness />
+        </FavoritesProvider>
+      );
+      await Promise.resolve();
+    });
+
+    expect(mockSetViewType).toHaveBeenCalledWith('namespace');
+    expect(mockSetSelectedNamespace).toHaveBeenCalledWith('default');
+    expect(mockOnNamespaceSelect).toHaveBeenCalledWith('default');
+    expect(mockSetActiveNamespaceTab).toHaveBeenCalledWith('workloads');
+    expect(mockSetSidebarSelection).toHaveBeenCalledWith({
+      type: 'namespace',
+      value: 'default',
+    });
+  });
+
+  it('does not block cluster favorites on namespace readiness', async () => {
+    mockNamespaceReady = false;
+    await renderProvider();
+
+    act(() => {
+      stateRef.current?.setPendingFavorite(
+        makeFavorite({
+          viewType: 'cluster',
+          view: 'nodes',
+          namespace: '',
+        })
+      );
+    });
+
+    expect(mockSetViewType).toHaveBeenCalledWith('cluster');
+    expect(mockSetActiveClusterView).toHaveBeenCalledWith('nodes');
+    expect(mockSetSidebarSelection).toHaveBeenCalledWith({
+      type: 'cluster',
+      value: 'cluster',
+    });
   });
 
   // Note: currentFavoriteMatch was moved from FavoritesContext to useFavToggle
