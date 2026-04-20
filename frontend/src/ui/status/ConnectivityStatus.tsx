@@ -14,7 +14,7 @@ import { useAuthError, useActiveClusterAuthState } from '@/core/contexts/AuthErr
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useClusterLifecycle } from '@core/contexts/ClusterLifecycleContext';
 import { eventBus } from '@/core/events';
-import { getAutoRefreshEnabled } from '@/core/settings/appPreferences';
+import { getAutoRefreshEnabled, setAutoRefreshEnabled } from '@/core/settings/appPreferences';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import { buildConnectivityPresentation } from '@/core/connection/connectivityPresentation';
 
@@ -58,14 +58,33 @@ const ConnectivityStatus: React.FC = () => {
     authState,
   });
 
-  /** Handle the action button click. */
-  const handleAction = useCallback(() => {
+  /** Handle the primary connectivity action button click. */
+  const handlePrimaryAction = useCallback(() => {
     if (authState.hasError && !authState.isRecovering && selectedClusterId) {
       void handleRetry(selectedClusterId);
       return;
     }
     void refreshOrchestrator.triggerManualRefreshForContext();
   }, [authState, selectedClusterId, handleRetry]);
+
+  const handleToggleAutoRefresh = useCallback(() => {
+    setAutoRefreshEnabled(isPaused);
+  }, [isPaused]);
+
+  const actions = [
+    ...(presentation.actionLabel || (isPaused && selectedClusterId)
+      ? [
+          {
+            label: presentation.actionLabel ?? 'Refresh Now',
+            onClick: handlePrimaryAction,
+          },
+        ]
+      : []),
+    {
+      label: isPaused ? 'Enable Auto-Refresh' : 'Disable Auto-Refresh',
+      onClick: handleToggleAutoRefresh,
+    },
+  ];
 
   return (
     <StatusIndicator
@@ -77,8 +96,7 @@ const ConnectivityStatus: React.FC = () => {
           <div className="connectivity-status-detail">{presentation.detail}</div>
         </div>
       }
-      actionLabel={presentation.actionLabel}
-      onAction={presentation.actionLabel ? handleAction : undefined}
+      actions={actions}
       ariaLabel={`Connectivity: ${presentation.summary}. ${presentation.detail}`}
       tooltipClassName="connectivity-status-popover"
     />

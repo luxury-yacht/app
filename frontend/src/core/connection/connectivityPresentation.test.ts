@@ -24,7 +24,7 @@ describe('buildConnectivityPresentation', () => {
 
     expect(presentation.status).toBe('refreshing');
     expect(presentation.summary).toBe('Ready');
-    expect(presentation.detail).toContain('alpha is connected');
-    expect(presentation.detail).toContain('namespace list is ready to use');
+    expect(presentation.detail).toBe('alpha is connected is ready to use.');
+    expect(presentation.actionLabel).toBe('Refresh Now');
   });
 });

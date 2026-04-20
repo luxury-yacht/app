@@ -13,6 +13,11 @@ import './StatusIndicator.css';
 /** The five shared status states. */
 export type StatusState = 'healthy' | 'refreshing' | 'degraded' | 'unhealthy' | 'inactive';
 
+export interface StatusIndicatorAction {
+  label: string;
+  onClick: () => void;
+}
+
 export interface StatusIndicatorProps {
   /** Current status state — drives the dot color and animation. */
   status: StatusState;
@@ -24,6 +29,8 @@ export interface StatusIndicatorProps {
   actionLabel?: string;
   /** Called when the action button is clicked. */
   onAction?: () => void;
+  /** Optional action list for multi-button tooltips. */
+  actions?: StatusIndicatorAction[];
   /** Accessible label for screen readers. */
   ariaLabel: string;
   /** Optional extra class name applied to the tooltip popover element. */
@@ -38,25 +45,36 @@ const StatusIndicator: React.FC<StatusIndicatorProps> = ({
   message,
   actionLabel,
   onAction,
+  actions,
   ariaLabel,
   tooltipClassName,
   hideTitle,
 }) => {
+  const actionItems =
+    actions && actions.length > 0
+      ? actions
+      : actionLabel && onAction
+        ? [{ label: actionLabel, onClick: onAction }]
+        : [];
+
   /* Build the rich tooltip content matching the existing popover layout */
   const tooltipContent = (
     <div className="status-popover-content" data-status={status}>
       {!hideTitle && <div className="status-popover-title">{title}</div>}
       <div className="status-popover-message">{message}</div>
-      {actionLabel && onAction && (
-        <div className="status-popover-action">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onAction();
-            }}
-          >
-            {actionLabel}
-          </button>
+      {actionItems.length > 0 && (
+        <div className="status-popover-actions">
+          {actionItems.map((action) => (
+            <button
+              key={action.label}
+              onClick={(e) => {
+                e.stopPropagation();
+                action.onClick();
+              }}
+            >
+              {action.label}
+            </button>
+          ))}
         </div>
       )}
     </div>

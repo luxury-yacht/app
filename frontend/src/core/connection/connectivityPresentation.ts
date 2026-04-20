@@ -89,7 +89,7 @@ export const buildConnectivityPresentation = ({
       status: 'unhealthy',
       summary: 'Cluster disconnected',
       detail: `The app lost its connection to ${clusterLabel}. Refresh to try again.`,
-      actionLabel: 'Refresh',
+      actionLabel: 'Refresh Now',
     };
   }
 
@@ -122,7 +122,7 @@ export const buildConnectivityPresentation = ({
       status: 'degraded',
       summary: 'Still loading cluster data',
       detail: `Initial data for ${clusterLabel} is taking longer than expected to become usable.`,
-      actionLabel: 'Refresh',
+      actionLabel: 'Refresh Now',
     };
   }
 
@@ -150,7 +150,7 @@ export const buildConnectivityPresentation = ({
       status: 'degraded',
       summary: 'Connection degraded',
       detail: `${clusterLabel} is usable, but background health checks are reconnecting.`,
-      actionLabel: 'Refresh',
+      actionLabel: 'Refresh Now',
     };
   }
 
@@ -159,6 +159,7 @@ export const buildConnectivityPresentation = ({
       status: 'refreshing',
       summary: 'Ready',
       detail: `${clusterLabel} is connected is ready to use.`,
+      actionLabel: 'Refresh Now',
     };
   }
 
@@ -166,6 +167,6 @@ export const buildConnectivityPresentation = ({
     status: 'healthy',
     summary: 'Ready',
     detail: `${clusterLabel} is connected is ready to use.`,
-    actionLabel: 'Refresh',
+    actionLabel: 'Refresh Now',
   };
 };

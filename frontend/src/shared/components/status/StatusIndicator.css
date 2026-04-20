@@ -69,15 +69,17 @@
   font-size: 12px;
 }
 
-.status-popover-action {
+.status-popover-actions {
   display: flex;
-  justify-content: flex-end;
+  justify-content: flex-start;
+  gap: 8px;
   margin-top: 10px;
   padding-top: 8px;
   border-top: 1px solid var(--border-color);
 }
 
-.status-popover-action button {
+.status-popover-actions button {
+  white-space: nowrap;
   font-size: 11px;
   font-weight: 500;
   padding: 4px 12px;
@@ -92,7 +94,7 @@
     color 0.15s ease;
 }
 
-.status-popover-action button:hover {
+.status-popover-actions button:hover {
   background: rgba(96, 165, 250, 0.22);
   border-color: rgba(96, 165, 250, 0.5);
   color: #93bbfd;
@@ -111,4 +113,9 @@
 
 .connectivity-status-detail {
   color: var(--color-text-secondary);
+}
+
+.connectivity-status-popover {
+  min-width: 320px;
+  max-width: 320px;
 }
