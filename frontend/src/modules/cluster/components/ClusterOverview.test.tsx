@@ -291,14 +291,8 @@ describe('ClusterOverview', () => {
       'cluster-1|',
       true
     );
-    expect(container.querySelector('.cluster-overview')?.classList.contains('is-skeleton')).toBe(
-      true
-    );
-    expect(
-      container.querySelector('.metric-legend__count')?.classList.contains('skeleton-text')
-    ).toBe(true);
-    expect(statValueFor(container, 'total')).toBe('0');
-    expect(statValueFor(container, 'namespaces')).toBe('0');
+    expect(statValueFor(container, 'total')).toBe('—');
+    expect(statValueFor(container, 'namespaces')).toBe('—');
     expect(container.querySelector('.cluster-overview .cluster-overview-error') ?? null).toBeNull();
   });
 
@@ -347,9 +341,6 @@ describe('ClusterOverview', () => {
     rerender();
     await flushEffects();
 
-    expect(container.querySelector('.cluster-overview')?.classList.contains('is-skeleton')).toBe(
-      false
-    );
     expect(statValueFor(container, 'total')).toBe('3');
     expect(statValueFor(container, 'namespaces')).toBe('6');
     expect(statValueFor(container, 'pods')).toBe('42');
@@ -400,9 +391,6 @@ describe('ClusterOverview', () => {
     await flushEffects();
 
     expect(mockRefreshOrchestrator.fetchScopedDomain).not.toHaveBeenCalled();
-    expect(container.querySelector('.cluster-overview')?.classList.contains('is-skeleton')).toBe(
-      false
-    );
     expect(container.textContent).toContain('Status');
     expect(container.textContent).toContain('Auto-refresh paused');
     expect(container.textContent).not.toContain('Ready');
@@ -585,9 +573,6 @@ describe('ClusterOverview', () => {
 
     expect(container.textContent).toContain('Failed to load cluster overview');
     expect(container.textContent).toContain('forbidden');
-    expect(container.querySelector('.cluster-overview')?.classList.contains('is-skeleton')).toBe(
-      false
-    );
     expect(statValueFor(container, 'total')).toBe('0');
     expect(container.textContent).not.toContain('Loading cluster overview...');
   });
@@ -739,9 +724,7 @@ describe('ClusterOverview', () => {
     );
     expect(mockRefreshOrchestrator.fetchScopedDomain).not.toHaveBeenCalled();
     expect(container.textContent).not.toContain('Failed to load cluster overview');
-    expect(container.querySelector('.cluster-overview')?.classList.contains('is-skeleton')).toBe(
-      true
-    );
+    expect(statValueFor(container, 'total')).toBe('—');
   });
 });
 

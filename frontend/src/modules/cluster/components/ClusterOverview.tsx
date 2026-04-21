@@ -222,7 +222,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
       return;
     }
     if (hydratedClusterId && hydratedClusterId !== selectedClusterId && !selectedOverview) {
-      // Clear cached data when switching tabs so the new cluster shows loading shimmers.
+      // Clear cached data when switching tabs so the new cluster shows loading placeholders.
       setOverviewData(EMPTY_OVERVIEW);
       setIsHydrated(false);
       setIsSwitching(true);
@@ -429,7 +429,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
           className={`metric-legend__dot metric-legend__dot--${item.variant}`}
           aria-hidden="true"
         />
-        <span className={`metric-legend__count${skeletonTextClass}`}>{item.value}</span>
+        <span className="metric-legend__count">{showSkeleton ? DASH : item.value}</span>
         <span className="metric-legend__label">{item.label}</span>
       </div>
     );
@@ -553,17 +553,16 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
         className={`metric-legend__dot metric-legend__dot--${item.variant}`}
         aria-hidden="true"
       />
-      <span className={`metric-legend__count${skeletonTextClass}`}>{item.value}</span>
+      <span className="metric-legend__count">{showSkeleton ? DASH : item.value}</span>
       <span className="metric-legend__label">{item.label}</span>
     </div>
   );
 
-  const rootClassName = ['cluster-overview', showSkeleton ? 'is-skeleton' : '']
-    .filter(Boolean)
-    .join(' ');
-  const skeletonBlockClass = showSkeleton ? ' skeleton-block' : '';
-  const skeletonTextClass = showSkeleton ? ' skeleton-text' : '';
   const showUpdateBanner = Boolean(updateInfo?.isUpdateAvailable && updateInfo?.releaseUrl);
+  // Before the initial snapshot arrives we don't have real values yet —
+  // render a dash placeholder instead of zeros so the UI reads as "loading"
+  // without surfacing misleading "0" values.
+  const DASH = '—';
   const handleUpdateClick = useCallback(() => {
     if (!updateInfo?.releaseUrl) {
       return;
@@ -573,7 +572,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
   }, [updateInfo]);
 
   return (
-    <div className={rootClassName}>
+    <div className="cluster-overview">
       {showUpdateBanner && (
         <div className="overview-update-banner-wrap">
           <button type="button" className="overview-update-banner" onClick={handleUpdateClick}>
@@ -593,14 +592,14 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
           <div className="cluster-info">
             <span className="cluster-info-item">
               <span className="cluster-info-label">Cluster Type</span>
-              <span className={`cluster-info-value${skeletonTextClass}`}>
-                {displayOverview.clusterType || 'Unknown'}
+              <span className="cluster-info-value">
+                {showSkeleton ? '—' : displayOverview.clusterType || 'Unknown'}
               </span>
             </span>
             <span className="cluster-info-item">
               <span className="cluster-info-label">Version</span>
-              <span className={`cluster-info-value${skeletonTextClass}`}>
-                {displayOverview.clusterVersion || 'Unknown'}
+              <span className="cluster-info-value">
+                {showSkeleton ? '—' : displayOverview.clusterVersion || 'Unknown'}
               </span>
             </span>
             {overviewStatus.summary && (
@@ -643,13 +642,15 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
             <div className="metric-header">
               <h3>CPU</h3>
               <div className="metric-legend__total">
-                <span className={`metric-legend__total-value${skeletonTextClass}`}>
-                  {displayOverview.cpuAllocatable || '0'} cores
+                <span className="metric-legend__total-value">
+                  {showSkeleton
+                    ? DASH
+                    : `${displayOverview.cpuAllocatable || '0'} cores`}
                 </span>
                 <span className="metric-legend__total-label"> total</span>
               </div>
             </div>
-            <div className={`resource-bar-placeholder${skeletonBlockClass}`}>
+            <div className="resource-bar-placeholder">
               <ResourceBar
                 usage={displayOverview.cpuUsage}
                 request={displayOverview.cpuRequests}
@@ -661,20 +662,20 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
             <div className="metric-legend">
               <div className="metric-legend__items">
                 <div className="metric-legend__item">
-                  <span className={`metric-legend__count${skeletonTextClass}`}>
-                    {displayOverview.cpuUsage || '0'}
+                  <span className="metric-legend__count">
+                    {showSkeleton ? DASH : displayOverview.cpuUsage || '0'}
                   </span>
                   <span className="metric-legend__label">used</span>
                 </div>
                 <div className="metric-legend__item">
-                  <span className={`metric-legend__count${skeletonTextClass}`}>
-                    {displayOverview.cpuRequests || '0'}
+                  <span className="metric-legend__count">
+                    {showSkeleton ? DASH : displayOverview.cpuRequests || '0'}
                   </span>
                   <span className="metric-legend__label">requests</span>
                 </div>
                 <div className="metric-legend__item">
-                  <span className={`metric-legend__count${skeletonTextClass}`}>
-                    {displayOverview.cpuLimits || '0'}
+                  <span className="metric-legend__count">
+                    {showSkeleton ? DASH : displayOverview.cpuLimits || '0'}
                   </span>
                   <span className="metric-legend__label">limits</span>
                 </div>
@@ -686,13 +687,13 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
             <div className="metric-header">
               <h3>Memory</h3>
               <div className="metric-legend__total">
-                <span className={`metric-legend__total-value${skeletonTextClass}`}>
-                  {displayOverview.memoryAllocatable || '0'}
+                <span className="metric-legend__total-value">
+                  {showSkeleton ? DASH : displayOverview.memoryAllocatable || '0'}
                 </span>
                 <span className="metric-legend__total-label"> total</span>
               </div>
             </div>
-            <div className={`resource-bar-placeholder${skeletonBlockClass}`}>
+            <div className="resource-bar-placeholder">
               <ResourceBar
                 usage={displayOverview.memoryUsage}
                 request={displayOverview.memoryRequests}
@@ -704,20 +705,20 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
             <div className="metric-legend">
               <div className="metric-legend__items">
                 <div className="metric-legend__item">
-                  <span className={`metric-legend__count${skeletonTextClass}`}>
-                    {displayOverview.memoryUsage || '0'}
+                  <span className="metric-legend__count">
+                    {showSkeleton ? DASH : displayOverview.memoryUsage || '0'}
                   </span>
                   <span className="metric-legend__label">used</span>
                 </div>
                 <div className="metric-legend__item">
-                  <span className={`metric-legend__count${skeletonTextClass}`}>
-                    {displayOverview.memoryRequests || '0'}
+                  <span className="metric-legend__count">
+                    {showSkeleton ? DASH : displayOverview.memoryRequests || '0'}
                   </span>
                   <span className="metric-legend__label">requests</span>
                 </div>
                 <div className="metric-legend__item">
-                  <span className={`metric-legend__count${skeletonTextClass}`}>
-                    {displayOverview.memoryLimits || '0'}
+                  <span className="metric-legend__count">
+                    {showSkeleton ? DASH : displayOverview.memoryLimits || '0'}
                   </span>
                   <span className="metric-legend__label">limits</span>
                 </div>
@@ -730,22 +731,22 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
           <h2>Nodes</h2>
           <div className="metric-stats">
             <div className="metric-stat" data-testid="cluster-nodes-total">
-              <span className={`metric-stat__count${skeletonTextClass}`}>
-                {displayOverview.totalNodes}
+              <span className="metric-stat__count">
+                {showSkeleton ? DASH : displayOverview.totalNodes}
               </span>
               <span className="metric-stat__label">total</span>
             </div>
             {displayOverview.clusterType === 'EKS' && (
               <>
                 <div className="metric-stat" data-testid="cluster-nodes-ec2">
-                  <span className={`metric-stat__count${skeletonTextClass}`}>
-                    {displayOverview.ec2Nodes}
+                  <span className="metric-stat__count">
+                    {showSkeleton ? DASH : displayOverview.ec2Nodes}
                   </span>
                   <span className="metric-stat__label">ec2</span>
                 </div>
                 <div className="metric-stat" data-testid="cluster-nodes-fargate">
-                  <span className={`metric-stat__count${skeletonTextClass}`}>
-                    {displayOverview.fargateNodes}
+                  <span className="metric-stat__count">
+                    {showSkeleton ? DASH : displayOverview.fargateNodes}
                   </span>
                   <span className="metric-stat__label">fargate</span>
                 </div>
@@ -754,14 +755,14 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
             {displayOverview.clusterType === 'AKS' && (
               <>
                 <div className="metric-stat" data-testid="cluster-nodes-vm">
-                  <span className={`metric-stat__count${skeletonTextClass}`}>
-                    {displayOverview.vmNodes}
+                  <span className="metric-stat__count">
+                    {showSkeleton ? DASH : displayOverview.vmNodes}
                   </span>
                   <span className="metric-stat__label">vm</span>
                 </div>
                 <div className="metric-stat" data-testid="cluster-nodes-virtual">
-                  <span className={`metric-stat__count${skeletonTextClass}`}>
-                    {displayOverview.virtualNodes}
+                  <span className="metric-stat__count">
+                    {showSkeleton ? DASH : displayOverview.virtualNodes}
                   </span>
                   <span className="metric-stat__label">virtual</span>
                 </div>
@@ -773,14 +774,14 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
             <div className="metric-header">
               <h3>Node Health</h3>
               <div className="metric-legend__total">
-                <span className={`metric-legend__total-value${skeletonTextClass}`}>
-                  {displayOverview.totalNodes}
+                <span className="metric-legend__total-value">
+                  {showSkeleton ? DASH : displayOverview.totalNodes}
                 </span>
                 <span className="metric-legend__total-label"> total</span>
               </div>
             </div>
             <div
-              className={`stacked-bar${skeletonBlockClass}`}
+              className="stacked-bar"
               role="presentation"
               aria-hidden="true"
             >
@@ -814,20 +815,20 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
           <h2>Workloads</h2>
           <div className="metric-stats">
             <div className="metric-stat" data-testid="cluster-workloads-namespaces">
-              <span className={`metric-stat__count${skeletonTextClass}`}>
-                {displayOverview.totalNamespaces}
+              <span className="metric-stat__count">
+                {showSkeleton ? DASH : displayOverview.totalNamespaces}
               </span>
               <span className="metric-stat__label">namespaces</span>
             </div>
             <div className="metric-stat" data-testid="cluster-workloads-pods">
-              <span className={`metric-stat__count${skeletonTextClass}`}>
-                {displayOverview.totalPods}
+              <span className="metric-stat__count">
+                {showSkeleton ? DASH : displayOverview.totalPods}
               </span>
               <span className="metric-stat__label">pods</span>
             </div>
             <div className="metric-stat" data-testid="cluster-workloads-containers">
-              <span className={`metric-stat__count${skeletonTextClass}`}>
-                {displayOverview.totalContainers}
+              <span className="metric-stat__count">
+                {showSkeleton ? DASH : displayOverview.totalContainers}
               </span>
               <span className="metric-stat__label">containers</span>
             </div>
@@ -837,14 +838,14 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
             <div className="metric-header">
               <h3>By Type</h3>
               <div className="metric-legend__total">
-                <span className={`metric-legend__total-value${skeletonTextClass}`}>
-                  {workloadTotal}
+                <span className="metric-legend__total-value">
+                  {showSkeleton ? DASH : workloadTotal}
                 </span>
                 <span className="metric-legend__total-label"> total</span>
               </div>
             </div>
             <div
-              className={`stacked-bar${skeletonBlockClass}`}
+              className="stacked-bar"
               role="presentation"
               aria-hidden="true"
             >
@@ -876,7 +877,9 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
                       className={`metric-legend__dot metric-legend__dot--${item.variant}`}
                       aria-hidden="true"
                     />
-                    <span className={`metric-legend__count${skeletonTextClass}`}>{item.value}</span>
+                    <span className="metric-legend__count">
+                      {showSkeleton ? DASH : item.value}
+                    </span>
                     <span className="metric-legend__label">{item.label}</span>
                   </div>
                 ))}
@@ -888,14 +891,14 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
             <div className="metric-header">
               <h3>Pod Status</h3>
               <div className="metric-legend__total">
-                <span className={`metric-legend__total-value${skeletonTextClass}`}>
-                  {displayOverview.totalPods}
+                <span className="metric-legend__total-value">
+                  {showSkeleton ? DASH : displayOverview.totalPods}
                 </span>
                 <span className="metric-legend__total-label"> total</span>
               </div>
             </div>
             <div
-              className={`stacked-bar${skeletonBlockClass}`}
+              className="stacked-bar"
               role="presentation"
               aria-hidden="true"
             >

@@ -2,9 +2,6 @@
 
 ## Issues
 
-- Select all/none in log viewer is broken
-- new cluster race condition
-
 - Issue 40 Support object creation
 
 - Issue 135 Enable text select/copy in more places
