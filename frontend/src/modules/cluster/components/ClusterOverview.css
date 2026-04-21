@@ -33,8 +33,9 @@
 
 .overview-top__title {
   font-size: 1.1rem;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--color-text);
+  margin-bottom: 0.5rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

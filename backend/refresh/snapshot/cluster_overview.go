@@ -666,15 +666,15 @@ func formatMemoryValue(bytes int64) string {
 		return fmt.Sprintf("%d", bytes)
 	}
 	if bytes < mi {
-		return fmt.Sprintf("%.1fKi", float64(bytes)/float64(ki))
+		return fmt.Sprintf("%.1f Ki", float64(bytes)/float64(ki))
 	}
 	if bytes < gi {
-		return fmt.Sprintf("%.1fMi", float64(bytes)/float64(mi))
+		return fmt.Sprintf("%.1f Mi", float64(bytes)/float64(mi))
 	}
 	if bytes < ti {
-		return fmt.Sprintf("%.1fGi", float64(bytes)/float64(gi))
+		return fmt.Sprintf("%.1f Gi", float64(bytes)/float64(gi))
 	}
-	return fmt.Sprintf("%.1fTi", float64(bytes)/float64(ti))
+	return fmt.Sprintf("%.1f Ti", float64(bytes)/float64(ti))
 }
 func (b *ClusterOverviewBuilder) buildFromListers(ctx context.Context) (*refresh.Snapshot, error) {
 	if err := b.waitForInformerSync(ctx); err != nil {

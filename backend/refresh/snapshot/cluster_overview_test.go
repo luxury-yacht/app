@@ -178,10 +178,10 @@ func TestClusterOverviewBuilder(t *testing.T) {
 	require.Equal(t, "350m", overview.CPURequests)
 	require.Equal(t, "500m", overview.CPULimits)
 	require.Equal(t, "2.50", overview.CPUAllocatable)
-	require.Equal(t, "200.0Mi", overview.MemoryUsage)
-	require.Equal(t, "320.0Mi", overview.MemoryRequests)
-	require.Equal(t, "512.0Mi", overview.MemoryLimits)
-	require.Equal(t, "9.0Gi", overview.MemoryAllocatable)
+	require.Equal(t, "200.0 Mi", overview.MemoryUsage)
+	require.Equal(t, "320.0 Mi", overview.MemoryRequests)
+	require.Equal(t, "512.0 Mi", overview.MemoryLimits)
+	require.Equal(t, "9.0 Gi", overview.MemoryAllocatable)
 
 	metricsMeta := payload.Metrics
 	require.False(t, metricsMeta.Stale)
@@ -275,8 +275,8 @@ func TestClusterOverviewBuilderUsesCatalog(t *testing.T) {
 	require.Equal(t, "v1.28.1", payload.Overview.ClusterVersion)
 	require.Equal(t, "100m", payload.Overview.CPUUsage)
 	require.Equal(t, "200m", payload.Overview.CPURequests)
-	require.Equal(t, "256.0Mi", payload.Overview.MemoryRequests)
-	require.Equal(t, "128.0Mi", payload.Overview.MemoryUsage)
+	require.Equal(t, "256.0 Mi", payload.Overview.MemoryRequests)
+	require.Equal(t, "128.0 Mi", payload.Overview.MemoryUsage)
 }
 
 func TestDetectClusterTypeFallsBackToServerHostForAKS(t *testing.T) {
