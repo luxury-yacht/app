@@ -32,6 +32,10 @@ import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshL
 import { formatAge } from '@/utils/ageFormatter';
 import { parseApiVersion } from '@shared/constants/builtinGroupVersions';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
+import {
+  objectPanelId,
+  useObjectPanelState,
+} from '@/core/contexts/ObjectPanelStateContext';
 import type { RecentEventEntry } from '@/core/refresh/types';
 
 interface ClusterOverviewProps {
@@ -88,6 +92,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
 
   const { selectedClusterId, selectedClusterName } = useKubeconfig();
   const { openWithObject } = useObjectPanel();
+  const { setObjectPanelActiveTab, hydrateClusterMeta } = useObjectPanelState();
   const { getClusterState } = useClusterLifecycle();
   const { getActiveClusterHealth } = useClusterHealthListener(selectedClusterId);
   const authState = useActiveClusterAuthState(selectedClusterId);
@@ -474,7 +479,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
   const handleRecentEventOpen = useCallback(
     (event: RecentEventEntry) => {
       const { group, version } = parseApiVersion(event.objectApiVersion);
-      openWithObject({
+      const ref = {
         clusterId: event.clusterId ?? selectedClusterId ?? undefined,
         clusterName: event.clusterName ?? selectedClusterName ?? undefined,
         kind: event.objectKind,
@@ -482,9 +487,21 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
         namespace: event.objectNamespace || undefined,
         group: group ?? '',
         version: version ?? '',
-      });
+      };
+      openWithObject(ref);
+      // Clicking an event should land on the Events tab for the involved object.
+      // The panel id is deterministic from the hydrated ref, so we can compute it
+      // and set the active tab for the panel openWithObject just created.
+      const panelId = objectPanelId(hydrateClusterMeta(ref));
+      setObjectPanelActiveTab(panelId, 'events');
     },
-    [openWithObject, selectedClusterId, selectedClusterName]
+    [
+      openWithObject,
+      selectedClusterId,
+      selectedClusterName,
+      setObjectPanelActiveTab,
+      hydrateClusterMeta,
+    ]
   );
 
   const renderNodeHealthLegendItem = (item: {

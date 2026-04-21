@@ -189,6 +189,19 @@ vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
   }),
 }));
 
+vi.mock('@/core/contexts/ObjectPanelStateContext', async () => {
+  const actual = await vi.importActual<typeof import('@/core/contexts/ObjectPanelStateContext')>(
+    '@/core/contexts/ObjectPanelStateContext'
+  );
+  return {
+    ...actual,
+    useObjectPanelState: () => ({
+      setObjectPanelActiveTab: vi.fn(),
+      hydrateClusterMeta: (ref: unknown) => ref,
+    }),
+  };
+});
+
 vi.mock('@/core/contexts/AuthErrorContext', () => ({
   useActiveClusterAuthState: () => mockAuthState,
 }));
