@@ -739,8 +739,8 @@ func mergeClusterOverviewPayload(payloads []ClusterOverviewSnapshot) ClusterOver
 	out.ClusterVersion = mergeLabel(clusterVersions, "Multiple")
 
 	// Merge: keep only the most recent events across all clusters, preserving
-	// the same 10-item cap used per-cluster so the UI never renders more rows
-	// than intended.
+	// the same cap used per-cluster so the UI never renders more rows than
+	// intended.
 	sort.Slice(out.RecentEvents, func(i, j int) bool {
 		return out.RecentEvents[i].Timestamp > out.RecentEvents[j].Timestamp
 	})

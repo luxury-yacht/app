@@ -2,7 +2,8 @@
 
 ## Issues
 
-Select all/none in log viewer is broken
+- Select all/none in log viewer is broken
+- new cluster race condition
 
 - Issue 40 Support object creation
 

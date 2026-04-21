@@ -215,7 +215,6 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 			},
 			fallbackChecks: []listCheck{
 				{group: "", resource: "nodes"},
-				{group: "", resource: "namespaces"},
 			},
 			registerFallback: func() error {
 				return snapshot.RegisterClusterOverviewDomainList(
@@ -226,7 +225,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 				)
 			},
 			fallbackLog:  "Registering cluster overview domain using list fallback due to missing informer permissions",
-			deniedReason: "cluster overview requires nodes/namespaces",
+			deniedReason: "cluster overview requires nodes",
 		}),
 
 		withSkip(directRegistration("catalog", func() error {

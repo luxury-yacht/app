@@ -2,13 +2,22 @@ package snapshot
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	kubefake "k8s.io/client-go/kubernetes/fake"
+	cgotesting "k8s.io/client-go/testing"
+	"k8s.io/client-go/tools/cache"
 
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/testsupport"
@@ -277,6 +286,154 @@ func TestClusterOverviewBuilderUsesCatalog(t *testing.T) {
 	require.Equal(t, "200m", payload.Overview.CPURequests)
 	require.Equal(t, "256.0 Mi", payload.Overview.MemoryRequests)
 	require.Equal(t, "128.0 Mi", payload.Overview.MemoryUsage)
+}
+
+func TestClusterOverviewBuilderSkipsOptionalCachesUntilSynced(t *testing.T) {
+	now := time.Now()
+
+	builder := &ClusterOverviewBuilder{
+		nodeLister:      testsupport.NewNodeLister(t, &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node-a"}}),
+		podLister:       testsupport.NewPodLister(t),
+		namespaceLister: testsupport.NewNamespaceLister(t),
+		eventLister: testsupport.NewEventLister(t, &corev1.Event{
+			ObjectMeta: metav1.ObjectMeta{Name: "warn-a", Namespace: "default", UID: "event-1"},
+			Type:       corev1.EventTypeWarning,
+			LastTimestamp: metav1.Time{
+				Time: now,
+			},
+			InvolvedObject: corev1.ObjectReference{
+				Kind:       "Pod",
+				Name:       "api-a",
+				Namespace:  "default",
+				APIVersion: "v1",
+				UID:        "pod-uid-1",
+			},
+		}),
+		deploymentLister:  testsupport.NewDeploymentLister(t, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "deploy-a", Namespace: "default"}}),
+		statefulSetLister: testsupport.NewStatefulSetLister(t, &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: "stateful-a", Namespace: "default"}}),
+		daemonSetLister:   testsupport.NewDaemonSetLister(t, &appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "daemon-a", Namespace: "default"}}),
+		cronJobLister:     testsupport.NewCronJobLister(t, &batchv1.CronJob{ObjectMeta: metav1.ObjectMeta{Name: "cron-a", Namespace: "default"}}),
+		hasSyncedFns: []cache.InformerSynced{
+			func() bool { return true },
+			func() bool { return true },
+			func() bool { return true },
+		},
+		eventHasSynced:       func() bool { return false },
+		deploymentHasSynced:  func() bool { return false },
+		statefulSetHasSynced: func() bool { return false },
+		daemonSetHasSynced:   func() bool { return false },
+		cronJobHasSynced:     func() bool { return false },
+		cachedVersion:        "v1.29.0",
+		versionFetched:       now,
+	}
+
+	snapshot, err := builder.Build(context.Background(), "")
+	require.NoError(t, err)
+
+	payload, ok := snapshot.Payload.(ClusterOverviewSnapshot)
+	require.True(t, ok)
+	require.Zero(t, payload.Overview.TotalDeployments)
+	require.Zero(t, payload.Overview.TotalStatefulSets)
+	require.Zero(t, payload.Overview.TotalDaemonSets)
+	require.Zero(t, payload.Overview.TotalCronJobs)
+	require.Empty(t, payload.Overview.RecentEvents)
+}
+
+func TestClusterOverviewListBuilderIncludesOptionalCountsAndRecentEvents(t *testing.T) {
+	now := time.Now()
+
+	client := kubefake.NewSimpleClientset(
+		&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node-a"}},
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+		&corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: "pod-a", Namespace: "default"},
+			Status:     corev1.PodStatus{Phase: corev1.PodRunning},
+		},
+		&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "deploy-a", Namespace: "default"}},
+		&appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: "stateful-a", Namespace: "default"}},
+		&appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "daemon-a", Namespace: "default"}},
+		&batchv1.CronJob{ObjectMeta: metav1.ObjectMeta{Name: "cron-a", Namespace: "default"}},
+		&corev1.Event{
+			ObjectMeta: metav1.ObjectMeta{Name: "warn-a", Namespace: "default", UID: "event-1"},
+			Type:       corev1.EventTypeWarning,
+			LastTimestamp: metav1.Time{
+				Time: now,
+			},
+			InvolvedObject: corev1.ObjectReference{
+				Kind:       "Pod",
+				Name:       "pod-a",
+				Namespace:  "default",
+				APIVersion: "v1",
+				UID:        "pod-uid-1",
+			},
+			Message: "Back-off restarting failed container",
+			Reason:  "BackOff",
+		},
+	)
+
+	builder := &ClusterOverviewListBuilder{
+		client:     client,
+		metrics:    fakeClusterMetrics{},
+		versionFn:  func(context.Context) string { return "v1.30.0" },
+		serverHost: "https://cluster.example.com",
+	}
+
+	snapshot, err := builder.Build(context.Background(), "")
+	require.NoError(t, err)
+
+	payload, ok := snapshot.Payload.(ClusterOverviewSnapshot)
+	require.True(t, ok)
+	require.Equal(t, 1, payload.Overview.TotalDeployments)
+	require.Equal(t, 1, payload.Overview.TotalStatefulSets)
+	require.Equal(t, 1, payload.Overview.TotalDaemonSets)
+	require.Equal(t, 1, payload.Overview.TotalCronJobs)
+	require.Len(t, payload.Overview.RecentEvents, 1)
+	require.Equal(t, "event-1", payload.Overview.RecentEvents[0].EventUID)
+	require.Equal(t, "pod-uid-1", payload.Overview.RecentEvents[0].ObjectUID)
+}
+
+func TestClusterOverviewListBuilderIgnoresForbiddenOptionalResources(t *testing.T) {
+	client := kubefake.NewSimpleClientset(
+		&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node-a"}},
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+	)
+	for _, resource := range []struct {
+		group    string
+		resource string
+	}{
+		{group: "apps", resource: "deployments"},
+		{group: "apps", resource: "statefulsets"},
+		{group: "apps", resource: "daemonsets"},
+		{group: "batch", resource: "cronjobs"},
+		{group: "", resource: "events"},
+	} {
+		resource := resource
+		client.PrependReactor("list", resource.resource, func(cgotesting.Action) (bool, runtime.Object, error) {
+			return true, nil, apierrors.NewForbidden(
+				schema.GroupResource{Group: resource.group, Resource: resource.resource},
+				resource.resource,
+				errors.New("forbidden"),
+			)
+		})
+	}
+
+	builder := &ClusterOverviewListBuilder{
+		client:     client,
+		metrics:    fakeClusterMetrics{},
+		versionFn:  func(context.Context) string { return "v1.30.0" },
+		serverHost: "https://cluster.example.com",
+	}
+
+	snapshot, err := builder.Build(context.Background(), "")
+	require.NoError(t, err)
+
+	payload, ok := snapshot.Payload.(ClusterOverviewSnapshot)
+	require.True(t, ok)
+	require.Zero(t, payload.Overview.TotalDeployments)
+	require.Zero(t, payload.Overview.TotalStatefulSets)
+	require.Zero(t, payload.Overview.TotalDaemonSets)
+	require.Zero(t, payload.Overview.TotalCronJobs)
+	require.Empty(t, payload.Overview.RecentEvents)
 }
 
 func TestDetectClusterTypeFallsBackToServerHostForAKS(t *testing.T) {

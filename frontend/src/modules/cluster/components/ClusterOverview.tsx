@@ -30,13 +30,13 @@ import { useActiveClusterAuthState } from '@/core/contexts/AuthErrorContext';
 import { buildConnectivityPresentation } from '@/core/connection/connectivityPresentation';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { formatAge } from '@/utils/ageFormatter';
-import { parseApiVersion } from '@shared/constants/builtinGroupVersions';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
-import {
-  objectPanelId,
-  useObjectPanelState,
-} from '@/core/contexts/ObjectPanelStateContext';
+import { objectPanelId, useObjectPanelState } from '@/core/contexts/ObjectPanelStateContext';
 import type { RecentEventEntry } from '@/core/refresh/types';
+import {
+  canResolveEventObjectReference,
+  resolveEventObjectReference,
+} from '@shared/utils/eventObjectIdentity';
 
 interface ClusterOverviewProps {
   clusterContext: string;
@@ -476,18 +476,33 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
 
   const recentEvents = displayOverview.recentEvents ?? [];
 
+  const getRecentEventObjectRefInput = useCallback(
+    (event: RecentEventEntry) => ({
+      object:
+        event.objectKind && event.objectName
+          ? `${event.objectKind}/${event.objectName}`
+          : undefined,
+      objectUid: event.objectUid,
+      objectApiVersion: event.objectApiVersion,
+      objectNamespace: event.objectNamespace || undefined,
+      clusterId: event.clusterId ?? selectedClusterId ?? undefined,
+      clusterName: event.clusterName ?? selectedClusterName ?? undefined,
+    }),
+    [selectedClusterId, selectedClusterName]
+  );
+
+  const canOpenRecentEventObject = useCallback(
+    (event: RecentEventEntry) =>
+      canResolveEventObjectReference(getRecentEventObjectRefInput(event)),
+    [getRecentEventObjectRefInput]
+  );
+
   const handleRecentEventOpen = useCallback(
-    (event: RecentEventEntry) => {
-      const { group, version } = parseApiVersion(event.objectApiVersion);
-      const ref = {
-        clusterId: event.clusterId ?? selectedClusterId ?? undefined,
-        clusterName: event.clusterName ?? selectedClusterName ?? undefined,
-        kind: event.objectKind,
-        name: event.objectName,
-        namespace: event.objectNamespace || undefined,
-        group: group ?? '',
-        version: version ?? '',
-      };
+    async (event: RecentEventEntry) => {
+      const ref = await resolveEventObjectReference(getRecentEventObjectRefInput(event));
+      if (!ref) {
+        return;
+      }
       openWithObject(ref);
       // Clicking an event should land on the Events tab for the involved object.
       // The panel id is deterministic from the hydrated ref, so we can compute it
@@ -495,13 +510,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
       const panelId = objectPanelId(hydrateClusterMeta(ref));
       setObjectPanelActiveTab(panelId, 'events');
     },
-    [
-      openWithObject,
-      selectedClusterId,
-      selectedClusterName,
-      setObjectPanelActiveTab,
-      hydrateClusterMeta,
-    ]
+    [getRecentEventObjectRefInput, hydrateClusterMeta, openWithObject, setObjectPanelActiveTab]
   );
 
   const renderNodeHealthLegendItem = (item: {
@@ -906,7 +915,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
           ) : (
             <ul className="recent-events__list">
               {recentEvents.map((event) => {
-                const clickable = Boolean(event.objectName && event.objectKind);
+                const clickable = canOpenRecentEventObject(event);
                 const rowClass = `recent-events__row${
                   clickable ? ' recent-events__row--clickable' : ''
                 }`;
@@ -916,13 +925,13 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
                       className={rowClass}
                       role={clickable ? 'button' : undefined}
                       tabIndex={clickable ? 0 : undefined}
-                      onClick={clickable ? () => handleRecentEventOpen(event) : undefined}
+                      onClick={clickable ? () => void handleRecentEventOpen(event) : undefined}
                       onKeyDown={
                         clickable
                           ? (e) => {
                               if (e.key === 'Enter' || e.key === ' ') {
                                 e.preventDefault();
-                                handleRecentEventOpen(event);
+                                void handleRecentEventOpen(event);
                               }
                             }
                           : undefined

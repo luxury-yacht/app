@@ -25,6 +25,10 @@ const {
   emitPodsUnhealthySignalMock,
   getAppInfoMock,
   browserOpenURLMock,
+  openWithObjectMock,
+  setObjectPanelActiveTabMock,
+  canResolveEventObjectReferenceMock,
+  resolveEventObjectReferenceMock,
 } = vi.hoisted(() => {
   return {
     mockRefreshOrchestrator: {
@@ -58,6 +62,10 @@ const {
     emitPodsUnhealthySignalMock: vi.fn(),
     getAppInfoMock: vi.fn(),
     browserOpenURLMock: vi.fn(),
+    openWithObjectMock: vi.fn(),
+    setObjectPanelActiveTabMock: vi.fn(),
+    canResolveEventObjectReferenceMock: vi.fn(() => false),
+    resolveEventObjectReferenceMock: vi.fn(),
   };
 });
 let mockLifecycleState = 'ready';
@@ -181,7 +189,7 @@ vi.mock('@/hooks/useWailsRuntimeEvents', () => ({
 
 vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
   useObjectPanel: () => ({
-    openWithObject: vi.fn(),
+    openWithObject: openWithObjectMock,
     close: vi.fn(),
     isOpen: false,
     openPanels: [],
@@ -196,11 +204,16 @@ vi.mock('@/core/contexts/ObjectPanelStateContext', async () => {
   return {
     ...actual,
     useObjectPanelState: () => ({
-      setObjectPanelActiveTab: vi.fn(),
+      setObjectPanelActiveTab: setObjectPanelActiveTabMock,
       hydrateClusterMeta: (ref: unknown) => ref,
     }),
   };
 });
+
+vi.mock('@shared/utils/eventObjectIdentity', () => ({
+  canResolveEventObjectReference: canResolveEventObjectReferenceMock,
+  resolveEventObjectReference: resolveEventObjectReferenceMock,
+}));
 
 vi.mock('@/core/contexts/AuthErrorContext', () => ({
   useActiveClusterAuthState: () => mockAuthState,
@@ -249,6 +262,8 @@ describe('ClusterOverview', () => {
       isBeta: false,
       update: { isUpdateAvailable: false },
     });
+    canResolveEventObjectReferenceMock.mockReturnValue(false);
+    resolveEventObjectReferenceMock.mockReset();
     cleanupRoot = null;
   });
 
@@ -278,9 +293,7 @@ describe('ClusterOverview', () => {
       true
     );
     expect(
-      container
-        .querySelector('.metric-legend__count')
-        ?.classList.contains('skeleton-text')
+      container.querySelector('.metric-legend__count')?.classList.contains('skeleton-text')
     ).toBe(true);
     expect(statValueFor(container, 'total')).toBe('0');
     expect(statValueFor(container, 'namespaces')).toBe('0');
@@ -634,6 +647,73 @@ describe('ClusterOverview', () => {
     });
     expect(navigateToNamespaceMock).toHaveBeenCalled();
     expect(emitPodsUnhealthySignalMock).not.toHaveBeenCalled();
+  });
+
+  it('opens the recent event target via the UID-aware resolver and selects the events tab', async () => {
+    canResolveEventObjectReferenceMock.mockReturnValue(true);
+    resolveEventObjectReferenceMock.mockResolvedValue({
+      clusterId: 'cluster-1',
+      clusterName: 'cluster-1',
+      kind: 'Pod',
+      name: 'api-7c8d9',
+      namespace: 'default',
+      group: '',
+      version: 'v1',
+    });
+    domainStateRef.current = createDomainState('ready', {
+      overview: {
+        ...EMPTY_OVERVIEW_DATA,
+        recentEvents: [
+          {
+            clusterId: 'cluster-1',
+            clusterName: 'cluster-1',
+            eventUid: 'event-1',
+            reason: 'Failed',
+            message: 'Back-off restarting failed container',
+            timestamp: Date.now(),
+            objectKind: 'Pod',
+            objectName: 'api-7c8d9',
+            objectNamespace: 'default',
+            objectApiVersion: '',
+            objectUid: 'pod-uid-1',
+          },
+        ],
+      },
+    });
+
+    const { container, cleanup } = renderClusterOverview();
+    cleanupRoot = cleanup;
+    await flushEffects();
+
+    const row = container.querySelector('.recent-events__row--clickable');
+    expect(row).not.toBeNull();
+
+    await act(async () => {
+      row?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(resolveEventObjectReferenceMock).toHaveBeenCalledWith({
+      object: 'Pod/api-7c8d9',
+      objectUid: 'pod-uid-1',
+      objectApiVersion: '',
+      objectNamespace: 'default',
+      clusterId: 'cluster-1',
+      clusterName: 'cluster-1',
+    });
+    expect(openWithObjectMock).toHaveBeenCalledWith({
+      clusterId: 'cluster-1',
+      clusterName: 'cluster-1',
+      kind: 'Pod',
+      name: 'api-7c8d9',
+      namespace: 'default',
+      group: '',
+      version: 'v1',
+    });
+    expect(setObjectPanelActiveTabMock).toHaveBeenCalledWith(
+      'obj:cluster-1:/v1/pod:default:api-7c8d9',
+      'events'
+    );
   });
 });
 
