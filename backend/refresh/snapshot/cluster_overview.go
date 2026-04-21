@@ -129,6 +129,7 @@ type ClusterOverviewPayload struct {
 type RecentEvent struct {
 	ClusterID        string `json:"clusterId,omitempty"`
 	ClusterName      string `json:"clusterName,omitempty"`
+	EventUID         string `json:"eventUid"`
 	Reason           string `json:"reason"`
 	Message          string `json:"message"`
 	Timestamp        int64  `json:"timestamp"`
@@ -825,6 +826,7 @@ func buildRecentEvents(events []*corev1.Event, meta ClusterMeta) []RecentEvent {
 		out = append(out, RecentEvent{
 			ClusterID:        meta.ClusterID,
 			ClusterName:      meta.ClusterName,
+			EventUID:         string(evt.UID),
 			Reason:           strings.TrimSpace(evt.Reason),
 			Message:          eventMessage(evt),
 			Timestamp:        eventTimestamp(evt).UnixMilli(),

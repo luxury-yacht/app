@@ -894,7 +894,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
                   clickable ? ' recent-events__row--clickable' : ''
                 }`;
                 return (
-                  <li key={`${event.objectUid}-${event.timestamp}-${event.reason}`}>
+                  <li key={event.eventUid}>
                     <div
                       className={rowClass}
                       role={clickable ? 'button' : undefined}

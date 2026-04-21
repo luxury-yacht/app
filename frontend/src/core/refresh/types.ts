@@ -202,6 +202,7 @@ export interface ClusterOverviewPayload {
 export interface RecentEventEntry {
   clusterId?: string;
   clusterName?: string;
+  eventUid: string;
   reason: string;
   message: string;
   timestamp: number;
