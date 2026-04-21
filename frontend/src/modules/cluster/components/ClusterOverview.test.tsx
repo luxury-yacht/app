@@ -328,7 +328,7 @@ describe('ClusterOverview', () => {
     expect(container.textContent).toContain('EKS');
     expect(container.textContent).toContain('1.26.3');
     expect(container.textContent).not.toContain('Loading cluster overview...');
-    expect(container.textContent).toContain('Status:');
+    expect(container.textContent).toContain('Status');
     expect(container.textContent).toContain('Ready');
   });
 
@@ -339,7 +339,7 @@ describe('ClusterOverview', () => {
     cleanupRoot = cleanup;
     await flushEffects();
 
-    expect(container.textContent).toContain('Status:');
+    expect(container.textContent).toContain('Status');
     expect(container.textContent).toContain('Loading namespaces');
   });
 
@@ -359,7 +359,7 @@ describe('ClusterOverview', () => {
     cleanupRoot = cleanup;
     await flushEffects();
 
-    expect(container.textContent).toContain('Status:');
+    expect(container.textContent).toContain('Status');
     expect(container.textContent).toContain('Ready');
     expect(container.textContent).not.toContain('Refreshing cluster data');
   });
@@ -375,7 +375,7 @@ describe('ClusterOverview', () => {
     expect(container.querySelector('.cluster-overview')?.classList.contains('is-skeleton')).toBe(
       false
     );
-    expect(container.textContent).toContain('Status:');
+    expect(container.textContent).toContain('Status');
     expect(container.textContent).toContain('Auto-refresh paused');
     expect(container.textContent).not.toContain('Ready');
   });

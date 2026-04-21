@@ -544,20 +544,20 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
           <h1 className="overview-top__title">{contextLabel}</h1>
           <div className="cluster-info">
             <span className="cluster-info-item">
-              <span className="cluster-info-label">Cluster Type:</span>
+              <span className="cluster-info-label">Cluster Type</span>
               <span className={`cluster-info-value${skeletonTextClass}`}>
                 {displayOverview.clusterType || 'Unknown'}
               </span>
             </span>
             <span className="cluster-info-item">
-              <span className="cluster-info-label">Version:</span>
+              <span className="cluster-info-label">Version</span>
               <span className={`cluster-info-value${skeletonTextClass}`}>
                 {displayOverview.clusterVersion || 'Unknown'}
               </span>
             </span>
             {overviewStatus.summary && (
               <span className="cluster-info-item">
-                <span className="cluster-info-label">Status:</span>
+                <span className="cluster-info-label">Status</span>
                 <span
                   className={`cluster-info-value cluster-info-value--${overviewStatus.status}`}
                 >
