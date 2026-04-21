@@ -221,7 +221,7 @@
 }
 
 .resource-usage .metric-legend__item {
-  min-width: 6rem;
+  min-width: 5.5rem;
 }
 
 .stats-grid {
@@ -533,7 +533,7 @@
   align-items: baseline;
   gap: 0.4rem;
   font-size: 0.75rem;
-  min-width: 6rem;
+  min-width: 5.5rem;
 }
 
 .metric-stat__count {

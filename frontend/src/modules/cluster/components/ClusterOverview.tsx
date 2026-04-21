@@ -382,9 +382,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
     variant: string;
   }) => {
     const clickable = item.value > 0;
-    const itemClass = `metric-legend__item${
-      clickable ? ' metric-legend__item--clickable' : ''
-    }`;
+    const itemClass = `metric-legend__item${clickable ? ' metric-legend__item--clickable' : ''}`;
     return (
       <div
         key={item.key}
@@ -558,9 +556,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
             {overviewStatus.summary && (
               <span className="cluster-info-item">
                 <span className="cluster-info-label">Status</span>
-                <span
-                  className={`cluster-info-value cluster-info-value--${overviewStatus.status}`}
-                >
+                <span className={`cluster-info-value cluster-info-value--${overviewStatus.status}`}>
                   {overviewStatus.summary}
                 </span>
               </span>
@@ -598,7 +594,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
               <h3>CPU</h3>
               <div className="metric-legend__total">
                 <span className={`metric-legend__total-value${skeletonTextClass}`}>
-                  {displayOverview.cpuAllocatable || '0'}
+                  {displayOverview.cpuAllocatable || '0'} cores
                 </span>
                 <span className="metric-legend__total-label"> total</span>
               </div>
@@ -830,9 +826,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
                       className={`metric-legend__dot metric-legend__dot--${item.variant}`}
                       aria-hidden="true"
                     />
-                    <span className={`metric-legend__count${skeletonTextClass}`}>
-                      {item.value}
-                    </span>
+                    <span className={`metric-legend__count${skeletonTextClass}`}>{item.value}</span>
                     <span className="metric-legend__label">{item.label}</span>
                   </div>
                 ))}
