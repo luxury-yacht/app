@@ -384,6 +384,18 @@
   --resourcebar-tooltip-shadow: var(--tooltip-shadow);
   --resourcebar-warning-text: #d97706;
 
+  /* Pod phase colors (Cluster Overview Pod Status bar) */
+  --pod-phase-healthy: #22c55e;
+  --pod-phase-pending: #f59e0b;
+  --pod-phase-failing: #ef4444;
+  --pod-phase-restarted: #a563f1;
+
+  /* Workload type colors (Cluster Overview workload breakdown bar) */
+  --workload-deployment: #3b82f6;
+  --workload-statefulset: #bf06d4;
+  --workload-daemonset: #6c2eff;
+  --workload-cronjob: #ec4899;
+
   /* Metrics availability banner */
   --metrics-banner-bg: rgba(245, 158, 11, 0.1);
   --metrics-banner-border: rgba(245, 158, 11, 0.3);

@@ -51,12 +51,10 @@
 
 .app-header-title {
   /* Use display font for header title */
-  font-family: var(--font-family-display, var(--font-family-base));
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 1.2rem;
   max-width: 100%;
-  text-align: center;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -64,18 +62,18 @@
 }
 
 .app-header-label {
-  color: var(--color-text-secondary);
-  font-weight: 400;
+  color: var(--color-text-tertiary);
+  font-weight: 600;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  padding-right: 0.25rem;
+  letter-spacing: 0.03rem;
 }
 
 .app-header-value {
   color: var(--color-text);
+  font-size: 0.8rem;
   font-weight: 500;
-}
-
-.app-header-separator {
-  color: var(--color-text-secondary);
-  font-weight: 400;
 }
 
 .app-header-controls {

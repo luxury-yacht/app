@@ -25,6 +25,10 @@ const {
   emitPodsUnhealthySignalMock,
   getAppInfoMock,
   browserOpenURLMock,
+  openWithObjectMock,
+  setObjectPanelActiveTabMock,
+  canResolveEventObjectReferenceMock,
+  resolveEventObjectReferenceMock,
 } = vi.hoisted(() => {
   return {
     mockRefreshOrchestrator: {
@@ -58,6 +62,10 @@ const {
     emitPodsUnhealthySignalMock: vi.fn(),
     getAppInfoMock: vi.fn(),
     browserOpenURLMock: vi.fn(),
+    openWithObjectMock: vi.fn(),
+    setObjectPanelActiveTabMock: vi.fn(),
+    canResolveEventObjectReferenceMock: vi.fn(() => false),
+    resolveEventObjectReferenceMock: vi.fn(),
   };
 });
 let mockLifecycleState = 'ready';
@@ -179,6 +187,34 @@ vi.mock('@/hooks/useWailsRuntimeEvents', () => ({
   }),
 }));
 
+vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
+  useObjectPanel: () => ({
+    openWithObject: openWithObjectMock,
+    close: vi.fn(),
+    isOpen: false,
+    openPanels: [],
+    objectData: null,
+  }),
+}));
+
+vi.mock('@/core/contexts/ObjectPanelStateContext', async () => {
+  const actual = await vi.importActual<typeof import('@/core/contexts/ObjectPanelStateContext')>(
+    '@/core/contexts/ObjectPanelStateContext'
+  );
+  return {
+    ...actual,
+    useObjectPanelState: () => ({
+      setObjectPanelActiveTab: setObjectPanelActiveTabMock,
+      hydrateClusterMeta: (ref: unknown) => ref,
+    }),
+  };
+});
+
+vi.mock('@shared/utils/eventObjectIdentity', () => ({
+  canResolveEventObjectReference: canResolveEventObjectReferenceMock,
+  resolveEventObjectReference: resolveEventObjectReferenceMock,
+}));
+
 vi.mock('@/core/contexts/AuthErrorContext', () => ({
   useActiveClusterAuthState: () => mockAuthState,
 }));
@@ -226,6 +262,8 @@ describe('ClusterOverview', () => {
       isBeta: false,
       update: { isUpdateAvailable: false },
     });
+    canResolveEventObjectReferenceMock.mockReturnValue(false);
+    resolveEventObjectReferenceMock.mockReset();
     cleanupRoot = null;
   });
 
@@ -237,6 +275,8 @@ describe('ClusterOverview', () => {
   });
 
   it('renders zero-value skeleton with loading message before data arrives', async () => {
+    mockLifecycleState = 'loading';
+
     const { container, cleanup } = renderClusterOverview();
     cleanupRoot = cleanup;
     await flushEffects();
@@ -251,15 +291,11 @@ describe('ClusterOverview', () => {
       'cluster-1|',
       true
     );
-    expect(container.querySelector('.overview-header h1')?.textContent).toBe('Cluster Overview');
-    expect(container.querySelector('.cluster-overview')?.classList.contains('is-skeleton')).toBe(
+    expect(container.querySelector('.cluster-overview')?.classList.contains('selectable')).toBe(
       true
     );
-    expect(
-      container.querySelector('.stat-card .stat-value')?.classList.contains('skeleton-text')
-    ).toBe(true);
-    expect(statValueFor(container, 'Total')).toBe('0');
-    expect(statValueFor(container, 'Namespaces')).toBe('0');
+    expect(statValueFor(container, 'total')).toBe('—');
+    expect(statValueFor(container, 'namespaces')).toBe('—');
     expect(container.querySelector('.cluster-overview .cluster-overview-error') ?? null).toBeNull();
   });
 
@@ -289,26 +325,32 @@ describe('ClusterOverview', () => {
         totalContainers: 84,
         totalInitContainers: 3,
         runningPods: 40,
+        succeededPods: 0,
         pendingPods: 1,
         failedPods: 1,
         restartedPods: 7,
         totalNamespaces: 6,
+        totalDeployments: 8,
+        totalStatefulSets: 2,
+        totalDaemonSets: 1,
+        totalCronJobs: 3,
+        readyNodes: 3,
+        notReadyNodes: 0,
+        cordonedNodes: 0,
+        recentEvents: [],
       },
     });
 
     rerender();
     await flushEffects();
 
-    expect(container.querySelector('.cluster-overview')?.classList.contains('is-skeleton')).toBe(
-      false
-    );
-    expect(statValueFor(container, 'Total')).toBe('3');
-    expect(statValueFor(container, 'Namespaces')).toBe('6');
-    expect(statValueFor(container, 'Pods')).toBe('42');
+    expect(statValueFor(container, 'total')).toBe('3');
+    expect(statValueFor(container, 'namespaces')).toBe('6');
+    expect(statValueFor(container, 'pods')).toBe('42');
     expect(container.textContent).toContain('EKS');
     expect(container.textContent).toContain('1.26.3');
     expect(container.textContent).not.toContain('Loading cluster overview...');
-    expect(container.textContent).toContain('Status:');
+    expect(container.textContent).toContain('Status');
     expect(container.textContent).toContain('Ready');
   });
 
@@ -319,7 +361,7 @@ describe('ClusterOverview', () => {
     cleanupRoot = cleanup;
     await flushEffects();
 
-    expect(container.textContent).toContain('Status:');
+    expect(container.textContent).toContain('Status');
     expect(container.textContent).toContain('Loading namespaces');
   });
 
@@ -339,7 +381,7 @@ describe('ClusterOverview', () => {
     cleanupRoot = cleanup;
     await flushEffects();
 
-    expect(container.textContent).toContain('Status:');
+    expect(container.textContent).toContain('Status');
     expect(container.textContent).toContain('Ready');
     expect(container.textContent).not.toContain('Refreshing cluster data');
   });
@@ -352,10 +394,7 @@ describe('ClusterOverview', () => {
     await flushEffects();
 
     expect(mockRefreshOrchestrator.fetchScopedDomain).not.toHaveBeenCalled();
-    expect(container.querySelector('.cluster-overview')?.classList.contains('is-skeleton')).toBe(
-      false
-    );
-    expect(container.textContent).toContain('Status:');
+    expect(container.textContent).toContain('Status');
     expect(container.textContent).toContain('Auto-refresh paused');
     expect(container.textContent).not.toContain('Ready');
   });
@@ -414,9 +453,9 @@ describe('ClusterOverview', () => {
 
     expect(container.textContent).toContain('Auto-refresh paused');
     expect(container.textContent).not.toContain('Ready');
-    expect(statValueFor(container, 'Total')).toBe('0');
-    expect(statValueFor(container, 'Namespaces')).toBe('0');
-    expect(statValueFor(container, 'Pods')).toBe('0');
+    expect(statValueFor(container, 'total')).toBe('0');
+    expect(statValueFor(container, 'namespaces')).toBe('0');
+    expect(statValueFor(container, 'pods')).toBe('0');
   });
 
   it('updates the overview status when auto-refresh is toggled off', async () => {
@@ -449,12 +488,12 @@ describe('ClusterOverview', () => {
     cleanupRoot = cleanup;
     await flushEffects();
 
-    expect(statValueFor(container, 'Total')).toBe('5');
-    expect(statValueFor(container, 'EC2')).toBe('3');
-    expect(statValueFor(container, 'Fargate')).toBe('2');
+    expect(statValueFor(container, 'total')).toBe('5');
+    expect(statValueFor(container, 'ec2')).toBe('3');
+    expect(statValueFor(container, 'fargate')).toBe('2');
     // AKS-specific cards should not appear.
-    expect(statValueFor(container, 'VM')).toBe('');
-    expect(statValueFor(container, 'Virtual')).toBe('');
+    expect(statValueFor(container, 'vm')).toBe('');
+    expect(statValueFor(container, 'virtual')).toBe('');
   });
 
   it('shows VM and Virtual cards for AKS clusters', async () => {
@@ -472,12 +511,12 @@ describe('ClusterOverview', () => {
     cleanupRoot = cleanup;
     await flushEffects();
 
-    expect(statValueFor(container, 'Total')).toBe('4');
-    expect(statValueFor(container, 'VM')).toBe('3');
-    expect(statValueFor(container, 'Virtual')).toBe('1');
+    expect(statValueFor(container, 'total')).toBe('4');
+    expect(statValueFor(container, 'vm')).toBe('3');
+    expect(statValueFor(container, 'virtual')).toBe('1');
     // EKS-specific cards should not appear.
-    expect(statValueFor(container, 'EC2')).toBe('');
-    expect(statValueFor(container, 'Fargate')).toBe('');
+    expect(statValueFor(container, 'ec2')).toBe('');
+    expect(statValueFor(container, 'fargate')).toBe('');
   });
 
   it('shows only Total card for GKE clusters', async () => {
@@ -493,12 +532,12 @@ describe('ClusterOverview', () => {
     cleanupRoot = cleanup;
     await flushEffects();
 
-    expect(statValueFor(container, 'Total')).toBe('6');
+    expect(statValueFor(container, 'total')).toBe('6');
     // No provider-specific breakdown cards.
-    expect(statValueFor(container, 'EC2')).toBe('');
-    expect(statValueFor(container, 'Fargate')).toBe('');
-    expect(statValueFor(container, 'VM')).toBe('');
-    expect(statValueFor(container, 'Virtual')).toBe('');
+    expect(statValueFor(container, 'ec2')).toBe('');
+    expect(statValueFor(container, 'fargate')).toBe('');
+    expect(statValueFor(container, 'vm')).toBe('');
+    expect(statValueFor(container, 'virtual')).toBe('');
   });
 
   it('renders an update banner when a newer release is available', async () => {
@@ -528,6 +567,7 @@ describe('ClusterOverview', () => {
   });
 
   it('shows an inline error while retaining the zero skeleton when permissions fail', async () => {
+    mockLifecycleState = 'loading';
     domainStateRef.current = createDomainState('error', { error: 'forbidden' });
 
     const { container, cleanup } = renderClusterOverview();
@@ -536,14 +576,12 @@ describe('ClusterOverview', () => {
 
     expect(container.textContent).toContain('Failed to load cluster overview');
     expect(container.textContent).toContain('forbidden');
-    expect(container.querySelector('.cluster-overview')?.classList.contains('is-skeleton')).toBe(
-      false
-    );
-    expect(statValueFor(container, 'Total')).toBe('0');
+    expect(statValueFor(container, 'total')).toBe('0');
     expect(container.textContent).not.toContain('Loading cluster overview...');
   });
 
   it('navigates to the pods view with unhealthy filter when clicking a pod status card', async () => {
+    mockLifecycleState = 'loading';
     domainStateRef.current = createDomainState('ready', {
       overview: {
         ...EMPTY_OVERVIEW_DATA,
@@ -572,11 +610,13 @@ describe('ClusterOverview', () => {
     expect(emitPodsUnhealthySignalMock).toHaveBeenCalledWith('cluster-1', ALL_NAMESPACES_SCOPE);
   });
 
-  it('navigates to the pods view without unhealthy filter when clicking the running card', async () => {
+  it('navigates to the pods view without unhealthy filter when clicking the healthy item', async () => {
+    mockLifecycleState = 'loading';
     domainStateRef.current = createDomainState('ready', {
       overview: {
         ...EMPTY_OVERVIEW_DATA,
-        runningPods: 5,
+        runningPods: 4,
+        succeededPods: 1,
       },
     });
 
@@ -584,11 +624,12 @@ describe('ClusterOverview', () => {
     cleanupRoot = cleanup;
     await flushEffects();
 
-    const runningCard = container.querySelector('[data-testid="cluster-pod-status-running"]');
-    expect(runningCard).not.toBeNull();
+    const healthyItem = container.querySelector('[data-testid="cluster-pod-status-healthy"]');
+    expect(healthyItem).not.toBeNull();
+    expect(healthyItem?.textContent).toContain('5');
 
     act(() => {
-      runningCard?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      healthyItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
     expect(setSelectedNamespaceMock).toHaveBeenCalledWith(ALL_NAMESPACES_SCOPE);
@@ -599,6 +640,94 @@ describe('ClusterOverview', () => {
     });
     expect(navigateToNamespaceMock).toHaveBeenCalled();
     expect(emitPodsUnhealthySignalMock).not.toHaveBeenCalled();
+  });
+
+  it('opens the recent event target via the UID-aware resolver and selects the events tab', async () => {
+    mockLifecycleState = 'loading';
+    canResolveEventObjectReferenceMock.mockReturnValue(true);
+    resolveEventObjectReferenceMock.mockResolvedValue({
+      clusterId: 'cluster-1',
+      clusterName: 'cluster-1',
+      kind: 'Pod',
+      name: 'api-7c8d9',
+      namespace: 'default',
+      group: '',
+      version: 'v1',
+    });
+    domainStateRef.current = createDomainState('ready', {
+      overview: {
+        ...EMPTY_OVERVIEW_DATA,
+        recentEvents: [
+          {
+            clusterId: 'cluster-1',
+            clusterName: 'cluster-1',
+            eventUid: 'event-1',
+            reason: 'Failed',
+            message: 'Back-off restarting failed container',
+            timestamp: Date.now(),
+            objectKind: 'Pod',
+            objectName: 'api-7c8d9',
+            objectNamespace: 'default',
+            objectApiVersion: '',
+            objectUid: 'pod-uid-1',
+          },
+        ],
+      },
+    });
+
+    const { container, cleanup } = renderClusterOverview();
+    cleanupRoot = cleanup;
+    await flushEffects();
+
+    const row = container.querySelector('.recent-events__row--clickable');
+    expect(row).not.toBeNull();
+
+    await act(async () => {
+      row?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(resolveEventObjectReferenceMock).toHaveBeenCalledWith({
+      object: 'Pod/api-7c8d9',
+      objectUid: 'pod-uid-1',
+      objectApiVersion: '',
+      objectNamespace: 'default',
+      clusterId: 'cluster-1',
+      clusterName: 'cluster-1',
+    });
+    expect(openWithObjectMock).toHaveBeenCalledWith({
+      clusterId: 'cluster-1',
+      clusterName: 'cluster-1',
+      kind: 'Pod',
+      name: 'api-7c8d9',
+      namespace: 'default',
+      group: '',
+      version: 'v1',
+    });
+    expect(setObjectPanelActiveTabMock).toHaveBeenCalledWith(
+      'obj:cluster-1:/v1/pod:default:api-7c8d9',
+      'events'
+    );
+  });
+
+  it('keeps cluster-overview disabled before data services start and suppresses the transient unavailable error', async () => {
+    mockLifecycleState = 'connecting';
+    domainStateRef.current = createDomainState('error', {
+      error: 'no active clusters available (requested: [cluster-1])',
+    });
+
+    const { container, cleanup } = renderClusterOverview();
+    cleanupRoot = cleanup;
+    await flushEffects();
+
+    expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
+      'cluster-overview',
+      'cluster-1|',
+      false
+    );
+    expect(mockRefreshOrchestrator.fetchScopedDomain).not.toHaveBeenCalled();
+    expect(container.textContent).not.toContain('Failed to load cluster overview');
+    expect(statValueFor(container, 'total')).toBe('—');
   });
 });
 
@@ -623,10 +752,19 @@ const EMPTY_OVERVIEW_DATA: ClusterOverviewPayload = {
   totalContainers: 0,
   totalInitContainers: 0,
   runningPods: 0,
+  succeededPods: 0,
   pendingPods: 0,
   failedPods: 0,
   restartedPods: 0,
+  totalDeployments: 0,
+  totalStatefulSets: 0,
+  totalDaemonSets: 0,
+  totalCronJobs: 0,
+  readyNodes: 0,
+  notReadyNodes: 0,
+  cordonedNodes: 0,
   totalNamespaces: 0,
+  recentEvents: [],
 };
 
 function renderClusterOverview() {
@@ -659,11 +797,11 @@ async function flushEffects() {
 }
 
 function statValueFor(container: HTMLElement, label: string): string {
-  const labelElement = Array.from(container.querySelectorAll('.stat-label')).find(
+  const labelElement = Array.from(container.querySelectorAll('.metric-stat__label')).find(
     (element) => element.textContent === label
   );
-  const statCard = labelElement?.closest('.stat-card');
-  return statCard?.querySelector('.stat-value')?.textContent?.trim() ?? '';
+  const item = labelElement?.closest('.metric-stat');
+  return item?.querySelector('.metric-stat__count')?.textContent?.trim() ?? '';
 }
 
 function createDomainState(

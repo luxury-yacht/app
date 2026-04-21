@@ -720,10 +720,15 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
     if (typeof document === 'undefined') {
       return;
     }
-    const target = document.documentElement;
+    const target = document.querySelector('.content');
+    if (!(target instanceof HTMLElement)) {
+      return;
+    }
     return () => {
       target.style.removeProperty('--dock-right-offset');
       target.style.removeProperty('--dock-bottom-offset');
+      document.body.classList.remove('dock-right-open');
+      document.body.classList.remove('dock-bottom-open');
     };
   }, []);
 

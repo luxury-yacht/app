@@ -184,10 +184,33 @@ export interface ClusterOverviewPayload {
   totalContainers: number;
   totalInitContainers: number;
   runningPods: number;
+  succeededPods: number;
   pendingPods: number;
   failedPods: number;
   restartedPods: number;
   totalNamespaces: number;
+  totalDeployments: number;
+  totalStatefulSets: number;
+  totalDaemonSets: number;
+  totalCronJobs: number;
+  readyNodes: number;
+  notReadyNodes: number;
+  cordonedNodes: number;
+  recentEvents: RecentEventEntry[];
+}
+
+export interface RecentEventEntry {
+  clusterId?: string;
+  clusterName?: string;
+  eventUid: string;
+  reason: string;
+  message: string;
+  timestamp: number;
+  objectKind: string;
+  objectName: string;
+  objectNamespace: string;
+  objectApiVersion: string;
+  objectUid: string;
 }
 
 export interface ClusterOverviewSnapshotPayload extends ClusterMeta {

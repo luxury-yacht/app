@@ -3,6 +3,7 @@ package snapshot
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -15,6 +16,8 @@ import (
 	versioned "k8s.io/apimachinery/pkg/version"
 	informers "k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
+	appslisters "k8s.io/client-go/listers/apps/v1"
+	batchlisters "k8s.io/client-go/listers/batch/v1"
 	corelisters "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
@@ -28,31 +31,45 @@ import (
 
 const (
 	clusterOverviewDomainName = "cluster-overview"
+	// Recent events on the cluster overview are a signal, not a comprehensive
+	// audit log — capped to the most recent 20 warnings within the last 24h.
+	recentEventsLimit    = 20
+	recentEventsLookback = 24 * time.Hour
 )
 
 // ClusterOverviewBuilder constructs aggregated cluster statistics using informer caches.
 type ClusterOverviewBuilder struct {
-	client          kubernetes.Interface
-	nodeLister      corelisters.NodeLister
-	podLister       corelisters.PodLister
-	namespaceLister corelisters.NamespaceLister
-	metrics         metrics.Provider
-	serverHost      string
+	client            kubernetes.Interface
+	nodeLister        corelisters.NodeLister
+	podLister         corelisters.PodLister
+	namespaceLister   corelisters.NamespaceLister
+	eventLister       corelisters.EventLister
+	deploymentLister  appslisters.DeploymentLister
+	statefulSetLister appslisters.StatefulSetLister
+	daemonSetLister   appslisters.DaemonSetLister
+	cronJobLister     batchlisters.CronJobLister
+	metrics           metrics.Provider
+	serverHost        string
 
 	versionMu      sync.RWMutex
 	cachedVersion  string
 	versionFetched time.Time
 
-	hasSyncedFns []cache.InformerSynced
-	synced       atomic.Uint32
+	hasSyncedFns         []cache.InformerSynced
+	eventHasSynced       cache.InformerSynced
+	deploymentHasSynced  cache.InformerSynced
+	statefulSetHasSynced cache.InformerSynced
+	daemonSetHasSynced   cache.InformerSynced
+	cronJobHasSynced     cache.InformerSynced
+	synced               atomic.Uint32
 }
 
 // ClusterOverviewSnapshot is the payload published for the cluster overview domain.
 type ClusterOverviewSnapshot struct {
 	ClusterMeta
-	Overview         ClusterOverviewPayload              `json:"overview"`
-	Metrics          ClusterOverviewMetrics              `json:"metrics"`
-	MetricsByCluster map[string]ClusterOverviewMetrics   `json:"metricsByCluster,omitempty"`
+	Overview         ClusterOverviewPayload            `json:"overview"`
+	Metrics          ClusterOverviewMetrics            `json:"metrics"`
+	MetricsByCluster map[string]ClusterOverviewMetrics `json:"metricsByCluster,omitempty"`
 	// OverviewByCluster keeps per-cluster cards for multi-cluster snapshots.
 	OverviewByCluster map[string]ClusterOverviewPayload `json:"overviewByCluster,omitempty"`
 }
@@ -82,22 +99,50 @@ type ClusterOverviewPayload struct {
 	MemoryLimits      string `json:"memoryLimits"`
 	MemoryAllocatable string `json:"memoryAllocatable"`
 
-	TotalNodes   int `json:"totalNodes"`
-	FargateNodes int `json:"fargateNodes"`
-	RegularNodes int `json:"regularNodes"`
-	EC2Nodes     int `json:"ec2Nodes"`
-	VirtualNodes int `json:"virtualNodes"`
-	VMNodes      int `json:"vmNodes"`
+	TotalNodes    int `json:"totalNodes"`
+	FargateNodes  int `json:"fargateNodes"`
+	RegularNodes  int `json:"regularNodes"`
+	EC2Nodes      int `json:"ec2Nodes"`
+	VirtualNodes  int `json:"virtualNodes"`
+	VMNodes       int `json:"vmNodes"`
+	ReadyNodes    int `json:"readyNodes"`
+	NotReadyNodes int `json:"notReadyNodes"`
+	CordonedNodes int `json:"cordonedNodes"`
 
 	TotalPods           int `json:"totalPods"`
 	TotalContainers     int `json:"totalContainers"`
 	TotalInitContainers int `json:"totalInitContainers"`
 	RunningPods         int `json:"runningPods"`
+	SucceededPods       int `json:"succeededPods"`
 	PendingPods         int `json:"pendingPods"`
 	FailedPods          int `json:"failedPods"`
 	RestartedPods       int `json:"restartedPods"`
 
 	TotalNamespaces int `json:"totalNamespaces"`
+
+	TotalDeployments  int `json:"totalDeployments"`
+	TotalStatefulSets int `json:"totalStatefulSets"`
+	TotalDaemonSets   int `json:"totalDaemonSets"`
+	TotalCronJobs     int `json:"totalCronJobs"`
+
+	RecentEvents []RecentEvent `json:"recentEvents"`
+}
+
+// RecentEvent is a single warning event shown on the cluster overview.
+// Only the fields needed to render the row and navigate to the involved
+// object are included; richer event detail lives in the Events views.
+type RecentEvent struct {
+	ClusterID        string `json:"clusterId,omitempty"`
+	ClusterName      string `json:"clusterName,omitempty"`
+	EventUID         string `json:"eventUid"`
+	Reason           string `json:"reason"`
+	Message          string `json:"message"`
+	Timestamp        int64  `json:"timestamp"`
+	ObjectKind       string `json:"objectKind"`
+	ObjectName       string `json:"objectName"`
+	ObjectNamespace  string `json:"objectNamespace"`
+	ObjectAPIVersion string `json:"objectApiVersion"`
+	ObjectUID        string `json:"objectUid"`
 }
 
 // RegisterClusterOverviewDomain wires the cluster-overview domain into the registry.
@@ -121,19 +166,34 @@ func RegisterClusterOverviewDomain(
 	nodeInformer := factory.Core().V1().Nodes()
 	podInformer := factory.Core().V1().Pods()
 	namespaceInformer := factory.Core().V1().Namespaces()
+	eventInformer := factory.Core().V1().Events()
+	deploymentInformer := factory.Apps().V1().Deployments()
+	statefulSetInformer := factory.Apps().V1().StatefulSets()
+	daemonSetInformer := factory.Apps().V1().DaemonSets()
+	cronJobInformer := factory.Batch().V1().CronJobs()
 
 	builder := &ClusterOverviewBuilder{
-		client:          client,
-		nodeLister:      nodeInformer.Lister(),
-		podLister:       podInformer.Lister(),
-		namespaceLister: namespaceInformer.Lister(),
-		metrics:         provider,
-		serverHost:      serverHost,
+		client:            client,
+		nodeLister:        nodeInformer.Lister(),
+		podLister:         podInformer.Lister(),
+		namespaceLister:   namespaceInformer.Lister(),
+		eventLister:       eventInformer.Lister(),
+		deploymentLister:  deploymentInformer.Lister(),
+		statefulSetLister: statefulSetInformer.Lister(),
+		daemonSetLister:   daemonSetInformer.Lister(),
+		cronJobLister:     cronJobInformer.Lister(),
+		metrics:           provider,
+		serverHost:        serverHost,
 		hasSyncedFns: []cache.InformerSynced{
 			nodeInformer.Informer().HasSynced,
 			podInformer.Informer().HasSynced,
 			namespaceInformer.Informer().HasSynced,
 		},
+		eventHasSynced:       eventInformer.Informer().HasSynced,
+		deploymentHasSynced:  deploymentInformer.Informer().HasSynced,
+		statefulSetHasSynced: statefulSetInformer.Informer().HasSynced,
+		daemonSetHasSynced:   daemonSetInformer.Informer().HasSynced,
+		cronJobHasSynced:     cronJobInformer.Informer().HasSynced,
 	}
 
 	return reg.Register(refresh.DomainConfig{
@@ -177,6 +237,11 @@ func (b *ClusterOverviewListBuilder) Build(ctx context.Context, scope string) (*
 		nodes            []*corev1.Node
 		pods             []*corev1.Pod
 		namespaces       []*corev1.Namespace
+		recentEvents     []RecentEvent
+		deploymentCount  int
+		statefulSetCount int
+		daemonSetCount   int
+		cronJobCount     int
 		podsForbidden    bool
 		namespacesDenied bool
 		mu               sync.Mutex
@@ -229,9 +294,85 @@ func (b *ClusterOverviewListBuilder) Build(ctx context.Context, scope string) (*
 				return err
 			}
 		},
+		func(ctx context.Context) error {
+			resp, err := b.client.AppsV1().Deployments("").List(ctx, metav1.ListOptions{})
+			switch {
+			case err == nil:
+				mu.Lock()
+				deploymentCount = len(resp.Items)
+				mu.Unlock()
+				return nil
+			case apierrors.IsForbidden(err):
+				klog.V(2).Info("cluster-overview fallback: deployment list forbidden; proceeding without deployment count")
+				return nil
+			default:
+				return err
+			}
+		},
+		func(ctx context.Context) error {
+			resp, err := b.client.AppsV1().StatefulSets("").List(ctx, metav1.ListOptions{})
+			switch {
+			case err == nil:
+				mu.Lock()
+				statefulSetCount = len(resp.Items)
+				mu.Unlock()
+				return nil
+			case apierrors.IsForbidden(err):
+				klog.V(2).Info("cluster-overview fallback: statefulset list forbidden; proceeding without statefulset count")
+				return nil
+			default:
+				return err
+			}
+		},
+		func(ctx context.Context) error {
+			resp, err := b.client.AppsV1().DaemonSets("").List(ctx, metav1.ListOptions{})
+			switch {
+			case err == nil:
+				mu.Lock()
+				daemonSetCount = len(resp.Items)
+				mu.Unlock()
+				return nil
+			case apierrors.IsForbidden(err):
+				klog.V(2).Info("cluster-overview fallback: daemonset list forbidden; proceeding without daemonset count")
+				return nil
+			default:
+				return err
+			}
+		},
+		func(ctx context.Context) error {
+			resp, err := b.client.BatchV1().CronJobs("").List(ctx, metav1.ListOptions{})
+			switch {
+			case err == nil:
+				mu.Lock()
+				cronJobCount = len(resp.Items)
+				mu.Unlock()
+				return nil
+			case apierrors.IsForbidden(err):
+				klog.V(2).Info("cluster-overview fallback: cronjob list forbidden; proceeding without cronjob count")
+				return nil
+			default:
+				return err
+			}
+		},
+		func(ctx context.Context) error {
+			resp, err := b.client.CoreV1().Events("").List(ctx, metav1.ListOptions{})
+			switch {
+			case err == nil:
+				events := parallel.CopyToPointers(resp.Items)
+				mu.Lock()
+				recentEvents = buildRecentEvents(events, ClusterMetaFromContext(ctx))
+				mu.Unlock()
+				return nil
+			case apierrors.IsForbidden(err):
+				klog.V(2).Info("cluster-overview fallback: event list forbidden; proceeding without recent warning events")
+				return nil
+			default:
+				return err
+			}
+		},
 	}
 
-	if err := parallel.RunLimited(ctx, 3, tasks...); err != nil {
+	if err := parallel.RunLimited(ctx, 4, tasks...); err != nil {
 		return nil, err
 	}
 	if podsForbidden {
@@ -246,7 +387,18 @@ func (b *ClusterOverviewListBuilder) Build(ctx context.Context, scope string) (*
 		versionFn = func(context.Context) string { return defaultClusterVersion("") }
 	}
 
-	return buildClusterOverviewSnapshot(ctx, nodes, pods, namespaces, b.metrics, versionFn, b.serverHost)
+	snapshot, err := buildClusterOverviewSnapshot(ctx, nodes, pods, namespaces, b.metrics, versionFn, b.serverHost)
+	if err != nil {
+		return nil, err
+	}
+	applyClusterOverviewExtras(snapshot, clusterOverviewExtras{
+		totalDeployments:  deploymentCount,
+		totalStatefulSets: statefulSetCount,
+		totalDaemonSets:   daemonSetCount,
+		totalCronJobs:     cronJobCount,
+		recentEvents:      recentEvents,
+	})
+	return snapshot, nil
 }
 
 // Build assembles the cluster overview payload from cached resources and metrics.
@@ -291,6 +443,24 @@ func buildClusterOverviewSnapshot(
 
 		cpuAllocatableMilli += node.Status.Allocatable.Cpu().MilliValue()
 		memAllocatableBytes += node.Status.Allocatable.Memory().Value()
+
+		// Node health — Ready condition and cordoned state are tracked for all
+		// nodes regardless of compute type (Fargate, virtual-kubelet, etc.).
+		ready := false
+		for _, cond := range node.Status.Conditions {
+			if cond.Type == corev1.NodeReady {
+				ready = cond.Status == corev1.ConditionTrue
+				break
+			}
+		}
+		if ready {
+			overview.ReadyNodes++
+		} else {
+			overview.NotReadyNodes++
+		}
+		if node.Spec.Unschedulable {
+			overview.CordonedNodes++
+		}
 
 		// EKS Fargate nodes carry the eks.amazonaws.com/compute-type label.
 		if _, ok := node.Labels["eks.amazonaws.com/compute-type"]; ok {
@@ -348,6 +518,8 @@ func buildClusterOverviewSnapshot(
 		switch pod.Status.Phase {
 		case corev1.PodRunning:
 			overview.RunningPods++
+		case corev1.PodSucceeded:
+			overview.SucceededPods++
 		case corev1.PodPending:
 			overview.PendingPods++
 		case corev1.PodFailed:
@@ -450,8 +622,8 @@ func buildClusterOverviewSnapshot(
 		Version: version,
 		Payload: ClusterOverviewSnapshot{
 			ClusterMeta: meta,
-			Overview: overview,
-			Metrics:  metricsSnapshot,
+			Overview:    overview,
+			Metrics:     metricsSnapshot,
 		},
 		Stats: refresh.SnapshotStats{
 			ItemCount: overview.TotalNodes,
@@ -592,16 +764,45 @@ func formatMemoryValue(bytes int64) string {
 		return fmt.Sprintf("%d", bytes)
 	}
 	if bytes < mi {
-		return fmt.Sprintf("%.1fKi", float64(bytes)/float64(ki))
+		return fmt.Sprintf("%.1f Ki", float64(bytes)/float64(ki))
 	}
 	if bytes < gi {
-		return fmt.Sprintf("%.1fMi", float64(bytes)/float64(mi))
+		return fmt.Sprintf("%.1f Mi", float64(bytes)/float64(mi))
 	}
 	if bytes < ti {
-		return fmt.Sprintf("%.1fGi", float64(bytes)/float64(gi))
+		return fmt.Sprintf("%.1f Gi", float64(bytes)/float64(gi))
 	}
-	return fmt.Sprintf("%.1fTi", float64(bytes)/float64(ti))
+	return fmt.Sprintf("%.1f Ti", float64(bytes)/float64(ti))
 }
+
+type clusterOverviewExtras struct {
+	totalDeployments  int
+	totalStatefulSets int
+	totalDaemonSets   int
+	totalCronJobs     int
+	recentEvents      []RecentEvent
+}
+
+func applyClusterOverviewExtras(snapshot *refresh.Snapshot, extras clusterOverviewExtras) {
+	if snapshot == nil {
+		return
+	}
+	payload, ok := snapshot.Payload.(ClusterOverviewSnapshot)
+	if !ok {
+		return
+	}
+	payload.Overview.TotalDeployments = extras.totalDeployments
+	payload.Overview.TotalStatefulSets = extras.totalStatefulSets
+	payload.Overview.TotalDaemonSets = extras.totalDaemonSets
+	payload.Overview.TotalCronJobs = extras.totalCronJobs
+	payload.Overview.RecentEvents = extras.recentEvents
+	snapshot.Payload = payload
+}
+
+func informerSynced(fn cache.InformerSynced) bool {
+	return fn == nil || fn()
+}
+
 func (b *ClusterOverviewBuilder) buildFromListers(ctx context.Context) (*refresh.Snapshot, error) {
 	if err := b.waitForInformerSync(ctx); err != nil {
 		return nil, err
@@ -617,6 +818,8 @@ func (b *ClusterOverviewBuilder) buildFromListers(ctx context.Context) (*refresh
 		podRes       listResult[corev1.Pod]
 		namespaceRes listResult[corev1.Namespace]
 	)
+	var deploymentCount, statefulSetCount, daemonSetCount, cronJobCount int
+	var recentEvents []RecentEvent
 
 	tasks := []func(context.Context) error{
 		func(context.Context) error {
@@ -637,9 +840,60 @@ func (b *ClusterOverviewBuilder) buildFromListers(ctx context.Context) (*refresh
 			namespaceRes.err = err
 			return err
 		},
+		func(context.Context) error {
+			if b.deploymentLister == nil || !informerSynced(b.deploymentHasSynced) {
+				return nil
+			}
+			list, err := b.deploymentLister.List(labels.Everything())
+			if err == nil {
+				deploymentCount = len(list)
+			}
+			return err
+		},
+		func(context.Context) error {
+			if b.statefulSetLister == nil || !informerSynced(b.statefulSetHasSynced) {
+				return nil
+			}
+			list, err := b.statefulSetLister.List(labels.Everything())
+			if err == nil {
+				statefulSetCount = len(list)
+			}
+			return err
+		},
+		func(context.Context) error {
+			if b.daemonSetLister == nil || !informerSynced(b.daemonSetHasSynced) {
+				return nil
+			}
+			list, err := b.daemonSetLister.List(labels.Everything())
+			if err == nil {
+				daemonSetCount = len(list)
+			}
+			return err
+		},
+		func(context.Context) error {
+			if b.cronJobLister == nil || !informerSynced(b.cronJobHasSynced) {
+				return nil
+			}
+			list, err := b.cronJobLister.List(labels.Everything())
+			if err == nil {
+				cronJobCount = len(list)
+			}
+			return err
+		},
+		func(context.Context) error {
+			if b.eventLister == nil || !informerSynced(b.eventHasSynced) {
+				return nil
+			}
+			events, err := b.eventLister.List(labels.Everything())
+			if err != nil {
+				return err
+			}
+			recentEvents = buildRecentEvents(events, ClusterMetaFromContext(ctx))
+			return nil
+		},
 	}
 
-	if err := parallel.RunLimited(ctx, 3, tasks...); err != nil {
+	if err := parallel.RunLimited(ctx, 4, tasks...); err != nil {
 		return nil, err
 	}
 	if nodeRes.err != nil {
@@ -652,5 +906,61 @@ func (b *ClusterOverviewBuilder) buildFromListers(ctx context.Context) (*refresh
 		return nil, namespaceRes.err
 	}
 
-	return buildClusterOverviewSnapshot(ctx, nodeRes.items, podRes.items, namespaceRes.items, b.metrics, b.serverVersion, b.serverHost)
+	snapshot, err := buildClusterOverviewSnapshot(ctx, nodeRes.items, podRes.items, namespaceRes.items, b.metrics, b.serverVersion, b.serverHost)
+	if err != nil {
+		return nil, err
+	}
+	applyClusterOverviewExtras(snapshot, clusterOverviewExtras{
+		totalDeployments:  deploymentCount,
+		totalStatefulSets: statefulSetCount,
+		totalDaemonSets:   daemonSetCount,
+		totalCronJobs:     cronJobCount,
+		recentEvents:      recentEvents,
+	})
+	return snapshot, nil
+}
+
+// buildRecentEvents filters events down to recent warnings and packages the
+// subset consumed by the Cluster Overview "Recent Events" section.
+func buildRecentEvents(events []*corev1.Event, meta ClusterMeta) []RecentEvent {
+	cutoff := time.Now().Add(-recentEventsLookback)
+	filtered := make([]*corev1.Event, 0, len(events))
+	for _, evt := range events {
+		if evt == nil {
+			continue
+		}
+		if !strings.EqualFold(evt.Type, corev1.EventTypeWarning) {
+			continue
+		}
+		if eventTimestamp(evt).Before(cutoff) {
+			continue
+		}
+		filtered = append(filtered, evt)
+	}
+
+	sort.Slice(filtered, func(i, j int) bool {
+		return compareEventOrder(filtered[i], filtered[j]) < 0
+	})
+
+	if len(filtered) > recentEventsLimit {
+		filtered = filtered[:recentEventsLimit]
+	}
+
+	out := make([]RecentEvent, 0, len(filtered))
+	for _, evt := range filtered {
+		out = append(out, RecentEvent{
+			ClusterID:        meta.ClusterID,
+			ClusterName:      meta.ClusterName,
+			EventUID:         string(evt.UID),
+			Reason:           strings.TrimSpace(evt.Reason),
+			Message:          eventMessage(evt),
+			Timestamp:        eventTimestamp(evt).UnixMilli(),
+			ObjectKind:       evt.InvolvedObject.Kind,
+			ObjectName:       evt.InvolvedObject.Name,
+			ObjectNamespace:  evt.InvolvedObject.Namespace,
+			ObjectAPIVersion: evt.InvolvedObject.APIVersion,
+			ObjectUID:        string(evt.InvolvedObject.UID),
+		})
+	}
+	return out
 }
