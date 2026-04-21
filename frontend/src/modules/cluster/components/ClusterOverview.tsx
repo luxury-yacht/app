@@ -891,7 +891,12 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
         </div>
 
         <div className="overview-section recent-events">
-          <h2>Latest Warning Events</h2>
+          <div className="section-header">
+            <h2>Latest Warning Events</h2>
+            <span className="section-header__count">
+              {recentEvents.length} {recentEvents.length === 1 ? 'event' : 'events'}
+            </span>
+          </div>
           {recentEvents.length === 0 ? (
             <div className="recent-events__empty">
               {showSkeleton ? '' : 'No warning events in the last 24 hours.'}
