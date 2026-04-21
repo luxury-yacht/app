@@ -134,9 +134,12 @@ describe('DockablePanelProvider', () => {
   });
 
   beforeEach(() => {
-    // Create a .content element so the panel host can be appended inside it.
+    // Create the content shell used by the real app layout.
     const contentEl = document.createElement('div');
     contentEl.className = 'content';
+    const contentBodyEl = document.createElement('div');
+    contentBodyEl.className = 'content-body';
+    contentEl.appendChild(contentBodyEl);
     document.body.appendChild(contentEl);
   });
 

@@ -643,9 +643,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
               <h3>CPU</h3>
               <div className="metric-legend__total">
                 <span className="metric-legend__total-value">
-                  {showSkeleton
-                    ? DASH
-                    : `${displayOverview.cpuAllocatable || '0'} cores`}
+                  {showSkeleton ? DASH : `${displayOverview.cpuAllocatable || '0'} cores`}
                 </span>
                 <span className="metric-legend__total-label"> total</span>
               </div>
@@ -780,11 +778,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
                 <span className="metric-legend__total-label"> total</span>
               </div>
             </div>
-            <div
-              className="stacked-bar"
-              role="presentation"
-              aria-hidden="true"
-            >
+            <div className="stacked-bar" role="presentation" aria-hidden="true">
               {!showSkeleton &&
                 nodeHealthPhaseItems.map((item) => {
                   const width = nodeHealthPct(item.value);
@@ -844,11 +838,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
                 <span className="metric-legend__total-label"> total</span>
               </div>
             </div>
-            <div
-              className="stacked-bar"
-              role="presentation"
-              aria-hidden="true"
-            >
+            <div className="stacked-bar" role="presentation" aria-hidden="true">
               {!showSkeleton &&
                 workloadItems.map((item) => {
                   const width = workloadPct(item.value);
@@ -877,9 +867,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
                       className={`metric-legend__dot metric-legend__dot--${item.variant}`}
                       aria-hidden="true"
                     />
-                    <span className="metric-legend__count">
-                      {showSkeleton ? DASH : item.value}
-                    </span>
+                    <span className="metric-legend__count">{showSkeleton ? DASH : item.value}</span>
                     <span className="metric-legend__label">{item.label}</span>
                   </div>
                 ))}
@@ -897,11 +885,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
                 <span className="metric-legend__total-label"> total</span>
               </div>
             </div>
-            <div
-              className="stacked-bar"
-              role="presentation"
-              aria-hidden="true"
-            >
+            <div className="stacked-bar" role="presentation" aria-hidden="true">
               {!showSkeleton &&
                 phaseSegments.map((segment) => {
                   const width = phasePct(segment.value);

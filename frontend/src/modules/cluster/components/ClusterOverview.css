@@ -2,11 +2,16 @@
 
 .cluster-overview {
   padding: 1.5rem;
+  padding-right: calc(1.5rem + var(--dock-right-offset, 0px));
+  padding-bottom: calc(1.5rem + var(--dock-bottom-offset, 0px));
   height: 100%;
   overflow-y: auto;
+  overflow-x: hidden;
   width: 100%;
-  max-width: 1400px;
+  min-width: calc(800px + 3rem + var(--dock-right-offset, 0px));
+  max-width: calc(1400px + 3rem + var(--dock-right-offset, 0px));
   margin-inline: auto;
+  box-sizing: border-box;
 }
 
 .overview-hero {

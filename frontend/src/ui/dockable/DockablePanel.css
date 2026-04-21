@@ -30,22 +30,21 @@
 
 /* Position variants */
 .dockable-panel--right {
-  top: var(--gridtable-filter-bar-height, 0px);
+  top: 0;
   right: 0;
-  bottom: 0;
+  bottom: var(--dock-bottom-offset, 0px);
+  left: auto;
   border-left: 2px solid var(--color-border, #333);
   border-right: none;
-  max-height: 100%;
-  overflow: visible;
 }
 
 .dockable-panel--bottom {
   left: 0;
-  right: 0;
+  right: var(--dock-right-offset, 0px);
   bottom: 0;
+  top: auto;
   border-top: 2px solid var(--color-border, #333);
   border-bottom: none;
-  overflow: visible;
 }
 
 .dockable-panel--floating {

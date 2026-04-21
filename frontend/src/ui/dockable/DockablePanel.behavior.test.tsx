@@ -37,6 +37,9 @@ const ensureContentElement = () => {
   if (!document.querySelector('.content')) {
     const el = document.createElement('div');
     el.className = 'content';
+    const contentBody = document.createElement('div');
+    contentBody.className = 'content-body';
+    el.appendChild(contentBody);
     document.body.appendChild(el);
     // JSDOM doesn't do layout, so mock getBoundingClientRect to return realistic dimensions.
     el.getBoundingClientRect = () =>
