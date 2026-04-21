@@ -16,6 +16,35 @@
   margin-bottom: 1rem;
 }
 
+.overview-top {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.overview-top__info {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.overview-top__title {
+  font-size: 1.1rem;
+  font-weight: 500;
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.overview-top__hero {
+  display: flex;
+  align-items: center;
+}
+
 .overview-update-banner-wrap {
   display: flex;
   justify-content: center;
@@ -89,8 +118,9 @@
 
 .cluster-info {
   display: flex;
-  align-items: center;
-  gap: 0.5rem;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
   font-size: 0.9rem;
   color: var(--color-text-secondary);
 }
@@ -103,11 +133,14 @@
 
 .cluster-info-label {
   color: var(--color-text-secondary);
+  font-size: 0.8rem;
+  text-transform: uppercase;
 }
 
 .cluster-info-value {
   color: var(--color-text);
   font-weight: 500;
+  font-size: 0.8rem;
 }
 
 .cluster-info-value--healthy {
@@ -136,7 +169,7 @@
 
 .overview-grid {
   display: grid;
-  gap: 1rem;
+  gap: 1.5rem;
   grid-template-columns: 1fr;
 }
 
@@ -156,7 +189,7 @@
 }
 
 .overview-section h2 {
-  font-size: 0.9rem;
+  font-size: 0.95rem;
   font-weight: 600;
   margin: 0 0 1rem 0;
   color: var(--color-text-secondary);
@@ -307,7 +340,7 @@
 }
 
 .recent-events__reason {
-  color: var(--color-warning);
+  color: var(--color-text);
   font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;

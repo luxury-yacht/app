@@ -526,11 +526,6 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
 
   return (
     <div className={rootClassName}>
-      <div className="overview-hero">
-        <img src={captainK8s} alt="Captain K8s" className="captain-k8s-small" />
-        <img src={logo} alt="Luxury Yacht" className="logo-small" />
-      </div>
-
       {showUpdateBanner && (
         <div className="overview-update-banner-wrap">
           <button type="button" className="overview-update-banner" onClick={handleUpdateClick}>
@@ -544,8 +539,9 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
         </div>
       )}
 
-      <div className="overview-section cluster-header">
-        <div className="overview-header">
+      <div className="overview-top">
+        <div className="overview-top__info">
+          <h1 className="overview-top__title">{contextLabel}</h1>
           <div className="cluster-info">
             <span className="cluster-info-item">
               <span className="cluster-info-label">Cluster Type:</span>
@@ -553,43 +549,39 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
                 {displayOverview.clusterType || 'Unknown'}
               </span>
             </span>
-            <span className="cluster-info-separator">·</span>
             <span className="cluster-info-item">
               <span className="cluster-info-label">Version:</span>
               <span className={`cluster-info-value${skeletonTextClass}`}>
                 {displayOverview.clusterVersion || 'Unknown'}
               </span>
             </span>
-            <span className="cluster-info-separator">·</span>
-            <span className="cluster-info-item">
-              <span className="cluster-info-label">Context:</span>
-              <span className="cluster-info-value">{contextLabel}</span>
-            </span>
             {overviewStatus.summary && (
-              <>
-                <span className="cluster-info-separator">·</span>
-                <span className="cluster-info-item">
-                  <span className="cluster-info-label">Status:</span>
-                  <span
-                    className={`cluster-info-value cluster-info-value--${overviewStatus.status}`}
-                  >
-                    {overviewStatus.summary}
-                  </span>
+              <span className="cluster-info-item">
+                <span className="cluster-info-label">Status:</span>
+                <span
+                  className={`cluster-info-value cluster-info-value--${overviewStatus.status}`}
+                >
+                  {overviewStatus.summary}
                 </span>
-              </>
+              </span>
             )}
           </div>
         </div>
-        {errorMessage && (
-          <div className="cluster-overview-loading-inline">
-            <div className="cluster-overview-error">
-              <span className="error-icon">⚠️</span>
-              <div>Failed to load cluster overview</div>
-              <div className="error-detail">{errorMessage}</div>
-            </div>
-          </div>
-        )}
+        <div className="overview-top__hero">
+          <img src={captainK8s} alt="Captain K8s" className="captain-k8s-small" />
+          <img src={logo} alt="Luxury Yacht" className="logo-small" />
+        </div>
       </div>
+
+      {errorMessage && (
+        <div className="cluster-overview-loading-inline">
+          <div className="cluster-overview-error">
+            <span className="error-icon">⚠️</span>
+            <div>Failed to load cluster overview</div>
+            <div className="error-detail">{errorMessage}</div>
+          </div>
+        </div>
+      )}
 
       <div className="overview-grid">
         <div className="overview-section resource-usage">
