@@ -191,7 +191,7 @@
 .overview-section h2 {
   font-size: 0.95rem;
   font-weight: 600;
-  margin: 0 0 1rem 0;
+  margin: 0 0 1.2rem 0;
   color: var(--color-text-secondary);
   text-transform: uppercase;
 }
