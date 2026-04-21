@@ -291,6 +291,9 @@ describe('ClusterOverview', () => {
       'cluster-1|',
       true
     );
+    expect(container.querySelector('.cluster-overview')?.classList.contains('selectable')).toBe(
+      true
+    );
     expect(statValueFor(container, 'total')).toBe('—');
     expect(statValueFor(container, 'namespaces')).toBe('—');
     expect(container.querySelector('.cluster-overview .cluster-overview-error') ?? null).toBeNull();

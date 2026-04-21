@@ -572,7 +572,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
   }, [updateInfo]);
 
   return (
-    <div className="cluster-overview">
+    <div className="cluster-overview selectable">
       {showUpdateBanner && (
         <div className="overview-update-banner-wrap">
           <button type="button" className="overview-update-banner" onClick={handleUpdateClick}>
