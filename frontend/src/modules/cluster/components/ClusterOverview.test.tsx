@@ -275,6 +275,8 @@ describe('ClusterOverview', () => {
   });
 
   it('renders zero-value skeleton with loading message before data arrives', async () => {
+    mockLifecycleState = 'loading';
+
     const { container, cleanup } = renderClusterOverview();
     cleanupRoot = cleanup;
     await flushEffects();
@@ -574,6 +576,7 @@ describe('ClusterOverview', () => {
   });
 
   it('shows an inline error while retaining the zero skeleton when permissions fail', async () => {
+    mockLifecycleState = 'loading';
     domainStateRef.current = createDomainState('error', { error: 'forbidden' });
 
     const { container, cleanup } = renderClusterOverview();
@@ -590,6 +593,7 @@ describe('ClusterOverview', () => {
   });
 
   it('navigates to the pods view with unhealthy filter when clicking a pod status card', async () => {
+    mockLifecycleState = 'loading';
     domainStateRef.current = createDomainState('ready', {
       overview: {
         ...EMPTY_OVERVIEW_DATA,
@@ -619,6 +623,7 @@ describe('ClusterOverview', () => {
   });
 
   it('navigates to the pods view without unhealthy filter when clicking the healthy item', async () => {
+    mockLifecycleState = 'loading';
     domainStateRef.current = createDomainState('ready', {
       overview: {
         ...EMPTY_OVERVIEW_DATA,
@@ -650,6 +655,7 @@ describe('ClusterOverview', () => {
   });
 
   it('opens the recent event target via the UID-aware resolver and selects the events tab', async () => {
+    mockLifecycleState = 'loading';
     canResolveEventObjectReferenceMock.mockReturnValue(true);
     resolveEventObjectReferenceMock.mockResolvedValue({
       clusterId: 'cluster-1',
@@ -713,6 +719,28 @@ describe('ClusterOverview', () => {
     expect(setObjectPanelActiveTabMock).toHaveBeenCalledWith(
       'obj:cluster-1:/v1/pod:default:api-7c8d9',
       'events'
+    );
+  });
+
+  it('keeps cluster-overview disabled before data services start and suppresses the transient unavailable error', async () => {
+    mockLifecycleState = 'connecting';
+    domainStateRef.current = createDomainState('error', {
+      error: 'no active clusters available (requested: [cluster-1])',
+    });
+
+    const { container, cleanup } = renderClusterOverview();
+    cleanupRoot = cleanup;
+    await flushEffects();
+
+    expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
+      'cluster-overview',
+      'cluster-1|',
+      false
+    );
+    expect(mockRefreshOrchestrator.fetchScopedDomain).not.toHaveBeenCalled();
+    expect(container.textContent).not.toContain('Failed to load cluster overview');
+    expect(container.querySelector('.cluster-overview')?.classList.contains('is-skeleton')).toBe(
+      true
     );
   });
 });

@@ -11,6 +11,10 @@ import { readAppInfo, requestAppState } from '@/core/app-state-access';
 import { requestRefreshDomain } from '@/core/data-access';
 import { refreshOrchestrator, useRefreshScopedDomain } from '@/core/refresh';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
+import {
+  canActivateClusterOverviewRefresh,
+  shouldSuppressClusterOverviewUnavailableError,
+} from '@/core/refresh/clusterOverviewLifecycle';
 import { eventBus } from '@/core/events';
 import type { ClusterOverviewPayload } from '@/core/refresh/types';
 import logo from '@assets/luxury-yacht-logo.png';
@@ -108,6 +112,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
   );
   const overviewDomain = useRefreshScopedDomain('cluster-overview', overviewScope);
   const health = getActiveClusterHealth();
+  const canActivateOverviewRefresh = canActivateClusterOverviewRefresh(lifecycleState);
   const overviewStatus = useMemo(
     () =>
       buildConnectivityPresentation({
@@ -267,13 +272,25 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
   const isHydratedForCluster = isHydrated && hydratedClusterId === selectedClusterId;
   const displayOverview = isHydratedForCluster ? overviewData : EMPTY_OVERVIEW;
   const isLoading = overviewDomain.status === 'loading';
+  const suppressUnavailableError =
+    overviewDomain.status === 'error' &&
+    !isHydratedForCluster &&
+    shouldSuppressClusterOverviewUnavailableError(lifecycleState, overviewDomain.error);
   const errorMessage =
-    overviewDomain.status === 'error' && !isHydratedForCluster ? overviewDomain.error : null;
+    overviewDomain.status === 'error' && !isHydratedForCluster && !suppressUnavailableError
+      ? overviewDomain.error
+      : null;
   const showSkeleton =
     !errorMessage &&
     !isHydratedForCluster &&
     !suppressPassiveLoading &&
-    (isSwitching || isLoading || overviewDomain.status === 'idle');
+    (isSwitching ||
+      isLoading ||
+      overviewDomain.status === 'idle' ||
+      suppressUnavailableError ||
+      lifecycleState === '' ||
+      lifecycleState === 'connecting' ||
+      lifecycleState === 'connected');
 
   useEffect(() => {
     // Skip scoped calls when no clusters are connected (scope is empty).
@@ -282,7 +299,14 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
     }
 
     const enableOverview = () => {
-      refreshOrchestrator.setScopedDomainEnabled('cluster-overview', overviewScope, true);
+      refreshOrchestrator.setScopedDomainEnabled(
+        'cluster-overview',
+        overviewScope,
+        canActivateOverviewRefresh
+      );
+      if (!canActivateOverviewRefresh) {
+        return;
+      }
       requestRefreshDomain({
         domain: 'cluster-overview',
         scope: overviewScope,
@@ -328,7 +352,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
     return () => {
       clearLocalState();
     };
-  }, [overviewScope]);
+  }, [canActivateOverviewRefresh, overviewScope]);
 
   const handlePodStatusNavigate = useCallback(
     (key: string, count: number) => {
