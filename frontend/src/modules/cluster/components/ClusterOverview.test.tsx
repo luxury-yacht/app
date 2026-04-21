@@ -261,7 +261,6 @@ describe('ClusterOverview', () => {
       'cluster-1|',
       true
     );
-    expect(container.querySelector('.overview-header h1')?.textContent).toBe('Cluster Overview');
     expect(container.querySelector('.cluster-overview')?.classList.contains('is-skeleton')).toBe(
       true
     );

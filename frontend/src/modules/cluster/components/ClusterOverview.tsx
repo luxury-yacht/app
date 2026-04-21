@@ -546,10 +546,9 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
 
       <div className="overview-section cluster-header">
         <div className="overview-header">
-          <h1>Cluster Overview</h1>
           <div className="cluster-info">
             <span className="cluster-info-item">
-              <span className="cluster-info-label">Type:</span>
+              <span className="cluster-info-label">Cluster Type:</span>
               <span className={`cluster-info-value${skeletonTextClass}`}>
                 {displayOverview.clusterType || 'Unknown'}
               </span>
@@ -609,7 +608,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
                 <span className={`metric-legend__total-value${skeletonTextClass}`}>
                   {displayOverview.cpuAllocatable || '0'}
                 </span>
-                <span className="metric-legend__total-label"> allocatable</span>
+                <span className="metric-legend__total-label"> total</span>
               </div>
             </div>
             <div className={`resource-bar-placeholder${skeletonBlockClass}`}>
@@ -627,7 +626,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
                   <span className={`metric-legend__count${skeletonTextClass}`}>
                     {displayOverview.cpuUsage || '0'}
                   </span>
-                  <span className="metric-legend__label">usage</span>
+                  <span className="metric-legend__label">used</span>
                 </div>
                 <div className="metric-legend__item">
                   <span className={`metric-legend__count${skeletonTextClass}`}>
@@ -652,7 +651,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
                 <span className={`metric-legend__total-value${skeletonTextClass}`}>
                   {displayOverview.memoryAllocatable || '0'}
                 </span>
-                <span className="metric-legend__total-label"> allocatable</span>
+                <span className="metric-legend__total-label"> total</span>
               </div>
             </div>
             <div className={`resource-bar-placeholder${skeletonBlockClass}`}>
@@ -670,7 +669,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
                   <span className={`metric-legend__count${skeletonTextClass}`}>
                     {displayOverview.memoryUsage || '0'}
                   </span>
-                  <span className="metric-legend__label">usage</span>
+                  <span className="metric-legend__label">used</span>
                 </div>
                 <div className="metric-legend__item">
                   <span className={`metric-legend__count${skeletonTextClass}`}>

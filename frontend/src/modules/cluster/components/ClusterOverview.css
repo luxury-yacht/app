@@ -148,6 +148,10 @@
 }
 
 .overview-section.cluster-header {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
   margin-bottom: 1rem;
 }
 
@@ -401,7 +405,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  font-size: 0.85rem;
+  font-size: 0.75rem;
   border-radius: var(--border-radius-md);
   border: 1px solid transparent;
 }
@@ -472,12 +476,12 @@
 }
 
 .metric-legend__label {
-  color: var(--color-text-secondary);
+  color: var(--color-text-tertiary);
 }
 
 .metric-legend__total {
-  font-size: 0.85rem;
-  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+  color: var(--color-text-tertiary);
   margin-left: auto;
 }
 
@@ -497,7 +501,7 @@
   display: inline-flex;
   align-items: baseline;
   gap: 0.4rem;
-  font-size: 0.85rem;
+  font-size: 0.75rem;
   flex: 1;
   min-width: 0;
 }
@@ -509,7 +513,7 @@
 }
 
 .metric-stat__label {
-  color: var(--color-text-secondary);
+  color: var(--color-text-tertiary);
 }
 
 .overview-loading-banner {
