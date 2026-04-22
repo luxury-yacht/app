@@ -13,6 +13,8 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { ClipboardAddon } from '@xterm/addon-clipboard';
 import '@xterm/xterm/css/xterm.css';
+import ContextMenu from '@shared/components/ContextMenu';
+import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import Tooltip from '@shared/components/Tooltip';
 import { resolveTerminalTheme, toXtermThemeDefinition } from '@shared/terminal/terminalTheme';
 import { EventsOn } from '@wailsjs/runtime/runtime';
@@ -59,6 +61,10 @@ interface PendingReplayState {
   bufferedOutput: string[];
 }
 
+interface ShellContextMenuState {
+  position: { x: number; y: number };
+}
+
 const ShellTab: React.FC<ShellTabProps> = ({
   namespace,
   resourceName,
@@ -84,6 +90,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
   const [discoveredContainers, setDiscoveredContainers] = useState<string[]>([]);
   const [reconnectToken, setReconnectToken] = useState(0);
   const [statusReason, setStatusReason] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<ShellContextMenuState | null>(null);
   const sessionIdRef = useRef<string | null>(null);
   const statusRef = useRef<ShellStatus>('idle');
   const terminalRef = useRef<Terminal | null>(null);
@@ -177,6 +184,17 @@ const ShellTab: React.FC<ShellTabProps> = ({
     void clipboard.writeText(selection).catch(() => {
       /* ignore clipboard write failures */
     });
+    return true;
+  }, []);
+
+  const selectAllTerminalText = useCallback(() => {
+    const terminal = terminalRef.current as (Terminal & { selectAll?: () => void }) | null;
+    if (!terminal?.selectAll) {
+      return false;
+    }
+
+    terminal.selectAll();
+    terminal.focus();
     return true;
   }, []);
 
@@ -304,13 +322,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
         return copyTerminalSelection();
       }
       if (action === 'selectAll') {
-        const terminal = terminalRef.current as (Terminal & { selectAll?: () => void }) | null;
-        if (!terminal?.selectAll) {
-          return false;
-        }
-        terminal.selectAll();
-        terminal.focus();
-        return true;
+        return selectAllTerminalText();
       }
       if (action !== 'paste') {
         return false;
@@ -847,14 +859,44 @@ const ShellTab: React.FC<ShellTabProps> = ({
   const hasActiveSession = status === 'open' || status === 'connecting';
   const connectionErrorMessage =
     status === 'error' ? statusReason || 'Shell session failed.' : null;
-  const handleTerminalContextMenu = useCallback(
-    (event: MouseEvent<HTMLDivElement>) => {
-      event.preventDefault();
-      event.stopPropagation();
-      void pasteClipboardToTerminal();
+  const handleCloseContextMenu = useCallback(() => {
+    setContextMenu(null);
+    terminalRef.current?.focus();
+  }, []);
+
+  const handleTerminalContextMenu = useCallback((event: MouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    terminalRef.current?.focus();
+    setContextMenu({
+      position: { x: event.clientX, y: event.clientY },
+    });
+  }, []);
+
+  const contextMenuItems: ContextMenuItem[] = [
+    {
+      label: 'Copy',
+      disabled: !terminalRef.current?.hasSelection(),
+      onClick: () => {
+        copyTerminalSelection();
+      },
     },
-    [pasteClipboardToTerminal]
-  );
+    {
+      label: 'Paste',
+      onClick: () => {
+        void pasteClipboardToTerminal();
+      },
+    },
+    {
+      divider: true,
+    },
+    {
+      label: 'Select All',
+      onClick: () => {
+        selectAllTerminalText();
+      },
+    },
+  ];
 
   return (
     <div className="object-panel-shell-tab">
@@ -1034,6 +1076,13 @@ const ShellTab: React.FC<ShellTabProps> = ({
           data-tab-native="true"
         />
       </div>
+      {contextMenu && (
+        <ContextMenu
+          items={contextMenuItems}
+          position={contextMenu.position}
+          onClose={handleCloseContextMenu}
+        />
+      )}
     </div>
   );
 };
