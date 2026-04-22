@@ -412,6 +412,12 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
   box-sizing: border-box; /* Include padding in width */
 }
 
+.gridtable--body .grid-cell,
+.gridtable--body .grid-cell * {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
 /* Content wrapper for proper truncation within flex container */
 .grid-cell-content {
   white-space: nowrap;

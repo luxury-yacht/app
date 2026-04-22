@@ -5,7 +5,7 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import React, { useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import type { RefObject } from 'react';
 import type { RenderRowContentFn } from '@shared/components/tables/hooks/useGridTableRowRenderer';
 import { getStableRowId } from '@shared/components/tables/GridTable.utils';
@@ -99,6 +99,39 @@ function GridTableBody<T>({
   if (!shouldVirtualize) {
     stretchDecisionRef.current = null;
   }
+
+  useEffect(() => {
+    const wrapper = wrapperRef.current;
+    if (!wrapper) {
+      return;
+    }
+
+    const isGridCellTarget = (target: EventTarget | null): target is HTMLElement =>
+      target instanceof HTMLElement && Boolean(target.closest('.grid-cell'));
+
+    const handleMouseDownCapture = (event: MouseEvent) => {
+      if (event.button !== 2 || !isGridCellTarget(event.target)) {
+        return;
+      }
+      window.getSelection()?.removeAllRanges();
+      event.preventDefault();
+    };
+
+    const handleContextMenuCapture = (event: MouseEvent) => {
+      if (!isGridCellTarget(event.target)) {
+        return;
+      }
+      window.getSelection()?.removeAllRanges();
+    };
+
+    wrapper.addEventListener('mousedown', handleMouseDownCapture, true);
+    wrapper.addEventListener('contextmenu', handleContextMenuCapture, true);
+
+    return () => {
+      wrapper.removeEventListener('mousedown', handleMouseDownCapture, true);
+      wrapper.removeEventListener('contextmenu', handleContextMenuCapture, true);
+    };
+  }, [wrapperRef]);
 
   const renderRows = () => {
     if (tableData.length === 0) {
