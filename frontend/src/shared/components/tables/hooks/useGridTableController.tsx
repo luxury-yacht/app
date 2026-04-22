@@ -315,6 +315,8 @@ export function useGridTableController<T>({
     filters,
     diagnosticsLabel,
     columnsDropdown: columnsDropdownConfig ?? undefined,
+    exportColumns: renderedColumns,
+    getTextContent,
   });
 
   const tableData = useMemo<T[]>(
