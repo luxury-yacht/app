@@ -14,6 +14,7 @@ interface ResourceBarProps {
   request?: string;
   limit?: string;
   allocatable?: string; // For nodes - total allocatable capacity
+  'data-gridtable-export-text'?: string;
   type: 'cpu' | 'memory';
   showTooltip?: boolean;
   variant?: 'default' | 'compact';

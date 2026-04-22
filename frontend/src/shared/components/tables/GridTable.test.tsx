@@ -32,7 +32,10 @@ import GridTable, {
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
   type GridTableFilterConfig,
 } from '@shared/components/tables/GridTable';
-import { createResourceBarColumn, createTextColumn } from '@shared/components/tables/columnFactories';
+import {
+  createResourceBarColumn,
+  createTextColumn,
+} from '@shared/components/tables/columnFactories';
 import { KeyboardProvider } from '@ui/shortcuts';
 import { ZoomProvider } from '@core/contexts/ZoomContext';
 
@@ -1509,9 +1512,7 @@ it('copies the current visible table contents as CSV from the filter icon bar', 
   });
 
   expect(clipboardWriteText).toHaveBeenCalledWith(
-    'Label,Notes\n' +
-      '"Alpha,One","He said ""hi"""\n' +
-      'Beta,"Line\nBreak"'
+    'Label,Notes\n' + '"Alpha,One","He said ""hi"""\n' + 'Beta,"Line\nBreak"'
   );
 
   cleanup();

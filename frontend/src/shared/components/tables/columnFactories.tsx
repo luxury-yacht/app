@@ -156,23 +156,22 @@ export function createResourceBarColumn<T>(
       const exportText = getMetricsError?.(item) ? '—' : formatResourceForExport(usage);
 
       return (
-        <span data-gridtable-export-text={exportText}>
-          <ResourceBar
-            usage={usage}
-            request={request}
-            limit={limit}
-            allocatable={allocatable}
-            type={type}
-            variant={getVariant?.(item) ?? 'compact'}
-            showTooltip={getShowTooltip?.(item)}
-            overcommitPercent={getOvercommitPercent?.(item)}
-            metricsStale={getMetricsStale?.(item)}
-            metricsError={getMetricsError?.(item)}
-            metricsLastUpdated={getMetricsLastUpdated?.(item)}
-            animationScopeKey={getAnimationKey?.(item)}
-            showEmptyState={showEmptyState ?? true}
-          />
-        </span>
+        <ResourceBar
+          usage={usage}
+          request={request}
+          limit={limit}
+          allocatable={allocatable}
+          type={type}
+          variant={getVariant?.(item) ?? 'compact'}
+          showTooltip={getShowTooltip?.(item)}
+          overcommitPercent={getOvercommitPercent?.(item)}
+          metricsStale={getMetricsStale?.(item)}
+          metricsError={getMetricsError?.(item)}
+          metricsLastUpdated={getMetricsLastUpdated?.(item)}
+          animationScopeKey={getAnimationKey?.(item)}
+          showEmptyState={showEmptyState ?? true}
+          data-gridtable-export-text={exportText}
+        />
       );
     },
   };
