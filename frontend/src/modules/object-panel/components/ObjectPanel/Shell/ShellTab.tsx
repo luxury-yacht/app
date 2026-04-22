@@ -2,7 +2,7 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.tsx
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import {
   readShellSessionBacklog,
   readShellSessions,
@@ -13,7 +13,10 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { ClipboardAddon } from '@xterm/addon-clipboard';
 import '@xterm/xterm/css/xterm.css';
+import ContextMenu from '@shared/components/ContextMenu';
+import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import Tooltip from '@shared/components/Tooltip';
+import { resolveTerminalTheme, toXtermThemeDefinition } from '@shared/terminal/terminalTheme';
 import { EventsOn } from '@wailsjs/runtime/runtime';
 import {
   CloseShellSession,
@@ -26,6 +29,7 @@ import { types } from '@wailsjs/go/models';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import { useDockablePanelState } from '@ui/dockable';
+import { useKeyboardSurface } from '@ui/shortcuts';
 import './ShellTab.css';
 
 interface ShellTabProps {
@@ -57,6 +61,10 @@ interface PendingReplayState {
   bufferedOutput: string[];
 }
 
+interface ShellContextMenuState {
+  position: { x: number; y: number };
+}
+
 const ShellTab: React.FC<ShellTabProps> = ({
   namespace,
   resourceName,
@@ -82,6 +90,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
   const [discoveredContainers, setDiscoveredContainers] = useState<string[]>([]);
   const [reconnectToken, setReconnectToken] = useState(0);
   const [statusReason, setStatusReason] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<ShellContextMenuState | null>(null);
   const sessionIdRef = useRef<string | null>(null);
   const statusRef = useRef<ShellStatus>('idle');
   const terminalRef = useRef<Terminal | null>(null);
@@ -132,55 +141,68 @@ const ShellTab: React.FC<ShellTabProps> = ({
 
   const resolveThemeColors = useCallback(() => {
     const container = terminalContainerRef.current;
-    if (!container) {
-      return {
-        background: '#060b18',
-        foreground: '#e2e8f0',
-        cursor: '#22d3ee',
-        selectionBackground: '#1d4ed844',
-        scrollbarSlider: '#64748b66',
-        scrollbarSliderHover: '#64748b99',
-        scrollbarSliderActive: '#64748bcc',
-        scrollbarWidth: 6,
-        overviewRulerBorder: 'transparent',
-      };
+    return resolveTerminalTheme(container ? getComputedStyle(container) : null);
+  }, []);
+
+  const pasteTextToTerminal = useCallback((text: string) => {
+    const terminal = terminalRef.current;
+    if (!terminal) {
+      return;
     }
-    const styles = getComputedStyle(container);
-    const rawScrollbarWidth = Number.parseInt(
-      styles.getPropertyValue('--scrollbar-width').trim(),
-      10
-    );
-    const scrollbarWidth = Number.isFinite(rawScrollbarWidth) ? rawScrollbarWidth : 6;
-    return {
-      background: styles.getPropertyValue('--shell-terminal-bg').trim() || '#060b18',
-      foreground: styles.getPropertyValue('--shell-terminal-fg').trim() || '#e2e8f0',
-      cursor: styles.getPropertyValue('--shell-terminal-cursor').trim() || '#22d3ee',
-      selectionBackground:
-        styles.getPropertyValue('--shell-terminal-selection').trim() || '#1d4ed844',
-      scrollbarSlider: styles.getPropertyValue('--scrollbar-thumb-bg').trim() || '#64748b66',
-      scrollbarSliderHover:
-        styles.getPropertyValue('--scrollbar-thumb-hover-bg').trim() || '#64748b99',
-      scrollbarSliderActive:
-        styles.getPropertyValue('--scrollbar-thumb-hover-bg').trim() || '#64748bcc',
-      scrollbarWidth,
-      overviewRulerBorder: 'transparent',
-    };
+
+    terminal.focus();
+    terminal.paste(text);
+  }, []);
+
+  const pasteClipboardToTerminal = useCallback(async () => {
+    const clipboard = typeof navigator === 'undefined' ? undefined : navigator.clipboard;
+    if (!clipboard?.readText) {
+      return false;
+    }
+
+    try {
+      const text = await clipboard.readText();
+      pasteTextToTerminal(text ?? '');
+      return true;
+    } catch {
+      return false;
+    }
+  }, [pasteTextToTerminal]);
+
+  const copyTerminalSelection = useCallback(() => {
+    const terminal = terminalRef.current;
+    const clipboard = typeof navigator === 'undefined' ? undefined : navigator.clipboard;
+    if (!terminal || !clipboard?.writeText || !terminal.hasSelection()) {
+      return false;
+    }
+
+    const selection = terminal.getSelection();
+    if (!selection) {
+      return false;
+    }
+
+    void clipboard.writeText(selection).catch(() => {
+      /* ignore clipboard write failures */
+    });
+    return true;
+  }, []);
+
+  const selectAllTerminalText = useCallback(() => {
+    const terminal = terminalRef.current as (Terminal & { selectAll?: () => void }) | null;
+    if (!terminal?.selectAll) {
+      return false;
+    }
+
+    terminal.selectAll();
+    terminal.focus();
+    return true;
   }, []);
 
   const applyTerminalTheme = useCallback(() => {
     const terminal = terminalRef.current as
       | (Terminal & {
           options?: {
-            theme?: {
-              background?: string;
-              foreground?: string;
-              cursor?: string;
-              selectionBackground?: string;
-              scrollbarSliderBackground?: string;
-              scrollbarSliderHoverBackground?: string;
-              scrollbarSliderActiveBackground?: string;
-              overviewRulerBorder?: string;
-            };
+            theme?: ReturnType<typeof toXtermThemeDefinition>;
             overviewRuler?: { width?: number };
           };
           refresh?: (start: number, end: number) => void;
@@ -191,16 +213,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
     }
 
     const theme = resolveThemeColors();
-    terminal.options.theme = {
-      background: theme.background,
-      foreground: theme.foreground,
-      cursor: theme.cursor,
-      selectionBackground: theme.selectionBackground,
-      scrollbarSliderBackground: theme.scrollbarSlider,
-      scrollbarSliderHoverBackground: theme.scrollbarSliderHover,
-      scrollbarSliderActiveBackground: theme.scrollbarSliderActive,
-      overviewRulerBorder: theme.overviewRulerBorder,
-    };
+    terminal.options.theme = toXtermThemeDefinition(theme);
     terminal.options.overviewRuler = {
       width: theme.scrollbarWidth,
     };
@@ -223,16 +236,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
       overviewRuler: {
         width: theme.scrollbarWidth,
       },
-      theme: {
-        background: theme.background,
-        foreground: theme.foreground,
-        cursor: theme.cursor,
-        selectionBackground: theme.selectionBackground,
-        scrollbarSliderBackground: theme.scrollbarSlider,
-        scrollbarSliderHoverBackground: theme.scrollbarSliderHover,
-        scrollbarSliderActiveBackground: theme.scrollbarSliderActive,
-        overviewRulerBorder: theme.overviewRulerBorder,
-      },
+      theme: toXtermThemeDefinition(theme),
     });
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
@@ -259,13 +263,9 @@ const ShellTab: React.FC<ShellTabProps> = ({
         if (!clipboard?.writeText || !terminal.hasSelection()) {
           return true;
         }
-        const selection = terminal.getSelection();
-        if (!selection) {
+        if (!copyTerminalSelection()) {
           return true;
         }
-        void clipboard.writeText(selection).catch(() => {
-          /* ignore clipboard write failures */
-        });
         event.preventDefault();
         event.stopPropagation();
         return false;
@@ -277,14 +277,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
         }
         event.preventDefault();
         event.stopPropagation();
-        void clipboard
-          .readText()
-          .then((text) => {
-            terminal.paste(text ?? '');
-          })
-          .catch(() => {
-            /* ignore clipboard read failures */
-          });
+        void pasteClipboardToTerminal();
         return false;
       }
 
@@ -318,7 +311,30 @@ const ShellTab: React.FC<ShellTabProps> = ({
     fitAddonRef.current = fitAddon;
     resizeObserverRef.current = resizeObserver;
     setTerminalReady(true);
-  }, [resolveThemeColors]);
+  }, [copyTerminalSelection, pasteClipboardToTerminal, resolveThemeColors]);
+
+  useKeyboardSurface({
+    kind: 'editor',
+    rootRef: terminalContainerRef,
+    active: isActive && terminalReady,
+    onNativeAction: ({ action, text }) => {
+      if (action === 'copy') {
+        return copyTerminalSelection();
+      }
+      if (action === 'selectAll') {
+        return selectAllTerminalText();
+      }
+      if (action !== 'paste') {
+        return false;
+      }
+      if (typeof text === 'string' && text.length > 0) {
+        pasteTextToTerminal(text);
+        return true;
+      }
+      void pasteClipboardToTerminal();
+      return true;
+    },
+  });
 
   useEffect(() => {
     return () => {
@@ -843,6 +859,44 @@ const ShellTab: React.FC<ShellTabProps> = ({
   const hasActiveSession = status === 'open' || status === 'connecting';
   const connectionErrorMessage =
     status === 'error' ? statusReason || 'Shell session failed.' : null;
+  const handleCloseContextMenu = useCallback(() => {
+    setContextMenu(null);
+    terminalRef.current?.focus();
+  }, []);
+
+  const handleTerminalContextMenu = useCallback((event: MouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    terminalRef.current?.focus();
+    setContextMenu({
+      position: { x: event.clientX, y: event.clientY },
+    });
+  }, []);
+
+  const contextMenuItems: ContextMenuItem[] = [
+    {
+      label: 'Copy',
+      disabled: !terminalRef.current?.hasSelection(),
+      onClick: () => {
+        copyTerminalSelection();
+      },
+    },
+    {
+      label: 'Paste',
+      onClick: () => {
+        void pasteClipboardToTerminal();
+      },
+    },
+    {
+      divider: true,
+    },
+    {
+      label: 'Select All',
+      onClick: () => {
+        selectAllTerminalText();
+      },
+    },
+  ];
 
   return (
     <div className="object-panel-shell-tab">
@@ -1009,13 +1063,26 @@ const ShellTab: React.FC<ShellTabProps> = ({
         </div>
       )}
 
-      <div className="shell-tab__terminal-wrapper" onClick={() => terminalRef.current?.focus()}>
+      <div
+        className="shell-tab__terminal-wrapper"
+        data-tab-native="true"
+        onClick={() => terminalRef.current?.focus()}
+        onContextMenu={handleTerminalContextMenu}
+      >
         <div
           className={`shell-tab__terminal${terminalReady ? '' : ' shell-tab__terminal--hidden'}`}
           ref={terminalContainerRef}
           aria-label="Shell terminal"
+          data-tab-native="true"
         />
       </div>
+      {contextMenu && (
+        <ContextMenu
+          items={contextMenuItems}
+          position={contextMenu.position}
+          onClose={handleCloseContextMenu}
+        />
+      )}
     </div>
   );
 };

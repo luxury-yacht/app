@@ -38,6 +38,7 @@ import type { TabInfo } from './DockableTabBar';
 import type { GroupKey } from './tabGroupTypes';
 import type { DockPosition } from './useDockablePanelState';
 import { useKeyboardSurface } from '@ui/shortcuts';
+import { hasNativeTabHandling } from '@ui/shortcuts/utils';
 import './DockablePanel.css';
 
 export type { DockPosition };
@@ -462,35 +463,30 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     setGroupLeader(groupKey, panelId);
   }, [groupKey, groupInfo, isGroupLeader, panelId, groupLeaderByKeyRef]);
 
-  // Set CSS variables so .app-main can shrink the content area for docked panels.
-  // Only the group leader sets these -- non-leaders must not touch the CSS variables,
-  // otherwise their cleanup resets the offset to 0px causing a visible flicker.
+  // Set CSS variables on the shared content container so both the route layout
+  // and the portal-mounted dock layer can read the same dock geometry.
   useLayoutEffect(() => {
     if (!panelState.isOpen || isMaximized || !isGroupLeader) return;
+    const target = document.querySelector('.content');
+    if (!(target instanceof HTMLElement)) {
+      return;
+    }
 
     if (panelState.position === 'right') {
-      document.documentElement.style.setProperty(
-        '--dock-right-offset',
-        `${panelState.size.width}px`
-      );
-      // Signal that a right-docked panel is open so CSS can apply
-      // opening transitions without also transitioning on close.
+      target.style.setProperty('--dock-right-offset', `${panelState.size.width}px`);
       document.body.classList.add('dock-right-open');
       return () => {
         document.body.classList.remove('dock-right-open');
-        document.documentElement.style.setProperty('--dock-right-offset', '0px');
+        target.style.setProperty('--dock-right-offset', '0px');
       };
     }
 
     if (panelState.position === 'bottom') {
-      document.documentElement.style.setProperty(
-        '--dock-bottom-offset',
-        `${panelState.size.height}px`
-      );
+      target.style.setProperty('--dock-bottom-offset', `${panelState.size.height}px`);
       document.body.classList.add('dock-bottom-open');
       return () => {
         document.body.classList.remove('dock-bottom-open');
-        document.documentElement.style.setProperty('--dock-bottom-offset', '0px');
+        target.style.setProperty('--dock-bottom-offset', '0px');
       };
     }
   }, [
@@ -610,6 +606,10 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
       const target = event.target as HTMLElement | null;
       const panelRoot = panelRef.current;
       if (!target || !panelRoot?.contains(target)) {
+        return false;
+      }
+
+      if (hasNativeTabHandling(target)) {
         return false;
       }
 

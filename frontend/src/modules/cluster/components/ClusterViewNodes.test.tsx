@@ -10,6 +10,16 @@ import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import ClusterViewNodes from '@modules/cluster/components/ClusterViewNodes';
 
+const { useTableSortMock } = vi.hoisted(() => ({
+  useTableSortMock: vi.fn(
+    (data: unknown[], _defaultKey?: string, _defaultDir?: any, opts?: any) => ({
+      sortedData: data,
+      sortConfig: opts?.controlledSort ?? { key: '', direction: null },
+      handleSort: vi.fn(),
+    })
+  ),
+}));
+
 vi.mock('@core/contexts/FavoritesContext', () => ({
   useFavorites: () => ({
     favorites: [],
@@ -72,11 +82,7 @@ vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
 }));
 
 vi.mock('@/hooks/useTableSort', () => ({
-  useTableSort: (data: unknown[], _defaultKey?: string, _defaultDir?: any, opts?: any) => ({
-    sortedData: data,
-    sortConfig: opts?.controlledSort ?? { key: '', direction: null },
-    handleSort: vi.fn(),
-  }),
+  useTableSort: (...args: any[]) => (useTableSortMock as any)(...args),
 }));
 
 vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => ({
@@ -147,6 +153,7 @@ describe('ClusterViewNodes', () => {
     gridTablePropsRef.current = null;
     scopedDomainCallsRef.current = [];
     openWithObjectMock.mockReset();
+    useTableSortMock.mockClear();
   });
 
   afterEach(() => {
@@ -173,6 +180,25 @@ describe('ClusterViewNodes', () => {
     });
     expect(props.columnVisibility).toBe(null);
     expect(props.columnWidths).toBe(null);
+  });
+
+  it('passes numeric CPU and memory sort values into useTableSort', async () => {
+    await act(async () => {
+      root.render(<ClusterViewNodes data={[baseNode as any]} loaded={true} />);
+      await Promise.resolve();
+    });
+
+    expect(useTableSortMock).toHaveBeenCalled();
+    const options = useTableSortMock.mock.calls[0]?.[3];
+    const columns = options.columns as Array<{
+      key: string;
+      sortValue?: (item: typeof baseNode) => unknown;
+    }>;
+    const cpuColumn = columns.find((column) => column.key === 'cpu');
+    const memoryColumn = columns.find((column) => column.key === 'memory');
+
+    expect(cpuColumn?.sortValue?.(baseNode)).toBe(1000);
+    expect(memoryColumn?.sortValue?.(baseNode)).toBe(2048);
   });
 
   it('opens the object panel with cluster metadata when clicking a node name', async () => {

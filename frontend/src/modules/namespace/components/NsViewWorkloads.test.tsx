@@ -318,6 +318,45 @@ describe('NsViewWorkloads', () => {
     expect(options.rowIdentity(workload, 0)).toBe('alpha:ctx|apps/v1/Deployment/team-a/api');
   });
 
+  it('passes numeric CPU and memory sort values into useTableSort', async () => {
+    const workload = {
+      kind: 'Deployment',
+      name: 'api',
+      namespace: 'team-a',
+      status: 'Running',
+      ready: '1/1',
+      restarts: 0,
+      cpuUsage: '10m',
+      memUsage: '20Mi',
+      clusterId: 'alpha:ctx',
+      clusterName: 'alpha',
+    } as any;
+
+    await act(async () => {
+      root.render(
+        <NsViewWorkloads
+          namespace="team-a"
+          data={[workload]}
+          loading={false}
+          loaded={true}
+          metrics={null}
+        />
+      );
+      await Promise.resolve();
+    });
+
+    const options = useTableSortMock.mock.calls[0]?.[3];
+    const columns = options.columns as Array<{
+      key: string;
+      sortValue?: (item: typeof workload) => unknown;
+    }>;
+    const cpuColumn = columns.find((column) => column.key === 'cpu');
+    const memoryColumn = columns.find((column) => column.key === 'memory');
+
+    expect(cpuColumn?.sortValue?.(workload)).toBe(10);
+    expect(memoryColumn?.sortValue?.(workload)).toBe(20);
+  });
+
   it('routes workload clicks through the object panel with cluster metadata', async () => {
     const workload = {
       kind: 'Deployment',

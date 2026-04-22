@@ -218,10 +218,8 @@ func defaultPermissionChecks() map[string]permissionCheck {
 		"nodes": requireAll(
 			listPermission("", "nodes"),
 		),
-		clusterOverviewDomainName: requireAny(
-			"cluster overview resources",
+		clusterOverviewDomainName: requireAll(
 			listPermission("", "nodes"),
-			listPermission("", "namespaces"),
 		),
 		clusterRBACDomainName: requireAny(
 			"rbac.authorization.k8s.io",

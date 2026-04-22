@@ -29,6 +29,9 @@ const hoisted = vi.hoisted(() => ({
     },
   },
   scopedDomainCalls: [] as Array<[string, string]>,
+  lifecycleStateRef: {
+    current: 'loading',
+  },
 }));
 
 vi.mock('@/core/data-access', () => ({
@@ -49,6 +52,12 @@ vi.mock('@/core/contexts/ViewStateContext', () => ({
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: () => hoisted.kubeconfigStateRef.current,
+}));
+
+vi.mock('@core/contexts/ClusterLifecycleContext', () => ({
+  useClusterLifecycle: () => ({
+    getClusterState: () => hoisted.lifecycleStateRef.current,
+  }),
 }));
 
 describe('useClusterMetricsAvailability', () => {
@@ -82,6 +91,7 @@ describe('useClusterMetricsAvailability', () => {
       error: null,
     };
     hoisted.scopedDomainCalls.length = 0;
+    hoisted.lifecycleStateRef.current = 'loading';
   });
 
   afterEach(() => {
@@ -118,5 +128,26 @@ describe('useClusterMetricsAvailability', () => {
       scope: 'cluster-1|',
       reason: 'startup',
     });
+  });
+
+  it('keeps cluster-overview disabled until the lifecycle reaches loading', async () => {
+    hoisted.lifecycleStateRef.current = 'connecting';
+
+    const HookHarness: React.FC = () => {
+      resultRef.current = useClusterMetricsAvailability();
+      return null;
+    };
+
+    await act(async () => {
+      root.render(<HookHarness />);
+      await Promise.resolve();
+    });
+
+    expect(hoisted.refreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
+      'cluster-overview',
+      'cluster-1|',
+      false
+    );
+    expect(hoisted.requestRefreshDomain).not.toHaveBeenCalled();
   });
 });

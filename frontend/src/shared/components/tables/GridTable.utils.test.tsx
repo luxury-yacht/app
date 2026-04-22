@@ -60,6 +60,9 @@ describe('GridTable utils', () => {
     expect(getTextContent(['a', 'b'])).toBe('ab');
     expect(getTextContent(<span title="fallback" />)).toBe('fallback');
     expect(getTextContent(<div>child</div>)).toBe('child');
+    expect(getTextContent(<span data-gridtable-export-text="exported">child</span>)).toBe(
+      'exported'
+    );
   });
 
   it('parses and detects width inputs', () => {

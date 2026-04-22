@@ -167,6 +167,24 @@
   --toast-auto-dismiss-short: 5000ms;
   --toast-auto-dismiss-long: 10000ms;
 
+  /* Terminal ANSI palette (iTerm2 default) */
+  --terminal-ansi-black: #14191e;
+  --terminal-ansi-red: #b43c2a;
+  --terminal-ansi-green: #00c200;
+  --terminal-ansi-yellow: #c7c400;
+  --terminal-ansi-blue: #2744c7;
+  --terminal-ansi-magenta: #c040be;
+  --terminal-ansi-cyan: #00c5c7;
+  --terminal-ansi-white: #c7c7c7;
+  --terminal-ansi-bright-black: #686868;
+  --terminal-ansi-bright-red: #dd7975;
+  --terminal-ansi-bright-green: #58e790;
+  --terminal-ansi-bright-yellow: #ece100;
+  --terminal-ansi-bright-blue: #a7abf2;
+  --terminal-ansi-bright-magenta: #e17ee1;
+  --terminal-ansi-bright-cyan: #60fdff;
+  --terminal-ansi-bright-white: #ffffff;
+
   /* Log viewer */
   --log-surface-bg: var(--color-base-900);
   --log-surface-maximized-bg: var(--color-base-950);
@@ -389,6 +407,18 @@
   --resourcebar-tooltip-border: var(--tooltip-border);
   --resourcebar-tooltip-shadow: var(--tooltip-shadow);
   --resourcebar-warning-text: var(--color-accent-dark-400);
+
+  /* Pod phase colors (Cluster Overview Pod Status bar) */
+  --pod-phase-healthy: #22c55e;
+  --pod-phase-pending: #f59e0b;
+  --pod-phase-failing: #ef4444;
+  --pod-phase-restarted: #a563f1;
+
+  /* Workload type colors (Cluster Overview workload breakdown bar) */
+  --workload-deployment: #3b82f6;
+  --workload-statefulset: #bf06d4;
+  --workload-daemonset: #6c2eff;
+  --workload-cronjob: #03ffbc;
 
   /* Metrics availability banner */
   --metrics-banner-bg: rgba(245, 158, 11, 0.12);

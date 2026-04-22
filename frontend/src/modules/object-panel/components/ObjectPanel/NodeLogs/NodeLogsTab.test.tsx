@@ -12,6 +12,10 @@ vi.mock('./nodeLogsApi', () => ({
   fetchNodeLogs: (...args: unknown[]) => mockFetchNodeLogs(...args),
 }));
 
+vi.mock('@core/contexts/ZoomContext', () => ({
+  useZoom: () => ({ zoomLevel: 100 }),
+}));
+
 describe('NodeLogsTab', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
@@ -44,6 +48,12 @@ describe('NodeLogsTab', () => {
     root = ReactDOM.createRoot(container);
     mockFetchNodeLogs.mockReset();
     resetLogViewerPrefsCacheForTesting();
+    Object.defineProperty(globalThis.navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: vi.fn().mockResolvedValue(undefined),
+      },
+    });
   });
 
   afterEach(() => {
@@ -272,6 +282,56 @@ describe('NodeLogsTab', () => {
 
     const highlightedMatch = container.querySelector('mark.pod-log-highlight');
     expect(highlightedMatch?.textContent).toBe('error');
+  });
+
+  it('highlights ANSI-colored node log text in the DOM renderer', async () => {
+    mockFetchNodeLogs.mockResolvedValue({
+      source: sources[0],
+      sourcePath: sources[0].path,
+      content: '\u001b[31merror\u001b[0m failed to reconcile',
+    });
+
+    await renderTab();
+    await selectSource('kubelet');
+    await setFilterValue('error');
+
+    const highlightButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Highlight matching text - disabled when Invert is enabled"]'
+    );
+    expect(highlightButton).toBeTruthy();
+
+    await act(async () => {
+      highlightButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    const highlightedMatch = container.querySelector('.pod-log-line mark.pod-log-highlight');
+    expect(highlightedMatch?.textContent).toBe('error');
+    expect(highlightedMatch?.closest('span[style*="color"]')).toBeTruthy();
+    expect(container.querySelector('.read-only-terminal-surface')).toBeNull();
+  });
+
+  it('supports no-wrap for ANSI-colored node logs in the DOM renderer', async () => {
+    mockFetchNodeLogs.mockResolvedValue({
+      source: sources[0],
+      sourcePath: sources[0].path,
+      content: '\u001b[31merror\u001b[0m failed to reconcile',
+    });
+
+    await renderTab();
+    await selectSource('kubelet');
+
+    const wrapButton = container.querySelector<HTMLButtonElement>('button[aria-label="Wrap text"]');
+    expect(wrapButton).toBeTruthy();
+
+    await act(async () => {
+      wrapButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('.pod-logs-text.no-wrap')).toBeTruthy();
+    expect(container.querySelector('.pod-log-line span[style*="color"]')).toBeTruthy();
+    expect(container.querySelector('.read-only-terminal-surface')).toBeNull();
   });
 
   it('shows an error for invalid regex filters when regex mode is enabled', async () => {

@@ -83,6 +83,7 @@ describe('useGridTableContextMenuWiring', () => {
     contextMenuActiveRef: { current: boolean };
     isContextMenuVisible: boolean;
     contextMenuNode: React.ReactNode;
+    handleRowActivation: ReturnType<typeof vi.fn>;
   };
 
   const renderHook = (opts: {
@@ -97,6 +98,7 @@ describe('useGridTableContextMenuWiring', () => {
       { id: '3', name: 'Charlie' },
     ];
     const wrapperRef = { current: null as HTMLDivElement | null };
+    const handleRowActivation = vi.fn();
     let result: HarnessResult = null!;
 
     const Harness: React.FC = () => {
@@ -109,9 +111,9 @@ describe('useGridTableContextMenuWiring', () => {
         focusedRowIndex: opts.focusedRowIndex ?? null,
         focusedRowKey: opts.focusedRowKey ?? null,
         wrapperRef,
-        handleRowActivation: vi.fn(),
+        handleRowActivation,
       });
-      result = wiring;
+      result = { ...wiring, handleRowActivation };
       return (
         <>
           <div
@@ -184,6 +186,16 @@ describe('useGridTableContextMenuWiring', () => {
     const fakeEvent = { preventDefault: vi.fn() } as any;
     result.handleCellContextMenu(fakeEvent, 'name', { id: '1', name: 'Alice' }, 0);
     expect(mockOpenCellContextMenu).not.toHaveBeenCalled();
+  });
+
+  it('handleCellContextMenu opens without activating the row on right-click', () => {
+    const result = renderHook({});
+    const fakeEvent = { preventDefault: vi.fn() } as any;
+
+    result.handleCellContextMenu(fakeEvent, 'name', { id: '1', name: 'Alice' }, 0);
+
+    expect(mockOpenCellContextMenu).toHaveBeenCalledTimes(1);
+    expect(result.handleRowActivation).not.toHaveBeenCalled();
   });
 
   it('handleWrapperContextMenu does nothing when context menu is disabled', () => {

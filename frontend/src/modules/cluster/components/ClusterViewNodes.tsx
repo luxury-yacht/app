@@ -28,6 +28,8 @@ import GridTable, {
 import {
   calculateCpuOvercommitted,
   calculateMemoryOvercommitted,
+  parseCpuToMillicores,
+  parseMemToMB,
 } from '@/utils/resourceCalculations';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 import { useMetadataSearch } from '@shared/components/tables/hooks/useMetadataSearch';
@@ -193,6 +195,8 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
           getMetricsLastUpdated: () => metricsLastUpdatedDate ?? undefined,
           getVariant: () => 'compact',
           getAnimationKey: (row) => `node:${row.name}:cpu`,
+          sortable: true,
+          sortValue: (row) => parseCpuToMillicores(row.cpuUsage),
         }),
         cf.createResourceBarColumn<ClusterNodeRow>({
           key: 'memory',
@@ -211,6 +215,8 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
           getMetricsLastUpdated: () => metricsLastUpdatedDate ?? undefined,
           getVariant: () => 'compact',
           getAnimationKey: (row) => `node:${row.name}:memory`,
+          sortable: true,
+          sortValue: (row) => parseMemToMB(row.memoryUsage),
         }),
         {
           ...(cf.createAgeColumn<ClusterNodeRow & { age?: string }>('age', 'Age', (row) => {

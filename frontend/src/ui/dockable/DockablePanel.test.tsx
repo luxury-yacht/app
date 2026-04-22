@@ -252,6 +252,51 @@ describe('DockablePanel', () => {
     unmount();
   });
 
+  it('does not trap Tab for native tab regions inside the panel', async () => {
+    const { unmount } = await renderPanel(
+      <DockablePanel
+        panelId="dockable-panel-native-tab-pass-through"
+        defaultPosition="floating"
+        isOpen
+      >
+        <div data-tab-native="true">
+          <button type="button">Terminal input</button>
+        </div>
+        <button type="button">Other control</button>
+      </DockablePanel>
+    );
+
+    const layer = document.querySelector('.dockable-panel-layer');
+    const panel = layer?.querySelector('.dockable-panel') as HTMLDivElement | null;
+    expect(panel).toBeTruthy();
+
+    const terminalButton = Array.from(panel?.querySelectorAll('button') ?? []).find(
+      (button) => button.textContent === 'Terminal input'
+    );
+    expect(terminalButton).toBeTruthy();
+
+    await act(async () => {
+      terminalButton?.focus();
+      await Promise.resolve();
+    });
+
+    const event = new KeyboardEvent('keydown', {
+      key: 'Tab',
+      bubbles: true,
+      cancelable: true,
+    });
+
+    await act(async () => {
+      terminalButton?.dispatchEvent(event);
+      await Promise.resolve();
+    });
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(document.activeElement).toBe(terminalButton);
+
+    unmount();
+  });
+
   it('keeps panel controls out of the native tab order until the panel is focused', async () => {
     const { unmount } = await renderPanel(
       <>

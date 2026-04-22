@@ -206,7 +206,6 @@ export function useGridTableController<T>({
   diagnosticsLabel,
   diagnosticsMode = 'local',
   allowHorizontalOverflow = true,
-  disableCellNativeTitle = false,
   isKindColumnKey = defaultIsKindColumnKey,
 }: GridTableProps<T>): GridTableControllerResult<T> {
   const [maxTableRows, setMaxTableRows] = useState<number>(() => getMaxTableRows());
@@ -316,6 +315,8 @@ export function useGridTableController<T>({
     filters,
     diagnosticsLabel,
     columnsDropdown: columnsDropdownConfig ?? undefined,
+    exportColumns: renderedColumns,
+    getTextContent,
   });
 
   const tableData = useMemo<T[]>(
@@ -1003,7 +1004,6 @@ export function useGridTableController<T>({
     handleContextMenu: handleCellContextMenu,
     getCachedCellContent,
     measureRowRef,
-    disableCellNativeTitle,
   });
 
   const { loadMoreSentinelRef, handleManualLoadMore, paginationStatus } = useGridTablePagination({

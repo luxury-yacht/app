@@ -46,7 +46,6 @@ export function useGridTableContextMenuWiring<T>(options: ContextMenuWiringOptio
     focusedRowIndex,
     focusedRowKey,
     wrapperRef,
-    handleRowActivation,
     contextMenuActiveRef: externalContextMenuActiveRef,
   } = options;
 
@@ -100,25 +99,16 @@ export function useGridTableContextMenuWiring<T>(options: ContextMenuWiringOptio
   }, [closeContextMenu, wrapperRef, contextMenuActiveRef]);
 
   const handleCellContextMenu = useCallback(
-    (event: MouseEvent, columnKey: string, item: T | null, rowIndex: number) => {
+    (event: MouseEvent, columnKey: string, item: T | null, _rowIndex: number) => {
       if (!enableContextMenu) {
         return;
-      }
-      if (item) {
-        handleRowActivation(item, rowIndex, 'pointer');
       }
       const opened = openCellContextMenu(event, columnKey, item);
       if (opened) {
         beginContextMenuInteraction(wrapperRef.current);
       }
     },
-    [
-      beginContextMenuInteraction,
-      enableContextMenu,
-      handleRowActivation,
-      openCellContextMenu,
-      wrapperRef,
-    ]
+    [beginContextMenuInteraction, enableContextMenu, openCellContextMenu, wrapperRef]
   );
 
   const handleWrapperContextMenu = useCallback(

@@ -44,6 +44,22 @@ function isEditableTarget(target: Element): boolean {
   return false;
 }
 
+function getLogSelectionRoot(target: Element | null): HTMLElement | null {
+  return target?.closest('.pod-logs-content') as HTMLElement | null;
+}
+
+function selectNodeContents(root: HTMLElement): void {
+  const selection = window.getSelection();
+  if (!selection) {
+    return;
+  }
+
+  selection.removeAllRanges();
+  const range = document.createRange();
+  range.selectNodeContents(root);
+  selection.addRange(range);
+}
+
 const TextContextMenu: React.FC = () => {
   const [menu, setMenu] = useState<TextContextMenuState | null>(null);
   const targetRef = useRef<Element | null>(null);
@@ -71,10 +87,11 @@ const TextContextMenu: React.FC = () => {
         (target instanceof HTMLInputElement && isTextualInput(target)) ||
         target instanceof HTMLTextAreaElement;
       const isContentEditable = !!target.closest('[contenteditable="true"]');
+      const logSelectionRoot = getLogSelectionRoot(target);
       const selectedText = deriveCopyText(window.getSelection());
       const hasSelection = !!selectedText;
 
-      if (!isInput && !isContentEditable && !hasSelection) return;
+      if (!isInput && !isContentEditable && !hasSelection && !logSelectionRoot) return;
 
       event.preventDefault();
       targetRef.current = target;
@@ -132,6 +149,9 @@ const TextContextMenu: React.FC = () => {
           if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
             el.focus();
             el.select();
+          } else if (logSelectionRoot) {
+            logSelectionRoot.focus();
+            selectNodeContents(logSelectionRoot);
           } else {
             document.execCommand('selectAll');
           }

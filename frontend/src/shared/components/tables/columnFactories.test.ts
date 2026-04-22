@@ -151,6 +151,7 @@ describe('columnFactories', () => {
       const element = usageColumn.render({ id: 'row' });
       expect(React.isValidElement(element)).toBe(true);
       const resourceElement = element as React.ReactElement<Record<string, unknown>>;
+      expect(resourceElement.props['data-gridtable-export-text']).toBe('200m');
       expect(resourceElement.props).toMatchObject({
         usage: '200m',
         limit: '500m',
@@ -169,6 +170,7 @@ describe('columnFactories', () => {
       const fallbackElement = fallbackColumn.render({ id: 'row-2' });
       expect(React.isValidElement(fallbackElement)).toBe(true);
       const fallbackProps = (fallbackElement as React.ReactElement<Record<string, unknown>>).props;
+      expect(fallbackProps['data-gridtable-export-text']).toBe('-');
       expect(fallbackProps.showEmptyState).toBe(false);
     });
   });

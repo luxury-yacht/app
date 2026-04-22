@@ -9,13 +9,18 @@ import { useEffect, useMemo } from 'react';
 import { requestRefreshDomain } from '@/core/data-access';
 import { refreshOrchestrator, useRefreshScopedDomain } from '@/core/refresh';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
+import { canActivateClusterOverviewRefresh } from '@/core/refresh/clusterOverviewLifecycle';
 import { useViewState } from '@/core/contexts/ViewStateContext';
 import type { ClusterOverviewMetrics } from '@/core/refresh/types';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import { useClusterLifecycle } from '@core/contexts/ClusterLifecycleContext';
 
 export const useClusterMetricsAvailability = (): ClusterOverviewMetrics | null => {
   const { selectedClusterId } = useKubeconfig();
   const { viewType } = useViewState();
+  const { getClusterState } = useClusterLifecycle();
+  const lifecycleState = selectedClusterId ? getClusterState(selectedClusterId) : '';
+  const canActivateOverviewRefresh = canActivateClusterOverviewRefresh(lifecycleState);
 
   // Metrics for foreground UI should follow the active cluster only.
   const overviewScope = useMemo(
@@ -34,7 +39,8 @@ export const useClusterMetricsAvailability = (): ClusterOverviewMetrics | null =
     // Keep cluster-overview running for all active views so diagnostics and background
     // metrics stay current regardless of which view type is selected.
     const shouldEnable =
-      viewType === 'overview' || viewType === 'namespace' || viewType === 'cluster';
+      (viewType === 'overview' || viewType === 'namespace' || viewType === 'cluster') &&
+      canActivateOverviewRefresh;
     refreshOrchestrator.setScopedDomainEnabled('cluster-overview', overviewScope, shouldEnable);
 
     const shouldTrigger = shouldEnable && viewType !== 'overview';
@@ -46,7 +52,13 @@ export const useClusterMetricsAvailability = (): ClusterOverviewMetrics | null =
         reason: 'startup',
       });
     }
-  }, [overviewDomain.data, overviewDomain.status, overviewScope, viewType]);
+  }, [
+    canActivateOverviewRefresh,
+    overviewDomain.data,
+    overviewDomain.status,
+    overviewScope,
+    viewType,
+  ]);
 
   const metricsByCluster = overviewDomain.data?.metricsByCluster;
   if (metricsByCluster) {

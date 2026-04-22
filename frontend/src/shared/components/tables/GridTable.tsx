@@ -48,6 +48,7 @@ const GridTable = memo(function GridTable<T>(props: GridTableProps<T>) {
     showLoadMoreButton = true,
     showPaginationStatus = true,
     allowHorizontalOverflow = true,
+    showTrailingColumnBoundary = true,
     keyExtractor,
   } = props;
 
@@ -85,6 +86,14 @@ const GridTable = memo(function GridTable<T>(props: GridTableProps<T>) {
     wrapWithProfiler,
   } = useGridTableController<T>(props);
 
+  const trailingBoundaryOffset =
+    showTrailingColumnBoundary &&
+    tableContentWidth > 0 &&
+    tableViewportWidth > 0 &&
+    tableContentWidth < tableViewportWidth - 0.5
+      ? tableContentWidth
+      : null;
+
   const headerNode = (
     <GridTableHeader
       headerInnerRef={headerInnerRef}
@@ -93,6 +102,7 @@ const GridTable = memo(function GridTable<T>(props: GridTableProps<T>) {
       scrollbarWidth={scrollbarWidth}
       headerRow={headerRow}
       hideHeader={hideHeader}
+      trailingBoundaryOffset={trailingBoundaryOffset}
     />
   );
 

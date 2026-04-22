@@ -3,6 +3,7 @@ package snapshot
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -691,14 +692,23 @@ func mergeClusterOverviewPayload(payloads []ClusterOverviewSnapshot) ClusterOver
 		out.EC2Nodes += overview.EC2Nodes
 		out.VirtualNodes += overview.VirtualNodes
 		out.VMNodes += overview.VMNodes
+		out.ReadyNodes += overview.ReadyNodes
+		out.NotReadyNodes += overview.NotReadyNodes
+		out.CordonedNodes += overview.CordonedNodes
 		out.TotalPods += overview.TotalPods
 		out.TotalContainers += overview.TotalContainers
 		out.TotalInitContainers += overview.TotalInitContainers
 		out.RunningPods += overview.RunningPods
+		out.SucceededPods += overview.SucceededPods
 		out.PendingPods += overview.PendingPods
 		out.FailedPods += overview.FailedPods
 		out.RestartedPods += overview.RestartedPods
 		out.TotalNamespaces += overview.TotalNamespaces
+		out.TotalDeployments += overview.TotalDeployments
+		out.TotalStatefulSets += overview.TotalStatefulSets
+		out.TotalDaemonSets += overview.TotalDaemonSets
+		out.TotalCronJobs += overview.TotalCronJobs
+		out.RecentEvents = append(out.RecentEvents, overview.RecentEvents...)
 
 		cpuUsageMilli += parseCPUValue(overview.CPUUsage)
 		cpuRequestsMilli += parseCPUValue(overview.CPURequests)
@@ -727,6 +737,16 @@ func mergeClusterOverviewPayload(payloads []ClusterOverviewSnapshot) ClusterOver
 	out.MemoryAllocatable = formatMemoryValue(memoryAllocatableBytes)
 	out.ClusterType = mergeLabel(clusterTypes, "Mixed")
 	out.ClusterVersion = mergeLabel(clusterVersions, "Multiple")
+
+	// Merge: keep only the most recent events across all clusters, preserving
+	// the same cap used per-cluster so the UI never renders more rows than
+	// intended.
+	sort.Slice(out.RecentEvents, func(i, j int) bool {
+		return out.RecentEvents[i].Timestamp > out.RecentEvents[j].Timestamp
+	})
+	if len(out.RecentEvents) > recentEventsLimit {
+		out.RecentEvents = out.RecentEvents[:recentEventsLimit]
+	}
 
 	return out
 }
