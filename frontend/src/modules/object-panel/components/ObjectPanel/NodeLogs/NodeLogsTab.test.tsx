@@ -12,6 +12,10 @@ vi.mock('./nodeLogsApi', () => ({
   fetchNodeLogs: (...args: unknown[]) => mockFetchNodeLogs(...args),
 }));
 
+vi.mock('@core/contexts/ZoomContext', () => ({
+  useZoom: () => ({ zoomLevel: 100 }),
+}));
+
 describe('NodeLogsTab', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
@@ -44,6 +48,12 @@ describe('NodeLogsTab', () => {
     root = ReactDOM.createRoot(container);
     mockFetchNodeLogs.mockReset();
     resetLogViewerPrefsCacheForTesting();
+    Object.defineProperty(globalThis.navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: vi.fn().mockResolvedValue(undefined),
+      },
+    });
   });
 
   afterEach(() => {

@@ -72,6 +72,21 @@ const waitForElement = async <T extends Element>(
   throw new Error('Timed out waiting for element');
 };
 
+const getLatestKeyboardSurfaceConfig = () => {
+  const calls = shortcutMocks.useKeyboardSurface.mock.calls;
+  const call = calls[calls.length - 1];
+  return call?.[0] as
+    | {
+        onNativeAction?: (context: {
+          action: 'copy' | 'selectAll' | 'paste';
+          activeElement: Element | null;
+          selection: Selection | null;
+          text?: string;
+        }) => boolean;
+      }
+    | undefined;
+};
+
 const mockModules = vi.hoisted(() => {
   const orchestrator = {
     stopStreamingDomain: vi.fn(),
@@ -118,6 +133,7 @@ vi.mock('@/core/refresh/fallbacks/objectLogFallbackManager', () => ({
 
 const shortcutMocks = vi.hoisted(() => ({
   useShortcut: vi.fn(),
+  useKeyboardSurface: vi.fn(),
 }));
 
 const contextMocks = vi.hoisted(() => ({
@@ -136,8 +152,13 @@ const contextMocks = vi.hoisted(() => ({
 
 vi.mock('@ui/shortcuts', () => ({
   useShortcut: (...args: unknown[]) => shortcutMocks.useShortcut(...args),
+  useKeyboardSurface: (...args: unknown[]) => shortcutMocks.useKeyboardSurface(...args),
   useKeyboardContext: () => contextMocks,
   useSearchShortcutTarget: () => undefined,
+}));
+
+vi.mock('@core/contexts/ZoomContext', () => ({
+  useZoom: () => ({ zoomLevel: 100 }),
 }));
 
 vi.mock('@shared/components/dropdowns/Dropdown', () => ({
@@ -265,6 +286,7 @@ describe('LogViewer active pod synchronisation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     shortcutMocks.useShortcut.mockClear();
+    shortcutMocks.useKeyboardSurface.mockClear();
     contextMocks.registerShortcut.mockClear();
     contextMocks.unregisterShortcut.mockClear();
     contextMocks.getAvailableShortcuts.mockClear();
@@ -1150,6 +1172,46 @@ describe('LogViewer active pod synchronisation', () => {
         '2024-05-01T11:00:00Z,web-1,app,info,2,"hello, world"',
       ].join('\n')
     );
+  });
+
+  it('copies selected log text through the app native-action path', async () => {
+    seedLogSnapshot([
+      {
+        pod: 'web-1',
+        container: 'app',
+        line: 'selected log text',
+        timestamp: '2024-05-01T11:00:00Z',
+        isInit: false,
+      },
+    ]);
+
+    await renderViewer({ activePodNames: ['web-1'] });
+
+    const surfaceConfig = getLatestKeyboardSurfaceConfig();
+    const line = container.querySelector('.pod-log-line');
+    const content = container.querySelector('.pod-logs-content');
+    expect(surfaceConfig?.onNativeAction).toBeTruthy();
+    expect(line).toBeTruthy();
+    expect(content).toBeTruthy();
+
+    const selection = {
+      toString: () => 'selected log text',
+      isCollapsed: false,
+      anchorNode: line,
+      focusNode: line,
+      rangeCount: 1,
+      getRangeAt: () => ({ commonAncestorContainer: line }) as unknown as Range,
+    } as unknown as Selection;
+
+    const handled = surfaceConfig?.onNativeAction?.({
+      action: 'copy',
+      activeElement: content,
+      selection,
+    });
+    await flushAsync();
+
+    expect(handled).toBe(true);
+    expect(writeTextMock).toHaveBeenCalledWith('selected log text');
   });
 
   it('formats the API timestamp using the configured preference in the rendered log rows', async () => {

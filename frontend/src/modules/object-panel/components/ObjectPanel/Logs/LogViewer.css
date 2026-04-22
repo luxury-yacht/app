@@ -361,6 +361,17 @@
   font-family:
     "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Consolas, "Courier New", monospace;
   position: relative;
+  user-select: text !important;
+  -webkit-user-select: text !important;
+}
+
+.pod-logs-content * {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+}
+
+.pod-logs-content:focus {
+  outline: none;
 }
 
 .pod-logs-warning-bar {
@@ -386,6 +397,12 @@
   padding: 0 0.5rem;
 }
 
+.pod-logs-text.no-wrap {
+  display: inline-block;
+  min-width: 100%;
+  width: max-content;
+}
+
 .pod-logs-virtual-body {
   position: relative;
 }
@@ -409,6 +426,18 @@
   overflow-x: visible;
 }
 
+.pod-logs-text.no-wrap .pod-logs-virtual-body,
+.pod-logs-text.no-wrap .pod-logs-virtual-inner,
+.pod-logs-text.no-wrap .pod-log-row,
+.pod-logs-text.no-wrap .pod-log-line {
+  min-width: 100%;
+  width: max-content;
+}
+
+.pod-logs-text.no-wrap .pod-logs-virtual-inner {
+  right: auto;
+}
+
 /* Individual log line with hanging indent for wrapped text */
 .pod-log-line {
   white-space: pre-wrap;
@@ -419,7 +448,6 @@
   text-indent: -1rem;
   user-select: text;
   -webkit-user-select: text;
-  contain: layout paint;
 }
 
 .pod-log-line .pod-log-metadata {

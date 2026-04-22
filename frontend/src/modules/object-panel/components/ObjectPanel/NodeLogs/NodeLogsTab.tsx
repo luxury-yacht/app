@@ -38,6 +38,8 @@ import type { ParsedLogEntry } from '../Logs/logViewerReducer';
 import { fetchNodeLogs, type NodeLogSource } from './nodeLogsApi';
 import '../Logs/LogViewer.css';
 import './NodeLogsTab.css';
+import { useKeyboardSurface } from '@ui/shortcuts';
+import { getSelectedTextWithinRoot, selectAllTextWithinRoot } from '../Logs/textSelection';
 
 const NODE_LOG_TAIL_BYTES = 256 * 1024;
 const NODE_LOG_AUTO_REFRESH_MS = 5000;
@@ -783,6 +785,29 @@ const NodeLogsTab = ({
     resetCopyFeedback();
   }, [displayedText, resetCopyFeedback]);
 
+  useKeyboardSurface({
+    kind: 'editor',
+    rootRef: logsContentRef,
+    active: isActive,
+    captureWhenActive: true,
+    onNativeAction: ({ action, selection }) => {
+      if (action === 'copy') {
+        const text = getSelectedTextWithinRoot(selection, logsContentRef.current);
+        if (!text) {
+          return false;
+        }
+        void navigator.clipboard.writeText(text).catch(() => {
+          /* ignore clipboard failures */
+        });
+        return true;
+      }
+      if (action === 'selectAll') {
+        return selectAllTextWithinRoot(selection, logsContentRef.current);
+      }
+      return false;
+    },
+  });
+
   const renderHighlightedMessage = useCallback(
     (text: string, keyPrefix: string) => {
       if (!text) {
@@ -1094,7 +1119,7 @@ const NodeLogsTab = ({
           </div>
         )}
 
-        <div ref={logsContentRef} className="pod-logs-content">
+        <div ref={logsContentRef} className="pod-logs-content selectable" tabIndex={-1}>
           {error ? (
             <div className="pod-logs-display-error">{error}</div>
           ) : !selectedSource ? (

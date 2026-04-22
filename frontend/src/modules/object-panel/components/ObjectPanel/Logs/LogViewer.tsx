@@ -81,6 +81,8 @@ import {
   resolveTerminalTheme,
   type TerminalThemeColors,
 } from '@shared/terminal/terminalTheme';
+import { useKeyboardSurface } from '@ui/shortcuts';
+import { getSelectedTextWithinRoot, selectAllTextWithinRoot } from './textSelection';
 
 interface LogViewerProps {
   namespace: string;
@@ -2159,6 +2161,29 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     }
   }, [displayLogs, displayMode, parsedCsv, scheduleCopyReset, dispatch]);
 
+  useKeyboardSurface({
+    kind: 'editor',
+    rootRef: logsContentRef,
+    active: isActive,
+    captureWhenActive: true,
+    onNativeAction: ({ action, selection }) => {
+      if (action === 'copy') {
+        const text = getSelectedTextWithinRoot(selection, logsContentRef.current);
+        if (!text) {
+          return false;
+        }
+        void navigator.clipboard.writeText(text).catch((err) => {
+          console.error('Failed to copy selected log text', err);
+        });
+        return true;
+      }
+      if (action === 'selectAll') {
+        return selectAllTextWithinRoot(selection, logsContentRef.current);
+      }
+      return false;
+    },
+  });
+
   // Keyboard shortcuts for Logs tab
   useLogKeyboardShortcuts({
     isActive,
@@ -2502,7 +2527,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
             </div>
           )}
 
-          <div className="pod-logs-content" ref={logsContentRef}>
+          <div className="pod-logs-content selectable" ref={logsContentRef} tabIndex={-1}>
             {isParsedView ? (
               <div onClick={handleParsedTableClick} style={{ height: '100%' }}>
                 <GridTable

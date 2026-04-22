@@ -67,12 +67,12 @@ function fireContextMenu(target: Element, x = 100, y = 200): void {
   target.dispatchEvent(event);
 }
 
-function stubSelection(text: string): void {
+function stubSelection(text: string, anchorNode: Node | null = document.body): void {
   vi.spyOn(window, 'getSelection').mockReturnValue({
     toString: () => text,
     isCollapsed: text.length === 0,
-    anchorNode: document.body,
-    focusNode: document.body,
+    anchorNode,
+    focusNode: anchorNode,
     anchorOffset: 0,
     focusOffset: 0,
     rangeCount: text ? 1 : 0,
@@ -142,10 +142,26 @@ describe('TextContextMenu', () => {
     span.textContent = 'hello';
     document.body.appendChild(span);
 
-    stubSelection('hello');
+    stubSelection('hello', span);
     act(() => fireContextMenu(span));
     expect(itemLabels()).toEqual(['Copy', 'Select All']);
     span.remove();
+  });
+
+  it('shows Copy and Select All for selected log text', () => {
+    const logs = document.createElement('div');
+    logs.className = 'pod-logs-content';
+    logs.tabIndex = -1;
+    const line = document.createElement('div');
+    line.className = 'pod-log-line';
+    line.textContent = 'selected log text';
+    logs.appendChild(line);
+    document.body.appendChild(logs);
+
+    stubSelection('selected log text', line);
+    act(() => fireContextMenu(line));
+    expect(itemLabels()).toEqual(['Copy', 'Select All']);
+    logs.remove();
   });
 
   it('shows Cut, Copy, Paste, Select All on editable textarea', () => {
@@ -251,6 +267,42 @@ describe('TextContextMenu', () => {
     act(() => selectAllItem!.onClick!());
     expect(selectSpy).toHaveBeenCalled();
     input.remove();
+  });
+
+  it('Select All scopes to the log viewer when right-clicking selected log text', () => {
+    const logs = document.createElement('div');
+    logs.className = 'pod-logs-content';
+    logs.tabIndex = -1;
+    const line = document.createElement('div');
+    line.className = 'pod-log-line';
+    line.textContent = 'selected log text';
+    logs.appendChild(line);
+    document.body.appendChild(logs);
+
+    const focusSpy = vi.spyOn(logs, 'focus');
+    const removeAllRanges = vi.fn();
+    const addRange = vi.fn();
+    vi.spyOn(window, 'getSelection').mockReturnValue({
+      toString: () => 'selected log text',
+      isCollapsed: false,
+      anchorNode: line,
+      focusNode: line,
+      anchorOffset: 0,
+      focusOffset: 0,
+      rangeCount: 1,
+      removeAllRanges,
+      addRange,
+    } as unknown as Selection);
+
+    act(() => fireContextMenu(line));
+
+    const selectAllItem = capturedMenuProps!.items.find((item) => item.label === 'Select All');
+    act(() => selectAllItem!.onClick!());
+
+    expect(focusSpy).toHaveBeenCalled();
+    expect(removeAllRanges).toHaveBeenCalled();
+    expect(addRange).toHaveBeenCalledTimes(1);
+    logs.remove();
   });
 
   it('shows editable items for contenteditable elements', () => {
