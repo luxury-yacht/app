@@ -2,7 +2,7 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.tsx
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import {
   readShellSessionBacklog,
   readShellSessions,
@@ -27,6 +27,7 @@ import { types } from '@wailsjs/go/models';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import { useDockablePanelState } from '@ui/dockable';
+import { useKeyboardSurface } from '@ui/shortcuts';
 import './ShellTab.css';
 
 interface ShellTabProps {
@@ -136,6 +137,49 @@ const ShellTab: React.FC<ShellTabProps> = ({
     return resolveTerminalTheme(container ? getComputedStyle(container) : null);
   }, []);
 
+  const pasteTextToTerminal = useCallback((text: string) => {
+    const terminal = terminalRef.current;
+    if (!terminal) {
+      return;
+    }
+
+    terminal.focus();
+    terminal.paste(text);
+  }, []);
+
+  const pasteClipboardToTerminal = useCallback(async () => {
+    const clipboard = typeof navigator === 'undefined' ? undefined : navigator.clipboard;
+    if (!clipboard?.readText) {
+      return false;
+    }
+
+    try {
+      const text = await clipboard.readText();
+      pasteTextToTerminal(text ?? '');
+      return true;
+    } catch {
+      return false;
+    }
+  }, [pasteTextToTerminal]);
+
+  const copyTerminalSelection = useCallback(() => {
+    const terminal = terminalRef.current;
+    const clipboard = typeof navigator === 'undefined' ? undefined : navigator.clipboard;
+    if (!terminal || !clipboard?.writeText || !terminal.hasSelection()) {
+      return false;
+    }
+
+    const selection = terminal.getSelection();
+    if (!selection) {
+      return false;
+    }
+
+    void clipboard.writeText(selection).catch(() => {
+      /* ignore clipboard write failures */
+    });
+    return true;
+  }, []);
+
   const applyTerminalTheme = useCallback(() => {
     const terminal = terminalRef.current as
       | (Terminal & {
@@ -201,13 +245,9 @@ const ShellTab: React.FC<ShellTabProps> = ({
         if (!clipboard?.writeText || !terminal.hasSelection()) {
           return true;
         }
-        const selection = terminal.getSelection();
-        if (!selection) {
+        if (!copyTerminalSelection()) {
           return true;
         }
-        void clipboard.writeText(selection).catch(() => {
-          /* ignore clipboard write failures */
-        });
         event.preventDefault();
         event.stopPropagation();
         return false;
@@ -219,14 +259,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
         }
         event.preventDefault();
         event.stopPropagation();
-        void clipboard
-          .readText()
-          .then((text) => {
-            terminal.paste(text ?? '');
-          })
-          .catch(() => {
-            /* ignore clipboard read failures */
-          });
+        void pasteClipboardToTerminal();
         return false;
       }
 
@@ -260,7 +293,36 @@ const ShellTab: React.FC<ShellTabProps> = ({
     fitAddonRef.current = fitAddon;
     resizeObserverRef.current = resizeObserver;
     setTerminalReady(true);
-  }, [resolveThemeColors]);
+  }, [copyTerminalSelection, pasteClipboardToTerminal, resolveThemeColors]);
+
+  useKeyboardSurface({
+    kind: 'editor',
+    rootRef: terminalContainerRef,
+    active: isActive && terminalReady,
+    onNativeAction: ({ action, text }) => {
+      if (action === 'copy') {
+        return copyTerminalSelection();
+      }
+      if (action === 'selectAll') {
+        const terminal = terminalRef.current as (Terminal & { selectAll?: () => void }) | null;
+        if (!terminal?.selectAll) {
+          return false;
+        }
+        terminal.selectAll();
+        terminal.focus();
+        return true;
+      }
+      if (action !== 'paste') {
+        return false;
+      }
+      if (typeof text === 'string' && text.length > 0) {
+        pasteTextToTerminal(text);
+        return true;
+      }
+      void pasteClipboardToTerminal();
+      return true;
+    },
+  });
 
   useEffect(() => {
     return () => {
@@ -785,6 +847,14 @@ const ShellTab: React.FC<ShellTabProps> = ({
   const hasActiveSession = status === 'open' || status === 'connecting';
   const connectionErrorMessage =
     status === 'error' ? statusReason || 'Shell session failed.' : null;
+  const handleTerminalContextMenu = useCallback(
+    (event: MouseEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      void pasteClipboardToTerminal();
+    },
+    [pasteClipboardToTerminal]
+  );
 
   return (
     <div className="object-panel-shell-tab">
@@ -951,11 +1021,17 @@ const ShellTab: React.FC<ShellTabProps> = ({
         </div>
       )}
 
-      <div className="shell-tab__terminal-wrapper" onClick={() => terminalRef.current?.focus()}>
+      <div
+        className="shell-tab__terminal-wrapper"
+        data-tab-native="true"
+        onClick={() => terminalRef.current?.focus()}
+        onContextMenu={handleTerminalContextMenu}
+      >
         <div
           className={`shell-tab__terminal${terminalReady ? '' : ' shell-tab__terminal--hidden'}`}
           ref={terminalContainerRef}
           aria-label="Shell terminal"
+          data-tab-native="true"
         />
       </div>
     </div>

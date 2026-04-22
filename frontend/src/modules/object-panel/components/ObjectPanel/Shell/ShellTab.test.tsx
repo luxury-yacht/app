@@ -9,6 +9,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 
 import ShellTab from './ShellTab';
 import { DockablePanelProvider } from '@ui/dockable/DockablePanelProvider';
+import { KeyboardProvider } from '@ui/shortcuts/context';
 
 const wailsMocks = vi.hoisted(() => ({
   StartShellSession: vi.fn(),
@@ -101,6 +102,9 @@ vi.mock('@wailsjs/runtime/runtime', () => ({
         delete eventRegistry.handlers[name];
       }
     };
+  },
+  EventsOff: (name: string) => {
+    delete eventRegistry.handlers[name];
   },
 }));
 
@@ -258,9 +262,11 @@ describe('ShellTab', () => {
     };
     await act(async () => {
       root.render(
-        <DockablePanelProvider>
-          <ShellTab {...finalProps} />
-        </DockablePanelProvider>
+        <KeyboardProvider>
+          <DockablePanelProvider>
+            <ShellTab {...finalProps} />
+          </DockablePanelProvider>
+        </KeyboardProvider>
       );
     });
     await flushAsync();
@@ -366,6 +372,35 @@ describe('ShellTab', () => {
     expect(event.preventDefault).toHaveBeenCalled();
     expect(event.stopPropagation).toHaveBeenCalled();
     expect(handled).toBe(false);
+  });
+
+  it('pastes clipboard contents directly on terminal context menu', async () => {
+    await renderShellTab();
+    clickConnectButton();
+
+    const terminal = getLatestTerminal();
+    (navigator.clipboard.readText as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      'kubectl logs pod-1\n'
+    );
+
+    const wrapper = container.querySelector(
+      '.shell-tab__terminal-wrapper'
+    ) as HTMLDivElement | null;
+    expect(wrapper).toBeTruthy();
+
+    const event = new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+    });
+
+    await act(async () => {
+      wrapper?.dispatchEvent(event);
+      await Promise.resolve();
+    });
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(navigator.clipboard.readText).toHaveBeenCalled();
+    expect(terminal?.paste).toHaveBeenCalledWith('kubectl logs pod-1\n');
   });
 
   it('sends stdin data to the backend when the session is open', async () => {

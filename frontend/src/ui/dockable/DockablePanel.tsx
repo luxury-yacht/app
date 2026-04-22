@@ -38,6 +38,7 @@ import type { TabInfo } from './DockableTabBar';
 import type { GroupKey } from './tabGroupTypes';
 import type { DockPosition } from './useDockablePanelState';
 import { useKeyboardSurface } from '@ui/shortcuts';
+import { hasNativeTabHandling } from '@ui/shortcuts/utils';
 import './DockablePanel.css';
 
 export type { DockPosition };
@@ -605,6 +606,10 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
       const target = event.target as HTMLElement | null;
       const panelRoot = panelRef.current;
       if (!target || !panelRoot?.contains(target)) {
+        return false;
+      }
+
+      if (hasNativeTabHandling(target)) {
         return false;
       }
 

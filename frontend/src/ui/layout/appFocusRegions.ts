@@ -1,6 +1,7 @@
 import { type RefObject, useEffect } from 'react';
 import { getTabbableElements } from '@shared/components/modals/getTabbableElements';
 import { useKeyboardSurface } from '@ui/shortcuts';
+import { hasNativeTabHandling } from '@ui/shortcuts/utils';
 
 export type TopLevelAppRegion = 'header' | 'sidebar' | 'content';
 
@@ -239,6 +240,10 @@ export const useContentRegionShiftTabHandoff = (
         event.ctrlKey ||
         event.altKey
       ) {
+        return false;
+      }
+
+      if (hasNativeTabHandling(event.target)) {
         return false;
       }
 
