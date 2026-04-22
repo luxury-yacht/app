@@ -1397,6 +1397,181 @@ describe('LogViewer active pod synchronisation', () => {
     expect(container.querySelector('.pod-log-line span[style*="color"]')).toBeNull();
   });
 
+  it('keeps workload metadata controls available for ANSI log rows', async () => {
+    const panelId = 'obj:test:workload-ansi-metadata';
+    seedLogSnapshot(
+      [
+        {
+          pod: 'web-1',
+          container: 'app',
+          line: '\u001b[32mmatched log\u001b[0m',
+          timestamp: '2024-05-01T10:00:00Z',
+          isInit: false,
+        },
+        {
+          pod: 'web-2',
+          container: 'app',
+          line: '\u001b[31mwrong pod\u001b[0m',
+          timestamp: '2024-05-01T10:00:01Z',
+          isInit: false,
+        },
+      ],
+      defaultScope
+    );
+
+    await renderViewer({ activePodNames: ['web-1', 'web-2'], panelId });
+    await flushAsync();
+
+    const podButton = await waitForElement(() =>
+      container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Show only logs from pod web-1"]'
+      )
+    );
+    expect(container.querySelector('.pod-log-line span[style*="color"]')).toBeTruthy();
+
+    await act(async () => {
+      podButton.click();
+      await Promise.resolve();
+    });
+
+    const lines = Array.from(container.querySelectorAll('.pod-log-line')).map((el) =>
+      el.textContent?.replace(/\s+/g, ' ').trim()
+    );
+    expect(lines).toEqual(['[2024-05-01T10:00:00Z] [web-1/app] matched log']);
+  });
+
+  it('supports highlighting ANSI-colored log text in the DOM renderer', async () => {
+    const panelId = 'obj:test:highlight-ansi';
+    setLogViewerPrefs(panelId, {
+      selectedContainer: '',
+      selectedFilters: [],
+      autoRefresh: true,
+      timestampMode: 'default',
+      showTimestamps: true,
+      wrapText: true,
+      textFilter: 'INFO',
+      highlightMatches: true,
+      inverseMatches: false,
+      caseSensitiveMatches: true,
+      regexMatches: false,
+      displayMode: 'raw',
+      isParsedView: false,
+      expandedRows: [],
+      showPreviousLogs: false,
+    });
+    seedLogSnapshot(
+      [
+        {
+          pod: 'api',
+          container: 'app',
+          line: '\u001b[32mINFO\u001b[0m GuardDuty agent started',
+          timestamp: '2026-04-07T04:10:44.787377Z',
+          isInit: false,
+        },
+      ],
+      buildLogScope('team-a:pod:api')
+    );
+
+    await renderViewer({
+      resourceKind: 'Pod',
+      resourceName: 'api',
+      activePodNames: ['api'],
+      panelId,
+    });
+    await waitForMockCalls(GetLogScopeContainers as unknown as ViMock, 1);
+    await flushAsync();
+
+    const highlight = container.querySelector('.pod-log-line mark.pod-log-highlight');
+    expect(highlight?.textContent).toBe('INFO');
+    expect(highlight?.closest('span[style*="color"]')).toBeTruthy();
+    expect(container.querySelector('.read-only-terminal-surface')).toBeNull();
+  });
+
+  it('supports no-wrap for ANSI-colored log text in the DOM renderer', async () => {
+    const panelId = 'obj:test:nowrap-ansi';
+    setLogViewerPrefs(panelId, {
+      selectedContainer: '',
+      selectedFilters: [],
+      autoRefresh: true,
+      timestampMode: 'default',
+      showTimestamps: true,
+      wrapText: false,
+      textFilter: '',
+      highlightMatches: false,
+      inverseMatches: false,
+      caseSensitiveMatches: false,
+      regexMatches: false,
+      displayMode: 'raw',
+      isParsedView: false,
+      expandedRows: [],
+      showPreviousLogs: false,
+    });
+    seedLogSnapshot(
+      [
+        {
+          pod: 'api',
+          container: 'app',
+          line: '\u001b[31mlong ansi line\u001b[0m',
+          timestamp: '2024-05-01T10:00:00Z',
+          isInit: false,
+        },
+      ],
+      buildLogScope('team-a:pod:api')
+    );
+
+    await renderViewer({
+      resourceKind: 'Pod',
+      resourceName: 'api',
+      activePodNames: ['api'],
+      panelId,
+    });
+    await waitForMockCalls(GetLogScopeContainers as unknown as ViMock, 1);
+    await flushAsync();
+
+    expect(container.querySelector('.pod-logs-text.no-wrap')).toBeTruthy();
+    expect(container.querySelector('.pod-log-line span[style*="color"]')).toBeTruthy();
+    expect(container.querySelector('.read-only-terminal-surface')).toBeNull();
+  });
+
+  it('copies ANSI-enabled raw logs without stripping escape sequences when colors are enabled', async () => {
+    const panelId = 'obj:test:copy-ansi';
+    seedLogSnapshot(
+      [
+        {
+          pod: 'api',
+          container: 'app',
+          line: '\u001b[31merror\u001b[0m happened',
+          timestamp: '2024-05-01T10:00:00Z',
+          isInit: false,
+        },
+      ],
+      buildLogScope('team-a:pod:api')
+    );
+
+    await renderViewer({
+      resourceKind: 'Pod',
+      resourceName: 'api',
+      activePodNames: ['api'],
+      panelId,
+    });
+    await waitForMockCalls(GetLogScopeContainers as unknown as ViMock, 1);
+    await flushAsync();
+
+    const copyButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Copy to clipboard"]'
+    );
+    expect(copyButton).toBeTruthy();
+
+    await act(async () => {
+      copyButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(writeTextMock).toHaveBeenLastCalledWith(
+      '[2024-05-01T10:00:00Z] \u001b[31merror\u001b[0m happened'
+    );
+  });
+
   it('auto-selects the only container for single pod logs', async () => {
     (GetLogScopeContainers as unknown as ViMock).mockResolvedValue(['app']);
     seedLogSnapshot(

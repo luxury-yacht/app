@@ -350,6 +350,14 @@
   flex: 1;
   overflow: auto;
   background-color: var(--log-surface-bg);
+  --terminal-theme-background: var(--log-surface-bg);
+  --terminal-theme-foreground: var(--log-text-primary);
+  --terminal-theme-cursor: var(--log-text-primary);
+  --terminal-theme-selection: var(--code-selection-match-bg);
+  --terminal-theme-scrollbar-slider: var(--log-scroll-thumb);
+  --terminal-theme-scrollbar-slider-hover: var(--log-scroll-thumb-hover);
+  --terminal-theme-scrollbar-slider-active: var(--log-scroll-thumb-hover);
+  --terminal-theme-overview-ruler-border: transparent;
   font-family:
     "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Consolas, "Courier New", monospace;
   position: relative;

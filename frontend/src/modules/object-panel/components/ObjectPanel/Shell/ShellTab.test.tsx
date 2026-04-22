@@ -23,6 +23,7 @@ const wailsMocks = vi.hoisted(() => ({
 
 const terminalMocks = vi.hoisted(() => {
   class TerminalInstance {
+    options: Record<string, unknown>;
     cols = 120;
     rows = 40;
     loadAddon = vi.fn();
@@ -49,12 +50,16 @@ const terminalMocks = vi.hoisted(() => {
     triggerData = (data: string) => {
       this.dataHandler?.(data);
     };
+
+    constructor(options: Record<string, unknown> = {}) {
+      this.options = options;
+    }
   }
 
   const instances: TerminalInstance[] = [];
 
-  const TerminalMock = vi.fn(function TerminalConstructor() {
-    const instance = new TerminalInstance();
+  const TerminalMock = vi.fn(function TerminalConstructor(options: Record<string, unknown> = {}) {
+    const instance = new TerminalInstance(options);
     instances.push(instance);
     return instance;
   });
@@ -289,6 +294,22 @@ describe('ShellTab', () => {
 
     emitEvent('object-shell:output', { sessionId: 'sess-1', stream: 'stdout', data: 'hello' });
     expect(terminal?.write).toHaveBeenCalledWith('hello');
+  });
+
+  it('uses the shared iTerm2 ANSI palette for the terminal theme', async () => {
+    await renderShellTab();
+    clickConnectButton();
+
+    const terminal = getLatestTerminal();
+    const theme = terminal?.options.theme as Record<string, string> | undefined;
+
+    expect(theme).toMatchObject({
+      red: '#b43c2a',
+      green: '#00c200',
+      blue: '#2744c7',
+      brightBlue: '#a7abf2',
+      brightWhite: '#ffffff',
+    });
   });
 
   it('copies selection on mod+c when the terminal has a selection', async () => {

@@ -14,6 +14,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { ClipboardAddon } from '@xterm/addon-clipboard';
 import '@xterm/xterm/css/xterm.css';
 import Tooltip from '@shared/components/Tooltip';
+import { resolveTerminalTheme, toXtermThemeDefinition } from '@shared/terminal/terminalTheme';
 import { EventsOn } from '@wailsjs/runtime/runtime';
 import {
   CloseShellSession,
@@ -132,55 +133,14 @@ const ShellTab: React.FC<ShellTabProps> = ({
 
   const resolveThemeColors = useCallback(() => {
     const container = terminalContainerRef.current;
-    if (!container) {
-      return {
-        background: '#060b18',
-        foreground: '#e2e8f0',
-        cursor: '#22d3ee',
-        selectionBackground: '#1d4ed844',
-        scrollbarSlider: '#64748b66',
-        scrollbarSliderHover: '#64748b99',
-        scrollbarSliderActive: '#64748bcc',
-        scrollbarWidth: 6,
-        overviewRulerBorder: 'transparent',
-      };
-    }
-    const styles = getComputedStyle(container);
-    const rawScrollbarWidth = Number.parseInt(
-      styles.getPropertyValue('--scrollbar-width').trim(),
-      10
-    );
-    const scrollbarWidth = Number.isFinite(rawScrollbarWidth) ? rawScrollbarWidth : 6;
-    return {
-      background: styles.getPropertyValue('--shell-terminal-bg').trim() || '#060b18',
-      foreground: styles.getPropertyValue('--shell-terminal-fg').trim() || '#e2e8f0',
-      cursor: styles.getPropertyValue('--shell-terminal-cursor').trim() || '#22d3ee',
-      selectionBackground:
-        styles.getPropertyValue('--shell-terminal-selection').trim() || '#1d4ed844',
-      scrollbarSlider: styles.getPropertyValue('--scrollbar-thumb-bg').trim() || '#64748b66',
-      scrollbarSliderHover:
-        styles.getPropertyValue('--scrollbar-thumb-hover-bg').trim() || '#64748b99',
-      scrollbarSliderActive:
-        styles.getPropertyValue('--scrollbar-thumb-hover-bg').trim() || '#64748bcc',
-      scrollbarWidth,
-      overviewRulerBorder: 'transparent',
-    };
+    return resolveTerminalTheme(container ? getComputedStyle(container) : null);
   }, []);
 
   const applyTerminalTheme = useCallback(() => {
     const terminal = terminalRef.current as
       | (Terminal & {
           options?: {
-            theme?: {
-              background?: string;
-              foreground?: string;
-              cursor?: string;
-              selectionBackground?: string;
-              scrollbarSliderBackground?: string;
-              scrollbarSliderHoverBackground?: string;
-              scrollbarSliderActiveBackground?: string;
-              overviewRulerBorder?: string;
-            };
+            theme?: ReturnType<typeof toXtermThemeDefinition>;
             overviewRuler?: { width?: number };
           };
           refresh?: (start: number, end: number) => void;
@@ -191,16 +151,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
     }
 
     const theme = resolveThemeColors();
-    terminal.options.theme = {
-      background: theme.background,
-      foreground: theme.foreground,
-      cursor: theme.cursor,
-      selectionBackground: theme.selectionBackground,
-      scrollbarSliderBackground: theme.scrollbarSlider,
-      scrollbarSliderHoverBackground: theme.scrollbarSliderHover,
-      scrollbarSliderActiveBackground: theme.scrollbarSliderActive,
-      overviewRulerBorder: theme.overviewRulerBorder,
-    };
+    terminal.options.theme = toXtermThemeDefinition(theme);
     terminal.options.overviewRuler = {
       width: theme.scrollbarWidth,
     };
@@ -223,16 +174,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
       overviewRuler: {
         width: theme.scrollbarWidth,
       },
-      theme: {
-        background: theme.background,
-        foreground: theme.foreground,
-        cursor: theme.cursor,
-        selectionBackground: theme.selectionBackground,
-        scrollbarSliderBackground: theme.scrollbarSlider,
-        scrollbarSliderHoverBackground: theme.scrollbarSliderHover,
-        scrollbarSliderActiveBackground: theme.scrollbarSliderActive,
-        overviewRulerBorder: theme.overviewRulerBorder,
-      },
+      theme: toXtermThemeDefinition(theme),
     });
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);

@@ -5,7 +5,7 @@
  * Extracts logic into hooks for clarity.
  * Uses a reducer for state management.
  */
-import React, { useReducer, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useReducer, useEffect, useRef, useMemo, useCallback, useState } from 'react';
 import { LogFetcher } from '@wailsjs/go/backend/App';
 import { readLogScopeContainers, requestData } from '@/core/data-access';
 import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
@@ -76,6 +76,11 @@ import {
   formatLogApiTimestamp,
 } from '@/utils/logApiTimestampFormat';
 import LogSettingsModal from '@ui/modals/LogSettingsModal';
+import {
+  DEFAULT_TERMINAL_THEME,
+  resolveTerminalTheme,
+  type TerminalThemeColors,
+} from '@shared/terminal/terminalTheme';
 
 interface LogViewerProps {
   namespace: string;
@@ -461,6 +466,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   const filterInputRef = useRef<HTMLInputElement>(null);
   const seqCounterRef = useRef(0);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [terminalTheme, setTerminalTheme] = useState<TerminalThemeColors>(DEFAULT_TERMINAL_THEME);
   // True until the restoration effect has successfully positioned the
   // scroll container after a (re)mount. Prevents the auto-scroll effect
   // from fighting the restoration for the first paint, and makes the
@@ -476,6 +482,25 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       ),
     []
   );
+  useEffect(() => {
+    const updateTheme = () => {
+      setTerminalTheme(
+        resolveTerminalTheme(
+          logsContentRef.current ? getComputedStyle(logsContentRef.current) : null
+        )
+      );
+    };
+
+    updateTheme();
+
+    const observer = new MutationObserver(updateTheme);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme', 'class'],
+    });
+
+    return () => observer.disconnect();
+  }, []);
 
   const resourceKindKey = resourceKind?.toLowerCase() ?? '';
   const isWorkload = resourceKindKey !== 'pod';
@@ -1518,7 +1543,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
         return renderHighlightedMessage(normalizedText, keyPrefix);
       }
 
-      const segments = parseAnsiTextSegments(text);
+      const segments = parseAnsiTextSegments(text, terminalTheme);
       if (segments.length === 0) {
         return renderHighlightedMessage(stripAnsi(text), keyPrefix);
       }
@@ -1535,7 +1560,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
         );
       });
     },
-    [renderHighlightedMessage, showAnsiColors]
+    [renderHighlightedMessage, showAnsiColors, terminalTheme]
   );
 
   const renderRawLogRow = useCallback(
