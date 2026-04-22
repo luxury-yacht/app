@@ -27,12 +27,19 @@ import {
 import { CaseSensitiveIcon } from '@shared/components/icons/MenuIcons';
 import type { LogDisplayMode, CapabilityState } from '../types';
 import { containsAnsi, parseAnsiTextSegments, stripAnsi } from '../Logs/ansi';
+import {
+  DEFAULT_TERMINAL_THEME,
+  resolveTerminalTheme,
+  type TerminalThemeColors,
+} from '@shared/terminal/terminalTheme';
 import { formatParsedValue, tryParseJSONObject } from '../Logs/jsonLogs';
 import { getLogViewerScrollTop, setLogViewerScrollTop } from '../Logs/logViewerPrefsCache';
 import type { ParsedLogEntry } from '../Logs/logViewerReducer';
 import { fetchNodeLogs, type NodeLogSource } from './nodeLogsApi';
 import '../Logs/LogViewer.css';
 import './NodeLogsTab.css';
+import { useKeyboardSurface } from '@ui/shortcuts';
+import { getSelectedTextWithinRoot, selectAllTextWithinRoot } from '../Logs/textSelection';
 
 const NODE_LOG_TAIL_BYTES = 256 * 1024;
 const NODE_LOG_AUTO_REFRESH_MS = 5000;
@@ -216,6 +223,7 @@ const NodeLogsTab = ({
   const [displayMode, setDisplayMode] = useState<LogDisplayMode>('raw');
   const [parsedLogs, setParsedLogs] = useState<ParsedLogEntry[]>([]);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(() => new Set<string>());
+  const [terminalTheme, setTerminalTheme] = useState<TerminalThemeColors>(DEFAULT_TERMINAL_THEME);
   const logsContentRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef('');
   const loadedSourcePathRef = useRef<string | null>(null);
@@ -229,6 +237,26 @@ const NodeLogsTab = ({
     () => buildNodeLogSourceOptions(sources),
     [sources]
   );
+
+  useEffect(() => {
+    const updateTheme = () => {
+      setTerminalTheme(
+        resolveTerminalTheme(
+          logsContentRef.current ? getComputedStyle(logsContentRef.current) : null
+        )
+      );
+    };
+
+    updateTheme();
+
+    const observer = new MutationObserver(updateTheme);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme', 'class'],
+    });
+
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     if (sources.length === 0) {
@@ -757,6 +785,29 @@ const NodeLogsTab = ({
     resetCopyFeedback();
   }, [displayedText, resetCopyFeedback]);
 
+  useKeyboardSurface({
+    kind: 'editor',
+    rootRef: logsContentRef,
+    active: isActive,
+    captureWhenActive: true,
+    onNativeAction: ({ action, selection }) => {
+      if (action === 'copy') {
+        const text = getSelectedTextWithinRoot(selection, logsContentRef.current);
+        if (!text) {
+          return false;
+        }
+        void navigator.clipboard.writeText(text).catch(() => {
+          /* ignore clipboard failures */
+        });
+        return true;
+      }
+      if (action === 'selectAll') {
+        return selectAllTextWithinRoot(selection, logsContentRef.current);
+      }
+      return false;
+    },
+  });
+
   const renderHighlightedMessage = useCallback(
     (text: string, keyPrefix: string) => {
       if (!text) {
@@ -809,7 +860,7 @@ const NodeLogsTab = ({
         return renderHighlightedMessage(normalizedText, keyPrefix);
       }
 
-      const segments = parseAnsiTextSegments(text);
+      const segments = parseAnsiTextSegments(text, terminalTheme);
       if (segments.length === 0) {
         return renderHighlightedMessage(stripAnsi(text), keyPrefix);
       }
@@ -826,7 +877,7 @@ const NodeLogsTab = ({
         );
       });
     },
-    [renderHighlightedMessage, showAnsiColors]
+    [renderHighlightedMessage, showAnsiColors, terminalTheme]
   );
 
   if (availability.pending) {
@@ -1068,7 +1119,7 @@ const NodeLogsTab = ({
           </div>
         )}
 
-        <div ref={logsContentRef} className="pod-logs-content">
+        <div ref={logsContentRef} className="pod-logs-content selectable" tabIndex={-1}>
           {error ? (
             <div className="pod-logs-display-error">{error}</div>
           ) : !selectedSource ? (

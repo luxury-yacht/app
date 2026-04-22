@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useState, type RefObject } from 'react';
 import { KeyboardScopePriority } from '@ui/shortcuts/priorities';
 import { useKeyboardSurface } from '@ui/shortcuts/surfaces';
-import { isInputElement, resolveEventElement } from '@ui/shortcuts/utils';
+import { hasNativeTabHandling, isInputElement, resolveEventElement } from '@ui/shortcuts/utils';
 import type { NamespaceViewType, ClusterViewType } from '@/types/navigation/views';
 import { focusPreviousRegionBeforeSidebar } from './appFocusRegions';
 
@@ -243,7 +243,7 @@ export const useSidebarKeyboardControls = ({
             (document.activeElement instanceof HTMLElement &&
               container?.contains(document.activeElement)));
 
-        if (targetElement?.closest('[data-tab-native="true"]') || isInputElement(targetElement)) {
+        if (hasNativeTabHandling(targetElement) || isInputElement(targetElement)) {
           return false;
         }
         if (focusIsInsideSidebar) {

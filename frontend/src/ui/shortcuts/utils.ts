@@ -82,3 +82,16 @@ export function isInputElement(target: EventTarget | null): boolean {
 
   return isInput || isContentEditable || isCodeMirror;
 }
+
+export function hasNativeTabHandling(target: EventTarget | null): boolean {
+  let element = resolveEventElement(target);
+  if (
+    !element &&
+    typeof document !== 'undefined' &&
+    document.activeElement instanceof HTMLElement
+  ) {
+    element = document.activeElement;
+  }
+
+  return !!element?.closest('[data-tab-native="true"]');
+}

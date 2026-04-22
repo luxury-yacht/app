@@ -167,6 +167,24 @@
   --toast-auto-dismiss-short: 5000ms;
   --toast-auto-dismiss-long: 10000ms;
 
+  /* Terminal ANSI palette (iTerm2 default) */
+  --terminal-ansi-black: #14191e;
+  --terminal-ansi-red: #b43c2a;
+  --terminal-ansi-green: #00c200;
+  --terminal-ansi-yellow: #c7c400;
+  --terminal-ansi-blue: #2744c7;
+  --terminal-ansi-magenta: #c040be;
+  --terminal-ansi-cyan: #00c5c7;
+  --terminal-ansi-white: #c7c7c7;
+  --terminal-ansi-bright-black: #686868;
+  --terminal-ansi-bright-red: #dd7975;
+  --terminal-ansi-bright-green: #58e790;
+  --terminal-ansi-bright-yellow: #ece100;
+  --terminal-ansi-bright-blue: #a7abf2;
+  --terminal-ansi-bright-magenta: #e17ee1;
+  --terminal-ansi-bright-cyan: #60fdff;
+  --terminal-ansi-bright-white: #ffffff;
+
   /* Log viewer */
   --log-surface-bg: var(--color-base-900);
   --log-surface-maximized-bg: var(--color-base-950);

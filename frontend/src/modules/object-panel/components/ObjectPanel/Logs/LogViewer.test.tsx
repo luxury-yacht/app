@@ -72,6 +72,21 @@ const waitForElement = async <T extends Element>(
   throw new Error('Timed out waiting for element');
 };
 
+const getLatestKeyboardSurfaceConfig = () => {
+  const calls = shortcutMocks.useKeyboardSurface.mock.calls;
+  const call = calls[calls.length - 1];
+  return call?.[0] as
+    | {
+        onNativeAction?: (context: {
+          action: 'copy' | 'selectAll' | 'paste';
+          activeElement: Element | null;
+          selection: Selection | null;
+          text?: string;
+        }) => boolean;
+      }
+    | undefined;
+};
+
 const mockModules = vi.hoisted(() => {
   const orchestrator = {
     stopStreamingDomain: vi.fn(),
@@ -118,6 +133,7 @@ vi.mock('@/core/refresh/fallbacks/objectLogFallbackManager', () => ({
 
 const shortcutMocks = vi.hoisted(() => ({
   useShortcut: vi.fn(),
+  useKeyboardSurface: vi.fn(),
 }));
 
 const contextMocks = vi.hoisted(() => ({
@@ -136,8 +152,13 @@ const contextMocks = vi.hoisted(() => ({
 
 vi.mock('@ui/shortcuts', () => ({
   useShortcut: (...args: unknown[]) => shortcutMocks.useShortcut(...args),
+  useKeyboardSurface: (...args: unknown[]) => shortcutMocks.useKeyboardSurface(...args),
   useKeyboardContext: () => contextMocks,
   useSearchShortcutTarget: () => undefined,
+}));
+
+vi.mock('@core/contexts/ZoomContext', () => ({
+  useZoom: () => ({ zoomLevel: 100 }),
 }));
 
 vi.mock('@shared/components/dropdowns/Dropdown', () => ({
@@ -265,6 +286,7 @@ describe('LogViewer active pod synchronisation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     shortcutMocks.useShortcut.mockClear();
+    shortcutMocks.useKeyboardSurface.mockClear();
     contextMocks.registerShortcut.mockClear();
     contextMocks.unregisterShortcut.mockClear();
     contextMocks.getAvailableShortcuts.mockClear();
@@ -1152,6 +1174,46 @@ describe('LogViewer active pod synchronisation', () => {
     );
   });
 
+  it('copies selected log text through the app native-action path', async () => {
+    seedLogSnapshot([
+      {
+        pod: 'web-1',
+        container: 'app',
+        line: 'selected log text',
+        timestamp: '2024-05-01T11:00:00Z',
+        isInit: false,
+      },
+    ]);
+
+    await renderViewer({ activePodNames: ['web-1'] });
+
+    const surfaceConfig = getLatestKeyboardSurfaceConfig();
+    const line = container.querySelector('.pod-log-line');
+    const content = container.querySelector('.pod-logs-content');
+    expect(surfaceConfig?.onNativeAction).toBeTruthy();
+    expect(line).toBeTruthy();
+    expect(content).toBeTruthy();
+
+    const selection = {
+      toString: () => 'selected log text',
+      isCollapsed: false,
+      anchorNode: line,
+      focusNode: line,
+      rangeCount: 1,
+      getRangeAt: () => ({ commonAncestorContainer: line }) as unknown as Range,
+    } as unknown as Selection;
+
+    const handled = surfaceConfig?.onNativeAction?.({
+      action: 'copy',
+      activeElement: content,
+      selection,
+    });
+    await flushAsync();
+
+    expect(handled).toBe(true);
+    expect(writeTextMock).toHaveBeenCalledWith('selected log text');
+  });
+
   it('formats the API timestamp using the configured preference in the rendered log rows', async () => {
     setAppPreferencesForTesting({ logApiTimestampFormat: 'HH:mm:ss.SSS' });
     seedLogSnapshot([
@@ -1395,6 +1457,181 @@ describe('LogViewer active pod synchronisation', () => {
     expect(ansiButton?.getAttribute('aria-pressed')).toBe('false');
     expect(container.textContent).toContain('INFO GuardDuty agent started');
     expect(container.querySelector('.pod-log-line span[style*="color"]')).toBeNull();
+  });
+
+  it('keeps workload metadata controls available for ANSI log rows', async () => {
+    const panelId = 'obj:test:workload-ansi-metadata';
+    seedLogSnapshot(
+      [
+        {
+          pod: 'web-1',
+          container: 'app',
+          line: '\u001b[32mmatched log\u001b[0m',
+          timestamp: '2024-05-01T10:00:00Z',
+          isInit: false,
+        },
+        {
+          pod: 'web-2',
+          container: 'app',
+          line: '\u001b[31mwrong pod\u001b[0m',
+          timestamp: '2024-05-01T10:00:01Z',
+          isInit: false,
+        },
+      ],
+      defaultScope
+    );
+
+    await renderViewer({ activePodNames: ['web-1', 'web-2'], panelId });
+    await flushAsync();
+
+    const podButton = await waitForElement(() =>
+      container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Show only logs from pod web-1"]'
+      )
+    );
+    expect(container.querySelector('.pod-log-line span[style*="color"]')).toBeTruthy();
+
+    await act(async () => {
+      podButton.click();
+      await Promise.resolve();
+    });
+
+    const lines = Array.from(container.querySelectorAll('.pod-log-line')).map((el) =>
+      el.textContent?.replace(/\s+/g, ' ').trim()
+    );
+    expect(lines).toEqual(['[2024-05-01T10:00:00Z] [web-1/app] matched log']);
+  });
+
+  it('supports highlighting ANSI-colored log text in the DOM renderer', async () => {
+    const panelId = 'obj:test:highlight-ansi';
+    setLogViewerPrefs(panelId, {
+      selectedContainer: '',
+      selectedFilters: [],
+      autoRefresh: true,
+      timestampMode: 'default',
+      showTimestamps: true,
+      wrapText: true,
+      textFilter: 'INFO',
+      highlightMatches: true,
+      inverseMatches: false,
+      caseSensitiveMatches: true,
+      regexMatches: false,
+      displayMode: 'raw',
+      isParsedView: false,
+      expandedRows: [],
+      showPreviousLogs: false,
+    });
+    seedLogSnapshot(
+      [
+        {
+          pod: 'api',
+          container: 'app',
+          line: '\u001b[32mINFO\u001b[0m GuardDuty agent started',
+          timestamp: '2026-04-07T04:10:44.787377Z',
+          isInit: false,
+        },
+      ],
+      buildLogScope('team-a:pod:api')
+    );
+
+    await renderViewer({
+      resourceKind: 'Pod',
+      resourceName: 'api',
+      activePodNames: ['api'],
+      panelId,
+    });
+    await waitForMockCalls(GetLogScopeContainers as unknown as ViMock, 1);
+    await flushAsync();
+
+    const highlight = container.querySelector('.pod-log-line mark.pod-log-highlight');
+    expect(highlight?.textContent).toBe('INFO');
+    expect(highlight?.closest('span[style*="color"]')).toBeTruthy();
+    expect(container.querySelector('.read-only-terminal-surface')).toBeNull();
+  });
+
+  it('supports no-wrap for ANSI-colored log text in the DOM renderer', async () => {
+    const panelId = 'obj:test:nowrap-ansi';
+    setLogViewerPrefs(panelId, {
+      selectedContainer: '',
+      selectedFilters: [],
+      autoRefresh: true,
+      timestampMode: 'default',
+      showTimestamps: true,
+      wrapText: false,
+      textFilter: '',
+      highlightMatches: false,
+      inverseMatches: false,
+      caseSensitiveMatches: false,
+      regexMatches: false,
+      displayMode: 'raw',
+      isParsedView: false,
+      expandedRows: [],
+      showPreviousLogs: false,
+    });
+    seedLogSnapshot(
+      [
+        {
+          pod: 'api',
+          container: 'app',
+          line: '\u001b[31mlong ansi line\u001b[0m',
+          timestamp: '2024-05-01T10:00:00Z',
+          isInit: false,
+        },
+      ],
+      buildLogScope('team-a:pod:api')
+    );
+
+    await renderViewer({
+      resourceKind: 'Pod',
+      resourceName: 'api',
+      activePodNames: ['api'],
+      panelId,
+    });
+    await waitForMockCalls(GetLogScopeContainers as unknown as ViMock, 1);
+    await flushAsync();
+
+    expect(container.querySelector('.pod-logs-text.no-wrap')).toBeTruthy();
+    expect(container.querySelector('.pod-log-line span[style*="color"]')).toBeTruthy();
+    expect(container.querySelector('.read-only-terminal-surface')).toBeNull();
+  });
+
+  it('copies ANSI-enabled raw logs without stripping escape sequences when colors are enabled', async () => {
+    const panelId = 'obj:test:copy-ansi';
+    seedLogSnapshot(
+      [
+        {
+          pod: 'api',
+          container: 'app',
+          line: '\u001b[31merror\u001b[0m happened',
+          timestamp: '2024-05-01T10:00:00Z',
+          isInit: false,
+        },
+      ],
+      buildLogScope('team-a:pod:api')
+    );
+
+    await renderViewer({
+      resourceKind: 'Pod',
+      resourceName: 'api',
+      activePodNames: ['api'],
+      panelId,
+    });
+    await waitForMockCalls(GetLogScopeContainers as unknown as ViMock, 1);
+    await flushAsync();
+
+    const copyButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Copy to clipboard"]'
+    );
+    expect(copyButton).toBeTruthy();
+
+    await act(async () => {
+      copyButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(writeTextMock).toHaveBeenLastCalledWith(
+      '[2024-05-01T10:00:00Z] \u001b[31merror\u001b[0m happened'
+    );
   });
 
   it('auto-selects the only container for single pod logs', async () => {

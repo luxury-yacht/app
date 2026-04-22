@@ -9,6 +9,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 
 import ShellTab from './ShellTab';
 import { DockablePanelProvider } from '@ui/dockable/DockablePanelProvider';
+import { KeyboardProvider } from '@ui/shortcuts/context';
 
 const wailsMocks = vi.hoisted(() => ({
   StartShellSession: vi.fn(),
@@ -23,6 +24,7 @@ const wailsMocks = vi.hoisted(() => ({
 
 const terminalMocks = vi.hoisted(() => {
   class TerminalInstance {
+    options: Record<string, unknown>;
     cols = 120;
     rows = 40;
     loadAddon = vi.fn();
@@ -33,6 +35,7 @@ const terminalMocks = vi.hoisted(() => {
     write = vi.fn();
     writeln = vi.fn();
     paste = vi.fn();
+    selectAll = vi.fn();
     hasSelection = vi.fn(() => false);
     getSelection = vi.fn(() => '');
     private disposeData = vi.fn();
@@ -49,12 +52,16 @@ const terminalMocks = vi.hoisted(() => {
     triggerData = (data: string) => {
       this.dataHandler?.(data);
     };
+
+    constructor(options: Record<string, unknown> = {}) {
+      this.options = options;
+    }
   }
 
   const instances: TerminalInstance[] = [];
 
-  const TerminalMock = vi.fn(function TerminalConstructor() {
-    const instance = new TerminalInstance();
+  const TerminalMock = vi.fn(function TerminalConstructor(options: Record<string, unknown> = {}) {
+    const instance = new TerminalInstance(options);
     instances.push(instance);
     return instance;
   });
@@ -96,6 +103,9 @@ vi.mock('@wailsjs/runtime/runtime', () => ({
         delete eventRegistry.handlers[name];
       }
     };
+  },
+  EventsOff: (name: string) => {
+    delete eventRegistry.handlers[name];
   },
 }));
 
@@ -253,9 +263,11 @@ describe('ShellTab', () => {
     };
     await act(async () => {
       root.render(
-        <DockablePanelProvider>
-          <ShellTab {...finalProps} />
-        </DockablePanelProvider>
+        <KeyboardProvider>
+          <DockablePanelProvider>
+            <ShellTab {...finalProps} />
+          </DockablePanelProvider>
+        </KeyboardProvider>
       );
     });
     await flushAsync();
@@ -289,6 +301,22 @@ describe('ShellTab', () => {
 
     emitEvent('object-shell:output', { sessionId: 'sess-1', stream: 'stdout', data: 'hello' });
     expect(terminal?.write).toHaveBeenCalledWith('hello');
+  });
+
+  it('uses the shared iTerm2 ANSI palette for the terminal theme', async () => {
+    await renderShellTab();
+    clickConnectButton();
+
+    const terminal = getLatestTerminal();
+    const theme = terminal?.options.theme as Record<string, string> | undefined;
+
+    expect(theme).toMatchObject({
+      red: '#b43c2a',
+      green: '#00c200',
+      blue: '#2744c7',
+      brightBlue: '#a7abf2',
+      brightWhite: '#ffffff',
+    });
   });
 
   it('copies selection on mod+c when the terminal has a selection', async () => {
@@ -345,6 +373,114 @@ describe('ShellTab', () => {
     expect(event.preventDefault).toHaveBeenCalled();
     expect(event.stopPropagation).toHaveBeenCalled();
     expect(handled).toBe(false);
+  });
+
+  it('opens a shell-specific context menu on terminal right-click', async () => {
+    await renderShellTab();
+    clickConnectButton();
+
+    const terminal = getLatestTerminal();
+    terminal?.hasSelection.mockReturnValue(true);
+
+    const wrapper = container.querySelector(
+      '.shell-tab__terminal-wrapper'
+    ) as HTMLDivElement | null;
+    expect(wrapper).toBeTruthy();
+
+    const event = new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+    });
+
+    await act(async () => {
+      wrapper?.dispatchEvent(event);
+      await Promise.resolve();
+    });
+
+    expect(event.defaultPrevented).toBe(true);
+    const menuLabels = Array.from(document.body.querySelectorAll('.context-menu-item')).map(
+      (node) => node.textContent?.trim()
+    );
+    expect(menuLabels).toEqual(['Copy', 'Paste', 'Select All']);
+
+    const copyItem = Array.from(
+      document.body.querySelectorAll<HTMLDivElement>('.context-menu-item')
+    ).find((node) => node.textContent?.trim() === 'Copy');
+    expect(copyItem?.classList.contains('disabled')).toBe(false);
+  });
+
+  it('pastes clipboard contents from the shell context menu', async () => {
+    await renderShellTab();
+    clickConnectButton();
+
+    const terminal = getLatestTerminal();
+    (navigator.clipboard.readText as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      'kubectl logs pod-1\n'
+    );
+
+    const wrapper = container.querySelector(
+      '.shell-tab__terminal-wrapper'
+    ) as HTMLDivElement | null;
+    expect(wrapper).toBeTruthy();
+
+    await act(async () => {
+      wrapper?.dispatchEvent(
+        new MouseEvent('contextmenu', {
+          bubbles: true,
+          cancelable: true,
+        })
+      );
+      await Promise.resolve();
+    });
+
+    const pasteItem = Array.from(
+      document.body.querySelectorAll<HTMLDivElement>('.context-menu-item')
+    ).find((node) => node.textContent?.trim() === 'Paste');
+    expect(pasteItem).toBeTruthy();
+
+    await act(async () => {
+      pasteItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(navigator.clipboard.readText).toHaveBeenCalled();
+    expect(terminal?.paste).toHaveBeenCalledWith('kubectl logs pod-1\n');
+  });
+
+  it('copies the terminal selection from the shell context menu', async () => {
+    await renderShellTab();
+    clickConnectButton();
+
+    const terminal = getLatestTerminal();
+    terminal?.hasSelection.mockReturnValue(true);
+    terminal?.getSelection.mockReturnValue('kubectl get pods');
+
+    const wrapper = container.querySelector(
+      '.shell-tab__terminal-wrapper'
+    ) as HTMLDivElement | null;
+    expect(wrapper).toBeTruthy();
+
+    await act(async () => {
+      wrapper?.dispatchEvent(
+        new MouseEvent('contextmenu', {
+          bubbles: true,
+          cancelable: true,
+        })
+      );
+      await Promise.resolve();
+    });
+
+    const copyItem = Array.from(
+      document.body.querySelectorAll<HTMLDivElement>('.context-menu-item')
+    ).find((node) => node.textContent?.trim() === 'Copy');
+    expect(copyItem).toBeTruthy();
+
+    await act(async () => {
+      copyItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('kubectl get pods');
   });
 
   it('sends stdin data to the backend when the session is open', async () => {

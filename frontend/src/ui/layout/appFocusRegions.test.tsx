@@ -140,4 +140,62 @@ describe('appFocusRegions', () => {
 
     expect(document.activeElement?.textContent).toBe('Overview');
   });
+
+  it('does not hijack shift-tab from native tab regions inside content', async () => {
+    const Harness = () => {
+      const contentRef = React.useRef<HTMLDivElement | null>(null);
+
+      useContentRegionShiftTabHandoff(contentRef, true);
+
+      return (
+        <>
+          <div className="cluster-tabs-wrapper">
+            <div role="tab" tabIndex={0}>
+              Cluster tab
+            </div>
+          </div>
+          <div className="app-main">
+            <div className="sidebar" tabIndex={0}>
+              <div className="sidebar-item active" data-sidebar-focusable="true" tabIndex={-1}>
+                Overview
+              </div>
+            </div>
+            <div ref={contentRef} className="content-body">
+              <div data-tab-native="true">
+                <button type="button">Terminal input</button>
+              </div>
+            </div>
+          </div>
+        </>
+      );
+    };
+
+    await act(async () => {
+      root.render(
+        <KeyboardProvider>
+          <Harness />
+        </KeyboardProvider>
+      );
+      await Promise.resolve();
+    });
+
+    const terminalButton = document.querySelector<HTMLButtonElement>('.content-body button');
+    expect(terminalButton).toBeTruthy();
+    terminalButton?.focus();
+
+    const event = new KeyboardEvent('keydown', {
+      key: 'Tab',
+      shiftKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+
+    await act(async () => {
+      terminalButton?.dispatchEvent(event);
+      await Promise.resolve();
+    });
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(document.activeElement).toBe(terminalButton);
+  });
 });

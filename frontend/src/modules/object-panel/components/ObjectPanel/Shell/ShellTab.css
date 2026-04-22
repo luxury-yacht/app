@@ -134,6 +134,14 @@
   --shell-terminal-fg: var(--color-text);
   --shell-terminal-cursor: var(--color-text);
   --shell-terminal-selection: var(--color-bg-tertiary);
+  --terminal-theme-background: var(--shell-terminal-bg);
+  --terminal-theme-foreground: var(--shell-terminal-fg);
+  --terminal-theme-cursor: var(--shell-terminal-cursor);
+  --terminal-theme-selection: var(--shell-terminal-selection);
+  --terminal-theme-scrollbar-slider: var(--scrollbar-thumb-bg);
+  --terminal-theme-scrollbar-slider-hover: var(--scrollbar-thumb-hover-bg);
+  --terminal-theme-scrollbar-slider-active: var(--scrollbar-thumb-hover-bg);
+  --terminal-theme-overview-ruler-border: transparent;
 }
 
 .shell-tab__terminal--hidden {
