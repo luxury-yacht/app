@@ -160,4 +160,37 @@ describe('useGridTableRowRenderer', () => {
     expect(handleRowClick).toHaveBeenCalledWith({ name: 'beta' }, 1, event);
     renderers.cleanup();
   });
+
+  it('does not assign native title tooltips to grid cells', () => {
+    const renderers = renderHook(() =>
+      useGridTableRowRenderer({
+        keyExtractor: (_item, index) => `row-${index}`,
+        getRowClassName: () => '',
+        getRowStyle: undefined,
+        handleRowClick: vi.fn(),
+        handleRowMouseEnter: vi.fn(),
+        handleRowMouseLeave: vi.fn(),
+        columnRenderModelsWithOffsets: baseColumns,
+        columnVirtualizationConfig: {
+          enabled: false,
+          overscanColumns: 0,
+          stickyStart: 0,
+          stickyEnd: 0,
+        },
+        columnWindowRange: { startIndex: 0, endIndex: 1 },
+        handleContextMenu: vi.fn(),
+        getCachedCellContent: () => ({ content: 'cell', text: 'tooltip text' }),
+        measureRowRef: vi.fn(),
+      })
+    );
+
+    const renderRow = renderers.get();
+    const rowElement = renderRow({ name: 'beta' }, 1, false, 'row-beta') as React.ReactElement;
+    const rowProps = rowElement.props as { children: React.ReactNode[] };
+    const cells = rowProps.children.filter(Boolean) as React.ReactElement<{ title?: string }>[];
+
+    expect(cells[0]?.props.title).toBeUndefined();
+
+    renderers.cleanup();
+  });
 });

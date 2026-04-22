@@ -59,13 +59,6 @@ export interface UseGridTableRowRendererParams<T> {
     text: string;
   };
   measureRowRef: MeasureRowRefFn;
-  /**
-   * When true, cells skip setting a native `title` attribute so the
-   * browser's built-in hover tooltip never fires. Used by tables that
-   * provide their own expansion / tooltip mechanism and don't want the
-   * native tooltip racing with it.
-   */
-  disableCellNativeTitle?: boolean;
 }
 
 export function useGridTableRowRenderer<T>({
@@ -81,7 +74,6 @@ export function useGridTableRowRenderer<T>({
   handleContextMenu,
   getCachedCellContent,
   measureRowRef,
-  disableCellNativeTitle = false,
 }: UseGridTableRowRendererParams<T>): RenderRowContentFn<T> {
   return useCallback(
     (
@@ -154,7 +146,6 @@ export function useGridTableRowRenderer<T>({
                 data-has-context-menu="true"
                 onContextMenu={(e) => handleContextMenu(e, model.key, item, absoluteIndex)}
                 style={model.cellStyle}
-                title={disableCellNativeTitle ? undefined : cell.text}
                 data-gridtable-shortcut-optout={disableShortcuts ? 'true' : undefined}
               >
                 <span className="grid-cell-content">{cell.content}</span>
@@ -177,7 +168,6 @@ export function useGridTableRowRenderer<T>({
       handleContextMenu,
       getCachedCellContent,
       measureRowRef,
-      disableCellNativeTitle,
     ]
   );
 }

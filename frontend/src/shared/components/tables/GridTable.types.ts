@@ -174,13 +174,6 @@ export interface GridTableProps<T> {
    * Default: true.
    */
   showTrailingColumnBoundary?: boolean;
-  /**
-   * When true, cells will not set a native `title` attribute from their
-   * extracted text content. Use this for tables where the consumer
-   * provides its own row-expansion or tooltip mechanism and doesn't want
-   * the browser's hover tooltip racing with it. Default: false.
-   */
-  disableCellNativeTitle?: boolean;
 }
 
 export interface InternalFilterOptions {

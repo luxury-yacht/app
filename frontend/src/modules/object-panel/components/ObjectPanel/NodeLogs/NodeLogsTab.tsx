@@ -1151,7 +1151,6 @@ const NodeLogsTab = ({
                   tableClassName="gridtable-parsed-logs"
                   virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}
                   isKindColumnKey={() => false}
-                  disableCellNativeTitle
                 />
               </div>
             )
