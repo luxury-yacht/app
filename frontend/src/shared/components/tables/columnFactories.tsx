@@ -91,6 +91,56 @@ export function createResourceBarColumn<T>(
     return str.length > 0 ? str : undefined;
   };
 
+  const parseResourceForExport = (value: string | undefined): number => {
+    if (!value || value === '-' || value === 'undefined' || value === 'null' || value === 'not set')
+      return 0;
+
+    if (type === 'cpu') {
+      if (value.endsWith('m')) {
+        const parsed = parseFloat(value.slice(0, -1));
+        return Number.isNaN(parsed) ? 0 : parsed;
+      }
+      const parsed = parseFloat(value) * 1000;
+      return Number.isNaN(parsed) ? 0 : parsed;
+    }
+
+    const num = parseFloat(value);
+    if (Number.isNaN(num)) {
+      return 0;
+    }
+    if (value.endsWith('Ki')) {
+      return num / 1024;
+    }
+    if (value.endsWith('Mi')) {
+      return num;
+    }
+    if (value.endsWith('Gi') || value.endsWith('GB')) {
+      return num * 1024;
+    }
+    if (value.endsWith('MB')) {
+      return num;
+    }
+    return num / (1024 * 1024);
+  };
+
+  const formatResourceForExport = (value: string | undefined): string => {
+    if (!value || value === '-' || value === 'undefined' || value === 'null') {
+      return '-';
+    }
+
+    const parsedValue = parseResourceForExport(value);
+    if (type === 'cpu') {
+      return `${Math.round(parsedValue)}m`;
+    }
+    if (parsedValue === 0) {
+      return '-';
+    }
+    if (parsedValue >= 1024) {
+      return `${(parsedValue / 1024).toFixed(1)}Gi`;
+    }
+    return `${Math.round(parsedValue)}Mi`;
+  };
+
   return {
     key,
     header,
@@ -103,6 +153,7 @@ export function createResourceBarColumn<T>(
       const limit = coerce(getLimit?.(item));
       const allocatable = coerce(getAllocatable?.(item));
       const showEmptyState = getShowEmptyState?.(item);
+      const exportText = getMetricsError?.(item) ? '—' : formatResourceForExport(usage);
 
       return (
         <ResourceBar
@@ -119,6 +170,7 @@ export function createResourceBarColumn<T>(
           metricsLastUpdated={getMetricsLastUpdated?.(item)}
           animationScopeKey={getAnimationKey?.(item)}
           showEmptyState={showEmptyState ?? true}
+          data-gridtable-export-text={exportText}
         />
       );
     },

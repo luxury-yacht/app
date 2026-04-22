@@ -134,6 +134,10 @@ export const getTextContent = (node: React.ReactNode): string => {
   }
   if (React.isValidElement(node)) {
     const props = node.props as any;
+    const exportText = props['data-gridtable-export-text'];
+    if (typeof exportText === 'string') {
+      return exportText;
+    }
     if (props.children) {
       return getTextContent(props.children);
     }

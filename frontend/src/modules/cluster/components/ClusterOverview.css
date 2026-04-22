@@ -51,6 +51,11 @@
   align-items: center;
 }
 
+.overview-top__hero img {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 .overview-update-banner-wrap {
   display: flex;
   justify-content: center;
@@ -105,12 +110,12 @@
 }
 
 .captain-k8s-small {
-  height: 160px;
+  height: 120px;
   width: auto;
 }
 
 .logo-small {
-  height: 160px;
+  height: 120px;
   width: auto;
 }
 
@@ -140,6 +145,8 @@
   color: var(--color-text-secondary);
   font-size: 0.8rem;
   text-transform: uppercase;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .cluster-info-value {
@@ -199,6 +206,8 @@
   margin: 0 0 1.2rem 0;
   color: var(--color-text-secondary);
   text-transform: uppercase;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .overview-section h3 {
@@ -206,6 +215,8 @@
   font-weight: 500;
   margin: 0 0 0.5rem 0;
   color: var(--color-text-secondary);
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .resource-group {

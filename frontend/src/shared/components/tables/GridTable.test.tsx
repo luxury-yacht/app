@@ -32,7 +32,10 @@ import GridTable, {
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
   type GridTableFilterConfig,
 } from '@shared/components/tables/GridTable';
-import { createTextColumn } from '@shared/components/tables/columnFactories';
+import {
+  createResourceBarColumn,
+  createTextColumn,
+} from '@shared/components/tables/columnFactories';
 import { KeyboardProvider } from '@ui/shortcuts';
 import { ZoomProvider } from '@core/contexts/ZoomContext';
 
@@ -715,6 +718,15 @@ describe('GridTable interactions (non-virtualized)', () => {
 
     await flushAsync();
 
+    const wrapper = container.querySelector<HTMLDivElement>('.gridtable-wrapper');
+    expect(wrapper).not.toBeNull();
+
+    act(() => {
+      wrapper!.focus();
+    });
+
+    await flushAsync();
+
     const firstCell = container.querySelector('.gridtable--body .grid-cell');
     expect(firstCell).not.toBeNull();
     act(() => {
@@ -725,9 +737,6 @@ describe('GridTable interactions (non-virtualized)', () => {
 
     await flushAsync();
     expect(document.querySelector('.context-menu')).not.toBeNull();
-
-    const wrapper = container.querySelector<HTMLDivElement>('.gridtable-wrapper');
-    expect(wrapper).not.toBeNull();
 
     act(() => {
       wrapper!.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
@@ -1425,6 +1434,156 @@ it('ignores wrapper context menus when no empty-area items are exposed', async (
 
   expect(customItems).not.toHaveBeenCalled();
   expect(document.querySelector('.context-menu')).toBeNull();
+
+  cleanup();
+});
+
+it('copies the current visible table contents as CSV from the filter icon bar', async () => {
+  const clipboardWriteText = vi.fn().mockResolvedValue(undefined);
+  if (!navigator.clipboard) {
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: clipboardWriteText },
+    });
+  } else {
+    Object.assign(navigator.clipboard, { writeText: clipboardWriteText });
+  }
+
+  const csvColumns: GridColumnDefinition<SimpleRow & { notes: string; secret: string }>[] = [
+    {
+      key: 'label',
+      header: 'Label',
+      render: (row) => row.label,
+    },
+    {
+      key: 'notes',
+      header: 'Notes',
+      render: (row) => row.notes,
+    },
+    {
+      key: 'secret',
+      header: 'Secret',
+      render: (row) => row.secret,
+    },
+  ];
+
+  const csvRows = [
+    {
+      id: 'row-0',
+      label: 'Alpha,One',
+      name: 'Row 0',
+      notes: 'He said "hi"',
+      secret: 'omit me',
+    },
+    {
+      id: 'row-1',
+      label: 'Beta',
+      name: 'Row 1',
+      notes: 'Line\nBreak',
+      secret: 'omit me too',
+    },
+  ] as unknown as SimpleRow[];
+
+  const { container, cleanup } = renderGridTable({
+    data: csvRows,
+    columns: csvColumns as GridColumnDefinition<SimpleRow>[],
+    virtualization: { enabled: false },
+    filters: {
+      enabled: true,
+      options: {
+        kinds: [],
+        namespaces: [],
+      },
+    },
+    columnVisibility: { secret: false },
+  });
+  cleanupRoot = cleanup;
+
+  await flushAsync();
+
+  const copyButton = container.querySelector<HTMLButtonElement>(
+    '.icon-bar-button[aria-label="Copy table as CSV"]'
+  );
+  expect(copyButton).not.toBeNull();
+
+  await act(async () => {
+    copyButton!.click();
+    await Promise.resolve();
+  });
+
+  expect(clipboardWriteText).toHaveBeenCalledWith(
+    'Label,Notes\n' + '"Alpha,One","He said ""hi"""\n' + 'Beta,"Line\nBreak"'
+  );
+
+  cleanup();
+});
+
+it('copies resource-bar columns using their displayed CPU and memory values', async () => {
+  const clipboardWriteText = vi.fn().mockResolvedValue(undefined);
+  if (!navigator.clipboard) {
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: clipboardWriteText },
+    });
+  } else {
+    Object.assign(navigator.clipboard, { writeText: clipboardWriteText });
+  }
+
+  type ResourceRow = SimpleRow & { cpu: string; memory: string };
+  const resourceColumns: GridColumnDefinition<ResourceRow>[] = [
+    {
+      key: 'label',
+      header: 'Label',
+      render: (row) => row.label,
+    },
+    createResourceBarColumn<ResourceRow>({
+      key: 'cpu',
+      header: 'CPU',
+      type: 'cpu',
+      getUsage: (row) => row.cpu,
+    }),
+    createResourceBarColumn<ResourceRow>({
+      key: 'memory',
+      header: 'Memory',
+      type: 'memory',
+      getUsage: (row) => row.memory,
+    }),
+  ];
+
+  const resourceRows = [
+    { id: 'row-0', label: 'Alpha', name: 'Alpha', cpu: '250m', memory: '512Mi' },
+    { id: 'row-1', label: 'Beta', name: 'Beta', cpu: '1', memory: `${2 * 1024 * 1024 * 1024}` },
+  ] as unknown as SimpleRow[];
+
+  const { container, cleanup } = renderGridTable({
+    data: resourceRows,
+    columns: resourceColumns as GridColumnDefinition<SimpleRow>[],
+    virtualization: { enabled: false },
+    filters: {
+      enabled: true,
+      options: {
+        kinds: [],
+        namespaces: [],
+      },
+    },
+  });
+  cleanupRoot = cleanup;
+
+  await flushAsync();
+
+  const copyButton = container.querySelector<HTMLButtonElement>(
+    '.icon-bar-button[aria-label="Copy table as CSV"]'
+  );
+  expect(copyButton).not.toBeNull();
+
+  await act(async () => {
+    copyButton!.click();
+    await Promise.resolve();
+  });
+
+  expect(clipboardWriteText).toHaveBeenCalledWith(
+    'Label,CPU,Memory\nAlpha,250m,512Mi\nBeta,1000m,2.0Gi'
+  );
 
   cleanup();
 });

@@ -208,4 +208,76 @@ describe('GridTableBody', () => {
 
     expect(onClearFilters).toHaveBeenCalledTimes(1);
   });
+
+  it('prevents native right-click text selection inside grid cells', async () => {
+    const renderRowContent: RenderRowContentFn<TestRow> = (item) => (
+      <div key={item.id} className="gridtable-row">
+        <div className="grid-cell">
+          <span className="grid-cell-content">Row {item.id}</span>
+        </div>
+      </div>
+    );
+
+    const { container } = await renderTableBody({
+      renderRowContent: renderRowContent as RenderRowContentFn<any>,
+    });
+
+    const cell = container.querySelector('.grid-cell') as HTMLDivElement | null;
+    expect(cell).not.toBeNull();
+
+    const removeAllRanges = vi.fn();
+    const getSelectionSpy = vi.spyOn(window, 'getSelection').mockReturnValue({
+      removeAllRanges,
+    } as unknown as Selection);
+
+    const mouseDownEvent = new MouseEvent('mousedown', {
+      bubbles: true,
+      cancelable: true,
+      button: 2,
+    });
+    cell?.dispatchEvent(mouseDownEvent);
+
+    expect(mouseDownEvent.defaultPrevented).toBe(true);
+    expect(removeAllRanges).toHaveBeenCalledTimes(1);
+
+    getSelectionSpy.mockRestore();
+  });
+
+  it('clears any active selection before opening the wrapper context menu for a cell', async () => {
+    const onWrapperContextMenu = vi.fn();
+    const renderRowContent: RenderRowContentFn<TestRow> = (item) => (
+      <div key={item.id} className="gridtable-row">
+        <div className="grid-cell">
+          <span className="grid-cell-content">Row {item.id}</span>
+        </div>
+      </div>
+    );
+
+    const { container } = await renderTableBody({
+      renderRowContent: renderRowContent as RenderRowContentFn<any>,
+      onWrapperContextMenu,
+    });
+
+    const cell = container.querySelector('.grid-cell') as HTMLDivElement | null;
+    expect(cell).not.toBeNull();
+
+    const removeAllRanges = vi.fn();
+    const getSelectionSpy = vi.spyOn(window, 'getSelection').mockReturnValue({
+      removeAllRanges,
+    } as unknown as Selection);
+
+    const contextMenuEvent = new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      button: 2,
+      clientX: 20,
+      clientY: 20,
+    });
+    cell?.dispatchEvent(contextMenuEvent);
+
+    expect(removeAllRanges).toHaveBeenCalledTimes(1);
+    expect(onWrapperContextMenu).toHaveBeenCalledTimes(1);
+
+    getSelectionSpy.mockRestore();
+  });
 });
