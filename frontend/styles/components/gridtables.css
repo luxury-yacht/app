@@ -288,6 +288,52 @@ body.dockable-panel-resizing .content-body .gridtable-header-container {
   opacity: 1;
 }
 
+.gridtable-trailing-boundary {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  transform: translateX(-50%);
+  pointer-events: none;
+  z-index: var(--z-index-grid-resize-handle);
+}
+
+.gridtable-trailing-boundary::before {
+  content: "";
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  border-radius: 1px;
+  background-color: var(--grid-resize-handle-color, var(--grid-border-color));
+  opacity: var(--grid-resize-handle-opacity, 0.65);
+}
+
+.column-separator {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  pointer-events: none;
+  z-index: var(--z-index-grid-resize-handle);
+}
+
+.column-separator::before {
+  content: "";
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  border-radius: 1px;
+  background-color: var(--grid-resize-handle-color, var(--grid-border-color));
+  opacity: var(--grid-resize-handle-opacity, 0.65);
+}
+
 /* ============================================
    7. Rows & Cells
    ============================================ */
@@ -389,22 +435,6 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
   text-overflow: clip;
   white-space: normal; /* Allow event text to wrap */
   line-height: 1.4;
-}
-
-/* Context menu hints */
-.grid-cell[data-has-context-menu="true"] {
-  position: relative;
-}
-
-.grid-cell[data-has-context-menu="true"]:hover::after {
-  content: "⋮";
-  position: absolute;
-  right: 4px;
-  top: 50%;
-  transform: translateY(-50%);
-  opacity: 0.3;
-  font-size: 12px;
-  pointer-events: none;
 }
 
 /* --- Table Variants ------------------------------------------------------ */

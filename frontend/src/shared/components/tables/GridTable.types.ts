@@ -168,6 +168,13 @@ export interface GridTableProps<T> {
   filters?: GridTableFilterConfig<T>;
   allowHorizontalOverflow?: boolean;
   /**
+   * When true, show a passive vertical boundary at the end of the rendered
+   * columns whenever the table content is narrower than the visible viewport.
+   * This makes the width of the rightmost column clear without enabling resize.
+   * Default: true.
+   */
+  showTrailingColumnBoundary?: boolean;
+  /**
    * When true, cells will not set a native `title` attribute from their
    * extracted text content. Use this for tables where the consumer
    * provides its own row-expansion or tooltip mechanism and doesn't want

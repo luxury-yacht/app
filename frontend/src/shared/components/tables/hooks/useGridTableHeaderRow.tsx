@@ -42,6 +42,7 @@ export function useGridTableHeaderRow<T>({
           !!nextColumn &&
           !isFixedColumnKey(column.key) &&
           !isFixedColumnKey(nextColumn.key);
+        const showKindSeparator = column.key === 'kind' && !!nextColumn && !showResizeHandle;
 
         // Compute aria-sort for this header cell.
         const ariaSortValue = (() => {
@@ -101,6 +102,7 @@ export function useGridTableHeaderRow<T>({
                 }}
               />
             )}
+            {showKindSeparator && <div className="column-separator" aria-hidden="true" />}
           </div>
         );
       })}

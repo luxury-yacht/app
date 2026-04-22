@@ -15,6 +15,7 @@ interface GridTableHeaderProps {
   scrollbarWidth: number;
   headerRow: React.ReactNode;
   hideHeader: boolean;
+  trailingBoundaryOffset: number | null;
 }
 
 const GridTableHeader: React.FC<GridTableHeaderProps> = ({
@@ -24,6 +25,7 @@ const GridTableHeader: React.FC<GridTableHeaderProps> = ({
   scrollbarWidth,
   headerRow,
   hideHeader,
+  trailingBoundaryOffset,
 }) => {
   if (hideHeader) {
     return null;
@@ -40,6 +42,13 @@ const GridTableHeader: React.FC<GridTableHeaderProps> = ({
       >
         {headerRow}
       </div>
+      {trailingBoundaryOffset !== null && (
+        <div
+          className="gridtable-trailing-boundary gridtable-trailing-boundary--header"
+          style={{ left: `${trailingBoundaryOffset}px` }}
+          aria-hidden="true"
+        />
+      )}
     </div>
   );
 };

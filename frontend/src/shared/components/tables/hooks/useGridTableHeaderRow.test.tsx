@@ -144,6 +144,35 @@ describe('useGridTableHeaderRow', () => {
     expect(handleHeaderClick).toHaveBeenCalledWith(columns[2]);
   });
 
+  it('renders a passive separator after the Kind column when it is fixed', async () => {
+    const kindColumns: GridColumnDefinition<any>[] = [
+      { key: 'kind', header: 'Kind', sortable: true, render: (row: any) => row?.kind ?? null },
+      { key: 'name', header: 'Name', sortable: true, render: (row: any) => row?.name ?? null },
+    ];
+
+    const KindHarness: React.FC = () => {
+      const node = useGridTableHeaderRow({
+        renderedColumns: kindColumns,
+        enableColumnResizing: true,
+        isFixedColumnKey: (key) => key === 'kind',
+        handleHeaderContextMenu: undefined,
+        columnWidths: { kind: 120, name: 180 },
+        handleHeaderClick,
+        renderSortIndicator,
+        handleResizeStart,
+        autoSizeColumn,
+      });
+      return <>{node}</>;
+    };
+
+    await act(async () => {
+      root.render(<KindHarness />);
+    });
+
+    expect(container.querySelectorAll('.resize-handle')).toHaveLength(0);
+    expect(container.querySelectorAll('.column-separator')).toHaveLength(1);
+  });
+
   it('activates sort via Enter and Space keys on sortable headers', async () => {
     await act(async () => {
       root.render(<HeaderHarness enableResizing={false} />);
