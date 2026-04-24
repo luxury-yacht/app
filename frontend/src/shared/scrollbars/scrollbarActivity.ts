@@ -105,7 +105,7 @@ const resolveOverlayContainer = (element: HTMLElement): HTMLElement => {
   }
 
   if (owner === element && owner.matches('.dropdown-menu')) {
-    return owner.parentElement ?? document.body;
+    return document.body;
   }
 
   return owner;
@@ -988,12 +988,19 @@ const scheduleScrollbarInactive = (element: Element): void => {
   activeTimers.set(element, timer);
 };
 
-const markScrollbarActive = (element: Element): void => {
+const markScrollbarActive = (
+  element: Element,
+  geometry: 'immediate' | 'scheduled' | 'none' = 'immediate'
+): void => {
   const activeOpacity = readScrollbarOpacityToken('--scrollbar-thumb-active-opacity', 1);
   if (isOverlayScrollbarElement(element)) {
     ensureOverlayScrollbars(element);
     activeOverlayElements.add(element);
-    updateOverlayScrollbarGeometry(element);
+    if (geometry === 'scheduled') {
+      scheduleOverlayGeometryUpdate(element);
+    } else if (geometry === 'immediate') {
+      updateOverlayScrollbarGeometry(element);
+    }
     startActiveOverlayGeometryTracking();
   }
   setScrollbarOpacity(element, getCurrentScrollbarOpacity(element));
@@ -1031,7 +1038,7 @@ export const initializeScrollbarActivityTracking = (): void => {
       if (element) {
         overlayGeometryTransitionsDisabled.add(element);
         updateOverlayScrollbarGeometry(element);
-        markScrollbarActive(element);
+        markScrollbarActive(element, 'none');
       }
     },
     { capture: true, passive: true, signal }
@@ -1046,15 +1053,15 @@ export const initializeScrollbarActivityTracking = (): void => {
         const delta = getWheelDeltaPixels(event, overlayOwner);
         scrollByPixels(overlayOwner, delta.x, delta.y);
         overlayGeometryTransitionsDisabled.add(overlayOwner);
-        markScrollbarActive(overlayOwner);
         updateOverlayScrollbarGeometry(overlayOwner);
+        markScrollbarActive(overlayOwner, 'none');
         event.preventDefault();
         return;
       }
 
       const element = findWheelScrollTarget(event.target, event);
       if (element) {
-        markScrollbarActive(element);
+        markScrollbarActive(element, 'scheduled');
       }
     },
     { capture: true, passive: false, signal }

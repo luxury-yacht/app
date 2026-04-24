@@ -302,12 +302,15 @@ describe('scrollbar activity tracking', () => {
     dropdown.appendChild(menu);
 
     dispatchWheel(menu);
+    vi.runOnlyPendingTimers();
 
-    const verticalThumb = dropdown.querySelector<HTMLElement>('.scrollbar-overlay-thumb--vertical');
-    const horizontalThumb = dropdown.querySelector<HTMLElement>(
+    const verticalThumb = document.body.querySelector<HTMLElement>(
+      '.scrollbar-overlay-thumb--vertical'
+    );
+    const horizontalThumb = document.body.querySelector<HTMLElement>(
       '.scrollbar-overlay-thumb--horizontal'
     );
-    expect(verticalThumb?.parentElement).toBe(dropdown);
+    expect(verticalThumb?.parentElement).toBe(document.body);
     expect(menu.querySelector('.scrollbar-overlay-thumb--vertical')).toBeNull();
     expect(verticalThumb?.style.zIndex).toBe('4001');
     expect(horizontalThumb?.style.display).toBe('none');
