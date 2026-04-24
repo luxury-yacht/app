@@ -302,7 +302,7 @@ describe('scrollbar activity tracking', () => {
     dropdown.appendChild(menu);
 
     dispatchWheel(menu);
-    vi.runOnlyPendingTimers();
+    vi.advanceTimersByTime(0);
 
     const verticalThumb = document.body.querySelector<HTMLElement>(
       '.scrollbar-overlay-thumb--vertical'

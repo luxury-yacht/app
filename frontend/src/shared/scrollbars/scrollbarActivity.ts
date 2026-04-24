@@ -1061,7 +1061,11 @@ export const initializeScrollbarActivityTracking = (): void => {
 
       const element = findWheelScrollTarget(event.target, event);
       if (element) {
-        markScrollbarActive(element, 'scheduled');
+        const geometry =
+          element instanceof HTMLElement && element.matches('.dropdown-menu')
+            ? 'scheduled'
+            : 'immediate';
+        markScrollbarActive(element, geometry);
       }
     },
     { capture: true, passive: false, signal }
