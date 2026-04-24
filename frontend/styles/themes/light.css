@@ -140,8 +140,8 @@
 
   /* Scrollbar colors */
   --scrollbar-track-bg: transparent;
-  --scrollbar-thumb-bg: rgba(120, 120, 128, 0.42);
-  --scrollbar-thumb-hover-bg: rgba(120, 120, 128, 0.68);
+  --scrollbar-thumb-bg: var(--color-bg-tertiary);
+  --scrollbar-thumb-hover-bg: var(--color-bg-tertiary);
   --scrollbar-corner-bg: transparent;
 
   /* Shadows */
