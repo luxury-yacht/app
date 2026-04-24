@@ -184,13 +184,13 @@ describe('GlobalShortcuts', () => {
 
   it('prioritises settings modal when Escape shortcut fires', async () => {
     const toggleSettings = vi.fn();
-    const toggleLogs = vi.fn();
+    const toggleAppLogsPanel = vi.fn();
 
     await renderComponent({
       onToggleSettings: toggleSettings,
-      onToggleLogsPanel: toggleLogs,
+      onToggleAppLogsPanel: toggleAppLogsPanel,
       isSettingsOpen: true,
-      isLogsPanelOpen: true,
+      isAppLogsPanelOpen: true,
     });
 
     await act(async () => {
@@ -199,15 +199,15 @@ describe('GlobalShortcuts', () => {
     });
 
     expect(toggleSettings).toHaveBeenCalledTimes(1);
-    expect(toggleLogs).not.toHaveBeenCalled();
+    expect(toggleAppLogsPanel).not.toHaveBeenCalled();
   });
 
   it('closes the help overlay before invoking other Escape handlers', async () => {
-    const toggleLogs = vi.fn();
+    const toggleAppLogsPanel = vi.fn();
 
     await renderComponent({
-      onToggleLogsPanel: toggleLogs,
-      isLogsPanelOpen: true,
+      onToggleAppLogsPanel: toggleAppLogsPanel,
+      isAppLogsPanelOpen: true,
     });
 
     await act(async () => {
@@ -222,15 +222,15 @@ describe('GlobalShortcuts', () => {
     });
 
     expect(latestHelpProps?.isOpen).toBe(false);
-    expect(toggleLogs).not.toHaveBeenCalled();
+    expect(toggleAppLogsPanel).not.toHaveBeenCalled();
   });
 
-  it('falls back to toggling the logs panel when Escape fires', async () => {
-    const toggleLogs = vi.fn();
+  it('falls back to toggling the Application Logs Panel when Escape fires', async () => {
+    const toggleAppLogsPanel = vi.fn();
 
     await renderComponent({
-      onToggleLogsPanel: toggleLogs,
-      isLogsPanelOpen: true,
+      onToggleAppLogsPanel: toggleAppLogsPanel,
+      isAppLogsPanelOpen: true,
       isSettingsOpen: false,
     });
 
@@ -239,7 +239,7 @@ describe('GlobalShortcuts', () => {
       await Promise.resolve();
     });
 
-    expect(toggleLogs).toHaveBeenCalledTimes(1);
+    expect(toggleAppLogsPanel).toHaveBeenCalledTimes(1);
   });
 
   it('registers refresh shortcut only when handler provided', async () => {
@@ -288,15 +288,15 @@ describe('GlobalShortcuts', () => {
     expect(toggleSidebar).toHaveBeenCalledTimes(1);
   });
 
-  it('toggles logs panel via Ctrl+Shift+L shortcut', async () => {
-    const toggleLogs = vi.fn();
-    await renderComponent({ onToggleLogsPanel: toggleLogs });
+  it('toggles Application Logs Panel via Ctrl+Shift+L shortcut', async () => {
+    const toggleAppLogsPanel = vi.fn();
+    await renderComponent({ onToggleAppLogsPanel: toggleAppLogsPanel });
 
     act(() => {
       findShortcut('l', { ctrl: true, shift: true }).handler();
     });
 
-    expect(toggleLogs).toHaveBeenCalledTimes(1);
+    expect(toggleAppLogsPanel).toHaveBeenCalledTimes(1);
   });
 
   it('toggles diagnostics panel via Ctrl+Shift+D shortcut', async () => {

@@ -15,10 +15,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 
+	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/internal/parallel"
 	"github.com/luxury-yacht/app/backend/refresh"
+	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
-	"github.com/luxury-yacht/app/backend/refresh/logstream"
 )
 
 const (
@@ -30,7 +31,7 @@ const (
 type NamespaceCustomBuilder struct {
 	dynamic   dynamic.Interface
 	crdLister apiextensionslisters.CustomResourceDefinitionLister
-	logger    logstream.Logger
+	logger    containerlogsstream.Logger
 }
 
 // NamespaceCustomSnapshot is returned to clients.
@@ -73,7 +74,7 @@ func RegisterNamespaceCustomDomain(
 	reg *domain.Registry,
 	apiextFactory apiextensionsinformers.SharedInformerFactory,
 	dynamicClient dynamic.Interface,
-	logger logstream.Logger,
+	logger containerlogsstream.Logger,
 ) error {
 	if apiextFactory == nil {
 		return fmt.Errorf("apiextensions informer factory is nil")
@@ -130,7 +131,7 @@ func (b *NamespaceCustomBuilder) Build(ctx context.Context, scope string) (*refr
 
 	if len(namespacedCRDs) == 0 {
 		if b.logger != nil {
-			b.logger.Info("namespace-custom: no namespaced CRDs discovered", "Refresh")
+			b.logger.Info("namespace-custom: no namespaced CRDs discovered", logsources.Refresh)
 		}
 		snapshotScope := namespace
 		if isAll {
@@ -201,7 +202,7 @@ func (b *NamespaceCustomBuilder) Build(ctx context.Context, scope string) (*refr
 					return nil
 				}
 				if b.logger != nil {
-					b.logger.Warn(fmt.Sprintf("namespace-custom: list %s failed: %v", gvr.String(), err), "Refresh")
+					b.logger.Warn(fmt.Sprintf("namespace-custom: list %s failed: %v", gvr.String(), err), logsources.Refresh)
 				}
 				mu.Lock()
 				warning := fmt.Sprintf("Failed to list %s: %v", gvr.String(), err)

@@ -16,6 +16,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/luxury-yacht/app/backend/internal/logclassify"
 	"k8s.io/klog/v2"
 )
 
@@ -157,22 +158,12 @@ func matchAnyPattern(lower string, patterns []*regexp.Regexp) bool {
 
 // parseKlogSeverity extracts klog severity for lines starting with the standard prefix.
 func parseKlogSeverity(line string) (byte, bool) {
-	if len(line) < 2 {
-		return 0, false
-	}
-	sev := line[0]
-	switch sev {
-	case 'I', 'W', 'E', 'F', 'D':
-		if line[1] >= '0' && line[1] <= '9' {
-			return sev, true
-		}
-	}
-	return 0, false
+	return logclassify.ParseKlogSeverity(line)
 }
 
 // isErrorSeverity reports whether a klog severity should be treated as an error.
 func isErrorSeverity(sev byte) bool {
-	return sev == 'E' || sev == 'F'
+	return logclassify.IsErrorSeverity(sev)
 }
 
 // isFallbackErrorLine matches the broader error scan used in capturedError.
@@ -361,21 +352,8 @@ func getLogSink() func(level string, message string) {
 // emitToLogSink sends captured error messages to the configured log sink.
 func (c *Capture) emitToLogSink(chunk []byte) {
 	forEachTrimmedLine(string(chunk), func(msg string) {
-		level := "info"
-		lower := strings.ToLower(msg)
-		switch {
-		case strings.HasPrefix(msg, "E") || strings.Contains(lower, "error"):
-			level = "error"
-		case strings.HasPrefix(msg, "W") || strings.Contains(lower, "warning"):
-			level = "warn"
-		case strings.HasPrefix(msg, "I"):
-			level = "info"
-		case strings.HasPrefix(msg, "D"):
-			level = "debug"
-		}
-
 		if sink := getLogSink(); sink != nil {
-			sink(level, msg)
+			sink(logclassify.Classify(msg), msg)
 		}
 	})
 }

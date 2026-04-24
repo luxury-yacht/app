@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/eventstream"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
@@ -128,7 +129,7 @@ func (h *aggregateEventStreamHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 			if h.telemetry != nil {
 				h.telemetry.RecordStreamError(streamName, err)
 			}
-			h.logger.Warn(fmt.Sprintf("eventstream: initial snapshot failed: %v", err), "EventStream")
+			h.logger.Warn(fmt.Sprintf("eventstream: initial snapshot failed: %v", err), logsources.EventStream)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}

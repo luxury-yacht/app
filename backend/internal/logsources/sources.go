@@ -1,0 +1,26 @@
+package logsources
+
+const (
+	App                 = "App"
+	Auth                = "Auth"
+	ContainerLogs       = "ContainerLogs"
+	ContainerLogsStream = "ContainerLogsStream"
+	ErrorCapture        = "ErrorCapture"
+	EventStream         = "EventStream"
+	Frontend            = "Frontend"
+	Heartbeat           = "Heartbeat"
+	Helm                = "Helm"
+	KubernetesClient    = "KubernetesClient"
+	KubeconfigManager   = "KubeconfigManager"
+	KubeconfigWatcher   = "KubeconfigWatcher"
+	ObjectCatalog       = "ObjectCatalog"
+	PortForward         = "PortForward"
+	Refresh             = "Refresh"
+	ResourceLoader      = "ResourceLoader"
+	ResourceStream      = "ResourceStream"
+	Settings            = "Settings"
+	ShellSession        = "ShellSession"
+	StandardLog         = "StdLog"
+	StreamMux           = "StreamMux"
+	UpdateCheck         = "UpdateCheck"
+)

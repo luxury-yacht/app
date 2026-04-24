@@ -12,6 +12,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/cachekeys"
 	"github.com/luxury-yacht/app/backend/internal/errorcapture"
+	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/internal/timeutil"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -70,7 +71,7 @@ func FetchResourceWithSelection[T any](
 
 	result, err := executeWithRetry(ctx, a, selectionKey, resourceKind, identifier, fetchFunc)
 	if err != nil {
-		a.logger.Error(fmt.Sprintf("Failed to fetch %s %s: %v", resourceKind, identifier, err), "ResourceLoader")
+		a.logger.Error(fmt.Sprintf("Failed to fetch %s %s: %v", resourceKind, identifier, err), logsources.ResourceLoader)
 		// Include clusterId in error payload so frontend can identify which cluster
 		// the error belongs to. selectionKey is the clusterID when set by callers
 		// like FetchNamespacedResource and FetchClusterResource.
@@ -114,7 +115,7 @@ func FetchResourceList[T any](
 
 	result, err := executeWithRetry(ctx, a, clusterID, resourceKind, scope, fetchFunc)
 	if err != nil {
-		a.logger.Error(fmt.Sprintf("Failed to list %s in %s: %v", resourceKind, scope, err), "ResourceLoader")
+		a.logger.Error(fmt.Sprintf("Failed to list %s in %s: %v", resourceKind, scope, err), logsources.ResourceLoader)
 		// Include clusterId in error payload so frontend can identify which cluster
 		// the error belongs to.
 		a.emitEvent("backend-error", map[string]any{
@@ -171,7 +172,7 @@ func FetchClusterResource[T any](
 func ensureDependenciesInitialized(a *App, deps common.Dependencies, resourceKind string) error {
 	if deps.KubernetesClient == nil {
 		if a != nil && a.logger != nil {
-			a.logger.Error(fmt.Sprintf("Kubernetes client not initialized for %s fetch", resourceKind), "ResourceLoader")
+			a.logger.Error(fmt.Sprintf("Kubernetes client not initialized for %s fetch", resourceKind), logsources.ResourceLoader)
 		}
 		return fmt.Errorf("kubernetes client not initialized")
 	}
@@ -219,7 +220,7 @@ func executeWithRetry[T any](ctx context.Context, a *App, clusterID, resourceKin
 			}
 			if a != nil {
 				if a.logger != nil {
-					a.logger.Warn(fmt.Sprintf("Retrying %s %s due to %s (attempt %d/%d)", resourceKind, target, reason, attempt+1, fetchMaxAttempts-1), "ResourceLoader")
+					a.logger.Warn(fmt.Sprintf("Retrying %s %s due to %s (attempt %d/%d)", resourceKind, target, reason, attempt+1, fetchMaxAttempts-1), logsources.ResourceLoader)
 				}
 				if a.telemetryRecorder != nil {
 					a.telemetryRecorder.RecordRetryAttempt(err)

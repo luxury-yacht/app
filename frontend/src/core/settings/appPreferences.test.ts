@@ -10,38 +10,38 @@ import {
   getAutoRefreshEnabled,
   getBackgroundRefreshEnabled,
   getGridTablePersistenceMode,
-  getLogApiTimestampFormat,
-  getLogApiTimestampUseLocalTimeZone,
-  getLogBufferMaxSize,
+  getObjPanelLogsApiTimestampFormat,
+  getObjPanelLogsApiTimestampUseLocalTimeZone,
+  getObjPanelLogsBufferMaxSize,
   getMaxTableRows,
-  getLogTargetGlobalLimit,
-  getLogTargetPerScopeLimit,
+  getObjPanelLogsTargetGlobalLimit,
+  getObjPanelLogsTargetPerScopeLimit,
   getMetricsRefreshIntervalMs,
   getPaletteTint,
   getThemePreference,
   getUseShortResourceNames,
   hydrateAppPreferences,
-  LOG_BUFFER_DEFAULT_SIZE,
-  LOG_BUFFER_MAX_SIZE,
-  LOG_BUFFER_MIN_SIZE,
+  OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE,
+  OBJ_PANEL_LOGS_BUFFER_MAX_SIZE,
+  OBJ_PANEL_LOGS_BUFFER_MIN_SIZE,
   MAX_TABLE_ROWS_DEFAULT,
   MAX_TABLE_ROWS_MAX,
   MAX_TABLE_ROWS_MIN,
-  LOG_TARGET_GLOBAL_DEFAULT,
-  LOG_TARGET_GLOBAL_MAX,
-  LOG_TARGET_PER_SCOPE_DEFAULT,
-  LOG_TARGET_PER_SCOPE_MAX,
+  OBJ_PANEL_LOGS_TARGET_GLOBAL_DEFAULT,
+  OBJ_PANEL_LOGS_TARGET_GLOBAL_MAX,
+  OBJ_PANEL_LOGS_TARGET_PER_SCOPE_DEFAULT,
+  OBJ_PANEL_LOGS_TARGET_PER_SCOPE_MAX,
   resetAppPreferencesCacheForTesting,
   setAccentColor,
   setAutoRefreshEnabled,
   setBackgroundRefreshEnabled,
   setGridTablePersistenceMode,
-  setLogApiTimestampFormat,
-  setLogApiTimestampUseLocalTimeZone,
-  setLogBufferMaxSize,
+  setObjPanelLogsApiTimestampFormat,
+  setObjPanelLogsApiTimestampUseLocalTimeZone,
+  setObjPanelLogsBufferMaxSize,
   setMaxTableRows,
-  setLogTargetGlobalLimit,
-  setLogTargetPerScopeLimit,
+  setObjPanelLogsTargetGlobalLimit,
+  setObjPanelLogsTargetPerScopeLimit,
   setPaletteTint,
   setThemePreference,
   setUseShortResourceNames,
@@ -51,25 +51,29 @@ const appMocks = vi.hoisted(() => ({
   GetAppSettings: vi.fn(),
   SetTheme: vi.fn(),
   SetUseShortResourceNames: vi.fn(),
-  SetLogAPITimestampFormat: vi.fn(),
-  SetLogAPITimestampUseLocalTimeZone: vi.fn(),
+  SetObjPanelLogsAPITimestampFormat: vi.fn(),
+  SetObjPanelLogsAPITimestampUseLocalTimeZone: vi.fn(),
   SetMaxTableRows: vi.fn(),
-  SetLogBufferMaxSize: vi.fn(),
-  SetLogTargetPerScopeLimit: vi.fn(),
-  SetLogTargetGlobalLimit: vi.fn(),
+  SetObjPanelLogsBufferMaxSize: vi.fn(),
+  SetObjPanelLogsTargetPerScopeLimit: vi.fn(),
+  SetObjPanelLogsTargetGlobalLimit: vi.fn(),
 }));
 
 vi.mock('@wailsjs/go/backend/App', () => ({
   GetAppSettings: (...args: unknown[]) => appMocks.GetAppSettings(...args),
   SetTheme: (...args: unknown[]) => appMocks.SetTheme(...args),
   SetUseShortResourceNames: (...args: unknown[]) => appMocks.SetUseShortResourceNames(...args),
-  SetLogAPITimestampFormat: (...args: unknown[]) => appMocks.SetLogAPITimestampFormat(...args),
-  SetLogAPITimestampUseLocalTimeZone: (...args: unknown[]) =>
-    appMocks.SetLogAPITimestampUseLocalTimeZone(...args),
+  SetObjPanelLogsAPITimestampFormat: (...args: unknown[]) =>
+    appMocks.SetObjPanelLogsAPITimestampFormat(...args),
+  SetObjPanelLogsAPITimestampUseLocalTimeZone: (...args: unknown[]) =>
+    appMocks.SetObjPanelLogsAPITimestampUseLocalTimeZone(...args),
   SetMaxTableRows: (...args: unknown[]) => appMocks.SetMaxTableRows(...args),
-  SetLogBufferMaxSize: (...args: unknown[]) => appMocks.SetLogBufferMaxSize(...args),
-  SetLogTargetPerScopeLimit: (...args: unknown[]) => appMocks.SetLogTargetPerScopeLimit(...args),
-  SetLogTargetGlobalLimit: (...args: unknown[]) => appMocks.SetLogTargetGlobalLimit(...args),
+  SetObjPanelLogsBufferMaxSize: (...args: unknown[]) =>
+    appMocks.SetObjPanelLogsBufferMaxSize(...args),
+  SetObjPanelLogsTargetPerScopeLimit: (...args: unknown[]) =>
+    appMocks.SetObjPanelLogsTargetPerScopeLimit(...args),
+  SetObjPanelLogsTargetGlobalLimit: (...args: unknown[]) =>
+    appMocks.SetObjPanelLogsTargetGlobalLimit(...args),
 }));
 
 describe('appPreferences', () => {
@@ -78,30 +82,30 @@ describe('appPreferences', () => {
     appMocks.GetAppSettings.mockReset();
     appMocks.SetTheme.mockReset();
     appMocks.SetUseShortResourceNames.mockReset();
-    appMocks.SetLogAPITimestampFormat.mockReset();
-    appMocks.SetLogAPITimestampUseLocalTimeZone.mockReset();
+    appMocks.SetObjPanelLogsAPITimestampFormat.mockReset();
+    appMocks.SetObjPanelLogsAPITimestampUseLocalTimeZone.mockReset();
     appMocks.SetMaxTableRows.mockReset();
-    appMocks.SetLogBufferMaxSize.mockReset();
-    appMocks.SetLogTargetPerScopeLimit.mockReset();
-    appMocks.SetLogTargetGlobalLimit.mockReset();
-    appMocks.SetLogAPITimestampFormat.mockResolvedValue(undefined);
-    appMocks.SetLogAPITimestampUseLocalTimeZone.mockResolvedValue(undefined);
+    appMocks.SetObjPanelLogsBufferMaxSize.mockReset();
+    appMocks.SetObjPanelLogsTargetPerScopeLimit.mockReset();
+    appMocks.SetObjPanelLogsTargetGlobalLimit.mockReset();
+    appMocks.SetObjPanelLogsAPITimestampFormat.mockResolvedValue(undefined);
+    appMocks.SetObjPanelLogsAPITimestampUseLocalTimeZone.mockResolvedValue(undefined);
     appMocks.SetMaxTableRows.mockResolvedValue(undefined);
-    appMocks.SetLogBufferMaxSize.mockResolvedValue(undefined);
-    appMocks.SetLogTargetPerScopeLimit.mockResolvedValue(undefined);
-    appMocks.SetLogTargetGlobalLimit.mockResolvedValue(undefined);
+    appMocks.SetObjPanelLogsBufferMaxSize.mockResolvedValue(undefined);
+    appMocks.SetObjPanelLogsTargetPerScopeLimit.mockResolvedValue(undefined);
+    appMocks.SetObjPanelLogsTargetGlobalLimit.mockResolvedValue(undefined);
     (window as any).go = {
       backend: {
         App: {
           SetAutoRefreshEnabled: vi.fn().mockResolvedValue(undefined),
           SetBackgroundRefreshEnabled: vi.fn().mockResolvedValue(undefined),
           SetGridTablePersistenceMode: vi.fn().mockResolvedValue(undefined),
-          SetLogAPITimestampFormat: vi.fn().mockResolvedValue(undefined),
-          SetLogAPITimestampUseLocalTimeZone: vi.fn().mockResolvedValue(undefined),
+          SetObjPanelLogsAPITimestampFormat: vi.fn().mockResolvedValue(undefined),
+          SetObjPanelLogsAPITimestampUseLocalTimeZone: vi.fn().mockResolvedValue(undefined),
           SetMaxTableRows: vi.fn().mockResolvedValue(undefined),
-          SetLogBufferMaxSize: vi.fn().mockResolvedValue(undefined),
-          SetLogTargetPerScopeLimit: vi.fn().mockResolvedValue(undefined),
-          SetLogTargetGlobalLimit: vi.fn().mockResolvedValue(undefined),
+          SetObjPanelLogsBufferMaxSize: vi.fn().mockResolvedValue(undefined),
+          SetObjPanelLogsTargetPerScopeLimit: vi.fn().mockResolvedValue(undefined),
+          SetObjPanelLogsTargetGlobalLimit: vi.fn().mockResolvedValue(undefined),
           SetPaletteTint: vi.fn().mockResolvedValue(undefined),
           SetAccentColor: vi.fn().mockResolvedValue(undefined),
         },
@@ -121,10 +125,10 @@ describe('appPreferences', () => {
       refreshBackgroundClustersEnabled: false,
       metricsRefreshIntervalMs: 7000,
       maxTableRows: 2500,
-      logApiTimestampFormat: 'HH:mm:ss.SSS',
-      logApiTimestampUseLocalTimeZone: true,
-      logTargetPerScopeLimit: 144,
-      logTargetGlobalLimit: 180,
+      objPanelLogsApiTimestampFormat: 'HH:mm:ss.SSS',
+      objPanelLogsApiTimestampUseLocalTimeZone: true,
+      objPanelLogsTargetPerScopeLimit: 144,
+      objPanelLogsTargetGlobalLimit: 180,
       gridTablePersistenceMode: 'namespaced',
       paletteHueLight: 220,
       paletteSaturationLight: 50,
@@ -144,10 +148,10 @@ describe('appPreferences', () => {
     expect(getBackgroundRefreshEnabled()).toBe(false);
     expect(getMetricsRefreshIntervalMs()).toBe(7000);
     expect(getMaxTableRows()).toBe(2500);
-    expect(getLogApiTimestampFormat()).toBe('HH:mm:ss.SSS');
-    expect(getLogApiTimestampUseLocalTimeZone()).toBe(true);
-    expect(getLogTargetPerScopeLimit()).toBe(144);
-    expect(getLogTargetGlobalLimit()).toBe(180);
+    expect(getObjPanelLogsApiTimestampFormat()).toBe('HH:mm:ss.SSS');
+    expect(getObjPanelLogsApiTimestampUseLocalTimeZone()).toBe(true);
+    expect(getObjPanelLogsTargetPerScopeLimit()).toBe(144);
+    expect(getObjPanelLogsTargetGlobalLimit()).toBe(180);
     expect(getGridTablePersistenceMode()).toBe('namespaced');
     expect(getPaletteTint('light')).toEqual({ hue: 220, saturation: 50, brightness: -15 });
     expect(getPaletteTint('dark')).toEqual({ hue: 120, saturation: 40, brightness: 10 });
@@ -168,15 +172,15 @@ describe('appPreferences', () => {
     expect(getAccentColor('dark')).toBe('');
   });
 
-  it('normalizes an invalid persisted log API timestamp format back to the default', async () => {
+  it('normalizes an invalid persisted Object Panel Logs Tab API timestamp format back to the default', async () => {
     appMocks.GetAppSettings.mockResolvedValue({
       theme: 'system',
-      logApiTimestampFormat: 'foo',
+      objPanelLogsApiTimestampFormat: 'foo',
     });
 
     await hydrateAppPreferences({ force: true });
 
-    expect(getLogApiTimestampFormat()).toBe('YYYY-MM-DDTHH:mm:ss.SSS[Z]');
+    expect(getObjPanelLogsApiTimestampFormat()).toBe('YYYY-MM-DDTHH:mm:ss.SSS[Z]');
   });
 
   it('persists preference updates and updates the cache', async () => {
@@ -193,8 +197,8 @@ describe('appPreferences', () => {
 
     await setThemePreference('dark');
     await setUseShortResourceNames(true);
-    setLogApiTimestampFormat('HH:mm:ss.SSS');
-    setLogApiTimestampUseLocalTimeZone(true);
+    setObjPanelLogsApiTimestampFormat('HH:mm:ss.SSS');
+    setObjPanelLogsApiTimestampUseLocalTimeZone(true);
     setMaxTableRows(2500);
     setAutoRefreshEnabled(false);
     setBackgroundRefreshEnabled(false);
@@ -202,8 +206,8 @@ describe('appPreferences', () => {
 
     expect(appMocks.SetTheme).toHaveBeenCalledWith('dark');
     expect(appMocks.SetUseShortResourceNames).toHaveBeenCalledWith(true);
-    expect(appMocks.SetLogAPITimestampFormat).toHaveBeenCalledWith('HH:mm:ss.SSS');
-    expect(appMocks.SetLogAPITimestampUseLocalTimeZone).toHaveBeenCalledWith(true);
+    expect(appMocks.SetObjPanelLogsAPITimestampFormat).toHaveBeenCalledWith('HH:mm:ss.SSS');
+    expect(appMocks.SetObjPanelLogsAPITimestampUseLocalTimeZone).toHaveBeenCalledWith(true);
     expect(appMocks.SetMaxTableRows).toHaveBeenCalledWith(2500);
     expect((window as any).go.backend.App.SetAutoRefreshEnabled).toHaveBeenCalledWith(false);
     expect((window as any).go.backend.App.SetBackgroundRefreshEnabled).toHaveBeenCalledWith(false);
@@ -213,8 +217,8 @@ describe('appPreferences', () => {
 
     expect(getThemePreference()).toBe('dark');
     expect(getUseShortResourceNames()).toBe(true);
-    expect(getLogApiTimestampFormat()).toBe('HH:mm:ss.SSS');
-    expect(getLogApiTimestampUseLocalTimeZone()).toBe(true);
+    expect(getObjPanelLogsApiTimestampFormat()).toBe('HH:mm:ss.SSS');
+    expect(getObjPanelLogsApiTimestampUseLocalTimeZone()).toBe(true);
     expect(getMaxTableRows()).toBe(2500);
     expect(getAutoRefreshEnabled()).toBe(false);
     expect(getBackgroundRefreshEnabled()).toBe(false);
@@ -222,12 +226,12 @@ describe('appPreferences', () => {
     expect(getGridTablePersistenceMode()).toBe('namespaced');
   });
 
-  it('rejects invalid log API timestamp formats before persisting', async () => {
+  it('rejects invalid Object Panel Logs Tab API timestamp formats before persisting', async () => {
     appMocks.GetAppSettings.mockResolvedValue({ theme: 'system' });
     await hydrateAppPreferences({ force: true });
 
-    expect(() => setLogApiTimestampFormat('foo')).toThrow(/Unsupported token/);
-    expect(appMocks.SetLogAPITimestampFormat).not.toHaveBeenCalled();
+    expect(() => setObjPanelLogsApiTimestampFormat('foo')).toThrow(/Unsupported token/);
+    expect(appMocks.SetObjPanelLogsAPITimestampFormat).not.toHaveBeenCalled();
   });
 
   it('setPaletteTint updates cache and calls backend for the specified theme', async () => {
@@ -302,18 +306,18 @@ describe('appPreferences', () => {
   });
 
   // ---------------------------------------------------------------------
-  // Log buffer size — user-configurable via Advanced → Pod Logs. Must
+  // Object Panel Logs Tab buffer size. Must
   // hydrate from the backend payload, round-trip through the setter, and
   // clamp out-of-range values in the normalizer.
   // ---------------------------------------------------------------------
 
-  it('hydrates logBufferMaxSize from backend settings', async () => {
+  it('hydrates Object Panel Logs Tab buffer size from backend settings', async () => {
     appMocks.GetAppSettings.mockResolvedValue({
       theme: 'system',
-      logBufferMaxSize: 2500,
+      objPanelLogsBufferMaxSize: 2500,
     });
     await hydrateAppPreferences({ force: true });
-    expect(getLogBufferMaxSize()).toBe(2500);
+    expect(getObjPanelLogsBufferMaxSize()).toBe(2500);
   });
 
   it('hydrates maxTableRows from backend settings', async () => {
@@ -355,107 +359,107 @@ describe('appPreferences', () => {
     expect(getMaxTableRows()).toBe(MAX_TABLE_ROWS_MAX);
   });
 
-  it('defaults logBufferMaxSize when the backend payload is missing the field', async () => {
+  it('defaults Object Panel Logs Tab buffer size when the backend payload is missing the field', async () => {
     appMocks.GetAppSettings.mockResolvedValue({ theme: 'system' });
     await hydrateAppPreferences({ force: true });
-    expect(getLogBufferMaxSize()).toBe(LOG_BUFFER_DEFAULT_SIZE);
+    expect(getObjPanelLogsBufferMaxSize()).toBe(OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE);
   });
 
-  it('defaults logBufferMaxSize when the backend payload reports zero (unset)', async () => {
-    appMocks.GetAppSettings.mockResolvedValue({ theme: 'system', logBufferMaxSize: 0 });
+  it('defaults Object Panel Logs Tab buffer size when the backend payload reports zero (unset)', async () => {
+    appMocks.GetAppSettings.mockResolvedValue({ theme: 'system', objPanelLogsBufferMaxSize: 0 });
     await hydrateAppPreferences({ force: true });
-    expect(getLogBufferMaxSize()).toBe(LOG_BUFFER_DEFAULT_SIZE);
+    expect(getObjPanelLogsBufferMaxSize()).toBe(OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE);
   });
 
-  it('setLogBufferMaxSize round-trips an in-range value through the cache and backend', async () => {
+  it('setObjPanelLogsBufferMaxSize round-trips an in-range value through the cache and backend', async () => {
     appMocks.GetAppSettings.mockResolvedValue({
       theme: 'system',
-      logBufferMaxSize: LOG_BUFFER_DEFAULT_SIZE,
+      objPanelLogsBufferMaxSize: OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE,
     });
     await hydrateAppPreferences({ force: true });
 
-    setLogBufferMaxSize(3500);
-    expect(getLogBufferMaxSize()).toBe(3500);
+    setObjPanelLogsBufferMaxSize(3500);
+    expect(getObjPanelLogsBufferMaxSize()).toBe(3500);
     // Allow the fire-and-forget persist promise to resolve before we
     // assert the backend call landed. The setter calls the imported
     // Wails binding (mocked via appMocks), not window.go.backend.App
     // directly — the window object is only read to check that the
     // runtime is present.
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
-    expect(appMocks.SetLogBufferMaxSize).toHaveBeenCalledWith(3500);
+    expect(appMocks.SetObjPanelLogsBufferMaxSize).toHaveBeenCalledWith(3500);
   });
 
-  it('setLogBufferMaxSize clamps values below the minimum', async () => {
+  it('setObjPanelLogsBufferMaxSize clamps values below the minimum', async () => {
     appMocks.GetAppSettings.mockResolvedValue({ theme: 'system' });
     await hydrateAppPreferences({ force: true });
-    setLogBufferMaxSize(1);
-    expect(getLogBufferMaxSize()).toBe(LOG_BUFFER_MIN_SIZE);
+    setObjPanelLogsBufferMaxSize(1);
+    expect(getObjPanelLogsBufferMaxSize()).toBe(OBJ_PANEL_LOGS_BUFFER_MIN_SIZE);
   });
 
-  it('setLogBufferMaxSize clamps values above the maximum', async () => {
+  it('setObjPanelLogsBufferMaxSize clamps values above the maximum', async () => {
     appMocks.GetAppSettings.mockResolvedValue({ theme: 'system' });
     await hydrateAppPreferences({ force: true });
-    setLogBufferMaxSize(999_999);
-    expect(getLogBufferMaxSize()).toBe(LOG_BUFFER_MAX_SIZE);
+    setObjPanelLogsBufferMaxSize(999_999);
+    expect(getObjPanelLogsBufferMaxSize()).toBe(OBJ_PANEL_LOGS_BUFFER_MAX_SIZE);
   });
 
-  it('hydrates log target limits from backend settings', async () => {
+  it('hydrates Object Panel Logs Tab target limits from backend settings', async () => {
     appMocks.GetAppSettings.mockResolvedValue({
       theme: 'system',
-      logTargetPerScopeLimit: 144,
-      logTargetGlobalLimit: 180,
+      objPanelLogsTargetPerScopeLimit: 144,
+      objPanelLogsTargetGlobalLimit: 180,
     });
     await hydrateAppPreferences({ force: true });
-    expect(getLogTargetPerScopeLimit()).toBe(144);
-    expect(getLogTargetGlobalLimit()).toBe(180);
+    expect(getObjPanelLogsTargetPerScopeLimit()).toBe(144);
+    expect(getObjPanelLogsTargetGlobalLimit()).toBe(180);
   });
 
-  it('defaults log target limits when the backend payload is missing the fields', async () => {
+  it('defaults Object Panel Logs Tab target limits when the backend payload is missing the fields', async () => {
     appMocks.GetAppSettings.mockResolvedValue({ theme: 'system' });
     await hydrateAppPreferences({ force: true });
-    expect(getLogTargetPerScopeLimit()).toBe(LOG_TARGET_PER_SCOPE_DEFAULT);
-    expect(getLogTargetGlobalLimit()).toBe(LOG_TARGET_GLOBAL_DEFAULT);
+    expect(getObjPanelLogsTargetPerScopeLimit()).toBe(OBJ_PANEL_LOGS_TARGET_PER_SCOPE_DEFAULT);
+    expect(getObjPanelLogsTargetGlobalLimit()).toBe(OBJ_PANEL_LOGS_TARGET_GLOBAL_DEFAULT);
   });
 
-  it('setLogTargetPerScopeLimit round-trips an in-range value through the cache and backend', async () => {
+  it('setObjPanelLogsTargetPerScopeLimit round-trips an in-range value through the cache and backend', async () => {
     appMocks.GetAppSettings.mockResolvedValue({ theme: 'system' });
     await hydrateAppPreferences({ force: true });
 
-    setLogTargetPerScopeLimit(144);
-    expect(getLogTargetPerScopeLimit()).toBe(144);
+    setObjPanelLogsTargetPerScopeLimit(144);
+    expect(getObjPanelLogsTargetPerScopeLimit()).toBe(144);
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
-    expect(appMocks.SetLogTargetPerScopeLimit).toHaveBeenCalledWith(144);
+    expect(appMocks.SetObjPanelLogsTargetPerScopeLimit).toHaveBeenCalledWith(144);
   });
 
-  it('setLogTargetPerScopeLimit defaults zero and clamps large values', async () => {
+  it('setObjPanelLogsTargetPerScopeLimit defaults zero and clamps large values', async () => {
     appMocks.GetAppSettings.mockResolvedValue({ theme: 'system' });
     await hydrateAppPreferences({ force: true });
 
-    setLogTargetPerScopeLimit(0);
-    expect(getLogTargetPerScopeLimit()).toBe(LOG_TARGET_PER_SCOPE_DEFAULT);
+    setObjPanelLogsTargetPerScopeLimit(0);
+    expect(getObjPanelLogsTargetPerScopeLimit()).toBe(OBJ_PANEL_LOGS_TARGET_PER_SCOPE_DEFAULT);
 
-    setLogTargetPerScopeLimit(999_999);
-    expect(getLogTargetPerScopeLimit()).toBe(LOG_TARGET_PER_SCOPE_MAX);
+    setObjPanelLogsTargetPerScopeLimit(999_999);
+    expect(getObjPanelLogsTargetPerScopeLimit()).toBe(OBJ_PANEL_LOGS_TARGET_PER_SCOPE_MAX);
   });
 
-  it('setLogTargetGlobalLimit round-trips an in-range value through the cache and backend', async () => {
+  it('setObjPanelLogsTargetGlobalLimit round-trips an in-range value through the cache and backend', async () => {
     appMocks.GetAppSettings.mockResolvedValue({ theme: 'system' });
     await hydrateAppPreferences({ force: true });
 
-    setLogTargetGlobalLimit(180);
-    expect(getLogTargetGlobalLimit()).toBe(180);
+    setObjPanelLogsTargetGlobalLimit(180);
+    expect(getObjPanelLogsTargetGlobalLimit()).toBe(180);
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
-    expect(appMocks.SetLogTargetGlobalLimit).toHaveBeenCalledWith(180);
+    expect(appMocks.SetObjPanelLogsTargetGlobalLimit).toHaveBeenCalledWith(180);
   });
 
-  it('setLogTargetGlobalLimit defaults zero and clamps large values', async () => {
+  it('setObjPanelLogsTargetGlobalLimit defaults zero and clamps large values', async () => {
     appMocks.GetAppSettings.mockResolvedValue({ theme: 'system' });
     await hydrateAppPreferences({ force: true });
 
-    setLogTargetGlobalLimit(0);
-    expect(getLogTargetGlobalLimit()).toBe(LOG_TARGET_GLOBAL_DEFAULT);
+    setObjPanelLogsTargetGlobalLimit(0);
+    expect(getObjPanelLogsTargetGlobalLimit()).toBe(OBJ_PANEL_LOGS_TARGET_GLOBAL_DEFAULT);
 
-    setLogTargetGlobalLimit(999_999);
-    expect(getLogTargetGlobalLimit()).toBe(LOG_TARGET_GLOBAL_MAX);
+    setObjPanelLogsTargetGlobalLimit(999_999);
+    expect(getObjPanelLogsTargetGlobalLimit()).toBe(OBJ_PANEL_LOGS_TARGET_GLOBAL_MAX);
   });
 });

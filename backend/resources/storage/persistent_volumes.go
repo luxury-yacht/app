@@ -10,6 +10,7 @@ package storage
 import (
 	"fmt"
 
+	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/types"
 	corev1 "k8s.io/api/core/v1"
@@ -23,7 +24,7 @@ func (s *Service) PersistentVolume(name string) (*types.PersistentVolumeDetails,
 
 	pv, err := s.deps.KubernetesClient.CoreV1().PersistentVolumes().Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
-		s.deps.Logger.Error(fmt.Sprintf("Failed to get persistent volume %s: %v", name, err), "ResourceLoader")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to get persistent volume %s: %v", name, err), logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to get persistent volume: %v", err)
 	}
 
@@ -37,7 +38,7 @@ func (s *Service) PersistentVolumes() ([]*types.PersistentVolumeDetails, error) 
 
 	pvs, err := s.deps.KubernetesClient.CoreV1().PersistentVolumes().List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
-		s.deps.Logger.Error(fmt.Sprintf("Failed to list persistent volumes: %v", err), "ResourceLoader")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to list persistent volumes: %v", err), logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to list persistent volumes: %v", err)
 	}
 
@@ -204,7 +205,7 @@ func (s *Service) listPersistentVolumes() *corev1.PersistentVolumeList {
 
 	pvs, err := s.deps.KubernetesClient.CoreV1().PersistentVolumes().List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
-		s.deps.Logger.Warn(fmt.Sprintf("Failed to list persistent volumes: %v", err), "ResourceLoader")
+		s.deps.Logger.Warn(fmt.Sprintf("Failed to list persistent volumes: %v", err), logsources.ResourceLoader)
 		return nil
 	}
 	return pvs

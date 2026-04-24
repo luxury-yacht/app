@@ -519,8 +519,8 @@ func TestWrapperGuardPathsRequireClient(t *testing.T) {
 		}
 	}
 
-	resp := app.LogFetcher(clusterID, LogFetchRequest{Namespace: "ns", PodName: "pod"})
+	resp := app.FetchContainerLogs(clusterID, ContainerLogsFetchRequest{Namespace: "ns", PodName: "pod"})
 	if resp.Error == "" {
-		t.Fatalf("expected error for LogFetcher without client")
+		t.Fatalf("expected error for FetchContainerLogs without client")
 	}
 }

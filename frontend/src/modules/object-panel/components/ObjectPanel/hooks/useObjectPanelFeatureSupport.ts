@@ -15,7 +15,7 @@ export const useObjectPanelFeatureSupport = (
   return useMemo<FeatureSupport>(() => {
     if (!objectKind) {
       return {
-        logs: false,
+        objPanelLogs: false,
         nodeLogs: false,
         manifest: false,
         values: false,
@@ -35,7 +35,7 @@ export const useObjectPanelFeatureSupport = (
 
     if (!definition) {
       return {
-        logs: false,
+        objPanelLogs: false,
         nodeLogs: false,
         manifest: isHelmRelease,
         values: isHelmRelease,
@@ -51,7 +51,7 @@ export const useObjectPanelFeatureSupport = (
     }
 
     return {
-      logs: Boolean(definition.logs),
+      objPanelLogs: Boolean(definition.objPanelLogs),
       nodeLogs: Boolean(definition.nodeLogs),
       manifest: isHelmRelease,
       values: isHelmRelease,

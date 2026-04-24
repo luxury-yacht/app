@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/resources/types"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -123,6 +124,6 @@ func summarizeWebhookConfiguration(count int, selector *metav1.LabelSelector) st
 
 func (s *Service) logError(msg string) {
 	if s.deps.Logger != nil {
-		s.deps.Logger.Error(msg, "ResourceLoader")
+		s.deps.Logger.Error(msg, logsources.ResourceLoader)
 	}
 }

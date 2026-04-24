@@ -262,7 +262,7 @@ describe('ObjectPanelStateContext', () => {
     // detailScope), events, logs. helmScope is null for non-Helm kinds.
     const calls = resetScopedDomainMock.mock.calls.map(([domain]) => domain);
     expect(calls).toEqual(
-      expect.arrayContaining(['object-details', 'object-yaml', 'object-events', 'object-logs'])
+      expect.arrayContaining(['object-details', 'object-yaml', 'object-events', 'container-logs'])
     );
     // Helm-only domains must NOT be evicted for a Pod (helmScope is null).
     expect(calls).not.toContain('object-helm-manifest');

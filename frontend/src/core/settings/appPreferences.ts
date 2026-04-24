@@ -12,21 +12,21 @@ import {
   ReorderThemes,
   ApplyTheme,
   MatchThemeForCluster,
-  SetLogBufferMaxSize as SetLogBufferMaxSizeBackend,
+  SetObjPanelLogsBufferMaxSize as SetObjPanelLogsBufferMaxSizeBackend,
   SetMaxTableRows as SetMaxTableRowsBackend,
-  SetLogAPITimestampFormat as SetLogAPITimestampFormatBackend,
-  SetLogAPITimestampUseLocalTimeZone as SetLogAPITimestampUseLocalTimeZoneBackend,
-  SetLogTargetGlobalLimit as SetLogTargetGlobalLimitBackend,
-  SetLogTargetPerScopeLimit as SetLogTargetPerScopeLimitBackend,
+  SetObjPanelLogsAPITimestampFormat as SetObjPanelLogsAPITimestampFormatBackend,
+  SetObjPanelLogsAPITimestampUseLocalTimeZone as SetObjPanelLogsAPITimestampUseLocalTimeZoneBackend,
+  SetObjPanelLogsTargetGlobalLimit as SetObjPanelLogsTargetGlobalLimitBackend,
+  SetObjPanelLogsTargetPerScopeLimit as SetObjPanelLogsTargetPerScopeLimitBackend,
 } from '@wailsjs/go/backend/App';
 import { types } from '@wailsjs/go/models';
 import { readAppSettings, readThemes, requestAppState } from '@/core/app-state-access';
 import { eventBus } from '@/core/events';
 import {
-  DEFAULT_LOG_API_TIMESTAMP_FORMAT,
-  getLogApiTimestampFormatValidationError,
-  normalizeLogApiTimestampFormat,
-} from '@/utils/logApiTimestampFormat';
+  DEFAULT_OBJ_PANEL_LOGS_API_TIMESTAMP_FORMAT,
+  getObjPanelLogsApiTimestampFormatValidationError,
+  normalizeObjPanelLogsApiTimestampFormat,
+} from '@/utils/objPanelLogsApiTimestampFormat';
 
 export type ThemePreference = 'light' | 'dark' | 'system';
 export type GridTablePersistenceMode = 'namespaced' | 'shared';
@@ -39,11 +39,11 @@ interface AppPreferences {
   refreshBackgroundClustersEnabled: boolean;
   metricsRefreshIntervalMs: number;
   maxTableRows: number;
-  logBufferMaxSize: number;
-  logApiTimestampFormat: string;
-  logApiTimestampUseLocalTimeZone: boolean;
-  logTargetPerScopeLimit: number;
-  logTargetGlobalLimit: number;
+  objPanelLogsBufferMaxSize: number;
+  objPanelLogsApiTimestampFormat: string;
+  objPanelLogsApiTimestampUseLocalTimeZone: boolean;
+  objPanelLogsTargetPerScopeLimit: number;
+  objPanelLogsTargetGlobalLimit: number;
   gridTablePersistenceMode: GridTablePersistenceMode;
   defaultObjectPanelPosition: ObjectPanelPosition;
   objectPanelDockedRightWidth: number;
@@ -71,11 +71,11 @@ interface AppSettingsPayload {
   refreshBackgroundClustersEnabled?: boolean;
   metricsRefreshIntervalMs?: number;
   maxTableRows?: number;
-  logBufferMaxSize?: number;
-  logApiTimestampFormat?: string;
-  logApiTimestampUseLocalTimeZone?: boolean;
-  logTargetPerScopeLimit?: number;
-  logTargetGlobalLimit?: number;
+  objPanelLogsBufferMaxSize?: number;
+  objPanelLogsApiTimestampFormat?: string;
+  objPanelLogsApiTimestampUseLocalTimeZone?: boolean;
+  objPanelLogsTargetPerScopeLimit?: number;
+  objPanelLogsTargetGlobalLimit?: number;
   gridTablePersistenceMode?: string;
   defaultObjectPanelPosition?: string;
   objectPanelDockedRightWidth?: number;
@@ -103,21 +103,20 @@ interface AppSettingsPayload {
 
 const DEFAULT_METRICS_REFRESH_INTERVAL_MS = 5000;
 
-// Log buffer bounds — keep in lockstep with backend/app_settings.go so the
-// client and server agree on the clamp range. Shown to the user in the
-// Advanced → Pod Logs settings section.
-export const LOG_BUFFER_MIN_SIZE = 100;
-export const LOG_BUFFER_MAX_SIZE = 10000;
-export const LOG_BUFFER_DEFAULT_SIZE = 1000;
+// ObjPanelLogs buffer bounds — keep in lockstep with backend/app_settings.go so
+// the client and server agree on the clamp range.
+export const OBJ_PANEL_LOGS_BUFFER_MIN_SIZE = 100;
+export const OBJ_PANEL_LOGS_BUFFER_MAX_SIZE = 10000;
+export const OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE = 1000;
 export const MAX_TABLE_ROWS_MIN = 100;
 export const MAX_TABLE_ROWS_MAX = 10000;
 export const MAX_TABLE_ROWS_DEFAULT = 1000;
-export const LOG_TARGET_PER_SCOPE_MIN = 1;
-export const LOG_TARGET_PER_SCOPE_MAX = 1000;
-export const LOG_TARGET_PER_SCOPE_DEFAULT = 100;
-export const LOG_TARGET_GLOBAL_MIN = 1;
-export const LOG_TARGET_GLOBAL_MAX = 1000;
-export const LOG_TARGET_GLOBAL_DEFAULT = 200;
+export const OBJ_PANEL_LOGS_TARGET_PER_SCOPE_MIN = 1;
+export const OBJ_PANEL_LOGS_TARGET_PER_SCOPE_MAX = 1000;
+export const OBJ_PANEL_LOGS_TARGET_PER_SCOPE_DEFAULT = 100;
+export const OBJ_PANEL_LOGS_TARGET_GLOBAL_MIN = 1;
+export const OBJ_PANEL_LOGS_TARGET_GLOBAL_MAX = 1000;
+export const OBJ_PANEL_LOGS_TARGET_GLOBAL_DEFAULT = 200;
 
 const DEFAULT_PREFERENCES: AppPreferences = {
   theme: 'system',
@@ -126,11 +125,11 @@ const DEFAULT_PREFERENCES: AppPreferences = {
   refreshBackgroundClustersEnabled: true,
   metricsRefreshIntervalMs: DEFAULT_METRICS_REFRESH_INTERVAL_MS,
   maxTableRows: MAX_TABLE_ROWS_DEFAULT,
-  logBufferMaxSize: LOG_BUFFER_DEFAULT_SIZE,
-  logApiTimestampFormat: DEFAULT_LOG_API_TIMESTAMP_FORMAT,
-  logApiTimestampUseLocalTimeZone: false,
-  logTargetPerScopeLimit: LOG_TARGET_PER_SCOPE_DEFAULT,
-  logTargetGlobalLimit: LOG_TARGET_GLOBAL_DEFAULT,
+  objPanelLogsBufferMaxSize: OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE,
+  objPanelLogsApiTimestampFormat: DEFAULT_OBJ_PANEL_LOGS_API_TIMESTAMP_FORMAT,
+  objPanelLogsApiTimestampUseLocalTimeZone: false,
+  objPanelLogsTargetPerScopeLimit: OBJ_PANEL_LOGS_TARGET_PER_SCOPE_DEFAULT,
+  objPanelLogsTargetGlobalLimit: OBJ_PANEL_LOGS_TARGET_GLOBAL_DEFAULT,
   paletteHueLight: 0,
   paletteSaturationLight: 0,
   paletteBrightnessLight: 0,
@@ -194,37 +193,37 @@ const normalizeMaxTableRows = (value?: number): number => {
   return floored;
 };
 
-// Clamp to [LOG_BUFFER_MIN_SIZE, LOG_BUFFER_MAX_SIZE]. A zero/undefined
+// Clamp to [OBJ_PANEL_LOGS_BUFFER_MIN_SIZE, OBJ_PANEL_LOGS_BUFFER_MAX_SIZE]. A zero/undefined
 // value from an old settings file (before this preference existed) maps
 // to the default, not to zero — otherwise an upgrade would wipe every
-// Logs tab to empty.
-const normalizeLogBufferMaxSize = (value?: number): number => {
+// Object Panel Logs Tab to empty.
+const normalizeObjPanelLogsBufferMaxSize = (value?: number): number => {
   if (value == null || Number.isNaN(value) || value <= 0) {
-    return LOG_BUFFER_DEFAULT_SIZE;
+    return OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE;
   }
   const floored = Math.floor(value);
-  if (floored < LOG_BUFFER_MIN_SIZE) return LOG_BUFFER_MIN_SIZE;
-  if (floored > LOG_BUFFER_MAX_SIZE) return LOG_BUFFER_MAX_SIZE;
+  if (floored < OBJ_PANEL_LOGS_BUFFER_MIN_SIZE) return OBJ_PANEL_LOGS_BUFFER_MIN_SIZE;
+  if (floored > OBJ_PANEL_LOGS_BUFFER_MAX_SIZE) return OBJ_PANEL_LOGS_BUFFER_MAX_SIZE;
   return floored;
 };
 
-const normalizeLogTargetPerScopeLimit = (value?: number): number => {
+const normalizeObjPanelLogsTargetPerScopeLimit = (value?: number): number => {
   if (value == null || Number.isNaN(value) || value <= 0) {
-    return LOG_TARGET_PER_SCOPE_DEFAULT;
+    return OBJ_PANEL_LOGS_TARGET_PER_SCOPE_DEFAULT;
   }
   const floored = Math.floor(value);
-  if (floored < LOG_TARGET_PER_SCOPE_MIN) return LOG_TARGET_PER_SCOPE_MIN;
-  if (floored > LOG_TARGET_PER_SCOPE_MAX) return LOG_TARGET_PER_SCOPE_MAX;
+  if (floored < OBJ_PANEL_LOGS_TARGET_PER_SCOPE_MIN) return OBJ_PANEL_LOGS_TARGET_PER_SCOPE_MIN;
+  if (floored > OBJ_PANEL_LOGS_TARGET_PER_SCOPE_MAX) return OBJ_PANEL_LOGS_TARGET_PER_SCOPE_MAX;
   return floored;
 };
 
-const normalizeLogTargetGlobalLimit = (value?: number): number => {
+const normalizeObjPanelLogsTargetGlobalLimit = (value?: number): number => {
   if (value == null || Number.isNaN(value) || value <= 0) {
-    return LOG_TARGET_GLOBAL_DEFAULT;
+    return OBJ_PANEL_LOGS_TARGET_GLOBAL_DEFAULT;
   }
   const floored = Math.floor(value);
-  if (floored < LOG_TARGET_GLOBAL_MIN) return LOG_TARGET_GLOBAL_MIN;
-  if (floored > LOG_TARGET_GLOBAL_MAX) return LOG_TARGET_GLOBAL_MAX;
+  if (floored < OBJ_PANEL_LOGS_TARGET_GLOBAL_MIN) return OBJ_PANEL_LOGS_TARGET_GLOBAL_MIN;
+  if (floored > OBJ_PANEL_LOGS_TARGET_GLOBAL_MAX) return OBJ_PANEL_LOGS_TARGET_GLOBAL_MAX;
   return floored;
 };
 
@@ -247,23 +246,35 @@ const emitPreferenceChanges = (previous: AppPreferences, next: AppPreferences): 
   if (previous.maxTableRows !== next.maxTableRows) {
     eventBus.emit('settings:max-table-rows', next.maxTableRows);
   }
-  if (previous.logBufferMaxSize !== next.logBufferMaxSize) {
-    eventBus.emit('settings:log-buffer-size', next.logBufferMaxSize);
+  if (previous.objPanelLogsBufferMaxSize !== next.objPanelLogsBufferMaxSize) {
+    eventBus.emit('settings:obj-panel-logs-buffer-size', next.objPanelLogsBufferMaxSize);
   }
-  if (previous.logApiTimestampFormat !== next.logApiTimestampFormat) {
-    eventBus.emit('settings:log-api-timestamp-format', next.logApiTimestampFormat);
-  }
-  if (previous.logApiTimestampUseLocalTimeZone !== next.logApiTimestampUseLocalTimeZone) {
+  if (previous.objPanelLogsApiTimestampFormat !== next.objPanelLogsApiTimestampFormat) {
     eventBus.emit(
-      'settings:log-api-timestamp-use-local-time-zone',
-      next.logApiTimestampUseLocalTimeZone
+      'settings:obj-panel-logs-api-timestamp-format',
+      next.objPanelLogsApiTimestampFormat
     );
   }
-  if (previous.logTargetPerScopeLimit !== next.logTargetPerScopeLimit) {
-    eventBus.emit('settings:log-target-per-scope-limit', next.logTargetPerScopeLimit);
+  if (
+    previous.objPanelLogsApiTimestampUseLocalTimeZone !==
+    next.objPanelLogsApiTimestampUseLocalTimeZone
+  ) {
+    eventBus.emit(
+      'settings:obj-panel-logs-api-timestamp-use-local-time-zone',
+      next.objPanelLogsApiTimestampUseLocalTimeZone
+    );
   }
-  if (previous.logTargetGlobalLimit !== next.logTargetGlobalLimit) {
-    eventBus.emit('settings:log-target-global-limit', next.logTargetGlobalLimit);
+  if (previous.objPanelLogsTargetPerScopeLimit !== next.objPanelLogsTargetPerScopeLimit) {
+    eventBus.emit(
+      'settings:obj-panel-logs-target-per-scope-limit',
+      next.objPanelLogsTargetPerScopeLimit
+    );
+  }
+  if (previous.objPanelLogsTargetGlobalLimit !== next.objPanelLogsTargetGlobalLimit) {
+    eventBus.emit(
+      'settings:obj-panel-logs-target-global-limit',
+      next.objPanelLogsTargetGlobalLimit
+    );
   }
   if (previous.gridTablePersistenceMode !== next.gridTablePersistenceMode) {
     eventBus.emit('gridtable:persistence-mode', next.gridTablePersistenceMode);
@@ -383,15 +394,21 @@ export const hydrateAppPreferences = async (options?: {
       DEFAULT_PREFERENCES.refreshBackgroundClustersEnabled,
     metricsRefreshIntervalMs: normalizeMetricsIntervalMs(backendSettings?.metricsRefreshIntervalMs),
     maxTableRows: normalizeMaxTableRows(backendSettings?.maxTableRows),
-    logBufferMaxSize: normalizeLogBufferMaxSize(backendSettings?.logBufferMaxSize),
-    logApiTimestampFormat: normalizeLogApiTimestampFormat(backendSettings?.logApiTimestampFormat),
-    logApiTimestampUseLocalTimeZone:
-      backendSettings?.logApiTimestampUseLocalTimeZone ??
-      DEFAULT_PREFERENCES.logApiTimestampUseLocalTimeZone,
-    logTargetPerScopeLimit: normalizeLogTargetPerScopeLimit(
-      backendSettings?.logTargetPerScopeLimit
+    objPanelLogsBufferMaxSize: normalizeObjPanelLogsBufferMaxSize(
+      backendSettings?.objPanelLogsBufferMaxSize
     ),
-    logTargetGlobalLimit: normalizeLogTargetGlobalLimit(backendSettings?.logTargetGlobalLimit),
+    objPanelLogsApiTimestampFormat: normalizeObjPanelLogsApiTimestampFormat(
+      backendSettings?.objPanelLogsApiTimestampFormat
+    ),
+    objPanelLogsApiTimestampUseLocalTimeZone:
+      backendSettings?.objPanelLogsApiTimestampUseLocalTimeZone ??
+      DEFAULT_PREFERENCES.objPanelLogsApiTimestampUseLocalTimeZone,
+    objPanelLogsTargetPerScopeLimit: normalizeObjPanelLogsTargetPerScopeLimit(
+      backendSettings?.objPanelLogsTargetPerScopeLimit
+    ),
+    objPanelLogsTargetGlobalLimit: normalizeObjPanelLogsTargetGlobalLimit(
+      backendSettings?.objPanelLogsTargetGlobalLimit
+    ),
     gridTablePersistenceMode: normalizeGridTableMode(backendSettings?.gridTablePersistenceMode),
     defaultObjectPanelPosition: normalizeObjectPanelPosition(
       backendSettings?.defaultObjectPanelPosition
@@ -460,24 +477,24 @@ export const getMaxTableRows = (): number => {
   return preferenceCache.maxTableRows;
 };
 
-export const getLogBufferMaxSize = (): number => {
-  return preferenceCache.logBufferMaxSize;
+export const getObjPanelLogsBufferMaxSize = (): number => {
+  return preferenceCache.objPanelLogsBufferMaxSize;
 };
 
-export const getLogApiTimestampFormat = (): string => {
-  return preferenceCache.logApiTimestampFormat;
+export const getObjPanelLogsApiTimestampFormat = (): string => {
+  return preferenceCache.objPanelLogsApiTimestampFormat;
 };
 
-export const getLogApiTimestampUseLocalTimeZone = (): boolean => {
-  return preferenceCache.logApiTimestampUseLocalTimeZone;
+export const getObjPanelLogsApiTimestampUseLocalTimeZone = (): boolean => {
+  return preferenceCache.objPanelLogsApiTimestampUseLocalTimeZone;
 };
 
-export const getLogTargetPerScopeLimit = (): number => {
-  return preferenceCache.logTargetPerScopeLimit;
+export const getObjPanelLogsTargetPerScopeLimit = (): number => {
+  return preferenceCache.objPanelLogsTargetPerScopeLimit;
 };
 
-export const getLogTargetGlobalLimit = (): number => {
-  return preferenceCache.logTargetGlobalLimit;
+export const getObjPanelLogsTargetGlobalLimit = (): number => {
+  return preferenceCache.objPanelLogsTargetGlobalLimit;
 };
 
 export const getGridTablePersistenceMode = (): GridTablePersistenceMode => {
@@ -605,15 +622,15 @@ export const setBackgroundRefreshEnabled = (enabled: boolean): void => {
   });
 };
 
-// Fire-and-forget persistence for log buffer size. Skips the backend
+// Fire-and-forget persistence for Object Panel Logs Tab buffer size. Skips the backend
 // call when Wails isn't present (unit tests) so the cache update still
 // lands in the event bus.
-const persistLogBufferMaxSize = async (size: number): Promise<void> => {
+const persistObjPanelLogsBufferMaxSize = async (size: number): Promise<void> => {
   const runtimeApp = (window as any)?.go?.backend?.App;
   if (!runtimeApp) {
     return;
   }
-  await SetLogBufferMaxSizeBackend(size);
+  await SetObjPanelLogsBufferMaxSizeBackend(size);
 };
 
 const persistMaxTableRows = async (size: number): Promise<void> => {
@@ -624,44 +641,44 @@ const persistMaxTableRows = async (size: number): Promise<void> => {
   await SetMaxTableRowsBackend(size);
 };
 
-const persistLogApiTimestampFormat = async (format: string): Promise<void> => {
+const persistObjPanelLogsApiTimestampFormat = async (format: string): Promise<void> => {
   const runtimeApp = (window as any)?.go?.backend?.App;
   if (!runtimeApp) {
     return;
   }
-  await SetLogAPITimestampFormatBackend(format);
+  await SetObjPanelLogsAPITimestampFormatBackend(format);
 };
 
-const persistLogApiTimestampUseLocalTimeZone = async (enabled: boolean): Promise<void> => {
+const persistObjPanelLogsApiTimestampUseLocalTimeZone = async (enabled: boolean): Promise<void> => {
   const runtimeApp = (window as any)?.go?.backend?.App;
   if (!runtimeApp) {
     return;
   }
-  await SetLogAPITimestampUseLocalTimeZoneBackend(enabled);
+  await SetObjPanelLogsAPITimestampUseLocalTimeZoneBackend(enabled);
 };
 
-const persistLogTargetPerScopeLimit = async (limit: number): Promise<void> => {
+const persistObjPanelLogsTargetPerScopeLimit = async (limit: number): Promise<void> => {
   const runtimeApp = (window as any)?.go?.backend?.App;
   if (!runtimeApp) {
     return;
   }
-  await SetLogTargetPerScopeLimitBackend(limit);
+  await SetObjPanelLogsTargetPerScopeLimitBackend(limit);
 };
 
-const persistLogTargetGlobalLimit = async (limit: number): Promise<void> => {
+const persistObjPanelLogsTargetGlobalLimit = async (limit: number): Promise<void> => {
   const runtimeApp = (window as any)?.go?.backend?.App;
   if (!runtimeApp) {
     return;
   }
-  await SetLogTargetGlobalLimitBackend(limit);
+  await SetObjPanelLogsTargetGlobalLimitBackend(limit);
 };
 
-export const setLogBufferMaxSize = (size: number): void => {
-  const normalized = normalizeLogBufferMaxSize(size);
+export const setObjPanelLogsBufferMaxSize = (size: number): void => {
+  const normalized = normalizeObjPanelLogsBufferMaxSize(size);
   hydrated = true;
-  updatePreferenceCache({ logBufferMaxSize: normalized });
-  void persistLogBufferMaxSize(normalized).catch((error) => {
-    console.error('Failed to persist log buffer max size:', error);
+  updatePreferenceCache({ objPanelLogsBufferMaxSize: normalized });
+  void persistObjPanelLogsBufferMaxSize(normalized).catch((error) => {
+    console.error('Failed to persist Object Panel Logs Tab buffer max size:', error);
   });
 };
 
@@ -674,42 +691,45 @@ export const setMaxTableRows = (size: number): void => {
   });
 };
 
-export const setLogApiTimestampFormat = (format: string): void => {
-  const validationError = getLogApiTimestampFormatValidationError(format);
+export const setObjPanelLogsApiTimestampFormat = (format: string): void => {
+  const validationError = getObjPanelLogsApiTimestampFormatValidationError(format);
   if (validationError) {
     throw new Error(validationError);
   }
   const normalized = format.trim();
   hydrated = true;
-  updatePreferenceCache({ logApiTimestampFormat: normalized });
-  void persistLogApiTimestampFormat(normalized).catch((error) => {
-    console.error('Failed to persist log API timestamp format:', error);
+  updatePreferenceCache({ objPanelLogsApiTimestampFormat: normalized });
+  void persistObjPanelLogsApiTimestampFormat(normalized).catch((error) => {
+    console.error('Failed to persist Object Panel Logs Tab API timestamp format:', error);
   });
 };
 
-export const setLogApiTimestampUseLocalTimeZone = (enabled: boolean): void => {
+export const setObjPanelLogsApiTimestampUseLocalTimeZone = (enabled: boolean): void => {
   hydrated = true;
-  updatePreferenceCache({ logApiTimestampUseLocalTimeZone: enabled });
-  void persistLogApiTimestampUseLocalTimeZone(enabled).catch((error) => {
-    console.error('Failed to persist log API timestamp local timezone setting:', error);
+  updatePreferenceCache({ objPanelLogsApiTimestampUseLocalTimeZone: enabled });
+  void persistObjPanelLogsApiTimestampUseLocalTimeZone(enabled).catch((error) => {
+    console.error(
+      'Failed to persist Object Panel Logs Tab API timestamp local timezone setting:',
+      error
+    );
   });
 };
 
-export const setLogTargetPerScopeLimit = (limit: number): void => {
-  const normalized = normalizeLogTargetPerScopeLimit(limit);
+export const setObjPanelLogsTargetPerScopeLimit = (limit: number): void => {
+  const normalized = normalizeObjPanelLogsTargetPerScopeLimit(limit);
   hydrated = true;
-  updatePreferenceCache({ logTargetPerScopeLimit: normalized });
-  void persistLogTargetPerScopeLimit(normalized).catch((error) => {
-    console.error('Failed to persist log target per-scope limit:', error);
+  updatePreferenceCache({ objPanelLogsTargetPerScopeLimit: normalized });
+  void persistObjPanelLogsTargetPerScopeLimit(normalized).catch((error) => {
+    console.error('Failed to persist Object Panel Logs Tab target per-scope limit:', error);
   });
 };
 
-export const setLogTargetGlobalLimit = (limit: number): void => {
-  const normalized = normalizeLogTargetGlobalLimit(limit);
+export const setObjPanelLogsTargetGlobalLimit = (limit: number): void => {
+  const normalized = normalizeObjPanelLogsTargetGlobalLimit(limit);
   hydrated = true;
-  updatePreferenceCache({ logTargetGlobalLimit: normalized });
-  void persistLogTargetGlobalLimit(normalized).catch((error) => {
-    console.error('Failed to persist log target global limit:', error);
+  updatePreferenceCache({ objPanelLogsTargetGlobalLimit: normalized });
+  void persistObjPanelLogsTargetGlobalLimit(normalized).catch((error) => {
+    console.error('Failed to persist Object Panel Logs Tab target global limit:', error);
   });
 };
 

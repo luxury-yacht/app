@@ -16,6 +16,7 @@ import (
 	discoveryv1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/types"
 )
@@ -25,7 +26,7 @@ const endpointSliceTimeout = 10 * time.Second
 func (s *Service) GetService(namespace, name string) (*types.ServiceDetails, error) {
 	svc, err := s.deps.KubernetesClient.CoreV1().Services(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
-		s.deps.Logger.Error(fmt.Sprintf("Failed to get service %s/%s: %v", namespace, name, err), "ResourceLoader")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to get service %s/%s: %v", namespace, name, err), logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to get service: %v", err)
 	}
 
@@ -33,7 +34,7 @@ func (s *Service) GetService(namespace, name string) (*types.ServiceDetails, err
 	defer cancel()
 	slices, err := s.listEndpointSlices(ctx, namespace, name)
 	if err != nil {
-		s.deps.Logger.Warn(fmt.Sprintf("Failed to get endpoint slices for service %s/%s: %v", namespace, name, err), "ResourceLoader")
+		s.deps.Logger.Warn(fmt.Sprintf("Failed to get endpoint slices for service %s/%s: %v", namespace, name, err), logsources.ResourceLoader)
 	}
 
 	return s.buildServiceDetails(svc, slices), nil
@@ -42,7 +43,7 @@ func (s *Service) GetService(namespace, name string) (*types.ServiceDetails, err
 func (s *Service) Services(namespace string) ([]*types.ServiceDetails, error) {
 	services, err := s.deps.KubernetesClient.CoreV1().Services(namespace).List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
-		s.deps.Logger.Error(fmt.Sprintf("Failed to list services in namespace %s: %v", namespace, err), "ResourceLoader")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to list services in namespace %s: %v", namespace, err), logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to list services: %v", err)
 	}
 
@@ -50,7 +51,7 @@ func (s *Service) Services(namespace string) ([]*types.ServiceDetails, error) {
 	defer cancel()
 	slices, err := s.listEndpointSlices(ctx, namespace, "")
 	if err != nil {
-		s.deps.Logger.Warn(fmt.Sprintf("Failed to list endpoint slices in namespace %s: %v", namespace, err), "ResourceLoader")
+		s.deps.Logger.Warn(fmt.Sprintf("Failed to list endpoint slices in namespace %s: %v", namespace, err), logsources.ResourceLoader)
 	}
 	slicesByService := groupEndpointSlicesByService(slices)
 

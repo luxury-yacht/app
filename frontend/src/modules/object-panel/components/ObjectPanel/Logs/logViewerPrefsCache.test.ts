@@ -27,7 +27,7 @@ const samplePrefs = (overrides: Partial<LogViewerPrefs> = {}): LogViewerPrefs =>
   displayMode: 'raw',
   isParsedView: false,
   expandedRows: [],
-  showPreviousLogs: false,
+  showPreviousContainerLogs: false,
   ...overrides,
 });
 

@@ -177,7 +177,7 @@ function AppContent() {
     // open/close lives in ModalStateContext via viewState, not in the
     // per-cluster panel layout store. Toggling it directly keeps both
     // the keyboard shortcut and command-palette paths in sync.
-    viewState.toggleAppLogs();
+    viewState.toggleAppLogsPanel();
   }, [viewState]);
 
   const handleToggleDiagnostics = useCallback(() => {
@@ -193,7 +193,7 @@ function AppContent() {
     onOpenSettings: () => viewState.setIsSettingsOpen(true),
     onOpenAbout: () => viewState.setIsAboutOpen(true),
     onToggleSidebar: () => viewState.toggleSidebar(),
-    onToggleAppLogs: handleToggleAppLogsPanel,
+    onToggleAppLogsPanel: handleToggleAppLogsPanel,
     onToggleDiagnostics: handleToggleDiagnostics,
     onToggleObjectDiff: handleToggleObjectDiff,
   });
@@ -210,7 +210,7 @@ function AppContent() {
   // handler the keyboard shortcut + tray menu use, so all paths share
   // the single source of truth in ModalStateContext.
   useEffect(() => {
-    return eventBus.on('view:toggle-app-logs', handleToggleAppLogsPanel);
+    return eventBus.on('view:toggle-app-logs-panel', handleToggleAppLogsPanel);
   }, [handleToggleAppLogsPanel]);
 
   // Handle manual refresh (Cmd+R)
@@ -233,12 +233,12 @@ function AppContent() {
     <>
       <GlobalShortcuts
         onToggleSidebar={viewState.toggleSidebar}
-        onToggleLogsPanel={handleToggleAppLogsPanel}
+        onToggleAppLogsPanel={handleToggleAppLogsPanel}
         onToggleSettings={() => viewState.setIsSettingsOpen(!viewState.isSettingsOpen)}
         onToggleObjectDiff={() => viewState.setIsObjectDiffOpen(!viewState.isObjectDiffOpen)}
         onRefresh={handleManualRefresh}
         onToggleDiagnostics={handleToggleDiagnostics}
-        isLogsPanelOpen={viewState.showAppLogs}
+        isAppLogsPanelOpen={viewState.showAppLogsPanel}
         isObjectPanelOpen={viewState.showObjectPanel}
         isSettingsOpen={viewState.isSettingsOpen}
       />

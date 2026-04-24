@@ -11,9 +11,9 @@ type (
 	AppSettings                           = types.AppSettings
 	ThemeInfo                             = types.ThemeInfo
 	Theme                                 = types.Theme
-	PodLogEntry                           = types.PodLogEntry
-	LogFetchRequest                       = types.LogFetchRequest
-	LogFetchResponse                      = types.LogFetchResponse
+	ContainerLogsEntry                    = types.ContainerLogsEntry
+	ContainerLogsFetchRequest             = types.ContainerLogsFetchRequest
+	ContainerLogsFetchResponse            = types.ContainerLogsFetchResponse
 	NodeLogSource                         = types.NodeLogSource
 	NodeLogDiscoveryResponse              = types.NodeLogDiscoveryResponse
 	NodeLogFetchRequest                   = types.NodeLogFetchRequest

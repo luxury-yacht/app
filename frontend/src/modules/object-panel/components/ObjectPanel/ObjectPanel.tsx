@@ -220,10 +220,17 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
   const [state, dispatch] = useReducer(panelReducer, INITIAL_PANEL_STATE);
   const activeTab: ViewType = getObjectPanelActiveTab(panelId) ?? 'details';
 
-  const { objectKind, detailScope, eventsScope, logScope, helmScope, isHelmRelease, isEvent } =
-    getObjectPanelKind(objectData, {
-      clusterScope: CLUSTER_SCOPE,
-    });
+  const {
+    objectKind,
+    detailScope,
+    eventsScope,
+    containerLogsScope,
+    helmScope,
+    isHelmRelease,
+    isEvent,
+  } = getObjectPanelKind(objectData, {
+    clusterScope: CLUSTER_SCOPE,
+  });
 
   const lastEvaluatedNamespaceRef = useRef<string | null>(null);
   useEffect(() => {
@@ -663,7 +670,7 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
           nodeLogSources={nodeLogSources}
           detailScope={detailScope}
           eventsScope={eventsScope}
-          logScope={logScope}
+          containerLogsScope={containerLogsScope}
           helmScope={helmScope}
           objectData={objectData}
           objectKind={objectKind}

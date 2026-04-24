@@ -33,7 +33,7 @@ export type PanelObjectData = {
 };
 
 export type ResourceCapability = {
-  logs?: boolean;
+  objPanelLogs?: boolean;
   nodeLogs?: boolean;
   delete?: boolean;
   restart?: boolean;
@@ -46,7 +46,7 @@ export type ResourceCapability = {
 };
 
 export type FeatureSupport = {
-  logs: boolean;
+  objPanelLogs: boolean;
   nodeLogs: boolean;
   manifest: boolean;
   values: boolean;
@@ -61,7 +61,7 @@ export type FeatureSupport = {
 };
 
 export type ComputedCapabilities = {
-  hasLogs: boolean;
+  hasObjPanelLogs: boolean;
   hasNodeLogs: boolean;
   hasShell: boolean;
   hasManifest: boolean;
@@ -77,7 +77,7 @@ export type ComputedCapabilities = {
 export type CapabilityIdMap = {
   viewYaml?: string;
   editYaml?: string;
-  viewLogs?: string;
+  viewObjPanelLogs?: string;
   viewManifest?: string;
   viewValues?: string;
   delete?: string;
@@ -122,7 +122,7 @@ export type CapabilityReasons = {
 export const createEmptyCapabilityIdMap = (): CapabilityIdMap => ({
   viewYaml: undefined,
   editYaml: undefined,
-  viewLogs: undefined,
+  viewObjPanelLogs: undefined,
   viewManifest: undefined,
   viewValues: undefined,
   delete: undefined,
@@ -157,7 +157,7 @@ export type LogTimestampMode = 'hidden' | 'default' | 'short' | 'localized';
  * (logViewerPrefsCache) keyed by panelId, evicted by
  * ObjectPanelStateContext when the panel actually closes.
  *
- * Pure-derived state (containers, parsedLogs, fallbackError, etc.) is
+ * Pure-derived state (containers, parsedContainerLogs, fallbackError, etc.) is
  * NOT included — those get recomputed from the cached log entries on
  * remount. expandedRows is stored as an array because the in-memory Set
  * is rebuilt by applyLogViewerPrefs on rehydrate; using an array keeps
@@ -179,7 +179,7 @@ export interface LogViewerPrefs {
   displayMode: LogDisplayMode;
   isParsedView: boolean;
   expandedRows: string[];
-  showPreviousLogs: boolean;
+  showPreviousContainerLogs: boolean;
 }
 
 export type PanelState = {

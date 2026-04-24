@@ -49,7 +49,7 @@ describe('useObjectPanelCapabilities', () => {
   };
 
   const baseFeatureSupport: FeatureSupport = {
-    logs: true,
+    objPanelLogs: true,
     nodeLogs: false,
     manifest: false,
     values: false,
@@ -145,7 +145,7 @@ describe('useObjectPanelCapabilities', () => {
       featureSupport: baseFeatureSupport,
     });
 
-    expect(result.capabilities.hasLogs).toBe(false);
+    expect(result.capabilities.hasObjPanelLogs).toBe(false);
   });
 
   it('returns default states when descriptors are unavailable', async () => {
@@ -159,7 +159,7 @@ describe('useObjectPanelCapabilities', () => {
       objectKind: null,
       detailScope: null,
       featureSupport: {
-        logs: false,
+        objPanelLogs: false,
         nodeLogs: false,
         manifest: false,
         values: false,
@@ -175,7 +175,7 @@ describe('useObjectPanelCapabilities', () => {
     });
 
     expect(result.capabilities).toEqual({
-      hasLogs: false,
+      hasObjPanelLogs: false,
       hasNodeLogs: false,
       hasShell: false,
       hasManifest: false,
@@ -379,12 +379,12 @@ describe('useObjectPanelCapabilities', () => {
       objectData: { kind: 'Node', name: 'node-a', clusterId: 'c1' },
       objectKind: 'node',
       detailScope: 'node:node-a',
-      featureSupport: { ...baseFeatureSupport, logs: false, nodeLogs: true },
+      featureSupport: { ...baseFeatureSupport, objPanelLogs: false, nodeLogs: true },
     });
 
     expect(mockDiscoverNodeLogs).toHaveBeenCalledWith('c1', 'node-a');
     expect(result.capabilities.hasNodeLogs).toBe(true);
-    expect(result.capabilities.hasLogs).toBe(true);
+    expect(result.capabilities.hasObjPanelLogs).toBe(true);
     expect(result.nodeLogSources).toEqual([
       {
         id: 'journal/kubelet',
@@ -417,7 +417,7 @@ describe('useObjectPanelCapabilities', () => {
       objectData: { kind: 'Node', name: 'node-a', clusterId: 'c1' },
       objectKind: 'node',
       detailScope: 'node:node-a',
-      featureSupport: { ...baseFeatureSupport, logs: false, nodeLogs: true },
+      featureSupport: { ...baseFeatureSupport, objPanelLogs: false, nodeLogs: true },
     });
 
     expect(mockGetCachedNodeLogDiscovery).toHaveBeenCalledWith('c1', 'node-a');
@@ -463,7 +463,7 @@ describe('useObjectPanelCapabilities', () => {
       objectData: { kind: 'Node', name: 'node-a', clusterId: 'c1' },
       objectKind: 'node',
       detailScope: 'node:node-a:c1',
-      featureSupport: { ...baseFeatureSupport, logs: false, nodeLogs: true },
+      featureSupport: { ...baseFeatureSupport, objPanelLogs: false, nodeLogs: true },
     });
 
     expect(first.nodeLogSources[0]?.path).toBe('journal/kubelet');
@@ -473,7 +473,7 @@ describe('useObjectPanelCapabilities', () => {
       objectData: { kind: 'Node', name: 'node-a', clusterId: 'c2' },
       objectKind: 'node',
       detailScope: 'node:node-a:c2',
-      featureSupport: { ...baseFeatureSupport, logs: false, nodeLogs: true },
+      featureSupport: { ...baseFeatureSupport, objPanelLogs: false, nodeLogs: true },
     });
 
     expect(mockGetCachedNodeLogDiscovery).toHaveBeenCalledWith('c2', 'node-a');
@@ -496,11 +496,11 @@ describe('useObjectPanelCapabilities', () => {
       objectData: { kind: 'Node', name: 'node-a', clusterId: 'c1' },
       objectKind: 'node',
       detailScope: 'node:node-a',
-      featureSupport: { ...baseFeatureSupport, logs: false, nodeLogs: true },
+      featureSupport: { ...baseFeatureSupport, objPanelLogs: false, nodeLogs: true },
     });
 
     expect(result.capabilities.hasNodeLogs).toBe(false);
-    expect(result.capabilities.hasLogs).toBe(true);
+    expect(result.capabilities.hasObjPanelLogs).toBe(true);
     expect(result.nodeLogSources).toEqual([]);
     expect(result.capabilityReasons.nodeLogs).toBe('node logs are not supported on this cluster');
   });

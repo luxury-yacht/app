@@ -70,6 +70,13 @@ describe('Dropdown', () => {
     });
   };
 
+  const mouseDown = (element: Element | null) => {
+    if (!element) throw new Error('Element not found');
+    act(() => {
+      element.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    });
+  };
+
   const pressKey = async (element: Element | null, key: string) => {
     if (!element) throw new Error('Element not found');
     await act(async () => {
@@ -117,6 +124,46 @@ describe('Dropdown', () => {
     expect(handleChange).toHaveBeenCalledWith('beta');
     expect(container.querySelector('.dropdown-menu')).toBeNull();
     expect(container.querySelector('.dropdown-value')?.textContent).toBe('Beta');
+  });
+
+  it('closes an open sibling dropdown when mousedown bubbling is stopped by a parent', async () => {
+    const Harness = () => {
+      const [firstValue, setFirstValue] = useState<string[]>([]);
+      const [secondValue, setSecondValue] = useState<string[]>([]);
+      return (
+        <div onMouseDown={(event) => event.stopPropagation()}>
+          <Dropdown
+            options={OPTIONS}
+            value={firstValue}
+            onChange={(next) => setFirstValue(next as string[])}
+            multiple
+            showBulkActions
+            renderValue={() => 'First'}
+          />
+          <Dropdown
+            options={OPTIONS}
+            value={secondValue}
+            onChange={(next) => setSecondValue(next as string[])}
+            multiple
+            showBulkActions
+            renderValue={() => 'Second'}
+          />
+        </div>
+      );
+    };
+
+    await mount(<Harness />);
+
+    const triggers = container.querySelectorAll('.dropdown-trigger');
+    click(triggers.item(0));
+    expect(container.querySelectorAll('.dropdown-menu')).toHaveLength(1);
+
+    mouseDown(triggers.item(1));
+    click(triggers.item(1));
+
+    expect(container.querySelectorAll('.dropdown-menu')).toHaveLength(1);
+    expect(container.querySelectorAll('.dropdown.open')).toHaveLength(1);
+    expect(container.querySelector('.dropdown.open .dropdown-value')?.textContent).toBe('Second');
   });
 
   it('supports search input and clearing selection', async () => {

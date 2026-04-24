@@ -189,7 +189,7 @@ const computeCapabilityDescriptors = (
     );
   }
 
-  if (featureSupport.logs) {
+  if (featureSupport.objPanelLogs) {
     if (objectKind === 'pod') {
       add(
         {
@@ -202,10 +202,10 @@ const computeCapabilityDescriptors = (
           name: resourceName,
           subresource: 'log',
         },
-        'viewLogs'
+        'viewObjPanelLogs'
       );
     } else {
-      // Non-pod workloads get a pod-log check against core/v1 Pod.
+      // Non-pod workloads get a container log permission check against core/v1 Pod.
       add(
         {
           id: 'view-logs',
@@ -216,7 +216,7 @@ const computeCapabilityDescriptors = (
           namespace,
           subresource: 'log',
         },
-        'viewLogs'
+        'viewObjPanelLogs'
       );
     }
   }
@@ -378,7 +378,7 @@ export const useObjectPanelCapabilities = ({
     };
   }, [capabilityDescriptorInfo.idMap, capabilitiesEnabled, getCapabilityState]);
 
-  const viewLogsPermission = useUserPermission(
+  const viewObjPanelLogsPermission = useUserPermission(
     'Pod',
     'get',
     objectData?.namespace ?? null,
@@ -454,18 +454,18 @@ export const useObjectPanelCapabilities = ({
   }, [featureSupport.nodeLogs, objectData?.clusterId, objectData?.name, objectKind]);
 
   const capabilities = useMemo<ComputedCapabilities>(() => {
-    const hasLogs =
+    const hasObjPanelLogs =
       objectKind === 'node'
         ? featureSupport.nodeLogs
-        : featureSupport.logs &&
+        : featureSupport.objPanelLogs &&
           !(
-            viewLogsPermission &&
-            !viewLogsPermission.pending &&
-            viewLogsPermission.allowed === false
+            viewObjPanelLogsPermission &&
+            !viewObjPanelLogsPermission.pending &&
+            viewObjPanelLogsPermission.allowed === false
           );
 
     return {
-      hasLogs,
+      hasObjPanelLogs,
       hasNodeLogs: featureSupport.nodeLogs && nodeLogsCapabilityState.allowed,
       hasShell: featureSupport.shell && capabilityStates.shell.allowed,
       hasManifest: featureSupport.manifest,
@@ -482,7 +482,7 @@ export const useObjectPanelCapabilities = ({
     featureSupport,
     nodeLogsCapabilityState.allowed,
     objectKind,
-    viewLogsPermission,
+    viewObjPanelLogsPermission,
   ]);
 
   const capabilityReasons = useMemo<CapabilityReasons>(

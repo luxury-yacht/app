@@ -1,6 +1,6 @@
 /* Logs Tab Styles */
 
-.pod-logs-display {
+.logs-viewer-display {
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -10,7 +10,7 @@
 /* Note: This component uses the Dropdown component with standard styles from Dropdown.css */
 
 /* Maximized view - takes full content-body area */
-.pod-logs-display.maximized {
+.logs-viewer-display.maximized {
   position: absolute;
   top: 0;
   left: 0;
@@ -23,7 +23,7 @@
 }
 
 /* Placeholder shown when logs are maximized */
-.pod-logs-placeholder {
+.logs-viewer-placeholder {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -36,12 +36,12 @@
 }
 
 /* Enhance controls visibility in maximized mode */
-.pod-logs-display.maximized .pod-logs-controls {
+.logs-viewer-display.maximized .logs-viewer-controls {
   background-color: var(--log-controls-maximized-bg);
   box-shadow: var(--log-controls-maximized-shadow);
 }
 
-.pod-logs-controls {
+.logs-viewer-controls {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -51,11 +51,11 @@
   box-shadow: var(--log-controls-shadow, none);
 }
 
-.pod-logs-controls--with-active-filters {
+.logs-viewer-controls--with-active-filters {
   border-bottom: 0;
 }
 
-.pod-logs-active-filters {
+.logs-viewer-active-filters {
   display: flex;
   align-items: center;
   align-content: center;
@@ -66,7 +66,7 @@
   border-bottom: 1px solid var(--log-controls-border);
 }
 
-.pod-logs-controls-left {
+.logs-viewer-controls-left {
   display: flex;
   align-items: center;
   gap: 1rem;
@@ -74,19 +74,19 @@
   flex: 1;
 }
 
-.pod-logs-control-group {
+.logs-viewer-control-group {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
 }
 
-.pod-logs-selector-dropdown .dropdown-trigger {
+.logs-viewer-selector-dropdown .dropdown-trigger {
   width: 175px;
   min-width: 175px;
   max-width: 175px;
 }
 
-.pod-logs-selector-dropdown .dropdown-value {
+.logs-viewer-selector-dropdown .dropdown-value {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -96,7 +96,7 @@
    controls row. Uses tabular-nums so the value doesn't jitter as
    entries stream in, and the secondary text color so it reads as
    metadata rather than a primary control. */
-.pod-logs-count {
+.logs-viewer-count {
   font-size: var(--font-size-small, 0.75rem);
   color: var(--color-text-secondary);
   font-variant-numeric: tabular-nums;
@@ -104,36 +104,36 @@
   user-select: none;
 }
 
-.pod-logs-control-group label {
+.logs-viewer-control-group label {
   font-size: var(--font-size-normal);
   color: var(--color-text-secondary);
   white-space: nowrap;
 }
 
 /* Logs control select inherits from unified dropdown styles */
-.pod-logs-control-select {
+.logs-viewer-control-select {
   min-width: 80px;
 }
 
-.pod-logs-control-checkbox {
+.logs-viewer-control-checkbox {
   display: flex;
   align-items: center;
   gap: var(--spacing-xs);
   cursor: pointer;
 }
 
-.pod-logs-control-checkbox input[type="checkbox"] {
+.logs-viewer-control-checkbox input[type="checkbox"] {
   cursor: pointer;
 }
 
-.pod-logs-filter-group {
+.logs-viewer-filter-group {
   position: relative;
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-xs);
 }
 
-.pod-logs-text-filter {
+.logs-viewer-text-filter {
   padding: 4px 28px 4px 8px; /* Add right padding for clear button */
   background: var(--color-bg);
   border: 1px solid var(--color-border);
@@ -144,18 +144,18 @@
   outline: none;
 }
 
-.pod-logs-text-filter:focus {
+.logs-viewer-text-filter:focus {
   outline: none;
   border-color: var(--color-accent);
   box-shadow: var(--dropdown-trigger-focus-shadow);
 }
 
-.pod-logs-text-filter::placeholder {
+.logs-viewer-text-filter::placeholder {
   color: var(--color-text-secondary);
   opacity: 0.6;
 }
 
-.pod-logs-filter-clear {
+.logs-viewer-filter-clear {
   position: absolute;
   right: 4px;
   background: transparent;
@@ -169,15 +169,15 @@
   outline: none;
 }
 
-.pod-logs-filter-clear:hover {
+.logs-viewer-filter-clear:hover {
   color: var(--color-text);
 }
 
-.pod-logs-filter-clear:active {
+.logs-viewer-filter-clear:active {
   transform: scale(0.9);
 }
 
-.pod-log-metadata-button {
+.log-viewer-metadata-button {
   appearance: none;
   background: none;
   border: 0;
@@ -188,17 +188,17 @@
   padding: 0;
 }
 
-.pod-log-metadata-button:hover {
+.log-viewer-metadata-button:hover {
   text-decoration: underline;
 }
 
-.pod-log-metadata-button:focus-visible {
+.log-viewer-metadata-button:focus-visible {
   outline: 1px solid currentColor;
   outline-offset: 2px;
   border-radius: 2px;
 }
 
-.pod-logs-filter-chip {
+.logs-viewer-filter-chip {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -212,7 +212,7 @@
   font-weight: 400;
 }
 
-.pod-logs-filter-chip--clear-all {
+.logs-viewer-filter-chip--clear-all {
   appearance: none;
   cursor: pointer;
   border: 0;
@@ -222,17 +222,17 @@
   padding: 0 8px;
 }
 
-.pod-logs-filter-chip--clear-all:hover {
+.logs-viewer-filter-chip--clear-all:hover {
   background: var(--color-accent);
 }
 
-.pod-logs-filter-chip-label {
+.logs-viewer-filter-chip-label {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.pod-logs-filter-chip-remove {
+.logs-viewer-filter-chip-remove {
   appearance: none;
   display: inline-flex;
   align-items: center;
@@ -251,12 +251,12 @@
   border-radius: 999px;
 }
 
-.pod-logs-filter-chip-remove:hover {
+.logs-viewer-filter-chip-remove:hover {
   background-color: var(--color-accent);
   color: var(--color-text);
 }
 
-.pod-logs-filter-toggle {
+.logs-viewer-filter-toggle {
   padding: 4px 10px;
   background: var(--color-bg-secondary);
   border: 1px solid var(--color-border);
@@ -266,23 +266,23 @@
   cursor: pointer;
 }
 
-.pod-logs-filter-toggle:hover:not(:disabled) {
+.logs-viewer-filter-toggle:hover:not(:disabled) {
   color: var(--color-text);
   border-color: var(--color-accent);
 }
 
-.pod-logs-filter-toggle.active {
+.logs-viewer-filter-toggle.active {
   background: var(--button-action-bg);
   border-color: var(--button-action-bg);
   color: var(--button-action-text);
 }
 
-.pod-logs-filter-toggle:disabled {
+.logs-viewer-filter-toggle:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
-.pod-logs-control-btn {
+.logs-viewer-control-btn {
   padding: var(--spacing-xs) 0.75rem;
   font-size: var(--font-size-normal);
   border-radius: var(--border-radius-round);
@@ -295,24 +295,24 @@
   border: 1px solid;
 }
 
-.pod-logs-control-btn.refresh {
+.logs-viewer-control-btn.refresh {
   background-color: var(--button-action-bg);
   color: var(--button-action-text);
   border-color: var(--button-action-bg);
 }
 
-.pod-logs-control-btn.refresh:hover:not(:disabled) {
+.logs-viewer-control-btn.refresh:hover:not(:disabled) {
   background-color: var(--button-action-hover);
   border-color: var(--button-action-hover);
 }
 
-.pod-logs-control-btn:disabled {
+.logs-viewer-control-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
 
 /* Maximize button styles */
-.pod-logs-maximize-btn {
+.logs-viewer-maximize-btn {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -332,21 +332,21 @@
   flex-shrink: 0;
 }
 
-.pod-logs-maximize-btn:hover {
+.logs-viewer-maximize-btn:hover {
   background-color: var(--log-maximize-hover-bg);
   color: var(--log-text-primary);
 }
 
-.pod-logs-maximize-btn:active {
+.logs-viewer-maximize-btn:active {
   transform: scale(0.95);
 }
 
-.pod-logs-maximize-btn svg {
+.logs-viewer-maximize-btn svg {
   width: 18px;
   height: 18px;
 }
 
-.pod-logs-content {
+.logs-viewer-content {
   flex: 1;
   overflow: auto;
   background-color: var(--log-surface-bg);
@@ -365,16 +365,16 @@
   -webkit-user-select: text !important;
 }
 
-.pod-logs-content * {
+.logs-viewer-content * {
   user-select: text !important;
   -webkit-user-select: text !important;
 }
 
-.pod-logs-content:focus {
+.logs-viewer-content:focus {
   outline: none;
 }
 
-.pod-logs-warning-bar {
+.logs-viewer-warning-bar {
   display: flex;
   align-items: center;
   padding: 0.5rem 0.75rem;
@@ -384,7 +384,7 @@
   font-weight: 500;
 }
 
-.pod-logs-text {
+.logs-viewer-text {
   color: var(--log-text-primary);
   font-size: var(--font-size-mono);
   line-height: 1.5;
@@ -393,53 +393,53 @@
   -webkit-user-select: text;
 }
 
-.pod-logs-text.pod-logs-text--virtualized {
+.logs-viewer-text.logs-viewer-text--virtualized {
   padding: 0 0.5rem;
 }
 
-.pod-logs-text.no-wrap {
+.logs-viewer-text.no-wrap {
   display: inline-block;
   min-width: 100%;
   width: max-content;
 }
 
-.pod-logs-virtual-body {
+.logs-viewer-virtual-body {
   position: relative;
 }
 
-.pod-logs-virtual-inner {
+.logs-viewer-virtual-inner {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
 }
 
-.pod-log-row {
+.log-viewer-row {
   padding-bottom: 0.1rem;
 }
 
 /* No wrap mode - disable text wrapping */
-.pod-logs-text.no-wrap .pod-log-line {
+.logs-viewer-text.no-wrap .log-viewer-line {
   white-space: pre;
   word-wrap: normal;
   word-break: normal;
   overflow-x: visible;
 }
 
-.pod-logs-text.no-wrap .pod-logs-virtual-body,
-.pod-logs-text.no-wrap .pod-logs-virtual-inner,
-.pod-logs-text.no-wrap .pod-log-row,
-.pod-logs-text.no-wrap .pod-log-line {
+.logs-viewer-text.no-wrap .logs-viewer-virtual-body,
+.logs-viewer-text.no-wrap .logs-viewer-virtual-inner,
+.logs-viewer-text.no-wrap .log-viewer-row,
+.logs-viewer-text.no-wrap .log-viewer-line {
   min-width: 100%;
   width: max-content;
 }
 
-.pod-logs-text.no-wrap .pod-logs-virtual-inner {
+.logs-viewer-text.no-wrap .logs-viewer-virtual-inner {
   right: auto;
 }
 
 /* Individual log line with hanging indent for wrapped text */
-.pod-log-line {
+.log-viewer-line {
   white-space: pre-wrap;
   word-wrap: break-word;
   word-break: break-all;
@@ -450,22 +450,22 @@
   -webkit-user-select: text;
 }
 
-.pod-log-line .pod-log-metadata {
+.log-viewer-line .log-viewer-metadata {
   color: var(--log-metadata-text);
 }
 
-.pod-logs-loading,
-.pod-logs-error {
+.logs-viewer-loading,
+.logs-viewer-error {
   color: var(--color-text-secondary);
   padding: var(--spacing-lg);
 }
 
-.pod-logs-error {
+.logs-viewer-error {
   color: var(--color-error, #dc3545);
 }
 
-.pod-logs-display-loading,
-.pod-logs-display-error {
+.logs-viewer-display-loading,
+.logs-viewer-display-error {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -473,7 +473,7 @@
   color: var(--color-text-secondary);
 }
 
-.pod-logs-display-error {
+.logs-viewer-display-error {
   color: var(--color-error, #dc3545);
 }
 
@@ -482,8 +482,8 @@
   height: 100%;
 }
 
-/* Override absolute positioning from tables.css for ANY table inside pod-logs-content */
-.pod-logs-content > .table-container {
+/* Override absolute positioning from tables.css for ANY table inside logs-viewer-content */
+.logs-viewer-content > .table-container {
   position: relative !important;
   top: auto !important;
   left: auto !important;
@@ -494,7 +494,7 @@
 }
 
 /* Additional specificity for parsed-logs-table */
-.pod-logs-content .parsed-logs-table {
+.logs-viewer-content .parsed-logs-table {
   position: relative !important;
   height: 100%;
 }
@@ -652,18 +652,18 @@
   color: var(--pod-color);
 }
 
-/* Higher specificity to override .pod-log-line .pod-log-metadata base color. */
-.pod-log-line .pod-color-text {
+/* Higher specificity to override .log-viewer-line .log-viewer-metadata base color. */
+.log-viewer-line .pod-color-text {
   color: var(--pod-color);
 }
 
-/* Pod/container prefix in raw multi-pod log lines. */
-.pod-log-line .pod-log-metadata--bold {
+/* Pod/container prefix in raw multi-container log lines. */
+.log-viewer-line .log-viewer-metadata--bold {
   color: var(--pod-color);
   font-weight: 500;
 }
 
-.pod-log-highlight {
+.log-viewer-highlight {
   background: var(--code-selection-match-bg);
   color: inherit;
   outline: 1px solid var(--code-selection-match-outline);

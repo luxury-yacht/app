@@ -24,10 +24,10 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
+	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/eventstream"
 	"github.com/luxury-yacht/app/backend/refresh/informer"
-	"github.com/luxury-yacht/app/backend/refresh/logstream"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"github.com/luxury-yacht/app/backend/refresh/resourcestream"
@@ -44,22 +44,22 @@ type PermissionIssue struct {
 
 // Config contains the dependencies required to initialise the refresh manager.
 type Config struct {
-	KubernetesClient        kubernetes.Interface                    // Kubernetes client for API interactions.
-	MetricsClient           *metricsclient.Clientset                // Metrics client for collecting cluster metrics.
-	RestConfig              *rest.Config                            // REST configuration for Kubernetes client.
-	ResyncInterval          time.Duration                           // Interval for resyncing informers.
-	MetricsInterval         time.Duration                           // Interval for collecting metrics.
-	APIExtensionsClient     apiextensionsclientset.Interface        // Client for API extensions.
-	DynamicClient           dynamic.Interface                       // Dynamic client for interacting with Kubernetes resources.
-	HelmFactory             snapshot.HelmActionFactory              // Factory for creating Helm actions.
-	ObjectDetailsProvider   snapshot.ObjectDetailProvider           // Provider for detailed object information.
-	Logger                  logstream.Logger                        // Logger for recording refresh operations.
-	ObjectCatalogEnabled    func() bool                             // Function to check if the object catalog is enabled.
-	ObjectCatalogService    func() *objectcatalog.Service           // Function to get the object catalog service.
-	ObjectCatalogNamespaces func() []snapshot.CatalogNamespaceGroup // Function to get the object catalog namespaces.
-	LogTargetLimiter        *logstream.GlobalTargetLimiter          // Shared global limiter for log stream targets.
-	ClusterID               string                                  // stable identifier for cluster-scoped keys
-	ClusterName             string                                  // display name for cluster in payloads
+	KubernetesClient           kubernetes.Interface                     // Kubernetes client for API interactions.
+	MetricsClient              *metricsclient.Clientset                 // Metrics client for collecting cluster metrics.
+	RestConfig                 *rest.Config                             // REST configuration for Kubernetes client.
+	ResyncInterval             time.Duration                            // Interval for resyncing informers.
+	MetricsInterval            time.Duration                            // Interval for collecting metrics.
+	APIExtensionsClient        apiextensionsclientset.Interface         // Client for API extensions.
+	DynamicClient              dynamic.Interface                        // Dynamic client for interacting with Kubernetes resources.
+	HelmFactory                snapshot.HelmActionFactory               // Factory for creating Helm actions.
+	ObjectDetailsProvider      snapshot.ObjectDetailProvider            // Provider for detailed object information.
+	Logger                     containerlogsstream.Logger               // Logger for recording refresh operations.
+	ObjectCatalogEnabled       func() bool                              // Function to check if the object catalog is enabled.
+	ObjectCatalogService       func() *objectcatalog.Service            // Function to get the object catalog service.
+	ObjectCatalogNamespaces    func() []snapshot.CatalogNamespaceGroup  // Function to get the object catalog namespaces.
+	ContainerLogsTargetLimiter *containerlogsstream.GlobalTargetLimiter // Shared global limiter for container logs stream targets.
+	ClusterID                  string                                   // stable identifier for cluster-scoped keys
+	ClusterName                string                                   // display name for cluster in payloads
 }
 
 // Subsystem bundles the refresh manager and supporting services.

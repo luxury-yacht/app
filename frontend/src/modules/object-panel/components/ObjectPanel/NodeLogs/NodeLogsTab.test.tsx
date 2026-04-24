@@ -101,7 +101,7 @@ describe('NodeLogsTab', () => {
   };
 
   const selectSource = async (label: string): Promise<void> => {
-    const trigger = container.querySelector('.pod-logs-selector-dropdown .dropdown-trigger');
+    const trigger = container.querySelector('.logs-viewer-selector-dropdown .dropdown-trigger');
     expect(trigger).toBeTruthy();
 
     await act(async () => {
@@ -141,7 +141,7 @@ describe('NodeLogsTab', () => {
     expect(mockFetchNodeLogs).not.toHaveBeenCalled();
     expect(container.textContent).toContain('Select a log source to view logs.');
     expect(
-      container.querySelector('.pod-logs-selector-dropdown .dropdown-value')?.textContent
+      container.querySelector('.logs-viewer-selector-dropdown .dropdown-value')?.textContent
     ).toBe('Select log source');
   });
 
@@ -162,7 +162,7 @@ describe('NodeLogsTab', () => {
       sourcePath: 'journal/containerd',
       tailBytes: 262144,
     });
-    expect(container.querySelector('.pod-logs-text')?.textContent).toContain(
+    expect(container.querySelector('.logs-viewer-text')?.textContent).toContain(
       'content for journal/containerd'
     );
   });
@@ -197,10 +197,10 @@ describe('NodeLogsTab', () => {
       ],
     });
 
-    const trigger = container.querySelector('.pod-logs-selector-dropdown .dropdown-trigger');
+    const trigger = container.querySelector('.logs-viewer-selector-dropdown .dropdown-trigger');
     expect(trigger).toBeTruthy();
     expect(
-      container.querySelector('.pod-logs-selector-dropdown .dropdown-value')?.textContent
+      container.querySelector('.logs-viewer-selector-dropdown .dropdown-value')?.textContent
     ).toBe('Select log source');
 
     await act(async () => {
@@ -230,7 +230,7 @@ describe('NodeLogsTab', () => {
     await selectSource('kubelet');
     await setFilterValue('error');
 
-    expect(container.querySelector('.pod-logs-text')?.textContent).toBe(
+    expect(container.querySelector('.logs-viewer-text')?.textContent).toBe(
       'error failed to reconcile'
     );
   });
@@ -256,7 +256,7 @@ describe('NodeLogsTab', () => {
       await Promise.resolve();
     });
 
-    expect(container.querySelector('.pod-logs-text')?.textContent).toBe('info boot complete');
+    expect(container.querySelector('.logs-viewer-text')?.textContent).toBe('info boot complete');
   });
 
   it('can highlight matches from the icon bar', async () => {
@@ -280,7 +280,7 @@ describe('NodeLogsTab', () => {
       await Promise.resolve();
     });
 
-    const highlightedMatch = container.querySelector('mark.pod-log-highlight');
+    const highlightedMatch = container.querySelector('mark.log-viewer-highlight');
     expect(highlightedMatch?.textContent).toBe('error');
   });
 
@@ -305,7 +305,7 @@ describe('NodeLogsTab', () => {
       await Promise.resolve();
     });
 
-    const highlightedMatch = container.querySelector('.pod-log-line mark.pod-log-highlight');
+    const highlightedMatch = container.querySelector('.log-viewer-line mark.log-viewer-highlight');
     expect(highlightedMatch?.textContent).toBe('error');
     expect(highlightedMatch?.closest('span[style*="color"]')).toBeTruthy();
     expect(container.querySelector('.read-only-terminal-surface')).toBeNull();
@@ -329,8 +329,8 @@ describe('NodeLogsTab', () => {
       await Promise.resolve();
     });
 
-    expect(container.querySelector('.pod-logs-text.no-wrap')).toBeTruthy();
-    expect(container.querySelector('.pod-log-line span[style*="color"]')).toBeTruthy();
+    expect(container.querySelector('.logs-viewer-text.no-wrap')).toBeTruthy();
+    expect(container.querySelector('.log-viewer-line span[style*="color"]')).toBeTruthy();
     expect(container.querySelector('.read-only-terminal-surface')).toBeNull();
   });
 
@@ -379,7 +379,7 @@ describe('NodeLogsTab', () => {
       await Promise.resolve();
     });
 
-    const logLines = Array.from(container.querySelectorAll('.pod-log-line')).map(
+    const logLines = Array.from(container.querySelectorAll('.log-viewer-line')).map(
       (element) => element.textContent
     );
     expect(logLines).toContain('{');
@@ -414,7 +414,7 @@ describe('NodeLogsTab', () => {
     expect(container.textContent).toContain('boot complete');
   });
 
-  it('supports parsed-table row expansion and collapse like pod logs', async () => {
+  it('supports parsed-table row expansion and collapse like container logs', async () => {
     mockFetchNodeLogs.mockResolvedValue({
       source: sources[0],
       sourcePath: sources[0].path,
@@ -533,7 +533,7 @@ describe('NodeLogsTab', () => {
 
     await waitForAnimationFrames(2);
 
-    const content = container.querySelector<HTMLElement>('.pod-logs-content');
+    const content = container.querySelector<HTMLElement>('.logs-viewer-content');
     expect(content).toBeTruthy();
     expect(content!.scrollTop).toBe(500);
 
@@ -579,7 +579,7 @@ describe('NodeLogsTab', () => {
     await renderTab();
     await selectSource('kubelet');
 
-    const content = container.querySelector<HTMLElement>('.pod-logs-content');
+    const content = container.querySelector<HTMLElement>('.logs-viewer-content');
     expect(content).toBeTruthy();
 
     await act(async () => {
@@ -588,7 +588,7 @@ describe('NodeLogsTab', () => {
       await Promise.resolve();
     });
 
-    const trigger = container.querySelector('.pod-logs-selector-dropdown .dropdown-trigger');
+    const trigger = container.querySelector('.logs-viewer-selector-dropdown .dropdown-trigger');
     expect(trigger).toBeTruthy();
     await selectSource('containerd');
     await waitForAnimationFrames(6);
@@ -625,12 +625,12 @@ describe('NodeLogsTab', () => {
     await renderTab();
     await selectSource('kubelet');
 
-    expect(container.querySelector('.pod-logs-text')?.textContent).toContain(
+    expect(container.querySelector('.logs-viewer-text')?.textContent).toContain(
       'content for journal/kubelet'
     );
 
     await act(async () => {
-      const trigger = container.querySelector('.pod-logs-selector-dropdown .dropdown-trigger');
+      const trigger = container.querySelector('.logs-viewer-selector-dropdown .dropdown-trigger');
       trigger!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await Promise.resolve();
     });
@@ -658,7 +658,7 @@ describe('NodeLogsTab', () => {
       await Promise.resolve();
     });
 
-    expect(container.querySelector('.pod-logs-text')?.textContent).toContain(
+    expect(container.querySelector('.logs-viewer-text')?.textContent).toContain(
       'content for journal/containerd'
     );
   });
@@ -688,7 +688,7 @@ describe('NodeLogsTab', () => {
         await Promise.resolve();
       });
 
-      expect(container.querySelector('.pod-logs-text')?.textContent).toContain('line one');
+      expect(container.querySelector('.logs-viewer-text')?.textContent).toContain('line one');
       expect(container.textContent).not.toContain('Loading logs…');
 
       await act(async () => {
@@ -700,7 +700,7 @@ describe('NodeLogsTab', () => {
         await Promise.resolve();
         await Promise.resolve();
       });
-      expect(container.querySelector('.pod-logs-text')?.textContent).toContain('line three');
+      expect(container.querySelector('.logs-viewer-text')?.textContent).toContain('line three');
     } finally {
       vi.useRealTimers();
     }
@@ -739,7 +739,7 @@ describe('NodeLogsTab', () => {
           sinceTime: expect.any(String),
         })
       );
-      const logLines = Array.from(container.querySelectorAll('.pod-log-line')).map(
+      const logLines = Array.from(container.querySelectorAll('.log-viewer-line')).map(
         (element) => element.textContent
       );
       expect(logLines).toEqual(['line one', 'line two', 'line three']);

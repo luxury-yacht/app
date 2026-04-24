@@ -156,7 +156,7 @@ describe('ObjectPanelContent', () => {
     },
     isPanelOpen: true,
     capabilities: {
-      hasLogs: true,
+      hasObjPanelLogs: true,
       hasNodeLogs: false,
       hasShell: false,
       hasManifest: true,
@@ -173,7 +173,7 @@ describe('ObjectPanelContent', () => {
     nodeLogSources: [],
     detailScope: 'team-a:deployment:api',
     eventsScope: 'team-a:Deployment:api',
-    logScope: 'team-a:deployment:api',
+    containerLogsScope: 'team-a:deployment:api',
     helmScope: 'team-a:api',
     objectData: { kind: 'Deployment', name: 'api', namespace: 'team-a' },
     objectKind: 'deployment',
@@ -235,7 +235,7 @@ describe('ObjectPanelContent', () => {
   it('renders node logs tab when logs tab is active for a node', () => {
     renderContent({
       activeTab: 'logs',
-      capabilities: { ...baseProps.capabilities, hasLogs: true, hasNodeLogs: false },
+      capabilities: { ...baseProps.capabilities, hasObjPanelLogs: true, hasNodeLogs: false },
       objectData: { kind: 'Node', name: 'node-1', clusterId: 'alpha:ctx' },
       objectKind: 'node',
       nodeLogsState: { allowed: false, pending: true, reason: undefined },
@@ -261,7 +261,7 @@ describe('ObjectPanelContent', () => {
   it('does not render logs viewer when capability is missing', () => {
     renderContent({
       activeTab: 'logs',
-      capabilities: { ...baseProps.capabilities, hasLogs: false },
+      capabilities: { ...baseProps.capabilities, hasObjPanelLogs: false },
     });
     expect(hoistedRefs.logViewerProps.current).toBeNull();
   });

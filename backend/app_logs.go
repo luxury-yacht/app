@@ -11,25 +11,35 @@ import (
 	"strings"
 )
 
-func (a *App) GetLogs() []LogEntry {
+type AppLogsAddedEvent struct {
+	Sequence uint64 `json:"sequence"`
+}
+
+func (a *App) GetAppLogs() []LogEntry {
 	if a.logger == nil {
 		return []LogEntry{}
 	}
 	return a.logger.GetEntries()
 }
 
-func (a *App) ClearLogs() error {
+func (a *App) GetAppLogsSince(sequence uint64) []LogEntry {
+	if a.logger == nil {
+		return []LogEntry{}
+	}
+	return a.logger.GetEntriesSince(sequence)
+}
+
+func (a *App) ClearAppLogs() error {
 	if a.logger == nil {
 		return fmt.Errorf("logger not initialized")
 	}
 
 	a.logger.Clear()
-	a.logger.Info("Application logs cleared", "App")
 	return nil
 }
 
-// LogFrontend appends a log entry originating from the frontend to the application log store.
-func (a *App) LogFrontend(level string, message string, source string) error {
+// LogAppLogsFromFrontend appends a log entry originating from the frontend to the application log store.
+func (a *App) LogAppLogsFromFrontend(level string, message string, source string) error {
 	if a.logger == nil {
 		return fmt.Errorf("logger not initialized")
 	}

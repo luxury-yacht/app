@@ -35,7 +35,7 @@ describe('useObjectPanelTabs', () => {
   const closeMock = vi.fn();
 
   const baseCapabilities: ComputedCapabilities = {
-    hasLogs: true,
+    hasObjPanelLogs: true,
     hasNodeLogs: false,
     hasShell: false,
     hasManifest: false,
@@ -154,7 +154,7 @@ describe('useObjectPanelTabs', () => {
   it('adds the Maintenance tab for node objects', async () => {
     const { availableTabs } = await renderHook({
       objectData: { kind: 'Node', name: 'node-1' },
-      capabilities: { ...baseCapabilities, hasLogs: false },
+      capabilities: { ...baseCapabilities, hasObjPanelLogs: false },
     });
     expect(availableTabs.map((tab) => tab.label)).toEqual([
       'Details',
@@ -168,7 +168,7 @@ describe('useObjectPanelTabs', () => {
   it('uses the Logs tab for node objects rather than a separate node logs tab', async () => {
     const { availableTabs } = await renderHook({
       objectData: { kind: 'Node', name: 'node-1' },
-      capabilities: { ...baseCapabilities, hasLogs: true, hasNodeLogs: false },
+      capabilities: { ...baseCapabilities, hasObjPanelLogs: true, hasNodeLogs: false },
     });
     expect(availableTabs.map((tab) => tab.label)).toEqual([
       'Details',
@@ -183,7 +183,7 @@ describe('useObjectPanelTabs', () => {
   it('falls back to details when the active tab becomes unavailable', async () => {
     await renderHook({
       currentTab: 'logs',
-      capabilities: { ...baseCapabilities, hasLogs: false },
+      capabilities: { ...baseCapabilities, hasObjPanelLogs: false },
     });
     expect(setActiveTabMock).toHaveBeenCalledWith('details');
   });
@@ -234,7 +234,7 @@ describe('useObjectPanelTabs', () => {
   it('omits shortcuts for hidden tabs instead of disabling them', async () => {
     // Without logs capability: Details, Pods, Events, YAML → 4 shortcuts, no gap.
     const { availableTabs } = await renderHook({
-      capabilities: { ...baseCapabilities, hasLogs: false },
+      capabilities: { ...baseCapabilities, hasObjPanelLogs: false },
     });
 
     expect(availableTabs.map((tab) => tab.label)).toEqual(['Details', 'Pods', 'Events', 'YAML']);

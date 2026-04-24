@@ -534,7 +534,87 @@ describe('scrollbar activity tracking', () => {
     dispatchWheel(element);
 
     const gutter = document.body.querySelector<HTMLElement>('.scrollbar-overlay-gutter--vertical');
-    expect(gutter?.style.height).toBe('80px');
+    expect(gutter?.style.height).toBe('120px');
+    expect(gutter?.style.clipPath).toBe('inset(0px 0px 40px 0px)');
+  });
+
+  it('repositions active child overlays when an ancestor scrolls', () => {
+    const ancestor = document.createElement('div');
+    document.body.appendChild(ancestor);
+
+    let elementTop = 120;
+    const element = createScrollableElement();
+    element.getBoundingClientRect = () =>
+      ({
+        bottom: elementTop + 100,
+        height: 100,
+        left: 0,
+        right: 100,
+        top: elementTop,
+        width: 100,
+        x: 0,
+        y: elementTop,
+        toJSON: () => undefined,
+      }) as DOMRect;
+    ancestor.appendChild(element);
+
+    dispatchWheel(element);
+
+    const thumb = document.body.querySelector<HTMLElement>('.scrollbar-overlay-thumb--vertical');
+    const gutter = document.body.querySelector<HTMLElement>('.scrollbar-overlay-gutter--vertical');
+    expect(thumb?.style.top).toBe('121px');
+    expect(gutter?.style.top).toBe('120px');
+
+    elementTop = 40;
+    ancestor.dispatchEvent(new Event('scroll', { bubbles: true }));
+    vi.advanceTimersByTime(0);
+
+    expect(thumb?.style.top).toBe('41px');
+    expect(gutter?.style.top).toBe('40px');
+  });
+
+  it('keeps the thumb anchored to the full gutter while clipping to visible ancestors', () => {
+    const ancestor = document.createElement('div');
+    ancestor.style.overflowX = 'hidden';
+    ancestor.style.overflowY = 'hidden';
+    ancestor.getBoundingClientRect = () =>
+      ({
+        bottom: 100,
+        height: 100,
+        left: 0,
+        right: 100,
+        top: 0,
+        width: 100,
+        x: 0,
+        y: 0,
+        toJSON: () => undefined,
+      }) as DOMRect;
+    document.body.appendChild(ancestor);
+
+    const element = createScrollableElement();
+    defineMetric(element, 'clientHeight', 100);
+    defineMetric(element, 'scrollHeight', 500);
+    element.scrollTop = 400;
+    element.getBoundingClientRect = () =>
+      ({
+        bottom: 250,
+        height: 250,
+        left: 0,
+        right: 100,
+        top: 0,
+        width: 100,
+        x: 0,
+        y: 0,
+        toJSON: () => undefined,
+      }) as DOMRect;
+    ancestor.appendChild(element);
+
+    dispatchWheel(element);
+
+    const thumb = document.body.querySelector<HTMLElement>('.scrollbar-overlay-thumb--vertical');
+    expect(thumb?.style.top).toBe('199.4px');
+    expect(thumb?.style.height).toBe('49.6px');
+    expect(thumb?.style.clipPath).toBe('inset(0px 0px 149px 0px)');
   });
 
   it('does not animate fades when reduced motion is requested', () => {

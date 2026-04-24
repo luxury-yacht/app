@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/types"
 	"golang.org/x/text/cases"
@@ -334,30 +335,30 @@ func toStringMap(value interface{}) (map[string]interface{}, bool) {
 
 func (s *Service) logDebug(msg string) {
 	if s.deps.Common.Logger != nil {
-		s.deps.Common.Logger.Debug(msg, "Helm")
+		s.deps.Common.Logger.Debug(msg, logsources.Helm)
 	}
 }
 
 func (s *Service) logDebugf(format string, args ...interface{}) {
 	if s.deps.Common.Logger != nil {
-		s.deps.Common.Logger.Debug(fmt.Sprintf(format, args...), "Helm")
+		s.deps.Common.Logger.Debug(fmt.Sprintf(format, args...), logsources.Helm)
 	}
 }
 
 func (s *Service) logWarn(msg string) {
 	if s.deps.Common.Logger != nil {
-		s.deps.Common.Logger.Warn(msg, "Helm")
+		s.deps.Common.Logger.Warn(msg, logsources.Helm)
 	}
 }
 
 func (s *Service) logError(msg string) {
 	if s.deps.Common.Logger != nil {
-		s.deps.Common.Logger.Error(msg, "Helm")
+		s.deps.Common.Logger.Error(msg, logsources.Helm)
 	}
 }
 
 func (s *Service) logInfo(msg string) {
 	if s.deps.Common.Logger != nil {
-		s.deps.Common.Logger.Info(msg, "Helm")
+		s.deps.Common.Logger.Info(msg, logsources.Helm)
 	}
 }

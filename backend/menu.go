@@ -224,16 +224,16 @@ func createViewMenu(appMenu *menu.Menu, app *App) {
 		}()
 	})
 
-	// Dynamic logs panel menu item text
+	// Dynamic Application Logs Panel menu item text
 	logsText := "Show Application Logs"
-	if app.IsLogsPanelVisible() {
+	if app.IsAppLogsPanelVisible() {
 		logsText = "Hide Application Logs"
 	}
 
 	viewMenu.AddText(logsText, keys.Combo("l", keys.ShiftKey, keys.ControlKey), func(_ *menu.CallbackData) {
 		go func() {
-			if err := app.ToggleLogsPanel(); err != nil {
-				println("Failed to toggle logs panel:", err.Error())
+			if err := app.ToggleAppLogsPanel(); err != nil {
+				println("Failed to toggle Application Logs Panel:", err.Error())
 			}
 		}()
 	})

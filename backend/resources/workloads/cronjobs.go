@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/pods"
 	restypes "github.com/luxury-yacht/app/backend/resources/types"
@@ -37,7 +38,7 @@ func (s *CronJobService) CronJob(namespace, name string) (*restypes.CronJobDetai
 
 	cronJob, err := client.BatchV1().CronJobs(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
-		s.deps.Logger.Error(fmt.Sprintf("Failed to get CronJob %s/%s: %v", namespace, name, err), "ResourceLoader")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to get CronJob %s/%s: %v", namespace, name, err), logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to get cronjob: %v", err)
 	}
 
@@ -59,7 +60,7 @@ func (s *CronJobService) CronJobs(namespace string) ([]*restypes.CronJobDetails,
 
 	cronJobs, err := client.BatchV1().CronJobs(namespace).List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
-		s.deps.Logger.Error(fmt.Sprintf("Failed to list CronJobs in namespace %s: %v", namespace, err), "ResourceLoader")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to list CronJobs in namespace %s: %v", namespace, err), logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to list cronjobs: %v", err)
 	}
 
@@ -168,7 +169,7 @@ func (s *CronJobService) collectCronJobPods(namespace string, cronJob *batchv1.C
 
 		podList, err := client.CoreV1().Pods(namespace).List(s.deps.Context, options)
 		if err != nil {
-			s.deps.Logger.Debug(fmt.Sprintf("Failed to list pods for job %s/%s: %v", namespace, job.Name, err), "ResourceLoader")
+			s.deps.Logger.Debug(fmt.Sprintf("Failed to list pods for job %s/%s: %v", namespace, job.Name, err), logsources.ResourceLoader)
 			continue
 		}
 

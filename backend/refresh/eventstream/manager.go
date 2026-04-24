@@ -12,6 +12,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/internal/timeutil"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 )
@@ -323,7 +324,7 @@ func (m *Manager) broadcast(scope string, entry Entry) {
 			}
 			continue
 		}
-		m.logger.Warn("eventstream: subscriber channel full after drop attempt; closing", "EventStream")
+		m.logger.Warn("eventstream: subscriber channel full after drop attempt; closing", logsources.EventStream)
 		go m.dropSubscriber(scope, item.id, sub)
 	}
 	m.recordDelivery(delivered, backlogDrops)

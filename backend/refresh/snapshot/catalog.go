@@ -10,8 +10,8 @@ import (
 
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
+	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
-	"github.com/luxury-yacht/app/backend/refresh/logstream"
 )
 
 const (
@@ -23,7 +23,7 @@ const (
 type CatalogConfig struct {
 	CatalogService  func() *objectcatalog.Service
 	NamespaceGroups func() []CatalogNamespaceGroup
-	Logger          logstream.Logger
+	Logger          containerlogsstream.Logger
 }
 
 // CatalogSnapshot captures the browse payload returned to clients.
@@ -54,7 +54,7 @@ type catalogBuilder struct {
 	domain          string
 	catalogService  func() *objectcatalog.Service
 	namespaceGroups func() []CatalogNamespaceGroup
-	logger          logstream.Logger
+	logger          containerlogsstream.Logger
 }
 
 type browseQueryOptions struct {

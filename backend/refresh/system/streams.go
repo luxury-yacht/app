@@ -4,9 +4,9 @@ import (
 	"net/http"
 
 	"github.com/luxury-yacht/app/backend/refresh"
+	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
 	"github.com/luxury-yacht/app/backend/refresh/eventstream"
 	"github.com/luxury-yacht/app/backend/refresh/informer"
-	"github.com/luxury-yacht/app/backend/refresh/logstream"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/refresh/resourcestream"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
@@ -25,16 +25,16 @@ type streamDeps struct {
 
 // registerStreamHandlers wires stream endpoints and returns stream managers.
 func registerStreamHandlers(mux *http.ServeMux, deps streamDeps) (*eventstream.Manager, *resourcestream.Manager, error) {
-	logHandler, err := logstream.NewHandler(
+	logHandler, err := containerlogsstream.NewHandler(
 		deps.cfg.KubernetesClient,
 		deps.cfg.Logger,
 		deps.telemetry,
-		deps.cfg.LogTargetLimiter,
+		deps.cfg.ContainerLogsTargetLimiter,
 	)
 	if err != nil {
 		return nil, nil, err
 	}
-	mux.Handle("/api/v2/stream/logs", logHandler)
+	mux.Handle("/api/v2/stream/container-logs", logHandler)
 
 	eventManager := eventstream.NewManager(
 		deps.informerFactory.SharedInformerFactory().Core().V1().Events(),

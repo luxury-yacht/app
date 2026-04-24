@@ -5,13 +5,13 @@
  * Pure transformation logic extracted from LogViewer.
  */
 import { useMemo } from 'react';
-import type { ObjectLogEntry } from '@/core/refresh/types';
+import type { ContainerLogsEntry } from '@/core/refresh/types';
 import type { ParsedLogEntry } from '../logViewerReducer';
 import { stripAnsi } from '../ansi';
 import { tryParseJSONObject } from '../jsonLogs';
 
 interface UseLogFilteringParams {
-  logEntries: ObjectLogEntry[];
+  logEntries: ContainerLogsEntry[];
   isWorkload: boolean;
   selectedFilters: string[];
   textFilter: string;
@@ -21,9 +21,9 @@ interface UseLogFilteringParams {
 }
 
 interface UseLogFilteringResult {
-  filteredEntries: ObjectLogEntry[];
+  filteredEntries: ContainerLogsEntry[];
   parsedCandidates: ParsedLogEntry[];
-  canParseLogs: boolean;
+  canParseContainerLogs: boolean;
 }
 
 /**
@@ -88,7 +88,7 @@ export function useLogFiltering({
 
   const filteredEntries = useMemo(() => {
     if (!orderedEntries.length) {
-      return [] as ObjectLogEntry[];
+      return [] as ContainerLogsEntry[];
     }
 
     let entries = orderedEntries;
@@ -139,7 +139,7 @@ export function useLogFiltering({
       const searchText = caseSensitiveMatches ? textFilter : textFilter.toLowerCase();
       const regex = regexMatches ? buildSearchRegex(textFilter, caseSensitiveMatches) : null;
       if (regexMatches && !regex) {
-        return [] as ObjectLogEntry[];
+        return [] as ContainerLogsEntry[];
       }
       entries = entries.filter((entry) => {
         const lineText = stripAnsi(entry.line);
@@ -197,9 +197,9 @@ export function useLogFiltering({
     return parsed;
   }, [filteredEntries, isWorkload]);
 
-  const canParseLogs = parsedCandidates.length > 0;
+  const canParseContainerLogs = parsedCandidates.length > 0;
 
-  return { filteredEntries, parsedCandidates, canParseLogs };
+  return { filteredEntries, parsedCandidates, canParseContainerLogs };
 }
 
 function buildSearchRegex(pattern: string, caseSensitive: boolean): RegExp | null {

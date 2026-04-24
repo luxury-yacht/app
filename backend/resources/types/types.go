@@ -29,37 +29,37 @@ type WindowSettings struct {
 
 // AppSettings represents the application settings
 type AppSettings struct {
-	Theme                            string   `json:"theme"`                            // "light", "dark", or "system"
-	SelectedKubeconfigs              []string `json:"selectedKubeconfigs"`              // Multi-cluster selections in "path:context" form
-	UseShortResourceNames            bool     `json:"useShortResourceNames"`            // Use short names like "po" for pods in badges/headers
-	AutoRefreshEnabled               bool     `json:"autoRefreshEnabled"`               // Enable automatic refresh cycles
-	RefreshBackgroundClustersEnabled bool     `json:"refreshBackgroundClustersEnabled"` // Refresh inactive clusters in the background
-	MetricsRefreshIntervalMs         int      `json:"metricsRefreshIntervalMs"`         // Metrics refresh interval (ms)
-	MaxTableRows                    int      `json:"maxTableRows"`                    // Max rows shown in a data table (100-10000)
-	LogBufferMaxSize                 int      `json:"logBufferMaxSize"`                 // Max log entries kept in memory per Logs tab (100-10000)
-	LogTargetPerScopeLimit           int      `json:"logTargetPerScopeLimit"`           // Max pod/container log targets per Logs tab (1-1000)
-	LogTargetGlobalLimit             int      `json:"logTargetGlobalLimit"`             // Max pod/container log targets across all log tabs (1-1000)
-	LogAPITimestampFormat            string   `json:"logApiTimestampFormat"`            // Day.js format for the Kubernetes API timestamp shown in pod logs
-	LogAPITimestampUseLocalTimeZone  bool     `json:"logApiTimestampUseLocalTimeZone"`  // Render the Kubernetes API timestamp in the user's local timezone instead of UTC
-	GridTablePersistenceMode         string   `json:"gridTablePersistenceMode"`         // "shared" or "namespaced"
-	DefaultObjectPanelPosition       string   `json:"defaultObjectPanelPosition"`       // "right", "bottom", or "floating"
-	ObjectPanelDockedRightWidth      int      `json:"objectPanelDockedRightWidth"`      // Default width when docked right (px)
-	ObjectPanelDockedBottomHeight    int      `json:"objectPanelDockedBottomHeight"`    // Default height when docked bottom (px)
-	ObjectPanelFloatingWidth         int      `json:"objectPanelFloatingWidth"`         // Default floating width (px)
-	ObjectPanelFloatingHeight        int      `json:"objectPanelFloatingHeight"`        // Default floating height (px)
-	ObjectPanelFloatingX             int      `json:"objectPanelFloatingX"`             // Default floating X position (px)
-	ObjectPanelFloatingY             int      `json:"objectPanelFloatingY"`             // Default floating Y position (px)
-	PaletteHueLight                  int      `json:"paletteHueLight"`                  // Hue for gray palette tint in light theme (0-360)
-	PaletteSaturationLight           int      `json:"paletteSaturationLight"`           // Saturation intensity for gray palette tint in light theme (0-100)
-	PaletteBrightnessLight           int      `json:"paletteBrightnessLight"`           // Brightness offset for gray palette in light theme (-50 to +50)
-	PaletteHueDark                   int      `json:"paletteHueDark"`                   // Hue for gray palette tint in dark theme (0-360)
-	PaletteSaturationDark            int      `json:"paletteSaturationDark"`            // Saturation intensity for gray palette tint in dark theme (0-100)
-	PaletteBrightnessDark            int      `json:"paletteBrightnessDark"`            // Brightness offset for gray palette in dark theme (-50 to +50)
-	AccentColorLight                 string   `json:"accentColorLight"`                 // Custom accent hex for light theme (empty = default)
-	AccentColorDark                  string   `json:"accentColorDark"`                  // Custom accent hex for dark theme (empty = default)
-	LinkColorLight                   string   `json:"linkColorLight"`                   // Custom link hex for light theme (empty = default)
-	LinkColorDark                    string   `json:"linkColorDark"`                    // Custom link hex for dark theme (empty = default)
-	Themes                           []Theme  `json:"themes"`                           // Saved theme library
+	Theme                                    string   `json:"theme"`                                    // "light", "dark", or "system"
+	SelectedKubeconfigs                      []string `json:"selectedKubeconfigs"`                      // Multi-cluster selections in "path:context" form
+	UseShortResourceNames                    bool     `json:"useShortResourceNames"`                    // Use short names like "po" for pods in badges/headers
+	AutoRefreshEnabled                       bool     `json:"autoRefreshEnabled"`                       // Enable automatic refresh cycles
+	RefreshBackgroundClustersEnabled         bool     `json:"refreshBackgroundClustersEnabled"`         // Refresh inactive clusters in the background
+	MetricsRefreshIntervalMs                 int      `json:"metricsRefreshIntervalMs"`                 // Metrics refresh interval (ms)
+	MaxTableRows                             int      `json:"maxTableRows"`                             // Max rows shown in a data table (100-10000)
+	ObjPanelLogsBufferMaxSize                int      `json:"objPanelLogsBufferMaxSize"`                // Max container log entries kept in memory per Object Panel Logs Tab (100-10000)
+	ObjPanelLogsTargetPerScopeLimit          int      `json:"objPanelLogsTargetPerScopeLimit"`          // Max pod/container Object Panel Logs Tab targets per Logs tab (1-1000)
+	ObjPanelLogsTargetGlobalLimit            int      `json:"objPanelLogsTargetGlobalLimit"`            // Max pod/container Object Panel Logs Tab targets across all log tabs (1-1000)
+	ObjPanelLogsAPITimestampFormat           string   `json:"objPanelLogsApiTimestampFormat"`           // Day.js format for the Kubernetes API timestamp shown in container logs
+	ObjPanelLogsAPITimestampUseLocalTimeZone bool     `json:"objPanelLogsApiTimestampUseLocalTimeZone"` // Render the Kubernetes API timestamp in the user's local timezone instead of UTC
+	GridTablePersistenceMode                 string   `json:"gridTablePersistenceMode"`                 // "shared" or "namespaced"
+	DefaultObjectPanelPosition               string   `json:"defaultObjectPanelPosition"`               // "right", "bottom", or "floating"
+	ObjectPanelDockedRightWidth              int      `json:"objectPanelDockedRightWidth"`              // Default width when docked right (px)
+	ObjectPanelDockedBottomHeight            int      `json:"objectPanelDockedBottomHeight"`            // Default height when docked bottom (px)
+	ObjectPanelFloatingWidth                 int      `json:"objectPanelFloatingWidth"`                 // Default floating width (px)
+	ObjectPanelFloatingHeight                int      `json:"objectPanelFloatingHeight"`                // Default floating height (px)
+	ObjectPanelFloatingX                     int      `json:"objectPanelFloatingX"`                     // Default floating X position (px)
+	ObjectPanelFloatingY                     int      `json:"objectPanelFloatingY"`                     // Default floating Y position (px)
+	PaletteHueLight                          int      `json:"paletteHueLight"`                          // Hue for gray palette tint in light theme (0-360)
+	PaletteSaturationLight                   int      `json:"paletteSaturationLight"`                   // Saturation intensity for gray palette tint in light theme (0-100)
+	PaletteBrightnessLight                   int      `json:"paletteBrightnessLight"`                   // Brightness offset for gray palette in light theme (-50 to +50)
+	PaletteHueDark                           int      `json:"paletteHueDark"`                           // Hue for gray palette tint in dark theme (0-360)
+	PaletteSaturationDark                    int      `json:"paletteSaturationDark"`                    // Saturation intensity for gray palette tint in dark theme (0-100)
+	PaletteBrightnessDark                    int      `json:"paletteBrightnessDark"`                    // Brightness offset for gray palette in dark theme (-50 to +50)
+	AccentColorLight                         string   `json:"accentColorLight"`                         // Custom accent hex for light theme (empty = default)
+	AccentColorDark                          string   `json:"accentColorDark"`                          // Custom accent hex for dark theme (empty = default)
+	LinkColorLight                           string   `json:"linkColorLight"`                           // Custom link hex for light theme (empty = default)
+	LinkColorDark                            string   `json:"linkColorDark"`                            // Custom link hex for dark theme (empty = default)
+	Themes                                   []Theme  `json:"themes"`                                   // Saved theme library
 }
 
 // ThemeInfo represents theme information to send to frontend
@@ -89,8 +89,8 @@ type Theme struct {
 	LinkColorDark  string `json:"linkColorDark,omitempty"`  // Hex "#rrggbb" or empty for default
 }
 
-// PodLogEntry represents a single log line with metadata
-type PodLogEntry struct {
+// ContainerLogsEntry represents a single log line with metadata
+type ContainerLogsEntry struct {
 	Timestamp   string `json:"timestamp"` // RFC3339Nano format
 	Pod         string `json:"pod"`
 	Container   string `json:"container"`
@@ -99,8 +99,8 @@ type PodLogEntry struct {
 	IsEphemeral bool   `json:"isEphemeral,omitempty"` // Whether this is from an ephemeral/debug container
 }
 
-// LogFetchRequest represents parameters for fetching logs
-type LogFetchRequest struct {
+// ContainerLogsFetchRequest represents parameters for fetching logs
+type ContainerLogsFetchRequest struct {
 	Scope            string   `json:"scope,omitempty"`
 	Namespace        string   `json:"namespace"`
 	WorkloadName     string   `json:"workloadName,omitempty"`
@@ -121,11 +121,11 @@ type LogFetchRequest struct {
 	SinceSeconds     int64    `json:"sinceSeconds,omitempty"`
 }
 
-// LogFetchResponse represents the response from LogFetcher
-type LogFetchResponse struct {
-	Entries  []PodLogEntry `json:"entries"`
-	Warnings []string      `json:"warnings,omitempty"`
-	Error    string        `json:"error,omitempty"`
+// ContainerLogsFetchResponse represents the response from FetchContainerLogs
+type ContainerLogsFetchResponse struct {
+	Entries  []ContainerLogsEntry `json:"entries"`
+	Warnings []string             `json:"warnings,omitempty"`
+	Error    string               `json:"error,omitempty"`
 }
 
 // NodeLogSource represents a discovered node log source that can be fetched directly.

@@ -1,0 +1,80 @@
+package containerlogsstream
+
+import (
+	"time"
+
+	"github.com/luxury-yacht/app/backend/internal/containerlogs"
+	"github.com/luxury-yacht/app/backend/refresh"
+)
+
+// Logger represents the minimal logging interface required by the container logs streaming subsystem.
+type Logger interface {
+	Debug(message string, source ...string)
+	Info(message string, source ...string)
+	Warn(message string, source ...string)
+	Error(message string, source ...string)
+}
+
+type noopLogger struct{}
+
+func (noopLogger) Debug(string, ...string) {}
+func (noopLogger) Info(string, ...string)  {}
+func (noopLogger) Warn(string, ...string)  {}
+func (noopLogger) Error(string, ...string) {}
+
+// Options captures the parameters for a container logs streaming session.
+type Options struct {
+	ClusterID        string
+	Namespace        string
+	Kind             string
+	Name             string
+	PodFilter        string
+	PodInclude       string
+	PodExclude       string
+	SelectedFilters  []string
+	Selection        containerlogs.ScopeSelection
+	Container        string
+	IncludeInit      bool
+	IncludeEphemeral bool
+	ContainerState   containerlogs.ContainerStateFilter
+	Include          string
+	Exclude          string
+	PodNameFilter    containerlogs.PodNameFilter
+	LineFilter       containerlogs.LineFilter
+	TailLines        int
+	ScopeString      string
+}
+
+// Entry mirrors the log line payload sent to clients.
+type Entry struct {
+	Timestamp   string `json:"timestamp"`
+	Pod         string `json:"pod"`
+	Container   string `json:"container"`
+	Line        string `json:"line"`
+	IsInit      bool   `json:"isInit"`
+	IsEphemeral bool   `json:"isEphemeral,omitempty"`
+}
+
+// EventPayload is the SSE message envelope emitted to clients.
+type EventPayload struct {
+	Domain       string                          `json:"domain"`
+	Scope        string                          `json:"scope"`
+	Sequence     uint64                          `json:"sequence"`
+	GeneratedAt  int64                           `json:"generatedAt"`
+	Reset        bool                            `json:"reset,omitempty"`
+	Entries      []Entry                         `json:"entries,omitempty"`
+	Warnings     *[]string                       `json:"warnings,omitempty"`
+	Error        string                          `json:"error,omitempty"`
+	ErrorDetails *refresh.PermissionDeniedStatus `json:"errorDetails,omitempty"`
+}
+
+// containerState keeps track of lines delivered at the last timestamp to avoid duplicates.
+// When multiple log lines share the same timestamp (common in Java apps), we track all of them
+// so that on stream reconnection (using SinceTime which is inclusive), we can skip all
+// previously seen lines at that timestamp.
+type containerState struct {
+	lastTimestamp time.Time
+	// linesAtTimestamp tracks all lines seen at lastTimestamp to handle deduplication
+	// when multiple lines share the same timestamp.
+	linesAtTimestamp map[string]struct{}
+}

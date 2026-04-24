@@ -8,9 +8,10 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
-	"github.com/luxury-yacht/app/backend/refresh/logstream"
+	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
@@ -50,7 +51,7 @@ func (a *App) setupRefreshSubsystem() error {
 
 	// Handle case where no subsystems were created (all auth failed).
 	if len(subsystems) == 0 {
-		a.logger.Warn("No refresh subsystems created (all clusters may have auth failures)", "Refresh")
+		a.logger.Warn("No refresh subsystems created (all clusters may have auth failures)", logsources.Refresh)
 		// Initialize empty state but don't fail - clusters may recover later.
 		a.refreshSubsystems = make(map[string]*system.Subsystem)
 		return nil
@@ -110,7 +111,7 @@ func (a *App) buildRefreshSubsystems(
 		// Check both the explicit flag (set during pre-flight check) and the auth state.
 		if clients.authFailedOnInit {
 			if a.logger != nil {
-				a.logger.Warn(fmt.Sprintf("Skipping subsystem for cluster %s: auth failed during initialization", clusterMeta.Name), "Refresh")
+				a.logger.Warn(fmt.Sprintf("Skipping subsystem for cluster %s: auth failed during initialization", clusterMeta.Name), logsources.Refresh, clusterMeta.ID, clusterMeta.Name)
 			}
 			// Still add to clusterOrder so the cluster appears in the UI.
 			clusterOrder = append(clusterOrder, clusterMeta.ID)
@@ -119,11 +120,11 @@ func (a *App) buildRefreshSubsystems(
 		if clients.authManager != nil {
 			state, reason := clients.authManager.State()
 			if a.logger != nil {
-				a.logger.Info(fmt.Sprintf("Auth state for cluster %s: %s (reason: %s)", clusterMeta.Name, state.String(), reason), "Refresh")
+				a.logger.Info(fmt.Sprintf("Auth state for cluster %s: %s (reason: %s)", clusterMeta.Name, state.String(), reason), logsources.Refresh, clusterMeta.ID, clusterMeta.Name)
 			}
 			if !clients.authManager.IsValid() {
 				if a.logger != nil {
-					a.logger.Warn(fmt.Sprintf("Skipping subsystem for cluster %s: auth not valid (state=%s)", clusterMeta.Name, state.String()), "Refresh")
+					a.logger.Warn(fmt.Sprintf("Skipping subsystem for cluster %s: auth not valid (state=%s)", clusterMeta.Name, state.String()), logsources.Refresh, clusterMeta.ID, clusterMeta.Name)
 				}
 				// Still add to clusterOrder so the cluster appears in the UI.
 				clusterOrder = append(clusterOrder, clusterMeta.ID)
@@ -151,19 +152,19 @@ func (a *App) buildRefreshSubsystemForSelection(
 	clusterMeta ClusterMeta,
 ) (*system.Subsystem, error) {
 	cfg := system.Config{
-		KubernetesClient:      clients.client,
-		MetricsClient:         clients.metricsClient,
-		RestConfig:            clients.restConfig,
-		ResyncInterval:        config.RefreshResyncInterval,
-		MetricsInterval:       a.resolveMetricsInterval(),
-		APIExtensionsClient:   clients.apiextensionsClient,
-		DynamicClient:         clients.dynamicClient,
-		HelmFactory:           a.helmActionFactoryForSelection(selection),
-		ObjectDetailsProvider: a.objectDetailProvider(),
-		Logger:                a.logger,
-		LogTargetLimiter:      a.sharedLogTargetLimiter(),
-		ClusterID:             clusterMeta.ID,
-		ClusterName:           clusterMeta.Name,
+		KubernetesClient:           clients.client,
+		MetricsClient:              clients.metricsClient,
+		RestConfig:                 clients.restConfig,
+		ResyncInterval:             config.RefreshResyncInterval,
+		MetricsInterval:            a.resolveMetricsInterval(),
+		APIExtensionsClient:        clients.apiextensionsClient,
+		DynamicClient:              clients.dynamicClient,
+		HelmFactory:                a.helmActionFactoryForSelection(selection),
+		ObjectDetailsProvider:      a.objectDetailProvider(),
+		Logger:                     a.logger,
+		ContainerLogsTargetLimiter: a.sharedContainerLogsTargetLimiter(),
+		ClusterID:                  clusterMeta.ID,
+		ClusterName:                clusterMeta.Name,
 	}
 
 	cfg.ObjectCatalogService = func() *objectcatalog.Service {
@@ -199,7 +200,7 @@ func (a *App) startRefreshSubsystems(ctx context.Context, subsystems map[string]
 		}
 		go func(mgr *refresh.Manager) {
 			if err := mgr.Start(ctx); err != nil && !errors.Is(err, context.Canceled) {
-				a.logger.Warn(fmt.Sprintf("refresh manager stopped: %v", err), "Refresh")
+				a.logger.Warn(fmt.Sprintf("refresh manager stopped: %v", err), logsources.Refresh)
 			}
 		}(manager)
 		// Keep permission grants fresh; revoke access stops refresh informers/streams.
@@ -222,23 +223,23 @@ func (a *App) storeRefreshPermissionCancel(clusterID string, cancel context.Canc
 	a.refreshPermissionCancels[clusterID] = cancel
 }
 
-func (a *App) sharedLogTargetLimiter() *logstream.GlobalTargetLimiter {
+func (a *App) sharedContainerLogsTargetLimiter() *containerlogsstream.GlobalTargetLimiter {
 	if a == nil {
 		return nil
 	}
-	if a.logTargetLimiter == nil {
-		limit := defaultLogTargetGlobalLimit
+	if a.containerLogsTargetLimiter == nil {
+		limit := defaultObjPanelLogsTargetGlobalLimit
 		a.settingsMu.Lock()
 		if a.appSettings == nil {
 			_ = a.loadAppSettings()
 		}
-		if a.appSettings != nil && a.appSettings.LogTargetGlobalLimit > 0 {
-			limit = clampLogTargetGlobalLimit(a.appSettings.LogTargetGlobalLimit)
+		if a.appSettings != nil && a.appSettings.ObjPanelLogsTargetGlobalLimit > 0 {
+			limit = clampObjPanelLogsTargetGlobalLimit(a.appSettings.ObjPanelLogsTargetGlobalLimit)
 		}
 		a.settingsMu.Unlock()
-		a.logTargetLimiter = logstream.NewGlobalTargetLimiter(limit)
+		a.containerLogsTargetLimiter = containerlogsstream.NewGlobalTargetLimiter(limit)
 	}
-	return a.logTargetLimiter
+	return a.containerLogsTargetLimiter
 }
 
 // buildRefreshMux wires the aggregate refresh routes on top of the core API endpoints.
@@ -284,7 +285,7 @@ func (a *App) buildRefreshMux(
 		sharedTelemetry,
 		a.logger,
 	)
-	aggregateLogs := newAggregateLogStreamHandler(subsystems)
+	aggregateContainerLogs := newAggregateContainerLogsStreamHandler(subsystems)
 	aggregateCatalog := newAggregateCatalogStreamHandler(subsystems)
 	aggregateResources, err := newAggregateResourceStreamHandler(subsystems, a.logger, sharedTelemetry)
 	if err != nil {
@@ -299,31 +300,31 @@ func (a *App) buildRefreshMux(
 		HealthHub:       nil, // Health is per-cluster, not global.
 	})
 	mux.Handle("/api/v2/stream/events", aggregateEvents)
-	mux.Handle("/api/v2/stream/logs", aggregateLogs)
+	mux.Handle("/api/v2/stream/container-logs", aggregateContainerLogs)
 	mux.Handle("/api/v2/stream/catalog", aggregateCatalog)
 	mux.Handle("/api/v2/stream/resources", aggregateResources)
 	// NOTE: Do NOT mount "/" to any single subsystem's handler.
 	// Requests to "/" should return 404, not route to one cluster.
 
 	aggregates := &refreshAggregateHandlers{
-		snapshot:  aggregateService,
-		manual:    aggregateQueue,
-		events:    aggregateEvents,
-		logs:      aggregateLogs,
-		catalog:   aggregateCatalog,
-		resources: aggregateResources,
+		snapshot:      aggregateService,
+		manual:        aggregateQueue,
+		events:        aggregateEvents,
+		containerLogs: aggregateContainerLogs,
+		catalog:       aggregateCatalog,
+		resources:     aggregateResources,
 	}
 	return mux, aggregates, nil
 }
 
 // refreshAggregateHandlers stores aggregate endpoints that need live cluster updates.
 type refreshAggregateHandlers struct {
-	snapshot  *aggregateSnapshotService
-	manual    *aggregateManualQueue
-	events    *aggregateEventStreamHandler
-	logs      *aggregateLogStreamHandler
-	catalog   *aggregateCatalogStreamHandler
-	resources *aggregateResourceStreamHandler
+	snapshot      *aggregateSnapshotService
+	manual        *aggregateManualQueue
+	events        *aggregateEventStreamHandler
+	containerLogs *aggregateContainerLogsStreamHandler
+	catalog       *aggregateCatalogStreamHandler
+	resources     *aggregateResourceStreamHandler
 }
 
 // Update refreshes aggregate endpoint wiring without rebuilding the HTTP server.
@@ -350,8 +351,8 @@ func (h *refreshAggregateHandlers) Update(clusterOrder []string, subsystems map[
 			clusterOrder,
 		)
 	}
-	if h.logs != nil {
-		h.logs.Update(subsystems)
+	if h.containerLogs != nil {
+		h.containerLogs.Update(subsystems)
 	}
 	if h.catalog != nil {
 		h.catalog.Update(subsystems)
@@ -406,7 +407,7 @@ func (a *App) startRefreshHTTPServer(
 	go func() {
 		defer close(a.refreshServerDone)
 		if err := srv.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			a.logger.Warn(fmt.Sprintf("refresh HTTP server stopped: %v", err), "Refresh")
+			a.logger.Warn(fmt.Sprintf("refresh HTTP server stopped: %v", err), logsources.Refresh)
 		}
 	}()
 
@@ -440,7 +441,7 @@ func (a *App) helmActionFactoryForSelection(selection kubeconfigSelection) snaps
 		actionConfig := new(action.Configuration)
 		if err := actionConfig.Init(settings.RESTClientGetter(), namespace, "secret", func(format string, v ...interface{}) {
 			if a.logger != nil {
-				a.logger.Debug(fmt.Sprintf(format, v...), "Helm")
+				a.logger.Debug(fmt.Sprintf(format, v...), logsources.Helm)
 			}
 		}); err != nil {
 			return nil, err
