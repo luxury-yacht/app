@@ -8,14 +8,14 @@ import (
 
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
-	"github.com/luxury-yacht/app/backend/refresh/logstream"
+	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 )
 
 type catalogStreamHandler struct {
 	service     func() *objectcatalog.Service
 	telemetry   *telemetry.Recorder
-	logger      logstream.Logger
+	logger      containerlogsstream.Logger
 	clusterMeta ClusterMeta
 }
 
@@ -30,7 +30,7 @@ const (
 // NewCatalogStreamHandler returns an SSE handler that streams catalog updates.
 func NewCatalogStreamHandler(
 	service func() *objectcatalog.Service,
-	logger logstream.Logger,
+	logger containerlogsstream.Logger,
 	recorder *telemetry.Recorder,
 	meta ClusterMeta,
 ) http.Handler {
@@ -124,15 +124,15 @@ func (h *catalogStreamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 }
 
 type catalogStreamEvent struct {
-	Reset        bool                      `json:"reset,omitempty"`
-	Ready        bool                      `json:"ready"`
-	CacheReady   bool                      `json:"cacheReady"`
-	Truncated    bool                      `json:"truncated"`
+	Reset        bool                                `json:"reset,omitempty"`
+	Ready        bool                                `json:"ready"`
+	CacheReady   bool                                `json:"cacheReady"`
+	Truncated    bool                                `json:"truncated"`
 	SnapshotMode catalogStreamSnapshotMode `json:"snapshotMode"`
-	Snapshot     CatalogSnapshot           `json:"snapshot"`
-	Stats        refresh.SnapshotStats     `json:"stats"`
-	GeneratedAt  int64                     `json:"generatedAt"`
-	Sequence     uint64                    `json:"sequence"`
+	Snapshot     CatalogSnapshot                     `json:"snapshot"`
+	Stats        refresh.SnapshotStats               `json:"stats"`
+	GeneratedAt  int64                               `json:"generatedAt"`
+	Sequence     uint64                              `json:"sequence"`
 }
 
 func (h *catalogStreamHandler) writeSnapshot(

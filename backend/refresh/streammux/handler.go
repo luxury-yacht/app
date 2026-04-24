@@ -15,7 +15,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
-	"github.com/luxury-yacht/app/backend/refresh/logstream"
+	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 )
 
@@ -43,7 +43,7 @@ type ClusterAdapter interface {
 // Config captures the dependencies for a websocket stream multiplexer.
 type Config struct {
 	Adapter                    Adapter
-	Logger                     logstream.Logger
+	Logger                     containerlogsstream.Logger
 	Telemetry                  *telemetry.Recorder
 	ClusterID                  string
 	ClusterName                string
@@ -56,7 +56,7 @@ type Config struct {
 // Handler exposes a websocket endpoint that multiplexes stream subscriptions.
 type Handler struct {
 	adapter                    Adapter
-	logger                     logstream.Logger
+	logger                     containerlogsstream.Logger
 	telemetry                  *telemetry.Recorder
 	clusterID                  string
 	clusterName                string
@@ -134,7 +134,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 type session struct {
 	conn                      wsConn
 	adapter                   Adapter
-	logger                    logstream.Logger
+	logger                    containerlogsstream.Logger
 	telemetry                 *telemetry.Recorder
 	clusterID                 string
 	clusterName               string
@@ -175,7 +175,7 @@ func isExpectedStreamCloseError(err error) bool {
 func newSession(
 	conn wsConn,
 	adapter Adapter,
-	logger logstream.Logger,
+	logger containerlogsstream.Logger,
 	recorder *telemetry.Recorder,
 	clusterID, clusterName, streamName string,
 	sendReset bool,

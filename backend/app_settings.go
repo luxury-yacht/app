@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
-	"github.com/luxury-yacht/app/backend/internal/podlogs"
+	"github.com/luxury-yacht/app/backend/internal/containerlogs"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -32,19 +32,19 @@ type settingsFile struct {
 
 // settingsPreferences captures user-configurable preferences.
 type settingsPreferences struct {
-	Theme                         string           `json:"theme"`
-	UseShortResourceNames         bool             `json:"useShortResourceNames"`
-	Refresh                       *settingsRefresh `json:"refresh"`
-	MaxTableRows                  int              `json:"maxTableRows"`
-	Logs                          *settingsLogs    `json:"logs,omitempty"`
-	GridTablePersistenceMode      string           `json:"gridTablePersistenceMode"`
-	DefaultObjectPanelPosition    string           `json:"defaultObjectPanelPosition"`
-	ObjectPanelDockedRightWidth   int              `json:"objectPanelDockedRightWidth"`
-	ObjectPanelDockedBottomHeight int              `json:"objectPanelDockedBottomHeight"`
-	ObjectPanelFloatingWidth      int              `json:"objectPanelFloatingWidth"`
-	ObjectPanelFloatingHeight     int              `json:"objectPanelFloatingHeight"`
-	ObjectPanelFloatingX          int              `json:"objectPanelFloatingX"`
-	ObjectPanelFloatingY          int              `json:"objectPanelFloatingY"`
+	Theme                         string                `json:"theme"`
+	UseShortResourceNames         bool                  `json:"useShortResourceNames"`
+	Refresh                       *settingsRefresh      `json:"refresh"`
+	MaxTableRows                  int                   `json:"maxTableRows"`
+	ObjPanelLogs                  *settingsObjPanelLogs `json:"objPanelLogs,omitempty"`
+	GridTablePersistenceMode      string                `json:"gridTablePersistenceMode"`
+	DefaultObjectPanelPosition    string                `json:"defaultObjectPanelPosition"`
+	ObjectPanelDockedRightWidth   int                   `json:"objectPanelDockedRightWidth"`
+	ObjectPanelDockedBottomHeight int                   `json:"objectPanelDockedBottomHeight"`
+	ObjectPanelFloatingWidth      int                   `json:"objectPanelFloatingWidth"`
+	ObjectPanelFloatingHeight     int                   `json:"objectPanelFloatingHeight"`
+	ObjectPanelFloatingX          int                   `json:"objectPanelFloatingX"`
+	ObjectPanelFloatingY          int                   `json:"objectPanelFloatingY"`
 
 	// Migration: old single-value palette fields, read-only, omitted when zero.
 	PaletteHue        int `json:"paletteHue,omitempty"`
@@ -74,32 +74,32 @@ type settingsRefresh struct {
 	MetricsIntervalMs int  `json:"metricsIntervalMs"`
 }
 
-// settingsLogs captures user-configurable pod-logs settings.
-type settingsLogs struct {
-	BufferMaxSize       int    `json:"bufferMaxSize"`       // Max log entries kept in memory per Logs tab
-	TargetPerScopeLimit int    `json:"targetPerScopeLimit"` // Max pod/container targets per Logs tab
-	TargetGlobalLimit   int    `json:"targetGlobalLimit"`   // Max pod/container targets across all Logs tabs
-	APITimestampFormat  string `json:"apiTimestampFormat"`  // Day.js format for the Kubernetes API timestamp shown in pod logs
+// settingsObjPanelLogs captures user-configurable Object Panel Logs Tab settings.
+type settingsObjPanelLogs struct {
+	BufferMaxSize       int    `json:"bufferMaxSize"`       // Max container log entries kept in memory per Object Panel Logs Tab
+	TargetPerScopeLimit int    `json:"targetPerScopeLimit"` // Max pod/container targets per Object Panel Logs Tab
+	TargetGlobalLimit   int    `json:"targetGlobalLimit"`   // Max pod/container targets across all Object Panel Logs tabs
+	APITimestampFormat  string `json:"apiTimestampFormat"`  // Day.js format for the Kubernetes API timestamp shown in container logs
 	UseLocalTimeZone    bool   `json:"useLocalTimeZone"`    // Render the Kubernetes API timestamp in the user's local timezone instead of UTC
 }
 
-// Log buffer size bounds. The frontend clamps to the same range in
-// normalizeLogBufferMaxSize, so the client can't push values outside
-// these limits; clamping again in the setter is defence in depth.
+// Object Panel Logs Tab buffer size bounds. The frontend clamps to the same
+// range, so the client can't push values outside these limits; clamping again
+// in the setter is defence in depth.
 const (
-	defaultLogBufferMaxSize       = 1000
-	minLogBufferMaxSize           = 100
-	maxLogBufferMaxSize           = 10000
-	defaultMaxTableRows           = 1000
-	minMaxTableRows               = 100
-	maxMaxTableRows               = 10000
-	defaultLogAPITimestampFormat  = "YYYY-MM-DDTHH:mm:ss.SSS[Z]"
-	defaultLogTargetPerScopeLimit = podlogs.DefaultPerScopeTargetLimit
-	minLogTargetPerScopeLimit     = podlogs.MinPerScopeTargetLimit
-	maxLogTargetPerScopeLimit     = podlogs.MaxPerScopeTargetLimit
-	defaultLogTargetGlobalLimit   = config.LogStreamGlobalTargetLimit
-	minLogTargetGlobalLimit       = 1
-	maxLogTargetGlobalLimit       = 1000
+	defaultObjPanelLogsBufferMaxSize       = 1000
+	minObjPanelLogsBufferMaxSize           = 100
+	maxObjPanelLogsBufferMaxSize           = 10000
+	defaultMaxTableRows                    = 1000
+	minMaxTableRows                        = 100
+	maxMaxTableRows                        = 10000
+	defaultObjPanelLogsAPITimestampFormat  = "YYYY-MM-DDTHH:mm:ss.SSS[Z]"
+	defaultObjPanelLogsTargetPerScopeLimit = containerlogs.DefaultPerScopeTargetLimit
+	minObjPanelLogsTargetPerScopeLimit     = containerlogs.MinPerScopeTargetLimit
+	maxObjPanelLogsTargetPerScopeLimit     = containerlogs.MaxPerScopeTargetLimit
+	defaultObjPanelLogsTargetGlobalLimit   = config.ContainerLogsStreamGlobalTargetLimit
+	minObjPanelLogsTargetGlobalLimit       = 1
+	maxObjPanelLogsTargetGlobalLimit       = 1000
 )
 
 func clampMaxTableRows(size int) int {
@@ -112,32 +112,32 @@ func clampMaxTableRows(size int) int {
 	return size
 }
 
-func clampLogBufferMaxSize(size int) int {
-	if size < minLogBufferMaxSize {
-		return minLogBufferMaxSize
+func clampObjPanelLogsBufferMaxSize(size int) int {
+	if size < minObjPanelLogsBufferMaxSize {
+		return minObjPanelLogsBufferMaxSize
 	}
-	if size > maxLogBufferMaxSize {
-		return maxLogBufferMaxSize
+	if size > maxObjPanelLogsBufferMaxSize {
+		return maxObjPanelLogsBufferMaxSize
 	}
 	return size
 }
 
-func clampLogTargetPerScopeLimit(limit int) int {
-	if limit < minLogTargetPerScopeLimit {
-		return minLogTargetPerScopeLimit
+func clampObjPanelLogsTargetPerScopeLimit(limit int) int {
+	if limit < minObjPanelLogsTargetPerScopeLimit {
+		return minObjPanelLogsTargetPerScopeLimit
 	}
-	if limit > maxLogTargetPerScopeLimit {
-		return maxLogTargetPerScopeLimit
+	if limit > maxObjPanelLogsTargetPerScopeLimit {
+		return maxObjPanelLogsTargetPerScopeLimit
 	}
 	return limit
 }
 
-func clampLogTargetGlobalLimit(limit int) int {
-	if limit < minLogTargetGlobalLimit {
-		return minLogTargetGlobalLimit
+func clampObjPanelLogsTargetGlobalLimit(limit int) int {
+	if limit < minObjPanelLogsTargetGlobalLimit {
+		return minObjPanelLogsTargetGlobalLimit
 	}
-	if limit > maxLogTargetGlobalLimit {
-		return maxLogTargetGlobalLimit
+	if limit > maxObjPanelLogsTargetGlobalLimit {
+		return maxObjPanelLogsTargetGlobalLimit
 	}
 	return limit
 }
@@ -162,14 +162,14 @@ func defaultSettingsFile() *settingsFile {
 		SchemaVersion: settingsSchemaVersion,
 		UpdatedAt:     time.Now().UTC(),
 		Preferences: settingsPreferences{
-			Theme:   "system",
-			Refresh: &settingsRefresh{Auto: true, Background: true, MetricsIntervalMs: defaultMetricsIntervalMs()},
+			Theme:        "system",
+			Refresh:      &settingsRefresh{Auto: true, Background: true, MetricsIntervalMs: defaultMetricsIntervalMs()},
 			MaxTableRows: defaultMaxTableRows,
-			Logs: &settingsLogs{
-				BufferMaxSize:       defaultLogBufferMaxSize,
-				TargetPerScopeLimit: defaultLogTargetPerScopeLimit,
-				TargetGlobalLimit:   defaultLogTargetGlobalLimit,
-				APITimestampFormat:  defaultLogAPITimestampFormat,
+			ObjPanelLogs: &settingsObjPanelLogs{
+				BufferMaxSize:       defaultObjPanelLogsBufferMaxSize,
+				TargetPerScopeLimit: defaultObjPanelLogsTargetPerScopeLimit,
+				TargetGlobalLimit:   defaultObjPanelLogsTargetGlobalLimit,
+				APITimestampFormat:  defaultObjPanelLogsAPITimestampFormat,
 			},
 
 			GridTablePersistenceMode: "shared",
@@ -206,34 +206,32 @@ func normalizeSettingsFile(settings *settingsFile) *settingsFile {
 	} else {
 		settings.Preferences.MaxTableRows = clampMaxTableRows(settings.Preferences.MaxTableRows)
 	}
-	if settings.Preferences.Logs == nil {
-		settings.Preferences.Logs = &settingsLogs{
-			BufferMaxSize:       defaultLogBufferMaxSize,
-			TargetPerScopeLimit: defaultLogTargetPerScopeLimit,
-			TargetGlobalLimit:   defaultLogTargetGlobalLimit,
-			APITimestampFormat:  defaultLogAPITimestampFormat,
+	if settings.Preferences.ObjPanelLogs == nil {
+		settings.Preferences.ObjPanelLogs = &settingsObjPanelLogs{
+			BufferMaxSize:       defaultObjPanelLogsBufferMaxSize,
+			TargetPerScopeLimit: defaultObjPanelLogsTargetPerScopeLimit,
+			TargetGlobalLimit:   defaultObjPanelLogsTargetGlobalLimit,
+			APITimestampFormat:  defaultObjPanelLogsAPITimestampFormat,
 		}
 	}
-	// A zero value from an older settings file means "use the default",
-	// not "truncate every buffer to 0" — clamp after the fact so existing
-	// users upgrade cleanly.
-	if settings.Preferences.Logs.BufferMaxSize <= 0 {
-		settings.Preferences.Logs.BufferMaxSize = defaultLogBufferMaxSize
+	// A zero value means "use the default", not "truncate every buffer to 0".
+	if settings.Preferences.ObjPanelLogs.BufferMaxSize <= 0 {
+		settings.Preferences.ObjPanelLogs.BufferMaxSize = defaultObjPanelLogsBufferMaxSize
 	} else {
-		settings.Preferences.Logs.BufferMaxSize = clampLogBufferMaxSize(settings.Preferences.Logs.BufferMaxSize)
+		settings.Preferences.ObjPanelLogs.BufferMaxSize = clampObjPanelLogsBufferMaxSize(settings.Preferences.ObjPanelLogs.BufferMaxSize)
 	}
-	if settings.Preferences.Logs.TargetPerScopeLimit <= 0 {
-		settings.Preferences.Logs.TargetPerScopeLimit = defaultLogTargetPerScopeLimit
+	if settings.Preferences.ObjPanelLogs.TargetPerScopeLimit <= 0 {
+		settings.Preferences.ObjPanelLogs.TargetPerScopeLimit = defaultObjPanelLogsTargetPerScopeLimit
 	} else {
-		settings.Preferences.Logs.TargetPerScopeLimit = clampLogTargetPerScopeLimit(settings.Preferences.Logs.TargetPerScopeLimit)
+		settings.Preferences.ObjPanelLogs.TargetPerScopeLimit = clampObjPanelLogsTargetPerScopeLimit(settings.Preferences.ObjPanelLogs.TargetPerScopeLimit)
 	}
-	if settings.Preferences.Logs.TargetGlobalLimit <= 0 {
-		settings.Preferences.Logs.TargetGlobalLimit = defaultLogTargetGlobalLimit
+	if settings.Preferences.ObjPanelLogs.TargetGlobalLimit <= 0 {
+		settings.Preferences.ObjPanelLogs.TargetGlobalLimit = defaultObjPanelLogsTargetGlobalLimit
 	} else {
-		settings.Preferences.Logs.TargetGlobalLimit = clampLogTargetGlobalLimit(settings.Preferences.Logs.TargetGlobalLimit)
+		settings.Preferences.ObjPanelLogs.TargetGlobalLimit = clampObjPanelLogsTargetGlobalLimit(settings.Preferences.ObjPanelLogs.TargetGlobalLimit)
 	}
-	if settings.Preferences.Logs.APITimestampFormat == "" {
-		settings.Preferences.Logs.APITimestampFormat = defaultLogAPITimestampFormat
+	if settings.Preferences.ObjPanelLogs.APITimestampFormat == "" {
+		settings.Preferences.ObjPanelLogs.APITimestampFormat = defaultObjPanelLogsAPITimestampFormat
 	}
 	if settings.Preferences.GridTablePersistenceMode == "" {
 		settings.Preferences.GridTablePersistenceMode = "shared"
@@ -399,19 +397,19 @@ func (a *App) LoadWindowSettings() (*WindowSettings, error) {
 
 func getDefaultAppSettings() *AppSettings {
 	return &AppSettings{
-		Theme:                            "system",
-		SelectedKubeconfigs:              nil,
-		UseShortResourceNames:            false,
-		AutoRefreshEnabled:               true,
-		RefreshBackgroundClustersEnabled: true,
-		MetricsRefreshIntervalMs:         defaultMetricsIntervalMs(),
-		MaxTableRows:                     defaultMaxTableRows,
-		LogBufferMaxSize:                 defaultLogBufferMaxSize,
-		LogTargetPerScopeLimit:           defaultLogTargetPerScopeLimit,
-		LogTargetGlobalLimit:             defaultLogTargetGlobalLimit,
-		LogAPITimestampFormat:            defaultLogAPITimestampFormat,
-		LogAPITimestampUseLocalTimeZone:  false,
-		GridTablePersistenceMode:         "shared",
+		Theme:                                    "system",
+		SelectedKubeconfigs:                      nil,
+		UseShortResourceNames:                    false,
+		AutoRefreshEnabled:                       true,
+		RefreshBackgroundClustersEnabled:         true,
+		MetricsRefreshIntervalMs:                 defaultMetricsIntervalMs(),
+		MaxTableRows:                             defaultMaxTableRows,
+		ObjPanelLogsBufferMaxSize:                defaultObjPanelLogsBufferMaxSize,
+		ObjPanelLogsTargetPerScopeLimit:          defaultObjPanelLogsTargetPerScopeLimit,
+		ObjPanelLogsTargetGlobalLimit:            defaultObjPanelLogsTargetGlobalLimit,
+		ObjPanelLogsAPITimestampFormat:           defaultObjPanelLogsAPITimestampFormat,
+		ObjPanelLogsAPITimestampUseLocalTimeZone: false,
+		GridTablePersistenceMode:                 "shared",
 	}
 }
 
@@ -421,67 +419,67 @@ func (a *App) loadAppSettings() error {
 		return err
 	}
 
-	logBufferMaxSize := defaultLogBufferMaxSize
-	logTargetPerScopeLimit := defaultLogTargetPerScopeLimit
-	logTargetGlobalLimit := defaultLogTargetGlobalLimit
-	logAPITimestampFormat := defaultLogAPITimestampFormat
+	objPanelLogsBufferMaxSize := defaultObjPanelLogsBufferMaxSize
+	objPanelLogsTargetPerScopeLimit := defaultObjPanelLogsTargetPerScopeLimit
+	objPanelLogsTargetGlobalLimit := defaultObjPanelLogsTargetGlobalLimit
+	logAPITimestampFormat := defaultObjPanelLogsAPITimestampFormat
 	logAPITimestampUseLocalTimeZone := false
 	maxTableRows := defaultMaxTableRows
 	if settings.Preferences.MaxTableRows > 0 {
 		maxTableRows = clampMaxTableRows(settings.Preferences.MaxTableRows)
 	}
-	if settings.Preferences.Logs != nil && settings.Preferences.Logs.BufferMaxSize > 0 {
-		logBufferMaxSize = clampLogBufferMaxSize(settings.Preferences.Logs.BufferMaxSize)
+	if settings.Preferences.ObjPanelLogs != nil && settings.Preferences.ObjPanelLogs.BufferMaxSize > 0 {
+		objPanelLogsBufferMaxSize = clampObjPanelLogsBufferMaxSize(settings.Preferences.ObjPanelLogs.BufferMaxSize)
 	}
-	if settings.Preferences.Logs != nil && settings.Preferences.Logs.TargetPerScopeLimit > 0 {
-		logTargetPerScopeLimit = clampLogTargetPerScopeLimit(settings.Preferences.Logs.TargetPerScopeLimit)
+	if settings.Preferences.ObjPanelLogs != nil && settings.Preferences.ObjPanelLogs.TargetPerScopeLimit > 0 {
+		objPanelLogsTargetPerScopeLimit = clampObjPanelLogsTargetPerScopeLimit(settings.Preferences.ObjPanelLogs.TargetPerScopeLimit)
 	}
-	if settings.Preferences.Logs != nil && settings.Preferences.Logs.TargetGlobalLimit > 0 {
-		logTargetGlobalLimit = clampLogTargetGlobalLimit(settings.Preferences.Logs.TargetGlobalLimit)
+	if settings.Preferences.ObjPanelLogs != nil && settings.Preferences.ObjPanelLogs.TargetGlobalLimit > 0 {
+		objPanelLogsTargetGlobalLimit = clampObjPanelLogsTargetGlobalLimit(settings.Preferences.ObjPanelLogs.TargetGlobalLimit)
 	}
-	if settings.Preferences.Logs != nil && settings.Preferences.Logs.APITimestampFormat != "" {
-		logAPITimestampFormat = settings.Preferences.Logs.APITimestampFormat
+	if settings.Preferences.ObjPanelLogs != nil && settings.Preferences.ObjPanelLogs.APITimestampFormat != "" {
+		logAPITimestampFormat = settings.Preferences.ObjPanelLogs.APITimestampFormat
 	}
-	if settings.Preferences.Logs != nil {
-		logAPITimestampUseLocalTimeZone = settings.Preferences.Logs.UseLocalTimeZone
+	if settings.Preferences.ObjPanelLogs != nil {
+		logAPITimestampUseLocalTimeZone = settings.Preferences.ObjPanelLogs.UseLocalTimeZone
 	}
 
 	a.appSettings = &AppSettings{
-		Theme:                            settings.Preferences.Theme,
-		SelectedKubeconfigs:              append([]string(nil), settings.Kubeconfig.Selected...),
-		UseShortResourceNames:            settings.Preferences.UseShortResourceNames,
-		AutoRefreshEnabled:               settings.Preferences.Refresh.Auto,
-		RefreshBackgroundClustersEnabled: settings.Preferences.Refresh.Background,
-		MetricsRefreshIntervalMs:         settings.Preferences.Refresh.MetricsIntervalMs,
-		MaxTableRows:                     maxTableRows,
-		LogBufferMaxSize:                 logBufferMaxSize,
-		LogTargetPerScopeLimit:           logTargetPerScopeLimit,
-		LogTargetGlobalLimit:             logTargetGlobalLimit,
-		LogAPITimestampFormat:            logAPITimestampFormat,
-		LogAPITimestampUseLocalTimeZone:  logAPITimestampUseLocalTimeZone,
-		GridTablePersistenceMode:         settings.Preferences.GridTablePersistenceMode,
-		DefaultObjectPanelPosition:       settings.Preferences.DefaultObjectPanelPosition,
-		ObjectPanelDockedRightWidth:      settings.Preferences.ObjectPanelDockedRightWidth,
-		ObjectPanelDockedBottomHeight:    settings.Preferences.ObjectPanelDockedBottomHeight,
-		ObjectPanelFloatingWidth:         settings.Preferences.ObjectPanelFloatingWidth,
-		ObjectPanelFloatingHeight:        settings.Preferences.ObjectPanelFloatingHeight,
-		ObjectPanelFloatingX:             settings.Preferences.ObjectPanelFloatingX,
-		ObjectPanelFloatingY:             settings.Preferences.ObjectPanelFloatingY,
-		PaletteHueLight:                  settings.Preferences.PaletteHueLight,
-		PaletteSaturationLight:           settings.Preferences.PaletteSaturationLight,
-		PaletteBrightnessLight:           settings.Preferences.PaletteBrightnessLight,
-		PaletteHueDark:                   settings.Preferences.PaletteHueDark,
-		PaletteSaturationDark:            settings.Preferences.PaletteSaturationDark,
-		PaletteBrightnessDark:            settings.Preferences.PaletteBrightnessDark,
-		AccentColorLight:                 settings.Preferences.AccentColorLight,
-		AccentColorDark:                  settings.Preferences.AccentColorDark,
-		LinkColorLight:                   settings.Preferences.LinkColorLight,
-		LinkColorDark:                    settings.Preferences.LinkColorDark,
-		Themes:                           settings.Preferences.Themes,
+		Theme:                                    settings.Preferences.Theme,
+		SelectedKubeconfigs:                      append([]string(nil), settings.Kubeconfig.Selected...),
+		UseShortResourceNames:                    settings.Preferences.UseShortResourceNames,
+		AutoRefreshEnabled:                       settings.Preferences.Refresh.Auto,
+		RefreshBackgroundClustersEnabled:         settings.Preferences.Refresh.Background,
+		MetricsRefreshIntervalMs:                 settings.Preferences.Refresh.MetricsIntervalMs,
+		MaxTableRows:                             maxTableRows,
+		ObjPanelLogsBufferMaxSize:                objPanelLogsBufferMaxSize,
+		ObjPanelLogsTargetPerScopeLimit:          objPanelLogsTargetPerScopeLimit,
+		ObjPanelLogsTargetGlobalLimit:            objPanelLogsTargetGlobalLimit,
+		ObjPanelLogsAPITimestampFormat:           logAPITimestampFormat,
+		ObjPanelLogsAPITimestampUseLocalTimeZone: logAPITimestampUseLocalTimeZone,
+		GridTablePersistenceMode:                 settings.Preferences.GridTablePersistenceMode,
+		DefaultObjectPanelPosition:               settings.Preferences.DefaultObjectPanelPosition,
+		ObjectPanelDockedRightWidth:              settings.Preferences.ObjectPanelDockedRightWidth,
+		ObjectPanelDockedBottomHeight:            settings.Preferences.ObjectPanelDockedBottomHeight,
+		ObjectPanelFloatingWidth:                 settings.Preferences.ObjectPanelFloatingWidth,
+		ObjectPanelFloatingHeight:                settings.Preferences.ObjectPanelFloatingHeight,
+		ObjectPanelFloatingX:                     settings.Preferences.ObjectPanelFloatingX,
+		ObjectPanelFloatingY:                     settings.Preferences.ObjectPanelFloatingY,
+		PaletteHueLight:                          settings.Preferences.PaletteHueLight,
+		PaletteSaturationLight:                   settings.Preferences.PaletteSaturationLight,
+		PaletteBrightnessLight:                   settings.Preferences.PaletteBrightnessLight,
+		PaletteHueDark:                           settings.Preferences.PaletteHueDark,
+		PaletteSaturationDark:                    settings.Preferences.PaletteSaturationDark,
+		PaletteBrightnessDark:                    settings.Preferences.PaletteBrightnessDark,
+		AccentColorLight:                         settings.Preferences.AccentColorLight,
+		AccentColorDark:                          settings.Preferences.AccentColorDark,
+		LinkColorLight:                           settings.Preferences.LinkColorLight,
+		LinkColorDark:                            settings.Preferences.LinkColorDark,
+		Themes:                                   settings.Preferences.Themes,
 	}
-	podlogs.SetPerScopeTargetLimit(logTargetPerScopeLimit)
-	if a.logTargetLimiter != nil {
-		a.logTargetLimiter.SetLimit(logTargetGlobalLimit)
+	containerlogs.SetPerScopeTargetLimit(objPanelLogsTargetPerScopeLimit)
+	if a.containerLogsTargetLimiter != nil {
+		a.containerLogsTargetLimiter.SetLimit(objPanelLogsTargetGlobalLimit)
 	}
 	return nil
 }
@@ -505,18 +503,18 @@ func (a *App) saveAppSettings() error {
 	settings.Preferences.Refresh.Background = a.appSettings.RefreshBackgroundClustersEnabled
 	settings.Preferences.Refresh.MetricsIntervalMs = a.appSettings.MetricsRefreshIntervalMs
 	settings.Preferences.MaxTableRows = clampMaxTableRows(a.appSettings.MaxTableRows)
-	if settings.Preferences.Logs == nil {
-		settings.Preferences.Logs = &settingsLogs{}
+	if settings.Preferences.ObjPanelLogs == nil {
+		settings.Preferences.ObjPanelLogs = &settingsObjPanelLogs{}
 	}
-	settings.Preferences.Logs.BufferMaxSize = clampLogBufferMaxSize(a.appSettings.LogBufferMaxSize)
-	settings.Preferences.Logs.TargetPerScopeLimit = clampLogTargetPerScopeLimit(a.appSettings.LogTargetPerScopeLimit)
-	settings.Preferences.Logs.TargetGlobalLimit = clampLogTargetGlobalLimit(a.appSettings.LogTargetGlobalLimit)
-	if a.appSettings.LogAPITimestampFormat == "" {
-		settings.Preferences.Logs.APITimestampFormat = defaultLogAPITimestampFormat
+	settings.Preferences.ObjPanelLogs.BufferMaxSize = clampObjPanelLogsBufferMaxSize(a.appSettings.ObjPanelLogsBufferMaxSize)
+	settings.Preferences.ObjPanelLogs.TargetPerScopeLimit = clampObjPanelLogsTargetPerScopeLimit(a.appSettings.ObjPanelLogsTargetPerScopeLimit)
+	settings.Preferences.ObjPanelLogs.TargetGlobalLimit = clampObjPanelLogsTargetGlobalLimit(a.appSettings.ObjPanelLogsTargetGlobalLimit)
+	if a.appSettings.ObjPanelLogsAPITimestampFormat == "" {
+		settings.Preferences.ObjPanelLogs.APITimestampFormat = defaultObjPanelLogsAPITimestampFormat
 	} else {
-		settings.Preferences.Logs.APITimestampFormat = a.appSettings.LogAPITimestampFormat
+		settings.Preferences.ObjPanelLogs.APITimestampFormat = a.appSettings.ObjPanelLogsAPITimestampFormat
 	}
-	settings.Preferences.Logs.UseLocalTimeZone = a.appSettings.LogAPITimestampUseLocalTimeZone
+	settings.Preferences.ObjPanelLogs.UseLocalTimeZone = a.appSettings.ObjPanelLogsAPITimestampUseLocalTimeZone
 	settings.Preferences.GridTablePersistenceMode = a.appSettings.GridTablePersistenceMode
 	settings.Preferences.DefaultObjectPanelPosition = a.appSettings.DefaultObjectPanelPosition
 	settings.Preferences.ObjectPanelDockedRightWidth = a.appSettings.ObjectPanelDockedRightWidth
@@ -691,9 +689,10 @@ func (a *App) SetMaxTableRows(size int) error {
 	return a.saveAppSettings()
 }
 
-// SetLogBufferMaxSize persists the max log entries each Logs tab keeps
-// in memory. Values are clamped to [minLogBufferMaxSize, maxLogBufferMaxSize].
-func (a *App) SetLogBufferMaxSize(size int) error {
+// SetObjPanelLogsBufferMaxSize persists the max container log entries each
+// Object Panel Logs Tab keeps in memory.
+// Values are clamped to [minObjPanelLogsBufferMaxSize, maxObjPanelLogsBufferMaxSize].
+func (a *App) SetObjPanelLogsBufferMaxSize(size int) error {
 	a.settingsMu.Lock()
 	defer a.settingsMu.Unlock()
 
@@ -703,13 +702,13 @@ func (a *App) SetLogBufferMaxSize(size int) error {
 		}
 	}
 
-	clamped := clampLogBufferMaxSize(size)
-	a.logger.Info(fmt.Sprintf("Log buffer max size changed to: %d", clamped), "Settings")
-	a.appSettings.LogBufferMaxSize = clamped
+	clamped := clampObjPanelLogsBufferMaxSize(size)
+	a.logger.Info(fmt.Sprintf("ObjPanelLogs buffer max size changed to: %d", clamped), "Settings")
+	a.appSettings.ObjPanelLogsBufferMaxSize = clamped
 	return a.saveAppSettings()
 }
 
-func (a *App) SetLogTargetPerScopeLimit(limit int) error {
+func (a *App) SetObjPanelLogsTargetPerScopeLimit(limit int) error {
 	a.settingsMu.Lock()
 	defer a.settingsMu.Unlock()
 
@@ -719,14 +718,14 @@ func (a *App) SetLogTargetPerScopeLimit(limit int) error {
 		}
 	}
 
-	clamped := clampLogTargetPerScopeLimit(limit)
-	a.logger.Info(fmt.Sprintf("Log target per-scope limit changed to: %d", clamped), "Settings")
-	a.appSettings.LogTargetPerScopeLimit = clamped
-	podlogs.SetPerScopeTargetLimit(clamped)
+	clamped := clampObjPanelLogsTargetPerScopeLimit(limit)
+	a.logger.Info(fmt.Sprintf("Object Panel Logs Tab target per-scope limit changed to: %d", clamped), "Settings")
+	a.appSettings.ObjPanelLogsTargetPerScopeLimit = clamped
+	containerlogs.SetPerScopeTargetLimit(clamped)
 	return a.saveAppSettings()
 }
 
-func (a *App) SetLogTargetGlobalLimit(limit int) error {
+func (a *App) SetObjPanelLogsTargetGlobalLimit(limit int) error {
 	a.settingsMu.Lock()
 	defer a.settingsMu.Unlock()
 
@@ -736,16 +735,16 @@ func (a *App) SetLogTargetGlobalLimit(limit int) error {
 		}
 	}
 
-	clamped := clampLogTargetGlobalLimit(limit)
-	a.logger.Info(fmt.Sprintf("Log target global limit changed to: %d", clamped), "Settings")
-	a.appSettings.LogTargetGlobalLimit = clamped
-	if a.logTargetLimiter != nil {
-		a.logTargetLimiter.SetLimit(clamped)
+	clamped := clampObjPanelLogsTargetGlobalLimit(limit)
+	a.logger.Info(fmt.Sprintf("Object Panel Logs Tab target global limit changed to: %d", clamped), "Settings")
+	a.appSettings.ObjPanelLogsTargetGlobalLimit = clamped
+	if a.containerLogsTargetLimiter != nil {
+		a.containerLogsTargetLimiter.SetLimit(clamped)
 	}
 	return a.saveAppSettings()
 }
 
-func (a *App) SetLogAPITimestampFormat(format string) error {
+func (a *App) SetObjPanelLogsAPITimestampFormat(format string) error {
 	a.settingsMu.Lock()
 	defer a.settingsMu.Unlock()
 
@@ -756,14 +755,14 @@ func (a *App) SetLogAPITimestampFormat(format string) error {
 	}
 
 	if format == "" {
-		format = defaultLogAPITimestampFormat
+		format = defaultObjPanelLogsAPITimestampFormat
 	}
-	a.logger.Info(fmt.Sprintf("Log API timestamp format changed to: %s", format), "Settings")
-	a.appSettings.LogAPITimestampFormat = format
+	a.logger.Info(fmt.Sprintf("Object Panel Logs Tab API timestamp format changed to: %s", format), "Settings")
+	a.appSettings.ObjPanelLogsAPITimestampFormat = format
 	return a.saveAppSettings()
 }
 
-func (a *App) SetLogAPITimestampUseLocalTimeZone(enabled bool) error {
+func (a *App) SetObjPanelLogsAPITimestampUseLocalTimeZone(enabled bool) error {
 	a.settingsMu.Lock()
 	defer a.settingsMu.Unlock()
 
@@ -774,10 +773,10 @@ func (a *App) SetLogAPITimestampUseLocalTimeZone(enabled bool) error {
 	}
 
 	a.logger.Info(
-		fmt.Sprintf("Log API timestamp local timezone changed to: %v", enabled),
+		fmt.Sprintf("Object Panel Logs Tab API timestamp local timezone changed to: %v", enabled),
 		"Settings",
 	)
-	a.appSettings.LogAPITimestampUseLocalTimeZone = enabled
+	a.appSettings.ObjPanelLogsAPITimestampUseLocalTimeZone = enabled
 	return a.saveAppSettings()
 }
 

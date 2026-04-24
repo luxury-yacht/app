@@ -835,7 +835,7 @@ const NodeLogsTab = ({
           nodes.push(text.slice(lastIndex, matchIndex));
         }
         nodes.push(
-          <mark key={`${keyPrefix}-${matchIndex}-${index}`} className="pod-log-highlight">
+          <mark key={`${keyPrefix}-${matchIndex}-${index}`} className="log-viewer-highlight">
             {value}
           </mark>
         );
@@ -883,9 +883,9 @@ const NodeLogsTab = ({
   if (availability.pending) {
     return (
       <div className="object-panel-tab-content">
-        <div className="pod-logs-display">
-          <div className="pod-logs-content">
-            <div className="pod-logs-display-loading">
+        <div className="logs-viewer-display">
+          <div className="logs-viewer-content">
+            <div className="logs-viewer-display-loading">
               Checking if logs are available for this node...
             </div>
           </div>
@@ -897,9 +897,9 @@ const NodeLogsTab = ({
   if (sources.length === 0) {
     return (
       <div className="object-panel-tab-content">
-        <div className="pod-logs-display">
-          <div className="pod-logs-content">
-            <div className="pod-logs-display-error">
+        <div className="logs-viewer-display">
+          <div className="logs-viewer-content">
+            <div className="logs-viewer-display-error">
               <div className="node-log-unavailable-message">
                 <div>Logs are not available on this node</div>
                 {availability.reason ? <div>Error: {availability.reason}</div> : null}
@@ -913,10 +913,10 @@ const NodeLogsTab = ({
 
   return (
     <div className="object-panel-tab-content">
-      <div className="pod-logs-display">
-        <div className="pod-logs-controls">
-          <div className="pod-logs-controls-left">
-            <div className="pod-logs-control-group">
+      <div className="logs-viewer-display">
+        <div className="logs-viewer-controls">
+          <div className="logs-viewer-controls-left">
+            <div className="logs-viewer-control-group">
               <Dropdown
                 options={sourceOptions}
                 value={selectedSource?.path ?? ''}
@@ -925,7 +925,7 @@ const NodeLogsTab = ({
                 }
                 placeholder={loading ? 'Loading logs…' : 'Select log source'}
                 size="compact"
-                className="pod-logs-selector-dropdown"
+                className="logs-viewer-selector-dropdown"
                 ariaLabel="Node log source"
                 renderOption={(option) => {
                   if (option.group === 'header') {
@@ -960,9 +960,9 @@ const NodeLogsTab = ({
               />
             </div>
 
-            <div className="pod-logs-control-group pod-logs-filter-group">
+            <div className="logs-viewer-control-group logs-viewer-filter-group">
               <input
-                className="pod-logs-text-filter"
+                className="logs-viewer-text-filter"
                 type="text"
                 value={textFilter}
                 onChange={(event) => setTextFilter(event.target.value)}
@@ -971,7 +971,7 @@ const NodeLogsTab = ({
               />
               {textFilter && (
                 <button
-                  className="pod-logs-filter-clear"
+                  className="logs-viewer-filter-clear"
                   onClick={() => setTextFilter('')}
                   title="Clear filter"
                   aria-label="Clear filter"
@@ -1103,7 +1103,7 @@ const NodeLogsTab = ({
             />
 
             <span
-              className="pod-logs-count"
+              className="logs-viewer-count"
               aria-label="Selected node log source"
               title={selectedSource?.path || '/'}
             >
@@ -1113,30 +1113,30 @@ const NodeLogsTab = ({
         </div>
 
         {truncated && !error && (
-          <div className="pod-logs-warning-bar">
+          <div className="logs-viewer-warning-bar">
             Showing only the most recent {Math.floor(NODE_LOG_TAIL_BYTES / 1024)} KB for
             responsiveness.
           </div>
         )}
 
-        <div ref={logsContentRef} className="pod-logs-content selectable" tabIndex={-1}>
+        <div ref={logsContentRef} className="logs-viewer-content selectable" tabIndex={-1}>
           {error ? (
-            <div className="pod-logs-display-error">{error}</div>
+            <div className="logs-viewer-display-error">{error}</div>
           ) : !selectedSource ? (
-            <div className="pod-logs-display-loading">Select a log source to view logs.</div>
+            <div className="logs-viewer-display-loading">Select a log source to view logs.</div>
           ) : loading && !hasLoadedContent ? (
-            <div className="pod-logs-display-loading">Loading logs…</div>
+            <div className="logs-viewer-display-loading">Loading logs…</div>
           ) : hasInvalidRegex ? (
-            <div className="pod-logs-display-error">Enter a valid regular expression.</div>
+            <div className="logs-viewer-display-error">Enter a valid regular expression.</div>
           ) : filteredLines.length === 0 ? (
-            <div className="pod-logs-display-loading">
+            <div className="logs-viewer-display-loading">
               {content.length === 0
                 ? 'No logs returned for this source.'
                 : 'No log lines match the current filter.'}
             </div>
           ) : isParsedView ? (
             !canParseLogs ? (
-              <div className="pod-logs-display-loading">
+              <div className="logs-viewer-display-loading">
                 No JSON log lines match the current filter.
               </div>
             ) : (
@@ -1155,9 +1155,9 @@ const NodeLogsTab = ({
               </div>
             )
           ) : (
-            <div className={`pod-logs-text ${!wrapText ? 'no-wrap' : ''}`}>
+            <div className={`logs-viewer-text ${!wrapText ? 'no-wrap' : ''}`}>
               {renderedDisplayRows.map((row, index) => (
-                <div key={row.key} className="pod-log-line">
+                <div key={row.key} className="log-viewer-line">
                   {renderMessageContent(row.line, `node-log-line-${index}`)}
                 </div>
               ))}

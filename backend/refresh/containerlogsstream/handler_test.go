@@ -1,0 +1,596 @@
+package containerlogsstream
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/luxury-yacht/app/backend/internal/containerlogs"
+	"github.com/luxury-yacht/app/backend/refresh/telemetry"
+	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/kubernetes/fake"
+	k8stesting "k8s.io/client-go/testing"
+)
+
+func TestParseOptions(t *testing.T) {
+	tests := []struct {
+		name             string
+		query            url.Values
+		expectError      bool
+		kind             string
+		podFilter        string
+		podInclude       string
+		podExclude       string
+		container        string
+		includeInit      bool
+		includeEphemeral bool
+		containerState   string
+		include          string
+		exclude          string
+		tail             int
+	}{
+		{
+			name:  "valid scope with defaults",
+			query: url.Values{"scope": []string{"default:/v1:pod:nginx"}},
+			kind:  "pod",
+			tail:  defaultTailLines,
+		},
+		{
+			name: "custom tail and filters",
+			query: url.Values{
+				"scope":            []string{"prod:apps/v1:deployment:web"},
+				"tailLines":        []string{"200"},
+				"pod":              []string{"web-123"},
+				"podInclude":       []string{"^web-"},
+				"podExclude":       []string{"-canary$"},
+				"selectedFilter":   []string{"pod:web-2", "debug:debug-abc"},
+				"container":        []string{"app"},
+				"includeInit":      []string{"false"},
+				"includeEphemeral": []string{"false"},
+				"containerState":   []string{"running"},
+				"include":          []string{"error|warn"},
+				"exclude":          []string{"healthcheck"},
+			},
+			kind:             "deployment",
+			podFilter:        "web-123",
+			podInclude:       "^web-",
+			podExclude:       "-canary$",
+			container:        "app",
+			includeInit:      false,
+			includeEphemeral: false,
+			containerState:   "running",
+			include:          "error|warn",
+			exclude:          "healthcheck",
+			tail:             200,
+		},
+		{
+			name:  "gvk scope",
+			query: url.Values{"scope": []string{"cluster-a|default:apps/v1:deployment:web"}},
+			kind:  "deployment",
+			tail:  defaultTailLines,
+		},
+		{
+			name:  "tail capped at max",
+			query: url.Values{"scope": []string{"default:/v1:pod:nginx"}, "tailLines": []string{"99999"}},
+			kind:  "pod",
+			tail:  maxTailLines,
+		},
+		{
+			name:        "invalid line filter",
+			query:       url.Values{"scope": []string{"default:/v1:pod:nginx"}, "include": []string{"["}},
+			expectError: true,
+		},
+		{
+			name:        "invalid pod filter",
+			query:       url.Values{"scope": []string{"default:/v1:pod:nginx"}, "podInclude": []string{"["}},
+			expectError: true,
+		},
+		{
+			name:        "missing scope",
+			query:       url.Values{},
+			expectError: true,
+		},
+		{
+			name:        "empty namespace",
+			query:       url.Values{"scope": []string{":/v1:pod:nginx"}},
+			expectError: true,
+		},
+		{
+			name:        "empty kind",
+			query:       url.Values{"scope": []string{"default::nginx"}},
+			expectError: true,
+		},
+		{
+			name:        "empty name",
+			query:       url.Values{"scope": []string{"default:/v1:pod:"}},
+			expectError: true,
+		},
+		{
+			name:        "missing api version rejected",
+			query:       url.Values{"scope": []string{"default:pod:nginx"}},
+			expectError: true,
+		},
+		{
+			name:        "cluster-scoped object invalid",
+			query:       url.Values{"scope": []string{"__cluster__:Node:n1"}},
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		request := httptest.NewRequest("GET", "/?"+tt.query.Encode(), nil)
+		opts, err := parseOptions(request)
+		if tt.expectError {
+			if err == nil {
+				t.Fatalf("%s: expected error", tt.name)
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatalf("%s: unexpected error: %v", tt.name, err)
+		}
+		if opts.Kind != tt.kind {
+			t.Fatalf("%s: expected kind %q, got %q", tt.name, tt.kind, opts.Kind)
+		}
+		if opts.PodFilter != tt.podFilter {
+			t.Fatalf("%s: expected pod filter %q, got %q", tt.name, tt.podFilter, opts.PodFilter)
+		}
+		if opts.PodInclude != tt.podInclude {
+			t.Fatalf("%s: expected pod include %q, got %q", tt.name, tt.podInclude, opts.PodInclude)
+		}
+		if opts.PodExclude != tt.podExclude {
+			t.Fatalf("%s: expected pod exclude %q, got %q", tt.name, tt.podExclude, opts.PodExclude)
+		}
+		if opts.Container != tt.container {
+			t.Fatalf("%s: expected container %q, got %q", tt.name, tt.container, opts.Container)
+		}
+		if tt.name == "custom tail and filters" {
+			require.Equal(t, []string{"pod:web-2", "debug:debug-abc"}, opts.SelectedFilters)
+			require.True(t, opts.Selection.MatchPod("web-2"))
+			require.False(t, opts.Selection.MatchPod("web-1"))
+			require.True(t, opts.Selection.MatchContainer(containerlogs.ContainerRef{Name: "debug-abc", IsEphemeral: true}))
+			require.False(t, opts.Selection.MatchContainer(containerlogs.ContainerRef{Name: "app"}))
+		}
+		expectedIncludeInit := tt.includeInit
+		if _, ok := tt.query["includeInit"]; !ok {
+			expectedIncludeInit = true
+		}
+		if opts.IncludeInit != expectedIncludeInit {
+			t.Fatalf("%s: expected includeInit %t, got %t", tt.name, expectedIncludeInit, opts.IncludeInit)
+		}
+		expectedIncludeEphemeral := tt.includeEphemeral
+		if _, ok := tt.query["includeEphemeral"]; !ok {
+			expectedIncludeEphemeral = true
+		}
+		if opts.IncludeEphemeral != expectedIncludeEphemeral {
+			t.Fatalf("%s: expected includeEphemeral %t, got %t", tt.name, expectedIncludeEphemeral, opts.IncludeEphemeral)
+		}
+		expectedContainerState := tt.containerState
+		if expectedContainerState == "" {
+			expectedContainerState = "all"
+		}
+		if string(opts.ContainerState) != expectedContainerState {
+			t.Fatalf("%s: expected container state %q, got %q", tt.name, expectedContainerState, opts.ContainerState)
+		}
+		if opts.Include != tt.include {
+			t.Fatalf("%s: expected include %q, got %q", tt.name, tt.include, opts.Include)
+		}
+		if opts.Exclude != tt.exclude {
+			t.Fatalf("%s: expected exclude %q, got %q", tt.name, tt.exclude, opts.Exclude)
+		}
+		if opts.TailLines != tt.tail {
+			t.Fatalf("%s: expected tail %d, got %d", tt.name, tt.tail, opts.TailLines)
+		}
+	}
+}
+
+func TestMatchContainerFilter(t *testing.T) {
+	if !matchContainerFilter("nginx", "nginx", false, false) {
+		t.Fatal("expected direct match for regular container")
+	}
+	if matchContainerFilter("init-setup", "init-setup", false, false) == false {
+		t.Fatalf("expected filter to match identical name")
+	}
+	if !matchContainerFilter("init-setup", "init-setup (init)", true, false) {
+		t.Fatal("expected init suffix match")
+	}
+	if matchContainerFilter("nginx", "sidecar", false, false) {
+		t.Fatal("unexpected match for different container")
+	}
+}
+
+func TestServeHTTPRequiresFlusher(t *testing.T) {
+	client := fake.NewClientset()
+	handler, err := NewHandler(client, noopLogger{}, telemetry.NewRecorder())
+	if err != nil {
+		t.Fatalf("NewHandler returned error: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/?scope=default:/v1:pod:web", nil)
+
+	rec := &noFlushRecorder{
+		header: make(http.Header),
+	}
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.status != http.StatusInternalServerError {
+		t.Fatalf("expected 500 when flusher missing, got %d", rec.status)
+	}
+	if body := rec.body.String(); body != "streaming not supported\n" {
+		t.Fatalf("unexpected body %q", body)
+	}
+}
+
+func TestServeHTTPEmitsInitialSnapshot(t *testing.T) {
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "default",
+			Name:      "my-pod",
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{Name: "app"}},
+		},
+	}
+	client := fake.NewClientset(pod)
+	handler, err := NewHandler(client, noopLogger{}, telemetry.NewRecorder())
+	if err != nil {
+		t.Fatalf("NewHandler returned error: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	req := httptest.NewRequest("GET", "/?scope=default:/v1:pod:my-pod", nil).WithContext(ctx)
+	rec := newFlushRecorder()
+
+	done := make(chan struct{})
+	go func() {
+		handler.ServeHTTP(rec, req)
+		close(done)
+	}()
+
+	var events []EventPayload
+	require.Eventually(t, func() bool {
+		events = parseSSEEvents(rec.Body())
+		// Expect at least 2 events: connected event + initial entries event
+		if len(events) < 2 {
+			return false
+		}
+		// Second event should have entries
+		return len(events[1].Entries) > 0
+	}, time.Second, 10*time.Millisecond, "expected initial log snapshot")
+
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("log handler did not exit after cancel")
+	}
+
+	// First event is the "connected" event with Reset: true and empty entries
+	connected := events[0]
+	require.True(t, connected.Reset)
+	require.Equal(t, "default:/v1:pod:my-pod", connected.Scope)
+	require.Empty(t, connected.Entries)
+
+	// Second event has the initial log entries and must replace any
+	// preserved client buffer on reconnect/remount.
+	initial := events[1]
+	require.True(t, initial.Reset)
+	require.Equal(t, "default:/v1:pod:my-pod", initial.Scope)
+	require.Len(t, initial.Entries, 1)
+
+	entry := initial.Entries[0]
+	require.NotEmpty(t, entry.Line)
+	require.Equal(t, "my-pod", entry.Pod)
+	require.Equal(t, "app", entry.Container)
+	require.False(t, entry.IsInit)
+	require.Equal(t, http.StatusOK, rec.Status())
+}
+
+func TestServeHTTPEmitsPermissionDeniedPayload(t *testing.T) {
+	client := fake.NewClientset()
+	client.PrependReactor("list", "pods", func(k8stesting.Action) (bool, runtime.Object, error) {
+		return true, nil, apierrors.NewForbidden(
+			schema.GroupResource{Group: "", Resource: "pods"},
+			"",
+			errors.New("forbidden"),
+		)
+	})
+
+	handler, err := NewHandler(client, noopLogger{}, telemetry.NewRecorder())
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodGet, "/?scope=default:batch/v1:job:my-job", nil)
+	rec := newFlushRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	events := parseSSEEvents(rec.Body())
+	// Expect 2 events: connected event + error event
+	require.Len(t, events, 2)
+
+	// First event is the "connected" event
+	connected := events[0]
+	require.True(t, connected.Reset)
+	require.Empty(t, connected.Error)
+
+	// Second event is the permission denied error
+	errEvent := events[1]
+	require.NotEmpty(t, errEvent.Error)
+	require.NotNil(t, errEvent.ErrorDetails)
+	require.Equal(t, "container-logs", errEvent.ErrorDetails.Details.Domain)
+	require.Equal(t, logPermissionResource, errEvent.ErrorDetails.Details.Resource)
+}
+
+func TestServeHTTPStreamsUpdates(t *testing.T) {
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "default",
+			Name:      "stream-pod",
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{Name: "app"}},
+		},
+	}
+	baseClient := fake.NewClientset(pod)
+	origin := time.Unix(0, 0)
+	streams := []string{
+		buildContainerLogsStream(origin, []time.Duration{time.Millisecond}, []string{"initial"}),
+		buildContainerLogsStream(origin, []time.Duration{2 * time.Millisecond}, []string{"update"}),
+	}
+
+	delegateCore := baseClient.CoreV1()
+	override := newLogPods(delegateCore.Pods("default"), "default", streams)
+	client := &stubClient{
+		Clientset: baseClient,
+		core: &logCore{
+			CoreV1Interface: delegateCore,
+			overrides:       map[string]*logPods{"default": override},
+		},
+	}
+
+	handler, err := NewHandler(client, noopLogger{}, telemetry.NewRecorder())
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	req := httptest.NewRequest("GET", "/?scope=default:/v1:pod:stream-pod", nil).WithContext(ctx)
+	rec := newFlushRecorder()
+
+	done := make(chan struct{})
+	go func() {
+		handler.ServeHTTP(rec, req)
+		close(done)
+	}()
+
+	var events []EventPayload
+	require.Eventually(t, func() bool {
+		events = parseSSEEvents(rec.Body())
+		// Expect at least 3 events: connected + initial + update
+		return len(events) >= 3
+	}, 4*time.Second, 20*time.Millisecond, "expected at least three SSE events")
+
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("ServeHTTP did not exit after cancellation")
+	}
+
+	// First event is the "connected" event with Reset: true and empty entries
+	connected := events[0]
+	require.True(t, connected.Reset)
+	require.Empty(t, connected.Entries)
+
+	// Second event has initial log entries
+	initial := events[1]
+	require.True(t, initial.Reset)
+	require.Len(t, initial.Entries, 1)
+	require.Equal(t, "initial", initial.Entries[0].Line)
+
+	// Third event has update log entries
+	update := events[2]
+	require.False(t, update.Reset)
+	require.Len(t, update.Entries, 1)
+	require.Equal(t, "update", update.Entries[0].Line)
+}
+
+func TestServeHTTPEmitsErrorEvent(t *testing.T) {
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "default",
+			Name:      "error-pod",
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{Name: "app"}},
+		},
+	}
+	baseClient := fake.NewClientset(pod)
+	origin := time.Unix(0, 0)
+	responses := []logResponse{
+		{body: buildContainerLogsStream(origin, []time.Duration{time.Millisecond}, []string{"initial"}), status: http.StatusOK},
+		{body: "boom", status: http.StatusInternalServerError},
+	}
+
+	delegateCore := baseClient.CoreV1()
+	override := newLogPodsWithResponses(delegateCore.Pods("default"), "default", responses)
+	client := &stubClient{
+		Clientset: baseClient,
+		core: &logCore{
+			CoreV1Interface: delegateCore,
+			overrides:       map[string]*logPods{"default": override},
+		},
+	}
+
+	handler, err := NewHandler(client, noopLogger{}, telemetry.NewRecorder())
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	req := httptest.NewRequest("GET", "/?scope=default:/v1:pod:error-pod", nil).WithContext(ctx)
+	rec := newFlushRecorder()
+
+	done := make(chan struct{})
+	go func() {
+		handler.ServeHTTP(rec, req)
+		close(done)
+	}()
+
+	var events []EventPayload
+	require.Eventually(t, func() bool {
+		events = parseSSEEvents(rec.Body())
+		if len(events) < 2 {
+			return false
+		}
+		for _, evt := range events {
+			if evt.Error != "" {
+				return true
+			}
+		}
+		return false
+	}, 5*time.Second, 20*time.Millisecond, "expected error SSE event")
+
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("ServeHTTP did not exit after cancellation")
+	}
+
+	var errorEvent *EventPayload
+	for i := range events {
+		if events[i].Error != "" {
+			errorEvent = &events[i]
+			break
+		}
+	}
+	require.NotNil(t, errorEvent, "error event should be present")
+	require.Contains(t, errorEvent.Error, "containerlogsstream: follow failed")
+	require.Empty(t, errorEvent.Entries)
+}
+
+func TestComposeStreamWarningsDistinguishesTransportDrops(t *testing.T) {
+	warnings := composeStreamWarnings(
+		[]string{"Logs are hidden for 1 containers because the per-tab limit of 24 was reached. Using filters to reduce the number of containers may clear this message."},
+		true,
+	)
+
+	require.Equal(t, []string{
+		"Logs are hidden for 1 containers because the per-tab limit of 24 was reached. Using filters to reduce the number of containers may clear this message.",
+		transportDropWarning,
+	}, warnings)
+
+	withoutDrops := composeStreamWarnings([]string{"selection warning"}, false)
+	require.Equal(t, []string{"selection warning"}, withoutDrops)
+}
+
+func TestSplitTimestamp(t *testing.T) {
+	ts, line := splitTimestamp("2024-01-02T15:04:05Z some message")
+	if ts == "" || line != "some message" {
+		t.Fatalf("expected timestamp split, got %q / %q", ts, line)
+	}
+	ts, line = splitTimestamp("no-space-line")
+	if ts != "" || line != "no-space-line" {
+		t.Fatalf("expected entire line without timestamp, got %q / %q", ts, line)
+	}
+}
+
+type noFlushRecorder struct {
+	header http.Header
+	body   strings.Builder
+	status int
+}
+
+func (n *noFlushRecorder) Header() http.Header {
+	return n.header
+}
+
+func (n *noFlushRecorder) Write(b []byte) (int, error) {
+	return n.body.WriteString(string(b))
+}
+
+func (n *noFlushRecorder) WriteHeader(statusCode int) {
+	n.status = statusCode
+}
+
+type flushRecorder struct {
+	header http.Header
+	body   strings.Builder
+	status int
+	mu     sync.Mutex
+}
+
+func newFlushRecorder() *flushRecorder {
+	return &flushRecorder{
+		header: make(http.Header),
+	}
+}
+
+func (f *flushRecorder) Header() http.Header {
+	return f.header
+}
+
+func (f *flushRecorder) Write(b []byte) (int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.body.WriteString(string(b))
+}
+
+func (f *flushRecorder) WriteHeader(statusCode int) {
+	f.status = statusCode
+}
+
+func (f *flushRecorder) Flush() {}
+
+func (f *flushRecorder) Body() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.body.String()
+}
+
+func (f *flushRecorder) Status() int {
+	if f.status == 0 {
+		return http.StatusOK
+	}
+	return f.status
+}
+
+func parseSSEEvents(raw string) []EventPayload {
+	chunks := strings.Split(raw, "\n\n")
+	events := make([]EventPayload, 0, len(chunks))
+	for _, chunk := range chunks {
+		if !strings.HasPrefix(chunk, "event: log") {
+			continue
+		}
+		idx := strings.Index(chunk, "data: ")
+		if idx == -1 {
+			continue
+		}
+		data := chunk[idx+len("data: "):]
+		if nl := strings.IndexByte(data, '\n'); nl != -1 {
+			data = data[:nl]
+		}
+		var payload EventPayload
+		if err := json.Unmarshal([]byte(data), &payload); err != nil {
+			continue
+		}
+		events = append(events, payload)
+	}
+	return events
+}

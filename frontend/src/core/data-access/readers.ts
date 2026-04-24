@@ -2,7 +2,7 @@ import {
   EvaluateCapabilities,
   FindCatalogObjectByUID,
   FindCatalogObjectMatch,
-  GetLogScopeContainers,
+  GetContainerLogsScopeContainers,
   GetObjectYAMLByGVK,
   GetPodContainers,
   GetRevisionHistory,
@@ -23,8 +23,8 @@ export const readTargetPorts = (
 export const readPodContainers = (clusterId: string, namespace: string, resourceName: string) =>
   GetPodContainers(clusterId, namespace, resourceName);
 
-export const readLogScopeContainers = (clusterId: string, scope: string) =>
-  GetLogScopeContainers(clusterId, scope);
+export const readContainerLogsScopeContainers = (clusterId: string, scope: string) =>
+  GetContainerLogsScopeContainers(clusterId, scope);
 
 export const readObjectYAMLByGVK = (
   clusterId: string,

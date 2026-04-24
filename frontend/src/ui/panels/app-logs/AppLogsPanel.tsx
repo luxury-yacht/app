@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef, useMemo, useLayoutEffect } from 'react';
-import { ClearLogs, SetLogsPanelVisible } from '@wailsjs/go/backend/App';
+import { ClearAppLogs, SetAppLogsPanelVisible } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import { useShortcut, useKeyboardSurface } from '@ui/shortcuts';
@@ -60,10 +60,10 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
   // Separate ref to track auto-scroll without causing re-renders
   const isAutoScrollRef = useRef(isAutoScroll);
 
-  // Keep backend log-stream visibility aligned with this panel's open state.
+  // Keep backend menu/panel visibility aligned with this panel's open state.
   useEffect(() => {
-    SetLogsPanelVisible(isOpen).catch((error) => {
-      errorHandler.handle(error, { action: 'setLogsPanelVisible' });
+    SetAppLogsPanelVisible(isOpen).catch((error) => {
+      errorHandler.handle(error, { action: 'setAppLogsPanelVisible' });
     });
   }, [isOpen]);
 
@@ -165,9 +165,9 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
     }
   }, []);
 
-  const handleClearLogs = useCallback(async () => {
+  const handleClearAppLogs = useCallback(async () => {
     try {
-      await ClearLogs();
+      await ClearAppLogs();
       setLogs([]);
     } catch (error) {
       errorHandler.handle(error, { action: 'clearLogs' });
@@ -382,12 +382,12 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
 
     const runtime = window.runtime;
     if (runtime?.EventsOn) {
-      runtime.EventsOn('log-added', handleLogAdded);
+      runtime.EventsOn('app-logs:added', handleLogAdded);
     }
 
     return () => {
       clearTimeout(loadTimer);
-      runtime?.EventsOff?.('log-added');
+      runtime?.EventsOff?.('app-logs:added');
     };
   }, [isOpen, loadLogs]);
 
@@ -401,8 +401,8 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
       }
       return false;
     },
-    description: 'Close app logs panel',
-    category: 'App Logs',
+    description: 'Close Application Logs Panel',
+    category: 'Application Logs Panel',
     enabled: isOpen,
     priority: isOpen ? KeyboardShortcutPriority.APP_LOGS_ESCAPE : 0,
   });
@@ -457,7 +457,7 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
     (clusterFilter.length > 0 && clusterFilter.length !== clusterValues.length) ||
     textFilter.trim().length > 0;
 
-  // Add shortcuts for logs panel (only visible when panel is open)
+  // Add shortcuts for Application Logs Panel actions.
   useShortcut({
     key: 's',
     handler: () => {
@@ -468,8 +468,8 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
       return false;
     },
     description: 'Toggle auto-scroll',
-    category: 'Logs Panel',
-    enabled: isOpen, // Only show in help when logs panel is open
+    category: 'Application Logs Panel',
+    enabled: isOpen,
     priority: isOpen ? KeyboardShortcutPriority.APP_LOGS_ACTION : 0,
   });
 
@@ -478,14 +478,14 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
     modifiers: { shift: true },
     handler: () => {
       if (isOpen) {
-        handleClearLogs();
+        handleClearAppLogs();
         return true;
       }
       return false;
     },
     description: 'Clear logs',
-    category: 'Logs Panel',
-    enabled: isOpen, // Only show in help when logs panel is open
+    category: 'Application Logs Panel',
+    enabled: isOpen,
     priority: isOpen ? KeyboardShortcutPriority.APP_LOGS_ACTION : 0,
   });
 
@@ -638,7 +638,7 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
             Copy
           </button>
 
-          <button className="app-logs-button" onClick={handleClearLogs} title="Clear logs">
+          <button className="app-logs-button" onClick={handleClearAppLogs} title="Clear logs">
             Clear
           </button>
         </div>

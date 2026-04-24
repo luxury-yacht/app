@@ -1,8 +1,8 @@
 /*
  * backend/resources/pods/logs_test.go
  *
- * Tests for Pod log retrieval and follow helpers.
- * - Covers Pod log retrieval and follow helpers behavior and edge cases.
+ * Tests for Container log retrieval and follow helpers.
+ * - Covers Container log retrieval and follow helpers behavior and edge cases.
  */
 
 package pods
@@ -16,7 +16,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/luxury-yacht/app/backend/internal/podlogs"
+	"github.com/luxury-yacht/app/backend/internal/containerlogs"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -32,18 +32,18 @@ import (
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
 
-func TestLogFetcherRequiresNamespace(t *testing.T) {
+func TestFetchContainerLogsRequiresNamespace(t *testing.T) {
 	service := NewService(common.Dependencies{
 		Context:          context.Background(),
 		Logger:           testsupport.NoopLogger{},
 		KubernetesClient: fake.NewClientset(),
 	})
 
-	resp := service.LogFetcher(types.LogFetchRequest{})
+	resp := service.FetchContainerLogs(types.ContainerLogsFetchRequest{})
 	require.Equal(t, "namespace is required", resp.Error)
 }
 
-func TestLogFetcherUnsupportedWorkload(t *testing.T) {
+func TestFetchContainerLogsUnsupportedWorkload(t *testing.T) {
 	pods := fake.NewClientset()
 	service := NewService(common.Dependencies{
 		Context:          context.Background(),
@@ -51,7 +51,7 @@ func TestLogFetcherUnsupportedWorkload(t *testing.T) {
 		KubernetesClient: pods,
 	})
 
-	resp := service.LogFetcher(types.LogFetchRequest{
+	resp := service.FetchContainerLogs(types.ContainerLogsFetchRequest{
 		Namespace:    "default",
 		WorkloadKind: "gadget",
 		WorkloadName: "demo",
@@ -157,7 +157,7 @@ func TestPodsForCronJobContinuesOnPodListError(t *testing.T) {
 	require.Equal(t, []string{"pod-b"}, pods)
 }
 
-func TestFetchPodLogsPropagatesGetError(t *testing.T) {
+func TestFetchContainerLogsForPodPropagatesGetError(t *testing.T) {
 	client := fake.NewClientset()
 	service := NewService(common.Dependencies{
 		Context:          context.Background(),
@@ -165,7 +165,7 @@ func TestFetchPodLogsPropagatesGetError(t *testing.T) {
 		KubernetesClient: client,
 	})
 
-	_, err := service.fetchPodLogs("default", "pod", "", 10, false, 0, podlogs.LineFilter{})
+	_, err := service.fetchContainerLogsForPod("default", "pod", "", 10, false, 0, containerlogs.LineFilter{})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "failed to get pod")
 }
@@ -212,7 +212,7 @@ func TestPodContainersIncludesEphemeral(t *testing.T) {
 	require.Equal(t, []string{"app", "debug-abc (debug)"}, containers)
 }
 
-func TestLogScopeContainersWorkloadReturnsUniqueDisplayNames(t *testing.T) {
+func TestContainerLogsScopeContainersWorkloadReturnsUniqueDisplayNames(t *testing.T) {
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "default"},
 		Spec: appsv1.DeploymentSpec{
@@ -240,7 +240,7 @@ func TestLogScopeContainersWorkloadReturnsUniqueDisplayNames(t *testing.T) {
 		KubernetesClient: client,
 	})
 
-	containers, err := service.LogScopeContainers("cluster-a|default:apps/v1:deployment:web")
+	containers, err := service.ContainerLogsScopeContainers("cluster-a|default:apps/v1:deployment:web")
 	require.NoError(t, err)
 	require.Equal(t, []string{"app", "init-a (init)", "other", "sidecar"}, containers)
 }
@@ -260,7 +260,7 @@ func TestResolveTargetPodsDeployment(t *testing.T) {
 		KubernetesClient: client,
 	})
 
-	pods, err := service.resolveTargetPods(types.LogFetchRequest{Namespace: "default", WorkloadKind: "deployment", WorkloadName: "web"})
+	pods, err := service.resolveTargetPods(types.ContainerLogsFetchRequest{Namespace: "default", WorkloadKind: "deployment", WorkloadName: "web"})
 	require.NoError(t, err)
 	require.Equal(t, []string{"web-pod"}, pods)
 }
@@ -284,7 +284,7 @@ func TestResolveTargetPodsAppliesPodFilter(t *testing.T) {
 		KubernetesClient: client,
 	})
 
-	pods, err := service.resolveTargetPods(types.LogFetchRequest{
+	pods, err := service.resolveTargetPods(types.ContainerLogsFetchRequest{
 		Namespace:    "default",
 		WorkloadKind: "deployment",
 		WorkloadName: "web",
@@ -316,7 +316,7 @@ func TestResolveTargetPodsAppliesPodNameRegexFilters(t *testing.T) {
 		KubernetesClient: client,
 	})
 
-	pods, err := service.resolveTargetPods(types.LogFetchRequest{
+	pods, err := service.resolveTargetPods(types.ContainerLogsFetchRequest{
 		Namespace:    "default",
 		WorkloadKind: "deployment",
 		WorkloadName: "web",
@@ -339,7 +339,7 @@ func TestResolveTargetPodsCronJob(t *testing.T) {
 		KubernetesClient: client,
 	})
 
-	pods, err := service.resolveTargetPods(types.LogFetchRequest{Namespace: "default", WorkloadKind: "cronjob", WorkloadName: "nightly"})
+	pods, err := service.resolveTargetPods(types.ContainerLogsFetchRequest{Namespace: "default", WorkloadKind: "cronjob", WorkloadName: "nightly"})
 	require.NoError(t, err)
 	require.Equal(t, []string{"nightly-pod"}, pods)
 }
@@ -359,24 +359,24 @@ func TestResolveTargetPodsScopedGVKDeployment(t *testing.T) {
 		KubernetesClient: client,
 	})
 
-	pods, err := service.resolveTargetPods(types.LogFetchRequest{
+	pods, err := service.resolveTargetPods(types.ContainerLogsFetchRequest{
 		Scope: "cluster-a|default:apps/v1:deployment:web",
 	})
 	require.NoError(t, err)
 	require.Equal(t, []string{"web-pod"}, pods)
 }
 
-func TestLogFetcherScopedPodUsesScopeNamespace(t *testing.T) {
+func TestFetchContainerLogsScopedPodUsesScopeNamespace(t *testing.T) {
 	defer func(orig func(corev1client.PodInterface, context.Context, string, *corev1.PodLogOptions) (io.ReadCloser, error)) {
-		logStreamFunc = orig
-	}(logStreamFunc)
+		containerLogsStreamFunc = orig
+	}(containerLogsStreamFunc)
 
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "default"},
 		Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "app"}}},
 	}
 	client := fake.NewClientset(pod)
-	logStreamFunc = func(corev1client.PodInterface, context.Context, string, *corev1.PodLogOptions) (io.ReadCloser, error) {
+	containerLogsStreamFunc = func(corev1client.PodInterface, context.Context, string, *corev1.PodLogOptions) (io.ReadCloser, error) {
 		return io.NopCloser(strings.NewReader("2024-01-01T00:00:01Z ok")), nil
 	}
 
@@ -385,7 +385,7 @@ func TestLogFetcherScopedPodUsesScopeNamespace(t *testing.T) {
 		KubernetesClient: client,
 	})
 
-	resp := service.LogFetcher(types.LogFetchRequest{
+	resp := service.FetchContainerLogs(types.ContainerLogsFetchRequest{
 		Scope: "cluster-a|default:/v1:pod:demo",
 	})
 	require.Empty(t, resp.Error)
@@ -393,17 +393,17 @@ func TestLogFetcherScopedPodUsesScopeNamespace(t *testing.T) {
 	require.Equal(t, "ok", resp.Entries[0].Line)
 }
 
-func TestLogFetcherAppliesIncludeExcludeFilters(t *testing.T) {
+func TestFetchContainerLogsAppliesIncludeExcludeFilters(t *testing.T) {
 	defer func(orig func(corev1client.PodInterface, context.Context, string, *corev1.PodLogOptions) (io.ReadCloser, error)) {
-		logStreamFunc = orig
-	}(logStreamFunc)
+		containerLogsStreamFunc = orig
+	}(containerLogsStreamFunc)
 
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "default"},
 		Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "app"}}},
 	}
 	client := fake.NewClientset(pod)
-	logStreamFunc = func(corev1client.PodInterface, context.Context, string, *corev1.PodLogOptions) (io.ReadCloser, error) {
+	containerLogsStreamFunc = func(corev1client.PodInterface, context.Context, string, *corev1.PodLogOptions) (io.ReadCloser, error) {
 		logs := strings.Join([]string{
 			"2024-01-01T00:00:01Z info starting",
 			"2024-01-01T00:00:02Z warn should-keep",
@@ -417,7 +417,7 @@ func TestLogFetcherAppliesIncludeExcludeFilters(t *testing.T) {
 		KubernetesClient: client,
 	})
 
-	resp := service.LogFetcher(types.LogFetchRequest{
+	resp := service.FetchContainerLogs(types.ContainerLogsFetchRequest{
 		Namespace: "default",
 		PodName:   "demo",
 		Include:   "warn",
@@ -428,7 +428,7 @@ func TestLogFetcherAppliesIncludeExcludeFilters(t *testing.T) {
 	require.Equal(t, "warn should-keep", resp.Entries[0].Line)
 }
 
-func TestLogFetcherAggregatesWorkloadPods(t *testing.T) {
+func TestFetchContainerLogsAggregatesWorkloadPods(t *testing.T) {
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "default"},
 		Spec:       appsv1.DeploymentSpec{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "api"}}},
@@ -444,7 +444,7 @@ func TestLogFetcherAggregatesWorkloadPods(t *testing.T) {
 		KubernetesClient: client,
 	})
 
-	resp := service.LogFetcher(types.LogFetchRequest{
+	resp := service.FetchContainerLogs(types.ContainerLogsFetchRequest{
 		Namespace:    "default",
 		WorkloadKind: "deployment",
 		WorkloadName: "api",
@@ -452,13 +452,15 @@ func TestLogFetcherAggregatesWorkloadPods(t *testing.T) {
 	require.Empty(t, resp.Error)
 	sort.Slice(resp.Entries, func(i, j int) bool { return resp.Entries[i].Pod < resp.Entries[j].Pod })
 	require.Len(t, resp.Entries, 0)
-	require.NotPanics(t, func() { service.resolveTargetPods(types.LogFetchRequest{Namespace: "default", PodName: "api-0"}) })
+	require.NotPanics(t, func() {
+		service.resolveTargetPods(types.ContainerLogsFetchRequest{Namespace: "default", PodName: "api-0"})
+	})
 }
 
 func TestFetchContainerLogsParsesTimestamps(t *testing.T) {
 	defer func(orig func(corev1client.PodInterface, context.Context, string, *corev1.PodLogOptions) (io.ReadCloser, error)) {
-		logStreamFunc = orig
-	}(logStreamFunc)
+		containerLogsStreamFunc = orig
+	}(containerLogsStreamFunc)
 
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "default"},
@@ -469,7 +471,7 @@ func TestFetchContainerLogsParsesTimestamps(t *testing.T) {
 	}
 	client := fake.NewClientset(pod)
 
-	logStreamFunc = func(_ corev1client.PodInterface, _ context.Context, _ string, _ *corev1.PodLogOptions) (io.ReadCloser, error) {
+	containerLogsStreamFunc = func(_ corev1client.PodInterface, _ context.Context, _ string, _ *corev1.PodLogOptions) (io.ReadCloser, error) {
 		logs := "2024-01-01T00:00:00Z init line\napp line without ts"
 		return io.NopCloser(strings.NewReader(logs)), nil
 	}
@@ -479,7 +481,7 @@ func TestFetchContainerLogsParsesTimestamps(t *testing.T) {
 		KubernetesClient: client,
 	})
 
-	entries, err := service.fetchContainerLogs("default", "demo", "app", false, false, 50, false, 0, podlogs.LineFilter{})
+	entries, err := service.fetchContainerLogs("default", "demo", "app", false, false, 50, false, 0, containerlogs.LineFilter{})
 	require.NoError(t, err)
 	require.Len(t, entries, 2)
 	require.Equal(t, "2024-01-01T00:00:00Z", entries[0].Timestamp)
@@ -503,13 +505,13 @@ func TestFetchContainerLogsSwallowsCommonErrors(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			defer func(orig func(corev1client.PodInterface, context.Context, string, *corev1.PodLogOptions) (io.ReadCloser, error)) {
-				logStreamFunc = orig
-			}(logStreamFunc)
+				containerLogsStreamFunc = orig
+			}(containerLogsStreamFunc)
 
 			pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "default"}}
 			client := fake.NewClientset(pod)
 
-			logStreamFunc = func(_ corev1client.PodInterface, _ context.Context, _ string, _ *corev1.PodLogOptions) (io.ReadCloser, error) {
+			containerLogsStreamFunc = func(_ corev1client.PodInterface, _ context.Context, _ string, _ *corev1.PodLogOptions) (io.ReadCloser, error) {
 				return nil, errors.New(tc.errorMsg)
 			}
 
@@ -519,7 +521,7 @@ func TestFetchContainerLogsSwallowsCommonErrors(t *testing.T) {
 				KubernetesClient: client,
 			})
 
-			entries, err := service.fetchContainerLogs("default", "demo", "app", false, false, 10, true, 5, podlogs.LineFilter{})
+			entries, err := service.fetchContainerLogs("default", "demo", "app", false, false, 10, true, 5, containerlogs.LineFilter{})
 			require.NoError(t, err)
 			require.Empty(t, entries)
 		})
@@ -528,13 +530,13 @@ func TestFetchContainerLogsSwallowsCommonErrors(t *testing.T) {
 
 func TestFetchContainerLogsUnexpectedErrorPropagates(t *testing.T) {
 	defer func(orig func(corev1client.PodInterface, context.Context, string, *corev1.PodLogOptions) (io.ReadCloser, error)) {
-		logStreamFunc = orig
-	}(logStreamFunc)
+		containerLogsStreamFunc = orig
+	}(containerLogsStreamFunc)
 
 	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "default"}}
 	client := fake.NewClientset(pod)
 
-	logStreamFunc = func(_ corev1client.PodInterface, _ context.Context, _ string, _ *corev1.PodLogOptions) (io.ReadCloser, error) {
+	containerLogsStreamFunc = func(_ corev1client.PodInterface, _ context.Context, _ string, _ *corev1.PodLogOptions) (io.ReadCloser, error) {
 		return nil, fmt.Errorf("forbidden")
 	}
 
@@ -544,15 +546,15 @@ func TestFetchContainerLogsUnexpectedErrorPropagates(t *testing.T) {
 		KubernetesClient: client,
 	})
 
-	_, err := service.fetchContainerLogs("default", "demo", "app", false, false, 10, false, 0, podlogs.LineFilter{})
+	_, err := service.fetchContainerLogs("default", "demo", "app", false, false, 10, false, 0, containerlogs.LineFilter{})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "forbidden")
 }
 
-func TestLogFetcherAggregatesAndSortsEntries(t *testing.T) {
+func TestFetchContainerLogsAggregatesAndSortsEntries(t *testing.T) {
 	defer func(orig func(corev1client.PodInterface, context.Context, string, *corev1.PodLogOptions) (io.ReadCloser, error)) {
-		logStreamFunc = orig
-	}(logStreamFunc)
+		containerLogsStreamFunc = orig
+	}(containerLogsStreamFunc)
 
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "default"},
@@ -567,7 +569,7 @@ func TestLogFetcherAggregatesAndSortsEntries(t *testing.T) {
 	}
 	client := fake.NewClientset(pod, pod2)
 
-	logStreamFunc = func(_ corev1client.PodInterface, _ context.Context, podName string, opts *corev1.PodLogOptions) (io.ReadCloser, error) {
+	containerLogsStreamFunc = func(_ corev1client.PodInterface, _ context.Context, podName string, opts *corev1.PodLogOptions) (io.ReadCloser, error) {
 		switch podName {
 		case "demo":
 			if opts.Container == "init" {
@@ -587,21 +589,21 @@ func TestLogFetcherAggregatesAndSortsEntries(t *testing.T) {
 		KubernetesClient: client,
 	})
 
-	resp := service.LogFetcher(types.LogFetchRequest{Namespace: "default", PodName: "demo"})
+	resp := service.FetchContainerLogs(types.ContainerLogsFetchRequest{Namespace: "default", PodName: "demo"})
 	require.Empty(t, resp.Error)
 	require.Len(t, resp.Entries, 2)
 	require.Equal(t, "2024-01-01T00:00:00Z", resp.Entries[0].Timestamp)
 	require.Equal(t, "init", resp.Entries[0].Container)
 
-	resp = service.LogFetcher(types.LogFetchRequest{Namespace: "default", PodName: "demo-2"})
+	resp = service.FetchContainerLogs(types.ContainerLogsFetchRequest{Namespace: "default", PodName: "demo-2"})
 	require.Len(t, resp.Entries, 1)
 	require.Equal(t, "other pod", resp.Entries[0].Line)
 }
 
 func TestResolveTargetPodsOtherWorkloads(t *testing.T) {
 	defer func(orig func(corev1client.PodInterface, context.Context, string, *corev1.PodLogOptions) (io.ReadCloser, error)) {
-		logStreamFunc = orig
-	}(logStreamFunc)
+		containerLogsStreamFunc = orig
+	}(containerLogsStreamFunc)
 
 	rs := &appsv1.ReplicaSet{
 		ObjectMeta: metav1.ObjectMeta{Name: "rs", Namespace: "default"},
@@ -625,7 +627,7 @@ func TestResolveTargetPodsOtherWorkloads(t *testing.T) {
 	jobPod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "job-pod", Namespace: "default", Labels: map[string]string{"job-name": "job"}}}
 
 	client := fake.NewClientset(rs, ds, sts, rsPod, dsPod, stsPod, job, jobPod)
-	logStreamFunc = func(corev1client.PodInterface, context.Context, string, *corev1.PodLogOptions) (io.ReadCloser, error) {
+	containerLogsStreamFunc = func(corev1client.PodInterface, context.Context, string, *corev1.PodLogOptions) (io.ReadCloser, error) {
 		return io.NopCloser(strings.NewReader("2024-01-01T00:00:00Z log")), nil
 	}
 	service := NewService(common.Dependencies{
@@ -634,28 +636,28 @@ func TestResolveTargetPodsOtherWorkloads(t *testing.T) {
 		KubernetesClient: client,
 	})
 
-	rsPods, err := service.resolveTargetPods(types.LogFetchRequest{Namespace: "default", WorkloadKind: "replicaset", WorkloadName: "rs"})
+	rsPods, err := service.resolveTargetPods(types.ContainerLogsFetchRequest{Namespace: "default", WorkloadKind: "replicaset", WorkloadName: "rs"})
 	require.NoError(t, err)
 	require.Equal(t, []string{"rs-pod"}, rsPods)
 
-	dsPods, err := service.resolveTargetPods(types.LogFetchRequest{Namespace: "default", WorkloadKind: "daemonset", WorkloadName: "ds"})
+	dsPods, err := service.resolveTargetPods(types.ContainerLogsFetchRequest{Namespace: "default", WorkloadKind: "daemonset", WorkloadName: "ds"})
 	require.NoError(t, err)
 	require.Equal(t, []string{"ds-pod"}, dsPods)
 
-	stsPods, err := service.resolveTargetPods(types.LogFetchRequest{Namespace: "default", WorkloadKind: "statefulset", WorkloadName: "sts"})
+	stsPods, err := service.resolveTargetPods(types.ContainerLogsFetchRequest{Namespace: "default", WorkloadKind: "statefulset", WorkloadName: "sts"})
 	require.NoError(t, err)
 	require.Equal(t, []string{"sts-0"}, stsPods)
 
-	jobPods, err := service.resolveTargetPods(types.LogFetchRequest{Namespace: "default", WorkloadKind: "job", WorkloadName: "job"})
+	jobPods, err := service.resolveTargetPods(types.ContainerLogsFetchRequest{Namespace: "default", WorkloadKind: "job", WorkloadName: "job"})
 	require.NoError(t, err)
 	require.Equal(t, []string{"job-pod"}, jobPods)
 }
 
-func TestLogFetcherRequiresClient(t *testing.T) {
+func TestFetchContainerLogsRequiresClient(t *testing.T) {
 	service := NewService(common.Dependencies{
 		Context: context.Background(),
 	})
-	resp := service.LogFetcher(types.LogFetchRequest{Namespace: "default", PodName: "demo"})
+	resp := service.FetchContainerLogs(types.ContainerLogsFetchRequest{Namespace: "default", PodName: "demo"})
 	require.Contains(t, resp.Error, "kubernetes client not initialized")
 }
 
@@ -666,13 +668,13 @@ func (errReader) Close() error               { return nil }
 
 func TestFetchContainerLogsScannerError(t *testing.T) {
 	defer func(orig func(corev1client.PodInterface, context.Context, string, *corev1.PodLogOptions) (io.ReadCloser, error)) {
-		logStreamFunc = orig
-	}(logStreamFunc)
+		containerLogsStreamFunc = orig
+	}(containerLogsStreamFunc)
 
 	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "default"}, Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "app"}}}}
 	client := fake.NewClientset(pod)
 
-	logStreamFunc = func(corev1client.PodInterface, context.Context, string, *corev1.PodLogOptions) (io.ReadCloser, error) {
+	containerLogsStreamFunc = func(corev1client.PodInterface, context.Context, string, *corev1.PodLogOptions) (io.ReadCloser, error) {
 		return errReader{}, nil
 	}
 	service := NewService(common.Dependencies{
@@ -681,21 +683,21 @@ func TestFetchContainerLogsScannerError(t *testing.T) {
 		KubernetesClient: client,
 	})
 
-	_, err := service.fetchContainerLogs("default", "demo", "app", false, false, 10, false, 0, podlogs.LineFilter{})
+	_, err := service.fetchContainerLogs("default", "demo", "app", false, false, 10, false, 0, containerlogs.LineFilter{})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "read failure")
 }
 
 func TestFetchContainerLogsHandlesOversizedLine(t *testing.T) {
 	defer func(orig func(corev1client.PodInterface, context.Context, string, *corev1.PodLogOptions) (io.ReadCloser, error)) {
-		logStreamFunc = orig
-	}(logStreamFunc)
+		containerLogsStreamFunc = orig
+	}(containerLogsStreamFunc)
 
 	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "default"}, Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "app"}}}}
 	client := fake.NewClientset(pod)
 	longLine := strings.Repeat("x", 80*1024)
 
-	logStreamFunc = func(corev1client.PodInterface, context.Context, string, *corev1.PodLogOptions) (io.ReadCloser, error) {
+	containerLogsStreamFunc = func(corev1client.PodInterface, context.Context, string, *corev1.PodLogOptions) (io.ReadCloser, error) {
 		return io.NopCloser(strings.NewReader("2024-01-01T00:00:00Z " + longLine)), nil
 	}
 	service := NewService(common.Dependencies{
@@ -704,16 +706,16 @@ func TestFetchContainerLogsHandlesOversizedLine(t *testing.T) {
 		KubernetesClient: client,
 	})
 
-	entries, err := service.fetchContainerLogs("default", "demo", "app", false, false, 10, false, 0, podlogs.LineFilter{})
+	entries, err := service.fetchContainerLogs("default", "demo", "app", false, false, 10, false, 0, containerlogs.LineFilter{})
 	require.NoError(t, err)
 	require.Len(t, entries, 1)
 	require.Equal(t, longLine, entries[0].Line)
 }
 
-func TestFetchPodLogsSpecificContainer(t *testing.T) {
+func TestFetchContainerLogsForPodSpecificContainer(t *testing.T) {
 	defer func(orig func(corev1client.PodInterface, context.Context, string, *corev1.PodLogOptions) (io.ReadCloser, error)) {
-		logStreamFunc = orig
-	}(logStreamFunc)
+		containerLogsStreamFunc = orig
+	}(containerLogsStreamFunc)
 
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "default"},
@@ -723,7 +725,7 @@ func TestFetchPodLogsSpecificContainer(t *testing.T) {
 		},
 	}
 	client := fake.NewClientset(pod)
-	logStreamFunc = func(_ corev1client.PodInterface, _ context.Context, _ string, opts *corev1.PodLogOptions) (io.ReadCloser, error) {
+	containerLogsStreamFunc = func(_ corev1client.PodInterface, _ context.Context, _ string, opts *corev1.PodLogOptions) (io.ReadCloser, error) {
 		require.Equal(t, "app", opts.Container)
 		return io.NopCloser(strings.NewReader("2024-01-01T00:00:00Z only app")), nil
 	}
@@ -734,17 +736,17 @@ func TestFetchPodLogsSpecificContainer(t *testing.T) {
 		KubernetesClient: client,
 	})
 
-	entries, err := service.fetchPodLogs("default", "demo", "app", 100, false, 0, podlogs.LineFilter{})
+	entries, err := service.fetchContainerLogsForPod("default", "demo", "app", 100, false, 0, containerlogs.LineFilter{})
 	require.NoError(t, err)
 	require.Len(t, entries, 1)
 	require.Equal(t, "only app", entries[0].Line)
 	require.False(t, entries[0].IsInit)
 }
 
-func TestFetchPodLogsIncludesEphemeralInAllContainers(t *testing.T) {
+func TestFetchContainerLogsForPodIncludesEphemeralInAllContainers(t *testing.T) {
 	defer func(orig func(corev1client.PodInterface, context.Context, string, *corev1.PodLogOptions) (io.ReadCloser, error)) {
-		logStreamFunc = orig
-	}(logStreamFunc)
+		containerLogsStreamFunc = orig
+	}(containerLogsStreamFunc)
 
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "default"},
@@ -758,7 +760,7 @@ func TestFetchPodLogsIncludesEphemeralInAllContainers(t *testing.T) {
 	}
 	client := fake.NewClientset(pod)
 	requestedContainers := make([]string, 0, 3)
-	logStreamFunc = func(_ corev1client.PodInterface, _ context.Context, _ string, opts *corev1.PodLogOptions) (io.ReadCloser, error) {
+	containerLogsStreamFunc = func(_ corev1client.PodInterface, _ context.Context, _ string, opts *corev1.PodLogOptions) (io.ReadCloser, error) {
 		requestedContainers = append(requestedContainers, opts.Container)
 		return io.NopCloser(strings.NewReader(fmt.Sprintf("2024-01-01T00:00:00Z %s line", opts.Container))), nil
 	}
@@ -769,7 +771,7 @@ func TestFetchPodLogsIncludesEphemeralInAllContainers(t *testing.T) {
 		KubernetesClient: client,
 	})
 
-	entries, err := service.fetchPodLogs("default", "demo", "all", 100, false, 0, podlogs.LineFilter{})
+	entries, err := service.fetchContainerLogsForPod("default", "demo", "all", 100, false, 0, containerlogs.LineFilter{})
 	require.NoError(t, err)
 	require.Len(t, entries, 3)
 	require.Equal(t, []string{"init", "app", "debug-abc"}, requestedContainers)
@@ -777,10 +779,10 @@ func TestFetchPodLogsIncludesEphemeralInAllContainers(t *testing.T) {
 	require.Equal(t, "debug-abc line", entries[2].Line)
 }
 
-func TestFetchPodLogsMatchesSharedContainerEnumeration(t *testing.T) {
+func TestFetchContainerLogsForPodMatchesSharedContainerEnumeration(t *testing.T) {
 	defer func(orig func(corev1client.PodInterface, context.Context, string, *corev1.PodLogOptions) (io.ReadCloser, error)) {
-		logStreamFunc = orig
-	}(logStreamFunc)
+		containerLogsStreamFunc = orig
+	}(containerLogsStreamFunc)
 
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "default"},
@@ -794,7 +796,7 @@ func TestFetchPodLogsMatchesSharedContainerEnumeration(t *testing.T) {
 	}
 	client := fake.NewClientset(pod)
 	requestedContainers := make([]string, 0, 3)
-	logStreamFunc = func(_ corev1client.PodInterface, _ context.Context, _ string, opts *corev1.PodLogOptions) (io.ReadCloser, error) {
+	containerLogsStreamFunc = func(_ corev1client.PodInterface, _ context.Context, _ string, opts *corev1.PodLogOptions) (io.ReadCloser, error) {
 		requestedContainers = append(requestedContainers, opts.Container)
 		return io.NopCloser(strings.NewReader(fmt.Sprintf("2024-01-01T00:00:00Z %s line", opts.Container))), nil
 	}
@@ -805,10 +807,10 @@ func TestFetchPodLogsMatchesSharedContainerEnumeration(t *testing.T) {
 		KubernetesClient: client,
 	})
 
-	_, err := service.fetchPodLogs("default", "demo", "all", 100, false, 0, podlogs.LineFilter{})
+	_, err := service.fetchContainerLogsForPod("default", "demo", "all", 100, false, 0, containerlogs.LineFilter{})
 	require.NoError(t, err)
 
-	sharedContainers := podlogs.EnumerateContainers(pod, "all")
+	sharedContainers := containerlogs.EnumerateContainers(pod, "all")
 	expectedNames := make([]string, 0, len(sharedContainers))
 	for _, containerRef := range sharedContainers {
 		expectedNames = append(expectedNames, containerRef.Name)
@@ -817,14 +819,14 @@ func TestFetchPodLogsMatchesSharedContainerEnumeration(t *testing.T) {
 	require.Equal(t, expectedNames, requestedContainers)
 }
 
-func TestLogFetcherReturnsErrorWhenAllFetchesFail(t *testing.T) {
+func TestFetchContainerLogsReturnsErrorWhenAllFetchesFail(t *testing.T) {
 	defer func(orig func(corev1client.PodInterface, context.Context, string, *corev1.PodLogOptions) (io.ReadCloser, error)) {
-		logStreamFunc = orig
-	}(logStreamFunc)
+		containerLogsStreamFunc = orig
+	}(containerLogsStreamFunc)
 
 	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "default"}, Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "app"}}}}
 	client := fake.NewClientset(pod)
-	logStreamFunc = func(corev1client.PodInterface, context.Context, string, *corev1.PodLogOptions) (io.ReadCloser, error) {
+	containerLogsStreamFunc = func(corev1client.PodInterface, context.Context, string, *corev1.PodLogOptions) (io.ReadCloser, error) {
 		return nil, fmt.Errorf("forbidden")
 	}
 
@@ -834,16 +836,16 @@ func TestLogFetcherReturnsErrorWhenAllFetchesFail(t *testing.T) {
 		KubernetesClient: client,
 	})
 
-	resp := service.LogFetcher(types.LogFetchRequest{Namespace: "default", PodName: "demo"})
+	resp := service.FetchContainerLogs(types.ContainerLogsFetchRequest{Namespace: "default", PodName: "demo"})
 	require.Empty(t, resp.Entries)
 	require.Contains(t, resp.Error, "failed to fetch logs")
 	require.Contains(t, resp.Error, "forbidden")
 }
 
-func TestLogFetcherAllowsPartialSuccessAcrossContainers(t *testing.T) {
+func TestFetchContainerLogsAllowsPartialSuccessAcrossContainers(t *testing.T) {
 	defer func(orig func(corev1client.PodInterface, context.Context, string, *corev1.PodLogOptions) (io.ReadCloser, error)) {
-		logStreamFunc = orig
-	}(logStreamFunc)
+		containerLogsStreamFunc = orig
+	}(containerLogsStreamFunc)
 
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "default"},
@@ -853,7 +855,7 @@ func TestLogFetcherAllowsPartialSuccessAcrossContainers(t *testing.T) {
 		},
 	}
 	client := fake.NewClientset(pod)
-	logStreamFunc = func(_ corev1client.PodInterface, _ context.Context, _ string, opts *corev1.PodLogOptions) (io.ReadCloser, error) {
+	containerLogsStreamFunc = func(_ corev1client.PodInterface, _ context.Context, _ string, opts *corev1.PodLogOptions) (io.ReadCloser, error) {
 		if opts.Container == "init" {
 			return nil, fmt.Errorf("forbidden")
 		}
@@ -866,19 +868,19 @@ func TestLogFetcherAllowsPartialSuccessAcrossContainers(t *testing.T) {
 		KubernetesClient: client,
 	})
 
-	resp := service.LogFetcher(types.LogFetchRequest{Namespace: "default", PodName: "demo"})
+	resp := service.FetchContainerLogs(types.ContainerLogsFetchRequest{Namespace: "default", PodName: "demo"})
 	require.Empty(t, resp.Error)
 	require.Len(t, resp.Entries, 1)
 	require.Equal(t, "app", resp.Entries[0].Container)
 	require.Equal(t, "app log", resp.Entries[0].Line)
 }
 
-func TestLogFetcherWarnsWhenTargetLimitExceeded(t *testing.T) {
+func TestFetchContainerLogsWarnsWhenTargetLimitExceeded(t *testing.T) {
 	defer func(orig func(corev1client.PodInterface, context.Context, string, *corev1.PodLogOptions) (io.ReadCloser, error)) {
-		logStreamFunc = orig
-	}(logStreamFunc)
+		containerLogsStreamFunc = orig
+	}(containerLogsStreamFunc)
 
-	containerCount := podlogs.DefaultPerScopeTargetLimit + 1
+	containerCount := containerlogs.DefaultPerScopeTargetLimit + 1
 	containers := make([]corev1.Container, 0, containerCount)
 	for i := 0; i < containerCount; i++ {
 		containers = append(containers, corev1.Container{Name: fmt.Sprintf("c-%02d", i)})
@@ -888,7 +890,7 @@ func TestLogFetcherWarnsWhenTargetLimitExceeded(t *testing.T) {
 		Spec:       corev1.PodSpec{Containers: containers},
 	}
 	client := fake.NewClientset(pod)
-	logStreamFunc = func(_ corev1client.PodInterface, _ context.Context, _ string, opts *corev1.PodLogOptions) (io.ReadCloser, error) {
+	containerLogsStreamFunc = func(_ corev1client.PodInterface, _ context.Context, _ string, opts *corev1.PodLogOptions) (io.ReadCloser, error) {
 		return io.NopCloser(strings.NewReader(fmt.Sprintf("2024-01-01T00:00:00Z %s log", opts.Container))), nil
 	}
 
@@ -898,25 +900,25 @@ func TestLogFetcherWarnsWhenTargetLimitExceeded(t *testing.T) {
 		KubernetesClient: client,
 	})
 
-	resp := service.LogFetcher(types.LogFetchRequest{Namespace: "default", PodName: "demo"})
+	resp := service.FetchContainerLogs(types.ContainerLogsFetchRequest{Namespace: "default", PodName: "demo"})
 	require.Empty(t, resp.Error)
-	require.Len(t, resp.Entries, podlogs.DefaultPerScopeTargetLimit)
+	require.Len(t, resp.Entries, containerlogs.DefaultPerScopeTargetLimit)
 	require.Len(t, resp.Warnings, 1)
 	require.Contains(
 		t,
 		resp.Warnings[0],
 		fmt.Sprintf(
 			"Logs are hidden for %d containers because the per-tab limit of %d was reached.",
-			containerCount-podlogs.DefaultPerScopeTargetLimit,
-			podlogs.DefaultPerScopeTargetLimit,
+			containerCount-containerlogs.DefaultPerScopeTargetLimit,
+			containerlogs.DefaultPerScopeTargetLimit,
 		),
 	)
 }
 
-func TestLogFetcherUsesSharedCappedTargetSelection(t *testing.T) {
+func TestFetchContainerLogsUsesSharedCappedTargetSelection(t *testing.T) {
 	defer func(orig func(corev1client.PodInterface, context.Context, string, *corev1.PodLogOptions) (io.ReadCloser, error)) {
-		logStreamFunc = orig
-	}(logStreamFunc)
+		containerLogsStreamFunc = orig
+	}(containerLogsStreamFunc)
 
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "default"},
@@ -926,7 +928,7 @@ func TestLogFetcherUsesSharedCappedTargetSelection(t *testing.T) {
 	}
 
 	objects := []runtime.Object{deployment}
-	podCount := podlogs.DefaultPerScopeTargetLimit + 1
+	podCount := containerlogs.DefaultPerScopeTargetLimit + 1
 	podObjects := make([]*corev1.Pod, 0, podCount)
 	for i := 0; i < podCount; i++ {
 		pod := &corev1.Pod{
@@ -951,8 +953,8 @@ func TestLogFetcherUsesSharedCappedTargetSelection(t *testing.T) {
 	}
 
 	client := fake.NewClientset(objects...)
-	requestedKeys := make([]string, 0, podlogs.DefaultPerScopeTargetLimit)
-	logStreamFunc = func(_ corev1client.PodInterface, _ context.Context, podName string, opts *corev1.PodLogOptions) (io.ReadCloser, error) {
+	requestedKeys := make([]string, 0, containerlogs.DefaultPerScopeTargetLimit)
+	containerLogsStreamFunc = func(_ corev1client.PodInterface, _ context.Context, podName string, opts *corev1.PodLogOptions) (io.ReadCloser, error) {
 		requestedKeys = append(requestedKeys, fmt.Sprintf("default/%s/%s", podName, opts.Container))
 		return io.NopCloser(strings.NewReader(fmt.Sprintf("2024-01-01T00:00:00Z %s log", podName))), nil
 	}
@@ -963,17 +965,17 @@ func TestLogFetcherUsesSharedCappedTargetSelection(t *testing.T) {
 		KubernetesClient: client,
 	})
 
-	resp := service.LogFetcher(types.LogFetchRequest{
+	resp := service.FetchContainerLogs(types.ContainerLogsFetchRequest{
 		Namespace:    "default",
 		WorkloadKind: "deployment",
 		WorkloadName: "web",
 	})
 	require.Empty(t, resp.Error)
 
-	expectedTargets, total := podlogs.SelectTargets(
+	expectedTargets, total := containerlogs.SelectTargets(
 		podObjects,
-		podlogs.DefaultContainerSelection(""),
-		podlogs.DefaultPerScopeTargetLimit,
+		containerlogs.DefaultContainerSelection(""),
+		containerlogs.DefaultPerScopeTargetLimit,
 	)
 	require.Equal(t, podCount, total)
 	expectedKeys := make([]string, 0, len(expectedTargets))
@@ -988,21 +990,21 @@ func TestLogFetcherUsesSharedCappedTargetSelection(t *testing.T) {
 		resp.Warnings[0],
 		fmt.Sprintf(
 			"Logs are hidden for %d containers because the per-tab limit of %d was reached.",
-			podCount-podlogs.DefaultPerScopeTargetLimit,
-			podlogs.DefaultPerScopeTargetLimit,
+			podCount-containerlogs.DefaultPerScopeTargetLimit,
+			containerlogs.DefaultPerScopeTargetLimit,
 		),
 	)
 }
 
-func TestLogFetcherAppliesSelectedFiltersBeforeTargetLimit(t *testing.T) {
+func TestFetchContainerLogsAppliesSelectedFiltersBeforeTargetLimit(t *testing.T) {
 	defer func(orig int) {
-		podlogs.SetPerScopeTargetLimit(orig)
-	}(podlogs.GetPerScopeTargetLimit())
+		containerlogs.SetPerScopeTargetLimit(orig)
+	}(containerlogs.GetPerScopeTargetLimit())
 	defer func(orig func(corev1client.PodInterface, context.Context, string, *corev1.PodLogOptions) (io.ReadCloser, error)) {
-		logStreamFunc = orig
-	}(logStreamFunc)
+		containerLogsStreamFunc = orig
+	}(containerLogsStreamFunc)
 
-	podlogs.SetPerScopeTargetLimit(1)
+	containerlogs.SetPerScopeTargetLimit(1)
 
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "default"},
@@ -1032,7 +1034,7 @@ func TestLogFetcherAppliesSelectedFiltersBeforeTargetLimit(t *testing.T) {
 	}
 
 	client := fake.NewClientset(pods...)
-	logStreamFunc = func(_ corev1client.PodInterface, _ context.Context, podName string, _ *corev1.PodLogOptions) (io.ReadCloser, error) {
+	containerLogsStreamFunc = func(_ corev1client.PodInterface, _ context.Context, podName string, _ *corev1.PodLogOptions) (io.ReadCloser, error) {
 		return io.NopCloser(strings.NewReader(fmt.Sprintf("2024-01-01T00:00:00Z %s log", podName))), nil
 	}
 
@@ -1042,7 +1044,7 @@ func TestLogFetcherAppliesSelectedFiltersBeforeTargetLimit(t *testing.T) {
 		KubernetesClient: client,
 	})
 
-	resp := service.LogFetcher(types.LogFetchRequest{
+	resp := service.FetchContainerLogs(types.ContainerLogsFetchRequest{
 		Namespace:       "default",
 		WorkloadKind:    "deployment",
 		WorkloadName:    "web",
@@ -1054,17 +1056,17 @@ func TestLogFetcherAppliesSelectedFiltersBeforeTargetLimit(t *testing.T) {
 	require.Empty(t, resp.Warnings)
 }
 
-func TestLogFetcherSortsWhenTimestampMissing(t *testing.T) {
+func TestFetchContainerLogsSortsWhenTimestampMissing(t *testing.T) {
 	defer func(orig func(corev1client.PodInterface, context.Context, string, *corev1.PodLogOptions) (io.ReadCloser, error)) {
-		logStreamFunc = orig
-	}(logStreamFunc)
+		containerLogsStreamFunc = orig
+	}(containerLogsStreamFunc)
 
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "default"},
 		Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "app"}}},
 	}
 	client := fake.NewClientset(pod)
-	logStreamFunc = func(corev1client.PodInterface, context.Context, string, *corev1.PodLogOptions) (io.ReadCloser, error) {
+	containerLogsStreamFunc = func(corev1client.PodInterface, context.Context, string, *corev1.PodLogOptions) (io.ReadCloser, error) {
 		return io.NopCloser(strings.NewReader("malformed line\n2024-01-01T00:00:01Z ok")), nil
 	}
 
@@ -1073,7 +1075,7 @@ func TestLogFetcherSortsWhenTimestampMissing(t *testing.T) {
 		KubernetesClient: client,
 	})
 
-	resp := service.LogFetcher(types.LogFetchRequest{Namespace: "default", PodName: "demo"})
+	resp := service.FetchContainerLogs(types.ContainerLogsFetchRequest{Namespace: "default", PodName: "demo"})
 	require.Len(t, resp.Entries, 2)
 	require.Equal(t, []string{"2024-01-01T00:00:01Z", "malformed"}, []string{resp.Entries[0].Timestamp, resp.Entries[1].Timestamp})
 }

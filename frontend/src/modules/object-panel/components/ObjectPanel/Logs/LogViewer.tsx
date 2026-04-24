@@ -1,13 +1,13 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Logs/LogViewer.tsx
  *
- * Component for viewing object logs with filtering, parsing, and keyboard shortcuts.
+ * Component for viewing Object Panel Logs Tab with filtering, parsing, and keyboard shortcuts.
  * Extracts logic into hooks for clarity.
  * Uses a reducer for state management.
  */
 import React, { useReducer, useEffect, useRef, useMemo, useCallback, useState } from 'react';
-import { LogFetcher } from '@wailsjs/go/backend/App';
-import { readLogScopeContainers, requestData } from '@/core/data-access';
+import { FetchContainerLogs } from '@wailsjs/go/backend/App';
+import { readContainerLogsScopeContainers, requestData } from '@/core/data-access';
 import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
 import GridTable, {
   type GridColumnDefinition,
@@ -18,10 +18,10 @@ import { useLogKeyboardShortcuts } from './hooks/useLogKeyboardShortcuts';
 import { useLogFiltering } from './hooks/useLogFiltering';
 import { useVirtualizedLogRows } from './hooks/useVirtualizedLogRows';
 import {
-  useLogStreamFallback,
+  useContainerLogsStreamFallback,
   isLogDataUnavailable,
   getLogDataUnavailableMessage,
-} from './hooks/useLogStreamFallback';
+} from './hooks/useContainerLogsStreamFallback';
 import { Dropdown, type DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import {
   AutoRefreshIcon,
@@ -45,11 +45,11 @@ import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshL
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
 import { setScopedDomainState, useRefreshScopedDomain } from '@/core/refresh/store';
 import {
-  getLogApiTimestampFormat,
-  getLogApiTimestampUseLocalTimeZone,
-  getLogBufferMaxSize,
+  getObjPanelLogsApiTimestampFormat,
+  getObjPanelLogsApiTimestampUseLocalTimeZone,
+  getObjPanelLogsBufferMaxSize,
 } from '@/core/settings/appPreferences';
-import type { ObjectLogEntry } from '@/core/refresh/types';
+import type { ContainerLogsEntry } from '@/core/refresh/types';
 import type { types } from '@wailsjs/go/models';
 import {
   ALL_CONTAINERS,
@@ -68,14 +68,14 @@ import {
 import { containsAnsi, parseAnsiTextSegments, stripAnsi } from './ansi';
 import { formatParsedValue, tryParseJSONObject } from './jsonLogs';
 import { buildStablePodColorMap } from './podColors';
-import { setLogStreamScopeParams } from './logStreamScopeParamsCache';
+import { setContainerLogsStreamScopeParams } from './containerLogsStreamScopeParamsCache';
 import { INACTIVE_SCOPE } from '../constants';
 import {
-  DEFAULT_LOG_API_TIMESTAMP_FORMAT,
-  formatDefaultLogApiTimestamp,
-  formatLogApiTimestamp,
-} from '@/utils/logApiTimestampFormat';
-import LogSettingsModal from '@ui/modals/LogSettingsModal';
+  DEFAULT_OBJ_PANEL_LOGS_API_TIMESTAMP_FORMAT,
+  formatDefaultObjPanelLogsApiTimestamp,
+  formatObjPanelLogsApiTimestamp,
+} from '@/utils/objPanelLogsApiTimestampFormat';
+import ObjPanelLogsSettingsModal from '@ui/modals/ObjPanelLogsSettingsModal';
 import {
   DEFAULT_TERMINAL_THEME,
   resolveTerminalTheme,
@@ -89,12 +89,12 @@ interface LogViewerProps {
   resourceName: string;
   resourceKind: string;
   /**
-   * Refresh-domain scope string for the object-logs producer. Owned by
+   * Refresh-domain scope string for the container-logs producer. Owned by
    * ObjectPanel via getObjectPanelKind so this component and the panel-
    * level cleanup effect in ObjectPanelContent consume the same value.
    * They used to compute it independently and could drift apart.
    */
-  logScope: string | null;
+  containerLogsScope: string | null;
   isActive?: boolean;
   activePodNames?: string[] | null;
   clusterId?: string | null;
@@ -107,7 +107,7 @@ interface LogViewerProps {
   panelId: string;
 }
 
-const LOG_DOMAIN = 'object-logs' as const;
+const CONTAINER_LOGS_DOMAIN = 'container-logs' as const;
 const PARSED_COLUMN_MIN_WIDTH = 50;
 const PARSED_TIMESTAMP_MIN_WIDTH = 80;
 const PARSED_POD_COLUMN_MIN_WIDTH = 80;
@@ -130,11 +130,11 @@ const formatTimestampForMode = (
   }
   switch (mode) {
     case 'default':
-      return formatLogApiTimestamp(timestamp, apiTimestampFormat, useLocalTimeZone);
+      return formatObjPanelLogsApiTimestamp(timestamp, apiTimestampFormat, useLocalTimeZone);
     case 'short': {
       const parsed = new Date(timestamp);
       if (Number.isNaN(parsed.getTime())) {
-        return formatDefaultLogApiTimestamp(timestamp, useLocalTimeZone);
+        return formatDefaultObjPanelLogsApiTimestamp(timestamp, useLocalTimeZone);
       }
       const hours = String(useLocalTimeZone ? parsed.getHours() : parsed.getUTCHours()).padStart(
         2,
@@ -154,7 +154,7 @@ const formatTimestampForMode = (
     case 'localized': {
       const parsed = new Date(timestamp);
       if (Number.isNaN(parsed.getTime())) {
-        return formatDefaultLogApiTimestamp(timestamp, useLocalTimeZone);
+        return formatDefaultObjPanelLogsApiTimestamp(timestamp, useLocalTimeZone);
       }
       return parsed.toLocaleString([], {
         hour12: false,
@@ -168,7 +168,11 @@ const formatTimestampForMode = (
       });
     }
     default:
-      return formatLogApiTimestamp(timestamp, DEFAULT_LOG_API_TIMESTAMP_FORMAT, useLocalTimeZone);
+      return formatObjPanelLogsApiTimestamp(
+        timestamp,
+        DEFAULT_OBJ_PANEL_LOGS_API_TIMESTAMP_FORMAT,
+        useLocalTimeZone
+      );
   }
 };
 
@@ -377,7 +381,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   namespace,
   resourceName,
   resourceKind: resourceKind,
-  logScope,
+  containerLogsScope,
   isActive = false,
   activePodNames = null,
   clusterId,
@@ -395,11 +399,11 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     return cached ? applyLogViewerPrefs(initialLogViewerState, cached) : initialLogViewerState;
   });
   const [apiTimestampFormat, setApiTimestampFormatState] = React.useState<string>(() =>
-    getLogApiTimestampFormat()
+    getObjPanelLogsApiTimestampFormat()
   );
   const [apiTimestampUseLocalTimeZone, setApiTimestampUseLocalTimeZoneState] =
-    React.useState<boolean>(() => getLogApiTimestampUseLocalTimeZone());
-  const [isLogSettingsOpen, setIsLogSettingsOpen] = React.useState(false);
+    React.useState<boolean>(() => getObjPanelLogsApiTimestampUseLocalTimeZone());
+  const [isObjPanelLogsSettingsOpen, setIsObjPanelLogsSettingsOpen] = React.useState(false);
 
   // Destructure commonly used state for readability
   const {
@@ -417,11 +421,11 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     regexMatches,
     copyFeedback,
     displayMode,
-    parsedLogs,
+    parsedContainerLogs,
     expandedRows,
     fallbackActive,
-    showPreviousLogs,
-    isLoadingPreviousLogs,
+    showPreviousContainerLogs,
+    isLoadingPreviousContainerLogs,
   } = state;
   const showTimestamps = timestampMode !== 'hidden';
   const isParsedView = displayMode === 'parsed';
@@ -434,7 +438,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   // initializer above pulls these values back out.
   //
   // Deps list every persistent field individually so changes to derived
-  // state (containers, availablePods, parsedLogs, fallbackError, etc.)
+  // state (containers, availablePods, parsedContainerLogs, fallbackError, etc.)
   // don't trigger an unnecessary writeback.
   useEffect(() => {
     setLogViewerPrefs(panelId, extractLogViewerPrefs(state));
@@ -454,13 +458,13 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     state.regexMatches,
     state.displayMode,
     state.expandedRows,
-    state.showPreviousLogs,
+    state.showPreviousContainerLogs,
   ]);
 
   const hasPrimedScopeRef = useRef(false);
   const fallbackRecoveringRef = useRef(false);
   const previousActivePodsRef = useRef<string[] | null>(null);
-  const previousLogScopeRef = useRef<string | null>(null);
+  const previousContainerLogsScopeRef = useRef<string | null>(null);
   const resolvedClusterId = clusterId?.trim() ?? '';
 
   // Refs
@@ -475,11 +479,14 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   // restore-once behavior idempotent across state changes.
   const scrollRestoredRef = useRef<boolean>(false);
 
-  useEffect(() => eventBus.on('settings:log-api-timestamp-format', setApiTimestampFormatState), []);
+  useEffect(
+    () => eventBus.on('settings:obj-panel-logs-api-timestamp-format', setApiTimestampFormatState),
+    []
+  );
   useEffect(
     () =>
       eventBus.on(
-        'settings:log-api-timestamp-use-local-time-zone',
+        'settings:obj-panel-logs-api-timestamp-use-local-time-zone',
         setApiTimestampUseLocalTimeZoneState
       ),
     []
@@ -506,7 +513,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
 
   const resourceKindKey = resourceKind?.toLowerCase() ?? '';
   const isWorkload = resourceKindKey !== 'pod';
-  const supportsPreviousLogs = resourceKindKey === 'pod';
+  const supportsPreviousContainerLogs = resourceKindKey === 'pod';
   const podName = !isWorkload ? resourceName : '';
   const selectedInitContainers = useMemo(
     () =>
@@ -584,9 +591,9 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
 
   // Reset state when scope changes - do this during render, not in an effect,
   // to avoid causing a re-render that would interrupt streaming startup
-  if (logScope !== previousLogScopeRef.current) {
-    const hadPreviousScope = previousLogScopeRef.current !== null;
-    previousLogScopeRef.current = logScope;
+  if (containerLogsScope !== previousContainerLogsScopeRef.current) {
+    const hadPreviousScope = previousContainerLogsScopeRef.current !== null;
+    previousContainerLogsScopeRef.current = containerLogsScope;
     hasPrimedScopeRef.current = false;
     previousActivePodsRef.current = null;
     // Only dispatch RESET_FOR_NEW_SCOPE if we had a previous scope (not on initial render)
@@ -596,11 +603,14 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     }
   }
 
-  const logSnapshot = useRefreshScopedDomain(LOG_DOMAIN, logScope ?? INACTIVE_SCOPE);
-  const payloadEntries = logScope ? logSnapshot.data?.entries : undefined;
-  const rawLogEntries: ObjectLogEntry[] = useMemo(() => payloadEntries ?? [], [payloadEntries]);
+  const logSnapshot = useRefreshScopedDomain(
+    CONTAINER_LOGS_DOMAIN,
+    containerLogsScope ?? INACTIVE_SCOPE
+  );
+  const payloadEntries = containerLogsScope ? logSnapshot.data?.entries : undefined;
+  const rawLogEntries: ContainerLogsEntry[] = useMemo(() => payloadEntries ?? [], [payloadEntries]);
 
-  // LogStreamManager already caps rawLogEntries at the user-configured
+  // ContainerLogsStreamManager already caps rawLogEntries at the user-configured
   // buffer size, so we can use it directly. The old stable-list merge
   // logic existed to keep the viewport anchored while reading in place
   // with autoScroll off, but now that tail-following is derived from
@@ -608,11 +618,11 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   // stable list is unnecessary — new entries arrive at the bottom,
   // buffer rotation drops the oldest, and the smart-scroll effect only
   // tail-follows when the user is already at the bottom anyway.
-  const logEntries: ObjectLogEntry[] = rawLogEntries;
-  const snapshotStatus = logScope ? logSnapshot.status : 'idle';
-  const snapshotError = logScope ? logSnapshot.error : null;
+  const logEntries: ContainerLogsEntry[] = rawLogEntries;
+  const snapshotStatus = containerLogsScope ? logSnapshot.status : 'idle';
+  const snapshotError = containerLogsScope ? logSnapshot.error : null;
   // sequence 1 = connected event, sequence >= 2 = initial logs received (may be empty)
-  const snapshotSequence = logScope ? (logSnapshot.data?.sequence ?? 0) : 0;
+  const snapshotSequence = containerLogsScope ? (logSnapshot.data?.sequence ?? 0) : 0;
   const hasReceivedInitialLogs = snapshotSequence >= 2;
   const logWarnings = (logSnapshot.stats?.warnings ?? []).filter(
     (warning) => typeof warning === 'string' && warning.trim().length > 0
@@ -630,15 +640,15 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   const displayError = snapshotError && !isLogDataUnavailable(snapshotError) ? snapshotError : null;
   const transientStreamError = displayError
     ? [
-        'log stream connection lost',
-        'log stream disconnected',
+        'container logs stream connection lost',
+        'container logs stream disconnected',
         'reconnecting',
-        'failed to open log stream',
+        'failed to open container logs stream',
       ].some((term) => displayError.toLowerCase().includes(term))
     : false;
   const shouldSuppressError =
     fallbackActive ||
-    showPreviousLogs ||
+    showPreviousContainerLogs ||
     fallbackRecoveringRef.current ||
     transientStreamError ||
     (autoRefresh && snapshotStatus === 'error');
@@ -673,8 +683,8 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     [logEntries, normalizedActivePods]
   );
 
-  const isPendingLogs = showPreviousLogs
-    ? isLoadingPreviousLogs && logEntries.length === 0
+  const isPendingLogs = showPreviousContainerLogs
+    ? isLoadingPreviousContainerLogs && logEntries.length === 0
     : logEntries.length === 0 &&
       (!hasReceivedInitialLogs ||
         waitingForInitialPrime ||
@@ -686,11 +696,11 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     hasLoaded: hasReceivedInitialLogs,
     hasData: logEntries.length > 0,
     isPaused,
-    isManualRefreshActive: isManualRefreshActive || showPreviousLogs,
+    isManualRefreshActive: isManualRefreshActive || showPreviousContainerLogs,
   });
   const showPausedLogsState = logsLoadingState.showPausedEmptyState;
 
-  const { filteredEntries, parsedCandidates, canParseLogs } = useLogFiltering({
+  const { filteredEntries, parsedCandidates, canParseContainerLogs } = useLogFiltering({
     logEntries,
     isWorkload,
     selectedFilters,
@@ -702,15 +712,15 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
 
   const mapEntriesToSnapshot = useCallback(
     (
-      entries: ObjectLogEntry[],
+      entries: ContainerLogsEntry[],
       generatedAt: number,
       isManual: boolean,
       warnings: string[] = []
     ) => {
-      if (!logScope) {
+      if (!containerLogsScope) {
         return;
       }
-      setScopedDomainState(LOG_DOMAIN, logScope, (previous) => {
+      setScopedDomainState(CONTAINER_LOGS_DOMAIN, containerLogsScope, (previous) => {
         const previousPayload = previous.data ?? {
           entries: [],
           sequence: 0,
@@ -743,16 +753,16 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
           lastManualRefresh: isManual ? generatedAt : previous.lastManualRefresh,
           lastAutoRefresh: !isManual ? generatedAt : previous.lastAutoRefresh,
           isManual,
-          scope: logScope,
+          scope: containerLogsScope,
         };
       });
     },
-    [logScope]
+    [containerLogsScope]
   );
 
   const fetchLogs = useCallback(
     async (options: { isManual?: boolean; previous?: boolean } = {}) => {
-      if (!logScope) {
+      if (!containerLogsScope) {
         return;
       }
 
@@ -760,11 +770,11 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
 
       try {
         // tailLines for the fallback fetch tracks the user-configurable
-        // log buffer size setting (Advanced → Pod Logs). This keeps the
+        // Object Panel Logs Tab buffer size setting. This keeps the
         // initial fallback fetch in sync with the rolling buffer cap so
         // the user gets exactly as much history as their buffer can hold.
-        const request: types.LogFetchRequest = {
-          scope: logScope,
+        const request: types.ContainerLogsFetchRequest = {
+          scope: containerLogsScope,
           namespace,
           workloadName: isWorkload ? resourceName : '',
           workloadKind: isWorkload ? resourceKindKey : '',
@@ -774,11 +784,11 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
           includeInit: backendLogSelection.includeInit,
           includeEphemeral: backendLogSelection.includeEphemeral,
           previous,
-          tailLines: getLogBufferMaxSize(),
+          tailLines: getObjPanelLogsBufferMaxSize(),
           sinceSeconds: 0,
         };
 
-        const response = await LogFetcher(resolvedClusterId, request);
+        const response = await FetchContainerLogs(resolvedClusterId, request);
         if (response?.error) {
           throw new Error(response.error);
         }
@@ -788,7 +798,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
           ? response.warnings.filter((warning): warning is string => typeof warning === 'string')
           : [];
 
-        const mapped: ObjectLogEntry[] = entries.map((entry) => ({
+        const mapped: ContainerLogsEntry[] = entries.map((entry) => ({
           timestamp: entry.timestamp ?? '',
           pod: entry.pod ?? '',
           container: entry.container ?? '',
@@ -811,17 +821,17 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
           return;
         }
         dispatch({ type: 'SET_FALLBACK_ERROR', payload: message });
-        setScopedDomainState(LOG_DOMAIN, logScope, (previous) => ({
+        setScopedDomainState(CONTAINER_LOGS_DOMAIN, containerLogsScope, (previous) => ({
           ...previous,
           status: 'error',
           error: message,
-          scope: logScope,
+          scope: containerLogsScope,
         }));
       }
     },
     [
       isWorkload,
-      logScope,
+      containerLogsScope,
       mapEntriesToSnapshot,
       namespace,
       podName,
@@ -835,7 +845,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     ]
   );
 
-  const fetchFallbackLogs = useCallback(
+  const fetchFallbackContainerLogs = useCallback(
     async (isManualFetch: boolean = false) => {
       await fetchLogs({ isManual: isManualFetch });
     },
@@ -843,29 +853,29 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   );
 
   // Stream lifecycle, fallback activation, recovery, and initial log priming.
-  useLogStreamFallback({
-    logScope,
+  useContainerLogsStreamFallback({
+    containerLogsScope,
     isActive,
     autoRefresh,
-    showPreviousLogs,
+    showPreviousContainerLogs,
     snapshotStatus,
     logEntriesLength: logEntries.length,
     fallbackActive,
-    fetchFallbackLogs,
+    fetchFallbackContainerLogs,
     dispatch,
     fallbackRecoveringRef,
     hasPrimedScopeRef,
   });
 
   useEffect(() => {
-    if (!logScope) {
+    if (!containerLogsScope) {
       return;
     }
-    const changed = setLogStreamScopeParams(logScope, backendLogSelection);
+    const changed = setContainerLogsStreamScopeParams(containerLogsScope, backendLogSelection);
     if (!changed) {
       return;
     }
-    if (showPreviousLogs) {
+    if (showPreviousContainerLogs) {
       dispatch({ type: 'SET_IS_LOADING_PREVIOUS_LOGS', payload: true });
       void fetchLogs({ previous: true, isManual: true })
         .catch((error) => {
@@ -877,26 +887,26 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       return;
     }
     if (fallbackActive) {
-      void fetchFallbackLogs(false);
+      void fetchFallbackContainerLogs(false);
       return;
     }
     if (!isActive || !autoRefresh) {
       return;
     }
-    void refreshOrchestrator.restartStreamingDomain(LOG_DOMAIN, logScope);
+    void refreshOrchestrator.restartStreamingDomain(CONTAINER_LOGS_DOMAIN, containerLogsScope);
   }, [
     autoRefresh,
     backendLogSelection,
     fallbackActive,
-    fetchFallbackLogs,
+    fetchFallbackContainerLogs,
     fetchLogs,
     isActive,
-    logScope,
-    showPreviousLogs,
+    containerLogsScope,
+    showPreviousContainerLogs,
   ]);
 
   useEffect(() => {
-    if (!isWorkload || !logScope || showPreviousLogs) {
+    if (!isWorkload || !containerLogsScope || showPreviousContainerLogs) {
       previousActivePodsRef.current = normalizedActivePods;
       return;
     }
@@ -927,7 +937,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
 
     const generatedAt = Date.now();
 
-    setScopedDomainState(LOG_DOMAIN, logScope, (previous) => {
+    setScopedDomainState(CONTAINER_LOGS_DOMAIN, containerLogsScope, (previous) => {
       const previousPayload = previous.data ?? {
         entries: [],
         sequence: 0,
@@ -949,25 +959,25 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
         lastUpdated: generatedAt,
         lastAutoRefresh: generatedAt,
         isManual: false,
-        scope: logScope,
+        scope: containerLogsScope,
       };
     });
 
     hasPrimedScopeRef.current = filteredEntries.length > 0;
     previousActivePodsRef.current = normalizedActivePods;
-  }, [isWorkload, logEntries, logScope, normalizedActivePods, showPreviousLogs]);
+  }, [isWorkload, logEntries, containerLogsScope, normalizedActivePods, showPreviousContainerLogs]);
 
-  const handleTogglePreviousLogs = useCallback(() => {
-    if (!supportsPreviousLogs) {
+  const handleTogglePreviousContainerLogs = useCallback(() => {
+    if (!supportsPreviousContainerLogs) {
       return;
     }
-    if (!logScope) {
-      dispatch({ type: 'SET_SHOW_PREVIOUS_LOGS', payload: !showPreviousLogs });
+    if (!containerLogsScope) {
+      dispatch({ type: 'SET_SHOW_PREVIOUS_LOGS', payload: !showPreviousContainerLogs });
       dispatch({ type: 'SET_IS_LOADING_PREVIOUS_LOGS', payload: false });
       return;
     }
 
-    if (showPreviousLogs) {
+    if (showPreviousContainerLogs) {
       dispatch({ type: 'STOP_PREVIOUS_LOGS' });
       hasPrimedScopeRef.current = false;
       return;
@@ -976,10 +986,12 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     dispatch({ type: 'START_PREVIOUS_LOGS' });
     hasPrimedScopeRef.current = false;
 
-    refreshOrchestrator.stopStreamingDomain(LOG_DOMAIN, logScope, { reset: false });
-    refreshOrchestrator.setScopedDomainEnabled(LOG_DOMAIN, logScope, false);
+    refreshOrchestrator.stopStreamingDomain(CONTAINER_LOGS_DOMAIN, containerLogsScope, {
+      reset: false,
+    });
+    refreshOrchestrator.setScopedDomainEnabled(CONTAINER_LOGS_DOMAIN, containerLogsScope, false);
 
-    setScopedDomainState(LOG_DOMAIN, logScope, (previous) => {
+    setScopedDomainState(CONTAINER_LOGS_DOMAIN, containerLogsScope, (previous) => {
       const previousPayload = previous.data ?? {
         entries: [],
         sequence: 0,
@@ -996,7 +1008,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
           ...previousPayload,
           entries: [],
         },
-        scope: logScope,
+        scope: containerLogsScope,
       };
     });
 
@@ -1007,14 +1019,14 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       .finally(() => {
         dispatch({ type: 'SET_IS_LOADING_PREVIOUS_LOGS', payload: false });
       });
-  }, [fetchLogs, logScope, showPreviousLogs, supportsPreviousLogs]);
+  }, [fetchLogs, containerLogsScope, showPreviousContainerLogs, supportsPreviousContainerLogs]);
 
   useEffect(() => {
-    if (!supportsPreviousLogs && showPreviousLogs) {
+    if (!supportsPreviousContainerLogs && showPreviousContainerLogs) {
       dispatch({ type: 'SET_SHOW_PREVIOUS_LOGS', payload: false });
       dispatch({ type: 'SET_IS_LOADING_PREVIOUS_LOGS', payload: false });
     }
-  }, [supportsPreviousLogs, showPreviousLogs]);
+  }, [supportsPreviousContainerLogs, showPreviousContainerLogs]);
 
   // Generate consistent colors for pods (workload view)
   // Colors are read from CSS variables to support light/dark themes
@@ -1175,7 +1187,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       });
     }
 
-    if (showPreviousLogs) {
+    if (showPreviousContainerLogs) {
       chips.push({
         key: 'previous-logs',
         label: 'Showing previous logs',
@@ -1247,13 +1259,13 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     regexMatches,
     selectedFilters,
     selectorOptionLabelsByValue,
-    showPreviousLogs,
+    showPreviousContainerLogs,
     textFilter,
   ]);
   const handleClearAllFilters = useCallback(() => {
     dispatch({ type: 'SET_TEXT_FILTER', payload: '' });
     dispatch({ type: 'SET_SELECTED_FILTERS', payload: [] });
-    if (showPreviousLogs) {
+    if (showPreviousContainerLogs) {
       dispatch({ type: 'STOP_PREVIOUS_LOGS' });
       hasPrimedScopeRef.current = false;
     }
@@ -1275,7 +1287,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     highlightMatches,
     inverseMatches,
     regexMatches,
-    showPreviousLogs,
+    showPreviousContainerLogs,
   ]);
 
   useEffect(() => {
@@ -1320,7 +1332,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     if (unavailableLogMessage) {
       return 'unavailable';
     }
-    if (showPreviousLogs) {
+    if (showPreviousContainerLogs) {
       return 'no_previous_logs';
     }
     if ((textFilter.trim().length > 0 || selectedFilters.length > 0) && logEntries.length > 0) {
@@ -1332,7 +1344,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     isPendingLogs,
     logEntries.length,
     selectedFilters.length,
-    showPreviousLogs,
+    showPreviousContainerLogs,
     textFilter,
     unavailableLogMessage,
   ]);
@@ -1354,7 +1366,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     logsLoadingState.suppressPassiveLoading &&
     logEmptyState === 'no_logs_yet' &&
     logEntries.length === 0 &&
-    !showPreviousLogs;
+    !showPreviousContainerLogs;
 
   const displayLines = useMemo(() => {
     if (filteredEntries.length === 0) {
@@ -1443,7 +1455,9 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     [displayLines, filteredEntries]
   );
 
-  const hasCopyableContent = isParsedView ? parsedLogs.length > 0 : filteredEntries.length > 0;
+  const hasCopyableContent = isParsedView
+    ? parsedContainerLogs.length > 0
+    : filteredEntries.length > 0;
   const hasAnsiLogEntries = useMemo(
     () => rawLogEntries.some((entry) => containsAnsi(entry.line)),
     [rawLogEntries]
@@ -1469,10 +1483,10 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   });
 
   useEffect(() => {
-    if (displayMode !== 'raw' && !canParseLogs) {
+    if (displayMode !== 'raw' && !canParseContainerLogs) {
       dispatch({ type: 'SET_DISPLAY_MODE', payload: 'raw' });
     }
-  }, [canParseLogs, displayMode]);
+  }, [canParseContainerLogs, displayMode]);
 
   useEffect(() => {
     if (!isParsedView) {
@@ -1520,7 +1534,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
           nodes.push(text.slice(lastIndex, matchIndex));
         }
         nodes.push(
-          <mark key={`${keyPrefix}-${matchIndex}-${index}`} className="pod-log-highlight">
+          <mark key={`${keyPrefix}-${matchIndex}-${index}`} className="log-viewer-highlight">
             {value}
           </mark>
         );
@@ -1576,23 +1590,23 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
           const podColor = podColors[pod] || podColors['__fallback__'];
 
           return (
-            <div className="pod-log-line">
+            <div className="log-viewer-line">
               {timestamp && (
                 <span
-                  className="pod-log-metadata pod-color-text"
+                  className="log-viewer-metadata pod-color-text"
                   style={{ '--pod-color': podColor } as React.CSSProperties}
                 >
                   {timestamp}
                 </span>
               )}
               <span
-                className="pod-log-metadata pod-log-metadata--bold"
+                className="log-viewer-metadata log-viewer-metadata--bold"
                 style={{ '--pod-color': podColor } as React.CSSProperties}
               >
                 [
                 <button
                   type="button"
-                  className="pod-log-metadata-button pod-color-text"
+                  className="log-viewer-metadata-button pod-color-text"
                   style={{ '--pod-color': podColor } as React.CSSProperties}
                   onClick={() => handleSelectPodFilter(pod)}
                   title={`Show only logs from pod ${pod}`}
@@ -1603,7 +1617,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                 /
                 <button
                   type="button"
-                  className="pod-log-metadata-button pod-color-text"
+                  className="log-viewer-metadata-button pod-color-text"
                   style={{ '--pod-color': podColor } as React.CSSProperties}
                   onClick={() =>
                     (() => {
@@ -1648,14 +1662,14 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
           const containerLabel = showContainerMeta && containerMatch ? containerMatch[1] : '';
           const remainder = showContainerMeta && containerMatch ? containerMatch[2] : workingLine;
           return (
-            <div className="pod-log-line">
-              {timestampPrefix && <span className="pod-log-metadata">{timestampPrefix}</span>}
+            <div className="log-viewer-line">
+              {timestampPrefix && <span className="log-viewer-metadata">{timestampPrefix}</span>}
               {showContainerMeta && (
-                <span className="pod-log-metadata">
+                <span className="log-viewer-metadata">
                   [
                   <button
                     type="button"
-                    className="pod-log-metadata-button"
+                    className="log-viewer-metadata-button"
                     onClick={() =>
                       (() => {
                         const parsedContainerLabel = parseContainerLabel(containerLabel);
@@ -1680,7 +1694,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
         }
       }
 
-      return <div className="pod-log-line">{renderMessageContent(line, `line-${row.key}`)}</div>;
+      return <div className="log-viewer-line">{renderMessageContent(line, `line-${row.key}`)}</div>;
     },
     [
       handleSelectContainerFilter,
@@ -1712,7 +1726,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
 
   // Fetch container inventory for the current log scope.
   useEffect(() => {
-    if (!logScope) {
+    if (!containerLogsScope) {
       dispatch({ type: 'SET_CONTAINERS', payload: [] });
       dispatch({ type: 'SET_SELECTED_CONTAINER', payload: '' });
       return;
@@ -1724,7 +1738,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
         const result = await requestData({
           resource: 'log-scope-containers',
           reason: 'user',
-          read: () => readLogScopeContainers(resolvedClusterId, logScope),
+          read: () => readContainerLogsScopeContainers(resolvedClusterId, containerLogsScope),
         });
         const containerList = result.status === 'executed' ? (result.data ?? []) : [];
 
@@ -1753,7 +1767,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     return () => {
       isCancelled = true;
     };
-  }, [isWorkload, logScope, resolvedClusterId]);
+  }, [isWorkload, containerLogsScope, resolvedClusterId]);
 
   // --- Scroll position and tail-follow ---
   //
@@ -1761,7 +1775,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   //
   //   1. getScrollContainer — returns the element that actually
   //      scrolls for the current view mode. Raw view is
-  //      pod-logs-content itself; parsed view is the GridTable's
+  //      logs-viewer-content itself; parsed view is the GridTable's
   //      virtualization wrapper inside it.
   //
   //   2. Scroll listener — on every scroll event, saves the current
@@ -1859,7 +1873,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   useEffect(() => {
     if (scrollRestoredRef.current) return;
 
-    const entryCount = isParsedView ? parsedLogs.length : logEntries.length;
+    const entryCount = isParsedView ? parsedContainerLogs.length : logEntries.length;
     if (entryCount === 0) return;
 
     const scrollEl = getScrollContainer();
@@ -1876,7 +1890,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
 
     scrollEl.scrollTop = targetScrollTop;
     scrollRestoredRef.current = true;
-  }, [getScrollContainer, isParsedView, logEntries.length, panelId, parsedLogs.length]);
+  }, [getScrollContainer, isParsedView, logEntries.length, panelId, parsedContainerLogs.length]);
 
   // After commit: if the user was tail-following, scroll to the new
   // bottom so the newly appended entries come into view. If not,
@@ -1918,20 +1932,26 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     return () => {
       if (rafId !== undefined) cancelAnimationFrame(rafId);
     };
-  }, [getScrollContainer, isParsedView, logEntries.length, parsedLogs.length, displayLogs]);
+  }, [
+    getScrollContainer,
+    isParsedView,
+    logEntries.length,
+    parsedContainerLogs.length,
+    displayLogs,
+  ]);
 
   // Derive field keys directly from parsed log data
   const derivedFieldKeys = useMemo(() => {
-    if (parsedLogs.length === 0) return [];
+    if (parsedContainerLogs.length === 0) return [];
     const seen = new Set<string>();
-    for (const entry of parsedLogs) {
+    for (const entry of parsedContainerLogs) {
       for (const key of Object.keys(entry.data)) {
         seen.add(key);
       }
     }
     // Sort alphabetically so column order is stable across buffer changes
     return Array.from(seen).sort();
-  }, [parsedLogs]);
+  }, [parsedContainerLogs]);
 
   const tableColumns = useMemo(() => {
     if (derivedFieldKeys.length === 0) return [];
@@ -1989,7 +2009,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
           item.pod ? (
             <button
               type="button"
-              className="pod-log-metadata-button pod-color-text"
+              className="log-viewer-metadata-button pod-color-text"
               style={
                 {
                   '--pod-color': podColors[item.pod] || podColors['__fallback__'],
@@ -2020,7 +2040,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
         item.container ? (
           <button
             type="button"
-            className="pod-log-metadata-button pod-color-text"
+            className="log-viewer-metadata-button pod-color-text"
             style={
               {
                 '--pod-color': podColors[item.pod || ''] || podColors['__fallback__'],
@@ -2102,7 +2122,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   ]);
 
   const parsedCsv = useMemo(() => {
-    if (!isParsedView || parsedLogs.length === 0 || tableColumns.length === 0) {
+    if (!isParsedView || parsedContainerLogs.length === 0 || tableColumns.length === 0) {
       return '';
     }
 
@@ -2129,7 +2149,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     const headerRow = tableColumns.map((column) =>
       escapeCsvCell(typeof column.header === 'string' ? column.header : column.key)
     );
-    const dataRows = parsedLogs.map((entry) =>
+    const dataRows = parsedContainerLogs.map((entry) =>
       tableColumns.map((column) => escapeCsvCell(getParsedColumnValue(entry, column.key)))
     );
 
@@ -2138,12 +2158,12 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     apiTimestampFormat,
     apiTimestampUseLocalTimeZone,
     isParsedView,
-    parsedLogs,
+    parsedContainerLogs,
     tableColumns,
     timestampMode,
   ]);
 
-  const handleCopyLogs = useCallback(async () => {
+  const handleCopyContainerLogs = useCallback(async () => {
     const text = displayMode === 'parsed' ? parsedCsv : displayLogs;
     if (!text) {
       dispatch({ type: 'SET_COPY_FEEDBACK', payload: 'error' });
@@ -2194,10 +2214,10 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     hasAnsiLogEntries,
     hasCopyableContent,
     dispatch,
-    supportsPreviousLogs,
-    canParseLogs,
-    handleTogglePreviousLogs,
-    handleCopyLogs,
+    supportsPreviousContainerLogs,
+    canParseContainerLogs,
+    handleTogglePreviousContainerLogs,
+    handleCopyContainerLogs,
     filterInputRef,
     logsContentRef,
   });
@@ -2228,10 +2248,10 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
 
   const getParsedRowClassName = useCallback(
     (_item: ParsedLogEntry, index: number) => {
-      const key = `log-${parsedLogs[index]?.seq ?? parsedLogs[index]?.lineNumber ?? index}`;
+      const key = `log-${parsedContainerLogs[index]?.seq ?? parsedContainerLogs[index]?.lineNumber ?? index}`;
       return expandedRows.has(key) ? 'parsed-row-expanded' : undefined;
     },
-    [expandedRows, parsedLogs]
+    [expandedRows, parsedContainerLogs]
   );
 
   // Loading state
@@ -2246,7 +2266,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   if (showPausedLogsState || shouldShowPausedLogsEmptyState) {
     return (
       <div className="object-panel-tab-content">
-        <div className="pod-logs-display-empty">
+        <div className="logs-viewer-display-empty">
           <ClusterDataPausedState />
         </div>
       </div>
@@ -2257,7 +2277,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   if (!pendingFallback && displayError && logEntries.length === 0) {
     return (
       <div className="object-panel-tab-content">
-        <div className="pod-logs-display-error">
+        <div className="logs-viewer-display-error">
           <div className="error-message">Error: {displayError}</div>
         </div>
       </div>
@@ -2267,14 +2287,14 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   return (
     <>
       <div className="object-panel-tab-content">
-        <div className="pod-logs-display">
+        <div className="logs-viewer-display">
           <div
-            className={`pod-logs-controls${activeFilterChips.length > 0 ? ' pod-logs-controls--with-active-filters' : ''}`}
+            className={`logs-viewer-controls${activeFilterChips.length > 0 ? ' logs-viewer-controls--with-active-filters' : ''}`}
           >
-            <div className="pod-logs-controls-left">
+            <div className="logs-viewer-controls-left">
               {/* Pod / container selector */}
               {selectorOptions.length > 0 && (
-                <div className="pod-logs-control-group">
+                <div className="logs-viewer-control-group">
                   <Dropdown
                     options={selectorOptions}
                     value={selectedFilters}
@@ -2294,26 +2314,26 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                       )
                     }
                     size="compact"
-                    className="pod-logs-selector-dropdown"
+                    className="logs-viewer-selector-dropdown"
                   />
                 </div>
               )}
 
               {/* Text filter input */}
-              <div className="pod-logs-control-group pod-logs-filter-group">
-                <div className="pod-logs-filter-group">
+              <div className="logs-viewer-control-group logs-viewer-filter-group">
+                <div className="logs-viewer-filter-group">
                   <input
                     type="text"
                     ref={filterInputRef}
                     value={textFilter}
                     onChange={(e) => dispatch({ type: 'SET_TEXT_FILTER', payload: e.target.value })}
                     placeholder="Filter logs..."
-                    className="pod-logs-text-filter"
+                    className="logs-viewer-text-filter"
                     title="Filter logs by text (searches in log lines, pods, and containers)"
                   />
                   {textFilter && (
                     <button
-                      className="pod-logs-filter-clear"
+                      className="logs-viewer-filter-clear"
                       onClick={() => dispatch({ type: 'SET_TEXT_FILTER', payload: '' })}
                       title="Clear filter"
                       aria-label="Clear filter"
@@ -2375,14 +2395,14 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                       title: 'Toggle auto-refresh (R)',
                       ariaLabel: 'Toggle auto-refresh',
                     },
-                    ...(supportsPreviousLogs
+                    ...(supportsPreviousContainerLogs
                       ? [
                           {
                             type: 'toggle' as const,
                             id: 'previousLogs',
                             icon: <PreviousLogsIcon />,
-                            active: showPreviousLogs,
-                            onClick: handleTogglePreviousLogs,
+                            active: showPreviousContainerLogs,
+                            onClick: handleTogglePreviousContainerLogs,
                             title: 'Show previous logs (V)',
                             ariaLabel: 'Show previous logs (V)',
                           },
@@ -2425,7 +2445,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                           },
                         ]
                       : []),
-                    ...(canParseLogs
+                    ...(canParseContainerLogs
                       ? [
                           {
                             type: 'toggle' as const,
@@ -2460,7 +2480,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                       type: 'action',
                       id: 'logSettings',
                       icon: <SettingsIcon width={16} height={16} />,
-                      onClick: () => setIsLogSettingsOpen(true),
+                      onClick: () => setIsObjPanelLogsSettingsOpen(true),
                       title: 'Open log settings',
                       ariaLabel: 'Open log settings',
                     },
@@ -2468,7 +2488,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                       type: 'action',
                       id: 'copy',
                       icon: <CopyIcon />,
-                      onClick: handleCopyLogs,
+                      onClick: handleCopyContainerLogs,
                       title: 'Copy to clipboard (Shift+C)',
                       ariaLabel: 'Copy to clipboard',
                       disabled: !hasCopyableContent,
@@ -2484,7 +2504,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
               />
 
               {hasActiveResultFilter && (
-                <span className="pod-logs-count" title={countTitle}>
+                <span className="logs-viewer-count" title={countTitle}>
                   {countLabel}
                 </span>
               )}
@@ -2492,11 +2512,11 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
           </div>
 
           {activeFilterChips.length > 0 && (
-            <div className="pod-logs-active-filters" aria-label="Active log filters">
+            <div className="logs-viewer-active-filters" aria-label="Active log filters">
               {activeFilterChips.length > 0 && (
                 <button
                   type="button"
-                  className="pod-logs-filter-chip pod-logs-filter-chip--clear-all"
+                  className="logs-viewer-filter-chip logs-viewer-filter-chip--clear-all"
                   onClick={handleClearAllFilters}
                   aria-label="Clear all filters"
                   title="Clear all filters"
@@ -2505,11 +2525,11 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                 </button>
               )}
               {activeFilterChips.map((chip) => (
-                <span key={chip.key} className="pod-logs-filter-chip">
-                  <span className="pod-logs-filter-chip-label">{chip.label}</span>
+                <span key={chip.key} className="logs-viewer-filter-chip">
+                  <span className="logs-viewer-filter-chip-label">{chip.label}</span>
                   <button
                     type="button"
-                    className="pod-logs-filter-chip-remove"
+                    className="logs-viewer-filter-chip-remove"
                     onClick={chip.onRemove}
                     aria-label={chip.title}
                     title={chip.title}
@@ -2522,16 +2542,16 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
           )}
 
           {visibleLogWarnings.length > 0 && (
-            <div className="pod-logs-warning-bar" aria-label="Log warnings">
+            <div className="logs-viewer-warning-bar" aria-label="Log warnings">
               {visibleLogWarnings.join(' ')}
             </div>
           )}
 
-          <div className="pod-logs-content selectable" ref={logsContentRef} tabIndex={-1}>
+          <div className="logs-viewer-content selectable" ref={logsContentRef} tabIndex={-1}>
             {isParsedView ? (
               <div onClick={handleParsedTableClick} style={{ height: '100%' }}>
                 <GridTable
-                  data={parsedLogs}
+                  data={parsedContainerLogs}
                   columns={tableColumns}
                   keyExtractor={(item: ParsedLogEntry) => `log-${item.seq ?? item.lineNumber}`}
                   onRowClick={handleParsedRowKeyboard}
@@ -2544,16 +2564,16 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
               </div>
             ) : (
               <div
-                className={`pod-logs-text ${!wrapText ? 'no-wrap' : ''} ${shouldVirtualizeRawLogs ? 'pod-logs-text--virtualized' : ''}`}
+                className={`logs-viewer-text ${!wrapText ? 'no-wrap' : ''} ${shouldVirtualizeRawLogs ? 'logs-viewer-text--virtualized' : ''}`}
               >
                 {displayLogs ? (
                   shouldVirtualizeRawLogs ? (
                     <div
-                      className="pod-logs-virtual-body"
+                      className="logs-viewer-virtual-body"
                       style={{ height: `${virtualizedRawHeight + RAW_LOG_VERTICAL_PADDING_PX}px` }}
                     >
                       <div
-                        className="pod-logs-virtual-inner"
+                        className="logs-viewer-virtual-inner"
                         style={{
                           transform: `translateY(${virtualizedRawOffsetTop + RAW_LOG_VERTICAL_PADDING_PX / 2}px)`,
                         }}
@@ -2561,7 +2581,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                         {visibleRenderedLogRows.map((row) => (
                           <div
                             key={row.key}
-                            className="pod-log-row"
+                            className="log-viewer-row"
                             ref={(node) => {
                               measureVirtualizedRawRow(row.key, node);
                             }}
@@ -2573,7 +2593,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                     </div>
                   ) : (
                     renderedDisplayRows.map((row) => (
-                      <div key={row.key} className="pod-log-row">
+                      <div key={row.key} className="log-viewer-row">
                         {renderRawLogRow(row)}
                       </div>
                     ))
@@ -2586,7 +2606,10 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
           </div>
         </div>
       </div>
-      <LogSettingsModal isOpen={isLogSettingsOpen} onClose={() => setIsLogSettingsOpen(false)} />
+      <ObjPanelLogsSettingsModal
+        isOpen={isObjPanelLogsSettingsOpen}
+        onClose={() => setIsObjPanelLogsSettingsOpen(false)}
+      />
     </>
   );
 };

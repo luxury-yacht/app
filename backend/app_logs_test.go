@@ -6,59 +6,59 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestGetLogsHandlesNilLogger(t *testing.T) {
+func TestGetAppLogsHandlesNilLogger(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	app.logger = nil
 
-	logs := app.GetLogs()
+	logs := app.GetAppLogs()
 	require.Empty(t, logs)
 }
 
-func TestGetLogsReturnsEntries(t *testing.T) {
+func TestGetAppLogsReturnsEntries(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	app.logger.Info("hello")
 
-	logs := app.GetLogs()
+	logs := app.GetAppLogs()
 	require.Len(t, logs, 1)
 	require.Equal(t, "hello", logs[0].Message)
 }
 
-func TestGetLogsReturnsClusterMetadata(t *testing.T) {
+func TestGetAppLogsReturnsClusterMetadata(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	app.logger.Warn("cluster warning", "Auth", "cluster-a", "alpha")
 
-	logs := app.GetLogs()
+	logs := app.GetAppLogs()
 	require.Len(t, logs, 1)
 	require.Equal(t, "cluster-a", logs[0].ClusterID)
 	require.Equal(t, "alpha", logs[0].ClusterName)
 }
 
-func TestClearLogs(t *testing.T) {
+func TestClearAppLogs(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	app.logger.Info("hello")
 
-	err := app.ClearLogs()
+	err := app.ClearAppLogs()
 	require.NoError(t, err)
 
-	logs := app.GetLogs()
+	logs := app.GetAppLogs()
 	require.Empty(t, logs)
 }
 
-func TestClearLogsWhenNil(t *testing.T) {
+func TestClearAppLogsWhenNil(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	app.logger = nil
 
-	err := app.ClearLogs()
+	err := app.ClearAppLogs()
 	require.Error(t, err)
 }
 
-func TestLogFrontendNormalizesLevelAndSource(t *testing.T) {
+func TestLogAppLogsFromFrontendNormalizesLevelAndSource(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 
-	err := app.LogFrontend("warning", "  frontend warning  ", "  UI  ")
+	err := app.LogAppLogsFromFrontend("warning", "  frontend warning  ", "  UI  ")
 	require.NoError(t, err)
 
-	logs := app.GetLogs()
+	logs := app.GetAppLogs()
 	require.Len(t, logs, 1)
 	require.Equal(t, "WARN", logs[0].Level)
 	require.Equal(t, "frontend warning", logs[0].Message)

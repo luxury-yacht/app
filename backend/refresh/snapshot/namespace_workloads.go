@@ -20,8 +20,8 @@ import (
 	corelisters "k8s.io/client-go/listers/core/v1"
 
 	"github.com/luxury-yacht/app/backend/refresh"
+	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
-	"github.com/luxury-yacht/app/backend/refresh/logstream"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 )
 
@@ -51,7 +51,7 @@ type NamespaceWorkloadsBuilder struct {
 	cronJobLister    batchlisters.CronJobLister
 	hpaLister        autoscalinglisters.HorizontalPodAutoscalerLister
 	metrics          metrics.Provider
-	logger           logstream.Logger
+	logger           containerlogsstream.Logger
 }
 
 // NamespaceWorkloadsSnapshot is returned to the frontend.
@@ -103,7 +103,7 @@ func RegisterNamespaceWorkloadsDomain(
 	reg *domain.Registry,
 	factory informers.SharedInformerFactory,
 	provider metrics.Provider,
-	logger logstream.Logger,
+	logger containerlogsstream.Logger,
 	perms NamespaceWorkloadsPermissions,
 ) error {
 	if factory == nil {

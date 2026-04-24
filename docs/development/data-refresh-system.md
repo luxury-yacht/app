@@ -44,20 +44,20 @@ Streams are long-lived connections that push updates to the frontend instead of 
 
 **WebSocket** — used by the resource stream for most views (workloads, config, network, RBAC, storage, nodes, etc.). The frontend sends REQUEST/CANCEL messages; the backend responds with RESET, ADDED, MODIFIED, DELETED, COMPLETE, ERROR, and HEARTBEAT messages. A single shared WebSocket per cluster multiplexes all domain subscriptions. The resource stream hooks directly into shared informer event handlers, so updates arrive within milliseconds of a Kubernetes change.
 
-**SSE (Server-Sent Events)** — used by the catalog stream (browse view), event stream, and log stream. These are unidirectional server-push connections with simpler reconnection semantics.
+**SSE (Server-Sent Events)** — used by the catalog stream (browse view), event stream, and container logs stream. These are unidirectional server-push connections with simpler reconnection semantics.
 
 Stream endpoints:
 
 - Catalog stream (SSE): backend/refresh/snapshot/catalog_stream.go → /api/v2/stream/catalog
 - Event stream (SSE): backend/refresh/eventstream/handler.go → /api/v2/stream/events
-- Log stream (SSE): backend/refresh/logstream/handler.go → /api/v2/stream/logs
+- Container logs stream (SSE): backend/refresh/containerlogsstream/handler.go → /api/v2/stream/container-logs
 - Resource stream (WebSocket): backend/refresh/resourcestream/handler.go → /api/v2/stream/resources
 
 The frontend orchestrator starts/stops stream managers for live updates (frontend/src/core/refresh/orchestrator.ts):
 
 - Catalog: frontend/src/core/refresh/streaming/catalogStreamManager.ts (EventSource)
 - Events: frontend/src/core/refresh/streaming/eventStreamManager.ts (EventSource)
-- Logs: frontend/src/core/refresh/streaming/logStreamManager.ts (EventSource)
+- Container logs: frontend/src/core/refresh/streaming/containerLogsStreamManager.ts (EventSource)
 - Resources: frontend/src/core/refresh/streaming/resourceStreamManager.ts (WebSocket)
 
 ### How it ties together
@@ -232,7 +232,7 @@ Streaming domains use long-lived connections instead of polling. There are three
 
 **Event stream (SSE)** — pushes Kubernetes Events. `cluster-events` and `namespace-events` use `eventStreamManager`. Each scope maintains an in-memory sorted list of up to 500 events with merge-by-UID deduplication. Supports resume via sequence tokens on reconnect.
 
-**Log stream (SSE)** — pushes container logs for the object panel. Uses `logStreamManager`. Has a polling fallback (`objectLogFallbackManager`) used by the log viewer when streaming is unavailable or disabled.
+**Container logs stream (SSE)** — pushes container logs for the Object Panel Logs Tab. Uses `containerLogsStreamManager`. Has a polling fallback (`containerLogsFallbackManager`) used by the log viewer when streaming is unavailable or disabled.
 
 **Catalog stream (SSE)** — pushes browse view catalog snapshots. Uses `catalogStreamManager`. The catalog SSE delivers full snapshots (not deltas). `snapshotMode: full|partial` reflects backend batching of a snapshot payload, not a user-visible pagination model.
 
@@ -349,7 +349,7 @@ The backend builds one refresh subsystem per active cluster (`backend/app_refres
 - Snapshot builders (`backend/refresh/snapshot/*.go`).
 - A snapshot service with short-lived caching and singleflight dedup (`backend/refresh/snapshot/service.go`).
 - A manual refresh queue (`backend/refresh/types.go`).
-- Streaming managers: resource stream (`backend/refresh/resourcestream`), event stream (`backend/refresh/eventstream`), log stream (`backend/refresh/logstream`).
+- Streaming managers: resource stream (`backend/refresh/resourcestream`), event stream (`backend/refresh/eventstream`), container logs stream (`backend/refresh/containerlogsstream`).
 - A telemetry recorder (`backend/refresh/telemetry`).
 
 ### Row builder single source of truth
@@ -489,7 +489,7 @@ See `frontend/src/core/refresh/client.ts` and `orchestrator.ts`.
 
 1. The object panel updates the refresh context with object metadata.
 2. `object-details` and `object-events` refreshers are triggered.
-3. Logs use `object-logs` streaming (with fallback polling if needed).
+3. Logs use `container-logs` streaming (with fallback polling if needed).
 
 ### Catalog browse
 

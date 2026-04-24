@@ -41,7 +41,7 @@ const SYSTEM_REFRESHERS = {
   objectYaml: 'object-yaml',
   objectHelmManifest: 'object-helm-manifest',
   objectHelmValues: 'object-helm-values',
-  objectLogs: 'object-logs',
+  containerLogs: 'container-logs',
   objectMaintenance: 'object-maintenance',
 } as const;
 

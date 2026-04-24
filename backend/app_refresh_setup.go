@@ -10,7 +10,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
-	"github.com/luxury-yacht/app/backend/refresh/logstream"
+	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
@@ -151,19 +151,19 @@ func (a *App) buildRefreshSubsystemForSelection(
 	clusterMeta ClusterMeta,
 ) (*system.Subsystem, error) {
 	cfg := system.Config{
-		KubernetesClient:      clients.client,
-		MetricsClient:         clients.metricsClient,
-		RestConfig:            clients.restConfig,
-		ResyncInterval:        config.RefreshResyncInterval,
-		MetricsInterval:       a.resolveMetricsInterval(),
-		APIExtensionsClient:   clients.apiextensionsClient,
-		DynamicClient:         clients.dynamicClient,
-		HelmFactory:           a.helmActionFactoryForSelection(selection),
-		ObjectDetailsProvider: a.objectDetailProvider(),
-		Logger:                a.logger,
-		LogTargetLimiter:      a.sharedLogTargetLimiter(),
-		ClusterID:             clusterMeta.ID,
-		ClusterName:           clusterMeta.Name,
+		KubernetesClient:           clients.client,
+		MetricsClient:              clients.metricsClient,
+		RestConfig:                 clients.restConfig,
+		ResyncInterval:             config.RefreshResyncInterval,
+		MetricsInterval:            a.resolveMetricsInterval(),
+		APIExtensionsClient:        clients.apiextensionsClient,
+		DynamicClient:              clients.dynamicClient,
+		HelmFactory:                a.helmActionFactoryForSelection(selection),
+		ObjectDetailsProvider:      a.objectDetailProvider(),
+		Logger:                     a.logger,
+		ContainerLogsTargetLimiter: a.sharedContainerLogsTargetLimiter(),
+		ClusterID:                  clusterMeta.ID,
+		ClusterName:                clusterMeta.Name,
 	}
 
 	cfg.ObjectCatalogService = func() *objectcatalog.Service {
@@ -222,23 +222,23 @@ func (a *App) storeRefreshPermissionCancel(clusterID string, cancel context.Canc
 	a.refreshPermissionCancels[clusterID] = cancel
 }
 
-func (a *App) sharedLogTargetLimiter() *logstream.GlobalTargetLimiter {
+func (a *App) sharedContainerLogsTargetLimiter() *containerlogsstream.GlobalTargetLimiter {
 	if a == nil {
 		return nil
 	}
-	if a.logTargetLimiter == nil {
-		limit := defaultLogTargetGlobalLimit
+	if a.containerLogsTargetLimiter == nil {
+		limit := defaultObjPanelLogsTargetGlobalLimit
 		a.settingsMu.Lock()
 		if a.appSettings == nil {
 			_ = a.loadAppSettings()
 		}
-		if a.appSettings != nil && a.appSettings.LogTargetGlobalLimit > 0 {
-			limit = clampLogTargetGlobalLimit(a.appSettings.LogTargetGlobalLimit)
+		if a.appSettings != nil && a.appSettings.ObjPanelLogsTargetGlobalLimit > 0 {
+			limit = clampObjPanelLogsTargetGlobalLimit(a.appSettings.ObjPanelLogsTargetGlobalLimit)
 		}
 		a.settingsMu.Unlock()
-		a.logTargetLimiter = logstream.NewGlobalTargetLimiter(limit)
+		a.containerLogsTargetLimiter = containerlogsstream.NewGlobalTargetLimiter(limit)
 	}
-	return a.logTargetLimiter
+	return a.containerLogsTargetLimiter
 }
 
 // buildRefreshMux wires the aggregate refresh routes on top of the core API endpoints.
@@ -284,7 +284,7 @@ func (a *App) buildRefreshMux(
 		sharedTelemetry,
 		a.logger,
 	)
-	aggregateLogs := newAggregateLogStreamHandler(subsystems)
+	aggregateContainerLogs := newAggregateContainerLogsStreamHandler(subsystems)
 	aggregateCatalog := newAggregateCatalogStreamHandler(subsystems)
 	aggregateResources, err := newAggregateResourceStreamHandler(subsystems, a.logger, sharedTelemetry)
 	if err != nil {
@@ -299,31 +299,31 @@ func (a *App) buildRefreshMux(
 		HealthHub:       nil, // Health is per-cluster, not global.
 	})
 	mux.Handle("/api/v2/stream/events", aggregateEvents)
-	mux.Handle("/api/v2/stream/logs", aggregateLogs)
+	mux.Handle("/api/v2/stream/container-logs", aggregateContainerLogs)
 	mux.Handle("/api/v2/stream/catalog", aggregateCatalog)
 	mux.Handle("/api/v2/stream/resources", aggregateResources)
 	// NOTE: Do NOT mount "/" to any single subsystem's handler.
 	// Requests to "/" should return 404, not route to one cluster.
 
 	aggregates := &refreshAggregateHandlers{
-		snapshot:  aggregateService,
-		manual:    aggregateQueue,
-		events:    aggregateEvents,
-		logs:      aggregateLogs,
-		catalog:   aggregateCatalog,
-		resources: aggregateResources,
+		snapshot:      aggregateService,
+		manual:        aggregateQueue,
+		events:        aggregateEvents,
+		containerLogs: aggregateContainerLogs,
+		catalog:       aggregateCatalog,
+		resources:     aggregateResources,
 	}
 	return mux, aggregates, nil
 }
 
 // refreshAggregateHandlers stores aggregate endpoints that need live cluster updates.
 type refreshAggregateHandlers struct {
-	snapshot  *aggregateSnapshotService
-	manual    *aggregateManualQueue
-	events    *aggregateEventStreamHandler
-	logs      *aggregateLogStreamHandler
-	catalog   *aggregateCatalogStreamHandler
-	resources *aggregateResourceStreamHandler
+	snapshot      *aggregateSnapshotService
+	manual        *aggregateManualQueue
+	events        *aggregateEventStreamHandler
+	containerLogs *aggregateContainerLogsStreamHandler
+	catalog       *aggregateCatalogStreamHandler
+	resources     *aggregateResourceStreamHandler
 }
 
 // Update refreshes aggregate endpoint wiring without rebuilding the HTTP server.
@@ -350,8 +350,8 @@ func (h *refreshAggregateHandlers) Update(clusterOrder []string, subsystems map[
 			clusterOrder,
 		)
 	}
-	if h.logs != nil {
-		h.logs.Update(subsystems)
+	if h.containerLogs != nil {
+		h.containerLogs.Update(subsystems)
 	}
 	if h.catalog != nil {
 		h.catalog.Update(subsystems)

@@ -9,9 +9,9 @@ import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const getLogsMock = vi.hoisted(() => vi.fn());
-const clearLogsMock = vi.hoisted(() => vi.fn());
-const setLogsPanelVisibleMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const getAppLogsMock = vi.hoisted(() => vi.fn());
+const clearAppLogsMock = vi.hoisted(() => vi.fn());
+const setAppLogsPanelVisibleMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const useShortcutMock = vi.hoisted(() => vi.fn());
 const useKeyboardSurfaceMock = vi.hoisted(() => vi.fn());
 const errorHandlerMock = vi.hoisted(() => ({ handle: vi.fn() }));
@@ -48,9 +48,9 @@ vi.mock('@ui/shortcuts', () => ({
 }));
 
 vi.mock('@wailsjs/go/backend/App', () => ({
-  GetLogs: (...args: unknown[]) => getLogsMock(...args),
-  ClearLogs: (...args: unknown[]) => clearLogsMock(...args),
-  SetLogsPanelVisible: (...args: unknown[]) => setLogsPanelVisibleMock(...args),
+  GetAppLogs: (...args: unknown[]) => getAppLogsMock(...args),
+  ClearAppLogs: (...args: unknown[]) => clearAppLogsMock(...args),
+  SetAppLogsPanelVisible: (...args: unknown[]) => setAppLogsPanelVisibleMock(...args),
 }));
 
 vi.mock('@utils/errorHandler', () => ({
@@ -107,10 +107,10 @@ const latestDropdown = (renderValue: string) =>
 beforeEach(() => {
   useShortcutMock.mockClear();
   useKeyboardSurfaceMock.mockClear();
-  getLogsMock.mockReset();
-  clearLogsMock.mockReset();
-  setLogsPanelVisibleMock.mockReset();
-  setLogsPanelVisibleMock.mockResolvedValue(undefined);
+  getAppLogsMock.mockReset();
+  clearAppLogsMock.mockReset();
+  setAppLogsPanelVisibleMock.mockReset();
+  setAppLogsPanelVisibleMock.mockResolvedValue(undefined);
   errorHandlerMock.handle.mockReset();
   dropdownInstances.length = 0;
   (window as any).runtime = {
@@ -133,20 +133,20 @@ afterAll(() => {
 describe('AppLogsPanel', () => {
   it('syncs backend visibility when open state changes', async () => {
     vi.useFakeTimers();
-    getLogsMock.mockResolvedValue([]);
+    getAppLogsMock.mockResolvedValue([]);
 
     const { rerender, cleanup } = await renderPanel(true);
-    expect(setLogsPanelVisibleMock).toHaveBeenLastCalledWith(true);
+    expect(setAppLogsPanelVisibleMock).toHaveBeenLastCalledWith(true);
 
     await rerender(false);
-    expect(setLogsPanelVisibleMock).toHaveBeenLastCalledWith(false);
+    expect(setAppLogsPanelVisibleMock).toHaveBeenLastCalledWith(false);
 
     cleanup();
   });
 
   it('loads logs when opened and renders entries', async () => {
     vi.useFakeTimers();
-    getLogsMock.mockResolvedValue([
+    getAppLogsMock.mockResolvedValue([
       { timestamp: '2024-01-01T00:00:00.000Z', level: 'info', message: 'Ready', source: 'core' },
       { timestamp: '2024-01-01T00:00:01.000Z', level: 'error', message: 'Boom', source: 'worker' },
     ]);
@@ -157,7 +157,7 @@ describe('AppLogsPanel', () => {
 
     const entries = container.querySelectorAll('.log-entry');
     expect(entries.length).toBe(2);
-    expect(getLogsMock).toHaveBeenCalledTimes(1);
+    expect(getAppLogsMock).toHaveBeenCalledTimes(1);
 
     cleanup();
   });
@@ -165,7 +165,7 @@ describe('AppLogsPanel', () => {
   it('handles load errors gracefully', async () => {
     vi.useFakeTimers();
     const error = new Error('load failed');
-    getLogsMock.mockRejectedValue(error);
+    getAppLogsMock.mockRejectedValue(error);
 
     const { container, cleanup } = await renderPanel();
 
@@ -179,7 +179,7 @@ describe('AppLogsPanel', () => {
 
   it('toggles dropdown filters and updates counts', async () => {
     vi.useFakeTimers();
-    getLogsMock.mockResolvedValue([
+    getAppLogsMock.mockResolvedValue([
       {
         timestamp: '2024-01-01T00:00:00.000Z',
         level: 'info',
@@ -234,7 +234,7 @@ describe('AppLogsPanel', () => {
 
   it('filters and renders cluster metadata', async () => {
     vi.useFakeTimers();
-    getLogsMock.mockResolvedValue([
+    getAppLogsMock.mockResolvedValue([
       {
         timestamp: '2024-01-01T00:00:00.000Z',
         level: 'info',
@@ -279,7 +279,7 @@ describe('AppLogsPanel', () => {
 
   it('uses shared dropdown bulk actions instead of custom select-all options', async () => {
     vi.useFakeTimers();
-    getLogsMock.mockResolvedValue([
+    getAppLogsMock.mockResolvedValue([
       {
         timestamp: '2024-01-01T00:00:00.000Z',
         level: 'info',
@@ -330,7 +330,7 @@ describe('AppLogsPanel', () => {
 
   it('applies text filters and shows empty state when no matches', async () => {
     vi.useFakeTimers();
-    getLogsMock.mockResolvedValue([
+    getAppLogsMock.mockResolvedValue([
       {
         timestamp: '2024-01-01T00:00:00.000Z',
         level: 'info',
@@ -366,7 +366,7 @@ describe('AppLogsPanel', () => {
 
   it('routes reverse tab from the log body back to the filter controls', async () => {
     vi.useFakeTimers();
-    getLogsMock.mockResolvedValue([
+    getAppLogsMock.mockResolvedValue([
       { timestamp: '2024-01-01T00:00:00.000Z', level: 'info', message: 'Ready', source: 'core' },
     ]);
 
@@ -410,10 +410,10 @@ describe('AppLogsPanel', () => {
 
   it('clears logs on demand', async () => {
     vi.useFakeTimers();
-    getLogsMock.mockResolvedValue([
+    getAppLogsMock.mockResolvedValue([
       { timestamp: '2024-01-01T00:00:00.000Z', level: 'info', message: 'Ready', source: 'core' },
     ]);
-    clearLogsMock.mockResolvedValue(undefined);
+    clearAppLogsMock.mockResolvedValue(undefined);
 
     const { container, cleanup } = await renderPanel();
 
@@ -427,7 +427,7 @@ describe('AppLogsPanel', () => {
       await Promise.resolve();
     });
 
-    expect(clearLogsMock).toHaveBeenCalled();
+    expect(clearAppLogsMock).toHaveBeenCalled();
     expect(container.querySelector('.app-logs-empty')?.textContent).toContain('No logs available');
 
     cleanup();
@@ -437,7 +437,7 @@ describe('AppLogsPanel', () => {
     vi.useFakeTimers();
     const clipboardError = new Error('clipboard blocked');
     (navigator as any).clipboard.writeText.mockRejectedValueOnce(clipboardError);
-    getLogsMock.mockResolvedValue([
+    getAppLogsMock.mockResolvedValue([
       { timestamp: '2024-01-01T00:00:00.000Z', level: 'info', message: 'Ready', source: 'core' },
     ]);
 

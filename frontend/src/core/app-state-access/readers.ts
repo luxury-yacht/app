@@ -4,7 +4,7 @@ import {
   GetAppSettings,
   GetKubeconfigSearchPaths,
   GetKubeconfigs,
-  GetLogs,
+  GetAppLogs,
   GetSelectedKubeconfigs,
   GetShellSessionBacklog,
   GetThemeInfo,
@@ -24,7 +24,7 @@ export const readZoomLevel = () => GetZoomLevel();
 export const readThemeInfo = () => GetThemeInfo();
 export const readKubeconfigSearchPaths = () => GetKubeconfigSearchPaths();
 export const readAppInfo = () => GetAppInfo();
-export const readAppLogs = () => GetLogs();
+export const readAppLogs = () => GetAppLogs();
 export const readPortForwardSessions = () => ListPortForwards();
 export const readShellSessions = () => ListShellSessions();
 export const readShellSessionBacklog = (sessionId: string) => GetShellSessionBacklog(sessionId);

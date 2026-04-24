@@ -23,12 +23,12 @@ export interface ObjectPanelKindResult {
   // string MUST come from one place so they cannot disagree (an old
   // bug had each computing its own and the two drifting apart).
   eventsScope: string | null;
-  // Scope string for the object-logs refresh domain. Used by both
+  // Scope string for the container-logs refresh domain. Used by both
   // ObjectPanelContent (full-cleanup lifecycle on panel close) and
   // LogViewer (the actual streaming start/stop). Same drift hazard as
   // eventsScope: keep computation in one place. The log producer uses
   // the lowercased kind by historical convention.
-  logScope: string | null;
+  containerLogsScope: string | null;
   helmScope: string | null;
   isHelmRelease: boolean;
   isEvent: boolean;
@@ -83,11 +83,11 @@ export const getObjectPanelKind = (
           })
         );
 
-  // logScope follows the same object-scope encoding as detailScope so
+  // containerLogsScope follows the same object-scope encoding as detailScope so
   // the live stream path and the fallback/manual fetch path can share a
   // single canonical object identity. The kind stays lowercased to
-  // match the object-logs backend producer's workload dispatch.
-  const logScope =
+  // match the container-logs backend producer's workload dispatch.
+  const containerLogsScope =
     !objectData?.name || !objectKind
       ? null
       : buildClusterScope(
@@ -114,7 +114,7 @@ export const getObjectPanelKind = (
     scopeNamespace,
     detailScope,
     eventsScope,
-    logScope,
+    containerLogsScope,
     helmScope,
     isHelmRelease,
     isEvent,

@@ -14,7 +14,7 @@ import {
   type NamespaceRefresherName,
 } from './refresherTypes';
 import { refreshOrchestrator } from './orchestrator';
-import { logAppInfo } from '@/core/logging/appLogClient';
+import { logAppLogsInfo } from '@/core/logging/appLogsClient';
 
 // Default interval between background refresh ticks (15 seconds).
 const BACKGROUND_REFRESH_INTERVAL_MS = 15_000;
@@ -112,7 +112,7 @@ export class BackgroundClusterRefresher {
     this.intervalTimer = setInterval(() => {
       void this.tick();
     }, BACKGROUND_REFRESH_INTERVAL_MS);
-    logAppInfo('[background-refresh] started', 'BackgroundClusterRefresher');
+    logAppLogsInfo('[background-refresh] started', 'BackgroundClusterRefresher');
   }
 
   /** Stop the periodic background refresh loop. */
@@ -120,7 +120,7 @@ export class BackgroundClusterRefresher {
     if (this.intervalTimer !== null) {
       clearInterval(this.intervalTimer);
       this.intervalTimer = null;
-      logAppInfo('[background-refresh] stopped', 'BackgroundClusterRefresher');
+      logAppLogsInfo('[background-refresh] stopped', 'BackgroundClusterRefresher');
     }
   }
 

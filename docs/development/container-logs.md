@@ -1,13 +1,13 @@
 # Container Logs
 
-This document describes the current pod log implementation in the Object Panel, including the backend retrieval paths, the frontend viewer model, and the main maintenance gotchas.
+This document describes the current Container Logs implementation in the Object Panel, including the backend retrieval paths, the frontend viewer model, and the main maintenance gotchas.
 
 ## Scope and identity
 
-Object-backed log views use the same canonical object identity as the rest of the refresh system:
+The Object Panel Logs Tab uses the same canonical object identity as the rest of the refresh system:
 
 - namespaced objects: `clusterId|namespace:group/version:kind:name`
-- cluster-scoped objects still use `__cluster__` internally for the namespace token, but pod logs only support namespaced objects
+- cluster-scoped objects still use `__cluster__` internally for the namespace token, but container logs only support namespaced objects
 
 Logs are no longer a special-case legacy path. Live streaming and manual/fallback fetch both resolve the target object from the same scope value.
 
@@ -15,8 +15,8 @@ Logs are no longer a special-case legacy path. Live streaming and manual/fallbac
 
 There are two retrieval paths:
 
-1. live stream via `/api/v2/stream/logs`
-2. manual/fallback fetch via `LogFetcher`
+1. live stream via `/api/v2/stream/container-logs`
+2. manual/fallback fetch via `FetchContainerLogs`
 
 Both paths share the same core target-resolution behavior:
 
@@ -45,7 +45,7 @@ The frontend derives everything else from that payload.
 
 ### Live streaming
 
-`/api/v2/stream/logs` is routed per cluster through the aggregate log stream handler, then served by `backend/refresh/logstream`.
+`/api/v2/stream/container-logs` is routed per cluster through the aggregate container logs stream handler, then served by `backend/refresh/containerlogsstream`.
 
 Current live-stream behavior:
 
@@ -57,7 +57,7 @@ Current live-stream behavior:
 
 ### Manual fetch and fallback
 
-The frontend falls back to `LogFetcher` when the stream is unavailable or when previous logs are requested.
+The frontend falls back to `FetchContainerLogs` when the stream is unavailable or when previous logs are requested.
 
 Current fetch behavior:
 
@@ -142,7 +142,7 @@ Single-pod view groups:
 
 Notes:
 
-- the `Pods` section is omitted for single-pod logs
+- the `Pods` section is omitted for single-container logs
 - the `Init Containers` header is omitted when there are no init containers
 - `Select all` / `Select none` come from the shared multi-select dropdown component
 - selected pod/container filters are sent to both live streaming and manual fetch
@@ -270,24 +270,24 @@ The log toolbar currently contains:
 
 ### 1. Do not call both `setScopedDomainEnabled` and `startStreamingDomain`
 
-The log viewer uses the refresh orchestrator to manage log streaming. `setScopedDomainEnabled(domain, scope, true)` already schedules streaming. Calling `startStreamingDomain` separately introduces a race with orchestrator deduplication and is especially brittle under React Strict Mode.
+The log viewer uses the refresh orchestrator to manage container logs streaming. `setScopedDomainEnabled(domain, scope, true)` already schedules streaming. Calling `startStreamingDomain` separately introduces a race with orchestrator deduplication and is especially brittle under React Strict Mode.
 
 Correct:
 
 ```typescript
-refreshOrchestrator.setScopedDomainEnabled(LOG_DOMAIN, logScope, true);
+refreshOrchestrator.setScopedDomainEnabled(CONTAINER_LOGS_DOMAIN, containerLogsScope, true);
 ```
 
 Incorrect:
 
 ```typescript
-refreshOrchestrator.setScopedDomainEnabled(LOG_DOMAIN, logScope, true);
-void refreshOrchestrator.startStreamingDomain(LOG_DOMAIN, logScope);
+refreshOrchestrator.setScopedDomainEnabled(CONTAINER_LOGS_DOMAIN, containerLogsScope, true);
+void refreshOrchestrator.startStreamingDomain(CONTAINER_LOGS_DOMAIN, containerLogsScope);
 ```
 
 ### 2. Reset scope-sensitive state during render, not in an effect
 
-When `logScope` changes, `LogViewer` resets scope-sensitive state during render. Doing that reset in an effect causes an extra render that can interrupt stream startup.
+When `containerLogsScope` changes, `LogViewer` resets scope-sensitive state during render. Doing that reset in an effect causes an extra render that can interrupt stream startup.
 
 ### 3. Initial stream snapshots must replace preserved client buffers
 
@@ -295,7 +295,7 @@ The frontend intentionally preserves per-tab log state across transient remounts
 
 ### 4. Fallback/manual fetch and live stream must consume the same scope
 
-`LogFetcher` and `/api/v2/stream/logs` both derive from the same `logScope` value built from full object identity. Do not reintroduce a second legacy identity path for manual fetches.
+`FetchContainerLogs` and `/api/v2/stream/container-logs` both derive from the same `containerLogsScope` value built from full object identity. Do not reintroduce a second legacy identity path for manual fetches.
 
 ### 5. The current UI is intentionally simpler than the backend contract
 

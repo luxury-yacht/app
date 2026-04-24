@@ -55,7 +55,7 @@ describe('refresherConfig cadence defaults', () => {
       timeout: 10,
     });
 
-    expect(systemRefresherConfig(SYSTEM_REFRESHERS.objectLogs)).toEqual({
+    expect(systemRefresherConfig(SYSTEM_REFRESHERS.containerLogs)).toEqual({
       interval: 5000,
       cooldown: 1000,
       timeout: 10,

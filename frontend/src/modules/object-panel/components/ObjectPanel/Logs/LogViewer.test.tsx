@@ -18,17 +18,17 @@ import {
   setScopedDomainState,
 } from '@/core/refresh/store';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
-import type { ObjectLogEntry } from '@/core/refresh/types';
-import { GetLogScopeContainers, LogFetcher } from '@wailsjs/go/backend/App';
+import type { ContainerLogsEntry } from '@/core/refresh/types';
+import { GetContainerLogsScopeContainers, FetchContainerLogs } from '@wailsjs/go/backend/App';
 import {
   getLogViewerPrefs,
   resetLogViewerPrefsCacheForTesting,
   setLogViewerPrefs,
 } from './logViewerPrefsCache';
 import {
-  getLogStreamScopeParams,
-  resetLogStreamScopeParamsCacheForTesting,
-} from './logStreamScopeParamsCache';
+  getContainerLogsStreamScopeParams,
+  resetContainerLogsStreamScopeParamsCacheForTesting,
+} from './containerLogsStreamScopeParamsCache';
 
 beforeAll(() => {
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
@@ -115,8 +115,8 @@ const autoRefreshLoadingState = vi.hoisted(() => ({
 }));
 
 vi.mock('@wailsjs/go/backend/App', () => ({
-  LogFetcher: vi.fn(),
-  GetLogScopeContainers: vi.fn(),
+  FetchContainerLogs: vi.fn(),
+  GetContainerLogsScopeContainers: vi.fn(),
 }));
 
 vi.mock('@/core/refresh/orchestrator', () => ({
@@ -127,8 +127,8 @@ vi.mock('@/core/refresh/hooks/useAutoRefreshLoadingState', () => ({
   useAutoRefreshLoadingState: () => autoRefreshLoadingState,
 }));
 
-vi.mock('@/core/refresh/fallbacks/objectLogFallbackManager', () => ({
-  objectLogFallbackManager: mockModules.fallbackManager,
+vi.mock('@/core/refresh/fallbacks/containerLogsFallbackManager', () => ({
+  containerLogsFallbackManager: mockModules.fallbackManager,
 }));
 
 const shortcutMocks = vi.hoisted(() => ({
@@ -242,12 +242,12 @@ vi.mock('@shared/components/Tooltip', () => ({
 }));
 
 const testClusterId = 'alpha:ctx';
-const buildLogScope = (scope: string) => buildClusterScope(testClusterId, scope);
-const defaultScope = buildLogScope('team-a:deployment:api');
+const buildContainerLogsScope = (scope: string) => buildClusterScope(testClusterId, scope);
+const defaultScope = buildContainerLogsScope('team-a:deployment:api');
 let activeScope = defaultScope;
 
 const seedLogSnapshot = (
-  entries: ObjectLogEntry[],
+  entries: ContainerLogsEntry[],
   scope: string = defaultScope,
   overrides: Partial<{
     status: 'ready' | 'loading' | 'updating' | 'error' | 'initialising' | 'idle';
@@ -258,7 +258,7 @@ const seedLogSnapshot = (
 ) => {
   activeScope = scope;
   const generatedAt = overrides.generatedAt ?? Date.now();
-  setScopedDomainState('object-logs', scope, () => ({
+  setScopedDomainState('container-logs', scope, () => ({
     status: overrides.status ?? 'ready',
     data: {
       entries,
@@ -292,12 +292,12 @@ describe('LogViewer active pod synchronisation', () => {
     contextMocks.getAvailableShortcuts.mockClear();
     contextMocks.isShortcutAvailable.mockClear();
     contextMocks.setEnabled.mockClear();
-    (LogFetcher as unknown as ViMock).mockReset?.();
-    (GetLogScopeContainers as unknown as ViMock).mockReset?.();
-    (GetLogScopeContainers as unknown as ViMock).mockResolvedValue(['app']);
+    (FetchContainerLogs as unknown as ViMock).mockReset?.();
+    (GetContainerLogsScopeContainers as unknown as ViMock).mockReset?.();
+    (GetContainerLogsScopeContainers as unknown as ViMock).mockResolvedValue(['app']);
     resetAppPreferencesCacheForTesting();
     resetLogViewerPrefsCacheForTesting();
-    resetLogStreamScopeParamsCacheForTesting();
+    resetContainerLogsStreamScopeParamsCacheForTesting();
     autoRefreshLoadingState.isPaused = false;
     autoRefreshLoadingState.isManualRefreshActive = false;
     autoRefreshLoadingState.suppressPassiveLoading = false;
@@ -333,8 +333,8 @@ describe('LogViewer active pod synchronisation', () => {
       root?.unmount();
     });
     container.remove();
-    resetScopedDomainState('object-logs', activeScope);
-    resetLogStreamScopeParamsCacheForTesting();
+    resetScopedDomainState('container-logs', activeScope);
+    resetContainerLogsStreamScopeParamsCacheForTesting();
   });
 
   const renderViewer = async (
@@ -347,11 +347,11 @@ describe('LogViewer active pod synchronisation', () => {
       isActive = true,
       activePodNames = null,
       clusterId = testClusterId,
-      // logScope is normally produced by getObjectPanelKind in
+      // containerLogsScope is normally produced by getObjectPanelKind in
       // ObjectPanel and threaded down. The default here mirrors what
       // seedLogSnapshot wrote to so existing scope-keyed assertions
       // keep working without per-test plumbing.
-      logScope = activeScope,
+      containerLogsScope = activeScope,
       panelId = 'obj:test:deployment:team-a:api',
     } = overrides;
 
@@ -361,7 +361,7 @@ describe('LogViewer active pod synchronisation', () => {
           namespace={namespace}
           resourceName={resourceName}
           resourceKind={resourceKind}
-          logScope={logScope}
+          containerLogsScope={containerLogsScope}
           isActive={isActive}
           activePodNames={activePodNames}
           clusterId={clusterId}
@@ -390,7 +390,7 @@ describe('LogViewer active pod synchronisation', () => {
     await renderViewer({ activePodNames: ['web-1', 'web-2'] });
     await renderViewer({ activePodNames: ['web-2'] });
 
-    const snapshot = getScopedDomainState('object-logs', activeScope);
+    const snapshot = getScopedDomainState('container-logs', activeScope);
     expect(snapshot.data?.entries).toEqual([
       expect.objectContaining({ pod: 'web-2', line: 'second' }),
     ]);
@@ -400,7 +400,7 @@ describe('LogViewer active pod synchronisation', () => {
     await renderViewer({ activePodNames: ['web-1', 'web-2'] });
     await renderViewer({ activePodNames: null });
 
-    const snapshot = getScopedDomainState('object-logs', activeScope);
+    const snapshot = getScopedDomainState('container-logs', activeScope);
     expect(snapshot.data?.entries).toHaveLength(2);
   });
 
@@ -408,7 +408,7 @@ describe('LogViewer active pod synchronisation', () => {
     await renderViewer({ activePodNames: ['web-1', 'web-2'] });
     await renderViewer({ activePodNames: [] });
 
-    const snapshot = getScopedDomainState('object-logs', activeScope);
+    const snapshot = getScopedDomainState('container-logs', activeScope);
     expect(snapshot.data?.entries).toEqual([]);
   });
 
@@ -433,8 +433,8 @@ describe('LogViewer active pod synchronisation', () => {
     vi.clearAllMocks();
     shortcutMocks.useShortcut.mockClear();
     act(() => {
-      resetScopedDomainState('object-logs', activeScope);
-      seedLogSnapshot([], buildLogScope('team-a:pod:api'));
+      resetScopedDomainState('container-logs', activeScope);
+      seedLogSnapshot([], buildContainerLogsScope('team-a:pod:api'));
     });
     await renderViewer({
       resourceKind: 'pod',
@@ -458,7 +458,7 @@ describe('LogViewer active pod synchronisation', () => {
           isInit: false,
         },
       ],
-      buildLogScope('team-a:pod:api')
+      buildContainerLogsScope('team-a:pod:api')
     );
 
     await renderViewer({
@@ -542,7 +542,7 @@ describe('LogViewer active pod synchronisation', () => {
           isInit: false,
         },
       ],
-      buildLogScope('team-a:pod:api')
+      buildContainerLogsScope('team-a:pod:api')
     );
 
     await renderViewer({
@@ -567,7 +567,7 @@ describe('LogViewer active pod synchronisation', () => {
 
   it('disables handlers when the tab is inactive', async () => {
     act(() => {
-      resetScopedDomainState('object-logs', activeScope);
+      resetScopedDomainState('container-logs', activeScope);
       seedLogSnapshot(
         [
           {
@@ -602,7 +602,7 @@ describe('LogViewer active pod synchronisation', () => {
 
     shortcutMocks.useShortcut.mockClear();
     act(() => {
-      resetScopedDomainState('object-logs', activeScope);
+      resetScopedDomainState('container-logs', activeScope);
       seedLogSnapshot(
         [
           {
@@ -613,7 +613,7 @@ describe('LogViewer active pod synchronisation', () => {
             isInit: false,
           },
         ],
-        buildLogScope('team-a:pod:api')
+        buildContainerLogsScope('team-a:pod:api')
       );
     });
     await renderViewer({
@@ -642,7 +642,7 @@ describe('LogViewer active pod synchronisation', () => {
       defaultScope,
       { status: 'error', error: 'stream disconnected' }
     );
-    (LogFetcher as unknown as ViMock).mockResolvedValue({ entries: [] });
+    (FetchContainerLogs as unknown as ViMock).mockResolvedValue({ entries: [] });
 
     await renderViewer({ activePodNames: ['web-1'] });
     await flushAsync();
@@ -662,16 +662,16 @@ describe('LogViewer active pod synchronisation', () => {
       | undefined;
     expect(typeof fallbackFetcher).toBe('function');
 
-    (LogFetcher as unknown as ViMock).mockClear();
+    (FetchContainerLogs as unknown as ViMock).mockClear();
     mockModules.orchestrator.restartStreamingDomain.mockClear();
 
     await act(async () => {
       await fallbackFetcher?.(true);
     });
-    await waitForMockCalls(LogFetcher as unknown as ViMock, 1);
+    await waitForMockCalls(FetchContainerLogs as unknown as ViMock, 1);
 
-    expect(LogFetcher).toHaveBeenCalledTimes(1);
-    expect((LogFetcher as unknown as ViMock).mock.calls[0][1]).toMatchObject({
+    expect(FetchContainerLogs).toHaveBeenCalledTimes(1);
+    expect((FetchContainerLogs as unknown as ViMock).mock.calls[0][1]).toMatchObject({
       scope: defaultScope,
       workloadKind: 'deployment',
     });
@@ -692,7 +692,7 @@ describe('LogViewer active pod synchronisation', () => {
       defaultScope,
       { status: 'error', error: 'stream disconnected' }
     );
-    (LogFetcher as unknown as ViMock).mockResolvedValue({
+    (FetchContainerLogs as unknown as ViMock).mockResolvedValue({
       entries: [
         {
           pod: 'web-1',
@@ -727,7 +727,7 @@ describe('LogViewer active pod synchronisation', () => {
 
   it('surfaces target-cap warnings from the scoped log snapshot', async () => {
     const generatedAt = Date.now();
-    setScopedDomainState('object-logs', defaultScope, () => ({
+    setScopedDomainState('container-logs', defaultScope, () => ({
       status: 'ready',
       data: {
         entries: [
@@ -770,7 +770,7 @@ describe('LogViewer active pod synchronisation', () => {
 
   it('merges per-tab and global target-cap warnings into a single message', async () => {
     const generatedAt = Date.now();
-    setScopedDomainState('object-logs', defaultScope, () => ({
+    setScopedDomainState('container-logs', defaultScope, () => ({
       status: 'ready',
       data: {
         entries: [
@@ -829,11 +829,11 @@ describe('LogViewer active pod synchronisation', () => {
       displayMode: 'raw',
       isParsedView: false,
       expandedRows: [],
-      showPreviousLogs: false,
+      showPreviousContainerLogs: false,
     });
 
     const generatedAt = Date.now();
-    setScopedDomainState('object-logs', defaultScope, () => ({
+    setScopedDomainState('container-logs', defaultScope, () => ({
       status: 'ready',
       data: {
         entries: [],
@@ -846,7 +846,7 @@ describe('LogViewer active pod synchronisation', () => {
         itemCount: 0,
         buildDurationMs: 0,
         warnings: [
-          'Live log stream dropped one or more log entries due to client backlog. These lines were not intentionally filtered.',
+          'Live container logs stream dropped one or more log entries due to client backlog. These lines were not intentionally filtered.',
         ],
       },
       error: null,
@@ -862,13 +862,13 @@ describe('LogViewer active pod synchronisation', () => {
     await flushAsync();
 
     expect(container.textContent).not.toContain(
-      'Live log stream dropped one or more log entries due to client backlog. These lines were not intentionally filtered.'
+      'Live container logs stream dropped one or more log entries due to client backlog. These lines were not intentionally filtered.'
     );
   });
 
   it('renders a distinct unavailable-yet message when the snapshot carries that warning', async () => {
     const generatedAt = Date.now();
-    setScopedDomainState('object-logs', defaultScope, () => ({
+    setScopedDomainState('container-logs', defaultScope, () => ({
       status: 'ready',
       data: {
         entries: [],
@@ -902,7 +902,7 @@ describe('LogViewer active pod synchronisation', () => {
 
   it('renders a distinct no-logs-yet message when the snapshot is healthy but empty', async () => {
     const generatedAt = Date.now();
-    setScopedDomainState('object-logs', defaultScope, () => ({
+    setScopedDomainState('container-logs', defaultScope, () => ({
       status: 'ready',
       data: {
         entries: [],
@@ -968,7 +968,7 @@ describe('LogViewer active pod synchronisation', () => {
       displayMode: 'raw',
       isParsedView: false,
       expandedRows: [],
-      showPreviousLogs: false,
+      showPreviousContainerLogs: false,
     });
 
     await renderViewer({ activePodNames: ['web-1', 'web-2'], panelId });
@@ -977,7 +977,9 @@ describe('LogViewer active pod synchronisation', () => {
     expect(container.querySelector('[aria-label="Active log filters"]')?.textContent).toContain(
       'Text: unmatched'
     );
-    expect(container.querySelector('.pod-logs-count')?.textContent?.trim()).toBe('0 matching logs');
+    expect(container.querySelector('.logs-viewer-count')?.textContent?.trim()).toBe(
+      '0 matching logs'
+    );
   });
 
   it('virtualizes large raw log buffers instead of rendering every row at once', async () => {
@@ -994,7 +996,7 @@ describe('LogViewer active pod synchronisation', () => {
 
     await renderViewer({ activePodNames: ['web-1'] });
 
-    const rowElements = Array.from(container.querySelectorAll('.pod-log-line'));
+    const rowElements = Array.from(container.querySelectorAll('.log-viewer-line'));
     expect(rowElements.length).toBeGreaterThan(0);
     expect(rowElements.length).toBeLessThan(200);
     expect(container.textContent).toContain('log line 1');
@@ -1002,7 +1004,7 @@ describe('LogViewer active pod synchronisation', () => {
   });
 
   it('colors API timestamps and container metadata only when showing all containers', async () => {
-    (GetLogScopeContainers as unknown as ViMock).mockResolvedValue(['app', 'sidecar']);
+    (GetContainerLogsScopeContainers as unknown as ViMock).mockResolvedValue(['app', 'sidecar']);
     seedLogSnapshot(
       [
         {
@@ -1013,14 +1015,14 @@ describe('LogViewer active pod synchronisation', () => {
           isInit: false,
         },
       ],
-      buildLogScope('team-a:pod:api-pod-0')
+      buildContainerLogsScope('team-a:pod:api-pod-0')
     );
 
     await renderViewer({ resourceKind: 'pod', resourceName: 'api-pod-0' });
-    await waitForMockCalls(GetLogScopeContainers as unknown as ViMock, 1);
+    await waitForMockCalls(GetContainerLogsScopeContainers as unknown as ViMock, 1);
 
     const allMetadataSpans = Array.from(
-      container.querySelectorAll('.pod-log-line .pod-log-metadata')
+      container.querySelectorAll('.log-viewer-line .log-viewer-metadata')
     );
     expect(allMetadataSpans[0]?.textContent?.trim()).toBe('[2024-05-01T10:00:00.123Z]');
     expect(allMetadataSpans.some((span) => span.textContent?.trim() === '[app]')).toBe(true);
@@ -1032,7 +1034,7 @@ describe('LogViewer active pod synchronisation', () => {
     await setMultiSelectValues(containerSelect!, ['container:app']);
 
     const filteredMetadataSpans = Array.from(
-      container.querySelectorAll('.pod-log-line .pod-log-metadata')
+      container.querySelectorAll('.log-viewer-line .log-viewer-metadata')
     );
     expect(filteredMetadataSpans[0]?.textContent?.trim()).toBe('[2024-05-01T10:00:00.123Z]');
     expect(filteredMetadataSpans.some((span) => span.textContent?.includes('[app]'))).toBe(false);
@@ -1188,8 +1190,8 @@ describe('LogViewer active pod synchronisation', () => {
     await renderViewer({ activePodNames: ['web-1'] });
 
     const surfaceConfig = getLatestKeyboardSurfaceConfig();
-    const line = container.querySelector('.pod-log-line');
-    const content = container.querySelector('.pod-logs-content');
+    const line = container.querySelector('.log-viewer-line');
+    const content = container.querySelector('.logs-viewer-content');
     expect(surfaceConfig?.onNativeAction).toBeTruthy();
     expect(line).toBeTruthy();
     expect(content).toBeTruthy();
@@ -1215,7 +1217,7 @@ describe('LogViewer active pod synchronisation', () => {
   });
 
   it('formats the API timestamp using the configured preference in the rendered log rows', async () => {
-    setAppPreferencesForTesting({ logApiTimestampFormat: 'HH:mm:ss.SSS' });
+    setAppPreferencesForTesting({ objPanelLogsApiTimestampFormat: 'HH:mm:ss.SSS' });
     seedLogSnapshot([
       {
         pod: 'web-1',
@@ -1232,7 +1234,7 @@ describe('LogViewer active pod synchronisation', () => {
   });
 
   it('keeps the workload pod metadata when the log line is empty', async () => {
-    setAppPreferencesForTesting({ logApiTimestampFormat: 'HH:mm:ss.SSS' });
+    setAppPreferencesForTesting({ objPanelLogsApiTimestampFormat: 'HH:mm:ss.SSS' });
     seedLogSnapshot([
       {
         pod: 'web-1',
@@ -1245,14 +1247,14 @@ describe('LogViewer active pod synchronisation', () => {
 
     await renderViewer({ activePodNames: ['web-1'] });
 
-    const lines = Array.from(container.querySelectorAll('.pod-log-line')).map((element) =>
+    const lines = Array.from(container.querySelectorAll('.log-viewer-line')).map((element) =>
       element.textContent?.replace(/\s+/g, ' ').trim()
     );
     expect(lines).toEqual(['[11:00:00.123] [web-1/app] [container emitted an empty log]']);
   });
 
   it('copies the configured API timestamp format in raw and parsed views', async () => {
-    setAppPreferencesForTesting({ logApiTimestampFormat: 'HH:mm:ss.SSS' });
+    setAppPreferencesForTesting({ objPanelLogsApiTimestampFormat: 'HH:mm:ss.SSS' });
     seedLogSnapshot([
       {
         pod: 'web-1',
@@ -1308,7 +1310,7 @@ describe('LogViewer active pod synchronisation', () => {
       await Promise.resolve();
     });
 
-    expect(document.body.textContent).toContain('Log Settings');
+    expect(document.body.textContent).toContain('Object Panel Logs Tab Settings');
     expect(document.querySelector<HTMLInputElement>('input#log-api-timestamp-format')).toBeTruthy();
   });
 
@@ -1328,8 +1330,8 @@ describe('LogViewer active pod synchronisation', () => {
     ].join('');
 
     setAppPreferencesForTesting({
-      logApiTimestampUseLocalTimeZone: true,
-      logApiTimestampFormat: 'YYYY-MM-DDTHH:mm:ss.SSS[Z]',
+      objPanelLogsApiTimestampUseLocalTimeZone: true,
+      objPanelLogsApiTimestampFormat: 'YYYY-MM-DDTHH:mm:ss.SSS[Z]',
     });
     seedLogSnapshot([
       {
@@ -1406,7 +1408,10 @@ describe('LogViewer active pod synchronisation', () => {
       await Promise.resolve();
     });
 
-    const line = container.querySelector('.pod-log-line')?.textContent?.replace(/\s+/g, ' ').trim();
+    const line = container
+      .querySelector('.log-viewer-line')
+      ?.textContent?.replace(/\s+/g, ' ')
+      .trim();
     expect(line).toBe('[web-1/app] matched log');
   });
 
@@ -1417,7 +1422,7 @@ describe('LogViewer active pod synchronisation', () => {
   });
 
   it('renders ANSI-colored segments by default and strips them when disabled', async () => {
-    (GetLogScopeContainers as unknown as ViMock).mockResolvedValue(['app']);
+    (GetContainerLogsScopeContainers as unknown as ViMock).mockResolvedValue(['app']);
     seedLogSnapshot(
       [
         {
@@ -1428,7 +1433,7 @@ describe('LogViewer active pod synchronisation', () => {
           isInit: false,
         },
       ],
-      buildLogScope('team-a:pod:api')
+      buildContainerLogsScope('team-a:pod:api')
     );
 
     await renderViewer({
@@ -1437,7 +1442,7 @@ describe('LogViewer active pod synchronisation', () => {
       activePodNames: ['api'],
       panelId: 'obj:test:pod:team-a:api',
     });
-    await waitForMockCalls(GetLogScopeContainers as unknown as ViMock, 1);
+    await waitForMockCalls(GetContainerLogsScopeContainers as unknown as ViMock, 1);
     await flushAsync();
 
     const ansiButton = container.querySelector<HTMLButtonElement>(
@@ -1447,7 +1452,7 @@ describe('LogViewer active pod synchronisation', () => {
     expect(ansiButton?.getAttribute('aria-pressed')).toBe('true');
     expect(container.textContent).toContain('INFO GuardDuty agent started');
     expect(container.textContent).not.toContain('\u001b[');
-    expect(container.querySelector('.pod-log-line span[style*="color"]')).toBeTruthy();
+    expect(container.querySelector('.log-viewer-line span[style*="color"]')).toBeTruthy();
 
     await act(async () => {
       ansiButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -1456,7 +1461,7 @@ describe('LogViewer active pod synchronisation', () => {
 
     expect(ansiButton?.getAttribute('aria-pressed')).toBe('false');
     expect(container.textContent).toContain('INFO GuardDuty agent started');
-    expect(container.querySelector('.pod-log-line span[style*="color"]')).toBeNull();
+    expect(container.querySelector('.log-viewer-line span[style*="color"]')).toBeNull();
   });
 
   it('keeps workload metadata controls available for ANSI log rows', async () => {
@@ -1489,14 +1494,14 @@ describe('LogViewer active pod synchronisation', () => {
         'button[aria-label="Show only logs from pod web-1"]'
       )
     );
-    expect(container.querySelector('.pod-log-line span[style*="color"]')).toBeTruthy();
+    expect(container.querySelector('.log-viewer-line span[style*="color"]')).toBeTruthy();
 
     await act(async () => {
       podButton.click();
       await Promise.resolve();
     });
 
-    const lines = Array.from(container.querySelectorAll('.pod-log-line')).map((el) =>
+    const lines = Array.from(container.querySelectorAll('.log-viewer-line')).map((el) =>
       el.textContent?.replace(/\s+/g, ' ').trim()
     );
     expect(lines).toEqual(['[2024-05-01T10:00:00Z] [web-1/app] matched log']);
@@ -1519,7 +1524,7 @@ describe('LogViewer active pod synchronisation', () => {
       displayMode: 'raw',
       isParsedView: false,
       expandedRows: [],
-      showPreviousLogs: false,
+      showPreviousContainerLogs: false,
     });
     seedLogSnapshot(
       [
@@ -1531,7 +1536,7 @@ describe('LogViewer active pod synchronisation', () => {
           isInit: false,
         },
       ],
-      buildLogScope('team-a:pod:api')
+      buildContainerLogsScope('team-a:pod:api')
     );
 
     await renderViewer({
@@ -1540,10 +1545,10 @@ describe('LogViewer active pod synchronisation', () => {
       activePodNames: ['api'],
       panelId,
     });
-    await waitForMockCalls(GetLogScopeContainers as unknown as ViMock, 1);
+    await waitForMockCalls(GetContainerLogsScopeContainers as unknown as ViMock, 1);
     await flushAsync();
 
-    const highlight = container.querySelector('.pod-log-line mark.pod-log-highlight');
+    const highlight = container.querySelector('.log-viewer-line mark.log-viewer-highlight');
     expect(highlight?.textContent).toBe('INFO');
     expect(highlight?.closest('span[style*="color"]')).toBeTruthy();
     expect(container.querySelector('.read-only-terminal-surface')).toBeNull();
@@ -1566,7 +1571,7 @@ describe('LogViewer active pod synchronisation', () => {
       displayMode: 'raw',
       isParsedView: false,
       expandedRows: [],
-      showPreviousLogs: false,
+      showPreviousContainerLogs: false,
     });
     seedLogSnapshot(
       [
@@ -1578,7 +1583,7 @@ describe('LogViewer active pod synchronisation', () => {
           isInit: false,
         },
       ],
-      buildLogScope('team-a:pod:api')
+      buildContainerLogsScope('team-a:pod:api')
     );
 
     await renderViewer({
@@ -1587,11 +1592,11 @@ describe('LogViewer active pod synchronisation', () => {
       activePodNames: ['api'],
       panelId,
     });
-    await waitForMockCalls(GetLogScopeContainers as unknown as ViMock, 1);
+    await waitForMockCalls(GetContainerLogsScopeContainers as unknown as ViMock, 1);
     await flushAsync();
 
-    expect(container.querySelector('.pod-logs-text.no-wrap')).toBeTruthy();
-    expect(container.querySelector('.pod-log-line span[style*="color"]')).toBeTruthy();
+    expect(container.querySelector('.logs-viewer-text.no-wrap')).toBeTruthy();
+    expect(container.querySelector('.log-viewer-line span[style*="color"]')).toBeTruthy();
     expect(container.querySelector('.read-only-terminal-surface')).toBeNull();
   });
 
@@ -1607,7 +1612,7 @@ describe('LogViewer active pod synchronisation', () => {
           isInit: false,
         },
       ],
-      buildLogScope('team-a:pod:api')
+      buildContainerLogsScope('team-a:pod:api')
     );
 
     await renderViewer({
@@ -1616,7 +1621,7 @@ describe('LogViewer active pod synchronisation', () => {
       activePodNames: ['api'],
       panelId,
     });
-    await waitForMockCalls(GetLogScopeContainers as unknown as ViMock, 1);
+    await waitForMockCalls(GetContainerLogsScopeContainers as unknown as ViMock, 1);
     await flushAsync();
 
     const copyButton = container.querySelector<HTMLButtonElement>(
@@ -1634,8 +1639,8 @@ describe('LogViewer active pod synchronisation', () => {
     );
   });
 
-  it('auto-selects the only container for single pod logs', async () => {
-    (GetLogScopeContainers as unknown as ViMock).mockResolvedValue(['app']);
+  it('auto-selects the only container for single container logs', async () => {
+    (GetContainerLogsScopeContainers as unknown as ViMock).mockResolvedValue(['app']);
     seedLogSnapshot(
       [
         {
@@ -1646,7 +1651,7 @@ describe('LogViewer active pod synchronisation', () => {
           isInit: false,
         },
       ],
-      buildLogScope('team-a:pod:api')
+      buildContainerLogsScope('team-a:pod:api')
     );
 
     await renderViewer({
@@ -1655,17 +1660,17 @@ describe('LogViewer active pod synchronisation', () => {
       activePodNames: ['api'],
     });
 
-    await waitForMockCalls(GetLogScopeContainers as unknown as ViMock, 1);
+    await waitForMockCalls(GetContainerLogsScopeContainers as unknown as ViMock, 1);
     await flushAsync();
 
-    const lines = Array.from(container.querySelectorAll('.pod-log-line')).map((el) =>
+    const lines = Array.from(container.querySelectorAll('.log-viewer-line')).map((el) =>
       el.textContent?.replace(/\s+/g, ' ').trim()
     );
     expect(lines).toEqual(['[2024-05-01T12:30:00Z] only container line']);
   });
 
-  it('shows the empty-log placeholder for single pod logs', async () => {
-    (GetLogScopeContainers as unknown as ViMock).mockResolvedValue(['app']);
+  it('shows the empty-log placeholder for single container logs', async () => {
+    (GetContainerLogsScopeContainers as unknown as ViMock).mockResolvedValue(['app']);
     seedLogSnapshot(
       [
         {
@@ -1676,7 +1681,7 @@ describe('LogViewer active pod synchronisation', () => {
           isInit: false,
         },
       ],
-      buildLogScope('team-a:pod:api')
+      buildContainerLogsScope('team-a:pod:api')
     );
 
     await renderViewer({
@@ -1685,17 +1690,20 @@ describe('LogViewer active pod synchronisation', () => {
       activePodNames: ['api'],
     });
 
-    await waitForMockCalls(GetLogScopeContainers as unknown as ViMock, 1);
+    await waitForMockCalls(GetContainerLogsScopeContainers as unknown as ViMock, 1);
     await flushAsync();
 
-    const lines = Array.from(container.querySelectorAll('.pod-log-line')).map((el) =>
+    const lines = Array.from(container.querySelectorAll('.log-viewer-line')).map((el) =>
       el.textContent?.replace(/\s+/g, ' ').trim()
     );
     expect(lines).toEqual(['[2024-05-01T12:30:00Z] [container emitted an empty log]']);
   });
 
-  it('filters single pod logs by selected container', async () => {
-    (GetLogScopeContainers as unknown as ViMock).mockResolvedValue(['app', 'sidecar (init)']);
+  it('filters single container logs by selected container', async () => {
+    (GetContainerLogsScopeContainers as unknown as ViMock).mockResolvedValue([
+      'app',
+      'sidecar (init)',
+    ]);
     seedLogSnapshot(
       [
         {
@@ -1713,7 +1721,7 @@ describe('LogViewer active pod synchronisation', () => {
           isInit: true,
         },
       ],
-      buildLogScope('team-a:pod:api')
+      buildContainerLogsScope('team-a:pod:api')
     );
 
     await renderViewer({
@@ -1722,14 +1730,16 @@ describe('LogViewer active pod synchronisation', () => {
       activePodNames: ['api'],
     });
 
-    await waitForMockCalls(GetLogScopeContainers as unknown as ViMock, 1);
+    await waitForMockCalls(GetContainerLogsScopeContainers as unknown as ViMock, 1);
     await flushAsync();
-    expect(getLogStreamScopeParams(buildLogScope('team-a:pod:api'))).toBeUndefined();
+    expect(
+      getContainerLogsStreamScopeParams(buildContainerLogsScope('team-a:pod:api'))
+    ).toBeUndefined();
     expect(mockModules.orchestrator.restartStreamingDomain).not.toHaveBeenCalled();
 
-    expect((GetLogScopeContainers as unknown as ViMock).mock.calls[0]).toEqual([
+    expect((GetContainerLogsScopeContainers as unknown as ViMock).mock.calls[0]).toEqual([
       'alpha:ctx',
-      buildLogScope('team-a:pod:api'),
+      buildContainerLogsScope('team-a:pod:api'),
     ]);
 
     const containerSelect = container.querySelector<HTMLSelectElement>(
@@ -1737,7 +1747,7 @@ describe('LogViewer active pod synchronisation', () => {
     );
     expect(containerSelect).toBeTruthy();
 
-    const initialLines = Array.from(container.querySelectorAll('.pod-log-line')).map((el) =>
+    const initialLines = Array.from(container.querySelectorAll('.log-viewer-line')).map((el) =>
       el.textContent?.replace(/\s+/g, ' ').trim()
     );
     expect(initialLines).toHaveLength(2);
@@ -1753,24 +1763,24 @@ describe('LogViewer active pod synchronisation', () => {
     });
     await flushAsync();
 
-    const filteredLines = Array.from(container.querySelectorAll('.pod-log-line')).map((el) =>
+    const filteredLines = Array.from(container.querySelectorAll('.log-viewer-line')).map((el) =>
       el.textContent?.replace(/\s+/g, ' ').trim()
     );
     expect(filteredLines).toHaveLength(1);
     expect(filteredLines[0]).toContain('[2024-05-01T12:00:01Z]');
     expect(filteredLines[0]).not.toContain('[sidecar:init]');
     expect(filteredLines[0]).toContain('init complete');
-    expect(getLogStreamScopeParams(buildLogScope('team-a:pod:api'))).toEqual({
+    expect(getContainerLogsStreamScopeParams(buildContainerLogsScope('team-a:pod:api'))).toEqual({
       selectedFilters: ['init:sidecar'],
     });
     expect(mockModules.orchestrator.restartStreamingDomain).toHaveBeenCalledWith(
-      'object-logs',
-      buildLogScope('team-a:pod:api')
+      'container-logs',
+      buildContainerLogsScope('team-a:pod:api')
     );
   });
 
   it('filters workload logs locally from the multi-select pod/container dropdown', async () => {
-    (GetLogScopeContainers as unknown as ViMock).mockResolvedValue([
+    (GetContainerLogsScopeContainers as unknown as ViMock).mockResolvedValue([
       'app',
       'init-db (init)',
       'sidecar',
@@ -1790,7 +1800,7 @@ describe('LogViewer active pod synchronisation', () => {
       displayMode: 'raw',
       isParsedView: false,
       expandedRows: [],
-      showPreviousLogs: false,
+      showPreviousContainerLogs: false,
     });
     seedLogSnapshot(
       [
@@ -1839,12 +1849,12 @@ describe('LogViewer active pod synchronisation', () => {
     await setMultiSelectValues(workloadFilter, ['pod:web-1', 'container:app']);
     await flushAsync();
 
-    const filteredLines = Array.from(container.querySelectorAll('.pod-log-line')).map((el) =>
+    const filteredLines = Array.from(container.querySelectorAll('.log-viewer-line')).map((el) =>
       el.textContent?.replace(/\s+/g, ' ').trim()
     );
     expect(filteredLines).toHaveLength(1);
     expect(filteredLines[0]).toContain('[web-1/app] matched log');
-    expect(getLogStreamScopeParams(defaultScope)).toEqual({
+    expect(getContainerLogsStreamScopeParams(defaultScope)).toEqual({
       selectedFilters: ['pod:web-1', 'container:app'],
     });
     expect(getLogViewerPrefs('obj:test:deployment:team-a:api')?.selectedFilters).toEqual([
@@ -1917,9 +1927,9 @@ describe('LogViewer active pod synchronisation', () => {
     expect(container.textContent).not.toContain('wrong container');
   });
 
-  it('filters single-pod logs when container metadata is clicked', async () => {
+  it('filters single-container logs when container metadata is clicked', async () => {
     const panelId = 'obj:test:pod:team-a:api';
-    (GetLogScopeContainers as unknown as ViMock).mockResolvedValue(['app', 'sidecar']);
+    (GetContainerLogsScopeContainers as unknown as ViMock).mockResolvedValue(['app', 'sidecar']);
 
     seedLogSnapshot(
       [
@@ -1938,7 +1948,7 @@ describe('LogViewer active pod synchronisation', () => {
           isInit: false,
         },
       ],
-      buildLogScope('team-a:pod:api')
+      buildContainerLogsScope('team-a:pod:api')
     );
 
     await renderViewer({
@@ -1947,7 +1957,7 @@ describe('LogViewer active pod synchronisation', () => {
       activePodNames: ['api'],
       panelId,
     });
-    await waitForMockCalls(GetLogScopeContainers as unknown as ViMock, 1);
+    await waitForMockCalls(GetContainerLogsScopeContainers as unknown as ViMock, 1);
 
     const containerButton = await waitForElement(() =>
       container.querySelector<HTMLButtonElement>(
@@ -1966,7 +1976,10 @@ describe('LogViewer active pod synchronisation', () => {
   });
 
   it('labels all-containers mode to indicate debug containers are included', async () => {
-    (GetLogScopeContainers as unknown as ViMock).mockResolvedValue(['app', 'debug-abc (debug)']);
+    (GetContainerLogsScopeContainers as unknown as ViMock).mockResolvedValue([
+      'app',
+      'debug-abc (debug)',
+    ]);
     seedLogSnapshot(
       [
         {
@@ -1984,7 +1997,7 @@ describe('LogViewer active pod synchronisation', () => {
           isInit: false,
         },
       ],
-      buildLogScope('team-a:pod:api')
+      buildContainerLogsScope('team-a:pod:api')
     );
 
     await renderViewer({
@@ -1993,7 +2006,7 @@ describe('LogViewer active pod synchronisation', () => {
       activePodNames: ['api'],
     });
 
-    await waitForMockCalls(GetLogScopeContainers as unknown as ViMock, 1);
+    await waitForMockCalls(GetContainerLogsScopeContainers as unknown as ViMock, 1);
     await flushAsync();
 
     const containerSelect = container.querySelector<HTMLSelectElement>(
@@ -2007,7 +2020,7 @@ describe('LogViewer active pod synchronisation', () => {
   });
 
   it('shows workload containers even when they have not produced log lines yet', async () => {
-    (GetLogScopeContainers as unknown as ViMock).mockResolvedValue([
+    (GetContainerLogsScopeContainers as unknown as ViMock).mockResolvedValue([
       'aws-node',
       'aws-eks-nodeagent',
       'aws-vpc-cni-init (init)',
@@ -2022,7 +2035,7 @@ describe('LogViewer active pod synchronisation', () => {
           isInit: false,
         },
       ],
-      buildLogScope('kube-system:daemonset:aws-node')
+      buildContainerLogsScope('kube-system:daemonset:aws-node')
     );
 
     await renderViewer({
@@ -2030,10 +2043,10 @@ describe('LogViewer active pod synchronisation', () => {
       resourceName: 'aws-node',
       resourceKind: 'daemonset',
       activePodNames: ['aws-node-a', 'aws-node-b'],
-      logScope: buildLogScope('kube-system:daemonset:aws-node'),
+      containerLogsScope: buildContainerLogsScope('kube-system:daemonset:aws-node'),
     });
 
-    await waitForMockCalls(GetLogScopeContainers as unknown as ViMock, 1);
+    await waitForMockCalls(GetContainerLogsScopeContainers as unknown as ViMock, 1);
     await flushAsync();
 
     const containerSelect = container.querySelector<HTMLSelectElement>(
@@ -2064,7 +2077,7 @@ describe('LogViewer active pod synchronisation', () => {
       displayMode: 'raw',
       isParsedView: false,
       expandedRows: [],
-      showPreviousLogs: false,
+      showPreviousContainerLogs: false,
     });
     seedLogSnapshot(
       [
@@ -2088,10 +2101,10 @@ describe('LogViewer active pod synchronisation', () => {
       'button[aria-label="Highlight matching text - disabled when Invert is enabled"]'
     );
     expect(highlightButton?.getAttribute('aria-pressed')).toBe('true');
-    expect(getLogStreamScopeParams(defaultScope)).toBeUndefined();
+    expect(getContainerLogsStreamScopeParams(defaultScope)).toBeUndefined();
 
-    const highlights = Array.from(container.querySelectorAll('.pod-log-highlight')).map((element) =>
-      element.textContent?.trim()
+    const highlights = Array.from(container.querySelectorAll('.log-viewer-highlight')).map(
+      (element) => element.textContent?.trim()
     );
     expect(highlights).toEqual(['panic']);
     expect(container.textContent).toContain('timeout while waiting for panic handler');
@@ -2278,8 +2291,8 @@ describe('LogViewer active pod synchronisation', () => {
       await Promise.resolve();
     });
 
-    const highlights = Array.from(container.querySelectorAll('.pod-log-highlight')).map((element) =>
-      element.textContent?.trim()
+    const highlights = Array.from(container.querySelectorAll('.log-viewer-highlight')).map(
+      (element) => element.textContent?.trim()
     );
     expect(highlights).toEqual(['panic', 'timeout']);
     expect(container.textContent).not.toContain('steady state');
@@ -2292,7 +2305,7 @@ describe('LogViewer active pod synchronisation', () => {
     expect(inverseButton?.getAttribute('aria-pressed')).toBe('true');
     expect(highlightButton?.getAttribute('aria-pressed')).toBe('false');
     expect(highlightButton?.hasAttribute('disabled')).toBe(true);
-    expect(container.querySelectorAll('.pod-log-highlight')).toHaveLength(0);
+    expect(container.querySelectorAll('.log-viewer-highlight')).toHaveLength(0);
     expect(container.textContent).toContain('steady state');
     expect(container.textContent).not.toContain('panic in worker');
     expect(container.textContent).not.toContain('timeout waiting on cache');
@@ -2340,8 +2353,8 @@ describe('LogViewer active pod synchronisation', () => {
   });
 
   it('shows previous log message when toggled with no data', async () => {
-    seedLogSnapshot([], buildLogScope('team-a:pod:api'));
-    (LogFetcher as unknown as ViMock).mockResolvedValue({ entries: [] });
+    seedLogSnapshot([], buildContainerLogsScope('team-a:pod:api'));
+    (FetchContainerLogs as unknown as ViMock).mockResolvedValue({ entries: [] });
 
     await renderViewer({
       resourceKind: 'Pod',
@@ -2359,15 +2372,15 @@ describe('LogViewer active pod synchronisation', () => {
 
   it('renders loading state when resource metadata is missing', async () => {
     // Mirror what getObjectPanelKind would produce upstream when the
-    // panel is in its empty state: a null logScope. The component
-    // gates its loading-vs-rendered path on logScope, not on
+    // panel is in its empty state: a null containerLogsScope. The component
+    // gates its loading-vs-rendered path on containerLogsScope, not on
     // resourceName/resourceKind directly.
     await renderViewer({
       resourceName: '',
       resourceKind: '',
       namespace: '',
       activePodNames: null,
-      logScope: null,
+      containerLogsScope: null,
     });
 
     expect(container.textContent).toContain('Loading logs');
@@ -2376,7 +2389,7 @@ describe('LogViewer active pod synchronisation', () => {
   it('shows the paused message instead of a loading spinner before logs have loaded', async () => {
     autoRefreshLoadingState.isPaused = true;
     autoRefreshLoadingState.suppressPassiveLoading = true;
-    setScopedDomainState('object-logs', activeScope, () => ({
+    setScopedDomainState('container-logs', activeScope, () => ({
       status: 'loading',
       data: {
         entries: [],
@@ -2417,10 +2430,10 @@ describe('LogViewer active pod synchronisation', () => {
       displayMode: 'raw',
       isParsedView: false,
       expandedRows: [],
-      showPreviousLogs: false,
+      showPreviousContainerLogs: false,
     });
     const generatedAt = Date.now();
-    setScopedDomainState('object-logs', defaultScope, () => ({
+    setScopedDomainState('container-logs', defaultScope, () => ({
       status: 'error',
       data: {
         entries: [],
@@ -2468,7 +2481,7 @@ describe('LogViewer active pod synchronisation', () => {
       displayMode: 'raw',
       isParsedView: false,
       expandedRows: ['row-7', 'row-9'],
-      showPreviousLogs: false,
+      showPreviousContainerLogs: false,
     });
 
     await renderViewer({ panelId });
@@ -2478,7 +2491,7 @@ describe('LogViewer active pod synchronisation', () => {
     );
     expect(highlightButton?.getAttribute('aria-pressed')).toBe('true');
     expect(getLogViewerPrefs(panelId)?.selectedFilters).toEqual(['pod:web-1']);
-    expect(getLogStreamScopeParams(defaultScope)).toEqual({
+    expect(getContainerLogsStreamScopeParams(defaultScope)).toEqual({
       selectedFilters: ['pod:web-1'],
     });
   });
@@ -2573,8 +2586,8 @@ describe('LogViewer active pod synchronisation', () => {
 
   it('preserves workload pod color metadata when using a custom timestamp format', async () => {
     setAppPreferencesForTesting({
-      logApiTimestampFormat: 'YYYY/MM/DD HH:mm:ss',
-      logApiTimestampUseLocalTimeZone: false,
+      objPanelLogsApiTimestampFormat: 'YYYY/MM/DD HH:mm:ss',
+      objPanelLogsApiTimestampUseLocalTimeZone: false,
     });
     for (let index = 1; index <= 20; index += 1) {
       document.documentElement.style.setProperty(
@@ -2648,7 +2661,7 @@ describe('LogViewer active pod synchronisation', () => {
       displayMode: 'raw',
       isParsedView: false,
       expandedRows: [],
-      showPreviousLogs: false,
+      showPreviousContainerLogs: false,
     });
     setLogViewerPrefs(panelB, {
       selectedContainer: '',
@@ -2665,7 +2678,7 @@ describe('LogViewer active pod synchronisation', () => {
       displayMode: 'raw',
       isParsedView: false,
       expandedRows: [],
-      showPreviousLogs: false,
+      showPreviousContainerLogs: false,
     });
 
     await renderViewer({ panelId: panelB });
@@ -2680,7 +2693,7 @@ describe('LogViewer active pod synchronisation', () => {
 
   it('shows active filter chips for the current filter state', async () => {
     const panelId = 'obj:cluster-a:pod:team-a:api';
-    (GetLogScopeContainers as unknown as ViMock).mockResolvedValue(['app']);
+    (GetContainerLogsScopeContainers as unknown as ViMock).mockResolvedValue(['app']);
     setLogViewerPrefs(panelId, {
       selectedContainer: '',
       selectedFilters: ['pod:web-1', 'container:app'],
@@ -2696,11 +2709,11 @@ describe('LogViewer active pod synchronisation', () => {
       displayMode: 'raw',
       isParsedView: false,
       expandedRows: [],
-      showPreviousLogs: false,
+      showPreviousContainerLogs: false,
     });
 
     await renderViewer({ panelId });
-    await waitForMockCalls(GetLogScopeContainers as unknown as ViMock, 1);
+    await waitForMockCalls(GetContainerLogsScopeContainers as unknown as ViMock, 1);
     await flushAsync();
 
     const chipStrip = container.querySelector('[aria-label="Active log filters"]');
@@ -2729,7 +2742,7 @@ describe('LogViewer active pod synchronisation', () => {
       displayMode: 'raw',
       isParsedView: false,
       expandedRows: [],
-      showPreviousLogs: false,
+      showPreviousContainerLogs: false,
     });
 
     await renderViewer({ panelId });
@@ -2755,7 +2768,7 @@ describe('LogViewer active pod synchronisation', () => {
       displayMode: 'raw',
       isParsedView: false,
       expandedRows: [],
-      showPreviousLogs: false,
+      showPreviousContainerLogs: false,
     });
 
     await renderViewer({ panelId });
@@ -2781,7 +2794,7 @@ describe('LogViewer active pod synchronisation', () => {
       displayMode: 'raw',
       isParsedView: false,
       expandedRows: [],
-      showPreviousLogs: true,
+      showPreviousContainerLogs: true,
     });
 
     await renderViewer({
@@ -2789,7 +2802,7 @@ describe('LogViewer active pod synchronisation', () => {
       resourceKind: 'Pod',
       resourceName: 'api',
       activePodNames: ['api'],
-      logScope: buildLogScope('team-a:pod:api'),
+      containerLogsScope: buildContainerLogsScope('team-a:pod:api'),
     });
 
     const chipStrip = container.querySelector('[aria-label="Active log filters"]');
@@ -2805,7 +2818,7 @@ describe('LogViewer active pod synchronisation', () => {
       await Promise.resolve();
     });
 
-    expect(getLogViewerPrefs(panelId)?.showPreviousLogs).toBe(false);
+    expect(getLogViewerPrefs(panelId)?.showPreviousContainerLogs).toBe(false);
     expect(
       container.querySelector('[aria-label="Active log filters"]')?.textContent ?? ''
     ).not.toContain('Showing previous logs');
@@ -2828,7 +2841,7 @@ describe('LogViewer active pod synchronisation', () => {
       displayMode: 'raw',
       isParsedView: false,
       expandedRows: [],
-      showPreviousLogs: true,
+      showPreviousContainerLogs: true,
     });
 
     await renderViewer({
@@ -2836,7 +2849,7 @@ describe('LogViewer active pod synchronisation', () => {
       resourceKind: 'Pod',
       resourceName: 'api',
       activePodNames: ['api'],
-      logScope: buildLogScope('team-a:pod:api'),
+      containerLogsScope: buildContainerLogsScope('team-a:pod:api'),
     });
 
     const removeTextFilterButton = container.querySelector<HTMLButtonElement>(
@@ -2868,7 +2881,7 @@ describe('LogViewer active pod synchronisation', () => {
       clearAllButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await Promise.resolve();
     });
-    expect(getLogViewerPrefs(panelId)?.showPreviousLogs).toBe(false);
+    expect(getLogViewerPrefs(panelId)?.showPreviousContainerLogs).toBe(false);
     const chipStrip = container.querySelector('[aria-label="Active log filters"]');
     expect(chipStrip?.textContent ?? '').not.toContain('Highlight');
     expect(chipStrip?.textContent ?? '').not.toContain('Showing previous logs');
@@ -2877,26 +2890,27 @@ describe('LogViewer active pod synchronisation', () => {
   // ---------------------------------------------------------------------
   // Acceptance test: spinner must not reappear on stream reconnect once
   // this LogViewer instance has content to show. This is the test that
-  // would have caught the original "pod logs reload every time I switch
+  // would have caught the original "container logs reload every time I switch
   // cluster tabs" bug — it exercises the full view-layer interaction with
-  // the fixed LogStreamManager.applyPayload behavior.
+  // the fixed ContainerLogsStreamManager.applyPayload behavior.
   // ---------------------------------------------------------------------
 
   it('does not re-show the initial-load spinner when the stream reconnects', async () => {
     // Use the singleton manager so the in-memory buffers and the scoped
     // store stay in lockstep — this is what happens in production when
-    // LogStreamConnection.handleLogEvent calls applyPayload on the
-    // module-scoped logStreamManager instance.
-    const { logStreamManager } = await import('@/core/refresh/streaming/logStreamManager');
+    // ContainerLogsStreamConnection.handleLogEvent calls applyPayload on the
+    // module-scoped containerLogsStreamManager instance.
+    const { containerLogsStreamManager } =
+      await import('@/core/refresh/streaming/containerLogsStreamManager');
 
     // Seed via applyPayload (not seedLogSnapshot) so the manager's
     // internal buffers AND the scoped store both have the entries. Use
     // sequence: 3 so the view already thinks it's past the initial-load
     // threshold (hasReceivedInitialLogs needs >= 2).
-    logStreamManager.applyPayload(
+    containerLogsStreamManager.applyPayload(
       defaultScope,
       {
-        domain: 'object-logs',
+        domain: 'container-logs',
         scope: defaultScope,
         sequence: 3,
         generatedAt: 1_000,
@@ -2936,10 +2950,10 @@ describe('LogViewer active pod synchronisation', () => {
     // regress, so the view keeps showing the cached entries without
     // flashing the initial-load spinner.
     await act(async () => {
-      logStreamManager.applyPayload(
+      containerLogsStreamManager.applyPayload(
         defaultScope,
         {
-          domain: 'object-logs',
+          domain: 'container-logs',
           scope: defaultScope,
           sequence: 1,
           generatedAt: 2_000,
@@ -2958,13 +2972,13 @@ describe('LogViewer active pod synchronisation', () => {
     // And the store's sequence must still be >= 2 — the client-side
     // counter did not regress despite the reset=true frame carrying
     // sequence=1 from the server.
-    const finalState = getScopedDomainState('object-logs', defaultScope);
+    const finalState = getScopedDomainState('container-logs', defaultScope);
     expect(finalState.data?.sequence).toBeGreaterThanOrEqual(2);
 
     // Clear the manager's buffer so the next test starts from a clean
     // slate — afterEach only resets the scoped store, not the manager.
     await act(async () => {
-      logStreamManager.stop(defaultScope, true);
+      containerLogsStreamManager.stop(defaultScope, true);
       await Promise.resolve();
     });
   });

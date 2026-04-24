@@ -18,16 +18,16 @@ export function ClearAllSSRRCaches() {
   return window['go']['backend']['App']['ClearAllSSRRCaches']();
 }
 
+export function ClearAppLogs() {
+  return window['go']['backend']['App']['ClearAppLogs']();
+}
+
 export function ClearAppState() {
   return window['go']['backend']['App']['ClearAppState']();
 }
 
 export function ClearGridTablePersistence() {
   return window['go']['backend']['App']['ClearGridTablePersistence']();
-}
-
-export function ClearLogs() {
-  return window['go']['backend']['App']['ClearLogs']();
 }
 
 export function ClearSSRRCache(arg1) {
@@ -98,6 +98,10 @@ export function EvaluateCapabilities(arg1) {
   return window['go']['backend']['App']['EvaluateCapabilities'](arg1);
 }
 
+export function FetchContainerLogs(arg1, arg2) {
+  return window['go']['backend']['App']['FetchContainerLogs'](arg1, arg2);
+}
+
 export function FetchNodeLogs(arg1, arg2, arg3) {
   return window['go']['backend']['App']['FetchNodeLogs'](arg1, arg2, arg3);
 }
@@ -124,6 +128,10 @@ export function GetAllClusterLifecycleStates() {
 
 export function GetAppInfo() {
   return window['go']['backend']['App']['GetAppInfo']();
+}
+
+export function GetAppLogs() {
+  return window['go']['backend']['App']['GetAppLogs']();
 }
 
 export function GetAppSettings() {
@@ -160,6 +168,10 @@ export function GetClusterTabOrder() {
 
 export function GetConfigMap(arg1, arg2, arg3) {
   return window['go']['backend']['App']['GetConfigMap'](arg1, arg2, arg3);
+}
+
+export function GetContainerLogsScopeContainers(arg1, arg2) {
+  return window['go']['backend']['App']['GetContainerLogsScopeContainers'](arg1, arg2);
 }
 
 export function GetCronJob(arg1, arg2, arg3) {
@@ -228,14 +240,6 @@ export function GetKubeconfigs() {
 
 export function GetLimitRange(arg1, arg2, arg3) {
   return window['go']['backend']['App']['GetLimitRange'](arg1, arg2, arg3);
-}
-
-export function GetLogScopeContainers(arg1, arg2) {
-  return window['go']['backend']['App']['GetLogScopeContainers'](arg1, arg2);
-}
-
-export function GetLogs() {
-  return window['go']['backend']['App']['GetLogs']();
 }
 
 export function GetMutatingWebhookConfiguration(arg1, arg2) {
@@ -358,12 +362,12 @@ export function GetZoomLevel() {
   return window['go']['backend']['App']['GetZoomLevel']();
 }
 
-export function IsDiagnosticsPanelVisible() {
-  return window['go']['backend']['App']['IsDiagnosticsPanelVisible']();
+export function IsAppLogsPanelVisible() {
+  return window['go']['backend']['App']['IsAppLogsPanelVisible']();
 }
 
-export function IsLogsPanelVisible() {
-  return window['go']['backend']['App']['IsLogsPanelVisible']();
+export function IsDiagnosticsPanelVisible() {
+  return window['go']['backend']['App']['IsDiagnosticsPanelVisible']();
 }
 
 export function IsSidebarVisible() {
@@ -386,12 +390,8 @@ export function LoadWindowSettings() {
   return window['go']['backend']['App']['LoadWindowSettings']();
 }
 
-export function LogFetcher(arg1, arg2) {
-  return window['go']['backend']['App']['LogFetcher'](arg1, arg2);
-}
-
-export function LogFrontend(arg1, arg2, arg3) {
-  return window['go']['backend']['App']['LogFrontend'](arg1, arg2, arg3);
+export function LogAppLogsFromFrontend(arg1, arg2, arg3) {
+  return window['go']['backend']['App']['LogAppLogsFromFrontend'](arg1, arg2, arg3);
 }
 
 export function MatchThemeForCluster(arg1) {
@@ -454,6 +454,10 @@ export function SetAccentColor(arg1, arg2) {
   return window['go']['backend']['App']['SetAccentColor'](arg1, arg2);
 }
 
+export function SetAppLogsPanelVisible(arg1) {
+  return window['go']['backend']['App']['SetAppLogsPanelVisible'](arg1);
+}
+
 export function SetAutoRefreshEnabled(arg1) {
   return window['go']['backend']['App']['SetAutoRefreshEnabled'](arg1);
 }
@@ -494,32 +498,28 @@ export function SetLinkColor(arg1, arg2) {
   return window['go']['backend']['App']['SetLinkColor'](arg1, arg2);
 }
 
-export function SetLogAPITimestampFormat(arg1) {
-  return window['go']['backend']['App']['SetLogAPITimestampFormat'](arg1);
-}
-
-export function SetLogAPITimestampUseLocalTimeZone(arg1) {
-  return window['go']['backend']['App']['SetLogAPITimestampUseLocalTimeZone'](arg1);
-}
-
-export function SetLogBufferMaxSize(arg1) {
-  return window['go']['backend']['App']['SetLogBufferMaxSize'](arg1);
-}
-
-export function SetLogTargetGlobalLimit(arg1) {
-  return window['go']['backend']['App']['SetLogTargetGlobalLimit'](arg1);
-}
-
-export function SetLogTargetPerScopeLimit(arg1) {
-  return window['go']['backend']['App']['SetLogTargetPerScopeLimit'](arg1);
-}
-
-export function SetLogsPanelVisible(arg1) {
-  return window['go']['backend']['App']['SetLogsPanelVisible'](arg1);
-}
-
 export function SetMaxTableRows(arg1) {
   return window['go']['backend']['App']['SetMaxTableRows'](arg1);
+}
+
+export function SetObjPanelLogsAPITimestampFormat(arg1) {
+  return window['go']['backend']['App']['SetObjPanelLogsAPITimestampFormat'](arg1);
+}
+
+export function SetObjPanelLogsAPITimestampUseLocalTimeZone(arg1) {
+  return window['go']['backend']['App']['SetObjPanelLogsAPITimestampUseLocalTimeZone'](arg1);
+}
+
+export function SetObjPanelLogsBufferMaxSize(arg1) {
+  return window['go']['backend']['App']['SetObjPanelLogsBufferMaxSize'](arg1);
+}
+
+export function SetObjPanelLogsTargetGlobalLimit(arg1) {
+  return window['go']['backend']['App']['SetObjPanelLogsTargetGlobalLimit'](arg1);
+}
+
+export function SetObjPanelLogsTargetPerScopeLimit(arg1) {
+  return window['go']['backend']['App']['SetObjPanelLogsTargetPerScopeLimit'](arg1);
 }
 
 export function SetObjectPanelLayout(arg1, arg2, arg3, arg4, arg5, arg6) {
@@ -586,12 +586,12 @@ export function SuspendCronJob(arg1, arg2, arg3, arg4) {
   return window['go']['backend']['App']['SuspendCronJob'](arg1, arg2, arg3, arg4);
 }
 
-export function ToggleDiagnosticsPanel() {
-  return window['go']['backend']['App']['ToggleDiagnosticsPanel']();
+export function ToggleAppLogsPanel() {
+  return window['go']['backend']['App']['ToggleAppLogsPanel']();
 }
 
-export function ToggleLogsPanel() {
-  return window['go']['backend']['App']['ToggleLogsPanel']();
+export function ToggleDiagnosticsPanel() {
+  return window['go']['backend']['App']['ToggleDiagnosticsPanel']();
 }
 
 export function ToggleObjectDiff() {

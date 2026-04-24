@@ -15,13 +15,13 @@ export const INACTIVE_SCOPE = '__inactive__';
 
 export const RESOURCE_CAPABILITIES: Record<string, ResourceCapability> = {
   // Workloads
-  pod: { logs: true, delete: true, shell: true, debug: true },
-  deployment: { logs: true, restart: true, scale: true, delete: true },
-  daemonset: { logs: true, restart: true, delete: true },
-  statefulset: { logs: true, restart: true, scale: true, delete: true },
-  job: { logs: true, delete: true },
-  cronjob: { logs: true, delete: true, trigger: true, suspend: true },
-  replicaset: { logs: true, delete: true },
+  pod: { objPanelLogs: true, delete: true, shell: true, debug: true },
+  deployment: { objPanelLogs: true, restart: true, scale: true, delete: true },
+  daemonset: { objPanelLogs: true, restart: true, delete: true },
+  statefulset: { objPanelLogs: true, restart: true, scale: true, delete: true },
+  job: { objPanelLogs: true, delete: true },
+  cronjob: { objPanelLogs: true, delete: true, trigger: true, suspend: true },
+  replicaset: { objPanelLogs: true, delete: true },
 
   // Configuration
   configmap: { delete: true },
@@ -76,7 +76,7 @@ export const TABS = {
   DETAILS: { id: 'details', label: 'Details', alwaysShow: true },
   VALUES: { id: 'values', label: 'Values' },
   MANIFEST: { id: 'manifest', label: 'Manifest' },
-  LOGS: { id: 'logs', label: 'Logs', requiresCapability: 'hasLogs' },
+  LOGS: { id: 'logs', label: 'Logs', requiresCapability: 'hasObjPanelLogs' },
   PODS: {
     id: 'pods',
     label: 'Pods',

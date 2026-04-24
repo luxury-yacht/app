@@ -119,8 +119,8 @@ describe('getObjectPanelKind', () => {
     expect(getObjectPanelKind({ name: 'api' }).eventsScope).toBeNull();
   });
 
-  it('builds logScope using the lowercased kind so ObjectPanelContent and LogViewer agree', () => {
-    // logScope is consumed by ObjectPanelContent (full-cleanup lifecycle
+  it('builds containerLogsScope using the lowercased kind so ObjectPanelContent and LogViewer agree', () => {
+    // containerLogsScope is consumed by ObjectPanelContent (full-cleanup lifecycle
     // when the panel closes) AND by LogViewer (the actual streaming
     // start/stop). The two consumers used to compute their own scope
     // strings independently — same drift bug as eventsScope. The log
@@ -133,10 +133,10 @@ describe('getObjectPanelKind', () => {
       clusterId: 'cluster-1',
     });
 
-    expect(result.logScope).toBe('cluster-1|team-a:deployment:api');
+    expect(result.containerLogsScope).toBe('cluster-1|team-a:deployment:api');
   });
 
-  it('threads group/version into logScope when PanelObjectData carries them', () => {
+  it('threads group/version into containerLogsScope when PanelObjectData carries them', () => {
     const result = getObjectPanelKind({
       kind: 'Deployment',
       name: 'api',
@@ -146,10 +146,10 @@ describe('getObjectPanelKind', () => {
       clusterId: 'cluster-1',
     });
 
-    expect(result.logScope).toBe('cluster-1|team-a:apps/v1:deployment:api');
+    expect(result.containerLogsScope).toBe('cluster-1|team-a:apps/v1:deployment:api');
   });
 
-  it('keeps colliding kinds distinct in logScope by threading group/version', () => {
+  it('keeps colliding kinds distinct in containerLogsScope by threading group/version', () => {
     const first = getObjectPanelKind({
       kind: 'DBInstance',
       name: 'orders',
@@ -167,16 +167,18 @@ describe('getObjectPanelKind', () => {
       clusterId: 'cluster-1',
     });
 
-    expect(first.logScope).toBe('cluster-1|team-a:rds.services.k8s.aws/v1alpha1:dbinstance:orders');
-    expect(second.logScope).toBe(
+    expect(first.containerLogsScope).toBe(
+      'cluster-1|team-a:rds.services.k8s.aws/v1alpha1:dbinstance:orders'
+    );
+    expect(second.containerLogsScope).toBe(
       'cluster-1|team-a:documentdb.services.k8s.aws/v1alpha1:dbinstance:orders'
     );
-    expect(first.logScope).not.toBe(second.logScope);
+    expect(first.containerLogsScope).not.toBe(second.containerLogsScope);
   });
 
-  it('returns null logScope when objectData is incomplete', () => {
-    expect(getObjectPanelKind(null).logScope).toBeNull();
-    expect(getObjectPanelKind({ kind: 'Pod' }).logScope).toBeNull();
-    expect(getObjectPanelKind({ name: 'api' }).logScope).toBeNull();
+  it('returns null containerLogsScope when objectData is incomplete', () => {
+    expect(getObjectPanelKind(null).containerLogsScope).toBeNull();
+    expect(getObjectPanelKind({ kind: 'Pod' }).containerLogsScope).toBeNull();
+    expect(getObjectPanelKind({ name: 'api' }).containerLogsScope).toBeNull();
   });
 });

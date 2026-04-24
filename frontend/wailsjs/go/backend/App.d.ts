@@ -15,11 +15,11 @@ export function ApplyTheme(arg1:string):Promise<void>;
 
 export function ClearAllSSRRCaches():Promise<void>;
 
+export function ClearAppLogs():Promise<void>;
+
 export function ClearAppState():Promise<void>;
 
 export function ClearGridTablePersistence():Promise<number>;
-
-export function ClearLogs():Promise<void>;
 
 export function ClearSSRRCache(arg1:string):Promise<void>;
 
@@ -55,6 +55,8 @@ export function DrainNode(arg1:string,arg2:string,arg3:types.DrainNodeOptions):P
 
 export function EvaluateCapabilities(arg1:Array<capabilities.CheckRequest>):Promise<Array<capabilities.CheckResult>>;
 
+export function FetchContainerLogs(arg1:string,arg2:types.ContainerLogsFetchRequest):Promise<types.ContainerLogsFetchResponse>;
+
 export function FetchNodeLogs(arg1:string,arg2:string,arg3:types.NodeLogFetchRequest):Promise<types.NodeLogFetchResponse>;
 
 export function FindCatalogObjectByUID(arg1:string,arg2:string):Promise<objectcatalog.Summary>;
@@ -68,6 +70,8 @@ export function GetAllClusterAuthStates():Promise<Record<string, Record<string, 
 export function GetAllClusterLifecycleStates():Promise<Record<string, backend.ClusterLifecycleState>>;
 
 export function GetAppInfo():Promise<backend.AppInfo>;
+
+export function GetAppLogs():Promise<Array<backend.LogEntry>>;
 
 export function GetAppSettings():Promise<types.AppSettings>;
 
@@ -86,6 +90,8 @@ export function GetClusterShellSessionCount(arg1:string):Promise<number>;
 export function GetClusterTabOrder():Promise<Array<string>>;
 
 export function GetConfigMap(arg1:string,arg2:string,arg3:string):Promise<types.ConfigMapDetails>;
+
+export function GetContainerLogsScopeContainers(arg1:string,arg2:string):Promise<Array<string>>;
 
 export function GetCronJob(arg1:string,arg2:string,arg3:string):Promise<types.CronJobDetails>;
 
@@ -120,10 +126,6 @@ export function GetKubeconfigSearchPaths():Promise<Array<string>>;
 export function GetKubeconfigs():Promise<Array<types.KubeconfigInfo>>;
 
 export function GetLimitRange(arg1:string,arg2:string,arg3:string):Promise<types.LimitRangeDetails>;
-
-export function GetLogScopeContainers(arg1:string,arg2:string):Promise<Array<string>>;
-
-export function GetLogs():Promise<Array<backend.LogEntry>>;
 
 export function GetMutatingWebhookConfiguration(arg1:string,arg2:string):Promise<types.MutatingWebhookConfigurationDetails>;
 
@@ -185,9 +187,9 @@ export function GetWorkloads(arg1:string,arg2:string,arg3:string):Promise<backen
 
 export function GetZoomLevel():Promise<number>;
 
-export function IsDiagnosticsPanelVisible():Promise<boolean>;
+export function IsAppLogsPanelVisible():Promise<boolean>;
 
-export function IsLogsPanelVisible():Promise<boolean>;
+export function IsDiagnosticsPanelVisible():Promise<boolean>;
 
 export function IsSidebarVisible():Promise<boolean>;
 
@@ -199,9 +201,7 @@ export function ListShellSessions():Promise<Array<types.ShellSessionInfo>>;
 
 export function LoadWindowSettings():Promise<types.WindowSettings>;
 
-export function LogFetcher(arg1:string,arg2:types.LogFetchRequest):Promise<types.LogFetchResponse>;
-
-export function LogFrontend(arg1:string,arg2:string,arg3:string):Promise<void>;
+export function LogAppLogsFromFrontend(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function MatchThemeForCluster(arg1:string):Promise<types.Theme>;
 
@@ -233,6 +233,8 @@ export function SendShellInput(arg1:string,arg2:string):Promise<void>;
 
 export function SetAccentColor(arg1:string,arg2:string):Promise<void>;
 
+export function SetAppLogsPanelVisible(arg1:boolean):Promise<void>;
+
 export function SetAutoRefreshEnabled(arg1:boolean):Promise<void>;
 
 export function SetBackgroundRefreshEnabled(arg1:boolean):Promise<void>;
@@ -253,19 +255,17 @@ export function SetKubeconfigSearchPaths(arg1:Array<string>):Promise<void>;
 
 export function SetLinkColor(arg1:string,arg2:string):Promise<void>;
 
-export function SetLogAPITimestampFormat(arg1:string):Promise<void>;
-
-export function SetLogAPITimestampUseLocalTimeZone(arg1:boolean):Promise<void>;
-
-export function SetLogBufferMaxSize(arg1:number):Promise<void>;
-
-export function SetLogTargetGlobalLimit(arg1:number):Promise<void>;
-
-export function SetLogTargetPerScopeLimit(arg1:number):Promise<void>;
-
-export function SetLogsPanelVisible(arg1:boolean):Promise<void>;
-
 export function SetMaxTableRows(arg1:number):Promise<void>;
+
+export function SetObjPanelLogsAPITimestampFormat(arg1:string):Promise<void>;
+
+export function SetObjPanelLogsAPITimestampUseLocalTimeZone(arg1:boolean):Promise<void>;
+
+export function SetObjPanelLogsBufferMaxSize(arg1:number):Promise<void>;
+
+export function SetObjPanelLogsTargetGlobalLimit(arg1:number):Promise<void>;
+
+export function SetObjPanelLogsTargetPerScopeLimit(arg1:number):Promise<void>;
 
 export function SetObjectPanelLayout(arg1:number,arg2:number,arg3:number,arg4:number,arg5:number,arg6:number):Promise<void>;
 
@@ -299,9 +299,9 @@ export function StopPortForward(arg1:string):Promise<void>;
 
 export function SuspendCronJob(arg1:string,arg2:string,arg3:string,arg4:boolean):Promise<void>;
 
-export function ToggleDiagnosticsPanel():Promise<void>;
+export function ToggleAppLogsPanel():Promise<void>;
 
-export function ToggleLogsPanel():Promise<void>;
+export function ToggleDiagnosticsPanel():Promise<void>;
 
 export function ToggleObjectDiff():Promise<void>;
 

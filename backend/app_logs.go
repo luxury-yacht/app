@@ -11,14 +11,14 @@ import (
 	"strings"
 )
 
-func (a *App) GetLogs() []LogEntry {
+func (a *App) GetAppLogs() []LogEntry {
 	if a.logger == nil {
 		return []LogEntry{}
 	}
 	return a.logger.GetEntries()
 }
 
-func (a *App) ClearLogs() error {
+func (a *App) ClearAppLogs() error {
 	if a.logger == nil {
 		return fmt.Errorf("logger not initialized")
 	}
@@ -27,8 +27,8 @@ func (a *App) ClearLogs() error {
 	return nil
 }
 
-// LogFrontend appends a log entry originating from the frontend to the application log store.
-func (a *App) LogFrontend(level string, message string, source string) error {
+// LogAppLogsFromFrontend appends a log entry originating from the frontend to the application log store.
+func (a *App) LogAppLogsFromFrontend(level string, message string, source string) error {
 	if a.logger == nil {
 		return fmt.Errorf("logger not initialized")
 	}

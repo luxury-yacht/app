@@ -82,28 +82,28 @@ func TestAppSaveAndLoadAppSettingsRoundTrip(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 
 	app.appSettings = &AppSettings{
-		Theme:                            "dark",
-		SelectedKubeconfigs:              []string{"/tmp/config:ctx"},
-		UseShortResourceNames:            true,
-		AutoRefreshEnabled:               false,
-		RefreshBackgroundClustersEnabled: false,
-		MetricsRefreshIntervalMs:         7000,
-		MaxTableRows:                     2500,
-		LogBufferMaxSize:                 2500,
-		LogTargetPerScopeLimit:           144,
-		LogTargetGlobalLimit:             180,
-		LogAPITimestampFormat:            "HH:mm:ss.SSS",
-		LogAPITimestampUseLocalTimeZone:  true,
-		GridTablePersistenceMode:         "namespaced",
-		DefaultObjectPanelPosition:       "floating",
-		PaletteHueLight:                  200,
-		PaletteSaturationLight:           60,
-		PaletteBrightnessLight:           -20,
-		PaletteHueDark:                   120,
-		PaletteSaturationDark:            40,
-		PaletteBrightnessDark:            10,
-		AccentColorLight:                 "#0d9488",
-		AccentColorDark:                  "#f59e0b",
+		Theme:                                    "dark",
+		SelectedKubeconfigs:                      []string{"/tmp/config:ctx"},
+		UseShortResourceNames:                    true,
+		AutoRefreshEnabled:                       false,
+		RefreshBackgroundClustersEnabled:         false,
+		MetricsRefreshIntervalMs:                 7000,
+		MaxTableRows:                             2500,
+		ObjPanelLogsBufferMaxSize:                2500,
+		ObjPanelLogsTargetPerScopeLimit:          144,
+		ObjPanelLogsTargetGlobalLimit:            180,
+		ObjPanelLogsAPITimestampFormat:           "HH:mm:ss.SSS",
+		ObjPanelLogsAPITimestampUseLocalTimeZone: true,
+		GridTablePersistenceMode:                 "namespaced",
+		DefaultObjectPanelPosition:               "floating",
+		PaletteHueLight:                          200,
+		PaletteSaturationLight:                   60,
+		PaletteBrightnessLight:                   -20,
+		PaletteHueDark:                           120,
+		PaletteSaturationDark:                    40,
+		PaletteBrightnessDark:                    10,
+		AccentColorLight:                         "#0d9488",
+		AccentColorDark:                          "#f59e0b",
 	}
 
 	require.NoError(t, app.saveAppSettings())
@@ -117,11 +117,11 @@ func TestAppSaveAndLoadAppSettingsRoundTrip(t *testing.T) {
 	require.False(t, app.appSettings.RefreshBackgroundClustersEnabled)
 	require.Equal(t, 7000, app.appSettings.MetricsRefreshIntervalMs)
 	require.Equal(t, 2500, app.appSettings.MaxTableRows)
-	require.Equal(t, 2500, app.appSettings.LogBufferMaxSize)
-	require.Equal(t, 144, app.appSettings.LogTargetPerScopeLimit)
-	require.Equal(t, 180, app.appSettings.LogTargetGlobalLimit)
-	require.Equal(t, "HH:mm:ss.SSS", app.appSettings.LogAPITimestampFormat)
-	require.True(t, app.appSettings.LogAPITimestampUseLocalTimeZone)
+	require.Equal(t, 2500, app.appSettings.ObjPanelLogsBufferMaxSize)
+	require.Equal(t, 144, app.appSettings.ObjPanelLogsTargetPerScopeLimit)
+	require.Equal(t, 180, app.appSettings.ObjPanelLogsTargetGlobalLimit)
+	require.Equal(t, "HH:mm:ss.SSS", app.appSettings.ObjPanelLogsAPITimestampFormat)
+	require.True(t, app.appSettings.ObjPanelLogsAPITimestampUseLocalTimeZone)
 	require.Equal(t, "namespaced", app.appSettings.GridTablePersistenceMode)
 	require.Equal(t, "floating", app.appSettings.DefaultObjectPanelPosition)
 	require.Equal(t, 200, app.appSettings.PaletteHueLight)
@@ -215,39 +215,39 @@ func TestAppSetBackgroundRefreshEnabledPersists(t *testing.T) {
 	require.Contains(t, last.Message, "Background refresh enabled changed to: false")
 }
 
-func TestAppSetLogBufferMaxSizePersistsAndClamps(t *testing.T) {
+func TestAppSetObjPanelLogsBufferMaxSizePersistsAndClamps(t *testing.T) {
 	setTestConfigEnv(t)
 
 	// In-range value round-trips unchanged.
 	app := newTestAppWithDefaults(t)
-	require.NoError(t, app.SetLogBufferMaxSize(2500))
-	require.Equal(t, 2500, app.appSettings.LogBufferMaxSize)
+	require.NoError(t, app.SetObjPanelLogsBufferMaxSize(2500))
+	require.Equal(t, 2500, app.appSettings.ObjPanelLogsBufferMaxSize)
 
 	app.appSettings = nil
 	require.NoError(t, app.loadAppSettings())
-	require.Equal(t, 2500, app.appSettings.LogBufferMaxSize)
+	require.Equal(t, 2500, app.appSettings.ObjPanelLogsBufferMaxSize)
 
 	entries := app.logger.GetEntries()
 	require.NotEmpty(t, entries)
-	require.Contains(t, entries[len(entries)-1].Message, "Log buffer max size changed to: 2500")
+	require.Contains(t, entries[len(entries)-1].Message, "ObjPanelLogs buffer max size changed to: 2500")
 
 	// Out-of-range values clamp to the allowed range.
-	require.NoError(t, app.SetLogBufferMaxSize(50))
-	require.Equal(t, minLogBufferMaxSize, app.appSettings.LogBufferMaxSize)
+	require.NoError(t, app.SetObjPanelLogsBufferMaxSize(50))
+	require.Equal(t, minObjPanelLogsBufferMaxSize, app.appSettings.ObjPanelLogsBufferMaxSize)
 
-	require.NoError(t, app.SetLogBufferMaxSize(50000))
-	require.Equal(t, maxLogBufferMaxSize, app.appSettings.LogBufferMaxSize)
+	require.NoError(t, app.SetObjPanelLogsBufferMaxSize(50000))
+	require.Equal(t, maxObjPanelLogsBufferMaxSize, app.appSettings.ObjPanelLogsBufferMaxSize)
 
 	// Default is returned when the settings file has no entry yet.
 	setTestConfigEnv(t)
 	freshApp := newTestAppWithDefaults(t)
 	settings, err := freshApp.GetAppSettings()
 	require.NoError(t, err)
-	require.Equal(t, defaultLogBufferMaxSize, settings.LogBufferMaxSize)
-	require.Equal(t, defaultLogTargetPerScopeLimit, settings.LogTargetPerScopeLimit)
-	require.Equal(t, defaultLogTargetGlobalLimit, settings.LogTargetGlobalLimit)
-	require.Equal(t, defaultLogAPITimestampFormat, settings.LogAPITimestampFormat)
-	require.False(t, settings.LogAPITimestampUseLocalTimeZone)
+	require.Equal(t, defaultObjPanelLogsBufferMaxSize, settings.ObjPanelLogsBufferMaxSize)
+	require.Equal(t, defaultObjPanelLogsTargetPerScopeLimit, settings.ObjPanelLogsTargetPerScopeLimit)
+	require.Equal(t, defaultObjPanelLogsTargetGlobalLimit, settings.ObjPanelLogsTargetGlobalLimit)
+	require.Equal(t, defaultObjPanelLogsAPITimestampFormat, settings.ObjPanelLogsAPITimestampFormat)
+	require.False(t, settings.ObjPanelLogsAPITimestampUseLocalTimeZone)
 }
 
 func TestAppSetMaxTableRowsPersistsAndClamps(t *testing.T) {
@@ -278,86 +278,86 @@ func TestAppSetMaxTableRowsPersistsAndClamps(t *testing.T) {
 	require.Equal(t, defaultMaxTableRows, settings.MaxTableRows)
 }
 
-func TestAppSetLogTargetPerScopeLimitPersistsAndClamps(t *testing.T) {
+func TestAppSetObjPanelLogsTargetPerScopeLimitPersistsAndClamps(t *testing.T) {
 	setTestConfigEnv(t)
 
 	app := newTestAppWithDefaults(t)
-	require.NoError(t, app.SetLogTargetPerScopeLimit(144))
-	require.Equal(t, 144, app.appSettings.LogTargetPerScopeLimit)
+	require.NoError(t, app.SetObjPanelLogsTargetPerScopeLimit(144))
+	require.Equal(t, 144, app.appSettings.ObjPanelLogsTargetPerScopeLimit)
 
 	app.appSettings = nil
 	require.NoError(t, app.loadAppSettings())
-	require.Equal(t, 144, app.appSettings.LogTargetPerScopeLimit)
+	require.Equal(t, 144, app.appSettings.ObjPanelLogsTargetPerScopeLimit)
 
 	entries := app.logger.GetEntries()
 	require.NotEmpty(t, entries)
-	require.Contains(t, entries[len(entries)-1].Message, "Log target per-scope limit changed to: 144")
+	require.Contains(t, entries[len(entries)-1].Message, "Object Panel Logs Tab target per-scope limit changed to: 144")
 
-	require.NoError(t, app.SetLogTargetPerScopeLimit(0))
-	require.Equal(t, minLogTargetPerScopeLimit, app.appSettings.LogTargetPerScopeLimit)
+	require.NoError(t, app.SetObjPanelLogsTargetPerScopeLimit(0))
+	require.Equal(t, minObjPanelLogsTargetPerScopeLimit, app.appSettings.ObjPanelLogsTargetPerScopeLimit)
 
-	require.NoError(t, app.SetLogTargetPerScopeLimit(999_999))
-	require.Equal(t, maxLogTargetPerScopeLimit, app.appSettings.LogTargetPerScopeLimit)
+	require.NoError(t, app.SetObjPanelLogsTargetPerScopeLimit(999_999))
+	require.Equal(t, maxObjPanelLogsTargetPerScopeLimit, app.appSettings.ObjPanelLogsTargetPerScopeLimit)
 }
 
-func TestAppSetLogTargetGlobalLimitPersistsAndClamps(t *testing.T) {
+func TestAppSetObjPanelLogsTargetGlobalLimitPersistsAndClamps(t *testing.T) {
 	setTestConfigEnv(t)
 
 	app := newTestAppWithDefaults(t)
-	require.NoError(t, app.SetLogTargetGlobalLimit(180))
-	require.Equal(t, 180, app.appSettings.LogTargetGlobalLimit)
+	require.NoError(t, app.SetObjPanelLogsTargetGlobalLimit(180))
+	require.Equal(t, 180, app.appSettings.ObjPanelLogsTargetGlobalLimit)
 
 	app.appSettings = nil
 	require.NoError(t, app.loadAppSettings())
-	require.Equal(t, 180, app.appSettings.LogTargetGlobalLimit)
+	require.Equal(t, 180, app.appSettings.ObjPanelLogsTargetGlobalLimit)
 
 	entries := app.logger.GetEntries()
 	require.NotEmpty(t, entries)
-	require.Contains(t, entries[len(entries)-1].Message, "Log target global limit changed to: 180")
+	require.Contains(t, entries[len(entries)-1].Message, "Object Panel Logs Tab target global limit changed to: 180")
 
-	require.NoError(t, app.SetLogTargetGlobalLimit(0))
-	require.Equal(t, minLogTargetGlobalLimit, app.appSettings.LogTargetGlobalLimit)
+	require.NoError(t, app.SetObjPanelLogsTargetGlobalLimit(0))
+	require.Equal(t, minObjPanelLogsTargetGlobalLimit, app.appSettings.ObjPanelLogsTargetGlobalLimit)
 
-	require.NoError(t, app.SetLogTargetGlobalLimit(999_999))
-	require.Equal(t, maxLogTargetGlobalLimit, app.appSettings.LogTargetGlobalLimit)
+	require.NoError(t, app.SetObjPanelLogsTargetGlobalLimit(999_999))
+	require.Equal(t, maxObjPanelLogsTargetGlobalLimit, app.appSettings.ObjPanelLogsTargetGlobalLimit)
 }
 
-func TestAppSetLogAPITimestampFormatPersists(t *testing.T) {
+func TestAppSetObjPanelLogsAPITimestampFormatPersists(t *testing.T) {
 	setTestConfigEnv(t)
 
 	app := newTestAppWithDefaults(t)
-	require.NoError(t, app.SetLogAPITimestampFormat("HH:mm:ss.SSS"))
-	require.Equal(t, "HH:mm:ss.SSS", app.appSettings.LogAPITimestampFormat)
+	require.NoError(t, app.SetObjPanelLogsAPITimestampFormat("HH:mm:ss.SSS"))
+	require.Equal(t, "HH:mm:ss.SSS", app.appSettings.ObjPanelLogsAPITimestampFormat)
 
 	app.appSettings = nil
 	require.NoError(t, app.loadAppSettings())
-	require.Equal(t, "HH:mm:ss.SSS", app.appSettings.LogAPITimestampFormat)
+	require.Equal(t, "HH:mm:ss.SSS", app.appSettings.ObjPanelLogsAPITimestampFormat)
 
 	entries := app.logger.GetEntries()
 	require.NotEmpty(t, entries)
-	require.Contains(t, entries[len(entries)-1].Message, "Log API timestamp format changed to: HH:mm:ss.SSS")
+	require.Contains(t, entries[len(entries)-1].Message, "Object Panel Logs Tab API timestamp format changed to: HH:mm:ss.SSS")
 
-	require.NoError(t, app.SetLogAPITimestampFormat(""))
-	require.Equal(t, defaultLogAPITimestampFormat, app.appSettings.LogAPITimestampFormat)
+	require.NoError(t, app.SetObjPanelLogsAPITimestampFormat(""))
+	require.Equal(t, defaultObjPanelLogsAPITimestampFormat, app.appSettings.ObjPanelLogsAPITimestampFormat)
 }
 
-func TestAppSetLogAPITimestampUseLocalTimeZonePersists(t *testing.T) {
+func TestAppSetObjPanelLogsAPITimestampUseLocalTimeZonePersists(t *testing.T) {
 	setTestConfigEnv(t)
 
 	app := newTestAppWithDefaults(t)
-	require.NoError(t, app.SetLogAPITimestampUseLocalTimeZone(true))
-	require.True(t, app.appSettings.LogAPITimestampUseLocalTimeZone)
+	require.NoError(t, app.SetObjPanelLogsAPITimestampUseLocalTimeZone(true))
+	require.True(t, app.appSettings.ObjPanelLogsAPITimestampUseLocalTimeZone)
 
 	app.appSettings = nil
 	require.NoError(t, app.loadAppSettings())
-	require.True(t, app.appSettings.LogAPITimestampUseLocalTimeZone)
+	require.True(t, app.appSettings.ObjPanelLogsAPITimestampUseLocalTimeZone)
 
 	entries := app.logger.GetEntries()
 	require.NotEmpty(t, entries)
 	require.Contains(
 		t,
 		entries[len(entries)-1].Message,
-		"Log API timestamp local timezone changed to: true",
+		"Object Panel Logs Tab API timestamp local timezone changed to: true",
 	)
 }
 

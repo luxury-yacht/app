@@ -50,7 +50,7 @@ import type {
 import { buildClusterScopeList, parseClusterScopeList, stripClusterScope } from '../clusterScope';
 import { errorHandler } from '@utils/errorHandler';
 import { eventBus, type AppEvents } from '@/core/events';
-import { logAppInfo, logAppWarn } from '@/core/logging/appLogClient';
+import { logAppLogsInfo, logAppLogsWarn } from '@/core/logging/appLogsClient';
 import { resolvePermissionDeniedMessage } from '../permissionErrors';
 
 const RESOURCE_STREAM_PATH = '/api/v2/stream/resources';
@@ -67,11 +67,11 @@ const MAX_UPDATE_QUEUE = 1000;
 const RECONNECT_JITTER_FACTOR = 0.2;
 
 const logInfo = (message: string): void => {
-  logAppInfo(message, 'ResourceStream');
+  logAppLogsInfo(message, 'ResourceStream');
 };
 
 const logWarning = (message: string): void => {
-  logAppWarn(message, 'ResourceStream');
+  logAppLogsWarn(message, 'ResourceStream');
 };
 
 const MESSAGE_TYPES = {

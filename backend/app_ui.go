@@ -17,14 +17,14 @@ func (a *App) ToggleDiagnosticsPanel() error {
 	return nil
 }
 
-func (a *App) ToggleLogsPanel() error {
+func (a *App) ToggleAppLogsPanel() error {
 	if a.Ctx == nil {
 		return fmt.Errorf("application context not available")
 	}
 
-	a.logsPanelVisible = !a.logsPanelVisible
-	a.logger.Info("Logs panel toggled", "App")
-	a.emitEvent("toggle-app-logs")
+	a.appLogsPanelVisible = !a.appLogsPanelVisible
+	a.logger.Info("Application Logs Panel toggled", "App")
+	a.emitEvent("toggle-app-logs-panel")
 	a.UpdateMenu()
 	return nil
 }
@@ -71,8 +71,8 @@ func (a *App) IsDiagnosticsPanelVisible() bool {
 	return a.diagnosticsPanelVisible
 }
 
-func (a *App) IsLogsPanelVisible() bool {
-	return a.logsPanelVisible
+func (a *App) IsAppLogsPanelVisible() bool {
+	return a.appLogsPanelVisible
 }
 
 func (a *App) SetSidebarVisible(visible bool) {
@@ -82,10 +82,9 @@ func (a *App) SetSidebarVisible(visible bool) {
 	}
 }
 
-func (a *App) SetLogsPanelVisible(visible bool) {
-	if a.logsPanelVisible != visible {
-		a.logsPanelVisible = visible
+func (a *App) SetAppLogsPanelVisible(visible bool) {
+	if a.appLogsPanelVisible != visible {
+		a.appLogsPanelVisible = visible
 		a.UpdateMenu()
 	}
 }
-

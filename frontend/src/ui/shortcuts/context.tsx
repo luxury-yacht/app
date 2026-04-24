@@ -134,8 +134,8 @@ export const deriveCopyText = (selection: Selection | null): string | null => {
         break;
       }
       if (
-        currentNode.classList?.contains('pod-logs-text') ||
-        currentNode.classList?.contains('pod-logs-content')
+        currentNode.classList?.contains('logs-viewer-text') ||
+        currentNode.classList?.contains('logs-viewer-content')
       ) {
         break;
       }

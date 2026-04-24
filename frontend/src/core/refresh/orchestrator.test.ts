@@ -58,14 +58,14 @@ vi.mock('./client', () => ({
   setMetricsActive: clientMocks.setMetricsActiveMock,
 }));
 
-const logStreamMocks = vi.hoisted(() => ({
+const containerLogsStreamMocks = vi.hoisted(() => ({
   start: vi.fn(),
   stop: vi.fn(),
   refreshOnce: vi.fn(),
 }));
 
-vi.mock('./streaming/logStreamManager', () => ({
-  logStreamManager: logStreamMocks,
+vi.mock('./streaming/containerLogsStreamManager', () => ({
+  containerLogsStreamManager: containerLogsStreamMocks,
 }));
 
 const eventStreamMocks = vi.hoisted(() => ({
@@ -1215,34 +1215,34 @@ describe('refreshOrchestrator', () => {
   });
 
   it('starts and stops streaming managers for scoped domains', async () => {
-    logStreamMocks.start.mockClear();
-    logStreamMocks.stop.mockClear();
-    logStreamMocks.refreshOnce.mockClear();
+    containerLogsStreamMocks.start.mockClear();
+    containerLogsStreamMocks.stop.mockClear();
+    containerLogsStreamMocks.refreshOnce.mockClear();
     eventStreamMocks.startNamespace.mockClear();
     eventStreamMocks.stopNamespace.mockClear();
     eventStreamMocks.refreshNamespace.mockClear();
 
     refreshOrchestrator.registerDomain({
-      domain: 'object-logs',
-      refresherName: SYSTEM_REFRESHERS.objectLogs,
+      domain: 'container-logs',
+      refresherName: SYSTEM_REFRESHERS.containerLogs,
       category: 'system',
 
       streaming: {
-        start: (scope: string) => logStreamMocks.start(scope),
+        start: (scope: string) => containerLogsStreamMocks.start(scope),
         stop: (scope: string, options?: { reset?: boolean }) =>
-          logStreamMocks.stop(scope, options?.reset ?? false),
-        refreshOnce: (scope: string) => logStreamMocks.refreshOnce(scope),
+          containerLogsStreamMocks.stop(scope, options?.reset ?? false),
+        refreshOnce: (scope: string) => containerLogsStreamMocks.refreshOnce(scope),
       },
     });
 
-    await refreshOrchestrator.setScopedDomainEnabled?.('object-logs', 'team-a', true);
-    expect(logStreamMocks.start).toHaveBeenCalledWith('team-a');
+    await refreshOrchestrator.setScopedDomainEnabled?.('container-logs', 'team-a', true);
+    expect(containerLogsStreamMocks.start).toHaveBeenCalledWith('team-a');
 
-    await refreshOrchestrator.refreshStreamingDomainOnce('object-logs', 'team-a');
-    expect(logStreamMocks.refreshOnce).toHaveBeenCalledWith('team-a');
+    await refreshOrchestrator.refreshStreamingDomainOnce('container-logs', 'team-a');
+    expect(containerLogsStreamMocks.refreshOnce).toHaveBeenCalledWith('team-a');
 
-    await refreshOrchestrator.setScopedDomainEnabled?.('object-logs', 'team-a', false);
-    expect(logStreamMocks.stop).toHaveBeenCalledWith('team-a', true);
+    await refreshOrchestrator.setScopedDomainEnabled?.('container-logs', 'team-a', false);
+    expect(containerLogsStreamMocks.stop).toHaveBeenCalledWith('team-a', true);
 
     catalogStreamMocks.start.mockClear();
     catalogStreamMocks.stop.mockClear();
@@ -1298,23 +1298,23 @@ describe('refreshOrchestrator', () => {
   });
 
   it('handles concurrent namespace streams without leaking state', async () => {
-    logStreamMocks.start.mockClear();
-    logStreamMocks.stop.mockClear();
-    logStreamMocks.refreshOnce.mockClear();
+    containerLogsStreamMocks.start.mockClear();
+    containerLogsStreamMocks.stop.mockClear();
+    containerLogsStreamMocks.refreshOnce.mockClear();
     eventStreamMocks.startNamespace.mockClear();
     eventStreamMocks.stopNamespace.mockClear();
     eventStreamMocks.refreshNamespace?.mockClear?.();
 
     refreshOrchestrator.registerDomain({
-      domain: 'object-logs',
-      refresherName: SYSTEM_REFRESHERS.objectLogs,
+      domain: 'container-logs',
+      refresherName: SYSTEM_REFRESHERS.containerLogs,
       category: 'system',
 
       streaming: {
-        start: (scope: string) => logStreamMocks.start(scope),
+        start: (scope: string) => containerLogsStreamMocks.start(scope),
         stop: (scope: string, options?: { reset?: boolean }) =>
-          logStreamMocks.stop(scope, options?.reset ?? false),
-        refreshOnce: (scope: string) => logStreamMocks.refreshOnce(scope),
+          containerLogsStreamMocks.stop(scope, options?.reset ?? false),
+        refreshOnce: (scope: string) => containerLogsStreamMocks.refreshOnce(scope),
       },
     });
 
@@ -1331,19 +1331,19 @@ describe('refreshOrchestrator', () => {
       },
     });
 
-    await refreshOrchestrator.setScopedDomainEnabled?.('object-logs', 'team-a', true);
+    await refreshOrchestrator.setScopedDomainEnabled?.('container-logs', 'team-a', true);
     await refreshOrchestrator.setScopedDomainEnabled?.('namespace-events', 'team-a', true);
 
-    expect(logStreamMocks.start).toHaveBeenCalledWith('team-a');
+    expect(containerLogsStreamMocks.start).toHaveBeenCalledWith('team-a');
     expect(eventStreamMocks.startNamespace).toHaveBeenCalledWith('team-a');
 
     await refreshOrchestrator.refreshStreamingDomainOnce('namespace-events', 'team-a');
     expect(eventStreamMocks.refreshNamespace).toHaveBeenCalledWith('team-a');
 
-    await refreshOrchestrator.setScopedDomainEnabled?.('object-logs', 'team-a', false);
+    await refreshOrchestrator.setScopedDomainEnabled?.('container-logs', 'team-a', false);
     await refreshOrchestrator.setScopedDomainEnabled?.('namespace-events', 'team-a', false);
 
-    expect(logStreamMocks.stop).toHaveBeenCalledWith('team-a', true);
+    expect(containerLogsStreamMocks.stop).toHaveBeenCalledWith('team-a', true);
     expect(eventStreamMocks.stopNamespace).toHaveBeenCalledWith('team-a', true);
   });
 
@@ -1352,8 +1352,8 @@ describe('refreshOrchestrator', () => {
     const stopSpy = vi.fn();
 
     refreshOrchestrator.registerDomain({
-      domain: 'object-logs',
-      refresherName: SYSTEM_REFRESHERS.objectLogs,
+      domain: 'container-logs',
+      refresherName: SYSTEM_REFRESHERS.containerLogs,
       category: 'system',
 
       streaming: {
@@ -1363,14 +1363,14 @@ describe('refreshOrchestrator', () => {
       },
     });
 
-    refreshOrchestrator.setScopedDomainEnabled('object-logs', '  Team-A  ', true);
+    refreshOrchestrator.setScopedDomainEnabled('container-logs', '  Team-A  ', true);
     await Promise.resolve();
     expect(startSpy).toHaveBeenCalledWith('Team-A');
 
-    refreshOrchestrator.setScopedDomainEnabled('object-logs', 'Team-A', true);
+    refreshOrchestrator.setScopedDomainEnabled('container-logs', 'Team-A', true);
     expect(startSpy).toHaveBeenCalledTimes(1);
 
-    refreshOrchestrator.setScopedDomainEnabled('object-logs', 'Team-A', false);
+    refreshOrchestrator.setScopedDomainEnabled('container-logs', 'Team-A', false);
     expect(stopSpy).toHaveBeenCalledWith('Team-A', true);
   });
 
@@ -1476,37 +1476,37 @@ describe('refreshOrchestrator', () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const startError = new Error('stream boom');
 
-    logStreamMocks.start.mockRejectedValueOnce(startError);
+    containerLogsStreamMocks.start.mockRejectedValueOnce(startError);
     refreshOrchestrator.registerDomain({
-      domain: 'object-logs',
-      refresherName: SYSTEM_REFRESHERS.objectLogs,
+      domain: 'container-logs',
+      refresherName: SYSTEM_REFRESHERS.containerLogs,
       category: 'system',
 
       streaming: {
-        start: (scope: string) => logStreamMocks.start(scope),
+        start: (scope: string) => containerLogsStreamMocks.start(scope),
         stop: (scope: string, options?: { reset?: boolean }) =>
-          logStreamMocks.stop(scope, options?.reset ?? false),
-        refreshOnce: (scope: string) => logStreamMocks.refreshOnce(scope),
+          containerLogsStreamMocks.stop(scope, options?.reset ?? false),
+        refreshOnce: (scope: string) => containerLogsStreamMocks.refreshOnce(scope),
       },
     });
 
-    await refreshOrchestrator.setScopedDomainEnabled?.('object-logs', 'team-a', true);
+    await refreshOrchestrator.setScopedDomainEnabled?.('container-logs', 'team-a', true);
     await Promise.resolve();
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(logStreamMocks.start).toHaveBeenCalledWith('team-a');
+    expect(containerLogsStreamMocks.start).toHaveBeenCalledWith('team-a');
     expect(consoleSpy).toHaveBeenCalledWith(
-      expect.stringContaining('Failed to start streaming domain object-logs::team-a'),
+      expect.stringContaining('Failed to start streaming domain container-logs::team-a'),
       startError
     );
     expect(orchestratorInternals.streamingCleanup.size).toBe(0);
-    const scopedState = getScopedDomainState('object-logs', 'team-a');
+    const scopedState = getScopedDomainState('container-logs', 'team-a');
     expect(scopedState.status).toBe('error');
     expect(scopedState.error).toContain('stream boom');
     expect(errorHandlerMock.handle).toHaveBeenCalledWith(
       expect.any(Error),
       expect.objectContaining({
-        domain: 'object-logs',
+        domain: 'container-logs',
         scope: 'team-a',
       })
     );

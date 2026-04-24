@@ -104,7 +104,7 @@ func (l *Logger) Log(level LogLevel, message string, source ...string) {
 	// Emit outside the logger lock so event handlers cannot block log writes
 	// or deadlock by synchronously reading the logger.
 	if emit != nil {
-		emit("log-added")
+		emit("app-logs:added")
 	}
 }
 

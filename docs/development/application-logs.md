@@ -1,18 +1,19 @@
 # Application Logs Subsystem Review
 
 This document reviews the Application Logs subsystem as it exists today across
-the Go backend and React frontend. It is intentionally separate from the pod
-and object log viewer.
+the Go backend and React frontend. It is intentionally separate from the Object
+Panel Logs Tab and from Kubernetes container logs.
 
 ## Scope
 
-Application Logs are the app's own diagnostic log stream. They are shown in the
-global "Application Logs" panel and are backed by `backend.Logger`.
+Application Logs are the app's own diagnostic log buffer. They are shown in the
+global Application Logs Panel and are backed by `backend.Logger`.
 
-They are not Kubernetes pod logs. Pod and object logs are fetched from the
+They are not Kubernetes container logs. Container Logs are fetched from the
 Kubernetes logs APIs through `backend/resources/pods/logs.go`,
-`backend/refresh/logstream`, and the object panel `LogViewer`. Those paths have
-their own settings, stream limits, buffers, timestamp formatting, and UI.
+`backend/refresh/containerlogsstream`, and the Object Panel Logs Tab's `LogViewer`.
+Those paths have their own settings, stream limits, buffers, timestamp
+formatting, and UI.
 
 ## Current Architecture
 
@@ -37,13 +38,13 @@ Core files:
   discarded.
 - `GetEntries()` returns a shallow copy of the slice.
 - `Clear()` empties the slice but keeps capacity.
-- Every write invokes the configured event emitter with `log-added`.
+- Every write invokes the configured event emitter with `app-logs:added`.
 
 The Wails-exposed backend API is in `backend/app_logs.go`:
 
-- `GetLogs()` returns the current in-memory entries.
-- `ClearLogs()` clears the logger; after clear, the backend buffer is empty.
-- `LogFrontend(level, message, source)` lets frontend code append entries into
+- `GetAppLogs()` returns the current in-memory entries.
+- `ClearAppLogs()` clears the logger; after clear, the backend buffer is empty.
+- `LogAppLogsFromFrontend(level, message, source)` lets frontend code append entries into
   the backend Application Logs buffer.
 
 ### Backend Ingestion Sources
@@ -54,15 +55,15 @@ Application Logs currently receive data from several backend sources:
 - Standard-library `log` output via `stdLogBridge`, installed in `Startup()`.
 - Captured stderr/klog output from Kubernetes libraries via
   `backend/internal/errorcapture`.
-- Frontend diagnostic messages sent through `LogFrontend`.
+- Frontend diagnostic messages sent through `LogAppLogsFromFrontend`.
 
 Direct app logging is widely used across backend startup, kubeconfig discovery,
 cluster connection/recovery, refresh setup, resource loaders, object catalog,
 streaming handlers, shell sessions, port forwarding, settings changes, auth,
 and update checks. Common sources include `App`, `KubernetesClient`,
 `KubeconfigManager`, `KubeconfigWatcher`, `Refresh`, `ResourceLoader`,
-`ObjectCatalog`, `Auth`, `Heartbeat`, `LogStream`, `ResourceStream`,
-`EventStream`, `StreamMux`, `Settings`, `Pod`, and `PodLogs`.
+`ObjectCatalog`, `Auth`, `Heartbeat`, `ContainerLogsStream`, `ResourceStream`,
+`EventStream`, `StreamMux`, `Settings`, `Pod`, and `ContainerLogs`.
 
 `stdLogBridge` classifies plain `log` output heuristically:
 
@@ -102,7 +103,7 @@ Core files:
 - `frontend/src/ui/panels/app-logs/AppLogsPanel.tsx`
 - `frontend/src/ui/panels/app-logs/AppLogsPanel.css`
 - `frontend/src/core/app-state-access/readers.ts`
-- `frontend/src/core/logging/appLogClient.ts`
+- `frontend/src/core/logging/appLogsClient.ts`
 - `frontend/src/core/contexts/ModalStateContext.tsx`
 - `frontend/src/App.tsx`
 - `frontend/src/hooks/useWailsRuntimeEvents.ts`
@@ -110,7 +111,7 @@ Core files:
 - `frontend/src/ui/command-palette/CommandPaletteCommands.tsx`
 
 The panel is app-global, not cluster-scoped. `ModalStateContext` stores
-`showAppLogs`, and `AppLayout` renders `AppLogsPanel` under a
+`showAppLogsPanel`, and `AppLayout` renders `AppLogsPanel` under a
 `PanelErrorBoundary`.
 
 Open/close entrypoints:
@@ -118,16 +119,16 @@ Open/close entrypoints:
 - Native menu item: `View > Show/Hide Application Logs`.
 - Global shortcut: `Ctrl+Shift+L`.
 - Command palette command: `Application Logs Panel`.
-- Runtime event: `toggle-app-logs`.
+- Runtime event: `toggle-app-logs-panel`.
 
 When the panel opens:
 
-- It calls `SetLogsPanelVisible(isOpen)` to sync backend menu state.
-- It waits 300 ms, then reads all logs through `readAppLogs()` / `GetLogs()`.
+- It calls `SetAppLogsPanelVisible(isOpen)` to sync backend menu state.
+- It waits 300 ms, then reads all logs through `readAppLogs()` / `GetAppLogs()`.
   The Application Logs read path intentionally avoids `requestAppState()` so
   the log sink does not feed broker-read diagnostics back into itself.
-- It subscribes to the Wails `log-added` event.
-- On every `log-added`, it refetches the entire log buffer via `GetLogs()`.
+- It subscribes to the Wails `app-logs:added` event.
+- On every `app-logs:added`, it refetches the entire log buffer via `GetAppLogs()`.
 
 The panel provides:
 
@@ -147,12 +148,12 @@ The panel provides:
 
 ### Frontend Log Producers
 
-`frontend/src/core/logging/appLogClient.ts` wraps `window.go.backend.App.LogFrontend`
+`frontend/src/core/logging/appLogsClient.ts` wraps `window.go.backend.App.LogAppLogsFromFrontend`
 and exports:
 
-- `logAppDebug`
-- `logAppInfo`
-- `logAppWarn`
+- `logAppLogsDebug`
+- `logAppLogsInfo`
+- `logAppLogsWarn`
 
 Current frontend producers include:
 
@@ -162,12 +163,12 @@ Current frontend producers include:
 - `CatalogStream`: logs catalog stream fallback warnings.
 - `useCatalogDiagnostics`: logs catalog update-rate diagnostics and warnings.
 
-There is no `logAppError` helper today, although the backend supports an
-`error` level through `LogFrontend`.
+There is no `logAppLogsError` helper today, although the backend supports an
+`error` level through `LogAppLogsFromFrontend`.
 
 ## Current User-Facing Behavior
 
-The Application Logs panel is best understood as a global support/debug console
+The Application Logs Panel is best understood as a global support/debug console
 for the running app:
 
 - It shows lifecycle events such as startup, shutdown, settings changes, cluster
@@ -184,33 +185,32 @@ Those logs live in the object panel Logs tab and node log views.
 
 ## Confusing Boundaries
 
-The codebase uses "logs" for at least three different features:
+The codebase now uses the following names for the separate concepts:
 
-1. Application Logs: app diagnostics shown by `AppLogsPanel`.
-2. Pod/object logs: Kubernetes pod log data shown by `LogViewer`.
-3. Log settings: mostly pod/object log viewer settings.
+1. Application Logs Panel: settings/config for the panel that shows
+   Application Logs. Examples: `AppLogsPanel`, `SetAppLogsPanelVisible()`.
+2. Application Logs: the app's own diagnostics. Examples: `GetAppLogs()`,
+   `ClearAppLogs()`, `LogAppLogsFromFrontend()`, `app-logs:added`.
+3. Object Panel Logs Tab: settings/config for the Object Panel tab that shows
+   Container Logs. Examples: `ObjPanelLogsSettings`,
+   `getObjPanelLogsBufferMaxSize()`, `settings:obj-panel-logs-buffer-size`.
+4. Container Logs: the actual Kubernetes pod/container log data. Examples:
+   `FetchContainerLogs()`, `ContainerLogsFetchRequest`,
+   `ContainerLogsEntry`, the `container-logs` refresh domain.
 
-The `Log Settings` modal is for pod/object log viewing, not Application Logs.
-Examples:
-
-- `Log buffer size` controls pod log viewer scrollback through
-  `getLogBufferMaxSize()` and `LogViewer`.
-- `Max containers` controls pod/container log target limits.
-- `API Timestamps` controls Kubernetes API timestamps in pod/object log rows.
-
-Backend settings names such as `SetLogBufferMaxSize` and
-`LogBufferMaxSize` sound generic, but they do not resize the Application Logs
-backend buffer. The Application Logs backend buffer is currently fixed at
-`NewLogger(1000)`.
+The `Object Panel Logs Tab Settings` modal is for the Object Panel Logs Tab,
+not Application Logs. Its buffer size controls Object Panel Logs Tab
+scrollback for Container Logs. It does not resize the Application Logs backend
+buffer, which is currently fixed at `NewLogger(1000)`.
 
 ## Existing Test Coverage
 
 Backend coverage:
 
-- `backend/app_logs_test.go` covers nil logger handling, `GetLogs()`,
-  structured cluster metadata, `ClearLogs()`, and `LogFrontend()` level/source
+- `backend/app_logs_test.go` covers nil logger handling, `GetAppLogs()`,
+  structured cluster metadata, `ClearAppLogs()`, and `LogAppLogsFromFrontend()` level/source
   normalization.
-- `backend/app_ui_test.go` covers logs panel toggling, event emission, and menu
+- `backend/app_ui_test.go` covers Application Logs Panel toggling, event emission, and menu
   state updates.
 - `backend/app_lifecycle_test.go` covers `stdLogBridge` level classification.
 - `backend/internal/errorcapture/error_capture_test.go` covers stderr capture,
@@ -228,14 +228,14 @@ Frontend coverage:
   closes the previously open dropdown even when a parent stops `mousedown`
   bubbling.
 - Shortcut and command-palette tests cover the general UI entrypoints.
-- Streaming manager tests mock frontend app-log producers.
+- Streaming manager tests mock frontend Application Logs producers.
 
 Notably missing:
 
-- No direct unit test for `appLogClient.ts`.
-- No test asserting that Application Logs settings are independent from pod log
+- No direct unit test for `appLogsClient.ts`.
+- No test asserting that Application Logs settings are independent from container log
   settings.
-- No integration test that exercises `log-added -> GetLogs -> render`.
+- No integration test that exercises `app-logs:added -> GetAppLogs -> render`.
 - No test for multiple Wails listeners on the same event.
 
 ## Completed Work
@@ -246,10 +246,10 @@ Notably missing:
   populate cluster metadata through the existing logger methods.
 - [x] Added Application Logs UI support for displaying, filtering, searching,
   and copying cluster metadata.
-- [x] Moved logger `log-added` event emission outside the logger mutex.
+- [x] Moved logger `app-logs:added` event emission outside the logger mutex.
 - [x] Kept Application Logs reads out of `requestAppState()` to avoid a
   diagnostics/logging feedback loop.
-- [x] Replaced custom App Logs select-all sentinel options with the shared
+- [x] Replaced custom Application Logs select-all sentinel options with the shared
   `Dropdown` component's built-in bulk actions.
 - [x] Fixed shared dropdown outside-click handling so sibling dropdowns close
   correctly even inside parents that stop `mousedown` bubbling.
@@ -260,28 +260,25 @@ Notably missing:
 
 ### Ranked Findings
 
-1. Medium-high: Application Logs and pod/object Logs boundaries are confusing.
-   The visible Log Settings UI applies to pod/object logs, not Application
-   Logs, while backend setting names such as `LogBufferMaxSize` sound generic.
-2. Medium: Severity classification is inconsistent across direct logger calls,
+1. Medium: Severity classification is inconsistent across direct logger calls,
    `stdLogBridge`, and `errorcapture`, which makes the log level less reliable
    as diagnostic signal.
-3. Medium: The `log-added` event contains no payload, so the frontend refetches
+2. Medium: The `app-logs:added` event contains no payload, so the frontend refetches
    the full log buffer on every new entry.
-4. Medium: Wails event unsubscription may be too broad if another future
-   consumer also listens to `log-added`.
-5. Medium-low: Application Logs have no persistence or file export path, which
+3. Medium: Wails event unsubscription may be too broad if another future
+   consumer also listens to `app-logs:added`.
+4. Medium-low: Application Logs have no persistence or file export path, which
    limits support workflows after restart or early startup failure.
-6. Medium-low: The frontend logging helper is incomplete because it lacks
-   `logAppError()` even though the backend supports error-level frontend logs.
-7. Low: Source names are free-form and can drift, making component filtering
+5. Medium-low: The frontend logging helper is incomplete because it lacks
+   `logAppLogsError()` even though the backend supports error-level frontend logs.
+6. Low: Source names are free-form and can drift, making component filtering
     less predictable.
-8. Low: Debug entries are hidden by default, which is probably correct but
+7. Low: Debug entries are hidden by default, which is probably correct but
     needs better support/testing guidance.
-9. Low: Rendering is not virtualized. This is fine for the fixed 1000-entry
+8. Low: Rendering is not virtualized. This is fine for the fixed 1000-entry
     buffer, but becomes a concern if the buffer grows.
-10. Low: Application Log timestamp formatting is hard-coded and intentionally
-    separate from pod log timestamp preferences, but the distinction is not
+9. Low: Application Log timestamp formatting is hard-coded and intentionally
+    separate from container log timestamp preferences, but the distinction is not
     obvious.
 
 Completed finding:
@@ -289,17 +286,21 @@ Completed finding:
 - Cluster-aware Application Log entries and UI filtering are complete.
 - Clear behavior is normalized: clearing Application Logs leaves the backend
   buffer and frontend panel empty, with no marker row.
+- Application Logs, Application Logs Panel, Object Panel Logs Tab, and
+  Container Logs naming is clarified through hard-renamed backend APIs,
+  generated Wails bindings, frontend helper names, settings events, and UI
+  copy.
 - Event emission no longer happens while holding the logger mutex.
 
 ### Event Payload Is Too Thin
 
-`Logger.Log()` emits only `log-added`; the frontend then refetches the entire
+`Logger.Log()` emits only `app-logs:added`; the frontend then refetches the entire
 buffer. This is simple and safe for a 1000-entry buffer, but it is noisy under
 bursts and makes every new log an RPC read of the full list.
 
 A future incremental model could emit the new entry or a monotonic sequence
 number. The panel could append entries and occasionally reconcile with
-`GetLogs()`.
+`GetAppLogs()`.
 
 ### Application Logs Are Not Structured Enough For Multi-Cluster Diagnosis
 
@@ -322,7 +323,7 @@ text.
 
 The `source` field is an arbitrary string. That keeps call sites simple, but it
 also creates drift. Examples include broad sources (`App`, `Refresh`), domain
-sources (`ResourceStream`, `LogStream`), and resource-oriented sources
+sources (`ResourceStream`, `ContainerLogsStream`), and resource-oriented sources
 (`Pod`, `ResourceLoader`, `RBAC`).
 
 There is no registry or guidance for choosing a source. This makes component
@@ -356,17 +357,18 @@ explicitly say "include Debug" when investigating klog or refresh noise.
 
 ### Wails Event Unsubscription May Be Too Broad
 
-`AppLogsPanel` calls `runtime.EventsOff('log-added')` during cleanup. If Wails'
+`AppLogsPanel` calls `runtime.EventsOff('app-logs:added')` during cleanup. If Wails'
 event API removes all listeners for the event, another future consumer of
-`log-added` could be disconnected when the panel closes.
+`app-logs:added` could be disconnected when the panel closes.
 
 This is harmless while `AppLogsPanel` is the only listener. It becomes risky if
 additional listeners are added.
 
 ### Application Log Buffer Size Is Not Configurable
 
-The app has user-visible "Log buffer size" settings, but those settings apply
-to pod/object logs. Application Logs remain fixed at 1000 entries.
+The app has user-visible "Object Panel Logs Tab buffer size" settings, but
+those settings apply to the Object Panel Logs Tab's Container Logs display.
+Application Logs remain fixed at 1000 entries.
 
 That may be enough, but it should be intentional and named clearly. If support
 work often needs longer app history, add an Application Logs-specific buffer
@@ -380,7 +382,7 @@ after restart. There is also no "save to file" action, only copy-to-clipboard.
 
 ### Frontend Logging Has No Error Helper
 
-`appLogClient.ts` exports debug/info/warn helpers but no error helper, even
+`appLogsClient.ts` exports debug/info/warn helpers but no error helper, even
 though the backend accepts `error`. This encourages frontend code either to log
 warnings for errors or to bypass the helper.
 
@@ -393,25 +395,19 @@ discipline as larger tabular/log surfaces.
 ### Timestamp Formatting Is Hard-Coded
 
 Application Logs render local `HH:mm:ss.SSS` using `Intl.DateTimeFormat`. The
-pod log timestamp settings do not apply. That is fine if intentional, but the
+container log timestamp settings do not apply. That is fine if intentional, but the
 difference should be visible in naming and docs.
 
 ## Simplification Opportunities
 
-### Separate Names For App Logs And Pod Logs
+### Separate Names For The Four Log Concepts
 
-Use explicit names in settings and code comments:
+Completed: settings and comments now use explicit names:
 
-- "Application Logs" for `backend.Logger` and `AppLogsPanel`.
-- "Pod Logs" or "Object Logs" for Kubernetes container logs and `LogViewer`.
-
-Concrete cleanup:
-
-- Rename misleading comments such as "Keep backend log-stream visibility aligned
-  with this panel's open state" in `AppLogsPanel`; `SetLogsPanelVisible` only
-  tracks app panel/menu visibility.
-- Clarify backend comments on `SetLogBufferMaxSize` as pod/object log viewer
-  settings, not Application Logs settings.
+- "Application Logs Panel" for the panel UI/config.
+- "Application Logs" for `backend.Logger` entries.
+- "Object Panel Logs Tab" for object-panel tab UI/settings.
+- "Container Logs" for Kubernetes pod/container log rows.
 
 ### Introduce A Small App Log Contract
 
@@ -427,7 +423,7 @@ need to be heavy:
 ### Normalize Event Delivery
 
 Completed: `Logger.Log()` now appends under lock, releases the lock, and then
-emits `log-added`.
+emits `app-logs:added`.
 
 ### Avoid Full Buffer Reads On Every Log
 
@@ -435,8 +431,8 @@ For now, full reads are acceptable. If Application Logs become noisy, a minimal
 incremental improvement is:
 
 - Add `sequence` to `LogEntry`.
-- Add `GetLogsSince(sequence)`.
-- Emit `log-added` with the newest sequence.
+- Add `GetAppLogsSince(sequence)`.
+- Emit `app-logs:added` with the newest sequence.
 - Let the panel request only deltas.
 
 ### Remove Duplicate Filter Logic
@@ -445,9 +441,9 @@ incremental improvement is:
 that into a small local helper such as `filterLogEntries(logs, filters)`. This
 would make future changes to filter semantics less error-prone.
 
-### Add `logAppError`
+### Add `logAppLogsError`
 
-Export `logAppError()` from `appLogClient.ts` and test level normalization. This
+Export `logAppLogsError()` from `appLogsClient.ts` and test level normalization. This
 is a small, obvious API completion.
 
 ## Missing Capabilities
@@ -460,9 +456,9 @@ High-value missing capabilities:
 - Export/save logs to a file.
 - Copy all logs regardless of active filters.
 - "Include Debug" discoverability for support workflows.
-- Direct test coverage for `appLogClient`.
-- Clear, documented boundary between Application Logs and pod/object Logs
-  settings.
+- Direct test coverage for `appLogsClient`.
+- Clear, documented boundary between Application Logs Panel, Application Logs,
+  Object Panel Logs Tab, and Container Logs.
 - Optional persistent crash/startup log file for early startup failures.
 
 Lower-priority capabilities:
@@ -476,14 +472,12 @@ Lower-priority capabilities:
 
 ## Recommended Backlog
 
-1. Clarify naming and comments around Application Logs versus pod/object Logs.
-   This is the cheapest fix and prevents future wrong assumptions.
-2. Add tests for `appLogClient`, including an added `logAppError` helper.
-3. Add complete object-reference metadata to `LogEntry` for object-specific
+1. Add tests for `appLogsClient`, including an added `logAppLogsError` helper.
+2. Add complete object-reference metadata to `LogEntry` for object-specific
    messages.
-4. Add canonical source constants for common subsystems.
-5. Consider a delta API only if full-buffer refetches show up in profiling.
-6. Consider Application Logs export/persistence if support workflows need logs
+3. Add canonical source constants for common subsystems.
+4. Consider a delta API only if full-buffer refetches show up in profiling.
+5. Consider Application Logs export/persistence if support workflows need logs
    after restart.
 
 ## Manual Testing Checklist
@@ -519,9 +513,9 @@ Kubernetes stderr/klog test:
 4. Look for `ErrorCapture` entries such as Kubernetes reflector/cache messages
    or warnings/errors.
 
-Pod log isolation test:
+Container log isolation test:
 
 1. Open an object panel Logs tab for a pod/workload.
-2. Stream or fetch pod logs.
-3. Confirm container stdout/stderr appears in the pod/object Logs view, not as
+2. Stream or fetch container logs.
+3. Confirm container stdout/stderr appears in the Object Panel Logs Tab, not as
    Application Logs entries unless the log subsystem itself emits a diagnostic.

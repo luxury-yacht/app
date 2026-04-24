@@ -86,7 +86,7 @@ export const DOMAIN_REFRESHER_MAP: Partial<Record<RefreshDomain, RefresherName>>
   'namespace-quotas': NAMESPACE_REFRESHERS.quotas,
   'namespace-rbac': NAMESPACE_REFRESHERS.rbac,
   'namespace-storage': NAMESPACE_REFRESHERS.storage,
-  'object-logs': SYSTEM_REFRESHERS.objectLogs,
+  'container-logs': SYSTEM_REFRESHERS.containerLogs,
 };
 
 // Stream telemetry names for diagnostics (only set for stream-backed domains).
@@ -110,7 +110,7 @@ export const DOMAIN_STREAM_MAP: Partial<Record<RefreshDomain, string>> = {
   'cluster-events': 'events',
   'namespace-events': 'events',
   catalog: 'catalog',
-  'object-logs': 'object-logs',
+  'container-logs': 'container-logs',
 };
 
 export const PRIORITY_DOMAINS: RefreshDomain[] = [

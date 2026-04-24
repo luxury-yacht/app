@@ -9,8 +9,8 @@ import { afterEach, beforeEach, describe, expect, it, test, vi } from 'vitest';
 const ensureRefreshBaseURLMock = vi.hoisted(() => vi.fn(async () => 'http://127.0.0.1:0'));
 const fetchSnapshotMock = vi.hoisted(() => vi.fn());
 const invalidateRefreshBaseURLMock = vi.hoisted(() => vi.fn());
-const logAppInfoMock = vi.hoisted(() => vi.fn());
-const logAppWarnMock = vi.hoisted(() => vi.fn());
+const logAppLogsInfoMock = vi.hoisted(() => vi.fn());
+const logAppLogsWarnMock = vi.hoisted(() => vi.fn());
 const errorHandlerMock = vi.hoisted(() => ({
   handle: vi.fn(),
 }));
@@ -27,9 +27,9 @@ vi.mock('@utils/errorHandler', () => ({
   errorHandler: errorHandlerMock,
 }));
 
-vi.mock('@/core/logging/appLogClient', () => ({
-  logAppInfo: logAppInfoMock,
-  logAppWarn: logAppWarnMock,
+vi.mock('@/core/logging/appLogsClient', () => ({
+  logAppLogsInfo: logAppLogsInfoMock,
+  logAppLogsWarn: logAppLogsWarnMock,
 }));
 
 import { buildClusterScopeList } from '../clusterScope';
@@ -72,8 +72,8 @@ beforeEach(() => {
   ensureRefreshBaseURLMock.mockResolvedValue('http://127.0.0.1:0');
   fetchSnapshotMock.mockReset();
   invalidateRefreshBaseURLMock.mockReset();
-  logAppInfoMock.mockClear();
-  logAppWarnMock.mockClear();
+  logAppLogsInfoMock.mockClear();
+  logAppLogsWarnMock.mockClear();
   errorHandlerMock.handle.mockClear();
   createdSockets.length = 0;
 

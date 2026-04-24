@@ -129,17 +129,17 @@ func TestRecordMetrics(t *testing.T) {
 func TestStreamTelemetry(t *testing.T) {
 	rec := NewRecorder()
 
-	rec.RecordStreamConnect(StreamLogs)
-	rec.RecordStreamDelivery(StreamLogs, 3, 0)
-	rec.RecordStreamDelivery(StreamLogs, 0, 2)
-	rec.RecordStreamSkippedTargets(StreamLogs, 5, "per-scope target cap")
-	rec.RecordStreamError(StreamLogs, errors.New("pipe closed"))
-	rec.RecordStreamDisconnect(StreamLogs)
+	rec.RecordStreamConnect(StreamContainerLogs)
+	rec.RecordStreamDelivery(StreamContainerLogs, 3, 0)
+	rec.RecordStreamDelivery(StreamContainerLogs, 0, 2)
+	rec.RecordStreamSkippedTargets(StreamContainerLogs, 5, "per-scope target cap")
+	rec.RecordStreamError(StreamContainerLogs, errors.New("pipe closed"))
+	rec.RecordStreamDisconnect(StreamContainerLogs)
 
 	streams := rec.SnapshotSummary().Streams
 	require.Len(t, streams, 1)
 	s := streams[0]
-	require.Equal(t, StreamLogs, s.Name)
+	require.Equal(t, StreamContainerLogs, s.Name)
 	require.Equal(t, 0, s.ActiveSessions)
 	require.Equal(t, uint64(3), s.TotalMessages)
 	require.Equal(t, uint64(2), s.DroppedMessages)
@@ -148,7 +148,7 @@ func TestStreamTelemetry(t *testing.T) {
 	require.Equal(t, "pipe closed", s.LastError)
 	require.Equal(t, "per-scope target cap", s.LastSkipReason)
 
-	rec.RecordStreamDelivery(StreamLogs, 1, 0)
+	rec.RecordStreamDelivery(StreamContainerLogs, 1, 0)
 	s = rec.SnapshotSummary().Streams[0]
 	require.Equal(t, "pipe closed", s.LastError) // last error persists until overwritten
 }

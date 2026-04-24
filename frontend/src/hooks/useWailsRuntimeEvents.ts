@@ -39,7 +39,7 @@ interface WailsRuntimeEventHandlers {
   onOpenSettings: () => void;
   onOpenAbout: () => void;
   onToggleSidebar: () => void;
-  onToggleAppLogs: () => void;
+  onToggleAppLogsPanel: () => void;
   onToggleDiagnostics: () => void;
   onToggleObjectDiff: () => void;
 }
@@ -52,7 +52,7 @@ export function useWailsRuntimeEvents(handlers: WailsRuntimeEventHandlers): void
     onOpenSettings,
     onOpenAbout,
     onToggleSidebar,
-    onToggleAppLogs,
+    onToggleAppLogsPanel,
     onToggleDiagnostics,
     onToggleObjectDiff,
   } = handlers;
@@ -67,7 +67,7 @@ export function useWailsRuntimeEvents(handlers: WailsRuntimeEventHandlers): void
       ['open-settings', onOpenSettings],
       ['open-about', onOpenAbout],
       ['toggle-sidebar', onToggleSidebar],
-      ['toggle-app-logs', onToggleAppLogs],
+      ['toggle-app-logs-panel', onToggleAppLogsPanel],
       ['toggle-diagnostics', onToggleDiagnostics],
       ['toggle-object-diff', onToggleObjectDiff],
     ];
@@ -81,7 +81,7 @@ export function useWailsRuntimeEvents(handlers: WailsRuntimeEventHandlers): void
     onOpenSettings,
     onOpenAbout,
     onToggleSidebar,
-    onToggleAppLogs,
+    onToggleAppLogsPanel,
     onToggleDiagnostics,
     onToggleObjectDiff,
   ]);

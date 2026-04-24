@@ -34,8 +34,8 @@ import (
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
 	"github.com/luxury-yacht/app/backend/refresh/informer"
-	"github.com/luxury-yacht/app/backend/refresh/logstream"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
@@ -191,7 +191,7 @@ func (c *customResourceInformer) stop() {
 type Manager struct {
 	clusterMeta snapshot.ClusterMeta
 	metrics     metrics.Provider
-	logger      logstream.Logger
+	logger      containerlogsstream.Logger
 	telemetry   *telemetry.Recorder
 	permissions permissions.ListWatchChecker
 
@@ -228,7 +228,7 @@ type Manager struct {
 func NewManager(
 	factory *informer.Factory,
 	provider metrics.Provider,
-	logger logstream.Logger,
+	logger containerlogsstream.Logger,
 	recorder *telemetry.Recorder,
 	meta snapshot.ClusterMeta,
 	dynamicClient dynamic.Interface,

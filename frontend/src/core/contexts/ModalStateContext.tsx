@@ -15,20 +15,20 @@ interface ModalStateContextType {
   isObjectDiffOpen: boolean;
   objectDiffOpenRequest: ObjectDiffOpenRequest | null;
   /**
-   * Application-logs panel visibility. App-global (not per-cluster):
-   * the app logs are the application's own log output, not workspace
+   * Application Logs Panel visibility. App-global (not per-cluster):
+   * Application Logs are the application's own log output, not workspace
    * content tied to a cluster, so the panel behaves like a tool window
    * that follows the user across cluster switches. Mirrors the existing
    * `isSettingsOpen` / `showDiagnostics` pattern for non-cluster panels.
    */
-  showAppLogs: boolean;
+  showAppLogsPanel: boolean;
 
   setIsSettingsOpen: (open: boolean) => void;
   setIsAboutOpen: (open: boolean) => void;
   setIsObjectDiffOpen: (open: boolean) => void;
   openObjectDiff: (request?: { left?: ObjectDiffOpenRequest['left'] }) => void;
-  setShowAppLogs: (open: boolean) => void;
-  toggleAppLogs: () => void;
+  setShowAppLogsPanel: (open: boolean) => void;
+  toggleAppLogsPanel: () => void;
 }
 
 const ModalStateContext = createContext<ModalStateContextType | undefined>(undefined);
@@ -52,10 +52,10 @@ export const ModalStateProvider: React.FC<ModalStateProviderProps> = ({ children
   const [objectDiffOpenRequest, setObjectDiffOpenRequest] = useState<ObjectDiffOpenRequest | null>(
     null
   );
-  const [showAppLogs, setShowAppLogs] = useState(false);
+  const [showAppLogsPanel, setShowAppLogsPanel] = useState(false);
 
-  const toggleAppLogs = useCallback(() => {
-    setShowAppLogs((prev) => !prev);
+  const toggleAppLogsPanel = useCallback(() => {
+    setShowAppLogsPanel((prev) => !prev);
   }, []);
 
   const openObjectDiff = useCallback((request?: { left?: ObjectDiffOpenRequest['left'] }) => {
@@ -79,22 +79,22 @@ export const ModalStateProvider: React.FC<ModalStateProviderProps> = ({ children
       isAboutOpen,
       isObjectDiffOpen,
       objectDiffOpenRequest,
-      showAppLogs,
+      showAppLogsPanel,
       setIsSettingsOpen,
       setIsAboutOpen,
       setIsObjectDiffOpen,
       openObjectDiff,
-      setShowAppLogs,
-      toggleAppLogs,
+      setShowAppLogsPanel,
+      toggleAppLogsPanel,
     }),
     [
       isSettingsOpen,
       isAboutOpen,
       isObjectDiffOpen,
       objectDiffOpenRequest,
-      showAppLogs,
+      showAppLogsPanel,
       openObjectDiff,
-      toggleAppLogs,
+      toggleAppLogsPanel,
     ]
   );
 
