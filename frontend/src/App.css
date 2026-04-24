@@ -110,8 +110,27 @@ textarea,
 }
 
 .view-content--cluster-overview {
-  overflow-x: auto;
-  overflow-y: hidden;
+  margin-right: var(--dock-right-offset, 0px);
+  margin-bottom: var(--dock-bottom-offset, 0px);
+  overflow: auto;
+}
+
+body.dock-right-open .view-content--cluster-overview {
+  transition: margin-right 0.3s ease-out;
+}
+
+body.dock-bottom-open .view-content--cluster-overview {
+  transition: margin-bottom 0.3s ease-out;
+}
+
+body.dock-right-open.dock-bottom-open .view-content--cluster-overview {
+  transition:
+    margin-right 0.3s ease-out,
+    margin-bottom 0.3s ease-out;
+}
+
+body.dockable-panel-resizing .view-content--cluster-overview {
+  transition: none;
 }
 
 .app-main-inactive .sidebar,

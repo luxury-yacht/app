@@ -34,6 +34,7 @@ const linuxScrollbarCSS = `
 scrollbar {
   background: transparent;
   border: none;
+  box-shadow: none;
   margin: 0;
   padding: 0;
   -GtkScrollbar-has-backward-stepper: false;
@@ -51,20 +52,23 @@ scrollbar.horizontal {
 scrollbar trough {
   background: transparent;
   border: none;
+  box-shadow: none;
   min-width: 12px;
   min-height: 12px;
+  padding: 0;
 }
 
 scrollbar slider {
-  background-color: rgba(100, 116, 139, 0.58);
+  background-color: rgba(120, 120, 128, 0.42);
   border: none;
   border-radius: 999px;
+  box-shadow: none;
   margin: 3px;
 }
 
 scrollbar slider:hover,
 scrollbar slider:active {
-  background-color: rgba(100, 116, 139, 0.76);
+  background-color: rgba(120, 120, 128, 0.68);
 }
 
 scrollbar.vertical slider {
@@ -84,15 +88,22 @@ scrollbar button {
   border: none;
   background: transparent;
   color: transparent;
+  opacity: 0;
 }
 
-scrollbar.overlay-indicator:not(.dragging):not(.hovering) {
-  opacity: 1;
+scrollbar.overlay-indicator trough {
+  background: transparent;
+}
+
+scrollbar.overlay-indicator slider {
+  background-color: rgba(120, 120, 128, 0.42);
+  border-radius: 999px;
+  margin: 3px;
 }
 `
 
 func prepareLinuxScrollbarRuntime() {
-	os.Setenv("GTK_OVERLAY_SCROLLING", "0")
+	os.Setenv("GTK_OVERLAY_SCROLLING", "1")
 }
 
 func installLinuxScrollbarStyle() {
