@@ -304,4 +304,23 @@ describe('scrollbar activity tracking', () => {
 
     expect(element.style.getPropertyValue('--scrollbar-thumb-current-opacity')).toBe('1');
   });
+
+  it('does not restart fade-in while wheel movement is still active', () => {
+    document.documentElement.style.setProperty('--scrollbar-active-timeout', '1000ms');
+    document.documentElement.style.setProperty('--scrollbar-fade-in-duration', '200ms');
+    const cancelAnimationFrameSpy = vi.mocked(window.cancelAnimationFrame);
+    const element = createScrollableElement();
+
+    dispatchWheel(element);
+    dispatchWheel(element);
+    dispatchWheel(element);
+
+    expect(cancelAnimationFrameSpy).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(100);
+    const opacity = Number.parseFloat(
+      element.style.getPropertyValue('--scrollbar-thumb-current-opacity')
+    );
+    expect(opacity).toBeGreaterThan(0);
+  });
 });

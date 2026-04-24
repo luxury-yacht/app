@@ -41,6 +41,7 @@ const opacityAnimations = new WeakMap<
   Element,
   {
     frameId: number;
+    targetOpacity: number;
     value: number;
   }
 >();
@@ -758,6 +759,10 @@ const animateScrollbarOpacity = (
   onComplete?: () => void
 ): void => {
   const existingAnimation = opacityAnimations.get(element);
+  if (existingAnimation?.targetOpacity === targetOpacity) {
+    return;
+  }
+
   if (existingAnimation) {
     window.cancelAnimationFrame(existingAnimation.frameId);
   }
@@ -787,11 +792,11 @@ const animateScrollbarOpacity = (
     }
 
     const frameId = window.requestAnimationFrame(step);
-    opacityAnimations.set(element, { frameId, value });
+    opacityAnimations.set(element, { frameId, targetOpacity, value });
   };
 
   const frameId = window.requestAnimationFrame(step);
-  opacityAnimations.set(element, { frameId, value: startOpacity });
+  opacityAnimations.set(element, { frameId, targetOpacity, value: startOpacity });
 };
 
 const resolveScrollElement = (target: EventTarget | null): Element | null => {
