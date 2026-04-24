@@ -7,7 +7,7 @@
   --scrollbar-min-thumb-size: 32px;
   --scrollbar-thumb-inset: 1px;
   --scrollbar-fade-in-duration: 150ms;
-  --scrollbar-fade-out-duration: 1500ms;
+  --scrollbar-fade-out-duration: 1000ms;
   --scrollbar-fade-duration: var(--scrollbar-fade-out-duration);
   --scrollbar-active-timeout: 1000ms;
   --scrollbar-thumb-idle-bg: transparent;

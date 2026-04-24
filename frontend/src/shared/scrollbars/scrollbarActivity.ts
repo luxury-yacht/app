@@ -4,6 +4,7 @@ const OVERLAY_SCROLLBAR_SELECTOR = [
   '.gridtable-wrapper',
   '.dockable-panel__content',
   '.object-panel-content',
+  '.namespace-items',
   '.recent-events__list',
 ].join(',');
 const DEFAULT_ACTIVE_TIMEOUT_MS = 900;

@@ -72,6 +72,7 @@
   .gridtable-wrapper,
   .dockable-panel__content,
   .object-panel-content,
+  .namespace-items,
   .recent-events__list
 ) {
   scrollbar-gutter: auto;
@@ -83,6 +84,7 @@
   .gridtable-wrapper,
   .dockable-panel__content,
   .object-panel-content,
+  .namespace-items,
   .recent-events__list
 )::-webkit-scrollbar {
   width: 0;
