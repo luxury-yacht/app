@@ -199,9 +199,19 @@
   border-radius: var(--scrollbar-radius);
   pointer-events: none;
   transition:
-    background-color var(--scrollbar-hover-resize-duration) var(--ease-out, ease),
     height var(--scrollbar-hover-resize-duration) var(--ease-out, ease),
     width var(--scrollbar-hover-resize-duration) var(--ease-out, ease);
+}
+
+.shell-tab__terminal .xterm .xterm-scrollable-element > .scrollbar::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-color: var(--scrollbar-gutter-hover-bg);
+  border-radius: var(--scrollbar-radius);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--scrollbar-hover-resize-duration) var(--ease-out, ease);
 }
 
 .shell-tab__terminal .xterm .xterm-scrollable-element > .shadow {
@@ -229,6 +239,7 @@
   border-radius: var(--scrollbar-radius);
   box-sizing: border-box;
   opacity: var(--scrollbar-thumb-current-opacity);
+  z-index: 1;
   transition:
     background-color var(--scrollbar-fade-in-duration) var(--ease-out, ease),
     height var(--scrollbar-hover-resize-duration) var(--ease-out, ease),
@@ -262,7 +273,6 @@
   .xterm-scrollable-element
   > .scrollbar.vertical,
 .shell-tab__terminal .xterm .xterm-scrollable-element > .scrollbar.vertical:hover {
-  background-color: var(--scrollbar-gutter-hover-bg) !important;
   pointer-events: auto !important;
   width: var(--shell-scrollbar-hover-width) !important;
 }
@@ -272,9 +282,21 @@
   .xterm-scrollable-element
   > .scrollbar.horizontal,
 .shell-tab__terminal .xterm .xterm-scrollable-element > .scrollbar.horizontal:hover {
-  background-color: var(--scrollbar-gutter-hover-bg) !important;
   height: var(--shell-scrollbar-hover-height) !important;
   pointer-events: auto !important;
+}
+
+.shell-tab__terminal--scrollbar-hover-vertical
+  .xterm
+  .xterm-scrollable-element
+  > .scrollbar.vertical::before,
+.shell-tab__terminal .xterm .xterm-scrollable-element > .scrollbar.vertical:hover::before,
+.shell-tab__terminal--scrollbar-hover-horizontal
+  .xterm
+  .xterm-scrollable-element
+  > .scrollbar.horizontal::before,
+.shell-tab__terminal .xterm .xterm-scrollable-element > .scrollbar.horizontal:hover::before {
+  opacity: var(--scrollbar-gutter-hover-opacity);
 }
 
 .shell-tab__terminal--scrollbar-hover-vertical
