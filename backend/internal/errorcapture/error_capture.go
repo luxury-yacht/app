@@ -74,7 +74,6 @@ func Init() {
 	klogFlags.Set("legacy_stderr_threshold_behavior", "false")
 	klogFlags.Set("stderrthreshold", "INFO")
 	klogFlags.Set("logtostderr", "true")
-	klogFlags.Set("stderrthreshold", "0")
 	klogFlags.Set("v", "2")
 
 	global.start()
