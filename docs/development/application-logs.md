@@ -12,8 +12,7 @@ global Application Logs Panel and are backed by `backend.Logger`.
 They are not Kubernetes container logs. Container Logs are fetched from the
 Kubernetes logs APIs through `backend/resources/pods/logs.go`,
 `backend/refresh/containerlogsstream`, and the Object Panel Logs Tab's `LogViewer`.
-Those paths have their own settings, stream limits, buffers, timestamp
-formatting, and UI.
+Those paths have their own settings, stream limits, buffers, and UI.
 
 ## Current Architecture
 
@@ -32,7 +31,6 @@ Core files:
 - Each entry has `timestamp`, `level`, `message`, optional `source`, and
   optional structured cluster metadata (`clusterId`, `clusterName`).
 - Each entry has a monotonic `sequence` value for incremental panel updates.
-- Timestamps are stored as `time.RFC3339Nano` strings.
 - Levels are the enum values `DEBUG`, `INFO`, `WARN`, and `ERROR`.
 - The default app logger is created in `NewApp()` with `NewLogger(1000)`.
 - When the buffer exceeds `maxSize`, the oldest entries are copied out and
@@ -159,6 +157,7 @@ and exports:
 - `logAppLogsDebug`
 - `logAppLogsInfo`
 - `logAppLogsWarn`
+- `logAppLogsError`
 
 Current frontend producers include:
 
@@ -167,9 +166,6 @@ Current frontend producers include:
 - `ResourceStream`: logs resource stream info and warnings.
 - `CatalogStream`: logs catalog stream fallback warnings.
 - `useCatalogDiagnostics`: logs catalog update-rate diagnostics and warnings.
-
-There is no `logAppLogsError` helper today, although the backend supports an
-`error` level through `LogAppLogsFromFrontend`.
 
 ## Current User-Facing Behavior
 
@@ -188,26 +184,6 @@ for the running app:
 It does not show the actual stdout/stderr stream from Kubernetes containers.
 Those logs live in the object panel Logs tab and node log views.
 
-## Confusing Boundaries
-
-The codebase now uses the following names for the separate concepts:
-
-1. Application Logs Panel: settings/config for the panel that shows
-   Application Logs. Examples: `AppLogsPanel`, `SetAppLogsPanelVisible()`.
-2. Application Logs: the app's own diagnostics. Examples: `GetAppLogs()`,
-   `ClearAppLogs()`, `LogAppLogsFromFrontend()`, `app-logs:added`.
-3. Object Panel Logs Tab: settings/config for the Object Panel tab that shows
-   Container Logs. Examples: `ObjPanelLogsSettings`,
-   `getObjPanelLogsBufferMaxSize()`, `settings:obj-panel-logs-buffer-size`.
-4. Container Logs: the actual Kubernetes pod/container log data. Examples:
-   `FetchContainerLogs()`, `ContainerLogsFetchRequest`,
-   `ContainerLogsEntry`, the `container-logs` refresh domain.
-
-The `Object Panel Logs Tab Settings` modal is for the Object Panel Logs Tab,
-not Application Logs. Its buffer size controls Object Panel Logs Tab
-scrollback for Container Logs. It does not resize the Application Logs backend
-buffer, which is currently fixed at `NewLogger(1000)`.
-
 ## Existing Test Coverage
 
 Backend coverage:
@@ -224,6 +200,9 @@ Backend coverage:
 
 Frontend coverage:
 
+- `frontend/src/core/logging/appLogsClient.test.ts` covers frontend helper
+  level forwarding, source normalization, defensive no-op behavior, and
+  `app-logs:added` subscription cleanup.
 - `frontend/src/ui/panels/app-logs/AppLogsPanel.test.tsx` covers visibility
   sync, loading, rendering, load errors, filters, cluster metadata, shared
   dropdown bulk-action wiring, keyboard focus routing, clearing, and clipboard
@@ -241,66 +220,15 @@ Notably missing:
   settings.
 - No end-to-end Wails integration test that exercises backend
   `app-logs:added` emission through the native runtime into the rendered panel.
-- No direct unit test for multiple Wails listeners on the same event.
-
-## Completed Work
-
-- [x] Added structured `clusterId` and `clusterName` fields to Application Log
-  entries.
-- [x] Updated cluster lifecycle/auth/refresh/heartbeat/client log producers to
-  populate cluster metadata through the existing logger methods.
-- [x] Added Application Logs UI support for displaying, filtering, searching,
-  and copying cluster metadata.
-- [x] Moved logger `app-logs:added` event emission outside the logger mutex.
-- [x] Kept Application Logs reads out of `requestAppState()` to avoid a
-  diagnostics/logging feedback loop.
-- [x] Replaced custom Application Logs select-all sentinel options with the shared
-  `Dropdown` component's built-in bulk actions.
-- [x] Fixed shared dropdown outside-click handling so sibling dropdowns close
-  correctly even inside parents that stop `mousedown` bubbling.
-- [x] Added focused backend/frontend tests for the completed Application Logs
-  and dropdown behavior.
 
 ## Risks And Gaps
 
 ### Ranked Findings
 
-1. Medium-low: Application Logs have no persistence or file export path, which
-   limits support workflows after restart or early startup failure.
-2. Low: Source names are still accepted as free-form values at API boundaries,
+1. Low: Source names are still accepted as free-form values at API boundaries,
    so non-canonical or one-off sources can still drift.
-3. Low: Rendering is not virtualized. This is fine for the fixed 1000-entry
+2. Low: Rendering is not virtualized. This is fine for the fixed 1000-entry
     buffer, but becomes a concern if the buffer grows.
-4. Low: Application Log timestamp formatting is hard-coded and intentionally
-    separate from container log timestamp preferences, but the distinction is not
-    obvious.
-
-Completed finding:
-
-- Cluster-aware Application Log entries and UI filtering are complete.
-- Clear behavior is normalized: clearing Application Logs leaves the backend
-  buffer and frontend panel empty, with no marker row.
-- Application Logs, Application Logs Panel, Object Panel Logs Tab, and
-  Container Logs naming is clarified through hard-renamed backend APIs,
-  generated Wails bindings, frontend helper names, settings events, and UI
-  copy.
-- Event emission no longer happens while holding the logger mutex.
-- Severity classification is centralized for indirect log ingestion:
-  `stdLogBridge` and `errorcapture` both use the same klog-aware classifier.
-  Klog prefixes are only interpreted when they match the standard
-  `E1234` / `W1234` / `I1234` shape, and plain text uses word-boundary
-  fallback matching.
-- Application Logs now show all log levels by default, including `debug`.
-- Application Logs live updates now use a small event contract: entries have a
-  monotonic `sequence`, `app-logs:added` emits the newest sequence, the panel
-  reads deltas through `GetAppLogsSince()`, and cleanup uses the per-listener
-  disposer returned by Wails `EventsOn`.
-- The frontend Application Logs helper now has debug/info/warn/error helpers
-  and direct unit coverage for backend calls, defensive no-op behavior, and
-  event subscription cleanup.
-- Common backend Application Log sources now live in
-  `backend/internal/logsources`, and common frontend producers use
-  `APP_LOG_SOURCES` from `appLogsClient.ts`.
 
 ### Application Logs Are Not Structured Enough For Multi-Cluster Diagnosis
 
@@ -321,10 +249,9 @@ text.
 
 ### Source Names Are Still Not Enforced
 
-Common source names are now centralized as constants. That reduces drift in app
-code, but the `source` field is still an arbitrary string. `LogAppLogsFromFrontend`
-also accepts a source string from callers. That keeps the API simple, but custom
-or one-off sources can still appear.
+The `source` field is still an arbitrary string. `LogAppLogsFromFrontend` also
+accepts a source string from callers. That keeps the API simple, but custom or
+one-off sources can still appear.
 
 If stricter filtering becomes important, make `source` an enum-like type for
 internal producers and keep only the Wails frontend API as a string boundary.
@@ -339,61 +266,28 @@ That may be enough, but it should be intentional and named clearly. If support
 work often needs longer app history, add an Application Logs-specific buffer
 setting or increase the fixed size.
 
-### No Persistence Across Restart
-
-Application Logs are memory-only. This is simple and appropriate for normal use,
-but it limits debugging startup failures, early crashes, or issues discovered
-after restart. There is also no "save to file" action, only copy-to-clipboard.
-
 ### Rendering Is Not Virtualized
 
 Rendering up to 1000 rows is likely fine. If the Application Logs buffer becomes
 configurable or much larger, `AppLogsPanel` should use the same virtualization
 discipline as larger tabular/log surfaces.
 
-### Timestamp Formatting Is Hard-Coded
-
-Application Logs render local `HH:mm:ss.SSS` using `Intl.DateTimeFormat`. The
-container log timestamp settings do not apply. That is fine if intentional, but the
-difference should be visible in naming and docs.
-
 ## Simplification Opportunities
-
-### Separate Names For The Four Log Concepts
-
-Completed: settings and comments now use explicit names:
-
-- "Application Logs Panel" for the panel UI/config.
-- "Application Logs" for `backend.Logger` entries.
-- "Object Panel Logs Tab" for object-panel tab UI/settings.
-- "Container Logs" for Kubernetes pod/container log rows.
 
 ### Introduce A Small App Log Contract
 
-Partially complete: common source constants now exist for backend and frontend
-Application Logs producers. Remaining structure that would help:
+Additional structure that would help:
 
 - Document the existing optional logger metadata arguments for cluster-scoped
   messages in the logger API.
 - Add stronger types around internal source values if source drift continues.
 - Keep the existing `Logger` simple.
 
-### Normalize Event Delivery
-
-Completed: `Logger.Log()` now appends under lock, releases the lock, and then
-emits `app-logs:added`.
-
 ### Remove Duplicate Filter Logic
 
 `AppLogsPanel` duplicates the same filtering logic for rendering and copy. Move
 that into a small local helper such as `filterLogEntries(logs, filters)`. This
 would make future changes to filter semantics less error-prone.
-
-### Frontend Logging Helper Coverage
-
-Completed: `appLogsClient.ts` exports debug/info/warn/error helpers and has
-direct tests for level forwarding, message/source normalization, defensive
-no-op behavior, and `app-logs:added` subscription cleanup.
 
 ## Missing Capabilities
 
@@ -402,9 +296,7 @@ High-value missing capabilities:
 - Complete object-reference metadata and filtering for object-specific
   messages.
 - Stronger enforcement for canonical source names.
-- Export/save logs to a file.
 - Copy all logs regardless of active filters.
-- Optional persistent crash/startup log file for early startup failures.
 
 Lower-priority capabilities:
 
@@ -419,8 +311,6 @@ Lower-priority capabilities:
 
 1. Add complete object-reference metadata to `LogEntry` for object-specific
    messages.
-2. Consider Application Logs export/persistence if support workflows need logs
-   after restart.
 
 ## Manual Testing Checklist
 
