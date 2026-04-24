@@ -73,25 +73,6 @@
   min-height: 0;
 }
 
-/* Custom scrollbar for Values content */
-.values-content::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-.values-content::-webkit-scrollbar-track {
-  background: var(--editor-scroll-track);
-}
-
-.values-content::-webkit-scrollbar-thumb {
-  background: var(--editor-scroll-thumb);
-  border-radius: var(--border-radius-sm);
-}
-
-.values-content::-webkit-scrollbar-thumb:hover {
-  background: var(--editor-scroll-thumb-hover);
-}
-
 /* Highlighting for overridden values */
 .values-line-overridden {
   background-color: var(--helm-values-override-bg) !important;

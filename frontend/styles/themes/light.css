@@ -131,15 +131,13 @@
   --code-token-operator: var(--color-base-600);
   --code-token-invalid: rgba(220, 53, 69, 0.6);
 
-  /* Scrollbar styles */
-  --scrollbar-width: 6px;
-  --scrollbar-height: 6px;
-
   /* Scrollbar colors */
-  --scrollbar-track-bg: var(--color-base-100);
-  --scrollbar-thumb-bg: var(--color-base-300);
-  --scrollbar-thumb-hover-bg: var(--color-base-400);
-  --scrollbar-corner-bg: var(--color-base-100);
+  --scrollbar-track-bg: transparent;
+  --scrollbar-thumb-bg: var(--color-bg-tertiary);
+  --scrollbar-thumb-hover-bg: var(--color-bg-tertiary);
+  --scrollbar-gutter-hover-bg: var(--scrollbar-thumb-bg);
+  --scrollbar-gutter-hover-opacity: 0.12;
+  --scrollbar-corner-bg: transparent;
 
   /* Shadows */
   --shadow-interactive-soft: 0 2px 4px rgba(0, 0, 0, 0.08);

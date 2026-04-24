@@ -15,6 +15,11 @@ You MUST follow these at all times, no exceptions!
 - **ALL OBJECT REFERENCES MUST INCLUDE CLUSTERID, GROUP, KIND, AND VERSION.** This is
   critical to avoid ambiguous object references that may use the same Kind. Fix any
   code you find that doesn't do this.
+- **ALWAYS CHOOSE THE SIMPLEST SOLUTION THAT IS COMPLETE AND CORRECT.** Code that is
+  over-complicated or "clever" is never the right choice.
+- **PREFER THE DIFFICULT-BUT-CORRECT FIX OVER THE SIMPLE-BUT-INCOMPLETE FIX.** This
+  may seem contradictory to the previous statement, but this is to do with HOW you
+  work, not WHAT you produce.
 - **NEVER RUN STATE-MODIFYING GIT COMMANDS OR CREATE PRS UNLESS EXPLICITLY DIRECTED.**
   Read-only git commands are fine.
 
@@ -22,7 +27,6 @@ You MUST follow these at all times, no exceptions!
 
 If you break these rules I will be sad. Please don't make me sad.
 
-- Prefer the difficult-but-correct fix over the simple-but-incomplete one.
 - Don't change code, appearance, or dependencies beyond what was explicitly requested.
 - When adding dependencies, use the latest stable version.
 - Make the minimal change requested. Don't rewrite or restructure components for small

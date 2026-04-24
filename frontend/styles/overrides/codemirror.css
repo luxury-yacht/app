@@ -22,21 +22,3 @@
 .codemirror-shell .cm-scroller {
   overflow: auto;
 }
-
-.codemirror-shell .cm-scroller::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-.codemirror-shell .cm-scroller::-webkit-scrollbar-track {
-  background: var(--scrollbar-track-bg);
-}
-
-.codemirror-shell .cm-scroller::-webkit-scrollbar-thumb {
-  background: var(--scrollbar-thumb-bg);
-  border-radius: var(--border-radius-sm);
-}
-
-.codemirror-shell .cm-scroller::-webkit-scrollbar-thumb:hover {
-  background: var(--scrollbar-thumb-hover-bg);
-}

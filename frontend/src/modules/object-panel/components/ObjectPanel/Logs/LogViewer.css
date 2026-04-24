@@ -354,9 +354,9 @@
   --terminal-theme-foreground: var(--log-text-primary);
   --terminal-theme-cursor: var(--log-text-primary);
   --terminal-theme-selection: var(--code-selection-match-bg);
-  --terminal-theme-scrollbar-slider: var(--log-scroll-thumb);
-  --terminal-theme-scrollbar-slider-hover: var(--log-scroll-thumb-hover);
-  --terminal-theme-scrollbar-slider-active: var(--log-scroll-thumb-hover);
+  --terminal-theme-scrollbar-slider: var(--scrollbar-thumb-bg);
+  --terminal-theme-scrollbar-slider-hover: var(--scrollbar-thumb-hover-bg);
+  --terminal-theme-scrollbar-slider-active: var(--scrollbar-thumb-hover-bg);
   --terminal-theme-overview-ruler-border: transparent;
   font-family:
     "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Consolas, "Courier New", monospace;
@@ -475,25 +475,6 @@
 
 .pod-logs-display-error {
   color: var(--color-error, #dc3545);
-}
-
-/* Custom scrollbar for logs content */
-.pod-logs-content::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-.pod-logs-content::-webkit-scrollbar-track {
-  background: var(--log-scroll-track);
-}
-
-.pod-logs-content::-webkit-scrollbar-thumb {
-  background: var(--log-scroll-thumb);
-  border-radius: var(--border-radius-sm);
-}
-
-.pod-logs-content::-webkit-scrollbar-thumb:hover {
-  background: var(--log-scroll-thumb-hover);
 }
 
 /* Parsed logs table */
@@ -657,7 +638,6 @@
   max-height: min(500px, 80vh);
   overflow-y: auto;
   overflow-x: hidden;
-  scrollbar-width: thin;
   box-shadow: var(--log-tooltip-shadow);
   /* Match table cell font styling */
   font-family: var(--font-family-mono);
@@ -665,26 +645,6 @@
   line-height: 1.5;
   z-index: var(--z-tooltip, 9999);
   pointer-events: none;
-}
-
-/* Tooltip scrollbar styling */
-
-.parsed-log-tooltip::-webkit-scrollbar {
-  width: 6px;
-}
-
-.parsed-log-tooltip::-webkit-scrollbar-track {
-  background: var(--log-scroll-track);
-  border-radius: 3px;
-}
-
-.parsed-log-tooltip::-webkit-scrollbar-thumb {
-  background: var(--log-scroll-thumb);
-  border-radius: 3px;
-}
-
-.parsed-log-tooltip::-webkit-scrollbar-thumb:hover {
-  background: var(--log-scroll-thumb-hover);
 }
 
 /* Dynamic pod color applied via --pod-color CSS custom property. */

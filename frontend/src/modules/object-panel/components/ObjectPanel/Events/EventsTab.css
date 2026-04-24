@@ -9,14 +9,11 @@
   position: relative;
 }
 
-/* Grid layout for object events table */
+/* GridTable owns its inner scroll area; keep the outer container from adding a second scrollbar. */
 .gridtable-object-events {
   flex: 1;
-  overflow: auto;
   min-height: 0;
 }
-
-/* Ensure the header stays at the top of the scrollable area */
 
 .object-panel-placeholder {
   padding: 2rem;
@@ -35,23 +32,4 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-/* Custom scrollbar for events table */
-.gridtable-object-events::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-.gridtable-object-events::-webkit-scrollbar-track {
-  background: var(--events-scroll-track);
-}
-
-.gridtable-object-events::-webkit-scrollbar-thumb {
-  background: var(--events-scroll-thumb);
-  border-radius: var(--border-radius-sm);
-}
-
-.gridtable-object-events::-webkit-scrollbar-thumb:hover {
-  background: var(--events-scroll-thumb-hover);
 }

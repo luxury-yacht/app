@@ -110,8 +110,9 @@ textarea,
 }
 
 .view-content--cluster-overview {
-  overflow-x: auto;
-  overflow-y: hidden;
+  margin-right: var(--dock-right-offset, 0px);
+  margin-bottom: var(--dock-bottom-offset, 0px);
+  overflow: auto;
 }
 
 .app-main-inactive .sidebar,

@@ -195,7 +195,6 @@
   overflow: auto;
   padding: 16px;
   background: transparent;
-  scrollbar-gutter: stable;
 }
 
 .error-notification-message {

@@ -106,25 +106,6 @@
   min-height: 0;
 }
 
-/* Custom scrollbar for YAML content */
-.yaml-content::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-.yaml-content::-webkit-scrollbar-track {
-  background: var(--editor-scroll-track);
-}
-
-.yaml-content::-webkit-scrollbar-thumb {
-  background: var(--editor-scroll-thumb);
-  border-radius: var(--border-radius-sm);
-}
-
-.yaml-content::-webkit-scrollbar-thumb:hover {
-  background: var(--editor-scroll-thumb-hover);
-}
-
 .yaml-validation-message {
   font-size: 0.85rem;
   /* margin-bottom: 0.75rem; */

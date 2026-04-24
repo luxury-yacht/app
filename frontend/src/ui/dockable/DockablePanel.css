@@ -53,7 +53,7 @@
   border: 1px solid var(--color-border, #333);
   top: 0;
   left: 0;
-  contain: layout paint;
+  contain: layout;
   will-change: transform;
 }
 
@@ -187,7 +187,7 @@
 .dockable-panel__resize-handle {
   position: absolute;
   background: transparent;
-  z-index: 10;
+  z-index: calc(var(--z-index-scrollbar-overlay) + 1);
 }
 
 .dockable-panel__resize-handle--left {
@@ -245,15 +245,15 @@
 /* Invisible resize zones for floating panels */
 .dockable-panel__resize-zone {
   position: absolute;
-  z-index: 10;
+  z-index: calc(var(--z-index-scrollbar-overlay) + 1);
 
   /* transition: background-color var(--transition-fast); */
 }
 
 .dockable-panel__resize-zone--top {
-  top: 0;
-  left: var(--dockable-panel-floating-resize-zone);
-  right: var(--dockable-panel-floating-resize-zone);
+  top: calc(var(--dockable-panel-floating-resize-zone) * -1);
+  left: 0;
+  right: 0;
   height: var(--dockable-panel-floating-resize-zone);
   cursor:
     url("../../assets/cursors/ns-resize.svg") 12 12,
@@ -261,9 +261,9 @@
 }
 
 .dockable-panel__resize-zone--bottom {
-  bottom: 0;
-  left: var(--dockable-panel-floating-resize-zone);
-  right: var(--dockable-panel-floating-resize-zone);
+  bottom: calc(var(--dockable-panel-floating-resize-zone) * -1);
+  left: 0;
+  right: 0;
   height: var(--dockable-panel-floating-resize-zone);
   cursor:
     url("../../assets/cursors/ns-resize.svg") 12 12,
@@ -271,9 +271,9 @@
 }
 
 .dockable-panel__resize-zone--left {
-  left: 0;
-  top: var(--dockable-panel-floating-resize-zone);
-  bottom: var(--dockable-panel-floating-resize-zone);
+  left: calc(var(--dockable-panel-floating-resize-zone) * -1);
+  top: 0;
+  bottom: 0;
   width: var(--dockable-panel-floating-resize-zone);
   cursor:
     url("../../assets/cursors/ew-resize.svg") 12 12,
@@ -281,9 +281,9 @@
 }
 
 .dockable-panel__resize-zone--right {
-  right: 0;
-  top: var(--dockable-panel-floating-resize-zone);
-  bottom: var(--dockable-panel-floating-resize-zone);
+  right: calc(var(--dockable-panel-floating-resize-zone) * -1);
+  top: 0;
+  bottom: 0;
   width: var(--dockable-panel-floating-resize-zone);
   cursor:
     url("../../assets/cursors/ew-resize.svg") 12 12,
@@ -291,8 +291,8 @@
 }
 
 .dockable-panel__resize-zone--top-left {
-  top: 0;
-  left: 0;
+  top: calc(var(--dockable-panel-floating-resize-zone) * -1);
+  left: calc(var(--dockable-panel-floating-resize-zone) * -1);
   width: var(--dockable-panel-floating-resize-zone);
   height: var(--dockable-panel-floating-resize-zone);
   cursor:
@@ -301,8 +301,8 @@
 }
 
 .dockable-panel__resize-zone--top-right {
-  top: 0;
-  right: 0;
+  top: calc(var(--dockable-panel-floating-resize-zone) * -1);
+  right: calc(var(--dockable-panel-floating-resize-zone) * -1);
   width: var(--dockable-panel-floating-resize-zone);
   height: var(--dockable-panel-floating-resize-zone);
   cursor:
@@ -311,8 +311,8 @@
 }
 
 .dockable-panel__resize-zone--bottom-left {
-  bottom: 0;
-  left: 0;
+  bottom: calc(var(--dockable-panel-floating-resize-zone) * -1);
+  left: calc(var(--dockable-panel-floating-resize-zone) * -1);
   width: var(--dockable-panel-floating-resize-zone);
   height: var(--dockable-panel-floating-resize-zone);
   cursor:
@@ -321,8 +321,8 @@
 }
 
 .dockable-panel__resize-zone--bottom-right {
-  bottom: 0;
-  right: 0;
+  bottom: calc(var(--dockable-panel-floating-resize-zone) * -1);
+  right: calc(var(--dockable-panel-floating-resize-zone) * -1);
   width: var(--dockable-panel-floating-resize-zone);
   height: var(--dockable-panel-floating-resize-zone);
   cursor:
