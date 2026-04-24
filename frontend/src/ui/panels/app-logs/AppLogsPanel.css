@@ -21,6 +21,24 @@
   z-index: 10;
 }
 
+.app-logs-cluster-label {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-logs-cluster-file,
+.app-logs-cluster-separator {
+  color: var(--color-text-secondary);
+}
+
+.app-logs-cluster-context {
+  color: var(--color-text);
+}
+
 .app-logs-filter-group {
   position: relative;
   display: inline-flex;

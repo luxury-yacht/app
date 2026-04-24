@@ -6,6 +6,7 @@
  */
 
 import ReactDOM from 'react-dom/client';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { act } from 'react';
 import { afterEach, afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -240,7 +241,7 @@ describe('AppLogsPanel', () => {
         level: 'info',
         message: 'Cluster A ready',
         source: 'Auth',
-        clusterId: 'cluster-a',
+        clusterId: 'kube-alpha:alpha',
         clusterName: 'alpha',
       },
       {
@@ -248,7 +249,7 @@ describe('AppLogsPanel', () => {
         level: 'info',
         message: 'Cluster B ready',
         source: 'Auth',
-        clusterId: 'cluster-b',
+        clusterId: 'kube-bravo:bravo',
         clusterName: 'bravo',
       },
     ]);
@@ -259,13 +260,23 @@ describe('AppLogsPanel', () => {
 
     expect(container.querySelector('.log-cluster')?.textContent).toBe('[alpha]');
 
-    const clustersDropdown = dropdownInstances.find(
-      (instance) => instance.renderValue() === 'Clusters'
-    );
+    const clustersDropdown = latestDropdown('Clusters');
     expect(clustersDropdown).toBeTruthy();
+    expect(clustersDropdown?.options.map((option: any) => option.label)).toEqual([
+      'kube-alpha:alpha',
+      'kube-bravo:bravo',
+    ]);
+
+    const renderedClusterOption = renderToStaticMarkup(
+      <>{clustersDropdown?.renderOption(clustersDropdown.options[0], true)}</>
+    );
+    expect(renderedClusterOption).toContain('app-logs-cluster-file');
+    expect(renderedClusterOption).toContain('kube-alpha');
+    expect(renderedClusterOption).toContain('app-logs-cluster-context');
+    expect(renderedClusterOption).toContain('alpha');
 
     await act(async () => {
-      clustersDropdown?.onChange(['cluster-b']);
+      clustersDropdown?.onChange(['kube-bravo:bravo']);
       await Promise.resolve();
     });
 
@@ -285,7 +296,7 @@ describe('AppLogsPanel', () => {
         level: 'info',
         message: 'Cluster A ready',
         source: 'Auth',
-        clusterId: 'cluster-a',
+        clusterId: 'kube-alpha:alpha',
         clusterName: 'alpha',
       },
       {
@@ -293,7 +304,7 @@ describe('AppLogsPanel', () => {
         level: 'debug',
         message: 'Cluster B ready',
         source: 'Refresh',
-        clusterId: 'cluster-b',
+        clusterId: 'kube-bravo:bravo',
         clusterName: 'bravo',
       },
     ]);
@@ -321,8 +332,8 @@ describe('AppLogsPanel', () => {
       'Refresh',
     ]);
     expect(clustersDropdown?.options.map((option: any) => option.value)).toEqual([
-      'cluster-a',
-      'cluster-b',
+      'kube-alpha:alpha',
+      'kube-bravo:bravo',
     ]);
 
     cleanup();

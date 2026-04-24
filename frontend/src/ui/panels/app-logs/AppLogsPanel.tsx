@@ -37,6 +37,51 @@ const LOG_LEVEL_BASE_OPTIONS = [
 const ALL_LEVEL_VALUES = LOG_LEVEL_BASE_OPTIONS.map((option) => option.value);
 const DEFAULT_LOG_LEVELS = ['info', 'warn', 'error'];
 
+const buildClusterOption = (log: LogEntry) => {
+  const clusterId = log.clusterId?.trim() ?? '';
+  const clusterName = log.clusterName?.trim() ?? '';
+  const value = clusterId || clusterName;
+
+  if (!value) {
+    return null;
+  }
+
+  let fileName = '';
+  let context = '';
+
+  if (clusterId && clusterName && clusterId !== clusterName) {
+    const contextSuffix = `:${clusterName}`;
+    if (clusterId.endsWith(contextSuffix) && clusterId.length > contextSuffix.length) {
+      fileName = clusterId.slice(0, -contextSuffix.length);
+      context = clusterName;
+    } else if (clusterId.includes(':')) {
+      const separatorIndex = clusterId.lastIndexOf(':');
+      fileName = clusterId.slice(0, separatorIndex);
+      context = clusterId.slice(separatorIndex + 1);
+    } else {
+      fileName = clusterId;
+      context = clusterName;
+    }
+  } else if (clusterId.includes(':')) {
+    const separatorIndex = clusterId.lastIndexOf(':');
+    fileName = clusterId.slice(0, separatorIndex);
+    context = clusterId.slice(separatorIndex + 1);
+  } else {
+    context = clusterName || clusterId;
+  }
+
+  const label = fileName && context ? `${fileName}:${context}` : context || value;
+
+  return {
+    value,
+    label,
+    metadata: {
+      fileName,
+      context,
+    },
+  };
+};
+
 interface AppLogsPanelProps {
   isOpen: boolean;
   onClose: () => void;
@@ -226,18 +271,14 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
 
   const clusterOptions = useMemo(() => {
     const seen = new Set<string>();
-    const options: Array<{ value: string; label: string }> = [];
+    const options: Array<NonNullable<ReturnType<typeof buildClusterOption>>> = [];
     logs.forEach((log) => {
-      const value = log.clusterId || log.clusterName;
-      if (!value || seen.has(value)) {
+      const option = buildClusterOption(log);
+      if (!option || seen.has(option.value)) {
         return;
       }
-      seen.add(value);
-      const label =
-        log.clusterName && log.clusterId && log.clusterName !== log.clusterId
-          ? `${log.clusterName} (${log.clusterId})`
-          : value;
-      options.push({ value, label });
+      seen.add(option.value);
+      options.push(option);
     });
     options.sort((left, right) => left.label.localeCompare(right.label));
     return options;
@@ -299,11 +340,32 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
   );
 
   const renderClusterOption = useCallback(
-    (option: { value: string; label: string }, isSelected: boolean) => {
+    (
+      option: {
+        value: string;
+        label: string;
+        metadata?: { fileName?: unknown; context?: unknown };
+      },
+      isSelected: boolean
+    ) => {
+      const fileName =
+        typeof option.metadata?.fileName === 'string' ? option.metadata.fileName : '';
+      const context = typeof option.metadata?.context === 'string' ? option.metadata.context : '';
+
       return (
         <span className="dropdown-filter-option">
           <span className="dropdown-filter-check">{isSelected ? '✓' : ''}</span>
-          <span className="dropdown-filter-label">{option.label}</span>
+          {fileName && context ? (
+            <span className="app-logs-cluster-label">
+              <span className="app-logs-cluster-file">{fileName}</span>
+              <span className="app-logs-cluster-separator" aria-hidden="true">
+                :
+              </span>
+              <span className="app-logs-cluster-context">{context}</span>
+            </span>
+          ) : (
+            <span className="dropdown-filter-label">{option.label}</span>
+          )}
         </span>
       );
     },
@@ -579,9 +641,44 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
       {/* Panel-specific controls toolbar (moved from header for tab support) */}
       <div className="app-logs-panel-toolbar" onMouseDown={(e) => e.stopPropagation()}>
         <div className="app-logs-panel-controls">
-          <span className="app-logs-count">
-            {showFilteredCount ? `(${filteredLogs.length} / ${logs.length})` : `(${logs.length})`}
-          </span>
+          <Dropdown
+            options={clusterOptions}
+            value={clusterFilter}
+            onChange={handleClusterDropdownChange}
+            multiple
+            size="small"
+            showBulkActions
+            ariaLabel="Filter by cluster"
+            dropdownClassName="dropdown-filter-menu"
+            renderOption={renderClusterOption}
+            renderValue={() => 'Clusters'}
+          />
+
+          <Dropdown
+            options={componentOptions}
+            value={componentFilter}
+            onChange={handleComponentDropdownChange}
+            multiple
+            size="small"
+            showBulkActions
+            ariaLabel="Filter by component"
+            dropdownClassName="dropdown-filter-menu"
+            renderOption={renderComponentOption}
+            renderValue={() => 'Components'}
+          />
+
+          <Dropdown
+            options={LOG_LEVEL_BASE_OPTIONS}
+            value={logLevelFilter}
+            onChange={handleLogLevelDropdownChange}
+            multiple
+            size="small"
+            showBulkActions
+            ariaLabel="Filter by log level"
+            dropdownClassName="dropdown-filter-menu"
+            renderOption={renderLogLevelOption}
+            renderValue={() => 'Log Levels'}
+          />
 
           <div className="app-logs-filter-group">
             <input
@@ -605,46 +702,11 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
             )}
           </div>
 
-          <Dropdown
-            options={LOG_LEVEL_BASE_OPTIONS}
-            value={logLevelFilter}
-            onChange={handleLogLevelDropdownChange}
-            multiple
-            size="small"
-            showBulkActions
-            ariaLabel="Filter by log level"
-            dropdownClassName="dropdown-filter-menu"
-            renderOption={renderLogLevelOption}
-            renderValue={() => 'Log Levels'}
-          />
-
-          <Dropdown
-            options={componentOptions}
-            value={componentFilter}
-            onChange={handleComponentDropdownChange}
-            multiple
-            size="small"
-            showBulkActions
-            ariaLabel="Filter by component"
-            dropdownClassName="dropdown-filter-menu"
-            renderOption={renderComponentOption}
-            renderValue={() => 'Components'}
-          />
-
-          <Dropdown
-            options={clusterOptions}
-            value={clusterFilter}
-            onChange={handleClusterDropdownChange}
-            multiple
-            size="small"
-            showBulkActions
-            ariaLabel="Filter by cluster"
-            dropdownClassName="dropdown-filter-menu"
-            renderOption={renderClusterOption}
-            renderValue={() => 'Clusters'}
-          />
-
           <IconBar items={appLogsIconBarItems} className="app-logs-action-iconbar" />
+
+          <span className="app-logs-count">
+            {showFilteredCount ? `(${filteredLogs.length} / ${logs.length})` : `(${logs.length})`}
+          </span>
         </div>
       </div>
 
