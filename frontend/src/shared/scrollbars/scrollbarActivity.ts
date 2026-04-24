@@ -10,13 +10,13 @@ const SCROLLBAR_ACTIVE_CLASS = 'scrollbar-active';
 const OVERLAY_SCROLLBAR_EXCLUDED_SELECTOR = [
   'html',
   'body',
+  '.dropdown-menu',
   '.dockable-tab-bar',
   '.tab-strip',
   '.xterm-scrollable-element',
   '.xterm-viewport',
 ].join(',');
 const OVERLAY_SCROLLBAR_OWNER_SELECTOR = [
-  '.dropdown-menu',
   '.fav-dropdown-panel',
   '.tooltip',
   '.command-palette',
@@ -95,39 +95,8 @@ const isOverlayScrollbarElement = (element: Element): element is HTMLElement =>
   !element.matches(OVERLAY_SCROLLBAR_EXCLUDED_SELECTOR) &&
   (overlayElements.has(element) || canScroll(element));
 
-const resolveOverlayOwner = (element: HTMLElement): HTMLElement | null =>
-  element.closest<HTMLElement>(OVERLAY_SCROLLBAR_OWNER_SELECTOR);
-
 const resolveOverlayContainer = (element: HTMLElement): HTMLElement => {
-  const owner = resolveOverlayOwner(element);
-  if (!owner) {
-    return document.body;
-  }
-
-  if (owner === element && owner.matches('.dropdown-menu')) {
-    return document.body;
-  }
-
-  return owner;
-};
-
-const applyOverlayZIndex = (
-  element: HTMLElement,
-  overlay: {
-    horizontalGutter: HTMLDivElement;
-    horizontalThumb: HTMLDivElement;
-    verticalGutter: HTMLDivElement;
-    verticalThumb: HTMLDivElement;
-  }
-): void => {
-  const owner = resolveOverlayOwner(element);
-  const ownerZIndex = owner ? Number.parseInt(getComputedStyle(owner).zIndex, 10) : NaN;
-  const zIndex = Number.isFinite(ownerZIndex) ? String(ownerZIndex + 1) : '';
-
-  overlay.verticalGutter.style.zIndex = zIndex;
-  overlay.verticalThumb.style.zIndex = zIndex;
-  overlay.horizontalGutter.style.zIndex = zIndex;
-  overlay.horizontalThumb.style.zIndex = zIndex;
+  return element.closest<HTMLElement>(OVERLAY_SCROLLBAR_OWNER_SELECTOR) ?? document.body;
 };
 
 const canScrollAxis = (element: HTMLElement, axis: 'horizontal' | 'vertical'): boolean => {
@@ -437,7 +406,6 @@ const updateOverlayScrollbarGeometry = (element: Element): void => {
   overlay.verticalThumb.style.position = position;
   overlay.horizontalGutter.style.position = position;
   overlay.horizontalThumb.style.position = position;
-  applyOverlayZIndex(element, overlay);
 
   const rect = toOverlayCoordinateRect(getOverflowClipRect(element), overlay.container);
   const scrollbarWidth = readScrollbarPxToken('--scrollbar-width', 10);
@@ -988,19 +956,12 @@ const scheduleScrollbarInactive = (element: Element): void => {
   activeTimers.set(element, timer);
 };
 
-const markScrollbarActive = (
-  element: Element,
-  geometry: 'immediate' | 'scheduled' | 'none' = 'immediate'
-): void => {
+const markScrollbarActive = (element: Element): void => {
   const activeOpacity = readScrollbarOpacityToken('--scrollbar-thumb-active-opacity', 1);
   if (isOverlayScrollbarElement(element)) {
     ensureOverlayScrollbars(element);
     activeOverlayElements.add(element);
-    if (geometry === 'scheduled') {
-      scheduleOverlayGeometryUpdate(element);
-    } else if (geometry === 'immediate') {
-      updateOverlayScrollbarGeometry(element);
-    }
+    updateOverlayScrollbarGeometry(element);
     startActiveOverlayGeometryTracking();
   }
   setScrollbarOpacity(element, getCurrentScrollbarOpacity(element));
@@ -1038,7 +999,7 @@ export const initializeScrollbarActivityTracking = (): void => {
       if (element) {
         overlayGeometryTransitionsDisabled.add(element);
         updateOverlayScrollbarGeometry(element);
-        markScrollbarActive(element, 'none');
+        markScrollbarActive(element);
       }
     },
     { capture: true, passive: true, signal }
@@ -1053,19 +1014,15 @@ export const initializeScrollbarActivityTracking = (): void => {
         const delta = getWheelDeltaPixels(event, overlayOwner);
         scrollByPixels(overlayOwner, delta.x, delta.y);
         overlayGeometryTransitionsDisabled.add(overlayOwner);
+        markScrollbarActive(overlayOwner);
         updateOverlayScrollbarGeometry(overlayOwner);
-        markScrollbarActive(overlayOwner, 'none');
         event.preventDefault();
         return;
       }
 
       const element = findWheelScrollTarget(event.target, event);
       if (element) {
-        const geometry =
-          element instanceof HTMLElement && element.matches('.dropdown-menu')
-            ? 'scheduled'
-            : 'immediate';
-        markScrollbarActive(element, geometry);
+        markScrollbarActive(element);
       }
     },
     { capture: true, passive: false, signal }
