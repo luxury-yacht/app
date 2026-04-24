@@ -13,6 +13,9 @@ import { useShortcut, useKeyboardSurface } from '@ui/shortcuts';
 import { KeyboardScopePriority, KeyboardShortcutPriority } from '@ui/shortcuts/priorities';
 import { DockablePanel } from '@ui/dockable';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
+import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
+import { AutoScrollIcon, CopyIcon } from '@shared/components/icons/LogIcons';
+import { DeleteIcon } from '@shared/components/icons/MenuIcons';
 import { readAppLogs } from '@/core/app-state-access';
 import './AppLogsPanel.css';
 
@@ -43,6 +46,7 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [isAutoScroll, setIsAutoScroll] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
+  const [copyFeedback, setCopyFeedback] = useState<'idle' | 'copied' | 'error'>('idle');
 
   const [logLevelFilter, setLogLevelFilter] = useState<string[]>(DEFAULT_LOG_LEVELS);
   const [componentFilter, setComponentFilter] = useState<string[]>([]);
@@ -174,6 +178,10 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
     }
   }, []);
 
+  const handleToggleAutoScroll = useCallback(() => {
+    setIsAutoScroll((prev) => !prev);
+  }, []);
+
   const normalizeLevel = useCallback((level: string) => {
     const normalized = level.toLowerCase();
     return normalized === 'warning' ? 'warn' : normalized;
@@ -302,68 +310,6 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
     []
   );
 
-  const handleCopyToClipboard = useCallback(() => {
-    // Filter logs the same way as the display
-    const logsToCopy = logs.filter((log) => {
-      // Filter by level
-      const logLevel = normalizeLevel(log.level);
-      if (logLevelFilter.length > 0 && !logLevelFilter.includes(logLevel)) {
-        return false;
-      }
-      // Filter by component
-      if (componentFilter.length > 0 && !componentFilter.includes(log.source ?? '')) {
-        return false;
-      }
-      // Filter by cluster
-      const clusterValue = log.clusterId || log.clusterName || '';
-      if (clusterFilter.length > 0 && !clusterFilter.includes(clusterValue)) {
-        return false;
-      }
-      // Filter by text (case-insensitive search in message and source)
-      if (textFilter.trim()) {
-        const searchText = textFilter.toLowerCase();
-        const matchesMessage = log.message.toLowerCase().includes(searchText);
-        const matchesSource = log.source?.toLowerCase().includes(searchText) || false;
-        const matchesClusterId = log.clusterId?.toLowerCase().includes(searchText) || false;
-        const matchesClusterName = log.clusterName?.toLowerCase().includes(searchText) || false;
-        if (!matchesMessage && !matchesSource && !matchesClusterId && !matchesClusterName) {
-          return false;
-        }
-      }
-      return true;
-    });
-
-    // Format logs for clipboard
-    const formattedLogs = logsToCopy
-      .map((log) => {
-        const timestamp = formatTimestamp(log.timestamp);
-        const level = log.level.toUpperCase().padEnd(5);
-        const source = log.source ? `[${log.source}] ` : '';
-        const cluster = log.clusterName || log.clusterId;
-        const clusterPart = cluster ? `[${cluster}] ` : '';
-        return `${timestamp} ${level} ${source}${clusterPart}${log.message}`;
-      })
-      .join('\n');
-
-    // Copy to clipboard
-    navigator.clipboard
-      .writeText(formattedLogs)
-      .then(() => {
-        // Logs copied to clipboard successfully
-      })
-      .catch((err) => {
-        errorHandler.handle(err, { action: 'copyLogs' }, 'Failed to copy logs to clipboard');
-      });
-  }, [
-    logs,
-    logLevelFilter,
-    componentFilter,
-    clusterFilter,
-    textFilter,
-    formatTimestamp,
-    normalizeLevel,
-  ]);
-
   // Load logs when panel becomes visible
   useEffect(() => {
     if (!isOpen) {
@@ -462,7 +408,7 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
     key: 's',
     handler: () => {
       if (isOpen) {
-        setIsAutoScroll((prev) => !prev);
+        handleToggleAutoScroll();
         return true;
       }
       return false;
@@ -488,6 +434,83 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
     enabled: isOpen,
     priority: isOpen ? KeyboardShortcutPriority.APP_LOGS_ACTION : 0,
   });
+
+  const resetCopyFeedback = useCallback(() => {
+    window.setTimeout(() => {
+      setCopyFeedback('idle');
+    }, 1200);
+  }, []);
+
+  const handleCopyToClipboard = useCallback(async () => {
+    if (filteredLogs.length === 0) {
+      setCopyFeedback('error');
+      resetCopyFeedback();
+      return;
+    }
+
+    const formattedLogs = filteredLogs
+      .map((log) => {
+        const timestamp = formatTimestamp(log.timestamp);
+        const level = log.level.toUpperCase().padEnd(5);
+        const source = log.source ? `[${log.source}] ` : '';
+        const cluster = log.clusterName || log.clusterId;
+        const clusterPart = cluster ? `[${cluster}] ` : '';
+        return `${timestamp} ${level} ${source}${clusterPart}${log.message}`;
+      })
+      .join('\n');
+
+    try {
+      await navigator.clipboard.writeText(formattedLogs);
+      setCopyFeedback('copied');
+    } catch (err) {
+      setCopyFeedback('error');
+      errorHandler.handle(err, { action: 'copyLogs' }, 'Failed to copy logs to clipboard');
+    }
+    resetCopyFeedback();
+  }, [filteredLogs, formatTimestamp, resetCopyFeedback]);
+
+  const appLogsIconBarItems = useMemo<IconBarItem[]>(
+    () => [
+      {
+        type: 'toggle',
+        id: 'appLogsAutoScroll',
+        icon: <AutoScrollIcon />,
+        active: isAutoScroll,
+        onClick: handleToggleAutoScroll,
+        title: 'Toggle auto-scroll (S)',
+        ariaLabel: 'Toggle auto-scroll',
+      },
+      { type: 'separator' },
+      {
+        type: 'action',
+        id: 'copyAppLogs',
+        icon: <CopyIcon />,
+        onClick: handleCopyToClipboard,
+        title: 'Copy logs to clipboard',
+        ariaLabel: 'Copy logs to clipboard',
+        disabled: filteredLogs.length === 0,
+        feedback: copyFeedback === 'copied' ? 'success' : copyFeedback === 'error' ? 'error' : null,
+      },
+      {
+        type: 'action',
+        id: 'clearAppLogs',
+        icon: <DeleteIcon />,
+        onClick: handleClearAppLogs,
+        title: 'Clear logs',
+        ariaLabel: 'Clear logs',
+        disabled: logs.length === 0,
+      },
+    ],
+    [
+      copyFeedback,
+      filteredLogs.length,
+      handleClearAppLogs,
+      handleCopyToClipboard,
+      handleToggleAutoScroll,
+      isAutoScroll,
+      logs.length,
+    ]
+  );
 
   const focusFirstControl = useCallback(() => {
     if (textFilterInputRef.current) {
@@ -621,26 +644,7 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
             renderValue={() => 'Clusters'}
           />
 
-          <label className="app-logs-auto-scroll">
-            <input
-              type="checkbox"
-              checked={isAutoScroll}
-              onChange={(e) => setIsAutoScroll(e.target.checked)}
-            />
-            Auto-scroll
-          </label>
-
-          <button
-            className="app-logs-button"
-            onClick={handleCopyToClipboard}
-            title="Copy logs to clipboard"
-          >
-            Copy
-          </button>
-
-          <button className="app-logs-button" onClick={handleClearAppLogs} title="Clear logs">
-            Clear
-          </button>
+          <IconBar items={appLogsIconBarItems} className="app-logs-action-iconbar" />
         </div>
       </div>
 

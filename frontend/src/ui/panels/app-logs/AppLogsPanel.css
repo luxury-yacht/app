@@ -2,6 +2,7 @@
 
 .app-logs-panel-toolbar {
   flex-shrink: 0;
+  background-color: var(--color-bg-secondary);
   border-bottom: 1px solid var(--color-border);
   padding: 6px 10px;
 }
@@ -69,62 +70,8 @@
   transform: scale(0.9);
 }
 
-.app-logs-button {
-  padding: 4px 8px;
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-sm);
-  color: var(--color-text);
-  font-size: 12px;
-  cursor: pointer;
-  transition:
-    background-color 0.2s,
-    border-color 0.2s,
-    color 0.2s;
-}
-
-.app-logs-button:hover {
-  background: var(--color-bg-tertiary);
-  border-color: var(--color-accent);
-}
-
-.app-logs-button:active {
-  transform: scale(0.95);
-}
-
-.app-logs-button.active {
-  background: var(--color-accent);
-  color: var(--color-bg);
-  border-color: var(--color-accent);
-}
-
-.app-logs-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* Filter dropdown styling (shared by levels/components) */
-/* Auto-scroll checkbox */
-.app-logs-auto-scroll {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--color-text);
-  cursor: pointer;
-  user-select: none;
-  padding: 0 4px;
-}
-
-.app-logs-auto-scroll:hover {
-  color: var(--color-text);
-}
-
-.app-logs-auto-scroll input[type="checkbox"] {
-  cursor: pointer;
-  margin: 0;
-  width: 14px;
-  height: 14px;
+.app-logs-action-iconbar {
+  flex-shrink: 0;
 }
 
 /* Logs container */

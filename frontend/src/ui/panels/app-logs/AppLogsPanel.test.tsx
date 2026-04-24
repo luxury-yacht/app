@@ -328,6 +328,44 @@ describe('AppLogsPanel', () => {
     cleanup();
   });
 
+  it('renders app log actions in the shared iconbar', async () => {
+    vi.useFakeTimers();
+    getAppLogsMock.mockResolvedValue([
+      { timestamp: '2024-01-01T00:00:00.000Z', level: 'info', message: 'Ready', source: 'core' },
+    ]);
+
+    const { container, cleanup } = await renderPanel();
+
+    await flushInitialLoad();
+
+    const iconbar = container.querySelector('.app-logs-action-iconbar');
+    expect(iconbar).toBeTruthy();
+    expect(iconbar?.querySelectorAll('.icon-bar-button')).toHaveLength(3);
+
+    const autoScrollButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Toggle auto-scroll"]'
+    );
+    const copyButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Copy logs to clipboard"]'
+    );
+    const clearButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Clear logs"]'
+    );
+
+    expect(autoScrollButton?.getAttribute('aria-pressed')).toBe('true');
+    expect(copyButton?.disabled).toBe(false);
+    expect(clearButton?.disabled).toBe(false);
+
+    await act(async () => {
+      autoScrollButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(autoScrollButton?.getAttribute('aria-pressed')).toBe('false');
+
+    cleanup();
+  });
+
   it('applies text filters and shows empty state when no matches', async () => {
     vi.useFakeTimers();
     getAppLogsMock.mockResolvedValue([
