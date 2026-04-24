@@ -172,12 +172,17 @@
 }
 
 .shell-tab__terminal .xterm-viewport::-webkit-scrollbar-thumb {
-  background: var(--scrollbar-thumb-bg);
+  background-color: var(--scrollbar-thumb-idle-bg);
   border-radius: 10px;
+  transition: background-color var(--scrollbar-fade-duration) var(--ease-out, ease);
+}
+
+.shell-tab__terminal .xterm-viewport.scrollbar-active::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb-bg);
 }
 
 .shell-tab__terminal .xterm-viewport::-webkit-scrollbar-thumb:hover {
-  background: var(--scrollbar-thumb-hover-bg);
+  background-color: var(--scrollbar-thumb-hover-bg);
 }
 
 .shell-tab__terminal .xterm-viewport::-webkit-scrollbar-corner {
@@ -205,19 +210,25 @@
 }
 
 .shell-tab__terminal .xterm .xterm-scrollable-element > .scrollbar > .slider {
-  background: var(--scrollbar-thumb-bg) !important;
+  background-color: var(--scrollbar-thumb-idle-bg) !important;
   background-clip: padding-box;
   border: var(--scrollbar-thumb-inset) solid transparent;
   border-radius: var(--scrollbar-radius);
   box-sizing: border-box;
+  transition: background-color var(--scrollbar-fade-duration) var(--ease-out, ease);
+}
+
+.shell-tab__terminal.scrollbar-active .xterm .xterm-scrollable-element > .scrollbar > .slider,
+.shell-tab__terminal .xterm .xterm-scrollable-element > .scrollbar:hover > .slider {
+  background-color: var(--scrollbar-thumb-bg) !important;
 }
 
 .shell-tab__terminal .xterm .xterm-scrollable-element > .scrollbar > .slider:hover {
-  background: var(--scrollbar-thumb-hover-bg) !important;
+  background-color: var(--scrollbar-thumb-hover-bg) !important;
 }
 
 .shell-tab__terminal .xterm .xterm-scrollable-element > .scrollbar > .slider.active {
-  background: var(--scrollbar-thumb-hover-bg) !important;
+  background-color: var(--scrollbar-thumb-hover-bg) !important;
 }
 
 @media (max-width: 640px) {

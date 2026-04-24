@@ -34,7 +34,7 @@ import (
 	"unsafe"
 )
 
-//go:embed frontend/styles/themes/light.css frontend/styles/themes/dark.css
+//go:embed frontend/styles/tokens/colors.css frontend/styles/themes/light.css frontend/styles/themes/dark.css
 var themeCSS embed.FS
 
 const (
@@ -43,6 +43,7 @@ const (
 	scrollbarRadiusToken       = "--scrollbar-radius"
 	scrollbarMinThumbSizeToken = "--scrollbar-min-thumb-size"
 	scrollbarThumbInsetToken   = "--scrollbar-thumb-inset"
+	scrollbarFadeDurationToken = "--scrollbar-fade-duration"
 	scrollbarTrackBgToken      = "--scrollbar-track-bg"
 	scrollbarThumbBgToken      = "--scrollbar-thumb-bg"
 	scrollbarThumbHoverBgToken = "--scrollbar-thumb-hover-bg"
@@ -97,6 +98,10 @@ scrollbar slider {
   border-radius: %s;
   box-shadow: none;
   margin: %s;
+  opacity: 1;
+  transition:
+    background-color %s ease-out,
+    opacity %s ease-out;
 }
 
 scrollbar slider:hover,
@@ -143,6 +148,8 @@ scrollbar.overlay-indicator slider {
 		tokens[scrollbarThumbBgToken],
 		tokens[scrollbarRadiusToken],
 		tokens[scrollbarThumbInsetToken],
+		tokens[scrollbarFadeDurationToken],
+		tokens[scrollbarFadeDurationToken],
 		tokens[scrollbarThumbHoverBgToken],
 		verticalSliderWidth,
 		tokens[scrollbarMinThumbSizeToken],
@@ -158,6 +165,10 @@ scrollbar.overlay-indicator slider {
 }
 
 func readScrollbarTokens() (map[string]string, error) {
+	colorCSS, err := themeCSS.ReadFile("frontend/styles/tokens/colors.css")
+	if err != nil {
+		return nil, err
+	}
 	lightCSS, err := themeCSS.ReadFile("frontend/styles/themes/light.css")
 	if err != nil {
 		return nil, err
@@ -173,15 +184,18 @@ func readScrollbarTokens() (map[string]string, error) {
 		scrollbarRadiusToken,
 		scrollbarMinThumbSizeToken,
 		scrollbarThumbInsetToken,
+		scrollbarFadeDurationToken,
 		scrollbarTrackBgToken,
 		scrollbarThumbBgToken,
 		scrollbarThumbHoverBgToken,
 	}
+	lightProperties := parseCSSCustomProperties(string(colorCSS) + "\n" + string(lightCSS))
+	darkProperties := parseCSSCustomProperties(string(colorCSS) + "\n" + string(darkCSS))
 	tokenValues := make(map[string]string, len(tokenNames))
 	for _, name := range tokenNames {
-		value := findCSSCustomProperty(string(lightCSS), name)
+		value := resolveCSSCustomProperty(lightProperties, name)
 		if value == "" {
-			value = findCSSCustomProperty(string(darkCSS), name)
+			value = resolveCSSCustomProperty(darkProperties, name)
 		}
 		if value == "" {
 			return nil, fmt.Errorf("missing CSS token %s", name)
@@ -191,17 +205,45 @@ func readScrollbarTokens() (map[string]string, error) {
 	return tokenValues, nil
 }
 
-func findCSSCustomProperty(css, name string) string {
-	start := strings.Index(css, name+":")
-	if start < 0 {
+func parseCSSCustomProperties(css string) map[string]string {
+	properties := make(map[string]string)
+	for _, line := range strings.Split(css, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if !strings.HasPrefix(trimmed, "--") {
+			continue
+		}
+		name, value, ok := strings.Cut(trimmed, ":")
+		if !ok {
+			continue
+		}
+		value, _, _ = strings.Cut(value, ";")
+		properties[strings.TrimSpace(name)] = strings.TrimSpace(value)
+	}
+	return properties
+}
+
+func resolveCSSCustomProperty(properties map[string]string, name string) string {
+	return resolveCSSValue(properties, properties[name], 0)
+}
+
+func resolveCSSValue(properties map[string]string, value string, depth int) string {
+	if value == "" || depth > 8 {
 		return ""
 	}
-	valueStart := start + len(name) + 1
-	valueEnd := strings.Index(css[valueStart:], ";")
-	if valueEnd < 0 {
-		return ""
+	value = strings.TrimSpace(value)
+	if !strings.HasPrefix(value, "var(") || !strings.HasSuffix(value, ")") {
+		return value
 	}
-	return strings.TrimSpace(css[valueStart : valueStart+valueEnd])
+	reference := strings.TrimSuffix(strings.TrimPrefix(value, "var("), ")")
+	reference, fallback, hasFallback := strings.Cut(reference, ",")
+	reference = strings.TrimSpace(reference)
+	if resolved := resolveCSSValue(properties, properties[reference], depth+1); resolved != "" {
+		return resolved
+	}
+	if hasFallback {
+		return resolveCSSValue(properties, strings.TrimSpace(fallback), depth+1)
+	}
+	return ""
 }
 
 func subtractPxTokens(base, inset string, multiplier float64) (string, error) {

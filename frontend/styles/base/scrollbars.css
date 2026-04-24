@@ -1,5 +1,13 @@
 /* Shared scrollbar behavior for every platform-backed webview. */
 
+:root {
+  --scrollbar-thumb-current-bg: var(--scrollbar-thumb-idle-bg);
+}
+
+:root.scrollbar-active {
+  --scrollbar-thumb-current-bg: var(--scrollbar-thumb-bg);
+}
+
 *::-webkit-scrollbar {
   -webkit-appearance: none;
   width: var(--scrollbar-width);
@@ -15,10 +23,17 @@
 *::-webkit-scrollbar-thumb {
   min-width: var(--scrollbar-min-thumb-size);
   min-height: var(--scrollbar-min-thumb-size);
-  background-color: var(--scrollbar-thumb-bg);
+  background-color: var(--scrollbar-thumb-current-bg);
   background-clip: padding-box;
   border: var(--scrollbar-thumb-inset) solid transparent;
   border-radius: var(--scrollbar-radius);
+  transition: background-color var(--scrollbar-fade-duration) var(--ease-out, ease);
+}
+
+:root.scrollbar-active::-webkit-scrollbar-thumb,
+:root.scrollbar-active *::-webkit-scrollbar-thumb,
+.scrollbar-active::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb-bg);
 }
 
 *::-webkit-scrollbar-thumb:hover {
@@ -32,6 +47,12 @@
 @supports not selector(::-webkit-scrollbar) {
   * {
     scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb-current-bg) transparent;
+  }
+
+  :root.scrollbar-active,
+  :root.scrollbar-active *,
+  .scrollbar-active {
     scrollbar-color: var(--scrollbar-thumb-bg) transparent;
   }
 }

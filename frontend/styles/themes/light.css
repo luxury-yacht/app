@@ -137,9 +137,12 @@
   --scrollbar-radius: 999px;
   --scrollbar-min-thumb-size: 32px;
   --scrollbar-thumb-inset: 3px;
+  --scrollbar-fade-duration: 180ms;
+  --scrollbar-active-timeout: 900ms;
 
   /* Scrollbar colors */
   --scrollbar-track-bg: transparent;
+  --scrollbar-thumb-idle-bg: transparent;
   --scrollbar-thumb-bg: var(--color-bg-tertiary);
   --scrollbar-thumb-hover-bg: var(--color-bg-tertiary);
   --scrollbar-corner-bg: transparent;
