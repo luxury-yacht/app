@@ -273,7 +273,7 @@ describe('scrollbar activity tracking', () => {
 
     dispatchWheel(menu);
 
-    expect(menu.classList.contains('scrollbar-active')).toBe(true);
+    expect(menu.classList.contains('scrollbar-active')).toBe(false);
     expect(document.body.querySelector('.scrollbar-overlay-thumb--vertical')).toBeNull();
     expect(document.body.querySelector('.scrollbar-overlay-thumb--horizontal')).toBeNull();
   });

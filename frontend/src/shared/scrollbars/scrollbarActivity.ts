@@ -95,6 +95,9 @@ const isOverlayScrollbarElement = (element: Element): element is HTMLElement =>
   !element.matches(OVERLAY_SCROLLBAR_EXCLUDED_SELECTOR) &&
   (overlayElements.has(element) || canScroll(element));
 
+const isActivityIgnoredElement = (element: Element): boolean =>
+  element instanceof HTMLElement && element.matches('.dropdown-menu');
+
 const resolveOverlayContainer = (element: HTMLElement): HTMLElement => {
   return element.closest<HTMLElement>(OVERLAY_SCROLLBAR_OWNER_SELECTOR) ?? document.body;
 };
@@ -957,6 +960,10 @@ const scheduleScrollbarInactive = (element: Element): void => {
 };
 
 const markScrollbarActive = (element: Element): void => {
+  if (isActivityIgnoredElement(element)) {
+    return;
+  }
+
   const activeOpacity = readScrollbarOpacityToken('--scrollbar-thumb-active-opacity', 1);
   if (isOverlayScrollbarElement(element)) {
     ensureOverlayScrollbars(element);

@@ -141,7 +141,7 @@
   z-index: var(--z-index-overlay);
   animation: dropdownSlide 0.15s ease-out;
   scrollbar-width: thin;
-  scrollbar-color: var(--scrollbar-thumb-current-bg) transparent;
+  scrollbar-color: var(--scrollbar-thumb-bg) transparent;
 }
 
 .dropdown-menu::-webkit-scrollbar {
@@ -154,12 +154,8 @@
 }
 
 .dropdown-menu::-webkit-scrollbar-thumb {
-  background-color: var(--scrollbar-thumb-current-bg);
-  border-radius: var(--scrollbar-radius);
-}
-
-.dropdown-menu.scrollbar-active::-webkit-scrollbar-thumb {
   background-color: var(--scrollbar-thumb-bg);
+  border-radius: var(--scrollbar-radius);
 }
 
 .dropdown-menu.position-top {
