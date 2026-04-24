@@ -94,6 +94,7 @@
   flex: 1;
   overflow-y: auto;
   overflow-x: auto;
+  overscroll-behavior-x: none;
   min-height: 0;
   min-width: 0;
   display: flex;

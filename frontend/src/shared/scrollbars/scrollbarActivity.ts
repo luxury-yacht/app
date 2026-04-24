@@ -101,8 +101,7 @@ const resolveOverlayContainer = (element: HTMLElement): HTMLElement => {
 const canScrollAxis = (element: HTMLElement, axis: 'horizontal' | 'vertical'): boolean => {
   const styles = getComputedStyle(element);
   const overflow = axis === 'horizontal' ? styles.overflowX : styles.overflowY;
-  const scrollableOverflow =
-    overflow === 'auto' || overflow === 'scroll' || overflow === 'overlay';
+  const scrollableOverflow = overflow === 'auto' || overflow === 'scroll' || overflow === 'overlay';
 
   if (!scrollableOverflow) {
     return false;
@@ -798,6 +797,9 @@ const resolveScrollElement = (target: EventTarget | null): Element | null => {
   }
   if (target instanceof Document) {
     return target.scrollingElement ?? target.documentElement;
+  }
+  if (target instanceof Node) {
+    return target.parentElement;
   }
   return null;
 };

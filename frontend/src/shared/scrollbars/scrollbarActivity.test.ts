@@ -50,6 +50,13 @@ const dispatchWheel = (target: Element, deltaY = 24) => {
   );
 };
 
+const createCancelableWheelEvent = (deltaY = 24) =>
+  new WheelEvent('wheel', {
+    bubbles: true,
+    cancelable: true,
+    deltaY,
+  });
+
 const dispatchPointerMove = (clientX: number, clientY: number) => {
   document.dispatchEvent(
     new MouseEvent('pointermove', {
@@ -140,6 +147,35 @@ describe('scrollbar activity tracking', () => {
 
     expect(document.body.querySelector('.scrollbar-overlay-thumb--vertical')).toBeTruthy();
     expect(element.scrollTop).toBe(24);
+  });
+
+  it('allows native wheel scrolling while the target can move', () => {
+    const element = createScrollableElement();
+
+    const event = createCancelableWheelEvent(24);
+    element.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  it('allows native wheel scrolling from text nodes inside scrollable content', () => {
+    const element = createScrollableElement();
+    const text = document.createTextNode('row text');
+    element.appendChild(text);
+
+    const event = createCancelableWheelEvent(24);
+    text.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  it('leaves boundary wheel events native so scroll containers keep wheel input', () => {
+    const element = createScrollableElement();
+
+    const event = createCancelableWheelEvent(-24);
+    element.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(false);
   });
 
   it('page-scrolls when the visible gutter track is clicked', () => {

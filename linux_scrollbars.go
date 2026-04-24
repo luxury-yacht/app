@@ -139,6 +139,14 @@ scrollbar.overlay-indicator slider {
   border-radius: %s;
   margin: %s;
 }
+
+overshoot,
+undershoot {
+  background: none;
+  background-image: none;
+  border: none;
+  box-shadow: none;
+}
 `,
 		tokens[scrollbarTrackBgToken],
 		tokens[scrollbarWidthToken],
