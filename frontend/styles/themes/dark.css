@@ -140,7 +140,9 @@
   /* Scrollbar colors */
   --scrollbar-thumb-bg: #88888870;
   --scrollbar-thumb-hover-bg: #88888870;
-  --scrollbar-track-bg: transparent;
+  --scrollbar-gutter-hover-bg: #ffffff80;
+  --scrollbar-gutter-hover-opacity: 0.12;
+  --scrollbar-track-bg: #ffffff;
   --scrollbar-corner-bg: transparent;
 
   /* Shadows - Deeper for dark theme */

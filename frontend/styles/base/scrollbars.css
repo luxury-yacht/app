@@ -121,3 +121,22 @@
 .scrollbar-overlay-thumb--horizontal {
   cursor: default;
 }
+
+.scrollbar-overlay-gutter {
+  position: fixed;
+  z-index: var(--z-index-scrollbar-overlay, 2147483646);
+  pointer-events: none;
+  background-color: var(--scrollbar-gutter-hover-bg);
+  border-radius: var(--scrollbar-radius);
+  opacity: 0;
+  transition:
+    height var(--scrollbar-hover-resize-duration) var(--ease-out, ease),
+    left var(--scrollbar-hover-resize-duration) var(--ease-out, ease),
+    opacity var(--scrollbar-hover-resize-duration) var(--ease-out, ease),
+    top var(--scrollbar-hover-resize-duration) var(--ease-out, ease),
+    width var(--scrollbar-hover-resize-duration) var(--ease-out, ease);
+}
+
+.scrollbar-overlay-gutter--visible {
+  opacity: var(--scrollbar-gutter-hover-opacity);
+}

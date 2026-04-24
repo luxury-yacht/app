@@ -135,6 +135,8 @@
   --scrollbar-track-bg: transparent;
   --scrollbar-thumb-bg: var(--color-bg-tertiary);
   --scrollbar-thumb-hover-bg: var(--color-bg-tertiary);
+  --scrollbar-gutter-hover-bg: var(--scrollbar-thumb-bg);
+  --scrollbar-gutter-hover-opacity: 0.12;
   --scrollbar-corner-bg: transparent;
 
   /* Shadows */
