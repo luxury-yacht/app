@@ -222,6 +222,48 @@ describe('scrollbar activity tracking', () => {
     expect(thumb?.style.top).toBe('51px');
   });
 
+  it('keeps command palette overlays inside the palette stacking context', () => {
+    const palette = document.createElement('div');
+    palette.className = 'command-palette';
+    palette.getBoundingClientRect = () =>
+      ({
+        bottom: 300,
+        height: 240,
+        left: 100,
+        right: 500,
+        top: 60,
+        width: 400,
+        x: 100,
+        y: 60,
+        toJSON: () => undefined,
+      }) as DOMRect;
+    document.body.appendChild(palette);
+
+    const element = createScrollableElement();
+    element.className = 'command-palette-results';
+    element.getBoundingClientRect = () =>
+      ({
+        bottom: 260,
+        height: 180,
+        left: 120,
+        right: 480,
+        top: 80,
+        width: 360,
+        x: 120,
+        y: 80,
+        toJSON: () => undefined,
+      }) as DOMRect;
+    palette.appendChild(element);
+
+    dispatchWheel(element);
+
+    const thumb = palette.querySelector<HTMLElement>('.scrollbar-overlay-thumb--vertical');
+    expect(thumb?.parentElement).toBe(palette);
+    expect(thumb?.style.position).toBe('absolute');
+    expect(thumb?.style.left).toBe('376px');
+    expect(thumb?.style.top).toBe('21px');
+  });
+
   it('activates one scrollbar axis in the corner hover zone', () => {
     const element = createScrollableElement();
     defineMetric(element, 'scrollWidth', 500);

@@ -85,6 +85,11 @@ const isOverlayScrollbarElement = (element: Element): element is HTMLElement =>
   (overlayElements.has(element) || canScroll(element));
 
 const resolveOverlayContainer = (element: HTMLElement): HTMLElement => {
+  const commandPalette = element.closest<HTMLElement>('.command-palette');
+  if (commandPalette) {
+    return commandPalette;
+  }
+
   const dockablePanel = element.closest<HTMLElement>('.dockable-panel');
   if (dockablePanel) {
     return dockablePanel;
