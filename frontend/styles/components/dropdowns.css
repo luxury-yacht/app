@@ -137,6 +137,7 @@
   box-shadow: var(--dropdown-menu-shadow);
   overflow-y: auto;
   overflow-x: hidden;
+  overscroll-behavior: none;
   margin-top: 2px;
   z-index: var(--z-index-overlay);
   animation: dropdownSlide 0.15s ease-out;
