@@ -136,6 +136,7 @@
   border-radius: var(--border-radius-sm);
   box-shadow: var(--dropdown-menu-shadow);
   overflow-y: auto;
+  overflow-x: hidden;
   margin-top: 2px;
   z-index: var(--z-index-overlay);
   animation: dropdownSlide 0.15s ease-out;
@@ -215,7 +216,9 @@
 .dropdown-filter-option {
   display: flex;
   align-items: center;
+  box-sizing: border-box;
   width: 100%;
+  min-width: 0;
   gap: 8px;
 }
 
@@ -231,7 +234,10 @@
 
 .dropdown-filter-label {
   flex: 1;
+  min-width: 0;
   text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Option content elements */
