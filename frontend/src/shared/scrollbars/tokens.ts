@@ -1,5 +1,6 @@
 export const DEFAULT_SCROLLBAR_ACTIVE_TIMEOUT_MS = 900;
-export const DEFAULT_SCROLLBAR_FADE_DURATION_MS = 180;
+export const DEFAULT_SCROLLBAR_FADE_IN_DURATION_MS = 100;
+export const DEFAULT_SCROLLBAR_FADE_OUT_DURATION_MS = 1000;
 
 export const parseScrollbarDurationMs = (
   value: string,
@@ -40,18 +41,11 @@ export const readScrollbarFadeDurationMs = (
   const styles = readScrollbarTokenStyles(element);
   const directionalToken =
     direction === 'in' ? '--scrollbar-fade-in-duration' : '--scrollbar-fade-out-duration';
-  const directionalDuration = parseScrollbarDurationMs(
-    styles.getPropertyValue(directionalToken),
-    Number.NaN
-  );
-  if (Number.isFinite(directionalDuration)) {
-    return directionalDuration;
-  }
-
-  return parseScrollbarDurationMs(
-    styles.getPropertyValue('--scrollbar-fade-duration'),
-    DEFAULT_SCROLLBAR_FADE_DURATION_MS
-  );
+  const fallback =
+    direction === 'in'
+      ? DEFAULT_SCROLLBAR_FADE_IN_DURATION_MS
+      : DEFAULT_SCROLLBAR_FADE_OUT_DURATION_MS;
+  return parseScrollbarDurationMs(styles.getPropertyValue(directionalToken), fallback);
 };
 
 export const readScrollbarOpacityToken = (

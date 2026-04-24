@@ -43,7 +43,8 @@ const (
 	scrollbarRadiusToken       = "--scrollbar-radius"
 	scrollbarMinThumbSizeToken = "--scrollbar-min-thumb-size"
 	scrollbarThumbInsetToken   = "--scrollbar-thumb-inset"
-	scrollbarFadeDurationToken = "--scrollbar-fade-duration"
+	scrollbarFadeInToken       = "--scrollbar-fade-in-duration"
+	scrollbarFadeOutToken      = "--scrollbar-fade-out-duration"
 	scrollbarTrackBgToken      = "--scrollbar-track-bg"
 	scrollbarThumbBgToken      = "--scrollbar-thumb-bg"
 	scrollbarThumbHoverBgToken = "--scrollbar-thumb-hover-bg"
@@ -148,8 +149,8 @@ scrollbar.overlay-indicator slider {
 		tokens[scrollbarThumbBgToken],
 		tokens[scrollbarRadiusToken],
 		tokens[scrollbarThumbInsetToken],
-		tokens[scrollbarFadeDurationToken],
-		tokens[scrollbarFadeDurationToken],
+		tokens[scrollbarFadeInToken],
+		tokens[scrollbarFadeOutToken],
 		tokens[scrollbarThumbHoverBgToken],
 		verticalSliderWidth,
 		tokens[scrollbarMinThumbSizeToken],
@@ -188,7 +189,8 @@ func readScrollbarTokens() (map[string]string, error) {
 		scrollbarRadiusToken,
 		scrollbarMinThumbSizeToken,
 		scrollbarThumbInsetToken,
-		scrollbarFadeDurationToken,
+		scrollbarFadeInToken,
+		scrollbarFadeOutToken,
 		scrollbarTrackBgToken,
 		scrollbarThumbBgToken,
 		scrollbarThumbHoverBgToken,
