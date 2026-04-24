@@ -1,9 +1,9 @@
 :root {
-  --scrollbar-width: 10px;
-  --scrollbar-height: 10px;
+  --scrollbar-width: 5px;
+  --scrollbar-height: 5px;
   --scrollbar-radius: 999px;
   --scrollbar-min-thumb-size: 32px;
-  --scrollbar-thumb-inset: 3px;
+  --scrollbar-thumb-inset: 1px;
   --scrollbar-fade-in-duration: 150ms;
   --scrollbar-fade-out-duration: 1500ms;
   --scrollbar-fade-duration: var(--scrollbar-fade-out-duration);
