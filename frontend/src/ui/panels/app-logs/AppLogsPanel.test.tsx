@@ -200,7 +200,7 @@ describe('AppLogsPanel', () => {
     await flushInitialLoad();
 
     const countBadge = container.querySelector('.app-logs-count');
-    expect(countBadge?.textContent).toBe('(1 / 2)');
+    expect(countBadge?.textContent).toBe('(2)');
 
     const logLevelsDropdown = dropdownInstances.find(
       (instance) => instance.renderValue() === 'Log Levels'

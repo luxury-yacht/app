@@ -35,7 +35,7 @@ const LOG_LEVEL_BASE_OPTIONS = [
   { value: 'debug', label: 'Debug' },
 ];
 const ALL_LEVEL_VALUES = LOG_LEVEL_BASE_OPTIONS.map((option) => option.value);
-const DEFAULT_LOG_LEVELS = ['info', 'warn', 'error'];
+const DEFAULT_LOG_LEVELS = ALL_LEVEL_VALUES;
 
 const buildClusterOption = (log: LogEntry) => {
   const clusterId = log.clusterId?.trim() ?? '';
