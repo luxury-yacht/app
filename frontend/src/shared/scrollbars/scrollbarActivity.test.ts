@@ -222,6 +222,45 @@ describe('scrollbar activity tracking', () => {
     expect(thumb?.style.top).toBe('51px');
   });
 
+  it('keeps floating panel scrollbars flush with the scroll area edge', () => {
+    const panel = document.createElement('div');
+    panel.className = 'dockable-panel dockable-panel--floating';
+    panel.getBoundingClientRect = () =>
+      ({
+        bottom: 225,
+        height: 200,
+        left: 50,
+        right: 250,
+        top: 25,
+        width: 200,
+        x: 50,
+        y: 25,
+        toJSON: () => undefined,
+      }) as DOMRect;
+    document.body.appendChild(panel);
+
+    const element = createScrollableElement();
+    element.getBoundingClientRect = () =>
+      ({
+        bottom: 175,
+        height: 100,
+        left: 150,
+        right: 250,
+        top: 75,
+        width: 100,
+        x: 150,
+        y: 75,
+        toJSON: () => undefined,
+      }) as DOMRect;
+    panel.appendChild(element);
+
+    dispatchWheel(element);
+
+    const thumb = panel.querySelector<HTMLElement>('.scrollbar-overlay-thumb--vertical');
+    expect(thumb?.style.left).toBe('196px');
+    expect(thumb?.style.top).toBe('51px');
+  });
+
   it('keeps command palette overlays inside the palette stacking context', () => {
     const palette = document.createElement('div');
     palette.className = 'command-palette';
