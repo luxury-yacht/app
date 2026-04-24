@@ -33,10 +33,12 @@ func (l LogLevel) String() string {
 
 // LogEntry represents a single log entry
 type LogEntry struct {
-	Timestamp string `json:"timestamp"`
-	Level     string    `json:"level"`
-	Message   string    `json:"message"`
-	Source    string    `json:"source,omitempty"`
+	Timestamp   string `json:"timestamp"`
+	Level       string `json:"level"`
+	Message     string `json:"message"`
+	Source      string `json:"source,omitempty"`
+	ClusterID   string `json:"clusterId,omitempty"`
+	ClusterName string `json:"clusterName,omitempty"`
 }
 
 // Logger manages application logs in memory
@@ -58,23 +60,30 @@ func NewLogger(maxSize int) *Logger {
 	}
 }
 
-// Log adds a log entry with the specified level, message and optional source
+// Log adds a log entry with the specified level, message, and optional metadata.
+// The variadic fields are interpreted as source, cluster ID, and cluster name
+// in that order.
 func (l *Logger) Log(level LogLevel, message string, source ...string) {
 	if l == nil {
 		return // Safely handle nil logger
 	}
 
+	var emit func(string)
 	l.mu.Lock()
-	defer l.mu.Unlock()
 
 	entry := LogEntry{
 		Timestamp: time.Now().Format(time.RFC3339Nano),
 		Level:     level.String(),
 		Message:   message,
 	}
-
 	if len(source) > 0 {
 		entry.Source = source[0]
+	}
+	if len(source) > 1 {
+		entry.ClusterID = source[1]
+	}
+	if len(source) > 2 {
+		entry.ClusterName = source[2]
 	}
 
 	// Add the entry
@@ -89,9 +98,13 @@ func (l *Logger) Log(level LogLevel, message string, source ...string) {
 		l.entries = newEntries
 	}
 
-	// Emit event if event emitter is set
-	if l.eventEmitter != nil {
-		l.eventEmitter("log-added")
+	emit = l.eventEmitter
+	l.mu.Unlock()
+
+	// Emit outside the logger lock so event handlers cannot block log writes
+	// or deadlock by synchronously reading the logger.
+	if emit != nil {
+		emit("log-added")
 	}
 }
 

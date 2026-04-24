@@ -101,6 +101,9 @@ const setInputValue = (input: HTMLInputElement, value: string) => {
   setter?.call(input, value);
 };
 
+const latestDropdown = (renderValue: string) =>
+  [...dropdownInstances].reverse().find((instance) => instance.renderValue() === renderValue);
+
 beforeEach(() => {
   useShortcutMock.mockClear();
   useKeyboardSurfaceMock.mockClear();
@@ -208,7 +211,7 @@ describe('AppLogsPanel', () => {
     expect(componentsDropdown).toBeTruthy();
 
     await act(async () => {
-      logLevelsDropdown?.onChange(['__log_levels_all__']);
+      logLevelsDropdown?.onChange(['info', 'warn', 'error', 'debug']);
       await Promise.resolve();
     });
 
@@ -220,11 +223,107 @@ describe('AppLogsPanel', () => {
     expect(countBadge?.textContent).toBe('(1 / 2)');
 
     await act(async () => {
-      componentsDropdown?.onChange(['__components_all__']);
+      componentsDropdown?.onChange(['core', 'worker']);
       await Promise.resolve();
     });
 
     expect(countBadge?.textContent).toBe('(2)');
+
+    cleanup();
+  });
+
+  it('filters and renders cluster metadata', async () => {
+    vi.useFakeTimers();
+    getLogsMock.mockResolvedValue([
+      {
+        timestamp: '2024-01-01T00:00:00.000Z',
+        level: 'info',
+        message: 'Cluster A ready',
+        source: 'Auth',
+        clusterId: 'cluster-a',
+        clusterName: 'alpha',
+      },
+      {
+        timestamp: '2024-01-01T00:00:01.000Z',
+        level: 'info',
+        message: 'Cluster B ready',
+        source: 'Auth',
+        clusterId: 'cluster-b',
+        clusterName: 'bravo',
+      },
+    ]);
+
+    const { container, cleanup } = await renderPanel();
+
+    await flushInitialLoad();
+
+    expect(container.querySelector('.log-cluster')?.textContent).toBe('[alpha]');
+
+    const clustersDropdown = dropdownInstances.find(
+      (instance) => instance.renderValue() === 'Clusters'
+    );
+    expect(clustersDropdown).toBeTruthy();
+
+    await act(async () => {
+      clustersDropdown?.onChange(['cluster-b']);
+      await Promise.resolve();
+    });
+
+    const entries = Array.from(container.querySelectorAll('.log-entry'));
+    expect(entries.length).toBe(1);
+    expect(entries[0]?.textContent).toContain('Cluster B ready');
+    expect(entries[0]?.textContent).toContain('[bravo]');
+
+    cleanup();
+  });
+
+  it('uses shared dropdown bulk actions instead of custom select-all options', async () => {
+    vi.useFakeTimers();
+    getLogsMock.mockResolvedValue([
+      {
+        timestamp: '2024-01-01T00:00:00.000Z',
+        level: 'info',
+        message: 'Cluster A ready',
+        source: 'Auth',
+        clusterId: 'cluster-a',
+        clusterName: 'alpha',
+      },
+      {
+        timestamp: '2024-01-01T00:00:01.000Z',
+        level: 'debug',
+        message: 'Cluster B ready',
+        source: 'Refresh',
+        clusterId: 'cluster-b',
+        clusterName: 'bravo',
+      },
+    ]);
+
+    const { cleanup } = await renderPanel();
+
+    await flushInitialLoad();
+
+    const logLevelsDropdown = latestDropdown('Log Levels');
+    const componentsDropdown = latestDropdown('Components');
+    const clustersDropdown = latestDropdown('Clusters');
+
+    expect(logLevelsDropdown?.showBulkActions).toBe(true);
+    expect(componentsDropdown?.showBulkActions).toBe(true);
+    expect(clustersDropdown?.showBulkActions).toBe(true);
+
+    expect(logLevelsDropdown?.options.map((option: any) => option.value)).toEqual([
+      'info',
+      'warn',
+      'error',
+      'debug',
+    ]);
+    expect(componentsDropdown?.options.map((option: any) => option.value)).toEqual([
+      'Auth',
+      'Refresh',
+    ]);
+    expect(clustersDropdown?.options.map((option: any) => option.value)).toEqual([
+      'cluster-a',
+      'cluster-b',
+    ]);
 
     cleanup();
   });

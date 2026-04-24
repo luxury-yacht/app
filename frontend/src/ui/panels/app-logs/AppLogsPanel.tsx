@@ -13,7 +13,7 @@ import { useShortcut, useKeyboardSurface } from '@ui/shortcuts';
 import { KeyboardScopePriority, KeyboardShortcutPriority } from '@ui/shortcuts/priorities';
 import { DockablePanel } from '@ui/dockable';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
-import { readAppLogs, requestAppState } from '@/core/app-state-access';
+import { readAppLogs } from '@/core/app-state-access';
 import './AppLogsPanel.css';
 
 interface LogEntry {
@@ -21,18 +21,15 @@ interface LogEntry {
   level: string;
   message: string;
   source?: string;
+  clusterId?: string;
+  clusterName?: string;
 }
 
-const LOG_LEVEL_SELECT_ALL_VALUE = '__log_levels_all__';
 const LOG_LEVEL_BASE_OPTIONS = [
   { value: 'info', label: 'Info' },
   { value: 'warn', label: 'Warning' },
   { value: 'error', label: 'Error' },
   { value: 'debug', label: 'Debug' },
-];
-const LOG_LEVEL_OPTIONS = [
-  { value: LOG_LEVEL_SELECT_ALL_VALUE, label: 'Select All' },
-  ...LOG_LEVEL_BASE_OPTIONS,
 ];
 const ALL_LEVEL_VALUES = LOG_LEVEL_BASE_OPTIONS.map((option) => option.value);
 const DEFAULT_LOG_LEVELS = ['info', 'warn', 'error'];
@@ -49,6 +46,7 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
 
   const [logLevelFilter, setLogLevelFilter] = useState<string[]>(DEFAULT_LOG_LEVELS);
   const [componentFilter, setComponentFilter] = useState<string[]>([]);
+  const [clusterFilter, setClusterFilter] = useState<string[]>([]);
   const [textFilter, setTextFilter] = useState<string>('');
   const logsContainerRef = useRef<HTMLDivElement>(null);
   const textFilterInputRef = useRef<HTMLInputElement>(null);
@@ -140,11 +138,7 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
       if (showLoadingSpinner) {
         setIsLoading(true);
       }
-      const logEntries = await requestAppState({
-        resource: 'app-logs',
-        adapter: 'runtime-read',
-        read: () => readAppLogs(),
-      });
+      const logEntries = await readAppLogs();
       setLogs(logEntries);
     } catch (error) {
       errorHandler.handle(error, { action: 'loadLogs' });
@@ -185,38 +179,24 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
     return normalized === 'warning' ? 'warn' : normalized;
   }, []);
 
-  const handleLogLevelDropdownChange = useCallback(
-    (value: string | string[]) => {
-      if (!Array.isArray(value)) {
-        return;
-      }
+  const handleLogLevelDropdownChange = useCallback((value: string | string[]) => {
+    if (!Array.isArray(value)) {
+      return;
+    }
 
-      if (value.includes(LOG_LEVEL_SELECT_ALL_VALUE)) {
-        if (logLevelFilter.length === ALL_LEVEL_VALUES.length) {
-          setLogLevelFilter([]);
-        } else {
-          setLogLevelFilter(ALL_LEVEL_VALUES);
-        }
-        return;
-      }
-
-      setLogLevelFilter(value.filter((item) => item !== LOG_LEVEL_SELECT_ALL_VALUE));
-    },
-    [logLevelFilter]
-  );
+    setLogLevelFilter(value);
+  }, []);
 
   const renderLogLevelOption = useCallback(
     (option: { value: string; label: string }, isSelected: boolean) => {
-      const isSelectAll = option.value === LOG_LEVEL_SELECT_ALL_VALUE;
-      const checked = isSelectAll ? logLevelFilter.length === ALL_LEVEL_VALUES.length : isSelected;
       return (
         <span className="dropdown-filter-option">
-          <span className="dropdown-filter-check">{checked ? '✓' : ''}</span>
+          <span className="dropdown-filter-check">{isSelected ? '✓' : ''}</span>
           <span className="dropdown-filter-label">{option.label}</span>
         </span>
       );
     },
-    [logLevelFilter]
+    []
   );
 
   const componentNames = useMemo(
@@ -227,37 +207,46 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
     [logs]
   );
 
-  const COMPONENT_SELECT_ALL_VALUE = '__components_all__';
   const componentOptions = useMemo(
-    () => [
-      { value: COMPONENT_SELECT_ALL_VALUE, label: 'Select All' },
-      ...componentNames.map((component) => ({
+    () =>
+      componentNames.map((component) => ({
         value: component,
         label: component,
       })),
-    ],
     [componentNames]
   );
 
-  const handleComponentDropdownChange = useCallback(
-    (value: string | string[]) => {
-      if (!Array.isArray(value)) {
+  const clusterOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const options: Array<{ value: string; label: string }> = [];
+    logs.forEach((log) => {
+      const value = log.clusterId || log.clusterName;
+      if (!value || seen.has(value)) {
         return;
       }
+      seen.add(value);
+      const label =
+        log.clusterName && log.clusterId && log.clusterName !== log.clusterId
+          ? `${log.clusterName} (${log.clusterId})`
+          : value;
+      options.push({ value, label });
+    });
+    options.sort((left, right) => left.label.localeCompare(right.label));
+    return options;
+  }, [logs]);
 
-      if (value.includes(COMPONENT_SELECT_ALL_VALUE)) {
-        if (componentFilter.length === componentNames.length) {
-          setComponentFilter([]);
-        } else {
-          setComponentFilter(componentNames);
-        }
-        return;
-      }
-
-      setComponentFilter(value.filter((item) => item !== COMPONENT_SELECT_ALL_VALUE));
-    },
-    [componentFilter, componentNames]
+  const clusterValues = useMemo(
+    () => clusterOptions.map((option) => option.value),
+    [clusterOptions]
   );
+
+  const handleComponentDropdownChange = useCallback((value: string | string[]) => {
+    if (!Array.isArray(value)) {
+      return;
+    }
+
+    setComponentFilter(value);
+  }, []);
 
   useEffect(() => {
     setComponentFilter((prev) => {
@@ -270,18 +259,47 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
     });
   }, [componentNames]);
 
+  const handleClusterDropdownChange = useCallback((value: string | string[]) => {
+    if (!Array.isArray(value)) {
+      return;
+    }
+
+    setClusterFilter(value);
+  }, []);
+
+  useEffect(() => {
+    setClusterFilter((prev) => {
+      if (prev.length === 0) {
+        return prev;
+      }
+
+      const validSelections = prev.filter((name) => clusterValues.includes(name));
+      return validSelections.length === prev.length ? prev : validSelections;
+    });
+  }, [clusterValues]);
+
   const renderComponentOption = useCallback(
     (option: { value: string; label: string }, isSelected: boolean) => {
-      const isSelectAll = option.value === COMPONENT_SELECT_ALL_VALUE;
-      const checked = isSelectAll ? componentFilter.length === componentNames.length : isSelected;
       return (
         <span className="dropdown-filter-option">
-          <span className="dropdown-filter-check">{checked ? '✓' : ''}</span>
+          <span className="dropdown-filter-check">{isSelected ? '✓' : ''}</span>
           <span className="dropdown-filter-label">{option.label}</span>
         </span>
       );
     },
-    [componentFilter, componentNames]
+    []
+  );
+
+  const renderClusterOption = useCallback(
+    (option: { value: string; label: string }, isSelected: boolean) => {
+      return (
+        <span className="dropdown-filter-option">
+          <span className="dropdown-filter-check">{isSelected ? '✓' : ''}</span>
+          <span className="dropdown-filter-label">{option.label}</span>
+        </span>
+      );
+    },
+    []
   );
 
   const handleCopyToClipboard = useCallback(() => {
@@ -296,12 +314,19 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
       if (componentFilter.length > 0 && !componentFilter.includes(log.source ?? '')) {
         return false;
       }
+      // Filter by cluster
+      const clusterValue = log.clusterId || log.clusterName || '';
+      if (clusterFilter.length > 0 && !clusterFilter.includes(clusterValue)) {
+        return false;
+      }
       // Filter by text (case-insensitive search in message and source)
       if (textFilter.trim()) {
         const searchText = textFilter.toLowerCase();
         const matchesMessage = log.message.toLowerCase().includes(searchText);
         const matchesSource = log.source?.toLowerCase().includes(searchText) || false;
-        if (!matchesMessage && !matchesSource) {
+        const matchesClusterId = log.clusterId?.toLowerCase().includes(searchText) || false;
+        const matchesClusterName = log.clusterName?.toLowerCase().includes(searchText) || false;
+        if (!matchesMessage && !matchesSource && !matchesClusterId && !matchesClusterName) {
           return false;
         }
       }
@@ -314,7 +339,9 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
         const timestamp = formatTimestamp(log.timestamp);
         const level = log.level.toUpperCase().padEnd(5);
         const source = log.source ? `[${log.source}] ` : '';
-        return `${timestamp} ${level} ${source}${log.message}`;
+        const cluster = log.clusterName || log.clusterId;
+        const clusterPart = cluster ? `[${cluster}] ` : '';
+        return `${timestamp} ${level} ${source}${clusterPart}${log.message}`;
       })
       .join('\n');
 
@@ -327,7 +354,15 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
       .catch((err) => {
         errorHandler.handle(err, { action: 'copyLogs' }, 'Failed to copy logs to clipboard');
       });
-  }, [logs, logLevelFilter, componentFilter, textFilter, formatTimestamp, normalizeLevel]);
+  }, [
+    logs,
+    logLevelFilter,
+    componentFilter,
+    clusterFilter,
+    textFilter,
+    formatTimestamp,
+    normalizeLevel,
+  ]);
 
   // Load logs when panel becomes visible
   useEffect(() => {
@@ -397,12 +432,19 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
     if (componentFilter.length > 0 && !componentFilter.includes(log.source ?? '')) {
       return false;
     }
+    // Filter by cluster
+    const clusterValue = log.clusterId || log.clusterName || '';
+    if (clusterFilter.length > 0 && !clusterFilter.includes(clusterValue)) {
+      return false;
+    }
     // Filter by text (case-insensitive search in message and source)
     if (textFilter.trim()) {
       const searchText = textFilter.toLowerCase();
       const matchesMessage = log.message.toLowerCase().includes(searchText);
       const matchesSource = log.source?.toLowerCase().includes(searchText) || false;
-      if (!matchesMessage && !matchesSource) {
+      const matchesClusterId = log.clusterId?.toLowerCase().includes(searchText) || false;
+      const matchesClusterName = log.clusterName?.toLowerCase().includes(searchText) || false;
+      if (!matchesMessage && !matchesSource && !matchesClusterId && !matchesClusterName) {
         return false;
       }
     }
@@ -412,6 +454,7 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
   const showFilteredCount =
     (logLevelFilter.length > 0 && logLevelFilter.length !== ALL_LEVEL_VALUES.length) ||
     (componentFilter.length > 0 && componentFilter.length !== componentNames.length) ||
+    (clusterFilter.length > 0 && clusterFilter.length !== clusterValues.length) ||
     textFilter.trim().length > 0;
 
   // Add shortcuts for logs panel (only visible when panel is open)
@@ -540,11 +583,12 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
           </div>
 
           <Dropdown
-            options={LOG_LEVEL_OPTIONS}
+            options={LOG_LEVEL_BASE_OPTIONS}
             value={logLevelFilter}
             onChange={handleLogLevelDropdownChange}
             multiple
             size="small"
+            showBulkActions
             ariaLabel="Filter by log level"
             dropdownClassName="dropdown-filter-menu"
             renderOption={renderLogLevelOption}
@@ -557,10 +601,24 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
             onChange={handleComponentDropdownChange}
             multiple
             size="small"
+            showBulkActions
             ariaLabel="Filter by component"
             dropdownClassName="dropdown-filter-menu"
             renderOption={renderComponentOption}
             renderValue={() => 'Components'}
+          />
+
+          <Dropdown
+            options={clusterOptions}
+            value={clusterFilter}
+            onChange={handleClusterDropdownChange}
+            multiple
+            size="small"
+            showBulkActions
+            ariaLabel="Filter by cluster"
+            dropdownClassName="dropdown-filter-menu"
+            renderOption={renderClusterOption}
+            renderValue={() => 'Clusters'}
           />
 
           <label className="app-logs-auto-scroll">
@@ -604,6 +662,9 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
               <span className="log-timestamp">{formatTimestamp(log.timestamp)}</span>
               <span className={`log-level ${log.level.toUpperCase()}`}>{log.level}</span>
               {log.source && <span className="log-source">[{log.source}]</span>}
+              {(log.clusterName || log.clusterId) && (
+                <span className="log-cluster">[{log.clusterName || log.clusterId}]</span>
+              )}
               <span className="log-message">{log.message}</span>
             </div>
           ))

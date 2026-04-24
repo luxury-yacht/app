@@ -282,7 +282,7 @@ func (a *App) buildClusterClientsWithContext(
 	metricsClient, err := metricsclient.NewForConfig(config)
 	if err != nil {
 		if a.logger != nil {
-			a.logger.Info(fmt.Sprintf("Metrics client not available for cluster %s: %v", meta.ID, err), "KubernetesClient")
+			a.logger.Info(fmt.Sprintf("Metrics client not available for cluster %s: %v", meta.ID, err), "KubernetesClient", meta.ID, meta.Name)
 		}
 	} else {
 		metrics = metricsClient
@@ -323,11 +323,11 @@ func (a *App) buildClusterClientsWithContext(
 	var authFailedOnInit bool
 	if err := a.preflightClusterClientWithContext(ctx, clientset); err != nil {
 		if a.logger != nil {
-			a.logger.Warn(fmt.Sprintf("Pre-flight check failed for cluster %s: %v", meta.Name, err), "Auth")
+			a.logger.Warn(fmt.Sprintf("Pre-flight check failed for cluster %s: %v", meta.Name, err), "Auth", meta.ID, meta.Name)
 		}
 		if isCredentialError(err) {
 			if a.logger != nil {
-				a.logger.Warn(fmt.Sprintf("Detected credential error for cluster %s, reporting auth failure", meta.Name), "Auth")
+				a.logger.Warn(fmt.Sprintf("Detected credential error for cluster %s, reporting auth failure", meta.Name), "Auth", meta.ID, meta.Name)
 			}
 			clusterAuthMgr.ReportFailure(err.Error())
 			authFailedOnInit = true
@@ -336,7 +336,7 @@ func (a *App) buildClusterClientsWithContext(
 		// The subsystem builder will check auth state before proceeding.
 	} else {
 		if a.logger != nil {
-			a.logger.Info(fmt.Sprintf("Pre-flight check passed for cluster %s", meta.Name), "Auth")
+			a.logger.Info(fmt.Sprintf("Pre-flight check passed for cluster %s", meta.Name), "Auth", meta.ID, meta.Name)
 		}
 	}
 

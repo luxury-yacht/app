@@ -291,6 +291,8 @@ export namespace backend {
 	    level: string;
 	    message: string;
 	    source?: string;
+	    clusterId?: string;
+	    clusterName?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new LogEntry(source);
@@ -302,6 +304,8 @@ export namespace backend {
 	        this.level = source["level"];
 	        this.message = source["message"];
 	        this.source = source["source"];
+	        this.clusterId = source["clusterId"];
+	        this.clusterName = source["clusterName"];
 	    }
 	}
 	export class ObjectYAMLMutationRequest {

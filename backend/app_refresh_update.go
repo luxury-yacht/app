@@ -69,7 +69,7 @@ func (a *App) updateRefreshSubsystemSelections(selections []kubeconfigSelection)
 		// clusters don't block the addition of new healthy clusters.
 		if clients.authFailedOnInit {
 			if a.logger != nil {
-				a.logger.Warn(fmt.Sprintf("Skipping subsystem for cluster %s: auth failed during initialization", metaByID[id].Name), "Refresh")
+				a.logger.Warn(fmt.Sprintf("Skipping subsystem for cluster %s: auth failed during initialization", metaByID[id].Name), "Refresh", id, metaByID[id].Name)
 			}
 			// Cluster is in clusterOrder but has no subsystem - this is expected for auth-failed clusters.
 			continue
@@ -77,7 +77,7 @@ func (a *App) updateRefreshSubsystemSelections(selections []kubeconfigSelection)
 		if clients.authManager != nil && !clients.authManager.IsValid() {
 			if a.logger != nil {
 				state, _ := clients.authManager.State()
-				a.logger.Warn(fmt.Sprintf("Skipping subsystem for cluster %s: auth not valid (state=%s)", metaByID[id].Name, state.String()), "Refresh")
+				a.logger.Warn(fmt.Sprintf("Skipping subsystem for cluster %s: auth not valid (state=%s)", metaByID[id].Name, state.String()), "Refresh", id, metaByID[id].Name)
 			}
 			// Cluster is in clusterOrder but has no subsystem - this is expected for auth-failed clusters.
 			continue

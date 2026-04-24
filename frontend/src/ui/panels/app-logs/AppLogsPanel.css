@@ -212,6 +212,16 @@
   white-space: nowrap;
 }
 
+.log-cluster {
+  color: var(--color-text-secondary);
+  opacity: 0.85;
+  width: 140px;
+  flex-shrink: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .log-message {
   flex: 1;
   color: var(--color-text);

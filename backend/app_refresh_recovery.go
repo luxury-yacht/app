@@ -252,7 +252,7 @@ func (a *App) recordClusterTransportFailure(clusterID, reason string, err error)
 
 	if shouldTrigger {
 		if a.logger != nil {
-			a.logger.Warn(fmt.Sprintf("Transport connectivity degraded for cluster %s (%s); rebuilding", clusterID, reason), "KubernetesClient")
+			a.logger.Warn(fmt.Sprintf("Transport connectivity degraded for cluster %s (%s); rebuilding", clusterID, reason), "KubernetesClient", clusterID, a.clusterNameForID(clusterID))
 		}
 		go a.runClusterTransportRebuild(clusterID, reason, err)
 	}
@@ -291,7 +291,7 @@ func (a *App) runClusterTransportRebuild(clusterID, reason string, cause error) 
 			}
 
 			if a.logger != nil {
-				a.logger.Info(fmt.Sprintf("Starting transport rebuild for cluster %s", clusterID), "KubernetesClient")
+				a.logger.Info(fmt.Sprintf("Starting transport rebuild for cluster %s", clusterID), "KubernetesClient", clusterID, a.clusterNameForID(clusterID))
 			}
 
 			if err := a.runClusterOperation(context.Background(), clusterID, func(opCtx context.Context) error {
@@ -310,11 +310,11 @@ func (a *App) runClusterTransportRebuild(clusterID, reason string, cause error) 
 				if cause != nil {
 					msg = fmt.Sprintf("%s after %v", msg, cause)
 				}
-				a.logger.Info(msg, "KubernetesClient")
+				a.logger.Info(msg, "KubernetesClient", clusterID, a.clusterNameForID(clusterID))
 			}
 			return nil
 		},
 	); err != nil && a.logger != nil {
-		a.logger.Warn(fmt.Sprintf("Transport rebuild coordination failed for cluster %s: %v", clusterID, err), "KubernetesClient")
+		a.logger.Warn(fmt.Sprintf("Transport rebuild coordination failed for cluster %s: %v", clusterID, err), "KubernetesClient", clusterID, a.clusterNameForID(clusterID))
 	}
 }
