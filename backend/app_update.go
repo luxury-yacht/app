@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/luxury-yacht/app/backend/internal/logsources"
 )
 
 const (
@@ -94,7 +96,7 @@ func (a *App) storeUpdateInfo(info *UpdateInfo) {
 	a.updateInfo = info
 	a.updateCheckMu.Unlock()
 	if info.Error != "" && a.logger != nil {
-		a.logger.Warn(info.Error, "UpdateCheck")
+		a.logger.Warn(info.Error, logsources.UpdateCheck)
 	}
 	// Notify the frontend so views can update without polling.
 	a.emitEvent("app-update", info)

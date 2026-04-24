@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/types"
 	corev1 "k8s.io/api/core/v1"
@@ -20,7 +21,7 @@ import (
 func (s *Service) Secret(namespace, name string) (*types.SecretDetails, error) {
 	secret, err := s.deps.KubernetesClient.CoreV1().Secrets(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
-		s.deps.Logger.Error(fmt.Sprintf("Failed to get secret %s/%s: %v", namespace, name, err), "ResourceLoader")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to get secret %s/%s: %v", namespace, name, err), logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to get secret: %v", err)
 	}
 

@@ -10,6 +10,7 @@ package network
 import (
 	"fmt"
 
+	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/types"
 	networkingv1 "k8s.io/api/networking/v1"
@@ -19,7 +20,7 @@ import (
 func (s *Service) NetworkPolicy(namespace, name string) (*types.NetworkPolicyDetails, error) {
 	np, err := s.deps.KubernetesClient.NetworkingV1().NetworkPolicies(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
-		s.deps.Logger.Error(fmt.Sprintf("Failed to get network policy %s/%s: %v", namespace, name, err), "ResourceLoader")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to get network policy %s/%s: %v", namespace, name, err), logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to get network policy: %v", err)
 	}
 	return buildNetworkPolicyDetails(np), nil
@@ -28,7 +29,7 @@ func (s *Service) NetworkPolicy(namespace, name string) (*types.NetworkPolicyDet
 func (s *Service) NetworkPolicies(namespace string) ([]*types.NetworkPolicyDetails, error) {
 	policies, err := s.deps.KubernetesClient.NetworkingV1().NetworkPolicies(namespace).List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
-		s.deps.Logger.Error(fmt.Sprintf("Failed to list network policies in namespace %s: %v", namespace, err), "ResourceLoader")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to list network policies in namespace %s: %v", namespace, err), logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to list network policies: %v", err)
 	}
 

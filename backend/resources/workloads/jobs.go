@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/pods"
 	restypes "github.com/luxury-yacht/app/backend/resources/types"
@@ -36,13 +37,13 @@ func (s *JobService) Job(namespace, name string) (*restypes.JobDetails, error) {
 
 	job, err := client.BatchV1().Jobs(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
-		s.deps.Logger.Error(fmt.Sprintf("Failed to get Job %s/%s: %v", namespace, name, err), "ResourceLoader")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to get Job %s/%s: %v", namespace, name, err), logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to get job: %v", err)
 	}
 
 	podList, err := client.CoreV1().Pods(namespace).List(s.deps.Context, metav1.ListOptions{LabelSelector: metav1.FormatLabelSelector(job.Spec.Selector)})
 	if err != nil {
-		s.deps.Logger.Warn(fmt.Sprintf("Failed to list pods for Job %s/%s: %v", namespace, name, err), "ResourceLoader")
+		s.deps.Logger.Warn(fmt.Sprintf("Failed to list pods for Job %s/%s: %v", namespace, name, err), logsources.ResourceLoader)
 	}
 
 	podsForJob := filterPodsForJob(job, podList)
@@ -58,13 +59,13 @@ func (s *JobService) Jobs(namespace string) ([]*restypes.JobDetails, error) {
 
 	jobs, err := client.BatchV1().Jobs(namespace).List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
-		s.deps.Logger.Error(fmt.Sprintf("Failed to list Jobs in namespace %s: %v", namespace, err), "ResourceLoader")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to list Jobs in namespace %s: %v", namespace, err), logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to list jobs: %v", err)
 	}
 
 	podList, err := client.CoreV1().Pods(namespace).List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
-		s.deps.Logger.Warn(fmt.Sprintf("Failed to list pods in namespace %s: %v", namespace, err), "ResourceLoader")
+		s.deps.Logger.Warn(fmt.Sprintf("Failed to list pods in namespace %s: %v", namespace, err), logsources.ResourceLoader)
 	}
 
 	podService := pods.NewService(s.deps)

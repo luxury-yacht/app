@@ -34,6 +34,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
 	"github.com/luxury-yacht/app/backend/refresh/informer"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
@@ -801,7 +802,7 @@ func (m *Manager) Subscribe(domain, scope string) (*Subscription, error) {
 	if len(subs) >= config.ResourceStreamMaxSubscribersPerScope {
 		m.mu.Unlock()
 		err := fmt.Errorf("resource stream subscriber limit reached for %s/%s", domain, normalized)
-		m.logger.Warn(err.Error(), "ResourceStream")
+		m.logger.Warn(err.Error(), logsources.ResourceStream)
 		if m.telemetry != nil {
 			m.telemetry.RecordStreamError(telemetry.StreamResources, err)
 		}
@@ -1544,7 +1545,7 @@ func (m *Manager) handleNode(obj interface{}, updateType MessageType) {
 	}
 	pods, err := m.podsForNode(node.Name)
 	if err != nil {
-		m.logger.Warn(fmt.Sprintf("resource stream: list pods for node %s failed: %v", node.Name, err), "ResourceStream")
+		m.logger.Warn(fmt.Sprintf("resource stream: list pods for node %s failed: %v", node.Name, err), logsources.ResourceStream)
 		if m.telemetry != nil {
 			m.telemetry.RecordStreamError(telemetry.StreamResources, err)
 		}
@@ -1553,7 +1554,7 @@ func (m *Manager) handleNode(obj interface{}, updateType MessageType) {
 
 	summary, err := snapshot.BuildNodeSummary(m.clusterMeta, node, pods, m.metrics)
 	if err != nil {
-		m.logger.Warn(fmt.Sprintf("resource stream: build node summary for %s failed: %v", node.Name, err), "ResourceStream")
+		m.logger.Warn(fmt.Sprintf("resource stream: build node summary for %s failed: %v", node.Name, err), logsources.ResourceStream)
 		if m.telemetry != nil {
 			m.telemetry.RecordStreamError(telemetry.StreamResources, err)
 		}
@@ -1588,7 +1589,7 @@ func (m *Manager) handleWorkload(obj interface{}, updateType MessageType) {
 	ownerKey := snapshot.WorkloadOwnerKey(kind, namespace, workload.GetName())
 	pods, err := m.podsForWorkload(namespace, ownerKey)
 	if err != nil {
-		m.logger.Warn(fmt.Sprintf("resource stream: list pods for workload %s failed: %v", ownerKey, err), "ResourceStream")
+		m.logger.Warn(fmt.Sprintf("resource stream: list pods for workload %s failed: %v", ownerKey, err), logsources.ResourceStream)
 		if m.telemetry != nil {
 			m.telemetry.RecordStreamError(telemetry.StreamResources, err)
 		}
@@ -1598,7 +1599,7 @@ func (m *Manager) handleWorkload(obj interface{}, updateType MessageType) {
 	podUsage := m.podMetricsSnapshot()
 	summary, err := snapshot.BuildWorkloadSummary(m.clusterMeta, workload, pods, podUsage)
 	if err != nil {
-		m.logger.Warn(fmt.Sprintf("resource stream: build workload summary for %s failed: %v", ownerKey, err), "ResourceStream")
+		m.logger.Warn(fmt.Sprintf("resource stream: build workload summary for %s failed: %v", ownerKey, err), logsources.ResourceStream)
 		if m.telemetry != nil {
 			m.telemetry.RecordStreamError(telemetry.StreamResources, err)
 		}
@@ -1652,7 +1653,7 @@ func (m *Manager) handleWorkloadFromPod(pod *corev1.Pod, updateType MessageType,
 
 	pods, err := m.podsForWorkload(namespace, ownerKey)
 	if err != nil {
-		m.logger.Warn(fmt.Sprintf("resource stream: list pods for workload %s failed: %v", ownerKey, err), "ResourceStream")
+		m.logger.Warn(fmt.Sprintf("resource stream: list pods for workload %s failed: %v", ownerKey, err), logsources.ResourceStream)
 		if m.telemetry != nil {
 			m.telemetry.RecordStreamError(telemetry.StreamResources, err)
 		}
@@ -1661,7 +1662,7 @@ func (m *Manager) handleWorkloadFromPod(pod *corev1.Pod, updateType MessageType,
 
 	summary, err := snapshot.BuildWorkloadSummary(m.clusterMeta, workload, pods, usage)
 	if err != nil {
-		m.logger.Warn(fmt.Sprintf("resource stream: build workload summary for %s failed: %v", ownerKey, err), "ResourceStream")
+		m.logger.Warn(fmt.Sprintf("resource stream: build workload summary for %s failed: %v", ownerKey, err), logsources.ResourceStream)
 		if m.telemetry != nil {
 			m.telemetry.RecordStreamError(telemetry.StreamResources, err)
 		}
@@ -1721,7 +1722,7 @@ func (m *Manager) handleNodeFromPod(pod *corev1.Pod) {
 	node, err := m.nodeLister.Get(pod.Spec.NodeName)
 	if err != nil || node == nil {
 		if err != nil {
-			m.logger.Warn(fmt.Sprintf("resource stream: resolve node %s failed: %v", pod.Spec.NodeName, err), "ResourceStream")
+			m.logger.Warn(fmt.Sprintf("resource stream: resolve node %s failed: %v", pod.Spec.NodeName, err), logsources.ResourceStream)
 			if m.telemetry != nil {
 				m.telemetry.RecordStreamError(telemetry.StreamResources, err)
 			}
@@ -1732,7 +1733,7 @@ func (m *Manager) handleNodeFromPod(pod *corev1.Pod) {
 	// Pod changes affect node summaries (pod counts, restarts, and metrics usage).
 	pods, err := m.podsForNode(node.Name)
 	if err != nil {
-		m.logger.Warn(fmt.Sprintf("resource stream: list pods for node %s failed: %v", node.Name, err), "ResourceStream")
+		m.logger.Warn(fmt.Sprintf("resource stream: list pods for node %s failed: %v", node.Name, err), logsources.ResourceStream)
 		if m.telemetry != nil {
 			m.telemetry.RecordStreamError(telemetry.StreamResources, err)
 		}
@@ -1740,7 +1741,7 @@ func (m *Manager) handleNodeFromPod(pod *corev1.Pod) {
 	}
 	summary, err := snapshot.BuildNodeSummary(m.clusterMeta, node, pods, m.metrics)
 	if err != nil {
-		m.logger.Warn(fmt.Sprintf("resource stream: build node summary for %s failed: %v", node.Name, err), "ResourceStream")
+		m.logger.Warn(fmt.Sprintf("resource stream: build node summary for %s failed: %v", node.Name, err), logsources.ResourceStream)
 		if m.telemetry != nil {
 			m.telemetry.RecordStreamError(telemetry.StreamResources, err)
 		}
@@ -1821,7 +1822,7 @@ func (m *Manager) broadcast(domain string, scopes []string, update Update) {
 			}
 		}
 		if closedCount > 0 {
-			m.logger.Info(fmt.Sprintf("resource stream: cleaned up %d closed subscribers for %s/%s", closedCount, domain, scope), "ResourceStream")
+			m.logger.Info(fmt.Sprintf("resource stream: cleaned up %d closed subscribers for %s/%s", closedCount, domain, scope), logsources.ResourceStream)
 		}
 	}
 }

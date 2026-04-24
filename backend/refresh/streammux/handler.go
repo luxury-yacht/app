@@ -14,6 +14,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
@@ -107,7 +108,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	conn, err := h.upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		h.logger.Warn(fmt.Sprintf("stream mux upgrade failed: %v", err), "StreamMux")
+		h.logger.Warn(fmt.Sprintf("stream mux upgrade failed: %v", err), logsources.StreamMux)
 		return
 	}
 
@@ -230,7 +231,7 @@ func (s *session) readLoop() {
 			) {
 				return
 			}
-			s.logger.Warn(fmt.Sprintf("stream mux read error: %v", err), "StreamMux")
+			s.logger.Warn(fmt.Sprintf("stream mux read error: %v", err), logsources.StreamMux)
 			return
 		}
 
@@ -280,7 +281,7 @@ func (s *session) handleSubscribe(msg ClientMessage) {
 	if resumeToken > 0 {
 		resumeUpdates, resumeOK = s.resume(clusterID, msg.Domain, normalized, resumeToken)
 		if !resumeOK {
-			s.logger.Warn(fmt.Sprintf("stream mux: resume token expired for %s/%s", msg.Domain, normalized), "StreamMux")
+			s.logger.Warn(fmt.Sprintf("stream mux: resume token expired for %s/%s", msg.Domain, normalized), logsources.StreamMux)
 		}
 		if resumeOK && len(resumeUpdates) > 0 {
 			// Track the highest buffered sequence to skip duplicates from live delivery.
@@ -403,7 +404,7 @@ func (s *session) enqueue(msg ServerMessage) {
 
 func (s *session) handleBackpressure(msg ServerMessage) {
 	if msg.Type == MessageTypeHeartbeat {
-		s.logger.Warn("stream mux: outgoing buffer full, dropping heartbeat", "StreamMux")
+		s.logger.Warn("stream mux: outgoing buffer full, dropping heartbeat", logsources.StreamMux)
 		return
 	}
 
@@ -417,7 +418,7 @@ func (s *session) handleBackpressure(msg ServerMessage) {
 	}
 
 	if msg.Domain == "" || msg.Scope == "" {
-		s.logger.Warn("stream mux: outgoing buffer full, dropping message", "StreamMux")
+		s.logger.Warn("stream mux: outgoing buffer full, dropping message", logsources.StreamMux)
 		return
 	}
 
@@ -438,9 +439,9 @@ func (s *session) handleBackpressure(msg ServerMessage) {
 	}
 	select {
 	case s.outgoing <- reset:
-		s.logger.Warn(fmt.Sprintf("stream mux: outgoing buffer full, issued reset for %s/%s", msg.Domain, msg.Scope), "StreamMux")
+		s.logger.Warn(fmt.Sprintf("stream mux: outgoing buffer full, issued reset for %s/%s", msg.Domain, msg.Scope), logsources.StreamMux)
 	default:
-		s.logger.Warn("stream mux: outgoing buffer full, dropping message", "StreamMux")
+		s.logger.Warn("stream mux: outgoing buffer full, dropping message", logsources.StreamMux)
 	}
 }
 
@@ -472,11 +473,11 @@ func (s *session) writeLoop(ctx context.Context) {
 
 func (s *session) writeMessage(msg ServerMessage) error {
 	if err := s.conn.SetWriteDeadline(time.Now().Add(config.StreamMuxWriteTimeout)); err != nil {
-		s.logger.Warn(fmt.Sprintf("stream mux: write deadline failed: %v", err), "StreamMux")
+		s.logger.Warn(fmt.Sprintf("stream mux: write deadline failed: %v", err), logsources.StreamMux)
 	}
 	if err := s.conn.WriteJSON(msg); err != nil {
 		if !isExpectedStreamCloseError(err) {
-			s.logger.Warn(fmt.Sprintf("stream mux write error: %v", err), "StreamMux")
+			s.logger.Warn(fmt.Sprintf("stream mux write error: %v", err), logsources.StreamMux)
 		}
 		s.shutdown()
 		return err

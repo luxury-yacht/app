@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/types"
 	corev1 "k8s.io/api/core/v1"
@@ -21,7 +22,7 @@ import (
 func (s *Service) ConfigMap(namespace, name string) (*types.ConfigMapDetails, error) {
 	cm, err := s.deps.KubernetesClient.CoreV1().ConfigMaps(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
-		s.deps.Logger.Error(fmt.Sprintf("Failed to get configmap %s/%s: %v", namespace, name, err), "ResourceLoader")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to get configmap %s/%s: %v", namespace, name, err), logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to get configmap: %v", err)
 	}
 
@@ -32,7 +33,7 @@ func (s *Service) ConfigMap(namespace, name string) (*types.ConfigMapDetails, er
 func (s *Service) ConfigMaps(namespace string) ([]*types.ConfigMapDetails, error) {
 	configMaps, err := s.deps.KubernetesClient.CoreV1().ConfigMaps(namespace).List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
-		s.deps.Logger.Error(fmt.Sprintf("Failed to list configmaps in namespace %s: %v", namespace, err), "ResourceLoader")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to list configmaps in namespace %s: %v", namespace, err), logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to list configmaps: %v", err)
 	}
 
@@ -81,7 +82,7 @@ func (s *Service) processConfigMapDetails(cm *corev1.ConfigMap, pods *corev1.Pod
 func (s *Service) listNamespacePods(namespace string) *corev1.PodList {
 	pods, err := s.deps.KubernetesClient.CoreV1().Pods(namespace).List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
-		s.deps.Logger.Warn(fmt.Sprintf("Failed to list pods in namespace %s: %v", namespace, err), "ResourceLoader")
+		s.deps.Logger.Warn(fmt.Sprintf("Failed to list pods in namespace %s: %v", namespace, err), logsources.ResourceLoader)
 		return nil
 	}
 	return pods

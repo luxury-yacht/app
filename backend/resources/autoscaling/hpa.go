@@ -10,6 +10,7 @@ package autoscaling
 import (
 	"fmt"
 
+	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/types"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
@@ -234,6 +235,6 @@ func buildScalingRules(rules *autoscalingv2.HPAScalingRules) *types.ScalingRules
 
 func (s *Service) logError(msg string) {
 	if s.deps.Logger != nil {
-		s.deps.Logger.Error(msg, "ResourceLoader")
+		s.deps.Logger.Error(msg, logsources.ResourceLoader)
 	}
 }

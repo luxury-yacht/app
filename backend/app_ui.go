@@ -3,6 +3,8 @@ package backend
 import (
 	"fmt"
 	"runtime"
+
+	"github.com/luxury-yacht/app/backend/internal/logsources"
 )
 
 func (a *App) ToggleDiagnosticsPanel() error {
@@ -11,7 +13,7 @@ func (a *App) ToggleDiagnosticsPanel() error {
 	}
 
 	a.diagnosticsPanelVisible = !a.diagnosticsPanelVisible
-	a.logger.Info("Diagnostics panel toggled", "App")
+	a.logger.Info("Diagnostics panel toggled", logsources.App)
 	a.emitEvent("toggle-diagnostics")
 	a.UpdateMenu()
 	return nil
@@ -23,7 +25,7 @@ func (a *App) ToggleAppLogsPanel() error {
 	}
 
 	a.appLogsPanelVisible = !a.appLogsPanelVisible
-	a.logger.Info("Application Logs Panel toggled", "App")
+	a.logger.Info("Application Logs Panel toggled", logsources.App)
 	a.emitEvent("toggle-app-logs-panel")
 	a.UpdateMenu()
 	return nil

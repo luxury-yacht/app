@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/logsources"
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
@@ -22,16 +23,16 @@ func (a *App) discoverKubeconfigs() error {
 }
 
 func (a *App) discoverKubeconfigsLocked() error {
-	a.logger.Debug("Starting kubeconfig discovery", "KubeconfigManager")
+	a.logger.Debug("Starting kubeconfig discovery", logsources.KubeconfigManager)
 	a.availableKubeconfigs = []KubeconfigInfo{}
 
 	searchPaths, err := a.loadKubeconfigSearchPaths()
 	if err != nil {
-		a.logger.Error(fmt.Sprintf("Failed to load kubeconfig search paths: %v", err), "KubeconfigManager")
+		a.logger.Error(fmt.Sprintf("Failed to load kubeconfig search paths: %v", err), logsources.KubeconfigManager)
 		return err
 	}
 	if len(searchPaths) == 0 {
-		a.logger.Warn("No kubeconfig search paths configured", "KubeconfigManager")
+		a.logger.Warn("No kubeconfig search paths configured", logsources.KubeconfigManager)
 		return nil
 	}
 
@@ -47,22 +48,22 @@ func (a *App) discoverKubeconfigsLocked() error {
 		info, err := os.Stat(resolved)
 		if err != nil {
 			if os.IsNotExist(err) {
-				a.logger.Warn(fmt.Sprintf("Kubeconfig path not found: %s", resolved), "KubeconfigManager")
+				a.logger.Warn(fmt.Sprintf("Kubeconfig path not found: %s", resolved), logsources.KubeconfigManager)
 			} else {
-				a.logger.Warn(fmt.Sprintf("Failed to read kubeconfig path %s: %v", resolved, err), "KubeconfigManager")
+				a.logger.Warn(fmt.Sprintf("Failed to read kubeconfig path %s: %v", resolved, err), logsources.KubeconfigManager)
 			}
 			continue
 		}
 		foundRoot = true
 
 		if info.IsDir() {
-			a.logger.Debug(fmt.Sprintf("Scanning directory: %s", resolved), "KubeconfigManager")
+			a.logger.Debug(fmt.Sprintf("Scanning directory: %s", resolved), logsources.KubeconfigManager)
 			entries, err := os.ReadDir(resolved)
 			if err != nil {
-				a.logger.Warn(fmt.Sprintf("Failed to read kubeconfig directory %s: %v", resolved, err), "KubeconfigManager")
+				a.logger.Warn(fmt.Sprintf("Failed to read kubeconfig directory %s: %v", resolved, err), logsources.KubeconfigManager)
 				continue
 			}
-			a.logger.Debug(fmt.Sprintf("Found %d items in %s", len(entries), resolved), "KubeconfigManager")
+			a.logger.Debug(fmt.Sprintf("Found %d items in %s", len(entries), resolved), logsources.KubeconfigManager)
 			for _, d := range entries {
 				// Skip directories - we only want files directly in the search directory.
 				if d.IsDir() {
@@ -98,23 +99,23 @@ func (a *App) appendKubeconfigFromFile(path string, name string, defaultConfigPa
 	seenFiles[key] = struct{}{}
 
 	// Parse the file as a kubeconfig to validate it.
-	a.logger.Debug(fmt.Sprintf("Validating kubeconfig file: %s", cleanedPath), "KubeconfigManager")
+	a.logger.Debug(fmt.Sprintf("Validating kubeconfig file: %s", cleanedPath), logsources.KubeconfigManager)
 	config, err := clientcmd.LoadFromFile(cleanedPath)
 	if err != nil {
-		a.logger.Debug(fmt.Sprintf("Skipping %s - not a valid kubeconfig: %v", cleanedPath, err), "KubeconfigManager")
+		a.logger.Debug(fmt.Sprintf("Skipping %s - not a valid kubeconfig: %v", cleanedPath, err), logsources.KubeconfigManager)
 		return
 	}
 
 	// Additional validation: ensure it has clusters and contexts.
 	if len(config.Clusters) == 0 || len(config.Contexts) == 0 {
-		a.logger.Debug(fmt.Sprintf("Skipping %s - no clusters or contexts found", cleanedPath), "KubeconfigManager")
+		a.logger.Debug(fmt.Sprintf("Skipping %s - no clusters or contexts found", cleanedPath), logsources.KubeconfigManager)
 		return
 	}
 
 	isDefault := pathsEqual(cleanedPath, defaultConfigPath)
 	displayName := name
 
-	a.logger.Info(fmt.Sprintf("Found valid kubeconfig: %s (%d clusters, %d contexts)", cleanedPath, len(config.Clusters), len(config.Contexts)), "KubeconfigManager")
+	a.logger.Info(fmt.Sprintf("Found valid kubeconfig: %s (%d clusters, %d contexts)", cleanedPath, len(config.Clusters), len(config.Contexts)), logsources.KubeconfigManager)
 
 	// Create an entry for each context in the kubeconfig.
 	for contextName := range config.Contexts {
@@ -193,12 +194,12 @@ func (a *App) SetKubeconfigSearchPaths(paths []string) error {
 		}
 
 		if err := a.discoverKubeconfigs(); err != nil {
-			a.logger.Warn(fmt.Sprintf("Failed to refresh kubeconfig discovery: %v", err), "KubeconfigManager")
+			a.logger.Warn(fmt.Sprintf("Failed to refresh kubeconfig discovery: %v", err), logsources.KubeconfigManager)
 		}
 		if a.kubeconfigWatcher != nil {
 			watchPaths := a.resolvedKubeconfigWatchPaths()
 			if updateErr := a.kubeconfigWatcher.updateWatchedPaths(watchPaths); updateErr != nil {
-				a.logger.Warn(fmt.Sprintf("Failed to update watched paths: %v", updateErr), "KubeconfigWatcher")
+				a.logger.Warn(fmt.Sprintf("Failed to update watched paths: %v", updateErr), logsources.KubeconfigWatcher)
 			}
 		}
 
@@ -345,7 +346,7 @@ func (a *App) GetSelectedKubeconfigs() []string {
 // SetKubeconfig switches to a different kubeconfig file and context
 // The parameter should be in the format "path:context"
 func (a *App) SetKubeconfig(selection string) error {
-	a.logger.Info(fmt.Sprintf("Switching kubeconfig to: %s", selection), "KubeconfigManager")
+	a.logger.Info(fmt.Sprintf("Switching kubeconfig to: %s", selection), logsources.KubeconfigManager)
 
 	if strings.TrimSpace(selection) == "" {
 		return a.SetSelectedKubeconfigs(nil)
@@ -358,7 +359,7 @@ func (a *App) SetKubeconfig(selection string) error {
 
 	parsed, err := parseKubeconfigSelection(selection)
 	if err == nil {
-		a.logger.Info(fmt.Sprintf("Successfully switched to kubeconfig %s with context %s", parsed.Path, parsed.Context), "KubeconfigManager")
+		a.logger.Info(fmt.Sprintf("Successfully switched to kubeconfig %s with context %s", parsed.Path, parsed.Context), logsources.KubeconfigManager)
 	}
 	return nil
 }
@@ -474,7 +475,7 @@ func (a *App) commitSelectionChangeIntent(intent selectionChangeIntent) {
 	}
 	a.appSettings.SelectedKubeconfigs = append([]string(nil), intent.normalizedSelectionText...)
 	if err := a.saveAppSettings(); err != nil {
-		a.logger.Warn(fmt.Sprintf("Failed to save kubeconfig selection: %v", err), "KubeconfigManager")
+		a.logger.Warn(fmt.Sprintf("Failed to save kubeconfig selection: %v", err), logsources.KubeconfigManager)
 	}
 	a.settingsMu.Unlock()
 }
@@ -549,7 +550,7 @@ func (a *App) executeSelectionChangeWork(
 
 // clearKubeconfigSelection clears the active selection and resets client state.
 func (a *App) clearKubeconfigSelection() error {
-	a.logger.Info("Clearing kubeconfig selection", "KubeconfigManager")
+	a.logger.Info("Clearing kubeconfig selection", logsources.KubeconfigManager)
 	a.kubeconfigsMu.Lock()
 	a.selectedKubeconfigs = nil
 	a.kubeconfigsMu.Unlock()
@@ -569,10 +570,10 @@ func (a *App) clearKubeconfigSelection() error {
 	}
 	for clusterID := range clusterIDs {
 		if err := a.StopClusterShellSessions(clusterID); err != nil && a.logger != nil {
-			a.logger.Warn(fmt.Sprintf("Failed to stop shell sessions for cleared cluster %s: %v", clusterID, err), "KubeconfigManager")
+			a.logger.Warn(fmt.Sprintf("Failed to stop shell sessions for cleared cluster %s: %v", clusterID, err), logsources.KubeconfigManager)
 		}
 		if err := a.StopClusterPortForwards(clusterID); err != nil && a.logger != nil {
-			a.logger.Warn(fmt.Sprintf("Failed to stop port forwards for cleared cluster %s: %v", clusterID, err), "KubeconfigManager")
+			a.logger.Warn(fmt.Sprintf("Failed to stop port forwards for cleared cluster %s: %v", clusterID, err), logsources.KubeconfigManager)
 		}
 	}
 	a.teardownRefreshSubsystem()
@@ -583,7 +584,7 @@ func (a *App) clearKubeconfigSelection() error {
 	}
 	a.appSettings.SelectedKubeconfigs = nil
 	if err := a.saveAppSettings(); err != nil {
-		a.logger.Warn(fmt.Sprintf("Failed to save kubeconfig selection: %v", err), "KubeconfigManager")
+		a.logger.Warn(fmt.Sprintf("Failed to save kubeconfig selection: %v", err), logsources.KubeconfigManager)
 	}
 	a.settingsMu.Unlock()
 
@@ -604,10 +605,10 @@ func (a *App) startKubeconfigWatcher() error {
 
 	watchPaths := a.resolvedKubeconfigWatchPaths()
 	if err := w.updateWatchedPaths(watchPaths); err != nil {
-		a.logger.Warn(fmt.Sprintf("Failed to set watched paths: %v", err), "KubeconfigWatcher")
+		a.logger.Warn(fmt.Sprintf("Failed to set watched paths: %v", err), logsources.KubeconfigWatcher)
 	}
 
-	a.logger.Info(fmt.Sprintf("Kubeconfig watcher started, watching %d path(s)", len(watchPaths)), "KubeconfigWatcher")
+	a.logger.Info(fmt.Sprintf("Kubeconfig watcher started, watching %d path(s)", len(watchPaths)), logsources.KubeconfigWatcher)
 	return nil
 }
 
@@ -693,7 +694,7 @@ func (a *App) handleKubeconfigChange(changedPaths []string) {
 		a.handleKubeconfigChangeLocked(changedPaths, mutation.generation)
 		return nil
 	}); err != nil && a.logger != nil {
-		a.logger.Warn(fmt.Sprintf("Failed to process kubeconfig file changes: %v", err), "KubeconfigWatcher")
+		a.logger.Warn(fmt.Sprintf("Failed to process kubeconfig file changes: %v", err), logsources.KubeconfigWatcher)
 	}
 }
 
@@ -723,17 +724,17 @@ func (a *App) handleKubeconfigChangeLocked(changedPaths []string, generation uin
 	a.clusterClientsMu.Unlock()
 
 	if err := a.discoverKubeconfigs(); err != nil {
-		a.logger.Warn(fmt.Sprintf("Failed to re-discover kubeconfigs; skipping reconnect/deselect until next event: %v", err), "KubeconfigWatcher")
+		a.logger.Warn(fmt.Sprintf("Failed to re-discover kubeconfigs; skipping reconnect/deselect until next event: %v", err), logsources.KubeconfigWatcher)
 		return
 	}
 
 	a.kubeconfigsMu.RLock()
 	count := len(a.availableKubeconfigs)
 	a.kubeconfigsMu.RUnlock()
-	a.logger.Info(fmt.Sprintf("Re-discovery complete, found %d kubeconfig(s)", count), "KubeconfigWatcher")
+	a.logger.Info(fmt.Sprintf("Re-discovery complete, found %d kubeconfig(s)", count), logsources.KubeconfigWatcher)
 
 	if len(affectedClusterIDs) > 0 {
-		a.logger.Info(fmt.Sprintf("Processing %d affected cluster(s)", len(affectedClusterIDs)), "KubeconfigWatcher")
+		a.logger.Info(fmt.Sprintf("Processing %d affected cluster(s)", len(affectedClusterIDs)), logsources.KubeconfigWatcher)
 
 		type pathContextKey struct {
 			path    string
@@ -812,16 +813,16 @@ func (a *App) handleKubeconfigChangeLocked(changedPaths []string, generation uin
 			inspection := inspectFile(clients.kubeconfigPath)
 			switch {
 			case inspection.missing:
-				a.logger.Info(fmt.Sprintf("Kubeconfig file deleted/renamed for cluster %s, deselecting", clients.meta.Name), "KubeconfigWatcher")
+				a.logger.Info(fmt.Sprintf("Kubeconfig file deleted/renamed for cluster %s, deselecting", clients.meta.Name), logsources.KubeconfigWatcher)
 				toDeselect = append(toDeselect, clusterID)
 			case inspection.loadErr != nil:
-				a.logger.Warn(fmt.Sprintf("Kubeconfig file for cluster %s changed but is temporarily unreadable (%v); keeping selection until next event", clients.meta.Name, inspection.loadErr), "KubeconfigWatcher")
+				a.logger.Warn(fmt.Sprintf("Kubeconfig file for cluster %s changed but is temporarily unreadable (%v); keeping selection until next event", clients.meta.Name, inspection.loadErr), logsources.KubeconfigWatcher)
 			default:
 				if _, exists := inspection.contexts[clients.kubeconfigContext]; exists {
-					a.logger.Info(fmt.Sprintf("Kubeconfig context still present on disk for cluster %s; reconnecting", clients.meta.Name), "KubeconfigWatcher")
+					a.logger.Info(fmt.Sprintf("Kubeconfig context still present on disk for cluster %s; reconnecting", clients.meta.Name), logsources.KubeconfigWatcher)
 					toRebuild = append(toRebuild, clusterID)
 				} else {
-					a.logger.Info(fmt.Sprintf("Kubeconfig context removed/renamed for cluster %s, deselecting", clients.meta.Name), "KubeconfigWatcher")
+					a.logger.Info(fmt.Sprintf("Kubeconfig context removed/renamed for cluster %s, deselecting", clients.meta.Name), logsources.KubeconfigWatcher)
 					toDeselect = append(toDeselect, clusterID)
 				}
 			}
@@ -836,7 +837,7 @@ func (a *App) handleKubeconfigChangeLocked(changedPaths []string, generation uin
 			if clients == nil {
 				continue
 			}
-			a.logger.Info(fmt.Sprintf("Reconnecting cluster %s after kubeconfig change", clients.meta.Name), "KubeconfigWatcher")
+			a.logger.Info(fmt.Sprintf("Reconnecting cluster %s after kubeconfig change", clients.meta.Name), logsources.KubeconfigWatcher)
 			a.teardownClusterSubsystem(clusterID)
 			a.rebuildClusterSubsystem(clusterID)
 		}
@@ -889,7 +890,7 @@ func (a *App) deselectClusters(clusterIDs []string) {
 		}
 	}
 
-	a.applySelectionPrune(remainingSelections, remainingParsed, clusterIDs, "KubeconfigWatcher")
+	a.applySelectionPrune(remainingSelections, remainingParsed, clusterIDs, logsources.KubeconfigWatcher)
 }
 
 // pruneSelectionsAgainstDiscoveredKubeconfigs drops active selections that are no longer discoverable.
@@ -936,7 +937,7 @@ func (a *App) pruneSelectionsAgainstDiscoveredKubeconfigs() {
 		return
 	}
 
-	a.applySelectionPrune(remainingSelections, remainingParsed, removedClusterIDs, "KubeconfigManager")
+	a.applySelectionPrune(remainingSelections, remainingParsed, removedClusterIDs, logsources.KubeconfigManager)
 }
 
 // applySelectionPrune commits an already-computed selection prune and tears down removed cluster state.

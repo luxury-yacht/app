@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/pods"
 	restypes "github.com/luxury-yacht/app/backend/resources/types"
@@ -38,14 +39,14 @@ func (s *DeploymentService) Deployment(namespace, name string) (*restypes.Deploy
 
 	deployment, err := client.AppsV1().Deployments(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
-		s.deps.Logger.Error(fmt.Sprintf("Failed to get deployment %s/%s: %v", namespace, name, err), "ResourceLoader")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to get deployment %s/%s: %v", namespace, name, err), logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to get deployment: %v", err)
 	}
 
 	// getDeploymentPods also fetches ReplicaSets for filtering; reuse them to avoid a second list call.
 	deploymentPods, podMetrics, replicaSets, err := s.getDeploymentPods(deployment)
 	if err != nil {
-		s.deps.Logger.Warn(fmt.Sprintf("Failed to collect pods for deployment %s/%s: %v", namespace, name, err), "ResourceLoader")
+		s.deps.Logger.Warn(fmt.Sprintf("Failed to collect pods for deployment %s/%s: %v", namespace, name, err), logsources.ResourceLoader)
 	}
 
 	return s.buildDeploymentDetails(deployment, deploymentPods, podMetrics, replicaSets), nil
@@ -60,13 +61,13 @@ func (s *DeploymentService) Deployments(namespace string) ([]*restypes.Deploymen
 
 	deployments, err := client.AppsV1().Deployments(namespace).List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
-		s.deps.Logger.Error(fmt.Sprintf("Failed to list deployments in namespace %s: %v", namespace, err), "ResourceLoader")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to list deployments in namespace %s: %v", namespace, err), logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to list deployments: %v", err)
 	}
 
 	podList, err := client.CoreV1().Pods(namespace).List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
-		s.deps.Logger.Warn(fmt.Sprintf("Failed to list pods in namespace %s: %v", namespace, err), "ResourceLoader")
+		s.deps.Logger.Warn(fmt.Sprintf("Failed to list pods in namespace %s: %v", namespace, err), logsources.ResourceLoader)
 	}
 
 	replicaSetList, err := client.AppsV1().ReplicaSets(namespace).List(s.deps.Context, metav1.ListOptions{})

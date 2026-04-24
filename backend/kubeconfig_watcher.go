@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/luxury-yacht/app/backend/internal/logsources"
 )
 
 const kubeconfigWatcherDebounceInterval = 500 * time.Millisecond
@@ -110,7 +111,7 @@ func (w *kubeconfigWatcher) eventLoop() {
 				return
 			}
 			if w.app != nil && w.app.logger != nil {
-				w.app.logger.Warn("kubeconfig watcher error", "KubeconfigWatcher")
+				w.app.logger.Warn("kubeconfig watcher error", logsources.KubeconfigWatcher)
 			}
 
 		case <-debounceCh:
@@ -183,7 +184,7 @@ func (w *kubeconfigWatcher) updateWatchedPaths(paths []watchedPath) error {
 			continue
 		}
 		if err := w.watcher.Add(dir); err != nil && w.app != nil && w.app.logger != nil {
-			w.app.logger.Warn("Failed to watch directory: "+dir, "KubeconfigWatcher")
+			w.app.logger.Warn("Failed to watch directory: "+dir, logsources.KubeconfigWatcher)
 		}
 	}
 

@@ -7,7 +7,7 @@
 
 import { useEffect, useRef } from 'react';
 
-import { logAppLogsDebug, logAppLogsWarn } from '@/core/logging/appLogsClient';
+import { APP_LOG_SOURCES, logAppLogsDebug, logAppLogsWarn } from '@/core/logging/appLogsClient';
 import type { DomainSnapshotState } from '@/core/refresh/store';
 import type { CatalogSnapshotPayload } from '@/core/refresh/types';
 
@@ -15,7 +15,6 @@ const UPDATE_WINDOW_MS = 2000;
 const WARN_THRESHOLD = 20;
 const INFO_INTERVAL_MS = 15000;
 const WARN_INTERVAL_MS = 15000;
-const LOG_SOURCE = 'CatalogDiagnostics';
 
 export const useCatalogDiagnostics = (
   domain: DomainSnapshotState<CatalogSnapshotPayload>,
@@ -40,7 +39,7 @@ export const useCatalogDiagnostics = (
       if (countRef.current > 0 && now - lastInfoRef.current > INFO_INTERVAL_MS) {
         logAppLogsDebug(
           `[${viewLabel}] catalog updates: ${countRef.current}/${UPDATE_WINDOW_MS}ms`,
-          LOG_SOURCE
+          APP_LOG_SOURCES.CatalogDiagnostics
         );
         lastInfoRef.current = now;
       }
@@ -53,7 +52,7 @@ export const useCatalogDiagnostics = (
       logAppLogsWarn(
         `[${viewLabel}] catalog update rate high (${countRef.current}/${UPDATE_WINDOW_MS}ms). ` +
           `Risk of React update-depth warnings.`,
-        LOG_SOURCE
+        APP_LOG_SOURCES.CatalogDiagnostics
       );
       lastWarnRef.current = now;
     }

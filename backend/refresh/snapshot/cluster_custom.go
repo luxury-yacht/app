@@ -14,6 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 
+	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/internal/parallel"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
@@ -171,7 +172,7 @@ func (b *ClusterCustomBuilder) Build(ctx context.Context, scope string) (*refres
 					return nil
 				}
 				if b.logger != nil {
-					b.logger.Warn(fmt.Sprintf("cluster-custom: list %s failed: %v", gvr.String(), err), "Refresh")
+					b.logger.Warn(fmt.Sprintf("cluster-custom: list %s failed: %v", gvr.String(), err), logsources.Refresh)
 				}
 				mu.Lock()
 				if firstErr == nil {

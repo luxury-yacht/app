@@ -1,9 +1,13 @@
 package backend
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/luxury-yacht/app/backend/internal/logsources"
+)
 
 func (a *App) initKubernetesClient() (err error) {
-	a.logger.Info("Initializing Kubernetes client", "KubernetesClient")
+	a.logger.Info("Initializing Kubernetes client", logsources.KubernetesClient)
 
 	selections, err := a.selectedKubeconfigSelections()
 	if err != nil {
@@ -19,7 +23,7 @@ func (a *App) initKubernetesClient() (err error) {
 
 	if a.refreshHTTPServer == nil || a.refreshAggregates == nil || a.refreshCtx == nil {
 		if err := a.setupRefreshSubsystem(); err != nil {
-			a.logger.Error(fmt.Sprintf("Failed to initialise refresh subsystem: %v", err), "Refresh")
+			a.logger.Error(fmt.Sprintf("Failed to initialise refresh subsystem: %v", err), logsources.Refresh)
 			return fmt.Errorf("failed to initialise refresh subsystem: %w", err)
 		}
 	} else if err := a.updateRefreshSubsystemSelections(selections); err != nil {
@@ -28,7 +32,7 @@ func (a *App) initKubernetesClient() (err error) {
 
 	a.startObjectCatalog()
 
-	a.logger.Info(fmt.Sprintf("Successfully established Kubernetes clients for %d cluster(s)", len(selections)), "KubernetesClient")
+	a.logger.Info(fmt.Sprintf("Successfully established Kubernetes clients for %d cluster(s)", len(selections)), logsources.KubernetesClient)
 	// Note: Global connection status tracking has been removed. Connection health
 	// is now tracked per-cluster via cluster:health:* and cluster:auth:* events.
 

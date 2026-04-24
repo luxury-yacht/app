@@ -11,6 +11,8 @@ import (
 	"os"
 	"strconv"
 	"time"
+
+	"github.com/luxury-yacht/app/backend/internal/logsources"
 )
 
 // Version variables that can be set at build time
@@ -46,11 +48,11 @@ func init() {
 
 // AppInfo contains application version information
 type AppInfo struct {
-	Version    string `json:"version"`
-	BuildTime  string `json:"buildTime"`
-	GitCommit  string `json:"gitCommit"`
-	IsBeta     bool   `json:"isBeta"`
-	ExpiryDate string `json:"expiryDate,omitempty"`
+	Version    string      `json:"version"`
+	BuildTime  string      `json:"buildTime"`
+	GitCommit  string      `json:"gitCommit"`
+	IsBeta     bool        `json:"isBeta"`
+	ExpiryDate string      `json:"expiryDate,omitempty"`
 	Update     *UpdateInfo `json:"update,omitempty"`
 }
 
@@ -182,7 +184,7 @@ func (a *App) checkBetaExpiry() error {
 	if daysLeft <= 7 && a != nil && a.logger != nil {
 		// Warning if expiring soon
 		message := fmt.Sprintf("Beta build expires in %d day(s) on %s", daysLeft, expiryTime.Format("January 2, 2006"))
-		a.logger.Warn(message, "App")
+		a.logger.Warn(message, logsources.App)
 	}
 
 	return nil

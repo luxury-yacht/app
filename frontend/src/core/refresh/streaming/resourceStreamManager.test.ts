@@ -28,6 +28,9 @@ vi.mock('@utils/errorHandler', () => ({
 }));
 
 vi.mock('@/core/logging/appLogsClient', () => ({
+  APP_LOG_SOURCES: {
+    ResourceStream: 'ResourceStream',
+  },
   logAppLogsInfo: logAppLogsInfoMock,
   logAppLogsWarn: logAppLogsWarnMock,
 }));

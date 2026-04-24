@@ -53,7 +53,7 @@ import { eventStreamManager } from './streaming/eventStreamManager';
 import { resourceStreamManager } from './streaming/resourceStreamManager';
 import { catalogStreamManager } from './streaming/catalogStreamManager';
 import { errorHandler } from '@utils/errorHandler';
-import { logAppLogsInfo, logAppLogsWarn } from '@/core/logging/appLogsClient';
+import { APP_LOG_SOURCES, logAppLogsInfo, logAppLogsWarn } from '@/core/logging/appLogsClient';
 import { getAutoRefreshEnabled, getMetricsRefreshIntervalMs } from '@/core/settings/appPreferences';
 import {
   buildClusterScope,
@@ -98,11 +98,11 @@ const noopStreamingCleanup = () => {};
 const getStreamingMetricsMinIntervalMs = (): number => getMetricsRefreshIntervalMs();
 
 const logInfo = (message: string): void => {
-  logAppLogsInfo(message, 'RefreshOrchestrator');
+  logAppLogsInfo(message, APP_LOG_SOURCES.RefreshOrchestrator);
 };
 
 const logWarning = (message: string): void => {
-  logAppLogsWarn(message, 'RefreshOrchestrator');
+  logAppLogsWarn(message, APP_LOG_SOURCES.RefreshOrchestrator);
 };
 
 const makeInFlightKey = (domain: RefreshDomain, scope?: string) => `${domain}::${scope ?? '*'}`;

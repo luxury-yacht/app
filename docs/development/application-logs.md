@@ -267,8 +267,8 @@ Notably missing:
 
 1. Medium-low: Application Logs have no persistence or file export path, which
    limits support workflows after restart or early startup failure.
-2. Low: Source names are free-form and can drift, making component filtering
-    less predictable.
+2. Low: Source names are still accepted as free-form values at API boundaries,
+   so non-canonical or one-off sources can still drift.
 3. Low: Rendering is not virtualized. This is fine for the fixed 1000-entry
     buffer, but becomes a concern if the buffer grows.
 4. Low: Application Log timestamp formatting is hard-coded and intentionally
@@ -298,6 +298,9 @@ Completed finding:
 - The frontend Application Logs helper now has debug/info/warn/error helpers
   and direct unit coverage for backend calls, defensive no-op behavior, and
   event subscription cleanup.
+- Common backend Application Log sources now live in
+  `backend/internal/logsources`, and common frontend producers use
+  `APP_LOG_SOURCES` from `appLogsClient.ts`.
 
 ### Application Logs Are Not Structured Enough For Multi-Cluster Diagnosis
 
@@ -316,15 +319,15 @@ This matters because the app is multi-cluster. A global log panel is fine, but
 object-specific messages should also be filterable without relying on free-form
 text.
 
-### Source Names Are Free-Form
+### Source Names Are Still Not Enforced
 
-The `source` field is an arbitrary string. That keeps call sites simple, but it
-also creates drift. Examples include broad sources (`App`, `Refresh`), domain
-sources (`ResourceStream`, `ContainerLogsStream`), and resource-oriented sources
-(`Pod`, `ResourceLoader`, `RBAC`).
+Common source names are now centralized as constants. That reduces drift in app
+code, but the `source` field is still an arbitrary string. `LogAppLogsFromFrontend`
+also accepts a source string from callers. That keeps the API simple, but custom
+or one-off sources can still appear.
 
-There is no registry or guidance for choosing a source. This makes component
-filtering less predictable.
+If stricter filtering becomes important, make `source` an enum-like type for
+internal producers and keep only the Wails frontend API as a string boundary.
 
 ### Application Log Buffer Size Is Not Configurable
 
@@ -367,13 +370,12 @@ Completed: settings and comments now use explicit names:
 
 ### Introduce A Small App Log Contract
 
-Create a shared backend interface or package-level convention for app log
-entries instead of passing arbitrary source strings everywhere. This does not
-need to be heavy:
+Partially complete: common source constants now exist for backend and frontend
+Application Logs producers. Remaining structure that would help:
 
-- Define canonical source constants for common subsystems.
 - Document the existing optional logger metadata arguments for cluster-scoped
-  messages.
+  messages in the logger API.
+- Add stronger types around internal source values if source drift continues.
 - Keep the existing `Logger` simple.
 
 ### Normalize Event Delivery
@@ -399,7 +401,7 @@ High-value missing capabilities:
 
 - Complete object-reference metadata and filtering for object-specific
   messages.
-- Source registry or canonical source names.
+- Stronger enforcement for canonical source names.
 - Export/save logs to a file.
 - Copy all logs regardless of active filters.
 - Optional persistent crash/startup log file for early startup failures.
@@ -417,8 +419,7 @@ Lower-priority capabilities:
 
 1. Add complete object-reference metadata to `LogEntry` for object-specific
    messages.
-2. Add canonical source constants for common subsystems.
-3. Consider Application Logs export/persistence if support workflows need logs
+2. Consider Application Logs export/persistence if support workflows need logs
    after restart.
 
 ## Manual Testing Checklist

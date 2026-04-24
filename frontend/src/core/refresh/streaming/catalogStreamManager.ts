@@ -13,7 +13,7 @@ import type { CatalogStreamEventPayload } from '../types';
 import type { CatalogStreamMergeResult } from './catalogStreamMerge';
 import { CatalogStreamMergeQueue } from './catalogStreamMerge';
 import { errorHandler } from '@utils/errorHandler';
-import { logAppLogsWarn } from '@/core/logging/appLogsClient';
+import { APP_LOG_SOURCES, logAppLogsWarn } from '@/core/logging/appLogsClient';
 import { eventBus } from '@/core/events';
 
 type CatalogStreamEvent = CatalogStreamEventPayload;
@@ -361,7 +361,7 @@ class CatalogStreamManager {
     void refreshManager.triggerManualRefresh(CLUSTER_REFRESHERS.browse);
     logAppLogsWarn(
       `Catalog stream fallback (${reason}): dropped=${result.droppedEvents}, seq=${result.sequence}`,
-      'CatalogStream'
+      APP_LOG_SOURCES.CatalogStream
     );
   }
 

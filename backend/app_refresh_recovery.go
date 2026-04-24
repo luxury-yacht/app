@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/system"
 )
@@ -39,7 +40,7 @@ func (a *App) teardownRefreshSubsystem() {
 			ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 			defer cancel()
 			if err := manager.Shutdown(ctx); err != nil && a.logger != nil {
-				a.logger.Warn(fmt.Sprintf("Failed to shutdown refresh manager: %v", err), "Refresh")
+				a.logger.Warn(fmt.Sprintf("Failed to shutdown refresh manager: %v", err), logsources.Refresh)
 			}
 			close(done)
 		}(subsystem.Manager)
@@ -47,7 +48,7 @@ func (a *App) teardownRefreshSubsystem() {
 		case <-done:
 		case <-time.After(shutdownTimeout):
 			if a.logger != nil {
-				a.logger.Warn("Timed out waiting for refresh manager shutdown", "Refresh")
+				a.logger.Warn("Timed out waiting for refresh manager shutdown", logsources.Refresh)
 			}
 		}
 	}
@@ -64,7 +65,7 @@ func (a *App) teardownRefreshSubsystem() {
 			defer cancel()
 			if err := a.refreshHTTPServer.Shutdown(ctx); err != nil && !errors.Is(err, http.ErrServerClosed) {
 				if a.logger != nil {
-					a.logger.Warn(fmt.Sprintf("Failed to shutdown refresh HTTP server: %v", err), "Refresh")
+					a.logger.Warn(fmt.Sprintf("Failed to shutdown refresh HTTP server: %v", err), logsources.Refresh)
 				}
 			}
 			close(done)
@@ -73,7 +74,7 @@ func (a *App) teardownRefreshSubsystem() {
 		case <-done:
 		case <-time.After(shutdownTimeout):
 			if a.logger != nil {
-				a.logger.Warn("Timed out waiting for refresh HTTP server shutdown", "Refresh")
+				a.logger.Warn("Timed out waiting for refresh HTTP server shutdown", logsources.Refresh)
 			}
 		}
 		a.refreshHTTPServer = nil
@@ -84,7 +85,7 @@ func (a *App) teardownRefreshSubsystem() {
 		case <-serverDone:
 		case <-time.After(time.Second):
 			if a.logger != nil {
-				a.logger.Warn("Timed out waiting for refresh server loop", "Refresh")
+				a.logger.Warn("Timed out waiting for refresh server loop", logsources.Refresh)
 			}
 		}
 	}
@@ -92,7 +93,7 @@ func (a *App) teardownRefreshSubsystem() {
 
 	if a.refreshListener != nil {
 		if err := a.refreshListener.Close(); err != nil && a.logger != nil {
-			a.logger.Debug(fmt.Sprintf("Failed to close refresh listener: %v", err), "Refresh")
+			a.logger.Debug(fmt.Sprintf("Failed to close refresh listener: %v", err), logsources.Refresh)
 		}
 		a.refreshListener = nil
 	}
@@ -252,7 +253,7 @@ func (a *App) recordClusterTransportFailure(clusterID, reason string, err error)
 
 	if shouldTrigger {
 		if a.logger != nil {
-			a.logger.Warn(fmt.Sprintf("Transport connectivity degraded for cluster %s (%s); rebuilding", clusterID, reason), "KubernetesClient", clusterID, a.clusterNameForID(clusterID))
+			a.logger.Warn(fmt.Sprintf("Transport connectivity degraded for cluster %s (%s); rebuilding", clusterID, reason), logsources.KubernetesClient, clusterID, a.clusterNameForID(clusterID))
 		}
 		go a.runClusterTransportRebuild(clusterID, reason, err)
 	}
@@ -291,7 +292,7 @@ func (a *App) runClusterTransportRebuild(clusterID, reason string, cause error) 
 			}
 
 			if a.logger != nil {
-				a.logger.Info(fmt.Sprintf("Starting transport rebuild for cluster %s", clusterID), "KubernetesClient", clusterID, a.clusterNameForID(clusterID))
+				a.logger.Info(fmt.Sprintf("Starting transport rebuild for cluster %s", clusterID), logsources.KubernetesClient, clusterID, a.clusterNameForID(clusterID))
 			}
 
 			if err := a.runClusterOperation(context.Background(), clusterID, func(opCtx context.Context) error {
@@ -310,11 +311,11 @@ func (a *App) runClusterTransportRebuild(clusterID, reason string, cause error) 
 				if cause != nil {
 					msg = fmt.Sprintf("%s after %v", msg, cause)
 				}
-				a.logger.Info(msg, "KubernetesClient", clusterID, a.clusterNameForID(clusterID))
+				a.logger.Info(msg, logsources.KubernetesClient, clusterID, a.clusterNameForID(clusterID))
 			}
 			return nil
 		},
 	); err != nil && a.logger != nil {
-		a.logger.Warn(fmt.Sprintf("Transport rebuild coordination failed for cluster %s: %v", clusterID, err), "KubernetesClient", clusterID, a.clusterNameForID(clusterID))
+		a.logger.Warn(fmt.Sprintf("Transport rebuild coordination failed for cluster %s: %v", clusterID, err), logsources.KubernetesClient, clusterID, a.clusterNameForID(clusterID))
 	}
 }

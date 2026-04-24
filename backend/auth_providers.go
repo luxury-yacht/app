@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"k8s.io/client-go/util/homedir"
 
 	// Register all client-go authentication plugins (including the exec-based
@@ -44,7 +45,7 @@ func (a *App) setupEnvironment() {
 
 		loginPath, err := readLoginShellPath(envSetupTimeout)
 		if err != nil {
-			a.logger.Warn("Login shell PATH probe failed", "Auth")
+			a.logger.Warn("Login shell PATH probe failed", logsources.Auth)
 		}
 
 		merged := mergePathLists(loginPath, current)

@@ -6,6 +6,15 @@
 
 type AppLogsLevel = 'debug' | 'info' | 'warn' | 'error';
 
+export const APP_LOG_SOURCES = {
+  BackgroundClusterRefresher: 'BackgroundClusterRefresher',
+  CatalogDiagnostics: 'CatalogDiagnostics',
+  CatalogStream: 'CatalogStream',
+  Frontend: 'Frontend',
+  RefreshOrchestrator: 'RefreshOrchestrator',
+  ResourceStream: 'ResourceStream',
+} as const;
+
 export interface AppLogsAddedEvent {
   sequence?: number;
 }
@@ -31,7 +40,7 @@ const logToAppLogs = (level: AppLogsLevel, message: string, source?: string): vo
   if (!api || typeof api.LogAppLogsFromFrontend !== 'function') {
     return;
   }
-  const safeSource = (source ?? '').trim() || 'Frontend';
+  const safeSource = (source ?? '').trim() || APP_LOG_SOURCES.Frontend;
   try {
     void api.LogAppLogsFromFrontend(normalizeLevel(level), trimmed, safeSource);
   } catch (_err) {

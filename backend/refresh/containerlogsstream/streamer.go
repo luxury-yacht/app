@@ -12,6 +12,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/containerlogs"
 	"github.com/luxury-yacht/app/backend/internal/linescanner"
+	"github.com/luxury-yacht/app/backend/internal/logsources"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -107,7 +108,7 @@ func (s *Streamer) tail(ctx context.Context, opts Options, limiterSession *Targe
 		}
 		podEntries, err := s.fetchContainerTail(ctx, target, opts.TailLines, opts.LineFilter)
 		if err != nil {
-			s.logger.Warn(fmt.Sprintf("containerlogsstream: tail failed for %s/%s/%s: %v", target.namespace, target.pod, target.container, err), "ContainerLogsStream")
+			s.logger.Warn(fmt.Sprintf("containerlogsstream: tail failed for %s/%s/%s: %v", target.namespace, target.pod, target.container, err), logsources.ContainerLogsStream)
 			continue
 		}
 		for _, e := range podEntries {
@@ -211,7 +212,7 @@ func (s *Streamer) run(
 			defer targetWG.Done()
 			defer func() {
 				if r := recover(); r != nil {
-					s.logger.Error(fmt.Sprintf("containerlogsstream: panic in followContainer for %s: %v", t.key(), r), "ContainerLogsStream")
+					s.logger.Error(fmt.Sprintf("containerlogsstream: panic in followContainer for %s: %v", t.key(), r), logsources.ContainerLogsStream)
 					if s.telemetry != nil {
 						s.telemetry.RecordStreamError(telemetry.StreamContainerLogs, fmt.Errorf("panic: %v", r))
 					}
@@ -360,7 +361,7 @@ func (s *Streamer) run(
 			if ctx.Err() != nil {
 				return
 			}
-			s.logger.Warn(fmt.Sprintf("containerlogsstream: failed to start pod watch: %v", err), "ContainerLogsStream")
+			s.logger.Warn(fmt.Sprintf("containerlogsstream: failed to start pod watch: %v", err), logsources.ContainerLogsStream)
 			select {
 			case errCh <- err:
 			default:
@@ -383,7 +384,7 @@ func (s *Streamer) run(
 			return
 		}
 
-		s.logger.Warn(fmt.Sprintf("containerlogsstream: pod watch ended (will retry): %v", err), "ContainerLogsStream")
+		s.logger.Warn(fmt.Sprintf("containerlogsstream: pod watch ended (will retry): %v", err), logsources.ContainerLogsStream)
 		if s.telemetry != nil {
 			s.telemetry.RecordStreamError(telemetry.StreamContainerLogs, err)
 		}
@@ -541,7 +542,7 @@ func (s *Streamer) followContainer(ctx context.Context, target containerTarget, 
 
 				if !isTransient {
 					msg := fmt.Sprintf("containerlogsstream: follow failed for %s/%s/%s: %v", target.namespace, target.pod, target.container, err)
-					s.logger.Warn(msg, "ContainerLogsStream")
+					s.logger.Warn(msg, logsources.ContainerLogsStream)
 					streamErr := fmt.Errorf("containerlogsstream: follow failed for %s/%s/%s: %w", target.namespace, target.pod, target.container, err)
 					select {
 					case errCh <- streamErr:
@@ -643,10 +644,10 @@ func (s *Streamer) followContainer(ctx context.Context, target containerTarget, 
 
 		err = stream.Close()
 		if scannerErr := scanner.Err(); scannerErr != nil && !errors.Is(scannerErr, context.Canceled) && !errors.Is(scannerErr, io.EOF) {
-			s.logger.Debug(fmt.Sprintf("containerlogsstream: scanner error for %s/%s/%s: %v", target.namespace, target.pod, target.container, scannerErr), "ContainerLogsStream")
+			s.logger.Debug(fmt.Sprintf("containerlogsstream: scanner error for %s/%s/%s: %v", target.namespace, target.pod, target.container, scannerErr), logsources.ContainerLogsStream)
 		}
 		if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, io.EOF) {
-			s.logger.Debug(fmt.Sprintf("containerlogsstream: stream closed with error for %s/%s/%s: %v", target.namespace, target.pod, target.container, err), "ContainerLogsStream")
+			s.logger.Debug(fmt.Sprintf("containerlogsstream: stream closed with error for %s/%s/%s: %v", target.namespace, target.pod, target.container, err), logsources.ContainerLogsStream)
 		}
 
 		if !s.shouldContinueStreaming(ctx, target) {
@@ -982,12 +983,12 @@ func (s *Streamer) podBelongsToCronJob(ctx context.Context, namespace, cronJob s
 		for k := range cache {
 			delete(cache, k)
 		}
-		s.logger.Debug("containerlogsstream: cron cache evicted due to size limit", "ContainerLogsStream")
+		s.logger.Debug("containerlogsstream: cron cache evicted due to size limit", logsources.ContainerLogsStream)
 	}
 
 	job, err := s.client.BatchV1().Jobs(namespace).Get(ctx, jobName, metav1.GetOptions{})
 	if err != nil {
-		s.logger.Debug(fmt.Sprintf("containerlogsstream: failed to fetch job %s: %v", jobName, err), "ContainerLogsStream")
+		s.logger.Debug(fmt.Sprintf("containerlogsstream: failed to fetch job %s: %v", jobName, err), logsources.ContainerLogsStream)
 		cache[cacheKey] = false
 		return false
 	}

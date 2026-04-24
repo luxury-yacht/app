@@ -10,6 +10,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/containerlogs"
+	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -619,7 +620,7 @@ func (a *App) SetTheme(theme string) error {
 		}
 	}
 
-	a.logger.Info(fmt.Sprintf("Theme changed to: %s", theme), "Settings")
+	a.logger.Info(fmt.Sprintf("Theme changed to: %s", theme), logsources.Settings)
 	a.appSettings.Theme = theme
 	return a.saveAppSettings()
 }
@@ -634,7 +635,7 @@ func (a *App) SetUseShortResourceNames(useShort bool) error {
 		}
 	}
 
-	a.logger.Info(fmt.Sprintf("Use short resource names changed to: %v", useShort), "Settings")
+	a.logger.Info(fmt.Sprintf("Use short resource names changed to: %v", useShort), logsources.Settings)
 	a.appSettings.UseShortResourceNames = useShort
 	return a.saveAppSettings()
 }
@@ -650,7 +651,7 @@ func (a *App) SetAutoRefreshEnabled(enabled bool) error {
 		}
 	}
 
-	a.logger.Info(fmt.Sprintf("Auto refresh enabled changed to: %v", enabled), "Settings")
+	a.logger.Info(fmt.Sprintf("Auto refresh enabled changed to: %v", enabled), logsources.Settings)
 	a.appSettings.AutoRefreshEnabled = enabled
 	return a.saveAppSettings()
 }
@@ -666,7 +667,7 @@ func (a *App) SetBackgroundRefreshEnabled(enabled bool) error {
 		}
 	}
 
-	a.logger.Info(fmt.Sprintf("Background refresh enabled changed to: %v", enabled), "Settings")
+	a.logger.Info(fmt.Sprintf("Background refresh enabled changed to: %v", enabled), logsources.Settings)
 	a.appSettings.RefreshBackgroundClustersEnabled = enabled
 	return a.saveAppSettings()
 }
@@ -684,7 +685,7 @@ func (a *App) SetMaxTableRows(size int) error {
 	}
 
 	clamped := clampMaxTableRows(size)
-	a.logger.Info(fmt.Sprintf("Max table rows changed to: %d", clamped), "Settings")
+	a.logger.Info(fmt.Sprintf("Max table rows changed to: %d", clamped), logsources.Settings)
 	a.appSettings.MaxTableRows = clamped
 	return a.saveAppSettings()
 }
@@ -703,7 +704,7 @@ func (a *App) SetObjPanelLogsBufferMaxSize(size int) error {
 	}
 
 	clamped := clampObjPanelLogsBufferMaxSize(size)
-	a.logger.Info(fmt.Sprintf("ObjPanelLogs buffer max size changed to: %d", clamped), "Settings")
+	a.logger.Info(fmt.Sprintf("ObjPanelLogs buffer max size changed to: %d", clamped), logsources.Settings)
 	a.appSettings.ObjPanelLogsBufferMaxSize = clamped
 	return a.saveAppSettings()
 }
@@ -719,7 +720,7 @@ func (a *App) SetObjPanelLogsTargetPerScopeLimit(limit int) error {
 	}
 
 	clamped := clampObjPanelLogsTargetPerScopeLimit(limit)
-	a.logger.Info(fmt.Sprintf("Object Panel Logs Tab target per-scope limit changed to: %d", clamped), "Settings")
+	a.logger.Info(fmt.Sprintf("Object Panel Logs Tab target per-scope limit changed to: %d", clamped), logsources.Settings)
 	a.appSettings.ObjPanelLogsTargetPerScopeLimit = clamped
 	containerlogs.SetPerScopeTargetLimit(clamped)
 	return a.saveAppSettings()
@@ -736,7 +737,7 @@ func (a *App) SetObjPanelLogsTargetGlobalLimit(limit int) error {
 	}
 
 	clamped := clampObjPanelLogsTargetGlobalLimit(limit)
-	a.logger.Info(fmt.Sprintf("Object Panel Logs Tab target global limit changed to: %d", clamped), "Settings")
+	a.logger.Info(fmt.Sprintf("Object Panel Logs Tab target global limit changed to: %d", clamped), logsources.Settings)
 	a.appSettings.ObjPanelLogsTargetGlobalLimit = clamped
 	if a.containerLogsTargetLimiter != nil {
 		a.containerLogsTargetLimiter.SetLimit(clamped)
@@ -757,7 +758,7 @@ func (a *App) SetObjPanelLogsAPITimestampFormat(format string) error {
 	if format == "" {
 		format = defaultObjPanelLogsAPITimestampFormat
 	}
-	a.logger.Info(fmt.Sprintf("Object Panel Logs Tab API timestamp format changed to: %s", format), "Settings")
+	a.logger.Info(fmt.Sprintf("Object Panel Logs Tab API timestamp format changed to: %s", format), logsources.Settings)
 	a.appSettings.ObjPanelLogsAPITimestampFormat = format
 	return a.saveAppSettings()
 }
@@ -795,7 +796,7 @@ func (a *App) SetGridTablePersistenceMode(mode string) error {
 		}
 	}
 
-	a.logger.Info(fmt.Sprintf("Grid table persistence mode changed to: %s", mode), "Settings")
+	a.logger.Info(fmt.Sprintf("Grid table persistence mode changed to: %s", mode), logsources.Settings)
 	a.appSettings.GridTablePersistenceMode = mode
 	return a.saveAppSettings()
 }
@@ -815,7 +816,7 @@ func (a *App) SetDefaultObjectPanelPosition(position string) error {
 		}
 	}
 
-	a.logger.Info(fmt.Sprintf("Default object panel position changed to: %s", position), "Settings")
+	a.logger.Info(fmt.Sprintf("Default object panel position changed to: %s", position), logsources.Settings)
 	a.appSettings.DefaultObjectPanelPosition = position
 	return a.saveAppSettings()
 }
@@ -856,7 +857,7 @@ func (a *App) ShowSettings() {
 	maxRetries := 3
 	for i := 0; i < maxRetries; i++ {
 		if a.Ctx != nil {
-			a.logger.Debug("Settings menu triggered", "App")
+			a.logger.Debug("Settings menu triggered", logsources.App)
 			a.emitEvent("open-settings")
 			return
 		}
@@ -864,14 +865,14 @@ func (a *App) ShowSettings() {
 			time.Sleep(100 * time.Millisecond)
 		}
 	}
-	a.logger.Warn("Cannot show settings: application context is nil after retries", "App")
+	a.logger.Warn("Cannot show settings: application context is nil after retries", logsources.App)
 }
 
 func (a *App) ShowAbout() {
 	maxRetries := 3
 	for i := 0; i < maxRetries; i++ {
 		if a.Ctx != nil {
-			a.logger.Debug("About menu triggered", "App")
+			a.logger.Debug("About menu triggered", logsources.App)
 			a.emitEvent("open-about")
 			return
 		}
@@ -879,7 +880,7 @@ func (a *App) ShowAbout() {
 			time.Sleep(100 * time.Millisecond)
 		}
 	}
-	a.logger.Warn("Cannot show about: application context is nil after retries", "App")
+	a.logger.Warn("Cannot show about: application context is nil after retries", logsources.App)
 }
 
 // GetZoomLevel returns the persisted zoom level (50-200), defaulting to 100.
@@ -953,7 +954,7 @@ func (a *App) SetPaletteTint(theme string, hue, saturation, brightness int) erro
 		}
 	}
 
-	a.logger.Info(fmt.Sprintf("Palette tint (%s) changed to hue=%d saturation=%d brightness=%d", theme, hue, saturation, brightness), "Settings")
+	a.logger.Info(fmt.Sprintf("Palette tint (%s) changed to hue=%d saturation=%d brightness=%d", theme, hue, saturation, brightness), logsources.Settings)
 
 	if theme == "light" {
 		a.appSettings.PaletteHueLight = hue
@@ -990,7 +991,7 @@ func (a *App) SetLinkColor(theme string, color string) error {
 		}
 	}
 
-	a.logger.Info(fmt.Sprintf("Link color (%s) changed to: %s", theme, color), "Settings")
+	a.logger.Info(fmt.Sprintf("Link color (%s) changed to: %s", theme, color), logsources.Settings)
 
 	if theme == "light" {
 		a.appSettings.LinkColorLight = color
@@ -1020,7 +1021,7 @@ func (a *App) SetAccentColor(theme string, color string) error {
 		}
 	}
 
-	a.logger.Info(fmt.Sprintf("Accent color (%s) changed to: %s", theme, color), "Settings")
+	a.logger.Info(fmt.Sprintf("Accent color (%s) changed to: %s", theme, color), logsources.Settings)
 
 	if theme == "light" {
 		a.appSettings.AccentColorLight = color

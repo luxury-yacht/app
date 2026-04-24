@@ -3,6 +3,7 @@ package backend
 import (
 	"testing"
 
+	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/stretchr/testify/require"
 )
 
@@ -73,7 +74,7 @@ func TestAppLogsAddedEventIncludesSequence(t *testing.T) {
 
 func TestGetAppLogsReturnsClusterMetadata(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.logger.Warn("cluster warning", "Auth", "cluster-a", "alpha")
+	app.logger.Warn("cluster warning", logsources.Auth, "cluster-a", "alpha")
 
 	logs := app.GetAppLogs()
 	require.Len(t, logs, 1)

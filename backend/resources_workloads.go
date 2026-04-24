@@ -10,6 +10,7 @@ package backend
 import (
 	"fmt"
 
+	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/workloads"
 	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
@@ -136,7 +137,7 @@ func (a *App) resourceDependenciesForSelection(selection kubeconfigSelection, cl
 	deps.EnsureClient = func(resourceKind string) error {
 		if deps.KubernetesClient == nil {
 			if a.logger != nil {
-				a.logger.Error(fmt.Sprintf("Kubernetes client not initialized for %s fetch", resourceKind), "ResourceLoader")
+				a.logger.Error(fmt.Sprintf("Kubernetes client not initialized for %s fetch", resourceKind), logsources.ResourceLoader)
 			}
 			return fmt.Errorf("kubernetes client not initialized")
 		}
@@ -145,7 +146,7 @@ func (a *App) resourceDependenciesForSelection(selection kubeconfigSelection, cl
 	deps.EnsureAPIExtensions = func(resourceKind string) error {
 		if deps.APIExtensionsClient == nil {
 			if a.logger != nil {
-				a.logger.Error(fmt.Sprintf("API extensions client not initialized for %s fetch", resourceKind), "ResourceLoader")
+				a.logger.Error(fmt.Sprintf("API extensions client not initialized for %s fetch", resourceKind), logsources.ResourceLoader)
 			}
 			return fmt.Errorf("apiextensions client not initialized")
 		}

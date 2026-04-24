@@ -17,6 +17,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/containerlogs"
 	"github.com/luxury-yacht/app/backend/internal/linescanner"
+	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/resources/types"
 	corev1 "k8s.io/api/core/v1"
@@ -510,6 +511,6 @@ func (s *Service) ctx() context.Context {
 
 func (s *Service) logWarn(msg string) {
 	if s.deps.Logger != nil {
-		s.deps.Logger.Warn(msg, "ContainerLogs")
+		s.deps.Logger.Warn(msg, logsources.ContainerLogs)
 	}
 }

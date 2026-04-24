@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/containerlogs"
+	"github.com/luxury-yacht/app/backend/internal/logsources"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/kubernetes"
 
@@ -77,7 +78,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	f, ok := w.(http.Flusher)
 	if !ok {
-		h.streamer.logger.Warn("containerlogsstream: response does not implement http.Flusher", "ContainerLogsStream")
+		h.streamer.logger.Warn("containerlogsstream: response does not implement http.Flusher", logsources.ContainerLogsStream)
 		http.Error(w, "streaming not supported", http.StatusInternalServerError)
 		return
 	}
@@ -118,7 +119,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 	if deadline, ok := ctx.Deadline(); ok {
-		h.streamer.logger.Debug(fmt.Sprintf("containerlogsstream: client deadline %s", deadline.Format(time.RFC3339)), "ContainerLogsStream")
+		h.streamer.logger.Debug(fmt.Sprintf("containerlogsstream: client deadline %s", deadline.Format(time.RFC3339)), logsources.ContainerLogsStream)
 	}
 
 	var limiterSession *TargetSession
@@ -132,7 +133,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if h.telemetry != nil {
 			h.telemetry.RecordStreamError(streamName, err)
 		}
-		h.streamer.logger.Warn(fmt.Sprintf("containerlogsstream: initial tail failed: %v", err), "ContainerLogsStream")
+		h.streamer.logger.Warn(fmt.Sprintf("containerlogsstream: initial tail failed: %v", err), logsources.ContainerLogsStream)
 		if status := permissionDeniedStatus(err); status != nil {
 			payload := EventPayload{
 				Domain:       "container-logs",
@@ -188,7 +189,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				h.streamer.logger.Error(fmt.Sprintf("containerlogsstream: panic in stream handler: %v", r), "ContainerLogsStream")
+				h.streamer.logger.Error(fmt.Sprintf("containerlogsstream: panic in stream handler: %v", r), logsources.ContainerLogsStream)
 				if h.telemetry != nil {
 					h.telemetry.RecordStreamError(streamName, fmt.Errorf("panic: %v", r))
 				}

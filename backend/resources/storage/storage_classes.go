@@ -10,6 +10,7 @@ package storage
 import (
 	"fmt"
 
+	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/types"
 	corev1 "k8s.io/api/core/v1"
@@ -24,7 +25,7 @@ func (s *Service) StorageClass(name string) (*types.StorageClassDetails, error) 
 
 	sc, err := s.deps.KubernetesClient.StorageV1().StorageClasses().Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
-		s.deps.Logger.Error(fmt.Sprintf("Failed to get storage class %s: %v", name, err), "ResourceLoader")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to get storage class %s: %v", name, err), logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to get storage class: %v", err)
 	}
 
@@ -39,7 +40,7 @@ func (s *Service) StorageClasses() ([]*types.StorageClassDetails, error) {
 
 	storageClasses, err := s.deps.KubernetesClient.StorageV1().StorageClasses().List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
-		s.deps.Logger.Error(fmt.Sprintf("Failed to list storage classes: %v", err), "ResourceLoader")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to list storage classes: %v", err), logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to list storage classes: %v", err)
 	}
 

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
@@ -50,7 +51,7 @@ func (a *App) setupRefreshSubsystem() error {
 
 	// Handle case where no subsystems were created (all auth failed).
 	if len(subsystems) == 0 {
-		a.logger.Warn("No refresh subsystems created (all clusters may have auth failures)", "Refresh")
+		a.logger.Warn("No refresh subsystems created (all clusters may have auth failures)", logsources.Refresh)
 		// Initialize empty state but don't fail - clusters may recover later.
 		a.refreshSubsystems = make(map[string]*system.Subsystem)
 		return nil
@@ -110,7 +111,7 @@ func (a *App) buildRefreshSubsystems(
 		// Check both the explicit flag (set during pre-flight check) and the auth state.
 		if clients.authFailedOnInit {
 			if a.logger != nil {
-				a.logger.Warn(fmt.Sprintf("Skipping subsystem for cluster %s: auth failed during initialization", clusterMeta.Name), "Refresh", clusterMeta.ID, clusterMeta.Name)
+				a.logger.Warn(fmt.Sprintf("Skipping subsystem for cluster %s: auth failed during initialization", clusterMeta.Name), logsources.Refresh, clusterMeta.ID, clusterMeta.Name)
 			}
 			// Still add to clusterOrder so the cluster appears in the UI.
 			clusterOrder = append(clusterOrder, clusterMeta.ID)
@@ -119,11 +120,11 @@ func (a *App) buildRefreshSubsystems(
 		if clients.authManager != nil {
 			state, reason := clients.authManager.State()
 			if a.logger != nil {
-				a.logger.Info(fmt.Sprintf("Auth state for cluster %s: %s (reason: %s)", clusterMeta.Name, state.String(), reason), "Refresh", clusterMeta.ID, clusterMeta.Name)
+				a.logger.Info(fmt.Sprintf("Auth state for cluster %s: %s (reason: %s)", clusterMeta.Name, state.String(), reason), logsources.Refresh, clusterMeta.ID, clusterMeta.Name)
 			}
 			if !clients.authManager.IsValid() {
 				if a.logger != nil {
-					a.logger.Warn(fmt.Sprintf("Skipping subsystem for cluster %s: auth not valid (state=%s)", clusterMeta.Name, state.String()), "Refresh", clusterMeta.ID, clusterMeta.Name)
+					a.logger.Warn(fmt.Sprintf("Skipping subsystem for cluster %s: auth not valid (state=%s)", clusterMeta.Name, state.String()), logsources.Refresh, clusterMeta.ID, clusterMeta.Name)
 				}
 				// Still add to clusterOrder so the cluster appears in the UI.
 				clusterOrder = append(clusterOrder, clusterMeta.ID)
@@ -199,7 +200,7 @@ func (a *App) startRefreshSubsystems(ctx context.Context, subsystems map[string]
 		}
 		go func(mgr *refresh.Manager) {
 			if err := mgr.Start(ctx); err != nil && !errors.Is(err, context.Canceled) {
-				a.logger.Warn(fmt.Sprintf("refresh manager stopped: %v", err), "Refresh")
+				a.logger.Warn(fmt.Sprintf("refresh manager stopped: %v", err), logsources.Refresh)
 			}
 		}(manager)
 		// Keep permission grants fresh; revoke access stops refresh informers/streams.
@@ -406,7 +407,7 @@ func (a *App) startRefreshHTTPServer(
 	go func() {
 		defer close(a.refreshServerDone)
 		if err := srv.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			a.logger.Warn(fmt.Sprintf("refresh HTTP server stopped: %v", err), "Refresh")
+			a.logger.Warn(fmt.Sprintf("refresh HTTP server stopped: %v", err), logsources.Refresh)
 		}
 	}()
 
@@ -440,7 +441,7 @@ func (a *App) helmActionFactoryForSelection(selection kubeconfigSelection) snaps
 		actionConfig := new(action.Configuration)
 		if err := actionConfig.Init(settings.RESTClientGetter(), namespace, "secret", func(format string, v ...interface{}) {
 			if a.logger != nil {
-				a.logger.Debug(fmt.Sprintf(format, v...), "Helm")
+				a.logger.Debug(fmt.Sprintf(format, v...), logsources.Helm)
 			}
 		}); err != nil {
 			return nil, err

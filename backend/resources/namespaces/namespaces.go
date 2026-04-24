@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/types"
 	corev1 "k8s.io/api/core/v1"
@@ -190,6 +191,6 @@ func (s *Service) ensureClient(resource string) error {
 
 func (s *Service) logError(msg string) {
 	if s.deps.Logger != nil {
-		s.deps.Logger.Error(msg, "ResourceLoader")
+		s.deps.Logger.Error(msg, logsources.ResourceLoader)
 	}
 }

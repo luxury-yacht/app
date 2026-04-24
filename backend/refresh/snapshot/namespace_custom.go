@@ -15,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 
+	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/internal/parallel"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
@@ -130,7 +131,7 @@ func (b *NamespaceCustomBuilder) Build(ctx context.Context, scope string) (*refr
 
 	if len(namespacedCRDs) == 0 {
 		if b.logger != nil {
-			b.logger.Info("namespace-custom: no namespaced CRDs discovered", "Refresh")
+			b.logger.Info("namespace-custom: no namespaced CRDs discovered", logsources.Refresh)
 		}
 		snapshotScope := namespace
 		if isAll {
@@ -201,7 +202,7 @@ func (b *NamespaceCustomBuilder) Build(ctx context.Context, scope string) (*refr
 					return nil
 				}
 				if b.logger != nil {
-					b.logger.Warn(fmt.Sprintf("namespace-custom: list %s failed: %v", gvr.String(), err), "Refresh")
+					b.logger.Warn(fmt.Sprintf("namespace-custom: list %s failed: %v", gvr.String(), err), logsources.Refresh)
 				}
 				mu.Lock()
 				warning := fmt.Sprintf("Failed to list %s: %v", gvr.String(), err)

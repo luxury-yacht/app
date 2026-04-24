@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"k8s.io/client-go/tools/portforward"
 	"k8s.io/client-go/transport/spdy"
 )
@@ -291,7 +292,7 @@ func (a *App) runPortForwarder(ctx context.Context, session *portForwardSessionI
 		// Re-resolve the pod (it may have changed for workloads/services).
 		if err := a.reresolvePod(ctx, session); err != nil {
 			if a.logger != nil {
-				a.logger.Warn(fmt.Sprintf("Failed to re-resolve pod for %s: %v", session.ID, err), "PortForward")
+				a.logger.Warn(fmt.Sprintf("Failed to re-resolve pod for %s: %v", session.ID, err), logsources.PortForward)
 			}
 			continue
 		}

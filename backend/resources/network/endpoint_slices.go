@@ -17,6 +17,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 
+	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/types"
 )
@@ -27,7 +28,7 @@ func (s *Service) EndpointSlice(namespace, service string) (*types.EndpointSlice
 	defer cancel()
 	slices, err := s.listEndpointSlices(ctx, namespace, service)
 	if err != nil {
-		s.deps.Logger.Error(fmt.Sprintf("Failed to get endpoint slices %s/%s: %v", namespace, service, err), "ResourceLoader")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to get endpoint slices %s/%s: %v", namespace, service, err), logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to get endpoint slices: %v", err)
 	}
 	return buildEndpointSliceDetails(namespace, service, slices), nil
@@ -39,7 +40,7 @@ func (s *Service) EndpointSlices(namespace string) ([]*types.EndpointSliceDetail
 	defer cancel()
 	slices, err := s.listEndpointSlices(ctx, namespace, "")
 	if err != nil {
-		s.deps.Logger.Error(fmt.Sprintf("Failed to list endpoint slices in namespace %s: %v", namespace, err), "ResourceLoader")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to list endpoint slices in namespace %s: %v", namespace, err), logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to list endpoint slices: %v", err)
 	}
 
