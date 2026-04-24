@@ -134,6 +134,10 @@ export function GetAppLogs() {
   return window['go']['backend']['App']['GetAppLogs']();
 }
 
+export function GetAppLogsSince(arg1) {
+  return window['go']['backend']['App']['GetAppLogsSince'](arg1);
+}
+
 export function GetAppSettings() {
   return window['go']['backend']['App']['GetAppSettings']();
 }

@@ -31,6 +31,7 @@ Core files:
 
 - Each entry has `timestamp`, `level`, `message`, optional `source`, and
   optional structured cluster metadata (`clusterId`, `clusterName`).
+- Each entry has a monotonic `sequence` value for incremental panel updates.
 - Timestamps are stored as `time.RFC3339Nano` strings.
 - Levels are the enum values `DEBUG`, `INFO`, `WARN`, and `ERROR`.
 - The default app logger is created in `NewApp()` with `NewLogger(1000)`.
@@ -38,11 +39,14 @@ Core files:
   discarded.
 - `GetEntries()` returns a shallow copy of the slice.
 - `Clear()` empties the slice but keeps capacity.
-- Every write invokes the configured event emitter with `app-logs:added`.
+- Every write invokes the configured event emitter with `app-logs:added` and
+  the newest sequence.
 
 The Wails-exposed backend API is in `backend/app_logs.go`:
 
 - `GetAppLogs()` returns the current in-memory entries.
+- `GetAppLogsSince(sequence)` returns retained entries newer than the provided
+  sequence.
 - `ClearAppLogs()` clears the logger; after clear, the backend buffer is empty.
 - `LogAppLogsFromFrontend(level, message, source)` lets frontend code append entries into
   the backend Application Logs buffer.
@@ -128,7 +132,9 @@ When the panel opens:
   The Application Logs read path intentionally avoids `requestAppState()` so
   the log sink does not feed broker-read diagnostics back into itself.
 - It subscribes to the Wails `app-logs:added` event.
-- On every `app-logs:added`, it refetches the entire log buffer via `GetAppLogs()`.
+- On every `app-logs:added`, it requests deltas through `GetAppLogsSince()`.
+- It uses the per-listener disposer returned by `EventsOn`, so cleanup does not
+  remove other `app-logs:added` listeners.
 
 The panel provides:
 
@@ -234,8 +240,9 @@ Notably missing:
 - No direct unit test for `appLogsClient.ts`.
 - No test asserting that Application Logs settings are independent from container log
   settings.
-- No integration test that exercises `app-logs:added -> GetAppLogs -> render`.
-- No test for multiple Wails listeners on the same event.
+- No end-to-end Wails integration test that exercises backend
+  `app-logs:added` emission through the native runtime into the rendered panel.
+- No direct unit test for multiple Wails listeners on the same event.
 
 ## Completed Work
 
@@ -259,19 +266,15 @@ Notably missing:
 
 ### Ranked Findings
 
-1. Medium: The `app-logs:added` event contains no payload, so the frontend refetches
-   the full log buffer on every new entry.
-2. Medium: Wails event unsubscription may be too broad if another future
-   consumer also listens to `app-logs:added`.
-3. Medium-low: Application Logs have no persistence or file export path, which
+1. Medium-low: Application Logs have no persistence or file export path, which
    limits support workflows after restart or early startup failure.
-4. Medium-low: The frontend logging helper is incomplete because it lacks
+2. Medium-low: The frontend logging helper is incomplete because it lacks
    `logAppLogsError()` even though the backend supports error-level frontend logs.
-5. Low: Source names are free-form and can drift, making component filtering
+3. Low: Source names are free-form and can drift, making component filtering
     less predictable.
-6. Low: Rendering is not virtualized. This is fine for the fixed 1000-entry
+4. Low: Rendering is not virtualized. This is fine for the fixed 1000-entry
     buffer, but becomes a concern if the buffer grows.
-7. Low: Application Log timestamp formatting is hard-coded and intentionally
+5. Low: Application Log timestamp formatting is hard-coded and intentionally
     separate from container log timestamp preferences, but the distinction is not
     obvious.
 
@@ -291,16 +294,10 @@ Completed finding:
   `E1234` / `W1234` / `I1234` shape, and plain text uses word-boundary
   fallback matching.
 - Application Logs now show all log levels by default, including `debug`.
-
-### Event Payload Is Too Thin
-
-`Logger.Log()` emits only `app-logs:added`; the frontend then refetches the entire
-buffer. This is simple and safe for a 1000-entry buffer, but it is noisy under
-bursts and makes every new log an RPC read of the full list.
-
-A future incremental model could emit the new entry or a monotonic sequence
-number. The panel could append entries and occasionally reconcile with
-`GetAppLogs()`.
+- Application Logs live updates now use a small event contract: entries have a
+  monotonic `sequence`, `app-logs:added` emits the newest sequence, the panel
+  reads deltas through `GetAppLogsSince()`, and cleanup uses the per-listener
+  disposer returned by Wails `EventsOn`.
 
 ### Application Logs Are Not Structured Enough For Multi-Cluster Diagnosis
 
@@ -328,15 +325,6 @@ sources (`ResourceStream`, `ContainerLogsStream`), and resource-oriented sources
 
 There is no registry or guidance for choosing a source. This makes component
 filtering less predictable.
-
-### Wails Event Unsubscription May Be Too Broad
-
-`AppLogsPanel` calls `runtime.EventsOff('app-logs:added')` during cleanup. If Wails'
-event API removes all listeners for the event, another future consumer of
-`app-logs:added` could be disconnected when the panel closes.
-
-This is harmless while `AppLogsPanel` is the only listener. It becomes risky if
-additional listeners are added.
 
 ### Application Log Buffer Size Is Not Configurable
 
@@ -399,16 +387,6 @@ need to be heavy:
 Completed: `Logger.Log()` now appends under lock, releases the lock, and then
 emits `app-logs:added`.
 
-### Avoid Full Buffer Reads On Every Log
-
-For now, full reads are acceptable. If Application Logs become noisy, a minimal
-incremental improvement is:
-
-- Add `sequence` to `LogEntry`.
-- Add `GetAppLogsSince(sequence)`.
-- Emit `app-logs:added` with the newest sequence.
-- Let the panel request only deltas.
-
 ### Remove Duplicate Filter Logic
 
 `AppLogsPanel` duplicates the same filtering logic for rendering and copy. Move
@@ -449,8 +427,7 @@ Lower-priority capabilities:
 2. Add complete object-reference metadata to `LogEntry` for object-specific
    messages.
 3. Add canonical source constants for common subsystems.
-4. Consider a delta API only if full-buffer refetches show up in profiling.
-5. Consider Application Logs export/persistence if support workflows need logs
+4. Consider Application Logs export/persistence if support workflows need logs
    after restart.
 
 ## Manual Testing Checklist

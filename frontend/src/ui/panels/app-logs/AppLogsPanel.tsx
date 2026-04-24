@@ -16,10 +16,12 @@ import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
 import { AutoScrollIcon, CopyIcon } from '@shared/components/icons/LogIcons';
 import { DeleteIcon } from '@shared/components/icons/MenuIcons';
-import { readAppLogs } from '@/core/app-state-access';
+import { readAppLogs, readAppLogsSince } from '@/core/app-state-access';
+import { subscribeAppLogsAdded, type AppLogsAddedEvent } from '@/core/logging/appLogsClient';
 import './AppLogsPanel.css';
 
 interface LogEntry {
+  sequence?: number;
   timestamp: string;
   level: string;
   message: string;
@@ -36,6 +38,13 @@ const LOG_LEVEL_BASE_OPTIONS = [
 ];
 const ALL_LEVEL_VALUES = LOG_LEVEL_BASE_OPTIONS.map((option) => option.value);
 const DEFAULT_LOG_LEVELS = ALL_LEVEL_VALUES;
+
+const findLatestSequence = (entries: LogEntry[], fallback = 0) =>
+  entries.reduce(
+    (latest, entry) =>
+      typeof entry.sequence === 'number' && entry.sequence > latest ? entry.sequence : latest,
+    fallback
+  );
 
 const buildClusterOption = (log: LogEntry) => {
   const clusterId = log.clusterId?.trim() ?? '';
@@ -104,6 +113,7 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
   const prevScrollHeightRef = useRef(0);
   const prevScrollTopRef = useRef(0);
   const offsetFromBottomRef = useRef(0);
+  const latestSequenceRef = useRef(0);
   const SCROLL_THRESHOLD = 10;
 
   // Separate ref to track auto-scroll without causing re-renders
@@ -181,22 +191,61 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
     updatePinnedState();
   }, [isAutoScroll, updatePinnedState]);
 
-  const loadLogs = useCallback(async (showLoadingSpinner = false) => {
-    try {
-      // Only show loading spinner on initial load or when explicitly requested
-      if (showLoadingSpinner) {
-        setIsLoading(true);
+  const updateLatestSequence = useCallback((entries: LogEntry[]) => {
+    latestSequenceRef.current = findLatestSequence(entries);
+  }, []);
+
+  const loadLogs = useCallback(
+    async (showLoadingSpinner = false) => {
+      try {
+        // Only show loading spinner on initial load or when explicitly requested
+        if (showLoadingSpinner) {
+          setIsLoading(true);
+        }
+        const logEntries = await readAppLogs();
+        updateLatestSequence(logEntries);
+        setLogs(logEntries);
+      } catch (error) {
+        errorHandler.handle(error, { action: 'loadLogs' });
+      } finally {
+        if (showLoadingSpinner) {
+          setIsLoading(false);
+        }
       }
-      const logEntries = await readAppLogs();
-      setLogs(logEntries);
-    } catch (error) {
-      errorHandler.handle(error, { action: 'loadLogs' });
-    } finally {
-      if (showLoadingSpinner) {
-        setIsLoading(false);
-      }
+    },
+    [updateLatestSequence]
+  );
+
+  const loadLogDeltas = useCallback(async (event?: AppLogsAddedEvent) => {
+    const eventSequence = typeof event?.sequence === 'number' ? event.sequence : undefined;
+    if (eventSequence !== undefined && eventSequence <= latestSequenceRef.current) {
+      return;
     }
-  }, []); // No dependencies - use refs instead
+
+    try {
+      const deltaEntries = await readAppLogsSince(latestSequenceRef.current);
+      if (deltaEntries.length === 0) {
+        return;
+      }
+
+      setLogs((prevLogs) => {
+        const latestBeforeAppend = findLatestSequence(prevLogs, latestSequenceRef.current);
+        const newEntries = deltaEntries.filter(
+          (entry) => typeof entry.sequence !== 'number' || entry.sequence > latestBeforeAppend
+        );
+        if (newEntries.length === 0) {
+          latestSequenceRef.current = latestBeforeAppend;
+          return prevLogs;
+        }
+
+        const nextLogs = [...prevLogs, ...newEntries].slice(-1000);
+        latestSequenceRef.current = findLatestSequence(nextLogs, latestBeforeAppend);
+        return nextLogs;
+      });
+    } catch (error) {
+      errorHandler.handle(error, { action: 'loadLogDeltas' });
+    }
+  }, []);
 
   const formatTimestamp = useCallback((timestamp: string) => {
     try {
@@ -383,21 +432,13 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
       loadLogs(true); // Show spinner on initial load
     }, 300);
 
-    // Listen for real-time log events from backend
-    const handleLogAdded = () => {
-      loadLogs(); // No spinner for real-time updates
-    };
-
-    const runtime = window.runtime;
-    if (runtime?.EventsOn) {
-      runtime.EventsOn('app-logs:added', handleLogAdded);
-    }
+    const unsubscribe = subscribeAppLogsAdded(loadLogDeltas);
 
     return () => {
       clearTimeout(loadTimer);
-      runtime?.EventsOff?.('app-logs:added');
+      unsubscribe();
     };
-  }, [isOpen, loadLogs]);
+  }, [isOpen, loadLogDeltas, loadLogs]);
 
   // ESC key to close panel
   useShortcut({

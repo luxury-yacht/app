@@ -287,6 +287,7 @@ export namespace backend {
 	
 	
 	export class LogEntry {
+	    sequence: number;
 	    timestamp: string;
 	    level: string;
 	    message: string;
@@ -300,6 +301,7 @@ export namespace backend {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.sequence = source["sequence"];
 	        this.timestamp = source["timestamp"];
 	        this.level = source["level"];
 	        this.message = source["message"];

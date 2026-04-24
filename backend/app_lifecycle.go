@@ -92,8 +92,8 @@ func (a *App) Startup(ctx context.Context) {
 		return
 	}
 
-	a.logger.SetEventEmitter(func(eventName string) {
-		a.emitEvent(eventName)
+	a.logger.SetEventEmitter(func(eventName string, args ...interface{}) {
+		a.emitEvent(eventName, args...)
 	})
 
 	log.SetFlags(0)

@@ -33,6 +33,7 @@ func (l LogLevel) String() string {
 
 // LogEntry represents a single log entry
 type LogEntry struct {
+	Sequence    uint64 `json:"sequence"`
 	Timestamp   string `json:"timestamp"`
 	Level       string `json:"level"`
 	Message     string `json:"message"`
@@ -46,7 +47,8 @@ type Logger struct {
 	mu           sync.RWMutex
 	entries      []LogEntry
 	maxSize      int
-	eventEmitter func(string) // Function to emit log events
+	nextSequence uint64
+	eventEmitter func(string, ...interface{}) // Function to emit log events
 }
 
 // NewLogger creates a new logger with specified maximum entries
@@ -68,10 +70,13 @@ func (l *Logger) Log(level LogLevel, message string, source ...string) {
 		return // Safely handle nil logger
 	}
 
-	var emit func(string)
+	var emit func(string, ...interface{})
+	var emittedSequence uint64
 	l.mu.Lock()
 
+	l.nextSequence++
 	entry := LogEntry{
+		Sequence:  l.nextSequence,
 		Timestamp: time.Now().Format(time.RFC3339Nano),
 		Level:     level.String(),
 		Message:   message,
@@ -99,12 +104,13 @@ func (l *Logger) Log(level LogLevel, message string, source ...string) {
 	}
 
 	emit = l.eventEmitter
+	emittedSequence = entry.Sequence
 	l.mu.Unlock()
 
 	// Emit outside the logger lock so event handlers cannot block log writes
 	// or deadlock by synchronously reading the logger.
 	if emit != nil {
-		emit("app-logs:added")
+		emit("app-logs:added", AppLogsAddedEvent{Sequence: emittedSequence})
 	}
 }
 
@@ -143,6 +149,28 @@ func (l *Logger) GetEntries() []LogEntry {
 	return entries
 }
 
+// GetEntriesSince returns a copy of entries with a sequence greater than sequence.
+func (l *Logger) GetEntriesSince(sequence uint64) []LogEntry {
+	if l == nil {
+		return []LogEntry{}
+	}
+
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+
+	start := len(l.entries)
+	for i, entry := range l.entries {
+		if entry.Sequence > sequence {
+			start = i
+			break
+		}
+	}
+
+	entries := make([]LogEntry, len(l.entries)-start)
+	copy(entries, l.entries[start:])
+	return entries
+}
+
 // Clear removes all log entries
 func (l *Logger) Clear() {
 	if l == nil {
@@ -167,7 +195,7 @@ func (l *Logger) Count() int {
 }
 
 // SetEventEmitter sets the function to call when new logs are added
-func (l *Logger) SetEventEmitter(emitter func(string)) {
+func (l *Logger) SetEventEmitter(emitter func(string, ...interface{})) {
 	if l == nil {
 		return
 	}

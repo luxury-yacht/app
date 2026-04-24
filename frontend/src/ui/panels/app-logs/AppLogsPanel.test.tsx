@@ -11,12 +11,15 @@ import { act } from 'react';
 import { afterEach, afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const getAppLogsMock = vi.hoisted(() => vi.fn());
+const getAppLogsSinceMock = vi.hoisted(() => vi.fn());
 const clearAppLogsMock = vi.hoisted(() => vi.fn());
 const setAppLogsPanelVisibleMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const useShortcutMock = vi.hoisted(() => vi.fn());
 const useKeyboardSurfaceMock = vi.hoisted(() => vi.fn());
 const errorHandlerMock = vi.hoisted(() => ({ handle: vi.fn() }));
 const dropdownInstances = vi.hoisted(() => [] as Array<any>);
+const runtimeEventHandlers = vi.hoisted(() => new Map<string, (...args: any[]) => void>());
+const runtimeDisposerMock = vi.hoisted(() => vi.fn());
 
 // AppLogsPanel no longer calls useDockablePanelState — its open/close
 // state is now driven by props from AppLayout (which reads from
@@ -50,6 +53,7 @@ vi.mock('@ui/shortcuts', () => ({
 
 vi.mock('@wailsjs/go/backend/App', () => ({
   GetAppLogs: (...args: unknown[]) => getAppLogsMock(...args),
+  GetAppLogsSince: (...args: unknown[]) => getAppLogsSinceMock(...args),
   ClearAppLogs: (...args: unknown[]) => clearAppLogsMock(...args),
   SetAppLogsPanelVisible: (...args: unknown[]) => setAppLogsPanelVisibleMock(...args),
 }));
@@ -109,13 +113,19 @@ beforeEach(() => {
   useShortcutMock.mockClear();
   useKeyboardSurfaceMock.mockClear();
   getAppLogsMock.mockReset();
+  getAppLogsSinceMock.mockReset();
   clearAppLogsMock.mockReset();
   setAppLogsPanelVisibleMock.mockReset();
   setAppLogsPanelVisibleMock.mockResolvedValue(undefined);
   errorHandlerMock.handle.mockReset();
   dropdownInstances.length = 0;
+  runtimeEventHandlers.clear();
+  runtimeDisposerMock.mockReset();
   (window as any).runtime = {
-    EventsOn: vi.fn(),
+    EventsOn: vi.fn((eventName: string, handler: (...args: any[]) => void) => {
+      runtimeEventHandlers.set(eventName, handler);
+      return runtimeDisposerMock;
+    }),
     EventsOff: vi.fn(),
   };
   if (!navigator.clipboard) {
@@ -148,8 +158,20 @@ describe('AppLogsPanel', () => {
   it('loads logs when opened and renders entries', async () => {
     vi.useFakeTimers();
     getAppLogsMock.mockResolvedValue([
-      { timestamp: '2024-01-01T00:00:00.000Z', level: 'info', message: 'Ready', source: 'core' },
-      { timestamp: '2024-01-01T00:00:01.000Z', level: 'error', message: 'Boom', source: 'worker' },
+      {
+        sequence: 1,
+        timestamp: '2024-01-01T00:00:00.000Z',
+        level: 'info',
+        message: 'Ready',
+        source: 'core',
+      },
+      {
+        sequence: 2,
+        timestamp: '2024-01-01T00:00:01.000Z',
+        level: 'error',
+        message: 'Boom',
+        source: 'worker',
+      },
     ]);
 
     const { container, cleanup } = await renderPanel();
@@ -159,6 +181,92 @@ describe('AppLogsPanel', () => {
     const entries = container.querySelectorAll('.log-entry');
     expect(entries.length).toBe(2);
     expect(getAppLogsMock).toHaveBeenCalledTimes(1);
+
+    cleanup();
+  });
+
+  it('appends new logs from app-logs events using delta reads and listener disposers', async () => {
+    vi.useFakeTimers();
+    getAppLogsMock.mockResolvedValue([
+      {
+        sequence: 1,
+        timestamp: '2024-01-01T00:00:00.000Z',
+        level: 'info',
+        message: 'Ready',
+        source: 'core',
+      },
+    ]);
+    getAppLogsSinceMock.mockResolvedValue([
+      {
+        sequence: 2,
+        timestamp: '2024-01-01T00:00:01.000Z',
+        level: 'warn',
+        message: 'Delta',
+        source: 'core',
+      },
+    ]);
+
+    const { container, cleanup } = await renderPanel();
+
+    await flushInitialLoad();
+    expect(container.querySelectorAll('.log-entry')).toHaveLength(1);
+
+    const handler = runtimeEventHandlers.get('app-logs:added');
+    expect(handler).toBeTruthy();
+
+    await act(async () => {
+      handler?.({ sequence: 2 });
+      await Promise.resolve();
+    });
+
+    expect(getAppLogsSinceMock).toHaveBeenCalledWith(1);
+    expect(getAppLogsMock).toHaveBeenCalledTimes(1);
+    expect(container.querySelectorAll('.log-entry')).toHaveLength(2);
+    expect(container.textContent).toContain('Delta');
+
+    cleanup();
+
+    expect(runtimeDisposerMock).toHaveBeenCalledTimes(1);
+    expect(window.runtime?.EventsOff).not.toHaveBeenCalledWith('app-logs:added');
+  });
+
+  it('does not duplicate logs when overlapping app-logs events read the same delta', async () => {
+    vi.useFakeTimers();
+    getAppLogsMock.mockResolvedValue([
+      {
+        sequence: 1,
+        timestamp: '2024-01-01T00:00:00.000Z',
+        level: 'info',
+        message: 'Ready',
+        source: 'core',
+      },
+    ]);
+    getAppLogsSinceMock.mockResolvedValue([
+      {
+        sequence: 2,
+        timestamp: '2024-01-01T00:00:01.000Z',
+        level: 'warn',
+        message: 'Delta',
+        source: 'core',
+      },
+    ]);
+
+    const { container, cleanup } = await renderPanel();
+
+    await flushInitialLoad();
+    const handler = runtimeEventHandlers.get('app-logs:added');
+    expect(handler).toBeTruthy();
+
+    await act(async () => {
+      handler?.({ sequence: 2 });
+      handler?.({ sequence: 2 });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(getAppLogsSinceMock).toHaveBeenCalledTimes(2);
+    expect(container.querySelectorAll('.log-entry')).toHaveLength(2);
+    expect(container.textContent?.match(/Delta/g)).toHaveLength(1);
 
     cleanup();
   });

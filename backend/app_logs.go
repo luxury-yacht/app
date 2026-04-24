@@ -11,11 +11,22 @@ import (
 	"strings"
 )
 
+type AppLogsAddedEvent struct {
+	Sequence uint64 `json:"sequence"`
+}
+
 func (a *App) GetAppLogs() []LogEntry {
 	if a.logger == nil {
 		return []LogEntry{}
 	}
 	return a.logger.GetEntries()
+}
+
+func (a *App) GetAppLogsSince(sequence uint64) []LogEntry {
+	if a.logger == nil {
+		return []LogEntry{}
+	}
+	return a.logger.GetEntriesSince(sequence)
 }
 
 func (a *App) ClearAppLogs() error {

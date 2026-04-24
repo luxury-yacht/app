@@ -6,6 +6,12 @@
 
 type AppLogsLevel = 'debug' | 'info' | 'warn' | 'error';
 
+export interface AppLogsAddedEvent {
+  sequence?: number;
+}
+
+export type AppLogsAddedHandler = (event?: AppLogsAddedEvent) => void;
+
 const normalizeLevel = (level: AppLogsLevel): AppLogsLevel => {
   if (level === 'warn') {
     return 'warn';
@@ -43,4 +49,28 @@ export const logAppLogsInfo = (message: string, source?: string): void => {
 
 export const logAppLogsWarn = (message: string, source?: string): void => {
   logToAppLogs('warn', message, source);
+};
+
+export const subscribeAppLogsAdded = (handler: AppLogsAddedHandler): (() => void) => {
+  if (typeof window === 'undefined') {
+    return () => {};
+  }
+
+  const runtime = window.runtime;
+  if (!runtime?.EventsOn) {
+    return () => {};
+  }
+
+  const eventHandler = (event?: unknown) => {
+    handler(typeof event === 'object' && event !== null ? (event as AppLogsAddedEvent) : undefined);
+  };
+
+  const dispose = runtime.EventsOn('app-logs:added', eventHandler);
+  if (typeof dispose === 'function') {
+    return dispose;
+  }
+
+  return () => {
+    runtime.EventsOff?.('app-logs:added', eventHandler);
+  };
 };

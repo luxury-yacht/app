@@ -73,6 +73,8 @@ export function GetAppInfo():Promise<backend.AppInfo>;
 
 export function GetAppLogs():Promise<Array<backend.LogEntry>>;
 
+export function GetAppLogsSince(arg1:number):Promise<Array<backend.LogEntry>>;
+
 export function GetAppSettings():Promise<types.AppSettings>;
 
 export function GetCatalogDiagnostics():Promise<backend.CatalogDiagnostics>;
