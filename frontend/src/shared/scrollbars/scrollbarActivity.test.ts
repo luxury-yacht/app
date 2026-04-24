@@ -155,6 +155,20 @@ describe('scrollbar activity tracking', () => {
     expect(element.scrollTop).toBe(100);
   });
 
+  it('uses real hover dimensions so the thumb rounds from its expanded box', () => {
+    const element = createScrollableElement();
+    vi.spyOn(document, 'elementsFromPoint').mockReturnValue([element]);
+
+    dispatchPointerMove(99, 50);
+
+    const thumb = document.body.querySelector<HTMLElement>('.scrollbar-overlay-thumb--vertical');
+    const gutter = document.body.querySelector<HTMLElement>('.scrollbar-overlay-gutter--vertical');
+    expect(thumb?.style.width).toBe('9px');
+    expect(gutter?.style.width).toBe('15px');
+    expect(thumb?.style.transform).toBe('');
+    expect(gutter?.style.transform).toBe('');
+  });
+
   it('activates one scrollbar axis in the corner hover zone', () => {
     const element = createScrollableElement();
     defineMetric(element, 'scrollWidth', 500);
