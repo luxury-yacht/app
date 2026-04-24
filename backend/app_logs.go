@@ -24,7 +24,6 @@ func (a *App) ClearLogs() error {
 	}
 
 	a.logger.Clear()
-	a.logger.Info("Application logs cleared", "App")
 	return nil
 }
 

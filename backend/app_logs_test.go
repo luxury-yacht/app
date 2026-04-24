@@ -41,8 +41,7 @@ func TestClearLogs(t *testing.T) {
 	require.NoError(t, err)
 
 	logs := app.GetLogs()
-	require.Len(t, logs, 1)
-	require.Contains(t, logs[0].Message, "Application logs cleared")
+	require.Empty(t, logs)
 }
 
 func TestClearLogsWhenNil(t *testing.T) {

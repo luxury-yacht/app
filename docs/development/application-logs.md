@@ -42,8 +42,7 @@ Core files:
 The Wails-exposed backend API is in `backend/app_logs.go`:
 
 - `GetLogs()` returns the current in-memory entries.
-- `ClearLogs()` clears the logger and then writes an `INFO` entry:
-  `Application logs cleared`, source `App`.
+- `ClearLogs()` clears the logger; after clear, the backend buffer is empty.
 - `LogFrontend(level, message, source)` lets frontend code append entries into
   the backend Application Logs buffer.
 
@@ -261,37 +260,35 @@ Notably missing:
 
 ### Ranked Findings
 
-1. High: Clear behavior is ambiguous. The backend records an
-   `Application logs cleared` marker after clearing, while the frontend
-   immediately renders an empty local list. Tests currently encode both
-   expectations.
-2. Medium-high: Application Logs and pod/object Logs boundaries are confusing.
+1. Medium-high: Application Logs and pod/object Logs boundaries are confusing.
    The visible Log Settings UI applies to pod/object logs, not Application
    Logs, while backend setting names such as `LogBufferMaxSize` sound generic.
-3. Medium: Severity classification is inconsistent across direct logger calls,
+2. Medium: Severity classification is inconsistent across direct logger calls,
    `stdLogBridge`, and `errorcapture`, which makes the log level less reliable
    as diagnostic signal.
-4. Medium: The `log-added` event contains no payload, so the frontend refetches
+3. Medium: The `log-added` event contains no payload, so the frontend refetches
    the full log buffer on every new entry.
-5. Medium: Wails event unsubscription may be too broad if another future
+4. Medium: Wails event unsubscription may be too broad if another future
    consumer also listens to `log-added`.
-6. Medium-low: Application Logs have no persistence or file export path, which
+5. Medium-low: Application Logs have no persistence or file export path, which
    limits support workflows after restart or early startup failure.
-7. Medium-low: The frontend logging helper is incomplete because it lacks
+6. Medium-low: The frontend logging helper is incomplete because it lacks
    `logAppError()` even though the backend supports error-level frontend logs.
-8. Low: Source names are free-form and can drift, making component filtering
+7. Low: Source names are free-form and can drift, making component filtering
     less predictable.
-9. Low: Debug entries are hidden by default, which is probably correct but
+8. Low: Debug entries are hidden by default, which is probably correct but
     needs better support/testing guidance.
-10. Low: Rendering is not virtualized. This is fine for the fixed 1000-entry
+9. Low: Rendering is not virtualized. This is fine for the fixed 1000-entry
     buffer, but becomes a concern if the buffer grows.
-11. Low: Application Log timestamp formatting is hard-coded and intentionally
+10. Low: Application Log timestamp formatting is hard-coded and intentionally
     separate from pod log timestamp preferences, but the distinction is not
     obvious.
 
 Completed finding:
 
 - Cluster-aware Application Log entries and UI filtering are complete.
+- Clear behavior is normalized: clearing Application Logs leaves the backend
+  buffer and frontend panel empty, with no marker row.
 - Event emission no longer happens while holding the logger mutex.
 
 ### Event Payload Is Too Thin
@@ -356,21 +353,6 @@ also hides some important backend diagnostics, including most informational
 
 This is probably the right default, but support/testing instructions should
 explicitly say "include Debug" when investigating klog or refresh noise.
-
-### Clear Behavior Is Ambiguous
-
-`ClearLogs()` clears the backend buffer and then writes `Application logs
-cleared`. The frontend clear handler then immediately sets local logs to an
-empty list.
-
-Backend tests assert that the marker entry exists after clear. Frontend tests
-assert that the panel becomes empty. Runtime ordering depends on when the
-`log-added` event is processed relative to the local `setLogs([])`.
-
-Pick one user-facing behavior and align tests and implementation with it:
-
-- Empty means truly empty, with no marker entry.
-- Clear leaves one explicit marker row.
 
 ### Wails Event Unsubscription May Be Too Broad
 
@@ -497,12 +479,11 @@ Lower-priority capabilities:
 1. Clarify naming and comments around Application Logs versus pod/object Logs.
    This is the cheapest fix and prevents future wrong assumptions.
 2. Add tests for `appLogClient`, including an added `logAppError` helper.
-3. Decide and normalize clear behavior: empty panel or marker row.
-4. Add complete object-reference metadata to `LogEntry` for object-specific
+3. Add complete object-reference metadata to `LogEntry` for object-specific
    messages.
-5. Add canonical source constants for common subsystems.
-6. Consider a delta API only if full-buffer refetches show up in profiling.
-7. Consider Application Logs export/persistence if support workflows need logs
+4. Add canonical source constants for common subsystems.
+5. Consider a delta API only if full-buffer refetches show up in profiling.
+6. Consider Application Logs export/persistence if support workflows need logs
    after restart.
 
 ## Manual Testing Checklist
@@ -518,7 +499,7 @@ Application Logs smoke test:
 7. Filter by a cluster when cluster-scoped entries are present.
 8. Type text into the text filter and verify count changes.
 9. Click Copy and verify the clipboard contains only visible filtered logs.
-10. Click Clear and verify the chosen clear behavior.
+10. Click Clear and verify the panel is empty.
 11. Close and reopen the panel and verify logs reload from the backend buffer.
 12. Open one filter dropdown, then open another, and verify only one dropdown
     menu remains open.
