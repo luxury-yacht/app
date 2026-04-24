@@ -98,7 +98,12 @@
   background-color: var(--scrollbar-thumb-bg);
   border-radius: var(--scrollbar-radius);
   opacity: var(--scrollbar-thumb-current-opacity);
-  transition: background-color var(--scrollbar-fade-in-duration) var(--ease-out, ease);
+  transition:
+    background-color var(--scrollbar-fade-in-duration) var(--ease-out, ease),
+    height var(--scrollbar-hover-resize-duration) var(--ease-out, ease),
+    left var(--scrollbar-hover-resize-duration) var(--ease-out, ease),
+    top var(--scrollbar-hover-resize-duration) var(--ease-out, ease),
+    width var(--scrollbar-hover-resize-duration) var(--ease-out, ease);
   user-select: none;
 }
 

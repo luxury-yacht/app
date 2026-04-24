@@ -3,6 +3,7 @@
   --scrollbar-height: 5px;
   --scrollbar-hover-zone-size: 16px;
   --scrollbar-hover-scale: 3;
+  --scrollbar-hover-resize-duration: 100ms;
   --scrollbar-radius: 999px;
   --scrollbar-min-thumb-size: 32px;
   --scrollbar-thumb-inset: 1px;
