@@ -132,8 +132,7 @@ When the panel opens:
 
 The panel provides:
 
-- Level filtering with default levels `info`, `warn`, and `error`.
-- `debug` is available but hidden by default.
+- Level filtering with all levels selected by default.
 - Source/component filtering based on the `source` field.
 - Cluster filtering based on `clusterId` / `clusterName` when present.
 - Shared dropdown bulk actions for level, source/component, and cluster
@@ -260,24 +259,19 @@ Notably missing:
 
 ### Ranked Findings
 
-1. Medium: Severity classification is inconsistent across direct logger calls,
-   `stdLogBridge`, and `errorcapture`, which makes the log level less reliable
-   as diagnostic signal.
-2. Medium: The `app-logs:added` event contains no payload, so the frontend refetches
+1. Medium: The `app-logs:added` event contains no payload, so the frontend refetches
    the full log buffer on every new entry.
-3. Medium: Wails event unsubscription may be too broad if another future
+2. Medium: Wails event unsubscription may be too broad if another future
    consumer also listens to `app-logs:added`.
-4. Medium-low: Application Logs have no persistence or file export path, which
+3. Medium-low: Application Logs have no persistence or file export path, which
    limits support workflows after restart or early startup failure.
-5. Medium-low: The frontend logging helper is incomplete because it lacks
+4. Medium-low: The frontend logging helper is incomplete because it lacks
    `logAppLogsError()` even though the backend supports error-level frontend logs.
-6. Low: Source names are free-form and can drift, making component filtering
+5. Low: Source names are free-form and can drift, making component filtering
     less predictable.
-7. Low: Debug entries are hidden by default, which is probably correct but
-    needs better support/testing guidance.
-8. Low: Rendering is not virtualized. This is fine for the fixed 1000-entry
+6. Low: Rendering is not virtualized. This is fine for the fixed 1000-entry
     buffer, but becomes a concern if the buffer grows.
-9. Low: Application Log timestamp formatting is hard-coded and intentionally
+7. Low: Application Log timestamp formatting is hard-coded and intentionally
     separate from container log timestamp preferences, but the distinction is not
     obvious.
 
@@ -291,6 +285,12 @@ Completed finding:
   generated Wails bindings, frontend helper names, settings events, and UI
   copy.
 - Event emission no longer happens while holding the logger mutex.
+- Severity classification is centralized for indirect log ingestion:
+  `stdLogBridge` and `errorcapture` both use the same klog-aware classifier.
+  Klog prefixes are only interpreted when they match the standard
+  `E1234` / `W1234` / `I1234` shape, and plain text uses word-boundary
+  fallback matching.
+- Application Logs now show all log levels by default, including `debug`.
 
 ### Event Payload Is Too Thin
 
@@ -328,32 +328,6 @@ sources (`ResourceStream`, `ContainerLogsStream`), and resource-oriented sources
 
 There is no registry or guidance for choosing a source. This makes component
 filtering less predictable.
-
-### Level Classification Is Inconsistent Across Ingestion Paths
-
-Direct logger calls choose levels explicitly. `stdLogBridge` and `errorcapture`
-infer severity from strings.
-
-There are edge cases:
-
-- `errorcapture.emitToLogSink()` treats any line starting with `E` as `ERROR`
-  even if it is not a klog severity prefix.
-- `app_lifecycle.go` maps non-error/non-warning `ErrorCapture` lines to
-  `DEBUG`, even though `errorcapture` classified `I...` as `info`.
-- `stdLogBridge` uses broad substring checks such as `" error"` and `" warn"`.
-
-These are pragmatic but should be documented or tightened before Application
-Logs are treated as reliable severity telemetry.
-
-### Debug Logs Are Hidden By Default
-
-The panel default filter excludes `debug`. That keeps the view quiet, but it
-also hides some important backend diagnostics, including most informational
-`ErrorCapture` klog lines because they are written as `DEBUG` source
-`ErrorCapture`.
-
-This is probably the right default, but support/testing instructions should
-explicitly say "include Debug" when investigating klog or refresh noise.
 
 ### Wails Event Unsubscription May Be Too Broad
 
@@ -455,7 +429,6 @@ High-value missing capabilities:
 - Source registry or canonical source names.
 - Export/save logs to a file.
 - Copy all logs regardless of active filters.
-- "Include Debug" discoverability for support workflows.
 - Direct test coverage for `appLogsClient`.
 - Clear, documented boundary between Application Logs Panel, Application Logs,
   Object Panel Logs Tab, and Container Logs.

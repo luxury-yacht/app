@@ -167,12 +167,14 @@ func TestEmitToLogSinkClassifiesLevels(t *testing.T) {
 		logs = append(logs, level+":"+message)
 	})
 
-	c.emitToLogSink([]byte("E1010 10:00:00 error occurred\nW1010 warning issued\nI info line\n"))
+	c.emitToLogSink([]byte("E1010 10:00:00 error occurred\nW1010 warning issued\nI1010 info line\nExternal secrets cache ready\nrequest failed while listing pods\n"))
 
 	expected := []string{
 		"error:E1010 10:00:00 error occurred",
 		"warn:W1010 warning issued",
-		"info:I info line",
+		"info:I1010 info line",
+		"info:External secrets cache ready",
+		"error:request failed while listing pods",
 	}
 	if len(logs) != len(expected) {
 		t.Fatalf("expected %d log entries, got %d", len(expected), len(logs))

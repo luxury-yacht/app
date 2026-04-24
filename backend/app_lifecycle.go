@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/luxury-yacht/app/backend/internal/errorcapture"
+	"github.com/luxury-yacht/app/backend/internal/logclassify"
 	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -68,13 +69,15 @@ func (a *App) Startup(ctx context.Context) {
 		if containsAuthPattern(lower) {
 			return
 		}
-		switch strings.ToLower(level) {
-		case "error":
+		switch level {
+		case logclassify.LevelError:
 			a.logger.Error(message, "ErrorCapture")
-		case "warn", "warning":
+		case logclassify.LevelWarn:
 			a.logger.Warn(message, "ErrorCapture")
-		default:
+		case logclassify.LevelDebug:
 			a.logger.Debug(message, "ErrorCapture")
+		default:
+			a.logger.Info(message, "ErrorCapture")
 		}
 	})
 
@@ -174,12 +177,13 @@ func (b *stdLogBridge) Write(p []byte) (int, error) {
 			continue
 		}
 
-		lower := strings.ToLower(msg)
-		switch {
-		case strings.HasPrefix(lower, "error"), strings.Contains(lower, " error"), strings.HasPrefix(lower, "[error"), strings.Contains(lower, "[refresh:metrics] poll failed"):
+		switch logclassify.Classify(msg) {
+		case logclassify.LevelError:
 			b.logger.Error(msg, "StdLog")
-		case strings.HasPrefix(lower, "warn"), strings.Contains(lower, " warn"):
+		case logclassify.LevelWarn:
 			b.logger.Warn(msg, "StdLog")
+		case logclassify.LevelDebug:
+			b.logger.Debug(msg, "StdLog")
 		default:
 			b.logger.Info(msg, "StdLog")
 		}
