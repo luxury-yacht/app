@@ -60,12 +60,8 @@ const resizeObservedOverlayElements = new WeakSet<Element>();
 const pendingOverlayGeometryUpdates = new Set<Element>();
 let initialized = false;
 let overlayResizeObserver: ResizeObserver | undefined;
-let overlayMutationObserver: MutationObserver | undefined;
 let overlayGeometryFrameId: number | undefined;
-let activeOverlayGeometryFrameId: number | undefined;
-let hoverRefreshFrameId: number | undefined;
 let scrollbarActivityAbortController: AbortController | undefined;
-let lastPointerPosition: { clientX: number; clientY: number } | undefined;
 let activeDrag:
   | {
       axis: 'horizontal' | 'vertical';
@@ -201,36 +197,6 @@ const scheduleOverlayGeometryUpdate = (element: Element): void => {
       overlayGeometryTransitionsDisabled.add(element);
       updateOverlayScrollbarGeometry(element);
     });
-  });
-};
-
-const startActiveOverlayGeometryTracking = (): void => {
-  if (activeOverlayGeometryFrameId !== undefined) {
-    return;
-  }
-
-  activeOverlayGeometryFrameId = window.requestAnimationFrame(() => {
-    activeOverlayGeometryFrameId = undefined;
-    activeOverlayElements.forEach((element) => {
-      overlayGeometryTransitionsDisabled.add(element);
-      updateOverlayScrollbarGeometry(element);
-    });
-    if (activeOverlayElements.size > 0) {
-      startActiveOverlayGeometryTracking();
-    }
-  });
-};
-
-const scheduleOverlayHoverRefresh = (): void => {
-  if (!lastPointerPosition || hoverRefreshFrameId !== undefined) {
-    return;
-  }
-
-  hoverRefreshFrameId = window.requestAnimationFrame(() => {
-    hoverRefreshFrameId = undefined;
-    if (lastPointerPosition) {
-      updateOverlayHoverAtPoint(lastPointerPosition.clientX, lastPointerPosition.clientY);
-    }
   });
 };
 
@@ -627,7 +593,6 @@ const updateOverlayHoverAtPoint = (clientX: number, clientY: number): void => {
 };
 
 const updateOverlayHoverFromPointer = (event: PointerEvent): void => {
-  lastPointerPosition = { clientX: event.clientX, clientY: event.clientY };
   updateOverlayHoverAtPoint(event.clientX, event.clientY);
 };
 
@@ -969,7 +934,6 @@ const markScrollbarActive = (element: Element): void => {
     ensureOverlayScrollbars(element);
     activeOverlayElements.add(element);
     updateOverlayScrollbarGeometry(element);
-    startActiveOverlayGeometryTracking();
   }
   setScrollbarOpacity(element, getCurrentScrollbarOpacity(element));
   element.classList.add(SCROLLBAR_ACTIVE_CLASS);
@@ -990,14 +954,6 @@ export const initializeScrollbarActivityTracking = (): void => {
   initialized = true;
   scrollbarActivityAbortController = new AbortController();
   const signal = scrollbarActivityAbortController.signal;
-  if (typeof MutationObserver !== 'undefined') {
-    overlayMutationObserver = new MutationObserver(scheduleOverlayHoverRefresh);
-    overlayMutationObserver.observe(document.body, {
-      attributes: true,
-      childList: true,
-      subtree: true,
-    });
-  }
 
   document.addEventListener(
     'scroll',
@@ -1115,7 +1071,6 @@ export const initializeScrollbarActivityTracking = (): void => {
   document.addEventListener(
     'pointerleave',
     () => {
-      lastPointerPosition = undefined;
       clearOverlayHoverStates();
     },
     {
@@ -1126,7 +1081,6 @@ export const initializeScrollbarActivityTracking = (): void => {
   window.addEventListener(
     'blur',
     () => {
-      lastPointerPosition = undefined;
       clearOverlayHoverStates();
     },
     { passive: true, signal }
@@ -1138,19 +1092,10 @@ export const __resetScrollbarActivityTrackingForTest = (): void => {
   scrollbarActivityAbortController = undefined;
   initialized = false;
   activeDrag = undefined;
-  lastPointerPosition = undefined;
 
   if (overlayGeometryFrameId !== undefined) {
     window.cancelAnimationFrame(overlayGeometryFrameId);
     overlayGeometryFrameId = undefined;
-  }
-  if (activeOverlayGeometryFrameId !== undefined) {
-    window.cancelAnimationFrame(activeOverlayGeometryFrameId);
-    activeOverlayGeometryFrameId = undefined;
-  }
-  if (hoverRefreshFrameId !== undefined) {
-    window.cancelAnimationFrame(hoverRefreshFrameId);
-    hoverRefreshFrameId = undefined;
   }
 
   const elements = new Set<Element>([...activeOverlayElements, ...hoveredOverlayElements]);
@@ -1160,6 +1105,4 @@ export const __resetScrollbarActivityTrackingForTest = (): void => {
   pendingOverlayGeometryUpdates.clear();
   overlayResizeObserver?.disconnect();
   overlayResizeObserver = undefined;
-  overlayMutationObserver?.disconnect();
-  overlayMutationObserver = undefined;
 };
