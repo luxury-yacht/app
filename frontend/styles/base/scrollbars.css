@@ -131,4 +131,12 @@
 
 .scrollbar-overlay-gutter--visible {
   opacity: var(--scrollbar-gutter-hover-opacity);
+  pointer-events: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scrollbar-overlay-thumb,
+  .scrollbar-overlay-gutter {
+    transition: none;
+  }
 }

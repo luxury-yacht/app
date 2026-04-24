@@ -60,6 +60,17 @@ const dispatchPointerMove = (clientX: number, clientY: number) => {
   );
 };
 
+const dispatchPointerDown = (target: Element, clientX: number, clientY: number) => {
+  target.dispatchEvent(
+    new MouseEvent('pointerdown', {
+      bubbles: true,
+      cancelable: true,
+      clientX,
+      clientY,
+    })
+  );
+};
+
 describe('scrollbar activity tracking', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -117,17 +128,113 @@ describe('scrollbar activity tracking', () => {
     expect(document.body.querySelector('.scrollbar-overlay-thumb--vertical')).toBeNull();
   });
 
-  it('routes wheel activity from overlay thumbs back to the owning scroll container', () => {
+  it('routes wheel scrolling from overlay thumbs back to the owning scroll container', () => {
     const element = createScrollableElement();
 
     dispatchWheel(element);
     const thumb = document.body.querySelector('.scrollbar-overlay-thumb--vertical');
     expect(thumb).toBeTruthy();
 
-    vi.advanceTimersByTime(10);
+    expect(element.scrollTop).toBe(0);
     dispatchWheel(thumb!);
-    vi.advanceTimersByTime(15);
 
     expect(document.body.querySelector('.scrollbar-overlay-thumb--vertical')).toBeTruthy();
+    expect(element.scrollTop).toBe(24);
+  });
+
+  it('page-scrolls when the visible gutter track is clicked', () => {
+    const element = createScrollableElement();
+    vi.spyOn(document, 'elementsFromPoint').mockReturnValue([element]);
+
+    dispatchPointerMove(99, 50);
+    const gutter = document.body.querySelector('.scrollbar-overlay-gutter--vertical');
+    expect(gutter).toBeTruthy();
+
+    dispatchPointerDown(gutter!, 99, 95);
+
+    expect(element.scrollTop).toBe(100);
+  });
+
+  it('activates one scrollbar axis in the corner hover zone', () => {
+    const element = createScrollableElement();
+    defineMetric(element, 'scrollWidth', 500);
+    vi.spyOn(document, 'elementsFromPoint').mockReturnValue([element]);
+
+    dispatchPointerMove(99, 99);
+
+    expect(
+      document.body
+        .querySelector('.scrollbar-overlay-thumb--vertical')
+        ?.classList.contains('scrollbar-overlay-thumb--hovered')
+    ).toBe(true);
+    expect(
+      document.body
+        .querySelector('.scrollbar-overlay-thumb--horizontal')
+        ?.classList.contains('scrollbar-overlay-thumb--hovered')
+    ).toBe(false);
+  });
+
+  it('clips overlay geometry to overflowing ancestors', () => {
+    const ancestor = document.createElement('div');
+    ancestor.style.overflowX = 'hidden';
+    ancestor.style.overflowY = 'hidden';
+    ancestor.getBoundingClientRect = () =>
+      ({
+        bottom: 80,
+        height: 80,
+        left: 0,
+        right: 100,
+        top: 0,
+        width: 100,
+        x: 0,
+        y: 0,
+        toJSON: () => undefined,
+      }) as DOMRect;
+    document.body.appendChild(ancestor);
+
+    const element = createScrollableElement();
+    element.getBoundingClientRect = () =>
+      ({
+        bottom: 120,
+        height: 120,
+        left: 0,
+        right: 100,
+        top: 0,
+        width: 100,
+        x: 0,
+        y: 0,
+        toJSON: () => undefined,
+      }) as DOMRect;
+    ancestor.appendChild(element);
+
+    dispatchWheel(element);
+
+    const gutter = document.body.querySelector<HTMLElement>('.scrollbar-overlay-gutter--vertical');
+    expect(gutter?.style.height).toBe('80px');
+  });
+
+  it('does not animate fades when reduced motion is requested', () => {
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      value: vi.fn(
+        () =>
+          ({
+            addEventListener: vi.fn(),
+            addListener: vi.fn(),
+            dispatchEvent: vi.fn(),
+            matches: true,
+            media: '(prefers-reduced-motion: reduce)',
+            onchange: null,
+            removeEventListener: vi.fn(),
+            removeListener: vi.fn(),
+          }) as MediaQueryList
+      ),
+    });
+    document.documentElement.style.setProperty('--scrollbar-fade-in-duration', '200ms');
+    const element = createScrollableElement();
+
+    dispatchWheel(element);
+
+    expect(element.style.getPropertyValue('--scrollbar-thumb-current-opacity')).toBe('1');
   });
 });
