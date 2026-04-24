@@ -264,6 +264,55 @@ describe('scrollbar activity tracking', () => {
     expect(thumb?.style.top).toBe('21px');
   });
 
+  it('keeps dropdown menu overlays outside the scrollable menu content', () => {
+    const dropdown = document.createElement('div');
+    dropdown.className = 'dropdown';
+    dropdown.getBoundingClientRect = () =>
+      ({
+        bottom: 220,
+        height: 200,
+        left: 50,
+        right: 250,
+        top: 20,
+        width: 200,
+        x: 50,
+        y: 20,
+        toJSON: () => undefined,
+      }) as DOMRect;
+    document.body.appendChild(dropdown);
+
+    const menu = createScrollableElement();
+    menu.className = 'dropdown-menu';
+    menu.style.overflowX = 'hidden';
+    menu.style.overflowY = 'auto';
+    menu.style.zIndex = '4000';
+    defineMetric(menu, 'scrollWidth', 130);
+    menu.getBoundingClientRect = () =>
+      ({
+        bottom: 160,
+        height: 100,
+        left: 75,
+        right: 175,
+        top: 60,
+        width: 100,
+        x: 75,
+        y: 60,
+        toJSON: () => undefined,
+      }) as DOMRect;
+    dropdown.appendChild(menu);
+
+    dispatchWheel(menu);
+
+    const verticalThumb = dropdown.querySelector<HTMLElement>('.scrollbar-overlay-thumb--vertical');
+    const horizontalThumb = dropdown.querySelector<HTMLElement>(
+      '.scrollbar-overlay-thumb--horizontal'
+    );
+    expect(verticalThumb?.parentElement).toBe(dropdown);
+    expect(menu.querySelector('.scrollbar-overlay-thumb--vertical')).toBeNull();
+    expect(verticalThumb?.style.zIndex).toBe('4001');
+    expect(horizontalThumb?.style.display).toBe('none');
+  });
+
   it('keeps settings modal overlays inside the modal stacking context', () => {
     const modal = document.createElement('div');
     modal.className = 'modal-container settings-modal';

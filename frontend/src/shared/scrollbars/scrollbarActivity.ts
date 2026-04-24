@@ -95,8 +95,54 @@ const isOverlayScrollbarElement = (element: Element): element is HTMLElement =>
   !element.matches(OVERLAY_SCROLLBAR_EXCLUDED_SELECTOR) &&
   (overlayElements.has(element) || canScroll(element));
 
+const resolveOverlayOwner = (element: HTMLElement): HTMLElement | null =>
+  element.closest<HTMLElement>(OVERLAY_SCROLLBAR_OWNER_SELECTOR);
+
 const resolveOverlayContainer = (element: HTMLElement): HTMLElement => {
-  return element.closest<HTMLElement>(OVERLAY_SCROLLBAR_OWNER_SELECTOR) ?? document.body;
+  const owner = resolveOverlayOwner(element);
+  if (!owner) {
+    return document.body;
+  }
+
+  if (owner === element && owner.matches('.dropdown-menu')) {
+    return owner.parentElement ?? document.body;
+  }
+
+  return owner;
+};
+
+const applyOverlayZIndex = (
+  element: HTMLElement,
+  overlay: {
+    horizontalGutter: HTMLDivElement;
+    horizontalThumb: HTMLDivElement;
+    verticalGutter: HTMLDivElement;
+    verticalThumb: HTMLDivElement;
+  }
+): void => {
+  const owner = resolveOverlayOwner(element);
+  const ownerZIndex = owner ? Number.parseInt(getComputedStyle(owner).zIndex, 10) : NaN;
+  const zIndex = Number.isFinite(ownerZIndex) ? String(ownerZIndex + 1) : '';
+
+  overlay.verticalGutter.style.zIndex = zIndex;
+  overlay.verticalThumb.style.zIndex = zIndex;
+  overlay.horizontalGutter.style.zIndex = zIndex;
+  overlay.horizontalThumb.style.zIndex = zIndex;
+};
+
+const canScrollAxis = (element: HTMLElement, axis: 'horizontal' | 'vertical'): boolean => {
+  const styles = getComputedStyle(element);
+  const overflow = axis === 'horizontal' ? styles.overflowX : styles.overflowY;
+  const scrollableOverflow =
+    overflow === 'auto' || overflow === 'scroll' || overflow === 'overlay';
+
+  if (!scrollableOverflow) {
+    return false;
+  }
+
+  return axis === 'horizontal'
+    ? element.scrollWidth > element.clientWidth
+    : element.scrollHeight > element.clientHeight;
 };
 
 const toOverlayCoordinateRect = (rect: DOMRect, container: HTMLElement): DOMRect => {
@@ -391,6 +437,7 @@ const updateOverlayScrollbarGeometry = (element: Element): void => {
   overlay.verticalThumb.style.position = position;
   overlay.horizontalGutter.style.position = position;
   overlay.horizontalThumb.style.position = position;
+  applyOverlayZIndex(element, overlay);
 
   const rect = toOverlayCoordinateRect(getOverflowClipRect(element), overlay.container);
   const scrollbarWidth = readScrollbarPxToken('--scrollbar-width', 10);
@@ -401,8 +448,8 @@ const updateOverlayScrollbarGeometry = (element: Element): void => {
   const activeOpacity = getCurrentScrollbarOpacity(element);
   const hoverState = overlayHoverStates.get(element);
 
-  const hasVerticalScrollbar = element.scrollHeight > element.clientHeight;
-  const hasHorizontalScrollbar = element.scrollWidth > element.clientWidth;
+  const hasVerticalScrollbar = canScrollAxis(element, 'vertical');
+  const hasHorizontalScrollbar = canScrollAxis(element, 'horizontal');
 
   if (!hasVerticalScrollbar && !hasHorizontalScrollbar) {
     removeOverlayScrollbars(element);
@@ -585,8 +632,8 @@ const updateOverlayHoverAtPoint = (clientX: number, clientY: number): void => {
       continue;
     }
 
-    const hasVerticalScrollbar = element.scrollHeight > element.clientHeight;
-    const hasHorizontalScrollbar = element.scrollWidth > element.clientWidth;
+    const hasVerticalScrollbar = canScrollAxis(element, 'vertical');
+    const hasHorizontalScrollbar = canScrollAxis(element, 'horizontal');
     let vertical =
       hasVerticalScrollbar && clientX >= rect.right - hoverZoneSize && clientX <= rect.right;
     const horizontal =
