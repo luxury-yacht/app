@@ -79,7 +79,7 @@
 
 .scrollbar-overlay-thumb {
   position: fixed;
-  z-index: var(--z-index-scrollbar-overlay, 2147483647);
+  z-index: var(--z-index-scrollbar-overlay);
   pointer-events: auto;
   background-color: var(--scrollbar-thumb-bg);
   border-radius: var(--scrollbar-radius);
@@ -113,7 +113,7 @@
 
 .scrollbar-overlay-gutter {
   position: fixed;
-  z-index: var(--z-index-scrollbar-overlay, 2147483646);
+  z-index: var(--z-index-scrollbar-overlay);
   pointer-events: none;
   background-color: var(--scrollbar-gutter-hover-bg);
   border-radius: var(--scrollbar-radius);

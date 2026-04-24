@@ -14,6 +14,7 @@ const activeTimers = new WeakMap<Element, number>();
 const overlayElements = new WeakMap<
   Element,
   {
+    container: HTMLElement;
     horizontalGutter: HTMLDivElement;
     horizontalThumb: HTMLDivElement;
     verticalGutter: HTMLDivElement;
@@ -134,6 +135,38 @@ const isOverlayScrollbarElement = (element: Element): element is HTMLElement =>
   element instanceof HTMLElement &&
   !element.matches(OVERLAY_SCROLLBAR_EXCLUDED_SELECTOR) &&
   (overlayElements.has(element) || canScroll(element));
+
+const resolveOverlayContainer = (element: HTMLElement): HTMLElement => {
+  const dockablePanel = element.closest<HTMLElement>('.dockable-panel');
+  if (dockablePanel) {
+    return dockablePanel;
+  }
+
+  return element.closest<HTMLElement>('.object-panel') ?? document.body;
+};
+
+const toOverlayCoordinateRect = (rect: DOMRect, container: HTMLElement): DOMRect => {
+  if (container === document.body) {
+    return rect;
+  }
+
+  const containerRect = container.getBoundingClientRect();
+  const left = rect.left - containerRect.left + container.scrollLeft;
+  const top = rect.top - containerRect.top + container.scrollTop;
+  const width = rect.width;
+  const height = rect.height;
+  return {
+    bottom: top + height,
+    height,
+    left,
+    right: left + width,
+    top,
+    width,
+    x: left,
+    y: top,
+    toJSON: () => undefined,
+  } as DOMRect;
+};
 
 const getOverflowClipRect = (element: HTMLElement): DOMRect => {
   const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
@@ -274,9 +307,19 @@ const ensureOverlayScrollbars = (element: Element) => {
   if (!isOverlayScrollbarElement(element)) {
     return undefined;
   }
+  const container = resolveOverlayContainer(element);
 
   const existing = overlayElements.get(element);
   if (existing) {
+    if (existing.container !== container) {
+      container.append(
+        existing.verticalGutter,
+        existing.horizontalGutter,
+        existing.verticalThumb,
+        existing.horizontalThumb
+      );
+      existing.container = container;
+    }
     return existing;
   }
 
@@ -309,9 +352,15 @@ const ensureOverlayScrollbars = (element: Element) => {
     pageOverlayScrollbar(event, element, 'horizontal')
   );
 
-  document.body.append(verticalGutter, horizontalGutter, verticalThumb, horizontalThumb);
+  container.append(verticalGutter, horizontalGutter, verticalThumb, horizontalThumb);
 
-  const overlay = { horizontalGutter, horizontalThumb, verticalGutter, verticalThumb };
+  const overlay = {
+    container,
+    horizontalGutter,
+    horizontalThumb,
+    verticalGutter,
+    verticalThumb,
+  };
   overlayElements.set(element, overlay);
   overlayOwnerElements.set(verticalGutter, element);
   overlayOwnerElements.set(verticalThumb, element);
@@ -383,7 +432,13 @@ const updateOverlayScrollbarGeometry = (element: Element): void => {
   const shouldDisableGeometryTransitions = overlayGeometryTransitionsDisabled.has(element);
   setOverlayGeometryTransitions(element, shouldDisableGeometryTransitions);
 
-  const rect = getOverflowClipRect(element);
+  const position = overlay.container === document.body ? 'fixed' : 'absolute';
+  overlay.verticalGutter.style.position = position;
+  overlay.verticalThumb.style.position = position;
+  overlay.horizontalGutter.style.position = position;
+  overlay.horizontalThumb.style.position = position;
+
+  const rect = toOverlayCoordinateRect(getOverflowClipRect(element), overlay.container);
   const scrollbarWidth = readPxToken('--scrollbar-width', 10);
   const scrollbarHeight = readPxToken('--scrollbar-height', 10);
   const thumbInset = readPxToken('--scrollbar-thumb-inset', 3);
@@ -609,6 +664,19 @@ const setScrollbarOpacity = (element: Element, opacity: number): void => {
     return;
   }
   element.style.setProperty('--scrollbar-thumb-current-opacity', String(opacity));
+  if (element.matches('.shell-tab__terminal')) {
+    element
+      .querySelectorAll<HTMLElement>('.xterm .xterm-scrollable-element > .scrollbar')
+      .forEach((scrollbar) => {
+        scrollbar.style.opacity = String(opacity);
+        scrollbar.style.pointerEvents = opacity > 0 ? 'auto' : 'none';
+      });
+    element
+      .querySelectorAll<HTMLElement>('.xterm .xterm-scrollable-element > .scrollbar > .slider')
+      .forEach((slider) => {
+        slider.style.opacity = String(opacity);
+      });
+  }
   const overlay = overlayElements.get(element);
   if (overlay) {
     overlay.verticalThumb.style.opacity = String(opacity);
@@ -621,6 +689,19 @@ const clearScrollbarOpacity = (element: Element): void => {
     return;
   }
   element.style.removeProperty('--scrollbar-thumb-current-opacity');
+  if (element.matches('.shell-tab__terminal')) {
+    element
+      .querySelectorAll<HTMLElement>('.xterm .xterm-scrollable-element > .scrollbar')
+      .forEach((scrollbar) => {
+        scrollbar.style.removeProperty('opacity');
+        scrollbar.style.removeProperty('pointer-events');
+      });
+    element
+      .querySelectorAll<HTMLElement>('.xterm .xterm-scrollable-element > .scrollbar > .slider')
+      .forEach((slider) => {
+        slider.style.removeProperty('opacity');
+      });
+  }
 };
 
 const scrollByPixels = (element: HTMLElement, deltaX: number, deltaY: number): void => {
@@ -980,6 +1061,14 @@ export const initializeScrollbarActivityTracking = (): void => {
   document.addEventListener(
     'wheel',
     (event) => {
+      const terminalElement =
+        event.target instanceof Element
+          ? event.target.closest<HTMLElement>('.shell-tab__terminal')
+          : null;
+      if (terminalElement) {
+        markScrollbarActive(terminalElement);
+      }
+
       const overlayOwner =
         event.target instanceof Element ? overlayOwnerElements.get(event.target) : undefined;
       if (overlayOwner) {

@@ -169,6 +169,84 @@ describe('scrollbar activity tracking', () => {
     expect(gutter?.style.transform).toBe('');
   });
 
+  it('keeps base content overlays in the body stacking layer', () => {
+    const element = createScrollableElement();
+
+    dispatchWheel(element);
+
+    const thumb = document.body.querySelector<HTMLElement>('.scrollbar-overlay-thumb--vertical');
+    expect(thumb?.parentElement).toBe(document.body);
+    expect(thumb?.style.position).toBe('fixed');
+  });
+
+  it('keeps dockable panel overlays inside the owning panel stacking context', () => {
+    const panel = document.createElement('div');
+    panel.className = 'dockable-panel';
+    panel.style.position = 'absolute';
+    panel.style.zIndex = '1200';
+    panel.getBoundingClientRect = () =>
+      ({
+        bottom: 225,
+        height: 200,
+        left: 50,
+        right: 250,
+        top: 25,
+        width: 200,
+        x: 50,
+        y: 25,
+        toJSON: () => undefined,
+      }) as DOMRect;
+    document.body.appendChild(panel);
+
+    const element = createScrollableElement();
+    element.getBoundingClientRect = () =>
+      ({
+        bottom: 175,
+        height: 100,
+        left: 150,
+        right: 250,
+        top: 75,
+        width: 100,
+        x: 150,
+        y: 75,
+        toJSON: () => undefined,
+      }) as DOMRect;
+    panel.appendChild(element);
+
+    dispatchWheel(element);
+
+    const thumb = panel.querySelector<HTMLElement>('.scrollbar-overlay-thumb--vertical');
+    expect(thumb?.parentElement).toBe(panel);
+    expect(thumb?.style.position).toBe('absolute');
+    expect(thumb?.style.left).toBe('196px');
+    expect(thumb?.style.top).toBe('51px');
+  });
+
+  it('activates shell session scrollbars on wheel events', () => {
+    const terminal = document.createElement('div');
+    terminal.className = 'shell-tab__terminal';
+    const xterm = document.createElement('div');
+    xterm.className = 'xterm';
+    const scrollable = document.createElement('div');
+    scrollable.className = 'xterm-scrollable-element';
+    const scrollbar = document.createElement('div');
+    scrollbar.className = 'scrollbar vertical invisible';
+    const slider = document.createElement('div');
+    slider.className = 'slider';
+    scrollbar.appendChild(slider);
+    scrollable.appendChild(scrollbar);
+    xterm.appendChild(scrollable);
+    terminal.appendChild(xterm);
+    document.body.appendChild(terminal);
+
+    dispatchWheel(slider);
+
+    expect(terminal.classList.contains('scrollbar-active')).toBe(true);
+    expect(scrollbar.style.opacity).toBe('1');
+    expect(scrollbar.style.pointerEvents).toBe('auto');
+    expect(slider.style.opacity).toBe('1');
+  });
+
   it('activates one scrollbar axis in the corner hover zone', () => {
     const element = createScrollableElement();
     defineMetric(element, 'scrollWidth', 500);

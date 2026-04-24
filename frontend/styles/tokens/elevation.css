@@ -17,6 +17,7 @@
   /* Z-index scale */
   --z-index-base: 10;
   --z-index-panel: 500;
+  --z-index-scrollbar-overlay: calc(var(--z-index-panel) - 1);
   --z-index-modal-backdrop: 1500;
   --z-index-modal: 3000;
   --z-index-tooltip: 3200;

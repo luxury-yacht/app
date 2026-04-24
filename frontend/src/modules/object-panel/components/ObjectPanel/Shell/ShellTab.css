@@ -219,7 +219,9 @@
   border-radius: var(--scrollbar-radius);
   box-sizing: border-box;
   opacity: var(--scrollbar-thumb-current-opacity);
-  transition: background-color var(--scrollbar-fade-in-duration) var(--ease-out, ease);
+  transition:
+    background-color var(--scrollbar-fade-in-duration) var(--ease-out, ease),
+    opacity var(--scrollbar-fade-out-duration) var(--ease-out, ease);
 }
 
 .shell-tab__terminal.scrollbar-active .xterm .xterm-scrollable-element > .scrollbar > .slider {
