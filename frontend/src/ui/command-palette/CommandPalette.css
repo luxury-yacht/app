@@ -72,24 +72,6 @@
   padding: 0.5rem 0;
 }
 
-/* Custom scrollbar for results */
-.command-palette-results::-webkit-scrollbar {
-  width: 8px;
-}
-
-.command-palette-results::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.command-palette-results::-webkit-scrollbar-thumb {
-  background-color: var(--color-border);
-  border-radius: 4px;
-}
-
-.command-palette-results::-webkit-scrollbar-thumb:hover {
-  background-color: var(--color-text-secondary);
-}
-
 .command-palette-empty {
   padding: 2rem;
   text-align: center;

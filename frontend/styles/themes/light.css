@@ -132,14 +132,17 @@
   --code-token-invalid: rgba(220, 53, 69, 0.6);
 
   /* Scrollbar styles */
-  --scrollbar-width: 6px;
-  --scrollbar-height: 6px;
+  --scrollbar-width: 12px;
+  --scrollbar-height: 12px;
+  --scrollbar-radius: 999px;
+  --scrollbar-min-thumb-size: 32px;
+  --scrollbar-thumb-inset: 3px;
 
   /* Scrollbar colors */
-  --scrollbar-track-bg: var(--color-base-100);
-  --scrollbar-thumb-bg: var(--color-base-300);
-  --scrollbar-thumb-hover-bg: var(--color-base-400);
-  --scrollbar-corner-bg: var(--color-base-100);
+  --scrollbar-track-bg: transparent;
+  --scrollbar-thumb-bg: rgba(15, 23, 42, 0.32);
+  --scrollbar-thumb-hover-bg: rgba(15, 23, 42, 0.5);
+  --scrollbar-corner-bg: transparent;
 
   /* Shadows */
   --shadow-interactive-soft: 0 2px 4px rgba(0, 0, 0, 0.08);

@@ -206,7 +206,10 @@
 
 .shell-tab__terminal .xterm .xterm-scrollable-element > .scrollbar > .slider {
   background: var(--scrollbar-thumb-bg) !important;
-  border-radius: 10px;
+  background-clip: padding-box;
+  border: var(--scrollbar-thumb-inset) solid transparent;
+  border-radius: var(--scrollbar-radius);
+  box-sizing: border-box;
 }
 
 .shell-tab__terminal .xterm .xterm-scrollable-element > .scrollbar > .slider:hover {

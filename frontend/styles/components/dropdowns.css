@@ -12,8 +12,7 @@
    8. State Modifiers
    9. Animations
    10. Theme Support
-   11. Scrollbar Styling
-   12. Utility Classes
+   11. Utility Classes
    ============================================ */
 
 /* ============================================
@@ -431,28 +430,7 @@
    ============================================ */
 
 /* ============================================
-   11. SCROLLBAR STYLING
-   ============================================ */
-.dropdown-menu::-webkit-scrollbar {
-  width: 8px;
-}
-
-.dropdown-menu::-webkit-scrollbar-track {
-  background: var(--color-bg-secondary);
-  border-radius: 4px;
-}
-
-.dropdown-menu::-webkit-scrollbar-thumb {
-  background: var(--color-border);
-  border-radius: 4px;
-}
-
-.dropdown-menu::-webkit-scrollbar-thumb:hover {
-  background: var(--color-text-secondary);
-}
-
-/* ============================================
-   12. UTILITY CLASSES
+   11. UTILITY CLASSES
    ============================================ */
 .sr-only {
   position: absolute;

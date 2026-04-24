@@ -104,10 +104,6 @@
   outline: none;
 }
 
-.gridtable-wrapper::-webkit-scrollbar-corner {
-  background: var(--grid-bg-primary);
-}
-
 .gridtable {
   position: relative;
   width: fit-content;
@@ -577,7 +573,7 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
    ============================================ */
 .gridtable-container.embedded .gridtable-wrapper {
   max-height: none;
-  overflow: clip;
+  overflow: auto;
 }
 
 .gridtable-container.embedded .gridtable-header {
