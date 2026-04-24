@@ -237,7 +237,6 @@ Frontend coverage:
 
 Notably missing:
 
-- No direct unit test for `appLogsClient.ts`.
 - No test asserting that Application Logs settings are independent from container log
   settings.
 - No end-to-end Wails integration test that exercises backend
@@ -268,13 +267,11 @@ Notably missing:
 
 1. Medium-low: Application Logs have no persistence or file export path, which
    limits support workflows after restart or early startup failure.
-2. Medium-low: The frontend logging helper is incomplete because it lacks
-   `logAppLogsError()` even though the backend supports error-level frontend logs.
-3. Low: Source names are free-form and can drift, making component filtering
+2. Low: Source names are free-form and can drift, making component filtering
     less predictable.
-4. Low: Rendering is not virtualized. This is fine for the fixed 1000-entry
+3. Low: Rendering is not virtualized. This is fine for the fixed 1000-entry
     buffer, but becomes a concern if the buffer grows.
-5. Low: Application Log timestamp formatting is hard-coded and intentionally
+4. Low: Application Log timestamp formatting is hard-coded and intentionally
     separate from container log timestamp preferences, but the distinction is not
     obvious.
 
@@ -298,6 +295,9 @@ Completed finding:
   monotonic `sequence`, `app-logs:added` emits the newest sequence, the panel
   reads deltas through `GetAppLogsSince()`, and cleanup uses the per-listener
   disposer returned by Wails `EventsOn`.
+- The frontend Application Logs helper now has debug/info/warn/error helpers
+  and direct unit coverage for backend calls, defensive no-op behavior, and
+  event subscription cleanup.
 
 ### Application Logs Are Not Structured Enough For Multi-Cluster Diagnosis
 
@@ -341,12 +341,6 @@ setting or increase the fixed size.
 Application Logs are memory-only. This is simple and appropriate for normal use,
 but it limits debugging startup failures, early crashes, or issues discovered
 after restart. There is also no "save to file" action, only copy-to-clipboard.
-
-### Frontend Logging Has No Error Helper
-
-`appLogsClient.ts` exports debug/info/warn helpers but no error helper, even
-though the backend accepts `error`. This encourages frontend code either to log
-warnings for errors or to bypass the helper.
 
 ### Rendering Is Not Virtualized
 
@@ -393,10 +387,11 @@ emits `app-logs:added`.
 that into a small local helper such as `filterLogEntries(logs, filters)`. This
 would make future changes to filter semantics less error-prone.
 
-### Add `logAppLogsError`
+### Frontend Logging Helper Coverage
 
-Export `logAppLogsError()` from `appLogsClient.ts` and test level normalization. This
-is a small, obvious API completion.
+Completed: `appLogsClient.ts` exports debug/info/warn/error helpers and has
+direct tests for level forwarding, message/source normalization, defensive
+no-op behavior, and `app-logs:added` subscription cleanup.
 
 ## Missing Capabilities
 
@@ -407,9 +402,6 @@ High-value missing capabilities:
 - Source registry or canonical source names.
 - Export/save logs to a file.
 - Copy all logs regardless of active filters.
-- Direct test coverage for `appLogsClient`.
-- Clear, documented boundary between Application Logs Panel, Application Logs,
-  Object Panel Logs Tab, and Container Logs.
 - Optional persistent crash/startup log file for early startup failures.
 
 Lower-priority capabilities:
@@ -423,11 +415,10 @@ Lower-priority capabilities:
 
 ## Recommended Backlog
 
-1. Add tests for `appLogsClient`, including an added `logAppLogsError` helper.
-2. Add complete object-reference metadata to `LogEntry` for object-specific
+1. Add complete object-reference metadata to `LogEntry` for object-specific
    messages.
-3. Add canonical source constants for common subsystems.
-4. Consider Application Logs export/persistence if support workflows need logs
+2. Add canonical source constants for common subsystems.
+3. Consider Application Logs export/persistence if support workflows need logs
    after restart.
 
 ## Manual Testing Checklist

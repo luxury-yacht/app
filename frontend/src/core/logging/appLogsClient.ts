@@ -51,6 +51,10 @@ export const logAppLogsWarn = (message: string, source?: string): void => {
   logToAppLogs('warn', message, source);
 };
 
+export const logAppLogsError = (message: string, source?: string): void => {
+  logToAppLogs('error', message, source);
+};
+
 export const subscribeAppLogsAdded = (handler: AppLogsAddedHandler): (() => void) => {
   if (typeof window === 'undefined') {
     return () => {};
