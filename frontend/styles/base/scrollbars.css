@@ -66,3 +66,50 @@
     scrollbar-color: var(--scrollbar-thumb-bg) transparent;
   }
 }
+
+:where(
+  .view-content--cluster-overview,
+  .gridtable-wrapper,
+  .dockable-panel__content,
+  .object-panel-content,
+  .recent-events__list
+) {
+  scrollbar-gutter: auto;
+  scrollbar-width: none;
+}
+
+:where(
+  .view-content--cluster-overview,
+  .gridtable-wrapper,
+  .dockable-panel__content,
+  .object-panel-content,
+  .recent-events__list
+)::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.scrollbar-overlay-thumb {
+  position: fixed;
+  z-index: var(--z-index-scrollbar-overlay, 2147483647);
+  pointer-events: auto;
+  background-color: var(--scrollbar-thumb-bg);
+  border-radius: var(--scrollbar-radius);
+  opacity: var(--scrollbar-thumb-current-opacity);
+  transition: background-color var(--scrollbar-fade-in-duration) var(--ease-out, ease);
+  user-select: none;
+}
+
+.scrollbar-overlay-thumb:hover,
+.scrollbar-overlay-thumb--dragging {
+  background-color: var(--scrollbar-thumb-hover-bg);
+  opacity: var(--scrollbar-thumb-active-opacity);
+}
+
+.scrollbar-overlay-thumb--vertical {
+  cursor: default;
+}
+
+.scrollbar-overlay-thumb--horizontal {
+  cursor: default;
+}
