@@ -67,26 +67,12 @@
   }
 }
 
-:where(
-  .view-content--cluster-overview,
-  .gridtable-wrapper,
-  .dockable-panel__content,
-  .object-panel-content,
-  .namespace-items,
-  .recent-events__list
-) {
+:where(body *) {
   scrollbar-gutter: auto;
   scrollbar-width: none;
 }
 
-:where(
-  .view-content--cluster-overview,
-  .gridtable-wrapper,
-  .dockable-panel__content,
-  .object-panel-content,
-  .namespace-items,
-  .recent-events__list
-)::-webkit-scrollbar {
+:where(body *)::-webkit-scrollbar {
   width: 0;
   height: 0;
 }

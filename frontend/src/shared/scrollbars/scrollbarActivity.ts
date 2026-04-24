@@ -1,11 +1,11 @@
 const SCROLLBAR_ACTIVE_CLASS = 'scrollbar-active';
-const OVERLAY_SCROLLBAR_SELECTOR = [
-  '.view-content--cluster-overview',
-  '.gridtable-wrapper',
-  '.dockable-panel__content',
-  '.object-panel-content',
-  '.namespace-items',
-  '.recent-events__list',
+const OVERLAY_SCROLLBAR_EXCLUDED_SELECTOR = [
+  'html',
+  'body',
+  '.dockable-tab-bar',
+  '.tab-strip',
+  '.xterm-scrollable-element',
+  '.xterm-viewport',
 ].join(',');
 const DEFAULT_ACTIVE_TIMEOUT_MS = 900;
 const DEFAULT_FADE_DURATION_MS = 180;
@@ -20,6 +20,7 @@ const overlayElements = new WeakMap<
     verticalThumb: HTMLDivElement;
   }
 >();
+const overlayOwnerElements = new WeakMap<Element, HTMLElement>();
 const activeOverlayElements = new Set<Element>();
 const overlayHoverStates = new WeakMap<
   Element,
@@ -41,6 +42,8 @@ const pendingOverlayGeometryUpdates = new Set<Element>();
 let initialized = false;
 let overlayResizeObserver: ResizeObserver | undefined;
 let overlayGeometryFrameId: number | undefined;
+let activeOverlayGeometryFrameId: number | undefined;
+let scrollbarActivityAbortController: AbortController | undefined;
 let activeDrag:
   | {
       axis: 'horizontal' | 'vertical';
@@ -116,7 +119,9 @@ const readNumberToken = (tokenName: string, fallback: number): number => {
 };
 
 const isOverlayScrollbarElement = (element: Element): element is HTMLElement =>
-  element instanceof HTMLElement && element.matches(OVERLAY_SCROLLBAR_SELECTOR);
+  element instanceof HTMLElement &&
+  !element.matches(OVERLAY_SCROLLBAR_EXCLUDED_SELECTOR) &&
+  (overlayElements.has(element) || canScroll(element));
 
 const scheduleOverlayGeometryUpdate = (element: Element): void => {
   if (!isOverlayScrollbarElement(element)) {
@@ -130,8 +135,23 @@ const scheduleOverlayGeometryUpdate = (element: Element): void => {
 
   overlayGeometryFrameId = window.requestAnimationFrame(() => {
     overlayGeometryFrameId = undefined;
-    pendingOverlayGeometryUpdates.forEach(updateOverlayScrollbarGeometry);
+    const elements = Array.from(pendingOverlayGeometryUpdates);
     pendingOverlayGeometryUpdates.clear();
+    elements.forEach(updateOverlayScrollbarGeometry);
+  });
+};
+
+const startActiveOverlayGeometryTracking = (): void => {
+  if (activeOverlayGeometryFrameId !== undefined) {
+    return;
+  }
+
+  activeOverlayGeometryFrameId = window.requestAnimationFrame(() => {
+    activeOverlayGeometryFrameId = undefined;
+    activeOverlayElements.forEach(updateOverlayScrollbarGeometry);
+    if (activeOverlayElements.size > 0) {
+      startActiveOverlayGeometryTracking();
+    }
   });
 };
 
@@ -195,6 +215,10 @@ const ensureOverlayScrollbars = (element: Element) => {
 
   const overlay = { horizontalGutter, horizontalThumb, verticalGutter, verticalThumb };
   overlayElements.set(element, overlay);
+  overlayOwnerElements.set(verticalGutter, element);
+  overlayOwnerElements.set(verticalThumb, element);
+  overlayOwnerElements.set(horizontalGutter, element);
+  overlayOwnerElements.set(horizontalThumb, element);
   observeOverlayElementResize(element);
   return overlay;
 };
@@ -202,13 +226,33 @@ const ensureOverlayScrollbars = (element: Element) => {
 const removeOverlayScrollbars = (element: Element): void => {
   const overlay = overlayElements.get(element);
   if (!overlay) {
+    activeOverlayElements.delete(element);
+    overlayHoverStates.delete(element);
+    hoveredOverlayElements.delete(element);
+    pendingOverlayGeometryUpdates.delete(element);
     return;
+  }
+
+  const activeTimer = activeTimers.get(element);
+  if (activeTimer !== undefined) {
+    window.clearTimeout(activeTimer);
+    activeTimers.delete(element);
+  }
+
+  const opacityAnimation = opacityAnimations.get(element);
+  if (opacityAnimation) {
+    window.cancelAnimationFrame(opacityAnimation.frameId);
+    opacityAnimations.delete(element);
   }
 
   overlay.verticalGutter.remove();
   overlay.verticalThumb.remove();
   overlay.horizontalGutter.remove();
   overlay.horizontalThumb.remove();
+  overlayOwnerElements.delete(overlay.verticalGutter);
+  overlayOwnerElements.delete(overlay.verticalThumb);
+  overlayOwnerElements.delete(overlay.horizontalGutter);
+  overlayOwnerElements.delete(overlay.horizontalThumb);
   overlayResizeObserver?.unobserve(element);
   resizeObservedOverlayElements.delete(element);
   pendingOverlayGeometryUpdates.delete(element);
@@ -216,10 +260,19 @@ const removeOverlayScrollbars = (element: Element): void => {
   activeOverlayElements.delete(element);
   overlayHoverStates.delete(element);
   hoveredOverlayElements.delete(element);
+  if (element instanceof HTMLElement) {
+    element.classList.remove(SCROLLBAR_ACTIVE_CLASS);
+    clearScrollbarOpacity(element);
+  }
 };
 
 const updateOverlayScrollbarGeometry = (element: Element): void => {
   if (!isOverlayScrollbarElement(element)) {
+    return;
+  }
+
+  if (!element.isConnected) {
+    removeOverlayScrollbars(element);
     return;
   }
 
@@ -239,6 +292,11 @@ const updateOverlayScrollbarGeometry = (element: Element): void => {
 
   const hasVerticalScrollbar = element.scrollHeight > element.clientHeight;
   const hasHorizontalScrollbar = element.scrollWidth > element.clientWidth;
+
+  if (!hasVerticalScrollbar && !hasHorizontalScrollbar) {
+    removeOverlayScrollbars(element);
+    return;
+  }
 
   if (hasVerticalScrollbar && rect.height > 0) {
     const trackHeight = rect.height - thumbInset * 2;
@@ -551,6 +609,10 @@ const animateScrollbarOpacity = (
 
 const resolveScrollElement = (target: EventTarget | null): Element | null => {
   if (target instanceof Element) {
+    const overlayOwner = overlayOwnerElements.get(target);
+    if (overlayOwner) {
+      return overlayOwner;
+    }
     return target;
   }
   if (target instanceof Document) {
@@ -651,12 +713,43 @@ const SCROLL_KEYS = new Set([
   'Spacebar',
 ]);
 
+const isScrollbarHeldOpen = (element: Element): boolean =>
+  overlayHoverStates.has(element) || activeDrag?.element === element;
+
+const scheduleScrollbarInactive = (element: Element): void => {
+  const existingTimer = activeTimers.get(element);
+  if (existingTimer !== undefined) {
+    window.clearTimeout(existingTimer);
+  }
+
+  const timer = window.setTimeout(() => {
+    if (isScrollbarHeldOpen(element)) {
+      scheduleScrollbarInactive(element);
+      return;
+    }
+
+    const idleOpacity = readOpacityToken('--scrollbar-thumb-idle-opacity', 0);
+    animateScrollbarOpacity(element, idleOpacity, () => {
+      if (isScrollbarHeldOpen(element)) {
+        return;
+      }
+
+      element.classList.remove(SCROLLBAR_ACTIVE_CLASS);
+      clearScrollbarOpacity(element);
+      activeTimers.delete(element);
+      removeOverlayScrollbars(element);
+    });
+  }, readActiveTimeoutMs());
+  activeTimers.set(element, timer);
+};
+
 const markScrollbarActive = (element: Element): void => {
   const activeOpacity = readOpacityToken('--scrollbar-thumb-active-opacity', 1);
   if (isOverlayScrollbarElement(element)) {
     ensureOverlayScrollbars(element);
     activeOverlayElements.add(element);
     updateOverlayScrollbarGeometry(element);
+    startActiveOverlayGeometryTracking();
   }
   setScrollbarOpacity(element, getCurrentScrollbarOpacity(element));
   element.classList.add(SCROLLBAR_ACTIVE_CLASS);
@@ -667,21 +760,7 @@ const markScrollbarActive = (element: Element): void => {
     markScrollbarActive(terminalElement);
   }
 
-  const existingTimer = activeTimers.get(element);
-  if (existingTimer !== undefined) {
-    window.clearTimeout(existingTimer);
-  }
-
-  const timer = window.setTimeout(() => {
-    const idleOpacity = readOpacityToken('--scrollbar-thumb-idle-opacity', 0);
-    animateScrollbarOpacity(element, idleOpacity, () => {
-      element.classList.remove(SCROLLBAR_ACTIVE_CLASS);
-      clearScrollbarOpacity(element);
-      activeTimers.delete(element);
-      removeOverlayScrollbars(element);
-    });
-  }, readActiveTimeoutMs());
-  activeTimers.set(element, timer);
+  scheduleScrollbarInactive(element);
 };
 
 export const initializeScrollbarActivityTracking = (): void => {
@@ -689,6 +768,8 @@ export const initializeScrollbarActivityTracking = (): void => {
     return;
   }
   initialized = true;
+  scrollbarActivityAbortController = new AbortController();
+  const signal = scrollbarActivityAbortController.signal;
 
   document.addEventListener(
     'scroll',
@@ -699,7 +780,7 @@ export const initializeScrollbarActivityTracking = (): void => {
         markScrollbarActive(element);
       }
     },
-    { capture: true, passive: true }
+    { capture: true, passive: true, signal }
   );
 
   document.addEventListener(
@@ -710,7 +791,7 @@ export const initializeScrollbarActivityTracking = (): void => {
         markScrollbarActive(element);
       }
     },
-    { capture: true, passive: true }
+    { capture: true, passive: true, signal }
   );
 
   document.addEventListener(
@@ -721,7 +802,7 @@ export const initializeScrollbarActivityTracking = (): void => {
         markScrollbarActive(element);
       }
     },
-    { capture: true, passive: true }
+    { capture: true, passive: true, signal }
   );
 
   document.addEventListener(
@@ -735,7 +816,7 @@ export const initializeScrollbarActivityTracking = (): void => {
         markScrollbarActive(element);
       }
     },
-    { capture: true, passive: true }
+    { capture: true, passive: true, signal }
   );
 
   window.addEventListener(
@@ -743,7 +824,7 @@ export const initializeScrollbarActivityTracking = (): void => {
     () => {
       activeOverlayElements.forEach(updateOverlayScrollbarGeometry);
     },
-    { passive: true }
+    { passive: true, signal }
   );
 
   document.addEventListener(
@@ -767,20 +848,52 @@ export const initializeScrollbarActivityTracking = (): void => {
       markScrollbarActive(activeDrag.element);
       updateOverlayScrollbarGeometry(activeDrag.element);
     },
-    { passive: true }
+    { passive: true, signal }
   );
 
   document.addEventListener(
     'pointerup',
-    () => {
+    (event) => {
+      const draggedElement = activeDrag?.element;
       document
         .querySelectorAll('.scrollbar-overlay-thumb--dragging')
         .forEach((element) => element.classList.remove('scrollbar-overlay-thumb--dragging'));
       activeDrag = undefined;
+      if (draggedElement) {
+        updateOverlayHoverFromPointer(event);
+        markScrollbarActive(draggedElement);
+      }
     },
-    { passive: true }
+    { passive: true, signal }
   );
 
-  document.addEventListener('pointerleave', () => clearOverlayHoverStates(), { passive: true });
-  window.addEventListener('blur', () => clearOverlayHoverStates(), { passive: true });
+  document.addEventListener('pointerleave', () => clearOverlayHoverStates(), {
+    passive: true,
+    signal,
+  });
+  window.addEventListener('blur', () => clearOverlayHoverStates(), { passive: true, signal });
+};
+
+export const __resetScrollbarActivityTrackingForTest = (): void => {
+  scrollbarActivityAbortController?.abort();
+  scrollbarActivityAbortController = undefined;
+  initialized = false;
+  activeDrag = undefined;
+
+  if (overlayGeometryFrameId !== undefined) {
+    window.cancelAnimationFrame(overlayGeometryFrameId);
+    overlayGeometryFrameId = undefined;
+  }
+  if (activeOverlayGeometryFrameId !== undefined) {
+    window.cancelAnimationFrame(activeOverlayGeometryFrameId);
+    activeOverlayGeometryFrameId = undefined;
+  }
+
+  const elements = new Set<Element>([...activeOverlayElements, ...hoveredOverlayElements]);
+  elements.forEach(removeOverlayScrollbars);
+  activeOverlayElements.clear();
+  hoveredOverlayElements.clear();
+  pendingOverlayGeometryUpdates.clear();
+  overlayResizeObserver?.disconnect();
+  overlayResizeObserver = undefined;
 };
