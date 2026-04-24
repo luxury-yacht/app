@@ -27,6 +27,12 @@ const terminalMocks = vi.hoisted(() => {
     options: Record<string, unknown>;
     cols = 120;
     rows = 40;
+    buffer = {
+      active: {
+        baseY: 0,
+        viewportY: 0,
+      },
+    };
     loadAddon = vi.fn();
     open = vi.fn();
     focus = vi.fn();
@@ -35,15 +41,46 @@ const terminalMocks = vi.hoisted(() => {
     write = vi.fn();
     writeln = vi.fn();
     paste = vi.fn();
+    scrollLines = vi.fn((amount: number) => {
+      const nextViewportY = Math.max(
+        0,
+        Math.min(this.buffer.active.baseY, this.buffer.active.viewportY + amount)
+      );
+      this.buffer.active.viewportY = nextViewportY;
+      this.scrollHandler?.(nextViewportY);
+    });
+    scrollToLine = vi.fn((line: number) => {
+      const nextViewportY = Math.max(0, Math.min(this.buffer.active.baseY, line));
+      this.buffer.active.viewportY = nextViewportY;
+      this.scrollHandler?.(nextViewportY);
+    });
     selectAll = vi.fn();
     hasSelection = vi.fn(() => false);
     getSelection = vi.fn(() => '');
     private disposeData = vi.fn();
+    private disposeScroll = vi.fn();
+    private disposeResize = vi.fn();
+    private disposeWriteParsed = vi.fn();
     private dataHandler: ((data: string) => void) | null = null;
+    private scrollHandler: ((position: number) => void) | null = null;
+    private resizeHandler: ((size: { cols: number; rows: number }) => void) | null = null;
+    private writeParsedHandler: (() => void) | null = null;
     private keyHandler: ((event: KeyboardEvent) => boolean) | null = null;
     onData = vi.fn((handler: (data: string) => void) => {
       this.dataHandler = handler;
       return { dispose: this.disposeData };
+    });
+    onScroll = vi.fn((handler: (position: number) => void) => {
+      this.scrollHandler = handler;
+      return { dispose: this.disposeScroll };
+    });
+    onResize = vi.fn((handler: (size: { cols: number; rows: number }) => void) => {
+      this.resizeHandler = handler;
+      return { dispose: this.disposeResize };
+    });
+    onWriteParsed = vi.fn((handler: () => void) => {
+      this.writeParsedHandler = handler;
+      return { dispose: this.disposeWriteParsed };
     });
     attachCustomKeyEventHandler = vi.fn((handler: (event: KeyboardEvent) => boolean) => {
       this.keyHandler = handler;
@@ -51,6 +88,16 @@ const terminalMocks = vi.hoisted(() => {
     triggerKey = (event: KeyboardEvent) => this.keyHandler?.(event);
     triggerData = (data: string) => {
       this.dataHandler?.(data);
+    };
+    triggerScroll = (position = this.buffer.active.viewportY) => {
+      this.buffer.active.viewportY = position;
+      this.scrollHandler?.(position);
+    };
+    triggerResize = () => {
+      this.resizeHandler?.({ cols: this.cols, rows: this.rows });
+    };
+    triggerWriteParsed = () => {
+      this.writeParsedHandler?.();
     };
 
     constructor(options: Record<string, unknown> = {}) {
@@ -764,6 +811,163 @@ describe('ShellTab', () => {
 
     expect(container.querySelector('.shell-tab__controls')).toBeNull();
     expect(container.querySelector('#shell-tab-debug-toggle')).toBeNull();
+  });
+
+  it('renders a custom shell scrollbar from xterm buffer geometry', async () => {
+    await renderShellTab();
+    clickConnectButton();
+    await flushAsync();
+
+    const terminal = getLatestTerminal();
+    expect(terminal).toBeTruthy();
+    terminal!.buffer.active.baseY = 160;
+    terminal!.buffer.active.viewportY = 0;
+    terminal!.rows = 40;
+
+    const terminalElement = container.querySelector('.shell-tab__terminal') as HTMLDivElement;
+    Object.defineProperty(terminalElement, 'clientHeight', {
+      configurable: true,
+      value: 200,
+    });
+    terminalElement.getBoundingClientRect = () =>
+      ({
+        bottom: 200,
+        height: 200,
+        left: 0,
+        right: 200,
+        top: 0,
+        width: 200,
+        x: 0,
+        y: 0,
+        toJSON: () => undefined,
+      }) as DOMRect;
+
+    act(() => {
+      terminal!.triggerWriteParsed();
+    });
+    await flushAsync();
+
+    const scrollbar = container.querySelector<HTMLElement>('.scrollbar-virtual--vertical');
+    expect(scrollbar).toBeTruthy();
+    expect(scrollbar?.style.getPropertyValue('--scrollbar-virtual-thumb-size')).toBe('40px');
+    expect(scrollbar?.style.getPropertyValue('--scrollbar-virtual-thumb-offset')).toBe('0px');
+
+    act(() => {
+      terminal!.triggerScroll(80);
+    });
+    await flushAsync();
+
+    expect(scrollbar?.classList.contains('scrollbar-virtual--active')).toBe(true);
+    expect(scrollbar?.style.getPropertyValue('--scrollbar-virtual-thumb-offset')).toBe('80px');
+
+    const wrapper = container.querySelector('.shell-tab__terminal-wrapper') as HTMLDivElement;
+    act(() => {
+      wrapper.dispatchEvent(
+        new MouseEvent('pointermove', {
+          bubbles: true,
+          clientX: 198,
+          clientY: 100,
+        })
+      );
+    });
+    await flushAsync();
+
+    expect(scrollbar?.classList.contains('scrollbar-virtual--hovered')).toBe(true);
+  });
+
+  it('supports paging and dragging the custom shell scrollbar', async () => {
+    await renderShellTab();
+    clickConnectButton();
+    await flushAsync();
+
+    const terminal = getLatestTerminal();
+    expect(terminal).toBeTruthy();
+    terminal!.buffer.active.baseY = 160;
+    terminal!.buffer.active.viewportY = 0;
+    terminal!.rows = 40;
+
+    const terminalElement = container.querySelector('.shell-tab__terminal') as HTMLDivElement;
+    Object.defineProperty(terminalElement, 'clientHeight', {
+      configurable: true,
+      value: 200,
+    });
+    terminalElement.getBoundingClientRect = () =>
+      ({
+        bottom: 200,
+        height: 200,
+        left: 0,
+        right: 200,
+        top: 0,
+        width: 200,
+        x: 0,
+        y: 0,
+        toJSON: () => undefined,
+      }) as DOMRect;
+
+    act(() => {
+      terminal!.triggerWriteParsed();
+    });
+    await flushAsync();
+
+    const scrollbar = container.querySelector<HTMLElement>('.scrollbar-virtual--vertical');
+    const thumb = container.querySelector<HTMLElement>('.scrollbar-virtual-thumb');
+    expect(scrollbar).toBeTruthy();
+    expect(thumb).toBeTruthy();
+
+    act(() => {
+      scrollbar!.dispatchEvent(
+        new MouseEvent('pointerdown', {
+          bubbles: true,
+          button: 0,
+          cancelable: true,
+          clientY: 190,
+        })
+      );
+    });
+    await flushAsync();
+
+    expect(terminal!.scrollLines).toHaveBeenCalledWith(40);
+
+    act(() => {
+      scrollbar!.dispatchEvent(
+        new WheelEvent('wheel', {
+          bubbles: true,
+          cancelable: true,
+          deltaY: 80,
+        })
+      );
+    });
+    await flushAsync();
+
+    expect(terminal!.scrollLines).toHaveBeenCalledWith(2);
+
+    thumb!.setPointerCapture = vi.fn();
+    thumb!.releasePointerCapture = vi.fn();
+    const pointerDown = new MouseEvent('pointerdown', {
+      bubbles: true,
+      button: 0,
+      cancelable: true,
+      clientY: 50,
+    }) as PointerEvent;
+    Object.defineProperty(pointerDown, 'pointerId', { value: 1 });
+
+    act(() => {
+      thumb!.dispatchEvent(pointerDown);
+    });
+
+    const pointerMove = new MouseEvent('pointermove', {
+      bubbles: true,
+      cancelable: true,
+      clientY: 90,
+    }) as PointerEvent;
+    Object.defineProperty(pointerMove, 'pointerId', { value: 1 });
+
+    act(() => {
+      thumb!.dispatchEvent(pointerMove);
+    });
+    await flushAsync();
+
+    expect(terminal!.scrollToLine).toHaveBeenCalledWith(82);
   });
 
   it('includes debug containers in shell dropdown from backend container discovery', async () => {

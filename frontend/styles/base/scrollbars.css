@@ -23,7 +23,7 @@
 }
 
 *::-webkit-scrollbar-track {
-  background: transparent;
+  background: var(--scrollbar-track-bg);
   border-radius: var(--scrollbar-radius);
 }
 
@@ -49,7 +49,7 @@
 }
 
 *::-webkit-scrollbar-corner {
-  background: transparent;
+  background: var(--scrollbar-corner-bg);
 }
 
 @supports not selector(::-webkit-scrollbar) {
@@ -140,13 +140,130 @@
   pointer-events: auto;
 }
 
+.scrollbar-virtual {
+  position: absolute;
+  z-index: var(--z-index-scrollbar-overlay);
+  pointer-events: none;
+  transition:
+    height var(--scrollbar-hover-resize-duration) var(--ease-out, ease),
+    width var(--scrollbar-hover-resize-duration) var(--ease-out, ease);
+  user-select: none;
+}
+
+.scrollbar-virtual--vertical {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: var(--scrollbar-width);
+}
+
+.scrollbar-virtual--horizontal {
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: var(--scrollbar-height);
+}
+
+.scrollbar-virtual::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-color: var(--scrollbar-gutter-hover-bg);
+  border-radius: var(--scrollbar-radius);
+  opacity: 0;
+  transition: opacity var(--scrollbar-hover-resize-duration) var(--ease-out, ease);
+}
+
+.scrollbar-virtual--vertical.scrollbar-virtual--hovered,
+.scrollbar-virtual--vertical.scrollbar-virtual--dragging {
+  width: calc(var(--scrollbar-width) * var(--scrollbar-hover-scale));
+  pointer-events: auto;
+}
+
+.scrollbar-virtual--horizontal.scrollbar-virtual--hovered,
+.scrollbar-virtual--horizontal.scrollbar-virtual--dragging {
+  height: calc(var(--scrollbar-height) * var(--scrollbar-hover-scale));
+  pointer-events: auto;
+}
+
+.scrollbar-virtual--hovered::before,
+.scrollbar-virtual--dragging::before {
+  opacity: var(--scrollbar-gutter-hover-opacity);
+}
+
+.scrollbar-virtual-thumb {
+  position: absolute;
+  background-color: var(--scrollbar-thumb-bg);
+  border-radius: var(--scrollbar-radius);
+  opacity: 0;
+  pointer-events: auto;
+  transition:
+    background-color var(--scrollbar-fade-in-duration) var(--ease-out, ease),
+    opacity var(--scrollbar-fade-out-duration) var(--ease-out, ease),
+    height var(--scrollbar-hover-resize-duration) var(--ease-out, ease),
+    right var(--scrollbar-hover-resize-duration) var(--ease-out, ease),
+    bottom var(--scrollbar-hover-resize-duration) var(--ease-out, ease),
+    width var(--scrollbar-hover-resize-duration) var(--ease-out, ease);
+}
+
+.scrollbar-virtual--vertical .scrollbar-virtual-thumb {
+  top: var(--scrollbar-virtual-thumb-offset);
+  right: var(--scrollbar-thumb-inset);
+  width: calc(var(--scrollbar-width) - (var(--scrollbar-thumb-inset) * 2));
+  height: var(--scrollbar-virtual-thumb-size);
+  min-height: var(--scrollbar-min-thumb-size);
+}
+
+.scrollbar-virtual--horizontal .scrollbar-virtual-thumb {
+  bottom: var(--scrollbar-thumb-inset);
+  left: var(--scrollbar-virtual-thumb-offset);
+  width: var(--scrollbar-virtual-thumb-size);
+  min-width: var(--scrollbar-min-thumb-size);
+  height: calc(var(--scrollbar-height) - (var(--scrollbar-thumb-inset) * 2));
+}
+
+.scrollbar-virtual--vertical.scrollbar-virtual--hovered .scrollbar-virtual-thumb,
+.scrollbar-virtual--vertical.scrollbar-virtual--dragging .scrollbar-virtual-thumb {
+  right: calc(var(--scrollbar-thumb-inset) * var(--scrollbar-hover-scale));
+  width: calc(
+    (var(--scrollbar-width) - (var(--scrollbar-thumb-inset) * 2)) * var(--scrollbar-hover-scale)
+  );
+}
+
+.scrollbar-virtual--horizontal.scrollbar-virtual--hovered .scrollbar-virtual-thumb,
+.scrollbar-virtual--horizontal.scrollbar-virtual--dragging .scrollbar-virtual-thumb {
+  bottom: calc(var(--scrollbar-thumb-inset) * var(--scrollbar-hover-scale));
+  height: calc(
+    (var(--scrollbar-height) - (var(--scrollbar-thumb-inset) * 2)) * var(--scrollbar-hover-scale)
+  );
+}
+
+.scrollbar-virtual--active .scrollbar-virtual-thumb {
+  opacity: var(--scrollbar-thumb-active-opacity);
+  transition:
+    background-color var(--scrollbar-fade-in-duration) var(--ease-out, ease),
+    opacity var(--scrollbar-fade-in-duration) var(--ease-out, ease),
+    height var(--scrollbar-hover-resize-duration) var(--ease-out, ease),
+    right var(--scrollbar-hover-resize-duration) var(--ease-out, ease),
+    bottom var(--scrollbar-hover-resize-duration) var(--ease-out, ease),
+    width var(--scrollbar-hover-resize-duration) var(--ease-out, ease);
+}
+
+.scrollbar-virtual-thumb:hover,
+.scrollbar-virtual--dragging .scrollbar-virtual-thumb {
+  background-color: var(--scrollbar-thumb-hover-bg);
+}
+
 .scrollbar-overlay--geometry-updating {
   transition-property: background-color, opacity;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .scrollbar-overlay-thumb,
-  .scrollbar-overlay-gutter {
+  .scrollbar-overlay-gutter,
+  .scrollbar-virtual,
+  .scrollbar-virtual::before,
+  .scrollbar-virtual-thumb {
     transition: none;
   }
 }

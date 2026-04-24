@@ -2,7 +2,15 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.tsx
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent,
+  type WheelEvent,
+} from 'react';
 import {
   readShellSessionBacklog,
   readShellSessions,
@@ -28,6 +36,7 @@ import {
 import { types } from '@wailsjs/go/models';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
+import { useVirtualScrollbar } from '@shared/scrollbars/useVirtualScrollbar';
 import { useDockablePanelState } from '@ui/dockable';
 import { useKeyboardSurface } from '@ui/shortcuts';
 import './ShellTab.css';
@@ -98,6 +107,9 @@ const ShellTab: React.FC<ShellTabProps> = ({
   const terminalContainerRef = useRef<HTMLDivElement | null>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const terminalDataDisposableRef = useRef<{ dispose: () => void } | null>(null);
+  const terminalScrollDisposableRef = useRef<{ dispose: () => void } | null>(null);
+  const terminalResizeDisposableRef = useRef<{ dispose: () => void } | null>(null);
+  const terminalWriteParsedDisposableRef = useRef<{ dispose: () => void } | null>(null);
   const pendingReplayRef = useRef<PendingReplayState | null>(null);
   const sessionOpenedAtRef = useRef<number | null>(null);
   const sessionOutputBufferRef = useRef('');
@@ -122,22 +134,6 @@ const ShellTab: React.FC<ShellTabProps> = ({
   useEffect(() => {
     statusRef.current = status;
   }, [status]);
-
-  const disposeTerminal = useCallback(() => {
-    terminalDataDisposableRef.current?.dispose();
-    terminalDataDisposableRef.current = null;
-    resizeObserverRef.current?.disconnect();
-    resizeObserverRef.current = null;
-    terminalRef.current?.dispose();
-    terminalRef.current = null;
-    fitAddonRef.current = null;
-    if (terminalContainerRef.current) {
-      terminalContainerRef.current.innerHTML = '';
-    }
-    renderedSessionIdRef.current = null;
-    skipNextResizeRef.current = false;
-    setTerminalReady(false);
-  }, []);
 
   const resolveThemeColors = useCallback(() => {
     const container = terminalContainerRef.current;
@@ -197,6 +193,84 @@ const ShellTab: React.FC<ShellTabProps> = ({
     terminal.focus();
     return true;
   }, []);
+
+  const getShellScrollbarHost = useCallback(() => terminalContainerRef.current, []);
+
+  const getShellScrollbarMetrics = useCallback(() => {
+    const terminal = terminalRef.current;
+    if (!terminal) {
+      return null;
+    }
+
+    const buffer = terminal.buffer.active;
+    return {
+      contentSize: buffer.baseY + terminal.rows,
+      scrollOffset: buffer.viewportY,
+      viewportSize: terminal.rows,
+    };
+  }, []);
+
+  const scrollShellBy = useCallback((delta: number) => {
+    terminalRef.current?.scrollLines(delta);
+  }, []);
+
+  const scrollShellTo = useCallback((offset: number) => {
+    terminalRef.current?.scrollToLine(offset);
+  }, []);
+
+  const scrollShellByWheel = useCallback((event: WheelEvent<HTMLElement>) => {
+    const terminal = terminalRef.current;
+    if (!terminal) {
+      return;
+    }
+
+    const rawDelta = event.deltaY !== 0 ? event.deltaY : event.deltaX;
+    const lineDelta = event.deltaMode === 1 ? rawDelta : rawDelta / 40;
+    if (lineDelta === 0) {
+      return;
+    }
+    terminal.scrollLines(Math.sign(lineDelta) * Math.max(1, Math.round(Math.abs(lineDelta))));
+  }, []);
+
+  const shellScrollbar = useVirtualScrollbar({
+    axis: 'vertical',
+    getHostElement: getShellScrollbarHost,
+    getMetrics: getShellScrollbarMetrics,
+    scrollBy: scrollShellBy,
+    scrollByWheel: scrollShellByWheel,
+    scrollTo: scrollShellTo,
+  });
+  const {
+    onSurfacePointerLeave: handleShellScrollbarPointerLeave,
+    onSurfacePointerMove: handleShellScrollbarPointerMove,
+    reset: resetShellScrollbar,
+    scrollbar: shellScrollbarElement,
+    show: showShellScrollbar,
+    updateGeometry: updateShellScrollbarGeometry,
+  } = shellScrollbar;
+
+  const disposeTerminal = useCallback(() => {
+    terminalDataDisposableRef.current?.dispose();
+    terminalDataDisposableRef.current = null;
+    terminalScrollDisposableRef.current?.dispose();
+    terminalScrollDisposableRef.current = null;
+    terminalResizeDisposableRef.current?.dispose();
+    terminalResizeDisposableRef.current = null;
+    terminalWriteParsedDisposableRef.current?.dispose();
+    terminalWriteParsedDisposableRef.current = null;
+    resizeObserverRef.current?.disconnect();
+    resizeObserverRef.current = null;
+    resetShellScrollbar();
+    terminalRef.current?.dispose();
+    terminalRef.current = null;
+    fitAddonRef.current = null;
+    if (terminalContainerRef.current) {
+      terminalContainerRef.current.innerHTML = '';
+    }
+    renderedSessionIdRef.current = null;
+    skipNextResizeRef.current = false;
+    setTerminalReady(false);
+  }, [resetShellScrollbar]);
 
   const applyTerminalTheme = useCallback(() => {
     const terminal = terminalRef.current as
@@ -292,9 +366,19 @@ const ShellTab: React.FC<ShellTabProps> = ({
         /* ignore */
       });
     });
+    terminalScrollDisposableRef.current = terminal.onScroll(() => {
+      showShellScrollbar();
+    });
+    terminalResizeDisposableRef.current = terminal.onResize(() => {
+      updateShellScrollbarGeometry();
+    });
+    terminalWriteParsedDisposableRef.current = terminal.onWriteParsed(() => {
+      updateShellScrollbarGeometry();
+    });
 
     const resizeObserver = new ResizeObserver(() => {
       fitAddon.fit();
+      updateShellScrollbarGeometry();
       if (sessionIdRef.current && statusRef.current === 'open') {
         if (skipNextResizeRef.current) {
           skipNextResizeRef.current = false;
@@ -310,8 +394,15 @@ const ShellTab: React.FC<ShellTabProps> = ({
     terminalRef.current = terminal;
     fitAddonRef.current = fitAddon;
     resizeObserverRef.current = resizeObserver;
+    updateShellScrollbarGeometry();
     setTerminalReady(true);
-  }, [copyTerminalSelection, pasteClipboardToTerminal, resolveThemeColors]);
+  }, [
+    copyTerminalSelection,
+    pasteClipboardToTerminal,
+    resolveThemeColors,
+    showShellScrollbar,
+    updateShellScrollbarGeometry,
+  ]);
 
   useKeyboardSurface({
     kind: 'editor',
@@ -1068,6 +1159,9 @@ const ShellTab: React.FC<ShellTabProps> = ({
         data-tab-native="true"
         onClick={() => terminalRef.current?.focus()}
         onContextMenu={handleTerminalContextMenu}
+        onPointerLeave={handleShellScrollbarPointerLeave}
+        onPointerMove={handleShellScrollbarPointerMove}
+        onWheel={showShellScrollbar}
       >
         <div
           className={`shell-tab__terminal${terminalReady ? '' : ' shell-tab__terminal--hidden'}`}
@@ -1075,6 +1169,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
           aria-label="Shell terminal"
           data-tab-native="true"
         />
+        {shellScrollbarElement}
       </div>
       {contextMenu && (
         <ContextMenu

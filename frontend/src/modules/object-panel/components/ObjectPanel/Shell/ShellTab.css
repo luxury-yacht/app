@@ -142,8 +142,6 @@
   --terminal-theme-scrollbar-slider-hover: var(--scrollbar-thumb-hover-bg);
   --terminal-theme-scrollbar-slider-active: var(--scrollbar-thumb-hover-bg);
   --terminal-theme-overview-ruler-border: transparent;
-  --shell-scrollbar-hover-width: calc(var(--scrollbar-width) * var(--scrollbar-hover-scale));
-  --shell-scrollbar-hover-height: calc(var(--scrollbar-height) * var(--scrollbar-hover-scale));
 }
 
 .shell-tab__terminal--hidden {
@@ -169,13 +167,13 @@
 }
 
 .shell-tab__terminal .xterm-viewport::-webkit-scrollbar-track {
-  background: transparent;
-  border-radius: 10px;
+  background: var(--scrollbar-track-bg);
+  border-radius: var(--scrollbar-radius);
 }
 
 .shell-tab__terminal .xterm-viewport::-webkit-scrollbar-thumb {
   background-color: var(--scrollbar-thumb-bg);
-  border-radius: 10px;
+  border-radius: var(--scrollbar-radius);
   opacity: var(--scrollbar-thumb-current-opacity);
   transition: background-color var(--scrollbar-fade-in-duration) var(--ease-out, ease);
 }
@@ -191,27 +189,11 @@
 }
 
 .shell-tab__terminal .xterm-viewport::-webkit-scrollbar-corner {
-  background: transparent;
+  background: var(--scrollbar-corner-bg);
 }
 
 .shell-tab__terminal .xterm .xterm-scrollable-element > .scrollbar {
-  background-color: transparent !important;
-  border-radius: var(--scrollbar-radius);
-  pointer-events: none;
-  transition:
-    height var(--scrollbar-hover-resize-duration) var(--ease-out, ease),
-    width var(--scrollbar-hover-resize-duration) var(--ease-out, ease);
-}
-
-.shell-tab__terminal .xterm .xterm-scrollable-element > .scrollbar::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background-color: var(--scrollbar-gutter-hover-bg);
-  border-radius: var(--scrollbar-radius);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity var(--scrollbar-hover-resize-duration) var(--ease-out, ease);
+  display: none !important;
 }
 
 .shell-tab__terminal .xterm .xterm-scrollable-element > .shadow {
@@ -220,116 +202,6 @@
 
 .shell-tab__terminal .xterm .xterm-decoration-overview-ruler {
   display: none !important;
-}
-
-.shell-tab__terminal .xterm .xterm-scrollable-element > .scrollbar.vertical {
-  right: 0 !important;
-  width: var(--scrollbar-width) !important;
-}
-
-.shell-tab__terminal .xterm .xterm-scrollable-element > .scrollbar.horizontal {
-  bottom: 0 !important;
-  height: var(--scrollbar-height) !important;
-}
-
-.shell-tab__terminal .xterm .xterm-scrollable-element > .scrollbar > .slider {
-  background-color: var(--scrollbar-thumb-bg) !important;
-  background-clip: padding-box;
-  border: var(--scrollbar-thumb-inset) solid transparent;
-  border-radius: var(--scrollbar-radius);
-  box-sizing: border-box;
-  opacity: var(--scrollbar-thumb-current-opacity);
-  z-index: 1;
-  transition:
-    background-color var(--scrollbar-fade-in-duration) var(--ease-out, ease),
-    height var(--scrollbar-hover-resize-duration) var(--ease-out, ease),
-    left var(--scrollbar-hover-resize-duration) var(--ease-out, ease),
-    top var(--scrollbar-hover-resize-duration) var(--ease-out, ease),
-    width var(--scrollbar-hover-resize-duration) var(--ease-out, ease),
-    opacity var(--scrollbar-fade-out-duration) var(--ease-out, ease);
-}
-
-.shell-tab__terminal .xterm .xterm-scrollable-element > .scrollbar.vertical > .slider {
-  left: 0 !important;
-  right: auto !important;
-  transform: none;
-  width: var(--scrollbar-width) !important;
-}
-
-.shell-tab__terminal .xterm .xterm-scrollable-element > .scrollbar.horizontal > .slider {
-  bottom: 0 !important;
-  height: var(--scrollbar-height) !important;
-  top: auto !important;
-  transform: none;
-}
-
-.shell-tab__terminal.scrollbar-active .xterm .xterm-scrollable-element > .scrollbar > .slider {
-  background-color: var(--scrollbar-thumb-bg) !important;
-  opacity: var(--scrollbar-thumb-current-opacity);
-}
-
-.shell-tab__terminal--scrollbar-hover-vertical
-  .xterm
-  .xterm-scrollable-element
-  > .scrollbar.vertical,
-.shell-tab__terminal .xterm .xterm-scrollable-element > .scrollbar.vertical:hover {
-  pointer-events: auto !important;
-  width: var(--shell-scrollbar-hover-width) !important;
-}
-
-.shell-tab__terminal--scrollbar-hover-horizontal
-  .xterm
-  .xterm-scrollable-element
-  > .scrollbar.horizontal,
-.shell-tab__terminal .xterm .xterm-scrollable-element > .scrollbar.horizontal:hover {
-  height: var(--shell-scrollbar-hover-height) !important;
-  pointer-events: auto !important;
-}
-
-.shell-tab__terminal--scrollbar-hover-vertical
-  .xterm
-  .xterm-scrollable-element
-  > .scrollbar.vertical::before,
-.shell-tab__terminal .xterm .xterm-scrollable-element > .scrollbar.vertical:hover::before,
-.shell-tab__terminal--scrollbar-hover-horizontal
-  .xterm
-  .xterm-scrollable-element
-  > .scrollbar.horizontal::before,
-.shell-tab__terminal .xterm .xterm-scrollable-element > .scrollbar.horizontal:hover::before {
-  opacity: var(--scrollbar-gutter-hover-opacity);
-}
-
-.shell-tab__terminal--scrollbar-hover-vertical
-  .xterm
-  .xterm-scrollable-element
-  > .scrollbar.vertical
-  > .slider,
-.shell-tab__terminal .xterm .xterm-scrollable-element > .scrollbar.vertical:hover > .slider {
-  width: var(--shell-scrollbar-hover-width) !important;
-}
-
-.shell-tab__terminal--scrollbar-hover-horizontal
-  .xterm
-  .xterm-scrollable-element
-  > .scrollbar.horizontal
-  > .slider,
-.shell-tab__terminal .xterm .xterm-scrollable-element > .scrollbar.horizontal:hover > .slider {
-  height: var(--shell-scrollbar-hover-height) !important;
-}
-
-.shell-tab__terminal .xterm .xterm-scrollable-element > .scrollbar:hover > .slider {
-  background-color: var(--scrollbar-thumb-bg) !important;
-  opacity: var(--scrollbar-thumb-active-opacity);
-}
-
-.shell-tab__terminal .xterm .xterm-scrollable-element > .scrollbar > .slider:hover {
-  background-color: var(--scrollbar-thumb-hover-bg) !important;
-  opacity: var(--scrollbar-thumb-active-opacity);
-}
-
-.shell-tab__terminal .xterm .xterm-scrollable-element > .scrollbar > .slider.active {
-  background-color: var(--scrollbar-thumb-hover-bg) !important;
-  opacity: var(--scrollbar-thumb-active-opacity);
 }
 
 @media (max-width: 640px) {
