@@ -32,6 +32,7 @@ const overlayHoverStates = new WeakMap<
   }
 >();
 const hoveredOverlayElements = new Set<Element>();
+const hoveredShellTerminalElements = new Set<HTMLElement>();
 const opacityAnimations = new WeakMap<
   Element,
   {
@@ -659,6 +660,100 @@ const updateOverlayHoverFromPointer = (event: PointerEvent): void => {
   updateOverlayHoverAtPoint(event.clientX, event.clientY);
 };
 
+const setShellTerminalHoverState = (
+  terminal: HTMLElement,
+  hoverState: { horizontal: boolean; vertical: boolean }
+): void => {
+  const hasHover = hoverState.horizontal || hoverState.vertical;
+  terminal.classList.toggle(
+    'shell-tab__terminal--scrollbar-hover-horizontal',
+    hoverState.horizontal
+  );
+  terminal.classList.toggle('shell-tab__terminal--scrollbar-hover-vertical', hoverState.vertical);
+
+  if (hasHover) {
+    hoveredShellTerminalElements.add(terminal);
+    markScrollbarActive(terminal);
+  } else {
+    hoveredShellTerminalElements.delete(terminal);
+  }
+};
+
+const clearShellTerminalHoverStates = (exceptTerminal?: HTMLElement): void => {
+  hoveredShellTerminalElements.forEach((terminal) => {
+    if (terminal === exceptTerminal) {
+      return;
+    }
+    terminal.classList.remove(
+      'shell-tab__terminal--scrollbar-hover-horizontal',
+      'shell-tab__terminal--scrollbar-hover-vertical'
+    );
+    hoveredShellTerminalElements.delete(terminal);
+  });
+};
+
+const collectShellTerminalHoverCandidates = (clientX: number, clientY: number): HTMLElement[] => {
+  const candidates: HTMLElement[] = [];
+  const seen = new Set<Element>();
+
+  for (const elementAtPoint of document.elementsFromPoint(clientX, clientY)) {
+    const terminal = elementAtPoint.closest<HTMLElement>('.shell-tab__terminal');
+    if (terminal && !seen.has(terminal)) {
+      seen.add(terminal);
+      candidates.push(terminal);
+    }
+  }
+
+  return candidates;
+};
+
+const updateShellTerminalHoverAtPoint = (clientX: number, clientY: number): void => {
+  const hoverZoneSize = readPxToken('--scrollbar-hover-zone-size', 16);
+  for (const terminal of collectShellTerminalHoverCandidates(clientX, clientY)) {
+    const rect = terminal.getBoundingClientRect();
+    const isInside =
+      clientX >= rect.left &&
+      clientX <= rect.right &&
+      clientY >= rect.top &&
+      clientY <= rect.bottom;
+    if (!isInside) {
+      continue;
+    }
+
+    const hasVerticalScrollbar = Boolean(
+      terminal.querySelector('.xterm .xterm-scrollable-element > .scrollbar.vertical')
+    );
+    const hasHorizontalScrollbar = Boolean(
+      terminal.querySelector('.xterm .xterm-scrollable-element > .scrollbar.horizontal')
+    );
+    let vertical =
+      hasVerticalScrollbar && clientX >= rect.right - hoverZoneSize && clientX <= rect.right;
+    const horizontal =
+      hasHorizontalScrollbar && clientY >= rect.bottom - hoverZoneSize && clientY <= rect.bottom;
+
+    if (vertical && horizontal) {
+      const distanceToRight = rect.right - clientX;
+      const distanceToBottom = rect.bottom - clientY;
+      vertical = distanceToRight <= distanceToBottom;
+    }
+
+    if (vertical || horizontal) {
+      setShellTerminalHoverState(terminal, {
+        horizontal: horizontal && !vertical,
+        vertical,
+      });
+      clearShellTerminalHoverStates(terminal);
+      return;
+    }
+  }
+
+  clearShellTerminalHoverStates();
+};
+
+const updateShellTerminalHoverFromPointer = (event: PointerEvent): void => {
+  updateShellTerminalHoverAtPoint(event.clientX, event.clientY);
+};
+
 const setScrollbarOpacity = (element: Element, opacity: number): void => {
   if (!(element instanceof HTMLElement)) {
     return;
@@ -980,7 +1075,9 @@ const SCROLL_KEYS = new Set([
 ]);
 
 const isScrollbarHeldOpen = (element: Element): boolean =>
-  overlayHoverStates.has(element) || activeDrag?.element === element;
+  overlayHoverStates.has(element) ||
+  (element instanceof HTMLElement && hoveredShellTerminalElements.has(element)) ||
+  activeDrag?.element === element;
 
 const scheduleScrollbarInactive = (element: Element): void => {
   const existingTimer = activeTimers.get(element);
@@ -1001,6 +1098,13 @@ const scheduleScrollbarInactive = (element: Element): void => {
       }
 
       element.classList.remove(SCROLLBAR_ACTIVE_CLASS);
+      if (element instanceof HTMLElement) {
+        element.classList.remove(
+          'shell-tab__terminal--scrollbar-hover-horizontal',
+          'shell-tab__terminal--scrollbar-hover-vertical'
+        );
+        hoveredShellTerminalElements.delete(element);
+      }
       clearScrollbarOpacity(element);
       activeTimers.delete(element);
       removeOverlayScrollbars(element);
@@ -1128,6 +1232,7 @@ export const initializeScrollbarActivityTracking = (): void => {
   document.addEventListener(
     'pointermove',
     (event) => {
+      updateShellTerminalHoverFromPointer(event);
       if (!activeDrag) {
         updateOverlayHoverFromPointer(event);
         return;
@@ -1171,6 +1276,7 @@ export const initializeScrollbarActivityTracking = (): void => {
     () => {
       lastPointerPosition = undefined;
       clearOverlayHoverStates();
+      clearShellTerminalHoverStates();
     },
     {
       passive: true,
@@ -1182,6 +1288,7 @@ export const initializeScrollbarActivityTracking = (): void => {
     () => {
       lastPointerPosition = undefined;
       clearOverlayHoverStates();
+      clearShellTerminalHoverStates();
     },
     { passive: true, signal }
   );
@@ -1211,6 +1318,13 @@ export const __resetScrollbarActivityTrackingForTest = (): void => {
   elements.forEach(removeOverlayScrollbars);
   activeOverlayElements.clear();
   hoveredOverlayElements.clear();
+  hoveredShellTerminalElements.forEach((terminal) => {
+    terminal.classList.remove(
+      'shell-tab__terminal--scrollbar-hover-horizontal',
+      'shell-tab__terminal--scrollbar-hover-vertical'
+    );
+  });
+  hoveredShellTerminalElements.clear();
   pendingOverlayGeometryUpdates.clear();
   overlayResizeObserver?.disconnect();
   overlayResizeObserver = undefined;
