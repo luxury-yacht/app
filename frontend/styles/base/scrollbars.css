@@ -101,6 +101,7 @@
 }
 
 .scrollbar-overlay-thumb:hover,
+.scrollbar-overlay-thumb--hovered,
 .scrollbar-overlay-thumb--dragging {
   background-color: var(--scrollbar-thumb-hover-bg);
   opacity: var(--scrollbar-thumb-active-opacity);

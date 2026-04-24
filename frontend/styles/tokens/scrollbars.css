@@ -1,6 +1,8 @@
 :root {
   --scrollbar-width: 5px;
   --scrollbar-height: 5px;
+  --scrollbar-hover-zone-size: 16px;
+  --scrollbar-hover-scale: 3;
   --scrollbar-radius: 999px;
   --scrollbar-min-thumb-size: 32px;
   --scrollbar-thumb-inset: 1px;

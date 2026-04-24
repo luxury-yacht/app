@@ -138,9 +138,9 @@
   --code-token-invalid: rgba(239, 68, 68, 0.6);
 
   /* Scrollbar colors */
+  --scrollbar-thumb-bg: #88888870;
+  --scrollbar-thumb-hover-bg: #88888870;
   --scrollbar-track-bg: transparent;
-  --scrollbar-thumb-bg: var(--color-bg-tertiary);
-  --scrollbar-thumb-hover-bg: var(--color-bg-tertiary);
   --scrollbar-corner-bg: transparent;
 
   /* Shadows - Deeper for dark theme */
