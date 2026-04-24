@@ -32,6 +32,7 @@
    ========================================================================== */
 
 .modal-container {
+  position: relative;
   background: var(--modal-content-bg);
   /* Refined border with subtle highlight on top */
   border: 1px solid var(--color-border);

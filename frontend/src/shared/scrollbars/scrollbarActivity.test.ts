@@ -264,6 +264,132 @@ describe('scrollbar activity tracking', () => {
     expect(thumb?.style.top).toBe('21px');
   });
 
+  it('keeps settings modal overlays inside the modal stacking context', () => {
+    const modal = document.createElement('div');
+    modal.className = 'modal-container settings-modal';
+    modal.getBoundingClientRect = () =>
+      ({
+        bottom: 420,
+        height: 360,
+        left: 100,
+        right: 500,
+        top: 60,
+        width: 400,
+        x: 100,
+        y: 60,
+        toJSON: () => undefined,
+      }) as DOMRect;
+    document.body.appendChild(modal);
+
+    const element = createScrollableElement();
+    element.className = 'modal-content settings-modal-content';
+    element.getBoundingClientRect = () =>
+      ({
+        bottom: 390,
+        height: 300,
+        left: 120,
+        right: 480,
+        top: 90,
+        width: 360,
+        x: 120,
+        y: 90,
+        toJSON: () => undefined,
+      }) as DOMRect;
+    modal.appendChild(element);
+
+    dispatchWheel(element);
+
+    const thumb = modal.querySelector<HTMLElement>('.scrollbar-overlay-thumb--vertical');
+    expect(thumb?.parentElement).toBe(modal);
+    expect(thumb?.style.position).toBe('absolute');
+    expect(thumb?.style.left).toBe('376px');
+    expect(thumb?.style.top).toBe('31px');
+  });
+
+  it('keeps modal diff viewer overlays inside the modal stacking context', () => {
+    const modal = document.createElement('div');
+    modal.className = 'modal-container object-diff-modal';
+    modal.getBoundingClientRect = () =>
+      ({
+        bottom: 520,
+        height: 460,
+        left: 80,
+        right: 680,
+        top: 60,
+        width: 600,
+        x: 80,
+        y: 60,
+        toJSON: () => undefined,
+      }) as DOMRect;
+    document.body.appendChild(modal);
+
+    const element = createScrollableElement();
+    element.className = 'object-diff-table';
+    element.getBoundingClientRect = () =>
+      ({
+        bottom: 500,
+        height: 360,
+        left: 100,
+        right: 660,
+        top: 140,
+        width: 560,
+        x: 100,
+        y: 140,
+        toJSON: () => undefined,
+      }) as DOMRect;
+    modal.appendChild(element);
+
+    dispatchWheel(element);
+
+    const thumb = modal.querySelector<HTMLElement>('.scrollbar-overlay-thumb--vertical');
+    expect(thumb?.parentElement).toBe(modal);
+    expect(thumb?.style.position).toBe('absolute');
+    expect(thumb?.style.left).toBe('576px');
+    expect(thumb?.style.top).toBe('81px');
+  });
+
+  it('keeps elevated popover overlays inside the nearest popover stacking context', () => {
+    const tooltip = document.createElement('div');
+    tooltip.className = 'tooltip status-popover';
+    tooltip.getBoundingClientRect = () =>
+      ({
+        bottom: 240,
+        height: 180,
+        left: 300,
+        right: 620,
+        top: 60,
+        width: 320,
+        x: 300,
+        y: 60,
+        toJSON: () => undefined,
+      }) as DOMRect;
+    document.body.appendChild(tooltip);
+
+    const element = createScrollableElement();
+    element.className = 'sessions-status-tracking';
+    element.getBoundingClientRect = () =>
+      ({
+        bottom: 220,
+        height: 140,
+        left: 320,
+        right: 600,
+        top: 80,
+        width: 280,
+        x: 320,
+        y: 80,
+        toJSON: () => undefined,
+      }) as DOMRect;
+    tooltip.appendChild(element);
+
+    dispatchWheel(element);
+
+    const thumb = tooltip.querySelector<HTMLElement>('.scrollbar-overlay-thumb--vertical');
+    expect(thumb?.parentElement).toBe(tooltip);
+    expect(thumb?.style.position).toBe('absolute');
+    expect(thumb?.style.left).toBe('296px');
+    expect(thumb?.style.top).toBe('21px');
+  });
+
   it('activates one scrollbar axis in the corner hover zone', () => {
     const element = createScrollableElement();
     defineMetric(element, 'scrollWidth', 500);

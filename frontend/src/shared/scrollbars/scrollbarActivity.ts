@@ -15,6 +15,17 @@ const OVERLAY_SCROLLBAR_EXCLUDED_SELECTOR = [
   '.xterm-scrollable-element',
   '.xterm-viewport',
 ].join(',');
+const OVERLAY_SCROLLBAR_OWNER_SELECTOR = [
+  '.dropdown-menu',
+  '.fav-dropdown-panel',
+  '.tooltip',
+  '.command-palette',
+  '.modal-container',
+  '.debug-overlay-window',
+  '.error-notification',
+  '.dockable-panel',
+  '.object-panel',
+].join(',');
 const activeTimers = new WeakMap<Element, number>();
 const overlayElements = new WeakMap<
   Element,
@@ -85,17 +96,7 @@ const isOverlayScrollbarElement = (element: Element): element is HTMLElement =>
   (overlayElements.has(element) || canScroll(element));
 
 const resolveOverlayContainer = (element: HTMLElement): HTMLElement => {
-  const commandPalette = element.closest<HTMLElement>('.command-palette');
-  if (commandPalette) {
-    return commandPalette;
-  }
-
-  const dockablePanel = element.closest<HTMLElement>('.dockable-panel');
-  if (dockablePanel) {
-    return dockablePanel;
-  }
-
-  return element.closest<HTMLElement>('.object-panel') ?? document.body;
+  return element.closest<HTMLElement>(OVERLAY_SCROLLBAR_OWNER_SELECTOR) ?? document.body;
 };
 
 const toOverlayCoordinateRect = (rect: DOMRect, container: HTMLElement): DOMRect => {
