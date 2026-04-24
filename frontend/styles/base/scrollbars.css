@@ -100,11 +100,9 @@
   opacity: var(--scrollbar-thumb-current-opacity);
   transition:
     background-color var(--scrollbar-fade-in-duration) var(--ease-out, ease),
-    height var(--scrollbar-hover-resize-duration) var(--ease-out, ease),
-    left var(--scrollbar-hover-resize-duration) var(--ease-out, ease),
-    top var(--scrollbar-hover-resize-duration) var(--ease-out, ease),
-    width var(--scrollbar-hover-resize-duration) var(--ease-out, ease);
+    transform var(--scrollbar-hover-resize-duration) var(--ease-out, ease);
   user-select: none;
+  will-change: opacity, transform;
 }
 
 .scrollbar-overlay-thumb:hover,
@@ -116,10 +114,12 @@
 
 .scrollbar-overlay-thumb--vertical {
   cursor: default;
+  transform-origin: right center;
 }
 
 .scrollbar-overlay-thumb--horizontal {
   cursor: default;
+  transform-origin: center bottom;
 }
 
 .scrollbar-overlay-gutter {
@@ -130,11 +130,17 @@
   border-radius: var(--scrollbar-radius);
   opacity: 0;
   transition:
-    height var(--scrollbar-hover-resize-duration) var(--ease-out, ease),
-    left var(--scrollbar-hover-resize-duration) var(--ease-out, ease),
     opacity var(--scrollbar-hover-resize-duration) var(--ease-out, ease),
-    top var(--scrollbar-hover-resize-duration) var(--ease-out, ease),
-    width var(--scrollbar-hover-resize-duration) var(--ease-out, ease);
+    transform var(--scrollbar-hover-resize-duration) var(--ease-out, ease);
+  will-change: opacity, transform;
+}
+
+.scrollbar-overlay-gutter--vertical {
+  transform-origin: right center;
+}
+
+.scrollbar-overlay-gutter--horizontal {
+  transform-origin: center bottom;
 }
 
 .scrollbar-overlay-gutter--visible {

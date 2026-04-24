@@ -36,7 +36,11 @@ const opacityAnimations = new WeakMap<
     value: number;
   }
 >();
+const resizeObservedOverlayElements = new WeakSet<Element>();
+const pendingOverlayGeometryUpdates = new Set<Element>();
 let initialized = false;
+let overlayResizeObserver: ResizeObserver | undefined;
+let overlayGeometryFrameId: number | undefined;
 let activeDrag:
   | {
       axis: 'horizontal' | 'vertical';
@@ -114,6 +118,48 @@ const readNumberToken = (tokenName: string, fallback: number): number => {
 const isOverlayScrollbarElement = (element: Element): element is HTMLElement =>
   element instanceof HTMLElement && element.matches(OVERLAY_SCROLLBAR_SELECTOR);
 
+const scheduleOverlayGeometryUpdate = (element: Element): void => {
+  if (!isOverlayScrollbarElement(element)) {
+    return;
+  }
+
+  pendingOverlayGeometryUpdates.add(element);
+  if (overlayGeometryFrameId !== undefined) {
+    return;
+  }
+
+  overlayGeometryFrameId = window.requestAnimationFrame(() => {
+    overlayGeometryFrameId = undefined;
+    pendingOverlayGeometryUpdates.forEach(updateOverlayScrollbarGeometry);
+    pendingOverlayGeometryUpdates.clear();
+  });
+};
+
+const getOverlayResizeObserver = (): ResizeObserver | undefined => {
+  if (typeof ResizeObserver === 'undefined') {
+    return undefined;
+  }
+
+  overlayResizeObserver ??= new ResizeObserver((entries) => {
+    entries.forEach((entry) => scheduleOverlayGeometryUpdate(entry.target));
+  });
+  return overlayResizeObserver;
+};
+
+const observeOverlayElementResize = (element: Element): void => {
+  if (resizeObservedOverlayElements.has(element)) {
+    return;
+  }
+
+  const observer = getOverlayResizeObserver();
+  if (!observer) {
+    return;
+  }
+
+  observer.observe(element);
+  resizeObservedOverlayElements.add(element);
+};
+
 const ensureOverlayScrollbars = (element: Element) => {
   if (!isOverlayScrollbarElement(element)) {
     return undefined;
@@ -149,6 +195,7 @@ const ensureOverlayScrollbars = (element: Element) => {
 
   const overlay = { horizontalGutter, horizontalThumb, verticalGutter, verticalThumb };
   overlayElements.set(element, overlay);
+  observeOverlayElementResize(element);
   return overlay;
 };
 
@@ -162,6 +209,9 @@ const removeOverlayScrollbars = (element: Element): void => {
   overlay.verticalThumb.remove();
   overlay.horizontalGutter.remove();
   overlay.horizontalThumb.remove();
+  overlayResizeObserver?.unobserve(element);
+  resizeObservedOverlayElements.delete(element);
+  pendingOverlayGeometryUpdates.delete(element);
   overlayElements.delete(element);
   activeOverlayElements.delete(element);
   overlayHoverStates.delete(element);
@@ -201,30 +251,30 @@ const updateOverlayScrollbarGeometry = (element: Element): void => {
       rect.top + thumbInset + (element.scrollTop / maxScrollTop) * (trackHeight - thumbHeight);
     const baseThumbWidth = Math.max(1, scrollbarWidth - thumbInset * 2);
     const verticalScale = hoverState?.vertical ? hoverScale : 1;
-    const thumbWidth = baseThumbWidth * verticalScale;
-    const gutterWidth = scrollbarWidth * verticalScale;
-    const gutterInset = thumbInset * verticalScale;
+    const verticalThumbOffset = -thumbInset * (verticalScale - 1);
 
     overlay.verticalGutter.style.display = 'block';
     overlay.verticalGutter.classList.toggle(
       'scrollbar-overlay-gutter--visible',
       Boolean(hoverState?.vertical)
     );
-    overlay.verticalGutter.style.left = `${rect.right - gutterWidth}px`;
+    overlay.verticalGutter.style.left = `${rect.right - scrollbarWidth}px`;
     overlay.verticalGutter.style.top = `${rect.top}px`;
-    overlay.verticalGutter.style.width = `${gutterWidth}px`;
+    overlay.verticalGutter.style.width = `${scrollbarWidth}px`;
     overlay.verticalGutter.style.height = `${rect.height}px`;
+    overlay.verticalGutter.style.transform = `scaleX(${verticalScale})`;
 
     overlay.verticalThumb.style.display = 'block';
     overlay.verticalThumb.classList.toggle(
       'scrollbar-overlay-thumb--hovered',
       Boolean(hoverState?.vertical)
     );
-    overlay.verticalThumb.style.left = `${rect.right - gutterInset - thumbWidth}px`;
+    overlay.verticalThumb.style.left = `${rect.right - thumbInset - baseThumbWidth}px`;
     overlay.verticalThumb.style.top = `${thumbTop}px`;
-    overlay.verticalThumb.style.width = `${thumbWidth}px`;
+    overlay.verticalThumb.style.width = `${baseThumbWidth}px`;
     overlay.verticalThumb.style.height = `${thumbHeight}px`;
     overlay.verticalThumb.style.opacity = String(activeOpacity);
+    overlay.verticalThumb.style.transform = `translateX(${verticalThumbOffset}px) scaleX(${verticalScale})`;
   } else {
     overlay.verticalGutter.style.display = 'none';
     overlay.verticalThumb.style.display = 'none';
@@ -241,9 +291,7 @@ const updateOverlayScrollbarGeometry = (element: Element): void => {
       rect.left + thumbInset + (element.scrollLeft / maxScrollLeft) * (trackWidth - thumbWidth);
     const baseThumbHeight = Math.max(1, scrollbarHeight - thumbInset * 2);
     const horizontalScale = hoverState?.horizontal ? hoverScale : 1;
-    const thumbHeight = baseThumbHeight * horizontalScale;
-    const gutterHeight = scrollbarHeight * horizontalScale;
-    const gutterInset = thumbInset * horizontalScale;
+    const horizontalThumbOffset = -thumbInset * (horizontalScale - 1);
 
     overlay.horizontalGutter.style.display = 'block';
     overlay.horizontalGutter.classList.toggle(
@@ -251,9 +299,10 @@ const updateOverlayScrollbarGeometry = (element: Element): void => {
       Boolean(hoverState?.horizontal)
     );
     overlay.horizontalGutter.style.left = `${rect.left}px`;
-    overlay.horizontalGutter.style.top = `${rect.bottom - gutterHeight}px`;
+    overlay.horizontalGutter.style.top = `${rect.bottom - scrollbarHeight}px`;
     overlay.horizontalGutter.style.width = `${rect.width}px`;
-    overlay.horizontalGutter.style.height = `${gutterHeight}px`;
+    overlay.horizontalGutter.style.height = `${scrollbarHeight}px`;
+    overlay.horizontalGutter.style.transform = `scaleY(${horizontalScale})`;
 
     overlay.horizontalThumb.style.display = 'block';
     overlay.horizontalThumb.classList.toggle(
@@ -261,10 +310,11 @@ const updateOverlayScrollbarGeometry = (element: Element): void => {
       Boolean(hoverState?.horizontal)
     );
     overlay.horizontalThumb.style.left = `${thumbLeft}px`;
-    overlay.horizontalThumb.style.top = `${rect.bottom - gutterInset - thumbHeight}px`;
+    overlay.horizontalThumb.style.top = `${rect.bottom - thumbInset - baseThumbHeight}px`;
     overlay.horizontalThumb.style.width = `${thumbWidth}px`;
-    overlay.horizontalThumb.style.height = `${thumbHeight}px`;
+    overlay.horizontalThumb.style.height = `${baseThumbHeight}px`;
     overlay.horizontalThumb.style.opacity = String(activeOpacity);
+    overlay.horizontalThumb.style.transform = `translateY(${horizontalThumbOffset}px) scaleY(${horizontalScale})`;
   } else {
     overlay.horizontalGutter.style.display = 'none';
     overlay.horizontalThumb.style.display = 'none';
