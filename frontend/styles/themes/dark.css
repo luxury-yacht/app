@@ -138,10 +138,10 @@
   --code-token-invalid: rgba(239, 68, 68, 0.6);
 
   /* Scrollbar colors */
-  --scrollbar-thumb-bg: #88888870;
-  --scrollbar-thumb-hover-bg: #88888870;
-  --scrollbar-gutter-hover-bg: #ffffff80;
-  --scrollbar-gutter-hover-opacity: 0.12;
+  --scrollbar-thumb-bg: #555555;
+  --scrollbar-thumb-hover-bg: #555555;
+  --scrollbar-gutter-hover-bg: #444444;
+  --scrollbar-gutter-hover-opacity: 0.7;
   --scrollbar-track-bg: #ffffff;
   --scrollbar-corner-bg: transparent;
 
