@@ -23,6 +23,7 @@
 /* Tokens */
 @import "./tokens/colors.css";
 @import "./tokens/elevation.css";
+@import "./tokens/scrollbars.css";
 @import "./tokens/spacing.css";
 @import "./tokens/typography.css";
 /* Utilities */

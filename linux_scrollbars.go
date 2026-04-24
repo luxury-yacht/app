@@ -34,7 +34,7 @@ import (
 	"unsafe"
 )
 
-//go:embed frontend/styles/tokens/colors.css frontend/styles/themes/light.css frontend/styles/themes/dark.css
+//go:embed frontend/styles/tokens/colors.css frontend/styles/tokens/scrollbars.css frontend/styles/themes/light.css frontend/styles/themes/dark.css
 var themeCSS embed.FS
 
 const (
@@ -169,6 +169,10 @@ func readScrollbarTokens() (map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	scrollbarCSS, err := themeCSS.ReadFile("frontend/styles/tokens/scrollbars.css")
+	if err != nil {
+		return nil, err
+	}
 	lightCSS, err := themeCSS.ReadFile("frontend/styles/themes/light.css")
 	if err != nil {
 		return nil, err
@@ -189,8 +193,8 @@ func readScrollbarTokens() (map[string]string, error) {
 		scrollbarThumbBgToken,
 		scrollbarThumbHoverBgToken,
 	}
-	lightProperties := parseCSSCustomProperties(string(colorCSS) + "\n" + string(lightCSS))
-	darkProperties := parseCSSCustomProperties(string(colorCSS) + "\n" + string(darkCSS))
+	lightProperties := parseCSSCustomProperties(string(colorCSS) + "\n" + string(scrollbarCSS) + "\n" + string(lightCSS))
+	darkProperties := parseCSSCustomProperties(string(colorCSS) + "\n" + string(scrollbarCSS) + "\n" + string(darkCSS))
 	tokenValues := make(map[string]string, len(tokenNames))
 	for _, name := range tokenNames {
 		value := resolveCSSCustomProperty(lightProperties, name)
