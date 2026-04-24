@@ -55,6 +55,38 @@ const canScroll = (element: Element): boolean => {
   return scrollsX || scrollsY;
 };
 
+const canScrollWithDelta = (element: Element, deltaX: number, deltaY: number): boolean => {
+  if (!(element instanceof HTMLElement)) {
+    return false;
+  }
+
+  const styles = getComputedStyle(element);
+  const scrollsX =
+    (styles.overflowX === 'auto' ||
+      styles.overflowX === 'scroll' ||
+      styles.overflowX === 'overlay') &&
+    element.scrollWidth > element.clientWidth;
+  const scrollsY =
+    (styles.overflowY === 'auto' ||
+      styles.overflowY === 'scroll' ||
+      styles.overflowY === 'overlay') &&
+    element.scrollHeight > element.clientHeight;
+
+  const canMoveX =
+    scrollsX &&
+    ((deltaX < 0 && element.scrollLeft > 0) ||
+      (deltaX > 0 && element.scrollLeft + element.clientWidth < element.scrollWidth - 1));
+  const canMoveY =
+    scrollsY &&
+    ((deltaY < 0 && element.scrollTop > 0) ||
+      (deltaY > 0 && element.scrollTop + element.clientHeight < element.scrollHeight - 1));
+
+  if (Math.abs(deltaX) > Math.abs(deltaY)) {
+    return canMoveX || canMoveY;
+  }
+  return canMoveY || canMoveX;
+};
+
 const findScrollableAncestor = (target: EventTarget | null): Element | null => {
   let element = resolveScrollElement(target);
   while (element) {
@@ -64,6 +96,26 @@ const findScrollableAncestor = (target: EventTarget | null): Element | null => {
     element = element.parentElement;
   }
   return document.scrollingElement ?? document.documentElement;
+};
+
+const findWheelScrollTarget = (target: EventTarget | null, event: WheelEvent): Element | null => {
+  let element = resolveScrollElement(target);
+  let nearestScrollableElement: Element | null = null;
+  while (element) {
+    if (!nearestScrollableElement && canScroll(element)) {
+      nearestScrollableElement = element;
+    }
+    if (canScrollWithDelta(element, event.deltaX, event.deltaY)) {
+      return element;
+    }
+    element = element.parentElement;
+  }
+
+  const documentScroller = document.scrollingElement ?? document.documentElement;
+  if (canScrollWithDelta(documentScroller, event.deltaX, event.deltaY)) {
+    return documentScroller;
+  }
+  return nearestScrollableElement;
 };
 
 const SCROLL_KEYS = new Set([
@@ -99,13 +151,6 @@ const markScrollbarActive = (element: Element): void => {
   activeTimers.set(element, timer);
 };
 
-const markDocumentScrollbarActive = (): void => {
-  markScrollbarActive(document.documentElement);
-  if (document.body) {
-    markScrollbarActive(document.body);
-  }
-};
-
 export const initializeScrollbarActivityTracking = (): void => {
   if (initialized || typeof document === 'undefined') {
     return;
@@ -126,8 +171,7 @@ export const initializeScrollbarActivityTracking = (): void => {
   document.addEventListener(
     'wheel',
     (event) => {
-      markDocumentScrollbarActive();
-      const element = findScrollableAncestor(event.target);
+      const element = findWheelScrollTarget(event.target, event);
       if (element) {
         markScrollbarActive(element);
       }
@@ -138,7 +182,6 @@ export const initializeScrollbarActivityTracking = (): void => {
   document.addEventListener(
     'touchmove',
     (event) => {
-      markDocumentScrollbarActive();
       const element = findScrollableAncestor(event.target);
       if (element) {
         markScrollbarActive(element);
@@ -153,7 +196,6 @@ export const initializeScrollbarActivityTracking = (): void => {
       if (!SCROLL_KEYS.has(event.key)) {
         return;
       }
-      markDocumentScrollbarActive();
       const element = findScrollableAncestor(document.activeElement);
       if (element) {
         markScrollbarActive(element);
