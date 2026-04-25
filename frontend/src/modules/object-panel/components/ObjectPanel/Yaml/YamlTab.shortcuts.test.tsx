@@ -19,11 +19,6 @@ vi.mock('@ui/shortcuts', () => ({
   useSearchShortcutTarget: () => undefined,
 }));
 
-vi.mock('@ui/modals/CreateResourceModal', () => ({
-  __esModule: true,
-  default: () => null,
-}));
-
 vi.mock('@uiw/react-codemirror', () => ({
   __esModule: true,
   default: vi.fn(() => <div data-testid="code-editor" />),

@@ -106,10 +106,7 @@ export function useCommandPaletteCommands() {
   );
 
   const closeTabShortcut = useMemo(() => (isMacPlatform() ? ['⌘', 'W'] : ['Ctrl', 'W']), []);
-  const diffObjectsShortcut = useMemo(
-    () => (isMacPlatform() ? ['⇧', '⌘', 'D'] : ['⇧', 'Ctrl', 'D']),
-    []
-  );
+  const diffObjectsShortcut = useMemo(() => (isMacPlatform() ? ['⌘', 'D'] : ['Ctrl', 'D']), []);
 
   const commands = useMemo(
     () => [
@@ -175,7 +172,7 @@ export function useCommandPaletteCommands() {
           eventBus.emit('view:toggle-app-logs-panel');
         },
         keywords: ['logs', 'application', 'debug'],
-        shortcut: isMacPlatform() ? ['⇧', '⌘', 'L'] : ['⇧', 'Ctrl', 'L'],
+        shortcut: ['⇧', '⌃', 'L'],
       },
       {
         id: 'toggle-diagnostics',
@@ -187,7 +184,7 @@ export function useCommandPaletteCommands() {
           eventBus.emit('view:toggle-diagnostics');
         },
         keywords: ['diagnostics', 'status', 'permissions', 'refresh'],
-        shortcut: isMacPlatform() ? ['⇧', '⌘', 'I'] : ['⇧', 'Ctrl', 'I'],
+        shortcut: ['⇧', '⌃', 'D'],
       },
 
       // Resource Actions

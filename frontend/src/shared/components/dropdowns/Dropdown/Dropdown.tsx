@@ -301,14 +301,12 @@ const Dropdown: React.FC<DropdownProps> = ({
     if (isOpen && triggerRef.current && menuRef.current) {
       const triggerRect = triggerRef.current.getBoundingClientRect();
       const menuHeight = menuRef.current.offsetHeight;
-      const clippingRect = getNearestClippingRect(triggerRef.current);
-      const boundaryTop = clippingRect?.top ?? 0;
-      const boundaryBottom = clippingRect?.bottom ?? window.innerHeight;
+      const viewportHeight = window.innerHeight;
 
-      const spaceBelow = boundaryBottom - triggerRect.bottom;
-      const spaceAbove = triggerRect.top - boundaryTop;
+      const spaceBelow = viewportHeight - triggerRect.bottom;
+      const spaceAbove = triggerRect.top;
 
-      if (spaceBelow < menuHeight && spaceAbove > 0) {
+      if (spaceBelow < menuHeight && spaceAbove > spaceBelow) {
         setDropdownPosition('top');
       } else {
         setDropdownPosition('bottom');

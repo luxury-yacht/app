@@ -1173,7 +1173,6 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
       overlayClassName="object-diff-modal-overlay"
       containerClassName="object-diff-modal"
       isClosing={isClosing}
-      closeOnBackdrop={false}
     >
       <div className="modal-header object-diff-modal-header">
         <h2 id="object-diff-modal-title">Diff Objects</h2>

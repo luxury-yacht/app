@@ -80,7 +80,6 @@ const AboutModal: React.FC<AboutModalProps> = React.memo(({ isOpen, onClose }) =
       onClose={onClose}
       containerClassName="about-modal"
       isClosing={isClosing}
-      closeOnBackdrop={false}
     >
       <div className="modal-header">
         <h2 id="about-modal-title">About</h2>

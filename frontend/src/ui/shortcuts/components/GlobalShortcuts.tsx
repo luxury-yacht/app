@@ -257,7 +257,7 @@ export function GlobalShortcuts({
 
   useShortcut({
     key: 'd',
-    modifiers: macPlatform ? { meta: true, shift: true } : { ctrl: true, shift: true },
+    modifiers: macPlatform ? { meta: true } : { ctrl: true },
     handler: handleToggleObjectDiff,
     description: 'Toggle object diff viewer',
     category: 'Global',
@@ -283,8 +283,8 @@ export function GlobalShortcuts({
   });
 
   useShortcut({
-    key: 'i',
-    modifiers: macPlatform ? { meta: true, shift: true } : { ctrl: true, shift: true },
+    key: 'd',
+    modifiers: { ctrl: true, shift: true },
     handler: handleToggleDiagnostics,
     description: 'Toggle diagnostics panel',
     category: 'Global',

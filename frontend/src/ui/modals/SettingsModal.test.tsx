@@ -99,7 +99,7 @@ describe('SettingsModal shortcuts', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  it('does not close via overlay click', () => {
+  it('closes via overlay click but ignores clicks inside modal', () => {
     const onClose = vi.fn();
     act(() => {
       root.render(
@@ -111,11 +111,18 @@ describe('SettingsModal shortcuts', () => {
 
     const overlay = document.querySelector('.settings-modal-overlay') as HTMLDivElement | null;
     expect(overlay).toBeTruthy();
+    const modal = document.querySelector('.settings-modal') as HTMLDivElement | null;
+    expect(modal).toBeTruthy();
+
+    act(() => {
+      modal?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(onClose).not.toHaveBeenCalled();
 
     act(() => {
       overlay?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
-    expect(onClose).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalled();
   });
 
   it('maintains closing animation before unmounting and restores scroll lock', () => {

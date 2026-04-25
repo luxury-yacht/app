@@ -63,7 +63,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       overlayClassName="settings-modal-overlay"
       containerClassName="settings-modal"
       isClosing={isClosing}
-      closeOnBackdrop={false}
     >
       <div className="modal-header settings-modal-header">
         <h2 id="settings-modal-title">Settings</h2>

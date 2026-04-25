@@ -1,5 +1,4 @@
 import React from 'react';
-import { AddIcon, MinusIcon } from '@shared/components/icons/MenuIcons';
 
 type FormIconActionVariant = 'add' | 'remove';
 
@@ -30,6 +29,18 @@ interface FormEmptyActionRowProps {
   ghostText?: string | null;
   includeRemovePlaceholder?: boolean;
 }
+
+const AddIcon: React.FC<{ width?: number; height?: number }> = ({ width = 16, height = 16 }) => (
+  <svg width={width} height={height} viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <path d="M8 2V14M2 8H14" stroke="currentColor" strokeWidth="2" />
+  </svg>
+);
+
+const MinusIcon: React.FC<{ width?: number; height?: number }> = ({ width = 16, height = 16 }) => (
+  <svg width={width} height={height} viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <path d="M2 8H14" stroke="currentColor" strokeWidth="2" />
+  </svg>
+);
 
 /**
  * Shared icon action button used by add/remove controls across form rows.

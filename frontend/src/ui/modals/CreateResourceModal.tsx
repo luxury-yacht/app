@@ -24,7 +24,8 @@ import { isAllNamespaces } from '@modules/namespace/constants';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useErrorContext } from '@core/contexts/ErrorContext';
 import { ErrorSeverity, ErrorCategory } from '@utils/errorHandler';
-import { refreshOrchestrator, useRefreshScopedDomain } from '@/core/refresh';
+import { useRefreshScopedDomain } from '@/core/refresh';
+import { requestContextRefresh, requestRefreshDomain } from '@/core/data-access';
 import { buildClusterScopeList } from '@/core/refresh/clusterScope';
 import { buildCodeTheme } from '@/core/codemirror/theme';
 import { createSearchExtensions } from '@/core/codemirror/search';
@@ -557,6 +558,7 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
           const resolvedIdentity = editIdentity as ObjectIdentity;
           await validateYamlOnServer(
             targetClusterId,
+            request?.initialYaml ?? '',
             draftValidation.validation.normalizedYAML,
             resolvedIdentity,
             draftValidation.baselineResourceVersion
@@ -590,6 +592,7 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
       handleBackendError,
       editIdentity,
       isEditMode,
+      request?.initialYaml,
       validateEditDraft,
     ]);
 
@@ -616,6 +619,7 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
 
           const validationResponse = await validateYamlOnServer(
             capturedClusterId,
+            request?.initialYaml ?? '',
             draftValidation.validation.normalizedYAML,
             editIdentity,
             draftValidation.baselineResourceVersion
@@ -638,6 +642,7 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
 
           const applyResponse = await applyYamlOnServer(
             capturedClusterId,
+            request?.initialYaml ?? '',
             payloadForApply,
             editIdentity,
             resourceVersionForApply
@@ -648,11 +653,13 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
           onClose();
 
           if (request?.scope) {
-            await refreshOrchestrator.fetchScopedDomain('object-yaml', request.scope, {
-              isManual: true,
+            await requestRefreshDomain({
+              domain: 'object-yaml',
+              scope: request.scope,
+              reason: 'user',
             });
           }
-          await refreshOrchestrator.triggerManualRefreshForContext();
+          await requestContextRefresh({ reason: 'user' });
 
           const nsLabel = editIdentity.namespace ? ` in namespace ${editIdentity.namespace}` : '';
           addError({
@@ -686,7 +693,7 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
         onClose();
 
         // 3. Refresh current view (no cluster override — refreshes whatever is displayed).
-        void refreshOrchestrator.triggerManualRefreshForContext();
+        void requestContextRefresh({ reason: 'user' });
 
         // 4. Show success notification with cluster context.
         const nsLabel = resp.namespace ? ` in namespace ${resp.namespace}` : '';
@@ -715,6 +722,7 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
       handleBackendError,
       editIdentity,
       isEditMode,
+      request?.initialYaml,
       request?.scope,
       validateEditDraft,
     ]);

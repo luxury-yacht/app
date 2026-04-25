@@ -22,7 +22,7 @@ func TestCreateDebugContainerSuccess(t *testing.T) {
 			Namespace: "team-a",
 		},
 		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{{Name: "app", Image: "repo/image:tag"}},
+			Containers: []corev1.Container{{Name: "app", Image: "nginx:latest"}},
 		},
 		Status: corev1.PodStatus{Phase: corev1.PodRunning},
 	}
@@ -72,7 +72,7 @@ func TestCreateDebugContainerPollTimeout(t *testing.T) {
 			Namespace: "team-a",
 		},
 		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{{Name: "app", Image: "repo/image:tag"}},
+			Containers: []corev1.Container{{Name: "app", Image: "nginx:latest"}},
 		},
 		Status: corev1.PodStatus{Phase: corev1.PodRunning},
 	}

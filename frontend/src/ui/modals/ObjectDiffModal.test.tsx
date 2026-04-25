@@ -337,11 +337,18 @@ describe('ObjectDiffModal', () => {
 
     const overlay = document.querySelector('.object-diff-modal-overlay') as HTMLDivElement | null;
     expect(overlay).toBeTruthy();
+    const modal = document.querySelector('.object-diff-modal') as HTMLDivElement | null;
+    expect(modal).toBeTruthy();
+
+    act(() => {
+      modal?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(onClose).not.toHaveBeenCalled();
 
     act(() => {
       overlay?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
-    expect(onClose).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalled();
   });
 
   it('closes on Escape through the shared modal surface', () => {

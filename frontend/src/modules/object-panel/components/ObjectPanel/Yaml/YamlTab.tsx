@@ -257,7 +257,6 @@ const YamlTab: React.FC<YamlTabProps> = ({
     yaml: string;
     resourceVersion: string | null;
   } | null>(null);
-  const [editModalRequest, setEditModalRequest] = useState<CreateResourceModalRequest | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [searchState, setSearchState] = useState<YamlSearchState>(DEFAULT_YAML_SEARCH_STATE);
   const [hasServerYamlError, setHasServerYamlError] = useState(false);
@@ -929,8 +928,6 @@ const YamlTab: React.FC<YamlTabProps> = ({
     latestObjectIdentity,
     manualYamlOverride,
     objectIdentity,
-    resolvedClusterId,
-    scope,
     showManagedFields,
   ]);
 
@@ -1573,11 +1570,6 @@ const YamlTab: React.FC<YamlTabProps> = ({
   const isLargeManifest = activeYaml.length > LARGE_MANIFEST_THRESHOLD;
   return (
     <div className="object-panel-tab-content">
-      <CreateResourceModal
-        isOpen={!!editModalRequest}
-        onClose={() => setEditModalRequest(null)}
-        request={editModalRequest}
-      />
       <div className="yaml-display">
         <div className="yaml-header">
           <div className="yaml-search-controls">

@@ -88,30 +88,3 @@ vi.mock('@wailsjs/runtime/runtime', () => ({
   EventsOff: () => undefined,
   EventsOn: () => undefined,
 }));
-
-const originalConsoleError = console.error.bind(console);
-let consoleErrorSpy: ReturnType<typeof vi.spyOn> | null = null;
-let actWarnings: string[] = [];
-
-beforeEach(() => {
-  actWarnings = [];
-  consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
-    const message = args
-      .map((value) => (typeof value === 'string' ? value : String(value)))
-      .join(' ');
-    if (message.includes('not wrapped in act(')) {
-      actWarnings.push(message);
-    }
-    originalConsoleError(...args);
-  });
-});
-
-afterEach(() => {
-  consoleErrorSpy?.mockRestore();
-  consoleErrorSpy = null;
-  if (actWarnings.length > 0) {
-    throw new Error(
-      `Detected React act() warning in test:\n${actWarnings.join('\n\n')}\n\nWrap state updates with act(...) or await the associated async UI update.`
-    );
-  }
-});

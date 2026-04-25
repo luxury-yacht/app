@@ -15,9 +15,6 @@ const shortcutMocks = vi.hoisted(() => ({
 const searchShortcutMocks = vi.hoisted(() => ({
   useSearchShortcutTarget: vi.fn(),
 }));
-const createResourceModalMocks = vi.hoisted(() => ({
-  latestProps: null as any,
-}));
 
 const refreshMocks = vi.hoisted(() => ({
   setScopedDomainEnabled: vi.fn(),
@@ -133,21 +130,6 @@ vi.mock('@ui/shortcuts', () => ({
   useKeyboardSurface: (config: unknown) => shortcutMocks.useKeyboardSurface(config),
   useShortcut: shortcutMocks.useShortcut,
   useSearchShortcutTarget: (config: unknown) => searchShortcutMocks.useSearchShortcutTarget(config),
-}));
-
-vi.mock('@ui/modals/CreateResourceModal', () => ({
-  __esModule: true,
-  default: (props: any) => {
-    createResourceModalMocks.latestProps = props;
-    if (!props.isOpen) {
-      return null;
-    }
-    return (
-      <div data-testid="edit-resource-modal">
-        {props.request?.mode}:{props.request?.identity?.kind}:{props.request?.identity?.name}
-      </div>
-    );
-  },
 }));
 
 vi.mock('@/core/refresh', () => ({
@@ -432,7 +414,6 @@ describe('YamlTab', () => {
   beforeEach(() => {
     snapshotState.current = { status: 'ready', data: { yaml: YAML }, error: null };
     codeMirrorState.selectionText = '';
-    createResourceModalMocks.latestProps = null;
     codeMirrorState.value = '';
     codeMirrorState.latestProps.current = null;
     codeMirrorState.editorView.state.selection = { main: { from: 0, to: 0 }, ranges: [] } as any;
@@ -1436,7 +1417,11 @@ describe('YamlTab', () => {
     await act(async () => {
       toggleResult = updatedManagedShortcut?.handler() ?? true;
     });
-    expect(toggleResult).toBe(true);
+    expect(toggleResult).toBe(false);
+
+    await act(async () => {
+      codeMirrorState.latestProps.current.onChange(UPDATED_YAML);
+    });
 
     const updatedSaveShortcut = shortcutMocks.useShortcut.mock.calls
       .filter(([config]) => {
@@ -1445,13 +1430,13 @@ describe('YamlTab', () => {
       })
       .pop()?.[0] as { handler: () => boolean } | undefined;
 
-    saveResult = true;
+    saveResult = false;
     await act(async () => {
-      saveResult = updatedSaveShortcut?.handler() ?? true;
+      saveResult = updatedSaveShortcut?.handler() ?? false;
       await Promise.resolve();
     });
-    expect(saveResult).toBe(false);
-    expect(container.querySelector('[data-testid="edit-resource-modal"]')).toBeTruthy();
+    expect(saveResult).toBe(true);
+    expect(wailsMocks.ApplyObjectYaml).toHaveBeenCalled();
 
     await unmount();
   });
