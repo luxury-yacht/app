@@ -11,6 +11,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/luxury-yacht/app/backend/internal/logsources"
 	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
@@ -52,7 +53,7 @@ func InitializeForTesting(a *App, ctx context.Context, client kubernetes.Interfa
 		}
 
 		if err := a.setupRefreshSubsystem(); err != nil {
-			a.logger.Warn(fmt.Sprintf("Failed to initialize refresh subsystem in tests: %v", err), "Refresh")
+			a.logger.Warn(fmt.Sprintf("Failed to initialize refresh subsystem in tests: %v", err), logsources.Refresh)
 		} else {
 			a.startObjectCatalog()
 		}

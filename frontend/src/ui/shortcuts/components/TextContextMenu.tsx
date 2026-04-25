@@ -45,7 +45,7 @@ function isEditableTarget(target: Element): boolean {
 }
 
 function getLogSelectionRoot(target: Element | null): HTMLElement | null {
-  return target?.closest('.pod-logs-content') as HTMLElement | null;
+  return target?.closest('.logs-viewer-content') as HTMLElement | null;
 }
 
 function selectNodeContents(root: HTMLElement): void {

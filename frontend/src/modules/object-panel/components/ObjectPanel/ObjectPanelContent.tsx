@@ -56,11 +56,11 @@ interface ObjectPanelContentProps {
   // (fetch + per-tab enable/disable) consume the same string. Used to
   // be computed independently in two places, which created a drift bug.
   eventsScope: string | null;
-  // logScope follows the same pattern as eventsScope: one source of
+  // containerLogsScope follows the same pattern as eventsScope: one source of
   // truth in getObjectPanelKind, consumed by this component (cleanup)
   // and LogViewer (actual streaming). They used to duplicate the
   // string builder and could drift apart on kind casing.
-  logScope: string | null;
+  containerLogsScope: string | null;
   helmScope: string | null;
   objectData: PanelObjectData | null;
   objectKind: string | null;
@@ -88,7 +88,7 @@ export function ObjectPanelContent({
   nodeLogSources,
   detailScope,
   eventsScope,
-  logScope,
+  containerLogsScope,
   helmScope,
   objectData,
   objectKind,
@@ -100,7 +100,7 @@ export function ObjectPanelContent({
   panelId,
 }: ObjectPanelContentProps) {
   const showDetails = activeTab === 'details' && detailTabProps;
-  const showLogs = activeTab === 'logs' && capabilities.hasLogs && objectData;
+  const showLogs = activeTab === 'logs' && capabilities.hasObjPanelLogs && objectData;
   const showShell = activeTab === 'shell' && capabilities.hasShell && objectData;
   const showPods = activeTab === 'pods';
   const showJobs = activeTab === 'jobs';
@@ -110,7 +110,7 @@ export function ObjectPanelContent({
   const showValues = activeTab === 'values';
   const showMaintenance = activeTab === 'maintenance' && objectKind === 'node';
 
-  // eventsScope and logScope are produced upstream by getObjectPanelKind
+  // eventsScope and containerLogsScope are produced upstream by getObjectPanelKind
   // and threaded in via props so the lifecycle effects below and the
   // tabs that consume them (EventsTab, LogViewer) cannot disagree.
 
@@ -171,20 +171,20 @@ export function ObjectPanelContent({
     };
   }, [helmScope, isPanelOpen]);
 
-  // object-logs — LogViewer manages streaming start/stop. The disable call
+  // container-logs — LogViewer manages streaming start/stop. The disable call
   // here stops the underlying stream while keeping the buffered entries in
   // place; on remount the cache renders immediately and a new stream
   // resumes appending fresh entries.
   useEffect(() => {
-    if (!logScope || !isPanelOpen) {
+    if (!containerLogsScope || !isPanelOpen) {
       return;
     }
     return () => {
-      refreshOrchestrator.setScopedDomainEnabled('object-logs', logScope, false, {
+      refreshOrchestrator.setScopedDomainEnabled('container-logs', containerLogsScope, false, {
         preserveState: true,
       });
     };
-  }, [logScope, isPanelOpen]);
+  }, [containerLogsScope, isPanelOpen]);
 
   // Derive activePodNames from the nested pod arrays directly, not from
   // `detailTabProps` itself. `detailTabProps` is a fresh object literal
@@ -279,7 +279,7 @@ export function ObjectPanelContent({
             isActive={isPanelOpen && activeTab === 'logs'}
             resourceName={objectData?.name || ''}
             resourceKind={objectKind || 'pod'}
-            logScope={logScope}
+            containerLogsScope={containerLogsScope}
             activePodNames={activePodNames}
             clusterId={objectData?.clusterId ?? null}
             panelId={panelId}

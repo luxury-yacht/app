@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/luxury-yacht/app/backend/internal/logsources"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/httpstream"
@@ -533,14 +534,14 @@ func (a *App) monitorShellTimeout(ctx context.Context, sess *shellSession) {
 		case <-ticker.C:
 			// Check max duration first (hard limit)
 			if sess.totalDuration() >= shellMaxDuration {
-				a.logger.Warn(fmt.Sprintf("Shell session %s exceeded max duration (%s), terminating", sess.id, shellMaxDuration), "ShellSession")
+				a.logger.Warn(fmt.Sprintf("Shell session %s exceeded max duration (%s), terminating", sess.id, shellMaxDuration), logsources.ShellSession)
 				a.terminateShellWithReason(sess.id, "timeout", "session exceeded maximum duration")
 				return
 			}
 
 			// Check idle timeout
 			if sess.idleDuration() >= shellIdleTimeout {
-				a.logger.Warn(fmt.Sprintf("Shell session %s idle for %s, terminating", sess.id, shellIdleTimeout), "ShellSession")
+				a.logger.Warn(fmt.Sprintf("Shell session %s idle for %s, terminating", sess.id, shellIdleTimeout), logsources.ShellSession)
 				a.terminateShellWithReason(sess.id, "timeout", "session idle timeout")
 				return
 			}

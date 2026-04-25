@@ -13,6 +13,8 @@ import (
 	"strings"
 
 	"github.com/luxury-yacht/app/backend/internal/errorcapture"
+	"github.com/luxury-yacht/app/backend/internal/logclassify"
+	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -39,7 +41,7 @@ func (a *App) Startup(ctx context.Context) {
 			"previousState": previousState,
 		})
 	})
-	a.logger.Info("Application startup initiated", "App")
+	a.logger.Info("Application startup initiated", logsources.App)
 
 	errorcapture.Init()
 	errorcapture.SetEventEmitter(func(message string) {
@@ -68,18 +70,20 @@ func (a *App) Startup(ctx context.Context) {
 		if containsAuthPattern(lower) {
 			return
 		}
-		switch strings.ToLower(level) {
-		case "error":
-			a.logger.Error(message, "ErrorCapture")
-		case "warn", "warning":
-			a.logger.Warn(message, "ErrorCapture")
+		switch level {
+		case logclassify.LevelError:
+			a.logger.Error(message, logsources.ErrorCapture)
+		case logclassify.LevelWarn:
+			a.logger.Warn(message, logsources.ErrorCapture)
+		case logclassify.LevelDebug:
+			a.logger.Debug(message, logsources.ErrorCapture)
 		default:
-			a.logger.Debug(message, "ErrorCapture")
+			a.logger.Info(message, logsources.ErrorCapture)
 		}
 	})
 
 	if err := a.checkBetaExpiry(); err != nil {
-		a.logger.Error(err.Error(), "App")
+		a.logger.Error(err.Error(), logsources.App)
 		runtimeMessageDialog(ctx, runtime.MessageDialogOptions{
 			Type:    runtime.ErrorDialog,
 			Title:   "Beta Version Expired",
@@ -89,18 +93,18 @@ func (a *App) Startup(ctx context.Context) {
 		return
 	}
 
-	a.logger.SetEventEmitter(func(eventName string) {
-		a.emitEvent(eventName)
+	a.logger.SetEventEmitter(func(eventName string, args ...interface{}) {
+		a.emitEvent(eventName, args...)
 	})
 
 	log.SetFlags(0)
 	log.SetOutput(&stdLogBridge{logger: a.logger})
 
 	a.setupEnvironment()
-	a.logger.Debug("Environment setup completed", "App")
+	a.logger.Debug("Environment setup completed", logsources.App)
 
 	if settings, err := a.LoadWindowSettings(); err != nil {
-		a.logger.Warn(fmt.Sprintf("Failed to load window settings: %v", err), "App")
+		a.logger.Warn(fmt.Sprintf("Failed to load window settings: %v", err), logsources.App)
 	} else if settings != nil {
 		if settings.Width > 0 && settings.Height > 0 {
 			runtimeWindowSetSize(ctx, settings.Width, settings.Height)
@@ -114,43 +118,43 @@ func (a *App) Startup(ctx context.Context) {
 	}
 
 	runtimeWindowShow(ctx)
-	a.logger.Info("Luxury Yacht - Sail the Seas of Kubernetes In Style", "App")
+	a.logger.Info("Luxury Yacht - Sail the Seas of Kubernetes In Style", logsources.App)
 
-	a.logger.Info("Discovering kubeconfig files...", "App")
+	a.logger.Info("Discovering kubeconfig files...", logsources.App)
 	if err := a.discoverKubeconfigs(); err != nil {
-		a.logger.Error(fmt.Sprintf("Failed to discover kubeconfigs: %v", err), "App")
+		a.logger.Error(fmt.Sprintf("Failed to discover kubeconfigs: %v", err), logsources.App)
 	} else {
-		a.logger.Info(fmt.Sprintf("Found %d kubeconfig file(s)", len(a.availableKubeconfigs)), "App")
+		a.logger.Info(fmt.Sprintf("Found %d kubeconfig file(s)", len(a.availableKubeconfigs)), logsources.App)
 	}
 
 	// Startup is single-threaded here: the kubeconfig watcher has not started and
 	// Wails RPC handlers are not yet dispatching, so loadAppSettings is safe
 	// without settingsMu.
 	if err := a.loadAppSettings(); err != nil {
-		a.logger.Warn(fmt.Sprintf("Failed to load app settings: %v", err), "App")
+		a.logger.Warn(fmt.Sprintf("Failed to load app settings: %v", err), logsources.App)
 		a.appSettings = getDefaultAppSettings()
-		a.logger.Info("Initialized app settings with defaults", "App")
+		a.logger.Info("Initialized app settings with defaults", logsources.App)
 	} else {
-		a.logger.Debug("Application settings loaded successfully", "App")
+		a.logger.Debug("Application settings loaded successfully", logsources.App)
 	}
 
 	a.restoreKubeconfigSelection()
 
 	if len(a.selectedKubeconfigs) > 0 {
-		a.logger.Info(fmt.Sprintf("Connecting to %d selected cluster(s)", len(a.selectedKubeconfigs)), "App")
+		a.logger.Info(fmt.Sprintf("Connecting to %d selected cluster(s)", len(a.selectedKubeconfigs)), logsources.App)
 		if err := a.initKubernetesClient(); err != nil {
-			a.logger.Error(fmt.Sprintf("Failed to connect to cluster(s): %v", err), "App")
+			a.logger.Error(fmt.Sprintf("Failed to connect to cluster(s): %v", err), logsources.App)
 		} else {
-			a.logger.Info("Successfully connected to Kubernetes cluster(s)", "App")
+			a.logger.Info("Successfully connected to Kubernetes cluster(s)", logsources.App)
 		}
 	} else {
-		a.logger.Warn("No kubeconfig selections found - please select a cluster", "App")
+		a.logger.Warn("No kubeconfig selections found - please select a cluster", logsources.App)
 	}
 
 	// Start watching kubeconfig directories after cluster initialization completes
 	// so watcher callbacks cannot race startup subsystem construction.
 	if err := a.startKubeconfigWatcher(); err != nil {
-		a.logger.Warn(fmt.Sprintf("Kubeconfig directory watcher not available: %v", err), "App")
+		a.logger.Warn(fmt.Sprintf("Kubeconfig directory watcher not available: %v", err), logsources.App)
 	}
 
 	// Per-cluster heartbeat runs via startHeartbeatLoop, launched by setupRefreshSubsystem.
@@ -174,14 +178,15 @@ func (b *stdLogBridge) Write(p []byte) (int, error) {
 			continue
 		}
 
-		lower := strings.ToLower(msg)
-		switch {
-		case strings.HasPrefix(lower, "error"), strings.Contains(lower, " error"), strings.HasPrefix(lower, "[error"), strings.Contains(lower, "[refresh:metrics] poll failed"):
-			b.logger.Error(msg, "StdLog")
-		case strings.HasPrefix(lower, "warn"), strings.Contains(lower, " warn"):
-			b.logger.Warn(msg, "StdLog")
+		switch logclassify.Classify(msg) {
+		case logclassify.LevelError:
+			b.logger.Error(msg, logsources.StandardLog)
+		case logclassify.LevelWarn:
+			b.logger.Warn(msg, logsources.StandardLog)
+		case logclassify.LevelDebug:
+			b.logger.Debug(msg, logsources.StandardLog)
 		default:
-			b.logger.Info(msg, "StdLog")
+			b.logger.Info(msg, logsources.StandardLog)
 		}
 	}
 
@@ -191,12 +196,12 @@ func (b *stdLogBridge) Write(p []byte) (int, error) {
 // NewBeforeCloseHandler runs while the window is still alive so window metrics can be read safely.
 func NewBeforeCloseHandler(app *App) func(context.Context) bool {
 	return func(ctx context.Context) bool {
-		app.logger.Info("Application close requested", "App")
+		app.logger.Info("Application close requested", logsources.App)
 
 		if err := app.SaveWindowSettings(); err != nil {
-			app.logger.Warn(fmt.Sprintf("Failed to save window settings: %v", err), "App")
+			app.logger.Warn(fmt.Sprintf("Failed to save window settings: %v", err), logsources.App)
 		} else {
-			app.logger.Debug("Window settings saved successfully", "App")
+			app.logger.Debug("Window settings saved successfully", logsources.App)
 		}
 
 		return false
@@ -205,7 +210,7 @@ func NewBeforeCloseHandler(app *App) func(context.Context) bool {
 
 // Shutdown is called when the app is about to close and the frontend has been torn down.
 func (a *App) Shutdown(ctx context.Context) {
-	a.logger.Info("Application shutdown initiated", "App")
+	a.logger.Info("Application shutdown initiated", logsources.App)
 
 	// Shutdown all per-cluster auth managers to stop any recovery goroutines.
 	a.clusterClientsMu.Lock()
@@ -221,7 +226,7 @@ func (a *App) Shutdown(ctx context.Context) {
 
 	a.teardownRefreshSubsystem()
 
-	a.logger.Info("Application shutdown completed", "App")
+	a.logger.Info("Application shutdown completed", logsources.App)
 }
 
 // anyClusterAuthInvalid returns true if any cluster has an auth state that is not Valid.

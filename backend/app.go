@@ -10,7 +10,7 @@ import (
 	"github.com/luxury-yacht/app/backend/capabilities"
 	"github.com/luxury-yacht/app/backend/internal/versioning"
 	"github.com/luxury-yacht/app/backend/refresh"
-	"github.com/luxury-yacht/app/backend/refresh/logstream"
+	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
 	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 	apiextinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
@@ -34,7 +34,7 @@ type App struct {
 	responseCache           *responseCache
 	sidebarVisible          bool
 	diagnosticsPanelVisible bool
-	logsPanelVisible        bool
+	appLogsPanelVisible     bool
 
 	refreshManager               *refresh.Manager
 	refreshHTTPServer            *http.Server
@@ -44,7 +44,7 @@ type App struct {
 	refreshBaseURL               string
 	refreshServerDone            chan struct{}
 	telemetryRecorder            *telemetry.Recorder
-	logTargetLimiter             *logstream.GlobalTargetLimiter
+	containerLogsTargetLimiter   *containerlogsstream.GlobalTargetLimiter
 	sharedInformerFactory        informers.SharedInformerFactory
 	apiExtensionsInformerFactory apiextinformers.SharedInformerFactory
 	refreshSubsystems            map[string]*system.Subsystem
@@ -126,7 +126,7 @@ func NewApp() *App {
 		versionCache:             versioning.NewCache(),
 		responseCache:            newDefaultResponseCache(),
 		sidebarVisible:           true,
-		logsPanelVisible:         false,
+		appLogsPanelVisible:      false,
 		refreshSubsystems:        make(map[string]*system.Subsystem),
 		refreshPermissionCancels: make(map[string]context.CancelFunc),
 		clusterClients:           make(map[string]*clusterClients),

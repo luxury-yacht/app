@@ -10,6 +10,7 @@ package workloads
 import (
 	"fmt"
 
+	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/pods"
 	restypes "github.com/luxury-yacht/app/backend/resources/types"
@@ -36,13 +37,13 @@ func (s *DaemonSetService) DaemonSet(namespace, name string) (*restypes.DaemonSe
 
 	ds, err := client.AppsV1().DaemonSets(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
-		s.deps.Logger.Error(fmt.Sprintf("Failed to get DaemonSet %s/%s: %v", namespace, name, err), "ResourceLoader")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to get DaemonSet %s/%s: %v", namespace, name, err), logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to get daemonset: %v", err)
 	}
 
 	podsForSet, podMetrics, err := s.getDaemonSetPods(ds)
 	if err != nil {
-		s.deps.Logger.Warn(fmt.Sprintf("Failed to collect pods for DaemonSet %s/%s: %v", namespace, name, err), "ResourceLoader")
+		s.deps.Logger.Warn(fmt.Sprintf("Failed to collect pods for DaemonSet %s/%s: %v", namespace, name, err), logsources.ResourceLoader)
 	}
 
 	return s.buildDaemonSetDetails(ds, podsForSet, podMetrics), nil
@@ -56,13 +57,13 @@ func (s *DaemonSetService) DaemonSets(namespace string) ([]*restypes.DaemonSetDe
 
 	daemonSets, err := client.AppsV1().DaemonSets(namespace).List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
-		s.deps.Logger.Error(fmt.Sprintf("Failed to list DaemonSets in namespace %s: %v", namespace, err), "ResourceLoader")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to list DaemonSets in namespace %s: %v", namespace, err), logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to list daemonsets: %v", err)
 	}
 
 	podList, err := client.CoreV1().Pods(namespace).List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
-		s.deps.Logger.Warn(fmt.Sprintf("Failed to list pods in namespace %s: %v", namespace, err), "ResourceLoader")
+		s.deps.Logger.Warn(fmt.Sprintf("Failed to list pods in namespace %s: %v", namespace, err), logsources.ResourceLoader)
 	}
 
 	podService := pods.NewService(s.deps)

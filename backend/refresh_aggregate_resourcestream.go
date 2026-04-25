@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/luxury-yacht/app/backend/refresh/logstream"
+	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
 	"github.com/luxury-yacht/app/backend/refresh/resourcestream"
 	"github.com/luxury-yacht/app/backend/refresh/streammux"
 	"github.com/luxury-yacht/app/backend/refresh/system"
@@ -14,7 +14,7 @@ import (
 // aggregateResourceStreamHandler multiplexes resource stream subscriptions across clusters.
 type aggregateResourceStreamHandler struct {
 	mux      *streammux.Handler
-	logger   logstream.Logger
+	logger   containerlogsstream.Logger
 	recorder *telemetry.Recorder
 	mu       sync.RWMutex
 }
@@ -22,7 +22,7 @@ type aggregateResourceStreamHandler struct {
 // newAggregateResourceStreamHandler builds a multiplexed resource stream handler for all clusters.
 func newAggregateResourceStreamHandler(
 	subsystems map[string]*system.Subsystem,
-	logger logstream.Logger,
+	logger containerlogsstream.Logger,
 	recorder *telemetry.Recorder,
 ) (*aggregateResourceStreamHandler, error) {
 	if logger == nil {

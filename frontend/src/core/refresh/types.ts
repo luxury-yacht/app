@@ -682,7 +682,7 @@ export interface NamespaceHelmSnapshotPayload extends ClusterMeta {
   releases: NamespaceHelmSummary[];
 }
 
-export interface ObjectLogEntry {
+export interface ContainerLogsEntry {
   timestamp: string;
   pod: string;
   container: string;
@@ -693,8 +693,8 @@ export interface ObjectLogEntry {
   _seq?: number;
 }
 
-export interface ObjectLogsSnapshotPayload {
-  entries: ObjectLogEntry[];
+export interface ContainerLogsSnapshotPayload {
+  entries: ContainerLogsEntry[];
   sequence: number;
   generatedAt: number;
   resetCount: number;
@@ -712,7 +712,7 @@ export type RefreshDomain =
   | 'object-yaml'
   | 'object-helm-manifest'
   | 'object-helm-values'
-  | 'object-logs'
+  | 'container-logs'
   | 'cluster-rbac'
   | 'cluster-storage'
   | 'cluster-config'
@@ -743,7 +743,7 @@ export interface DomainPayloadMap {
   'object-yaml': ObjectYAMLSnapshotPayload;
   'object-helm-manifest': ObjectHelmManifestSnapshotPayload;
   'object-helm-values': ObjectHelmValuesSnapshotPayload;
-  'object-logs': ObjectLogsSnapshotPayload;
+  'container-logs': ContainerLogsSnapshotPayload;
   'cluster-rbac': ClusterRBACSnapshotPayload;
   'cluster-storage': ClusterStorageSnapshotPayload;
   'cluster-config': ClusterConfigSnapshotPayload;

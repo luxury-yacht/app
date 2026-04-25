@@ -13,6 +13,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
@@ -125,7 +126,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if h.telemetry != nil {
 				h.telemetry.RecordStreamError(streamName, err)
 			}
-			h.logger.Warn(err.Error(), "EventStream")
+			h.logger.Warn(err.Error(), logsources.EventStream)
 		}
 	}
 
@@ -135,7 +136,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if h.telemetry != nil {
 				h.telemetry.RecordStreamError(streamName, err)
 			}
-			h.logger.Warn(fmt.Sprintf("eventstream: initial snapshot failed: %v", err), "EventStream")
+			h.logger.Warn(fmt.Sprintf("eventstream: initial snapshot failed: %v", err), logsources.EventStream)
 			status, ok := refresh.PermissionDeniedStatusFromError(err)
 			if !ok && apierrors.IsForbidden(err) {
 				wrapped := refresh.WrapPermissionDenied(err, params.Domain, "")
@@ -218,7 +219,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		case streamEvent, ok := <-entries:
 			if !ok {
-				h.logger.Info("eventstream: subscriber channel closed", "EventStream")
+				h.logger.Info("eventstream: subscriber channel closed", logsources.EventStream)
 				return
 			}
 			lastDelivery = time.Now()

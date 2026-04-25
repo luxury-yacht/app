@@ -48,12 +48,12 @@ import type {
   PodSnapshotPayload,
   RefreshDomain,
 } from './types';
-import { logStreamManager } from './streaming/logStreamManager';
+import { containerLogsStreamManager } from './streaming/containerLogsStreamManager';
 import { eventStreamManager } from './streaming/eventStreamManager';
 import { resourceStreamManager } from './streaming/resourceStreamManager';
 import { catalogStreamManager } from './streaming/catalogStreamManager';
 import { errorHandler } from '@utils/errorHandler';
-import { logAppInfo, logAppWarn } from '@/core/logging/appLogClient';
+import { APP_LOG_SOURCES, logAppLogsInfo, logAppLogsWarn } from '@/core/logging/appLogsClient';
 import { getAutoRefreshEnabled, getMetricsRefreshIntervalMs } from '@/core/settings/appPreferences';
 import {
   buildClusterScope,
@@ -98,11 +98,11 @@ const noopStreamingCleanup = () => {};
 const getStreamingMetricsMinIntervalMs = (): number => getMetricsRefreshIntervalMs();
 
 const logInfo = (message: string): void => {
-  logAppInfo(message, 'RefreshOrchestrator');
+  logAppLogsInfo(message, APP_LOG_SOURCES.RefreshOrchestrator);
 };
 
 const logWarning = (message: string): void => {
-  logAppWarn(message, 'RefreshOrchestrator');
+  logAppLogsWarn(message, APP_LOG_SOURCES.RefreshOrchestrator);
 };
 
 const makeInFlightKey = (domain: RefreshDomain, scope?: string) => `${domain}::${scope ?? '*'}`;
@@ -2128,13 +2128,13 @@ refreshOrchestrator.registerDomain({
   category: 'system',
 });
 refreshOrchestrator.registerDomain({
-  domain: 'object-logs',
-  refresherName: SYSTEM_REFRESHERS.objectLogs,
+  domain: 'container-logs',
+  refresherName: SYSTEM_REFRESHERS.containerLogs,
   category: 'system',
   streaming: {
-    start: (scope) => logStreamManager.startStream(scope),
-    stop: (scope, options) => logStreamManager.stop(scope, options?.reset ?? false),
-    refreshOnce: (scope) => logStreamManager.refreshOnce(scope),
+    start: (scope) => containerLogsStreamManager.startStream(scope),
+    stop: (scope, options) => containerLogsStreamManager.stop(scope, options?.reset ?? false),
+    refreshOnce: (scope) => containerLogsStreamManager.refreshOnce(scope),
   },
 });
 resourceStreamDomain('pods', SYSTEM_REFRESHERS.unifiedPods, 'system', { metricsOnly: true });

@@ -10,6 +10,7 @@ package policy
 import (
 	"fmt"
 
+	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/types"
 	policyv1 "k8s.io/api/policy/v1"
@@ -115,6 +116,6 @@ func (s *Service) buildPodDisruptionBudgetDetails(pdb *policyv1.PodDisruptionBud
 
 func (s *Service) logError(msg string) {
 	if s.deps.Logger != nil {
-		s.deps.Logger.Error(msg, "ResourceLoader")
+		s.deps.Logger.Error(msg, logsources.ResourceLoader)
 	}
 }

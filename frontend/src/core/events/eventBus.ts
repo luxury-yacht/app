@@ -47,7 +47,7 @@ export interface AppEvents {
   // View events
   'view:reset': void;
   'view:toggle-diagnostics': void;
-  'view:toggle-app-logs': void;
+  'view:toggle-app-logs-panel': void;
   'view:open-object-diff': ObjectDiffOpenRequest;
   'cluster-tabs:order': string[];
 
@@ -85,11 +85,11 @@ export interface AppEvents {
   'settings:theme': string;
   'settings:metrics-interval': number;
   'settings:max-table-rows': number;
-  'settings:log-buffer-size': number;
-  'settings:log-api-timestamp-format': string;
-  'settings:log-api-timestamp-use-local-time-zone': boolean;
-  'settings:log-target-per-scope-limit': number;
-  'settings:log-target-global-limit': number;
+  'settings:obj-panel-logs-buffer-size': number;
+  'settings:obj-panel-logs-api-timestamp-format': string;
+  'settings:obj-panel-logs-api-timestamp-use-local-time-zone': boolean;
+  'settings:obj-panel-logs-target-per-scope-limit': number;
+  'settings:obj-panel-logs-target-global-limit': number;
   'settings:palette-tint': {
     theme: 'light' | 'dark';
     hue: number;

@@ -10,6 +10,7 @@ package workloads
 import (
 	"fmt"
 
+	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/pods"
 	restypes "github.com/luxury-yacht/app/backend/resources/types"
@@ -39,13 +40,13 @@ func (s *ReplicaSetService) ReplicaSet(namespace, name string) (*restypes.Replic
 
 	replicaSet, err := client.AppsV1().ReplicaSets(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
-		s.deps.Logger.Error(fmt.Sprintf("Failed to get ReplicaSet %s/%s: %v", namespace, name, err), "ResourceLoader")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to get ReplicaSet %s/%s: %v", namespace, name, err), logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to get replicaset: %v", err)
 	}
 
 	podsForSet, podMetrics, err := s.getReplicaSetPods(replicaSet)
 	if err != nil {
-		s.deps.Logger.Warn(fmt.Sprintf("Failed to collect pods for ReplicaSet %s/%s: %v", namespace, name, err), "ResourceLoader")
+		s.deps.Logger.Warn(fmt.Sprintf("Failed to collect pods for ReplicaSet %s/%s: %v", namespace, name, err), logsources.ResourceLoader)
 	}
 
 	return s.buildReplicaSetDetails(replicaSet, podsForSet, podMetrics), nil
@@ -132,7 +133,7 @@ func (s *ReplicaSetService) isReplicaSetActive(replicaSet *appsv1.ReplicaSet) bo
 
 	deployment, err := client.AppsV1().Deployments(replicaSet.Namespace).Get(s.deps.Context, deploymentName, metav1.GetOptions{})
 	if err != nil {
-		s.deps.Logger.Debug(fmt.Sprintf("Failed to fetch deployment %s/%s for ReplicaSet activity: %v", replicaSet.Namespace, deploymentName, err), "ResourceLoader")
+		s.deps.Logger.Debug(fmt.Sprintf("Failed to fetch deployment %s/%s for ReplicaSet activity: %v", replicaSet.Namespace, deploymentName, err), logsources.ResourceLoader)
 		return true
 	}
 

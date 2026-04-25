@@ -287,10 +287,13 @@ export namespace backend {
 
 
 	export class LogEntry {
+	    sequence: number;
 	    timestamp: string;
 	    level: string;
 	    message: string;
 	    source?: string;
+	    clusterId?: string;
+	    clusterName?: string;
 
 	    static createFrom(source: any = {}) {
 	        return new LogEntry(source);
@@ -298,10 +301,13 @@ export namespace backend {
 
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.sequence = source["sequence"];
 	        this.timestamp = source["timestamp"];
 	        this.level = source["level"];
 	        this.message = source["message"];
 	        this.source = source["source"];
+	        this.clusterId = source["clusterId"];
+	        this.clusterName = source["clusterName"];
 	    }
 	}
 	export class ObjectYAMLMutationRequest {
@@ -872,11 +878,11 @@ export namespace types {
 	    refreshBackgroundClustersEnabled: boolean;
 	    metricsRefreshIntervalMs: number;
 	    maxTableRows: number;
-	    logBufferMaxSize: number;
-	    logTargetPerScopeLimit: number;
-	    logTargetGlobalLimit: number;
-	    logApiTimestampFormat: string;
-	    logApiTimestampUseLocalTimeZone: boolean;
+	    objPanelLogsBufferMaxSize: number;
+	    objPanelLogsTargetPerScopeLimit: number;
+	    objPanelLogsTargetGlobalLimit: number;
+	    objPanelLogsApiTimestampFormat: string;
+	    objPanelLogsApiTimestampUseLocalTimeZone: boolean;
 	    gridTablePersistenceMode: string;
 	    defaultObjectPanelPosition: string;
 	    objectPanelDockedRightWidth: number;
@@ -910,11 +916,11 @@ export namespace types {
 	        this.refreshBackgroundClustersEnabled = source["refreshBackgroundClustersEnabled"];
 	        this.metricsRefreshIntervalMs = source["metricsRefreshIntervalMs"];
 	        this.maxTableRows = source["maxTableRows"];
-	        this.logBufferMaxSize = source["logBufferMaxSize"];
-	        this.logTargetPerScopeLimit = source["logTargetPerScopeLimit"];
-	        this.logTargetGlobalLimit = source["logTargetGlobalLimit"];
-	        this.logApiTimestampFormat = source["logApiTimestampFormat"];
-	        this.logApiTimestampUseLocalTimeZone = source["logApiTimestampUseLocalTimeZone"];
+	        this.objPanelLogsBufferMaxSize = source["objPanelLogsBufferMaxSize"];
+	        this.objPanelLogsTargetPerScopeLimit = source["objPanelLogsTargetPerScopeLimit"];
+	        this.objPanelLogsTargetGlobalLimit = source["objPanelLogsTargetGlobalLimit"];
+	        this.objPanelLogsApiTimestampFormat = source["objPanelLogsApiTimestampFormat"];
+	        this.objPanelLogsApiTimestampUseLocalTimeZone = source["objPanelLogsApiTimestampUseLocalTimeZone"];
 	        this.gridTablePersistenceMode = source["gridTablePersistenceMode"];
 	        this.defaultObjectPanelPosition = source["defaultObjectPanelPosition"];
 	        this.objectPanelDockedRightWidth = source["objectPanelDockedRightWidth"];
@@ -1225,6 +1231,108 @@ export namespace types {
 	        this.annotations = source["annotations"];
 	        this.usedBy = source["usedBy"];
 	    }
+	}
+	export class ContainerLogsEntry {
+	    timestamp: string;
+	    pod: string;
+	    container: string;
+	    line: string;
+	    isInit: boolean;
+	    isEphemeral?: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new ContainerLogsEntry(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.timestamp = source["timestamp"];
+	        this.pod = source["pod"];
+	        this.container = source["container"];
+	        this.line = source["line"];
+	        this.isInit = source["isInit"];
+	        this.isEphemeral = source["isEphemeral"];
+	    }
+	}
+	export class ContainerLogsFetchRequest {
+	    scope?: string;
+	    namespace: string;
+	    workloadName?: string;
+	    workloadKind?: string;
+	    podName?: string;
+	    podFilter?: string;
+	    podInclude?: string;
+	    podExclude?: string;
+	    selectedFilters?: string[];
+	    container?: string;
+	    includeInit?: boolean;
+	    includeEphemeral?: boolean;
+	    containerState?: string;
+	    include?: string;
+	    exclude?: string;
+	    previous: boolean;
+	    tailLines: number;
+	    sinceSeconds?: number;
+
+	    static createFrom(source: any = {}) {
+	        return new ContainerLogsFetchRequest(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.scope = source["scope"];
+	        this.namespace = source["namespace"];
+	        this.workloadName = source["workloadName"];
+	        this.workloadKind = source["workloadKind"];
+	        this.podName = source["podName"];
+	        this.podFilter = source["podFilter"];
+	        this.podInclude = source["podInclude"];
+	        this.podExclude = source["podExclude"];
+	        this.selectedFilters = source["selectedFilters"];
+	        this.container = source["container"];
+	        this.includeInit = source["includeInit"];
+	        this.includeEphemeral = source["includeEphemeral"];
+	        this.containerState = source["containerState"];
+	        this.include = source["include"];
+	        this.exclude = source["exclude"];
+	        this.previous = source["previous"];
+	        this.tailLines = source["tailLines"];
+	        this.sinceSeconds = source["sinceSeconds"];
+	    }
+	}
+	export class ContainerLogsFetchResponse {
+	    entries: ContainerLogsEntry[];
+	    warnings?: string[];
+	    error?: string;
+
+	    static createFrom(source: any = {}) {
+	        return new ContainerLogsFetchResponse(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.entries = this.convertValues(source["entries"], ContainerLogsEntry);
+	        this.warnings = source["warnings"];
+	        this.error = source["error"];
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class PodMetricsSummary {
 	    pods: number;
@@ -2666,108 +2774,6 @@ export namespace types {
 		}
 	}
 
-	export class LogFetchRequest {
-	    scope?: string;
-	    namespace: string;
-	    workloadName?: string;
-	    workloadKind?: string;
-	    podName?: string;
-	    podFilter?: string;
-	    podInclude?: string;
-	    podExclude?: string;
-	    selectedFilters?: string[];
-	    container?: string;
-	    includeInit?: boolean;
-	    includeEphemeral?: boolean;
-	    containerState?: string;
-	    include?: string;
-	    exclude?: string;
-	    previous: boolean;
-	    tailLines: number;
-	    sinceSeconds?: number;
-
-	    static createFrom(source: any = {}) {
-	        return new LogFetchRequest(source);
-	    }
-
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.scope = source["scope"];
-	        this.namespace = source["namespace"];
-	        this.workloadName = source["workloadName"];
-	        this.workloadKind = source["workloadKind"];
-	        this.podName = source["podName"];
-	        this.podFilter = source["podFilter"];
-	        this.podInclude = source["podInclude"];
-	        this.podExclude = source["podExclude"];
-	        this.selectedFilters = source["selectedFilters"];
-	        this.container = source["container"];
-	        this.includeInit = source["includeInit"];
-	        this.includeEphemeral = source["includeEphemeral"];
-	        this.containerState = source["containerState"];
-	        this.include = source["include"];
-	        this.exclude = source["exclude"];
-	        this.previous = source["previous"];
-	        this.tailLines = source["tailLines"];
-	        this.sinceSeconds = source["sinceSeconds"];
-	    }
-	}
-	export class PodLogEntry {
-	    timestamp: string;
-	    pod: string;
-	    container: string;
-	    line: string;
-	    isInit: boolean;
-	    isEphemeral?: boolean;
-
-	    static createFrom(source: any = {}) {
-	        return new PodLogEntry(source);
-	    }
-
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.timestamp = source["timestamp"];
-	        this.pod = source["pod"];
-	        this.container = source["container"];
-	        this.line = source["line"];
-	        this.isInit = source["isInit"];
-	        this.isEphemeral = source["isEphemeral"];
-	    }
-	}
-	export class LogFetchResponse {
-	    entries: PodLogEntry[];
-	    warnings?: string[];
-	    error?: string;
-
-	    static createFrom(source: any = {}) {
-	        return new LogFetchResponse(source);
-	    }
-
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.entries = this.convertValues(source["entries"], PodLogEntry);
-	        this.warnings = source["warnings"];
-	        this.error = source["error"];
-	    }
-
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
 
 
 	export class WebhookSelectorExpression {
@@ -3702,7 +3708,6 @@ export namespace types {
 		    return a;
 		}
 	}
-
 
 
 

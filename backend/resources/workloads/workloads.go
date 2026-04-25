@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/internal/parallel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	restypes "github.com/luxury-yacht/app/backend/resources/types"
@@ -51,7 +52,7 @@ func GetWorkloads(deps common.Dependencies, namespace string) ([]*WorkloadInfo, 
 	}
 
 	startTime := time.Now()
-	logger.Info(fmt.Sprintf("Loading workloads for namespace %s using domain services", namespace), "ResourceLoader")
+	logger.Info(fmt.Sprintf("Loading workloads for namespace %s using domain services", namespace), logsources.ResourceLoader)
 
 	var (
 		workloadsMu sync.Mutex
@@ -62,7 +63,7 @@ func GetWorkloads(deps common.Dependencies, namespace string) ([]*WorkloadInfo, 
 		func(context.Context) error {
 			details, err := NewDeploymentService(deps).Deployments(namespace)
 			if err != nil {
-				logger.Warn(fmt.Sprintf("Failed to list Deployments in namespace %s: %v", namespace, err), "ResourceLoader")
+				logger.Warn(fmt.Sprintf("Failed to list Deployments in namespace %s: %v", namespace, err), logsources.ResourceLoader)
 				return nil
 			}
 			items := make([]*WorkloadInfo, 0, len(details))
@@ -79,7 +80,7 @@ func GetWorkloads(deps common.Dependencies, namespace string) ([]*WorkloadInfo, 
 		func(context.Context) error {
 			details, err := NewStatefulSetService(deps).StatefulSets(namespace)
 			if err != nil {
-				logger.Warn(fmt.Sprintf("Failed to list StatefulSets in namespace %s: %v", namespace, err), "ResourceLoader")
+				logger.Warn(fmt.Sprintf("Failed to list StatefulSets in namespace %s: %v", namespace, err), logsources.ResourceLoader)
 				return nil
 			}
 			items := make([]*WorkloadInfo, 0, len(details))
@@ -96,7 +97,7 @@ func GetWorkloads(deps common.Dependencies, namespace string) ([]*WorkloadInfo, 
 		func(context.Context) error {
 			details, err := NewDaemonSetService(deps).DaemonSets(namespace)
 			if err != nil {
-				logger.Warn(fmt.Sprintf("Failed to list DaemonSets in namespace %s: %v", namespace, err), "ResourceLoader")
+				logger.Warn(fmt.Sprintf("Failed to list DaemonSets in namespace %s: %v", namespace, err), logsources.ResourceLoader)
 				return nil
 			}
 			items := make([]*WorkloadInfo, 0, len(details))
@@ -113,7 +114,7 @@ func GetWorkloads(deps common.Dependencies, namespace string) ([]*WorkloadInfo, 
 		func(context.Context) error {
 			details, err := NewJobService(deps).Jobs(namespace)
 			if err != nil {
-				logger.Warn(fmt.Sprintf("Failed to list Jobs in namespace %s: %v", namespace, err), "ResourceLoader")
+				logger.Warn(fmt.Sprintf("Failed to list Jobs in namespace %s: %v", namespace, err), logsources.ResourceLoader)
 				return nil
 			}
 			items := make([]*WorkloadInfo, 0, len(details))
@@ -130,7 +131,7 @@ func GetWorkloads(deps common.Dependencies, namespace string) ([]*WorkloadInfo, 
 		func(context.Context) error {
 			details, err := NewCronJobService(deps).CronJobs(namespace)
 			if err != nil {
-				logger.Warn(fmt.Sprintf("Failed to list CronJobs in namespace %s: %v", namespace, err), "ResourceLoader")
+				logger.Warn(fmt.Sprintf("Failed to list CronJobs in namespace %s: %v", namespace, err), logsources.ResourceLoader)
 				return nil
 			}
 			items := make([]*WorkloadInfo, 0, len(details))
@@ -160,7 +161,7 @@ func GetWorkloads(deps common.Dependencies, namespace string) ([]*WorkloadInfo, 
 		return workloads[i].Namespace < workloads[j].Namespace
 	})
 
-	logger.Info(fmt.Sprintf("Loaded %d workloads for namespace %s in %v", len(workloads), namespace, time.Since(startTime)), "ResourceLoader")
+	logger.Info(fmt.Sprintf("Loaded %d workloads for namespace %s in %v", len(workloads), namespace, time.Since(startTime)), logsources.ResourceLoader)
 	return workloads, nil
 }
 

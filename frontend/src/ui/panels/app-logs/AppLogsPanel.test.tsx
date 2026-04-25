@@ -6,16 +6,20 @@
  */
 
 import ReactDOM from 'react-dom/client';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { act } from 'react';
 import { afterEach, afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const getLogsMock = vi.hoisted(() => vi.fn());
-const clearLogsMock = vi.hoisted(() => vi.fn());
-const setLogsPanelVisibleMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const getAppLogsMock = vi.hoisted(() => vi.fn());
+const getAppLogsSinceMock = vi.hoisted(() => vi.fn());
+const clearAppLogsMock = vi.hoisted(() => vi.fn());
+const setAppLogsPanelVisibleMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const useShortcutMock = vi.hoisted(() => vi.fn());
 const useKeyboardSurfaceMock = vi.hoisted(() => vi.fn());
 const errorHandlerMock = vi.hoisted(() => ({ handle: vi.fn() }));
 const dropdownInstances = vi.hoisted(() => [] as Array<any>);
+const runtimeEventHandlers = vi.hoisted(() => new Map<string, (...args: any[]) => void>());
+const runtimeDisposerMock = vi.hoisted(() => vi.fn());
 
 // AppLogsPanel no longer calls useDockablePanelState — its open/close
 // state is now driven by props from AppLayout (which reads from
@@ -48,9 +52,10 @@ vi.mock('@ui/shortcuts', () => ({
 }));
 
 vi.mock('@wailsjs/go/backend/App', () => ({
-  GetLogs: (...args: unknown[]) => getLogsMock(...args),
-  ClearLogs: (...args: unknown[]) => clearLogsMock(...args),
-  SetLogsPanelVisible: (...args: unknown[]) => setLogsPanelVisibleMock(...args),
+  GetAppLogs: (...args: unknown[]) => getAppLogsMock(...args),
+  GetAppLogsSince: (...args: unknown[]) => getAppLogsSinceMock(...args),
+  ClearAppLogs: (...args: unknown[]) => clearAppLogsMock(...args),
+  SetAppLogsPanelVisible: (...args: unknown[]) => setAppLogsPanelVisibleMock(...args),
 }));
 
 vi.mock('@utils/errorHandler', () => ({
@@ -101,17 +106,26 @@ const setInputValue = (input: HTMLInputElement, value: string) => {
   setter?.call(input, value);
 };
 
+const latestDropdown = (renderValue: string) =>
+  [...dropdownInstances].reverse().find((instance) => instance.renderValue() === renderValue);
+
 beforeEach(() => {
   useShortcutMock.mockClear();
   useKeyboardSurfaceMock.mockClear();
-  getLogsMock.mockReset();
-  clearLogsMock.mockReset();
-  setLogsPanelVisibleMock.mockReset();
-  setLogsPanelVisibleMock.mockResolvedValue(undefined);
+  getAppLogsMock.mockReset();
+  getAppLogsSinceMock.mockReset();
+  clearAppLogsMock.mockReset();
+  setAppLogsPanelVisibleMock.mockReset();
+  setAppLogsPanelVisibleMock.mockResolvedValue(undefined);
   errorHandlerMock.handle.mockReset();
   dropdownInstances.length = 0;
+  runtimeEventHandlers.clear();
+  runtimeDisposerMock.mockReset();
   (window as any).runtime = {
-    EventsOn: vi.fn(),
+    EventsOn: vi.fn((eventName: string, handler: (...args: any[]) => void) => {
+      runtimeEventHandlers.set(eventName, handler);
+      return runtimeDisposerMock;
+    }),
     EventsOff: vi.fn(),
   };
   if (!navigator.clipboard) {
@@ -130,22 +144,34 @@ afterAll(() => {
 describe('AppLogsPanel', () => {
   it('syncs backend visibility when open state changes', async () => {
     vi.useFakeTimers();
-    getLogsMock.mockResolvedValue([]);
+    getAppLogsMock.mockResolvedValue([]);
 
     const { rerender, cleanup } = await renderPanel(true);
-    expect(setLogsPanelVisibleMock).toHaveBeenLastCalledWith(true);
+    expect(setAppLogsPanelVisibleMock).toHaveBeenLastCalledWith(true);
 
     await rerender(false);
-    expect(setLogsPanelVisibleMock).toHaveBeenLastCalledWith(false);
+    expect(setAppLogsPanelVisibleMock).toHaveBeenLastCalledWith(false);
 
     cleanup();
   });
 
   it('loads logs when opened and renders entries', async () => {
     vi.useFakeTimers();
-    getLogsMock.mockResolvedValue([
-      { timestamp: '2024-01-01T00:00:00.000Z', level: 'info', message: 'Ready', source: 'core' },
-      { timestamp: '2024-01-01T00:00:01.000Z', level: 'error', message: 'Boom', source: 'worker' },
+    getAppLogsMock.mockResolvedValue([
+      {
+        sequence: 1,
+        timestamp: '2024-01-01T00:00:00.000Z',
+        level: 'info',
+        message: 'Ready',
+        source: 'core',
+      },
+      {
+        sequence: 2,
+        timestamp: '2024-01-01T00:00:01.000Z',
+        level: 'error',
+        message: 'Boom',
+        source: 'worker',
+      },
     ]);
 
     const { container, cleanup } = await renderPanel();
@@ -154,7 +180,93 @@ describe('AppLogsPanel', () => {
 
     const entries = container.querySelectorAll('.log-entry');
     expect(entries.length).toBe(2);
-    expect(getLogsMock).toHaveBeenCalledTimes(1);
+    expect(getAppLogsMock).toHaveBeenCalledTimes(1);
+
+    cleanup();
+  });
+
+  it('appends new logs from app-logs events using delta reads and listener disposers', async () => {
+    vi.useFakeTimers();
+    getAppLogsMock.mockResolvedValue([
+      {
+        sequence: 1,
+        timestamp: '2024-01-01T00:00:00.000Z',
+        level: 'info',
+        message: 'Ready',
+        source: 'core',
+      },
+    ]);
+    getAppLogsSinceMock.mockResolvedValue([
+      {
+        sequence: 2,
+        timestamp: '2024-01-01T00:00:01.000Z',
+        level: 'warn',
+        message: 'Delta',
+        source: 'core',
+      },
+    ]);
+
+    const { container, cleanup } = await renderPanel();
+
+    await flushInitialLoad();
+    expect(container.querySelectorAll('.log-entry')).toHaveLength(1);
+
+    const handler = runtimeEventHandlers.get('app-logs:added');
+    expect(handler).toBeTruthy();
+
+    await act(async () => {
+      handler?.({ sequence: 2 });
+      await Promise.resolve();
+    });
+
+    expect(getAppLogsSinceMock).toHaveBeenCalledWith(1);
+    expect(getAppLogsMock).toHaveBeenCalledTimes(1);
+    expect(container.querySelectorAll('.log-entry')).toHaveLength(2);
+    expect(container.textContent).toContain('Delta');
+
+    cleanup();
+
+    expect(runtimeDisposerMock).toHaveBeenCalledTimes(1);
+    expect(window.runtime?.EventsOff).not.toHaveBeenCalledWith('app-logs:added');
+  });
+
+  it('does not duplicate logs when overlapping app-logs events read the same delta', async () => {
+    vi.useFakeTimers();
+    getAppLogsMock.mockResolvedValue([
+      {
+        sequence: 1,
+        timestamp: '2024-01-01T00:00:00.000Z',
+        level: 'info',
+        message: 'Ready',
+        source: 'core',
+      },
+    ]);
+    getAppLogsSinceMock.mockResolvedValue([
+      {
+        sequence: 2,
+        timestamp: '2024-01-01T00:00:01.000Z',
+        level: 'warn',
+        message: 'Delta',
+        source: 'core',
+      },
+    ]);
+
+    const { container, cleanup } = await renderPanel();
+
+    await flushInitialLoad();
+    const handler = runtimeEventHandlers.get('app-logs:added');
+    expect(handler).toBeTruthy();
+
+    await act(async () => {
+      handler?.({ sequence: 2 });
+      handler?.({ sequence: 2 });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(getAppLogsSinceMock).toHaveBeenCalledTimes(2);
+    expect(container.querySelectorAll('.log-entry')).toHaveLength(2);
+    expect(container.textContent?.match(/Delta/g)).toHaveLength(1);
 
     cleanup();
   });
@@ -162,7 +274,7 @@ describe('AppLogsPanel', () => {
   it('handles load errors gracefully', async () => {
     vi.useFakeTimers();
     const error = new Error('load failed');
-    getLogsMock.mockRejectedValue(error);
+    getAppLogsMock.mockRejectedValue(error);
 
     const { container, cleanup } = await renderPanel();
 
@@ -176,7 +288,7 @@ describe('AppLogsPanel', () => {
 
   it('toggles dropdown filters and updates counts', async () => {
     vi.useFakeTimers();
-    getLogsMock.mockResolvedValue([
+    getAppLogsMock.mockResolvedValue([
       {
         timestamp: '2024-01-01T00:00:00.000Z',
         level: 'info',
@@ -196,7 +308,7 @@ describe('AppLogsPanel', () => {
     await flushInitialLoad();
 
     const countBadge = container.querySelector('.app-logs-count');
-    expect(countBadge?.textContent).toBe('(1 / 2)');
+    expect(countBadge?.textContent).toBe('(2)');
 
     const logLevelsDropdown = dropdownInstances.find(
       (instance) => instance.renderValue() === 'Log Levels'
@@ -208,7 +320,7 @@ describe('AppLogsPanel', () => {
     expect(componentsDropdown).toBeTruthy();
 
     await act(async () => {
-      logLevelsDropdown?.onChange(['__log_levels_all__']);
+      logLevelsDropdown?.onChange(['info', 'warn', 'error', 'debug']);
       await Promise.resolve();
     });
 
@@ -220,7 +332,7 @@ describe('AppLogsPanel', () => {
     expect(countBadge?.textContent).toBe('(1 / 2)');
 
     await act(async () => {
-      componentsDropdown?.onChange(['__components_all__']);
+      componentsDropdown?.onChange(['core', 'worker']);
       await Promise.resolve();
     });
 
@@ -229,9 +341,153 @@ describe('AppLogsPanel', () => {
     cleanup();
   });
 
+  it('filters and renders cluster metadata', async () => {
+    vi.useFakeTimers();
+    getAppLogsMock.mockResolvedValue([
+      {
+        timestamp: '2024-01-01T00:00:00.000Z',
+        level: 'info',
+        message: 'Cluster A ready',
+        source: 'Auth',
+        clusterId: 'kube-alpha:alpha',
+        clusterName: 'alpha',
+      },
+      {
+        timestamp: '2024-01-01T00:00:01.000Z',
+        level: 'info',
+        message: 'Cluster B ready',
+        source: 'Auth',
+        clusterId: 'kube-bravo:bravo',
+        clusterName: 'bravo',
+      },
+    ]);
+
+    const { container, cleanup } = await renderPanel();
+
+    await flushInitialLoad();
+
+    expect(container.querySelector('.log-cluster')?.textContent).toBe('[alpha]');
+
+    const clustersDropdown = latestDropdown('Clusters');
+    expect(clustersDropdown).toBeTruthy();
+    expect(clustersDropdown?.options.map((option: any) => option.label)).toEqual([
+      'kube-alpha:alpha',
+      'kube-bravo:bravo',
+    ]);
+
+    const renderedClusterOption = renderToStaticMarkup(
+      <>{clustersDropdown?.renderOption(clustersDropdown.options[0], true)}</>
+    );
+    expect(renderedClusterOption).toContain('app-logs-cluster-file');
+    expect(renderedClusterOption).toContain('kube-alpha');
+    expect(renderedClusterOption).toContain('app-logs-cluster-context');
+    expect(renderedClusterOption).toContain('alpha');
+
+    await act(async () => {
+      clustersDropdown?.onChange(['kube-bravo:bravo']);
+      await Promise.resolve();
+    });
+
+    const entries = Array.from(container.querySelectorAll('.log-entry'));
+    expect(entries.length).toBe(1);
+    expect(entries[0]?.textContent).toContain('Cluster B ready');
+    expect(entries[0]?.textContent).toContain('[bravo]');
+
+    cleanup();
+  });
+
+  it('uses shared dropdown bulk actions instead of custom select-all options', async () => {
+    vi.useFakeTimers();
+    getAppLogsMock.mockResolvedValue([
+      {
+        timestamp: '2024-01-01T00:00:00.000Z',
+        level: 'info',
+        message: 'Cluster A ready',
+        source: 'Auth',
+        clusterId: 'kube-alpha:alpha',
+        clusterName: 'alpha',
+      },
+      {
+        timestamp: '2024-01-01T00:00:01.000Z',
+        level: 'debug',
+        message: 'Cluster B ready',
+        source: 'Refresh',
+        clusterId: 'kube-bravo:bravo',
+        clusterName: 'bravo',
+      },
+    ]);
+
+    const { cleanup } = await renderPanel();
+
+    await flushInitialLoad();
+
+    const logLevelsDropdown = latestDropdown('Log Levels');
+    const componentsDropdown = latestDropdown('Components');
+    const clustersDropdown = latestDropdown('Clusters');
+
+    expect(logLevelsDropdown?.showBulkActions).toBe(true);
+    expect(componentsDropdown?.showBulkActions).toBe(true);
+    expect(clustersDropdown?.showBulkActions).toBe(true);
+
+    expect(logLevelsDropdown?.options.map((option: any) => option.value)).toEqual([
+      'info',
+      'warn',
+      'error',
+      'debug',
+    ]);
+    expect(componentsDropdown?.options.map((option: any) => option.value)).toEqual([
+      'Auth',
+      'Refresh',
+    ]);
+    expect(clustersDropdown?.options.map((option: any) => option.value)).toEqual([
+      'kube-alpha:alpha',
+      'kube-bravo:bravo',
+    ]);
+
+    cleanup();
+  });
+
+  it('renders app log actions in the shared iconbar', async () => {
+    vi.useFakeTimers();
+    getAppLogsMock.mockResolvedValue([
+      { timestamp: '2024-01-01T00:00:00.000Z', level: 'info', message: 'Ready', source: 'core' },
+    ]);
+
+    const { container, cleanup } = await renderPanel();
+
+    await flushInitialLoad();
+
+    const iconbar = container.querySelector('.app-logs-action-iconbar');
+    expect(iconbar).toBeTruthy();
+    expect(iconbar?.querySelectorAll('.icon-bar-button')).toHaveLength(3);
+
+    const autoScrollButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Toggle auto-scroll"]'
+    );
+    const copyButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Copy logs to clipboard"]'
+    );
+    const clearButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Clear logs"]'
+    );
+
+    expect(autoScrollButton?.getAttribute('aria-pressed')).toBe('true');
+    expect(copyButton?.disabled).toBe(false);
+    expect(clearButton?.disabled).toBe(false);
+
+    await act(async () => {
+      autoScrollButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(autoScrollButton?.getAttribute('aria-pressed')).toBe('false');
+
+    cleanup();
+  });
+
   it('applies text filters and shows empty state when no matches', async () => {
     vi.useFakeTimers();
-    getLogsMock.mockResolvedValue([
+    getAppLogsMock.mockResolvedValue([
       {
         timestamp: '2024-01-01T00:00:00.000Z',
         level: 'info',
@@ -267,7 +523,7 @@ describe('AppLogsPanel', () => {
 
   it('routes reverse tab from the log body back to the filter controls', async () => {
     vi.useFakeTimers();
-    getLogsMock.mockResolvedValue([
+    getAppLogsMock.mockResolvedValue([
       { timestamp: '2024-01-01T00:00:00.000Z', level: 'info', message: 'Ready', source: 'core' },
     ]);
 
@@ -311,10 +567,10 @@ describe('AppLogsPanel', () => {
 
   it('clears logs on demand', async () => {
     vi.useFakeTimers();
-    getLogsMock.mockResolvedValue([
+    getAppLogsMock.mockResolvedValue([
       { timestamp: '2024-01-01T00:00:00.000Z', level: 'info', message: 'Ready', source: 'core' },
     ]);
-    clearLogsMock.mockResolvedValue(undefined);
+    clearAppLogsMock.mockResolvedValue(undefined);
 
     const { container, cleanup } = await renderPanel();
 
@@ -328,7 +584,7 @@ describe('AppLogsPanel', () => {
       await Promise.resolve();
     });
 
-    expect(clearLogsMock).toHaveBeenCalled();
+    expect(clearAppLogsMock).toHaveBeenCalled();
     expect(container.querySelector('.app-logs-empty')?.textContent).toContain('No logs available');
 
     cleanup();
@@ -338,7 +594,7 @@ describe('AppLogsPanel', () => {
     vi.useFakeTimers();
     const clipboardError = new Error('clipboard blocked');
     (navigator as any).clipboard.writeText.mockRejectedValueOnce(clipboardError);
-    getLogsMock.mockResolvedValue([
+    getAppLogsMock.mockResolvedValue([
       { timestamp: '2024-01-01T00:00:00.000Z', level: 'info', message: 'Ready', source: 'core' },
     ]);
 

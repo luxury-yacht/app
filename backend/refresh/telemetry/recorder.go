@@ -399,10 +399,10 @@ type StreamStatus struct {
 
 // Stream name identifiers used across the backend/frontend telemetry contract.
 const (
-	StreamEvents    = "events"
-	StreamLogs      = "object-logs"
-	StreamCatalog   = "catalog"
-	StreamResources = "resources"
+	StreamEvents        = "events"
+	StreamContainerLogs = "container-logs"
+	StreamCatalog       = "catalog"
+	StreamResources     = "resources"
 )
 
 // RecordStreamConnect increments the active session count for a stream.

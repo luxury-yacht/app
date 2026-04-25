@@ -194,7 +194,7 @@ describe('overviewRegistry', () => {
     });
     expect(registryModule.getResourceCapabilities('Pod')).toEqual({
       delete: true,
-      logs: true,
+      objPanelLogs: true,
       exec: true,
     });
     expect(registryModule.getResourceCapabilities('custom.foo')).toEqual({ delete: true });

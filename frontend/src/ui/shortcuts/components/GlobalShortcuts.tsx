@@ -21,26 +21,26 @@ import { EventsOn, EventsOff, Quit } from '@wailsjs/runtime/runtime';
 
 interface GlobalShortcutsProps {
   onToggleSidebar?: () => void;
-  onToggleLogsPanel?: () => void;
+  onToggleAppLogsPanel?: () => void;
   onToggleSettings?: () => void;
   onToggleObjectDiff?: () => void;
   onCreateResource?: () => void;
   onRefresh?: () => void;
   onToggleDiagnostics?: () => void;
-  isLogsPanelOpen?: boolean;
+  isAppLogsPanelOpen?: boolean;
   isObjectPanelOpen?: boolean;
   isSettingsOpen?: boolean;
 }
 
 export function GlobalShortcuts({
   onToggleSidebar,
-  onToggleLogsPanel,
+  onToggleAppLogsPanel,
   onToggleSettings,
   onToggleObjectDiff,
   onCreateResource,
   onRefresh,
   onToggleDiagnostics,
-  isLogsPanelOpen,
+  isAppLogsPanelOpen,
   isObjectPanelOpen,
   isSettingsOpen,
 }: GlobalShortcutsProps) {
@@ -81,9 +81,9 @@ export function GlobalShortcuts({
     onToggleSidebar?.();
   }, [onToggleSidebar]);
 
-  const handleToggleLogsPanel = useCallback(() => {
-    onToggleLogsPanel?.();
-  }, [onToggleLogsPanel]);
+  const handleToggleAppLogsPanel = useCallback(() => {
+    onToggleAppLogsPanel?.();
+  }, [onToggleAppLogsPanel]);
 
   const handleToggleSettings = useCallback(() => {
     // Only toggle settings if help modal isn't open or animating
@@ -169,15 +169,15 @@ export function GlobalShortcuts({
   // Use refs to avoid stale closures in the Escape handler
   const isHelpOpenRef = useRef(isHelpOpen);
   const isSettingsOpenRef = useRef(isSettingsOpen);
-  const isLogsPanelOpenRef = useRef(isLogsPanelOpen);
+  const isAppLogsPanelOpenRef = useRef(isAppLogsPanelOpen);
   const isObjectPanelOpenRef = useRef(isObjectPanelOpen);
 
   useEffect(() => {
     isHelpOpenRef.current = isHelpOpen;
     isSettingsOpenRef.current = isSettingsOpen;
-    isLogsPanelOpenRef.current = isLogsPanelOpen;
+    isAppLogsPanelOpenRef.current = isAppLogsPanelOpen;
     isObjectPanelOpenRef.current = isObjectPanelOpen;
-  }, [isHelpOpen, isSettingsOpen, isLogsPanelOpen, isObjectPanelOpen]);
+  }, [isHelpOpen, isSettingsOpen, isAppLogsPanelOpen, isObjectPanelOpen]);
 
   // Track when modals are animating to prevent opening others
   useEffect(() => {
@@ -206,18 +206,18 @@ export function GlobalShortcuts({
     // Check refs for current state - priority order:
     // 1. Help overlay
     // 2. Settings modal
-    // 3. Logs panel (closes before object panel when both are open)
+    // 3. Application Logs Panel (closes before object panel when both are open)
     // 4. Object panel
     if (isHelpOpenRef.current) {
       setIsHelpOpen(false);
     } else if (isSettingsOpenRef.current && onToggleSettings) {
       onToggleSettings(); // This will toggle it off
-    } else if (isLogsPanelOpenRef.current && onToggleLogsPanel) {
-      onToggleLogsPanel();
+    } else if (isAppLogsPanelOpenRef.current && onToggleAppLogsPanel) {
+      onToggleAppLogsPanel();
     } else if (isObjectPanelOpenRef.current) {
       // Object panel has its own ESC handler now
     }
-  }, [onToggleSettings, onToggleLogsPanel]);
+  }, [onToggleSettings, onToggleAppLogsPanel]);
 
   // Register all shortcuts individually to avoid hooks in loops
   useShortcut({
@@ -239,11 +239,11 @@ export function GlobalShortcuts({
 
   useShortcut({
     key: 'l',
-    modifiers: macPlatform ? { meta: true, shift: true } : { ctrl: true, shift: true },
-    handler: handleToggleLogsPanel,
-    description: 'Toggle logs panel',
+    modifiers: { shift: true, ctrl: true },
+    handler: handleToggleAppLogsPanel,
+    description: 'Toggle Application Logs Panel',
     category: 'Global',
-    enabled: !!onToggleLogsPanel,
+    enabled: !!onToggleAppLogsPanel,
   });
 
   useShortcut({

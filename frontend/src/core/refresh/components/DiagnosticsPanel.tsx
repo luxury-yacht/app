@@ -20,7 +20,7 @@ import type {
   RefreshDomain,
   NodeMetricsInfo,
   PodSnapshotPayload,
-  ObjectLogsSnapshotPayload,
+  ContainerLogsSnapshotPayload,
   TelemetrySummary,
   TelemetryStreamStatus,
   CatalogSnapshotPayload,
@@ -83,7 +83,7 @@ const STREAM_LABELS: Record<string, string> = {
   resources: 'Resources',
   events: 'Events',
   catalog: 'Catalog',
-  'object-logs': 'Object Logs',
+  'container-logs': 'Container Logs',
 };
 
 type HealthStatus = 'healthy' | 'degraded' | 'unhealthy';
@@ -97,7 +97,7 @@ type StreamHealthSummary = {
 };
 
 const METRICS_ONLY_DOMAINS = new Set<RefreshDomain>(['pods', 'namespace-workloads', 'nodes']);
-const STREAM_ONLY_DOMAINS = new Set<RefreshDomain>(['object-logs']);
+const STREAM_ONLY_DOMAINS = new Set<RefreshDomain>(['container-logs']);
 const PAUSE_POLLING_WHEN_STREAMING_DOMAINS = new Set<RefreshDomain>([
   'catalog',
   'cluster-rbac',
@@ -121,7 +121,7 @@ const STREAM_MODE_BY_NAME: Record<string, 'streaming' | 'watch'> = {
   resources: 'streaming',
   events: 'watch',
   catalog: 'watch',
-  'object-logs': 'streaming',
+  'container-logs': 'streaming',
 };
 
 const PERMISSION_ERROR_HINTS = ['forbidden', 'permission', 'unauthorized', 'access denied', 'rbac'];
@@ -324,7 +324,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
   const namespaceRBACScopeEntries = useRefreshScopedDomainEntries('namespace-rbac');
   const namespaceStorageScopeEntries = useRefreshScopedDomainEntries('namespace-storage');
   const podScopeEntries = useRefreshScopedDomainEntries('pods');
-  const logScopeEntries = useRefreshScopedDomainEntries('object-logs');
+  const containerLogsScopeEntries = useRefreshScopedDomainEntries('container-logs');
   // Object panel scoped domains – visible only while the object panel is open.
   const objectDetailsScopeEntries = useRefreshScopedDomainEntries('object-details');
   const objectEventsScopeEntries = useRefreshScopedDomainEntries('object-events');
@@ -647,7 +647,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     }): { label: string; tooltip?: string; status: HealthStatus } => {
       const { domain, status, error, scope, streamHealth } = params;
       const scopeTrimmed = (scope ?? '').trim();
-      if (!scopeTrimmed && (domain === 'pods' || domain === 'object-logs')) {
+      if (!scopeTrimmed && (domain === 'pods' || domain === 'container-logs')) {
         return {
           label: formatHealthLabel('unhealthy', 'no scope'),
           tooltip: 'No active scope',
@@ -1225,29 +1225,29 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
 
     const orderedPodRows = podRows.sort((a, b) => a.label.localeCompare(b.label));
 
-    const logStreamTelemetry = telemetrySummary?.streams.find(
-      (entry) => entry.name === 'object-logs'
+    const containerLogsStreamTelemetry = telemetrySummary?.streams.find(
+      (entry) => entry.name === 'container-logs'
     );
-    const logStreamHealth = resolveStreamTelemetryHealth(logStreamTelemetry);
-    const logStreamActive = Boolean(logStreamTelemetry?.activeSessions);
-    const logStreamHealthy = logStreamHealth?.status === 'healthy';
+    const containerLogsStreamHealth = resolveStreamTelemetryHealth(containerLogsStreamTelemetry);
+    const containerLogsStreamActive = Boolean(containerLogsStreamTelemetry?.activeSessions);
+    const containerLogsStreamHealthy = containerLogsStreamHealth?.status === 'healthy';
     const logPollingDetails = resolvePollingDetails({
-      domain: 'object-logs',
-      refresherName: DOMAIN_REFRESHER_MAP['object-logs'],
-      streamActive: logStreamActive,
-      streamHealthy: logStreamHealthy,
+      domain: 'container-logs',
+      refresherName: DOMAIN_REFRESHER_MAP['container-logs'],
+      streamActive: containerLogsStreamActive,
+      streamHealthy: containerLogsStreamHealthy,
       metricsOnly: false,
     });
     const logModeDetails = resolveModeDetails({
-      domain: 'object-logs',
-      streamMode: STREAM_MODE_BY_NAME['object-logs'],
-      streamActive: logStreamActive,
-      streamHealthy: logStreamHealthy,
+      domain: 'container-logs',
+      streamMode: STREAM_MODE_BY_NAME['container-logs'],
+      streamActive: containerLogsStreamActive,
+      streamHealthy: containerLogsStreamHealthy,
       pollingEnabled: logPollingDetails.enabled,
       metricsOnly: false,
     });
-    const logRows = logScopeEntries.map<DiagnosticsRow>(([scope, state]) => {
-      const payload = state.data as ObjectLogsSnapshotPayload | null;
+    const logRows = containerLogsScopeEntries.map<DiagnosticsRow>(([scope, state]) => {
+      const payload = state.data as ContainerLogsSnapshotPayload | null;
       const lastUpdated = state.lastUpdated ?? state.lastAutoRefresh ?? state.lastManualRefresh;
       const lastUpdatedInfo = formatLastUpdated(lastUpdated);
       const normalizedScope = stripClusterScope(scope);
@@ -1271,16 +1271,16 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       const countClassName = warnings.length > 0 ? 'diagnostics-count-warning' : undefined;
       const scopeDetails = resolveScopeDetails(scope, selectedClusterId, getClusterMeta);
       const healthDetails = resolveHealthDetails({
-        domain: 'object-logs',
+        domain: 'container-logs',
         status: state.status,
         error: state.error,
         scope,
-        streamHealth: logStreamHealth,
+        streamHealth: containerLogsStreamHealth,
       });
 
       return {
-        rowKey: `object-logs:${scope}`,
-        domain: 'object-logs' as RefreshDomain,
+        rowKey: `container-logs:${scope}`,
+        domain: 'container-logs' as RefreshDomain,
         label,
         status: state.status,
         version: resetCount > 0 ? String(resetCount) : '—',
@@ -1410,7 +1410,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
 
     const priorityRows = baseRows.filter((row) => prioritySet.has(row.domain));
     const remainingRows = baseRows.filter(
-      (row) => !prioritySet.has(row.domain) && row.domain !== 'pods' && row.domain !== 'object-logs'
+      (row) =>
+        !prioritySet.has(row.domain) && row.domain !== 'pods' && row.domain !== 'container-logs'
     );
 
     // Keep configured priority order while preserving every scoped row per domain.
@@ -1439,7 +1440,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
   }, [
     domainScopedStates,
     podScopeEntries,
-    logScopeEntries,
+    containerLogsScopeEntries,
     objectDetailsScopeEntries,
     objectEventsScopeEntries,
     objectYamlScopeEntries,
@@ -1813,8 +1814,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
   const catalogStreamTelemetry = telemetrySummary?.streams.find(
     (entry) => entry.name === 'catalog'
   );
-  const logStreamTelemetry = telemetrySummary?.streams.find(
-    (entry) => entry.name === 'object-logs'
+  const containerLogsStreamTelemetry = telemetrySummary?.streams.find(
+    (entry) => entry.name === 'container-logs'
   );
   const orchestratorSummary = useMemo(() => {
     const pending = refreshState.pendingRequests;
@@ -2013,34 +2014,36 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
   ]);
 
   const logSummary = useMemo(() => {
-    const totalScopes = logScopeEntries.length;
-    const activeScopes = logScopeEntries.filter(([, state]) =>
+    const totalScopes = containerLogsScopeEntries.length;
+    const activeScopes = containerLogsScopeEntries.filter(([, state]) =>
       ['ready', 'loading', 'updating'].includes(state.status)
     ).length;
-    const errorScopes = logScopeEntries.filter(([, state]) => state.status === 'error').length;
-    const latestUpdate = logScopeEntries.reduce((latest, [, state]) => {
+    const errorScopes = containerLogsScopeEntries.filter(
+      ([, state]) => state.status === 'error'
+    ).length;
+    const latestUpdate = containerLogsScopeEntries.reduce((latest, [, state]) => {
       const timestamp = state.lastUpdated ?? state.lastAutoRefresh ?? state.lastManualRefresh ?? 0;
       return Math.max(latest, timestamp);
     }, 0);
     const lastUpdatedInfo = formatLastUpdated(latestUpdate > 0 ? latestUpdate : undefined);
 
-    const delivered = logStreamTelemetry?.totalMessages ?? 0;
-    const dropped = logStreamTelemetry?.droppedMessages ?? 0;
-    const skippedTargets = logStreamTelemetry?.skippedTargets ?? 0;
-    const activeSessions = logStreamTelemetry?.activeSessions ?? 0;
+    const delivered = containerLogsStreamTelemetry?.totalMessages ?? 0;
+    const dropped = containerLogsStreamTelemetry?.droppedMessages ?? 0;
+    const skippedTargets = containerLogsStreamTelemetry?.skippedTargets ?? 0;
+    const activeSessions = containerLogsStreamTelemetry?.activeSessions ?? 0;
     const lastConnectInfo = formatLastUpdated(
-      logStreamTelemetry?.lastConnect && logStreamTelemetry.lastConnect > 0
-        ? logStreamTelemetry.lastConnect
+      containerLogsStreamTelemetry?.lastConnect && containerLogsStreamTelemetry.lastConnect > 0
+        ? containerLogsStreamTelemetry.lastConnect
         : undefined
     );
     const lastEventInfo = formatLastUpdated(
-      logStreamTelemetry?.lastEvent && logStreamTelemetry.lastEvent > 0
-        ? logStreamTelemetry.lastEvent
+      containerLogsStreamTelemetry?.lastEvent && containerLogsStreamTelemetry.lastEvent > 0
+        ? containerLogsStreamTelemetry.lastEvent
         : undefined
     );
 
     const summaryParts: string[] = [`Scopes: ${totalScopes}`, `Active Scopes: ${activeScopes}`];
-    if (logStreamTelemetry) {
+    if (containerLogsStreamTelemetry) {
       summaryParts.push(`Sessions: ${activeSessions}`);
       summaryParts.push(`Delivered: ${delivered}`);
       summaryParts.push(`Dropped: ${dropped}`);
@@ -2050,7 +2053,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     }
 
     const secondaryParts: string[] = [`Updated: ${lastUpdatedInfo.display}`];
-    if (logStreamTelemetry) {
+    if (containerLogsStreamTelemetry) {
       secondaryParts.push(`Last Connect: ${lastConnectInfo.display}`);
       secondaryParts.push(`Last Stream: ${lastEventInfo.display}`);
     }
@@ -2063,11 +2066,11 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     if (lastUpdatedInfo.tooltip) {
       titleParts.push(`Updated ${lastUpdatedInfo.tooltip}`);
     }
-    if (logStreamTelemetry?.lastError) {
-      titleParts.push(logStreamTelemetry.lastError);
+    if (containerLogsStreamTelemetry?.lastError) {
+      titleParts.push(containerLogsStreamTelemetry.lastError);
     }
-    if (logStreamTelemetry?.lastSkipReason) {
-      titleParts.push(logStreamTelemetry.lastSkipReason);
+    if (containerLogsStreamTelemetry?.lastSkipReason) {
+      titleParts.push(containerLogsStreamTelemetry.lastSkipReason);
     }
     if (lastConnectInfo.tooltip) {
       titleParts.push(`Connected ${lastConnectInfo.tooltip}`);
@@ -2082,7 +2085,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       className,
       title: titleParts.length > 0 ? titleParts.join(' | ') : undefined,
     };
-  }, [logScopeEntries, logStreamTelemetry]);
+  }, [containerLogsScopeEntries, containerLogsStreamTelemetry]);
 
   useShortcut({
     key: 'Escape',

@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/internal/parallel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/types"
@@ -81,7 +82,7 @@ func (s *Service) getMultiNamespacePodMetrics(pods []corev1.Pod) map[string]*met
 		if config != nil {
 			metricsClient, err := metricsclient.NewForConfig(config)
 			if err != nil {
-				s.deps.Logger.Debug(fmt.Sprintf("Metrics client not available: %v", err), "ResourceLoader")
+				s.deps.Logger.Debug(fmt.Sprintf("Metrics client not available: %v", err), logsources.ResourceLoader)
 				return metrics
 			}
 			s.deps.SetMetricsClient(metricsClient)
@@ -108,7 +109,7 @@ func (s *Service) getMultiNamespacePodMetrics(pods []corev1.Pod) map[string]*met
 	_ = parallel.ForEach(s.deps.Context, nsList, 4, func(ctx context.Context, ns string) error {
 		podMetricsList, err := client.MetricsV1beta1().PodMetricses(ns).List(ctx, metav1.ListOptions{})
 		if err != nil {
-			s.deps.Logger.Debug(fmt.Sprintf("Failed to fetch pod metrics for namespace %s: %v", ns, err), "ResourceLoader")
+			s.deps.Logger.Debug(fmt.Sprintf("Failed to fetch pod metrics for namespace %s: %v", ns, err), logsources.ResourceLoader)
 			return nil
 		}
 
@@ -352,7 +353,7 @@ func (s *Service) getPodMetrics(namespace string) map[string]*metricsv1beta1.Pod
 		if config != nil {
 			metricsClient, err := metricsclient.NewForConfig(config)
 			if err != nil {
-				s.deps.Logger.Info(fmt.Sprintf("Metrics client not available: %v", err), "ResourceLoader")
+				s.deps.Logger.Info(fmt.Sprintf("Metrics client not available: %v", err), logsources.ResourceLoader)
 				return metrics
 			}
 			s.deps.SetMetricsClient(metricsClient)
@@ -366,7 +367,7 @@ func (s *Service) getPodMetrics(namespace string) map[string]*metricsv1beta1.Pod
 	// Fetch pod metrics
 	podMetricsList, err := client.MetricsV1beta1().PodMetricses(namespace).List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
-		s.deps.Logger.Info(fmt.Sprintf("Failed to fetch pod metrics for namespace %s: %v", namespace, err), "ResourceLoader")
+		s.deps.Logger.Info(fmt.Sprintf("Failed to fetch pod metrics for namespace %s: %v", namespace, err), logsources.ResourceLoader)
 		return metrics
 	}
 
@@ -396,7 +397,7 @@ func (s *Service) getPodMetricsForPods(namespace string, pods []corev1.Pod) map[
 		if config != nil {
 			metricsClient, err := metricsclient.NewForConfig(config)
 			if err != nil {
-				s.deps.Logger.Debug(fmt.Sprintf("Metrics client not available: %v", err), "ResourceLoader")
+				s.deps.Logger.Debug(fmt.Sprintf("Metrics client not available: %v", err), logsources.ResourceLoader)
 				return metrics
 			}
 			s.deps.SetMetricsClient(metricsClient)
@@ -415,7 +416,7 @@ func (s *Service) getPodMetricsForPods(namespace string, pods []corev1.Pod) map[
 			podMetric, err := client.MetricsV1beta1().PodMetricses(namespace).Get(s.deps.Context, pod.Name, metav1.GetOptions{})
 			if err != nil {
 				// Individual pod metrics might not be available yet (new pods)
-				s.deps.Logger.Debug(fmt.Sprintf("No metrics for pod %s: %v", pod.Name, err), "ResourceLoader")
+				s.deps.Logger.Debug(fmt.Sprintf("No metrics for pod %s: %v", pod.Name, err), logsources.ResourceLoader)
 				continue
 			}
 			metrics[pod.Name] = podMetric
@@ -424,7 +425,7 @@ func (s *Service) getPodMetricsForPods(namespace string, pods []corev1.Pod) map[
 		// For many pods, fetch all and filter
 		podMetricsList, err := client.MetricsV1beta1().PodMetricses(namespace).List(s.deps.Context, metav1.ListOptions{})
 		if err != nil {
-			s.deps.Logger.Info(fmt.Sprintf("Failed to fetch pod metrics for namespace %s: %v", namespace, err), "ResourceLoader")
+			s.deps.Logger.Info(fmt.Sprintf("Failed to fetch pod metrics for namespace %s: %v", namespace, err), logsources.ResourceLoader)
 			return metrics
 		}
 
@@ -788,7 +789,7 @@ func (s *Service) buildMultiNamespaceRSMap(pods []corev1.Pod) map[string]string 
 	for ns := range namespaces {
 		rsList, err := s.deps.KubernetesClient.AppsV1().ReplicaSets(ns).List(s.deps.Context, metav1.ListOptions{})
 		if err != nil {
-			s.deps.Logger.Debug(fmt.Sprintf("Failed to fetch ReplicaSets for namespace %s: %v", ns, err), "ResourceLoader")
+			s.deps.Logger.Debug(fmt.Sprintf("Failed to fetch ReplicaSets for namespace %s: %v", ns, err), logsources.ResourceLoader)
 			continue
 		}
 

@@ -34,7 +34,7 @@ interface OverviewComponentConfig {
     restart?: boolean;
     scale?: boolean;
     edit?: boolean;
-    logs?: boolean;
+    objPanelLogs?: boolean;
     exec?: boolean;
     trigger?: boolean;
     suspend?: boolean;
@@ -196,7 +196,7 @@ overviewRegistry.register({
   component: PodOverview,
   capabilities: {
     delete: true,
-    logs: true,
+    objPanelLogs: true,
     exec: true,
   },
 });

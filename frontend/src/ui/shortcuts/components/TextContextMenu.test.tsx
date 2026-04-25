@@ -150,10 +150,10 @@ describe('TextContextMenu', () => {
 
   it('shows Copy and Select All for selected log text', () => {
     const logs = document.createElement('div');
-    logs.className = 'pod-logs-content';
+    logs.className = 'logs-viewer-content';
     logs.tabIndex = -1;
     const line = document.createElement('div');
-    line.className = 'pod-log-line';
+    line.className = 'log-viewer-line';
     line.textContent = 'selected log text';
     logs.appendChild(line);
     document.body.appendChild(logs);
@@ -271,10 +271,10 @@ describe('TextContextMenu', () => {
 
   it('Select All scopes to the log viewer when right-clicking selected log text', () => {
     const logs = document.createElement('div');
-    logs.className = 'pod-logs-content';
+    logs.className = 'logs-viewer-content';
     logs.tabIndex = -1;
     const line = document.createElement('div');
-    line.className = 'pod-log-line';
+    line.className = 'log-viewer-line';
     line.textContent = 'selected log text';
     logs.appendChild(line);
     document.body.appendChild(logs);

@@ -18,7 +18,7 @@ describe('useObjectPanelFeatureSupport', () => {
   const resultRef: { current: HookResult | null } = { current: null };
 
   const capabilities: Record<string, ResourceCapability> = {
-    deployment: { logs: true, restart: true, scale: true, delete: true },
+    deployment: { objPanelLogs: true, restart: true, scale: true, delete: true },
     node: { nodeLogs: true },
     helmrelease: { delete: true },
   };
@@ -59,7 +59,7 @@ describe('useObjectPanelFeatureSupport', () => {
     const result = await renderHook(null);
 
     expect(result).toEqual({
-      logs: false,
+      objPanelLogs: false,
       nodeLogs: false,
       manifest: false,
       values: false,
@@ -78,7 +78,7 @@ describe('useObjectPanelFeatureSupport', () => {
     const result = await renderHook('deployment');
 
     expect(result).toEqual({
-      logs: true,
+      objPanelLogs: true,
       nodeLogs: false,
       manifest: false,
       values: false,
@@ -97,7 +97,7 @@ describe('useObjectPanelFeatureSupport', () => {
     const result = await renderHook('helmrelease');
 
     expect(result).toEqual({
-      logs: false,
+      objPanelLogs: false,
       nodeLogs: false,
       manifest: true,
       values: true,
@@ -116,7 +116,7 @@ describe('useObjectPanelFeatureSupport', () => {
     const result = await renderHook('customkind');
 
     expect(result).toEqual({
-      logs: false,
+      objPanelLogs: false,
       nodeLogs: false,
       manifest: false,
       values: false,
@@ -135,7 +135,7 @@ describe('useObjectPanelFeatureSupport', () => {
     const result = await renderHook('node');
 
     expect(result).toEqual({
-      logs: false,
+      objPanelLogs: false,
       nodeLogs: true,
       manifest: false,
       values: false,

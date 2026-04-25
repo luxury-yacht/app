@@ -10,6 +10,7 @@ import ReactDOM from 'react-dom/client';
 import App from './App.tsx';
 import { initializeAutoRefresh, initializeMetricsRefreshInterval } from '@/core/refresh';
 import { hydrateAppPreferences } from '@/core/settings/appPreferences';
+import { initializeScrollbarActivityTracking } from '@shared/scrollbars/scrollbarActivity';
 
 const appElement = document.getElementById('app');
 if (appElement) {
@@ -17,6 +18,7 @@ if (appElement) {
     // Hydrate preferences before the first render so paused/loading UI starts
     // from the persisted settings instead of a temporary default state.
     await hydrateAppPreferences();
+    initializeScrollbarActivityTracking();
     initializeMetricsRefreshInterval();
     initializeAutoRefresh();
 

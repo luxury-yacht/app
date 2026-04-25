@@ -14,13 +14,13 @@ import { handoffLayoutBeforeClose } from '@ui/dockable/useDockablePanelState';
 import { refreshOrchestrator } from '@/core/refresh';
 import { getObjectPanelKind } from '@modules/object-panel/components/ObjectPanel/hooks/getObjectPanelKind';
 import { clearLogViewerPrefs } from '@modules/object-panel/components/ObjectPanel/Logs/logViewerPrefsCache';
-import { clearLogStreamScopeParams } from '@modules/object-panel/components/ObjectPanel/Logs/logStreamScopeParamsCache';
+import { clearContainerLogsStreamScopeParams } from '@modules/object-panel/components/ObjectPanel/Logs/containerLogsStreamScopeParamsCache';
 
 /**
  * Evict every scoped-domain entry that belongs to a single object panel.
  *
  * The five scopes (object-details, object-events, object-yaml,
- * object-helm-manifest, object-helm-values, object-logs) live in the
+ * object-helm-manifest, object-helm-values, container-logs) live in the
  * global refresh store keyed by cluster-prefixed scope strings, so an
  * unmount alone does NOT free them — that's deliberate, so a transient
  * unmount caused by a cluster switch can render from cache on the way
@@ -28,7 +28,7 @@ import { clearLogStreamScopeParams } from '@modules/object-panel/components/Obje
  * the panel for good, which is what this helper enforces.
  */
 const evictPanelScopes = (ref: KubernetesObjectReference): void => {
-  const { detailScope, eventsScope, logScope, helmScope } = getObjectPanelKind(ref);
+  const { detailScope, eventsScope, containerLogsScope, helmScope } = getObjectPanelKind(ref);
   if (detailScope) {
     refreshOrchestrator.resetScopedDomain('object-details', detailScope);
     refreshOrchestrator.resetScopedDomain('object-yaml', detailScope);
@@ -36,9 +36,9 @@ const evictPanelScopes = (ref: KubernetesObjectReference): void => {
   if (eventsScope) {
     refreshOrchestrator.resetScopedDomain('object-events', eventsScope);
   }
-  if (logScope) {
-    refreshOrchestrator.resetScopedDomain('object-logs', logScope);
-    clearLogStreamScopeParams(logScope);
+  if (containerLogsScope) {
+    refreshOrchestrator.resetScopedDomain('container-logs', containerLogsScope);
+    clearContainerLogsStreamScopeParams(containerLogsScope);
   }
   if (helmScope) {
     refreshOrchestrator.resetScopedDomain('object-helm-manifest', helmScope);

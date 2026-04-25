@@ -1,0 +1,269 @@
+/* Shared scrollbar behavior for every platform-backed webview. */
+
+:root {
+  --scrollbar-thumb-current-bg: var(--scrollbar-thumb-idle-bg);
+  --scrollbar-thumb-current-opacity: var(--scrollbar-thumb-idle-opacity);
+}
+
+.scrollbar-active * {
+  --scrollbar-thumb-current-bg: var(--scrollbar-thumb-idle-bg);
+  --scrollbar-thumb-current-opacity: var(--scrollbar-thumb-idle-opacity);
+}
+
+.scrollbar-active {
+  --scrollbar-thumb-current-bg: var(--scrollbar-thumb-bg);
+  --scrollbar-thumb-current-opacity: var(--scrollbar-thumb-active-opacity);
+}
+
+*::-webkit-scrollbar {
+  -webkit-appearance: none;
+  width: var(--scrollbar-width);
+  height: var(--scrollbar-height);
+  background: transparent;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--scrollbar-track-bg);
+  border-radius: var(--scrollbar-radius);
+}
+
+*::-webkit-scrollbar-thumb {
+  min-width: var(--scrollbar-min-thumb-size);
+  min-height: var(--scrollbar-min-thumb-size);
+  background-color: var(--scrollbar-thumb-bg);
+  background-clip: padding-box;
+  border: var(--scrollbar-thumb-inset) solid transparent;
+  border-radius: var(--scrollbar-radius);
+  opacity: var(--scrollbar-thumb-current-opacity);
+  transition: background-color var(--scrollbar-fade-in-duration) var(--ease-out, ease);
+}
+
+.scrollbar-active::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb-bg);
+  opacity: var(--scrollbar-thumb-current-opacity);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover-bg);
+  opacity: var(--scrollbar-thumb-active-opacity);
+}
+
+*::-webkit-scrollbar-corner {
+  background: var(--scrollbar-corner-bg);
+}
+
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb-current-bg) transparent;
+  }
+
+  .scrollbar-active * {
+    scrollbar-color: var(--scrollbar-thumb-idle-bg) transparent;
+  }
+
+  .scrollbar-active {
+    scrollbar-color: var(--scrollbar-thumb-bg) transparent;
+  }
+}
+
+:where(body *) {
+  scrollbar-gutter: auto;
+  scrollbar-width: none;
+}
+
+:where(body *)::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.scrollbar-overlay-thumb {
+  position: fixed;
+  z-index: var(--z-index-scrollbar-overlay);
+  pointer-events: auto;
+  background-color: var(--scrollbar-thumb-bg);
+  border-radius: var(--scrollbar-radius);
+  opacity: var(--scrollbar-thumb-current-opacity);
+  transition:
+    background-color var(--scrollbar-fade-in-duration) var(--ease-out, ease),
+    height var(--scrollbar-hover-resize-duration) var(--ease-out, ease),
+    left var(--scrollbar-hover-resize-duration) var(--ease-out, ease),
+    top var(--scrollbar-hover-resize-duration) var(--ease-out, ease),
+    width var(--scrollbar-hover-resize-duration) var(--ease-out, ease);
+  user-select: none;
+  will-change: height, left, opacity, top, width;
+}
+
+.scrollbar-overlay-thumb:hover,
+.scrollbar-overlay-thumb--hovered,
+.scrollbar-overlay-thumb--dragging {
+  background-color: var(--scrollbar-thumb-hover-bg);
+  opacity: var(--scrollbar-thumb-active-opacity);
+}
+
+.scrollbar-overlay-thumb--vertical {
+  cursor: default;
+  transform-origin: right center;
+}
+
+.scrollbar-overlay-thumb--horizontal {
+  cursor: default;
+  transform-origin: center bottom;
+}
+
+.scrollbar-overlay-gutter {
+  position: fixed;
+  z-index: var(--z-index-scrollbar-overlay);
+  pointer-events: none;
+  background-color: var(--scrollbar-gutter-hover-bg);
+  border-radius: var(--scrollbar-radius);
+  opacity: 0;
+  transition:
+    height var(--scrollbar-hover-resize-duration) var(--ease-out, ease),
+    left var(--scrollbar-hover-resize-duration) var(--ease-out, ease),
+    opacity var(--scrollbar-hover-resize-duration) var(--ease-out, ease),
+    top var(--scrollbar-hover-resize-duration) var(--ease-out, ease),
+    width var(--scrollbar-hover-resize-duration) var(--ease-out, ease);
+  will-change: height, left, opacity, top, width;
+}
+
+.scrollbar-overlay-gutter--vertical {
+  transform-origin: right center;
+}
+
+.scrollbar-overlay-gutter--horizontal {
+  transform-origin: center bottom;
+}
+
+.scrollbar-overlay-gutter--visible {
+  opacity: var(--scrollbar-gutter-hover-opacity);
+  pointer-events: auto;
+}
+
+.scrollbar-virtual {
+  position: absolute;
+  z-index: var(--z-index-scrollbar-overlay);
+  pointer-events: none;
+  transition:
+    height var(--scrollbar-hover-resize-duration) var(--ease-out, ease),
+    width var(--scrollbar-hover-resize-duration) var(--ease-out, ease);
+  user-select: none;
+}
+
+.scrollbar-virtual--vertical {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: var(--scrollbar-width);
+}
+
+.scrollbar-virtual--horizontal {
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: var(--scrollbar-height);
+}
+
+.scrollbar-virtual::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-color: var(--scrollbar-gutter-hover-bg);
+  border-radius: var(--scrollbar-radius);
+  opacity: 0;
+  transition: opacity var(--scrollbar-hover-resize-duration) var(--ease-out, ease);
+}
+
+.scrollbar-virtual--vertical.scrollbar-virtual--hovered,
+.scrollbar-virtual--vertical.scrollbar-virtual--dragging {
+  width: calc(var(--scrollbar-width) * var(--scrollbar-hover-scale));
+  pointer-events: auto;
+}
+
+.scrollbar-virtual--horizontal.scrollbar-virtual--hovered,
+.scrollbar-virtual--horizontal.scrollbar-virtual--dragging {
+  height: calc(var(--scrollbar-height) * var(--scrollbar-hover-scale));
+  pointer-events: auto;
+}
+
+.scrollbar-virtual--hovered::before,
+.scrollbar-virtual--dragging::before {
+  opacity: var(--scrollbar-gutter-hover-opacity);
+}
+
+.scrollbar-virtual-thumb {
+  position: absolute;
+  background-color: var(--scrollbar-thumb-bg);
+  border-radius: var(--scrollbar-radius);
+  opacity: 0;
+  pointer-events: auto;
+  transition:
+    background-color var(--scrollbar-fade-in-duration) var(--ease-out, ease),
+    opacity var(--scrollbar-fade-out-duration) var(--ease-out, ease),
+    height var(--scrollbar-hover-resize-duration) var(--ease-out, ease),
+    right var(--scrollbar-hover-resize-duration) var(--ease-out, ease),
+    bottom var(--scrollbar-hover-resize-duration) var(--ease-out, ease),
+    width var(--scrollbar-hover-resize-duration) var(--ease-out, ease);
+}
+
+.scrollbar-virtual--vertical .scrollbar-virtual-thumb {
+  top: var(--scrollbar-virtual-thumb-offset);
+  right: var(--scrollbar-thumb-inset);
+  width: calc(var(--scrollbar-width) - (var(--scrollbar-thumb-inset) * 2));
+  height: var(--scrollbar-virtual-thumb-size);
+  min-height: var(--scrollbar-min-thumb-size);
+}
+
+.scrollbar-virtual--horizontal .scrollbar-virtual-thumb {
+  bottom: var(--scrollbar-thumb-inset);
+  left: var(--scrollbar-virtual-thumb-offset);
+  width: var(--scrollbar-virtual-thumb-size);
+  min-width: var(--scrollbar-min-thumb-size);
+  height: calc(var(--scrollbar-height) - (var(--scrollbar-thumb-inset) * 2));
+}
+
+.scrollbar-virtual--vertical.scrollbar-virtual--hovered .scrollbar-virtual-thumb,
+.scrollbar-virtual--vertical.scrollbar-virtual--dragging .scrollbar-virtual-thumb {
+  right: calc(var(--scrollbar-thumb-inset) * var(--scrollbar-hover-scale));
+  width: calc(
+    (var(--scrollbar-width) - (var(--scrollbar-thumb-inset) * 2)) * var(--scrollbar-hover-scale)
+  );
+}
+
+.scrollbar-virtual--horizontal.scrollbar-virtual--hovered .scrollbar-virtual-thumb,
+.scrollbar-virtual--horizontal.scrollbar-virtual--dragging .scrollbar-virtual-thumb {
+  bottom: calc(var(--scrollbar-thumb-inset) * var(--scrollbar-hover-scale));
+  height: calc(
+    (var(--scrollbar-height) - (var(--scrollbar-thumb-inset) * 2)) * var(--scrollbar-hover-scale)
+  );
+}
+
+.scrollbar-virtual--active .scrollbar-virtual-thumb {
+  opacity: var(--scrollbar-thumb-active-opacity);
+  transition:
+    background-color var(--scrollbar-fade-in-duration) var(--ease-out, ease),
+    opacity var(--scrollbar-fade-in-duration) var(--ease-out, ease),
+    height var(--scrollbar-hover-resize-duration) var(--ease-out, ease),
+    right var(--scrollbar-hover-resize-duration) var(--ease-out, ease),
+    bottom var(--scrollbar-hover-resize-duration) var(--ease-out, ease),
+    width var(--scrollbar-hover-resize-duration) var(--ease-out, ease);
+}
+
+.scrollbar-virtual-thumb:hover,
+.scrollbar-virtual--dragging .scrollbar-virtual-thumb {
+  background-color: var(--scrollbar-thumb-hover-bg);
+}
+
+.scrollbar-overlay--geometry-updating {
+  transition-property: background-color, opacity;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scrollbar-overlay-thumb,
+  .scrollbar-overlay-gutter,
+  .scrollbar-virtual,
+  .scrollbar-virtual::before,
+  .scrollbar-virtual-thumb {
+    transition: none;
+  }
+}

@@ -94,7 +94,9 @@
   flex: 1;
   overflow-y: auto;
   overflow-x: auto;
+  overscroll-behavior-x: none;
   min-height: 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   position: relative;
@@ -102,10 +104,6 @@
 
 .gridtable-wrapper:focus {
   outline: none;
-}
-
-.gridtable-wrapper::-webkit-scrollbar-corner {
-  background: var(--grid-bg-primary);
 }
 
 .gridtable {
@@ -124,6 +122,7 @@
   flex-shrink: 0;
   position: relative;
   overflow: hidden;
+  min-width: 0;
   background-color: var(--grid-bg-header);
 }
 
@@ -577,19 +576,12 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
    ============================================ */
 .gridtable-container.embedded .gridtable-wrapper {
   max-height: none;
-  overflow: clip;
+  overflow: auto;
 }
 
 .gridtable-container.embedded .gridtable-header {
   background-color: var(--grid-bg-primary);
   border-top: 1px solid var(--grid-border-color);
-}
-
-/* Responsive breakpoint guard */
-@media (max-width: 1200px) {
-  .gridtable-wrapper {
-    min-width: 800px;
-  }
 }
 
 /* ============================================

@@ -52,7 +52,7 @@ export interface LogViewerState {
 
   // Parsed view state
   displayMode: LogDisplayMode;
-  parsedLogs: ParsedLogEntry[];
+  parsedContainerLogs: ParsedLogEntry[];
   expandedRows: Set<string>;
 
   // Loading/status state
@@ -60,8 +60,8 @@ export interface LogViewerState {
   manualRefreshPending: boolean;
   fallbackActive: boolean;
   fallbackError: string | null;
-  showPreviousLogs: boolean;
-  isLoadingPreviousLogs: boolean;
+  showPreviousContainerLogs: boolean;
+  isLoadingPreviousContainerLogs: boolean;
 }
 
 export type LogViewerAction =
@@ -129,7 +129,7 @@ export const initialLogViewerState: LogViewerState = {
 
   // Parsed view state
   displayMode: 'raw',
-  parsedLogs: [],
+  parsedContainerLogs: [],
   expandedRows: new Set<string>(),
 
   // Loading/status state
@@ -137,8 +137,8 @@ export const initialLogViewerState: LogViewerState = {
   manualRefreshPending: false,
   fallbackActive: false,
   fallbackError: null,
-  showPreviousLogs: false,
-  isLoadingPreviousLogs: false,
+  showPreviousContainerLogs: false,
+  isLoadingPreviousContainerLogs: false,
 };
 
 /**
@@ -163,7 +163,7 @@ export const extractLogViewerPrefs = (state: LogViewerState): LogViewerPrefs => 
   displayMode: state.displayMode,
   isParsedView: state.displayMode === 'parsed',
   expandedRows: Array.from(state.expandedRows),
-  showPreviousLogs: state.showPreviousLogs,
+  showPreviousContainerLogs: state.showPreviousContainerLogs,
 });
 
 /**
@@ -189,7 +189,7 @@ export const applyLogViewerPrefs = (
   regexMatches: prefs.regexMatches ?? false,
   displayMode: prefs.displayMode ?? (prefs.isParsedView ? 'parsed' : 'raw'),
   expandedRows: new Set(prefs.expandedRows),
-  showPreviousLogs: prefs.showPreviousLogs,
+  showPreviousContainerLogs: prefs.showPreviousContainerLogs,
 });
 
 export function logViewerReducer(state: LogViewerState, action: LogViewerAction): LogViewerState {
@@ -260,18 +260,18 @@ export function logViewerReducer(state: LogViewerState, action: LogViewerAction)
       return {
         ...state,
         displayMode: state.displayMode === 'parsed' ? 'raw' : 'parsed',
-        parsedLogs: state.displayMode === 'parsed' ? [] : state.parsedLogs,
+        parsedContainerLogs: state.displayMode === 'parsed' ? [] : state.parsedContainerLogs,
         expandedRows: new Set<string>(),
       };
     case 'SET_DISPLAY_MODE':
       return {
         ...state,
         displayMode: action.payload,
-        parsedLogs: action.payload === 'parsed' ? state.parsedLogs : [],
+        parsedContainerLogs: action.payload === 'parsed' ? state.parsedContainerLogs : [],
         expandedRows: new Set<string>(),
       };
     case 'SET_PARSED_LOGS':
-      return { ...state, parsedLogs: action.payload };
+      return { ...state, parsedContainerLogs: action.payload };
     case 'TOGGLE_ROW_EXPANSION': {
       const next = new Set(state.expandedRows);
       if (next.has(action.payload)) {
@@ -292,9 +292,9 @@ export function logViewerReducer(state: LogViewerState, action: LogViewerAction)
     case 'SET_FALLBACK_ERROR':
       return { ...state, fallbackError: action.payload };
     case 'SET_SHOW_PREVIOUS_LOGS':
-      return { ...state, showPreviousLogs: action.payload };
+      return { ...state, showPreviousContainerLogs: action.payload };
     case 'SET_IS_LOADING_PREVIOUS_LOGS':
-      return { ...state, isLoadingPreviousLogs: action.payload };
+      return { ...state, isLoadingPreviousContainerLogs: action.payload };
 
     // Compound actions
     case 'RESET_FOR_NEW_SCOPE':
@@ -308,30 +308,30 @@ export function logViewerReducer(state: LogViewerState, action: LogViewerAction)
         caseSensitiveMatches: false,
         regexMatches: false,
         displayMode: 'raw',
-        parsedLogs: [],
+        parsedContainerLogs: [],
         expandedRows: new Set<string>(),
         manualRefreshPending: false,
         fallbackActive: false,
         fallbackError: null,
-        showPreviousLogs: false,
-        isLoadingPreviousLogs: false,
+        showPreviousContainerLogs: false,
+        isLoadingPreviousContainerLogs: false,
       };
     case 'START_PREVIOUS_LOGS':
       return {
         ...state,
-        showPreviousLogs: true,
+        showPreviousContainerLogs: true,
         fallbackActive: false,
         fallbackError: null,
         manualRefreshPending: false,
-        isLoadingPreviousLogs: true,
+        isLoadingPreviousContainerLogs: true,
       };
     case 'STOP_PREVIOUS_LOGS':
       return {
         ...state,
-        showPreviousLogs: false,
+        showPreviousContainerLogs: false,
         fallbackError: null,
         manualRefreshPending: false,
-        isLoadingPreviousLogs: false,
+        isLoadingPreviousContainerLogs: false,
       };
     case 'CLEAR_FALLBACK':
       return {

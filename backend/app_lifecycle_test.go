@@ -173,15 +173,18 @@ func TestStdLogBridgeWritesToLogger(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	bridge := &stdLogBridge{logger: app.logger}
 
-	n, err := bridge.Write([]byte("error: failure\nwarning: heads up\nall good\n"))
+	input := "error: failure\nwarning: heads up\nrequest failed while listing pods\nExternal secrets cache ready\nI0102 info klog\n"
+	n, err := bridge.Write([]byte(input))
 	require.NoError(t, err)
-	require.Equal(t, len("error: failure\nwarning: heads up\nall good\n"), n)
+	require.Equal(t, len(input), n)
 
 	entries := app.logger.GetEntries()
-	require.Len(t, entries, 3)
+	require.Len(t, entries, 5)
 	require.Equal(t, "ERROR", entries[0].Level)
 	require.Equal(t, "WARN", entries[1].Level)
-	require.Equal(t, "INFO", entries[2].Level)
+	require.Equal(t, "ERROR", entries[2].Level)
+	require.Equal(t, "INFO", entries[3].Level)
+	require.Equal(t, "INFO", entries[4].Level)
 }
 
 func TestInitKubernetesClientRequiresSelections(t *testing.T) {

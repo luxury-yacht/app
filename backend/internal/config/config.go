@@ -76,11 +76,11 @@ const (
 	// MetricsStaleWindow is the window used to determine cluster overview metric freshness.
 	MetricsStaleWindow = 45 * time.Second
 
-	// LogStreamBackoffInitial is the initial backoff applied when log streaming reconnects.
-	LogStreamBackoffInitial = 1 * time.Second
+	// ContainerLogsStreamBackoffInitial is the initial backoff applied when container logs streaming reconnects.
+	ContainerLogsStreamBackoffInitial = 1 * time.Second
 
-	// LogStreamBackoffMax is the cap for log stream reconnection backoff.
-	LogStreamBackoffMax = 30 * time.Second
+	// ContainerLogsStreamBackoffMax is the cap for container logs stream reconnection backoff.
+	ContainerLogsStreamBackoffMax = 30 * time.Second
 
 	// StreamHeartbeatInterval defines how often we evaluate heartbeat state for SSE streams.
 	StreamHeartbeatInterval = 15 * time.Second
@@ -91,14 +91,14 @@ const (
 	// ClusterHealthHeartbeatInterval is how often we check each cluster's health via /readyz.
 	ClusterHealthHeartbeatInterval = 5 * time.Second
 
-	// LogStreamBatchWindow controls the bundling window for log stream events before flushing.
-	LogStreamBatchWindow = 250 * time.Millisecond
+	// ContainerLogsStreamBatchWindow controls the bundling window for container logs stream events before flushing.
+	ContainerLogsStreamBatchWindow = 250 * time.Millisecond
 
-	// LogStreamKeepAliveInterval controls how often keepalive messages are emitted for log streams.
-	LogStreamKeepAliveInterval = 15 * time.Second
+	// ContainerLogsStreamKeepAliveInterval controls how often keepalive messages are emitted for container logs streams.
+	ContainerLogsStreamKeepAliveInterval = 15 * time.Second
 
-	// LogStreamGlobalTargetLimit caps resolved pod/container targets across all active log scopes.
-	LogStreamGlobalTargetLimit = 200
+	// ContainerLogsStreamGlobalTargetLimit caps resolved pod/container targets across all active log scopes.
+	ContainerLogsStreamGlobalTargetLimit = 200
 
 	// EventStreamKeepAliveInterval controls how often keepalive messages are emitted for event streams.
 	EventStreamKeepAliveInterval = 15 * time.Second

@@ -15,12 +15,12 @@ func newUIApp(t *testing.T) *App {
 
 var menuUpdatesEnabled = runtime.GOOS != "linux"
 
-func TestToggleLogsPanelRequiresContext(t *testing.T) {
+func TestToggleAppLogsPanelRequiresContext(t *testing.T) {
 	app := newUIApp(t)
 
-	err := app.ToggleLogsPanel()
+	err := app.ToggleAppLogsPanel()
 	require.Error(t, err)
-	require.False(t, app.IsLogsPanelVisible())
+	require.False(t, app.IsAppLogsPanelVisible())
 }
 
 func TestToggleDiagnosticsPanelRequiresContext(t *testing.T) {
@@ -31,7 +31,7 @@ func TestToggleDiagnosticsPanelRequiresContext(t *testing.T) {
 	require.False(t, app.IsDiagnosticsPanelVisible())
 }
 
-func TestToggleLogsPanelTogglesAndEmits(t *testing.T) {
+func TestToggleAppLogsPanelTogglesAndEmits(t *testing.T) {
 	app := newUIApp(t)
 	events := []string{}
 	app.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
@@ -39,13 +39,13 @@ func TestToggleLogsPanelTogglesAndEmits(t *testing.T) {
 	}
 	app.Ctx = context.Background()
 
-	err := app.ToggleLogsPanel()
+	err := app.ToggleAppLogsPanel()
 	require.NoError(t, err)
-	require.True(t, app.IsLogsPanelVisible())
+	require.True(t, app.IsAppLogsPanelVisible())
 	if menuUpdatesEnabled {
-		require.Equal(t, []string{"toggle-app-logs", "update-menu"}, events)
+		require.Equal(t, []string{"toggle-app-logs-panel", "update-menu"}, events)
 	} else {
-		require.Equal(t, []string{"toggle-app-logs"}, events)
+		require.Equal(t, []string{"toggle-app-logs-panel"}, events)
 	}
 }
 
@@ -146,7 +146,7 @@ func TestSetSidebarVisibleOnlyWhenChanged(t *testing.T) {
 	require.Empty(t, events)
 }
 
-func TestSetLogsPanelVisibleOnlyWhenChanged(t *testing.T) {
+func TestSetAppLogsPanelVisibleOnlyWhenChanged(t *testing.T) {
 	app := newUIApp(t)
 	app.Ctx = context.Background()
 	events := []string{}
@@ -154,19 +154,19 @@ func TestSetLogsPanelVisibleOnlyWhenChanged(t *testing.T) {
 		events = append(events, name)
 	}
 
-	app.SetLogsPanelVisible(false)
+	app.SetAppLogsPanelVisible(false)
 	require.Empty(t, events)
 
-	app.SetLogsPanelVisible(true)
+	app.SetAppLogsPanelVisible(true)
 	if menuUpdatesEnabled {
 		require.Equal(t, []string{"update-menu"}, events)
 	} else {
 		require.Empty(t, events)
 	}
-	require.True(t, app.IsLogsPanelVisible())
+	require.True(t, app.IsAppLogsPanelVisible())
 
 	events = events[:0]
-	app.SetLogsPanelVisible(true)
+	app.SetAppLogsPanelVisible(true)
 	require.Empty(t, events)
 }
 

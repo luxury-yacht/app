@@ -33,10 +33,13 @@ func (l LogLevel) String() string {
 
 // LogEntry represents a single log entry
 type LogEntry struct {
-	Timestamp string `json:"timestamp"`
-	Level     string    `json:"level"`
-	Message   string    `json:"message"`
-	Source    string    `json:"source,omitempty"`
+	Sequence    uint64 `json:"sequence"`
+	Timestamp   string `json:"timestamp"`
+	Level       string `json:"level"`
+	Message     string `json:"message"`
+	Source      string `json:"source,omitempty"`
+	ClusterID   string `json:"clusterId,omitempty"`
+	ClusterName string `json:"clusterName,omitempty"`
 }
 
 // Logger manages application logs in memory
@@ -44,7 +47,8 @@ type Logger struct {
 	mu           sync.RWMutex
 	entries      []LogEntry
 	maxSize      int
-	eventEmitter func(string) // Function to emit log events
+	nextSequence uint64
+	eventEmitter func(string, ...interface{}) // Function to emit log events
 }
 
 // NewLogger creates a new logger with specified maximum entries
@@ -58,23 +62,33 @@ func NewLogger(maxSize int) *Logger {
 	}
 }
 
-// Log adds a log entry with the specified level, message and optional source
+// Log adds a log entry with the specified level, message, and optional metadata.
+// The variadic fields are interpreted as source, cluster ID, and cluster name
+// in that order.
 func (l *Logger) Log(level LogLevel, message string, source ...string) {
 	if l == nil {
 		return // Safely handle nil logger
 	}
 
+	var emit func(string, ...interface{})
+	var emittedSequence uint64
 	l.mu.Lock()
-	defer l.mu.Unlock()
 
+	l.nextSequence++
 	entry := LogEntry{
+		Sequence:  l.nextSequence,
 		Timestamp: time.Now().Format(time.RFC3339Nano),
 		Level:     level.String(),
 		Message:   message,
 	}
-
 	if len(source) > 0 {
 		entry.Source = source[0]
+	}
+	if len(source) > 1 {
+		entry.ClusterID = source[1]
+	}
+	if len(source) > 2 {
+		entry.ClusterName = source[2]
 	}
 
 	// Add the entry
@@ -89,9 +103,14 @@ func (l *Logger) Log(level LogLevel, message string, source ...string) {
 		l.entries = newEntries
 	}
 
-	// Emit event if event emitter is set
-	if l.eventEmitter != nil {
-		l.eventEmitter("log-added")
+	emit = l.eventEmitter
+	emittedSequence = entry.Sequence
+	l.mu.Unlock()
+
+	// Emit outside the logger lock so event handlers cannot block log writes
+	// or deadlock by synchronously reading the logger.
+	if emit != nil {
+		emit("app-logs:added", AppLogsAddedEvent{Sequence: emittedSequence})
 	}
 }
 
@@ -130,6 +149,28 @@ func (l *Logger) GetEntries() []LogEntry {
 	return entries
 }
 
+// GetEntriesSince returns a copy of entries with a sequence greater than sequence.
+func (l *Logger) GetEntriesSince(sequence uint64) []LogEntry {
+	if l == nil {
+		return []LogEntry{}
+	}
+
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+
+	start := len(l.entries)
+	for i, entry := range l.entries {
+		if entry.Sequence > sequence {
+			start = i
+			break
+		}
+	}
+
+	entries := make([]LogEntry, len(l.entries)-start)
+	copy(entries, l.entries[start:])
+	return entries
+}
+
 // Clear removes all log entries
 func (l *Logger) Clear() {
 	if l == nil {
@@ -154,7 +195,7 @@ func (l *Logger) Count() int {
 }
 
 // SetEventEmitter sets the function to call when new logs are added
-func (l *Logger) SetEventEmitter(emitter func(string)) {
+func (l *Logger) SetEventEmitter(emitter func(string, ...interface{})) {
 	if l == nil {
 		return
 	}

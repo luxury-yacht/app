@@ -84,7 +84,7 @@ const state: RefreshStoreState = {
     'object-yaml': createInitialDomainState(),
     'object-helm-manifest': createInitialDomainState(),
     'object-helm-values': createInitialDomainState(),
-    'object-logs': createInitialDomainState(),
+    'container-logs': createInitialDomainState(),
     'cluster-rbac': createInitialDomainState(),
     'cluster-storage': createInitialDomainState(),
     'cluster-config': createInitialDomainState(),

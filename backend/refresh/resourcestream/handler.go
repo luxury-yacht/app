@@ -4,7 +4,7 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/luxury-yacht/app/backend/refresh/logstream"
+	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/streammux"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
@@ -16,7 +16,7 @@ type Handler struct {
 }
 
 // NewHandler constructs a websocket handler for resource streams.
-func NewHandler(manager *Manager, logger logstream.Logger, recorder *telemetry.Recorder, meta snapshot.ClusterMeta) (*Handler, error) {
+func NewHandler(manager *Manager, logger containerlogsstream.Logger, recorder *telemetry.Recorder, meta snapshot.ClusterMeta) (*Handler, error) {
 	if manager == nil {
 		return nil, errors.New("resource stream manager is required")
 	}

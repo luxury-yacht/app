@@ -385,7 +385,7 @@ Some domains are intentionally restricted to single-cluster scope. Attempting mu
 | `object-*` (details, events, yaml) | Operates on a specific object that exists in exactly one cluster                        |
 | `catalog`, `catalog-diff`          | Catalog is per-cluster; diff compares states within one cluster                         |
 | `node-maintenance`                 | Node operations (cordon, uncordon, drain, delete) target a specific node in one cluster |
-| Log streams                        | Container logs come from a specific pod in one cluster                                  |
+| Container logs streams                        | Container logs come from a specific pod in one cluster                                  |
 | Catalog streams                    | Catalog operations require a single source                                              |
 
 ### Implementation

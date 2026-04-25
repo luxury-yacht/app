@@ -6,36 +6,90 @@
  */
 
 import { useState, useEffect, useCallback, useRef, useMemo, useLayoutEffect } from 'react';
-import { ClearLogs, SetLogsPanelVisible } from '@wailsjs/go/backend/App';
+import { ClearAppLogs, SetAppLogsPanelVisible } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import { useShortcut, useKeyboardSurface } from '@ui/shortcuts';
 import { KeyboardScopePriority, KeyboardShortcutPriority } from '@ui/shortcuts/priorities';
 import { DockablePanel } from '@ui/dockable';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
-import { readAppLogs, requestAppState } from '@/core/app-state-access';
+import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
+import { AutoScrollIcon, CopyIcon } from '@shared/components/icons/LogIcons';
+import { DeleteIcon } from '@shared/components/icons/MenuIcons';
+import { readAppLogs, readAppLogsSince } from '@/core/app-state-access';
+import { subscribeAppLogsAdded, type AppLogsAddedEvent } from '@/core/logging/appLogsClient';
 import './AppLogsPanel.css';
 
 interface LogEntry {
+  sequence?: number;
   timestamp: string;
   level: string;
   message: string;
   source?: string;
+  clusterId?: string;
+  clusterName?: string;
 }
 
-const LOG_LEVEL_SELECT_ALL_VALUE = '__log_levels_all__';
 const LOG_LEVEL_BASE_OPTIONS = [
   { value: 'info', label: 'Info' },
   { value: 'warn', label: 'Warning' },
   { value: 'error', label: 'Error' },
   { value: 'debug', label: 'Debug' },
 ];
-const LOG_LEVEL_OPTIONS = [
-  { value: LOG_LEVEL_SELECT_ALL_VALUE, label: 'Select All' },
-  ...LOG_LEVEL_BASE_OPTIONS,
-];
 const ALL_LEVEL_VALUES = LOG_LEVEL_BASE_OPTIONS.map((option) => option.value);
-const DEFAULT_LOG_LEVELS = ['info', 'warn', 'error'];
+const DEFAULT_LOG_LEVELS = ALL_LEVEL_VALUES;
+
+const findLatestSequence = (entries: LogEntry[], fallback = 0) =>
+  entries.reduce(
+    (latest, entry) =>
+      typeof entry.sequence === 'number' && entry.sequence > latest ? entry.sequence : latest,
+    fallback
+  );
+
+const buildClusterOption = (log: LogEntry) => {
+  const clusterId = log.clusterId?.trim() ?? '';
+  const clusterName = log.clusterName?.trim() ?? '';
+  const value = clusterId || clusterName;
+
+  if (!value) {
+    return null;
+  }
+
+  let fileName = '';
+  let context = '';
+
+  if (clusterId && clusterName && clusterId !== clusterName) {
+    const contextSuffix = `:${clusterName}`;
+    if (clusterId.endsWith(contextSuffix) && clusterId.length > contextSuffix.length) {
+      fileName = clusterId.slice(0, -contextSuffix.length);
+      context = clusterName;
+    } else if (clusterId.includes(':')) {
+      const separatorIndex = clusterId.lastIndexOf(':');
+      fileName = clusterId.slice(0, separatorIndex);
+      context = clusterId.slice(separatorIndex + 1);
+    } else {
+      fileName = clusterId;
+      context = clusterName;
+    }
+  } else if (clusterId.includes(':')) {
+    const separatorIndex = clusterId.lastIndexOf(':');
+    fileName = clusterId.slice(0, separatorIndex);
+    context = clusterId.slice(separatorIndex + 1);
+  } else {
+    context = clusterName || clusterId;
+  }
+
+  const label = fileName && context ? `${fileName}:${context}` : context || value;
+
+  return {
+    value,
+    label,
+    metadata: {
+      fileName,
+      context,
+    },
+  };
+};
 
 interface AppLogsPanelProps {
   isOpen: boolean;
@@ -46,9 +100,11 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [isAutoScroll, setIsAutoScroll] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
+  const [copyFeedback, setCopyFeedback] = useState<'idle' | 'copied' | 'error'>('idle');
 
   const [logLevelFilter, setLogLevelFilter] = useState<string[]>(DEFAULT_LOG_LEVELS);
   const [componentFilter, setComponentFilter] = useState<string[]>([]);
+  const [clusterFilter, setClusterFilter] = useState<string[]>([]);
   const [textFilter, setTextFilter] = useState<string>('');
   const logsContainerRef = useRef<HTMLDivElement>(null);
   const textFilterInputRef = useRef<HTMLInputElement>(null);
@@ -57,15 +113,16 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
   const prevScrollHeightRef = useRef(0);
   const prevScrollTopRef = useRef(0);
   const offsetFromBottomRef = useRef(0);
+  const latestSequenceRef = useRef(0);
   const SCROLL_THRESHOLD = 10;
 
   // Separate ref to track auto-scroll without causing re-renders
   const isAutoScrollRef = useRef(isAutoScroll);
 
-  // Keep backend log-stream visibility aligned with this panel's open state.
+  // Keep backend menu/panel visibility aligned with this panel's open state.
   useEffect(() => {
-    SetLogsPanelVisible(isOpen).catch((error) => {
-      errorHandler.handle(error, { action: 'setLogsPanelVisible' });
+    SetAppLogsPanelVisible(isOpen).catch((error) => {
+      errorHandler.handle(error, { action: 'setAppLogsPanelVisible' });
     });
   }, [isOpen]);
 
@@ -134,26 +191,61 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
     updatePinnedState();
   }, [isAutoScroll, updatePinnedState]);
 
-  const loadLogs = useCallback(async (showLoadingSpinner = false) => {
-    try {
-      // Only show loading spinner on initial load or when explicitly requested
-      if (showLoadingSpinner) {
-        setIsLoading(true);
+  const updateLatestSequence = useCallback((entries: LogEntry[]) => {
+    latestSequenceRef.current = findLatestSequence(entries);
+  }, []);
+
+  const loadLogs = useCallback(
+    async (showLoadingSpinner = false) => {
+      try {
+        // Only show loading spinner on initial load or when explicitly requested
+        if (showLoadingSpinner) {
+          setIsLoading(true);
+        }
+        const logEntries = await readAppLogs();
+        updateLatestSequence(logEntries);
+        setLogs(logEntries);
+      } catch (error) {
+        errorHandler.handle(error, { action: 'loadLogs' });
+      } finally {
+        if (showLoadingSpinner) {
+          setIsLoading(false);
+        }
       }
-      const logEntries = await requestAppState({
-        resource: 'app-logs',
-        adapter: 'runtime-read',
-        read: () => readAppLogs(),
-      });
-      setLogs(logEntries);
-    } catch (error) {
-      errorHandler.handle(error, { action: 'loadLogs' });
-    } finally {
-      if (showLoadingSpinner) {
-        setIsLoading(false);
-      }
+    },
+    [updateLatestSequence]
+  );
+
+  const loadLogDeltas = useCallback(async (event?: AppLogsAddedEvent) => {
+    const eventSequence = typeof event?.sequence === 'number' ? event.sequence : undefined;
+    if (eventSequence !== undefined && eventSequence <= latestSequenceRef.current) {
+      return;
     }
-  }, []); // No dependencies - use refs instead
+
+    try {
+      const deltaEntries = await readAppLogsSince(latestSequenceRef.current);
+      if (deltaEntries.length === 0) {
+        return;
+      }
+
+      setLogs((prevLogs) => {
+        const latestBeforeAppend = findLatestSequence(prevLogs, latestSequenceRef.current);
+        const newEntries = deltaEntries.filter(
+          (entry) => typeof entry.sequence !== 'number' || entry.sequence > latestBeforeAppend
+        );
+        if (newEntries.length === 0) {
+          latestSequenceRef.current = latestBeforeAppend;
+          return prevLogs;
+        }
+
+        const nextLogs = [...prevLogs, ...newEntries].slice(-1000);
+        latestSequenceRef.current = findLatestSequence(nextLogs, latestBeforeAppend);
+        return nextLogs;
+      });
+    } catch (error) {
+      errorHandler.handle(error, { action: 'loadLogDeltas' });
+    }
+  }, []);
 
   const formatTimestamp = useCallback((timestamp: string) => {
     try {
@@ -171,13 +263,17 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
     }
   }, []);
 
-  const handleClearLogs = useCallback(async () => {
+  const handleClearAppLogs = useCallback(async () => {
     try {
-      await ClearLogs();
+      await ClearAppLogs();
       setLogs([]);
     } catch (error) {
       errorHandler.handle(error, { action: 'clearLogs' });
     }
+  }, []);
+
+  const handleToggleAutoScroll = useCallback(() => {
+    setIsAutoScroll((prev) => !prev);
   }, []);
 
   const normalizeLevel = useCallback((level: string) => {
@@ -185,38 +281,24 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
     return normalized === 'warning' ? 'warn' : normalized;
   }, []);
 
-  const handleLogLevelDropdownChange = useCallback(
-    (value: string | string[]) => {
-      if (!Array.isArray(value)) {
-        return;
-      }
+  const handleLogLevelDropdownChange = useCallback((value: string | string[]) => {
+    if (!Array.isArray(value)) {
+      return;
+    }
 
-      if (value.includes(LOG_LEVEL_SELECT_ALL_VALUE)) {
-        if (logLevelFilter.length === ALL_LEVEL_VALUES.length) {
-          setLogLevelFilter([]);
-        } else {
-          setLogLevelFilter(ALL_LEVEL_VALUES);
-        }
-        return;
-      }
-
-      setLogLevelFilter(value.filter((item) => item !== LOG_LEVEL_SELECT_ALL_VALUE));
-    },
-    [logLevelFilter]
-  );
+    setLogLevelFilter(value);
+  }, []);
 
   const renderLogLevelOption = useCallback(
     (option: { value: string; label: string }, isSelected: boolean) => {
-      const isSelectAll = option.value === LOG_LEVEL_SELECT_ALL_VALUE;
-      const checked = isSelectAll ? logLevelFilter.length === ALL_LEVEL_VALUES.length : isSelected;
       return (
         <span className="dropdown-filter-option">
-          <span className="dropdown-filter-check">{checked ? '✓' : ''}</span>
+          <span className="dropdown-filter-check">{isSelected ? '✓' : ''}</span>
           <span className="dropdown-filter-label">{option.label}</span>
         </span>
       );
     },
-    [logLevelFilter]
+    []
   );
 
   const componentNames = useMemo(
@@ -227,37 +309,42 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
     [logs]
   );
 
-  const COMPONENT_SELECT_ALL_VALUE = '__components_all__';
   const componentOptions = useMemo(
-    () => [
-      { value: COMPONENT_SELECT_ALL_VALUE, label: 'Select All' },
-      ...componentNames.map((component) => ({
+    () =>
+      componentNames.map((component) => ({
         value: component,
         label: component,
       })),
-    ],
     [componentNames]
   );
 
-  const handleComponentDropdownChange = useCallback(
-    (value: string | string[]) => {
-      if (!Array.isArray(value)) {
+  const clusterOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const options: Array<NonNullable<ReturnType<typeof buildClusterOption>>> = [];
+    logs.forEach((log) => {
+      const option = buildClusterOption(log);
+      if (!option || seen.has(option.value)) {
         return;
       }
+      seen.add(option.value);
+      options.push(option);
+    });
+    options.sort((left, right) => left.label.localeCompare(right.label));
+    return options;
+  }, [logs]);
 
-      if (value.includes(COMPONENT_SELECT_ALL_VALUE)) {
-        if (componentFilter.length === componentNames.length) {
-          setComponentFilter([]);
-        } else {
-          setComponentFilter(componentNames);
-        }
-        return;
-      }
-
-      setComponentFilter(value.filter((item) => item !== COMPONENT_SELECT_ALL_VALUE));
-    },
-    [componentFilter, componentNames]
+  const clusterValues = useMemo(
+    () => clusterOptions.map((option) => option.value),
+    [clusterOptions]
   );
+
+  const handleComponentDropdownChange = useCallback((value: string | string[]) => {
+    if (!Array.isArray(value)) {
+      return;
+    }
+
+    setComponentFilter(value);
+  }, []);
 
   useEffect(() => {
     setComponentFilter((prev) => {
@@ -270,64 +357,69 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
     });
   }, [componentNames]);
 
+  const handleClusterDropdownChange = useCallback((value: string | string[]) => {
+    if (!Array.isArray(value)) {
+      return;
+    }
+
+    setClusterFilter(value);
+  }, []);
+
+  useEffect(() => {
+    setClusterFilter((prev) => {
+      if (prev.length === 0) {
+        return prev;
+      }
+
+      const validSelections = prev.filter((name) => clusterValues.includes(name));
+      return validSelections.length === prev.length ? prev : validSelections;
+    });
+  }, [clusterValues]);
+
   const renderComponentOption = useCallback(
     (option: { value: string; label: string }, isSelected: boolean) => {
-      const isSelectAll = option.value === COMPONENT_SELECT_ALL_VALUE;
-      const checked = isSelectAll ? componentFilter.length === componentNames.length : isSelected;
       return (
         <span className="dropdown-filter-option">
-          <span className="dropdown-filter-check">{checked ? '✓' : ''}</span>
+          <span className="dropdown-filter-check">{isSelected ? '✓' : ''}</span>
           <span className="dropdown-filter-label">{option.label}</span>
         </span>
       );
     },
-    [componentFilter, componentNames]
+    []
   );
 
-  const handleCopyToClipboard = useCallback(() => {
-    // Filter logs the same way as the display
-    const logsToCopy = logs.filter((log) => {
-      // Filter by level
-      const logLevel = normalizeLevel(log.level);
-      if (logLevelFilter.length > 0 && !logLevelFilter.includes(logLevel)) {
-        return false;
-      }
-      // Filter by component
-      if (componentFilter.length > 0 && !componentFilter.includes(log.source ?? '')) {
-        return false;
-      }
-      // Filter by text (case-insensitive search in message and source)
-      if (textFilter.trim()) {
-        const searchText = textFilter.toLowerCase();
-        const matchesMessage = log.message.toLowerCase().includes(searchText);
-        const matchesSource = log.source?.toLowerCase().includes(searchText) || false;
-        if (!matchesMessage && !matchesSource) {
-          return false;
-        }
-      }
-      return true;
-    });
+  const renderClusterOption = useCallback(
+    (
+      option: {
+        value: string;
+        label: string;
+        metadata?: { fileName?: unknown; context?: unknown };
+      },
+      isSelected: boolean
+    ) => {
+      const fileName =
+        typeof option.metadata?.fileName === 'string' ? option.metadata.fileName : '';
+      const context = typeof option.metadata?.context === 'string' ? option.metadata.context : '';
 
-    // Format logs for clipboard
-    const formattedLogs = logsToCopy
-      .map((log) => {
-        const timestamp = formatTimestamp(log.timestamp);
-        const level = log.level.toUpperCase().padEnd(5);
-        const source = log.source ? `[${log.source}] ` : '';
-        return `${timestamp} ${level} ${source}${log.message}`;
-      })
-      .join('\n');
-
-    // Copy to clipboard
-    navigator.clipboard
-      .writeText(formattedLogs)
-      .then(() => {
-        // Logs copied to clipboard successfully
-      })
-      .catch((err) => {
-        errorHandler.handle(err, { action: 'copyLogs' }, 'Failed to copy logs to clipboard');
-      });
-  }, [logs, logLevelFilter, componentFilter, textFilter, formatTimestamp, normalizeLevel]);
+      return (
+        <span className="dropdown-filter-option">
+          <span className="dropdown-filter-check">{isSelected ? '✓' : ''}</span>
+          {fileName && context ? (
+            <span className="app-logs-cluster-label">
+              <span className="app-logs-cluster-file">{fileName}</span>
+              <span className="app-logs-cluster-separator" aria-hidden="true">
+                :
+              </span>
+              <span className="app-logs-cluster-context">{context}</span>
+            </span>
+          ) : (
+            <span className="dropdown-filter-label">{option.label}</span>
+          )}
+        </span>
+      );
+    },
+    []
+  );
 
   // Load logs when panel becomes visible
   useEffect(() => {
@@ -340,21 +432,13 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
       loadLogs(true); // Show spinner on initial load
     }, 300);
 
-    // Listen for real-time log events from backend
-    const handleLogAdded = () => {
-      loadLogs(); // No spinner for real-time updates
-    };
-
-    const runtime = window.runtime;
-    if (runtime?.EventsOn) {
-      runtime.EventsOn('log-added', handleLogAdded);
-    }
+    const unsubscribe = subscribeAppLogsAdded(loadLogDeltas);
 
     return () => {
       clearTimeout(loadTimer);
-      runtime?.EventsOff?.('log-added');
+      unsubscribe();
     };
-  }, [isOpen, loadLogs]);
+  }, [isOpen, loadLogDeltas, loadLogs]);
 
   // ESC key to close panel
   useShortcut({
@@ -366,8 +450,8 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
       }
       return false;
     },
-    description: 'Close app logs panel',
-    category: 'App Logs',
+    description: 'Close Application Logs Panel',
+    category: 'Application Logs Panel',
     enabled: isOpen,
     priority: isOpen ? KeyboardShortcutPriority.APP_LOGS_ESCAPE : 0,
   });
@@ -397,12 +481,19 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
     if (componentFilter.length > 0 && !componentFilter.includes(log.source ?? '')) {
       return false;
     }
+    // Filter by cluster
+    const clusterValue = log.clusterId || log.clusterName || '';
+    if (clusterFilter.length > 0 && !clusterFilter.includes(clusterValue)) {
+      return false;
+    }
     // Filter by text (case-insensitive search in message and source)
     if (textFilter.trim()) {
       const searchText = textFilter.toLowerCase();
       const matchesMessage = log.message.toLowerCase().includes(searchText);
       const matchesSource = log.source?.toLowerCase().includes(searchText) || false;
-      if (!matchesMessage && !matchesSource) {
+      const matchesClusterId = log.clusterId?.toLowerCase().includes(searchText) || false;
+      const matchesClusterName = log.clusterName?.toLowerCase().includes(searchText) || false;
+      if (!matchesMessage && !matchesSource && !matchesClusterId && !matchesClusterName) {
         return false;
       }
     }
@@ -412,21 +503,22 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
   const showFilteredCount =
     (logLevelFilter.length > 0 && logLevelFilter.length !== ALL_LEVEL_VALUES.length) ||
     (componentFilter.length > 0 && componentFilter.length !== componentNames.length) ||
+    (clusterFilter.length > 0 && clusterFilter.length !== clusterValues.length) ||
     textFilter.trim().length > 0;
 
-  // Add shortcuts for logs panel (only visible when panel is open)
+  // Add shortcuts for Application Logs Panel actions.
   useShortcut({
     key: 's',
     handler: () => {
       if (isOpen) {
-        setIsAutoScroll((prev) => !prev);
+        handleToggleAutoScroll();
         return true;
       }
       return false;
     },
     description: 'Toggle auto-scroll',
-    category: 'Logs Panel',
-    enabled: isOpen, // Only show in help when logs panel is open
+    category: 'Application Logs Panel',
+    enabled: isOpen,
     priority: isOpen ? KeyboardShortcutPriority.APP_LOGS_ACTION : 0,
   });
 
@@ -435,16 +527,93 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
     modifiers: { shift: true },
     handler: () => {
       if (isOpen) {
-        handleClearLogs();
+        handleClearAppLogs();
         return true;
       }
       return false;
     },
     description: 'Clear logs',
-    category: 'Logs Panel',
-    enabled: isOpen, // Only show in help when logs panel is open
+    category: 'Application Logs Panel',
+    enabled: isOpen,
     priority: isOpen ? KeyboardShortcutPriority.APP_LOGS_ACTION : 0,
   });
+
+  const resetCopyFeedback = useCallback(() => {
+    window.setTimeout(() => {
+      setCopyFeedback('idle');
+    }, 1200);
+  }, []);
+
+  const handleCopyToClipboard = useCallback(async () => {
+    if (filteredLogs.length === 0) {
+      setCopyFeedback('error');
+      resetCopyFeedback();
+      return;
+    }
+
+    const formattedLogs = filteredLogs
+      .map((log) => {
+        const timestamp = formatTimestamp(log.timestamp);
+        const level = log.level.toUpperCase().padEnd(5);
+        const source = log.source ? `[${log.source}] ` : '';
+        const cluster = log.clusterName || log.clusterId;
+        const clusterPart = cluster ? `[${cluster}] ` : '';
+        return `${timestamp} ${level} ${source}${clusterPart}${log.message}`;
+      })
+      .join('\n');
+
+    try {
+      await navigator.clipboard.writeText(formattedLogs);
+      setCopyFeedback('copied');
+    } catch (err) {
+      setCopyFeedback('error');
+      errorHandler.handle(err, { action: 'copyLogs' }, 'Failed to copy logs to clipboard');
+    }
+    resetCopyFeedback();
+  }, [filteredLogs, formatTimestamp, resetCopyFeedback]);
+
+  const appLogsIconBarItems = useMemo<IconBarItem[]>(
+    () => [
+      {
+        type: 'toggle',
+        id: 'appLogsAutoScroll',
+        icon: <AutoScrollIcon />,
+        active: isAutoScroll,
+        onClick: handleToggleAutoScroll,
+        title: 'Toggle auto-scroll (S)',
+        ariaLabel: 'Toggle auto-scroll',
+      },
+      { type: 'separator' },
+      {
+        type: 'action',
+        id: 'copyAppLogs',
+        icon: <CopyIcon />,
+        onClick: handleCopyToClipboard,
+        title: 'Copy logs to clipboard',
+        ariaLabel: 'Copy logs to clipboard',
+        disabled: filteredLogs.length === 0,
+        feedback: copyFeedback === 'copied' ? 'success' : copyFeedback === 'error' ? 'error' : null,
+      },
+      {
+        type: 'action',
+        id: 'clearAppLogs',
+        icon: <DeleteIcon />,
+        onClick: handleClearAppLogs,
+        title: 'Clear logs',
+        ariaLabel: 'Clear logs',
+        disabled: logs.length === 0,
+      },
+    ],
+    [
+      copyFeedback,
+      filteredLogs.length,
+      handleClearAppLogs,
+      handleCopyToClipboard,
+      handleToggleAutoScroll,
+      isAutoScroll,
+      logs.length,
+    ]
+  );
 
   const focusFirstControl = useCallback(() => {
     if (textFilterInputRef.current) {
@@ -513,9 +682,44 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
       {/* Panel-specific controls toolbar (moved from header for tab support) */}
       <div className="app-logs-panel-toolbar" onMouseDown={(e) => e.stopPropagation()}>
         <div className="app-logs-panel-controls">
-          <span className="app-logs-count">
-            {showFilteredCount ? `(${filteredLogs.length} / ${logs.length})` : `(${logs.length})`}
-          </span>
+          <Dropdown
+            options={clusterOptions}
+            value={clusterFilter}
+            onChange={handleClusterDropdownChange}
+            multiple
+            size="small"
+            showBulkActions
+            ariaLabel="Filter by cluster"
+            dropdownClassName="dropdown-filter-menu"
+            renderOption={renderClusterOption}
+            renderValue={() => 'Clusters'}
+          />
+
+          <Dropdown
+            options={componentOptions}
+            value={componentFilter}
+            onChange={handleComponentDropdownChange}
+            multiple
+            size="small"
+            showBulkActions
+            ariaLabel="Filter by component"
+            dropdownClassName="dropdown-filter-menu"
+            renderOption={renderComponentOption}
+            renderValue={() => 'Components'}
+          />
+
+          <Dropdown
+            options={LOG_LEVEL_BASE_OPTIONS}
+            value={logLevelFilter}
+            onChange={handleLogLevelDropdownChange}
+            multiple
+            size="small"
+            showBulkActions
+            ariaLabel="Filter by log level"
+            dropdownClassName="dropdown-filter-menu"
+            renderOption={renderLogLevelOption}
+            renderValue={() => 'Log Levels'}
+          />
 
           <div className="app-logs-filter-group">
             <input
@@ -539,50 +743,11 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
             )}
           </div>
 
-          <Dropdown
-            options={LOG_LEVEL_OPTIONS}
-            value={logLevelFilter}
-            onChange={handleLogLevelDropdownChange}
-            multiple
-            size="small"
-            ariaLabel="Filter by log level"
-            dropdownClassName="dropdown-filter-menu"
-            renderOption={renderLogLevelOption}
-            renderValue={() => 'Log Levels'}
-          />
+          <IconBar items={appLogsIconBarItems} className="app-logs-action-iconbar" />
 
-          <Dropdown
-            options={componentOptions}
-            value={componentFilter}
-            onChange={handleComponentDropdownChange}
-            multiple
-            size="small"
-            ariaLabel="Filter by component"
-            dropdownClassName="dropdown-filter-menu"
-            renderOption={renderComponentOption}
-            renderValue={() => 'Components'}
-          />
-
-          <label className="app-logs-auto-scroll">
-            <input
-              type="checkbox"
-              checked={isAutoScroll}
-              onChange={(e) => setIsAutoScroll(e.target.checked)}
-            />
-            Auto-scroll
-          </label>
-
-          <button
-            className="app-logs-button"
-            onClick={handleCopyToClipboard}
-            title="Copy logs to clipboard"
-          >
-            Copy
-          </button>
-
-          <button className="app-logs-button" onClick={handleClearLogs} title="Clear logs">
-            Clear
-          </button>
+          <span className="app-logs-count">
+            {showFilteredCount ? `(${filteredLogs.length} / ${logs.length})` : `(${logs.length})`}
+          </span>
         </div>
       </div>
 
@@ -604,6 +769,9 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
               <span className="log-timestamp">{formatTimestamp(log.timestamp)}</span>
               <span className={`log-level ${log.level.toUpperCase()}`}>{log.level}</span>
               {log.source && <span className="log-source">[{log.source}]</span>}
+              {(log.clusterName || log.clusterId) && (
+                <span className="log-cluster">[{log.clusterName || log.clusterId}]</span>
+              )}
               <span className="log-message">{log.message}</span>
             </div>
           ))

@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/internal/parallel"
 	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	"k8s.io/client-go/dynamic"
@@ -206,10 +207,10 @@ func (a *App) syncClusterClientPoolWithContext(ctx context.Context, selections [
 	// churn drops a cluster from the active client pool.
 	for _, clusterID := range removedClusterIDs {
 		if err := a.StopClusterShellSessions(clusterID); err != nil && a.logger != nil {
-			a.logger.Warn(fmt.Sprintf("Failed to stop shell sessions for removed cluster %s: %v", clusterID, err), "KubernetesClient")
+			a.logger.Warn(fmt.Sprintf("Failed to stop shell sessions for removed cluster %s: %v", clusterID, err), logsources.KubernetesClient)
 		}
 		if err := a.StopClusterPortForwards(clusterID); err != nil && a.logger != nil {
-			a.logger.Warn(fmt.Sprintf("Failed to stop port forwards for removed cluster %s: %v", clusterID, err), "KubernetesClient")
+			a.logger.Warn(fmt.Sprintf("Failed to stop port forwards for removed cluster %s: %v", clusterID, err), logsources.KubernetesClient)
 		}
 	}
 
@@ -282,7 +283,7 @@ func (a *App) buildClusterClientsWithContext(
 	metricsClient, err := metricsclient.NewForConfig(config)
 	if err != nil {
 		if a.logger != nil {
-			a.logger.Info(fmt.Sprintf("Metrics client not available for cluster %s: %v", meta.ID, err), "KubernetesClient")
+			a.logger.Info(fmt.Sprintf("Metrics client not available for cluster %s: %v", meta.ID, err), logsources.KubernetesClient, meta.ID, meta.Name)
 		}
 	} else {
 		metrics = metricsClient
@@ -323,11 +324,11 @@ func (a *App) buildClusterClientsWithContext(
 	var authFailedOnInit bool
 	if err := a.preflightClusterClientWithContext(ctx, clientset); err != nil {
 		if a.logger != nil {
-			a.logger.Warn(fmt.Sprintf("Pre-flight check failed for cluster %s: %v", meta.Name, err), "Auth")
+			a.logger.Warn(fmt.Sprintf("Pre-flight check failed for cluster %s: %v", meta.Name, err), logsources.Auth, meta.ID, meta.Name)
 		}
 		if isCredentialError(err) {
 			if a.logger != nil {
-				a.logger.Warn(fmt.Sprintf("Detected credential error for cluster %s, reporting auth failure", meta.Name), "Auth")
+				a.logger.Warn(fmt.Sprintf("Detected credential error for cluster %s, reporting auth failure", meta.Name), logsources.Auth, meta.ID, meta.Name)
 			}
 			clusterAuthMgr.ReportFailure(err.Error())
 			authFailedOnInit = true
@@ -336,7 +337,7 @@ func (a *App) buildClusterClientsWithContext(
 		// The subsystem builder will check auth state before proceeding.
 	} else {
 		if a.logger != nil {
-			a.logger.Info(fmt.Sprintf("Pre-flight check passed for cluster %s", meta.Name), "Auth")
+			a.logger.Info(fmt.Sprintf("Pre-flight check passed for cluster %s", meta.Name), logsources.Auth, meta.ID, meta.Name)
 		}
 	}
 

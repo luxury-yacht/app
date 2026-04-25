@@ -201,16 +201,16 @@ When the selected source changes:
 
 ### Scroll behavior
 
-Node logs intentionally matches pod logs behavior:
+Node logs intentionally matches container logs behavior:
 
 - default to the newest visible content
 - preserve scroll position on remount
 - only auto-follow if the user was already at the bottom
 - keep current content mounted during same-source refreshes so scroll position is not reset
 
-### Viewer features reused from pod logs
+### Viewer features reused from container logs
 
-The node log viewer reuses the shared pod log interface patterns where possible:
+The node log viewer reuses the shared logs viewer interface patterns where possible:
 
 - text filter
 - highlight
@@ -224,7 +224,7 @@ The node log viewer reuses the shared pod log interface patterns where possible:
 - pretty JSON mode
 - parsed JSON table mode
 
-Parsed-table behavior also matches pod logs for:
+Parsed-table behavior also matches container logs for:
 
 - row expansion/collapse
 - truncation behavior
@@ -257,7 +257,7 @@ The current implementation does not surface:
 Also note:
 
 - the node log query API is snapshot-based, not stream-based
-- append refresh is best-effort, not equivalent to pod-log follow streaming
+- append refresh is best-effort, not equivalent to container logs follow streaming
 
 ## Notable maintenance gotchas
 
@@ -292,4 +292,3 @@ that a service query will work just because a node exposes `journal/`.
 
 The node log viewer intentionally reuses the shared logs UI. That means some visual behavior is
 still inherited from the shared logs styles unless explicitly overridden in `NodeLogsTab.css`.
-

@@ -902,7 +902,7 @@ describe('DiagnosticsPanel component', () => {
           lastError: 'Catalog stream disconnected',
         },
         {
-          name: 'object-logs',
+          name: 'container-logs',
           activeSessions: 1,
           totalMessages: 9,
           droppedMessages: 2,
@@ -948,7 +948,7 @@ describe('DiagnosticsPanel component', () => {
     } as any;
     setDomainState('catalog', catalogState);
 
-    scopedEntriesMap['object-logs'] = [
+    scopedEntriesMap['container-logs'] = [
       [
         'workload:default:deployment:web',
         {

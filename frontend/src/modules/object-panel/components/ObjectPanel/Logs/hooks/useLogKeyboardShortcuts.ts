@@ -17,10 +17,10 @@ interface UseLogKeyboardShortcutsParams {
   hasAnsiLogEntries: boolean;
   hasCopyableContent: boolean;
   dispatch: React.Dispatch<LogViewerAction>;
-  supportsPreviousLogs: boolean;
-  canParseLogs: boolean;
-  handleTogglePreviousLogs: () => void;
-  handleCopyLogs: () => void;
+  supportsPreviousContainerLogs: boolean;
+  canParseContainerLogs: boolean;
+  handleTogglePreviousContainerLogs: () => void;
+  handleCopyContainerLogs: () => void;
   filterInputRef: RefObject<HTMLInputElement | null>;
   logsContentRef: RefObject<HTMLDivElement | null>;
 }
@@ -38,10 +38,10 @@ export function useLogKeyboardShortcuts({
   hasAnsiLogEntries,
   hasCopyableContent,
   dispatch,
-  supportsPreviousLogs,
-  canParseLogs,
-  handleTogglePreviousLogs,
-  handleCopyLogs,
+  supportsPreviousContainerLogs,
+  canParseContainerLogs,
+  handleTogglePreviousContainerLogs,
+  handleCopyContainerLogs,
   filterInputRef,
   logsContentRef,
 }: UseLogKeyboardShortcutsParams) {
@@ -80,13 +80,13 @@ export function useLogKeyboardShortcuts({
   useShortcut({
     key: 'v',
     handler: useCallback(() => {
-      if (!isActive || !supportsPreviousLogs) return false;
-      handleTogglePreviousLogs();
+      if (!isActive || !supportsPreviousContainerLogs) return false;
+      handleTogglePreviousContainerLogs();
       return true;
-    }, [handleTogglePreviousLogs, isActive, supportsPreviousLogs]),
+    }, [handleTogglePreviousContainerLogs, isActive, supportsPreviousContainerLogs]),
     description: 'Toggle previous logs',
     category: 'Logs Tab',
-    enabled: isActive && supportsPreviousLogs,
+    enabled: isActive && supportsPreviousContainerLogs,
     priority: 20,
   });
 
@@ -146,13 +146,13 @@ export function useLogKeyboardShortcuts({
   useShortcut({
     key: 'p',
     handler: useCallback(() => {
-      if (!isActive || !canParseLogs) return false;
+      if (!isActive || !canParseContainerLogs) return false;
       dispatch({ type: 'TOGGLE_PARSED_VIEW' });
       return true;
-    }, [isActive, canParseLogs, dispatch]),
+    }, [isActive, canParseContainerLogs, dispatch]),
     description: 'Toggle Parse/Raw mode',
     category: 'Logs Tab',
-    enabled: isActive && canParseLogs,
+    enabled: isActive && canParseContainerLogs,
     priority: 20,
   });
 
@@ -174,9 +174,9 @@ export function useLogKeyboardShortcuts({
     modifiers: { shift: true },
     handler: useCallback(() => {
       if (!isActive || !hasCopyableContent) return false;
-      handleCopyLogs();
+      handleCopyContainerLogs();
       return true;
-    }, [handleCopyLogs, hasCopyableContent, isActive]),
+    }, [handleCopyContainerLogs, hasCopyableContent, isActive]),
     description: 'Copy logs to clipboard',
     category: 'Logs Tab',
     enabled: isActive && hasCopyableContent,
@@ -186,16 +186,16 @@ export function useLogKeyboardShortcuts({
   useShortcut({
     key: 'j',
     handler: useCallback(() => {
-      if (!isActive || !canParseLogs) return false;
+      if (!isActive || !canParseContainerLogs) return false;
       dispatch({
         type: 'SET_DISPLAY_MODE',
         payload: displayMode === 'pretty' ? 'raw' : 'pretty',
       });
       return true;
-    }, [isActive, canParseLogs, displayMode, dispatch]),
+    }, [isActive, canParseContainerLogs, displayMode, dispatch]),
     description: 'Toggle pretty JSON',
     category: 'Logs Tab',
-    enabled: isActive && canParseLogs,
+    enabled: isActive && canParseContainerLogs,
     priority: 20,
   });
 

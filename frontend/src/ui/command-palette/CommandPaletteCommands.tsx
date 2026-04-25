@@ -172,7 +172,7 @@ export function useCommandPaletteCommands() {
         description: 'Toggle application logs',
         category: 'Application',
         action: () => {
-          eventBus.emit('view:toggle-app-logs');
+          eventBus.emit('view:toggle-app-logs-panel');
         },
         keywords: ['logs', 'application', 'debug'],
         shortcut: isMacPlatform() ? ['⇧', '⌘', 'L'] : ['⇧', 'Ctrl', 'L'],

@@ -12,8 +12,7 @@
    8. State Modifiers
    9. Animations
    10. Theme Support
-   11. Scrollbar Styling
-   12. Utility Classes
+   11. Utility Classes
    ============================================ */
 
 /* ============================================
@@ -137,9 +136,27 @@
   border-radius: var(--border-radius-sm);
   box-shadow: var(--dropdown-menu-shadow);
   overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: none;
   margin-top: 2px;
   z-index: var(--z-index-overlay);
   animation: dropdownSlide 0.15s ease-out;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb-bg) transparent;
+}
+
+.dropdown-menu::-webkit-scrollbar {
+  width: var(--scrollbar-width);
+  height: 0;
+}
+
+.dropdown-menu::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.dropdown-menu::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb-bg);
+  border-radius: var(--scrollbar-radius);
 }
 
 .dropdown-menu.position-top {
@@ -216,7 +233,9 @@
 .dropdown-filter-option {
   display: flex;
   align-items: center;
+  box-sizing: border-box;
   width: 100%;
+  min-width: 0;
   gap: 8px;
 }
 
@@ -232,7 +251,10 @@
 
 .dropdown-filter-label {
   flex: 1;
+  min-width: 0;
   text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Option content elements */
@@ -431,28 +453,7 @@
    ============================================ */
 
 /* ============================================
-   11. SCROLLBAR STYLING
-   ============================================ */
-.dropdown-menu::-webkit-scrollbar {
-  width: 8px;
-}
-
-.dropdown-menu::-webkit-scrollbar-track {
-  background: var(--color-bg-secondary);
-  border-radius: 4px;
-}
-
-.dropdown-menu::-webkit-scrollbar-thumb {
-  background: var(--color-border);
-  border-radius: 4px;
-}
-
-.dropdown-menu::-webkit-scrollbar-thumb:hover {
-  background: var(--color-text-secondary);
-}
-
-/* ============================================
-   12. UTILITY CLASSES
+   11. UTILITY CLASSES
    ============================================ */
 .sr-only {
   position: absolute;

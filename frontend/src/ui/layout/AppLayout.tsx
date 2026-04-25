@@ -66,7 +66,7 @@ const CreateResourceModal = withLazyBoundary(
 );
 const AppLogsPanel = withLazyBoundary(
   () => import('@ui/panels/app-logs/AppLogsPanel'),
-  'Loading app logs panel...'
+  'Loading Application Logs Panel...'
 );
 // ObjectPanel is imported eagerly because panels are only rendered on-demand
 // (when openPanels has entries). A lazy boundary would flash a loading spinner
@@ -296,10 +296,10 @@ export const AppLayout: React.FC = () => {
         {hasActiveClusters && <AuthFailureOverlay />}
       </main>
 
-      <PanelErrorBoundary onClose={() => viewState.setShowAppLogs(false)} panelName="app-logs">
+      <PanelErrorBoundary onClose={() => viewState.setShowAppLogsPanel(false)} panelName="app-logs">
         <AppLogsPanel
-          isOpen={viewState.showAppLogs}
-          onClose={() => viewState.setShowAppLogs(false)}
+          isOpen={viewState.showAppLogsPanel}
+          onClose={() => viewState.setShowAppLogsPanel(false)}
         />
       </PanelErrorBoundary>
 
