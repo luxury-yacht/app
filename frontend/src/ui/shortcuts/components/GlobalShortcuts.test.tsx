@@ -359,6 +359,19 @@ describe('GlobalShortcuts', () => {
     expect(toggleDiff).toHaveBeenCalledTimes(1);
   });
 
+  it('invokes create resource via Cmd+Shift+N shortcut', async () => {
+    const createResource = vi.fn();
+    isMacPlatformMock.mockReturnValue(true);
+    registeredShortcuts.length = 0;
+    await renderComponent({ onCreateResource: createResource });
+
+    act(() => {
+      findShortcut('n', { meta: true, shift: true }).handler();
+    });
+
+    expect(createResource).toHaveBeenCalledTimes(1);
+  });
+
   it('invokes settings toggle when Cmd+, shortcut fires', async () => {
     const toggleSettings = vi.fn();
     isMacPlatformMock.mockReturnValue(true);

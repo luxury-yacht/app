@@ -14,6 +14,7 @@ interface ModalStateContextType {
   isAboutOpen: boolean;
   isObjectDiffOpen: boolean;
   objectDiffOpenRequest: ObjectDiffOpenRequest | null;
+  isCreateResourceOpen: boolean;
   /**
    * Application Logs Panel visibility. App-global (not per-cluster):
    * Application Logs are the application's own log output, not workspace
@@ -26,6 +27,7 @@ interface ModalStateContextType {
   setIsSettingsOpen: (open: boolean) => void;
   setIsAboutOpen: (open: boolean) => void;
   setIsObjectDiffOpen: (open: boolean) => void;
+  setIsCreateResourceOpen: (open: boolean) => void;
   openObjectDiff: (request?: { left?: ObjectDiffOpenRequest['left'] }) => void;
   setShowAppLogsPanel: (open: boolean) => void;
   toggleAppLogsPanel: () => void;
@@ -52,6 +54,7 @@ export const ModalStateProvider: React.FC<ModalStateProviderProps> = ({ children
   const [objectDiffOpenRequest, setObjectDiffOpenRequest] = useState<ObjectDiffOpenRequest | null>(
     null
   );
+  const [isCreateResourceOpen, setIsCreateResourceOpen] = useState(false);
   const [showAppLogsPanel, setShowAppLogsPanel] = useState(false);
 
   const toggleAppLogsPanel = useCallback(() => {
@@ -79,10 +82,12 @@ export const ModalStateProvider: React.FC<ModalStateProviderProps> = ({ children
       isAboutOpen,
       isObjectDiffOpen,
       objectDiffOpenRequest,
+      isCreateResourceOpen,
       showAppLogsPanel,
       setIsSettingsOpen,
       setIsAboutOpen,
       setIsObjectDiffOpen,
+      setIsCreateResourceOpen,
       openObjectDiff,
       setShowAppLogsPanel,
       toggleAppLogsPanel,
@@ -92,6 +97,7 @@ export const ModalStateProvider: React.FC<ModalStateProviderProps> = ({ children
       isAboutOpen,
       isObjectDiffOpen,
       objectDiffOpenRequest,
+      isCreateResourceOpen,
       showAppLogsPanel,
       openObjectDiff,
       toggleAppLogsPanel,
