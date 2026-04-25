@@ -25,7 +25,7 @@ import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useErrorContext } from '@core/contexts/ErrorContext';
 import { ErrorSeverity, ErrorCategory } from '@utils/errorHandler';
 import { useRefreshScopedDomain } from '@/core/refresh';
-import { requestContextRefresh, requestRefreshDomain } from '@/core/data-access';
+import { requestContextRefresh } from '@/core/data-access';
 import { buildClusterScopeList } from '@/core/refresh/clusterScope';
 import { buildCodeTheme } from '@/core/codemirror/theme';
 import { createSearchExtensions } from '@/core/codemirror/search';
@@ -39,21 +39,11 @@ import {
   parseObjectYamlError,
   type ObjectYamlErrorPayload,
 } from '@modules/object-panel/components/ObjectPanel/Yaml/yamlErrors';
-import {
-  applyResourceVersionToYaml,
-  applyYamlOnServer,
-  validateYamlOnServer,
-} from '@modules/object-panel/components/ObjectPanel/Yaml/yamlTabUtils';
-import {
-  validateYamlDraft,
-  type ObjectIdentity,
-} from '@modules/object-panel/components/ObjectPanel/Yaml/yamlValidation';
 import type { templates } from '@wailsjs/go/models';
 import { getFormDefinition } from './create-resource/formDefinitions';
 import { ResourceForm } from './create-resource/ResourceForm';
 import { getRequiredFieldErrors } from './create-resource/formUtils';
 import { getFieldValue } from './create-resource/yamlSync';
-import type { CreateResourceModalRequest } from './create-resource/types';
 
 // Minimal YAML skeleton for the "Blank" option.
 const BLANK_YAML = `apiVersion:
@@ -66,11 +56,10 @@ metadata:
 interface CreateResourceModalProps {
   isOpen: boolean;
   onClose: () => void;
-  request?: CreateResourceModalRequest | null;
 }
 
 const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
-  ({ isOpen, onClose, request = null }) => {
+  ({ isOpen, onClose }) => {
     const [isClosing, setIsClosing] = useState(false);
     const [shouldRender, setShouldRender] = useState(false);
     const modalRef = useRef<HTMLDivElement>(null);
@@ -78,8 +67,6 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
     const { selectedNamespace: activeNamespace } = useNamespace();
     const { openWithObject } = useObjectPanel();
     const { addError } = useErrorContext();
-    const isEditMode = request?.mode === 'edit';
-    const editIdentity = request?.identity ?? null;
 
     // YAML editor content.
     const [yamlContent, setYamlContent] = useState(BLANK_YAML);
@@ -211,16 +198,12 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
       if (isOpen) {
         setShouldRender(true);
         setIsClosing(false);
-        const initialNamespace = isEditMode
-          ? (editIdentity?.namespace ?? '')
-          : isAllNamespaces(activeNamespace)
-            ? ''
-            : (activeNamespace ?? '');
+        const initialNamespace = isAllNamespaces(activeNamespace) ? '' : (activeNamespace ?? '');
         // Reset state on open.
-        setYamlContent(isEditMode ? (request?.initialYaml ?? BLANK_YAML) : BLANK_YAML);
+        setYamlContent(BLANK_YAML);
         setSelectedTemplate('');
         setAvailableTemplates([]);
-        setTargetClusterId(isEditMode ? (request?.clusterId ?? '') : (selectedClusterId ?? ''));
+        setTargetClusterId(selectedClusterId ?? '');
         setSelectedNamespace(initialNamespace);
         setParseError(null);
         setValidationSuccess(null);
@@ -234,11 +217,6 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
         setYamlPanelReady(false);
         setYamlPanelWidth(700);
         setYamlPanelWrap(false);
-        const formKind = isEditMode ? (editIdentity?.kind ?? '') : '';
-        if (isEditMode) {
-          setActiveView(getFormDefinition(formKind) ? 'form' : 'yaml');
-          return undefined;
-        }
         // Load templates.
         GetResourceTemplates()
           .then((templates) => {
@@ -263,16 +241,7 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
         }, 200);
         return () => clearTimeout(timer);
       }
-    }, [
-      isOpen,
-      shouldRender,
-      activeNamespace,
-      selectedClusterId,
-      applyNamespaceToYaml,
-      editIdentity,
-      isEditMode,
-      request,
-    ]);
+    }, [isOpen, shouldRender, activeNamespace, selectedClusterId, applyNamespaceToYaml]);
 
     // Keep body scroll locked while the modal is open.
     useEffect(() => {
@@ -423,14 +392,11 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
 
     // Modal header reflects the selected Kind; Blank falls back to generic title.
     const createHeaderTitle = useMemo(() => {
-      if (isEditMode && editIdentity) {
-        return `Edit ${editIdentity.kind}`;
-      }
       if (!selectedTemplate) return 'Create Resource';
       const selected = availableTemplates.find((t) => t.name === selectedTemplate);
       const resourceKind = selected?.kind || selectedTemplate;
       return `Create ${resourceKind}`;
-    }, [availableTemplates, editIdentity, isEditMode, selectedTemplate]);
+    }, [availableTemplates, selectedTemplate]);
 
     // Clear validation state when YAML changes.
     const handleYamlChange = useCallback(
@@ -509,36 +475,6 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
       }
     }, []);
 
-    const validateEditDraft = useCallback(() => {
-      if (!editIdentity) {
-        return { isValid: false as const, message: 'Unable to resolve object identity.' };
-      }
-
-      const validation = validateYamlDraft(
-        yamlContent,
-        editIdentity,
-        editIdentity.resourceVersion ?? null
-      );
-      if (!validation.isValid) {
-        return validation;
-      }
-
-      const baselineResourceVersion = editIdentity.resourceVersion ?? null;
-      if (!baselineResourceVersion) {
-        return {
-          isValid: false as const,
-          message:
-            'metadata.resourceVersion is required for edits to avoid overwriting concurrent changes.',
-        };
-      }
-
-      return {
-        isValid: true as const,
-        validation,
-        baselineResourceVersion,
-      };
-    }, [editIdentity, yamlContent]);
-
     // Validate button handler (dry-run).
     const handleValidate = useCallback(async () => {
       if (!targetClusterId) return;
@@ -548,28 +484,6 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
       setRawError(null);
 
       try {
-        if (isEditMode) {
-          const draftValidation = validateEditDraft();
-          if (!draftValidation.isValid) {
-            setRawError(draftValidation.message);
-            return;
-          }
-
-          const resolvedIdentity = editIdentity as ObjectIdentity;
-          await validateYamlOnServer(
-            targetClusterId,
-            request?.initialYaml ?? '',
-            draftValidation.validation.normalizedYAML,
-            resolvedIdentity,
-            draftValidation.baselineResourceVersion
-          );
-          setValidationSuccess(
-            `Validation passed: ${resolvedIdentity.kind}/${resolvedIdentity.name}` +
-              (resolvedIdentity.namespace ? ` in ${resolvedIdentity.namespace}` : '')
-          );
-          return;
-        }
-
         const requestNamespace = extractNamespaceFromYaml(yamlContent) ?? selectedNamespace;
         const resp = await ValidateResourceCreation(targetClusterId, {
           yaml: yamlContent,
@@ -590,10 +504,6 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
       selectedNamespace,
       extractNamespaceFromYaml,
       handleBackendError,
-      editIdentity,
-      isEditMode,
-      request?.initialYaml,
-      validateEditDraft,
     ]);
 
     // Create button handler.
@@ -610,69 +520,6 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
       setRawError(null);
 
       try {
-        if (isEditMode && editIdentity) {
-          const draftValidation = validateEditDraft();
-          if (!draftValidation.isValid) {
-            setRawError(draftValidation.message);
-            return;
-          }
-
-          const validationResponse = await validateYamlOnServer(
-            capturedClusterId,
-            request?.initialYaml ?? '',
-            draftValidation.validation.normalizedYAML,
-            editIdentity,
-            draftValidation.baselineResourceVersion
-          );
-
-          const resourceVersionForApply =
-            validationResponse?.resourceVersion ?? draftValidation.baselineResourceVersion;
-
-          let payloadForApply = draftValidation.validation.normalizedYAML;
-          if (
-            validationResponse?.resourceVersion &&
-            validationResponse.resourceVersion !== draftValidation.baselineResourceVersion
-          ) {
-            payloadForApply = applyResourceVersionToYaml(
-              draftValidation.validation.normalizedYAML,
-              validationResponse.resourceVersion
-            );
-            setYamlContent(payloadForApply);
-          }
-
-          const applyResponse = await applyYamlOnServer(
-            capturedClusterId,
-            request?.initialYaml ?? '',
-            payloadForApply,
-            editIdentity,
-            resourceVersionForApply
-          );
-          const appliedResourceVersion = applyResponse?.resourceVersion ?? resourceVersionForApply;
-          setYamlContent(applyResourceVersionToYaml(payloadForApply, appliedResourceVersion));
-
-          onClose();
-
-          if (request?.scope) {
-            await requestRefreshDomain({
-              domain: 'object-yaml',
-              scope: request.scope,
-              reason: 'user',
-            });
-          }
-          await requestContextRefresh({ reason: 'user' });
-
-          const nsLabel = editIdentity.namespace ? ` in namespace ${editIdentity.namespace}` : '';
-          addError({
-            message: `Saved ${editIdentity.kind}/${editIdentity.name}${nsLabel} on cluster ${capturedClusterName}`,
-            category: ErrorCategory.UNKNOWN,
-            severity: ErrorSeverity.INFO,
-            timestamp: new Date(),
-            retryable: false,
-            userMessage: `Saved ${editIdentity.kind}/${editIdentity.name}${nsLabel} on cluster ${capturedClusterName}`,
-          });
-          return;
-        }
-
         const requestNamespace = extractNamespaceFromYaml(yamlContent) ?? selectedNamespace;
         const resp = await CreateResource(capturedClusterId, {
           yaml: yamlContent,
@@ -720,11 +567,6 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
       onClose,
       addError,
       handleBackendError,
-      editIdentity,
-      isEditMode,
-      request?.initialYaml,
-      request?.scope,
-      validateEditDraft,
     ]);
 
     if (!shouldRender) return null;
@@ -760,35 +602,25 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
             <div className="create-resource-context-bar">
               <div className="create-resource-dropdown-field">
                 <span className="create-resource-dropdown-label">Cluster</span>
-                {isEditMode ? (
-                  <span className="create-resource-context-value">
-                    {targetClusterName || targetClusterId}
-                  </span>
-                ) : (
-                  <Dropdown
-                    options={clusterOptions}
-                    value={targetClusterId}
-                    onChange={(v) => setTargetClusterId(Array.isArray(v) ? (v[0] ?? '') : v)}
-                    placeholder="Select cluster"
-                    size="compact"
-                    ariaLabel="Target cluster"
-                  />
-                )}
+                <Dropdown
+                  options={clusterOptions}
+                  value={targetClusterId}
+                  onChange={(v) => setTargetClusterId(Array.isArray(v) ? (v[0] ?? '') : v)}
+                  placeholder="Select cluster"
+                  size="compact"
+                  ariaLabel="Target cluster"
+                />
               </div>
               <div className="create-resource-dropdown-field">
                 <span className="create-resource-dropdown-label">Kind</span>
-                {isEditMode && editIdentity ? (
-                  <span className="create-resource-context-value">{editIdentity.kind}</span>
-                ) : (
-                  <Dropdown
-                    options={templateOptions}
-                    value={selectedTemplate}
-                    onChange={handleTemplateChange}
-                    placeholder="Blank"
-                    size="compact"
-                    ariaLabel="Resource template"
-                  />
-                )}
+                <Dropdown
+                  options={templateOptions}
+                  value={selectedTemplate}
+                  onChange={handleTemplateChange}
+                  placeholder="Blank"
+                  size="compact"
+                  ariaLabel="Resource template"
+                />
               </div>
               <button
                 type="button"
@@ -952,13 +784,7 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
             onClick={handleCreate}
             data-create-resource-focusable="true"
           >
-            {isCreating
-              ? isEditMode
-                ? 'Saving...'
-                : 'Creating...'
-              : isEditMode
-                ? 'Save'
-                : 'Create'}
+            {isCreating ? 'Creating...' : 'Create'}
           </button>
         </div>
       </ModalSurface>
