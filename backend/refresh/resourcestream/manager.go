@@ -672,6 +672,10 @@ func (m *Manager) handleCustomResourceDefinition(obj interface{}, updateType Mes
 		m.removeCustomInformer(crd.Name)
 		return
 	}
+	if snapshot.IsFirstClassCustomResourceDefinition(crd) {
+		m.removeCustomInformer(crd.Name)
+		return
+	}
 	m.ensureCustomInformer(crd)
 }
 

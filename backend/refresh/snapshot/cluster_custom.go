@@ -106,7 +106,7 @@ func (b *ClusterCustomBuilder) Build(ctx context.Context, scope string) (*refres
 
 	clusterCRDs := make([]*apiextensionsv1.CustomResourceDefinition, 0, len(crds))
 	for _, crd := range crds {
-		if crd != nil && crd.Spec.Scope == apiextensionsv1.ClusterScoped {
+		if crd != nil && crd.Spec.Scope == apiextensionsv1.ClusterScoped && !IsFirstClassCustomResourceDefinition(crd) {
 			clusterCRDs = append(clusterCRDs, crd)
 		}
 	}

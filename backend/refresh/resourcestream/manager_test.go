@@ -12,7 +12,9 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	dynamicfake "k8s.io/client-go/dynamic/fake"
 	appslisters "k8s.io/client-go/listers/apps/v1"
 	corelisters "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
@@ -504,6 +506,46 @@ func TestManagerCustomUpdateInvalidatesCache(t *testing.T) {
 	require.Equal(t, "Widget", gotKind)
 	require.Equal(t, "default", gotNamespace)
 	require.Equal(t, "widget-1", gotName)
+}
+
+func TestManagerSkipsCustomInformerForFirstClassGatewayCRD(t *testing.T) {
+	existingStopCh := make(chan struct{})
+	manager := &Manager{
+		clusterMeta:     snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
+		logger:          noopLogger{},
+		dynamicClient:   dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()),
+		customInformers: make(map[string]*customResourceInformer),
+		subscribers:     make(map[string]map[string]map[uint64]*subscription),
+	}
+	manager.customInformers["gateways.gateway.networking.k8s.io"] = &customResourceInformer{
+		stopCh: existingStopCh,
+	}
+
+	crd := &apiextensionsv1.CustomResourceDefinition{
+		ObjectMeta: metav1.ObjectMeta{Name: "gateways.gateway.networking.k8s.io"},
+		Spec: apiextensionsv1.CustomResourceDefinitionSpec{
+			Group: "gateway.networking.k8s.io",
+			Scope: apiextensionsv1.NamespaceScoped,
+			Names: apiextensionsv1.CustomResourceDefinitionNames{
+				Plural: "gateways",
+				Kind:   "Gateway",
+			},
+			Versions: []apiextensionsv1.CustomResourceDefinitionVersion{{
+				Name:    "v1",
+				Served:  true,
+				Storage: true,
+			}},
+		},
+	}
+
+	manager.handleCustomResourceDefinition(crd, MessageTypeModified)
+
+	require.Empty(t, manager.customInformers)
+	select {
+	case <-existingStopCh:
+	default:
+		t.Fatal("expected stale custom informer to be stopped")
+	}
 }
 
 func TestManagerClusterCustomUpdateBroadcasts(t *testing.T) {
