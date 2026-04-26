@@ -6,6 +6,7 @@ import React from 'react';
 import { types } from '@wailsjs/go/models';
 import { OverviewItem } from '@modules/object-panel/components/ObjectPanel/Details/Overview/shared/OverviewItem';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
+import Tooltip from '@shared/components/Tooltip';
 import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
@@ -21,8 +22,11 @@ interface GatewayAPIOverviewProps {
   backendTLSPolicyDetails?: types.BackendTLSPolicyDetails | null;
 }
 
-const conditionStatusClass = (status: string): string =>
-  status === 'True' ? 'healthy' : 'warning';
+const conditionStatusClass = (status: string): string => {
+  if (status === 'True') return 'healthy';
+  if (status === 'False') return 'failed';
+  return 'warning';
+};
 
 const objectRefLabel = (ref: types.ObjectRef): string =>
   `${ref.kind} ${ref.namespace ? `${ref.namespace}/` : ''}${ref.name}`;
@@ -96,21 +100,20 @@ const ConditionList: React.FC<{ conditions?: types.ConditionState[] | null }> = 
   return (
     <div className="overview-condition-list">
       {conditions.map((condition) => {
-        const showReason = condition.reason && condition.reason !== condition.type;
+        const tooltip = condition.message || condition.reason || '';
+        const badge = (
+          <span className={`overview-condition-status ${conditionStatusClass(condition.status)}`}>
+            {condition.type || 'Condition'}
+          </span>
+        );
         return (
-          <div
+          <Tooltip
             key={`${condition.type ?? 'condition'}-${condition.reason ?? condition.status}`}
-            className="overview-condition-item"
+            content={tooltip}
+            disabled={!tooltip}
           >
-            <span className="overview-condition-type">{condition.type || 'Condition'}</span>
-            <span className={`overview-condition-status ${conditionStatusClass(condition.status)}`}>
-              {condition.status}
-            </span>
-            {showReason && <span className="overview-condition-reason">{condition.reason}</span>}
-            {condition.message && (
-              <div className="overview-condition-message">{condition.message}</div>
-            )}
-          </div>
+            {badge}
+          </Tooltip>
         );
       })}
     </div>

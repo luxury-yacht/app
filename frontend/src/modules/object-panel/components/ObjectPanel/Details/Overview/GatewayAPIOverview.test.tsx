@@ -32,6 +32,11 @@ vi.mock('@shared/components/ObjectPanelLink', () => ({
   ),
 }));
 
+vi.mock('@shared/components/Tooltip', () => ({
+  __esModule: true,
+  default: ({ children }: any) => <>{children}</>,
+}));
+
 vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
   useObjectPanel: () => ({
     objectData: {
@@ -109,8 +114,11 @@ describe('GatewayAPIOverview', () => {
     expect(getValueForLabel(container, 'Listeners')?.textContent).toContain('HTTPS');
     expect(getValueForLabel(container, 'Listeners')?.textContent).toContain('443');
     expect(getValueForLabel(container, 'Listeners')?.textContent).toContain('2 routes');
-    expect(getValueForLabel(container, 'Conditions')?.textContent).toContain('Accepted');
-    expect(getValueForLabel(container, 'Conditions')?.textContent).toContain('True');
+    const conditionsValue = getValueForLabel(container, 'Conditions');
+    expect(conditionsValue?.textContent).toContain('Accepted');
+    // Status now drives badge color (healthy class) rather than appearing as text.
+    const acceptedBadge = conditionsValue?.querySelector('.overview-condition-status');
+    expect(acceptedBadge?.classList.contains('healthy')).toBe(true);
     expect(
       container.querySelector('[data-testid="object-panel-link"]')?.getAttribute('data-name')
     ).toBe('shared');
