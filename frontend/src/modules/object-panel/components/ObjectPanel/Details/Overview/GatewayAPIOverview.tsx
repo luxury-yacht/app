@@ -32,7 +32,7 @@ const objectRefLabel = (ref: types.ObjectRef): string =>
   `${ref.kind} ${ref.namespace ? `${ref.namespace}/` : ''}${ref.name}`;
 
 const displayRefLabel = (ref: types.DisplayRef): string =>
-  `${ref.kind} ${ref.namespace ? `${ref.namespace}/` : ''}${ref.name || '(name not specified)'}`;
+  `${ref.kind} ${ref.namespace ? `${ref.namespace}/` : ''}${ref.name || '*'}`;
 
 const formatAttachedRoutes = (count: number): string =>
   `${count} ${count === 1 ? 'route' : 'routes'}`;
@@ -214,20 +214,95 @@ const RouteRulesList: React.FC<{
   );
 };
 
-const GrantFromList: React.FC<{ from?: types.ReferenceGrantFromInfo[] | null }> = ({ from }) => {
+const groupFromByNamespace = (
+  from?: types.ReferenceGrantFromInfo[] | null
+): Array<{ namespace: string; entries: types.ReferenceGrantFromInfo[] }> => {
   if (!from || from.length === 0) {
+    return [];
+  }
+  const order: string[] = [];
+  const map = new Map<string, types.ReferenceGrantFromInfo[]>();
+  for (const entry of from) {
+    const ns = entry.namespace;
+    if (!map.has(ns)) {
+      order.push(ns);
+      map.set(ns, []);
+    }
+    map.get(ns)!.push(entry);
+  }
+  return order.map((namespace) => ({ namespace, entries: map.get(namespace)! }));
+};
+
+const groupRefsByNamespace = (
+  refs?: Array<types.ObjectRef | types.RefOrDisplay> | null
+): Array<{ namespace: string; refs: Array<types.ObjectRef | types.RefOrDisplay> }> => {
+  if (!refs || refs.length === 0) {
+    return [];
+  }
+  const order: string[] = [];
+  const map = new Map<string, Array<types.ObjectRef | types.RefOrDisplay>>();
+  for (const ref of refs) {
+    const parts = getRefParts(ref);
+    const ns = parts.ref?.namespace ?? parts.display?.namespace ?? '';
+    if (!map.has(ns)) {
+      order.push(ns);
+      map.set(ns, []);
+    }
+    map.get(ns)!.push(ref);
+  }
+  return order.map((namespace) => ({ namespace, refs: map.get(namespace)! }));
+};
+
+const ReferenceGrantDiagram: React.FC<{
+  from?: types.ReferenceGrantFromInfo[] | null;
+  to?: Array<types.ObjectRef | types.RefOrDisplay> | null;
+  clusterName?: string;
+}> = ({ from, to, clusterName }) => {
+  const fromGroups = groupFromByNamespace(from);
+  const toGroups = groupRefsByNamespace(to);
+  if (fromGroups.length === 0 && toGroups.length === 0) {
     return null;
   }
   return (
-    <div className="overview-ref-list">
-      {from.map((entry) => (
-        <div
-          key={`${entry.group}-${entry.kind}-${entry.namespace}`}
-          className="overview-ref-item"
-        >
-          {entry.group}/{entry.kind} from {entry.namespace}
-        </div>
-      ))}
+    <div className="reference-grant-diagram">
+      <div className="reference-grant-side-stack">
+        {fromGroups.map((group) => (
+          <div className="reference-grant-side" key={`from-ns-${group.namespace}`}>
+            <div className="reference-grant-namespace">{group.namespace}</div>
+            {group.entries.map((entry) => (
+              <div
+                key={`from-${group.namespace}-${entry.group}-${entry.kind}`}
+                className="reference-grant-item"
+              >
+                {entry.group}/{entry.kind}
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+      <div className="reference-grant-arrow" aria-hidden="true">
+        →
+      </div>
+      <div className="reference-grant-side-stack">
+        {toGroups.map((group, groupIndex) => (
+          <div
+            className="reference-grant-side"
+            key={`to-ns-${group.namespace || groupIndex}`}
+          >
+            {group.namespace && (
+              <div className="reference-grant-namespace">{group.namespace}</div>
+            )}
+            {group.refs.map((ref, refIndex) => (
+              <div
+                key={`to-${group.namespace}-${refIndex}`}
+                className="reference-grant-item"
+              >
+                <RefLink value={ref} clusterName={clusterName} />
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
     </div>
   );
 };
@@ -402,8 +477,7 @@ const ReferenceGrantOverview: React.FC<{
   details: types.ReferenceGrantDetails;
   clusterName?: string;
 }> = ({ details, clusterName }) => {
-  const hasFrom = Boolean(details.from?.length);
-  const hasTo = Boolean(details.to?.length);
+  const hasGrant = Boolean(details.from?.length) || Boolean(details.to?.length);
 
   return (
     <>
@@ -414,16 +488,16 @@ const ReferenceGrantOverview: React.FC<{
         age={details.age}
       />
       <OverviewItem
-        label="From"
-        value={<GrantFromList from={details.from} />}
+        label="Grant"
+        value={
+          <ReferenceGrantDiagram
+            from={details.from}
+            to={details.to}
+            clusterName={clusterName}
+          />
+        }
         fullWidth
-        hidden={!hasFrom}
-      />
-      <OverviewItem
-        label="To"
-        value={<RefList refs={details.to} clusterName={clusterName} />}
-        fullWidth
-        hidden={!hasTo}
+        hidden={!hasGrant}
       />
       <ResourceMetadata labels={details.labels} annotations={details.annotations} />
     </>

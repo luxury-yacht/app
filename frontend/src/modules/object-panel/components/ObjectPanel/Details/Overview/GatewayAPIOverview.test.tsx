@@ -212,12 +212,13 @@ describe('GatewayAPIOverview', () => {
       } as any,
     });
 
-    expect(getValueForLabel(container, 'From')?.textContent).toContain(
-      'gateway.networking.k8s.io/HTTPRoute from team-a'
-    );
-    expect(getValueForLabel(container, 'To')?.textContent).toContain(
-      'Widget team-a/(name not specified)'
-    );
+    // Single Grant row diagram replaces separate From/To labels. From entries
+    // are grouped by namespace; each namespace gets its own card with the
+    // namespace as a header above the kind lines.
+    const grant = getValueForLabel(container, 'Grant');
+    expect(grant?.textContent).toContain('team-a');
+    expect(grant?.textContent).toContain('gateway.networking.k8s.io/HTTPRoute');
+    expect(grant?.textContent).toContain('Widget team-a/*');
     expect(container.querySelector('[data-testid="object-panel-link"]')).toBeNull();
   });
 });

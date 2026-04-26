@@ -130,6 +130,64 @@
   border-top: 1px dashed var(--color-border);
 } */
 
+/* ---------- Reference grant diagram ----------
+   FROM block on the left, arrow in the middle, TO block on the right.
+   Each side is a card-style panel listing entries; the arrow visually
+   conveys the access-grant direction without needing to/from labels. */
+
+.reference-grant-diagram {
+  display: flex;
+  align-items: stretch;
+  gap: var(--spacing-md);
+}
+
+/* Each side of the grant is a stack of per-namespace boxes. The FROM side
+   typically has one box per source namespace; the TO side typically has
+   exactly one (the grant's own namespace), but uses the same stack
+   structure for visual symmetry. */
+.reference-grant-side-stack {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.reference-grant-side {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  background: var(--color-bg-tertiary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+}
+
+.reference-grant-namespace {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  margin-bottom: var(--spacing-xs);
+  letter-spacing: 0.02em;
+}
+
+.reference-grant-item {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-mono);
+  color: var(--color-text);
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.reference-grant-arrow {
+  align-self: center;
+  font-size: var(--font-size-lg);
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
+}
+
 /* ---------- Status accents (Ready / NotReady, etc.) ---------- */
 
 .overview-status-ready {
