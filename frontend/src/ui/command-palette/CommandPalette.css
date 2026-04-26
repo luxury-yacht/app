@@ -121,7 +121,7 @@
   border-left: 3px solid transparent;
 }
 
-.command-palette.mouse-selection-armed .command-palette-item:hover {
+.command-palette.mouse-selection-armed .command-palette-item:hover:not(.selected) {
   background-color: var(--color-bg-secondary);
   border-left-color: var(--color-border);
 }
