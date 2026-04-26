@@ -4,6 +4,7 @@
 
 import React, { useMemo } from 'react';
 import { types } from '@wailsjs/go/models';
+import { OverviewItem } from '@modules/object-panel/components/ObjectPanel/Details/Overview/shared/OverviewItem';
 import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
@@ -145,6 +146,18 @@ export const EndpointSliceOverview: React.FC<EndpointSliceOverviewProps> = ({
   const notReadyCount = notReadyAddresses.length;
   const totalCount = readyCount + notReadyCount;
 
+  const statusValue =
+    totalCount === 0 ? (
+      <StatusChip variant="warning">No endpoints</StatusChip>
+    ) : (
+      <span className="endpoint-status-chips">
+        {readyCount > 0 && <StatusChip variant="healthy">{readyCount} ready</StatusChip>}
+        {notReadyCount > 0 && (
+          <StatusChip variant="unhealthy">{notReadyCount} not ready</StatusChip>
+        )}
+      </span>
+    );
+
   return (
     <>
       <ResourceHeader
@@ -154,64 +167,53 @@ export const EndpointSliceOverview: React.FC<EndpointSliceOverviewProps> = ({
         age={endpointSliceDetails.age}
       />
 
-      <div className="slices-section">
-        <div className="overview-card" aria-label="endpoint-slice">
-          <div className="overview-card-header">
-            <span className="overview-card-title">
-              {endpointSliceDetails.addressType || 'IPv4'}
-            </span>{' '}
-            <span className="overview-card-meta">
-              ({readyCount}/{totalCount} ready)
-            </span>
-          </div>
-          <div className="overview-card-rows">
-            {readyCount > 0 && (
-              <div className="overview-row">
-                <span className="overview-row-label">
-                  <StatusChip variant="healthy">Ready</StatusChip>
-                </span>
-                <span className="overview-row-value plain">
-                  <AddressList
-                    addresses={readyAddresses}
-                    limit={10}
-                    namespace={namespace}
-                    clusterMeta={clusterMeta}
-                  />
-                </span>
-              </div>
-            )}
-            {notReadyCount > 0 && (
-              <div className="overview-row">
-                <span className="overview-row-label">
-                  <StatusChip variant="unhealthy">Not Ready</StatusChip>
-                </span>
-                <span className="overview-row-value plain">
-                  <AddressList
-                    addresses={notReadyAddresses}
-                    limit={5}
-                    namespace={namespace}
-                    clusterMeta={clusterMeta}
-                  />
-                </span>
-              </div>
-            )}
-            {ports.length > 0 && (
-              <div className="overview-row">
-                <span className="overview-row-label">Ports</span>
-                <span className="overview-row-value plain">
-                  <div className="overview-ref-list">
-                    {ports.map((port, portIndex) => (
-                      <div key={`${port.port}-${portIndex}`} className="overview-ref-item">
-                        {formatPort(port)}
-                      </div>
-                    ))}
-                  </div>
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
+      <OverviewItem label="Address Type" value={endpointSliceDetails.addressType || 'IPv4'} />
+      <OverviewItem label="Status" value={statusValue} />
+
+      {readyCount > 0 && (
+        <OverviewItem
+          label={`Ready (${readyCount})`}
+          value={
+            <AddressList
+              addresses={readyAddresses}
+              limit={10}
+              namespace={namespace}
+              clusterMeta={clusterMeta}
+            />
+          }
+          fullWidth
+        />
+      )}
+      {notReadyCount > 0 && (
+        <OverviewItem
+          label={`Not Ready (${notReadyCount})`}
+          value={
+            <AddressList
+              addresses={notReadyAddresses}
+              limit={5}
+              namespace={namespace}
+              clusterMeta={clusterMeta}
+            />
+          }
+          fullWidth
+        />
+      )}
+
+      {ports.length > 0 && (
+        <OverviewItem
+          label="Ports"
+          value={
+            <div className="overview-ref-list">
+              {ports.map((port, portIndex) => (
+                <div key={`${port.port}-${portIndex}`} className="overview-ref-item">
+                  {formatPort(port)}
+                </div>
+              ))}
+            </div>
+          }
+          fullWidth
+        />
+      )}
 
       <ResourceMetadata
         labels={endpointSliceDetails.labels}

@@ -1,21 +1,14 @@
 /* EndpointsOverview-specific styles
-   Layout uses the shared overview-card / overview-row classes from
-   shared/OverviewBlocks.css. These styles cover only the inline address row
-   (IP → target on node) since each address row is a flow line of mixed
-   technical text + links. */
+   Most layout comes from the standard OverviewItem rows; these styles cover
+   the inline address row (IP → target on node) and the small wrapper for the
+   Status row's chip group. */
 
-.slices-section {
-  margin-bottom: var(--spacing-sm);
+/* The Status row may show one or two chips side by side. */
+.endpoint-status-chips {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--spacing-sm);
 }
-
-/* Override the app-wide user-select: none so IPs, target refs, node names,
-   and port values can be copied. Mirrors the .overview-value treatment used
-   elsewhere in the details tab. */
-/* .slices-section,
-.slices-section * {
-  user-select: text;
-  -webkit-user-select: text;
-} */
 
 .addresses-list {
   display: flex;

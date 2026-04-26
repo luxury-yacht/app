@@ -79,12 +79,15 @@ describe('EndpointSliceOverview', () => {
       } as any,
     });
 
-    const slicesSection = container.querySelector('.slices-section');
-    expect(slicesSection).not.toBeNull();
-    expect(slicesSection?.textContent).toContain('IPv4 (12/18 ready)');
-    expect(slicesSection?.textContent).toContain('Ready');
-    expect(slicesSection?.textContent).toContain('Not Ready');
-    expect(slicesSection?.textContent).toContain('http:');
+    const overview = container;
+    expect(overview.textContent).toContain('IPv4');
+    // The Status row reports "12 ready" and "6 not ready" via chips.
+    expect(overview.textContent).toContain('12 ready');
+    expect(overview.textContent).toContain('6 not ready');
+    // Section labels include the per-state counts.
+    expect(overview.textContent).toContain('Ready (12)');
+    expect(overview.textContent).toContain('Not Ready (6)');
+    expect(overview.textContent).toContain('http:');
   });
 
   it('omits not ready section when no not-ready addresses', async () => {
@@ -105,11 +108,12 @@ describe('EndpointSliceOverview', () => {
       } as any,
     });
 
-    const slicesSection = container.querySelector('.slices-section');
-    expect(slicesSection?.textContent).toContain('IPv4 (2/2 ready)');
-    // No "Not Ready" chip should render when there are no not-ready addresses.
-    const unhealthyChips = slicesSection?.querySelectorAll('.status-chip--unhealthy');
-    expect(unhealthyChips?.length ?? 0).toBe(0);
+    expect(container.textContent).toContain('IPv4');
+    expect(container.textContent).toContain('2 ready');
+    // No "Not Ready" chip and no Not Ready section when there are none.
+    const unhealthyChips = container.querySelectorAll('.status-chip--unhealthy');
+    expect(unhealthyChips.length).toBe(0);
+    expect(container.textContent).not.toContain('Not Ready');
   });
 
   it('displays address with target and node', async () => {
@@ -127,11 +131,11 @@ describe('EndpointSliceOverview', () => {
       } as any,
     });
 
-    const slicesSection = container.querySelector('.slices-section');
-    expect(slicesSection?.textContent).toContain('2001:db8::1');
-    expect(slicesSection?.textContent).toContain('Pod/my-pod');
-    expect(slicesSection?.textContent).toContain('on');
-    expect(slicesSection?.textContent).toContain('worker-1');
-    expect(slicesSection?.textContent).toContain('IPv6 (1/1 ready)');
+    expect(container.textContent).toContain('2001:db8::1');
+    expect(container.textContent).toContain('Pod/my-pod');
+    expect(container.textContent).toContain('on');
+    expect(container.textContent).toContain('worker-1');
+    expect(container.textContent).toContain('IPv6');
+    expect(container.textContent).toContain('1 ready');
   });
 });
