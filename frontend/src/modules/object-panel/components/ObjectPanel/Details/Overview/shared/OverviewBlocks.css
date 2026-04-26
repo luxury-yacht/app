@@ -95,6 +95,13 @@
   font-size: var(--font-size-sm);
 }
 
+/* Mono utility for OverviewItem values that contain technical strings —
+   IPs, identifiers, port specs. Apply directly to a span inside the value. */
+.overview-value-mono {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-mono);
+}
+
 /* ---------- Reference list ----------
    A vertical list of object links or display refs. */
 

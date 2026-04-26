@@ -95,7 +95,7 @@ export const ServiceOverview: React.FC<ServiceOverviewProps> = ({ serviceDetails
 
       <OverviewItem
         label={clusterIPLabel}
-        value={<span style={{ fontFamily: 'var(--font-family-mono)' }}>{clusterIPValue}</span>}
+        value={<span className="overview-value-mono">{clusterIPValue}</span>}
         fullWidth={hasMultipleClusterIPs}
       />
 

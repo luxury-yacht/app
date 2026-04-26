@@ -218,7 +218,8 @@ describe('GatewayAPIOverview', () => {
     expect(diagram).not.toBeNull();
     expect(diagram?.textContent).toContain('team-a');
     expect(diagram?.textContent).toContain('gateway.networking.k8s.io/HTTPRoute');
-    expect(diagram?.textContent).toContain('Widget team-a/*');
+    // TO entries omit the namespace since it's the namespace card's header.
+    expect(diagram?.textContent).toContain('Widget/*');
     expect(container.querySelector('[data-testid="object-panel-link"]')).toBeNull();
   });
 });

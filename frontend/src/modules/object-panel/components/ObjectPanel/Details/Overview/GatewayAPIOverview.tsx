@@ -63,10 +63,14 @@ const getRefParts = (
 const RefLink: React.FC<{
   value?: types.ObjectRef | types.RefOrDisplay | null;
   clusterName?: string;
-}> = ({ value, clusterName }) => {
+  /** Render as `Kind/name` (no namespace) when the surrounding context
+   *  already shows the namespace — e.g., inside a per-namespace card. */
+  omitNamespace?: boolean;
+}> = ({ value, clusterName, omitNamespace }) => {
   const { ref, display } = getRefParts(value);
 
   if (ref) {
+    const label = omitNamespace ? `${ref.kind}/${ref.name}` : objectRefLabel(ref);
     return (
       <ObjectPanelLink
         objectRef={buildObjectReference({
@@ -79,13 +83,16 @@ const RefLink: React.FC<{
           version: ref.version,
         })}
       >
-        {objectRefLabel(ref)}
+        {label}
       </ObjectPanelLink>
     );
   }
 
   if (display) {
-    return <span>{displayRefLabel(display)}</span>;
+    const label = omitNamespace
+      ? `${display.kind}/${display.name || '*'}`
+      : displayRefLabel(display);
+    return <span>{label}</span>;
   }
 
   return null;
@@ -297,7 +304,7 @@ const ReferenceGrantDiagram: React.FC<{
                 key={`to-${group.namespace}-${refIndex}`}
                 className="reference-grant-item"
               >
-                <RefLink value={ref} clusterName={clusterName} />
+                <RefLink value={ref} clusterName={clusterName} omitNamespace />
               </div>
             ))}
           </div>
