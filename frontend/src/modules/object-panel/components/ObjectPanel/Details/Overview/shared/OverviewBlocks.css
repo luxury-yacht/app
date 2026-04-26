@@ -71,7 +71,7 @@
 }
 
 .overview-row-label {
-  color: var(--color-text-tertiary);
+  color: var(--color-text-secondary);
   font-family: var(--font-family-mono);
   font-size: var(--font-size-mono);
   min-width: 5rem;
@@ -114,7 +114,7 @@
 }
 
 .overview-ref-item {
-  color: var(--color-text-secondary);
+  color: var(--color-text);
   line-height: 1.5;
 }
 
