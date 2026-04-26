@@ -65,6 +65,13 @@ type DetailsSnapshotProps = Pick<
   | 'ingressDetails'
   | 'networkPolicyDetails'
   | 'endpointSliceDetails'
+  | 'gatewayDetails'
+  | 'httpRouteDetails'
+  | 'grpcRouteDetails'
+  | 'tlsRouteDetails'
+  | 'listenerSetDetails'
+  | 'referenceGrantDetails'
+  | 'backendTLSPolicyDetails'
   | 'pvcDetails'
   | 'pvDetails'
   | 'storageClassDetails'
@@ -80,6 +87,7 @@ type DetailsSnapshotProps = Pick<
   | 'nodeDetails'
   | 'namespaceDetails'
   | 'ingressClassDetails'
+  | 'gatewayClassDetails'
   | 'crdDetails'
   | 'mutatingWebhookDetails'
   | 'validatingWebhookDetails'
@@ -100,6 +108,13 @@ const EMPTY_DETAILS: DetailsSnapshotProps = {
   ingressDetails: null,
   networkPolicyDetails: null,
   endpointSliceDetails: null,
+  gatewayDetails: null,
+  httpRouteDetails: null,
+  grpcRouteDetails: null,
+  tlsRouteDetails: null,
+  listenerSetDetails: null,
+  referenceGrantDetails: null,
+  backendTLSPolicyDetails: null,
   pvcDetails: null,
   pvDetails: null,
   storageClassDetails: null,
@@ -115,6 +130,7 @@ const EMPTY_DETAILS: DetailsSnapshotProps = {
   nodeDetails: null,
   namespaceDetails: null,
   ingressClassDetails: null,
+  gatewayClassDetails: null,
   crdDetails: null,
   mutatingWebhookDetails: null,
   validatingWebhookDetails: null,
@@ -497,6 +513,29 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
           ...EMPTY_DETAILS,
           endpointSliceDetails: detailPayload as types.EndpointSliceDetails,
         };
+      case 'gateway':
+        return { ...EMPTY_DETAILS, gatewayDetails: detailPayload as types.GatewayDetails };
+      case 'httproute':
+        return { ...EMPTY_DETAILS, httpRouteDetails: detailPayload as types.RouteDetails };
+      case 'grpcroute':
+        return { ...EMPTY_DETAILS, grpcRouteDetails: detailPayload as types.RouteDetails };
+      case 'tlsroute':
+        return { ...EMPTY_DETAILS, tlsRouteDetails: detailPayload as types.RouteDetails };
+      case 'listenerset':
+        return {
+          ...EMPTY_DETAILS,
+          listenerSetDetails: detailPayload as types.ListenerSetDetails,
+        };
+      case 'referencegrant':
+        return {
+          ...EMPTY_DETAILS,
+          referenceGrantDetails: detailPayload as types.ReferenceGrantDetails,
+        };
+      case 'backendtlspolicy':
+        return {
+          ...EMPTY_DETAILS,
+          backendTLSPolicyDetails: detailPayload as types.BackendTLSPolicyDetails,
+        };
       case 'persistentvolumeclaim':
         return {
           ...EMPTY_DETAILS,
@@ -556,6 +595,11 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
         return {
           ...EMPTY_DETAILS,
           ingressClassDetails: detailPayload as types.IngressClassDetails,
+        };
+      case 'gatewayclass':
+        return {
+          ...EMPTY_DETAILS,
+          gatewayClassDetails: detailPayload as types.GatewayClassDetails,
         };
       case 'customresourcedefinition':
         return {

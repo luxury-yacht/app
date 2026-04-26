@@ -18,6 +18,7 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	appslisters "k8s.io/client-go/listers/apps/v1"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 )
@@ -160,6 +161,108 @@ func BuildNetworkPolicySummary(meta ClusterMeta, policy *networkingv1.NetworkPol
 	}
 }
 
+func BuildGatewayNetworkSummary(meta ClusterMeta, gateway *gatewayv1.Gateway) NetworkSummary {
+	if gateway == nil {
+		return NetworkSummary{ClusterMeta: meta, Kind: "Gateway"}
+	}
+	return NetworkSummary{
+		ClusterMeta: meta,
+		Kind:        "Gateway",
+		Name:        gateway.Name,
+		Namespace:   gateway.Namespace,
+		Details:     fmt.Sprintf("Class: %s, %d listener(s)", gateway.Spec.GatewayClassName, len(gateway.Spec.Listeners)),
+		Age:         formatAge(gateway.CreationTimestamp.Time),
+	}
+}
+
+func BuildHTTPRouteNetworkSummary(meta ClusterMeta, route *gatewayv1.HTTPRoute) NetworkSummary {
+	if route == nil {
+		return NetworkSummary{ClusterMeta: meta, Kind: "HTTPRoute"}
+	}
+	return NetworkSummary{
+		ClusterMeta: meta,
+		Kind:        "HTTPRoute",
+		Name:        route.Name,
+		Namespace:   route.Namespace,
+		Details:     describeGatewayRoute(len(route.Spec.Rules), len(route.Spec.ParentRefs), len(route.Spec.Hostnames)),
+		Age:         formatAge(route.CreationTimestamp.Time),
+	}
+}
+
+func BuildGRPCRouteNetworkSummary(meta ClusterMeta, route *gatewayv1.GRPCRoute) NetworkSummary {
+	if route == nil {
+		return NetworkSummary{ClusterMeta: meta, Kind: "GRPCRoute"}
+	}
+	return NetworkSummary{
+		ClusterMeta: meta,
+		Kind:        "GRPCRoute",
+		Name:        route.Name,
+		Namespace:   route.Namespace,
+		Details:     describeGatewayRoute(len(route.Spec.Rules), len(route.Spec.ParentRefs), len(route.Spec.Hostnames)),
+		Age:         formatAge(route.CreationTimestamp.Time),
+	}
+}
+
+func BuildTLSRouteNetworkSummary(meta ClusterMeta, route *gatewayv1.TLSRoute) NetworkSummary {
+	if route == nil {
+		return NetworkSummary{ClusterMeta: meta, Kind: "TLSRoute"}
+	}
+	return NetworkSummary{
+		ClusterMeta: meta,
+		Kind:        "TLSRoute",
+		Name:        route.Name,
+		Namespace:   route.Namespace,
+		Details:     describeGatewayRoute(len(route.Spec.Rules), len(route.Spec.ParentRefs), len(route.Spec.Hostnames)),
+		Age:         formatAge(route.CreationTimestamp.Time),
+	}
+}
+
+func BuildListenerSetNetworkSummary(meta ClusterMeta, listenerSet *gatewayv1.ListenerSet) NetworkSummary {
+	if listenerSet == nil {
+		return NetworkSummary{ClusterMeta: meta, Kind: "ListenerSet"}
+	}
+	return NetworkSummary{
+		ClusterMeta: meta,
+		Kind:        "ListenerSet",
+		Name:        listenerSet.Name,
+		Namespace:   listenerSet.Namespace,
+		Details:     fmt.Sprintf("Parent: %s, %d listener(s)", listenerSet.Spec.ParentRef.Name, len(listenerSet.Spec.Listeners)),
+		Age:         formatAge(listenerSet.CreationTimestamp.Time),
+	}
+}
+
+func BuildReferenceGrantNetworkSummary(meta ClusterMeta, grant *gatewayv1.ReferenceGrant) NetworkSummary {
+	if grant == nil {
+		return NetworkSummary{ClusterMeta: meta, Kind: "ReferenceGrant"}
+	}
+	return NetworkSummary{
+		ClusterMeta: meta,
+		Kind:        "ReferenceGrant",
+		Name:        grant.Name,
+		Namespace:   grant.Namespace,
+		Details:     fmt.Sprintf("%d from, %d to", len(grant.Spec.From), len(grant.Spec.To)),
+		Age:         formatAge(grant.CreationTimestamp.Time),
+	}
+}
+
+func BuildBackendTLSPolicyNetworkSummary(meta ClusterMeta, policy *gatewayv1.BackendTLSPolicy) NetworkSummary {
+	if policy == nil {
+		return NetworkSummary{ClusterMeta: meta, Kind: "BackendTLSPolicy"}
+	}
+	return NetworkSummary{
+		ClusterMeta: meta,
+		Kind:        "BackendTLSPolicy",
+		Name:        policy.Name,
+		Namespace:   policy.Namespace,
+		Details:     fmt.Sprintf("%d target(s)", len(policy.Spec.TargetRefs)),
+		Age:         formatAge(policy.CreationTimestamp.Time),
+	}
+}
+
+func describeGatewayRoute(ruleCount, parentCount, hostnameCount int) string {
+	return fmt.Sprintf("%d rule(s), %d parent(s), %d hostname(s)", ruleCount, parentCount, hostnameCount)
+}
+
 // BuildNamespaceCustomSummary builds a custom resource row payload that
 // matches snapshot formatting. This is the **single source of truth** for
 // namespace-scoped custom resource row construction — the full-snapshot
@@ -296,6 +399,20 @@ func BuildClusterIngressClassSummary(meta ClusterMeta, ic *networkingv1.IngressC
 		Details:     ic.Spec.Controller,
 		IsDefault:   isDefaultClass(ic.Annotations),
 		Age:         formatAge(ic.CreationTimestamp.Time),
+	}
+}
+
+// BuildClusterGatewayClassSummary builds a gateway class entry that matches snapshot formatting.
+func BuildClusterGatewayClassSummary(meta ClusterMeta, gc *gatewayv1.GatewayClass) ClusterConfigEntry {
+	if gc == nil {
+		return ClusterConfigEntry{ClusterMeta: meta, Kind: "GatewayClass"}
+	}
+	return ClusterConfigEntry{
+		ClusterMeta: meta,
+		Kind:        "GatewayClass",
+		Name:        gc.Name,
+		Details:     string(gc.Spec.ControllerName),
+		Age:         formatAge(gc.CreationTimestamp.Time),
 	}
 }
 

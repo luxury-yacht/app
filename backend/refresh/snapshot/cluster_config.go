@@ -11,6 +11,8 @@ import (
 	admissionlisters "k8s.io/client-go/listers/admissionregistration/v1"
 	networklisters "k8s.io/client-go/listers/networking/v1"
 	storagelisters "k8s.io/client-go/listers/storage/v1"
+	gatewayinformers "sigs.k8s.io/gateway-api/pkg/client/informers/externalversions"
+	gatewaylisters "sigs.k8s.io/gateway-api/pkg/client/listers/apis/v1"
 
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
@@ -22,6 +24,7 @@ const clusterConfigDomainName = "cluster-config"
 type ClusterConfigBuilder struct {
 	storageClassLister      storagelisters.StorageClassLister
 	ingressClassLister      networklisters.IngressClassLister
+	gatewayClassLister      gatewaylisters.GatewayClassLister
 	validatingWebhookLister admissionlisters.ValidatingWebhookConfigurationLister
 	mutatingWebhookLister   admissionlisters.MutatingWebhookConfigurationLister
 	perms                   ClusterConfigPermissions
@@ -31,6 +34,7 @@ type ClusterConfigBuilder struct {
 type ClusterConfigPermissions struct {
 	IncludeStorageClasses     bool
 	IncludeIngressClasses     bool
+	IncludeGatewayClasses     bool
 	IncludeValidatingWebhooks bool
 	IncludeMutatingWebhooks   bool
 }
@@ -60,12 +64,22 @@ func RegisterClusterConfigDomain(
 	factory informers.SharedInformerFactory,
 	perms ClusterConfigPermissions,
 ) error {
+	return RegisterClusterConfigDomainWithGatewayAPI(reg, factory, nil, perms)
+}
+
+func RegisterClusterConfigDomainWithGatewayAPI(
+	reg *domain.Registry,
+	factory informers.SharedInformerFactory,
+	gatewayFactory gatewayinformers.SharedInformerFactory,
+	perms ClusterConfigPermissions,
+) error {
 	if factory == nil {
 		return fmt.Errorf("shared informer factory is nil")
 	}
 	builder := &ClusterConfigBuilder{
 		storageClassLister:      nil,
 		ingressClassLister:      nil,
+		gatewayClassLister:      nil,
 		validatingWebhookLister: nil,
 		mutatingWebhookLister:   nil,
 	}
@@ -74,6 +88,9 @@ func RegisterClusterConfigDomain(
 	}
 	if perms.IncludeIngressClasses {
 		builder.ingressClassLister = factory.Networking().V1().IngressClasses().Lister()
+	}
+	if perms.IncludeGatewayClasses && gatewayFactory != nil {
+		builder.gatewayClassLister = gatewayFactory.Gateway().V1().GatewayClasses().Lister()
 	}
 	if perms.IncludeValidatingWebhooks {
 		builder.validatingWebhookLister = factory.Admissionregistration().V1().ValidatingWebhookConfigurations().Lister()
@@ -136,6 +153,22 @@ func (b *ClusterConfigBuilder) buildFromListers(ctx context.Context) (*refresh.S
 		}
 	}
 
+	if b.gatewayClassLister != nil {
+		gatewayClasses, err := b.gatewayClassLister.List(labels.Everything())
+		if err != nil {
+			return nil, err
+		}
+		for _, gc := range gatewayClasses {
+			if gc == nil {
+				continue
+			}
+			entries = append(entries, BuildClusterGatewayClassSummary(meta, gc))
+			if v := resourceVersionOrTimestamp(gc); v > version {
+				version = v
+			}
+		}
+	}
+
 	if b.validatingWebhookLister != nil {
 		validatingWebhooks, err := b.validatingWebhookLister.List(labels.Everything())
 		if err != nil {
@@ -183,7 +216,7 @@ func (b *ClusterConfigBuilder) buildFromListers(ctx context.Context) (*refresh.S
 			Resources:   entries,
 			Kinds:       snapshotSortedKinds(entries, func(entry ClusterConfigEntry) string { return entry.Kind }),
 		},
-		Stats:   refresh.SnapshotStats{ItemCount: len(entries)},
+		Stats: refresh.SnapshotStats{ItemCount: len(entries)},
 	}, nil
 }
 

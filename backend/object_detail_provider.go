@@ -19,6 +19,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/config"
 	"github.com/luxury-yacht/app/backend/resources/constraints"
+	"github.com/luxury-yacht/app/backend/resources/gatewayapi"
 	"github.com/luxury-yacht/app/backend/resources/helm"
 	"github.com/luxury-yacht/app/backend/resources/namespaces"
 	"github.com/luxury-yacht/app/backend/resources/network"
@@ -123,6 +124,48 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 			return detail, "", err
 		},
 	},
+	"gateway": {
+		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
+			detail, err := gatewayapi.NewService(deps).Gateway(namespace, name)
+			return detail, "", err
+		},
+	},
+	"httproute": {
+		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
+			detail, err := gatewayapi.NewService(deps).HTTPRoute(namespace, name)
+			return detail, "", err
+		},
+	},
+	"grpcroute": {
+		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
+			detail, err := gatewayapi.NewService(deps).GRPCRoute(namespace, name)
+			return detail, "", err
+		},
+	},
+	"tlsroute": {
+		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
+			detail, err := gatewayapi.NewService(deps).TLSRoute(namespace, name)
+			return detail, "", err
+		},
+	},
+	"listenerset": {
+		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
+			detail, err := gatewayapi.NewService(deps).ListenerSet(namespace, name)
+			return detail, "", err
+		},
+	},
+	"referencegrant": {
+		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
+			detail, err := gatewayapi.NewService(deps).ReferenceGrant(namespace, name)
+			return detail, "", err
+		},
+	},
+	"backendtlspolicy": {
+		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
+			detail, err := gatewayapi.NewService(deps).BackendTLSPolicy(namespace, name)
+			return detail, "", err
+		},
+	},
 	"networkpolicy": {
 		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
 			detail, err := network.NewService(deps).NetworkPolicy(namespace, name)
@@ -222,6 +265,12 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 	"ingressclass": {
 		withDeps: func(deps common.Dependencies, _ string, name string) (interface{}, string, error) {
 			detail, err := network.NewService(deps).IngressClass(name)
+			return detail, "", err
+		},
+	},
+	"gatewayclass": {
+		withDeps: func(deps common.Dependencies, _ string, name string) (interface{}, string, error) {
+			detail, err := gatewayapi.NewService(deps).GatewayClass(name)
 			return detail, "", err
 		},
 	},

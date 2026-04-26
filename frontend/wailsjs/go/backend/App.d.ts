@@ -77,6 +77,8 @@ export function GetAppLogsSince(arg1:number):Promise<Array<backend.LogEntry>>;
 
 export function GetAppSettings():Promise<types.AppSettings>;
 
+export function GetBackendTLSPolicy(arg1:string,arg2:string,arg3:string):Promise<types.BackendTLSPolicyDetails>;
+
 export function GetCatalogDiagnostics():Promise<backend.CatalogDiagnostics>;
 
 export function GetClusterAuthState(arg1:string):Promise<string|string>;
@@ -107,7 +109,15 @@ export function GetEndpointSlice(arg1:string,arg2:string,arg3:string):Promise<ty
 
 export function GetFavorites():Promise<Array<backend.Favorite>>;
 
+export function GetGRPCRoute(arg1:string,arg2:string,arg3:string):Promise<types.RouteDetails>;
+
+export function GetGateway(arg1:string,arg2:string,arg3:string):Promise<types.GatewayDetails>;
+
+export function GetGatewayClass(arg1:string,arg2:string):Promise<types.GatewayClassDetails>;
+
 export function GetGridTablePersistence():Promise<Record<string, json.RawMessage>>;
+
+export function GetHTTPRoute(arg1:string,arg2:string,arg3:string):Promise<types.RouteDetails>;
 
 export function GetHelmManifest(arg1:string,arg2:string,arg3:string):Promise<string>;
 
@@ -129,6 +139,8 @@ export function GetKubeconfigs():Promise<Array<types.KubeconfigInfo>>;
 
 export function GetLimitRange(arg1:string,arg2:string,arg3:string):Promise<types.LimitRangeDetails>;
 
+export function GetListenerSet(arg1:string,arg2:string,arg3:string):Promise<types.ListenerSetDetails>;
+
 export function GetMutatingWebhookConfiguration(arg1:string,arg2:string):Promise<types.MutatingWebhookConfigurationDetails>;
 
 export function GetNamespace(arg1:string,arg2:string):Promise<types.NamespaceDetails>;
@@ -148,6 +160,8 @@ export function GetPod(arg1:string,arg2:string,arg3:string,arg4:boolean):Promise
 export function GetPodContainers(arg1:string,arg2:string,arg3:string):Promise<Array<string>>;
 
 export function GetPodDisruptionBudget(arg1:string,arg2:string,arg3:string):Promise<types.PodDisruptionBudgetDetails>;
+
+export function GetReferenceGrant(arg1:string,arg2:string,arg3:string):Promise<types.ReferenceGrantDetails>;
 
 export function GetRefreshBaseURL():Promise<string>;
 
@@ -176,6 +190,8 @@ export function GetShellSessionBacklog(arg1:string):Promise<string>;
 export function GetStatefulSet(arg1:string,arg2:string,arg3:string):Promise<types.StatefulSetDetails>;
 
 export function GetStorageClass(arg1:string,arg2:string):Promise<types.StorageClassDetails>;
+
+export function GetTLSRoute(arg1:string,arg2:string,arg3:string):Promise<types.RouteDetails>;
 
 export function GetTargetPorts(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string):Promise<Array<backend.ContainerPortInfo>>;
 

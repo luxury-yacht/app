@@ -31,6 +31,13 @@ interface UseOverviewDataParams {
   ingressDetails: types.IngressDetails | null;
   networkPolicyDetails: types.NetworkPolicyDetails | null;
   endpointSliceDetails: types.EndpointSliceDetails | null;
+  gatewayDetails?: types.GatewayDetails | null;
+  httpRouteDetails?: types.RouteDetails | null;
+  grpcRouteDetails?: types.RouteDetails | null;
+  tlsRouteDetails?: types.RouteDetails | null;
+  listenerSetDetails?: types.ListenerSetDetails | null;
+  referenceGrantDetails?: types.ReferenceGrantDetails | null;
+  backendTLSPolicyDetails?: types.BackendTLSPolicyDetails | null;
   pvcDetails: types.PersistentVolumeClaimDetails | null;
   pvDetails: types.PersistentVolumeDetails | null;
   storageClassDetails: types.StorageClassDetails | null;
@@ -46,6 +53,7 @@ interface UseOverviewDataParams {
   nodeDetails: types.NodeDetails | null;
   namespaceDetails: types.NamespaceDetails | null;
   ingressClassDetails: types.IngressClassDetails | null;
+  gatewayClassDetails?: types.GatewayClassDetails | null;
   crdDetails: types.CustomResourceDefinitionDetails | null;
   mutatingWebhookDetails: types.MutatingWebhookConfigurationDetails | null;
   validatingWebhookDetails: types.ValidatingWebhookConfigurationDetails | null;
@@ -68,6 +76,13 @@ export function useOverviewData(params: UseOverviewDataParams): OverviewData | n
     ingressDetails,
     networkPolicyDetails,
     endpointSliceDetails,
+    gatewayDetails,
+    httpRouteDetails,
+    grpcRouteDetails,
+    tlsRouteDetails,
+    listenerSetDetails,
+    referenceGrantDetails,
+    backendTLSPolicyDetails,
     pvcDetails,
     pvDetails,
     storageClassDetails,
@@ -83,6 +98,7 @@ export function useOverviewData(params: UseOverviewDataParams): OverviewData | n
     nodeDetails,
     namespaceDetails,
     ingressClassDetails,
+    gatewayClassDetails,
     crdDetails,
     mutatingWebhookDetails,
     validatingWebhookDetails,
@@ -365,6 +381,20 @@ export function useOverviewData(params: UseOverviewDataParams): OverviewData | n
       };
     }
 
+    const gatewayDetailByKind: Record<string, object | null | undefined> = {
+      gateway: gatewayDetails,
+      httproute: httpRouteDetails,
+      grpcroute: grpcRouteDetails,
+      tlsroute: tlsRouteDetails,
+      listenerset: listenerSetDetails,
+      referencegrant: referenceGrantDetails,
+      backendtlspolicy: backendTLSPolicyDetails,
+    };
+    const gatewayDetailsForKind = kind ? gatewayDetailByKind[kind] : null;
+    if (gatewayDetailsForKind) {
+      return { ...gatewayDetailsForKind };
+    }
+
     return null;
   }, [
     objectData,
@@ -373,6 +403,13 @@ export function useOverviewData(params: UseOverviewDataParams): OverviewData | n
     ingressDetails,
     networkPolicyDetails,
     endpointSliceDetails,
+    gatewayDetails,
+    httpRouteDetails,
+    grpcRouteDetails,
+    tlsRouteDetails,
+    listenerSetDetails,
+    referenceGrantDetails,
+    backendTLSPolicyDetails,
   ]);
 
   // -------------------------------------------------------------------------
@@ -681,6 +718,10 @@ export function useOverviewData(params: UseOverviewDataParams): OverviewData | n
       };
     }
 
+    if (gatewayClassDetails && kind === 'gatewayclass') {
+      return { ...gatewayClassDetails };
+    }
+
     // CustomResourceDefinition
     if (crdDetails && kind === 'customresourcedefinition') {
       return {
@@ -731,6 +772,7 @@ export function useOverviewData(params: UseOverviewDataParams): OverviewData | n
     nodeDetails,
     namespaceDetails,
     ingressClassDetails,
+    gatewayClassDetails,
     crdDetails,
     mutatingWebhookDetails,
     validatingWebhookDetails,

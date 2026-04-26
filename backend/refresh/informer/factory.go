@@ -18,13 +18,16 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
+	"github.com/luxury-yacht/app/backend/resources/common"
+	gatewayinformers "sigs.k8s.io/gateway-api/pkg/client/informers/externalversions"
 )
 
 // Factory wraps the shared informer factory used by the refresh subsystem.
 type Factory struct {
-	kubeClient    kubernetes.Interface
-	apiextFactory apiextinformers.SharedInformerFactory
-	resync        time.Duration
+	kubeClient     kubernetes.Interface
+	apiextFactory  apiextinformers.SharedInformerFactory
+	gatewayFactory gatewayinformers.SharedInformerFactory
+	resync         time.Duration
 
 	once     sync.Once
 	factory  informers.SharedInformerFactory
@@ -177,6 +180,41 @@ func New(client kubernetes.Interface, apiextClient apiextensionsclientset.Interf
 	return result
 }
 
+// WithGatewayFactory registers Gateway API informers that are available on the cluster.
+// It must be called before Start so the Gateway caches participate in initial sync.
+func (f *Factory) WithGatewayFactory(factory gatewayinformers.SharedInformerFactory, presence common.GatewayAPIPresence) *Factory {
+	if f == nil || factory == nil || presence == nil || !presence.AnyPresent() {
+		return f
+	}
+	f.gatewayFactory = factory
+	gateway := factory.Gateway().V1()
+	if presence.Has("GatewayClass") {
+		f.registerInformer(gateway.GatewayClasses().Informer())
+	}
+	if presence.Has("Gateway") {
+		f.registerInformer(gateway.Gateways().Informer())
+	}
+	if presence.Has("HTTPRoute") {
+		f.registerInformer(gateway.HTTPRoutes().Informer())
+	}
+	if presence.Has("GRPCRoute") {
+		f.registerInformer(gateway.GRPCRoutes().Informer())
+	}
+	if presence.Has("TLSRoute") {
+		f.registerInformer(gateway.TLSRoutes().Informer())
+	}
+	if presence.Has("ListenerSet") {
+		f.registerInformer(gateway.ListenerSets().Informer())
+	}
+	if presence.Has("ReferenceGrant") {
+		f.registerInformer(gateway.ReferenceGrants().Informer())
+	}
+	if presence.Has("BackendTLSPolicy") {
+		f.registerInformer(gateway.BackendTLSPolicies().Informer())
+	}
+	return f
+}
+
 // Start initialises informers for core resources and waits for their caches to sync.
 func (f *Factory) Start(ctx context.Context) error {
 	var startErr error
@@ -184,6 +222,9 @@ func (f *Factory) Start(ctx context.Context) error {
 		go f.factory.Start(ctx.Done())
 		if f.apiextFactory != nil {
 			go f.apiextFactory.Start(ctx.Done())
+		}
+		if f.gatewayFactory != nil {
+			go f.gatewayFactory.Start(ctx.Done())
 		}
 
 		synced := cache.WaitForCacheSync(ctx.Done(), f.syncedFns...)
@@ -205,6 +246,14 @@ func (f *Factory) SharedInformerFactory() informers.SharedInformerFactory {
 // APIExtensionsInformerFactory exposes the apiextensions informer factory when available.
 func (f *Factory) APIExtensionsInformerFactory() apiextinformers.SharedInformerFactory {
 	return f.apiextFactory
+}
+
+// GatewayInformerFactory exposes the Gateway API informer factory when available.
+func (f *Factory) GatewayInformerFactory() gatewayinformers.SharedInformerFactory {
+	if f == nil {
+		return nil
+	}
+	return f.gatewayFactory
 }
 
 // HasSynced reports cache sync status.
@@ -238,6 +287,7 @@ func (f *Factory) Shutdown() error {
 	// Clear factory references to allow GC
 	f.factory = nil
 	f.apiextFactory = nil
+	f.gatewayFactory = nil
 	f.pendingClusterInformers = nil
 
 	return nil

@@ -142,6 +142,10 @@ export function GetAppSettings() {
   return window['go']['backend']['App']['GetAppSettings']();
 }
 
+export function GetBackendTLSPolicy(arg1, arg2, arg3) {
+  return window['go']['backend']['App']['GetBackendTLSPolicy'](arg1, arg2, arg3);
+}
+
 export function GetCatalogDiagnostics() {
   return window['go']['backend']['App']['GetCatalogDiagnostics']();
 }
@@ -202,8 +206,24 @@ export function GetFavorites() {
   return window['go']['backend']['App']['GetFavorites']();
 }
 
+export function GetGRPCRoute(arg1, arg2, arg3) {
+  return window['go']['backend']['App']['GetGRPCRoute'](arg1, arg2, arg3);
+}
+
+export function GetGateway(arg1, arg2, arg3) {
+  return window['go']['backend']['App']['GetGateway'](arg1, arg2, arg3);
+}
+
+export function GetGatewayClass(arg1, arg2) {
+  return window['go']['backend']['App']['GetGatewayClass'](arg1, arg2);
+}
+
 export function GetGridTablePersistence() {
   return window['go']['backend']['App']['GetGridTablePersistence']();
+}
+
+export function GetHTTPRoute(arg1, arg2, arg3) {
+  return window['go']['backend']['App']['GetHTTPRoute'](arg1, arg2, arg3);
 }
 
 export function GetHelmManifest(arg1, arg2, arg3) {
@@ -246,6 +266,10 @@ export function GetLimitRange(arg1, arg2, arg3) {
   return window['go']['backend']['App']['GetLimitRange'](arg1, arg2, arg3);
 }
 
+export function GetListenerSet(arg1, arg2, arg3) {
+  return window['go']['backend']['App']['GetListenerSet'](arg1, arg2, arg3);
+}
+
 export function GetMutatingWebhookConfiguration(arg1, arg2) {
   return window['go']['backend']['App']['GetMutatingWebhookConfiguration'](arg1, arg2);
 }
@@ -284,6 +308,10 @@ export function GetPodContainers(arg1, arg2, arg3) {
 
 export function GetPodDisruptionBudget(arg1, arg2, arg3) {
   return window['go']['backend']['App']['GetPodDisruptionBudget'](arg1, arg2, arg3);
+}
+
+export function GetReferenceGrant(arg1, arg2, arg3) {
+  return window['go']['backend']['App']['GetReferenceGrant'](arg1, arg2, arg3);
 }
 
 export function GetRefreshBaseURL() {
@@ -340,6 +368,10 @@ export function GetStatefulSet(arg1, arg2, arg3) {
 
 export function GetStorageClass(arg1, arg2) {
   return window['go']['backend']['App']['GetStorageClass'](arg1, arg2);
+}
+
+export function GetTLSRoute(arg1, arg2, arg3) {
+  return window['go']['backend']['App']['GetTLSRoute'](arg1, arg2, arg3);
 }
 
 export function GetTargetPorts(arg1, arg2, arg3, arg4, arg5, arg6) {

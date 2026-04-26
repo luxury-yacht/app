@@ -18,6 +18,7 @@ import (
 	apiextinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	informers "k8s.io/client-go/informers"
+	gatewayinformers "sigs.k8s.io/gateway-api/pkg/client/informers/externalversions"
 )
 
 // Scope describes whether a resource is cluster- or namespace-scoped.
@@ -87,16 +88,17 @@ func (d Descriptor) GVR() schema.GroupVersionResource {
 
 // Dependencies captures collaborators required by the catalog service.
 type Dependencies struct {
-	Common                       common.Dependencies                   // common dependencies
-	Logger                       Logger                                // logging service
-	CapabilityFactory            CapabilityFactory                     // capability evaluation service
-	Telemetry                    Telemetry                             // telemetry service
-	Now                          func() time.Time                      // function to get the current time
-	InformerFactory              informers.SharedInformerFactory       // Kubernetes informer factory
-	APIExtensionsInformerFactory apiextinformers.SharedInformerFactory // Kubernetes API extensions informer factory
-	PermissionChecker            permissions.ListWatchChecker          // optional; if nil, assumes all permissions granted
-	ClusterID                    string                                // stable identifier for the source cluster
-	ClusterName                  string                                // display name for the source cluster
+	Common                       common.Dependencies                    // common dependencies
+	Logger                       Logger                                 // logging service
+	CapabilityFactory            CapabilityFactory                      // capability evaluation service
+	Telemetry                    Telemetry                              // telemetry service
+	Now                          func() time.Time                       // function to get the current time
+	InformerFactory              informers.SharedInformerFactory        // Kubernetes informer factory
+	APIExtensionsInformerFactory apiextinformers.SharedInformerFactory  // Kubernetes API extensions informer factory
+	GatewayInformerFactory       gatewayinformers.SharedInformerFactory // Gateway API informer factory
+	PermissionChecker            permissions.ListWatchChecker           // optional; if nil, assumes all permissions granted
+	ClusterID                    string                                 // stable identifier for the source cluster
+	ClusterName                  string                                 // display name for the source cluster
 }
 
 // Logger is the minimal logging contract required by the catalog.

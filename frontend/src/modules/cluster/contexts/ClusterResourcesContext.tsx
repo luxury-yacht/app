@@ -280,6 +280,13 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
     null,
     permissionClusterId
   );
+  const configGatewayClassPermission = useUserPermission(
+    'GatewayClass',
+    'list',
+    null,
+    null,
+    permissionClusterId
+  );
   const configMutatingWebhookPermission = useUserPermission(
     'MutatingWebhookConfiguration',
     'list',
@@ -309,6 +316,7 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
     const configDenied =
       isPermissionDenied(configStorageClassPermission) ||
       isPermissionDenied(configIngressClassPermission) ||
+      isPermissionDenied(configGatewayClassPermission) ||
       isPermissionDenied(configMutatingWebhookPermission) ||
       isPermissionDenied(configValidatingWebhookPermission);
 
@@ -325,6 +333,7 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
     } as Partial<Record<RefreshDomain, boolean>>;
   }, [
     configIngressClassPermission,
+    configGatewayClassPermission,
     configMutatingWebhookPermission,
     configStorageClassPermission,
     configValidatingWebhookPermission,

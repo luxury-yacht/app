@@ -29,6 +29,13 @@ export interface DetailsTabProps {
   ingressDetails: types.IngressDetails | null;
   networkPolicyDetails: types.NetworkPolicyDetails | null;
   endpointSliceDetails: types.EndpointSliceDetails | null;
+  gatewayDetails?: types.GatewayDetails | null;
+  httpRouteDetails?: types.RouteDetails | null;
+  grpcRouteDetails?: types.RouteDetails | null;
+  tlsRouteDetails?: types.RouteDetails | null;
+  listenerSetDetails?: types.ListenerSetDetails | null;
+  referenceGrantDetails?: types.ReferenceGrantDetails | null;
+  backendTLSPolicyDetails?: types.BackendTLSPolicyDetails | null;
   // Storage
   pvcDetails: types.PersistentVolumeClaimDetails | null;
   pvDetails: types.PersistentVolumeDetails | null;
@@ -49,6 +56,7 @@ export interface DetailsTabProps {
   nodeDetails: types.NodeDetails | null;
   namespaceDetails: types.NamespaceDetails | null;
   ingressClassDetails: types.IngressClassDetails | null;
+  gatewayClassDetails?: types.GatewayClassDetails | null;
   // CRDs and Webhooks
   crdDetails: types.CustomResourceDefinitionDetails | null;
   mutatingWebhookDetails: types.MutatingWebhookConfigurationDetails | null;
