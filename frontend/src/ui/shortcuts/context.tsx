@@ -276,11 +276,12 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
         }
       }
 
-      const fallbackSurface =
-        orderedSurfaces.find((surface) => surface.blocking) ??
-        orderedSurfaces.find((surface) => surface.captureWhenActive);
+      const blockingSurfaces = orderedSurfaces.filter((surface) => surface.blocking);
+      if (blockingSurfaces.length > 0) {
+        return blockingSurfaces;
+      }
 
-      return fallbackSurface ? [fallbackSurface] : [];
+      return orderedSurfaces.filter((surface) => surface.captureWhenActive);
     },
     [getOrderedSurfaces]
   );

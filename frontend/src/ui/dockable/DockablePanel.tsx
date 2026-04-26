@@ -38,6 +38,7 @@ import type { TabInfo } from './DockableTabBar';
 import type { GroupKey } from './tabGroupTypes';
 import type { DockPosition } from './useDockablePanelState';
 import { useKeyboardSurface } from '@ui/shortcuts';
+import { KeyboardScopePriority } from '@ui/shortcuts/priorities';
 import { hasNativeTabHandling } from '@ui/shortcuts/utils';
 import './DockablePanel.css';
 
@@ -611,6 +612,7 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     kind: 'panel',
     rootRef: panelRef,
     active: panelState.isOpen && isGroupLeader,
+    priority: KeyboardScopePriority.OBJECT_PANEL,
     captureWhenActive:
       closeActiveTabOnEscape && (!lastFocusedGroupKey || lastFocusedGroupKey === groupKey),
     onEscape: closeActiveTabOnEscape ? handleEscapeCloseActiveTab : undefined,

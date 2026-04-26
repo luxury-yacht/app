@@ -12,9 +12,9 @@
 
 ### Changed
 
-- Kind badge colors are now assigned by hashing the Kind name instead of being hard-coded, similar to how we assign colors to container names in the log viewer.
-  - Good news - all object kinds are color-coded now, including CRDs that used to all be gray
-  - Bad news - colors have changed compared to previous versions
+- Kind badge colors are now auto-assigned instead of being hard-coded, using the same color palette and hashing method used to assign colors to container names in the log viewer.
+  - Good news - all object kinds are now color-coded, including CRDs that used to all be gray
+  - Not-as-good news - colors have changed compared to previous versions. Hopefully this doesn't bother anyone too much since the previous colors had no specific meaning, and are only intended for quick visual differentiation in a list.
 
 ### Fixed
 

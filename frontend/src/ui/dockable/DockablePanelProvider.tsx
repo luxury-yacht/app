@@ -325,6 +325,9 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
         return setActiveTab(prev, panelId, groupKey);
       });
       focusPanelById(panelId);
+      window.setTimeout(() => {
+        focusDockableTab(panelId);
+      }, 0);
     },
     [activeStore, setLastFocusedGroupKey]
   );
