@@ -53,11 +53,3 @@
   font-style: italic;
   font-size: var(--font-size-xs);
 }
-
-.addresses-label.ready {
-  color: var(--color-success);
-}
-
-.addresses-label.not-ready {
-  color: var(--color-warning);
-}

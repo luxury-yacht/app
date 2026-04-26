@@ -82,7 +82,7 @@ describe('LabelsAndAnnotations', () => {
       longValue.substring(0, 150) + '... (click to expand)'
     );
 
-    const selectorChip = container.querySelector('.metadata-chip--selector');
+    const selectorChip = container.querySelector('.status-chip--info');
     expect(selectorChip).toBeTruthy();
     expect(selectorChip?.textContent).toBe('Selector');
   });

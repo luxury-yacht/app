@@ -125,8 +125,9 @@ describe('EndpointSliceOverview', () => {
 
     const slicesSection = container.querySelector('.slices-section');
     expect(slicesSection?.textContent).toContain('IPv4 (2/2 ready)');
-    const notReadyLabels = slicesSection?.querySelectorAll('.addresses-label.not-ready');
-    expect(notReadyLabels?.length ?? 0).toBe(0);
+    // No "Not Ready" chip should render when there are no not-ready addresses.
+    const unhealthyChips = slicesSection?.querySelectorAll('.status-chip--unhealthy');
+    expect(unhealthyChips?.length ?? 0).toBe(0);
   });
 
   it('displays address with target and node', async () => {

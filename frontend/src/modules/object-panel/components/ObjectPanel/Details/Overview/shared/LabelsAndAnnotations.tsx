@@ -3,6 +3,7 @@
  */
 
 import React, { useState } from 'react';
+import { StatusChip } from '@shared/components/StatusChip';
 import './LabelsAndAnnotations.css';
 
 interface LabelsAndAnnotationsProps {
@@ -77,9 +78,7 @@ export const LabelsAndAnnotations: React.FC<LabelsAndAnnotationsProps> = ({
                 >
                   {displayValue}
                 </span>
-                {isSelector && (
-                  <span className="metadata-chip metadata-chip--selector">Selector</span>
-                )}
+                {isSelector && <StatusChip variant="info">Selector</StatusChip>}
               </div>
             );
           })}

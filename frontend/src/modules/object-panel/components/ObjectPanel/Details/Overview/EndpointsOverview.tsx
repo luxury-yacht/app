@@ -8,6 +8,7 @@ import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
+import { StatusChip } from '@shared/components/StatusChip';
 import { buildObjectReference } from '@shared/utils/objectIdentity';
 import './shared/OverviewBlocks.css';
 import './EndpointsOverview.css';
@@ -173,7 +174,9 @@ export const EndpointSliceOverview: React.FC<EndpointSliceOverviewProps> = ({
                   <div className="overview-card-rows">
                     {readyCount > 0 && slice.readyAddresses && (
                       <div className="overview-row">
-                        <span className="overview-row-label addresses-label ready">Ready</span>
+                        <span className="overview-row-label">
+                          <StatusChip variant="healthy">Ready</StatusChip>
+                        </span>
                         <span className="overview-row-value plain">
                           <AddressList
                             addresses={slice.readyAddresses}
@@ -186,8 +189,8 @@ export const EndpointSliceOverview: React.FC<EndpointSliceOverviewProps> = ({
                     )}
                     {notReadyCount > 0 && slice.notReadyAddresses && (
                       <div className="overview-row">
-                        <span className="overview-row-label addresses-label not-ready">
-                          Not Ready
+                        <span className="overview-row-label">
+                          <StatusChip variant="unhealthy">Not Ready</StatusChip>
                         </span>
                         <span className="overview-row-value plain">
                           <AddressList
