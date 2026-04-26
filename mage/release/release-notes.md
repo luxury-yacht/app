@@ -19,3 +19,7 @@
 
 This is a time-limited beta release that will stop working after the expiry date.
 {{- end }}
+{{- if .PendingNotesBody }}
+
+{{ .PendingNotesBody }}
+{{- end }}
