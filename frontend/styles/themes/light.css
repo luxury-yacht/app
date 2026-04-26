@@ -213,34 +213,40 @@
   --log-fallback-retry-hover-bg: rgba(245, 158, 11, 0.15);
 
   /* Log pod colors - Darker variants for light backgrounds */
-  /* Hash-based color palette — used by both pod-log row colors and kind
-     badges. A deterministic hash of the source string (pod name / kind name)
-     selects a slot 1..24. Tuned for legibility on light backgrounds. */
-  --hash-color-1: #16a34a;
-  --hash-color-2: #2563eb;
-  --hash-color-3: #ea580c;
-  --hash-color-4: #9333ea;
-  --hash-color-5: #0891b2;
-  --hash-color-6: #65a30d;
-  --hash-color-7: #db2777;
-  --hash-color-8: #4f46e5;
-  --hash-color-9: #0f766e;
-  --hash-color-10: #dc2626;
-  --hash-color-11: #ca8a04;
-  --hash-color-12: #c026d3;
-  --hash-color-13: #7c3aed;
-  --hash-color-14: #047857;
-  --hash-color-15: #b45309;
-  --hash-color-16: #be123c;
-  --hash-color-17: #d97706;
-  --hash-color-18: #0369a1;
-  --hash-color-19: #0ea5e9;
-  --hash-color-20: #a21caf;
-  --hash-color-21: #475569;
-  --hash-color-22: #78716c;
-  --hash-color-23: #4d7c0f;
-  --hash-color-24: #9f1239;
+  /* Hash-based color palette — slots map to the same hue families as the
+     dark theme. Tailwind-600 values for saturated contrast on white bgs.
+
+     Layout: slots 1..17 walk the wheel, 18..20 are shoulder hues, 21..24
+     are earthy neutrals. */
+  --hash-color-1:  #dc2626; /* red */
+  --hash-color-2:  #ea580c; /* orange */
+  --hash-color-3:  #d97706; /* amber */
+  --hash-color-4:  #ca8a04; /* yellow */
+  --hash-color-5:  #65a30d; /* lime */
+  --hash-color-6:  #16a34a; /* green */
+  --hash-color-7:  #059669; /* emerald */
+  --hash-color-8:  #0d9488; /* teal */
+  --hash-color-9:  #0891b2; /* cyan */
+  --hash-color-10: #0284c7; /* sky */
+  --hash-color-11: #2563eb; /* blue */
+  --hash-color-12: #4f46e5; /* indigo */
+  --hash-color-13: #7c3aed; /* violet */
+  --hash-color-14: #9333ea; /* purple */
+  --hash-color-15: #c026d3; /* fuchsia */
+  --hash-color-16: #db2777; /* pink */
+  --hash-color-17: #e11d48; /* rose */
+  --hash-color-18: #be123c; /* crimson */
+  --hash-color-19: #4338ca; /* iris */
+  --hash-color-20: #a21caf; /* magenta */
+  --hash-color-21: #7c4f2c; /* brown */
+  --hash-color-22: #5d6f29; /* olive */
+  --hash-color-23: #475569; /* slate */
+  --hash-color-24: #78716c; /* stone */
   --hash-color-fallback: var(--color-base-500);
+  /* Light theme text is already saturated against the white bg; no boost
+     applied. The vars exist so badges.css uses one formula across themes. */
+  --hash-text-l-shift: 0;
+  --hash-text-c-mult: 1;
 
   /* Dropdown */
   --dropdown-trigger-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
