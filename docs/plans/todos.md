@@ -4,10 +4,6 @@
 
 - Issue 40 Support object creation
 
-- Issue 135 Enable text select/copy in more places
-
-- Issue 113 Add support for Gateway API
-
 ## Feature Ideas
 
 - Object relationships map

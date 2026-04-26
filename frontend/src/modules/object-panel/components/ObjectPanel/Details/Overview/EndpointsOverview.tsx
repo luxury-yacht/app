@@ -205,9 +205,7 @@ export const EndpointSliceOverview: React.FC<EndpointSliceOverviewProps> = ({
             <div className="overview-row-list">
               {ports.map((port, portIndex) => (
                 <div key={`${port.port}-${portIndex}`} className="overview-row">
-                  <span className="overview-row-label">
-                    {port.name || `port ${port.port}`}
-                  </span>
+                  <span className="overview-row-label">{port.name || `port ${port.port}`}</span>
                   <span className="overview-row-value">{formatPortValue(port)}</span>
                 </div>
               ))}

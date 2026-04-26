@@ -292,18 +292,10 @@ const ReferenceGrantDiagram: React.FC<{
       </div>
       <div className="reference-grant-side-stack">
         {toGroups.map((group, groupIndex) => (
-          <div
-            className="reference-grant-side"
-            key={`to-ns-${group.namespace || groupIndex}`}
-          >
-            {group.namespace && (
-              <div className="reference-grant-namespace">{group.namespace}</div>
-            )}
+          <div className="reference-grant-side" key={`to-ns-${group.namespace || groupIndex}`}>
+            {group.namespace && <div className="reference-grant-namespace">{group.namespace}</div>}
             {group.refs.map((ref, refIndex) => (
-              <div
-                key={`to-${group.namespace}-${refIndex}`}
-                className="reference-grant-item"
-              >
+              <div key={`to-${group.namespace}-${refIndex}`} className="reference-grant-item">
                 <RefLink value={ref} clusterName={clusterName} omitNamespace />
               </div>
             ))}
@@ -497,11 +489,7 @@ const ReferenceGrantOverview: React.FC<{
       {hasGrant && (
         <div className="overview-stacked">
           <div className="overview-label">Grant</div>
-          <ReferenceGrantDiagram
-            from={details.from}
-            to={details.to}
-            clusterName={clusterName}
-          />
+          <ReferenceGrantDiagram from={details.from} to={details.to} clusterName={clusterName} />
         </div>
       )}
       <ResourceMetadata labels={details.labels} annotations={details.annotations} />
