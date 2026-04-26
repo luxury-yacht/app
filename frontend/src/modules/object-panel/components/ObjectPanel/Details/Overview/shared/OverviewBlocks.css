@@ -130,6 +130,17 @@
   border-top: 1px dashed var(--color-border);
 } */
 
+/* ---------- Stacked section ----------
+   For overview rows where the content needs the panel's full width — label
+   on its own line above, content block below. Mirrors the metadata-section
+   pattern used by Labels / Annotations. */
+
+.overview-stacked {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
 /* ---------- Reference grant diagram ----------
    FROM block on the left, arrow in the middle, TO block on the right.
    Each side is a card-style panel listing entries; the arrow visually

@@ -487,18 +487,16 @@ const ReferenceGrantOverview: React.FC<{
         namespace={details.namespace}
         age={details.age}
       />
-      <OverviewItem
-        label="Grant"
-        value={
+      {hasGrant && (
+        <div className="overview-stacked">
+          <div className="overview-label">Grant</div>
           <ReferenceGrantDiagram
             from={details.from}
             to={details.to}
             clusterName={clusterName}
           />
-        }
-        fullWidth
-        hidden={!hasGrant}
-      />
+        </div>
+      )}
       <ResourceMetadata labels={details.labels} annotations={details.annotations} />
     </>
   );

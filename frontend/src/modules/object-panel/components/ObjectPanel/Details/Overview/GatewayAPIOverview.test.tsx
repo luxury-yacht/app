@@ -212,13 +212,13 @@ describe('GatewayAPIOverview', () => {
       } as any,
     });
 
-    // Single Grant row diagram replaces separate From/To labels. From entries
-    // are grouped by namespace; each namespace gets its own card with the
-    // namespace as a header above the kind lines.
-    const grant = getValueForLabel(container, 'Grant');
-    expect(grant?.textContent).toContain('team-a');
-    expect(grant?.textContent).toContain('gateway.networking.k8s.io/HTTPRoute');
-    expect(grant?.textContent).toContain('Widget team-a/*');
+    // Grant renders as a stacked section (label above, diagram below) rather
+    // than a label/value row, so query the diagram directly.
+    const diagram = container.querySelector('.reference-grant-diagram');
+    expect(diagram).not.toBeNull();
+    expect(diagram?.textContent).toContain('team-a');
+    expect(diagram?.textContent).toContain('gateway.networking.k8s.io/HTTPRoute');
+    expect(diagram?.textContent).toContain('Widget team-a/*');
     expect(container.querySelector('[data-testid="object-panel-link"]')).toBeNull();
   });
 });
