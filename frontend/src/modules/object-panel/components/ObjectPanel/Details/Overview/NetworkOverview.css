@@ -206,3 +206,86 @@
 .port-range {
   color: var(--text-tertiary);
 }
+
+/* Gateway API Overview Styles */
+.gateway-condition-list,
+.gateway-listener-list,
+.gateway-ref-list,
+.gateway-rule-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.gateway-condition {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  min-width: 0;
+}
+
+.gateway-condition-reason {
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-small);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gateway-listener,
+.gateway-rule {
+  padding: var(--spacing-sm);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.gateway-listener {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.gateway-listener-main {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+  min-width: 0;
+}
+
+.gateway-listener-name {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.gateway-listener-protocol,
+.gateway-listener-host,
+.gateway-listener-routes,
+.gateway-ref-item,
+.gateway-rule-line {
+  color: var(--text-secondary);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-small);
+}
+
+.gateway-listener-routes {
+  font-family: var(--font-family-sans);
+}
+
+.gateway-ref-item {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.gateway-rule {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.gateway-rule-line strong {
+  color: var(--text-primary);
+  font-weight: 500;
+}
