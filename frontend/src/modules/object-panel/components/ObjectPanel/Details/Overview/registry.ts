@@ -10,6 +10,7 @@ import { NodeOverview } from './NodeOverview';
 import { ConfigMapOverview } from './ConfigMapOverview';
 import { SecretOverview } from './SecretOverview';
 import { EndpointSliceOverview } from './EndpointsOverview';
+import { GatewayAPIOverview } from './GatewayAPIOverview';
 import { IngressOverview } from './IngressOverview';
 import { NetworkPolicyOverview } from './NetworkPolicyOverview';
 import { ServiceOverview } from './ServiceOverview';
@@ -175,6 +176,45 @@ overviewRegistry.register({
   kinds: ['networkpolicy'],
   component: NetworkPolicyOverview,
   mapProps: (props) => ({ networkPolicyDetails: props.networkPolicyDetails || props }),
+  capabilities: {
+    delete: true,
+    edit: true,
+  },
+});
+
+overviewRegistry.register({
+  kinds: [
+    'gatewayclass',
+    'gateway',
+    'listenerset',
+    'httproute',
+    'grpcroute',
+    'tlsroute',
+    'backendtlspolicy',
+    'referencegrant',
+  ],
+  component: GatewayAPIOverview,
+  mapProps: (props) => {
+    const kind = String(props.kind ?? '').toLowerCase();
+
+    if (kind === 'gatewayclass') {
+      return { gatewayClassDetails: props.gatewayClassDetails || props };
+    }
+    if (kind === 'gateway') {
+      return { gatewayDetails: props.gatewayDetails || props };
+    }
+    if (kind === 'listenerset') {
+      return { listenerSetDetails: props.listenerSetDetails || props };
+    }
+    if (kind === 'backendtlspolicy') {
+      return { backendTLSPolicyDetails: props.backendTLSPolicyDetails || props };
+    }
+    if (kind === 'referencegrant') {
+      return { referenceGrantDetails: props.referenceGrantDetails || props };
+    }
+
+    return { routeDetails: props.routeDetails || props };
+  },
   capabilities: {
     delete: true,
     edit: true,

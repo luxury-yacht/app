@@ -7,11 +7,14 @@ import { types } from '@wailsjs/go/models';
 import { OverviewItem } from '@modules/object-panel/components/ObjectPanel/Details/Overview/shared/OverviewItem';
 import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
-import './NetworkOverview.css';
+import './shared/OverviewBlocks.css';
 
 interface IngressOverviewProps {
   ingressDetails: types.IngressDetails | null;
 }
+
+const formatBackend = (backend: types.IngressBackendDetails): string =>
+  backend.serviceName ? `${backend.serviceName}:${backend.servicePort}` : (backend.resource ?? '');
 
 export const IngressOverview: React.FC<IngressOverviewProps> = ({ ingressDetails }) => {
   if (!ingressDetails) return null;
@@ -25,12 +28,10 @@ export const IngressOverview: React.FC<IngressOverviewProps> = ({ ingressDetails
         age={ingressDetails.age}
       />
 
-      {/* Ingress Class */}
       {ingressDetails.ingressClassName && (
         <OverviewItem label="Ingress Class" value={ingressDetails.ingressClassName} />
       )}
 
-      {/* Load Balancer Status */}
       {ingressDetails.loadBalancerStatus && ingressDetails.loadBalancerStatus.length > 0 && (
         <OverviewItem
           label="Load Balancer"
@@ -39,33 +40,25 @@ export const IngressOverview: React.FC<IngressOverviewProps> = ({ ingressDetails
         />
       )}
 
-      {/* Rules */}
       {ingressDetails.rules && ingressDetails.rules.length > 0 && (
         <OverviewItem
           label="Rules"
           value={
-            <div className="ingress-rules-list">
+            <div className="overview-card-list">
               {ingressDetails.rules.map((rule: types.IngressRuleDetails, ruleIndex: number) => (
-                <div key={`rule-${ruleIndex}-${rule.host ?? 'default'}`} className="ingress-rule">
-                  {rule.host && (
-                    <div className="rule-host">
-                      <strong>Host:</strong> {rule.host}
-                    </div>
-                  )}
+                <div key={`rule-${ruleIndex}-${rule.host ?? 'default'}`} className="overview-card">
+                  <div className="overview-card-header">
+                    <span className="overview-card-title">{rule.host || 'Default'}</span>
+                  </div>
                   {rule.paths && rule.paths.length > 0 && (
-                    <div className="rule-paths">
+                    <div className="overview-card-rows">
                       {rule.paths.map((path: types.IngressPathDetails, pathIndex: number) => (
-                        <div key={`path-${pathIndex}-${path.path ?? '/'}`} className="path-item">
-                          <span className="path-value">{path.path || '/'}</span>
-                          <span className="path-type"> ({path.pathType})</span>
-                          <span className="path-arrow"> → </span>
-                          {path.backend.serviceName ? (
-                            <span className="backend-service">
-                              {path.backend.serviceName}:{path.backend.servicePort}
-                            </span>
-                          ) : (
-                            <span className="backend-resource">{path.backend.resource}</span>
-                          )}
+                        <div key={`path-${pathIndex}-${path.path ?? '/'}`} className="overview-row">
+                          <span className="overview-row-label">{path.path || '/'}</span>
+                          <span className="overview-row-value">
+                            {path.pathType ? `(${path.pathType}) ` : ''}→{' '}
+                            {formatBackend(path.backend)}
+                          </span>
                         </div>
                       ))}
                     </div>
@@ -78,24 +71,30 @@ export const IngressOverview: React.FC<IngressOverviewProps> = ({ ingressDetails
         />
       )}
 
-      {/* TLS Configuration */}
       {ingressDetails.tls && ingressDetails.tls.length > 0 && (
         <OverviewItem
           label="TLS"
           value={
-            <div className="tls-list">
+            <div className="overview-card-list">
               {ingressDetails.tls.map((tls: types.IngressTLSDetails, index: number) => (
-                <div key={`tls-${index}-${tls.secretName ?? 'no-secret'}`} className="tls-item">
-                  {tls.hosts && tls.hosts.length > 0 && (
-                    <div className="tls-hosts">
-                      <strong>Hosts:</strong> {tls.hosts.join(', ')}
-                    </div>
-                  )}
-                  {tls.secretName && (
-                    <div className="tls-secret">
-                      <strong>Secret:</strong> {tls.secretName}
-                    </div>
-                  )}
+                <div
+                  key={`tls-${index}-${tls.secretName ?? 'no-secret'}`}
+                  className="overview-card"
+                >
+                  <div className="overview-card-rows">
+                    {tls.hosts && tls.hosts.length > 0 && (
+                      <div className="overview-row">
+                        <span className="overview-row-label">Hosts</span>
+                        <span className="overview-row-value">{tls.hosts.join(', ')}</span>
+                      </div>
+                    )}
+                    {tls.secretName && (
+                      <div className="overview-row">
+                        <span className="overview-row-label">Secret</span>
+                        <span className="overview-row-value">{tls.secretName}</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -104,19 +103,13 @@ export const IngressOverview: React.FC<IngressOverviewProps> = ({ ingressDetails
         />
       )}
 
-      {/* Default Backend */}
       {ingressDetails.defaultBackend && (
         <OverviewItem
           label="Default Backend"
-          value={
-            ingressDetails.defaultBackend.serviceName
-              ? `${ingressDetails.defaultBackend.serviceName}:${ingressDetails.defaultBackend.servicePort}`
-              : ingressDetails.defaultBackend.resource
-          }
+          value={formatBackend(ingressDetails.defaultBackend)}
         />
       )}
 
-      {/* Labels and Annotations */}
       <ResourceMetadata labels={ingressDetails.labels} annotations={ingressDetails.annotations} />
     </>
   );

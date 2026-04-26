@@ -15,6 +15,7 @@ import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { getDisplayKind, aliasToKindMap, canonicalKinds } from '@/utils/kindAliasMap';
+import { getKindColorClass } from '@shared/utils/kindBadgeColors';
 import { useShortNames } from '@/hooks/useShortNames';
 import { buildObjectReference } from '@shared/utils/objectIdentity';
 import { Command } from './CommandPaletteCommands';
@@ -40,10 +41,7 @@ const CATEGORY_ORDER = [
 const CATALOG_RESULT_LIMIT = 20;
 const CATALOG_SEARCH_DEBOUNCE_MS = 200;
 
-const normalizeKindClass = (value: string) => {
-  const normalized = value.toLowerCase().replace(/[^a-z0-9]/g, '');
-  return normalized.length > 0 ? normalized : 'kind';
-};
+const normalizeKindClass = (value: string) => getKindColorClass(value);
 
 export interface ParsedQueryTokens {
   kindTokens: string[];
@@ -205,6 +203,7 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
   const [namespaceSelectMode, setNamespaceSelectMode] = useState(false);
   const [kubeconfigSelectMode, setKubeconfigSelectMode] = useState(false);
   const [hideCursor, setHideCursor] = useState(false);
+  const [mouseSelectionArmed, setMouseSelectionArmed] = useState(false);
   const [catalogResults, setCatalogResults] = useState<CatalogItem[]>([]);
   const [catalogStats, setCatalogStats] = useState<{ total: number; truncated: boolean } | null>(
     null
@@ -217,6 +216,7 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
   const resultsRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
   const selectedIndexRef = useRef(0);
+  const mouseSelectionArmedRef = useRef(false);
   const { hasActiveBlockingSurface } = useKeyboardContext();
   const { openWithObject } = useObjectPanel();
   const { selectedClusterId } = useKubeconfig();
@@ -452,6 +452,8 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
     setSearchQuery('');
     setSelectedIndex(0);
     selectedIndexRef.current = 0;
+    mouseSelectionArmedRef.current = false;
+    setMouseSelectionArmed(false);
     setNamespaceSelectMode(false);
     setKubeconfigSelectMode(false);
     setHideCursor(false);
@@ -466,6 +468,8 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
     setSearchQuery('');
     setSelectedIndex(0);
     selectedIndexRef.current = 0;
+    mouseSelectionArmedRef.current = false;
+    setMouseSelectionArmed(false);
     setNamespaceSelectMode(false);
     setKubeconfigSelectMode(false);
     setHideCursor(false);
@@ -824,17 +828,27 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
       )}
     >
       <div
-        className={`command-palette${hideCursor ? ' hide-cursor' : ''}`}
+        className={[
+          'command-palette',
+          hideCursor ? 'hide-cursor' : null,
+          mouseSelectionArmed ? 'mouse-selection-armed' : null,
+        ]
+          .filter(Boolean)
+          .join(' ')}
         ref={containerRef}
-        onMouseMove={() => {
+        onMouseMove={(event) => {
+          if (!mouseSelectionArmedRef.current) {
+            mouseSelectionArmedRef.current = true;
+            setMouseSelectionArmed(true);
+          }
           if (hideCursor) {
             setHideCursor(false);
           }
-          // Update highlight to follow mouse again
-          const targetIndex = itemRefs.current.findIndex((item) => item?.matches(':hover'));
+          const targetElement = event.target instanceof HTMLElement ? event.target : null;
+          const targetItem = targetElement?.closest('.command-palette-item');
+          const targetIndex = itemRefs.current.findIndex((item) => item === targetItem);
           if (targetIndex !== -1 && targetIndex !== selectedIndexRef.current) {
-            selectedIndexRef.current = targetIndex;
-            setSelectedIndex(targetIndex);
+            updateSelection(targetIndex);
           }
         }}
       >
@@ -883,7 +897,11 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
                           }}
                           className={`command-palette-item ${isSelected ? 'selected' : ''}`}
                           onClick={() => executePaletteItem({ type: 'command', command })}
-                          onMouseEnter={() => setSelectedIndex(currentIndex)}
+                          onMouseEnter={() => {
+                            if (mouseSelectionArmedRef.current) {
+                              updateSelection(currentIndex);
+                            }
+                          }}
                         >
                           {command.icon === '✓' ? (
                             <span className="command-palette-item-check" aria-hidden="true">
@@ -936,7 +954,11 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
                         }}
                         className={`command-palette-item ${isSelected ? 'selected' : ''}`}
                         onClick={() => executePaletteItem({ type: 'catalog', item: entry.item })}
-                        onMouseEnter={() => setSelectedIndex(currentIndex)}
+                        onMouseEnter={() => {
+                          if (mouseSelectionArmedRef.current) {
+                            updateSelection(currentIndex);
+                          }
+                        }}
                       >
                         <div className="command-palette-item-content">
                           <div className="command-palette-item-label catalog">

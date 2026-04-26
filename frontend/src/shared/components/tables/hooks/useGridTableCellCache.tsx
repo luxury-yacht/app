@@ -150,7 +150,7 @@ export function useGridTableCellCache<T>({
           if (!classTokens.includes('kind-badge')) {
             classTokens.push('kind-badge');
           }
-          if (!classTokens.includes(normalizedClass)) {
+          if (normalizedClass && !classTokens.includes(normalizedClass)) {
             classTokens.push(normalizedClass);
           }
           if (isInteractiveElement && !classTokens.includes('clickable')) {
@@ -161,7 +161,10 @@ export function useGridTableCellCache<T>({
             className: classTokens.join(' '),
           } as any);
         } else if (trimmedDisplay.length > 0) {
-          const badgeClasses = ['kind-badge', normalizedClass];
+          const badgeClasses = ['kind-badge'];
+          if (normalizedClass) {
+            badgeClasses.push(normalizedClass);
+          }
           if (isInteractiveElement) {
             badgeClasses.push('clickable');
           }

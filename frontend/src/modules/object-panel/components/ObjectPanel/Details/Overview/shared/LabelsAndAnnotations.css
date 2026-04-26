@@ -71,21 +71,3 @@
 .metadata-value.clickable:hover {
   color: var(--color-link);
 }
-
-.metadata-chip {
-  display: inline-flex;
-  align-items: center;
-  padding: 0 var(--spacing-xs);
-  border-radius: var(--border-radius-pill);
-  font-size: 0.65rem;
-  font-weight: var(--font-weight-semibold);
-  margin-left: var(--spacing-xs);
-  border: 1px solid transparent;
-  text-transform: uppercase;
-}
-
-.metadata-chip--selector {
-  background-color: var(--color-warning-bg);
-  border-color: var(--color-warning);
-  color: var(--color-warning);
-}

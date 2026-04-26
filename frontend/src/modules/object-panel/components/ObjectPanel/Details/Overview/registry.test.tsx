@@ -40,6 +40,10 @@ vi.mock('./EndpointsOverview', () => ({
   EndpointSliceOverview: registerMock('EndpointSliceOverview'),
 }));
 
+vi.mock('./GatewayAPIOverview', () => ({
+  GatewayAPIOverview: registerMock('GatewayAPIOverview'),
+}));
+
 vi.mock('./IngressOverview', () => ({
   IngressOverview: registerMock('IngressOverview'),
 }));
@@ -187,6 +191,59 @@ describe('overviewRegistry', () => {
     });
   });
 
+  it('maps Gateway API payloads before rendering', () => {
+    const gatewayElement = registryModule.overviewRegistry.renderComponent({
+      kind: 'Gateway',
+      name: 'edge',
+      namespace: 'prod',
+    });
+    expect(gatewayElement.type).toBe(componentMocks.GatewayAPIOverview);
+    expect(gatewayElement.props).toEqual({
+      gatewayDetails: {
+        kind: 'Gateway',
+        name: 'edge',
+        namespace: 'prod',
+      },
+    });
+
+    const routeElement = registryModule.overviewRegistry.renderComponent({
+      kind: 'HTTPRoute',
+      name: 'web',
+      namespace: 'prod',
+    });
+    expect(routeElement.type).toBe(componentMocks.GatewayAPIOverview);
+    expect(routeElement.props).toEqual({
+      routeDetails: {
+        kind: 'HTTPRoute',
+        name: 'web',
+        namespace: 'prod',
+      },
+    });
+
+    const gatewayClassElement = registryModule.overviewRegistry.renderComponent({
+      kind: 'GatewayClass',
+      gatewayClassDetails: { name: 'shared', controller: 'example.io/gateway' },
+    });
+    expect(gatewayClassElement.type).toBe(componentMocks.GatewayAPIOverview);
+    expect(gatewayClassElement.props).toEqual({
+      gatewayClassDetails: { name: 'shared', controller: 'example.io/gateway' },
+    });
+
+    const referenceGrantElement = registryModule.overviewRegistry.renderComponent({
+      kind: 'ReferenceGrant',
+      name: 'allow-web',
+      namespace: 'prod',
+    });
+    expect(referenceGrantElement.type).toBe(componentMocks.GatewayAPIOverview);
+    expect(referenceGrantElement.props).toEqual({
+      referenceGrantDetails: {
+        kind: 'ReferenceGrant',
+        name: 'allow-web',
+        namespace: 'prod',
+      },
+    });
+  });
+
   it('exposes capabilities for registered kinds and defaults to delete for unknown kinds', () => {
     expect(registryModule.getResourceCapabilities('Secret')).toEqual({
       delete: true,
@@ -196,6 +253,10 @@ describe('overviewRegistry', () => {
       delete: true,
       objPanelLogs: true,
       exec: true,
+    });
+    expect(registryModule.getResourceCapabilities('HTTPRoute')).toEqual({
+      delete: true,
+      edit: true,
     });
     expect(registryModule.getResourceCapabilities('custom.foo')).toEqual({ delete: true });
   });

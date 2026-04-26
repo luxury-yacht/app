@@ -1,0 +1,217 @@
+/* Shared building blocks for object-panel detail overviews
+   Used by Gateway/Route, Service, Endpoints, Ingress, NetworkPolicy. */
+
+/* ---------- Card list ----------
+   A vertical stack of card-shaped sub-blocks (e.g., listeners, ingress rules,
+   network-policy rules, endpoint slices). Each card has a subtle background
+   panel, a border, and inner padding. */
+
+.overview-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.overview-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+}
+
+.overview-card-header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+}
+
+.overview-card-title {
+  color: var(--color-text);
+  font-weight: 500;
+  font-size: var(--font-size-md);
+}
+
+.overview-card-meta {
+  color: var(--color-text-secondary);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-mono);
+}
+
+.overview-card-tag {
+  margin-left: auto;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-sm);
+}
+
+.overview-card-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+/* ---------- Row list ----------
+   A simple stack of label/value rows, used both inside cards (.overview-card-rows)
+   and standalone (.overview-row-list). */
+
+.overview-row-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.overview-row {
+  display: flex;
+  gap: var(--spacing-sm);
+  align-items: baseline;
+  font-size: var(--font-size-sm);
+}
+
+.overview-row-label {
+  color: var(--color-text-secondary);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-mono);
+  min-width: 5rem;
+  flex-shrink: 0;
+}
+
+.overview-row-value {
+  color: var(--color-text);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-mono);
+  flex: 1;
+  min-width: 0;
+  word-break: break-word;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* When the value is a list of links/components — drop mono treatment */
+.overview-row-value.plain {
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+}
+
+/* Mono utility for OverviewItem values that contain technical strings —
+   IPs, identifiers, port specs. Apply directly to a span inside the value. */
+.overview-value-mono {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-mono);
+}
+
+/* ---------- Reference list ----------
+   A vertical list of object links or display refs. */
+
+.overview-ref-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-mono);
+}
+
+.overview-ref-item {
+  color: var(--color-text);
+  line-height: 1.5;
+}
+
+/* ---------- Conditions ----------
+   Layout-only: lays a row of StatusChip components on a single line that
+   wraps when needed. The chip styling itself lives in StatusChip.css. */
+
+.overview-condition-list {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--spacing-xs);
+}
+
+/* When conditions live inside a card (e.g., listener), separate them
+   from the card body above with a subtle divider. */
+/* .overview-card .overview-condition-list {
+  padding-top: var(--spacing-sm);
+  border-top: 1px dashed var(--color-border);
+} */
+
+/* ---------- Stacked section ----------
+   For overview rows where the content needs the panel's full width — label
+   on its own line above, content block below. Mirrors the metadata-section
+   pattern used by Labels / Annotations. */
+
+.overview-stacked {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+/* ---------- Reference grant diagram ----------
+   FROM block on the left, arrow in the middle, TO block on the right.
+   Each side is a card-style panel listing entries; the arrow visually
+   conveys the access-grant direction without needing to/from labels. */
+
+.reference-grant-diagram {
+  display: flex;
+  align-items: stretch;
+  gap: var(--spacing-md);
+}
+
+/* Each side of the grant is a stack of per-namespace boxes. The FROM side
+   typically has one box per source namespace; the TO side typically has
+   exactly one (the grant's own namespace), but uses the same stack
+   structure for visual symmetry. */
+.reference-grant-side-stack {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.reference-grant-side {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  background: var(--color-bg-tertiary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+}
+
+.reference-grant-namespace {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  margin-bottom: var(--spacing-xs);
+  letter-spacing: 0.02em;
+}
+
+.reference-grant-item {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-mono);
+  color: var(--color-text);
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.reference-grant-arrow {
+  align-self: center;
+  font-size: var(--font-size-lg);
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
+}
+
+/* ---------- Status accents (Ready / NotReady, etc.) ---------- */
+
+.overview-status-ready {
+  color: var(--color-success);
+}
+
+.overview-status-not-ready {
+  color: var(--color-warning);
+}

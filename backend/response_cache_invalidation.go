@@ -11,6 +11,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/tools/cache"
+	gatewayinformers "sigs.k8s.io/gateway-api/pkg/client/informers/externalversions"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
@@ -70,6 +71,7 @@ func (a *App) registerResponseCacheInvalidation(subsystem *system.Subsystem, sel
 	a.registerRBACInvalidation(shared, selectionKey, guard, perms)
 	a.registerStorageInvalidation(shared, selectionKey, guard, perms)
 	a.registerNetworkingInvalidation(shared, selectionKey, guard, perms)
+	a.registerGatewayAPIInvalidation(subsystem.InformerFactory.GatewayInformerFactory(), selectionKey, guard, perms)
 	a.registerAutoscalingInvalidation(shared, selectionKey, guard, perms)
 	a.registerPolicyInvalidation(shared, selectionKey, guard, perms)
 	a.registerAdmissionInvalidation(shared, selectionKey, guard, perms)
@@ -181,6 +183,37 @@ func (a *App) registerNetworkingInvalidation(shared informers.SharedInformerFact
 	}
 	if perms == nil || perms.CanListWatch("networking.k8s.io", "ingressclasses") {
 		a.addResponseCacheInvalidationHandler(shared.Networking().V1().IngressClasses().Informer(), selectionKey, "IngressClass", guard)
+	}
+}
+
+func (a *App) registerGatewayAPIInvalidation(factory gatewayinformers.SharedInformerFactory, selectionKey string, guard responseCacheInvalidationGuard, perms permissions.ListWatchChecker) {
+	if factory == nil {
+		return
+	}
+	gateway := factory.Gateway().V1()
+	if perms == nil || perms.CanListWatch("gateway.networking.k8s.io", "gatewayclasses") {
+		a.addResponseCacheInvalidationHandler(gateway.GatewayClasses().Informer(), selectionKey, "GatewayClass", guard)
+	}
+	if perms == nil || perms.CanListWatch("gateway.networking.k8s.io", "gateways") {
+		a.addResponseCacheInvalidationHandler(gateway.Gateways().Informer(), selectionKey, "Gateway", guard)
+	}
+	if perms == nil || perms.CanListWatch("gateway.networking.k8s.io", "httproutes") {
+		a.addResponseCacheInvalidationHandler(gateway.HTTPRoutes().Informer(), selectionKey, "HTTPRoute", guard)
+	}
+	if perms == nil || perms.CanListWatch("gateway.networking.k8s.io", "grpcroutes") {
+		a.addResponseCacheInvalidationHandler(gateway.GRPCRoutes().Informer(), selectionKey, "GRPCRoute", guard)
+	}
+	if perms == nil || perms.CanListWatch("gateway.networking.k8s.io", "tlsroutes") {
+		a.addResponseCacheInvalidationHandler(gateway.TLSRoutes().Informer(), selectionKey, "TLSRoute", guard)
+	}
+	if perms == nil || perms.CanListWatch("gateway.networking.k8s.io", "listenersets") {
+		a.addResponseCacheInvalidationHandler(gateway.ListenerSets().Informer(), selectionKey, "ListenerSet", guard)
+	}
+	if perms == nil || perms.CanListWatch("gateway.networking.k8s.io", "referencegrants") {
+		a.addResponseCacheInvalidationHandler(gateway.ReferenceGrants().Informer(), selectionKey, "ReferenceGrant", guard)
+	}
+	if perms == nil || perms.CanListWatch("gateway.networking.k8s.io", "backendtlspolicies") {
+		a.addResponseCacheInvalidationHandler(gateway.BackendTLSPolicies().Informer(), selectionKey, "BackendTLSPolicy", guard)
 	}
 }
 

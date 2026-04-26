@@ -40,8 +40,10 @@
   pointer-events: none;
 }
 
-.command-palette.hide-cursor .command-palette-item:hover:not(.selected) {
+.command-palette.hide-cursor .command-palette-item:hover:not(.selected),
+.command-palette:not(.mouse-selection-armed) .command-palette-item:hover:not(.selected) {
   background-color: transparent;
+  border-left-color: transparent;
 }
 
 .command-palette-header {
@@ -119,7 +121,7 @@
   border-left: 3px solid transparent;
 }
 
-.command-palette-item:hover {
+.command-palette.mouse-selection-armed .command-palette-item:hover:not(.selected) {
   background-color: var(--color-bg-secondary);
   border-left-color: var(--color-border);
 }

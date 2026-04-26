@@ -9,14 +9,19 @@ import (
 	"sync"
 	"time"
 
+	appconfig "github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/internal/parallel"
+	"github.com/luxury-yacht/app/backend/resources/common"
+	"github.com/luxury-yacht/app/backend/resources/gatewayapi"
 	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
+	gatewayversioned "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned"
+	gatewayinformers "sigs.k8s.io/gateway-api/pkg/client/informers/externalversions"
 
 	"github.com/luxury-yacht/app/backend/internal/authstate"
 )
@@ -25,14 +30,18 @@ const clusterClientPreflightTimeout = 8 * time.Second
 
 // clusterClients stores Kubernetes clients scoped to a specific cluster selection.
 type clusterClients struct {
-	meta                ClusterMeta
-	kubeconfigPath      string
-	kubeconfigContext   string
-	client              kubernetes.Interface
-	apiextensionsClient apiextensionsclientset.Interface
-	dynamicClient       dynamic.Interface
-	metricsClient       *metricsclient.Clientset
-	restConfig          *rest.Config
+	meta                   ClusterMeta
+	kubeconfigPath         string
+	kubeconfigContext      string
+	client                 kubernetes.Interface
+	gatewayClient          gatewayversioned.Interface
+	gatewayInformerFactory gatewayinformers.SharedInformerFactory
+	gatewayAPIPresence     common.GatewayAPIPresence
+	gatewayVersionResolver common.VersionResolver
+	apiextensionsClient    apiextensionsclientset.Interface
+	dynamicClient          dynamic.Interface
+	metricsClient          *metricsclient.Clientset
+	restConfig             *rest.Config
 	// authManager provides per-cluster auth state tracking and recovery.
 	// Each cluster has its own auth manager so that auth failures in one
 	// cluster don't affect other clusters.
@@ -289,6 +298,22 @@ func (a *App) buildClusterClientsWithContext(
 		metrics = metricsClient
 	}
 
+	gatewayPresence, gatewayDiscoverErr := gatewayapi.DiscoverViaDiscovery(ctx, clientset.Discovery())
+	if gatewayDiscoverErr != nil && a.logger != nil {
+		a.logger.Warn(fmt.Sprintf("Gateway API discovery failed for cluster %s: %v", meta.Name, gatewayDiscoverErr), logsources.KubernetesClient, meta.ID, meta.Name)
+	}
+	var gatewayClient gatewayversioned.Interface
+	var gatewayInformerFactory gatewayinformers.SharedInformerFactory
+	if gatewayPresence.AnyPresent() {
+		gatewayClientset, err := gatewayversioned.NewForConfig(config)
+		if err != nil {
+			clusterAuthMgr.Shutdown()
+			return nil, fmt.Errorf("failed to create gateway api clientset: %w", err)
+		}
+		gatewayClient = gatewayClientset
+		gatewayInformerFactory = gatewayinformers.NewSharedInformerFactory(gatewayClientset, appconfig.RefreshResyncInterval)
+	}
+
 	// Configure the recovery test to rebuild credentials from kubeconfig.
 	// We can't use the existing clientset because it caches stale credentials.
 	// By rebuilding from the kubeconfig, we pick up refreshed SSO tokens.
@@ -342,16 +367,20 @@ func (a *App) buildClusterClientsWithContext(
 	}
 
 	return &clusterClients{
-		meta:                meta,
-		kubeconfigPath:      selection.Path,
-		kubeconfigContext:   selection.Context,
-		client:              clientset,
-		apiextensionsClient: apiextensionsClient,
-		dynamicClient:       dynamicClient,
-		metricsClient:       metrics,
-		restConfig:          config,
-		authManager:         clusterAuthMgr,
-		authFailedOnInit:    authFailedOnInit,
+		meta:                   meta,
+		kubeconfigPath:         selection.Path,
+		kubeconfigContext:      selection.Context,
+		client:                 clientset,
+		gatewayClient:          gatewayClient,
+		gatewayInformerFactory: gatewayInformerFactory,
+		gatewayAPIPresence:     gatewayPresence,
+		gatewayVersionResolver: gatewayPresence,
+		apiextensionsClient:    apiextensionsClient,
+		dynamicClient:          dynamicClient,
+		metricsClient:          metrics,
+		restConfig:             config,
+		authManager:            clusterAuthMgr,
+		authFailedOnInit:       authFailedOnInit,
 	}, nil
 }
 

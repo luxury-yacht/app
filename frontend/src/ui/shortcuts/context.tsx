@@ -276,11 +276,12 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
         }
       }
 
-      const fallbackSurface =
-        orderedSurfaces.find((surface) => surface.blocking) ??
-        orderedSurfaces.find((surface) => surface.captureWhenActive);
+      const blockingSurfaces = orderedSurfaces.filter((surface) => surface.blocking);
+      if (blockingSurfaces.length > 0) {
+        return blockingSurfaces;
+      }
 
-      return fallbackSurface ? [fallbackSurface] : [];
+      return orderedSurfaces.filter((surface) => surface.captureWhenActive);
     },
     [getOrderedSurfaces]
   );
@@ -402,18 +403,49 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
       }
 
       const targetSurface = getTargetSurface(event.target);
-      if (targetSurface) {
-        const escapeResult =
-          event.key === 'Escape' && targetSurface.onEscape ? targetSurface.onEscape(event) : false;
-        const handledEscape = escapeResult === true || escapeResult === 'handled-no-prevent';
-        const handledEscapeNoPrevent = escapeResult === 'handled-no-prevent';
-        const keyResult =
-          !handledEscape && targetSurface.onKeyDown ? targetSurface.onKeyDown(event) : false;
+      if (event.key === 'Escape') {
+        for (const surface of getSurfaceCandidates(event.target)) {
+          if (surface.onEscape) {
+            const escapeResult = surface.onEscape(event);
+            const handledEscape = escapeResult === true || escapeResult === 'handled-no-prevent';
+            const handledEscapeNoPrevent = escapeResult === 'handled-no-prevent';
+
+            if (handledEscape) {
+              if (!handledEscapeNoPrevent) {
+                event.preventDefault();
+              }
+              event.stopPropagation();
+              return;
+            }
+          }
+
+          if (surface.onKeyDown) {
+            const keyResult = surface.onKeyDown(event);
+            const handledKey = keyResult === true || keyResult === 'handled-no-prevent';
+            const handledKeyNoPrevent = keyResult === 'handled-no-prevent';
+
+            if (handledKey) {
+              if (!handledKeyNoPrevent) {
+                event.preventDefault();
+              }
+              event.stopPropagation();
+              return;
+            }
+          }
+
+          if (surface.suppressShortcuts) {
+            return;
+          }
+        }
+      }
+
+      if (targetSurface && event.key !== 'Escape') {
+        const keyResult = targetSurface.onKeyDown ? targetSurface.onKeyDown(event) : false;
         const handledKey = keyResult === true || keyResult === 'handled-no-prevent';
         const handledKeyNoPrevent = keyResult === 'handled-no-prevent';
 
-        if (handledEscape || handledKey) {
-          if (!handledEscapeNoPrevent && !handledKeyNoPrevent) {
+        if (handledKey) {
+          if (!handledKeyNoPrevent) {
             event.preventDefault();
           }
           event.stopPropagation();

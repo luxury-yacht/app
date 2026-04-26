@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
@@ -16,6 +15,9 @@ import (
 	corelisters "k8s.io/client-go/listers/core/v1"
 	discoverylisters "k8s.io/client-go/listers/discovery/v1"
 	networklisters "k8s.io/client-go/listers/networking/v1"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayinformers "sigs.k8s.io/gateway-api/pkg/client/informers/externalversions"
+	gatewaylisters "sigs.k8s.io/gateway-api/pkg/client/listers/apis/v1"
 
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
@@ -29,18 +31,32 @@ const (
 
 // NamespaceNetworkPermissions indicates which resources should be included in the domain.
 type NamespaceNetworkPermissions struct {
-	IncludeServices        bool
-	IncludeEndpointSlices  bool
-	IncludeIngresses       bool
-	IncludeNetworkPolicies bool
+	IncludeServices           bool
+	IncludeEndpointSlices     bool
+	IncludeIngresses          bool
+	IncludeNetworkPolicies    bool
+	IncludeGateways           bool
+	IncludeHTTPRoutes         bool
+	IncludeGRPCRoutes         bool
+	IncludeTLSRoutes          bool
+	IncludeListenerSets       bool
+	IncludeReferenceGrants    bool
+	IncludeBackendTLSPolicies bool
 }
 
 // NamespaceNetworkBuilder constructs summaries for namespace-scoped network resources.
 type NamespaceNetworkBuilder struct {
-	serviceLister       corelisters.ServiceLister
-	endpointSliceLister discoverylisters.EndpointSliceLister
-	ingressLister       networklisters.IngressLister
-	policyLister        networklisters.NetworkPolicyLister
+	serviceLister          corelisters.ServiceLister
+	endpointSliceLister    discoverylisters.EndpointSliceLister
+	ingressLister          networklisters.IngressLister
+	policyLister           networklisters.NetworkPolicyLister
+	gatewayLister          gatewaylisters.GatewayLister
+	httpRouteLister        gatewaylisters.HTTPRouteLister
+	grpcRouteLister        gatewaylisters.GRPCRouteLister
+	tlsRouteLister         gatewaylisters.TLSRouteLister
+	listenerSetLister      gatewaylisters.ListenerSetLister
+	referenceGrantLister   gatewaylisters.ReferenceGrantLister
+	backendTLSPolicyLister gatewaylisters.BackendTLSPolicyLister
 }
 
 // NamespaceNetworkSnapshot payload for the network tab.
@@ -68,6 +84,15 @@ func RegisterNamespaceNetworkDomain(
 	factory informers.SharedInformerFactory,
 	perms NamespaceNetworkPermissions,
 ) error {
+	return RegisterNamespaceNetworkDomainWithGatewayAPI(reg, factory, nil, perms)
+}
+
+func RegisterNamespaceNetworkDomainWithGatewayAPI(
+	reg *domain.Registry,
+	factory informers.SharedInformerFactory,
+	gatewayFactory gatewayinformers.SharedInformerFactory,
+	perms NamespaceNetworkPermissions,
+) error {
 	if factory == nil {
 		return fmt.Errorf("shared informer factory is nil")
 	}
@@ -83,6 +108,30 @@ func RegisterNamespaceNetworkDomain(
 	}
 	if perms.IncludeNetworkPolicies {
 		builder.policyLister = factory.Networking().V1().NetworkPolicies().Lister()
+	}
+	if gatewayFactory != nil {
+		gateway := gatewayFactory.Gateway().V1()
+		if perms.IncludeGateways {
+			builder.gatewayLister = gateway.Gateways().Lister()
+		}
+		if perms.IncludeHTTPRoutes {
+			builder.httpRouteLister = gateway.HTTPRoutes().Lister()
+		}
+		if perms.IncludeGRPCRoutes {
+			builder.grpcRouteLister = gateway.GRPCRoutes().Lister()
+		}
+		if perms.IncludeTLSRoutes {
+			builder.tlsRouteLister = gateway.TLSRoutes().Lister()
+		}
+		if perms.IncludeListenerSets {
+			builder.listenerSetLister = gateway.ListenerSets().Lister()
+		}
+		if perms.IncludeReferenceGrants {
+			builder.referenceGrantLister = gateway.ReferenceGrants().Lister()
+		}
+		if perms.IncludeBackendTLSPolicies {
+			builder.backendTLSPolicyLister = gateway.BackendTLSPolicies().Lister()
+		}
 	}
 	return reg.Register(refresh.DomainConfig{
 		Name:          namespaceNetworkDomainName,
@@ -140,10 +189,14 @@ func (b *NamespaceNetworkBuilder) Build(ctx context.Context, scope string) (*ref
 			return nil, fmt.Errorf("namespace network: failed to list network policies: %w", err)
 		}
 	}
+	gatewayItems, err := b.listGatewayAPIResources(namespace)
+	if err != nil {
+		return nil, err
+	}
 
 	slicesByService := groupEndpointSlicesByService(slices)
 
-	return b.buildSnapshot(meta, scopeLabel, services, slicesByService, ingresses, policies)
+	return b.buildSnapshot(meta, scopeLabel, services, slices, slicesByService, ingresses, policies, gatewayItems)
 }
 
 func (b *NamespaceNetworkBuilder) listServices(namespace string) ([]*corev1.Service, error) {
@@ -174,15 +227,103 @@ func (b *NamespaceNetworkBuilder) listNetworkPolicies(namespace string) ([]*netw
 	return b.policyLister.NetworkPolicies(namespace).List(labels.Everything())
 }
 
+type gatewayAPIResources struct {
+	gateways           []*gatewayv1.Gateway
+	httpRoutes         []*gatewayv1.HTTPRoute
+	grpcRoutes         []*gatewayv1.GRPCRoute
+	tlsRoutes          []*gatewayv1.TLSRoute
+	listenerSets       []*gatewayv1.ListenerSet
+	referenceGrants    []*gatewayv1.ReferenceGrant
+	backendTLSPolicies []*gatewayv1.BackendTLSPolicy
+}
+
+func (b *NamespaceNetworkBuilder) listGatewayAPIResources(namespace string) (gatewayAPIResources, error) {
+	var out gatewayAPIResources
+	var err error
+	if b.gatewayLister != nil {
+		if namespace == "" {
+			out.gateways, err = b.gatewayLister.List(labels.Everything())
+		} else {
+			out.gateways, err = b.gatewayLister.Gateways(namespace).List(labels.Everything())
+		}
+		if err != nil {
+			return out, fmt.Errorf("namespace network: failed to list gateways: %w", err)
+		}
+	}
+	if b.httpRouteLister != nil {
+		if namespace == "" {
+			out.httpRoutes, err = b.httpRouteLister.List(labels.Everything())
+		} else {
+			out.httpRoutes, err = b.httpRouteLister.HTTPRoutes(namespace).List(labels.Everything())
+		}
+		if err != nil {
+			return out, fmt.Errorf("namespace network: failed to list http routes: %w", err)
+		}
+	}
+	if b.grpcRouteLister != nil {
+		if namespace == "" {
+			out.grpcRoutes, err = b.grpcRouteLister.List(labels.Everything())
+		} else {
+			out.grpcRoutes, err = b.grpcRouteLister.GRPCRoutes(namespace).List(labels.Everything())
+		}
+		if err != nil {
+			return out, fmt.Errorf("namespace network: failed to list grpc routes: %w", err)
+		}
+	}
+	if b.tlsRouteLister != nil {
+		if namespace == "" {
+			out.tlsRoutes, err = b.tlsRouteLister.List(labels.Everything())
+		} else {
+			out.tlsRoutes, err = b.tlsRouteLister.TLSRoutes(namespace).List(labels.Everything())
+		}
+		if err != nil {
+			return out, fmt.Errorf("namespace network: failed to list tls routes: %w", err)
+		}
+	}
+	if b.listenerSetLister != nil {
+		if namespace == "" {
+			out.listenerSets, err = b.listenerSetLister.List(labels.Everything())
+		} else {
+			out.listenerSets, err = b.listenerSetLister.ListenerSets(namespace).List(labels.Everything())
+		}
+		if err != nil {
+			return out, fmt.Errorf("namespace network: failed to list listener sets: %w", err)
+		}
+	}
+	if b.referenceGrantLister != nil {
+		if namespace == "" {
+			out.referenceGrants, err = b.referenceGrantLister.List(labels.Everything())
+		} else {
+			out.referenceGrants, err = b.referenceGrantLister.ReferenceGrants(namespace).List(labels.Everything())
+		}
+		if err != nil {
+			return out, fmt.Errorf("namespace network: failed to list reference grants: %w", err)
+		}
+	}
+	if b.backendTLSPolicyLister != nil {
+		if namespace == "" {
+			out.backendTLSPolicies, err = b.backendTLSPolicyLister.List(labels.Everything())
+		} else {
+			out.backendTLSPolicies, err = b.backendTLSPolicyLister.BackendTLSPolicies(namespace).List(labels.Everything())
+		}
+		if err != nil {
+			return out, fmt.Errorf("namespace network: failed to list backend tls policies: %w", err)
+		}
+	}
+	return out, nil
+}
+
 func (b *NamespaceNetworkBuilder) buildSnapshot(
 	meta ClusterMeta,
 	scope string,
 	services []*corev1.Service,
+	slices []*discoveryv1.EndpointSlice,
 	slicesByService map[string][]*discoveryv1.EndpointSlice,
 	ingresses []*networkingv1.Ingress,
 	policies []*networkingv1.NetworkPolicy,
+	gatewayItems gatewayAPIResources,
 ) (*refresh.Snapshot, error) {
-	resources := make([]NetworkSummary, 0, len(services)+len(slicesByService)+len(ingresses)+len(policies))
+	resources := make([]NetworkSummary, 0, len(services)+len(slicesByService)+len(ingresses)+len(policies)+len(gatewayItems.gateways)+len(gatewayItems.httpRoutes)+len(gatewayItems.grpcRoutes)+len(gatewayItems.tlsRoutes)+len(gatewayItems.listenerSets)+len(gatewayItems.referenceGrants)+len(gatewayItems.backendTLSPolicies))
 	var version uint64
 
 	// Delegate to the shared row builders so the full-snapshot path and
@@ -219,18 +360,56 @@ func (b *NamespaceNetworkBuilder) buildSnapshot(
 		}
 	}
 
-	for svc, svcSlices := range slicesByService {
-		if len(svcSlices) == 0 {
+	for _, gateway := range gatewayItems.gateways {
+		resources = append(resources, BuildGatewayNetworkSummary(meta, gateway))
+		if v := resourceVersionOrTimestamp(gateway); v > version {
+			version = v
+		}
+	}
+	for _, route := range gatewayItems.httpRoutes {
+		resources = append(resources, BuildHTTPRouteNetworkSummary(meta, route))
+		if v := resourceVersionOrTimestamp(route); v > version {
+			version = v
+		}
+	}
+	for _, route := range gatewayItems.grpcRoutes {
+		resources = append(resources, BuildGRPCRouteNetworkSummary(meta, route))
+		if v := resourceVersionOrTimestamp(route); v > version {
+			version = v
+		}
+	}
+	for _, route := range gatewayItems.tlsRoutes {
+		resources = append(resources, BuildTLSRouteNetworkSummary(meta, route))
+		if v := resourceVersionOrTimestamp(route); v > version {
+			version = v
+		}
+	}
+	for _, listenerSet := range gatewayItems.listenerSets {
+		resources = append(resources, BuildListenerSetNetworkSummary(meta, listenerSet))
+		if v := resourceVersionOrTimestamp(listenerSet); v > version {
+			version = v
+		}
+	}
+	for _, referenceGrant := range gatewayItems.referenceGrants {
+		resources = append(resources, BuildReferenceGrantNetworkSummary(meta, referenceGrant))
+		if v := resourceVersionOrTimestamp(referenceGrant); v > version {
+			version = v
+		}
+	}
+	for _, policy := range gatewayItems.backendTLSPolicies {
+		resources = append(resources, BuildBackendTLSPolicyNetworkSummary(meta, policy))
+		if v := resourceVersionOrTimestamp(policy); v > version {
+			version = v
+		}
+	}
+
+	for _, slice := range slices {
+		if slice == nil {
 			continue
 		}
-		resources = append(resources, BuildEndpointSliceSummary(meta, svcSlices[0].Namespace, svc, svcSlices))
-		for _, slice := range svcSlices {
-			if slice == nil {
-				continue
-			}
-			if v := resourceVersionOrTimestamp(slice); v > version {
-				version = v
-			}
+		resources = append(resources, BuildEndpointSliceSummary(meta, slice))
+		if v := resourceVersionOrTimestamp(slice); v > version {
+			version = v
 		}
 	}
 
@@ -249,7 +428,7 @@ func (b *NamespaceNetworkBuilder) buildSnapshot(
 			Resources:   resources,
 			Kinds:       snapshotSortedKinds(resources, func(resource NetworkSummary) string { return resource.Kind }),
 		},
-		Stats:   refresh.SnapshotStats{ItemCount: len(resources)},
+		Stats: refresh.SnapshotStats{ItemCount: len(resources)},
 	}, nil
 }
 
@@ -360,19 +539,6 @@ func countAddressesFromSlices(slices []*discoveryv1.EndpointSlice) (ready, notRe
 		}
 	}
 	return ready, notReady
-}
-
-func earliestSliceCreation(slices []*discoveryv1.EndpointSlice) time.Time {
-	var earliest time.Time
-	for _, slice := range slices {
-		if slice == nil {
-			continue
-		}
-		if earliest.IsZero() || slice.CreationTimestamp.Time.Before(earliest) {
-			earliest = slice.CreationTimestamp.Time
-		}
-	}
-	return earliest
 }
 
 func groupEndpointSlicesByService(slices []*discoveryv1.EndpointSlice) map[string][]*discoveryv1.EndpointSlice {

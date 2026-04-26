@@ -60,6 +60,13 @@ export function ClusterResourcesManager({
     null,
     permissionClusterId
   );
+  const configGatewayClassPermission = useUserPermission(
+    'GatewayClass',
+    'list',
+    null,
+    null,
+    permissionClusterId
+  );
   const crdListPermission = useUserPermission(
     'CustomResourceDefinition',
     'list',
@@ -113,6 +120,7 @@ export function ClusterResourcesManager({
   const configPermissionMessage =
     permissionToMessage(configStorageClassPermission) ||
     permissionToMessage(configIngressClassPermission) ||
+    permissionToMessage(configGatewayClassPermission) ||
     permissionToMessage(configValidatingWebhookPermission) ||
     permissionToMessage(configMutatingWebhookPermission);
 

@@ -19,6 +19,8 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	informers "k8s.io/client-go/informers"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayinformers "sigs.k8s.io/gateway-api/pkg/client/informers/externalversions"
 )
 
 // informerListFunc returns objects for a namespace (or cluster-wide when empty/all).
@@ -198,6 +200,72 @@ var sharedInformerListers = map[schema.GroupResource]func(factory informers.Shar
 	{Group: "storage.k8s.io", Resource: "storageclasses"}: func(factory informers.SharedInformerFactory) informerListFunc {
 		lister := factory.Storage().V1().StorageClasses().Lister()
 		return newClusterLister(func() ([]*storagev1.StorageClass, error) { return lister.List(labels.Everything()) })
+	},
+}
+
+var gatewayInformerListers = map[schema.GroupResource]func(factory gatewayinformers.SharedInformerFactory) informerListFunc{
+	{Group: "gateway.networking.k8s.io", Resource: "gatewayclasses"}: func(factory gatewayinformers.SharedInformerFactory) informerListFunc {
+		lister := factory.Gateway().V1().GatewayClasses().Lister()
+		return newClusterLister(func() ([]*gatewayv1.GatewayClass, error) { return lister.List(labels.Everything()) })
+	},
+	{Group: "gateway.networking.k8s.io", Resource: "gateways"}: func(factory gatewayinformers.SharedInformerFactory) informerListFunc {
+		lister := factory.Gateway().V1().Gateways().Lister()
+		return newNamespacedLister(
+			func() ([]*gatewayv1.Gateway, error) { return lister.List(labels.Everything()) },
+			func(ns string) ([]*gatewayv1.Gateway, error) { return lister.Gateways(ns).List(labels.Everything()) },
+		)
+	},
+	{Group: "gateway.networking.k8s.io", Resource: "httproutes"}: func(factory gatewayinformers.SharedInformerFactory) informerListFunc {
+		lister := factory.Gateway().V1().HTTPRoutes().Lister()
+		return newNamespacedLister(
+			func() ([]*gatewayv1.HTTPRoute, error) { return lister.List(labels.Everything()) },
+			func(ns string) ([]*gatewayv1.HTTPRoute, error) {
+				return lister.HTTPRoutes(ns).List(labels.Everything())
+			},
+		)
+	},
+	{Group: "gateway.networking.k8s.io", Resource: "grpcroutes"}: func(factory gatewayinformers.SharedInformerFactory) informerListFunc {
+		lister := factory.Gateway().V1().GRPCRoutes().Lister()
+		return newNamespacedLister(
+			func() ([]*gatewayv1.GRPCRoute, error) { return lister.List(labels.Everything()) },
+			func(ns string) ([]*gatewayv1.GRPCRoute, error) {
+				return lister.GRPCRoutes(ns).List(labels.Everything())
+			},
+		)
+	},
+	{Group: "gateway.networking.k8s.io", Resource: "tlsroutes"}: func(factory gatewayinformers.SharedInformerFactory) informerListFunc {
+		lister := factory.Gateway().V1().TLSRoutes().Lister()
+		return newNamespacedLister(
+			func() ([]*gatewayv1.TLSRoute, error) { return lister.List(labels.Everything()) },
+			func(ns string) ([]*gatewayv1.TLSRoute, error) { return lister.TLSRoutes(ns).List(labels.Everything()) },
+		)
+	},
+	{Group: "gateway.networking.k8s.io", Resource: "listenersets"}: func(factory gatewayinformers.SharedInformerFactory) informerListFunc {
+		lister := factory.Gateway().V1().ListenerSets().Lister()
+		return newNamespacedLister(
+			func() ([]*gatewayv1.ListenerSet, error) { return lister.List(labels.Everything()) },
+			func(ns string) ([]*gatewayv1.ListenerSet, error) {
+				return lister.ListenerSets(ns).List(labels.Everything())
+			},
+		)
+	},
+	{Group: "gateway.networking.k8s.io", Resource: "referencegrants"}: func(factory gatewayinformers.SharedInformerFactory) informerListFunc {
+		lister := factory.Gateway().V1().ReferenceGrants().Lister()
+		return newNamespacedLister(
+			func() ([]*gatewayv1.ReferenceGrant, error) { return lister.List(labels.Everything()) },
+			func(ns string) ([]*gatewayv1.ReferenceGrant, error) {
+				return lister.ReferenceGrants(ns).List(labels.Everything())
+			},
+		)
+	},
+	{Group: "gateway.networking.k8s.io", Resource: "backendtlspolicies"}: func(factory gatewayinformers.SharedInformerFactory) informerListFunc {
+		lister := factory.Gateway().V1().BackendTLSPolicies().Lister()
+		return newNamespacedLister(
+			func() ([]*gatewayv1.BackendTLSPolicy, error) { return lister.List(labels.Everything()) },
+			func(ns string) ([]*gatewayv1.BackendTLSPolicy, error) {
+				return lister.BackendTLSPolicies(ns).List(labels.Everything())
+			},
+		)
 	},
 }
 

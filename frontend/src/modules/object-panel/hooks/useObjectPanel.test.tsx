@@ -7,24 +7,21 @@
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ObjectPanelStateProvider } from '@/core/contexts/ObjectPanelStateContext';
+import { ObjectPanelStateProvider, objectPanelId } from '@/core/contexts/ObjectPanelStateContext';
+import type { TabGroupState } from '@ui/dockable/tabGroupTypes';
 
 // Mock dockable panel context (replaces the old useDockablePanelState mock).
 const mockFocusPanel = vi.fn();
+let mockTabGroups: TabGroupState = {
+  right: { tabs: [], activeTab: null },
+  bottom: { tabs: [], activeTab: null },
+  floating: [],
+};
 vi.mock('@ui/dockable', () => ({
   useDockablePanelContext: () => ({
-    tabGroups: {
-      right: { tabs: [], activeTab: null },
-      bottom: { tabs: [], activeTab: null },
-      floating: [],
-    },
+    tabGroups: mockTabGroups,
     focusPanel: mockFocusPanel,
   }),
-}));
-
-// Mock tab group state helper used by the hook to find existing panels.
-vi.mock('@ui/dockable/tabGroupState', () => ({
-  getGroupForPanel: () => null,
 }));
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
@@ -84,6 +81,11 @@ describe('useObjectPanel', () => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
+    mockTabGroups = {
+      right: { tabs: [], activeTab: null },
+      bottom: { tabs: [], activeTab: null },
+      floating: [],
+    };
     mockFocusPanel.mockClear();
     if (!useObjectPanel || !closeObjectPanelGlobal) {
       throw new Error('Object panel hooks failed to load');
@@ -132,6 +134,36 @@ describe('useObjectPanel', () => {
 
     // Opening the same object twice should not create a second panel entry.
     expect(hookResult.openPanels.size).toBe(1);
+  });
+
+  it('focuses a newly opened panel after it joins a dockable tab group', async () => {
+    const pod = { kind: 'Pod', group: '', version: 'v1', name: 'api', namespace: 'default' };
+    const enrichedPod = {
+      ...pod,
+      clusterId: 'test-cluster',
+      clusterName: 'test',
+    };
+    const panelId = objectPanelId(enrichedPod);
+
+    await act(async () => {
+      hookResult.openWithObject(pod);
+      await Promise.resolve();
+    });
+
+    expect(mockFocusPanel).not.toHaveBeenCalled();
+
+    mockTabGroups = {
+      right: { tabs: [panelId], activeTab: panelId },
+      bottom: { tabs: [], activeTab: null },
+      floating: [],
+    };
+
+    await act(async () => {
+      root.render(<WrappedTestComponent />);
+      await Promise.resolve();
+    });
+
+    expect(mockFocusPanel).toHaveBeenCalledWith(panelId);
   });
 
   it('closes all panels via close()', () => {

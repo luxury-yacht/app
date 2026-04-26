@@ -79,16 +79,26 @@ describe('ServiceOverview', () => {
     });
 
     expect(getValueForLabel(container, 'Type')?.textContent).toBe('LoadBalancer');
-    expect(getValueForLabel(container, 'Cluster IP')?.textContent).toBe('10.0.0.1');
-    expect(getValueForLabel(container, 'Cluster IPs')?.textContent).toContain('10.0.0.2');
+    // Multi-IP services use the plural label and join the values.
+    expect(getValueForLabel(container, 'IP addresses')?.textContent).toContain('10.0.0.1');
+    expect(getValueForLabel(container, 'IP addresses')?.textContent).toContain('10.0.0.2');
     expect(getValueForLabel(container, 'External IPs')?.textContent).toContain('35.1.2.3');
     expect(getValueForLabel(container, 'Load Balancer IP')?.textContent).toBe('35.1.2.3');
-    expect(getValueForLabel(container, 'LB Status')?.textContent).toBe('Ready');
+    // LB status is wrapped in a healthy StatusChip when "Ready".
+    const lbStatus = getValueForLabel(container, 'LB Status');
+    expect(lbStatus?.textContent).toBe('Ready');
+    expect(lbStatus?.querySelector('.status-chip--healthy')).not.toBeNull();
+    // Health Status is wrapped in a healthy StatusChip when "Healthy".
+    const health = getValueForLabel(container, 'Health');
+    expect(health?.textContent).toBe('Healthy');
+    expect(health?.querySelector('.status-chip--healthy')).not.toBeNull();
     expect(getValueForLabel(container, 'Session Timeout')?.textContent).toBe('10800 seconds');
-    expect(getValueForLabel(container, 'Endpoint IPs')?.textContent).toContain('10.244.0.10:80');
+    // Endpoints row now shows the IP list directly (≤5 endpoints).
+    expect(getValueForLabel(container, 'Endpoints')?.textContent).toContain('10.244.0.10:80');
 
     const portsValue = getValueForLabel(container, 'Ports');
-    expect(portsValue?.textContent).toContain('http: 80/TCP → 8080 (NodePort: 30080)');
+    expect(portsValue?.textContent).toContain('http');
+    expect(portsValue?.textContent).toContain('80/TCP → 8080 (NodePort: 30080)');
     expect(portsValue?.textContent).toContain('443/TCP');
   });
 
@@ -115,5 +125,10 @@ describe('ServiceOverview', () => {
     expect(getValueForLabel(container, 'External Name')?.textContent).toBe('api.example.com');
     expect(container.textContent).not.toContain('Load Balancer IP');
     expect(container.textContent).not.toContain('External IPs');
+    // Session Affinity "None" is hidden as clutter.
+    expect(container.textContent).not.toContain('Session Affinity');
+    // Zero endpoints surface as an unhealthy status chip rather than a count.
+    const endpoints = getValueForLabel(container, 'Endpoints');
+    expect(endpoints?.querySelector('.status-chip--unhealthy')).not.toBeNull();
   });
 });

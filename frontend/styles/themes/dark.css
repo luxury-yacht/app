@@ -218,28 +218,44 @@
   --log-tooltip-shadow: var(--tooltip-shadow);
   --log-fallback-retry-hover-bg: rgba(245, 158, 11, 0.2);
 
-  /* Log pod colors - Vibrant for dark backgrounds */
-  --log-pod-color-1: #4ade80;
-  --log-pod-color-2: #60a5fa;
-  --log-pod-color-3: #fb923c;
-  --log-pod-color-4: #c084fc;
-  --log-pod-color-5: #22d3ee;
-  --log-pod-color-6: #a3e635;
-  --log-pod-color-7: #f472b6;
-  --log-pod-color-8: #818cf8;
-  --log-pod-color-9: #2dd4bf;
-  --log-pod-color-10: #f87171;
-  --log-pod-color-11: #facc15;
-  --log-pod-color-12: #e879f9;
-  --log-pod-color-13: #a78bfa;
-  --log-pod-color-14: #5eead4;
-  --log-pod-color-15: #fdba74;
-  --log-pod-color-16: #fb7185;
-  --log-pod-color-17: #818cf8;
-  --log-pod-color-18: #4ade80;
-  --log-pod-color-19: #38bdf8;
-  --log-pod-color-20: #d946ef;
-  --log-pod-color-fallback: var(--color-base-400);
+  /* Hash-based color palette — used by both pod-log row colors and kind
+     badges. A deterministic hash of the source string (pod name / kind name)
+     selects a slot 1..24.
+
+     Layout: slots 1..17 walk the color wheel (red → orange → ... → rose) at
+     saturated Tailwind-400 values, slots 18..20 are "shoulder" hues that
+     fill the largest visible gaps, slots 21..24 are earthy neutrals. */
+  --hash-color-1: #f87171; /* red */
+  --hash-color-2: #fb923c; /* orange */
+  --hash-color-3: #fbbf24; /* amber */
+  --hash-color-4: #facc15; /* yellow */
+  --hash-color-5: #a3e635; /* lime */
+  --hash-color-6: #4ade80; /* green */
+  --hash-color-7: #34d399; /* emerald */
+  --hash-color-8: #2dd4bf; /* teal */
+  --hash-color-9: #22d3ee; /* cyan */
+  --hash-color-10: #38bdf8; /* sky */
+  --hash-color-11: #60a5fa; /* blue */
+  --hash-color-12: #818cf8; /* indigo */
+  --hash-color-13: #a78bfa; /* violet */
+  --hash-color-14: #c084fc; /* purple */
+  --hash-color-15: #e879f9; /* fuchsia */
+  --hash-color-16: #f472b6; /* pink */
+  --hash-color-17: #fb7185; /* rose */
+  --hash-color-18: #f43f5e; /* crimson — between rose and red */
+  --hash-color-19: #6366f1; /* iris — between indigo and violet */
+  --hash-color-20: #d946ef; /* magenta — between fuchsia and pink */
+  --hash-color-21: #b08868; /* brown */
+  --hash-color-22: #95a86a; /* olive */
+  --hash-color-23: #94a3b8; /* slate */
+  --hash-color-24: #d6d3d1; /* stone */
+  --hash-color-fallback: var(--color-base-400);
+  /* Boosts badge text within the same hue: small lightness lift plus chroma
+     multiplier in OKLCH space, so text reads as a more vivid version of
+     the slot color rather than a paler/washed-out one. Bg/border tints
+     remain derived from the unmodified slot color. */
+  --hash-text-l-shift: 0.3;
+  --hash-text-c-mult: 1;
 
   /* Dropdown */
   --dropdown-trigger-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);

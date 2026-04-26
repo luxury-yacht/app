@@ -651,27 +651,22 @@ type ServicePortDetails struct {
 	NodePort   int32  `json:"nodePort,omitempty"`
 }
 
+// EndpointSliceDetails describes a single EndpointSlice resource. Address,
+// port, and address-type fields are flattened directly because each Object
+// Panel renders one EndpointSlice; aggregation across slices for a Service
+// uses a different model.
 type EndpointSliceDetails struct {
-	Kind          string                 `json:"kind"`
-	Name          string                 `json:"name"`
-	Namespace     string                 `json:"namespace"`
-	Age           string                 `json:"age"`
-	Details       string                 `json:"details"`
-	Slices        []EndpointSliceSummary `json:"slices,omitempty"`
-	TotalReady    int                    `json:"totalReady"`
-	TotalNotReady int                    `json:"totalNotReady"`
-	TotalPorts    int                    `json:"totalPorts"`
-	Labels        map[string]string      `json:"labels,omitempty"`
-	Annotations   map[string]string      `json:"annotations,omitempty"`
-}
-
-type EndpointSliceSummary struct {
+	Kind              string                 `json:"kind"`
 	Name              string                 `json:"name"`
-	AddressType       string                 `json:"addressType"`
+	Namespace         string                 `json:"namespace"`
 	Age               string                 `json:"age"`
+	Details           string                 `json:"details"`
+	AddressType       string                 `json:"addressType"`
 	ReadyAddresses    []EndpointSliceAddress `json:"readyAddresses,omitempty"`
 	NotReadyAddresses []EndpointSliceAddress `json:"notReadyAddresses,omitempty"`
 	Ports             []EndpointSlicePort    `json:"ports,omitempty"`
+	Labels            map[string]string      `json:"labels,omitempty"`
+	Annotations       map[string]string      `json:"annotations,omitempty"`
 }
 
 type EndpointSliceAddress struct {
@@ -723,6 +718,155 @@ type IngressBackendDetails struct {
 type IngressTLSDetails struct {
 	Hosts      []string `json:"hosts"`
 	SecretName string   `json:"secretName,omitempty"`
+}
+
+// ObjectRef carries the cluster ID + GVK + namespace/name required to open
+// an object without ambiguous kind-only resolution.
+type ObjectRef struct {
+	ClusterID string `json:"clusterId"`
+	Group     string `json:"group"`
+	Version   string `json:"version"`
+	Kind      string `json:"kind"`
+	Namespace string `json:"namespace,omitempty"`
+	Name      string `json:"name"`
+}
+
+// DisplayRef preserves unresolved cross-references that cannot be opened safely
+// because the source object did not provide a full GVK.
+type DisplayRef struct {
+	ClusterID string `json:"clusterId"`
+	Group     string `json:"group,omitempty"`
+	Kind      string `json:"kind"`
+	Namespace string `json:"namespace,omitempty"`
+	Name      string `json:"name"`
+}
+
+type RefOrDisplay struct {
+	Ref     *ObjectRef  `json:"ref,omitempty"`
+	Display *DisplayRef `json:"display,omitempty"`
+}
+
+type ConditionState struct {
+	Type               string `json:"type,omitempty"`
+	Status             string `json:"status"`
+	Reason             string `json:"reason,omitempty"`
+	Message            string `json:"message,omitempty"`
+	LastTransitionTime string `json:"lastTransitionTime,omitempty"`
+}
+
+type ConditionsSummary struct {
+	Accepted   *ConditionState `json:"accepted,omitempty"`
+	Programmed *ConditionState `json:"programmed,omitempty"`
+	Ready      *ConditionState `json:"ready,omitempty"`
+	Resolved   *ConditionState `json:"resolvedRefs,omitempty"`
+}
+
+type GatewayClassDetails struct {
+	Kind        string            `json:"kind"`
+	Name        string            `json:"name"`
+	Controller  string            `json:"controller"`
+	Age         string            `json:"age"`
+	Details     string            `json:"details"`
+	Conditions  []ConditionState  `json:"conditions,omitempty"`
+	Summary     ConditionsSummary `json:"summary"`
+	Parameters  *RefOrDisplay     `json:"parameters,omitempty"`
+	UsedBy      []ObjectRef       `json:"usedBy,omitempty"`
+	Labels      map[string]string `json:"labels,omitempty"`
+	Annotations map[string]string `json:"annotations,omitempty"`
+}
+
+type GatewayDetails struct {
+	Kind            string                   `json:"kind"`
+	Name            string                   `json:"name"`
+	Namespace       string                   `json:"namespace"`
+	Age             string                   `json:"age"`
+	Details         string                   `json:"details"`
+	GatewayClassRef ObjectRef                `json:"gatewayClassRef"`
+	Addresses       []string                 `json:"addresses,omitempty"`
+	Listeners       []GatewayListenerDetails `json:"listeners,omitempty"`
+	Conditions      []ConditionState         `json:"conditions,omitempty"`
+	Summary         ConditionsSummary        `json:"summary"`
+	Labels          map[string]string        `json:"labels,omitempty"`
+	Annotations     map[string]string        `json:"annotations,omitempty"`
+}
+
+type GatewayListenerDetails struct {
+	Name           string           `json:"name"`
+	Hostname       string           `json:"hostname,omitempty"`
+	Port           int32            `json:"port"`
+	Protocol       string           `json:"protocol"`
+	AttachedRoutes int32            `json:"attachedRoutes"`
+	Conditions     []ConditionState `json:"conditions,omitempty"`
+}
+
+type RouteDetails struct {
+	Kind        string             `json:"kind"`
+	Name        string             `json:"name"`
+	Namespace   string             `json:"namespace"`
+	Age         string             `json:"age"`
+	Details     string             `json:"details"`
+	Hostnames   []string           `json:"hostnames,omitempty"`
+	ParentRefs  []RefOrDisplay     `json:"parentRefs,omitempty"`
+	BackendRefs []RefOrDisplay     `json:"backendRefs,omitempty"`
+	Rules       []RouteRuleDetails `json:"rules,omitempty"`
+	Conditions  []ConditionState   `json:"conditions,omitempty"`
+	Summary     ConditionsSummary  `json:"summary"`
+	Labels      map[string]string  `json:"labels,omitempty"`
+	Annotations map[string]string  `json:"annotations,omitempty"`
+}
+
+type RouteRuleDetails struct {
+	Matches     []string       `json:"matches,omitempty"`
+	BackendRefs []RefOrDisplay `json:"backendRefs,omitempty"`
+}
+
+type HTTPRouteDetails = RouteDetails
+type GRPCRouteDetails = RouteDetails
+type TLSRouteDetails = RouteDetails
+
+type ListenerSetDetails struct {
+	Kind        string                   `json:"kind"`
+	Name        string                   `json:"name"`
+	Namespace   string                   `json:"namespace"`
+	Age         string                   `json:"age"`
+	Details     string                   `json:"details"`
+	ParentRef   RefOrDisplay             `json:"parentRef"`
+	Listeners   []GatewayListenerDetails `json:"listeners,omitempty"`
+	Conditions  []ConditionState         `json:"conditions,omitempty"`
+	Summary     ConditionsSummary        `json:"summary"`
+	Labels      map[string]string        `json:"labels,omitempty"`
+	Annotations map[string]string        `json:"annotations,omitempty"`
+}
+
+type ReferenceGrantDetails struct {
+	Kind        string                   `json:"kind"`
+	Name        string                   `json:"name"`
+	Namespace   string                   `json:"namespace"`
+	Age         string                   `json:"age"`
+	Details     string                   `json:"details"`
+	From        []ReferenceGrantFromInfo `json:"from,omitempty"`
+	To          []RefOrDisplay           `json:"to,omitempty"`
+	Labels      map[string]string        `json:"labels,omitempty"`
+	Annotations map[string]string        `json:"annotations,omitempty"`
+}
+
+type ReferenceGrantFromInfo struct {
+	Group     string `json:"group"`
+	Kind      string `json:"kind"`
+	Namespace string `json:"namespace"`
+}
+
+type BackendTLSPolicyDetails struct {
+	Kind        string            `json:"kind"`
+	Name        string            `json:"name"`
+	Namespace   string            `json:"namespace"`
+	Age         string            `json:"age"`
+	Details     string            `json:"details"`
+	TargetRefs  []RefOrDisplay    `json:"targetRefs,omitempty"`
+	Conditions  []ConditionState  `json:"conditions,omitempty"`
+	Summary     ConditionsSummary `json:"summary"`
+	Labels      map[string]string `json:"labels,omitempty"`
+	Annotations map[string]string `json:"annotations,omitempty"`
 }
 
 type IngressClassDetails struct {

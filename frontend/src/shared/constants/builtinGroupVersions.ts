@@ -71,6 +71,16 @@ const BUILTIN_KIND_GROUP_VERSIONS: Record<string, BuiltinGroupVersion> = {
   IngressClass: { group: 'networking.k8s.io', version: 'v1' },
   NetworkPolicy: { group: 'networking.k8s.io', version: 'v1' },
 
+  // gateway.networking.k8s.io/v1
+  GatewayClass: { group: 'gateway.networking.k8s.io', version: 'v1' },
+  Gateway: { group: 'gateway.networking.k8s.io', version: 'v1' },
+  ListenerSet: { group: 'gateway.networking.k8s.io', version: 'v1' },
+  HTTPRoute: { group: 'gateway.networking.k8s.io', version: 'v1' },
+  GRPCRoute: { group: 'gateway.networking.k8s.io', version: 'v1' },
+  TLSRoute: { group: 'gateway.networking.k8s.io', version: 'v1' },
+  BackendTLSPolicy: { group: 'gateway.networking.k8s.io', version: 'v1' },
+  ReferenceGrant: { group: 'gateway.networking.k8s.io', version: 'v1' },
+
   // rbac.authorization.k8s.io/v1
   Role: { group: 'rbac.authorization.k8s.io', version: 'v1' },
   RoleBinding: { group: 'rbac.authorization.k8s.io', version: 'v1' },

@@ -181,6 +181,7 @@
   display: grid;
   gap: 1.5rem;
   grid-template-columns: 1fr;
+  padding-bottom: 1.3rem;
 }
 
 .overview-section {

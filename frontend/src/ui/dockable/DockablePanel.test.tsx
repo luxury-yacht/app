@@ -137,6 +137,114 @@ describe('DockablePanel', () => {
     unmount();
   });
 
+  it('closes the active tab on Escape using left-adjacent activation', async () => {
+    const Host = () => {
+      const [openPanels, setOpenPanels] = React.useState({
+        a: true,
+        b: true,
+        c: true,
+      });
+      const closePanel = (key: keyof typeof openPanels) => {
+        setOpenPanels((current) => ({ ...current, [key]: false }));
+      };
+
+      return (
+        <>
+          {openPanels.a && (
+            <DockablePanel
+              panelId="panel-a"
+              title="A"
+              defaultPosition="right"
+              isOpen={openPanels.a}
+              onClose={() => closePanel('a')}
+              closeActiveTabOnEscape
+            >
+              <button type="button">Panel A body</button>
+            </DockablePanel>
+          )}
+          {openPanels.b && (
+            <DockablePanel
+              panelId="panel-b"
+              title="B"
+              defaultPosition="right"
+              isOpen={openPanels.b}
+              onClose={() => closePanel('b')}
+              closeActiveTabOnEscape
+            >
+              <button type="button">Panel B body</button>
+            </DockablePanel>
+          )}
+          {openPanels.c && (
+            <DockablePanel
+              panelId="panel-c"
+              title="C"
+              defaultPosition="right"
+              isOpen={openPanels.c}
+              onClose={() => closePanel('c')}
+              closeActiveTabOnEscape
+            >
+              <button type="button">Panel C body</button>
+            </DockablePanel>
+          )}
+        </>
+      );
+    };
+
+    const { unmount } = await renderPanel(<Host />);
+
+    const tabB = document.querySelector('[role="tab"][data-panel-id="panel-b"]') as HTMLElement;
+    expect(tabB).toBeTruthy();
+
+    await act(async () => {
+      tabB.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      tabB.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(
+      document.querySelector('[role="tab"][data-panel-id="panel-b"]')?.getAttribute('aria-selected')
+    ).toBe('true');
+
+    await act(async () => {
+      tabB.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+      );
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    const selectedTabA = document.querySelector(
+      '[role="tab"][data-panel-id="panel-a"]'
+    ) as HTMLElement | null;
+    expect(document.querySelector('[role="tab"][data-panel-id="panel-b"]')).toBeNull();
+    expect(selectedTabA?.getAttribute('aria-selected')).toBe('true');
+    expect(document.activeElement).toBe(selectedTabA);
+
+    await act(async () => {
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+      );
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    const selectedTabC = document.querySelector(
+      '[role="tab"][data-panel-id="panel-c"]'
+    ) as HTMLElement | null;
+    expect(document.querySelector('[role="tab"][data-panel-id="panel-a"]')).toBeNull();
+    expect(selectedTabC?.getAttribute('aria-selected')).toBe('true');
+    expect(document.activeElement).toBe(selectedTabC);
+
+    await act(async () => {
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+      );
+      await Promise.resolve();
+    });
+
+    expect(document.querySelector('.dockable-panel')).toBeNull();
+
+    unmount();
+  });
+
   it('updates docking position and notifies via onPositionChange', async () => {
     const onPositionChange = vi.fn();
     const { unmount } = await renderPanel(
