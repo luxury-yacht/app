@@ -72,6 +72,8 @@
 
 .overview-row-label {
   color: var(--color-text-tertiary);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-mono);
   min-width: 5rem;
   flex-shrink: 0;
 }
