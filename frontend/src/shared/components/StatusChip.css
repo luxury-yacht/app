@@ -1,0 +1,42 @@
+/* StatusChip — small uppercase pill for status indicators.
+
+   Visual recipe (per variant):
+     - background: same-hue color at ~20-25% alpha
+     - text: bright same-hue
+     - border: same hue at ~20-25% alpha for definition without weight */
+
+.status-chip {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: var(--border-radius-round);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-badge);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border: 1px solid transparent;
+  line-height: 1.4;
+}
+
+.status-chip--healthy {
+  background: var(--status-available-bg);
+  color: var(--status-available-text);
+  border-color: rgba(34, 197, 94, 0.2);
+}
+
+.status-chip--unhealthy {
+  background: var(--status-failed-bg);
+  color: var(--status-failed-text);
+  border-color: rgba(239, 68, 68, 0.25);
+}
+
+.status-chip--warning {
+  background: var(--status-warning-bg);
+  color: var(--status-warning-text);
+  border-color: rgba(249, 115, 22, 0.25);
+}
+
+.status-chip--info {
+  background: var(--badge-blue-bg);
+  color: var(--badge-blue-text);
+  border-color: rgba(59, 130, 246, 0.2);
+}

@@ -116,9 +116,9 @@ describe('GatewayAPIOverview', () => {
     expect(getValueForLabel(container, 'Listeners')?.textContent).toContain('2 routes');
     const conditionsValue = getValueForLabel(container, 'Conditions');
     expect(conditionsValue?.textContent).toContain('Accepted');
-    // Status now drives badge color (healthy class) rather than appearing as text.
-    const acceptedBadge = conditionsValue?.querySelector('.overview-condition-status');
-    expect(acceptedBadge?.classList.contains('healthy')).toBe(true);
+    // Status drives chip variant (healthy) rather than appearing as text.
+    const acceptedBadge = conditionsValue?.querySelector('.status-chip');
+    expect(acceptedBadge?.classList.contains('status-chip--healthy')).toBe(true);
     expect(
       container.querySelector('[data-testid="object-panel-link"]')?.getAttribute('data-name')
     ).toBe('shared');

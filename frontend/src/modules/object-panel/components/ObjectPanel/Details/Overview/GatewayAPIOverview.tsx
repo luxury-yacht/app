@@ -6,7 +6,7 @@ import React from 'react';
 import { types } from '@wailsjs/go/models';
 import { OverviewItem } from '@modules/object-panel/components/ObjectPanel/Details/Overview/shared/OverviewItem';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
-import Tooltip from '@shared/components/Tooltip';
+import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
 import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
@@ -22,9 +22,9 @@ interface GatewayAPIOverviewProps {
   backendTLSPolicyDetails?: types.BackendTLSPolicyDetails | null;
 }
 
-const conditionStatusClass = (status: string): string => {
+const conditionVariant = (status: string): StatusChipVariant => {
   if (status === 'True') return 'healthy';
-  if (status === 'False') return 'failed';
+  if (status === 'False') return 'unhealthy';
   return 'warning';
 };
 
@@ -99,23 +99,15 @@ const ConditionList: React.FC<{ conditions?: types.ConditionState[] | null }> = 
   }
   return (
     <div className="overview-condition-list">
-      {conditions.map((condition) => {
-        const tooltip = condition.message || condition.reason || '';
-        const badge = (
-          <span className={`overview-condition-status ${conditionStatusClass(condition.status)}`}>
-            {condition.type || 'Condition'}
-          </span>
-        );
-        return (
-          <Tooltip
-            key={`${condition.type ?? 'condition'}-${condition.reason ?? condition.status}`}
-            content={tooltip}
-            disabled={!tooltip}
-          >
-            {badge}
-          </Tooltip>
-        );
-      })}
+      {conditions.map((condition) => (
+        <StatusChip
+          key={`${condition.type ?? 'condition'}-${condition.reason ?? condition.status}`}
+          variant={conditionVariant(condition.status)}
+          tooltip={condition.message || condition.reason || undefined}
+        >
+          {condition.type || 'Condition'}
+        </StatusChip>
+      ))}
     </div>
   );
 };

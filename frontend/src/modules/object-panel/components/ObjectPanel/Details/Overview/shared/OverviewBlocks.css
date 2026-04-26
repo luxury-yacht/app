@@ -108,9 +108,8 @@
 }
 
 /* ---------- Conditions ----------
-   A row of compact pill badges, one per condition. Color encodes status
-   (green=True, red=False, amber=Unknown/other); the condition type is the
-   pill label, and the full message lives in the title attribute (tooltip). */
+   Layout-only: lays a row of StatusChip components on a single line that
+   wraps when needed. The chip styling itself lives in StatusChip.css. */
 
 .overview-condition-list {
   display: flex;
@@ -118,36 +117,6 @@
   flex-wrap: wrap;
   align-items: baseline;
   gap: var(--spacing-xs);
-}
-
-.overview-condition-status {
-  display: inline-block;
-  padding: 1px 6px;
-  border-radius: var(--border-radius-round);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-badge);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  border: 1px solid transparent;
-  line-height: 1.4;
-}
-
-.overview-condition-status.healthy {
-  background: var(--status-available-bg);
-  color: var(--status-available-text);
-  border-color: rgba(34, 197, 94, 0.2);
-}
-
-.overview-condition-status.failed {
-  background: var(--status-failed-bg);
-  color: var(--status-failed-text);
-  border-color: rgba(239, 68, 68, 0.25);
-}
-
-.overview-condition-status.warning {
-  background: var(--status-warning-bg);
-  color: var(--status-warning-text);
-  border-color: rgba(249, 115, 22, 0.25);
 }
 
 /* When conditions live inside a card (e.g., listener), separate them
