@@ -402,18 +402,35 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
       }
 
       const targetSurface = getTargetSurface(event.target);
+      if (event.key === 'Escape') {
+        for (const surface of getSurfaceCandidates(event.target)) {
+          if (surface.onEscape) {
+            const escapeResult = surface.onEscape(event);
+            const handledEscape = escapeResult === true || escapeResult === 'handled-no-prevent';
+            const handledEscapeNoPrevent = escapeResult === 'handled-no-prevent';
+
+            if (handledEscape) {
+              if (!handledEscapeNoPrevent) {
+                event.preventDefault();
+              }
+              event.stopPropagation();
+              return;
+            }
+          }
+
+          if (surface.suppressShortcuts) {
+            return;
+          }
+        }
+      }
+
       if (targetSurface) {
-        const escapeResult =
-          event.key === 'Escape' && targetSurface.onEscape ? targetSurface.onEscape(event) : false;
-        const handledEscape = escapeResult === true || escapeResult === 'handled-no-prevent';
-        const handledEscapeNoPrevent = escapeResult === 'handled-no-prevent';
-        const keyResult =
-          !handledEscape && targetSurface.onKeyDown ? targetSurface.onKeyDown(event) : false;
+        const keyResult = targetSurface.onKeyDown ? targetSurface.onKeyDown(event) : false;
         const handledKey = keyResult === true || keyResult === 'handled-no-prevent';
         const handledKeyNoPrevent = keyResult === 'handled-no-prevent';
 
-        if (handledEscape || handledKey) {
-          if (!handledEscapeNoPrevent && !handledKeyNoPrevent) {
+        if (handledKey) {
+          if (!handledKeyNoPrevent) {
             event.preventDefault();
           }
           event.stopPropagation();

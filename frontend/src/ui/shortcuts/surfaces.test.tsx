@@ -394,6 +394,70 @@ describe('keyboard surfaces', () => {
     expect(regionHandler).toHaveBeenCalledTimes(1);
   });
 
+  it('falls back to the parent surface for Escape when the deepest surface does not handle it', async () => {
+    const editorHandler = vi.fn();
+    const panelHandler = vi.fn();
+
+    const Harness = () => {
+      const panelRef = useRef<HTMLDivElement>(null);
+      const editorRef = useRef<HTMLDivElement>(null);
+
+      useKeyboardSurface({
+        kind: 'panel',
+        rootRef: panelRef,
+        active: true,
+        onEscape: () => {
+          panelHandler();
+          return true;
+        },
+      });
+
+      useKeyboardSurface({
+        kind: 'editor',
+        rootRef: editorRef,
+        active: true,
+        onEscape: () => {
+          editorHandler();
+          return false;
+        },
+      });
+
+      return (
+        <div ref={panelRef}>
+          <div ref={editorRef}>
+            <button id="inside-editor">Inside editor</button>
+          </div>
+        </div>
+      );
+    };
+
+    await act(async () => {
+      root.render(
+        <KeyboardProvider>
+          <Harness />
+        </KeyboardProvider>
+      );
+      await Promise.resolve();
+    });
+
+    const insideEditor = document.querySelector('#inside-editor') as HTMLButtonElement | null;
+    expect(insideEditor).not.toBeNull();
+    insideEditor?.focus();
+
+    const event = new KeyboardEvent('keydown', {
+      key: 'Escape',
+      bubbles: true,
+      cancelable: true,
+    });
+    act(() => {
+      insideEditor?.dispatchEvent(event);
+    });
+
+    expect(editorHandler).toHaveBeenCalledTimes(1);
+    expect(panelHandler).toHaveBeenCalledTimes(1);
+    expect(event.defaultPrevented).toBe(true);
+  });
+
   it('preserves registration order when inline surface callbacks change on rerender', async () => {
     const firstHandler = vi.fn();
     const secondHandler = vi.fn();

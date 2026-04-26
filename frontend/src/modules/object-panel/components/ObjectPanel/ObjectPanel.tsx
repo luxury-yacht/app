@@ -347,7 +347,6 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
     isOpen,
     setActiveTab,
     dispatch,
-    close,
     currentTab: activeTab,
   });
 
@@ -687,6 +686,7 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
         defaultGroupKey={openTargetGroupKey}
         className="object-panel-dockable"
         tabKindClass={tabKindClass}
+        closeActiveTabOnEscape
         allowMaximize
         maximizeTargetSelector=".content-body"
         onClose={close}

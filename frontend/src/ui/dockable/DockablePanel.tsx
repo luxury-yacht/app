@@ -73,6 +73,8 @@ interface DockablePanelProps {
   contentClassName?: string;
   // Optional normalized kind class for rendering a compact tab indicator.
   tabKindClass?: string;
+  // When enabled, Escape closes the active tab in this dockable group.
+  closeActiveTabOnEscape?: boolean;
 
   // Maximize support
   allowMaximize?: boolean;
@@ -171,6 +173,7 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     className = '',
     contentClassName = '',
     tabKindClass,
+    closeActiveTabOnEscape = false,
     allowMaximize = false,
     onMaximizeChange,
     maximizeTargetSelector = '.content-body',
@@ -207,6 +210,7 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     groupLeaderByKeyRef,
     updateGridTableHoverSuppression,
     movePanelBetweenGroupsAndFocus,
+    lastFocusedGroupKey,
     setLastFocusedGroupKey,
   } = useDockablePanelContext();
   const panelHostNode = useDockablePanelHost();
@@ -594,10 +598,22 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     ]
   );
 
+  const handleEscapeCloseActiveTab = useCallback(() => {
+    if (!closeActiveTabOnEscape) {
+      return false;
+    }
+    const activePanelId = groupInfo?.activeTab ?? panelId;
+    closeTab(activePanelId, 'left');
+    return true;
+  }, [closeActiveTabOnEscape, closeTab, groupInfo?.activeTab, panelId]);
+
   useKeyboardSurface({
     kind: 'panel',
     rootRef: panelRef,
     active: panelState.isOpen && isGroupLeader,
+    captureWhenActive:
+      closeActiveTabOnEscape && (!lastFocusedGroupKey || lastFocusedGroupKey === groupKey),
+    onEscape: closeActiveTabOnEscape ? handleEscapeCloseActiveTab : undefined,
     onKeyDown: (event) => {
       if (event.key !== 'Tab') {
         return false;
