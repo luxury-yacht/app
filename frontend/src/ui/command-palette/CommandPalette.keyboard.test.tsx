@@ -170,6 +170,39 @@ describe('CommandPalette keyboard integration', () => {
     expect(firstAction).not.toHaveBeenCalled();
   });
 
+  it('closes on Escape through the palette surface while the input is focused', async () => {
+    const commands: Command[] = [
+      { id: 'first', label: 'First', category: 'Application', action: vi.fn() },
+    ];
+
+    await act(async () => {
+      root.render(
+        <KeyboardProvider>
+          <CommandPalette commands={commands} />
+        </KeyboardProvider>
+      );
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      dispatchOpenShortcut();
+      await Promise.resolve();
+    });
+
+    const input = document.querySelector<HTMLInputElement>('.command-palette-input');
+    expect(input).not.toBeNull();
+    expect(document.activeElement).toBe(input);
+
+    await act(async () => {
+      input?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+      );
+      await Promise.resolve();
+    });
+
+    expect(document.querySelector('.command-palette')).toBeNull();
+  });
+
   it('does not open while another blocking surface is active', async () => {
     const commands: Command[] = [
       { id: 'first', label: 'First', category: 'Application', action: vi.fn() },

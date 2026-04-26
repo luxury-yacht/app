@@ -418,13 +418,27 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
             }
           }
 
+          if (surface.onKeyDown) {
+            const keyResult = surface.onKeyDown(event);
+            const handledKey = keyResult === true || keyResult === 'handled-no-prevent';
+            const handledKeyNoPrevent = keyResult === 'handled-no-prevent';
+
+            if (handledKey) {
+              if (!handledKeyNoPrevent) {
+                event.preventDefault();
+              }
+              event.stopPropagation();
+              return;
+            }
+          }
+
           if (surface.suppressShortcuts) {
             return;
           }
         }
       }
 
-      if (targetSurface) {
+      if (targetSurface && event.key !== 'Escape') {
         const keyResult = targetSurface.onKeyDown ? targetSurface.onKeyDown(event) : false;
         const handledKey = keyResult === true || keyResult === 'handled-no-prevent';
         const handledKeyNoPrevent = keyResult === 'handled-no-prevent';
