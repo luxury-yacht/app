@@ -47,7 +47,7 @@ describe('ObjectPanelHeader', () => {
     expect(name?.textContent).toBe('worker-1');
   });
 
-  it('sanitizes the kind class and renders alias with title', async () => {
+  it('attaches a hashed kind-color slot class and renders alias with title', async () => {
     await renderComponent({
       kind: 'Deployment@Beta',
       kindAlias: 'Workload',
@@ -59,7 +59,8 @@ describe('ObjectPanelHeader', () => {
 
     expect(badge?.textContent).toBe('Workload');
     expect(badge?.classList.contains('kind-badge')).toBe(true);
-    expect(badge?.classList.contains('deploymentbeta')).toBe(true);
+    const slotClass = Array.from(badge?.classList ?? []).find((c) => c.startsWith('hash-color-'));
+    expect(slotClass).toMatch(/^hash-color-\d{1,2}$/);
     expect(badge?.getAttribute('title')).toBe('Deployment@Beta');
     expect(name?.textContent).toBe('api');
   });

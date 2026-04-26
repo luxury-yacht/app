@@ -24,10 +24,17 @@ import {
 import type { ColumnWidthInput } from '@shared/components/tables/GridTable.types';
 
 describe('GridTable utils', () => {
-  it('normalizes kind class names', () => {
-    expect(normalizeKindClass('Deployment')).toBe('deployment');
-    expect(normalizeKindClass('Custom Kind!')).toBe('customkind');
-    expect(normalizeKindClass('')).toBe('kind');
+  it('returns a hash-based color slot class for known kinds', () => {
+    // Same kind always lands on the same slot.
+    expect(normalizeKindClass('Deployment')).toBe(normalizeKindClass('Deployment'));
+    // Casing and surrounding whitespace are normalized away.
+    expect(normalizeKindClass('Deployment')).toBe(normalizeKindClass('  deployment  '));
+    // The slot class follows the documented hash-color-{1..N} contract.
+    expect(normalizeKindClass('Deployment')).toMatch(/^hash-color-\d{1,2}$/);
+  });
+
+  it('returns an empty class for missing kinds so the badge falls back to grey', () => {
+    expect(normalizeKindClass('')).toBe('');
   });
 
   it('detects fixed column keys', () => {

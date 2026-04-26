@@ -2589,13 +2589,13 @@ describe('LogViewer active pod synchronisation', () => {
       objPanelLogsApiTimestampFormat: 'YYYY/MM/DD HH:mm:ss',
       objPanelLogsApiTimestampUseLocalTimeZone: false,
     });
-    for (let index = 1; index <= 20; index += 1) {
+    for (let index = 1; index <= 24; index += 1) {
       document.documentElement.style.setProperty(
-        `--log-pod-color-${index}`,
+        `--hash-color-${index}`,
         `rgb(${index}, ${index}, ${index})`
       );
     }
-    document.documentElement.style.setProperty('--log-pod-color-fallback', 'rgb(99, 99, 99)');
+    document.documentElement.style.setProperty('--hash-color-fallback', 'rgb(99, 99, 99)');
 
     seedLogSnapshot(
       [
@@ -2637,10 +2637,10 @@ describe('LogViewer active pod synchronisation', () => {
       secondPodButton.style.getPropertyValue('--pod-color')
     );
 
-    for (let index = 1; index <= 20; index += 1) {
-      document.documentElement.style.removeProperty(`--log-pod-color-${index}`);
+    for (let index = 1; index <= 24; index += 1) {
+      document.documentElement.style.removeProperty(`--hash-color-${index}`);
     }
-    document.documentElement.style.removeProperty('--log-pod-color-fallback');
+    document.documentElement.style.removeProperty('--hash-color-fallback');
   });
 
   it('keeps separate prefs entries for different panels', async () => {

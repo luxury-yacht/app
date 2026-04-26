@@ -213,27 +213,34 @@
   --log-fallback-retry-hover-bg: rgba(245, 158, 11, 0.15);
 
   /* Log pod colors - Darker variants for light backgrounds */
-  --log-pod-color-1: #16a34a;
-  --log-pod-color-2: #2563eb;
-  --log-pod-color-3: #ea580c;
-  --log-pod-color-4: #9333ea;
-  --log-pod-color-5: #0891b2;
-  --log-pod-color-6: #65a30d;
-  --log-pod-color-7: #db2777;
-  --log-pod-color-8: #4f46e5;
-  --log-pod-color-9: #0f766e;
-  --log-pod-color-10: #dc2626;
-  --log-pod-color-11: #ca8a04;
-  --log-pod-color-12: #c026d3;
-  --log-pod-color-13: #7c3aed;
-  --log-pod-color-14: #0f766e;
-  --log-pod-color-15: #b45309;
-  --log-pod-color-16: #be123c;
-  --log-pod-color-17: #4338ca;
-  --log-pod-color-18: #15803d;
-  --log-pod-color-19: #0ea5e9;
-  --log-pod-color-20: #a21caf;
-  --log-pod-color-fallback: var(--color-base-500);
+  /* Hash-based color palette — used by both pod-log row colors and kind
+     badges. A deterministic hash of the source string (pod name / kind name)
+     selects a slot 1..24. Tuned for legibility on light backgrounds. */
+  --hash-color-1: #16a34a;
+  --hash-color-2: #2563eb;
+  --hash-color-3: #ea580c;
+  --hash-color-4: #9333ea;
+  --hash-color-5: #0891b2;
+  --hash-color-6: #65a30d;
+  --hash-color-7: #db2777;
+  --hash-color-8: #4f46e5;
+  --hash-color-9: #0f766e;
+  --hash-color-10: #dc2626;
+  --hash-color-11: #ca8a04;
+  --hash-color-12: #c026d3;
+  --hash-color-13: #7c3aed;
+  --hash-color-14: #047857;
+  --hash-color-15: #b45309;
+  --hash-color-16: #be123c;
+  --hash-color-17: #d97706;
+  --hash-color-18: #0369a1;
+  --hash-color-19: #0ea5e9;
+  --hash-color-20: #a21caf;
+  --hash-color-21: #475569;
+  --hash-color-22: #78716c;
+  --hash-color-23: #4d7c0f;
+  --hash-color-24: #9f1239;
+  --hash-color-fallback: var(--color-base-500);
 
   /* Dropdown */
   --dropdown-trigger-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);

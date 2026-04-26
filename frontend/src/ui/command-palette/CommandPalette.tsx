@@ -15,6 +15,7 @@ import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { getDisplayKind, aliasToKindMap, canonicalKinds } from '@/utils/kindAliasMap';
+import { getKindColorClass } from '@shared/utils/kindBadgeColors';
 import { useShortNames } from '@/hooks/useShortNames';
 import { buildObjectReference } from '@shared/utils/objectIdentity';
 import { Command } from './CommandPaletteCommands';
@@ -40,10 +41,7 @@ const CATEGORY_ORDER = [
 const CATALOG_RESULT_LIMIT = 20;
 const CATALOG_SEARCH_DEBOUNCE_MS = 200;
 
-const normalizeKindClass = (value: string) => {
-  const normalized = value.toLowerCase().replace(/[^a-z0-9]/g, '');
-  return normalized.length > 0 ? normalized : 'kind';
-};
+const normalizeKindClass = (value: string) => getKindColorClass(value);
 
 export interface ParsedQueryTokens {
   kindTokens: string[];

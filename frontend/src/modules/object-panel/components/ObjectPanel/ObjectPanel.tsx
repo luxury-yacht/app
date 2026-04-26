@@ -33,6 +33,7 @@ import { useObjectPanelTabs } from '@modules/object-panel/components/ObjectPanel
 import { useObjectPanelPods } from '@modules/object-panel/components/ObjectPanel/hooks/useObjectPanelPods';
 import { ObjectPanelTabs } from '@modules/object-panel/components/ObjectPanel/ObjectPanelTabs';
 import { ObjectPanelHeader } from '@modules/object-panel/components/ObjectPanel/ObjectPanelHeader';
+import { getKindColorClass } from '@shared/utils/kindBadgeColors';
 import { ObjectPanelContent } from '@modules/object-panel/components/ObjectPanel/ObjectPanelContent';
 import {
   CLUSTER_SCOPE,
@@ -223,9 +224,7 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
 
   // Keep tab labels concise and consistent: object name only.
   const tabTitle = objectData?.name?.trim() || 'Object';
-  const tabKindClass = (objectData?.kind || objectData?.kindAlias || 'object')
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, '');
+  const tabKindClass = getKindColorClass(objectData?.kind || objectData?.kindAlias || '');
 
   // Use reducer for transient panel state (modal flags, action loading,
   // delete confirmation, etc.). The active sub-tab is intentionally NOT
