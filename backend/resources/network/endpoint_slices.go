@@ -22,19 +22,19 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/types"
 )
 
-// EndpointSlice returns slice details grouped by service name.
-func (s *Service) EndpointSlice(namespace, service string) (*types.EndpointSliceDetails, error) {
+// EndpointSlice returns details for one concrete EndpointSlice object.
+func (s *Service) EndpointSlice(namespace, name string) (*types.EndpointSliceDetails, error) {
 	ctx, cancel := s.ctx()
 	defer cancel()
-	slices, err := s.listEndpointSlices(ctx, namespace, service)
+	slice, err := s.deps.KubernetesClient.DiscoveryV1().EndpointSlices(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
-		s.deps.Logger.Error(fmt.Sprintf("Failed to get endpoint slices %s/%s: %v", namespace, service, err), logsources.ResourceLoader)
-		return nil, fmt.Errorf("failed to get endpoint slices: %v", err)
+		s.deps.Logger.Error(fmt.Sprintf("Failed to get endpoint slice %s/%s: %v", namespace, name, err), logsources.ResourceLoader)
+		return nil, fmt.Errorf("failed to get endpoint slice: %v", err)
 	}
-	return buildEndpointSliceDetails(namespace, service, slices), nil
+	return buildEndpointSliceDetails(namespace, name, []*discoveryv1.EndpointSlice{slice}), nil
 }
 
-// EndpointSlices lists slice details for every service in the namespace.
+// EndpointSlices lists details for every EndpointSlice object in the namespace.
 func (s *Service) EndpointSlices(namespace string) ([]*types.EndpointSliceDetails, error) {
 	ctx, cancel := s.ctx()
 	defer cancel()
@@ -44,10 +44,16 @@ func (s *Service) EndpointSlices(namespace string) ([]*types.EndpointSliceDetail
 		return nil, fmt.Errorf("failed to list endpoint slices: %v", err)
 	}
 
-	grouped := groupEndpointSlicesByService(slices)
-	results := make([]*types.EndpointSliceDetails, 0, len(grouped))
-	for service, serviceSlices := range grouped {
-		results = append(results, buildEndpointSliceDetails(namespace, service, serviceSlices))
+	sort.SliceStable(slices, func(i, j int) bool {
+		return slices[i].Name < slices[j].Name
+	})
+
+	results := make([]*types.EndpointSliceDetails, 0, len(slices))
+	for _, slice := range slices {
+		if slice == nil {
+			continue
+		}
+		results = append(results, buildEndpointSliceDetails(namespace, slice.Name, []*discoveryv1.EndpointSlice{slice}))
 	}
 	return results, nil
 }

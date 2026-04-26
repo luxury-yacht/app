@@ -1242,10 +1242,26 @@ func (m *Manager) handleEndpointSlice(obj interface{}, updateType MessageType) {
 	if slice.Labels != nil {
 		serviceName = strings.TrimSpace(slice.Labels[discoveryv1.LabelServiceName])
 	}
-	if serviceName == "" {
+
+	update := Update{
+		Type:            updateType,
+		Domain:          domainNamespaceNetwork,
+		ClusterID:       m.clusterMeta.ClusterID,
+		ClusterName:     m.clusterMeta.ClusterName,
+		ResourceVersion: slice.ResourceVersion,
+		UID:             string(slice.UID),
+		Name:            slice.Name,
+		Namespace:       slice.Namespace,
+		Kind:            "EndpointSlice",
+	}
+	if updateType != MessageTypeDeleted {
+		update.Row = snapshot.BuildEndpointSliceSummary(m.clusterMeta, slice)
+	}
+	m.broadcast(domainNamespaceNetwork, scopesForNamespace(slice.Namespace), update)
+
+	if m.serviceLister == nil || serviceName == "" {
 		return
 	}
-
 	slices, err := m.listEndpointSlicesForService(slice.Namespace, serviceName)
 	if err != nil {
 		m.logger.Warn(
@@ -1255,44 +1271,6 @@ func (m *Manager) handleEndpointSlice(obj interface{}, updateType MessageType) {
 		if m.telemetry != nil {
 			m.telemetry.RecordStreamError(telemetry.StreamResources, err)
 		}
-		return
-	}
-
-	if len(slices) == 0 {
-		update := Update{
-			Type:            MessageTypeDeleted,
-			Domain:          domainNamespaceNetwork,
-			ClusterID:       m.clusterMeta.ClusterID,
-			ClusterName:     m.clusterMeta.ClusterName,
-			ResourceVersion: slice.ResourceVersion,
-			UID:             string(slice.UID),
-			Name:            serviceName,
-			Namespace:       slice.Namespace,
-			Kind:            "EndpointSlice",
-		}
-		m.broadcast(domainNamespaceNetwork, scopesForNamespace(slice.Namespace), update)
-	} else {
-		summary := snapshot.BuildEndpointSliceSummary(m.clusterMeta, slice.Namespace, serviceName, slices)
-		eventType := updateType
-		if eventType == MessageTypeDeleted {
-			eventType = MessageTypeModified
-		}
-		update := Update{
-			Type:            eventType,
-			Domain:          domainNamespaceNetwork,
-			ClusterID:       m.clusterMeta.ClusterID,
-			ClusterName:     m.clusterMeta.ClusterName,
-			ResourceVersion: slice.ResourceVersion,
-			UID:             string(slice.UID),
-			Name:            serviceName,
-			Namespace:       slice.Namespace,
-			Kind:            "EndpointSlice",
-			Row:             summary,
-		}
-		m.broadcast(domainNamespaceNetwork, scopesForNamespace(slice.Namespace), update)
-	}
-
-	if m.serviceLister == nil {
 		return
 	}
 	service, err := m.serviceLister.Services(slice.Namespace).Get(serviceName)

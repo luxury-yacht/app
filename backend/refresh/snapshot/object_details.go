@@ -10,10 +10,8 @@ import (
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 
-	discoveryv1 "k8s.io/api/discovery/v1"
 	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/luxury-yacht/app/backend/refresh"
@@ -219,16 +217,11 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 		return wrapKubernetesObject(np)
 	},
 	"endpointslice": func(ctx context.Context, b *ObjectDetailsBuilder, namespace, name string) (interface{}, string, error) {
-		selector := labels.Set{discoveryv1.LabelServiceName: name}.AsSelector().String()
-		list, err := b.client.DiscoveryV1().EndpointSlices(namespace).List(ctx, metav1.ListOptions{LabelSelector: selector})
+		slice, err := b.client.DiscoveryV1().EndpointSlices(namespace).Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
 			return nil, "", err
 		}
-		if len(list.Items) == 0 {
-			empty := &discoveryv1.EndpointSliceList{Items: []discoveryv1.EndpointSlice{}}
-			return empty, empty.ResourceVersion, nil
-		}
-		return list, list.ResourceVersion, nil
+		return wrapKubernetesObject(slice)
 	},
 	"persistentvolumeclaim": func(ctx context.Context, b *ObjectDetailsBuilder, namespace, name string) (interface{}, string, error) {
 		pvc, err := b.client.CoreV1().PersistentVolumeClaims(namespace).Get(ctx, name, metav1.GetOptions{})

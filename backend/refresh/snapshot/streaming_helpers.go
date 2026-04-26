@@ -525,20 +525,21 @@ func BuildClusterCustomSummary(
 	}
 }
 
-// BuildEndpointSliceSummary builds an endpoint slice row payload that matches snapshot formatting.
+// BuildEndpointSliceSummary builds a row for one concrete EndpointSlice object.
 func BuildEndpointSliceSummary(
 	meta ClusterMeta,
-	namespace string,
-	serviceName string,
-	slices []*discoveryv1.EndpointSlice,
+	slice *discoveryv1.EndpointSlice,
 ) NetworkSummary {
+	if slice == nil {
+		return NetworkSummary{ClusterMeta: meta, Kind: "EndpointSlice"}
+	}
 	return NetworkSummary{
 		ClusterMeta: meta,
 		Kind:        "EndpointSlice",
-		Name:        serviceName,
-		Namespace:   namespace,
-		Details:     describeEndpointSlices(slices),
-		Age:         formatAge(earliestSliceCreation(slices)),
+		Name:        slice.Name,
+		Namespace:   slice.Namespace,
+		Details:     describeEndpointSlices([]*discoveryv1.EndpointSlice{slice}),
+		Age:         formatAge(slice.CreationTimestamp.Time),
 	}
 }
 

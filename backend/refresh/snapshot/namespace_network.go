@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
@@ -197,7 +196,7 @@ func (b *NamespaceNetworkBuilder) Build(ctx context.Context, scope string) (*ref
 
 	slicesByService := groupEndpointSlicesByService(slices)
 
-	return b.buildSnapshot(meta, scopeLabel, services, slicesByService, ingresses, policies, gatewayItems)
+	return b.buildSnapshot(meta, scopeLabel, services, slices, slicesByService, ingresses, policies, gatewayItems)
 }
 
 func (b *NamespaceNetworkBuilder) listServices(namespace string) ([]*corev1.Service, error) {
@@ -318,6 +317,7 @@ func (b *NamespaceNetworkBuilder) buildSnapshot(
 	meta ClusterMeta,
 	scope string,
 	services []*corev1.Service,
+	slices []*discoveryv1.EndpointSlice,
 	slicesByService map[string][]*discoveryv1.EndpointSlice,
 	ingresses []*networkingv1.Ingress,
 	policies []*networkingv1.NetworkPolicy,
@@ -403,18 +403,13 @@ func (b *NamespaceNetworkBuilder) buildSnapshot(
 		}
 	}
 
-	for svc, svcSlices := range slicesByService {
-		if len(svcSlices) == 0 {
+	for _, slice := range slices {
+		if slice == nil {
 			continue
 		}
-		resources = append(resources, BuildEndpointSliceSummary(meta, svcSlices[0].Namespace, svc, svcSlices))
-		for _, slice := range svcSlices {
-			if slice == nil {
-				continue
-			}
-			if v := resourceVersionOrTimestamp(slice); v > version {
-				version = v
-			}
+		resources = append(resources, BuildEndpointSliceSummary(meta, slice))
+		if v := resourceVersionOrTimestamp(slice); v > version {
+			version = v
 		}
 	}
 
@@ -544,19 +539,6 @@ func countAddressesFromSlices(slices []*discoveryv1.EndpointSlice) (ready, notRe
 		}
 	}
 	return ready, notReady
-}
-
-func earliestSliceCreation(slices []*discoveryv1.EndpointSlice) time.Time {
-	var earliest time.Time
-	for _, slice := range slices {
-		if slice == nil {
-			continue
-		}
-		if earliest.IsZero() || slice.CreationTimestamp.Time.Before(earliest) {
-			earliest = slice.CreationTimestamp.Time
-		}
-	}
-	return earliest
 }
 
 func groupEndpointSlicesByService(slices []*discoveryv1.EndpointSlice) map[string][]*discoveryv1.EndpointSlice {
