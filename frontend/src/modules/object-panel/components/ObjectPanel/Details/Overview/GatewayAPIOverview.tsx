@@ -219,15 +219,13 @@ const GrantFromList: React.FC<{ from?: types.ReferenceGrantFromInfo[] | null }> 
     return null;
   }
   return (
-    <div className="overview-card-list">
+    <div className="overview-ref-list">
       {from.map((entry) => (
-        <div key={`${entry.group}-${entry.kind}-${entry.namespace}`} className="overview-card">
-          <div className="overview-card-header">
-            <span className="overview-card-title">
-              {entry.group}/{entry.kind}
-            </span>{' '}
-            <span className="overview-card-meta">from {entry.namespace}</span>
-          </div>
+        <div
+          key={`${entry.group}-${entry.kind}-${entry.namespace}`}
+          className="overview-ref-item"
+        >
+          {entry.group}/{entry.kind} from {entry.namespace}
         </div>
       ))}
     </div>

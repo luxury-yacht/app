@@ -84,10 +84,12 @@ describe('EndpointSliceOverview', () => {
     // The Status row reports "12 ready" and "6 not ready" via chips.
     expect(overview.textContent).toContain('12 ready');
     expect(overview.textContent).toContain('6 not ready');
-    // Section labels include the per-state counts.
-    expect(overview.textContent).toContain('Ready (12)');
-    expect(overview.textContent).toContain('Not Ready (6)');
-    expect(overview.textContent).toContain('http:');
+    // Section labels are unadorned; counts live in the Status row chips.
+    expect(overview.textContent).toContain('Ready');
+    expect(overview.textContent).toContain('Not Ready');
+    // Ports render as label/value rows: name on the left, port/protocol on the right.
+    expect(overview.textContent).toContain('http');
+    expect(overview.textContent).toContain('80/TCP (http)');
   });
 
   it('omits not ready section when no not-ready addresses', async () => {

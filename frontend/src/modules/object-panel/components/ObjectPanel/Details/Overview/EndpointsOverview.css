@@ -13,7 +13,7 @@
 .addresses-list {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 0.5rem;
 }
 
 .address-row {
@@ -35,6 +35,8 @@
 .address-arrow,
 .address-on {
   color: var(--color-text-tertiary);
+  font-size: 0.75rem;
+  padding: 0 0.2rem;
 }
 
 .address-target,

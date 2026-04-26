@@ -118,11 +118,10 @@ const AddressList: React.FC<{
   </div>
 );
 
-const formatPort = (port: types.EndpointSlicePort): string => {
-  const name = port.name ? `${port.name}: ` : '';
+const formatPortValue = (port: types.EndpointSlicePort): string => {
   const protocol = port.protocol ? `/${port.protocol}` : '';
   const appProtocol = port.appProtocol ? ` (${port.appProtocol})` : '';
-  return `${name}${port.port}${protocol}${appProtocol}`;
+  return `${port.port}${protocol}${appProtocol}`;
 };
 
 export const EndpointSliceOverview: React.FC<EndpointSliceOverviewProps> = ({
@@ -172,7 +171,7 @@ export const EndpointSliceOverview: React.FC<EndpointSliceOverviewProps> = ({
 
       {readyCount > 0 && (
         <OverviewItem
-          label={`Ready (${readyCount})`}
+          label="Ready"
           value={
             <AddressList
               addresses={readyAddresses}
@@ -186,7 +185,7 @@ export const EndpointSliceOverview: React.FC<EndpointSliceOverviewProps> = ({
       )}
       {notReadyCount > 0 && (
         <OverviewItem
-          label={`Not Ready (${notReadyCount})`}
+          label="Not Ready"
           value={
             <AddressList
               addresses={notReadyAddresses}
@@ -203,10 +202,13 @@ export const EndpointSliceOverview: React.FC<EndpointSliceOverviewProps> = ({
         <OverviewItem
           label="Ports"
           value={
-            <div className="overview-ref-list">
+            <div className="overview-row-list">
               {ports.map((port, portIndex) => (
-                <div key={`${port.port}-${portIndex}`} className="overview-ref-item">
-                  {formatPort(port)}
+                <div key={`${port.port}-${portIndex}`} className="overview-row">
+                  <span className="overview-row-label">
+                    {port.name || `port ${port.port}`}
+                  </span>
+                  <span className="overview-row-value">{formatPortValue(port)}</span>
                 </div>
               ))}
             </div>
