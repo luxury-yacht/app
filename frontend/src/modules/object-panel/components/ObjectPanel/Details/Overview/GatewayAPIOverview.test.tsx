@@ -106,9 +106,11 @@ describe('GatewayAPIOverview', () => {
       'GatewayClass shared'
     );
     expect(getValueForLabel(container, 'Addresses')?.textContent).toBe('203.0.113.10');
-    expect(getValueForLabel(container, 'Listeners')?.textContent).toContain('HTTPS/443');
-    expect(getValueForLabel(container, 'Listeners')?.textContent).toContain('2 attached route(s)');
-    expect(getValueForLabel(container, 'Conditions')?.textContent).toContain('Accepted: True');
+    expect(getValueForLabel(container, 'Listeners')?.textContent).toContain('HTTPS');
+    expect(getValueForLabel(container, 'Listeners')?.textContent).toContain('443');
+    expect(getValueForLabel(container, 'Listeners')?.textContent).toContain('2 routes');
+    expect(getValueForLabel(container, 'Conditions')?.textContent).toContain('Accepted');
+    expect(getValueForLabel(container, 'Conditions')?.textContent).toContain('True');
     expect(
       container.querySelector('[data-testid="object-panel-link"]')?.getAttribute('data-name')
     ).toBe('shared');

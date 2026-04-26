@@ -1,0 +1,192 @@
+/* Shared building blocks for object-panel detail overviews
+   Used by Gateway/Route, Service, Endpoints, Ingress, NetworkPolicy. */
+
+/* ---------- Card list ----------
+   A vertical stack of card-shaped sub-blocks (e.g., listeners, ingress rules,
+   network-policy rules, endpoint slices). Each card has a subtle background
+   panel, a border, and inner padding. */
+
+.overview-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.overview-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+}
+
+.overview-card-header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+}
+
+.overview-card-title {
+  color: var(--color-text);
+  font-weight: 500;
+  font-size: var(--font-size-md);
+}
+
+.overview-card-meta {
+  color: var(--color-text-secondary);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-mono);
+}
+
+.overview-card-tag {
+  margin-left: auto;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-sm);
+}
+
+.overview-card-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+/* ---------- Row list ----------
+   A simple stack of label/value rows, used both inside cards (.overview-card-rows)
+   and standalone (.overview-row-list). */
+
+.overview-row-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.overview-row {
+  display: flex;
+  gap: var(--spacing-sm);
+  align-items: baseline;
+  font-size: var(--font-size-sm);
+}
+
+.overview-row-label {
+  color: var(--color-text-tertiary);
+  min-width: 5rem;
+  flex-shrink: 0;
+}
+
+.overview-row-value {
+  color: var(--color-text);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-mono);
+  flex: 1;
+  min-width: 0;
+  word-break: break-word;
+}
+
+/* When the value is a list of links/components — drop mono treatment */
+.overview-row-value.plain {
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+}
+
+/* Reuse the same spacing for card-internal rows */
+.overview-card-rows .overview-row {
+  /* inherits */
+}
+
+/* ---------- Reference list ----------
+   A vertical list of object links or display refs. */
+
+.overview-ref-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-mono);
+}
+
+.overview-ref-item {
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+
+/* ---------- Conditions ---------- */
+
+.overview-condition-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.overview-condition-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--spacing-xs) var(--spacing-sm);
+  font-size: var(--font-size-sm);
+}
+
+.overview-condition-type {
+  color: var(--color-text);
+  font-weight: 500;
+}
+
+.overview-condition-status {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: var(--border-radius-round);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-badge);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border: 1px solid transparent;
+  line-height: 1.4;
+}
+
+.overview-condition-status.healthy {
+  background: var(--status-available-bg);
+  color: var(--status-available-text);
+  border-color: rgba(34, 197, 94, 0.2);
+}
+
+.overview-condition-status.warning {
+  background: var(--status-warning-bg);
+  color: var(--status-warning-text);
+  border-color: rgba(249, 115, 22, 0.25);
+}
+
+.overview-condition-reason {
+  color: var(--color-text-tertiary);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-mono);
+}
+
+.overview-condition-message {
+  flex-basis: 100%;
+  color: var(--color-text-secondary);
+  margin-top: 2px;
+  padding-left: var(--spacing-sm);
+  border-left: 2px solid var(--color-border);
+  font-size: var(--font-size-sm);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* When conditions live inside a card (e.g., listener), separate them
+   from the card body above with a subtle divider. */
+.overview-card .overview-condition-list {
+  padding-top: var(--spacing-sm);
+  border-top: 1px dashed var(--color-border);
+}
+
+/* ---------- Status accents (Ready / NotReady, etc.) ---------- */
+
+.overview-status-ready {
+  color: var(--color-success);
+}
+
+.overview-status-not-ready {
+  color: var(--color-warning);
+}

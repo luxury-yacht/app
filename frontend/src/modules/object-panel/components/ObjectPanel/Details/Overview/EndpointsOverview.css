@@ -1,137 +1,63 @@
-/* EndpointsOverview styles */
+/* EndpointsOverview-specific styles
+   Layout uses the shared overview-card / overview-row classes from
+   shared/OverviewBlocks.css. These styles cover only the inline address row
+   (IP → target on node) since each address row is a flow line of mixed
+   technical text + links. */
 
 .slices-section {
   margin-bottom: var(--spacing-sm);
 }
 
 .slices-label {
-  font-size: var(--font-size-normal);
+  font-size: var(--font-size-sm);
   font-weight: var(--font-weight-bold);
   color: var(--color-text-secondary);
   text-transform: uppercase;
-  padding-bottom: 0.3rem;
+  letter-spacing: 0.04em;
+  padding-bottom: var(--spacing-xs);
 }
-
-.slices-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-lg);
-}
-
-.slice-item {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-md);
-}
-
-.slice-section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-sm);
-}
-
-.slice-section-header {
-  font-weight: 500;
-  color: var(--text-primary);
-}
-
-.slice-addresses {
-  margin-left: var(--spacing-md);
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-xs);
-}
-
-.slice-addresses.not-ready {
-  opacity: 0.8;
-}
-
-.addresses-label {
-  font-weight: 500;
-  color: var(--text-secondary);
-  font-size: var(--font-size-small);
-}
-
-/* .addresses-label.ready {
-  color: var(--color-success, #10b981);
-}
-
-.addresses-label.not-ready {
-  color: var(--color-warning, #f59e0b);
-} */
 
 .addresses-list {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-xs);
-  margin-left: var(--spacing-md);
+  gap: 2px;
 }
 
 .address-row {
-  /* font-family: var(--font-family-mono); */
-  font-size: var(--font-size-small);
+  font-size: var(--font-size-sm);
+  display: flex;
+  align-items: baseline;
+  gap: var(--spacing-xs);
+  flex-wrap: wrap;
 }
 
 .address-ip {
   font-family: var(--font-family-mono);
-  font-size: var(--font-size-small);
-  color: var(--text-primary);
+  font-size: var(--font-size-mono);
+  color: var(--color-text);
 }
 
-.address-arrow {
-  color: var(--text-tertiary);
-  margin: 0 var(--spacing-xs);
-}
-
-.address-target {
-  color: var(--text-secondary);
-}
-
+.address-arrow,
 .address-on {
-  color: var(--text-tertiary);
-  margin: 0 var(--spacing-xs);
+  color: var(--color-text-tertiary);
 }
 
+.address-target,
 .address-node {
-  color: var(--text-tertiary);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-mono);
 }
 
 .addresses-more {
-  color: var(--text-tertiary);
+  color: var(--color-text-tertiary);
   font-style: italic;
-  font-size: var(--font-size-xsmall);
+  font-size: var(--font-size-xs);
 }
 
-.slice-ports {
-  margin-left: var(--spacing-md);
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-xs);
+.addresses-label.ready {
+  color: var(--color-success);
 }
 
-.ports-label {
-  font-weight: 500;
-  color: var(--text-secondary);
-  font-size: var(--font-size-small);
-}
-
-.ports-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-xs);
-  margin-left: var(--spacing-md);
-}
-
-.port-row {
-  font-size: var(--font-size-small);
-}
-
-.port-name {
-  color: var(--text-primary);
-  margin-right: var(--spacing-xs);
-}
-
-.port-value {
-  color: var(--text-secondary);
-  /* font-family: var(--font-family-mono); */
+.addresses-label.not-ready {
+  color: var(--color-warning);
 }

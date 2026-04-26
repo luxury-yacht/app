@@ -88,7 +88,8 @@ describe('ServiceOverview', () => {
     expect(getValueForLabel(container, 'Endpoint IPs')?.textContent).toContain('10.244.0.10:80');
 
     const portsValue = getValueForLabel(container, 'Ports');
-    expect(portsValue?.textContent).toContain('http: 80/TCP → 8080 (NodePort: 30080)');
+    expect(portsValue?.textContent).toContain('http');
+    expect(portsValue?.textContent).toContain('80/TCP → 8080 (NodePort: 30080)');
     expect(portsValue?.textContent).toContain('443/TCP');
   });
 

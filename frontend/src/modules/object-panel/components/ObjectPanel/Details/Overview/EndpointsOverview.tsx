@@ -9,10 +9,16 @@ import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { buildObjectReference } from '@shared/utils/objectIdentity';
+import './shared/OverviewBlocks.css';
 import './EndpointsOverview.css';
 
 interface EndpointSliceOverviewProps {
   endpointSliceDetails: types.EndpointSliceDetails | null;
+}
+
+interface ClusterMeta {
+  clusterId?: string;
+  clusterName?: string;
 }
 
 const parseTargetRef = (targetRef: string): { kind: string; name: string } | null => {
@@ -24,24 +30,114 @@ const parseTargetRef = (targetRef: string): { kind: string; name: string } | nul
   return null;
 };
 
+const TargetRefLink: React.FC<{
+  targetRef: string;
+  namespace: string;
+  clusterMeta: ClusterMeta;
+}> = ({ targetRef, namespace, clusterMeta }) => {
+  const parsed = parseTargetRef(targetRef);
+  if (!parsed) {
+    return <span className="address-target">{targetRef}</span>;
+  }
+  let objectRef: ReturnType<typeof buildObjectReference> | null;
+  try {
+    objectRef = buildObjectReference({
+      kind: parsed.kind,
+      name: parsed.name,
+      namespace,
+      ...clusterMeta,
+    });
+  } catch {
+    objectRef = null;
+  }
+  if (!objectRef) {
+    return <span className="address-target">{targetRef}</span>;
+  }
+  return (
+    <ObjectPanelLink className="address-target" objectRef={objectRef}>
+      {targetRef}
+    </ObjectPanelLink>
+  );
+};
+
+const AddressRow: React.FC<{
+  address: types.EndpointSliceAddress;
+  namespace: string;
+  clusterMeta: ClusterMeta;
+}> = ({ address, namespace, clusterMeta }) => (
+  <div className="address-row">
+    <span className="address-ip">{address.ip}</span>
+    {address.targetRef && (
+      <>
+        <span className="address-arrow">→</span>
+        <TargetRefLink
+          targetRef={address.targetRef}
+          namespace={namespace}
+          clusterMeta={clusterMeta}
+        />
+      </>
+    )}
+    {address.nodeName && (
+      <>
+        <span className="address-on">on</span>
+        <ObjectPanelLink
+          className="address-node"
+          objectRef={buildObjectReference({
+            kind: 'Node',
+            name: address.nodeName,
+            ...clusterMeta,
+          })}
+        >
+          {address.nodeName}
+        </ObjectPanelLink>
+      </>
+    )}
+  </div>
+);
+
+const AddressList: React.FC<{
+  addresses: types.EndpointSliceAddress[];
+  limit: number;
+  namespace: string;
+  clusterMeta: ClusterMeta;
+}> = ({ addresses, limit, namespace, clusterMeta }) => (
+  <div className="addresses-list">
+    {addresses.slice(0, limit).map((addr, addrIndex) => (
+      <AddressRow
+        key={`${addr.ip}-${addrIndex}`}
+        address={addr}
+        namespace={namespace}
+        clusterMeta={clusterMeta}
+      />
+    ))}
+    {addresses.length > limit && (
+      <div className="addresses-more">... and {addresses.length - limit} more</div>
+    )}
+  </div>
+);
+
+const formatPort = (port: types.EndpointSlicePort): string => {
+  const name = port.name ? `${port.name}: ` : '';
+  const protocol = port.protocol ? `/${port.protocol}` : '';
+  const appProtocol = port.appProtocol ? ` (${port.appProtocol})` : '';
+  return `${name}${port.port}${protocol}${appProtocol}`;
+};
+
 export const EndpointSliceOverview: React.FC<EndpointSliceOverviewProps> = ({
   endpointSliceDetails,
 }) => {
   const { objectData } = useObjectPanel();
   const clusterId = objectData?.clusterId ?? undefined;
   const clusterName = objectData?.clusterName ?? undefined;
-  // Memoize cluster metadata to keep refs stable.
-  const clusterMeta = useMemo(
-    () => ({
-      clusterId,
-      clusterName,
-    }),
+  const clusterMeta = useMemo<ClusterMeta>(
+    () => ({ clusterId, clusterName }),
     [clusterId, clusterName]
   );
 
   if (!endpointSliceDetails) return null;
 
   const namespace = endpointSliceDetails.namespace;
+  const slices = endpointSliceDetails.slices;
 
   return (
     <>
@@ -52,190 +148,69 @@ export const EndpointSliceOverview: React.FC<EndpointSliceOverviewProps> = ({
         age={endpointSliceDetails.age}
       />
 
-      {endpointSliceDetails.slices && endpointSliceDetails.slices.length > 0 && (
+      {slices && slices.length > 0 && (
         <div className="slices-section">
           <div className="slices-label">Slices</div>
-          <div className="slices-list">
-            {endpointSliceDetails.slices.map(
-              (slice: types.EndpointSliceSummary, sliceIndex: number) => {
-                const readyCount = slice.readyAddresses?.length ?? 0;
-                const notReadyCount = slice.notReadyAddresses?.length ?? 0;
-                const totalCount = readyCount + notReadyCount;
+          <div className="overview-card-list">
+            {slices.map((slice: types.EndpointSliceSummary, sliceIndex: number) => {
+              const readyCount = slice.readyAddresses?.length ?? 0;
+              const notReadyCount = slice.notReadyAddresses?.length ?? 0;
+              const totalCount = readyCount + notReadyCount;
+              const hasPorts = Boolean(slice.ports && slice.ports.length > 0);
 
-                return (
-                  <div
-                    key={`${slice.name}-${sliceIndex}`}
-                    className="slice-item"
-                    aria-label="endpoint-slice"
-                  >
-                    <div className="slice-section">
-                      <div className="slice-section-header">
-                        {slice.addressType || 'IPv4'} ({readyCount}/{totalCount} ready)
+              return (
+                <div
+                  key={`${slice.name}-${sliceIndex}`}
+                  className="overview-card"
+                  aria-label="endpoint-slice"
+                >
+                  <div className="overview-card-header">
+                    <span className="overview-card-title">{slice.addressType || 'IPv4'}</span>{' '}
+                    <span className="overview-card-meta">
+                      ({readyCount}/{totalCount} ready)
+                    </span>
+                  </div>
+                  <div className="overview-card-rows">
+                    {readyCount > 0 && slice.readyAddresses && (
+                      <div className="overview-row">
+                        <span className="overview-row-label addresses-label ready">Ready</span>
+                        <span className="overview-row-value plain">
+                          <AddressList
+                            addresses={slice.readyAddresses}
+                            limit={10}
+                            namespace={namespace}
+                            clusterMeta={clusterMeta}
+                          />
+                        </span>
                       </div>
-
-                      {slice.readyAddresses && slice.readyAddresses.length > 0 && (
-                        <div className="slice-addresses">
-                          <div className="addresses-label ready">Ready</div>
-                          <div className="addresses-list">
-                            {slice.readyAddresses
-                              .slice(0, 10)
-                              .map((addr: types.EndpointSliceAddress, addrIndex: number) => (
-                                <div key={`${addr.ip}-${addrIndex}`} className="address-row">
-                                  <span className="address-ip">{addr.ip}</span>
-                                  {addr.targetRef && (
-                                    <>
-                                      <span className="address-arrow">→</span>
-                                      {(() => {
-                                        const parsed = parseTargetRef(addr.targetRef!);
-                                        const targetRef = parsed
-                                          ? (() => {
-                                              try {
-                                                return buildObjectReference({
-                                                  kind: parsed.kind,
-                                                  name: parsed.name,
-                                                  namespace,
-                                                  ...clusterMeta,
-                                                });
-                                              } catch {
-                                                return null;
-                                              }
-                                            })()
-                                          : null;
-                                        return parsed ? (
-                                          targetRef ? (
-                                            <ObjectPanelLink
-                                              className="address-target"
-                                              objectRef={targetRef}
-                                            >
-                                              {addr.targetRef}
-                                            </ObjectPanelLink>
-                                          ) : (
-                                            <span className="address-target">{addr.targetRef}</span>
-                                          )
-                                        ) : (
-                                          <span className="address-target">{addr.targetRef}</span>
-                                        );
-                                      })()}
-                                    </>
-                                  )}
-                                  {addr.nodeName && (
-                                    <>
-                                      <span className="address-on">on</span>
-                                      <ObjectPanelLink
-                                        className="address-node"
-                                        objectRef={buildObjectReference({
-                                          kind: 'Node',
-                                          name: addr.nodeName!,
-                                          ...clusterMeta,
-                                        })}
-                                      >
-                                        {addr.nodeName}
-                                      </ObjectPanelLink>
-                                    </>
-                                  )}
-                                </div>
-                              ))}
-                            {slice.readyAddresses.length > 10 && (
-                              <div className="addresses-more">
-                                ... and {slice.readyAddresses.length - 10} more
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      {slice.notReadyAddresses && slice.notReadyAddresses.length > 0 && (
-                        <div className="slice-addresses not-ready">
-                          <div className="addresses-label not-ready">Not Ready</div>
-                          <div className="addresses-list">
-                            {slice.notReadyAddresses
-                              .slice(0, 5)
-                              .map((addr: types.EndpointSliceAddress, addrIndex: number) => (
-                                <div key={`${addr.ip}-${addrIndex}`} className="address-row">
-                                  <span className="address-ip">{addr.ip}</span>
-                                  {addr.targetRef && (
-                                    <>
-                                      <span className="address-arrow">→</span>
-                                      {(() => {
-                                        const parsed = parseTargetRef(addr.targetRef!);
-                                        const targetRef = parsed
-                                          ? (() => {
-                                              try {
-                                                return buildObjectReference({
-                                                  kind: parsed.kind,
-                                                  name: parsed.name,
-                                                  namespace,
-                                                  ...clusterMeta,
-                                                });
-                                              } catch {
-                                                return null;
-                                              }
-                                            })()
-                                          : null;
-                                        return parsed ? (
-                                          targetRef ? (
-                                            <ObjectPanelLink
-                                              className="address-target"
-                                              objectRef={targetRef}
-                                            >
-                                              {addr.targetRef}
-                                            </ObjectPanelLink>
-                                          ) : (
-                                            <span className="address-target">{addr.targetRef}</span>
-                                          )
-                                        ) : (
-                                          <span className="address-target">{addr.targetRef}</span>
-                                        );
-                                      })()}
-                                    </>
-                                  )}
-                                  {addr.nodeName && (
-                                    <>
-                                      <span className="address-on">on</span>
-                                      <ObjectPanelLink
-                                        className="address-node"
-                                        objectRef={buildObjectReference({
-                                          kind: 'Node',
-                                          name: addr.nodeName!,
-                                          ...clusterMeta,
-                                        })}
-                                      >
-                                        {addr.nodeName}
-                                      </ObjectPanelLink>
-                                    </>
-                                  )}
-                                </div>
-                              ))}
-                            {slice.notReadyAddresses.length > 5 && (
-                              <div className="addresses-more">
-                                ... and {slice.notReadyAddresses.length - 5} more
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {slice.ports && slice.ports.length > 0 && (
-                      <div className="slice-ports">
-                        <div className="ports-label">Ports</div>
-                        <div className="ports-list">
-                          {slice.ports.map((port: types.EndpointSlicePort, portIndex: number) => (
-                            <div key={`${port.port}-${portIndex}`} className="port-row">
-                              {port.name && <span className="port-name">{port.name}:</span>}
-                              <span className="port-value">
-                                {port.port}/{port.protocol}
-                                {port.appProtocol ? ` (${port.appProtocol})` : ''}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
+                    )}
+                    {notReadyCount > 0 && slice.notReadyAddresses && (
+                      <div className="overview-row">
+                        <span className="overview-row-label addresses-label not-ready">
+                          Not Ready
+                        </span>
+                        <span className="overview-row-value plain">
+                          <AddressList
+                            addresses={slice.notReadyAddresses}
+                            limit={5}
+                            namespace={namespace}
+                            clusterMeta={clusterMeta}
+                          />
+                        </span>
+                      </div>
+                    )}
+                    {hasPorts && slice.ports && (
+                      <div className="overview-row">
+                        <span className="overview-row-label">Ports</span>
+                        <span className="overview-row-value">
+                          {slice.ports.map(formatPort).join(', ')}
+                        </span>
                       </div>
                     )}
                   </div>
-                );
-              }
-            )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

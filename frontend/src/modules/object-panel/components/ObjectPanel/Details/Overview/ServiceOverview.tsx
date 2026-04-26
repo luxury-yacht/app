@@ -7,7 +7,7 @@ import { types } from '@wailsjs/go/models';
 import { OverviewItem } from '@modules/object-panel/components/ObjectPanel/Details/Overview/shared/OverviewItem';
 import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
-import './NetworkOverview.css';
+import './shared/OverviewBlocks.css';
 
 interface ServiceOverviewProps {
   serviceDetails: types.ServiceDetails | null;
@@ -83,9 +83,9 @@ export const ServiceOverview: React.FC<ServiceOverviewProps> = ({ serviceDetails
           <OverviewItem
             label="Endpoint IPs"
             value={
-              <div className="endpoint-list">
+              <div className="overview-ref-list">
                 {serviceDetails.endpoints.map((ep: string, index: number) => (
-                  <div key={`${ep}-${index}`} className="endpoint-item">
+                  <div key={`${ep}-${index}`} className="overview-ref-item">
                     {ep}
                   </div>
                 ))}
@@ -100,14 +100,14 @@ export const ServiceOverview: React.FC<ServiceOverviewProps> = ({ serviceDetails
         <OverviewItem
           label="Ports"
           value={
-            <div className="ports-list">
+            <div className="overview-row-list">
               {serviceDetails.ports.map((port: types.ServicePortDetails, index: number) => (
                 <div
                   key={`${port.port}-${port.targetPort ?? 'target'}-${index}`}
-                  className="port-item"
+                  className="overview-row"
                 >
-                  {port.name && <span className="port-name">{port.name}: </span>}
-                  <span className="port-details">
+                  <span className="overview-row-label">{port.name || `port ${port.port}`}</span>
+                  <span className="overview-row-value">
                     {port.port}/{port.protocol}
                     {port.targetPort && ` → ${port.targetPort}`}
                     {port.nodePort && port.nodePort > 0 && ` (NodePort: ${port.nodePort})`}

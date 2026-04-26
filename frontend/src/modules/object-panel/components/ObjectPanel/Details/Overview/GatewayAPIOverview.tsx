@@ -10,7 +10,7 @@ import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { buildObjectReference } from '@shared/utils/objectIdentity';
-import './NetworkOverview.css';
+import './shared/OverviewBlocks.css';
 
 interface GatewayAPIOverviewProps {
   gatewayDetails?: types.GatewayDetails | null;
@@ -21,22 +21,17 @@ interface GatewayAPIOverviewProps {
   backendTLSPolicyDetails?: types.BackendTLSPolicyDetails | null;
 }
 
-const conditionClass = (condition: types.ConditionState): string => {
-  switch (condition.status) {
-    case 'True':
-      return 'success';
-    case 'False':
-      return 'error';
-    default:
-      return 'warning';
-  }
-};
+const conditionStatusClass = (status: string): string =>
+  status === 'True' ? 'healthy' : 'warning';
 
 const objectRefLabel = (ref: types.ObjectRef): string =>
   `${ref.kind} ${ref.namespace ? `${ref.namespace}/` : ''}${ref.name}`;
 
 const displayRefLabel = (ref: types.DisplayRef): string =>
   `${ref.kind} ${ref.namespace ? `${ref.namespace}/` : ''}${ref.name || '(name not specified)'}`;
+
+const formatAttachedRoutes = (count: number): string =>
+  `${count} ${count === 1 ? 'route' : 'routes'}`;
 
 const hasObjectRefFields = (value: unknown): value is types.ObjectRef => {
   if (!value || typeof value !== 'object') {
@@ -99,19 +94,25 @@ const ConditionList: React.FC<{ conditions?: types.ConditionState[] | null }> = 
     return null;
   }
   return (
-    <div className="gateway-condition-list">
-      {conditions.map((condition) => (
-        <div
-          key={`${condition.type ?? 'condition'}-${condition.reason ?? condition.status}`}
-          className="gateway-condition"
-          title={condition.message}
-        >
-          <span className={`status-badge ${conditionClass(condition)}`}>
-            {condition.type || 'Condition'}: {condition.status}
-          </span>
-          {condition.reason && <span className="gateway-condition-reason">{condition.reason}</span>}
-        </div>
-      ))}
+    <div className="overview-condition-list">
+      {conditions.map((condition) => {
+        const showReason = condition.reason && condition.reason !== condition.type;
+        return (
+          <div
+            key={`${condition.type ?? 'condition'}-${condition.reason ?? condition.status}`}
+            className="overview-condition-item"
+          >
+            <span className="overview-condition-type">{condition.type || 'Condition'}</span>
+            <span className={`overview-condition-status ${conditionStatusClass(condition.status)}`}>
+              {condition.status}
+            </span>
+            {showReason && <span className="overview-condition-reason">{condition.reason}</span>}
+            {condition.message && (
+              <div className="overview-condition-message">{condition.message}</div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 };
@@ -123,27 +124,37 @@ const ListenerList: React.FC<{ listeners?: types.GatewayListenerDetails[] | null
     return null;
   }
   return (
-    <div className="gateway-listener-list">
-      {listeners.map((listener) => (
-        <div
-          key={`${listener.name}-${listener.port}-${listener.protocol}`}
-          className="gateway-listener"
-        >
-          <div className="gateway-listener-main">
-            <span className="gateway-listener-name">{listener.name}</span>
-            <span className="gateway-listener-protocol">
-              {listener.protocol}/{listener.port}
-            </span>
-            {listener.hostname && (
-              <span className="gateway-listener-host">{listener.hostname}</span>
+    <div className="overview-card-list">
+      {listeners.map((listener) => {
+        const hasRows = Boolean(listener.hostname);
+        return (
+          <div
+            key={`${listener.name}-${listener.port}-${listener.protocol}`}
+            className="overview-card"
+          >
+            <div className="overview-card-header">
+              <span className="overview-card-title">{listener.name}</span>
+              <span className="overview-card-meta">
+                {listener.protocol}/{listener.port}
+              </span>
+              <span className="overview-card-tag">
+                {formatAttachedRoutes(listener.attachedRoutes)}
+              </span>
+            </div>
+            {hasRows && (
+              <div className="overview-card-rows">
+                {listener.hostname && (
+                  <div className="overview-row">
+                    <span className="overview-row-label">Hostname</span>
+                    <span className="overview-row-value">{listener.hostname}</span>
+                  </div>
+                )}
+              </div>
             )}
-            <span className="gateway-listener-routes">
-              {listener.attachedRoutes} attached route(s)
-            </span>
+            <ConditionList conditions={listener.conditions} />
           </div>
-          <ConditionList conditions={listener.conditions} />
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 };
@@ -156,10 +167,72 @@ const RefList: React.FC<{
     return null;
   }
   return (
-    <div className="gateway-ref-list">
+    <div className="overview-ref-list">
       {refs.map((ref, index) => (
-        <div key={`ref-${index}`} className="gateway-ref-item">
+        <div key={`ref-${index}`} className="overview-ref-item">
           <RefLink value={ref} clusterName={clusterName} />
+        </div>
+      ))}
+    </div>
+  );
+};
+
+const RouteRulesList: React.FC<{
+  rules?: types.RouteRuleDetails[] | null;
+  clusterName?: string;
+}> = ({ rules, clusterName }) => {
+  if (!rules || rules.length === 0) {
+    return null;
+  }
+  return (
+    <div className="overview-card-list">
+      {rules.map((rule, index) => {
+        const hasMatches = Boolean(rule.matches?.length);
+        const hasBackends = Boolean(rule.backendRefs?.length);
+        return (
+          <div key={`rule-${index}`} className="overview-card">
+            <div className="overview-card-header">
+              <span className="overview-card-title">Rule {index + 1}</span>
+            </div>
+            {(hasMatches || hasBackends) && (
+              <div className="overview-card-rows">
+                {hasMatches && (
+                  <div className="overview-row">
+                    <span className="overview-row-label">Matches</span>
+                    <span className="overview-row-value">{rule.matches?.join(', ')}</span>
+                  </div>
+                )}
+                {hasBackends && (
+                  <div className="overview-row">
+                    <span className="overview-row-label">Backends</span>
+                    <span className="overview-row-value plain">
+                      <RefList refs={rule.backendRefs} clusterName={clusterName} />
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+const GrantFromList: React.FC<{ from?: types.ReferenceGrantFromInfo[] | null }> = ({ from }) => {
+  if (!from || from.length === 0) {
+    return null;
+  }
+  return (
+    <div className="overview-card-list">
+      {from.map((entry) => (
+        <div key={`${entry.group}-${entry.kind}-${entry.namespace}`} className="overview-card">
+          <div className="overview-card-header">
+            <span className="overview-card-title">
+              {entry.group}/{entry.kind}
+            </span>{' '}
+            <span className="overview-card-meta">from {entry.namespace}</span>
+          </div>
         </div>
       ))}
     </div>
@@ -281,20 +354,7 @@ const RouteOverview: React.FC<{
       />
       <OverviewItem
         label="Rules"
-        value={
-          <div className="gateway-rule-list">
-            {details.rules?.map((rule, index) => (
-              <div key={`rule-${index}`} className="gateway-rule">
-                {rule.matches && rule.matches.length > 0 && (
-                  <div className="gateway-rule-line">
-                    <strong>Matches:</strong> {rule.matches.join(', ')}
-                  </div>
-                )}
-                <RefList refs={rule.backendRefs} clusterName={clusterName} />
-              </div>
-            ))}
-          </div>
-        }
+        value={<RouteRulesList rules={details.rules} clusterName={clusterName} />}
         fullWidth
         hidden={!hasRules}
       />
@@ -362,18 +422,7 @@ const ReferenceGrantOverview: React.FC<{
       />
       <OverviewItem
         label="From"
-        value={
-          <div className="gateway-ref-list">
-            {details.from?.map((from) => (
-              <div
-                key={`${from.group}-${from.kind}-${from.namespace}`}
-                className="gateway-ref-item"
-              >
-                {from.group}/{from.kind} from {from.namespace}
-              </div>
-            ))}
-          </div>
-        }
+        value={<GrantFromList from={details.from} />}
         fullWidth
         hidden={!hasFrom}
       />
