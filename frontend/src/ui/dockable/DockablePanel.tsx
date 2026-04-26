@@ -720,8 +720,22 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     if (isResizing) classes.push('dockable-panel--resizing');
     if (panelState.position === 'floating') classes.push('dockable-panel--floating');
     if (isMaximized) classes.push('dockable-panel--maximized');
+    // Dim panels whose group is not the most recently focused one. Pre-first-focus
+    // (lastFocusedGroupKey === null) leaves all panels at full opacity so the
+    // app doesn't open in a fully-dimmed state.
+    if (groupKey != null && lastFocusedGroupKey != null && lastFocusedGroupKey !== groupKey) {
+      classes.push('dockable-panel--inactive');
+    }
     return classes.join(' ');
-  }, [panelState.position, className, isDragging, isResizing, isMaximized]);
+  }, [
+    panelState.position,
+    className,
+    isDragging,
+    isResizing,
+    isMaximized,
+    groupKey,
+    lastFocusedGroupKey,
+  ]);
 
   const panelStyle = useMemo<React.CSSProperties>(() => {
     const style: React.CSSProperties & Record<string, string | number> = {
@@ -796,6 +810,7 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     <div
       ref={setPanelRef}
       className={panelClassName}
+      data-dockable-group-key={groupKey ?? undefined}
       style={isGroupLeader ? panelStyle : { display: 'none' }}
       onMouseDownCapture={
         isGroupLeader

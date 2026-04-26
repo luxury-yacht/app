@@ -268,9 +268,32 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
   // can resolve and store the focused floating group in an effect.
   const pendingFocusPanelIdRef = useRef<string | null>(null);
   const setLastFocusedGroupKey = useCallback((key: GroupKey) => {
+    if (lastFocusedGroupKeyRef.current === key) {
+      return;
+    }
     lastFocusedGroupKeyRef.current = key;
     setLastFocusedGroupKeyState(key);
   }, []);
+
+  // Track DOM focus shifts globally and route them to setLastFocusedGroupKey.
+  // The mousedown handler on each panel already covers click activation; this
+  // listener additionally covers keyboard focus moves (Tab cycling between
+  // fields in different panels) and programmatic focus() calls. Walks up from
+  // the focus target looking for the nearest [data-dockable-group-key]
+  // attribute, which DockablePanel sets on its root element.
+  useEffect(() => {
+    const handleFocusIn = (event: FocusEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const owner = target.closest<HTMLElement>('[data-dockable-group-key]');
+      if (!owner) return;
+      const key = owner.dataset.dockableGroupKey;
+      if (!key) return;
+      setLastFocusedGroupKey(key as GroupKey);
+    };
+    document.addEventListener('focusin', handleFocusIn);
+    return () => document.removeEventListener('focusin', handleFocusIn);
+  }, [setLastFocusedGroupKey]);
 
   // Resolve the best target group key for opening a new panel.
   const getPreferredOpenGroupKey = useCallback(

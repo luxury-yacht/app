@@ -15,6 +15,7 @@
 - Kind badge colors are now auto-assigned instead of being hard-coded, using the same color palette and hashing method used to assign colors to container names in the log viewer.
   - Good news - all object kinds are now color-coded, including CRDs that used to all be gray
   - Not-as-good news - colors have changed compared to previous versions. Hopefully this doesn't bother anyone too much since the previous colors had no specific meaning, and are only intended for quick visual differentiation in a list.
+- Inactive panels are dimmed to provide visual indication of where the focus is in the app.
 
 ### Fixed
 

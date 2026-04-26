@@ -25,7 +25,12 @@
   /* Floating: both matter */
   --dockable-panel-floating-min-width: 450;
   --dockable-panel-floating-min-height: 200;
-  transition: none; /* We'll handle animations separately */
+  transition: filter 150ms ease;
+}
+
+/* Inactive group: dim non-focused panels */
+.dockable-panel--inactive {
+  filter: saturate(0.8) brightness(0.75);
 }
 
 /* Position variants */
