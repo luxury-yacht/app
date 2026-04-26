@@ -291,6 +291,46 @@ describe('CommandPalette component behaviour', () => {
     expect(firstAction).not.toHaveBeenCalled();
   });
 
+  it('keeps the first item selected until the mouse actually moves', async () => {
+    const commands: Command[] = [
+      { id: 'first', label: 'First', category: 'Application', action: vi.fn() },
+      { id: 'second', label: 'Second', category: 'Application', action: vi.fn() },
+      { id: 'third', label: 'Third', category: 'Application', action: vi.fn() },
+    ];
+
+    await renderPalette(commands);
+    await openPalette();
+
+    const items = queryItems();
+    const palette = container.querySelector('.command-palette');
+    expect(items).toHaveLength(3);
+    expect(palette?.classList.contains('mouse-selection-armed')).toBe(false);
+    expect(items[0].classList.contains('selected')).toBe(true);
+
+    await act(async () => {
+      items[2].dispatchEvent(
+        new MouseEvent('mouseover', {
+          bubbles: true,
+          relatedTarget: container,
+        })
+      );
+      await Promise.resolve();
+    });
+
+    expect(queryItems()[0].classList.contains('selected')).toBe(true);
+    expect(queryItems()[2].classList.contains('selected')).toBe(false);
+    expect(palette?.classList.contains('mouse-selection-armed')).toBe(false);
+
+    await act(async () => {
+      items[2].dispatchEvent(new MouseEvent('mousemove', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(palette?.classList.contains('mouse-selection-armed')).toBe(true);
+    expect(queryItems()[0].classList.contains('selected')).toBe(false);
+    expect(queryItems()[2].classList.contains('selected')).toBe(true);
+  });
+
   it('enters namespace selection mode via the appropriate command', async () => {
     const namespaceCommand: Command = {
       id: 'namespace:prod',
