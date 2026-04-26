@@ -24,6 +24,9 @@ const healthVariant = (status: string): StatusChipVariant => {
 const lbStatusVariant = (status: string): StatusChipVariant =>
   status === 'Ready' ? 'healthy' : 'warning';
 
+// Above this count, render a count instead of the full IP list.
+const ENDPOINT_LIST_LIMIT = 20;
+
 export const ServiceOverview: React.FC<ServiceOverviewProps> = ({ serviceDetails }) => {
   if (!serviceDetails) return null;
 
@@ -32,7 +35,10 @@ export const ServiceOverview: React.FC<ServiceOverviewProps> = ({ serviceDetails
 
   const clusterIPs = serviceDetails.clusterIPs ?? [];
   const hasMultipleClusterIPs = clusterIPs.length > 1;
-  const clusterIPLabel = hasMultipleClusterIPs ? 'Cluster IPs' : 'Cluster IP';
+  // "IP address" rather than "Cluster IP" — the latter collides with the
+  // Kubernetes `ClusterIP` service type and is confusing to read alongside
+  // the Type field.
+  const clusterIPLabel = hasMultipleClusterIPs ? 'IP addresses' : 'IP address';
   const clusterIPValue = hasMultipleClusterIPs
     ? clusterIPs.join(', ')
     : (clusterIPs[0] ?? serviceDetails.clusterIP);
@@ -52,7 +58,7 @@ export const ServiceOverview: React.FC<ServiceOverviewProps> = ({ serviceDetails
     if (endpointCount === 0) {
       return <StatusChip variant="unhealthy">No endpoints</StatusChip>;
     }
-    if (endpoints.length > 0 && endpoints.length <= 5) {
+    if (endpoints.length > 0 && endpoints.length <= ENDPOINT_LIST_LIMIT) {
       return (
         <div className="overview-ref-list">
           {endpoints.map((ep, index) => (
@@ -65,7 +71,7 @@ export const ServiceOverview: React.FC<ServiceOverviewProps> = ({ serviceDetails
     }
     return `${endpointCount} ${endpointCount === 1 ? 'endpoint' : 'endpoints'}`;
   })();
-  const endpointsFullWidth = endpoints.length > 0 && endpoints.length <= 5;
+  const endpointsFullWidth = endpoints.length > 0 && endpoints.length <= ENDPOINT_LIST_LIMIT;
 
   return (
     <>
@@ -89,7 +95,7 @@ export const ServiceOverview: React.FC<ServiceOverviewProps> = ({ serviceDetails
 
       <OverviewItem
         label={clusterIPLabel}
-        value={clusterIPValue}
+        value={<span style={{ fontFamily: 'var(--font-family-mono)' }}>{clusterIPValue}</span>}
         fullWidth={hasMultipleClusterIPs}
       />
 

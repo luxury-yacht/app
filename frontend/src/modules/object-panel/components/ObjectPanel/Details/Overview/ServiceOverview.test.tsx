@@ -80,8 +80,8 @@ describe('ServiceOverview', () => {
 
     expect(getValueForLabel(container, 'Type')?.textContent).toBe('LoadBalancer');
     // Multi-IP services use the plural label and join the values.
-    expect(getValueForLabel(container, 'Cluster IPs')?.textContent).toContain('10.0.0.1');
-    expect(getValueForLabel(container, 'Cluster IPs')?.textContent).toContain('10.0.0.2');
+    expect(getValueForLabel(container, 'IP addresses')?.textContent).toContain('10.0.0.1');
+    expect(getValueForLabel(container, 'IP addresses')?.textContent).toContain('10.0.0.2');
     expect(getValueForLabel(container, 'External IPs')?.textContent).toContain('35.1.2.3');
     expect(getValueForLabel(container, 'Load Balancer IP')?.textContent).toBe('35.1.2.3');
     // LB status is wrapped in a healthy StatusChip when "Ready".

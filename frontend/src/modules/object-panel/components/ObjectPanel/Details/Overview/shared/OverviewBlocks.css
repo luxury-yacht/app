@@ -85,6 +85,8 @@
   flex: 1;
   min-width: 0;
   word-break: break-word;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 /* When the value is a list of links/components — drop mono treatment */
@@ -123,10 +125,10 @@
 
 /* When conditions live inside a card (e.g., listener), separate them
    from the card body above with a subtle divider. */
-.overview-card .overview-condition-list {
+/* .overview-card .overview-condition-list {
   padding-top: var(--spacing-sm);
   border-top: 1px dashed var(--color-border);
-}
+} */
 
 /* ---------- Status accents (Ready / NotReady, etc.) ---------- */
 

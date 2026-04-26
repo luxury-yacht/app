@@ -205,8 +205,14 @@ export const EndpointSliceOverview: React.FC<EndpointSliceOverviewProps> = ({
                     {hasPorts && slice.ports && (
                       <div className="overview-row">
                         <span className="overview-row-label">Ports</span>
-                        <span className="overview-row-value">
-                          {slice.ports.map(formatPort).join(', ')}
+                        <span className="overview-row-value plain">
+                          <div className="overview-ref-list">
+                            {slice.ports.map((port, portIndex) => (
+                              <div key={`${port.port}-${portIndex}`} className="overview-ref-item">
+                                {formatPort(port)}
+                              </div>
+                            ))}
+                          </div>
                         </span>
                       </div>
                     )}

@@ -8,6 +8,15 @@
   margin-bottom: var(--spacing-sm);
 }
 
+/* Override the app-wide user-select: none so IPs, target refs, node names,
+   and port values can be copied. Mirrors the .overview-value treatment used
+   elsewhere in the details tab. */
+/* .slices-section,
+.slices-section * {
+  user-select: text;
+  -webkit-user-select: text;
+} */
+
 .slices-label {
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-bold);
@@ -35,6 +44,8 @@
   font-family: var(--font-family-mono);
   font-size: var(--font-size-mono);
   color: var(--color-text);
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .address-arrow,
@@ -46,6 +57,8 @@
 .address-node {
   font-family: var(--font-family-mono);
   font-size: var(--font-size-mono);
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .addresses-more {
