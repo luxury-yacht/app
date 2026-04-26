@@ -55,7 +55,6 @@ type (
 	ServiceDetails                        = types.ServiceDetails
 	ServicePortDetails                    = types.ServicePortDetails
 	EndpointSliceDetails                  = types.EndpointSliceDetails
-	EndpointSliceSummary                  = types.EndpointSliceSummary
 	EndpointSliceAddress                  = types.EndpointSliceAddress
 	EndpointSlicePort                     = types.EndpointSlicePort
 	IngressDetails                        = types.IngressDetails

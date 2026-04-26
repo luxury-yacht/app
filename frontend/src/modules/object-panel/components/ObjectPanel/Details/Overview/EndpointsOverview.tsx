@@ -138,7 +138,12 @@ export const EndpointSliceOverview: React.FC<EndpointSliceOverviewProps> = ({
   if (!endpointSliceDetails) return null;
 
   const namespace = endpointSliceDetails.namespace;
-  const slices = endpointSliceDetails.slices;
+  const readyAddresses = endpointSliceDetails.readyAddresses ?? [];
+  const notReadyAddresses = endpointSliceDetails.notReadyAddresses ?? [];
+  const ports = endpointSliceDetails.ports ?? [];
+  const readyCount = readyAddresses.length;
+  const notReadyCount = notReadyAddresses.length;
+  const totalCount = readyCount + notReadyCount;
 
   return (
     <>
@@ -149,80 +154,64 @@ export const EndpointSliceOverview: React.FC<EndpointSliceOverviewProps> = ({
         age={endpointSliceDetails.age}
       />
 
-      {slices && slices.length > 0 && (
-        <div className="slices-section">
-          <div className="slices-label">Slices</div>
-          <div className="overview-card-list">
-            {slices.map((slice: types.EndpointSliceSummary, sliceIndex: number) => {
-              const readyCount = slice.readyAddresses?.length ?? 0;
-              const notReadyCount = slice.notReadyAddresses?.length ?? 0;
-              const totalCount = readyCount + notReadyCount;
-              const hasPorts = Boolean(slice.ports && slice.ports.length > 0);
-
-              return (
-                <div
-                  key={`${slice.name}-${sliceIndex}`}
-                  className="overview-card"
-                  aria-label="endpoint-slice"
-                >
-                  <div className="overview-card-header">
-                    <span className="overview-card-title">{slice.addressType || 'IPv4'}</span>{' '}
-                    <span className="overview-card-meta">
-                      ({readyCount}/{totalCount} ready)
-                    </span>
+      <div className="slices-section">
+        <div className="overview-card" aria-label="endpoint-slice">
+          <div className="overview-card-header">
+            <span className="overview-card-title">
+              {endpointSliceDetails.addressType || 'IPv4'}
+            </span>{' '}
+            <span className="overview-card-meta">
+              ({readyCount}/{totalCount} ready)
+            </span>
+          </div>
+          <div className="overview-card-rows">
+            {readyCount > 0 && (
+              <div className="overview-row">
+                <span className="overview-row-label">
+                  <StatusChip variant="healthy">Ready</StatusChip>
+                </span>
+                <span className="overview-row-value plain">
+                  <AddressList
+                    addresses={readyAddresses}
+                    limit={10}
+                    namespace={namespace}
+                    clusterMeta={clusterMeta}
+                  />
+                </span>
+              </div>
+            )}
+            {notReadyCount > 0 && (
+              <div className="overview-row">
+                <span className="overview-row-label">
+                  <StatusChip variant="unhealthy">Not Ready</StatusChip>
+                </span>
+                <span className="overview-row-value plain">
+                  <AddressList
+                    addresses={notReadyAddresses}
+                    limit={5}
+                    namespace={namespace}
+                    clusterMeta={clusterMeta}
+                  />
+                </span>
+              </div>
+            )}
+            {ports.length > 0 && (
+              <div className="overview-row">
+                <span className="overview-row-label">Ports</span>
+                <span className="overview-row-value plain">
+                  <div className="overview-ref-list">
+                    {ports.map((port, portIndex) => (
+                      <div key={`${port.port}-${portIndex}`} className="overview-ref-item">
+                        {formatPort(port)}
+                      </div>
+                    ))}
                   </div>
-                  <div className="overview-card-rows">
-                    {readyCount > 0 && slice.readyAddresses && (
-                      <div className="overview-row">
-                        <span className="overview-row-label">
-                          <StatusChip variant="healthy">Ready</StatusChip>
-                        </span>
-                        <span className="overview-row-value plain">
-                          <AddressList
-                            addresses={slice.readyAddresses}
-                            limit={10}
-                            namespace={namespace}
-                            clusterMeta={clusterMeta}
-                          />
-                        </span>
-                      </div>
-                    )}
-                    {notReadyCount > 0 && slice.notReadyAddresses && (
-                      <div className="overview-row">
-                        <span className="overview-row-label">
-                          <StatusChip variant="unhealthy">Not Ready</StatusChip>
-                        </span>
-                        <span className="overview-row-value plain">
-                          <AddressList
-                            addresses={slice.notReadyAddresses}
-                            limit={5}
-                            namespace={namespace}
-                            clusterMeta={clusterMeta}
-                          />
-                        </span>
-                      </div>
-                    )}
-                    {hasPorts && slice.ports && (
-                      <div className="overview-row">
-                        <span className="overview-row-label">Ports</span>
-                        <span className="overview-row-value plain">
-                          <div className="overview-ref-list">
-                            {slice.ports.map((port, portIndex) => (
-                              <div key={`${port.port}-${portIndex}`} className="overview-ref-item">
-                                {formatPort(port)}
-                              </div>
-                            ))}
-                          </div>
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+                </span>
+              </div>
+            )}
           </div>
         </div>
-      )}
+      </div>
 
       <ResourceMetadata
         labels={endpointSliceDetails.labels}

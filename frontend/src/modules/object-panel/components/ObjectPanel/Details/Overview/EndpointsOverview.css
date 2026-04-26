@@ -17,15 +17,6 @@
   -webkit-user-select: text;
 } */
 
-.slices-label {
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-bold);
-  color: var(--color-text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  padding-bottom: var(--spacing-xs);
-}
-
 .addresses-list {
   display: flex;
   flex-direction: column;

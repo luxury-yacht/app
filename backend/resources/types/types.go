@@ -651,27 +651,22 @@ type ServicePortDetails struct {
 	NodePort   int32  `json:"nodePort,omitempty"`
 }
 
+// EndpointSliceDetails describes a single EndpointSlice resource. Address,
+// port, and address-type fields are flattened directly because each Object
+// Panel renders one EndpointSlice; aggregation across slices for a Service
+// uses a different model.
 type EndpointSliceDetails struct {
-	Kind          string                 `json:"kind"`
-	Name          string                 `json:"name"`
-	Namespace     string                 `json:"namespace"`
-	Age           string                 `json:"age"`
-	Details       string                 `json:"details"`
-	Slices        []EndpointSliceSummary `json:"slices,omitempty"`
-	TotalReady    int                    `json:"totalReady"`
-	TotalNotReady int                    `json:"totalNotReady"`
-	TotalPorts    int                    `json:"totalPorts"`
-	Labels        map[string]string      `json:"labels,omitempty"`
-	Annotations   map[string]string      `json:"annotations,omitempty"`
-}
-
-type EndpointSliceSummary struct {
+	Kind              string                 `json:"kind"`
 	Name              string                 `json:"name"`
-	AddressType       string                 `json:"addressType"`
+	Namespace         string                 `json:"namespace"`
 	Age               string                 `json:"age"`
+	Details           string                 `json:"details"`
+	AddressType       string                 `json:"addressType"`
 	ReadyAddresses    []EndpointSliceAddress `json:"readyAddresses,omitempty"`
 	NotReadyAddresses []EndpointSliceAddress `json:"notReadyAddresses,omitempty"`
 	Ports             []EndpointSlicePort    `json:"ports,omitempty"`
+	Labels            map[string]string      `json:"labels,omitempty"`
+	Annotations       map[string]string      `json:"annotations,omitempty"`
 }
 
 type EndpointSliceAddress struct {

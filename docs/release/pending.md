@@ -23,3 +23,4 @@
   - Close the currently active tab, and open the tab to the left
   - If there are no tabs to the left, open the tab to the right
   - If there are no remaining tabs, close the panel
+- Fixed broken resolution of `endpointslice` names that caused an error when viewing YAML
