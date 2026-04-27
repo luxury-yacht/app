@@ -9,7 +9,14 @@ import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceStatus } from '@shared/components/kubernetes/ResourceStatus';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
+import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
 import { buildObjectReference, buildRelatedObjectReference } from '@shared/utils/objectIdentity';
+
+const qosVariant = (qosClass: string): StatusChipVariant => {
+  if (qosClass === 'Guaranteed') return 'healthy';
+  if (qosClass === 'BestEffort') return 'warning';
+  return 'info';
+};
 
 interface PodOverviewProps {
   name: string;
@@ -82,6 +89,10 @@ export const PodOverview: React.FC<PodOverviewProps> = ({
       {/* Use composed component for status */}
       <ResourceStatus status={status} statusSeverity={statusSeverity} ready={ready} />
 
+      {((restarts !== undefined && restarts > 0) || owner || node || nodeIP || podIP) && (
+        <div className="metadata-section-separator" />
+      )}
+
       {/* Restarts - highlight if there are any */}
       {restarts !== undefined && restarts > 0 && (
         <OverviewItem
@@ -133,46 +144,46 @@ export const PodOverview: React.FC<PodOverviewProps> = ({
       {/* Pod IP */}
       {podIP && <OverviewItem label="Pod IP" value={podIP} />}
 
-      {/* QoS and Priority - only show if not default */}
-      {qosClass && qosClass !== 'BestEffort' && (
-        <OverviewItem
-          label="QoS"
-          value={
-            <span className={`status-badge ${qosClass === 'Guaranteed' ? 'success' : 'info'}`}>
-              {qosClass}
-            </span>
-          }
-        />
-      )}
-
-      {priorityClass && <OverviewItem label="Priority" value={priorityClass} />}
-
-      {/* Service Account - only show if not default */}
-      {serviceAccount && serviceAccount !== 'default' && (
-        <OverviewItem
-          label="Service Account"
-          value={
-            <ObjectPanelLink
-              objectRef={buildObjectReference({
-                kind: 'serviceaccount',
-                name: serviceAccount,
-                namespace: namespace,
-                ...clusterMeta,
-              })}
-              title="Click to view service account"
-            >
-              {serviceAccount}
-            </ObjectPanelLink>
-          }
-        />
-      )}
-
-      {/* Special configurations */}
-      {hostNetwork && (
-        <OverviewItem
-          label="Host Network"
-          value={<span className="status-badge warning">Enabled</span>}
-        />
+      {/* Runtime / security group — visually separated from the identity
+          rows above (Owner / Node / IPs). */}
+      {(qosClass ||
+        priorityClass ||
+        (serviceAccount && serviceAccount !== 'default') ||
+        hostNetwork) && (
+        <>
+          <div className="metadata-section-separator" />
+          {qosClass && (
+            <OverviewItem
+              label="QoS"
+              value={<StatusChip variant={qosVariant(qosClass)}>{qosClass}</StatusChip>}
+            />
+          )}
+          {priorityClass && <OverviewItem label="Priority" value={priorityClass} />}
+          {serviceAccount && serviceAccount !== 'default' && (
+            <OverviewItem
+              label="Service Account"
+              value={
+                <ObjectPanelLink
+                  objectRef={buildObjectReference({
+                    kind: 'serviceaccount',
+                    name: serviceAccount,
+                    namespace: namespace,
+                    ...clusterMeta,
+                  })}
+                  title="Click to view service account"
+                >
+                  {serviceAccount}
+                </ObjectPanelLink>
+              }
+            />
+          )}
+          {hostNetwork && (
+            <OverviewItem
+              label="Host Network"
+              value={<span className="status-badge warning">Enabled</span>}
+            />
+          )}
+        </>
       )}
 
       {/* Use composed component for metadata */}
