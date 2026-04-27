@@ -393,7 +393,6 @@
   background: var(--workload-cronjob);
 }
 
-
 .metric-stats {
   display: flex;
   align-items: center;

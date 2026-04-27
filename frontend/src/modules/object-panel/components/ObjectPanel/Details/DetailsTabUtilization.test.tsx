@@ -77,7 +77,8 @@ describe('DetailsTabUtilization', () => {
       <Utilization cpu={{ usage: '400m', request: '200m', limit: '800m' }} podCount={5} />
     );
     expect(container.textContent).toContain('5 pods');
-    expect(container.textContent).not.toContain('/');
+    // The "X/Y pods" form should not appear when readyPodCount is absent.
+    expect(container.textContent).not.toMatch(/\d+\/\d+\s+pods/);
     cleanup();
   });
 
