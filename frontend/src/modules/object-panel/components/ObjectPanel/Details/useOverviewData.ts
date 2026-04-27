@@ -143,6 +143,8 @@ export function useOverviewData(params: UseOverviewDataParams): OverviewData | n
         hostNetwork: podDetails.hostNetwork,
         hostPID: podDetails.hostPID,
         hostIPC: podDetails.hostIPC,
+        tolerations: podDetails.tolerations,
+        restartPolicy: podDetails.restartPolicy,
         labels: podDetails.labels,
         annotations: podDetails.annotations,
       };

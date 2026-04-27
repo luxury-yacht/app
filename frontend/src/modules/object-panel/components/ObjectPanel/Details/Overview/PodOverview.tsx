@@ -13,6 +13,82 @@ import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChi
 import { buildObjectReference, buildRelatedObjectReference } from '@shared/utils/objectIdentity';
 import '@modules/object-panel/components/ObjectPanel/Details/Overview/shared/OverviewBlocks.css';
 
+// The DefaultTolerationSeconds admission controller silently injects these
+// two tolerations into virtually every pod, so they're noise rather than
+// signal. The backend formats them as e.g.
+//   "node.kubernetes.io/not-ready Exists (NoExecute) for 300s"
+// (default seconds varies by cluster config). We only filter the timed
+// variant — the un-timed form (added by the DaemonSet controller) still
+// surfaces, since it tells you the pod is a DaemonSet.
+const DEFAULT_TOLERATION_RE =
+  /^node\.kubernetes\.io\/(not-ready|unreachable) Exists \(NoExecute\) for \d+s$/;
+
+interface ParsedToleration {
+  label: string;
+  tooltip?: string;
+}
+
+// Backend tolerations arrive as e.g.
+//   "node-role.kubernetes.io/control-plane Equal master (NoSchedule) for 60s"
+//   "custom-taint Exists (NoExecute)"
+//   "Exists"  (operator-only, matches any taint)
+// We compress to taint-shape (`key[=value][:effect]`) for the chip label and
+// move whatever doesn't fit in that shape into a tooltip.
+const parseToleration = (raw: string): ParsedToleration | null => {
+  let remaining = raw.trim();
+  if (!remaining) return null;
+
+  // Strip optional " for Xs" tail (TolerationSeconds — only used with NoExecute).
+  let seconds: string | undefined;
+  const secondsMatch = remaining.match(/\s+for\s+(\d+)s$/);
+  if (secondsMatch) {
+    seconds = secondsMatch[1];
+    remaining = remaining.slice(0, secondsMatch.index).trim();
+  }
+
+  // Strip optional "(effect)" tail.
+  let effect: string | undefined;
+  const effectMatch = remaining.match(/\s*\(([^)]+)\)$/);
+  if (effectMatch) {
+    effect = effectMatch[1];
+    remaining = remaining.slice(0, effectMatch.index).trim();
+  }
+
+  // What's left is one of: "Exists", "key", "key Operator", or "key Operator value".
+  let key: string | undefined;
+  let value: string | undefined;
+  if (remaining === 'Exists') {
+    // operator-only toleration — tolerates any taint
+  } else {
+    const parts = remaining.split(/\s+/);
+    key = parts[0];
+    value = parts[2]; // present when operator is "Equal"
+  }
+
+  let label: string;
+  if (!key) {
+    label = 'Exists';
+  } else {
+    label = key + (value ? `=${value}` : '') + (effect ? `:${effect}` : '');
+  }
+
+  const tooltipParts: string[] = [];
+  if (!key) {
+    tooltipParts.push('Tolerates any taint.');
+  } else if (!value) {
+    tooltipParts.push('Tolerates any value for this key.');
+  }
+  if (key && !effect) {
+    tooltipParts.push('Tolerates any effect.');
+  }
+  if (seconds) {
+    tooltipParts.push(`Pod evicted after ${seconds}s if a matching taint persists.`);
+  }
+  const tooltip = tooltipParts.length > 0 ? tooltipParts.join(' ') : undefined;
+
+  return { label, tooltip };
+};
+
 const qosVariant = (qosClass: string): StatusChipVariant => {
   if (qosClass === 'Guaranteed') return 'healthy';
   if (qosClass === 'BestEffort') return 'warning';
@@ -50,6 +126,8 @@ interface PodOverviewProps {
   hostNetwork?: boolean;
   hostPID?: boolean;
   hostIPC?: boolean;
+  tolerations?: string[];
+  restartPolicy?: string;
   labels?: Record<string, string>;
   annotations?: Record<string, string>;
 }
@@ -72,6 +150,8 @@ export const PodOverview: React.FC<PodOverviewProps> = ({
   hostNetwork,
   hostPID,
   hostIPC,
+  tolerations,
+  restartPolicy,
   labels,
   annotations,
 }) => {
@@ -162,10 +242,34 @@ export const PodOverview: React.FC<PodOverviewProps> = ({
       {/* Pod IP */}
       {podIP && <OverviewItem label="Pod IP" value={podIP} />}
 
+      {(() => {
+        const parsed =
+          tolerations
+            ?.filter((tol) => !DEFAULT_TOLERATION_RE.test(tol))
+            .map(parseToleration)
+            .filter((p): p is ParsedToleration => p !== null) ?? [];
+        if (parsed.length === 0) return null;
+        return (
+          <OverviewItem
+            label="Tolerations"
+            value={
+              <div className="overview-condition-list">
+                {parsed.map((p, i) => (
+                  <StatusChip key={`${p.label}-${i}`} variant="info" tooltip={p.tooltip}>
+                    {p.label}
+                  </StatusChip>
+                ))}
+              </div>
+            }
+          />
+        );
+      })()}
+
       {/* Runtime / security group — visually separated from the identity
           rows above (Owner / Node / IPs). */}
       {(qosClass ||
         priorityClass ||
+        (restartPolicy && restartPolicy !== 'Always') ||
         (serviceAccount && serviceAccount !== 'default') ||
         hostNetwork ||
         hostPID ||
@@ -183,6 +287,9 @@ export const PodOverview: React.FC<PodOverviewProps> = ({
             />
           )}
           {priorityClass && <OverviewItem label="Priority" value={priorityClass} />}
+          {restartPolicy && restartPolicy !== 'Always' && (
+            <OverviewItem label="Restart Policy" value={restartPolicy} />
+          )}
           {serviceAccount && serviceAccount !== 'default' && (
             <OverviewItem
               label="Service Account"
