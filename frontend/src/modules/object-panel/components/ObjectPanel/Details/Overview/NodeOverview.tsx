@@ -7,6 +7,24 @@ import { OverviewItem } from '@modules/object-panel/components/ObjectPanel/Detai
 import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceStatus } from '@shared/components/kubernetes/ResourceStatus';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
+import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
+import './shared/OverviewBlocks.css';
+
+// For pressure-style conditions (MemoryPressure, DiskPressure, PIDPressure,
+// NetworkUnavailable), `True` means the bad state exists; for the rest
+// (Ready, etc.), `True` is healthy.
+const PRESSURE_CONDITION_TYPES = new Set([
+  'MemoryPressure',
+  'DiskPressure',
+  'PIDPressure',
+  'NetworkUnavailable',
+]);
+
+const nodeConditionVariant = (type: string, status: string): StatusChipVariant => {
+  if (status === 'Unknown') return 'warning';
+  const healthyStatus = PRESSURE_CONDITION_TYPES.has(type) ? 'False' : 'True';
+  return status === healthyStatus ? 'healthy' : 'unhealthy';
+};
 
 interface NodeOverviewProps {
   name: string;
@@ -109,52 +127,18 @@ export const NodeOverview: React.FC<NodeOverviewProps> = ({
         <OverviewItem
           label="Conditions"
           value={
-            <div className="node-conditions">
+            <div className="overview-condition-list">
               {conditions
-                .filter((condition: any) => {
-                  // Only show conditions that are not in their default healthy state
-                  const isPressureCondition = condition.type?.includes('Pressure');
-                  if (isPressureCondition) {
-                    return condition.status === 'True'; // Show if pressure exists
-                  } else if (condition.type === 'Ready') {
-                    return condition.status !== 'True'; // Show if not ready
-                  }
-                  return condition.status !== 'True'; // Show other non-healthy conditions
-                })
-                .map((condition: any, index: number) => {
-                  // For pressure conditions, True is bad
-                  const isPressureCondition = condition.type?.includes('Pressure');
-                  let statusClass = 'warning';
-                  let displayText = condition.type;
-
-                  if (condition.status === 'Unknown') {
-                    statusClass = 'unknown';
-                  } else if (isPressureCondition && condition.status === 'True') {
-                    statusClass = 'error';
-                  }
-
-                  return (
-                    <span
-                      key={index}
-                      style={{ marginRight: index < conditions.length - 1 ? '8px' : 0 }}
-                    >
-                      <span
-                        className={`status-badge ${statusClass}`}
-                        style={{ fontSize: '0.85em' }}
-                      >
-                        {displayText}
-                      </span>
-                    </span>
-                  );
-                })}
-              {/* If all conditions are healthy, show a simple message */}
-              {conditions.every((condition: any) => {
-                const isPressureCondition = condition.kind?.includes('Pressure');
-                if (isPressureCondition) {
-                  return condition.status === 'False';
-                }
-                return condition.status === 'True';
-              }) && <span className="status-badge success">All Healthy</span>}
+                .filter((condition: any) => Boolean(condition.kind))
+                .map((condition: any) => (
+                  <StatusChip
+                    key={condition.kind}
+                    variant={nodeConditionVariant(condition.kind, condition.status)}
+                    tooltip={condition.message || condition.reason || undefined}
+                  >
+                    {condition.kind}
+                  </StatusChip>
+                ))}
             </div>
           }
         />

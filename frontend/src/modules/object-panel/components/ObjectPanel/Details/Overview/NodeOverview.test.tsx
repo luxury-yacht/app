@@ -24,6 +24,11 @@ vi.mock('@shared/components/kubernetes/ResourceMetadata', () => ({
   ResourceMetadata: () => <div data-testid="resource-metadata" />,
 }));
 
+vi.mock('@shared/components/Tooltip', () => ({
+  __esModule: true,
+  default: ({ children }: any) => <>{children}</>,
+}));
+
 const getValueForLabel = (container: HTMLElement, label: string) => {
   const labelElement = Array.from(container.querySelectorAll<HTMLElement>('.overview-label')).find(
     (el) => el.textContent?.trim() === label
@@ -75,8 +80,8 @@ describe('NodeOverview', () => {
       storageCapacity: '500Gi',
       taints: [{ key: 'node-role.kubernetes.io/control-plane', effect: 'NoSchedule' }],
       conditions: [
-        { type: 'MemoryPressure', status: 'True' },
-        { type: 'Ready', status: 'False' },
+        { kind: 'MemoryPressure', status: 'True' },
+        { kind: 'Ready', status: 'False' },
       ],
       labels: {},
       annotations: {},
@@ -91,16 +96,28 @@ describe('NodeOverview', () => {
     expect(container.textContent).toContain('MemoryPressure');
   });
 
-  it('shows all-healthy badge when conditions are healthy', async () => {
+  it('renders every condition as a status chip with the correct variant', async () => {
     await renderComponent({
       name: 'node-b',
       age: '10d',
       conditions: [
-        { type: 'Ready', status: 'True', kind: 'Ready' },
-        { type: 'MemoryPressure', status: 'False', kind: 'MemoryPressure' },
+        { kind: 'Ready', status: 'True' },
+        { kind: 'MemoryPressure', status: 'False' },
+        { kind: 'DiskPressure', status: 'True', message: 'disk full' },
+        { kind: 'PIDPressure', status: 'Unknown' },
       ],
     });
 
-    expect(container.textContent).toContain('All Healthy');
+    const chips = Array.from(container.querySelectorAll<HTMLElement>('.status-chip'));
+    expect(chips.map((el) => el.textContent)).toEqual([
+      'Ready',
+      'MemoryPressure',
+      'DiskPressure',
+      'PIDPressure',
+    ]);
+    expect(chips[0].className).toContain('status-chip--healthy');
+    expect(chips[1].className).toContain('status-chip--healthy');
+    expect(chips[2].className).toContain('status-chip--unhealthy');
+    expect(chips[3].className).toContain('status-chip--warning');
   });
 });
