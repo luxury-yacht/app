@@ -31,7 +31,6 @@ interface NodeOverviewProps {
   age: string;
   status?: string;
   roles?: string;
-  version?: string;
   os?: string;
   osImage?: string;
   architecture?: string;
@@ -55,12 +54,12 @@ export const NodeOverview: React.FC<NodeOverviewProps> = ({
   age,
   status,
   roles,
-  version,
   os,
   osImage,
   architecture,
   containerRuntime,
   kernelVersion,
+  kubeletVersion,
   hostname,
   internalIP,
   externalIP,
@@ -79,7 +78,49 @@ export const NodeOverview: React.FC<NodeOverviewProps> = ({
 
       {/* Use composed component for status */}
       {status && <ResourceStatus status={status} />}
-      {roles && <OverviewItem label="Roles" value={roles} />}
+
+      {conditions && conditions.length > 0 && (
+        <>
+          <OverviewItem
+            label="Conditions"
+            value={
+              <div className="overview-condition-list">
+                {conditions
+                  .filter((condition: any) => Boolean(condition.kind))
+                  .map((condition: any) => (
+                    <StatusChip
+                      key={condition.kind}
+                      variant={nodeConditionVariant(condition.kind, condition.status)}
+                      tooltip={condition.message || condition.reason || undefined}
+                    >
+                      {condition.kind}
+                    </StatusChip>
+                  ))}
+              </div>
+            }
+          />
+          <div className="metadata-section-separator" />
+        </>
+      )}
+
+      {roles && (
+        <OverviewItem
+          label="Roles"
+          value={
+            <div className="overview-condition-list">
+              {roles
+                .split(',')
+                .map((role) => role.trim())
+                .filter(Boolean)
+                .map((role) => (
+                  <StatusChip key={role} variant="info">
+                    {role}
+                  </StatusChip>
+                ))}
+            </div>
+          }
+        />
+      )}
 
       {/* Network information */}
       {internalIP && <OverviewItem label="Internal IP" value={internalIP} />}
@@ -89,56 +130,37 @@ export const NodeOverview: React.FC<NodeOverviewProps> = ({
       {/* Pod count and capacity. If either value is unknown, display `unknown` */}
       <OverviewItem label="Pods" value={`${podsCount ?? 'unknown'}/${podsCapacity ?? 'unknown'}`} />
 
-      {/* Version information - combine related fields */}
-      {version && <OverviewItem label="Kubernetes" value={version} />}
-
-      {/* System information - only show if different from defaults or important */}
-      {os && osImage && <OverviewItem label="OS" value={`${os}/${architecture || 'unknown'}`} />}
-
-      {osImage && <OverviewItem label="OS Image" value={osImage} />}
-
-      {containerRuntime && <OverviewItem label="Runtime" value={containerRuntime} />}
-
-      {/* Only show kernel if provided */}
-      {kernelVersion && <OverviewItem label="Kernel" value={kernelVersion} />}
-
       {/* Storage capacity if available */}
       {storageCapacity && <OverviewItem label="Storage" value={storageCapacity} />}
+
+      {/* System info group — visually separated from surrounding rows */}
+      {(kubeletVersion || osImage || containerRuntime || kernelVersion) && (
+        <>
+          <div className="metadata-section-separator" />
+          {kubeletVersion && <OverviewItem label="Kubelet" value={kubeletVersion} />}
+          {os && osImage && (
+            <OverviewItem label="OS" value={`${os}/${architecture || 'unknown'}`} />
+          )}
+          {osImage && <OverviewItem label="OS Image" value={osImage} />}
+          {kernelVersion && <OverviewItem label="Kernel" value={kernelVersion} />}
+          {containerRuntime && <OverviewItem label="Runtime" value={containerRuntime} />}
+          <div className="metadata-section-separator" />
+        </>
+      )}
 
       {taints && taints.length > 0 && (
         <OverviewItem
           label="Taints"
           value={
-            <div>
-              {taints.map((taint: any, index: number) => (
-                <span key={index} style={{ marginRight: index < taints.length - 1 ? '8px' : 0 }}>
-                  <span className="status-badge warning">
-                    {taint.key}
-                    {taint.value && `=${taint.value}`}:{taint.effect}
-                  </span>
-                </span>
-              ))}
-            </div>
-          }
-        />
-      )}
-
-      {conditions && conditions.length > 0 && (
-        <OverviewItem
-          label="Conditions"
-          value={
             <div className="overview-condition-list">
-              {conditions
-                .filter((condition: any) => Boolean(condition.kind))
-                .map((condition: any) => (
-                  <StatusChip
-                    key={condition.kind}
-                    variant={nodeConditionVariant(condition.kind, condition.status)}
-                    tooltip={condition.message || condition.reason || undefined}
-                  >
-                    {condition.kind}
+              {taints.map((taint: any, index: number) => {
+                const label = `${taint.key}${taint.value ? `=${taint.value}` : ''}:${taint.effect}`;
+                return (
+                  <StatusChip key={`${label}-${index}`} variant="warning">
+                    {label}
                   </StatusChip>
-                ))}
+                );
+              })}
             </div>
           }
         />

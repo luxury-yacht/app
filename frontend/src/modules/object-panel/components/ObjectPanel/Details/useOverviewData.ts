@@ -660,7 +660,6 @@ export function useOverviewData(params: UseOverviewDataParams): OverviewData | n
         age: nodeDetails.age,
         status: nodeDetails.status,
         roles: nodeDetails.roles,
-        version: nodeDetails.version,
         os: nodeDetails.os,
         osImage: nodeDetails.osImage,
         architecture: nodeDetails.architecture,

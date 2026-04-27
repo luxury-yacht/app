@@ -429,7 +429,6 @@ func (s *Service) buildNodeDetails(node *corev1.Node, pods []corev1.Pod, nodeMet
 		KernelVersion:    node.Status.NodeInfo.KernelVersion,
 		ContainerRuntime: node.Status.NodeInfo.ContainerRuntimeVersion,
 		KubeletVersion:   node.Status.NodeInfo.KubeletVersion,
-		Version:          node.Status.NodeInfo.KubeletVersion,
 		Labels:           node.Labels,
 		Annotations:      node.Annotations,
 		PodsList:         podsList,
@@ -450,6 +449,14 @@ func (s *Service) buildNodeDetails(node *corev1.Node, pods []corev1.Pod, nodeMet
 			Status:  string(condition.Status),
 			Reason:  condition.Reason,
 			Message: condition.Message,
+		})
+	}
+
+	for _, taint := range node.Spec.Taints {
+		details.Taints = append(details.Taints, restypes.NodeTaint{
+			Key:    taint.Key,
+			Value:  taint.Value,
+			Effect: string(taint.Effect),
 		})
 	}
 

@@ -3430,7 +3430,6 @@ export namespace types {
 	    unschedulable: boolean;
 	    roles: string;
 	    age: string;
-	    version: string;
 	    internalIP: string;
 	    externalIP?: string;
 	    hostname: string;
@@ -3476,7 +3475,6 @@ export namespace types {
 	        this.unschedulable = source["unschedulable"];
 	        this.roles = source["roles"];
 	        this.age = source["age"];
-	        this.version = source["version"];
 	        this.internalIP = source["internalIP"];
 	        this.externalIP = source["externalIP"];
 	        this.hostname = source["hostname"];

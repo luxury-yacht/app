@@ -71,7 +71,7 @@ describe('NodeOverview', () => {
       hostname: 'node-host',
       podsCapacity: '100',
       podsCount: 80,
-      version: 'v1.28.0',
+      kubeletVersion: 'v1.28.0',
       os: 'linux',
       architecture: 'amd64',
       osImage: 'Ubuntu 22.04',
@@ -87,7 +87,12 @@ describe('NodeOverview', () => {
       annotations: {},
     });
 
-    expect(container.textContent).toContain('control-plane,master');
+    const rolesValue = getValueForLabel(container, 'Roles');
+    expect(rolesValue?.textContent).toContain('control-plane');
+    expect(rolesValue?.textContent).toContain('master');
+    const roleChips = rolesValue?.querySelectorAll('.status-chip');
+    expect(roleChips?.length).toBe(2);
+    roleChips?.forEach((chip) => expect(chip.className).toContain('status-chip--info'));
     expect(getValueForLabel(container, 'Internal IP')?.textContent).toBe('10.0.0.10');
     expect(getValueForLabel(container, 'Pods')?.textContent).toContain('80/100');
     expect(getValueForLabel(container, 'OS')?.textContent).toContain('linux/amd64');

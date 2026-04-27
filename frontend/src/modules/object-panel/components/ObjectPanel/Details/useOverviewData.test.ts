@@ -277,7 +277,6 @@ describe('useOverviewData', () => {
       age: '60d',
       status: 'Ready',
       roles: ['control-plane'],
-      version: 'v1.29.0',
       os: 'linux',
       osImage: 'Ubuntu 22.04',
       architecture: 'amd64',
