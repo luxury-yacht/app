@@ -32,6 +32,7 @@ import (
 	discoverylisters "k8s.io/client-go/listers/discovery/v1"
 	networklisters "k8s.io/client-go/listers/networking/v1"
 	"k8s.io/client-go/tools/cache"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
@@ -330,6 +331,66 @@ func NewManager(
 		})
 	}
 
+	if gatewayShared := factory.GatewayInformerFactory(); gatewayShared != nil {
+		gateway := gatewayShared.Gateway().V1()
+		if mgr.permissions == nil || mgr.permissions.CanListWatch("gateway.networking.k8s.io", "gateways") {
+			inf := gateway.Gateways()
+			inf.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+				AddFunc:    func(obj interface{}) { mgr.handleGateway(obj, MessageTypeAdded) },
+				UpdateFunc: func(_, newObj interface{}) { mgr.handleGateway(newObj, MessageTypeModified) },
+				DeleteFunc: func(obj interface{}) { mgr.handleGateway(obj, MessageTypeDeleted) },
+			})
+		}
+		if mgr.permissions == nil || mgr.permissions.CanListWatch("gateway.networking.k8s.io", "httproutes") {
+			inf := gateway.HTTPRoutes()
+			inf.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+				AddFunc:    func(obj interface{}) { mgr.handleHTTPRoute(obj, MessageTypeAdded) },
+				UpdateFunc: func(_, newObj interface{}) { mgr.handleHTTPRoute(newObj, MessageTypeModified) },
+				DeleteFunc: func(obj interface{}) { mgr.handleHTTPRoute(obj, MessageTypeDeleted) },
+			})
+		}
+		if mgr.permissions == nil || mgr.permissions.CanListWatch("gateway.networking.k8s.io", "grpcroutes") {
+			inf := gateway.GRPCRoutes()
+			inf.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+				AddFunc:    func(obj interface{}) { mgr.handleGRPCRoute(obj, MessageTypeAdded) },
+				UpdateFunc: func(_, newObj interface{}) { mgr.handleGRPCRoute(newObj, MessageTypeModified) },
+				DeleteFunc: func(obj interface{}) { mgr.handleGRPCRoute(obj, MessageTypeDeleted) },
+			})
+		}
+		if mgr.permissions == nil || mgr.permissions.CanListWatch("gateway.networking.k8s.io", "tlsroutes") {
+			inf := gateway.TLSRoutes()
+			inf.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+				AddFunc:    func(obj interface{}) { mgr.handleTLSRoute(obj, MessageTypeAdded) },
+				UpdateFunc: func(_, newObj interface{}) { mgr.handleTLSRoute(newObj, MessageTypeModified) },
+				DeleteFunc: func(obj interface{}) { mgr.handleTLSRoute(obj, MessageTypeDeleted) },
+			})
+		}
+		if mgr.permissions == nil || mgr.permissions.CanListWatch("gateway.networking.k8s.io", "listenersets") {
+			inf := gateway.ListenerSets()
+			inf.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+				AddFunc:    func(obj interface{}) { mgr.handleListenerSet(obj, MessageTypeAdded) },
+				UpdateFunc: func(_, newObj interface{}) { mgr.handleListenerSet(newObj, MessageTypeModified) },
+				DeleteFunc: func(obj interface{}) { mgr.handleListenerSet(obj, MessageTypeDeleted) },
+			})
+		}
+		if mgr.permissions == nil || mgr.permissions.CanListWatch("gateway.networking.k8s.io", "referencegrants") {
+			inf := gateway.ReferenceGrants()
+			inf.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+				AddFunc:    func(obj interface{}) { mgr.handleReferenceGrant(obj, MessageTypeAdded) },
+				UpdateFunc: func(_, newObj interface{}) { mgr.handleReferenceGrant(newObj, MessageTypeModified) },
+				DeleteFunc: func(obj interface{}) { mgr.handleReferenceGrant(obj, MessageTypeDeleted) },
+			})
+		}
+		if mgr.permissions == nil || mgr.permissions.CanListWatch("gateway.networking.k8s.io", "backendtlspolicies") {
+			inf := gateway.BackendTLSPolicies()
+			inf.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+				AddFunc:    func(obj interface{}) { mgr.handleBackendTLSPolicy(obj, MessageTypeAdded) },
+				UpdateFunc: func(_, newObj interface{}) { mgr.handleBackendTLSPolicy(newObj, MessageTypeModified) },
+				DeleteFunc: func(obj interface{}) { mgr.handleBackendTLSPolicy(obj, MessageTypeDeleted) },
+			})
+		}
+	}
+
 	if mgr.permissions == nil || mgr.permissions.CanListWatch("", "persistentvolumeclaims") {
 		pvcInformer := shared.Core().V1().PersistentVolumeClaims()
 		pvcInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -514,6 +575,16 @@ func NewManager(
 		})
 	}
 
+	if gatewayShared := factory.GatewayInformerFactory(); gatewayShared != nil &&
+		(mgr.permissions == nil || mgr.permissions.CanListWatch("gateway.networking.k8s.io", "gatewayclasses")) {
+		gatewayClassInformer := gatewayShared.Gateway().V1().GatewayClasses()
+		gatewayClassInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+			AddFunc:    func(obj interface{}) { mgr.handleGatewayClass(obj, MessageTypeAdded) },
+			UpdateFunc: func(_, newObj interface{}) { mgr.handleGatewayClass(newObj, MessageTypeModified) },
+			DeleteFunc: func(obj interface{}) { mgr.handleGatewayClass(obj, MessageTypeDeleted) },
+		})
+	}
+
 	if mgr.permissions == nil || mgr.permissions.CanListWatch("admissionregistration.k8s.io", "validatingwebhookconfigurations") {
 		validatingWebhookInformer := shared.Admissionregistration().V1().ValidatingWebhookConfigurations()
 		validatingWebhookInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -598,6 +669,10 @@ func (m *Manager) handleCustomResourceDefinition(obj interface{}, updateType Mes
 	// CRD updates feed both the cluster CRD stream and custom resource informers.
 	m.handleClusterCRD(obj, updateType)
 	if updateType == MessageTypeDeleted {
+		m.removeCustomInformer(crd.Name)
+		return
+	}
+	if snapshot.IsFirstClassCustomResourceDefinition(crd) {
 		m.removeCustomInformer(crd.Name)
 		return
 	}
@@ -1167,10 +1242,26 @@ func (m *Manager) handleEndpointSlice(obj interface{}, updateType MessageType) {
 	if slice.Labels != nil {
 		serviceName = strings.TrimSpace(slice.Labels[discoveryv1.LabelServiceName])
 	}
-	if serviceName == "" {
+
+	update := Update{
+		Type:            updateType,
+		Domain:          domainNamespaceNetwork,
+		ClusterID:       m.clusterMeta.ClusterID,
+		ClusterName:     m.clusterMeta.ClusterName,
+		ResourceVersion: slice.ResourceVersion,
+		UID:             string(slice.UID),
+		Name:            slice.Name,
+		Namespace:       slice.Namespace,
+		Kind:            "EndpointSlice",
+	}
+	if updateType != MessageTypeDeleted {
+		update.Row = snapshot.BuildEndpointSliceSummary(m.clusterMeta, slice)
+	}
+	m.broadcast(domainNamespaceNetwork, scopesForNamespace(slice.Namespace), update)
+
+	if m.serviceLister == nil || serviceName == "" {
 		return
 	}
-
 	slices, err := m.listEndpointSlicesForService(slice.Namespace, serviceName)
 	if err != nil {
 		m.logger.Warn(
@@ -1180,44 +1271,6 @@ func (m *Manager) handleEndpointSlice(obj interface{}, updateType MessageType) {
 		if m.telemetry != nil {
 			m.telemetry.RecordStreamError(telemetry.StreamResources, err)
 		}
-		return
-	}
-
-	if len(slices) == 0 {
-		update := Update{
-			Type:            MessageTypeDeleted,
-			Domain:          domainNamespaceNetwork,
-			ClusterID:       m.clusterMeta.ClusterID,
-			ClusterName:     m.clusterMeta.ClusterName,
-			ResourceVersion: slice.ResourceVersion,
-			UID:             string(slice.UID),
-			Name:            serviceName,
-			Namespace:       slice.Namespace,
-			Kind:            "EndpointSlice",
-		}
-		m.broadcast(domainNamespaceNetwork, scopesForNamespace(slice.Namespace), update)
-	} else {
-		summary := snapshot.BuildEndpointSliceSummary(m.clusterMeta, slice.Namespace, serviceName, slices)
-		eventType := updateType
-		if eventType == MessageTypeDeleted {
-			eventType = MessageTypeModified
-		}
-		update := Update{
-			Type:            eventType,
-			Domain:          domainNamespaceNetwork,
-			ClusterID:       m.clusterMeta.ClusterID,
-			ClusterName:     m.clusterMeta.ClusterName,
-			ResourceVersion: slice.ResourceVersion,
-			UID:             string(slice.UID),
-			Name:            serviceName,
-			Namespace:       slice.Namespace,
-			Kind:            "EndpointSlice",
-			Row:             summary,
-		}
-		m.broadcast(domainNamespaceNetwork, scopesForNamespace(slice.Namespace), update)
-	}
-
-	if m.serviceLister == nil {
 		return
 	}
 	service, err := m.serviceLister.Services(slice.Namespace).Get(serviceName)
@@ -1288,6 +1341,80 @@ func (m *Manager) handleNetworkPolicy(obj interface{}, updateType MessageType) {
 	m.broadcast(domainNamespaceNetwork, scopesForNamespace(policy.Namespace), update)
 }
 
+func (m *Manager) handleGateway(obj interface{}, updateType MessageType) {
+	item := gatewayFromObject(obj)
+	if item == nil {
+		return
+	}
+	m.broadcastGatewayNetworkUpdate(updateType, item.Name, item.Namespace, item.ResourceVersion, string(item.UID), "Gateway", snapshot.BuildGatewayNetworkSummary(m.clusterMeta, item))
+}
+
+func (m *Manager) handleHTTPRoute(obj interface{}, updateType MessageType) {
+	item := httpRouteFromObject(obj)
+	if item == nil {
+		return
+	}
+	m.broadcastGatewayNetworkUpdate(updateType, item.Name, item.Namespace, item.ResourceVersion, string(item.UID), "HTTPRoute", snapshot.BuildHTTPRouteNetworkSummary(m.clusterMeta, item))
+}
+
+func (m *Manager) handleGRPCRoute(obj interface{}, updateType MessageType) {
+	item := grpcRouteFromObject(obj)
+	if item == nil {
+		return
+	}
+	m.broadcastGatewayNetworkUpdate(updateType, item.Name, item.Namespace, item.ResourceVersion, string(item.UID), "GRPCRoute", snapshot.BuildGRPCRouteNetworkSummary(m.clusterMeta, item))
+}
+
+func (m *Manager) handleTLSRoute(obj interface{}, updateType MessageType) {
+	item := tlsRouteFromObject(obj)
+	if item == nil {
+		return
+	}
+	m.broadcastGatewayNetworkUpdate(updateType, item.Name, item.Namespace, item.ResourceVersion, string(item.UID), "TLSRoute", snapshot.BuildTLSRouteNetworkSummary(m.clusterMeta, item))
+}
+
+func (m *Manager) handleListenerSet(obj interface{}, updateType MessageType) {
+	item := listenerSetFromObject(obj)
+	if item == nil {
+		return
+	}
+	m.broadcastGatewayNetworkUpdate(updateType, item.Name, item.Namespace, item.ResourceVersion, string(item.UID), "ListenerSet", snapshot.BuildListenerSetNetworkSummary(m.clusterMeta, item))
+}
+
+func (m *Manager) handleReferenceGrant(obj interface{}, updateType MessageType) {
+	item := referenceGrantFromObject(obj)
+	if item == nil {
+		return
+	}
+	m.broadcastGatewayNetworkUpdate(updateType, item.Name, item.Namespace, item.ResourceVersion, string(item.UID), "ReferenceGrant", snapshot.BuildReferenceGrantNetworkSummary(m.clusterMeta, item))
+}
+
+func (m *Manager) handleBackendTLSPolicy(obj interface{}, updateType MessageType) {
+	item := backendTLSPolicyFromObject(obj)
+	if item == nil {
+		return
+	}
+	m.broadcastGatewayNetworkUpdate(updateType, item.Name, item.Namespace, item.ResourceVersion, string(item.UID), "BackendTLSPolicy", snapshot.BuildBackendTLSPolicyNetworkSummary(m.clusterMeta, item))
+}
+
+func (m *Manager) broadcastGatewayNetworkUpdate(updateType MessageType, name, namespace, resourceVersion, uid, kind string, row snapshot.NetworkSummary) {
+	update := Update{
+		Type:            updateType,
+		Domain:          domainNamespaceNetwork,
+		ClusterID:       m.clusterMeta.ClusterID,
+		ClusterName:     m.clusterMeta.ClusterName,
+		ResourceVersion: resourceVersion,
+		UID:             uid,
+		Name:            name,
+		Namespace:       namespace,
+		Kind:            kind,
+	}
+	if updateType != MessageTypeDeleted {
+		update.Row = row
+	}
+	m.broadcast(domainNamespaceNetwork, scopesForNamespace(namespace), update)
+}
+
 // Cluster configuration updates stream shared cluster resources.
 func (m *Manager) handleStorageClass(obj interface{}, updateType MessageType) {
 	storageClass := storageClassFromObject(obj)
@@ -1331,6 +1458,30 @@ func (m *Manager) handleIngressClass(obj interface{}, updateType MessageType) {
 		Name:            ingressClass.Name,
 		Namespace:       ingressClass.Namespace,
 		Kind:            "IngressClass",
+	}
+	if updateType != MessageTypeDeleted {
+		update.Row = summary
+	}
+
+	m.broadcast(domainClusterConfig, scopesForCluster(), update)
+}
+
+func (m *Manager) handleGatewayClass(obj interface{}, updateType MessageType) {
+	gatewayClass := gatewayClassFromObject(obj)
+	if gatewayClass == nil {
+		return
+	}
+
+	summary := snapshot.BuildClusterGatewayClassSummary(m.clusterMeta, gatewayClass)
+	update := Update{
+		Type:            updateType,
+		Domain:          domainClusterConfig,
+		ClusterID:       m.clusterMeta.ClusterID,
+		ClusterName:     m.clusterMeta.ClusterName,
+		ResourceVersion: gatewayClass.ResourceVersion,
+		UID:             string(gatewayClass.UID),
+		Name:            gatewayClass.Name,
+		Kind:            "GatewayClass",
 	}
 	if updateType != MessageTypeDeleted {
 		update.Row = summary
@@ -2260,6 +2411,94 @@ func networkPolicyFromObject(obj interface{}) *networkingv1.NetworkPolicy {
 		return typed
 	case cache.DeletedFinalStateUnknown:
 		return networkPolicyFromObject(typed.Obj)
+	default:
+		return nil
+	}
+}
+
+func gatewayClassFromObject(obj interface{}) *gatewayv1.GatewayClass {
+	switch typed := obj.(type) {
+	case *gatewayv1.GatewayClass:
+		return typed
+	case cache.DeletedFinalStateUnknown:
+		return gatewayClassFromObject(typed.Obj)
+	default:
+		return nil
+	}
+}
+
+func gatewayFromObject(obj interface{}) *gatewayv1.Gateway {
+	switch typed := obj.(type) {
+	case *gatewayv1.Gateway:
+		return typed
+	case cache.DeletedFinalStateUnknown:
+		return gatewayFromObject(typed.Obj)
+	default:
+		return nil
+	}
+}
+
+func httpRouteFromObject(obj interface{}) *gatewayv1.HTTPRoute {
+	switch typed := obj.(type) {
+	case *gatewayv1.HTTPRoute:
+		return typed
+	case cache.DeletedFinalStateUnknown:
+		return httpRouteFromObject(typed.Obj)
+	default:
+		return nil
+	}
+}
+
+func grpcRouteFromObject(obj interface{}) *gatewayv1.GRPCRoute {
+	switch typed := obj.(type) {
+	case *gatewayv1.GRPCRoute:
+		return typed
+	case cache.DeletedFinalStateUnknown:
+		return grpcRouteFromObject(typed.Obj)
+	default:
+		return nil
+	}
+}
+
+func tlsRouteFromObject(obj interface{}) *gatewayv1.TLSRoute {
+	switch typed := obj.(type) {
+	case *gatewayv1.TLSRoute:
+		return typed
+	case cache.DeletedFinalStateUnknown:
+		return tlsRouteFromObject(typed.Obj)
+	default:
+		return nil
+	}
+}
+
+func listenerSetFromObject(obj interface{}) *gatewayv1.ListenerSet {
+	switch typed := obj.(type) {
+	case *gatewayv1.ListenerSet:
+		return typed
+	case cache.DeletedFinalStateUnknown:
+		return listenerSetFromObject(typed.Obj)
+	default:
+		return nil
+	}
+}
+
+func referenceGrantFromObject(obj interface{}) *gatewayv1.ReferenceGrant {
+	switch typed := obj.(type) {
+	case *gatewayv1.ReferenceGrant:
+		return typed
+	case cache.DeletedFinalStateUnknown:
+		return referenceGrantFromObject(typed.Obj)
+	default:
+		return nil
+	}
+}
+
+func backendTLSPolicyFromObject(obj interface{}) *gatewayv1.BackendTLSPolicy {
+	switch typed := obj.(type) {
+	case *gatewayv1.BackendTLSPolicy:
+		return typed
+	case cache.DeletedFinalStateUnknown:
+		return backendTLSPolicyFromObject(typed.Obj)
 	default:
 		return nil
 	}

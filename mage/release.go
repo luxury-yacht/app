@@ -14,12 +14,13 @@ import (
 )
 
 type releaseNotesData struct {
-	Version    string
-	BuildLabel string
-	Commit     string
-	IsBeta     bool
-	BetaExpiry string
-	RepoURL    string
+	Version          string
+	BuildLabel       string
+	Commit           string
+	IsBeta           bool
+	BetaExpiry       string
+	RepoURL          string
+	PendingNotesBody string
 }
 
 // Make sure the GitHub CLI is installed.
@@ -73,6 +74,20 @@ func findReleaseAssets(cfg BuildConfig) ([]string, error) {
 	return assets, nil
 }
 
+func readPendingReleaseNotes(path string) (string, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", fmt.Errorf("failed to read release notes %s: %w", path, err)
+	}
+	if strings.TrimSpace(string(raw)) == "" {
+		return "", nil
+	}
+	return strings.TrimRight(string(raw), "\n"), nil
+}
+
 // Create the release notes and write them to a temporary file.
 func writeReleaseNotes(cfg BuildConfig, runNumber string) (string, error) {
 	notesTemplate := filepath.Join("mage", "release", "release-notes.md")
@@ -97,13 +112,19 @@ func writeReleaseNotes(cfg BuildConfig, runNumber string) (string, error) {
 		repoURL = "https://" + repoURL
 	}
 
+	pendingNotesBody, err := readPendingReleaseNotes(filepath.Join("docs", "release", "pending.md"))
+	if err != nil {
+		return "", err
+	}
+
 	data := releaseNotesData{
-		Version:    cfg.Version,
-		BuildLabel: buildLabel,
-		Commit:     cfg.Commit,
-		IsBeta:     cfg.IsBeta,
-		BetaExpiry: cfg.BetaExpiry,
-		RepoURL:    repoURL,
+		Version:          cfg.Version,
+		BuildLabel:       buildLabel,
+		Commit:           cfg.Commit,
+		IsBeta:           cfg.IsBeta,
+		BetaExpiry:       cfg.BetaExpiry,
+		RepoURL:          repoURL,
+		PendingNotesBody: pendingNotesBody,
 	}
 
 	if err := tmpl.Execute(tmpFile, data); err != nil {

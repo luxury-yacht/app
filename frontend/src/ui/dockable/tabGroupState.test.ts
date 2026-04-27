@@ -148,6 +148,27 @@ describe('removePanelFromGroup', () => {
     expect(next.right.activeTab).toBe('c');
   });
 
+  it('can activate the left-adjacent tab after removal', () => {
+    let state = createInitialTabGroupState();
+    state = addPanelToGroup(state, 'a', 'right');
+    state = addPanelToGroup(state, 'b', 'right');
+    state = addPanelToGroup(state, 'c', 'right');
+    state = setActiveTab(state, 'b', 'right');
+    const next = removePanelFromGroup(state, 'b', 'left');
+    expect(next.right.tabs).toEqual(['a', 'c']);
+    expect(next.right.activeTab).toBe('a');
+  });
+
+  it('falls back to the right-adjacent tab when left preference has no left neighbor', () => {
+    let state = createInitialTabGroupState();
+    state = addPanelToGroup(state, 'a', 'right');
+    state = addPanelToGroup(state, 'b', 'right');
+    state = setActiveTab(state, 'a', 'right');
+    const next = removePanelFromGroup(state, 'a', 'left');
+    expect(next.right.tabs).toEqual(['b']);
+    expect(next.right.activeTab).toBe('b');
+  });
+
   it('activates the left-adjacent tab when no right neighbor', () => {
     let state = createInitialTabGroupState();
     state = addPanelToGroup(state, 'a', 'right');

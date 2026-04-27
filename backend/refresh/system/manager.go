@@ -20,6 +20,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
 	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
+	gatewayinformers "sigs.k8s.io/gateway-api/pkg/client/informers/externalversions"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
@@ -33,6 +34,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/resourcestream"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
+	"github.com/luxury-yacht/app/backend/resources/common"
 )
 
 // PermissionIssue captures domains that could not be registered due to missing permissions or transient errors.
@@ -50,6 +52,8 @@ type Config struct {
 	ResyncInterval             time.Duration                            // Interval for resyncing informers.
 	MetricsInterval            time.Duration                            // Interval for collecting metrics.
 	APIExtensionsClient        apiextensionsclientset.Interface         // Client for API extensions.
+	GatewayInformerFactory     gatewayinformers.SharedInformerFactory   // Informers for Gateway API resources.
+	GatewayAPIPresence         common.GatewayAPIPresence                // Installed Gateway API kind set.
 	DynamicClient              dynamic.Interface                        // Dynamic client for interacting with Kubernetes resources.
 	HelmFactory                snapshot.HelmActionFactory               // Factory for creating Helm actions.
 	ObjectDetailsProvider      snapshot.ObjectDetailProvider            // Provider for detailed object information.
@@ -99,7 +103,8 @@ func NewSubsystem(cfg Config) (*refresh.Manager, http.Handler, *telemetry.Record
 func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 	registry := domain.New()
 	runtimePerms := permissions.NewChecker(cfg.KubernetesClient, cfg.ClusterID, 0)
-	informerFactory := informer.New(cfg.KubernetesClient, cfg.APIExtensionsClient, cfg.ResyncInterval, runtimePerms)
+	informerFactory := informer.New(cfg.KubernetesClient, cfg.APIExtensionsClient, cfg.ResyncInterval, runtimePerms).
+		WithGatewayFactory(cfg.GatewayInformerFactory, cfg.GatewayAPIPresence)
 	var permissionIssues []PermissionIssue
 
 	// appendIssue adds a permission issue to the list if any errors are present.

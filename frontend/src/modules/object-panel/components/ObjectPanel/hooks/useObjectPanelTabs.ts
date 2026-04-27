@@ -6,8 +6,7 @@
  */
 import { useEffect, useMemo } from 'react';
 
-import { useShortcut, useShortcuts } from '@ui/shortcuts';
-import { KeyboardShortcutPriority } from '@ui/shortcuts/priorities';
+import { useShortcuts } from '@ui/shortcuts';
 
 import { TABS } from '@modules/object-panel/components/ObjectPanel/constants';
 import type {
@@ -32,7 +31,6 @@ interface UseObjectPanelTabsArgs {
   setActiveTab: (tab: ViewType) => void;
   /** Dispatch for the remaining (transient, non-tab) panel reducer state. */
   dispatch: React.Dispatch<PanelAction>;
-  close: () => void;
   currentTab: ViewType;
 }
 
@@ -48,7 +46,6 @@ export const useObjectPanelTabs = ({
   isOpen,
   setActiveTab,
   dispatch: _dispatch,
-  close,
   currentTab,
 }: UseObjectPanelTabsArgs): ObjectPanelTabsResult => {
   const objectKind = objectData?.kind?.toLowerCase() ?? null;
@@ -108,21 +105,6 @@ export const useObjectPanelTabs = ({
       setActiveTab('details');
     }
   }, [availableTabs, currentTab, setActiveTab, objectData]);
-
-  useShortcut({
-    key: 'Escape',
-    handler: () => {
-      if (isOpen) {
-        close();
-        return true;
-      }
-      return false;
-    },
-    description: 'Close object panel',
-    category: 'Object Panel',
-    enabled: isOpen,
-    priority: isOpen ? KeyboardShortcutPriority.OBJECT_PANEL_ESCAPE : 0,
-  });
 
   // Derive tab shortcuts from the visible tabs so shortcut numbers always
   // match the rendered tab bar (e.g., key "1" = first visible tab, "2" =

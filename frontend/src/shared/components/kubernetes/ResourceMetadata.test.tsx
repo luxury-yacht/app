@@ -56,7 +56,7 @@ describe('ResourceMetadata', () => {
       labels: { app: 'demo' },
     });
     container = root;
-    const chips = root.querySelectorAll('.metadata-chip--selector');
+    const chips = root.querySelectorAll('.status-chip--info');
     expect(chips.length).toBe(2);
     expect(root.textContent).toContain('app');
     expect(root.textContent).toContain('tier');
@@ -69,7 +69,7 @@ describe('ResourceMetadata', () => {
       selector: { component: 'worker' },
     });
     container = root;
-    expect(root.querySelector('.metadata-chip--selector')).toBeTruthy();
+    expect(root.querySelector('.status-chip--info')).toBeTruthy();
     expect(root.textContent).toContain('component');
     cleanup();
   });

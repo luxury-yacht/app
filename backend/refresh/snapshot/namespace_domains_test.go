@@ -296,6 +296,9 @@ func TestNamespaceNetworkBuilder(t *testing.T) {
 	require.True(t, ok)
 	require.Len(t, payload.Resources, 4)
 	require.Equal(t, []string{"EndpointSlice", "Ingress", "NetworkPolicy", "Service"}, payload.Kinds)
+	endpointSliceSummary, ok := findNetworkSummary(payload.Resources, "EndpointSlice", "api-abcde")
+	require.True(t, ok)
+	require.Equal(t, "default", endpointSliceSummary.Namespace)
 	for _, entry := range payload.Resources {
 		require.NotEmpty(t, entry.Age)
 	}
@@ -1241,6 +1244,15 @@ func mustQuantity(t testing.TB, value string) resource.Quantity {
 		t.Fatalf("failed to parse quantity %s: %v", value, err)
 	}
 	return q
+}
+
+func findNetworkSummary(resources []NetworkSummary, kind, name string) (NetworkSummary, bool) {
+	for _, resource := range resources {
+		if resource.Kind == kind && resource.Name == name {
+			return resource, true
+		}
+	}
+	return NetworkSummary{}, false
 }
 
 type workloadMetricsProvider struct {

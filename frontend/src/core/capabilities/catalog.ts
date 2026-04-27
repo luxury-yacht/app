@@ -62,6 +62,9 @@ export const CLUSTER_CAPABILITIES: CapabilityDefinition[] = [
   clusterCapability('cluster:ingressclasses:list', 'IngressClass', 'list', 'Cluster config'),
   clusterCapability('cluster:ingressclasses:update', 'IngressClass', 'update', 'Cluster config'),
   clusterCapability('cluster:ingressclasses:delete', 'IngressClass', 'delete', 'Cluster config'),
+  clusterCapability('cluster:gatewayclasses:list', 'GatewayClass', 'list', 'Cluster config'),
+  clusterCapability('cluster:gatewayclasses:update', 'GatewayClass', 'update', 'Cluster config'),
+  clusterCapability('cluster:gatewayclasses:delete', 'GatewayClass', 'delete', 'Cluster config'),
   clusterCapability(
     'cluster:mutatingwebhookconfigurations:list',
     'MutatingWebhookConfiguration',

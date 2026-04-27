@@ -101,6 +101,59 @@ func TestNamespaceCustomBuilderPublishesKindsFromDiscoveredCRDs(t *testing.T) {
 	require.Equal(t, []string{"DBCluster", "Widget"}, payload.Kinds)
 }
 
+func TestNamespaceCustomBuilderSkipsFirstClassGatewayCRDs(t *testing.T) {
+	widgetCRD := &apiextensionsv1.CustomResourceDefinition{
+		ObjectMeta: metav1.ObjectMeta{Name: "widgets.acme.test"},
+		Spec: apiextensionsv1.CustomResourceDefinitionSpec{
+			Group: "acme.test",
+			Scope: apiextensionsv1.NamespaceScoped,
+			Names: apiextensionsv1.CustomResourceDefinitionNames{
+				Plural: "widgets",
+				Kind:   "Widget",
+			},
+			Versions: []apiextensionsv1.CustomResourceDefinitionVersion{{
+				Name:    "v1",
+				Served:  true,
+				Storage: true,
+			}},
+		},
+	}
+	gatewayCRD := &apiextensionsv1.CustomResourceDefinition{
+		ObjectMeta: metav1.ObjectMeta{Name: "gateways.gateway.networking.k8s.io"},
+		Spec: apiextensionsv1.CustomResourceDefinitionSpec{
+			Group: "gateway.networking.k8s.io",
+			Scope: apiextensionsv1.NamespaceScoped,
+			Names: apiextensionsv1.CustomResourceDefinitionNames{
+				Plural: "gateways",
+				Kind:   "Gateway",
+			},
+			Versions: []apiextensionsv1.CustomResourceDefinitionVersion{{
+				Name:    "v1",
+				Served:  true,
+				Storage: true,
+			}},
+		},
+	}
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, apiextensionsscheme.AddToScheme(scheme))
+	registerWidgetTypes(t, scheme)
+
+	builder := &NamespaceCustomBuilder{
+		dynamic:   testsupport.NewDynamicClient(t, scheme),
+		crdLister: testsupport.NewCRDLister(t, widgetCRD, gatewayCRD),
+		logger:    noopLogger{},
+	}
+
+	snapshot, err := builder.Build(context.Background(), "cluster-a::namespace:team-a")
+	require.NoError(t, err)
+
+	payload, ok := snapshot.Payload.(NamespaceCustomSnapshot)
+	require.True(t, ok)
+	require.Equal(t, []string{"Widget"}, payload.Kinds)
+	require.Empty(t, payload.Resources)
+}
+
 func registerDBClusterTypes(t testing.TB, scheme *runtime.Scheme) {
 	t.Helper()
 	gvk := schema.GroupVersionKind{Group: "postgresql.cnpg.io", Version: "v1", Kind: "DBCluster"}

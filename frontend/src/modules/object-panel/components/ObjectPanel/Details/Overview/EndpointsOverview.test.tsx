@@ -60,40 +60,36 @@ describe('EndpointSliceOverview', () => {
         name: 'svc-endpoint-slices',
         namespace: 'default',
         age: '1h',
-        totalReady: 12,
-        totalNotReady: 6,
-        totalPorts: 4,
-        slices: [
-          {
-            name: 'svc-endpoint-slices-a',
-            addressType: 'IPv4',
-            age: '30m',
-            readyAddresses: Array.from({ length: 12 }, (_, index) => ({
-              ip: `10.0.0.${index + 1}`,
-              hostname: `pod-${index + 1}`,
-              nodeName: `node-${index % 3}`,
-              targetRef: `pod-${index + 1}`,
-            })),
-            notReadyAddresses: Array.from({ length: 6 }, (_, index) => ({
-              ip: `10.0.1.${index + 1}`,
-            })),
-            ports: [
-              { name: 'http', port: 80, protocol: 'TCP', appProtocol: 'http' },
-              { name: 'https', port: 443, protocol: 'TCP' },
-            ],
-          },
+        addressType: 'IPv4',
+        readyAddresses: Array.from({ length: 12 }, (_, index) => ({
+          ip: `10.0.0.${index + 1}`,
+          hostname: `pod-${index + 1}`,
+          nodeName: `node-${index % 3}`,
+          targetRef: `pod-${index + 1}`,
+        })),
+        notReadyAddresses: Array.from({ length: 6 }, (_, index) => ({
+          ip: `10.0.1.${index + 1}`,
+        })),
+        ports: [
+          { name: 'http', port: 80, protocol: 'TCP', appProtocol: 'http' },
+          { name: 'https', port: 443, protocol: 'TCP' },
         ],
         labels: {},
         annotations: {},
       } as any,
     });
 
-    const slicesSection = container.querySelector('.slices-section');
-    expect(slicesSection).not.toBeNull();
-    expect(slicesSection?.textContent).toContain('IPv4 (12/18 ready)');
-    expect(slicesSection?.textContent).toContain('Ready');
-    expect(slicesSection?.textContent).toContain('Not Ready');
-    expect(slicesSection?.textContent).toContain('http:');
+    const overview = container;
+    expect(overview.textContent).toContain('IPv4');
+    // The Status row reports "12 ready" and "6 not ready" via chips.
+    expect(overview.textContent).toContain('12 ready');
+    expect(overview.textContent).toContain('6 not ready');
+    // Section labels are unadorned; counts live in the Status row chips.
+    expect(overview.textContent).toContain('Ready');
+    expect(overview.textContent).toContain('Not Ready');
+    // Ports render as label/value rows: name on the left, port/protocol on the right.
+    expect(overview.textContent).toContain('http');
+    expect(overview.textContent).toContain('80/TCP (http)');
   });
 
   it('omits not ready section when no not-ready addresses', async () => {
@@ -102,31 +98,24 @@ describe('EndpointSliceOverview', () => {
         name: 'healthy-slice',
         namespace: 'dev',
         age: '5m',
-        totalReady: 2,
-        totalNotReady: 0,
-        totalPorts: 1,
-        slices: [
-          {
-            name: 'healthy-slice-a',
-            addressType: 'IPv4',
-            age: '5m',
-            readyAddresses: [
-              { ip: '10.0.0.1', targetRef: 'pod-1', nodeName: 'node-1' },
-              { ip: '10.0.0.2', targetRef: 'pod-2', nodeName: 'node-2' },
-            ],
-            notReadyAddresses: [],
-            ports: [{ name: 'http', port: 80, protocol: 'TCP' }],
-          },
+        addressType: 'IPv4',
+        readyAddresses: [
+          { ip: '10.0.0.1', targetRef: 'pod-1', nodeName: 'node-1' },
+          { ip: '10.0.0.2', targetRef: 'pod-2', nodeName: 'node-2' },
         ],
+        notReadyAddresses: [],
+        ports: [{ name: 'http', port: 80, protocol: 'TCP' }],
         labels: {},
         annotations: {},
       } as any,
     });
 
-    const slicesSection = container.querySelector('.slices-section');
-    expect(slicesSection?.textContent).toContain('IPv4 (2/2 ready)');
-    const notReadyLabels = slicesSection?.querySelectorAll('.addresses-label.not-ready');
-    expect(notReadyLabels?.length ?? 0).toBe(0);
+    expect(container.textContent).toContain('IPv4');
+    expect(container.textContent).toContain('2 ready');
+    // No "Not Ready" chip and no Not Ready section when there are none.
+    const unhealthyChips = container.querySelectorAll('.status-chip--unhealthy');
+    expect(unhealthyChips.length).toBe(0);
+    expect(container.textContent).not.toContain('Not Ready');
   });
 
   it('displays address with target and node', async () => {
@@ -135,29 +124,20 @@ describe('EndpointSliceOverview', () => {
         name: 'test-slice',
         namespace: 'default',
         age: '1h',
-        totalReady: 1,
-        totalNotReady: 0,
-        totalPorts: 1,
-        slices: [
-          {
-            name: 'test-slice-a',
-            addressType: 'IPv6',
-            age: '1h',
-            readyAddresses: [{ ip: '2001:db8::1', targetRef: 'Pod/my-pod', nodeName: 'worker-1' }],
-            notReadyAddresses: [],
-            ports: [{ port: 8080, protocol: 'TCP' }],
-          },
-        ],
+        addressType: 'IPv6',
+        readyAddresses: [{ ip: '2001:db8::1', targetRef: 'Pod/my-pod', nodeName: 'worker-1' }],
+        notReadyAddresses: [],
+        ports: [{ port: 8080, protocol: 'TCP' }],
         labels: {},
         annotations: {},
       } as any,
     });
 
-    const slicesSection = container.querySelector('.slices-section');
-    expect(slicesSection?.textContent).toContain('2001:db8::1');
-    expect(slicesSection?.textContent).toContain('Pod/my-pod');
-    expect(slicesSection?.textContent).toContain('on');
-    expect(slicesSection?.textContent).toContain('worker-1');
-    expect(slicesSection?.textContent).toContain('IPv6 (1/1 ready)');
+    expect(container.textContent).toContain('2001:db8::1');
+    expect(container.textContent).toContain('Pod/my-pod');
+    expect(container.textContent).toContain('on');
+    expect(container.textContent).toContain('worker-1');
+    expect(container.textContent).toContain('IPv6');
+    expect(container.textContent).toContain('1 ready');
   });
 });

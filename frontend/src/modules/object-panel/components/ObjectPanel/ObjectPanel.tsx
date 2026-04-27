@@ -33,6 +33,7 @@ import { useObjectPanelTabs } from '@modules/object-panel/components/ObjectPanel
 import { useObjectPanelPods } from '@modules/object-panel/components/ObjectPanel/hooks/useObjectPanelPods';
 import { ObjectPanelTabs } from '@modules/object-panel/components/ObjectPanel/ObjectPanelTabs';
 import { ObjectPanelHeader } from '@modules/object-panel/components/ObjectPanel/ObjectPanelHeader';
+import { getKindColorClass } from '@shared/utils/kindBadgeColors';
 import { ObjectPanelContent } from '@modules/object-panel/components/ObjectPanel/ObjectPanelContent';
 import {
   CLUSTER_SCOPE,
@@ -65,6 +66,13 @@ type DetailsSnapshotProps = Pick<
   | 'ingressDetails'
   | 'networkPolicyDetails'
   | 'endpointSliceDetails'
+  | 'gatewayDetails'
+  | 'httpRouteDetails'
+  | 'grpcRouteDetails'
+  | 'tlsRouteDetails'
+  | 'listenerSetDetails'
+  | 'referenceGrantDetails'
+  | 'backendTLSPolicyDetails'
   | 'pvcDetails'
   | 'pvDetails'
   | 'storageClassDetails'
@@ -80,6 +88,7 @@ type DetailsSnapshotProps = Pick<
   | 'nodeDetails'
   | 'namespaceDetails'
   | 'ingressClassDetails'
+  | 'gatewayClassDetails'
   | 'crdDetails'
   | 'mutatingWebhookDetails'
   | 'validatingWebhookDetails'
@@ -100,6 +109,13 @@ const EMPTY_DETAILS: DetailsSnapshotProps = {
   ingressDetails: null,
   networkPolicyDetails: null,
   endpointSliceDetails: null,
+  gatewayDetails: null,
+  httpRouteDetails: null,
+  grpcRouteDetails: null,
+  tlsRouteDetails: null,
+  listenerSetDetails: null,
+  referenceGrantDetails: null,
+  backendTLSPolicyDetails: null,
   pvcDetails: null,
   pvDetails: null,
   storageClassDetails: null,
@@ -115,6 +131,7 @@ const EMPTY_DETAILS: DetailsSnapshotProps = {
   nodeDetails: null,
   namespaceDetails: null,
   ingressClassDetails: null,
+  gatewayClassDetails: null,
   crdDetails: null,
   mutatingWebhookDetails: null,
   validatingWebhookDetails: null,
@@ -207,9 +224,7 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
 
   // Keep tab labels concise and consistent: object name only.
   const tabTitle = objectData?.name?.trim() || 'Object';
-  const tabKindClass = (objectData?.kind || objectData?.kindAlias || 'object')
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, '');
+  const tabKindClass = getKindColorClass(objectData?.kind || objectData?.kindAlias || '');
 
   // Use reducer for transient panel state (modal flags, action loading,
   // delete confirmation, etc.). The active sub-tab is intentionally NOT
@@ -332,7 +347,6 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
     isOpen,
     setActiveTab,
     dispatch,
-    close,
     currentTab: activeTab,
   });
 
@@ -497,6 +511,29 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
           ...EMPTY_DETAILS,
           endpointSliceDetails: detailPayload as types.EndpointSliceDetails,
         };
+      case 'gateway':
+        return { ...EMPTY_DETAILS, gatewayDetails: detailPayload as types.GatewayDetails };
+      case 'httproute':
+        return { ...EMPTY_DETAILS, httpRouteDetails: detailPayload as types.RouteDetails };
+      case 'grpcroute':
+        return { ...EMPTY_DETAILS, grpcRouteDetails: detailPayload as types.RouteDetails };
+      case 'tlsroute':
+        return { ...EMPTY_DETAILS, tlsRouteDetails: detailPayload as types.RouteDetails };
+      case 'listenerset':
+        return {
+          ...EMPTY_DETAILS,
+          listenerSetDetails: detailPayload as types.ListenerSetDetails,
+        };
+      case 'referencegrant':
+        return {
+          ...EMPTY_DETAILS,
+          referenceGrantDetails: detailPayload as types.ReferenceGrantDetails,
+        };
+      case 'backendtlspolicy':
+        return {
+          ...EMPTY_DETAILS,
+          backendTLSPolicyDetails: detailPayload as types.BackendTLSPolicyDetails,
+        };
       case 'persistentvolumeclaim':
         return {
           ...EMPTY_DETAILS,
@@ -556,6 +593,11 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
         return {
           ...EMPTY_DETAILS,
           ingressClassDetails: detailPayload as types.IngressClassDetails,
+        };
+      case 'gatewayclass':
+        return {
+          ...EMPTY_DETAILS,
+          gatewayClassDetails: detailPayload as types.GatewayClassDetails,
         };
       case 'customresourcedefinition':
         return {
@@ -644,6 +686,7 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
         defaultGroupKey={openTargetGroupKey}
         className="object-panel-dockable"
         tabKindClass={tabKindClass}
+        closeActiveTabOnEscape
         allowMaximize
         maximizeTargetSelector=".content-body"
         onClose={close}

@@ -316,7 +316,7 @@ func TestNetworkWrappersHappyPath(t *testing.T) {
 	if _, err := app.GetService(clusterID, "default", "web"); err != nil {
 		t.Fatalf("expected service wrapper to succeed: %v", err)
 	}
-	if _, err := app.GetEndpointSlice(clusterID, "default", "web"); err != nil {
+	if _, err := app.GetEndpointSlice(clusterID, "default", "web-slice"); err != nil {
 		t.Fatalf("expected endpoint slice wrapper to succeed: %v", err)
 	}
 	if _, err := app.GetIngress(clusterID, "default", "web"); err != nil {

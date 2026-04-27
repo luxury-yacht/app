@@ -155,6 +155,59 @@ func TestClusterCustomBuilderMultipleCRDs(t *testing.T) {
 	require.NotEmpty(t, entry.Kind)
 }
 
+func TestClusterCustomBuilderSkipsFirstClassGatewayCRDs(t *testing.T) {
+	widgetCRD := &apiextensionsv1.CustomResourceDefinition{
+		ObjectMeta: metav1.ObjectMeta{Name: "widgets.acme.test"},
+		Spec: apiextensionsv1.CustomResourceDefinitionSpec{
+			Group: "acme.test",
+			Scope: apiextensionsv1.ClusterScoped,
+			Names: apiextensionsv1.CustomResourceDefinitionNames{
+				Plural: "widgets",
+				Kind:   "Widget",
+			},
+			Versions: []apiextensionsv1.CustomResourceDefinitionVersion{{
+				Name:    "v1",
+				Served:  true,
+				Storage: true,
+			}},
+		},
+	}
+	gatewayClassCRD := &apiextensionsv1.CustomResourceDefinition{
+		ObjectMeta: metav1.ObjectMeta{Name: "gatewayclasses.gateway.networking.k8s.io"},
+		Spec: apiextensionsv1.CustomResourceDefinitionSpec{
+			Group: "gateway.networking.k8s.io",
+			Scope: apiextensionsv1.ClusterScoped,
+			Names: apiextensionsv1.CustomResourceDefinitionNames{
+				Plural: "gatewayclasses",
+				Kind:   "GatewayClass",
+			},
+			Versions: []apiextensionsv1.CustomResourceDefinitionVersion{{
+				Name:    "v1",
+				Served:  true,
+				Storage: true,
+			}},
+		},
+	}
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, apiextensionsscheme.AddToScheme(scheme))
+	registerWidgetTypes(t, scheme)
+
+	builder := &ClusterCustomBuilder{
+		dynamic:   testsupport.NewDynamicClient(t, scheme),
+		crdLister: testsupport.NewCRDLister(t, widgetCRD, gatewayClassCRD),
+		logger:    noopLogger{},
+	}
+
+	snapshot, err := builder.Build(context.Background(), "")
+	require.NoError(t, err)
+
+	payload, ok := snapshot.Payload.(ClusterCustomSnapshot)
+	require.True(t, ok)
+	require.Equal(t, []string{"Widget"}, payload.Kinds)
+	require.Empty(t, payload.Resources)
+}
+
 func registerWidgetTypes(t testing.TB, scheme *runtime.Scheme) {
 	t.Helper()
 	gvk := schema.GroupVersionKind{Group: "acme.test", Version: "v1", Kind: "Widget"}

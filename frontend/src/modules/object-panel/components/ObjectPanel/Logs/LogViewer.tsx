@@ -1028,33 +1028,15 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     }
   }, [supportsPreviousContainerLogs, showPreviousContainerLogs]);
 
-  // Generate consistent colors for pods (workload view)
-  // Colors are read from CSS variables to support light/dark themes
+  // Generate consistent colors for pods (workload view).
+  // Reads the shared --hash-color-N palette so pod-log colors and kind badges
+  // draw from the same set; values resolve per theme.
   const podColors = useMemo(() => {
     const styles = getComputedStyle(document.documentElement);
-    const palette = [
-      styles.getPropertyValue('--log-pod-color-1').trim(),
-      styles.getPropertyValue('--log-pod-color-2').trim(),
-      styles.getPropertyValue('--log-pod-color-3').trim(),
-      styles.getPropertyValue('--log-pod-color-4').trim(),
-      styles.getPropertyValue('--log-pod-color-5').trim(),
-      styles.getPropertyValue('--log-pod-color-6').trim(),
-      styles.getPropertyValue('--log-pod-color-7').trim(),
-      styles.getPropertyValue('--log-pod-color-8').trim(),
-      styles.getPropertyValue('--log-pod-color-9').trim(),
-      styles.getPropertyValue('--log-pod-color-10').trim(),
-      styles.getPropertyValue('--log-pod-color-11').trim(),
-      styles.getPropertyValue('--log-pod-color-12').trim(),
-      styles.getPropertyValue('--log-pod-color-13').trim(),
-      styles.getPropertyValue('--log-pod-color-14').trim(),
-      styles.getPropertyValue('--log-pod-color-15').trim(),
-      styles.getPropertyValue('--log-pod-color-16').trim(),
-      styles.getPropertyValue('--log-pod-color-17').trim(),
-      styles.getPropertyValue('--log-pod-color-18').trim(),
-      styles.getPropertyValue('--log-pod-color-19').trim(),
-      styles.getPropertyValue('--log-pod-color-20').trim(),
-    ];
-    const fallbackColor = styles.getPropertyValue('--log-pod-color-fallback').trim();
+    const palette = Array.from({ length: 24 }, (_, i) =>
+      styles.getPropertyValue(`--hash-color-${i + 1}`).trim()
+    );
+    const fallbackColor = styles.getPropertyValue('--hash-color-fallback').trim();
     return buildStablePodColorMap(availablePods, palette, fallbackColor);
   }, [availablePods]);
 

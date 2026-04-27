@@ -238,7 +238,7 @@ func TestObjectDetailProviderCoversAdditionalKinds(t *testing.T) {
 		{"ingress", "extra", "ing"},
 		{"ingressclass", "", "standard"},
 		{"networkpolicy", "extra", "np"},
-		{"endpointslice", "extra", "svc"},
+		{"endpointslice", "extra", "svc-slice"},
 		{"persistentvolumeclaim", "extra", "pvc"},
 		{"persistentvolume", "", "pv"},
 		{"storageclass", "", "sc"},

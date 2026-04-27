@@ -22,19 +22,19 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/types"
 )
 
-// EndpointSlice returns slice details grouped by service name.
-func (s *Service) EndpointSlice(namespace, service string) (*types.EndpointSliceDetails, error) {
+// EndpointSlice returns details for one concrete EndpointSlice object.
+func (s *Service) EndpointSlice(namespace, name string) (*types.EndpointSliceDetails, error) {
 	ctx, cancel := s.ctx()
 	defer cancel()
-	slices, err := s.listEndpointSlices(ctx, namespace, service)
+	slice, err := s.deps.KubernetesClient.DiscoveryV1().EndpointSlices(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
-		s.deps.Logger.Error(fmt.Sprintf("Failed to get endpoint slices %s/%s: %v", namespace, service, err), logsources.ResourceLoader)
-		return nil, fmt.Errorf("failed to get endpoint slices: %v", err)
+		s.deps.Logger.Error(fmt.Sprintf("Failed to get endpoint slice %s/%s: %v", namespace, name, err), logsources.ResourceLoader)
+		return nil, fmt.Errorf("failed to get endpoint slice: %v", err)
 	}
-	return buildEndpointSliceDetails(namespace, service, slices), nil
+	return buildEndpointSliceDetails(namespace, name, slice), nil
 }
 
-// EndpointSlices lists slice details for every service in the namespace.
+// EndpointSlices lists details for every EndpointSlice object in the namespace.
 func (s *Service) EndpointSlices(namespace string) ([]*types.EndpointSliceDetails, error) {
 	ctx, cancel := s.ctx()
 	defer cancel()
@@ -44,10 +44,16 @@ func (s *Service) EndpointSlices(namespace string) ([]*types.EndpointSliceDetail
 		return nil, fmt.Errorf("failed to list endpoint slices: %v", err)
 	}
 
-	grouped := groupEndpointSlicesByService(slices)
-	results := make([]*types.EndpointSliceDetails, 0, len(grouped))
-	for service, serviceSlices := range grouped {
-		results = append(results, buildEndpointSliceDetails(namespace, service, serviceSlices))
+	sort.SliceStable(slices, func(i, j int) bool {
+		return slices[i].Name < slices[j].Name
+	})
+
+	results := make([]*types.EndpointSliceDetails, 0, len(slices))
+	for _, slice := range slices {
+		if slice == nil {
+			continue
+		}
+		results = append(results, buildEndpointSliceDetails(namespace, slice.Name, slice))
 	}
 	return results, nil
 }
@@ -82,61 +88,35 @@ func endpointReady(endpoint discoveryv1.Endpoint) bool {
 	return true
 }
 
-func buildEndpointSliceDetails(namespace, service string, slices []*discoveryv1.EndpointSlice) *types.EndpointSliceDetails {
+func buildEndpointSliceDetails(namespace, name string, slice *discoveryv1.EndpointSlice) *types.EndpointSliceDetails {
 	details := &types.EndpointSliceDetails{
 		Kind:      "EndpointSlice",
-		Name:      service,
+		Name:      name,
 		Namespace: namespace,
 	}
 
-	if len(slices) == 0 {
+	if slice == nil {
 		details.Details = "Ready: 0, Ports: 0"
 		details.Age = common.FormatAge(time.Time{})
 		return details
 	}
 
-	sort.SliceStable(slices, func(i, j int) bool {
-		return slices[i].Name < slices[j].Name
-	})
+	ready, notReady := endpointAddressesFromSlice(slice)
+	ports := slicePortsToDetails(slice.Ports)
 
-	var earliest time.Time
-	for _, slice := range slices {
-		if slice == nil {
-			continue
-		}
-		summary := types.EndpointSliceSummary{
-			Name:        slice.Name,
-			AddressType: string(slice.AddressType),
-			Age:         common.FormatAge(slice.CreationTimestamp.Time),
-			Ports:       slicePortsToDetails(slice.Ports),
-		}
+	details.AddressType = string(slice.AddressType)
+	details.ReadyAddresses = ready
+	details.NotReadyAddresses = notReady
+	details.Ports = ports
+	details.Age = common.FormatAge(slice.CreationTimestamp.Time)
+	details.Labels = slice.Labels
+	details.Annotations = slice.Annotations
 
-		ready, notReady := endpointAddressesFromSlice(slice)
-		summary.ReadyAddresses = ready
-		summary.NotReadyAddresses = notReady
-
-		details.Slices = append(details.Slices, summary)
-		details.TotalReady += len(ready)
-		details.TotalNotReady += len(notReady)
-		details.TotalPorts += len(summary.Ports)
-
-		if earliest.IsZero() || slice.CreationTimestamp.Time.Before(earliest) {
-			earliest = slice.CreationTimestamp.Time
-		}
-		if len(details.Labels) == 0 && len(slice.Labels) > 0 {
-			details.Labels = slice.Labels
-		}
-		if len(details.Annotations) == 0 && len(slice.Annotations) > 0 {
-			details.Annotations = slice.Annotations
-		}
+	details.Details = fmt.Sprintf("Ready: %d", len(ready))
+	if len(notReady) > 0 {
+		details.Details += fmt.Sprintf(", Not Ready: %d", len(notReady))
 	}
-
-	details.Age = common.FormatAge(earliest)
-	details.Details = fmt.Sprintf("Ready: %d", details.TotalReady)
-	if details.TotalNotReady > 0 {
-		details.Details += fmt.Sprintf(", Not Ready: %d", details.TotalNotReady)
-	}
-	details.Details += fmt.Sprintf(", Ports: %d", details.TotalPorts)
+	details.Details += fmt.Sprintf(", Ports: %d", len(ports))
 
 	return details
 }

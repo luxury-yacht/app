@@ -7,6 +7,8 @@
 
 import type { TabGroupState, FloatingTabGroup, GroupKey } from './tabGroupTypes';
 
+export type AdjacentTabActivationPreference = 'left' | 'right';
+
 /**
  * Generate a deterministic floating group ID from the current state.
  * This stays pure so React StrictMode double-invocations cannot consume IDs.
@@ -107,7 +109,8 @@ function activateAdjacentTab(
   tabs: string[],
   removedIndex: number,
   currentActiveId: string | null,
-  removedId: string
+  removedId: string,
+  preference: AdjacentTabActivationPreference = 'right'
 ): string | null {
   if (tabs.length === 0) {
     return null;
@@ -116,11 +119,13 @@ function activateAdjacentTab(
   if (currentActiveId !== removedId) {
     return currentActiveId;
   }
-  // Prefer right neighbor (same index since array shifted), then left.
-  if (removedIndex < tabs.length) {
-    return tabs[removedIndex];
+  // Right neighbor keeps the same index after removal. Left neighbor shifts to index - 1.
+  const rightNeighbor = tabs[removedIndex] ?? null;
+  const leftNeighbor = tabs[removedIndex - 1] ?? null;
+  if (preference === 'left') {
+    return leftNeighbor ?? rightNeighbor;
   }
-  return tabs[removedIndex - 1] ?? null;
+  return rightNeighbor ?? leftNeighbor;
 }
 
 // ---------------------------------------------------------------------------
@@ -191,7 +196,11 @@ export function addPanelToGroup(
  * - Returns state with empty tabs / null activeTab for empty docked groups.
  * - Returns state unchanged if panelId is not found.
  */
-export function removePanelFromGroup(state: TabGroupState, panelId: string): TabGroupState {
+export function removePanelFromGroup(
+  state: TabGroupState,
+  panelId: string,
+  activationPreference: AdjacentTabActivationPreference = 'right'
+): TabGroupState {
   // Check if the panel exists anywhere.
   const groupKey = getGroupForPanel(state, panelId);
   if (groupKey === null) {
@@ -202,7 +211,13 @@ export function removePanelFromGroup(state: TabGroupState, panelId: string): Tab
     const group = state[groupKey];
     const removedIndex = group.tabs.indexOf(panelId);
     const newTabs = group.tabs.filter((id) => id !== panelId);
-    const newActive = activateAdjacentTab(newTabs, removedIndex, group.activeTab, panelId);
+    const newActive = activateAdjacentTab(
+      newTabs,
+      removedIndex,
+      group.activeTab,
+      panelId,
+      activationPreference
+    );
     return {
       ...state,
       [groupKey]: { tabs: newTabs, activeTab: newActive },
@@ -222,7 +237,13 @@ export function removePanelFromGroup(state: TabGroupState, panelId: string): Tab
       // Destroy empty floating group.
       continue;
     }
-    const newActive = activateAdjacentTab(newTabs, removedIndex, group.activeTab, panelId);
+    const newActive = activateAdjacentTab(
+      newTabs,
+      removedIndex,
+      group.activeTab,
+      panelId,
+      activationPreference
+    );
     floating.push({ ...group, tabs: newTabs, activeTab: newActive });
   }
 

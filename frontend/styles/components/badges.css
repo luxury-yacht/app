@@ -70,109 +70,133 @@
 }
 
 /* ==========================================================================
-   Kind Badge Color Variants
+   Kind Badge Color Variants — hash-based slot assignment
+
+   The kind name is hashed in JS (see shared/utils/kindBadgeColors.ts) to one
+   of the N --hash-color-{N} palette slots, and the consumer attaches the
+   matching "hash-color-{1..N}" class. Theming swaps the underlying hex
+   values; the rules below stay constant.
    ========================================================================== */
 
-/* Blue badges - Deployments, ConfigMaps, etc. */
-.kind-badge.configmap,
-.kind-badge.deployment,
-.kind-badge.endpointslice,
-.kind-badge.helmrelease,
-.kind-badge.horizontalpodautoscaler,
-.kind-badge.persistentvolumeclaim {
-  background-color: var(--badge-blue-bg);
-  color: var(--badge-blue-text);
-  border-color: rgba(59, 130, 246, 0.2);
+.kind-badge.hash-color-1 {
+  background-color: color-mix(in srgb, var(--hash-color-1) 25%, transparent);
+  color: oklch(from var(--hash-color-1) calc(l + var(--hash-text-l-shift)) calc(c * var(--hash-text-c-mult)) h);
+  border-color: color-mix(in srgb, var(--hash-color-1) 30%, transparent);
 }
-
-/* Green badges - CronJobs, CRDs */
-.kind-badge.cronjob,
-.kind-badge.customresourcedefinition,
-.kind-badge.validatingwebhookconfiguration {
-  background-color: var(--badge-green-bg);
-  color: var(--badge-green-text);
-  border-color: rgba(34, 197, 94, 0.2);
+.kind-badge.hash-color-2 {
+  background-color: color-mix(in srgb, var(--hash-color-2) 25%, transparent);
+  color: oklch(from var(--hash-color-2) calc(l + var(--hash-text-l-shift)) calc(c * var(--hash-text-c-mult)) h);
+  border-color: color-mix(in srgb, var(--hash-color-2) 30%, transparent);
 }
-
-/* Orange badges - RBAC, DaemonSets */
-.kind-badge.clusterrole,
-.kind-badge.daemonset,
-.kind-badge.rolebinding,
-.kind-badge.role,
-.kind-badge.resourcequota,
-.kind-badge.mutatingwebhookconfiguration,
-.kind-badge.ingress {
-  background-color: var(--badge-orange-bg);
-  color: var(--badge-orange-text);
-  border-color: rgba(249, 115, 22, 0.2);
+.kind-badge.hash-color-3 {
+  background-color: color-mix(in srgb, var(--hash-color-3) 25%, transparent);
+  color: oklch(from var(--hash-color-3) calc(l + var(--hash-text-l-shift)) calc(c * var(--hash-text-c-mult)) h);
+  border-color: color-mix(in srgb, var(--hash-color-3) 30%, transparent);
 }
-
-/* Lime badges - Nodes */
-.kind-badge.node {
-  background-color: var(--badge-lime-bg);
-  color: var(--badge-lime-text);
-  border-color: rgba(132, 204, 22, 0.2);
+.kind-badge.hash-color-4 {
+  background-color: color-mix(in srgb, var(--hash-color-4) 25%, transparent);
+  color: oklch(from var(--hash-color-4) calc(l + var(--hash-text-l-shift)) calc(c * var(--hash-text-c-mult)) h);
+  border-color: color-mix(in srgb, var(--hash-color-4) 30%, transparent);
 }
-
-/* Pink badges - Secrets, Jobs, Storage */
-.kind-badge.job,
-.kind-badge.persistentvolume,
-.kind-badge.secret,
-.kind-badge.storageclass {
-  background-color: var(--badge-pink-bg);
-  color: var(--badge-pink-text);
-  border-color: rgba(236, 72, 153, 0.2);
+.kind-badge.hash-color-5 {
+  background-color: color-mix(in srgb, var(--hash-color-5) 25%, transparent);
+  color: oklch(from var(--hash-color-5) calc(l + var(--hash-text-l-shift)) calc(c * var(--hash-text-c-mult)) h);
+  border-color: color-mix(in srgb, var(--hash-color-5) 30%, transparent);
 }
-
-/* Purple badges - Pods, ReplicaSets, Events */
-.kind-badge.clusterrolebinding,
-.kind-badge.custom,
-.kind-badge.event,
-.kind-badge.networkpolicy,
-.kind-badge.poddisruptionbudget,
-.kind-badge.replicaset,
-.kind-badge.pod {
-  background-color: var(--badge-purple-bg);
-  color: var(--badge-purple-text);
-  border-color: rgba(168, 85, 247, 0.35);
+.kind-badge.hash-color-6 {
+  background-color: color-mix(in srgb, var(--hash-color-6) 25%, transparent);
+  color: oklch(from var(--hash-color-6) calc(l + var(--hash-text-l-shift)) calc(c * var(--hash-text-c-mult)) h);
+  border-color: color-mix(in srgb, var(--hash-color-6) 30%, transparent);
 }
-
-/* Teal badges - Namespaces, IngressClass */
-.kind-badge.ingressclass,
-.kind-badge.namespace {
-  background-color: var(--badge-teal-bg);
-  color: var(--badge-teal-text);
-  border-color: rgba(20, 184, 166, 0.2);
+.kind-badge.hash-color-7 {
+  background-color: color-mix(in srgb, var(--hash-color-7) 25%, transparent);
+  color: oklch(from var(--hash-color-7) calc(l + var(--hash-text-l-shift)) calc(c * var(--hash-text-c-mult)) h);
+  border-color: color-mix(in srgb, var(--hash-color-7) 30%, transparent);
 }
-
-/* Green (available) badges - Services, StatefulSets */
-.kind-badge.service,
-.kind-badge.serviceaccount,
-.kind-badge.statefulset {
-  background-color: var(--status-available-bg);
-  color: var(--status-available-text);
-  border-color: rgba(34, 197, 94, 0.2);
+.kind-badge.hash-color-8 {
+  background-color: color-mix(in srgb, var(--hash-color-8) 25%, transparent);
+  color: oklch(from var(--hash-color-8) calc(l + var(--hash-text-l-shift)) calc(c * var(--hash-text-c-mult)) h);
+  border-color: color-mix(in srgb, var(--hash-color-8) 30%, transparent);
 }
-
-/* ==========================================================================
-   Event Type Badges
-   ========================================================================== */
-.kind-badge.normal {
-  background-color: var(--badge-green-soft-bg);
-  color: var(--badge-green-soft-text);
-  border-color: rgba(34, 197, 94, 0.2);
+.kind-badge.hash-color-9 {
+  background-color: color-mix(in srgb, var(--hash-color-9) 25%, transparent);
+  color: oklch(from var(--hash-color-9) calc(l + var(--hash-text-l-shift)) calc(c * var(--hash-text-c-mult)) h);
+  border-color: color-mix(in srgb, var(--hash-color-9) 30%, transparent);
 }
-
-.kind-badge.warning {
-  background-color: var(--status-warning-bg);
-  color: var(--status-warning-text);
-  border-color: rgba(249, 115, 22, 0.2);
+.kind-badge.hash-color-10 {
+  background-color: color-mix(in srgb, var(--hash-color-10) 25%, transparent);
+  color: oklch(from var(--hash-color-10) calc(l + var(--hash-text-l-shift)) calc(c * var(--hash-text-c-mult)) h);
+  border-color: color-mix(in srgb, var(--hash-color-10) 30%, transparent);
 }
-
-.kind-badge.error {
-  background-color: var(--status-failed-bg);
-  color: var(--status-failed-text);
-  border-color: rgba(239, 68, 68, 0.2);
+.kind-badge.hash-color-11 {
+  background-color: color-mix(in srgb, var(--hash-color-11) 25%, transparent);
+  color: oklch(from var(--hash-color-11) calc(l + var(--hash-text-l-shift)) calc(c * var(--hash-text-c-mult)) h);
+  border-color: color-mix(in srgb, var(--hash-color-11) 30%, transparent);
+}
+.kind-badge.hash-color-12 {
+  background-color: color-mix(in srgb, var(--hash-color-12) 25%, transparent);
+  color: oklch(from var(--hash-color-12) calc(l + var(--hash-text-l-shift)) calc(c * var(--hash-text-c-mult)) h);
+  border-color: color-mix(in srgb, var(--hash-color-12) 30%, transparent);
+}
+.kind-badge.hash-color-13 {
+  background-color: color-mix(in srgb, var(--hash-color-13) 25%, transparent);
+  color: oklch(from var(--hash-color-13) calc(l + var(--hash-text-l-shift)) calc(c * var(--hash-text-c-mult)) h);
+  border-color: color-mix(in srgb, var(--hash-color-13) 30%, transparent);
+}
+.kind-badge.hash-color-14 {
+  background-color: color-mix(in srgb, var(--hash-color-14) 25%, transparent);
+  color: oklch(from var(--hash-color-14) calc(l + var(--hash-text-l-shift)) calc(c * var(--hash-text-c-mult)) h);
+  border-color: color-mix(in srgb, var(--hash-color-14) 30%, transparent);
+}
+.kind-badge.hash-color-15 {
+  background-color: color-mix(in srgb, var(--hash-color-15) 25%, transparent);
+  color: oklch(from var(--hash-color-15) calc(l + var(--hash-text-l-shift)) calc(c * var(--hash-text-c-mult)) h);
+  border-color: color-mix(in srgb, var(--hash-color-15) 30%, transparent);
+}
+.kind-badge.hash-color-16 {
+  background-color: color-mix(in srgb, var(--hash-color-16) 25%, transparent);
+  color: oklch(from var(--hash-color-16) calc(l + var(--hash-text-l-shift)) calc(c * var(--hash-text-c-mult)) h);
+  border-color: color-mix(in srgb, var(--hash-color-16) 30%, transparent);
+}
+.kind-badge.hash-color-17 {
+  background-color: color-mix(in srgb, var(--hash-color-17) 25%, transparent);
+  color: oklch(from var(--hash-color-17) calc(l + var(--hash-text-l-shift)) calc(c * var(--hash-text-c-mult)) h);
+  border-color: color-mix(in srgb, var(--hash-color-17) 30%, transparent);
+}
+.kind-badge.hash-color-18 {
+  background-color: color-mix(in srgb, var(--hash-color-18) 25%, transparent);
+  color: oklch(from var(--hash-color-18) calc(l + var(--hash-text-l-shift)) calc(c * var(--hash-text-c-mult)) h);
+  border-color: color-mix(in srgb, var(--hash-color-18) 30%, transparent);
+}
+.kind-badge.hash-color-19 {
+  background-color: color-mix(in srgb, var(--hash-color-19) 25%, transparent);
+  color: oklch(from var(--hash-color-19) calc(l + var(--hash-text-l-shift)) calc(c * var(--hash-text-c-mult)) h);
+  border-color: color-mix(in srgb, var(--hash-color-19) 30%, transparent);
+}
+.kind-badge.hash-color-20 {
+  background-color: color-mix(in srgb, var(--hash-color-20) 25%, transparent);
+  color: oklch(from var(--hash-color-20) calc(l + var(--hash-text-l-shift)) calc(c * var(--hash-text-c-mult)) h);
+  border-color: color-mix(in srgb, var(--hash-color-20) 30%, transparent);
+}
+.kind-badge.hash-color-21 {
+  background-color: color-mix(in srgb, var(--hash-color-21) 25%, transparent);
+  color: oklch(from var(--hash-color-21) calc(l + var(--hash-text-l-shift)) calc(c * var(--hash-text-c-mult)) h);
+  border-color: color-mix(in srgb, var(--hash-color-21) 30%, transparent);
+}
+.kind-badge.hash-color-22 {
+  background-color: color-mix(in srgb, var(--hash-color-22) 25%, transparent);
+  color: oklch(from var(--hash-color-22) calc(l + var(--hash-text-l-shift)) calc(c * var(--hash-text-c-mult)) h);
+  border-color: color-mix(in srgb, var(--hash-color-22) 30%, transparent);
+}
+.kind-badge.hash-color-23 {
+  background-color: color-mix(in srgb, var(--hash-color-23) 25%, transparent);
+  color: oklch(from var(--hash-color-23) calc(l + var(--hash-text-l-shift)) calc(c * var(--hash-text-c-mult)) h);
+  border-color: color-mix(in srgb, var(--hash-color-23) 30%, transparent);
+}
+.kind-badge.hash-color-24 {
+  background-color: color-mix(in srgb, var(--hash-color-24) 25%, transparent);
+  color: oklch(from var(--hash-color-24) calc(l + var(--hash-text-l-shift)) calc(c * var(--hash-text-c-mult)) h);
+  border-color: color-mix(in srgb, var(--hash-color-24) 30%, transparent);
 }
 
 /* ==========================================================================

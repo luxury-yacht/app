@@ -7,107 +7,135 @@ import { types } from '@wailsjs/go/models';
 import { OverviewItem } from '@modules/object-panel/components/ObjectPanel/Details/Overview/shared/OverviewItem';
 import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
-import './NetworkOverview.css';
+import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
+import './shared/OverviewBlocks.css';
 
 interface ServiceOverviewProps {
   serviceDetails: types.ServiceDetails | null;
 }
 
+const healthVariant = (status: string): StatusChipVariant => {
+  if (status === 'Healthy') return 'healthy';
+  if (status === 'No endpoints') return 'unhealthy';
+  if (status === 'External') return 'info';
+  return 'warning';
+};
+
+const lbStatusVariant = (status: string): StatusChipVariant =>
+  status === 'Ready' ? 'healthy' : 'warning';
+
+// Above this count, render a count instead of the full IP list.
+const ENDPOINT_LIST_LIMIT = 20;
+
 export const ServiceOverview: React.FC<ServiceOverviewProps> = ({ serviceDetails }) => {
   if (!serviceDetails) return null;
 
+  const isLoadBalancer = serviceDetails.serviceType === 'LoadBalancer';
+  const isExternalName = serviceDetails.serviceType === 'ExternalName';
+
+  const clusterIPs = serviceDetails.clusterIPs ?? [];
+  const hasMultipleClusterIPs = clusterIPs.length > 1;
+  // "IP address" rather than "Cluster IP" — the latter collides with the
+  // Kubernetes `ClusterIP` service type and is confusing to read alongside
+  // the Type field.
+  const clusterIPLabel = hasMultipleClusterIPs ? 'IP addresses' : 'IP address';
+  const clusterIPValue = hasMultipleClusterIPs
+    ? clusterIPs.join(', ')
+    : (clusterIPs[0] ?? serviceDetails.clusterIP);
+
+  const externalIPs = serviceDetails.externalIPs ?? [];
+  const hasExternalIPs = externalIPs.length > 0;
+
+  const sessionAffinity = serviceDetails.sessionAffinity;
+  const showSessionAffinity = Boolean(sessionAffinity) && sessionAffinity !== 'None';
+  const sessionTimeout = serviceDetails.sessionAffinityTimeout;
+
+  const ports = serviceDetails.ports ?? [];
+
+  const endpoints = serviceDetails.endpoints ?? [];
+  const endpointCount = serviceDetails.endpointCount;
+  const renderEndpoints = (() => {
+    if (endpointCount === 0) {
+      return <StatusChip variant="unhealthy">No endpoints</StatusChip>;
+    }
+    if (endpoints.length > 0 && endpoints.length <= ENDPOINT_LIST_LIMIT) {
+      return (
+        <div className="overview-ref-list">
+          {endpoints.map((ep, index) => (
+            <div key={`${ep}-${index}`} className="overview-ref-item">
+              {ep}
+            </div>
+          ))}
+        </div>
+      );
+    }
+    return `${endpointCount} ${endpointCount === 1 ? 'endpoint' : 'endpoints'}`;
+  })();
+  const endpointsFullWidth = endpoints.length > 0 && endpoints.length <= ENDPOINT_LIST_LIMIT;
+
   return (
     <>
-      {/* Use composed component for header */}
       <ResourceHeader
         kind="Service"
         name={serviceDetails.name}
         namespace={serviceDetails.namespace}
         age={serviceDetails.age}
       />
+
       <OverviewItem label="Type" value={serviceDetails.serviceType} />
+      <OverviewItem
+        label="Health"
+        value={
+          <StatusChip variant={healthVariant(serviceDetails.healthStatus)}>
+            {serviceDetails.healthStatus}
+          </StatusChip>
+        }
+        hidden={!serviceDetails.healthStatus}
+      />
 
-      {/* Cluster IPs */}
-      <OverviewItem label="Cluster IP" value={serviceDetails.clusterIP} />
-      {serviceDetails.clusterIPs && serviceDetails.clusterIPs.length > 1 && (
+      <OverviewItem
+        label={clusterIPLabel}
+        value={<span className="overview-value-mono">{clusterIPValue}</span>}
+        fullWidth={hasMultipleClusterIPs}
+      />
+
+      <OverviewItem
+        label="External IPs"
+        value={externalIPs.join(', ')}
+        fullWidth={externalIPs.length > 2}
+        hidden={!hasExternalIPs}
+      />
+
+      {isLoadBalancer && serviceDetails.loadBalancerIP && (
+        <OverviewItem label="Load Balancer IP" value={serviceDetails.loadBalancerIP} />
+      )}
+      {isLoadBalancer && serviceDetails.loadBalancerStatus && (
         <OverviewItem
-          label="Cluster IPs"
-          value={serviceDetails.clusterIPs.join(', ')}
-          fullWidth={serviceDetails.clusterIPs.length > 2}
+          label="LB Status"
+          value={
+            <StatusChip variant={lbStatusVariant(serviceDetails.loadBalancerStatus)}>
+              {serviceDetails.loadBalancerStatus}
+            </StatusChip>
+          }
         />
       )}
 
-      {/* External IPs */}
-      {serviceDetails.externalIPs && serviceDetails.externalIPs.length > 0 && (
-        <OverviewItem
-          label="External IPs"
-          value={serviceDetails.externalIPs.join(', ')}
-          fullWidth={serviceDetails.externalIPs.length > 2}
-        />
-      )}
-
-      {/* LoadBalancer specific */}
-      {serviceDetails.serviceType === 'LoadBalancer' && (
-        <>
-          {serviceDetails.loadBalancerIP && (
-            <OverviewItem label="Load Balancer IP" value={serviceDetails.loadBalancerIP} />
-          )}
-          {serviceDetails.loadBalancerStatus && (
-            <OverviewItem label="LB Status" value={serviceDetails.loadBalancerStatus} />
-          )}
-        </>
-      )}
-
-      {/* ExternalName specific */}
-      {serviceDetails.serviceType === 'ExternalName' && serviceDetails.externalName && (
+      {isExternalName && serviceDetails.externalName && (
         <OverviewItem label="External Name" value={serviceDetails.externalName} />
       )}
 
-      {/* Session Affinity */}
-      <OverviewItem label="Session Affinity" value={serviceDetails.sessionAffinity} />
-      {serviceDetails.sessionAffinityTimeout && serviceDetails.sessionAffinityTimeout > 0 && (
-        <OverviewItem
-          label="Session Timeout"
-          value={`${serviceDetails.sessionAffinityTimeout} seconds`}
-        />
-      )}
-
-      {/* Health Status */}
-      <OverviewItem label="Health Status" value={serviceDetails.healthStatus} />
-
-      {/* Endpoints */}
-      <OverviewItem label="Endpoints" value={`${serviceDetails.endpointCount} endpoint(s)`} />
-      {serviceDetails.endpoints &&
-        serviceDetails.endpoints.length > 0 &&
-        serviceDetails.endpoints.length <= 5 && (
-          <OverviewItem
-            label="Endpoint IPs"
-            value={
-              <div className="endpoint-list">
-                {serviceDetails.endpoints.map((ep: string, index: number) => (
-                  <div key={`${ep}-${index}`} className="endpoint-item">
-                    {ep}
-                  </div>
-                ))}
-              </div>
-            }
-            fullWidth
-          />
-        )}
-
-      {/* Ports */}
-      {serviceDetails.ports && serviceDetails.ports.length > 0 && (
+      {ports.length > 0 && (
         <OverviewItem
           label="Ports"
           value={
-            <div className="ports-list">
-              {serviceDetails.ports.map((port: types.ServicePortDetails, index: number) => (
+            <div className="overview-row-list">
+              {ports.map((port, index) => (
                 <div
                   key={`${port.port}-${port.targetPort ?? 'target'}-${index}`}
-                  className="port-item"
+                  className="overview-row"
                 >
-                  {port.name && <span className="port-name">{port.name}: </span>}
-                  <span className="port-details">
+                  <span className="overview-row-label">{port.name || `port ${port.port}`}</span>
+                  <span className="overview-row-value">
                     {port.port}/{port.protocol}
                     {port.targetPort && ` → ${port.targetPort}`}
                     {port.nodePort && port.nodePort > 0 && ` (NodePort: ${port.nodePort})`}
@@ -120,7 +148,13 @@ export const ServiceOverview: React.FC<ServiceOverviewProps> = ({ serviceDetails
         />
       )}
 
-      {/* Use composed component for metadata */}
+      <OverviewItem label="Endpoints" value={renderEndpoints} fullWidth={endpointsFullWidth} />
+
+      {showSessionAffinity && <OverviewItem label="Session Affinity" value={sessionAffinity} />}
+      {sessionTimeout && sessionTimeout > 0 && (
+        <OverviewItem label="Session Timeout" value={`${sessionTimeout} seconds`} />
+      )}
+
       <ResourceMetadata
         labels={serviceDetails.labels}
         annotations={serviceDetails.annotations}

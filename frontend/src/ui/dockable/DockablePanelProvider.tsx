@@ -41,6 +41,7 @@ import {
   getGroupForPanel,
   getGroupTabs,
 } from './tabGroupState';
+import type { AdjacentTabActivationPreference } from './tabGroupState';
 
 interface DockablePanelContextValue {
   // Tab group state
@@ -63,7 +64,7 @@ interface DockablePanelContextValue {
 
   // Tab actions
   switchTab: (groupKey: GroupKey, panelId: string) => void;
-  closeTab: (panelId: string) => void;
+  closeTab: (panelId: string, activationPreference?: AdjacentTabActivationPreference) => void;
   reorderTabInGroup: (groupKey: GroupKey, panelId: string, newIndex: number) => void;
   movePanelBetweenGroups: (
     panelId: string,
@@ -142,6 +143,17 @@ function getContentContainer(): HTMLElement | null {
   }
   const el = document.querySelector('.content');
   return el instanceof HTMLElement ? el : null;
+}
+
+function focusDockableTab(panelId: string): void {
+  if (typeof document === 'undefined') {
+    return;
+  }
+
+  const tab = Array.from(
+    document.querySelectorAll<HTMLElement>('[role="tab"][data-panel-id]')
+  ).find((element) => element.getAttribute('data-panel-id') === panelId);
+  tab?.focus();
 }
 
 export const useDockablePanelHost = (): HTMLElement | null => {
@@ -256,9 +268,32 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
   // can resolve and store the focused floating group in an effect.
   const pendingFocusPanelIdRef = useRef<string | null>(null);
   const setLastFocusedGroupKey = useCallback((key: GroupKey) => {
+    if (lastFocusedGroupKeyRef.current === key) {
+      return;
+    }
     lastFocusedGroupKeyRef.current = key;
     setLastFocusedGroupKeyState(key);
   }, []);
+
+  // Track DOM focus shifts globally and route them to setLastFocusedGroupKey.
+  // The mousedown handler on each panel already covers click activation; this
+  // listener additionally covers keyboard focus moves (Tab cycling between
+  // fields in different panels) and programmatic focus() calls. Walks up from
+  // the focus target looking for the nearest [data-dockable-group-key]
+  // attribute, which DockablePanel sets on its root element.
+  useEffect(() => {
+    const handleFocusIn = (event: FocusEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const owner = target.closest<HTMLElement>('[data-dockable-group-key]');
+      if (!owner) return;
+      const key = owner.dataset.dockableGroupKey;
+      if (!key) return;
+      setLastFocusedGroupKey(key as GroupKey);
+    };
+    document.addEventListener('focusin', handleFocusIn);
+    return () => document.removeEventListener('focusin', handleFocusIn);
+  }, [setLastFocusedGroupKey]);
 
   // Resolve the best target group key for opening a new panel.
   const getPreferredOpenGroupKey = useCallback(
@@ -313,6 +348,9 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
         return setActiveTab(prev, panelId, groupKey);
       });
       focusPanelById(panelId);
+      window.setTimeout(() => {
+        focusDockableTab(panelId);
+      }, 0);
     },
     [activeStore, setLastFocusedGroupKey]
   );
@@ -433,18 +471,25 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
   // closeTab -- removes a panel from its group AND fires onClose callback.
   // -----------------------------------------------------------------------
   const closeTab = useCallback(
-    (panelId: string) => {
+    (panelId: string, activationPreference: AdjacentTabActivationPreference = 'right') => {
       const registration = panelRegistrationsRef.current.get(panelId);
       const currentTabGroups = activeStore.getTabGroups();
       const currentGroupKey = getGroupForPanel(currentTabGroups, panelId);
 
       if (currentGroupKey) {
         activeStore.handoffLayoutBeforeClose(panelId);
-        const nextTabGroups = removePanelFromGroup(currentTabGroups, panelId);
+        const nextTabGroups = removePanelFromGroup(currentTabGroups, panelId, activationPreference);
+        const nextActivePanelId = getGroupTabs(nextTabGroups, currentGroupKey)?.activeTab ?? null;
 
         // Remove from the tab group using the snapshot we already analyzed so
         // leader hand-off and tab removal stay in sync for this close action.
         activeStore.setTabGroups(() => nextTabGroups);
+        if (nextActivePanelId) {
+          window.setTimeout(() => {
+            focusPanelById(nextActivePanelId);
+            focusDockableTab(nextActivePanelId);
+          }, 0);
+        }
       } else {
         // Panel is not grouped; still clear any stale membership defensively.
         activeStore.setTabGroups((prev) => removePanelFromGroup(prev, panelId));

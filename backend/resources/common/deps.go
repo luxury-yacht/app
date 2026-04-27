@@ -15,6 +15,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/metrics/pkg/client/clientset/versioned"
+	gatewayversioned "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned"
 )
 
 // EnsureClientFunc initialises core Kubernetes clients when required.
@@ -23,20 +24,34 @@ type EnsureClientFunc func(resourceKind string) error
 // EnsureAPIExtensionsFunc initialises the API extensions client when required.
 type EnsureAPIExtensionsFunc func(resourceKind string) error
 
+// GatewayAPIPresence reports which Gateway API kinds are installed on a cluster.
+type GatewayAPIPresence interface {
+	AnyPresent() bool
+	Has(kind string) bool
+}
+
+// VersionResolver returns the preferred served API version for a group/kind pair.
+type VersionResolver interface {
+	PreferredVersion(group, kind string) string
+}
+
 // Dependencies provides the common set of collaborators required by resource handlers.
 type Dependencies struct {
-	Context             context.Context
-	Logger              Logger
-	KubernetesClient    kubernetes.Interface
-	MetricsClient       versioned.Interface
-	SetMetricsClient    func(versioned.Interface)
-	DynamicClient       dynamic.Interface
-	APIExtensionsClient clientset.Interface
-	RestConfig          *rest.Config
-	EnsureClient        EnsureClientFunc
-	EnsureAPIExtensions EnsureAPIExtensionsFunc
-	SelectedKubeconfig  string
-	SelectedContext     string
+	Context                context.Context
+	Logger                 Logger
+	KubernetesClient       kubernetes.Interface
+	GatewayClient          gatewayversioned.Interface
+	GatewayAPIPresence     GatewayAPIPresence
+	GatewayVersionResolver VersionResolver
+	MetricsClient          versioned.Interface
+	SetMetricsClient       func(versioned.Interface)
+	DynamicClient          dynamic.Interface
+	APIExtensionsClient    clientset.Interface
+	RestConfig             *rest.Config
+	EnsureClient           EnsureClientFunc
+	EnsureAPIExtensions    EnsureAPIExtensionsFunc
+	SelectedKubeconfig     string
+	SelectedContext        string
 	// ClusterID uniquely identifies the cluster these dependencies belong to.
 	// Used for multi-cluster isolation in resources like drain jobs.
 	ClusterID string

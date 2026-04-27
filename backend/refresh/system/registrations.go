@@ -263,23 +263,26 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 
 		listRegistration(listDomainConfig{
 			name:          "cluster-config",
-			issueResource: "storage.k8s.io/storageclasses,networking.k8s.io/ingressclasses,admissionregistration.k8s.io/validatingwebhookconfigurations,admissionregistration.k8s.io/mutatingwebhookconfigurations",
+			issueResource: "storage.k8s.io/storageclasses,networking.k8s.io/ingressclasses,gateway.networking.k8s.io/gatewayclasses,admissionregistration.k8s.io/validatingwebhookconfigurations,admissionregistration.k8s.io/mutatingwebhookconfigurations",
 			logGroup:      "*",
-			logResource:   "storageclasses/ingressclasses/webhooks",
+			logResource:   "storageclasses/ingressclasses/gatewayclasses/webhooks",
 			checks: []listCheck{
 				{group: "storage.k8s.io", resource: "storageclasses"},
 				{group: "networking.k8s.io", resource: "ingressclasses"},
+				{group: "gateway.networking.k8s.io", resource: "gatewayclasses"},
 				{group: "admissionregistration.k8s.io", resource: "validatingwebhookconfigurations"},
 				{group: "admissionregistration.k8s.io", resource: "mutatingwebhookconfigurations"},
 			},
 			allowAny: true,
 			register: func(allowed map[string]bool) error {
-				return snapshot.RegisterClusterConfigDomain(
+				return snapshot.RegisterClusterConfigDomainWithGatewayAPI(
 					deps.registry,
 					deps.informerFactory.SharedInformerFactory(),
+					deps.informerFactory.GatewayInformerFactory(),
 					snapshot.ClusterConfigPermissions{
 						IncludeStorageClasses:     allowed["storage.k8s.io/storageclasses"],
 						IncludeIngressClasses:     allowed["networking.k8s.io/ingressclasses"],
+						IncludeGatewayClasses:     allowed["gateway.networking.k8s.io/gatewayclasses"],
 						IncludeValidatingWebhooks: allowed["admissionregistration.k8s.io/validatingwebhookconfigurations"],
 						IncludeMutatingWebhooks:   allowed["admissionregistration.k8s.io/mutatingwebhookconfigurations"],
 					},
@@ -452,25 +455,40 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 		}),
 		listRegistration(listDomainConfig{
 			name:          "namespace-network",
-			issueResource: "core/services,discovery.k8s.io/endpointslices,networking.k8s.io/ingresses,networking.k8s.io/networkpolicies",
+			issueResource: "core/services,discovery.k8s.io/endpointslices,networking.k8s.io/ingresses,networking.k8s.io/networkpolicies,gateway.networking.k8s.io",
 			logGroup:      "*",
-			logResource:   "services/endpointslices/ingresses/networkpolicies",
+			logResource:   "services/endpointslices/ingresses/networkpolicies/gateway-api",
 			checks: []listCheck{
 				{group: "", resource: "services"},
 				{group: "discovery.k8s.io", resource: "endpointslices"},
 				{group: "networking.k8s.io", resource: "ingresses"},
 				{group: "networking.k8s.io", resource: "networkpolicies"},
+				{group: "gateway.networking.k8s.io", resource: "gateways"},
+				{group: "gateway.networking.k8s.io", resource: "httproutes"},
+				{group: "gateway.networking.k8s.io", resource: "grpcroutes"},
+				{group: "gateway.networking.k8s.io", resource: "tlsroutes"},
+				{group: "gateway.networking.k8s.io", resource: "listenersets"},
+				{group: "gateway.networking.k8s.io", resource: "referencegrants"},
+				{group: "gateway.networking.k8s.io", resource: "backendtlspolicies"},
 			},
 			allowAny: true,
 			register: func(allowed map[string]bool) error {
-				return snapshot.RegisterNamespaceNetworkDomain(
+				return snapshot.RegisterNamespaceNetworkDomainWithGatewayAPI(
 					deps.registry,
 					deps.informerFactory.SharedInformerFactory(),
+					deps.informerFactory.GatewayInformerFactory(),
 					snapshot.NamespaceNetworkPermissions{
-						IncludeServices:        allowed["core/services"],
-						IncludeEndpointSlices:  allowed["discovery.k8s.io/endpointslices"],
-						IncludeIngresses:       allowed["networking.k8s.io/ingresses"],
-						IncludeNetworkPolicies: allowed["networking.k8s.io/networkpolicies"],
+						IncludeServices:           allowed["core/services"],
+						IncludeEndpointSlices:     allowed["discovery.k8s.io/endpointslices"],
+						IncludeIngresses:          allowed["networking.k8s.io/ingresses"],
+						IncludeNetworkPolicies:    allowed["networking.k8s.io/networkpolicies"],
+						IncludeGateways:           allowed["gateway.networking.k8s.io/gateways"],
+						IncludeHTTPRoutes:         allowed["gateway.networking.k8s.io/httproutes"],
+						IncludeGRPCRoutes:         allowed["gateway.networking.k8s.io/grpcroutes"],
+						IncludeTLSRoutes:          allowed["gateway.networking.k8s.io/tlsroutes"],
+						IncludeListenerSets:       allowed["gateway.networking.k8s.io/listenersets"],
+						IncludeReferenceGrants:    allowed["gateway.networking.k8s.io/referencegrants"],
+						IncludeBackendTLSPolicies: allowed["gateway.networking.k8s.io/backendtlspolicies"],
 					},
 				)
 			},

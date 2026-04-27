@@ -124,7 +124,7 @@ func (b *NamespaceCustomBuilder) Build(ctx context.Context, scope string) (*refr
 	namespacedCRDs := make([]*apiextensionsv1.CustomResourceDefinition, 0, len(crds))
 	for i := range crds {
 		crd := crds[i]
-		if crd != nil && crd.Spec.Scope == "Namespaced" {
+		if crd != nil && crd.Spec.Scope == "Namespaced" && !IsFirstClassCustomResourceDefinition(crd) {
 			namespacedCRDs = append(namespacedCRDs, crd)
 		}
 	}
