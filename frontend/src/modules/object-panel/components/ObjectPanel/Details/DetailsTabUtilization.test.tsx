@@ -12,6 +12,11 @@ vi.mock('@shared/components/ResourceBar', () => ({
   default: vi.fn(() => <div data-testid="resource-bar" />),
 }));
 
+vi.mock('@shared/components/Tooltip', () => ({
+  __esModule: true,
+  default: ({ children }: any) => <>{children}</>,
+}));
+
 describe('DetailsTabUtilization', () => {
   const render = async (ui: React.ReactElement) => {
     const container = document.createElement('div');

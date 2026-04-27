@@ -10,6 +10,7 @@
 import React from 'react';
 import ResourceBar from '@shared/components/ResourceBar';
 import ResourceBarErrorBoundary from '@shared/components/errors/ResourceBarErrorBoundary';
+import Tooltip from '@shared/components/Tooltip';
 import {
   calculateResourceMetrics,
   formatCpuValue,
@@ -58,15 +59,29 @@ interface ResourceSectionProps {
 const formatPercentSuffix = (numerator: number, denominator: number): string =>
   numerator > 0 && denominator > 0 ? ` (${Math.round((numerator / denominator) * 100)}%)` : '';
 
+const LEGEND_TOOLTIPS: Record<string, string> = {
+  used: 'Current utilization. Percentage is of the total Allocatable on the node',
+  allocatable: 'Total available to pods on this node',
+  requests: 'Sum of the resource Requests from all pods/containers',
+  limits: 'Sum of resource Limits from all pods/containers',
+  consumption: 'Percentage of Requests currently in use',
+  overcommitted:
+    'Above 100% means the configured Limits exceeds the Allocatable resources. Overcommit is not necessarily a problem, but means that lower-priority pods may be evicted under resource pressure.',
+};
+
 const LegendItem: React.FC<{
   count: React.ReactNode;
   label: string;
-}> = ({ count, label }) => (
-  <div className="metric-legend__item">
-    <span className="metric-legend__count">{count}</span>
-    <span className="metric-legend__label">{label}</span>
-  </div>
-);
+}> = ({ count, label }) => {
+  const item = (
+    <span className="metric-legend__item">
+      <span className="metric-legend__count">{count}</span>
+      <span className="metric-legend__label">{label}</span>
+    </span>
+  );
+  const tooltip = LEGEND_TOOLTIPS[label];
+  return tooltip ? <Tooltip content={tooltip}>{item}</Tooltip> : item;
+};
 
 const ResourceSection: React.FC<ResourceSectionProps> = ({ title, data, type, mode }) => {
   const metrics = calculateResourceMetrics(data, type);
