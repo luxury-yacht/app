@@ -26,7 +26,7 @@ func (a *App) teardownRefreshSubsystem() {
 	// Use timeout context for shutdown operations to prevent indefinite blocking
 	const shutdownTimeout = time.Second
 
-	subsystems := a.refreshSubsystems
+	subsystems := a.replaceRefreshSubsystems(nil)
 
 	for _, subsystem := range subsystems {
 		if subsystem == nil || subsystem.Manager == nil {
@@ -53,7 +53,6 @@ func (a *App) teardownRefreshSubsystem() {
 		}
 	}
 
-	a.refreshSubsystems = make(map[string]*system.Subsystem)
 	a.refreshManager = nil
 	a.refreshAggregates = nil
 

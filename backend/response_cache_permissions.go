@@ -41,6 +41,14 @@ var builtinDetailCachePermissionKinds = map[string]struct{}{
 	"ingressclass":                   {},
 	"networkpolicy":                  {},
 	"endpointslice":                  {},
+	"gateway":                        {},
+	"httproute":                      {},
+	"grpcroute":                      {},
+	"tlsroute":                       {},
+	"listenerset":                    {},
+	"backendtlspolicy":               {},
+	"referencegrant":                 {},
+	"gatewayclass":                   {},
 	"storageclass":                   {},
 	"role":                           {},
 	"rolebinding":                    {},
@@ -97,7 +105,7 @@ func (a *App) permissionCheckerForSelection(selectionKey string, deps common.Dep
 		return nil
 	}
 	if selectionKey != "" {
-		if subsystem := a.refreshSubsystems[selectionKey]; subsystem != nil && subsystem.RuntimePerms != nil {
+		if subsystem := a.getRefreshSubsystem(selectionKey); subsystem != nil && subsystem.RuntimePerms != nil {
 			return subsystem.RuntimePerms
 		}
 	}

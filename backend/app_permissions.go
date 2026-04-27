@@ -19,8 +19,11 @@ import (
 
 	"github.com/luxury-yacht/app/backend/capabilities"
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/internal/parallel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 )
+
+const queryPermissionsSSRRFetchConcurrency = 32
 
 // resolveGVRForPermissionQuery resolves a permission query to the concrete
 // resource used by Kubernetes RBAC. Built-in Kubernetes resources resolve from
@@ -66,6 +69,30 @@ type permissionResolutionResult struct {
 	err          error
 }
 
+type preparedPermissionQuery struct {
+	resultIdx     int
+	query         capabilities.PermissionQuery
+	gvr           schema.GroupVersionResource
+	isNamespaced  bool
+	attributes    *authorizationv1.ResourceAttributes
+	diagnosticKey string
+}
+
+type ssrrNamespaceKey struct {
+	clusterID string
+	namespace string
+}
+
+type ssrrNamespaceFetch struct {
+	index int
+	key   ssrrNamespaceKey
+}
+
+type ssrrNamespaceResult struct {
+	status *authorizationv1.SubjectRulesReviewStatus
+	err    error
+}
+
 // nsDiagEntry accumulates per-namespace diagnostics during query processing.
 type nsDiagEntry struct {
 	clusterId         string
@@ -91,6 +118,8 @@ func (a *App) QueryPermissions(queries []capabilities.PermissionQuery) (*capabil
 	// repeat the same kind across verbs/subresources; resolving once keeps
 	// first-load latency tied to unique resources, not descriptor count.
 	resolutionCache := make(map[string]permissionResolutionResult)
+	preparedQueries := make([]preparedPermissionQuery, 0, len(queries))
+	ssrrFetchesByKey := make(map[string]ssrrNamespaceKey)
 	// Per-cluster SSAR fallback batches.
 	ssarByCluster := make(map[string][]ssarItem)
 	// Per-namespace diagnostics keyed by "clusterId|namespace".
@@ -141,11 +170,47 @@ func (a *App) QueryPermissions(queries []capabilities.PermissionQuery) (*capabil
 			Name:        q.Name,
 		}
 
-		if !isNamespaced {
+		prepared := preparedPermissionQuery{
+			resultIdx:    i,
+			query:        q,
+			gvr:          gvr,
+			isNamespaced: isNamespaced,
+			attributes:   attrs,
+		}
+
+		if isNamespaced {
+			diagKey := q.ClusterId + "|" + q.Namespace
+			prepared.diagnosticKey = diagKey
+			diag := nsDiag[diagKey]
+			if diag == nil {
+				diag = &nsDiagEntry{
+					clusterId: q.ClusterId,
+					namespace: q.Namespace,
+				}
+				nsDiag[diagKey] = diag
+			}
+			diag.checkCount++
+			ssrrFetchesByKey[diagKey] = ssrrNamespaceKey{
+				clusterID: q.ClusterId,
+				namespace: q.Namespace,
+			}
+		}
+
+		preparedQueries = append(preparedQueries, prepared)
+	}
+
+	ssrrStart := time.Now()
+	ssrrResults := a.fetchSSRRRulesForNamespaces(ctx, ssrrFetchesByKey)
+	ssrrDuration += time.Since(ssrrStart)
+
+	for _, prepared := range preparedQueries {
+		q := prepared.query
+		attrs := prepared.attributes
+		if !prepared.isNamespaced {
 			// Cluster-scoped resource: route directly to SSAR.
 			attrs.Namespace = ""
 			ssarByCluster[q.ClusterId] = append(ssarByCluster[q.ClusterId], ssarItem{
-				resultIdx: i,
+				resultIdx: prepared.resultIdx,
 				attrs: capabilities.ReviewAttributes{
 					ID:         q.ID,
 					Attributes: attrs,
@@ -154,34 +219,17 @@ func (a *App) QueryPermissions(queries []capabilities.PermissionQuery) (*capabil
 			continue
 		}
 
-		// Namespaced resource: try SSRR cache.
-		diagKey := q.ClusterId + "|" + q.Namespace
-		diag := nsDiag[diagKey]
-		if diag == nil {
-			diag = &nsDiagEntry{
-				clusterId: q.ClusterId,
-				namespace: q.Namespace,
-			}
-			nsDiag[diagKey] = diag
+		diag := nsDiag[prepared.diagnosticKey]
+		ssrrResult, ok := ssrrResults[prepared.diagnosticKey]
+		if !ok {
+			ssrrResult.err = fmt.Errorf("SSRR result missing for cluster %s namespace %s", q.ClusterId, q.Namespace)
 		}
-		diag.checkCount++
-
-		cache := a.getOrCreateSSRRCache(q.ClusterId)
-		if cache == nil {
-			results[i].Source = "error"
-			results[i].Error = fmt.Sprintf("failed to create SSRR cache for cluster %s", q.ClusterId)
-			continue
-		}
-
-		ssrrStart := time.Now()
-		status, err := cache.GetRules(ctx, q.Namespace)
-		ssrrDuration += time.Since(ssrrStart)
-		if err != nil {
+		if ssrrResult.err != nil {
 			// SSRR fetch failed: fall back to SSAR.
 			diag.method = "ssar"
 			diag.ssarFallbackCount++
 			ssarByCluster[q.ClusterId] = append(ssarByCluster[q.ClusterId], ssarItem{
-				resultIdx: i,
+				resultIdx: prepared.resultIdx,
 				attrs: capabilities.ReviewAttributes{
 					ID:         q.ID,
 					Attributes: attrs,
@@ -189,6 +237,7 @@ func (a *App) QueryPermissions(queries []capabilities.PermissionQuery) (*capabil
 			})
 			continue
 		}
+		status := ssrrResult.status
 
 		// SSRR succeeded: record diagnostics.
 		if diag.method == "" {
@@ -198,25 +247,25 @@ func (a *App) QueryPermissions(queries []capabilities.PermissionQuery) (*capabil
 		diag.ssrrRuleCount = len(status.ResourceRules)
 
 		// Try to match the check against cached rules.
-		matched := capabilities.MatchRules(status.ResourceRules, gvr.Group, gvr.Resource, q.Verb, q.Subresource, q.Name)
+		matched := capabilities.MatchRules(status.ResourceRules, prepared.gvr.Group, prepared.gvr.Resource, q.Verb, q.Subresource, q.Name)
 		if matched {
-			results[i].Allowed = true
-			results[i].Source = "ssrr"
+			results[prepared.resultIdx].Allowed = true
+			results[prepared.resultIdx].Source = "ssrr"
 			continue
 		}
 
 		if !status.Incomplete {
 			// Rules are complete and no match: definitively denied.
-			results[i].Allowed = false
-			results[i].Source = "denied"
-			results[i].Reason = "no matching rule"
+			results[prepared.resultIdx].Allowed = false
+			results[prepared.resultIdx].Source = "denied"
+			results[prepared.resultIdx].Reason = "no matching rule"
 			continue
 		}
 
 		// Rules incomplete and no match: fall back to SSAR.
 		diag.ssarFallbackCount++
 		ssarByCluster[q.ClusterId] = append(ssarByCluster[q.ClusterId], ssarItem{
-			resultIdx: i,
+			resultIdx: prepared.resultIdx,
 			attrs: capabilities.ReviewAttributes{
 				ID:         q.ID,
 				Attributes: attrs,
@@ -249,6 +298,51 @@ func (a *App) QueryPermissions(queries []capabilities.PermissionQuery) (*capabil
 		Results:     results,
 		Diagnostics: diagnostics,
 	}, nil
+}
+
+func (a *App) fetchSSRRRulesForNamespaces(
+	ctx context.Context,
+	keysByDiagnostic map[string]ssrrNamespaceKey,
+) map[string]ssrrNamespaceResult {
+	if len(keysByDiagnostic) == 0 {
+		return nil
+	}
+
+	fetches := make([]ssrrNamespaceFetch, 0, len(keysByDiagnostic))
+	diagnosticKeys := make([]string, 0, len(keysByDiagnostic))
+	for diagnosticKey, key := range keysByDiagnostic {
+		diagnosticKeys = append(diagnosticKeys, diagnosticKey)
+		fetches = append(fetches, ssrrNamespaceFetch{
+			index: len(diagnosticKeys) - 1,
+			key:   key,
+		})
+	}
+
+	results := make([]ssrrNamespaceResult, len(fetches))
+	_ = parallel.ForEach(ctx, fetches, queryPermissionsSSRRFetchConcurrency, func(ctx context.Context, fetch ssrrNamespaceFetch) error {
+		cache := a.getOrCreateSSRRCache(fetch.key.clusterID)
+		if cache == nil {
+			results[fetch.index] = ssrrNamespaceResult{
+				err: fmt.Errorf("failed to create SSRR cache for cluster %s", fetch.key.clusterID),
+			}
+			return nil
+		}
+		status, err := cache.GetRules(ctx, fetch.key.namespace)
+		if err == nil && status == nil {
+			err = fmt.Errorf("SSRR returned no status for cluster %s namespace %s", fetch.key.clusterID, fetch.key.namespace)
+		}
+		results[fetch.index] = ssrrNamespaceResult{
+			status: status,
+			err:    err,
+		}
+		return nil
+	})
+
+	byDiagnostic := make(map[string]ssrrNamespaceResult, len(diagnosticKeys))
+	for i, diagnosticKey := range diagnosticKeys {
+		byDiagnostic[diagnosticKey] = results[i]
+	}
+	return byDiagnostic
 }
 
 type queryPermissionsBatchLog struct {

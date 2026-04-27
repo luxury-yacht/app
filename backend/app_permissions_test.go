@@ -2,7 +2,10 @@ package backend
 
 import (
 	"context"
+	"fmt"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/luxury-yacht/app/backend/capabilities"
 	authorizationv1 "k8s.io/api/authorization/v1"
@@ -22,6 +25,76 @@ func TestQueryPermissions_EmptyBatch(t *testing.T) {
 	}
 	if len(resp.Results) != 0 {
 		t.Errorf("expected 0 results, got %d", len(resp.Results))
+	}
+}
+
+func TestQueryPermissions_FetchesNamespaceSSRRsConcurrently(t *testing.T) {
+	const clusterID = "cluster-concurrent"
+	const namespaceCount = 8
+	client := cgofake.NewClientset()
+	var active atomic.Int32
+	var maxActive atomic.Int32
+
+	fetchRules := func(context.Context, string) (*authorizationv1.SubjectRulesReviewStatus, error) {
+		current := active.Add(1)
+		defer active.Add(-1)
+		for {
+			max := maxActive.Load()
+			if current <= max || maxActive.CompareAndSwap(max, current) {
+				break
+			}
+		}
+		time.Sleep(25 * time.Millisecond)
+
+		return &authorizationv1.SubjectRulesReviewStatus{
+			ResourceRules: []authorizationv1.ResourceRule{
+				{
+					Verbs:     []string{"list"},
+					APIGroups: []string{""},
+					Resources: []string{"pods"},
+				},
+			},
+		}, nil
+	}
+
+	app := NewApp()
+	app.Ctx = context.Background()
+	app.clusterClients = map[string]*clusterClients{
+		clusterID: {
+			meta:              ClusterMeta{ID: clusterID, Name: "Concurrent"},
+			kubeconfigPath:    "/path",
+			kubeconfigContext: "ctx",
+			client:            client,
+		},
+	}
+	app.ssrrCaches = map[string]*capabilities.SSRRCache{
+		clusterID: capabilities.NewSSRRCache(clusterID, time.Minute, 0, fetchRules, nil),
+	}
+
+	queries := make([]capabilities.PermissionQuery, 0, namespaceCount)
+	for i := range namespaceCount {
+		queries = append(queries, capabilities.PermissionQuery{
+			ID:           "pod-list",
+			ClusterId:    clusterID,
+			Group:        "",
+			Version:      "v1",
+			ResourceKind: "Pod",
+			Verb:         "list",
+			Namespace:    fmt.Sprintf("ns-%d", i),
+		})
+	}
+
+	resp, err := app.QueryPermissions(queries)
+	if err != nil {
+		t.Fatalf("QueryPermissions returned error: %v", err)
+	}
+	for _, result := range resp.Results {
+		if !result.Allowed || result.Source != "ssrr" {
+			t.Fatalf("expected allowed SSRR result, got %+v", result)
+		}
+	}
+	if maxActive.Load() < 2 {
+		t.Fatalf("expected concurrent SSRR fetches, max active fetches was %d", maxActive.Load())
 	}
 }
 

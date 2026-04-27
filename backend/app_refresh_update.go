@@ -48,7 +48,7 @@ func (a *App) updateRefreshSubsystemSelections(selections []kubeconfigSelection)
 	newSubsystems := make(map[string]*system.Subsystem)
 
 	for id, selection := range desired {
-		if existing := a.refreshSubsystems[id]; existing != nil {
+		if existing := a.getRefreshSubsystem(id); existing != nil {
 			nextSubsystems[id] = existing
 			continue
 		}
@@ -100,8 +100,7 @@ func (a *App) updateRefreshSubsystemSelections(selections []kubeconfigSelection)
 		return err
 	}
 
-	previousSubsystems := a.refreshSubsystems
-	a.refreshSubsystems = nextSubsystems
+	previousSubsystems := a.replaceRefreshSubsystems(nextSubsystems)
 
 	for id := range newSubsystems {
 		target := catalogTarget{
