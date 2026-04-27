@@ -2,7 +2,7 @@
  * frontend/src/core/capabilities/permissionStore.ts
  *
  * Core permission store backed by the QueryPermissions Wails endpoint.
- * Replaces the CapabilityEntry store with a PermissionEntry result map.
+ * Stores permission results from QueryPermissions.
  * Manages periodic refresh, diagnostics, and event bus integration.
  */
 

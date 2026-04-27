@@ -53,8 +53,6 @@ export function DiscoverNodeLogs(arg1:string,arg2:string):Promise<types.NodeLogD
 
 export function DrainNode(arg1:string,arg2:string,arg3:types.DrainNodeOptions):Promise<void>;
 
-export function EvaluateCapabilities(arg1:Array<capabilities.CheckRequest>):Promise<Array<capabilities.CheckResult>>;
-
 export function FetchContainerLogs(arg1:string,arg2:types.ContainerLogsFetchRequest):Promise<types.ContainerLogsFetchResponse>;
 
 export function FetchNodeLogs(arg1:string,arg2:string,arg3:types.NodeLogFetchRequest):Promise<types.NodeLogFetchResponse>;

@@ -44,7 +44,6 @@ export default [
             {
               name: '@wailsjs/go/backend/App',
               importNames: [
-                'EvaluateCapabilities',
                 'FindCatalogObjectByUID',
                 'FindCatalogObjectMatch',
                 'GetAllClusterAuthStates',

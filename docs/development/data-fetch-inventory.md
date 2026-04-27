@@ -28,7 +28,6 @@ Scope:
 | Container logs stream transport   | `containerLogsStreamManager`                                                                             | Streams container log entries; supports one-shot refresh                                   | `frontend/src/core/refresh/streaming/containerLogsStreamManager.ts`                            |
 | Direct Wails RPC                  | Generated `@wailsjs/go/backend/App` bindings or runtime `window.go.backend.App.*`                        | One-off reads that do not use refresh domains                                              | various                                                                                        |
 | Permission query RPC              | `window.go.backend.App.QueryPermissions()`                                                               | Namespace/cluster permission reads                                                         | `frontend/src/core/capabilities/permissionStore.ts`, `frontend/src/core/capabilities/hooks.ts` |
-| Capability evaluation RPC         | `EvaluateCapabilities()`                                                                                 | Feature/capability evaluation batches                                                      | `frontend/src/core/capabilities/store.ts`                                                      |
 
 ## Refresh Domain Registry
 
@@ -185,13 +184,12 @@ These stay internal to infrastructure/adapters and are not component-level broke
 
 ## Capability and Permission Read Inventory
 
-These are separate fetch systems today.
+Permission reads share the `QueryPermissions` endpoint.
 
 | File                                                                       | API                                        | Data pulled                                           | Current implementation                                   |
 | -------------------------------------------------------------------------- | ------------------------------------------ | ----------------------------------------------------- | -------------------------------------------------------- |
 | `frontend/src/core/capabilities/permissionStore.ts`                        | `window.go.backend.App.QueryPermissions()` | Namespace/cluster permission results plus diagnostics | Brokered through `dataAccess.requestData(...)`           |
 | `frontend/src/core/capabilities/hooks.ts`                                  | `window.go.backend.App.QueryPermissions()` | Hook-level permission query batches                   | Brokered through `dataAccess.requestData(...)`           |
-| `frontend/src/core/capabilities/store.ts`                                  | `EvaluateCapabilities()`                   | Capability results for feature descriptors            | Brokered through `dataAccess.requestData(...)`           |
 | `frontend/src/modules/namespace/contexts/NamespaceContext.tsx`             | `queryNamespacePermissions(...)`           | Permissions for selected namespace / all namespaces   | Frontend helper that eventually calls `QueryPermissions` |
 | `frontend/src/modules/namespace/contexts/NsResourcesContext.tsx`           | `queryNamespacePermissions(...)`           | Permissions for active/all namespace resources        | Same helper path                                         |
 | `frontend/src/modules/object-panel/components/ObjectPanel/ObjectPanel.tsx` | `queryNamespacePermissions(...)`           | Permissions for the panel object’s namespace          | Same helper path                                         |
@@ -293,7 +291,7 @@ Component code must not call transport helpers directly.
 - no component-level `fetchScopedDomain(...)`
 - no component-level `triggerManualRefreshForContext(...)`
 - no component-level cluster-data Wails RPC reads
-- no component-level direct `QueryPermissions` / `EvaluateCapabilities`
+- no component-level direct `QueryPermissions`
 
 Components should go through `dataAccess` or `appStateAccess`.
 

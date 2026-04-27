@@ -1,9 +1,6 @@
 package backend
 
-import (
-	"github.com/luxury-yacht/app/backend/capabilities"
-	"github.com/luxury-yacht/app/backend/resources/types"
-)
+import "github.com/luxury-yacht/app/backend/resources/types"
 
 type (
 	KubeconfigInfo                        = types.KubeconfigInfo
@@ -140,6 +137,4 @@ type (
 	NodeCondition                         = types.NodeCondition
 	NodeTaint                             = types.NodeTaint
 	DrainNodeOptions                      = types.DrainNodeOptions
-	CapabilityCheckRequest                = capabilities.CheckRequest
-	CapabilityCheckResult                 = capabilities.CheckResult
 )

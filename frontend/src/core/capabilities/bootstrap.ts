@@ -1,8 +1,7 @@
 /**
  * frontend/src/core/capabilities/bootstrap.ts
  *
- * Thin delegation layer that preserves the public API surface for the
- * permission system while delegating to the new permissionStore.
+ * Thin delegation layer for the permission store.
  */
 
 import { useSyncExternalStore } from 'react';
@@ -11,21 +10,13 @@ import {
   getPermissionKey as storeGetPermissionKey,
   getUserPermissionMap,
   initializePermissionStore,
-  queryNamespacePermissions,
   resetPermissionStore,
   setCurrentClusterId,
   subscribeUserPermissions,
 } from './permissionStore';
 import type { PermissionKey, PermissionMap, PermissionStatus } from './permissionTypes';
 
-// Re-export the new PermissionStatus type for consumers that import it from bootstrap.
 export type { PermissionStatus };
-
-export const DEFAULT_CAPABILITY_TTL_MS = 5 * 60 * 1000;
-
-// ---------------------------------------------------------------------------
-// Public API — same signatures as before, delegating to the new store
-// ---------------------------------------------------------------------------
 
 export const getPermissionKey = (
   resourceKind: string,
@@ -104,41 +95,6 @@ export const initializeUserPermissionsBootstrap = (clusterId?: string | null): v
 
   initializePermissionStore(cid);
   initialized = true;
-};
-
-// ---------------------------------------------------------------------------
-// Backward-compat shims (used by consumers being migrated in Plan 3)
-// ---------------------------------------------------------------------------
-
-/**
- * @deprecated Use queryNamespacePermissions from permissionStore instead.
- * Kept temporarily for consumers not yet migrated.
- */
-export const evaluateNamespacePermissions = (
-  namespace: string,
-  options: { force?: boolean; clusterId?: string | null } = {}
-): void => {
-  queryNamespacePermissions(namespace, options.clusterId ?? null);
-};
-
-/**
- * @deprecated No longer needed — permission specs are static lists.
- * Kept as a no-op for consumers not yet migrated.
- */
-export const registerNamespaceCapabilityDefinitions = (
-  _namespace: string | null,
-  _definitions: unknown[],
-  _options?: unknown
-): void => {
-  // No-op: the new store uses static permission spec lists.
-};
-
-/**
- * @deprecated No longer needed — ad-hoc capabilities go through useCapabilities directly.
- * Kept as a no-op for consumers not yet migrated.
- */
-export const registerAdHocCapabilities = (_descriptors: unknown[]): void => {
-  // No-op: useCapabilities now calls QueryPermissions directly.
 };
 
 // ---------------------------------------------------------------------------
