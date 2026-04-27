@@ -14,16 +14,14 @@ import FavMenuDropdown from '@ui/favorites/FavMenuDropdown';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import { WindowToggleMaximise } from '@wailsjs/runtime/runtime';
 import { SettingsIcon } from '@shared/components/icons/MenuIcons';
-import logo from '@assets/captain-k8s-color.png';
 import { isMacPlatform } from '@/utils/platform';
 import './AppHeader.css';
 
 interface AppHeaderProps {
   contentTitle: string;
-  onAboutClick?: () => void;
 }
 
-const AppHeader: React.FC<AppHeaderProps> = ({ contentTitle, onAboutClick }) => {
+const AppHeader: React.FC<AppHeaderProps> = ({ contentTitle }) => {
   const viewState = useViewState();
 
   const isMac = isMacPlatform();
@@ -44,23 +42,6 @@ const AppHeader: React.FC<AppHeaderProps> = ({ contentTitle, onAboutClick }) => 
       onDoubleClick={() => WindowToggleMaximise()}
       data-app-region="header"
     >
-      <div className="app-header-left">
-        <div
-          className="app-header-about-button"
-          onClick={onAboutClick}
-          onKeyDown={(event) =>
-            activateOnEnterOrSpace(event, () => {
-              onAboutClick?.();
-            })
-          }
-          aria-label="About Luxury Yacht"
-          title="About Luxury Yacht"
-          role="button"
-          tabIndex={0}
-        >
-          <img src={logo} alt="" className="app-header-logo" />
-        </div>
-      </div>
       <div className="app-header-center">
         <span className="app-header-title">
           {contentTitle.split(' • ').map((segment, index) => {
