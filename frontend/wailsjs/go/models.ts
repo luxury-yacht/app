@@ -555,6 +555,7 @@ export namespace backend {
 }
 
 export namespace capabilities {
+	
 	export class NamespaceDiagnostics {
 	    key: string;
 	    clusterId: string;
@@ -4929,3 +4930,4 @@ export namespace v1 {
 	}
 
 }
+

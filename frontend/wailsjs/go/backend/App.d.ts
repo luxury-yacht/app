@@ -3,9 +3,9 @@
 import {backend} from '../models';
 import {types} from '../models';
 import {context} from '../models';
-import {capabilities} from '../models';
 import {objectcatalog} from '../models';
 import {json} from '../models';
+import {capabilities} from '../models';
 
 export function AddFavorite(arg1:backend.Favorite):Promise<backend.Favorite>;
 
