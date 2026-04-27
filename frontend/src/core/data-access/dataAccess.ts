@@ -15,7 +15,7 @@ import type {
   RefreshDomainRequest,
 } from './types';
 
-export const isReasonAllowedWhilePaused = (reason: DataRequestReason): boolean => {
+const isReasonAllowedWhilePaused = (reason: DataRequestReason): boolean => {
   return reason === 'user';
 };
 

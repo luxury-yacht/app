@@ -118,7 +118,7 @@ export const focusPreviousRegionBeforeSidebar = () => {
   return false;
 };
 
-export const focusTopLevelAppRegion = (region: TopLevelAppRegion) => {
+const focusTopLevelAppRegion = (region: TopLevelAppRegion) => {
   if (region === 'header') {
     return focusHeaderRegion();
   }
@@ -199,7 +199,7 @@ export const useTopLevelAppRegionTracking = (active = true) => {
   }, [active]);
 };
 
-export const focusPreviousRegionBeforeContent = () => {
+const focusPreviousRegionBeforeContent = () => {
   const selectedSidebarItem = getSelectedSidebarItem();
   if (selectedSidebarItem) {
     selectedSidebarItem.focus();

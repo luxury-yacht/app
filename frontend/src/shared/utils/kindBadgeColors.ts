@@ -9,12 +9,12 @@
  * custom property.
  */
 
-export const HASH_COLOR_PALETTE_SIZE = 24;
+const HASH_COLOR_PALETTE_SIZE = 24;
 
 const FNV_OFFSET = 0x811c9dc5;
 const FNV_PRIME = 0x01000193;
 
-export const hashKindColorIndex = (kind: string, paletteSize: number): number => {
+const hashKindColorIndex = (kind: string, paletteSize: number): number => {
   if (paletteSize <= 0) {
     return 0;
   }

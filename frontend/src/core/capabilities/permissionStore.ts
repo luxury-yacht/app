@@ -900,8 +900,6 @@ export const subscribeUserPermissions = (listener: Listener): (() => void) => {
 
 export const getUserPermissionMap = (): PermissionMap => permissionMap;
 
-export const getStoreVersion = (): number => version;
-
 // ---------------------------------------------------------------------------
 // Diagnostics — populates PermissionQueryDiagnostics per (clusterId|namespace)
 // ---------------------------------------------------------------------------

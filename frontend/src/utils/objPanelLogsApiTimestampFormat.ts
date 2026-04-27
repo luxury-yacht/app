@@ -90,7 +90,7 @@ export const getObjPanelLogsApiTimestampFormatValidationError = (format: string)
   return null;
 };
 
-export const isValidObjPanelLogsApiTimestampFormat = (format: string): boolean =>
+const isValidObjPanelLogsApiTimestampFormat = (format: string): boolean =>
   getObjPanelLogsApiTimestampFormatValidationError(format) === null;
 
 export const normalizeObjPanelLogsApiTimestampFormat = (

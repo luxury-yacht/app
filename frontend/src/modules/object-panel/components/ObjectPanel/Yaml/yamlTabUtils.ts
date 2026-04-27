@@ -6,11 +6,7 @@
  */
 
 import * as YAML from 'yaml';
-import {
-  ValidateObjectYaml,
-  ApplyObjectYaml,
-  MergeObjectYamlWithLatest,
-} from '@wailsjs/go/backend/App';
+import { ApplyObjectYaml, MergeObjectYamlWithLatest } from '@wailsjs/go/backend/App';
 import type { ObjectIdentity } from './yamlValidation';
 import type { ObjectYamlMutationResponse } from './yamlErrors';
 import { YAML_STRINGIFY_OPTIONS } from './yamlTabConfig';
@@ -85,25 +81,6 @@ export const sanitizeYamlForSemanticCompare = (raw: string): string => {
   } catch {
     return raw;
   }
-};
-
-export const validateYamlOnServer = async (
-  clusterId: string,
-  baseYAML: string,
-  yamlContent: string,
-  identity: ObjectIdentity,
-  resourceVersion: string
-): Promise<ObjectYamlMutationResponse> => {
-  return ValidateObjectYaml(clusterId, {
-    baseYAML,
-    yaml: yamlContent,
-    kind: identity.kind,
-    apiVersion: identity.apiVersion,
-    namespace: identity.namespace ?? '',
-    name: identity.name,
-    uid: identity.uid ?? '',
-    resourceVersion,
-  });
 };
 
 export const applyYamlOnServer = async (

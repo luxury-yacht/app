@@ -11,8 +11,6 @@ export type TabDragPayload =
   | { kind: 'cluster-tab'; clusterId: string }
   | { kind: 'dockable-tab'; panelId: string; sourceGroupId: string };
 
-export type TabDragKind = TabDragPayload['kind'];
-
 /**
  * Wire-format key used with DataTransfer.setData / getData. Includes the
  * project namespace so it doesn't collide with anything the OS or other
