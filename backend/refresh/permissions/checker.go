@@ -4,19 +4,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"strings"
 	"sync"
 	"time"
 
 	authorizationv1 "k8s.io/api/authorization/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
 	"golang.org/x/sync/singleflight"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/internal/k8sretry"
 )
 
 // ListWatchChecker gates informer access based on RBAC permissions.
@@ -82,16 +81,21 @@ func NewChecker(client kubernetes.Interface, clusterID string, ttl time.Duration
 			defer cancel()
 		}
 
-		req := &authorizationv1.SelfSubjectAccessReview{
-			Spec: authorizationv1.SelfSubjectAccessReviewSpec{
-				ResourceAttributes: &authorizationv1.ResourceAttributes{
-					Group:    group,
-					Resource: resource,
-					Verb:     verb,
+		var resp *authorizationv1.SelfSubjectAccessReview
+		err := k8sretry.Do(ctx, permissionReviewRetryPolicy(), func(callCtx context.Context) error {
+			req := &authorizationv1.SelfSubjectAccessReview{
+				Spec: authorizationv1.SelfSubjectAccessReviewSpec{
+					ResourceAttributes: &authorizationv1.ResourceAttributes{
+						Group:    group,
+						Resource: resource,
+						Verb:     verb,
+					},
 				},
-			},
-		}
-		resp, err := client.AuthorizationV1().SelfSubjectAccessReviews().Create(ctx, req, metav1.CreateOptions{})
+			}
+			var err error
+			resp, err = client.AuthorizationV1().SelfSubjectAccessReviews().Create(callCtx, req, metav1.CreateOptions{})
+			return err
+		})
 		if err != nil {
 			return false, err
 		}
@@ -102,6 +106,14 @@ func NewChecker(client kubernetes.Interface, clusterID string, ttl time.Duration
 	}
 
 	return NewCheckerWithReview(clusterID, ttl, review)
+}
+
+func permissionReviewRetryPolicy() k8sretry.Policy {
+	return k8sretry.Policy{
+		MaxAttempts:    config.PermissionReviewRetryMaxAttempts,
+		InitialBackoff: config.PermissionReviewRetryInitialBackoff,
+		MaxBackoff:     config.PermissionReviewRetryMaxBackoff,
+	}
 }
 
 // NewCheckerWithStaleGrace constructs a checker with a custom stale grace period.
@@ -295,12 +307,5 @@ func isTransientPermissionError(err error) bool {
 	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 		return true
 	}
-	var netErr net.Error
-	if errors.As(err, &netErr) && netErr.Timeout() {
-		return true
-	}
-	if apierrors.IsTooManyRequests(err) || apierrors.IsTimeout(err) || apierrors.IsServerTimeout(err) {
-		return true
-	}
-	return false
+	return k8sretry.IsRetryable(err)
 }

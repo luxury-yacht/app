@@ -3,9 +3,9 @@
 import {backend} from '../models';
 import {types} from '../models';
 import {context} from '../models';
-import {capabilities} from '../models';
 import {objectcatalog} from '../models';
 import {json} from '../models';
+import {capabilities} from '../models';
 
 export function AddFavorite(arg1:backend.Favorite):Promise<backend.Favorite>;
 
@@ -52,8 +52,6 @@ export function DeleteTheme(arg1:string):Promise<void>;
 export function DiscoverNodeLogs(arg1:string,arg2:string):Promise<types.NodeLogDiscoveryResponse>;
 
 export function DrainNode(arg1:string,arg2:string,arg3:types.DrainNodeOptions):Promise<void>;
-
-export function EvaluateCapabilities(arg1:Array<capabilities.CheckRequest>):Promise<Array<capabilities.CheckResult>>;
 
 export function FetchContainerLogs(arg1:string,arg2:types.ContainerLogsFetchRequest):Promise<types.ContainerLogsFetchResponse>;
 

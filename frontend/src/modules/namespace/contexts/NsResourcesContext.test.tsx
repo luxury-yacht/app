@@ -505,8 +505,7 @@ describe('NamespaceResourcesProvider', () => {
 
     await runTimers();
 
-    // The new permission system calls queryNamespacePermissions on mount.
-    // registerNamespaceCapabilityDefinitions is now a no-op.
+    // The permission system calls queryNamespacePermissions on mount.
     expect(capabilityMocks.queryNamespacePermissions).toHaveBeenCalledWith('alpha', testClusterId);
   });
 

@@ -10,18 +10,16 @@ package network
 import (
 	"context"
 	"fmt"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/types"
 )
-
-const endpointSliceTimeout = 10 * time.Second
 
 func (s *Service) GetService(namespace, name string) (*types.ServiceDetails, error) {
 	svc, err := s.deps.KubernetesClient.CoreV1().Services(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
@@ -72,7 +70,7 @@ func (s *Service) ctx() (context.Context, context.CancelFunc) {
 	if _, hasDeadline := base.Deadline(); hasDeadline {
 		return base, func() {}
 	}
-	return context.WithTimeout(base, endpointSliceTimeout)
+	return context.WithTimeout(base, config.EndpointSliceLookupTimeout)
 }
 
 func (s *Service) buildServiceDetails(service *corev1.Service, slices []*discoveryv1.EndpointSlice) *types.ServiceDetails {

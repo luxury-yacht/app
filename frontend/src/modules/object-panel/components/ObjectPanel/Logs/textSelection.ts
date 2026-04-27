@@ -10,10 +10,7 @@ const nodeWithinRoot = (node: Node | null, root: HTMLElement): boolean => {
   return node.parentElement ? root.contains(node.parentElement) : false;
 };
 
-export const selectionBelongsToRoot = (
-  selection: Selection | null,
-  root: HTMLElement | null
-): boolean => {
+const selectionBelongsToRoot = (selection: Selection | null, root: HTMLElement | null): boolean => {
   if (!selection || selection.isCollapsed || !root) {
     return false;
   }

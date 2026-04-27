@@ -47,6 +47,7 @@ type App struct {
 	containerLogsTargetLimiter   *containerlogsstream.GlobalTargetLimiter
 	sharedInformerFactory        informers.SharedInformerFactory
 	apiExtensionsInformerFactory apiextinformers.SharedInformerFactory
+	refreshSubsystemsMu          sync.RWMutex
 	refreshSubsystems            map[string]*system.Subsystem
 	refreshAggregates            *refreshAggregateHandlers
 	refreshPermissionCancels     map[string]context.CancelFunc

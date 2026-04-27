@@ -2,15 +2,13 @@
  * frontend/src/core/capabilities/bootstrap.test.ts
  *
  * Test suite for bootstrap.
- * Covers the thin delegation layer that preserves the public API surface
- * while delegating to the new permissionStore.
+ * Covers the thin delegation layer for the permission store.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock permissionStore — bootstrap delegates all real work here.
 const mockInitializePermissionStore = vi.fn();
-const mockQueryNamespacePermissions = vi.fn();
 const mockResetPermissionStore = vi.fn();
 const mockSetCurrentClusterId = vi.fn();
 const mockGetPermissionKey = vi.fn(
@@ -47,7 +45,6 @@ const mockGetUserPermissionMap = vi.fn(() => permissionMap);
 
 vi.mock('./permissionStore', () => ({
   initializePermissionStore: (...args: unknown[]) => mockInitializePermissionStore(...args),
-  queryNamespacePermissions: (...args: unknown[]) => mockQueryNamespacePermissions(...args),
   resetPermissionStore: () => mockResetPermissionStore(),
   setCurrentClusterId: (...args: unknown[]) => mockSetCurrentClusterId(...args),
   getPermissionKey: (...args: unknown[]) =>
@@ -65,7 +62,6 @@ const loadBootstrap = async () => {
 
 beforeEach(() => {
   mockInitializePermissionStore.mockClear();
-  mockQueryNamespacePermissions.mockClear();
   mockResetPermissionStore.mockClear();
   mockSetCurrentClusterId.mockClear();
   mockGetPermissionKey.mockClear();
@@ -131,50 +127,6 @@ describe('capabilities bootstrap helpers', () => {
     bootstrap.initializeUserPermissionsBootstrap('cluster-b');
     // Re-initializes for the new cluster.
     expect(mockInitializePermissionStore).toHaveBeenCalledWith('cluster-b');
-  });
-
-  it('evaluateNamespacePermissions delegates to queryNamespacePermissions', async () => {
-    const bootstrap = await loadBootstrap();
-
-    bootstrap.evaluateNamespacePermissions('metrics', { clusterId: 'cluster-1' });
-
-    expect(mockQueryNamespacePermissions).toHaveBeenCalledWith('metrics', 'cluster-1');
-  });
-
-  it('evaluateNamespacePermissions passes null clusterId when not provided', async () => {
-    const bootstrap = await loadBootstrap();
-
-    bootstrap.evaluateNamespacePermissions('default');
-
-    expect(mockQueryNamespacePermissions).toHaveBeenCalledWith('default', null);
-  });
-
-  it('registerNamespaceCapabilityDefinitions is a no-op', async () => {
-    const bootstrap = await loadBootstrap();
-
-    // Should not throw and should not call any store functions.
-    bootstrap.registerNamespaceCapabilityDefinitions('default', [
-      {
-        id: 'test',
-        scope: 'namespace',
-        descriptor: { id: 'test', resourceKind: 'Pod', verb: 'get' },
-      },
-    ] as any);
-
-    expect(mockInitializePermissionStore).not.toHaveBeenCalled();
-    expect(mockQueryNamespacePermissions).not.toHaveBeenCalled();
-  });
-
-  it('registerAdHocCapabilities is a no-op', async () => {
-    const bootstrap = await loadBootstrap();
-
-    // Should not throw and should not call any store functions.
-    bootstrap.registerAdHocCapabilities([
-      { id: 'adhoc:test', resourceKind: 'Pod', verb: 'get', namespace: 'default' },
-    ] as any);
-
-    expect(mockInitializePermissionStore).not.toHaveBeenCalled();
-    expect(mockQueryNamespacePermissions).not.toHaveBeenCalled();
   });
 
   it('__resetCapabilitiesStateForTests calls resetPermissionStore', async () => {

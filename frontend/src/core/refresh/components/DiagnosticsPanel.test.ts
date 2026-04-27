@@ -14,10 +14,9 @@ import { KeyboardProvider } from '@ui/shortcuts';
 import type { ViewType } from '@/types/navigation/views';
 import type { TelemetrySummary } from '../types';
 import type {
-  CapabilityNamespaceDiagnostics,
-  NormalizedCapabilityDescriptor,
-} from '@/core/capabilities/types';
-import type { PermissionStatus } from '@/core/capabilities/bootstrap';
+  PermissionQueryDiagnostics,
+  PermissionStatus,
+} from '@/core/capabilities/permissionTypes';
 import type { DomainSnapshotState } from '../store';
 import { resourceStreamManager } from '../streaming/resourceStreamManager';
 import { buildClusterScopeList } from '@/core/refresh/clusterScope';
@@ -58,7 +57,7 @@ vi.mock('../client', () => ({
   fetchSelectionDiagnostics: fetchSelectionDiagnosticsMock,
 }));
 
-let capabilityDiagnosticsData: CapabilityNamespaceDiagnostics[] = [];
+let capabilityDiagnosticsData: PermissionQueryDiagnostics[] = [];
 let permissionMapData: Map<string, PermissionStatus> = new Map();
 let brokerReadDiagnosticsData: Array<{
   key: string;
@@ -1261,26 +1260,28 @@ describe('DiagnosticsPanel component', () => {
     };
     mockNamespaceState.selectedNamespace = 'default';
 
-    const descriptorDefault: NormalizedCapabilityDescriptor = {
-      id: 'cap-default',
+    type TestPermissionDescriptor = PermissionQueryDiagnostics['lastDescriptors'][number] & {
+      clusterId?: string;
+      group?: string;
+      version?: string;
+    };
+
+    const descriptorDefault: TestPermissionDescriptor = {
       resourceKind: 'deployments',
       verb: 'get',
       namespace: 'default',
     };
-    const descriptorExec: NormalizedCapabilityDescriptor = {
-      id: 'cap-exec',
+    const descriptorExec: TestPermissionDescriptor = {
       resourceKind: 'pods',
       verb: 'create',
       namespace: 'default',
       subresource: 'exec',
     };
-    const descriptorCluster: NormalizedCapabilityDescriptor = {
-      id: 'cap-cluster',
+    const descriptorCluster: TestPermissionDescriptor = {
       resourceKind: 'namespaces',
       verb: 'list',
     };
-    const descriptorOther: NormalizedCapabilityDescriptor = {
-      id: 'cap-other',
+    const descriptorOther: TestPermissionDescriptor = {
       resourceKind: 'configmaps',
       verb: 'get',
       namespace: 'kube-system',
@@ -1289,6 +1290,7 @@ describe('DiagnosticsPanel component', () => {
     capabilityDiagnosticsData = [
       {
         key: 'diag-default',
+        method: 'ssrr',
         namespace: 'default',
         pendingCount: 2,
         inFlightCount: 1,
@@ -1303,14 +1305,16 @@ describe('DiagnosticsPanel component', () => {
       },
       {
         key: 'diag-cluster',
+        method: 'ssar',
         pendingCount: 0,
         inFlightCount: 0,
+        totalChecks: 1,
         consecutiveFailureCount: 0,
         lastDescriptors: [descriptorCluster],
       },
     ];
 
-    const toDescriptor = (d: NormalizedCapabilityDescriptor): PermissionStatus['descriptor'] => ({
+    const toDescriptor = (d: TestPermissionDescriptor): PermissionStatus['descriptor'] => ({
       clusterId: d.clusterId ?? 'test-cluster',
       group: d.group ?? null,
       version: d.version ?? null,
@@ -1436,26 +1440,9 @@ describe('DiagnosticsPanel component', () => {
     expect(scopedRows[0].textContent).toContain('deployments (get)');
     expect(scopedRows[1].textContent).toContain('pods/exec (create)');
 
-    const toggle = rendered.container.querySelector<HTMLInputElement>(
-      '.diagnostics-permissions-toggle input'
-    );
-    expect(toggle).toBeTruthy();
-    expect(toggle?.checked).toBe(false);
-
-    await act(async () => {
-      toggle?.click();
-      await Promise.resolve();
-    });
-    await flushAsync();
-
-    const updatedToggle = rendered.container.querySelector<HTMLInputElement>(
-      '.diagnostics-permissions-toggle input'
-    );
-    expect(updatedToggle?.checked).toBe(true);
-    const allRows = permissionsBody!.querySelectorAll('tr');
-    expect(allRows.length).toBe(4);
-    expect(Array.from(allRows).some((row) => row.textContent?.includes('Cluster RBAC'))).toBe(true);
-    expect(Array.from(allRows).some((row) => row.textContent?.includes('kube-system'))).toBe(true);
+    expect(
+      rendered.container.querySelector<HTMLInputElement>('.diagnostics-permissions-toggle input')
+    ).toBeNull();
 
     await rendered.unmount();
   });

@@ -41,5 +41,3 @@ export const StatusChip: React.FC<StatusChipProps> = ({
   }
   return <Tooltip content={tooltip}>{chip}</Tooltip>;
 };
-
-export default StatusChip;

@@ -17,7 +17,7 @@ export interface PermissionSpecList {
 // Namespace-scoped permission spec lists
 // ---------------------------------------------------------------------------
 
-const WORKLOAD_PERMISSIONS: PermissionSpecList = {
+export const WORKLOAD_PERMISSIONS: PermissionSpecList = {
   feature: 'Namespace workloads',
   specs: [
     { kind: 'Deployment', verb: 'list' },
@@ -39,7 +39,7 @@ const WORKLOAD_PERMISSIONS: PermissionSpecList = {
   ],
 };
 
-const POD_PERMISSIONS: PermissionSpecList = {
+export const POD_PERMISSIONS: PermissionSpecList = {
   feature: 'Namespace pods',
   specs: [
     { kind: 'Pod', verb: 'list' },
@@ -49,7 +49,7 @@ const POD_PERMISSIONS: PermissionSpecList = {
   ],
 };
 
-const CONFIG_PERMISSIONS: PermissionSpecList = {
+export const CONFIG_PERMISSIONS: PermissionSpecList = {
   feature: 'Namespace config',
   specs: [
     { kind: 'ConfigMap', verb: 'list' },
@@ -59,7 +59,7 @@ const CONFIG_PERMISSIONS: PermissionSpecList = {
   ],
 };
 
-const NETWORK_PERMISSIONS: PermissionSpecList = {
+export const NETWORK_PERMISSIONS: PermissionSpecList = {
   feature: 'Namespace network',
   specs: [
     { kind: 'Service', verb: 'list' },
@@ -87,7 +87,7 @@ const NETWORK_PERMISSIONS: PermissionSpecList = {
   ],
 };
 
-const RBAC_PERMISSIONS: PermissionSpecList = {
+export const RBAC_PERMISSIONS: PermissionSpecList = {
   feature: 'Namespace RBAC',
   specs: [
     { kind: 'Role', verb: 'list' },
@@ -99,7 +99,7 @@ const RBAC_PERMISSIONS: PermissionSpecList = {
   ],
 };
 
-const STORAGE_PERMISSIONS: PermissionSpecList = {
+export const STORAGE_PERMISSIONS: PermissionSpecList = {
   feature: 'Namespace storage',
   specs: [
     { kind: 'PersistentVolumeClaim', verb: 'list' },
@@ -107,7 +107,7 @@ const STORAGE_PERMISSIONS: PermissionSpecList = {
   ],
 };
 
-const AUTOSCALING_PERMISSIONS: PermissionSpecList = {
+export const AUTOSCALING_PERMISSIONS: PermissionSpecList = {
   feature: 'Namespace autoscaling',
   specs: [
     { kind: 'HorizontalPodAutoscaler', verb: 'list' },
@@ -115,7 +115,7 @@ const AUTOSCALING_PERMISSIONS: PermissionSpecList = {
   ],
 };
 
-const QUOTA_PERMISSIONS: PermissionSpecList = {
+export const QUOTA_PERMISSIONS: PermissionSpecList = {
   feature: 'Namespace quotas',
   specs: [
     { kind: 'ResourceQuota', verb: 'list' },
@@ -127,7 +127,7 @@ const QUOTA_PERMISSIONS: PermissionSpecList = {
   ],
 };
 
-const EVENT_PERMISSIONS: PermissionSpecList = {
+export const EVENT_PERMISSIONS: PermissionSpecList = {
   feature: 'Namespace events',
   specs: [{ kind: 'Event', verb: 'list' }],
 };

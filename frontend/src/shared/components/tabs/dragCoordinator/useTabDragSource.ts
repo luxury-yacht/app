@@ -14,10 +14,7 @@
  *     no hook calls. Calls useContext exactly ONCE per consumer
  *     render regardless of tab count.
  *
- * Both entry points ultimately delegate to the same
- * `createTabDragSourceProps` pure factory, which is also exported
- * for unit-testing and for consumers that prefer to manage the
- * context themselves.
+ * Both entry points ultimately delegate to the same pure factory.
  */
 import { useContext, type DragEventHandler } from 'react';
 
@@ -48,7 +45,7 @@ export interface TabDragSourceProps {
  * given an already-resolved TabDragContext. No hooks inside, so this
  * can be called anywhere (including inside loops).
  */
-export function createTabDragSourceProps(
+function createTabDragSourceProps(
   payload: TabDragPayload | null,
   beginDrag: (payload: TabDragPayload) => void,
   endDrag: () => void,

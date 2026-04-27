@@ -1,10 +1,4 @@
-export {
-  isDataAccessBlocked,
-  requestContextRefresh,
-  requestData,
-  isReasonAllowedWhilePaused,
-  requestRefreshDomain,
-} from './dataAccess';
+export { requestContextRefresh, requestData, requestRefreshDomain } from './dataAccess';
 export * from './readers';
 export type {
   DataAccessAdapter,

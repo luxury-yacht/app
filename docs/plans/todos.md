@@ -9,6 +9,10 @@
 - Object relationships map
 - Traffic flow map
 
+- Configurable backend thresholds
+  - QPS (500) and Burst (1000)
+  - SSRR concurrency cap (32)
+
 - Gridtable improvements
 - Allow column order change via drag
   - should reset button also reset to default column order?

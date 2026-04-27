@@ -4,6 +4,9 @@
     "interface": true,
     "type": true
   },
+  "ignoreIssues": {
+    ".storybook/mocks/wailsModels.ts": ["exports"]
+  },
   "ignore": ["wailsjs/**/*"],
   "tags": ["-lintignore"]
 }

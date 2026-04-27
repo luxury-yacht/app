@@ -12,8 +12,8 @@ package backend
 import (
 	"context"
 	"fmt"
-	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -32,7 +32,7 @@ func (a *App) GetTargetPorts(clusterID, namespace, targetKind, targetGroup, targ
 		return nil, fmt.Errorf("failed to resolve cluster: %w", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), config.PortForwardTargetPortsTimeout)
 	defer cancel()
 
 	target := portForwardTargetRef{

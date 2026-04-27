@@ -21,17 +21,12 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
-
-// kindOnlyDiscoveryTimeout bounds discovery walks initiated by
-// DiscoverGVRByKind. Same value as the legacy `discoveryTimeout` constant
-// in backend/object_yaml.go.
-const kindOnlyDiscoveryTimeout = 10 * time.Second
 
 // DiscoverGVRByKind walks the cluster's discovered API resources looking
 // for one whose Kind, SingularName, or Resource (plural) name matches
@@ -56,7 +51,7 @@ func DiscoverGVRByKind(ctx context.Context, deps Dependencies, resourceKind stri
 			ctx = context.Background()
 		}
 	}
-	walkCtx, cancel := context.WithTimeout(ctx, kindOnlyDiscoveryTimeout)
+	walkCtx, cancel := context.WithTimeout(ctx, config.KindOnlyDiscoveryTimeout)
 	defer cancel()
 
 	discoveryClient := deps.KubernetesClient.Discovery()

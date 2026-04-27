@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -22,7 +23,7 @@ func (s *Service) discoverResources(ctx context.Context) ([]resourceDescriptor, 
 	discoveryClient := s.deps.Common.KubernetesClient.Discovery()
 	if cfg := s.deps.Common.RestConfig; cfg != nil {
 		cfgCopy := rest.CopyConfig(cfg)
-		cfgCopy.Timeout = discoveryRequestTimeout
+		cfgCopy.Timeout = config.ObjectCatalogDiscoveryRequestTimeout
 		if dc, err := discovery.NewDiscoveryClientForConfig(cfgCopy); err == nil {
 			discoveryClient = dc
 		} else if s.deps.Logger != nil {

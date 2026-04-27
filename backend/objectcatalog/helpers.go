@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/dynamic"
@@ -79,12 +80,12 @@ func shouldRetryList(err error) bool {
 // listRetryBackoff calculates exponential backoff for list retries.
 func listRetryBackoff(attempt int) time.Duration {
 	if attempt <= 0 {
-		return listRetryInitialBackoff
+		return config.ObjectCatalogListRetryInitialBackoff
 	}
 	factor := math.Pow(2, float64(attempt))
-	backoff := time.Duration(float64(listRetryInitialBackoff) * factor)
-	if backoff > listRetryMaxBackoff {
-		return listRetryMaxBackoff
+	backoff := time.Duration(float64(config.ObjectCatalogListRetryInitialBackoff) * factor)
+	if backoff > config.ObjectCatalogListRetryMaxBackoff {
+		return config.ObjectCatalogListRetryMaxBackoff
 	}
 	return backoff
 }
@@ -207,10 +208,10 @@ func snapshotSortedKindInfos(set map[string]bool) []KindInfo {
 // clampQueryLimit constrains a query limit to valid bounds.
 func clampQueryLimit(limit int) int {
 	if limit <= 0 {
-		return defaultQueryLimit
+		return config.ObjectCatalogQueryLimit
 	}
-	if limit > maxQueryLimit {
-		return maxQueryLimit
+	if limit > config.ObjectCatalogMaxQueryLimit {
+		return config.ObjectCatalogMaxQueryLimit
 	}
 	return limit
 }
@@ -348,8 +349,8 @@ func adjustedListWorkers() int {
 		cpu = 1
 	}
 	workers := cpu * 4
-	if workers < defaultListWorkers {
-		workers = defaultListWorkers
+	if workers < config.ObjectCatalogListWorkers {
+		workers = config.ObjectCatalogListWorkers
 	}
 	if workers > 128 {
 		workers = 128

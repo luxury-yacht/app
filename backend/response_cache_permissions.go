@@ -7,7 +7,6 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"github.com/luxury-yacht/app/backend/resources/common"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 const (
@@ -16,72 +15,50 @@ const (
 	helmReleaseKind  = "helmrelease"
 )
 
-// builtinKindGroupResource maps lowercased built-in Kubernetes kinds to
-// their canonical (group, resource) pair for SSAR permission checks.
-// Mirrors frontend/src/shared/constants/builtinGroupVersions.ts but with
-// the plural resource name instead of the version (SSAR keys on
-// group/resource, not group/version).
-//
-// Covers the kinds reachable via objectDetailFetchers (see
-// object_detail_provider.go) — these are the only kinds the response
-// cache ever holds, so this is the full set of kinds that
-// canServeCachedResponse needs to check. Adding a new fetcher entry
-// without adding its GroupResource here will cause the permission
-// check to silently pass, which is why the lookup is intentionally
-// strict (see cachedPermissionAttributes).
-var builtinKindGroupResource = map[string]schema.GroupResource{
-	// core/v1
-	"pod":                   {Group: "", Resource: "pods"},
-	"configmap":             {Group: "", Resource: "configmaps"},
-	"secret":                {Group: "", Resource: "secrets"},
-	"service":               {Group: "", Resource: "services"},
-	"serviceaccount":        {Group: "", Resource: "serviceaccounts"},
-	"persistentvolumeclaim": {Group: "", Resource: "persistentvolumeclaims"},
-	"persistentvolume":      {Group: "", Resource: "persistentvolumes"},
-	"namespace":             {Group: "", Resource: "namespaces"},
-	"node":                  {Group: "", Resource: "nodes"},
-	"resourcequota":         {Group: "", Resource: "resourcequotas"},
-	"limitrange":            {Group: "", Resource: "limitranges"},
-
-	// apps/v1
-	"deployment":  {Group: "apps", Resource: "deployments"},
-	"replicaset":  {Group: "apps", Resource: "replicasets"},
-	"daemonset":   {Group: "apps", Resource: "daemonsets"},
-	"statefulset": {Group: "apps", Resource: "statefulsets"},
-
-	// batch/v1
-	"job":     {Group: "batch", Resource: "jobs"},
-	"cronjob": {Group: "batch", Resource: "cronjobs"},
-
-	// networking.k8s.io/v1
-	"ingress":       {Group: "networking.k8s.io", Resource: "ingresses"},
-	"ingressclass":  {Group: "networking.k8s.io", Resource: "ingressclasses"},
-	"networkpolicy": {Group: "networking.k8s.io", Resource: "networkpolicies"},
-
-	// discovery.k8s.io/v1
-	"endpointslice": {Group: "discovery.k8s.io", Resource: "endpointslices"},
-
-	// storage.k8s.io/v1
-	"storageclass": {Group: "storage.k8s.io", Resource: "storageclasses"},
-
-	// rbac.authorization.k8s.io/v1
-	"role":               {Group: "rbac.authorization.k8s.io", Resource: "roles"},
-	"rolebinding":        {Group: "rbac.authorization.k8s.io", Resource: "rolebindings"},
-	"clusterrole":        {Group: "rbac.authorization.k8s.io", Resource: "clusterroles"},
-	"clusterrolebinding": {Group: "rbac.authorization.k8s.io", Resource: "clusterrolebindings"},
-
-	// autoscaling/v2
-	"horizontalpodautoscaler": {Group: "autoscaling", Resource: "horizontalpodautoscalers"},
-
-	// policy/v1
-	"poddisruptionbudget": {Group: "policy", Resource: "poddisruptionbudgets"},
-
-	// apiextensions.k8s.io/v1
-	"customresourcedefinition": {Group: "apiextensions.k8s.io", Resource: "customresourcedefinitions"},
-
-	// admissionregistration.k8s.io/v1
-	"mutatingwebhookconfiguration":   {Group: "admissionregistration.k8s.io", Resource: "mutatingwebhookconfigurations"},
-	"validatingwebhookconfiguration": {Group: "admissionregistration.k8s.io", Resource: "validatingwebhookconfigurations"},
+// builtinDetailCachePermissionKinds is response-cache policy, not resource
+// identity. It is intentionally narrower than builtinResourceCatalog because
+// cached detail reads are checked only for built-in kinds whose cached payloads
+// are guarded by a simple Kubernetes "get" permission check.
+var builtinDetailCachePermissionKinds = map[string]struct{}{
+	"pod":                            {},
+	"configmap":                      {},
+	"secret":                         {},
+	"service":                        {},
+	"serviceaccount":                 {},
+	"persistentvolumeclaim":          {},
+	"persistentvolume":               {},
+	"namespace":                      {},
+	"node":                           {},
+	"resourcequota":                  {},
+	"limitrange":                     {},
+	"deployment":                     {},
+	"replicaset":                     {},
+	"daemonset":                      {},
+	"statefulset":                    {},
+	"job":                            {},
+	"cronjob":                        {},
+	"ingress":                        {},
+	"ingressclass":                   {},
+	"networkpolicy":                  {},
+	"endpointslice":                  {},
+	"gateway":                        {},
+	"httproute":                      {},
+	"grpcroute":                      {},
+	"tlsroute":                       {},
+	"listenerset":                    {},
+	"backendtlspolicy":               {},
+	"referencegrant":                 {},
+	"gatewayclass":                   {},
+	"storageclass":                   {},
+	"role":                           {},
+	"rolebinding":                    {},
+	"clusterrole":                    {},
+	"clusterrolebinding":             {},
+	"horizontalpodautoscaler":        {},
+	"poddisruptionbudget":            {},
+	"customresourcedefinition":       {},
+	"mutatingwebhookconfiguration":   {},
+	"validatingwebhookconfiguration": {},
 }
 
 // canServeCachedResponse guards cached detail/helm responses against RBAC changes.
@@ -128,7 +105,7 @@ func (a *App) permissionCheckerForSelection(selectionKey string, deps common.Dep
 		return nil
 	}
 	if selectionKey != "" {
-		if subsystem := a.refreshSubsystems[selectionKey]; subsystem != nil && subsystem.RuntimePerms != nil {
+		if subsystem := a.getRefreshSubsystem(selectionKey); subsystem != nil && subsystem.RuntimePerms != nil {
 			return subsystem.RuntimePerms
 		}
 	}
@@ -140,11 +117,11 @@ func (a *App) permissionCheckerForSelection(selectionKey string, deps common.Dep
 
 // cachedPermissionAttributes resolves the (group, resource, verb) tuple
 // needed to validate cached responses. Looks up the kind against a
-// static table of built-ins — the response cache only ever stores
-// payloads for kinds that objectDetailFetchers knows how to fetch, and
-// those are all in this table. A kind missing from the table returns
-// ok=false, which canServeCachedResponse treats as "can't check, serve
-// the cached response optimistically".
+// central built-in resource catalog. The response cache only ever stores
+// payloads for kinds that objectDetailFetchers knows how to fetch, so this
+// function first checks the response-cache allowlist. A kind missing from
+// the allowlist or catalog returns ok=false, which canServeCachedResponse
+// treats as "can't check, serve the cached response optimistically".
 //
 // This used to route through the legacy getGVRForDependencies resolver
 // (first-match-wins discovery) which was the source of the
@@ -159,11 +136,24 @@ func cachedPermissionAttributes(kind string) (string, string, string, bool) {
 		// Helm release data uses the "secret" storage driver, so secrets gate access.
 		return "", "secrets", "get", true
 	}
-	gr, ok := builtinKindGroupResource[normalized]
+	if !isBuiltinDetailCachePermissionKind(normalized) {
+		return "", "", "", false
+	}
+	info, ok := lookupBuiltinResourceByKind(normalized)
 	if !ok {
 		return "", "", "", false
 	}
+	gr := info.GR()
 	return gr.Group, gr.Resource, "get", true
+}
+
+func isBuiltinDetailCachePermissionKind(kind string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(kind))
+	if normalized == "" {
+		return false
+	}
+	_, ok := builtinDetailCachePermissionKinds[normalized]
+	return ok
 }
 
 // permissionCheckContext ensures SSAR calls have a bounded timeout.

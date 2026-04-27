@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
@@ -170,11 +171,11 @@ func TestFetchResourceExhaustsRetriesAndEmits(t *testing.T) {
 
 	require.Zero(t, value)
 	require.Error(t, err)
-	require.Equal(t, fetchMaxAttempts, callCount)
+	require.Equal(t, config.ResourceFetchMaxAttempts, callCount)
 	require.NotNil(t, emitted)
 
 	summary := app.telemetryRecorder.SnapshotSummary()
-	require.Equal(t, uint64(fetchMaxAttempts-1), summary.Connection.RetryAttempts)
+	require.Equal(t, uint64(config.ResourceFetchMaxAttempts-1), summary.Connection.RetryAttempts)
 	require.Equal(t, uint64(0), summary.Connection.RetrySuccesses)
 	require.Equal(t, uint64(1), summary.Connection.RetryExhausted)
 	require.Equal(t, "", emitted["clusterId"])

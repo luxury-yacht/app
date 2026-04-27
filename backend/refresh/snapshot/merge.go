@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
@@ -744,8 +745,8 @@ func mergeClusterOverviewPayload(payloads []ClusterOverviewSnapshot) ClusterOver
 	sort.Slice(out.RecentEvents, func(i, j int) bool {
 		return out.RecentEvents[i].Timestamp > out.RecentEvents[j].Timestamp
 	})
-	if len(out.RecentEvents) > recentEventsLimit {
-		out.RecentEvents = out.RecentEvents[:recentEventsLimit]
+	if len(out.RecentEvents) > config.SnapshotClusterOverviewRecentEventsLimit {
+		out.RecentEvents = out.RecentEvents[:config.SnapshotClusterOverviewRecentEventsLimit]
 	}
 
 	return out

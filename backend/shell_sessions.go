@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -23,12 +24,6 @@ const (
 	shellOutputEventName = "object-shell:output"
 	shellStatusEventName = "object-shell:status"
 	shellListEventName   = "object-shell:list"
-
-	// shellIdleTimeout is the duration of inactivity after which a shell session is terminated.
-	shellIdleTimeout = 30 * time.Minute
-
-	// shellMaxDuration is the maximum lifetime of a shell session regardless of activity.
-	shellMaxDuration = 8 * time.Hour
 
 	// shellOutputBacklogMaxBytes bounds replay memory used per shell session.
 	shellOutputBacklogMaxBytes = 256 * 1024
@@ -206,7 +201,7 @@ func (a *App) StartShellSession(clusterID string, req ShellSessionRequest) (*She
 		return nil, fmt.Errorf("pod name is required")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), config.ShellSessionShutdownTimeout)
 	defer cancel()
 
 	podIdentifier := fmt.Sprintf("%s/%s", req.Namespace, req.PodName)
@@ -524,7 +519,7 @@ func hasEphemeralContainer(containers []corev1.EphemeralContainer, name string) 
 // monitorShellTimeout watches for idle and max duration timeouts and terminates the session.
 func (a *App) monitorShellTimeout(ctx context.Context, sess *shellSession) {
 	// Check more frequently than the idle timeout to be responsive
-	ticker := time.NewTicker(1 * time.Minute)
+	ticker := time.NewTicker(config.ShellSessionCleanupInterval)
 	defer ticker.Stop()
 
 	for {
@@ -533,15 +528,15 @@ func (a *App) monitorShellTimeout(ctx context.Context, sess *shellSession) {
 			return
 		case <-ticker.C:
 			// Check max duration first (hard limit)
-			if sess.totalDuration() >= shellMaxDuration {
-				a.logger.Warn(fmt.Sprintf("Shell session %s exceeded max duration (%s), terminating", sess.id, shellMaxDuration), logsources.ShellSession)
+			if sess.totalDuration() >= config.ShellSessionMaxDuration {
+				a.logger.Warn(fmt.Sprintf("Shell session %s exceeded max duration (%s), terminating", sess.id, config.ShellSessionMaxDuration), logsources.ShellSession)
 				a.terminateShellWithReason(sess.id, "timeout", "session exceeded maximum duration")
 				return
 			}
 
 			// Check idle timeout
-			if sess.idleDuration() >= shellIdleTimeout {
-				a.logger.Warn(fmt.Sprintf("Shell session %s idle for %s, terminating", sess.id, shellIdleTimeout), logsources.ShellSession)
+			if sess.idleDuration() >= config.ShellSessionIdleTimeout {
+				a.logger.Warn(fmt.Sprintf("Shell session %s idle for %s, terminating", sess.id, config.ShellSessionIdleTimeout), logsources.ShellSession)
 				a.terminateShellWithReason(sess.id, "timeout", "session idle timeout")
 				return
 			}

@@ -9,6 +9,10 @@ import (
 	"time"
 
 	authorizationv1 "k8s.io/api/authorization/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes/fake"
+	cgotesting "k8s.io/client-go/testing"
 )
 
 func makeRulesStatus(incomplete bool, rules ...authorizationv1.ResourceRule) *authorizationv1.SubjectRulesReviewStatus {
@@ -23,6 +27,34 @@ func podListRule() authorizationv1.ResourceRule {
 		Verbs:     []string{"get", "list", "watch"},
 		APIGroups: []string{""},
 		Resources: []string{"pods"},
+	}
+}
+
+func TestNewSSRRFetchFuncRetriesTooManyRequests(t *testing.T) {
+	client := fake.NewClientset()
+	calls := 0
+	client.Fake.PrependReactor("create", "selfsubjectrulesreviews", func(action cgotesting.Action) (bool, runtime.Object, error) {
+		calls++
+		if calls == 1 {
+			return true, nil, apierrors.NewTooManyRequests("busy", 0)
+		}
+		review := action.(cgotesting.CreateAction).GetObject().(*authorizationv1.SelfSubjectRulesReview)
+		review.Status = authorizationv1.SubjectRulesReviewStatus{
+			ResourceRules: []authorizationv1.ResourceRule{podListRule()},
+		}
+		return true, review, nil
+	})
+
+	fetch := NewSSRRFetchFunc(client, time.Second)
+	status, err := fetch(context.Background(), "default")
+	if err != nil {
+		t.Fatalf("expected retry to succeed, got %v", err)
+	}
+	if len(status.ResourceRules) != 1 {
+		t.Fatalf("expected retried SSRR status, got %+v", status)
+	}
+	if calls != 2 {
+		t.Fatalf("expected 2 SSRR calls, got %d", calls)
 	}
 }
 
@@ -112,6 +144,54 @@ func TestSSRRCache_StaleWithinGrace(t *testing.T) {
 	if fetchCount.Load() < 2 {
 		t.Errorf("expected background fetch, got count %d", fetchCount.Load())
 	}
+}
+
+func TestSSRRCache_StaleWithinGraceDeduplicatesBackgroundRefresh(t *testing.T) {
+	now := time.Now()
+	clock := func() time.Time { return now }
+	status := makeRulesStatus(false, podListRule())
+	releaseRefresh := make(chan struct{})
+
+	var fetchCount atomic.Int32
+	fetch := func(ctx context.Context, namespace string) (*authorizationv1.SubjectRulesReviewStatus, error) {
+		if fetchCount.Add(1) > 1 {
+			select {
+			case <-releaseRefresh:
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		}
+		return status, nil
+	}
+
+	cache := NewSSRRCache("cluster-1", 2*time.Minute, 30*time.Second, fetch, clock)
+	if _, err := cache.GetRules(context.Background(), "default"); err != nil {
+		t.Fatalf("unexpected seed error: %v", err)
+	}
+
+	now = now.Add(2*time.Minute + 15*time.Second)
+	if _, err := cache.GetRules(context.Background(), "default"); err != nil {
+		t.Fatalf("unexpected stale error: %v", err)
+	}
+	for range 50 {
+		if fetchCount.Load() >= 2 {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if fetchCount.Load() != 2 {
+		t.Fatalf("expected one background refresh to start, got %d fetches", fetchCount.Load())
+	}
+
+	for range 10 {
+		if _, err := cache.GetRules(context.Background(), "default"); err != nil {
+			t.Fatalf("unexpected stale error: %v", err)
+		}
+	}
+	if fetchCount.Load() != 2 {
+		t.Fatalf("expected stale hits to share one background refresh, got %d fetches", fetchCount.Load())
+	}
+	close(releaseRefresh)
 }
 
 func TestSSRRCache_ExpiredPastGrace(t *testing.T) {

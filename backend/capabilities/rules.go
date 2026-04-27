@@ -10,6 +10,7 @@ package capabilities
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"sync"
 	"time"
@@ -18,6 +19,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/internal/k8sretry"
 	"golang.org/x/sync/singleflight"
 )
 
@@ -30,16 +33,32 @@ func NewSSRRFetchFunc(client kubernetes.Interface, timeout time.Duration) SSRRFe
 		ctx, cancel := context.WithTimeout(ctx, timeout)
 		defer cancel()
 
-		review := &authorizationv1.SelfSubjectRulesReview{
-			Spec: authorizationv1.SelfSubjectRulesReviewSpec{
-				Namespace: namespace,
-			},
-		}
-		result, err := client.AuthorizationV1().SelfSubjectRulesReviews().Create(ctx, review, metav1.CreateOptions{})
+		var result *authorizationv1.SelfSubjectRulesReview
+		err := k8sretry.Do(ctx, permissionReviewRetryPolicy(), func(callCtx context.Context) error {
+			review := &authorizationv1.SelfSubjectRulesReview{
+				Spec: authorizationv1.SelfSubjectRulesReviewSpec{
+					Namespace: namespace,
+				},
+			}
+			var err error
+			result, err = client.AuthorizationV1().SelfSubjectRulesReviews().Create(callCtx, review, metav1.CreateOptions{})
+			return err
+		})
 		if err != nil {
 			return nil, err
 		}
+		if result == nil {
+			return nil, fmt.Errorf("permission rules review returned no response")
+		}
 		return &result.Status, nil
+	}
+}
+
+func permissionReviewRetryPolicy() k8sretry.Policy {
+	return k8sretry.Policy{
+		MaxAttempts:    config.PermissionReviewRetryMaxAttempts,
+		InitialBackoff: config.PermissionReviewRetryInitialBackoff,
+		MaxBackoff:     config.PermissionReviewRetryMaxBackoff,
 	}
 }
 
@@ -58,9 +77,10 @@ type SSRRCache struct {
 	fetch      SSRRFetchFunc
 	now        func() time.Time
 
-	mu      sync.RWMutex
-	entries map[string]ssrrCacheEntry
-	sfGroup singleflight.Group
+	mu         sync.RWMutex
+	entries    map[string]ssrrCacheEntry
+	refreshing map[string]struct{}
+	sfGroup    singleflight.Group
 }
 
 // NewSSRRCache creates a cache for one cluster's SSRR results.
@@ -75,6 +95,7 @@ func NewSSRRCache(clusterID string, ttl, staleGrace time.Duration, fetch SSRRFet
 		fetch:      fetch,
 		now:        clock,
 		entries:    make(map[string]ssrrCacheEntry),
+		refreshing: make(map[string]struct{}),
 	}
 }
 
@@ -94,7 +115,7 @@ func (c *SSRRCache) GetRules(ctx context.Context, namespace string) (*authorizat
 
 	// Stale within grace: serve stale, background refresh.
 	if ok && c.staleGrace > 0 && !now.After(entry.expiresAt.Add(c.staleGrace)) {
-		go c.fetchAndStore(context.Background(), namespace)
+		c.triggerBackgroundRefresh(namespace)
 		return entry.status, nil
 	}
 
@@ -130,10 +151,40 @@ func (c *SSRRCache) fetchAndStore(ctx context.Context, namespace string) (*autho
 	return result.status, nil
 }
 
+func (c *SSRRCache) triggerBackgroundRefresh(namespace string) {
+	if !c.markRefreshing(namespace) {
+		return
+	}
+	go func() {
+		defer c.clearRefreshing(namespace)
+		_, _ = c.fetchAndStore(context.Background(), namespace)
+	}()
+}
+
+func (c *SSRRCache) markRefreshing(namespace string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.refreshing == nil {
+		c.refreshing = make(map[string]struct{})
+	}
+	if _, ok := c.refreshing[namespace]; ok {
+		return false
+	}
+	c.refreshing[namespace] = struct{}{}
+	return true
+}
+
+func (c *SSRRCache) clearRefreshing(namespace string) {
+	c.mu.Lock()
+	delete(c.refreshing, namespace)
+	c.mu.Unlock()
+}
+
 // Clear removes all cached entries (e.g., on kubeconfig change).
 func (c *SSRRCache) Clear() {
 	c.mu.Lock()
 	c.entries = make(map[string]ssrrCacheEntry)
+	c.refreshing = make(map[string]struct{})
 	c.mu.Unlock()
 }
 

@@ -2,12 +2,47 @@ package backend
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 
 	"github.com/luxury-yacht/app/backend/internal/authstate"
+	appconfig "github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/stretchr/testify/require"
 )
+
+func TestBuildRestConfigForSelectionAppliesClientRateLimits(t *testing.T) {
+	app := newTestAppWithDefaults(t)
+	configPath := filepath.Join(t.TempDir(), "config")
+	kubeconfig := `apiVersion: v1
+clusters:
+- cluster:
+    server: https://example.invalid
+  name: test-cluster
+contexts:
+- context:
+    cluster: test-cluster
+    user: test-user
+  name: test-context
+current-context: test-context
+kind: Config
+preferences: {}
+users:
+- name: test-user
+  user:
+    token: test-token
+`
+	require.NoError(t, os.WriteFile(configPath, []byte(kubeconfig), 0o600))
+
+	cfg, err := app.buildRestConfigForSelection(kubeconfigSelection{
+		Path:    configPath,
+		Context: "test-context",
+	}, nil)
+	require.NoError(t, err)
+	require.Equal(t, float32(appconfig.KubernetesClientQPS), cfg.QPS)
+	require.Equal(t, appconfig.KubernetesClientBurst, cfg.Burst)
+}
 
 // TestSyncClusterClientPool_CreatesClientsForNewSelections verifies that calling
 // syncClusterClientPoolWithContext with selections causes the corresponding entries

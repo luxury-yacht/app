@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/system"
@@ -23,10 +24,7 @@ func (a *App) teardownRefreshSubsystem() {
 	a.refreshCtx = nil
 	a.clearRefreshPermissionCancels()
 
-	// Use timeout context for shutdown operations to prevent indefinite blocking
-	const shutdownTimeout = time.Second
-
-	subsystems := a.refreshSubsystems
+	subsystems := a.replaceRefreshSubsystems(nil)
 
 	for _, subsystem := range subsystems {
 		if subsystem == nil || subsystem.Manager == nil {
@@ -37,7 +35,7 @@ func (a *App) teardownRefreshSubsystem() {
 		}
 		done := make(chan struct{})
 		go func(manager *refresh.Manager) {
-			ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+			ctx, cancel := context.WithTimeout(context.Background(), config.RefreshShutdownTimeout)
 			defer cancel()
 			if err := manager.Shutdown(ctx); err != nil && a.logger != nil {
 				a.logger.Warn(fmt.Sprintf("Failed to shutdown refresh manager: %v", err), logsources.Refresh)
@@ -46,14 +44,13 @@ func (a *App) teardownRefreshSubsystem() {
 		}(subsystem.Manager)
 		select {
 		case <-done:
-		case <-time.After(shutdownTimeout):
+		case <-time.After(config.RefreshShutdownTimeout):
 			if a.logger != nil {
 				a.logger.Warn("Timed out waiting for refresh manager shutdown", logsources.Refresh)
 			}
 		}
 	}
 
-	a.refreshSubsystems = make(map[string]*system.Subsystem)
 	a.refreshManager = nil
 	a.refreshAggregates = nil
 
@@ -61,7 +58,7 @@ func (a *App) teardownRefreshSubsystem() {
 	if a.refreshHTTPServer != nil {
 		done := make(chan struct{})
 		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+			ctx, cancel := context.WithTimeout(context.Background(), config.RefreshShutdownTimeout)
 			defer cancel()
 			if err := a.refreshHTTPServer.Shutdown(ctx); err != nil && !errors.Is(err, http.ErrServerClosed) {
 				if a.logger != nil {
@@ -72,7 +69,7 @@ func (a *App) teardownRefreshSubsystem() {
 		}()
 		select {
 		case <-done:
-		case <-time.After(shutdownTimeout):
+		case <-time.After(config.RefreshShutdownTimeout):
 			if a.logger != nil {
 				a.logger.Warn("Timed out waiting for refresh HTTP server shutdown", logsources.Refresh)
 			}
@@ -83,7 +80,7 @@ func (a *App) teardownRefreshSubsystem() {
 	if serverDone != nil {
 		select {
 		case <-serverDone:
-		case <-time.After(time.Second):
+		case <-time.After(config.RefreshShutdownTimeout):
 			if a.logger != nil {
 				a.logger.Warn("Timed out waiting for refresh server loop", logsources.Refresh)
 			}
@@ -139,13 +136,6 @@ func (a *App) handlePermissionIssues(issues []system.PermissionIssue) {
 		// Permission issues without cluster context are logged but not auto-recovered.
 	}
 }
-
-// Transport failure tracking constants used by per-cluster functions.
-const (
-	transportFailureThreshold = 3
-	transportFailureWindow    = 30 * time.Second
-	transportRebuildCooldown  = time.Minute
-)
 
 // initAuthRecoveryState initializes the per-cluster auth recovery scheduling map.
 // Safe to call multiple times.
@@ -232,8 +222,7 @@ func (a *App) recordClusterTransportFailure(clusterID, reason string, err error)
 	state.mu.Lock()
 
 	now := time.Now()
-	// Reset window if expired (uses same window as global tracking: 30 seconds)
-	if now.Sub(state.windowStart) > transportFailureWindow {
+	if now.Sub(state.windowStart) > config.ClusterTransportFailureWindow {
 		state.failureCount = 0
 		state.windowStart = now
 	}
@@ -241,10 +230,9 @@ func (a *App) recordClusterTransportFailure(clusterID, reason string, err error)
 	state.failureCount++
 	count := state.failureCount
 
-	// Check if threshold reached (same as global: 3 failures)
-	shouldTrigger := count >= transportFailureThreshold &&
+	shouldTrigger := count >= config.ClusterTransportFailureThreshold &&
 		!state.rebuildInProgress &&
-		now.Sub(state.lastRebuild) >= transportRebuildCooldown
+		now.Sub(state.lastRebuild) >= config.ClusterTransportRebuildCooldown
 	if shouldTrigger {
 		state.rebuildInProgress = true
 		state.lastRebuild = now

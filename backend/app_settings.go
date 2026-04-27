@@ -854,7 +854,7 @@ func (a *App) GetThemeInfo() (*ThemeInfo, error) {
 }
 
 func (a *App) ShowSettings() {
-	maxRetries := 3
+	maxRetries := config.AppMenuTriggerMaxRetries
 	for i := 0; i < maxRetries; i++ {
 		if a.Ctx != nil {
 			a.logger.Debug("Settings menu triggered", logsources.App)
@@ -862,14 +862,14 @@ func (a *App) ShowSettings() {
 			return
 		}
 		if i < maxRetries-1 {
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(config.AppMenuTriggerRetryDelay)
 		}
 	}
 	a.logger.Warn("Cannot show settings: application context is nil after retries", logsources.App)
 }
 
 func (a *App) ShowAbout() {
-	maxRetries := 3
+	maxRetries := config.AppMenuTriggerMaxRetries
 	for i := 0; i < maxRetries; i++ {
 		if a.Ctx != nil {
 			a.logger.Debug("About menu triggered", logsources.App)
@@ -877,7 +877,7 @@ func (a *App) ShowAbout() {
 			return
 		}
 		if i < maxRetries-1 {
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(config.AppMenuTriggerRetryDelay)
 		}
 	}
 	a.logger.Warn("Cannot show about: application context is nil after retries", logsources.App)
