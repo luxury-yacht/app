@@ -5,7 +5,7 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CapabilityBatchRow } from './diagnosticsPanelTypes';
 
 interface CapabilityChecksTableProps {
@@ -13,6 +13,32 @@ interface CapabilityChecksTableProps {
   previousRows: CapabilityBatchRow[];
   summary: string;
 }
+
+const INITIAL_VISIBLE_ROWS = 250;
+const ROW_INCREMENT = 250;
+
+const matchesSearch = (row: CapabilityBatchRow, query: string): boolean => {
+  if (!query) {
+    return true;
+  }
+  const descriptorText =
+    row.descriptorsByFeature
+      ?.flatMap(({ feature, resources }) => [feature, ...resources])
+      .join(' ') ?? '';
+  return [
+    row.scope,
+    row.lastResult,
+    row.lastError,
+    row.method,
+    row.ssrrIncomplete == null ? null : row.ssrrIncomplete ? 'incomplete' : 'complete',
+    row.ssrrRuleCount,
+    row.ssarFallbackCount,
+    row.totalChecks,
+    descriptorText,
+  ]
+    .filter((value) => value != null)
+    .some((value) => String(value).toLowerCase().includes(query));
+};
 
 /** Renders a single data row within the capability checks table. */
 const CapabilityRow: React.FC<{
@@ -77,6 +103,8 @@ export const CapabilityChecksTable: React.FC<CapabilityChecksTableProps> = ({
 }) => {
   // Track which rows are expanded (collapsed by default).
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [visibleLimit, setVisibleLimit] = useState(INITIAL_VISIBLE_ROWS);
+  const [searchTerm, setSearchTerm] = useState('');
 
   const toggleRowExpanded = useCallback((key: string) => {
     setExpandedRows((prev) => {
@@ -90,13 +118,62 @@ export const CapabilityChecksTable: React.FC<CapabilityChecksTableProps> = ({
     });
   }, []);
 
+  const normalizedSearch = searchTerm.trim().toLowerCase();
+  const filteredCurrentRows = useMemo(
+    () => currentRows.filter((row) => matchesSearch(row, normalizedSearch)),
+    [currentRows, normalizedSearch]
+  );
+  const filteredPreviousRows = useMemo(
+    () => previousRows.filter((row) => matchesSearch(row, normalizedSearch)),
+    [previousRows, normalizedSearch]
+  );
   const totalRows = currentRows.length + previousRows.length;
+  const filteredTotalRows = filteredCurrentRows.length + filteredPreviousRows.length;
+  const { visibleCurrentRows, visiblePreviousRows, visibleRowsCount } = useMemo(() => {
+    const visibleCurrent = filteredCurrentRows.slice(0, visibleLimit);
+    const remaining = Math.max(visibleLimit - visibleCurrent.length, 0);
+    const visiblePrevious = filteredPreviousRows.slice(0, remaining);
+    return {
+      visibleCurrentRows: visibleCurrent,
+      visiblePreviousRows: visiblePrevious,
+      visibleRowsCount: visibleCurrent.length + visiblePrevious.length,
+    };
+  }, [filteredCurrentRows, filteredPreviousRows, visibleLimit]);
+  const hiddenRowCount = Math.max(filteredTotalRows - visibleRowsCount, 0);
+  const showMoreRows = useCallback(() => {
+    setVisibleLimit((current) => Math.min(current + ROW_INCREMENT, filteredTotalRows));
+  }, [filteredTotalRows]);
+
+  useEffect(() => {
+    setVisibleLimit(INITIAL_VISIBLE_ROWS);
+    setExpandedRows(new Set());
+  }, [normalizedSearch]);
 
   return (
     <div className="diagnostics-section">
-      <div className="diagnostics-section-header">
+      <div className="diagnostics-section-header diagnostics-section-header--toolbar">
         <div className="diagnostics-section-title-group">
-          <span className="diagnostics-section-subtitle">{summary}</span>
+          <span className="diagnostics-section-subtitle">
+            {summary}
+            {normalizedSearch ? ` • ${filteredTotalRows} MATCHES` : ''}
+            {hiddenRowCount > 0 ? ` • Showing ${visibleRowsCount}` : ''}
+          </span>
+        </div>
+        <div className="diagnostics-section-actions">
+          <label className="diagnostics-section-filter">
+            <span className="diagnostics-section-filter-label">Search</span>
+            <input
+              className="diagnostics-section-input"
+              type="search"
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.currentTarget.value)}
+            />
+          </label>
+          {hiddenRowCount > 0 && (
+            <button className="diagnostics-section-toggle" onClick={showMoreRows} type="button">
+              Show {Math.min(ROW_INCREMENT, hiddenRowCount)} More
+            </button>
+          )}
         </div>
       </div>
       <div className="diagnostics-table-wrapper">
@@ -125,6 +202,12 @@ export const CapabilityChecksTable: React.FC<CapabilityChecksTableProps> = ({
                 <td colSpan={COLUMN_COUNT}>No namespace capability requests recorded yet.</td>
               </tr>
             </tbody>
+          ) : filteredTotalRows === 0 ? (
+            <tbody>
+              <tr className="diagnostics-empty">
+                <td colSpan={COLUMN_COUNT}>No capability checks match the current search.</td>
+              </tr>
+            </tbody>
           ) : (
             <>
               {/* Current checks — Cluster + actively viewed namespace. */}
@@ -132,12 +215,12 @@ export const CapabilityChecksTable: React.FC<CapabilityChecksTableProps> = ({
                 <tr className="diagnostics-table-section-header">
                   <td colSpan={COLUMN_COUNT}>Current Checks</td>
                 </tr>
-                {currentRows.length === 0 ? (
+                {visibleCurrentRows.length === 0 ? (
                   <tr className="diagnostics-empty">
                     <td colSpan={COLUMN_COUNT}>No current checks.</td>
                   </tr>
                 ) : (
-                  currentRows.map((row) => (
+                  visibleCurrentRows.map((row) => (
                     <CapabilityRow
                       key={row.key}
                       row={row}
@@ -148,12 +231,12 @@ export const CapabilityChecksTable: React.FC<CapabilityChecksTableProps> = ({
                 )}
               </tbody>
               {/* Previous checks — namespaces no longer being viewed. */}
-              {previousRows.length > 0 && (
+              {visiblePreviousRows.length > 0 && (
                 <tbody>
                   <tr className="diagnostics-table-section-header">
                     <td colSpan={COLUMN_COUNT}>Previous Checks</td>
                   </tr>
-                  {previousRows.map((row) => (
+                  {visiblePreviousRows.map((row) => (
                     <CapabilityRow
                       key={row.key}
                       row={row}

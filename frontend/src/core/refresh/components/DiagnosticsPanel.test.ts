@@ -1436,26 +1436,9 @@ describe('DiagnosticsPanel component', () => {
     expect(scopedRows[0].textContent).toContain('deployments (get)');
     expect(scopedRows[1].textContent).toContain('pods/exec (create)');
 
-    const toggle = rendered.container.querySelector<HTMLInputElement>(
-      '.diagnostics-permissions-toggle input'
-    );
-    expect(toggle).toBeTruthy();
-    expect(toggle?.checked).toBe(false);
-
-    await act(async () => {
-      toggle?.click();
-      await Promise.resolve();
-    });
-    await flushAsync();
-
-    const updatedToggle = rendered.container.querySelector<HTMLInputElement>(
-      '.diagnostics-permissions-toggle input'
-    );
-    expect(updatedToggle?.checked).toBe(true);
-    const allRows = permissionsBody!.querySelectorAll('tr');
-    expect(allRows.length).toBe(4);
-    expect(Array.from(allRows).some((row) => row.textContent?.includes('Cluster RBAC'))).toBe(true);
-    expect(Array.from(allRows).some((row) => row.textContent?.includes('kube-system'))).toBe(true);
+    expect(
+      rendered.container.querySelector<HTMLInputElement>('.diagnostics-permissions-toggle input')
+    ).toBeNull();
 
     await rendered.unmount();
   });

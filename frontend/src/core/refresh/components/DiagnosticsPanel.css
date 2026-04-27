@@ -18,9 +18,8 @@
 }
 
 /* Tabs are fixed at the top — never let the inner table content squeeze
-   the strip vertically. Without this the default flex-shrink: 1 lets the
-   strip collapse when the Effective Permissions table grows on "Show All",
-   pushing the content area up into where the tabs were. */
+   the strip vertically. Without this the default flex-shrink: 1 lets large
+   diagnostics tables push the content area up into where the tabs were. */
 .diagnostics-content > .tab-strip {
   flex-shrink: 0;
 }
@@ -116,6 +115,19 @@
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+
+.diagnostics-section-header--toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.diagnostics-section-header--toolbar .diagnostics-section-actions,
+.diagnostics-section-header--toolbar .diagnostics-permissions-actions {
+  margin-left: auto;
+  justify-content: flex-end;
 }
 
 .diagnostics-section-title-group {
@@ -371,20 +383,6 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
-}
-
-.diagnostics-permissions-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  color: var(--color-text);
-  font-size: 0.75rem;
-  text-transform: none;
-  cursor: pointer;
-}
-
-.diagnostics-permissions-toggle input {
-  margin: 0;
 }
 
 .diagnostics-table-batches th,
