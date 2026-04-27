@@ -11,11 +11,25 @@ import { ResourceStatus } from '@shared/components/kubernetes/ResourceStatus';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
 import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
 import { buildObjectReference, buildRelatedObjectReference } from '@shared/utils/objectIdentity';
+import '@modules/object-panel/components/ObjectPanel/Details/Overview/shared/OverviewBlocks.css';
 
 const qosVariant = (qosClass: string): StatusChipVariant => {
   if (qosClass === 'Guaranteed') return 'healthy';
   if (qosClass === 'BestEffort') return 'warning';
   return 'info';
+};
+
+const qosTooltip = (qosClass: string): string | undefined => {
+  if (qosClass === 'Guaranteed') {
+    return 'Every container has equal CPU and memory requests and limits. Last to be evicted under node resource pressure.';
+  }
+  if (qosClass === 'Burstable') {
+    return 'At least one container has CPU or memory requests/limits set, but the pod does not meet the Guaranteed criteria. Evicted before Guaranteed pods under node resource pressure.';
+  }
+  if (qosClass === 'BestEffort') {
+    return 'No container has any CPU or memory requests or limits set. First to be evicted under node resource pressure.';
+  }
+  return undefined;
 };
 
 interface PodOverviewProps {
@@ -34,6 +48,8 @@ interface PodOverviewProps {
   priorityClass?: string;
   serviceAccount?: string;
   hostNetwork?: boolean;
+  hostPID?: boolean;
+  hostIPC?: boolean;
   labels?: Record<string, string>;
   annotations?: Record<string, string>;
 }
@@ -54,6 +70,8 @@ export const PodOverview: React.FC<PodOverviewProps> = ({
   priorityClass,
   serviceAccount,
   hostNetwork,
+  hostPID,
+  hostIPC,
   labels,
   annotations,
 }) => {
@@ -149,13 +167,19 @@ export const PodOverview: React.FC<PodOverviewProps> = ({
       {(qosClass ||
         priorityClass ||
         (serviceAccount && serviceAccount !== 'default') ||
-        hostNetwork) && (
+        hostNetwork ||
+        hostPID ||
+        hostIPC) && (
         <>
           <div className="metadata-section-separator" />
           {qosClass && (
             <OverviewItem
               label="QoS"
-              value={<StatusChip variant={qosVariant(qosClass)}>{qosClass}</StatusChip>}
+              value={
+                <StatusChip variant={qosVariant(qosClass)} tooltip={qosTooltip(qosClass)}>
+                  {qosClass}
+                </StatusChip>
+              }
             />
           )}
           {priorityClass && <OverviewItem label="Priority" value={priorityClass} />}
@@ -177,10 +201,37 @@ export const PodOverview: React.FC<PodOverviewProps> = ({
               }
             />
           )}
-          {hostNetwork && (
+          {(hostNetwork || hostPID || hostIPC) && (
             <OverviewItem
-              label="Host Network"
-              value={<span className="status-badge warning">Enabled</span>}
+              label="Host"
+              value={
+                <div className="overview-condition-list">
+                  {hostNetwork && (
+                    <StatusChip
+                      variant="warning"
+                      tooltip="Shares the host's network namespace. Bypasses network policies and can bind to host ports or sniff host traffic."
+                    >
+                      Network
+                    </StatusChip>
+                  )}
+                  {hostPID && (
+                    <StatusChip
+                      variant="warning"
+                      tooltip="Shares the host's process namespace. The pod can see, signal, and attach to every process running on the node."
+                    >
+                      PID
+                    </StatusChip>
+                  )}
+                  {hostIPC && (
+                    <StatusChip
+                      variant="warning"
+                      tooltip="Shares the host's IPC namespace. The pod can access shared memory and message queues used by host processes."
+                    >
+                      IPC
+                    </StatusChip>
+                  )}
+                </div>
+              }
             />
           )}
         </>

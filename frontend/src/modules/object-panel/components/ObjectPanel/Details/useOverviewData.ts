@@ -141,6 +141,8 @@ export function useOverviewData(params: UseOverviewDataParams): OverviewData | n
         priorityClass: podDetails.priorityClass,
         serviceAccount: podDetails.serviceAccount,
         hostNetwork: podDetails.hostNetwork,
+        hostPID: podDetails.hostPID,
+        hostIPC: podDetails.hostIPC,
         labels: podDetails.labels,
         annotations: podDetails.annotations,
       };
