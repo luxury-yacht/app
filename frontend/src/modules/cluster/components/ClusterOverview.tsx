@@ -630,7 +630,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
 
       <div className="overview-grid">
         <div className="overview-section resource-usage">
-          <h2>Resource Usage</h2>
+          <h2>Resource Utilization</h2>
           {metricsBanner && !errorMessage && (
             <div className="metrics-warning-banner" title={metricsBanner.tooltip}>
               <span className="metrics-warning-banner__dot" />

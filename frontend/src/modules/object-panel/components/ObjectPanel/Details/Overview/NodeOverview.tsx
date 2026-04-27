@@ -3,6 +3,7 @@
  */
 
 import React from 'react';
+import { types } from '@wailsjs/go/models';
 import { OverviewItem } from '@modules/object-panel/components/ObjectPanel/Details/Overview/shared/OverviewItem';
 import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceStatus } from '@shared/components/kubernetes/ResourceStatus';
@@ -43,8 +44,8 @@ interface NodeOverviewProps {
   podsCapacity?: string;
   podsCount?: number;
   storageCapacity?: string;
-  taints?: any[];
-  conditions?: any[];
+  taints?: types.NodeTaint[];
+  conditions?: types.NodeCondition[];
   labels?: Record<string, string>;
   annotations?: Record<string, string>;
 }
@@ -86,8 +87,8 @@ export const NodeOverview: React.FC<NodeOverviewProps> = ({
             value={
               <div className="overview-condition-list">
                 {conditions
-                  .filter((condition: any) => Boolean(condition.kind))
-                  .map((condition: any) => (
+                  .filter((condition) => Boolean(condition.kind))
+                  .map((condition) => (
                     <StatusChip
                       key={condition.kind}
                       variant={nodeConditionVariant(condition.kind, condition.status)}
@@ -153,7 +154,7 @@ export const NodeOverview: React.FC<NodeOverviewProps> = ({
           label="Taints"
           value={
             <div className="overview-condition-list">
-              {taints.map((taint: any, index: number) => {
+              {taints.map((taint, index) => {
                 const label = `${taint.key}${taint.value ? `=${taint.value}` : ''}:${taint.effect}`;
                 return (
                   <StatusChip key={`${label}-${index}`} variant="warning">

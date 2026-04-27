@@ -1,4 +1,10 @@
-/* Utilization Component Styles */
+/* Utilization Component Styles
+ *
+ * Per-resource sections reuse the ResourceBar housing classes
+ * (.resource-group / .metric-header / .resource-bar-placeholder /
+ * .metric-legend*) defined in ResourceBar.css. This file only handles the
+ * section's outer layout (CPU/Memory side-by-side grid) and per-tab
+ * specifics. */
 
 .utilization-content {
   display: flex;
@@ -20,80 +26,6 @@
   }
 }
 
-.utilization-resource {
-  border-radius: var(--border-radius);
-}
-
-.utilization-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 0.75rem;
-}
-
-.utilization-title {
-  font-size: var(--font-size-normal);
-  font-weight: var(--font-weight-bold);
-  color: var(--color-text);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.utilization-usage {
-  font-size: var(--font-size-normal);
-  font-weight: var(--font-weight-bold);
-  color: var(--color-primary);
-  user-select: text;
-  -webkit-user-select: text;
-}
-
-.utilization-details {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 1rem;
-  padding-top: 0.75rem;
-}
-
-/* Width at which the detail info should switch to 2 columns */
-@container (max-width: 850px) {
-  .utilization-details {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-.utilization-detail {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.utilization-detail-label {
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  color: var(--color-text-secondary);
-  letter-spacing: 0.5px;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.utilization-detail-value {
-  font-size: var(--font-size-normal);
-  color: var(--color-text);
-  user-select: text;
-  -webkit-user-select: text;
-}
-
-.utilization-detail-value * {
-  user-select: text;
-  -webkit-user-select: text;
-}
-
-.utilization-detail-value .overcommitted-text {
-  color: var(--utilization-overcommitted-text);
-  font-weight: 600;
-}
-
 .utilization-pod-count {
   font-weight: normal;
   color: var(--color-text-secondary);
@@ -108,4 +40,11 @@
   background: var(--color-bg);
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius);
+}
+
+/* Highlight overcommitted figures within a metric-legend item.
+   Standalone rule — applied to spans inside .metric-legend__count. */
+.overcommitted-text {
+  color: var(--utilization-overcommitted-text);
+  font-weight: 600;
 }

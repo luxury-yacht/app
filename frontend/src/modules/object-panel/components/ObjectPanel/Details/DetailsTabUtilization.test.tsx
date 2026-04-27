@@ -51,7 +51,7 @@ describe('DetailsTabUtilization', () => {
       <Utilization cpu={{ usage: '2', allocatable: '4' }} mode="nodeMetrics" />
     );
 
-    expect(container.textContent).toContain('Allocatable');
+    expect(container.textContent).toContain('allocatable');
     cleanup();
   });
 
