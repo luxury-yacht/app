@@ -95,9 +95,11 @@ const ContainerCard: React.FC<{ container: Container }> = ({ container }) => {
     <div className="containers-card">
       <div className="containers-card-header">
         <span className="containers-card-title">{container.name}</span>
-        <StatusChip variant={variant} tooltip={container.stateMessage || undefined}>
-          {stateLabel(container.state, container.stateReason)}
-        </StatusChip>
+        {container.state && (
+          <StatusChip variant={variant} tooltip={container.stateMessage || undefined}>
+            {stateLabel(container.state, container.stateReason)}
+          </StatusChip>
+        )}
         {restarts > 0 && (
           <StatusChip variant="warning">
             {restarts} restart{restarts === 1 ? '' : 's'}
