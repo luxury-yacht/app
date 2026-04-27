@@ -60,16 +60,9 @@ const formatPercentSuffix = (numerator: number, denominator: number): string =>
   numerator > 0 && denominator > 0 ? ` (${Math.round((numerator / denominator) * 100)}%)` : '';
 
 const LEGEND_TOOLTIPS: Record<string, React.ReactNode> = {
-  used: (
-    <>
-      Current utilization. Percentages are
-      <br />
-      (% of Requests / % of Allocatable).
-    </>
-  ),
-  allocatable: 'Total available to pods on this node',
-  requests: 'Sum of the resource Requests from all pods/containers',
-  limits: 'Sum of resource Limits from all pods/containers',
+  allocatable: 'Total available to pods on this node.',
+  requests: 'Sum of the resource Requests from all containers.',
+  limits: 'Sum of the resource Limits from all containers.',
   overcommitted: (
     <>
       Above 100% means the configured Limits exceeds the Allocatable resources.
@@ -84,33 +77,49 @@ const LEGEND_TOOLTIPS: Record<string, React.ReactNode> = {
 const LegendItem: React.FC<{
   count: React.ReactNode;
   label: string;
-}> = ({ count, label }) => {
+  tooltip?: React.ReactNode;
+}> = ({ count, label, tooltip }) => {
   const item = (
     <span className="metric-legend__item">
       <span className="metric-legend__count">{count}</span>
       <span className="metric-legend__label">{label}</span>
     </span>
   );
-  const tooltip = LEGEND_TOOLTIPS[label];
-  return tooltip ? <Tooltip content={tooltip}>{item}</Tooltip> : item;
+  const resolvedTooltip = tooltip ?? LEGEND_TOOLTIPS[label];
+  return resolvedTooltip ? <Tooltip content={resolvedTooltip}>{item}</Tooltip> : item;
 };
 
 const ResourceSection: React.FC<ResourceSectionProps> = ({ title, data, type, mode }) => {
   const metrics = calculateResourceMetrics(data, type);
   const formatValue = type === 'cpu' ? formatCpuValue : formatMemoryValue;
 
-  // Suffix denominator: prefer allocatable, fall back to limit (matches the
-  // existing per-row percentage logic).
-  const pctDenominator = metrics.allocatable > 0 ? metrics.allocatable : metrics.limit;
-  const usageAllocatablePct =
-    metrics.usage > 0 && pctDenominator > 0
-      ? `${Math.round((metrics.usage / pctDenominator) * 100)}%`
-      : null;
-  const usageRequestPct = metrics.consumption;
-  const requestSuffix = formatPercentSuffix(metrics.request, pctDenominator);
-  const limitSuffix = formatPercentSuffix(metrics.limit, metrics.allocatable);
+  const isNodeMode = mode === 'nodeMetrics';
 
-  const showAllocatableRow = mode === 'nodeMetrics' && Boolean(data.allocatable);
+  // Usage percentages: usage / requests is always meaningful when requests
+  // are set. The second percentage is usage / allocatable for nodes (a
+  // node-level concept) and usage / limits for workloads.
+  const usageRequestPct = metrics.consumption;
+  const usageSecondaryDenominator = isNodeMode ? metrics.allocatable : metrics.limit;
+  const usageSecondaryPct =
+    metrics.usage > 0 && usageSecondaryDenominator > 0
+      ? `${Math.round((metrics.usage / usageSecondaryDenominator) * 100)}%`
+      : null;
+
+  // Per-row request/limit suffixes: only meaningful for nodes, where
+  // allocatable provides a denominator.
+  const requestSuffix = isNodeMode ? formatPercentSuffix(metrics.request, metrics.allocatable) : '';
+  const limitSuffix = isNodeMode ? formatPercentSuffix(metrics.limit, metrics.allocatable) : '';
+
+  const showAllocatableRow = isNodeMode && Boolean(data.allocatable);
+  const showOvercommittedRow = isNodeMode;
+
+  const usedTooltip = (
+    <>
+      Current utilization. Percentages are
+      <br />
+      (% of Requests / % of {isNodeMode ? 'Allocatable' : 'Limits'}).
+    </>
+  );
 
   return (
     <div className="resource-group">
@@ -139,19 +148,22 @@ const ResourceSection: React.FC<ResourceSectionProps> = ({ title, data, type, mo
       <div className="metric-legend">
         <div className="metric-legend__items">
           <LegendItem
+            tooltip={usedTooltip}
             count={
               <>
                 {data.usage || 'not set'}
-                {(usageRequestPct !== null || usageAllocatablePct) && (
+                {metrics.usage > 0 && (metrics.request > 0 || usageSecondaryDenominator > 0) && (
                   <>
                     {' ('}
-                    {usageRequestPct !== null && (
+                    {usageRequestPct !== null ? (
                       <span className={usageRequestPct > 100 ? 'overcommitted-text' : ''}>
                         {usageRequestPct}%
                       </span>
+                    ) : (
+                      '-'
                     )}
-                    {usageRequestPct !== null && usageAllocatablePct && ' / '}
-                    {usageAllocatablePct}
+                    {' / '}
+                    {usageSecondaryPct ?? '-'}
                     {')'}
                   </>
                 )}
@@ -184,18 +196,20 @@ const ResourceSection: React.FC<ResourceSectionProps> = ({ title, data, type, mo
             }
             label="limits"
           />
-          <LegendItem
-            count={
-              metrics.overcommittedAmount > 0 ? (
-                <span className="overcommitted-text">
-                  {formatValue(metrics.overcommittedAmount)} ({metrics.overcommittedPercent}%)
-                </span>
-              ) : (
-                `${formatValue(0)} (0%)`
-              )
-            }
-            label="overcommitted"
-          />
+          {showOvercommittedRow && (
+            <LegendItem
+              count={
+                metrics.overcommittedAmount > 0 ? (
+                  <span className="overcommitted-text">
+                    {formatValue(metrics.overcommittedAmount)} ({metrics.overcommittedPercent}%)
+                  </span>
+                ) : (
+                  `${formatValue(0)} (0%)`
+                )
+              }
+              label="overcommitted"
+            />
+          )}
         </div>
       </div>
     </div>
