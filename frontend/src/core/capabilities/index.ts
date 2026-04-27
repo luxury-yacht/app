@@ -48,6 +48,7 @@ export {
 // New store — direct access for consumers that need it.
 export {
   queryNamespacePermissions,
+  queryNamespacesPermissions,
   queryClusterPermissions,
   queryKindPermissions,
   initializePermissionStore,
@@ -56,8 +57,17 @@ export {
 
 // Permission spec lists.
 export {
+  AUTOSCALING_PERMISSIONS,
   ALL_NAMESPACE_PERMISSIONS,
   CLUSTER_PERMISSIONS,
+  CONFIG_PERMISSIONS,
+  EVENT_PERMISSIONS,
+  NETWORK_PERMISSIONS,
+  POD_PERMISSIONS,
+  QUOTA_PERMISSIONS,
+  RBAC_PERMISSIONS,
+  STORAGE_PERMISSIONS,
+  WORKLOAD_PERMISSIONS,
   type PermissionSpecList,
 } from './permissionSpecs';
 

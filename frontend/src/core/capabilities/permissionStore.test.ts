@@ -6,19 +6,68 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+const hoisted = vi.hoisted(() => ({
+  readQueryPermissions: vi.fn(),
+  requestData: vi.fn(),
+}));
+
+vi.mock('@/core/data-access', () => ({
+  readQueryPermissions: (...args: unknown[]) => hoisted.readQueryPermissions(...args),
+  requestData: (...args: unknown[]) => hoisted.requestData(...args),
+}));
+
 import {
   __resetForTests,
   getPermissionKey,
   makePermissionStatus,
+  queryNamespacesPermissions,
   resetPermissionStore,
   subscribeUserPermissions,
 } from './permissionStore';
+import { POD_PERMISSIONS, WORKLOAD_PERMISSIONS } from './permissionSpecs';
 import type { PermissionEntry } from './permissionTypes';
 
 afterEach(() => {
   __resetForTests();
+  hoisted.readQueryPermissions.mockReset();
+  hoisted.requestData.mockReset();
   vi.restoreAllMocks();
 });
+
+const mockSuccessfulQueryPermissions = (): void => {
+  hoisted.requestData.mockImplementation(async (options: any) => ({
+    status: 'executed',
+    data: await options.read(),
+  }));
+  hoisted.readQueryPermissions.mockImplementation(async (queries: any[]) => {
+    const diagnosticKeys = Array.from(
+      new Set(queries.map((query) => `${query.clusterId}|${query.namespace}`))
+    );
+    return {
+      results: queries.map((query) => ({
+        ...query,
+        allowed: true,
+        source: 'ssrr',
+        reason: '',
+        error: '',
+      })),
+      diagnostics: diagnosticKeys.map((key) => {
+        const [clusterId, namespace] = key.split('|');
+        return {
+          key,
+          clusterId,
+          namespace,
+          method: 'ssrr',
+          ssrrIncomplete: false,
+          ssrrRuleCount: 1,
+          ssarFallbackCount: 0,
+          checkCount: queries.filter((query) => `${query.clusterId}|${query.namespace}` === key)
+            .length,
+        };
+      }),
+    };
+  });
+};
 
 // ---------------------------------------------------------------------------
 // getPermissionKey
@@ -162,6 +211,52 @@ describe('makePermissionStatus', () => {
     expect(status.entry.status).toBe('error');
     expect(status.error).toBe('cluster unreachable');
     expect(status.allowed).toBe(false);
+  });
+});
+
+describe('queryNamespacesPermissions', () => {
+  it('queries many namespaces in one QueryPermissions call for a scoped spec list', async () => {
+    mockSuccessfulQueryPermissions();
+
+    await queryNamespacesPermissions(
+      [
+        { namespace: 'default', clusterId: 'cluster-1' },
+        { namespace: 'kube-system', clusterId: 'cluster-1' },
+      ],
+      { specLists: [POD_PERMISSIONS] }
+    );
+
+    expect(hoisted.readQueryPermissions).toHaveBeenCalledTimes(1);
+    const payload = hoisted.readQueryPermissions.mock.calls[0][0] as Array<{
+      resourceKind: string;
+      namespace: string;
+    }>;
+    expect(payload).toHaveLength(POD_PERMISSIONS.specs.length * 2);
+    expect(new Set(payload.map((item) => item.namespace))).toEqual(
+      new Set(['default', 'kube-system'])
+    );
+    expect(new Set(payload.map((item) => item.resourceKind))).toEqual(new Set(['Pod']));
+  });
+
+  it('tracks freshness by namespace and spec list instead of suppressing later feature checks', async () => {
+    mockSuccessfulQueryPermissions();
+
+    await queryNamespacesPermissions([{ namespace: 'default', clusterId: 'cluster-1' }], {
+      specLists: [POD_PERMISSIONS],
+    });
+    await queryNamespacesPermissions([{ namespace: 'default', clusterId: 'cluster-1' }], {
+      specLists: [POD_PERMISSIONS],
+    });
+    await queryNamespacesPermissions([{ namespace: 'default', clusterId: 'cluster-1' }], {
+      specLists: [WORKLOAD_PERMISSIONS],
+    });
+
+    expect(hoisted.readQueryPermissions).toHaveBeenCalledTimes(2);
+    const secondPayload = hoisted.readQueryPermissions.mock.calls[1][0] as Array<{
+      resourceKind: string;
+    }>;
+    expect(secondPayload).toHaveLength(WORKLOAD_PERMISSIONS.specs.length);
+    expect(new Set(secondPayload.map((item) => item.resourceKind))).toContain('Deployment');
   });
 });
 
