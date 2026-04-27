@@ -1,9 +1,17 @@
 package backend
 
 import (
+	"context"
 	"testing"
 
 	"github.com/luxury-yacht/app/backend/capabilities"
+	authorizationv1 "k8s.io/api/authorization/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apiextensionsfake "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	cgofake "k8s.io/client-go/kubernetes/fake"
+	cgotesting "k8s.io/client-go/testing"
 )
 
 func TestQueryPermissions_EmptyBatch(t *testing.T) {
@@ -42,6 +50,132 @@ func TestQueryPermissions_ValidationErrors(t *testing.T) {
 		}
 		if r.Error == "" {
 			t.Errorf("result[%d]: expected non-empty error", i)
+		}
+	}
+}
+
+func TestQueryPermissions_BuiltinPodBypassesDiscovery(t *testing.T) {
+	const clusterID = "cluster-pods"
+	client := cgofake.NewClientset()
+	client.Fake.PrependReactor("create", "selfsubjectrulesreviews", func(action cgotesting.Action) (bool, runtime.Object, error) {
+		createAction := action.(cgotesting.CreateAction)
+		review := createAction.GetObject().(*authorizationv1.SelfSubjectRulesReview)
+		review.Status = authorizationv1.SubjectRulesReviewStatus{
+			ResourceRules: []authorizationv1.ResourceRule{
+				{
+					Verbs:     []string{"list", "delete", "get", "create"},
+					APIGroups: []string{""},
+					Resources: []string{"pods", "pods/log", "pods/portforward"},
+				},
+			},
+		}
+		return true, review, nil
+	})
+
+	app := NewApp()
+	app.Ctx = context.Background()
+	app.clusterClients = map[string]*clusterClients{
+		clusterID: {
+			meta:              ClusterMeta{ID: clusterID, Name: "Pods"},
+			kubeconfigPath:    "/path",
+			kubeconfigContext: "ctx",
+			client:            client,
+		},
+	}
+
+	queries := []capabilities.PermissionQuery{
+		{ID: "pod-list", ClusterId: clusterID, Group: "", Version: "v1", ResourceKind: "Pod", Verb: "list", Namespace: "default"},
+		{ID: "pod-delete", ClusterId: clusterID, Group: "", Version: "v1", ResourceKind: "Pod", Verb: "delete", Namespace: "default"},
+		{ID: "pod-log", ClusterId: clusterID, Group: "", Version: "v1", ResourceKind: "Pod", Verb: "get", Namespace: "default", Subresource: "log"},
+		{ID: "pod-portforward", ClusterId: clusterID, Group: "", Version: "v1", ResourceKind: "Pod", Verb: "create", Namespace: "default", Subresource: "portforward"},
+	}
+
+	resp, err := app.QueryPermissions(queries)
+	if err != nil {
+		t.Fatalf("QueryPermissions returned error: %v", err)
+	}
+	if len(resp.Results) != len(queries) {
+		t.Fatalf("expected %d results, got %d", len(queries), len(resp.Results))
+	}
+	for _, result := range resp.Results {
+		if result.Source == "error" {
+			t.Fatalf("builtin pod query %q unexpectedly hit discovery/error path: %s", result.ID, result.Error)
+		}
+		if !result.Allowed {
+			t.Fatalf("builtin pod query %q expected allowed, got source=%s reason=%s", result.ID, result.Source, result.Reason)
+		}
+	}
+}
+
+func TestQueryPermissions_CachesCRDResolutionWithinBatch(t *testing.T) {
+	const clusterID = "cluster-crd"
+	client := cgofake.NewClientset()
+	client.Fake.PrependReactor("create", "selfsubjectrulesreviews", func(action cgotesting.Action) (bool, runtime.Object, error) {
+		createAction := action.(cgotesting.CreateAction)
+		review := createAction.GetObject().(*authorizationv1.SelfSubjectRulesReview)
+		review.Status = authorizationv1.SubjectRulesReviewStatus{
+			ResourceRules: []authorizationv1.ResourceRule{
+				{
+					Verbs:     []string{"get", "delete"},
+					APIGroups: []string{"example.com"},
+					Resources: []string{"widgets"},
+				},
+			},
+		}
+		return true, review, nil
+	})
+
+	crd := &apiextensionsv1.CustomResourceDefinition{
+		ObjectMeta: metav1.ObjectMeta{Name: "widgets.example.com"},
+		Spec: apiextensionsv1.CustomResourceDefinitionSpec{
+			Group: "example.com",
+			Names: apiextensionsv1.CustomResourceDefinitionNames{
+				Plural: "widgets",
+				Kind:   "Widget",
+			},
+			Scope: apiextensionsv1.NamespaceScoped,
+			Versions: []apiextensionsv1.CustomResourceDefinitionVersion{
+				{Name: "v1", Served: true, Storage: true},
+			},
+		},
+	}
+	apiextClient := apiextensionsfake.NewSimpleClientset(crd)
+	crdListCalls := 0
+	apiextClient.Fake.PrependReactor("list", "customresourcedefinitions", func(action cgotesting.Action) (bool, runtime.Object, error) {
+		crdListCalls++
+		return false, nil, nil
+	})
+
+	app := NewApp()
+	app.Ctx = context.Background()
+	app.clusterClients = map[string]*clusterClients{
+		clusterID: {
+			meta:                ClusterMeta{ID: clusterID, Name: "CRD"},
+			kubeconfigPath:      "/path",
+			kubeconfigContext:   "ctx",
+			client:              client,
+			apiextensionsClient: apiextClient,
+		},
+	}
+
+	queries := []capabilities.PermissionQuery{
+		{ID: "widget-get", ClusterId: clusterID, Group: "example.com", Version: "v1", ResourceKind: "Widget", Verb: "get", Namespace: "default"},
+		{ID: "widget-delete", ClusterId: clusterID, Group: "example.com", Version: "v1", ResourceKind: "Widget", Verb: "delete", Namespace: "default"},
+	}
+
+	resp, err := app.QueryPermissions(queries)
+	if err != nil {
+		t.Fatalf("QueryPermissions returned error: %v", err)
+	}
+	if crdListCalls != 1 {
+		t.Fatalf("expected CRD resolution to list CRDs once, got %d calls", crdListCalls)
+	}
+	for _, result := range resp.Results {
+		if result.Source == "error" {
+			t.Fatalf("CRD query %q unexpectedly errored: %s", result.ID, result.Error)
+		}
+		if !result.Allowed {
+			t.Fatalf("CRD query %q expected allowed, got source=%s reason=%s", result.ID, result.Source, result.Reason)
 		}
 	}
 }

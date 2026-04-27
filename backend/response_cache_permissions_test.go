@@ -55,3 +55,25 @@ func TestCanServeCachedResponseAllowedKeepsCaches(t *testing.T) {
 		t.Fatalf("expected detail cache entry to remain on allow")
 	}
 }
+
+func TestCachedPermissionAttributesUsesBuiltinCatalog(t *testing.T) {
+	group, resource, verb, ok := cachedPermissionAttributes("Pod")
+	if !ok {
+		t.Fatalf("expected Pod cache permission attributes")
+	}
+	if group != "" || resource != "pods" || verb != "get" {
+		t.Fatalf("unexpected Pod permission attributes: group=%q resource=%q verb=%q", group, resource, verb)
+	}
+
+	group, resource, verb, ok = cachedPermissionAttributes("HelmManifest")
+	if !ok {
+		t.Fatalf("expected Helm cache permission attributes")
+	}
+	if group != "" || resource != "secrets" || verb != "get" {
+		t.Fatalf("unexpected Helm permission attributes: group=%q resource=%q verb=%q", group, resource, verb)
+	}
+
+	if _, _, _, ok := cachedPermissionAttributes("Gateway"); ok {
+		t.Fatalf("Gateway is in the built-in catalog but should not be in the response-cache allowlist")
+	}
+}
