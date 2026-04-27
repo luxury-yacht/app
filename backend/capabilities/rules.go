@@ -10,6 +10,7 @@ package capabilities
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"sync"
 	"time"
@@ -18,6 +19,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/internal/k8sretry"
 	"golang.org/x/sync/singleflight"
 )
 
@@ -30,16 +33,32 @@ func NewSSRRFetchFunc(client kubernetes.Interface, timeout time.Duration) SSRRFe
 		ctx, cancel := context.WithTimeout(ctx, timeout)
 		defer cancel()
 
-		review := &authorizationv1.SelfSubjectRulesReview{
-			Spec: authorizationv1.SelfSubjectRulesReviewSpec{
-				Namespace: namespace,
-			},
-		}
-		result, err := client.AuthorizationV1().SelfSubjectRulesReviews().Create(ctx, review, metav1.CreateOptions{})
+		var result *authorizationv1.SelfSubjectRulesReview
+		err := k8sretry.Do(ctx, permissionReviewRetryPolicy(), func(callCtx context.Context) error {
+			review := &authorizationv1.SelfSubjectRulesReview{
+				Spec: authorizationv1.SelfSubjectRulesReviewSpec{
+					Namespace: namespace,
+				},
+			}
+			var err error
+			result, err = client.AuthorizationV1().SelfSubjectRulesReviews().Create(callCtx, review, metav1.CreateOptions{})
+			return err
+		})
 		if err != nil {
 			return nil, err
 		}
+		if result == nil {
+			return nil, fmt.Errorf("permission rules review returned no response")
+		}
 		return &result.Status, nil
+	}
+}
+
+func permissionReviewRetryPolicy() k8sretry.Policy {
+	return k8sretry.Policy{
+		MaxAttempts:    config.PermissionReviewRetryMaxAttempts,
+		InitialBackoff: config.PermissionReviewRetryInitialBackoff,
+		MaxBackoff:     config.PermissionReviewRetryMaxBackoff,
 	}
 }
 

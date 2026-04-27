@@ -15,6 +15,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/internal/k8sretry"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	authorizationv1 "k8s.io/api/authorization/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -132,14 +134,21 @@ func (s *Service) Evaluate(ctx context.Context, checks []ReviewAttributes) ([]Ch
 				}
 
 				start := nowFn()
-				response, err := s.deps.Common.KubernetesClient.AuthorizationV1().
-					SelfSubjectAccessReviews().
-					Create(ctx, review, metav1.CreateOptions{})
+				var response *authorizationv1.SelfSubjectAccessReview
+				err := k8sretry.Do(ctx, capabilityReviewRetryPolicy(), func(callCtx context.Context) error {
+					var err error
+					response, err = s.deps.Common.KubernetesClient.AuthorizationV1().
+						SelfSubjectAccessReviews().
+						Create(callCtx, review, metav1.CreateOptions{})
+					return err
+				})
 				duration := nowFn().Sub(start)
 
 				if err != nil {
 					s.logError(fmt.Sprintf("Capability check %s failed: %v", job.check.ID, err))
 					result.Error = err.Error()
+				} else if response == nil {
+					result.Error = "permission review returned no response"
 				} else {
 					result.Allowed = response.Status.Allowed
 					result.DeniedReason = response.Status.Reason
@@ -201,6 +210,14 @@ func (s *Service) Evaluate(ctx context.Context, checks []ReviewAttributes) ([]Ch
 		return results, fmt.Errorf("all capability checks failed")
 	}
 	return results, nil
+}
+
+func capabilityReviewRetryPolicy() k8sretry.Policy {
+	return k8sretry.Policy{
+		MaxAttempts:    config.PermissionReviewRetryMaxAttempts,
+		InitialBackoff: config.PermissionReviewRetryInitialBackoff,
+		MaxBackoff:     config.PermissionReviewRetryMaxBackoff,
+	}
 }
 
 func (s *Service) ensureClient() error {

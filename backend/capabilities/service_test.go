@@ -7,6 +7,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/resources/common"
 	authorizationv1 "k8s.io/api/authorization/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
 	cgotesting "k8s.io/client-go/testing"
@@ -179,6 +180,46 @@ func TestEvaluateHandlesAPIError(t *testing.T) {
 
 	if results[0].Error == "" {
 		t.Fatalf("Expected error to be recorded, got %+v", results[0])
+	}
+}
+
+func TestEvaluateRetriesTransientAuthorizationError(t *testing.T) {
+	client := fake.NewClientset()
+	calls := 0
+	client.Fake.PrependReactor("create", "selfsubjectaccessreviews", func(action cgotesting.Action) (bool, runtime.Object, error) {
+		calls++
+		if calls == 1 {
+			return true, nil, apierrors.NewTooManyRequests("busy", 0)
+		}
+		review := action.(cgotesting.CreateAction).GetObject().(*authorizationv1.SelfSubjectAccessReview)
+		review.Status = authorizationv1.SubjectAccessReviewStatus{Allowed: true}
+		return true, review, nil
+	})
+
+	service := NewService(Dependencies{
+		Common: common.Dependencies{
+			Context:          context.Background(),
+			Logger:           noopLogger{},
+			KubernetesClient: client,
+		},
+		WorkerCount: 1,
+	})
+
+	results, err := service.Evaluate(context.Background(), []ReviewAttributes{{
+		ID: "get",
+		Attributes: &authorizationv1.ResourceAttributes{
+			Verb:     "get",
+			Resource: "pods",
+		},
+	}})
+	if err != nil {
+		t.Fatalf("Evaluate returned error: %v", err)
+	}
+	if calls != 2 {
+		t.Fatalf("expected 2 SSAR calls, got %d", calls)
+	}
+	if len(results) != 1 || !results[0].Allowed {
+		t.Fatalf("expected retried result to be allowed, got %+v", results)
 	}
 }
 

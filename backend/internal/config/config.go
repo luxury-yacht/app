@@ -41,6 +41,12 @@ const (
 	// ResponseCacheInvalidationWarmupAge ignores cache invalidation events for very new objects.
 	ResponseCacheInvalidationWarmupAge = time.Minute
 
+	// KubernetesClientQPS controls the per-cluster client-go REST request rate.
+	KubernetesClientQPS = 500
+
+	// KubernetesClientBurst controls the per-cluster client-go REST burst allowance.
+	KubernetesClientBurst = 1000
+
 	// PermissionCacheTTL controls how long SSAR permission decisions are cached.
 	PermissionCacheTTL = 2 * time.Minute
 
@@ -54,6 +60,15 @@ const (
 
 	// SSRRFetchTimeout bounds SelfSubjectRulesReview calls.
 	SSRRFetchTimeout = 5 * time.Second
+
+	// PermissionReviewRetryMaxAttempts caps retries for Kubernetes authorization review calls.
+	PermissionReviewRetryMaxAttempts = 3
+
+	// PermissionReviewRetryInitialBackoff is the first delay before retrying a throttled/transient authorization review.
+	PermissionReviewRetryInitialBackoff = 100 * time.Millisecond
+
+	// PermissionReviewRetryMaxBackoff caps retry delays for authorization reviews.
+	PermissionReviewRetryMaxBackoff = time.Second
 
 	// PermissionPrimeTimeout bounds permission priming calls before informer registration.
 	PermissionPrimeTimeout = 10 * time.Second

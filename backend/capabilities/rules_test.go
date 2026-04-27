@@ -9,6 +9,10 @@ import (
 	"time"
 
 	authorizationv1 "k8s.io/api/authorization/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes/fake"
+	cgotesting "k8s.io/client-go/testing"
 )
 
 func makeRulesStatus(incomplete bool, rules ...authorizationv1.ResourceRule) *authorizationv1.SubjectRulesReviewStatus {
@@ -23,6 +27,34 @@ func podListRule() authorizationv1.ResourceRule {
 		Verbs:     []string{"get", "list", "watch"},
 		APIGroups: []string{""},
 		Resources: []string{"pods"},
+	}
+}
+
+func TestNewSSRRFetchFuncRetriesTooManyRequests(t *testing.T) {
+	client := fake.NewClientset()
+	calls := 0
+	client.Fake.PrependReactor("create", "selfsubjectrulesreviews", func(action cgotesting.Action) (bool, runtime.Object, error) {
+		calls++
+		if calls == 1 {
+			return true, nil, apierrors.NewTooManyRequests("busy", 0)
+		}
+		review := action.(cgotesting.CreateAction).GetObject().(*authorizationv1.SelfSubjectRulesReview)
+		review.Status = authorizationv1.SubjectRulesReviewStatus{
+			ResourceRules: []authorizationv1.ResourceRule{podListRule()},
+		}
+		return true, review, nil
+	})
+
+	fetch := NewSSRRFetchFunc(client, time.Second)
+	status, err := fetch(context.Background(), "default")
+	if err != nil {
+		t.Fatalf("expected retry to succeed, got %v", err)
+	}
+	if len(status.ResourceRules) != 1 {
+		t.Fatalf("expected retried SSRR status, got %+v", status)
+	}
+	if calls != 2 {
+		t.Fatalf("expected 2 SSRR calls, got %d", calls)
 	}
 }
 
