@@ -8,18 +8,27 @@ package config
 
 import "time"
 
-// Timing knobs used across the backend refresh subsystem.
+// Kubernetes REST client settings.
+const (
+	// KubernetesClientQPS controls the per-cluster client-go REST request rate.
+	KubernetesClientQPS = 500
+
+	// KubernetesClientBurst controls the per-cluster client-go REST burst allowance.
+	KubernetesClientBurst = 1000
+)
+
+// Refresh subsystem settings.
 const (
 	// RefreshResyncInterval controls how often shared informers perform a full resync sweep.
-	// This is the cadence we hand to Kubernetes SharedInformers for their built-in “full resync” sweep.
+	// This is the cadence we hand to Kubernetes SharedInformers for their built-in "full resync" sweep.
 	// At that interval the informer re-lists the resource from the API to reconcile any missed events.
-	// it’s a coarse, background safety-net.
+	// It is a coarse, background safety-net.
 	RefreshResyncInterval = 15 * time.Second
 
 	// RefreshInformerSyncPollInterval is the poll frequency used while waiting for informer caches to sync.
-	// This is purely local to our code. While we’re waiting for a set of informers to report HasSynced() == true,
+	// This is purely local to our code. While we are waiting for a set of informers to report HasSynced() == true,
 	// we poll them on that short interval so the refresh snapshot builder can unblock as soon as their caches
-	// are ready. Once they’re synced, the poller stops.
+	// are ready. Once they are synced, the poller stops.
 	RefreshInformerSyncPollInterval = 50 * time.Millisecond
 
 	// RefreshMetricsInterval determines the cadence for the metrics poller (node/pod metrics).
@@ -27,7 +36,10 @@ const (
 
 	// RefreshRequestTimeout is the HTTP timeout used by refresh API clients.
 	RefreshRequestTimeout = 30 * time.Second
+)
 
+// Snapshot and response cache settings.
+const (
 	// SnapshotCacheTTL controls how long snapshot builds are cached to avoid redundant work.
 	SnapshotCacheTTL = 5 * time.Second
 
@@ -40,13 +52,10 @@ const (
 
 	// ResponseCacheInvalidationWarmupAge ignores cache invalidation events for very new objects.
 	ResponseCacheInvalidationWarmupAge = time.Minute
+)
 
-	// KubernetesClientQPS controls the per-cluster client-go REST request rate.
-	KubernetesClientQPS = 500
-
-	// KubernetesClientBurst controls the per-cluster client-go REST burst allowance.
-	KubernetesClientBurst = 1000
-
+// Permission and authorization review settings.
+const (
 	// PermissionCacheTTL controls how long SSAR permission decisions are cached.
 	PermissionCacheTTL = 2 * time.Minute
 
@@ -75,10 +84,19 @@ const (
 
 	// PermissionPreflightTimeout bounds permission preflight calls during refresh setup.
 	PermissionPreflightTimeout = 15 * time.Second
+)
 
+// Cluster metadata and health settings.
+const (
 	// ClusterVersionCacheTTL controls how long the cluster version lookup is cached.
 	ClusterVersionCacheTTL = 10 * time.Minute
 
+	// ClusterHealthHeartbeatInterval is how often we check each cluster's health via /readyz.
+	ClusterHealthHeartbeatInterval = 5 * time.Second
+)
+
+// Metrics collection settings.
+const (
 	// MetricsInitialBackoff defines the first retry delay when talking to the metrics API.
 	MetricsInitialBackoff = 500 * time.Millisecond
 
@@ -90,7 +108,10 @@ const (
 
 	// MetricsStaleWindow is the window used to determine cluster overview metric freshness.
 	MetricsStaleWindow = 45 * time.Second
+)
 
+// Container log stream settings.
+const (
 	// ContainerLogsStreamBackoffInitial is the initial backoff applied when container logs streaming reconnects.
 	ContainerLogsStreamBackoffInitial = 1 * time.Second
 
@@ -103,9 +124,6 @@ const (
 	// StreamHeartbeatTimeout is the max idle time before we flag the stream as stale.
 	StreamHeartbeatTimeout = 45 * time.Second
 
-	// ClusterHealthHeartbeatInterval is how often we check each cluster's health via /readyz.
-	ClusterHealthHeartbeatInterval = 5 * time.Second
-
 	// ContainerLogsStreamBatchWindow controls the bundling window for container logs stream events before flushing.
 	ContainerLogsStreamBatchWindow = 250 * time.Millisecond
 
@@ -114,7 +132,10 @@ const (
 
 	// ContainerLogsStreamGlobalTargetLimit caps resolved pod/container targets across all active log scopes.
 	ContainerLogsStreamGlobalTargetLimit = 200
+)
 
+// Event stream settings.
+const (
 	// EventStreamKeepAliveInterval controls how often keepalive messages are emitted for event streams.
 	EventStreamKeepAliveInterval = 15 * time.Second
 
@@ -132,7 +153,10 @@ const (
 
 	// AggregateEventStreamEntryBufferSize buffers aggregate events before delivery.
 	AggregateEventStreamEntryBufferSize = 256
+)
 
+// Resource stream settings.
+const (
 	// ResourceStreamMaxSubscribersPerScope limits concurrent resource stream subscribers per scope.
 	ResourceStreamMaxSubscribersPerScope = 100
 
@@ -141,7 +165,10 @@ const (
 
 	// ResourceStreamResumeBufferSize caps buffered resource updates per scope for resume tokens.
 	ResourceStreamResumeBufferSize = 1000
+)
 
+// Stream mux websocket settings.
+const (
 	// StreamMuxWriteTimeout bounds websocket writes for multiplexed streams.
 	StreamMuxWriteTimeout = 10 * time.Second
 
@@ -156,16 +183,25 @@ const (
 
 	// StreamMuxWriteBufferSize configures websocket write buffer sizing for multiplexed streams.
 	StreamMuxWriteBufferSize = 4096
+)
 
+// Node maintenance settings.
+const (
 	// NodeDrainTimeout is the maximum time to wait for pods to terminate during node drain.
 	NodeDrainTimeout = 30 * time.Second
 
 	// NodeDrainRetryDelay is the sleep interval between checks while draining a node.
 	NodeDrainRetryDelay = 2 * time.Second
+)
 
+// Namespace operation settings.
+const (
 	// NamespaceOperationTimeout is used when querying namespaces through the API.
 	NamespaceOperationTimeout = 2 * time.Second
+)
 
+// Manual refresh job settings.
+const (
 	// ManualJobMaxAttempts limits how many times we retry manual refresh operations.
 	ManualJobMaxAttempts = 3
 
