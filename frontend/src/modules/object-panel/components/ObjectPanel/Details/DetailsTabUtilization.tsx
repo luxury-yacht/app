@@ -59,14 +59,26 @@ interface ResourceSectionProps {
 const formatPercentSuffix = (numerator: number, denominator: number): string =>
   numerator > 0 && denominator > 0 ? ` (${Math.round((numerator / denominator) * 100)}%)` : '';
 
-const LEGEND_TOOLTIPS: Record<string, string> = {
-  used: 'Current utilization. Percentage is of the total Allocatable on the node',
+const LEGEND_TOOLTIPS: Record<string, React.ReactNode> = {
+  used: (
+    <>
+      Current utilization. Percentages are
+      <br />
+      (% of Requests / % of Allocatable).
+    </>
+  ),
   allocatable: 'Total available to pods on this node',
   requests: 'Sum of the resource Requests from all pods/containers',
   limits: 'Sum of resource Limits from all pods/containers',
-  consumption: 'Percentage of Requests currently in use',
-  overcommitted:
-    'Above 100% means the configured Limits exceeds the Allocatable resources. Overcommit is not necessarily a problem, but means that lower-priority pods may be evicted under resource pressure.',
+  overcommitted: (
+    <>
+      Above 100% means the configured Limits exceeds the Allocatable resources.
+      <br />
+      <br />
+      Overcommit is not necessarily a problem, but increases the risk of pods being evicted under
+      resource pressure.
+    </>
+  ),
 };
 
 const LegendItem: React.FC<{
@@ -90,7 +102,11 @@ const ResourceSection: React.FC<ResourceSectionProps> = ({ title, data, type, mo
   // Suffix denominator: prefer allocatable, fall back to limit (matches the
   // existing per-row percentage logic).
   const pctDenominator = metrics.allocatable > 0 ? metrics.allocatable : metrics.limit;
-  const usageSuffix = formatPercentSuffix(metrics.usage, pctDenominator);
+  const usageAllocatablePct =
+    metrics.usage > 0 && pctDenominator > 0
+      ? `${Math.round((metrics.usage / pctDenominator) * 100)}%`
+      : null;
+  const usageRequestPct = metrics.consumption;
   const requestSuffix = formatPercentSuffix(metrics.request, pctDenominator);
   const limitSuffix = formatPercentSuffix(metrics.limit, metrics.allocatable);
 
@@ -126,7 +142,19 @@ const ResourceSection: React.FC<ResourceSectionProps> = ({ title, data, type, mo
             count={
               <>
                 {data.usage || 'not set'}
-                {usageSuffix}
+                {(usageRequestPct !== null || usageAllocatablePct) && (
+                  <>
+                    {' ('}
+                    {usageRequestPct !== null && (
+                      <span className={usageRequestPct > 100 ? 'overcommitted-text' : ''}>
+                        {usageRequestPct}%
+                      </span>
+                    )}
+                    {usageRequestPct !== null && usageAllocatablePct && ' / '}
+                    {usageAllocatablePct}
+                    {')'}
+                  </>
+                )}
               </>
             }
             label="used"
@@ -156,20 +184,6 @@ const ResourceSection: React.FC<ResourceSectionProps> = ({ title, data, type, mo
             }
             label="limits"
           />
-          {metrics.consumption !== null && (
-            <LegendItem
-              count={
-                <>
-                  {formatValue(metrics.usage)} (
-                  <span className={metrics.consumption > 100 ? 'overcommitted-text' : ''}>
-                    {metrics.consumption}%
-                  </span>
-                  )
-                </>
-              }
-              label="consumption"
-            />
-          )}
           <LegendItem
             count={
               metrics.overcommittedAmount > 0 ? (
