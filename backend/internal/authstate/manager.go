@@ -4,14 +4,16 @@ import (
 	"context"
 	"sync"
 	"time"
+
+	"github.com/luxury-yacht/app/backend/internal/config"
 )
 
 // DefaultMaxAttempts is the default number of recovery attempts.
-const DefaultMaxAttempts = 4
+const DefaultMaxAttempts = config.ClusterAuthRecoveryMaxAttempts
 
 // DefaultBackoffSchedule is the default delay schedule between recovery attempts.
 // The first attempt happens immediately, then waits increase.
-var DefaultBackoffSchedule = []time.Duration{0, 5 * time.Second, 10 * time.Second, 15 * time.Second}
+var DefaultBackoffSchedule = append([]time.Duration(nil), config.ClusterAuthRecoveryBackoffSchedule...)
 
 // RecoveryProgress contains information about the current recovery attempt.
 type RecoveryProgress struct {
@@ -97,7 +99,7 @@ func New(cfg Config) *Manager {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &Manager{
-		state:  StateValid,
+		state: StateValid,
 		config: Config{
 			MaxAttempts:        cfg.MaxAttempts,
 			BackoffSchedule:    backoff,
@@ -260,7 +262,7 @@ func (m *Manager) runRecovery(ctx context.Context) {
 				select {
 				case <-ctx.Done():
 					return
-				case <-time.After(time.Second):
+				case <-time.After(config.AuthRecoveryProgressInterval):
 					remaining--
 				}
 			}

@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/stretchr/testify/require"
 )
 
@@ -188,5 +189,5 @@ func TestClusterLifecycleDefaultConstructor(t *testing.T) {
 	emitter, _ := collectingEmitter()
 	cl := newClusterLifecycle(emitter)
 
-	require.Equal(t, defaultSlowLoadingThreshold, cl.slowThreshold)
+	require.Equal(t, config.ClusterLifecycleSlowLoadingThreshold, cl.slowThreshold)
 }

@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/parallel"
 	"github.com/luxury-yacht/app/backend/internal/timeutil"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -235,7 +236,7 @@ func (s *Service) listNamespaceItems(ctx context.Context, index int, desc resour
 
 		var list *unstructuredv1.UnstructuredList
 		var err error
-		for attempt := 0; attempt < listRetryMaxAttempts; attempt++ {
+		for attempt := 0; attempt < config.ObjectCatalogListRetryMaxAttempts; attempt++ {
 			list, err = resourceInterface.List(ctx, options)
 			if err == nil {
 				break
@@ -244,7 +245,7 @@ func (s *Service) listNamespaceItems(ctx context.Context, index int, desc resour
 				s.logDebug(fmt.Sprintf("permission denied listing %s, skipping", desc.GVR.String()))
 				return results, nil
 			}
-			if !shouldRetryList(err) || attempt == listRetryMaxAttempts-1 {
+			if !shouldRetryList(err) || attempt == config.ObjectCatalogListRetryMaxAttempts-1 {
 				return nil, err
 			}
 			delay := listRetryBackoff(attempt)

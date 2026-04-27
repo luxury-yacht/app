@@ -14,6 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/internal/parallel"
 	"github.com/luxury-yacht/app/backend/refresh"
@@ -22,8 +23,7 @@ import (
 )
 
 const (
-	clusterCustomDomainName  = "cluster-custom"
-	clusterCustomWorkerLimit = 8
+	clusterCustomDomainName = "cluster-custom"
 )
 
 // ClusterCustomBuilder discovers cluster-scoped custom resources.
@@ -234,7 +234,7 @@ func (b *ClusterCustomBuilder) Build(ctx context.Context, scope string) (*refres
 		})
 	}
 
-	if err := parallel.RunLimited(ctx, clusterCustomWorkerLimit, tasks...); err != nil && firstErr == nil {
+	if err := parallel.RunLimited(ctx, config.SnapshotClusterCustomWorkerLimit, tasks...); err != nil && firstErr == nil {
 		firstErr = err
 	}
 

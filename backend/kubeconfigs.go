@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 	"k8s.io/client-go/tools/clientcmd"
@@ -373,8 +374,6 @@ type selectionChangeIntent struct {
 	clearSelection          bool
 }
 
-const selectionChangeWorkTimeout = 2 * time.Minute
-
 // SetSelectedKubeconfigs updates the active kubeconfig selection set for multi-cluster support.
 //
 // This function is the primary entry point for changing which Kubernetes clusters the application
@@ -489,7 +488,7 @@ func (a *App) executeSelectionChangeWork(
 	if workCtx == nil {
 		workCtx = context.Background()
 	}
-	workCtx, cancel := context.WithTimeout(workCtx, selectionChangeWorkTimeout)
+	workCtx, cancel := context.WithTimeout(workCtx, config.KubeconfigSelectionChangeWorkTimeout)
 	defer cancel()
 
 	if err := workCtx.Err(); err != nil {

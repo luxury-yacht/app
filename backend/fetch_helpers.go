@@ -11,18 +11,12 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/cachekeys"
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/errorcapture"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/internal/timeutil"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-)
-
-const (
-	fetchMaxAttempts    = 3
-	fetchRetryBaseDelay = 250 * time.Millisecond
-	fetchRetryMaxDelay  = 2 * time.Second
-	fetchCallTimeout    = 30 * time.Second
 )
 
 var fetchRetrySleep = time.Sleep
@@ -65,7 +59,7 @@ func FetchResourceWithSelection[T any](
 	ctx := a.CtxOrBackground()
 	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, fetchCallTimeout)
+		ctx, cancel = context.WithTimeout(ctx, config.ResourceFetchCallTimeout)
 		defer cancel()
 	}
 
@@ -109,7 +103,7 @@ func FetchResourceList[T any](
 	ctx := a.CtxOrBackground()
 	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, fetchCallTimeout)
+		ctx, cancel = context.WithTimeout(ctx, config.ResourceFetchCallTimeout)
 		defer cancel()
 	}
 
@@ -191,7 +185,7 @@ func executeWithRetry[T any](ctx context.Context, a *App, clusterID, resourceKin
 		target = "cluster scope"
 	}
 
-	for attempt := 0; attempt < fetchMaxAttempts; attempt++ {
+	for attempt := 0; attempt < config.ResourceFetchMaxAttempts; attempt++ {
 		if err := ctx.Err(); err != nil {
 			return zero, err
 		}
@@ -211,16 +205,16 @@ func executeWithRetry[T any](ctx context.Context, a *App, clusterID, resourceKin
 		}
 
 		retryable, reason := isRetryableFetchError(err)
-		isLastAttempt := attempt == fetchMaxAttempts-1
+		isLastAttempt := attempt == config.ResourceFetchMaxAttempts-1
 
 		if retryable && !isLastAttempt {
-			backoff := fetchRetryBaseDelay << attempt
-			if backoff > fetchRetryMaxDelay {
-				backoff = fetchRetryMaxDelay
+			backoff := config.ResourceFetchRetryBaseDelay << attempt
+			if backoff > config.ResourceFetchRetryMaxDelay {
+				backoff = config.ResourceFetchRetryMaxDelay
 			}
 			if a != nil {
 				if a.logger != nil {
-					a.logger.Warn(fmt.Sprintf("Retrying %s %s due to %s (attempt %d/%d)", resourceKind, target, reason, attempt+1, fetchMaxAttempts-1), logsources.ResourceLoader)
+					a.logger.Warn(fmt.Sprintf("Retrying %s %s due to %s (attempt %d/%d)", resourceKind, target, reason, attempt+1, config.ResourceFetchMaxAttempts-1), logsources.ResourceLoader)
 				}
 				if a.telemetryRecorder != nil {
 					a.telemetryRecorder.RecordRetryAttempt(err)

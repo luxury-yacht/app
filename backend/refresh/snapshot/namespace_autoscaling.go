@@ -12,13 +12,13 @@ import (
 	informers "k8s.io/client-go/informers"
 	autoscalinglisters "k8s.io/client-go/listers/autoscaling/v1"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 )
 
 const (
 	namespaceAutoscalingDomainName       = "namespace-autoscaling"
-	namespaceAutoscalingEntryLimit       = 1000
 	errNamespaceAutoscalingScopeRequired = "namespace scope is required"
 )
 
@@ -155,8 +155,8 @@ func (b *NamespaceAutoscalingBuilder) buildSnapshot(
 		return resources[i].Namespace < resources[j].Namespace
 	})
 
-	if len(resources) > namespaceAutoscalingEntryLimit {
-		resources = resources[:namespaceAutoscalingEntryLimit]
+	if len(resources) > config.SnapshotNamespaceAutoscalingEntryLimit {
+		resources = resources[:config.SnapshotNamespaceAutoscalingEntryLimit]
 	}
 
 	return &refresh.Snapshot{

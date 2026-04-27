@@ -23,8 +23,6 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/common"
 )
 
-const queryPermissionsSSRRFetchConcurrency = 32
-
 // resolveGVRForPermissionQuery resolves a permission query to the concrete
 // resource used by Kubernetes RBAC. Built-in Kubernetes resources resolve from
 // a static table so permission checks do not hit discovery on first load.
@@ -319,7 +317,7 @@ func (a *App) fetchSSRRRulesForNamespaces(
 	}
 
 	results := make([]ssrrNamespaceResult, len(fetches))
-	_ = parallel.ForEach(ctx, fetches, queryPermissionsSSRRFetchConcurrency, func(ctx context.Context, fetch ssrrNamespaceFetch) error {
+	_ = parallel.ForEach(ctx, fetches, config.PermissionSSRRFetchConcurrency, func(ctx context.Context, fetch ssrrNamespaceFetch) error {
 		cache := a.getOrCreateSSRRCache(fetch.key.clusterID)
 		if cache == nil {
 			results[fetch.index] = ssrrNamespaceResult{

@@ -7,7 +7,6 @@ import (
 	"runtime"
 	"strings"
 	"sync"
-	"time"
 
 	appconfig "github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
@@ -25,8 +24,6 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/authstate"
 )
-
-const clusterClientPreflightTimeout = 8 * time.Second
 
 // clusterClients stores Kubernetes clients scoped to a specific cluster selection.
 type clusterClients struct {
@@ -392,7 +389,7 @@ func (a *App) preflightClusterClientWithContext(ctx context.Context, client kube
 		ctx = context.Background()
 	}
 
-	preflightCtx, cancel := context.WithTimeout(ctx, clusterClientPreflightTimeout)
+	preflightCtx, cancel := context.WithTimeout(ctx, appconfig.KubernetesClientPreflightTimeout)
 	defer cancel()
 
 	restClient := client.Discovery().RESTClient()
@@ -409,8 +406,8 @@ func (a *App) preflightClusterClientWithContext(ctx context.Context, client kube
 // createClusterAuthManager creates a new auth state manager for a specific cluster.
 func (a *App) createClusterAuthManager(meta ClusterMeta) *authstate.Manager {
 	return authstate.New(authstate.Config{
-		MaxAttempts:     4,
-		BackoffSchedule: []time.Duration{0, 5 * time.Second, 10 * time.Second, 15 * time.Second},
+		MaxAttempts:     authstate.DefaultMaxAttempts,
+		BackoffSchedule: authstate.DefaultBackoffSchedule,
 		OnStateChange: func(state authstate.State, reason string) {
 			a.handleClusterAuthStateChange(meta.ID, state, reason)
 		},

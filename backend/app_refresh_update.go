@@ -3,8 +3,8 @@ package backend
 import (
 	"context"
 	"fmt"
-	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/refresh/system"
 )
@@ -138,7 +138,7 @@ func (a *App) stopRefreshSubsystem(subsystem *system.Subsystem) {
 	if subsystem.ResourceStream != nil {
 		subsystem.ResourceStream.Stop()
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), config.RefreshShutdownTimeout)
 	defer cancel()
 	if err := subsystem.Manager.Shutdown(ctx); err != nil && a.logger != nil {
 		a.logger.Warn(fmt.Sprintf("Failed to shutdown refresh manager: %v", err), logsources.Refresh)

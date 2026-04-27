@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/authstate"
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/errorcapture"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 )
@@ -120,12 +121,10 @@ func (a *App) teardownClusterSubsystem(clusterID string) {
 		subsystem.ResourceStream.Stop()
 	}
 
-	// Shutdown the manager with timeout
-	const shutdownTimeout = time.Second
 	if subsystem.Manager != nil {
 		done := make(chan struct{})
 		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+			ctx, cancel := context.WithTimeout(context.Background(), config.RefreshShutdownTimeout)
 			defer cancel()
 			if err := subsystem.Manager.Shutdown(ctx); err != nil && a.logger != nil {
 				a.logger.Warn(fmt.Sprintf("Failed to shutdown refresh manager for cluster %s: %v", clusterID, err), logsources.Auth, clusterID, clusterID)
@@ -134,7 +133,7 @@ func (a *App) teardownClusterSubsystem(clusterID string) {
 		}()
 		select {
 		case <-done:
-		case <-time.After(shutdownTimeout):
+		case <-time.After(config.RefreshShutdownTimeout):
 			if a.logger != nil {
 				a.logger.Warn(fmt.Sprintf("Timed out waiting for refresh manager shutdown for cluster %s", clusterID), logsources.Auth, clusterID, clusterID)
 			}

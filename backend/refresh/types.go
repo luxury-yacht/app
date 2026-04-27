@@ -299,7 +299,7 @@ func retryManualOperation[T any](ctx context.Context, attempts int, baseDelay ti
 	}
 	delay := baseDelay
 	if delay <= 0 {
-		delay = time.Second
+		delay = config.ManualJobRetryDelay
 	}
 	for i := 0; i < attempts; i++ {
 		if ctx.Err() != nil {

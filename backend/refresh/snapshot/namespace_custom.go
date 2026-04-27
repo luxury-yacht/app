@@ -15,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/internal/parallel"
 	"github.com/luxury-yacht/app/backend/refresh"
@@ -24,7 +25,6 @@ import (
 
 const (
 	namespaceCustomDomainName = "namespace-custom"
-	customWorkerLimit         = 8
 )
 
 // NamespaceCustomBuilder discovers custom resources via the dynamic client.
@@ -254,7 +254,7 @@ func (b *NamespaceCustomBuilder) Build(ctx context.Context, scope string) (*refr
 		})
 	}
 
-	if err := parallel.RunLimited(ctx, customWorkerLimit, tasks...); err != nil {
+	if err := parallel.RunLimited(ctx, config.SnapshotNamespaceCustomWorkerLimit, tasks...); err != nil {
 		return nil, err
 	}
 

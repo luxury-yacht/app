@@ -31,10 +31,6 @@ import (
 
 const (
 	clusterOverviewDomainName = "cluster-overview"
-	// Recent events on the cluster overview are a signal, not a comprehensive
-	// audit log — capped to the most recent 20 warnings within the last 24h.
-	recentEventsLimit    = 20
-	recentEventsLookback = 24 * time.Hour
 )
 
 // ClusterOverviewBuilder constructs aggregated cluster statistics using informer caches.
@@ -923,7 +919,7 @@ func (b *ClusterOverviewBuilder) buildFromListers(ctx context.Context) (*refresh
 // buildRecentEvents filters events down to recent warnings and packages the
 // subset consumed by the Cluster Overview "Recent Events" section.
 func buildRecentEvents(events []*corev1.Event, meta ClusterMeta) []RecentEvent {
-	cutoff := time.Now().Add(-recentEventsLookback)
+	cutoff := time.Now().Add(-config.SnapshotClusterOverviewRecentEventsLookback)
 	filtered := make([]*corev1.Event, 0, len(events))
 	for _, evt := range events {
 		if evt == nil {
@@ -942,8 +938,8 @@ func buildRecentEvents(events []*corev1.Event, meta ClusterMeta) []RecentEvent {
 		return compareEventOrder(filtered[i], filtered[j]) < 0
 	})
 
-	if len(filtered) > recentEventsLimit {
-		filtered = filtered[:recentEventsLimit]
+	if len(filtered) > config.SnapshotClusterOverviewRecentEventsLimit {
+		filtered = filtered[:config.SnapshotClusterOverviewRecentEventsLimit]
 	}
 
 	out := make([]RecentEvent, 0, len(filtered))

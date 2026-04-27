@@ -38,12 +38,6 @@ type Dependencies struct {
 	Now                  func() time.Time
 }
 
-const (
-	defaultWorkerCount       = 32
-	defaultRequestsPerSecond = 0 // unlimited
-	defaultSlowThreshold     = 750 * time.Millisecond
-)
-
 // RateLimiter gates outbound SelfSubjectAccessReview requests.
 type RateLimiter interface {
 	Wait(ctx context.Context) error
@@ -256,7 +250,7 @@ func (s *Service) resolveWorkerCount(requestCount int) int {
 	}
 	count := s.deps.WorkerCount
 	if count <= 0 {
-		count = defaultWorkerCount
+		count = config.AuthorizationReviewWorkerCount
 	}
 	if count > requestCount {
 		count = requestCount
@@ -271,7 +265,7 @@ func (s *Service) resolveSlowThreshold() time.Duration {
 	if s.deps.SlowRequestThreshold > 0 {
 		return s.deps.SlowRequestThreshold
 	}
-	return defaultSlowThreshold
+	return config.AuthorizationReviewSlowThreshold
 }
 
 func (s *Service) buildRateLimiter() RateLimiter {
@@ -280,7 +274,7 @@ func (s *Service) buildRateLimiter() RateLimiter {
 	}
 	qps := s.deps.RequestsPerSecond
 	if qps <= 0 {
-		qps = defaultRequestsPerSecond
+		qps = config.AuthorizationReviewRequestsPerSecond
 	}
 	if qps <= 0 {
 		return nil

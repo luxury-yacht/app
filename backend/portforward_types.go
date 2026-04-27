@@ -3,17 +3,11 @@ package backend
 import (
 	"context"
 	"sync"
-	"time"
 )
 
 const (
 	portForwardStatusEventName = "portforward:status"
 	portForwardListEventName   = "portforward:list"
-
-	// Reconnect settings
-	portForwardMaxReconnectAttempts = 5
-	portForwardInitialBackoff       = 1 * time.Second
-	portForwardMaxBackoff           = 30 * time.Second
 )
 
 // PortForwardSession represents an active port forwarding session.

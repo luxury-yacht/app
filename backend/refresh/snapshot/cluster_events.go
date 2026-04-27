@@ -12,6 +12,7 @@ import (
 	informers "k8s.io/client-go/informers"
 	corelisters "k8s.io/client-go/listers/core/v1"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 )
@@ -78,8 +79,8 @@ func (b *ClusterEventsBuilder) Build(ctx context.Context, scope string) (*refres
 	})
 
 	originalCount := len(events)
-	if originalCount > clusterEventsLimit {
-		events = events[:clusterEventsLimit]
+	if originalCount > config.SnapshotClusterEventsLimit {
+		events = events[:config.SnapshotClusterEventsLimit]
 	}
 
 	entries := make([]ClusterEventEntry, 0, len(events))

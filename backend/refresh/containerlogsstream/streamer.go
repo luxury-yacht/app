@@ -954,9 +954,6 @@ func splitTimestamp(line string) (string, string) {
 	return "", line
 }
 
-// maxCronCacheSize limits the cron job ownership cache to prevent unbounded growth.
-const maxCronCacheSize = 1000
-
 func (s *Streamer) podBelongsToCronJob(ctx context.Context, namespace, cronJob string, pod *corev1.Pod, cache map[string]bool) bool {
 	if pod == nil {
 		return false
@@ -979,7 +976,7 @@ func (s *Streamer) podBelongsToCronJob(ctx context.Context, namespace, cronJob s
 	}
 
 	// Evict cache if it exceeds size limit to prevent unbounded growth
-	if len(cache) >= maxCronCacheSize {
+	if len(cache) >= config.ContainerLogsStreamCronCacheMaxSize {
 		for k := range cache {
 			delete(cache, k)
 		}

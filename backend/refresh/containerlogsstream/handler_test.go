@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/containerlogs"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 	"github.com/stretchr/testify/require"
@@ -45,7 +46,7 @@ func TestParseOptions(t *testing.T) {
 			name:  "valid scope with defaults",
 			query: url.Values{"scope": []string{"default:/v1:pod:nginx"}},
 			kind:  "pod",
-			tail:  defaultTailLines,
+			tail:  config.ContainerLogsStreamDefaultTailLines,
 		},
 		{
 			name: "custom tail and filters",
@@ -79,13 +80,13 @@ func TestParseOptions(t *testing.T) {
 			name:  "gvk scope",
 			query: url.Values{"scope": []string{"cluster-a|default:apps/v1:deployment:web"}},
 			kind:  "deployment",
-			tail:  defaultTailLines,
+			tail:  config.ContainerLogsStreamDefaultTailLines,
 		},
 		{
 			name:  "tail capped at max",
 			query: url.Values{"scope": []string{"default:/v1:pod:nginx"}, "tailLines": []string{"99999"}},
 			kind:  "pod",
-			tail:  maxTailLines,
+			tail:  config.ContainerLogsStreamMaxTailLines,
 		},
 		{
 			name:        "invalid line filter",

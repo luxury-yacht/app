@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 )
 
@@ -116,7 +117,7 @@ func (a *App) getUpdateInfo() *UpdateInfo {
 }
 
 func fetchLatestRelease() (*githubRelease, error) {
-	client := &http.Client{Timeout: 6 * time.Second}
+	client := &http.Client{Timeout: config.AppUpdateRequestTimeout}
 	req, err := http.NewRequest(http.MethodGet, updateRepoReleaseURL, nil)
 	if err != nil {
 		return nil, err

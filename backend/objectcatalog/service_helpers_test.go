@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/timeutil"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -127,10 +128,10 @@ func TestSleepWithContext(t *testing.T) {
 }
 
 func TestListRetryBackoff(t *testing.T) {
-	if backoff := listRetryBackoff(0); backoff != listRetryInitialBackoff {
+	if backoff := listRetryBackoff(0); backoff != config.ObjectCatalogListRetryInitialBackoff {
 		t.Fatalf("expected initial backoff, got %v", backoff)
 	}
-	if backoff := listRetryBackoff(2); backoff != listRetryInitialBackoff*4 {
+	if backoff := listRetryBackoff(2); backoff != config.ObjectCatalogListRetryInitialBackoff*4 {
 		t.Fatalf("unexpected backoff for attempt 2: %v", backoff)
 	}
 }

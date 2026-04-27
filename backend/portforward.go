@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"k8s.io/client-go/tools/portforward"
 	"k8s.io/client-go/transport/spdy"
@@ -65,7 +66,7 @@ func (a *App) StartPortForward(clusterID string, req PortForwardRequest) (string
 	}
 
 	// Resolve the target to a pod.
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), config.PortForwardResolveTimeout)
 	defer cancel()
 
 	resolved, err := resolvePortForwardDestination(ctx, deps.KubernetesClient, target, req.ContainerPort)
@@ -118,7 +119,7 @@ func (a *App) StartPortForward(clusterID string, req PortForwardRequest) (string
 			a.emitPortForwardList()
 			return "", fmt.Errorf("failed to start port forward: %w", err)
 		}
-	case <-time.After(30 * time.Second):
+	case <-time.After(config.PortForwardConnectTimeout):
 		// Timeout waiting for connection.
 		a.removePortForwardSession(sessionID)
 		session.close()
@@ -265,11 +266,11 @@ func (a *App) runPortForwarder(ctx context.Context, session *portForwardSessionI
 		session.reconnectAttempt++
 		attempt := session.reconnectAttempt
 		session.Status = "reconnecting"
-		session.StatusReason = fmt.Sprintf("attempt %d/%d: %s", attempt, portForwardMaxReconnectAttempts, err.Error())
+		session.StatusReason = fmt.Sprintf("attempt %d/%d: %s", attempt, config.PortForwardMaxReconnectAttempts, err.Error())
 		session.mu.Unlock()
 		a.emitPortForwardStatus(session)
 
-		if attempt > portForwardMaxReconnectAttempts {
+		if attempt > config.PortForwardMaxReconnectAttempts {
 			session.mu.Lock()
 			session.Status = "error"
 			session.StatusReason = "max reconnect attempts exceeded"
@@ -425,11 +426,11 @@ func (a *App) shouldReconnect(session *portForwardSessionInternal) bool {
 // calculateBackoff returns the backoff duration for a reconnect attempt.
 // Uses exponential backoff: 1s, 2s, 4s, 8s, 16s, capped at 30s.
 func (a *App) calculateBackoff(attempt int) time.Duration {
-	backoff := portForwardInitialBackoff
+	backoff := config.PortForwardInitialBackoff
 	for i := 1; i < attempt; i++ {
 		backoff *= 2
-		if backoff > portForwardMaxBackoff {
-			backoff = portForwardMaxBackoff
+		if backoff > config.PortForwardMaxBackoff {
+			backoff = config.PortForwardMaxBackoff
 			break
 		}
 	}
