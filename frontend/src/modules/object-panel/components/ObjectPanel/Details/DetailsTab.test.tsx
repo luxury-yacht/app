@@ -11,6 +11,7 @@ const useShortcutMock = vi.fn();
 const overviewMock = vi.fn();
 const utilizationMock = vi.fn();
 const containersMock = vi.fn();
+const rbacRulesMock = vi.fn();
 const dataMock = vi.fn();
 
 vi.mock('@ui/shortcuts', () => ({
@@ -39,6 +40,14 @@ vi.mock('./DetailsTabContainers', () => ({
   default: (props: unknown) => {
     containersMock(props);
     return <div data-testid="mock-containers" />;
+  },
+}));
+
+vi.mock('./DetailsTabRBACRules', () => ({
+  __esModule: true,
+  default: (props: unknown) => {
+    rbacRulesMock(props);
+    return <div data-testid="mock-rbac-rules" />;
   },
 }));
 

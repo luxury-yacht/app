@@ -1,5 +1,47 @@
 /* RBAC Overview Styles
  *
- * Currently empty — the rules section moved to DetailsTabRBACRules.css.
- * Keeping this file as the conventional companion to RBACOverview.tsx so
- * future RBAC-specific overview styling has an obvious home. */
+ * Local styles for the inline Subjects list rendered for RoleBindings and
+ * ClusterRoleBindings. Subjects are bucketed by kind (ServiceAccount /
+ * User / Group / other), with one block per kind. */
+
+.rbac-subjects-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.rbac-subjects-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+/* Per-kind heading (e.g. "ServiceAccounts"). Hidden by the component when
+   only one kind is present in the binding. */
+.rbac-subjects-group-heading {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-text-secondary);
+}
+
+.rbac-subjects-names {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rbac-subjects-name-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+}
+
+.rbac-subjects-name {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-mono);
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
