@@ -546,6 +546,7 @@ export function useOverviewData(params: UseOverviewDataParams): OverviewData | n
         policyRules: clusterRoleDetails.rules,
         aggregationRule: clusterRoleDetails.aggregationRule,
         clusterRoleBindings: clusterRoleDetails.clusterRoleBindings,
+        roleBindings: clusterRoleDetails.roleBindings,
         // Surface metadata to match the ConfigMap/Secret layout.
         labels: clusterRoleDetails.labels,
         annotations: clusterRoleDetails.annotations,

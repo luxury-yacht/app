@@ -1,0 +1,64 @@
+/* Rules section for Role / ClusterRole detail views — local, self-contained
+ * styles for the per-rule cards, verb chip strip, and inline wildcard
+ * highlight. */
+
+.rules-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+}
+
+.rules-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  background: var(--color-bg-tertiary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-lg);
+  padding: var(--spacing-sm) var(--spacing-md);
+}
+
+.rules-card-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--spacing-sm);
+}
+
+.rules-card-title {
+  color: var(--color-text);
+  font-weight: 500;
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-mono);
+  /* Prefer natural break points (spaces between comma-separated entries);
+     only break inside an individual token if it's wider than the container. */
+  overflow-wrap: anywhere;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* Smaller secondary annotations next to the title (e.g. "in apps",
+   "named my-deployment"). */
+.rules-card-meta {
+  color: var(--color-text-secondary);
+  font-family: var(--font-family-mono);
+  font-size: 0.7rem;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* Verb chips for a single rule. Each chip is colored by risk level
+   (read / write / wildcard) so high-risk rules pop visually. */
+.rule-verbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+/* Inline highlight for `*` appearing in a rule's apiGroups, resources, or
+   nonResourceURLs — bare wildcard means cluster-wide scope, worth flagging
+   visually without promoting the value to a full chip. */
+.rule-wildcard {
+  color: var(--status-warning-text);
+  font-weight: 700;
+}

@@ -6,6 +6,7 @@ import React, { useMemo } from 'react';
 import Overview from '@modules/object-panel/components/ObjectPanel/Details/Overview';
 import Utilization from '@modules/object-panel/components/ObjectPanel/Details/DetailsTabUtilization';
 import Containers from '@modules/object-panel/components/ObjectPanel/Details/DetailsTabContainers';
+import RBACRules from '@modules/object-panel/components/ObjectPanel/Details/DetailsTabRBACRules';
 import DataSection from '@modules/object-panel/components/ObjectPanel/Details/DetailsTabData';
 import './DetailsTab.css';
 import './DetailsTabData.css';
@@ -347,6 +348,18 @@ const DetailsTabContent: React.FC<DetailsTabProps> = ({
                 }
                 initContainers={podDetails?.initContainers}
               />
+            </div>
+          );
+        })()}
+
+        {/* Rules Section - For Roles and ClusterRoles. Sibling to Overview;
+            rules are the primary content of the resource. */}
+        {(() => {
+          const rules = roleDetails?.rules ?? clusterRoleDetails?.rules;
+          if (!rules || rules.length === 0) return null;
+          return (
+            <div className="details-section-spaced">
+              <RBACRules policyRules={rules} />
             </div>
           );
         })()}

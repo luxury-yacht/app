@@ -57,7 +57,9 @@
   font-family: var(--font-family-mono);
   font-size: 0.7rem;
   color: var(--color-text-secondary);
-  word-break: break-all;
+  /* Prefer natural break points (slashes, colons); only fracture inside a
+     token if it's wider than the container. */
+  overflow-wrap: anywhere;
   user-select: text;
   -webkit-user-select: text;
 }

@@ -16,6 +16,21 @@ vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
   ),
 }));
 
+vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
+  useObjectPanel: () => ({
+    objectData: { clusterId: 'test-cluster', clusterName: 'test' },
+  }),
+}));
+
+vi.mock('@shared/components/ObjectPanelLink', () => ({
+  ObjectPanelLink: ({ children }: any) => <span>{children}</span>,
+}));
+
+vi.mock('@shared/components/Tooltip', () => ({
+  __esModule: true,
+  default: ({ children }: any) => <>{children}</>,
+}));
+
 const renderWithProps = async (
   root: ReactDOM.Root,
   props: React.ComponentProps<typeof RBACOverview>
@@ -43,26 +58,16 @@ describe('RBACOverview', () => {
     container.remove();
   });
 
-  it('renders rule details for cluster roles', async () => {
+  it('renders metadata and aggregation/used-by sections for cluster roles', async () => {
     await renderWithProps(root, {
       kind: 'ClusterRole',
       name: 'admin',
       labels: { team: 'platform' },
       annotations: { owner: 'rbac-admins' },
-      policyRules: [
-        {
-          apiGroups: ['', 'apps'],
-          resources: ['deployments', 'pods'],
-          verbs: ['get', 'list', '*'],
-          nonResourceURLs: ['/healthz'],
-        },
-      ],
+      // Rules render in DetailsTabRBACRules now (a sibling section);
+      // RBACOverview only handles header/aggregation/used-by/metadata.
     });
 
-    expect(container.textContent).toContain('Rules');
-    expect(container.textContent).toContain('deployments');
-    expect(container.textContent).toContain('* (all)');
-    expect(container.textContent).toContain('/healthz');
     expect(container.textContent).toContain('Labels');
     expect(container.textContent).toContain('team:');
     expect(container.textContent).toContain('platform');
