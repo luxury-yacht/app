@@ -7,6 +7,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
+	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/stretchr/testify/require"
 )
 
@@ -89,7 +90,7 @@ func TestAggregateSnapshotServiceBuildAllowsPartialFailuresForClusterList(t *tes
 	require.Contains(t, snap.Stats.Warnings, "Cluster cluster-b: permission denied for domain namespaces")
 }
 
-func TestAggregateSnapshotServiceFirstNamespaceSnapshotTransitionsToReady(t *testing.T) {
+func TestAggregateSnapshotServiceNamespaceSnapshotTriggersLifecycleCallback(t *testing.T) {
 	successSnapshot := &refresh.Snapshot{
 		Domain: "namespaces",
 		Payload: snapshot.NamespaceSnapshot{
@@ -108,22 +109,22 @@ func TestAggregateSnapshotServiceFirstNamespaceSnapshotTransitionsToReady(t *tes
 	aggregate := &aggregateSnapshotService{
 		clusterOrder: []string{"cluster-a"},
 		services:     services,
-		onFirstSnapshot: func(clusterID string) {
+		onNamespaceSnapshot: func(clusterID string) {
 			called = append(called, clusterID)
 		},
 	}
 
-	// First namespace build triggers the callback.
 	snap, err := aggregate.Build(context.Background(), "namespaces", "clusters=cluster-a|")
 	require.NoError(t, err)
 	require.NotNil(t, snap)
 	require.Equal(t, []string{"cluster-a"}, called)
 
-	// Second call does NOT fire again (once-per-cluster semantics).
+	// A later namespace snapshot should trigger the callback again. The lifecycle
+	// callback decides whether the cluster currently needs a ready transition.
 	snap, err = aggregate.Build(context.Background(), "namespaces", "clusters=cluster-a|")
 	require.NoError(t, err)
 	require.NotNil(t, snap)
-	require.Equal(t, []string{"cluster-a"}, called, "callback must fire only once per cluster")
+	require.Equal(t, []string{"cluster-a", "cluster-a"}, called)
 }
 
 func TestAggregateSnapshotServiceNonNamespaceDomainDoesNotTriggerCallback(t *testing.T) {
@@ -143,7 +144,7 @@ func TestAggregateSnapshotServiceNonNamespaceDomainDoesNotTriggerCallback(t *tes
 	aggregate := &aggregateSnapshotService{
 		clusterOrder: []string{"cluster-a"},
 		services:     services,
-		onFirstSnapshot: func(clusterID string) {
+		onNamespaceSnapshot: func(clusterID string) {
 			callbackFired = true
 		},
 	}
@@ -167,7 +168,7 @@ func TestAggregateSnapshotServiceFailedBuildDoesNotTriggerCallback(t *testing.T)
 	aggregate := &aggregateSnapshotService{
 		clusterOrder: []string{"cluster-a"},
 		services:     services,
-		onFirstSnapshot: func(clusterID string) {
+		onNamespaceSnapshot: func(clusterID string) {
 			callbackFired = true
 		},
 	}
@@ -176,7 +177,11 @@ func TestAggregateSnapshotServiceFailedBuildDoesNotTriggerCallback(t *testing.T)
 	require.False(t, callbackFired, "callback must not fire on build failure")
 }
 
-func TestAggregateSnapshotServiceUpdateClearsRemovedClusterTracking(t *testing.T) {
+func TestAggregateSnapshotServiceLifecycleTransitionsReadyAfterInPlaceRebuild(t *testing.T) {
+	emitter, getEvents := collectingEmitter()
+	lifecycle := newClusterLifecycleWithSlowThreshold(emitter, time.Minute)
+	lifecycle.SetState("cluster-a", ClusterStateLoading)
+
 	successSnapshot := &refresh.Snapshot{
 		Domain: "namespaces",
 		Payload: snapshot.NamespaceSnapshot{
@@ -184,7 +189,6 @@ func TestAggregateSnapshotServiceUpdateClearsRemovedClusterTracking(t *testing.T
 		},
 	}
 
-	var callCount int
 	aggregate := &aggregateSnapshotService{
 		clusterOrder: []string{"cluster-a"},
 		services: map[string]refresh.SnapshotService{
@@ -194,33 +198,42 @@ func TestAggregateSnapshotServiceUpdateClearsRemovedClusterTracking(t *testing.T
 				},
 			},
 		},
-		onFirstSnapshot: func(clusterID string) {
-			callCount++
+		onNamespaceSnapshot: func(clusterID string) {
+			state := lifecycle.GetState(clusterID)
+			if state == ClusterStateLoading || state == ClusterStateLoadingSlow {
+				lifecycle.SetState(clusterID, ClusterStateReady)
+			}
 		},
 	}
 
-	// Initial build fires the callback.
+	// Initial namespace snapshot moves loading -> ready.
 	_, err := aggregate.Build(context.Background(), "namespaces", "clusters=cluster-a|")
 	require.NoError(t, err)
-	require.Equal(t, 1, callCount)
+	require.Equal(t, ClusterStateReady, lifecycle.GetState("cluster-a"))
 
-	// Simulate cluster-a being removed, then re-added.
-	aggregate.Update([]string{}, nil) // removes cluster-a from services
-	aggregate.mu.Lock()
-	aggregate.clusterOrder = []string{"cluster-a"}
-	aggregate.services = map[string]refresh.SnapshotService{
-		"cluster-a": stubSnapshotService{
-			build: func(ctx context.Context, domain, scope string) (*refresh.Snapshot, error) {
-				return successSnapshot, nil
+	// Simulate an in-place rebuild for the same cluster ID. Rebuild sets the
+	// lifecycle back to loading and aggregate Update replaces the service while
+	// keeping the cluster present.
+	lifecycle.SetState("cluster-a", ClusterStateLoading)
+	aggregate.Update([]string{"cluster-a"}, map[string]*system.Subsystem{
+		"cluster-a": &system.Subsystem{
+			SnapshotService: stubSnapshotService{
+				build: func(ctx context.Context, domain, scope string) (*refresh.Snapshot, error) {
+					return successSnapshot, nil
+				},
 			},
 		},
-	}
-	aggregate.mu.Unlock()
+	})
 
-	// Build again should fire the callback since tracking was cleared.
 	_, err = aggregate.Build(context.Background(), "namespaces", "clusters=cluster-a|")
 	require.NoError(t, err)
-	require.Equal(t, 2, callCount, "callback must fire again after cluster tracking was cleared")
+	require.Equal(t, ClusterStateReady, lifecycle.GetState("cluster-a"))
+
+	events := getEvents()
+	require.Equal(t, emittedEvent{"cluster-a", "loading", ""}, events[0])
+	require.Equal(t, emittedEvent{"cluster-a", "ready", "loading"}, events[1])
+	require.Equal(t, emittedEvent{"cluster-a", "loading", "ready"}, events[2])
+	require.Equal(t, emittedEvent{"cluster-a", "ready", "loading"}, events[3])
 }
 
 func TestAggregateSnapshotServiceLifecycleIntegration(t *testing.T) {
@@ -245,7 +258,7 @@ func TestAggregateSnapshotServiceLifecycleIntegration(t *testing.T) {
 				},
 			},
 		},
-		onFirstSnapshot: func(clusterID string) {
+		onNamespaceSnapshot: func(clusterID string) {
 			state := lifecycle.GetState(clusterID)
 			if state == ClusterStateLoading || state == ClusterStateLoadingSlow {
 				lifecycle.SetState(clusterID, ClusterStateReady)
@@ -285,7 +298,7 @@ func TestAggregateSnapshotServiceLifecycleNoTransitionIfAlreadyReady(t *testing.
 				},
 			},
 		},
-		onFirstSnapshot: func(clusterID string) {
+		onNamespaceSnapshot: func(clusterID string) {
 			state := lifecycle.GetState(clusterID)
 			if state == ClusterStateLoading || state == ClusterStateLoadingSlow {
 				lifecycle.SetState(clusterID, ClusterStateReady)
