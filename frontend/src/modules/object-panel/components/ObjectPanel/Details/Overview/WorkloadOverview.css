@@ -134,7 +134,7 @@
 
 /* Middot separator between meta items. */
 .workload-volume-template-meta > span + span::before {
-  content: '·';
+  content: "·";
   margin-right: 0.5rem;
   color: var(--color-text-secondary);
 }

@@ -110,10 +110,28 @@ const RunSummary: React.FC<RunSummaryProps> = ({
   const nextStr = suspend ? 'Suspended' : formatRelative(nextScheduleTime);
   const rows: Array<{ label: string; value: string; retention?: boolean; iso?: string }> = [
     { label: 'Next Scheduled', value: nextStr, iso: nextScheduleTime },
-    { label: 'Last Scheduled', value: formatRelative(lastScheduleTime), iso: normalizeTime(lastScheduleTime) },
-    { label: 'Last Manual', value: formatRelative(lastManualTime), iso: normalizeTime(lastManualTime), retention: true },
-    { label: 'Last Success', value: formatRelative(lastSuccessfulTime), iso: normalizeTime(lastSuccessfulTime) },
-    { label: 'Last Failure', value: formatRelative(lastFailureTime), iso: normalizeTime(lastFailureTime), retention: true },
+    {
+      label: 'Last Scheduled',
+      value: formatRelative(lastScheduleTime),
+      iso: normalizeTime(lastScheduleTime),
+    },
+    {
+      label: 'Last Manual',
+      value: formatRelative(lastManualTime),
+      iso: normalizeTime(lastManualTime),
+      retention: true,
+    },
+    {
+      label: 'Last Success',
+      value: formatRelative(lastSuccessfulTime),
+      iso: normalizeTime(lastSuccessfulTime),
+    },
+    {
+      label: 'Last Failure',
+      value: formatRelative(lastFailureTime),
+      iso: normalizeTime(lastFailureTime),
+      retention: true,
+    },
   ];
 
   return (
