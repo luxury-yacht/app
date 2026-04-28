@@ -16,8 +16,8 @@
 
 .data-label {
   color: var(--color-text);
-  font-family: var(--font-mono, monospace);
-  font-size: var(--font-size-normal);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-mono);
   font-weight: var(--font-weight-normal);
   padding-bottom: var(--spacing-sm);
   min-width: 8rem;
@@ -29,8 +29,8 @@
   background: var(--color-bg);
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius);
-  font-family: var(--font-mono, monospace);
-  font-size: var(--font-size-small);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-mono);
   color: var(--color-text);
   white-space: pre-wrap;
   word-break: break-all;

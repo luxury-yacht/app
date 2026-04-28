@@ -7,6 +7,7 @@ import { types } from '@wailsjs/go/models';
 import { OverviewItem } from '@modules/object-panel/components/ObjectPanel/Details/Overview/shared/OverviewItem';
 import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
+import { StatusChip } from '@shared/components/StatusChip';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { buildObjectReference } from '@shared/utils/objectIdentity';
@@ -14,6 +15,31 @@ import { buildObjectReference } from '@shared/utils/objectIdentity';
 interface SecretOverviewProps {
   secretDetails: types.SecretDetails | null;
 }
+
+// Tooltips for the well-known Secret types defined by Kubernetes.
+// User-defined types (anything not matched here) get no tooltip so we don't
+// make up semantics for them.
+const secretTypeTooltip = (type: string): string | undefined => {
+  switch (type) {
+    case 'kubernetes.io/tls':
+      return 'TLS certificate and key. Typically referenced by Ingress objects.';
+    case 'kubernetes.io/service-account-token':
+      return 'Authentication token automatically mounted into ServiceAccount-bound pods.';
+    case 'kubernetes.io/dockerconfigjson':
+    case 'kubernetes.io/dockercfg':
+      return 'Container registry pull credentials. Referenced via imagePullSecrets.';
+    case 'kubernetes.io/basic-auth':
+      return 'Username and password credentials.';
+    case 'kubernetes.io/ssh-auth':
+      return 'SSH private key.';
+    case 'bootstrap.kubernetes.io/token':
+      return 'kubeadm cluster join token.';
+    case 'Opaque':
+      return 'User-defined data. No built-in semantics.';
+    default:
+      return undefined;
+  }
+};
 
 export const SecretOverview: React.FC<SecretOverviewProps> = ({ secretDetails }) => {
   const { objectData } = useObjectPanel();
@@ -34,33 +60,16 @@ export const SecretOverview: React.FC<SecretOverviewProps> = ({ secretDetails })
         age={secretDetails.age}
       />
 
-      {/* Secret Type - show prominently for secrets */}
+      {/* Secret Type — chip with a per-type tooltip for the well-known
+          kubernetes.io/* prefixes. */}
       {secretDetails.secretType && (
         <OverviewItem
           label="Type"
           value={
-            <span
-              className={`status-badge ${
-                secretDetails.secretType === 'kubernetes.io/tls'
-                  ? 'info'
-                  : secretDetails.secretType === 'kubernetes.io/service-account-token'
-                    ? 'system'
-                    : secretDetails.secretType === 'kubernetes.io/dockerconfigjson'
-                      ? 'registry'
-                      : 'default'
-              }`}
-            >
+            <StatusChip variant="info" tooltip={secretTypeTooltip(secretDetails.secretType)}>
               {secretDetails.secretType}
-            </span>
+            </StatusChip>
           }
-        />
-      )}
-
-      {/* Data keys count */}
-      {secretDetails.dataKeys && secretDetails.dataKeys.length > 0 && (
-        <OverviewItem
-          label="Data Keys"
-          value={`${secretDetails.dataKeys.length} key${secretDetails.dataKeys.length !== 1 ? 's' : ''}`}
         />
       )}
 
@@ -70,7 +79,7 @@ export const SecretOverview: React.FC<SecretOverviewProps> = ({ secretDetails })
           label="Used By"
           value={
             secretDetails.usedBy.length === 0 ? (
-              <span style={{ color: 'var(--color-text-secondary)' }}>Not in use</span>
+              <StatusChip variant="info">Not in use</StatusChip>
             ) : (
               <div>
                 {secretDetails.usedBy.map((podName: string, index: number) => (
