@@ -332,18 +332,18 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
           loaded={loaded}
           spinnerMessage="Loading Helm releases..."
           favModal={favModal}
-            columns={columns}
-            diagnosticsLabel={
-              namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Helm' : 'Namespace Helm'
-            }
-            loading={loading}
-            keyExtractor={keyExtractor}
-            onRowClick={handleResourceClick}
-            tableClassName="ns-helm-table"
-            enableContextMenu={true}
-            getCustomContextMenuItems={getContextMenuItems}
-            useShortNames={useShortResourceNames}
-            emptyMessage={emptyMessage}
+          columns={columns}
+          diagnosticsLabel={
+            namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Helm' : 'Namespace Helm'
+          }
+          loading={loading}
+          keyExtractor={keyExtractor}
+          onRowClick={handleResourceClick}
+          tableClassName="ns-helm-table"
+          enableContextMenu={true}
+          getCustomContextMenuItems={getContextMenuItems}
+          useShortNames={useShortResourceNames}
+          emptyMessage={emptyMessage}
         />
       </>
     );

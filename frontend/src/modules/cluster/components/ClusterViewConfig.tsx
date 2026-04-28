@@ -232,16 +232,16 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
           loaded={loaded}
           spinnerMessage="Loading configuration resources..."
           favModal={favModal}
-            columns={columns}
-            diagnosticsLabel="Cluster Configuration"
-            loading={loading}
-            keyExtractor={keyExtractor}
-            onRowClick={handleResourceClick}
-            tableClassName="gridtable-config"
-            enableContextMenu={true}
-            getCustomContextMenuItems={getContextMenuItems}
-            useShortNames={useShortResourceNames}
-            emptyMessage={emptyMessage}
+          columns={columns}
+          diagnosticsLabel="Cluster Configuration"
+          loading={loading}
+          keyExtractor={keyExtractor}
+          onRowClick={handleResourceClick}
+          tableClassName="gridtable-config"
+          enableContextMenu={true}
+          getCustomContextMenuItems={getContextMenuItems}
+          useShortNames={useShortResourceNames}
+          emptyMessage={emptyMessage}
         />
 
         <ConfirmationModal

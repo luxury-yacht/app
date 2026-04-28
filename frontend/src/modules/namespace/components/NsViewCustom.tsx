@@ -435,16 +435,16 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
           loaded={loaded}
           spinnerMessage="Loading custom resources..."
           favModal={favModal}
-            columns={columns}
-            diagnosticsLabel={diagnosticsLabel}
-            loading={loading}
-            keyExtractor={keyExtractor}
-            onRowClick={handleResourceClick}
-            tableClassName="ns-custom-table"
-            enableContextMenu={true}
-            getCustomContextMenuItems={getContextMenuItems}
-            useShortNames={useShortResourceNames}
-            emptyMessage={emptyMessage}
+          columns={columns}
+          diagnosticsLabel={diagnosticsLabel}
+          loading={loading}
+          keyExtractor={keyExtractor}
+          onRowClick={handleResourceClick}
+          tableClassName="ns-custom-table"
+          enableContextMenu={true}
+          getCustomContextMenuItems={getContextMenuItems}
+          useShortNames={useShortResourceNames}
+          emptyMessage={emptyMessage}
         />
 
         <ConfirmationModal

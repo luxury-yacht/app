@@ -274,16 +274,16 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
           loaded={loaded}
           spinnerMessage="Loading configuration resources..."
           favModal={favModal}
-            columns={columns}
-            diagnosticsLabel={diagnosticsLabel}
-            loading={loading}
-            keyExtractor={keyExtractor}
-            onRowClick={handleResourceClick}
-            tableClassName="ns-config-table"
-            enableContextMenu={true}
-            getCustomContextMenuItems={getContextMenuItems}
-            useShortNames={useShortResourceNames}
-            emptyMessage={emptyMessage}
+          columns={columns}
+          diagnosticsLabel={diagnosticsLabel}
+          loading={loading}
+          keyExtractor={keyExtractor}
+          onRowClick={handleResourceClick}
+          tableClassName="ns-config-table"
+          enableContextMenu={true}
+          getCustomContextMenuItems={getContextMenuItems}
+          useShortNames={useShortResourceNames}
+          emptyMessage={emptyMessage}
         />
 
         <ConfirmationModal

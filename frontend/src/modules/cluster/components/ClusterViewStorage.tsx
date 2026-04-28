@@ -361,16 +361,16 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
           loaded={loaded}
           spinnerMessage="Loading storage resources..."
           favModal={favModal}
-            columns={columns}
-            diagnosticsLabel="Cluster Storage"
-            loading={loading}
-            keyExtractor={keyExtractor}
-            onRowClick={handleResourceClick}
-            tableClassName="gridtable-pvs"
-            enableContextMenu={true}
-            getCustomContextMenuItems={getContextMenuItems}
-            useShortNames={useShortResourceNames}
-            emptyMessage={emptyMessage}
+          columns={columns}
+          diagnosticsLabel="Cluster Storage"
+          loading={loading}
+          keyExtractor={keyExtractor}
+          onRowClick={handleResourceClick}
+          tableClassName="gridtable-pvs"
+          enableContextMenu={true}
+          getCustomContextMenuItems={getContextMenuItems}
+          useShortNames={useShortResourceNames}
+          emptyMessage={emptyMessage}
         />
 
         <ConfirmationModal

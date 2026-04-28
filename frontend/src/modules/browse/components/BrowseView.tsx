@@ -19,11 +19,11 @@
 
 import React, { useCallback, useMemo, useState } from 'react';
 import './BrowseView.css';
-import GridTable, { GRIDTABLE_VIRTUALIZATION_DEFAULT } from '@shared/components/tables/GridTable';
+import { GRIDTABLE_VIRTUALIZATION_DEFAULT } from '@shared/components/tables/GridTable';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import RollbackModal from '@shared/components/modals/RollbackModal';
-import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
+import ResourceGridTableView from '@shared/components/tables/ResourceGridTableView';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 import { getPermissionKey, queryKindPermissions, useUserPermissions } from '@/core/capabilities';
 import { DeleteResourceByGVK, RestartWorkload } from '@wailsjs/go/backend/App';
@@ -442,28 +442,25 @@ const BrowseView: React.FC<BrowseViewProps> = ({
 
   return (
     <>
-      <ResourceLoadingBoundary
-        loading={loading}
-        dataLength={gridTableProps.data.length}
-        hasLoaded={hasLoadedOnce}
+      <ResourceGridTableView
+        gridTableProps={gridTableProps}
+        boundaryLoading={loading}
+        loaded={hasLoadedOnce}
         spinnerMessage={resolvedLoadingMessage}
         allowPartial
         suppressEmptyWarning
-      >
-        <GridTable<BrowseTableRow>
-          {...gridTableProps}
-          columns={columns}
-          diagnosticsLabel={diagnosticsLabel}
-          diagnosticsMode="query"
-          keyExtractor={keyExtractor}
-          onRowClick={handleOpen}
-          tableClassName={resolvedTableClassName}
-          useShortNames={useShortResourceNames}
-          enableContextMenu
-          getCustomContextMenuItems={getContextMenuItems}
-          emptyMessage={resolvedEmptyMessage}
-        />
-      </ResourceLoadingBoundary>
+        favModal={favModal}
+        columns={columns}
+        diagnosticsLabel={diagnosticsLabel}
+        diagnosticsMode="query"
+        keyExtractor={keyExtractor}
+        onRowClick={handleOpen}
+        tableClassName={resolvedTableClassName}
+        useShortNames={useShortResourceNames}
+        enableContextMenu
+        getCustomContextMenuItems={getContextMenuItems}
+        emptyMessage={resolvedEmptyMessage}
+      />
       <ConfirmationModal
         isOpen={deleteConfirm.show}
         title={`Delete ${deleteConfirm.item?.kind || 'Resource'}`}
@@ -503,8 +500,6 @@ const BrowseView: React.FC<BrowseViewProps> = ({
             kind={rollbackTarget.kind}
           />
         )}
-
-      {favModal}
     </>
   );
 };

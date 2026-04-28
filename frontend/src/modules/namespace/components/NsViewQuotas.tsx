@@ -276,16 +276,16 @@ const QuotasViewGrid: React.FC<QuotasViewProps> = React.memo(
           loaded={loaded}
           spinnerMessage="Loading quotas..."
           favModal={favModal}
-            columns={columns}
-            diagnosticsLabel={diagnosticsLabel}
-            loading={loading}
-            keyExtractor={keyExtractor}
-            onRowClick={handleResourceClick}
-            tableClassName="ns-quotas-table"
-            enableContextMenu={true}
-            getCustomContextMenuItems={getContextMenuItems}
-            useShortNames={useShortResourceNames}
-            emptyMessage={emptyMessage}
+          columns={columns}
+          diagnosticsLabel={diagnosticsLabel}
+          loading={loading}
+          keyExtractor={keyExtractor}
+          onRowClick={handleResourceClick}
+          tableClassName="ns-quotas-table"
+          enableContextMenu={true}
+          getCustomContextMenuItems={getContextMenuItems}
+          useShortNames={useShortResourceNames}
+          emptyMessage={emptyMessage}
         />
 
         <ConfirmationModal

@@ -307,19 +307,19 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
           loaded={loaded}
           spinnerMessage="Loading events..."
           favModal={favModal}
-            columns={columns}
-            diagnosticsLabel={
-              namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Events' : 'Namespace Events'
-            }
-            diagnosticsMode="live"
-            loading={loading}
-            keyExtractor={keyExtractor}
-            onRowClick={handleEventClick}
-            tableClassName="gridtable-ns-events"
-            enableContextMenu={true}
-            getCustomContextMenuItems={getContextMenuItems}
-            useShortNames={useShortResourceNames}
-            emptyMessage={emptyMessage}
+          columns={columns}
+          diagnosticsLabel={
+            namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Events' : 'Namespace Events'
+          }
+          diagnosticsMode="live"
+          loading={loading}
+          keyExtractor={keyExtractor}
+          onRowClick={handleEventClick}
+          tableClassName="gridtable-ns-events"
+          enableContextMenu={true}
+          getCustomContextMenuItems={getContextMenuItems}
+          useShortNames={useShortResourceNames}
+          emptyMessage={emptyMessage}
         />
       </>
     );

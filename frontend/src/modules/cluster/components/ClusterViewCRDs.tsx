@@ -280,16 +280,16 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
           loaded={loaded}
           spinnerMessage="Loading CRDs..."
           favModal={favModal}
-            columns={columns}
-            diagnosticsLabel="Cluster CRDs"
-            loading={loading}
-            keyExtractor={keyExtractor}
-            onRowClick={handleResourceClick}
-            tableClassName="gridtable-crds"
-            enableContextMenu={true}
-            getCustomContextMenuItems={getContextMenuItems}
-            useShortNames={useShortResourceNames}
-            emptyMessage={emptyMessage}
+          columns={columns}
+          diagnosticsLabel="Cluster CRDs"
+          loading={loading}
+          keyExtractor={keyExtractor}
+          onRowClick={handleResourceClick}
+          tableClassName="gridtable-crds"
+          enableContextMenu={true}
+          getCustomContextMenuItems={getContextMenuItems}
+          useShortNames={useShortResourceNames}
+          emptyMessage={emptyMessage}
         />
 
         <ConfirmationModal

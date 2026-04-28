@@ -23,7 +23,6 @@ import RollbackModal from '@shared/components/modals/RollbackModal';
 import { PortForwardModal, PortForwardTarget } from '@modules/port-forward';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
-import GridTable from '@shared/components/tables/GridTable';
 import {
   formatBuiltinApiVersion,
   resolveBuiltinGroupVersion,
@@ -503,37 +502,32 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
             {metricsBanner.message}
           </div>
         )}
-        <ResourceLoadingBoundary
-          loading={boundaryLoading}
-          dataLength={sortedWorkloads.length}
-          hasLoaded={Boolean(loaded) || sortedWorkloads.length > 0}
+        <ResourceGridTableView
+          gridTableProps={gridTableProps}
+          boundaryLoading={boundaryLoading}
+          loaded={Boolean(loaded) || sortedWorkloads.length > 0}
           spinnerMessage="Loading workloads..."
           allowPartial
-        >
-          <GridTable
-            {...gridTableProps}
-            columns={tableColumns}
-            diagnosticsLabel={
-              namespace === ALL_NAMESPACES_SCOPE
-                ? 'All Namespaces Workloads'
-                : 'Namespace Workloads'
-            }
-            diagnosticsMode="live"
-            loading={loading && sortedWorkloads.length === 0}
-            keyExtractor={keyExtractor}
-            onRowClick={handleWorkloadClick}
-            tableClassName="gridtable-workloads"
-            enableContextMenu={true}
-            getCustomContextMenuItems={getContextMenuItems}
-            emptyMessage={emptyMessage}
-            enableColumnVisibilityMenu
-            allowHorizontalOverflow={true}
-            loadingOverlay={{
-              show: Boolean(loading) && sortedWorkloads.length > 0,
-              message: 'Updating workloads…',
-            }}
-          />
-        </ResourceLoadingBoundary>
+          favModal={favModal}
+          columns={tableColumns}
+          diagnosticsLabel={
+            namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Workloads' : 'Namespace Workloads'
+          }
+          diagnosticsMode="live"
+          loading={loading && sortedWorkloads.length === 0}
+          keyExtractor={keyExtractor}
+          onRowClick={handleWorkloadClick}
+          tableClassName="gridtable-workloads"
+          enableContextMenu={true}
+          getCustomContextMenuItems={getContextMenuItems}
+          emptyMessage={emptyMessage}
+          enableColumnVisibilityMenu
+          allowHorizontalOverflow={true}
+          loadingOverlay={{
+            show: Boolean(loading) && sortedWorkloads.length > 0,
+            message: 'Updating workloads…',
+          }}
+        />
 
         <ConfirmationModal
           isOpen={restartConfirm.show}

@@ -302,16 +302,16 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
           loaded={loaded}
           spinnerMessage="Loading network resources..."
           favModal={favModal}
-            columns={columns}
-            diagnosticsLabel={diagnosticsLabel}
-            loading={loading}
-            keyExtractor={keyExtractor}
-            onRowClick={handleResourceClick}
-            tableClassName="ns-network-table"
-            enableContextMenu={true}
-            getCustomContextMenuItems={getContextMenuItems}
-            useShortNames={useShortResourceNames}
-            emptyMessage={emptyMessage}
+          columns={columns}
+          diagnosticsLabel={diagnosticsLabel}
+          loading={loading}
+          keyExtractor={keyExtractor}
+          onRowClick={handleResourceClick}
+          tableClassName="ns-network-table"
+          enableContextMenu={true}
+          getCustomContextMenuItems={getContextMenuItems}
+          useShortNames={useShortResourceNames}
+          emptyMessage={emptyMessage}
         />
 
         <ConfirmationModal

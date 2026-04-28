@@ -430,21 +430,21 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
           loaded={loaded}
           spinnerMessage="Loading autoscaling resources..."
           favModal={favModal}
-            columns={columns}
-            diagnosticsLabel={
-              namespace === ALL_NAMESPACES_SCOPE
-                ? 'All Namespaces Autoscaling'
-                : 'Namespace Autoscaling'
-            }
-            diagnosticsMode="live"
-            loading={loading}
-            keyExtractor={keyExtractor}
-            onRowClick={handleResourceClick}
-            tableClassName="ns-autoscaling-table"
-            enableContextMenu={true}
-            getCustomContextMenuItems={getContextMenuItems}
-            useShortNames={useShortResourceNames}
-            emptyMessage={emptyMessage}
+          columns={columns}
+          diagnosticsLabel={
+            namespace === ALL_NAMESPACES_SCOPE
+              ? 'All Namespaces Autoscaling'
+              : 'Namespace Autoscaling'
+          }
+          diagnosticsMode="live"
+          loading={loading}
+          keyExtractor={keyExtractor}
+          onRowClick={handleResourceClick}
+          tableClassName="ns-autoscaling-table"
+          enableContextMenu={true}
+          getCustomContextMenuItems={getContextMenuItems}
+          useShortNames={useShortResourceNames}
+          emptyMessage={emptyMessage}
         />
 
         <ConfirmationModal

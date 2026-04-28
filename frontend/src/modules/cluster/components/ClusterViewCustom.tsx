@@ -360,16 +360,16 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
           loaded={loaded}
           spinnerMessage="Loading cluster custom resources..."
           favModal={favModal}
-            columns={columns}
-            diagnosticsLabel="Cluster Custom"
-            loading={loading}
-            keyExtractor={keyExtractor}
-            onRowClick={handleResourceClick}
-            tableClassName="cluster-custom-table"
-            enableContextMenu={true}
-            getCustomContextMenuItems={getContextMenuItems}
-            useShortNames={useShortResourceNames}
-            emptyMessage={emptyMessage}
+          columns={columns}
+          diagnosticsLabel="Cluster Custom"
+          loading={loading}
+          keyExtractor={keyExtractor}
+          onRowClick={handleResourceClick}
+          tableClassName="cluster-custom-table"
+          enableContextMenu={true}
+          getCustomContextMenuItems={getContextMenuItems}
+          useShortNames={useShortResourceNames}
+          emptyMessage={emptyMessage}
         />
 
         <ConfirmationModal

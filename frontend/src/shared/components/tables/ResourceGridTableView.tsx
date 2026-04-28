@@ -5,7 +5,7 @@ import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary'
 interface ResourceGridTableViewProps<T> extends Omit<GridTableProps<T>, 'data'> {
   gridTableProps: Partial<GridTableProps<T>> & Pick<GridTableProps<T>, 'data'>;
   boundaryLoading?: boolean;
-  loaded: boolean;
+  loaded?: boolean;
   spinnerMessage: string;
   favModal?: React.ReactNode;
   allowPartial?: boolean;

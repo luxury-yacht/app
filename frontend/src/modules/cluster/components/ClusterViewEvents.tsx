@@ -262,17 +262,17 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
           loaded={loaded}
           spinnerMessage="Loading events..."
           favModal={favModal}
-            columns={columns}
-            diagnosticsLabel="Cluster Events"
-            diagnosticsMode="live"
-            loading={loading}
-            keyExtractor={keyExtractor}
-            onRowClick={handleEventClick}
-            tableClassName="gridtable-cluster-events"
-            enableContextMenu={true}
-            getCustomContextMenuItems={getContextMenuItems}
-            useShortNames={useShortResourceNames}
-            emptyMessage={emptyMessage}
+          columns={columns}
+          diagnosticsLabel="Cluster Events"
+          diagnosticsMode="live"
+          loading={loading}
+          keyExtractor={keyExtractor}
+          onRowClick={handleEventClick}
+          tableClassName="gridtable-cluster-events"
+          enableContextMenu={true}
+          getCustomContextMenuItems={getContextMenuItems}
+          useShortNames={useShortResourceNames}
+          emptyMessage={emptyMessage}
         />
       </>
     );

@@ -301,16 +301,16 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
           loaded={loaded}
           spinnerMessage="Loading storage resources..."
           favModal={favModal}
-            columns={columns}
-            diagnosticsLabel={diagnosticsLabel}
-            loading={loading}
-            keyExtractor={keyExtractor}
-            onRowClick={handleResourceClick}
-            tableClassName="ns-storage-table"
-            enableContextMenu={true}
-            getCustomContextMenuItems={getContextMenuItems}
-            useShortNames={useShortResourceNames}
-            emptyMessage={emptyMessage}
+          columns={columns}
+          diagnosticsLabel={diagnosticsLabel}
+          loading={loading}
+          keyExtractor={keyExtractor}
+          onRowClick={handleResourceClick}
+          tableClassName="ns-storage-table"
+          enableContextMenu={true}
+          getCustomContextMenuItems={getContextMenuItems}
+          useShortNames={useShortResourceNames}
+          emptyMessage={emptyMessage}
         />
 
         <ConfirmationModal

@@ -231,16 +231,16 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
           loaded={loaded}
           spinnerMessage="Loading RBAC resources..."
           favModal={favModal}
-            columns={columns}
-            diagnosticsLabel="Cluster RBAC"
-            loading={loading}
-            keyExtractor={keyExtractor}
-            onRowClick={handleResourceClick}
-            tableClassName="gridtable-rbac"
-            enableContextMenu={true}
-            getCustomContextMenuItems={getContextMenuItems}
-            useShortNames={useShortResourceNames}
-            emptyMessage={emptyMessage}
+          columns={columns}
+          diagnosticsLabel="Cluster RBAC"
+          loading={loading}
+          keyExtractor={keyExtractor}
+          onRowClick={handleResourceClick}
+          tableClassName="gridtable-rbac"
+          enableContextMenu={true}
+          getCustomContextMenuItems={getContextMenuItems}
+          useShortNames={useShortResourceNames}
+          emptyMessage={emptyMessage}
         />
 
         <ConfirmationModal
