@@ -143,6 +143,20 @@ const rolloutStatusVariant = (status: string): StatusChipVariant => {
  *  ordinal order respecting `partition`), so the kind disambiguates. */
 type StrategyKind = 'deployment' | 'daemonset' | 'statefulset';
 
+/** StatefulSet `podManagementPolicy` tooltips. The default `OrderedReady`
+ *  is normally not surfaced (filtered at the call site), but we cover it
+ *  so the helper is complete. */
+const podManagementTooltip = (policy: string): string | undefined => {
+  switch (policy) {
+    case 'OrderedReady':
+      return 'Pods are created and scaled one at a time, in order. The next pod only starts once the previous one is Ready, and pods are terminated in reverse order.';
+    case 'Parallel':
+      return 'Pods are created and terminated in parallel without waiting for ordering or readiness. Faster scaling, but the workload must tolerate non-sequential startup.';
+    default:
+      return undefined;
+  }
+};
+
 const strategyTooltip = (strategy: string, kind: StrategyKind): string | undefined => {
   switch (strategy) {
     case 'RollingUpdate':
@@ -329,21 +343,6 @@ export const WorkloadOverview: React.FC<WorkloadOverviewProps> = ({
         );
       })()}
 
-      {/* Up-to-date — only surface when there's revision drift (rollout in
-          progress). When all created pods are on the current revision this
-          row is just noise. */}
-      {(() => {
-        const createdCount = isDaemonSet ? current : parseLeadingCount(replicas);
-        if (
-          typeof upToDate === 'number' &&
-          typeof createdCount === 'number' &&
-          upToDate < createdCount
-        ) {
-          return <OverviewItem label="Up-to-date" value={`${upToDate} of ${createdCount}`} />;
-        }
-        return null;
-      })()}
-
       {/* ReplicaSet — surface min-ready when configured. */}
       {isReplicaSet && minReadySeconds && minReadySeconds > 0 && (
         <OverviewItem label="Min Ready" value={`${minReadySeconds}s`} />
@@ -352,6 +351,21 @@ export const WorkloadOverview: React.FC<WorkloadOverviewProps> = ({
       {/* Deployment-specific fields */}
       {isDeployment && (
         <>
+          {/* Up-to-date — only surface when there's revision drift
+              (rollout in progress). Steady-state, every created pod is
+              already on the current revision and this row is noise. */}
+          {(() => {
+            const createdCount = parseLeadingCount(replicas);
+            if (
+              typeof upToDate === 'number' &&
+              typeof createdCount === 'number' &&
+              upToDate < createdCount
+            ) {
+              return <OverviewItem label="Up-to-date" value={`${upToDate} of ${createdCount}`} />;
+            }
+            return null;
+          })()}
+
           {/* Important status indicators first */}
           {paused && (
             <OverviewItem
@@ -470,6 +484,11 @@ export const WorkloadOverview: React.FC<WorkloadOverviewProps> = ({
       {/* DaemonSet-specific fields */}
       {isDaemonSet && (
         <>
+          {/* Up-to-date — only surface when there's revision drift. */}
+          {typeof upToDate === 'number' && typeof current === 'number' && upToDate < current && (
+            <OverviewItem label="Up-to-date" value={`${upToDate} of ${current}`} />
+          )}
+
           {/* Update strategy — chip + params */}
           {updateStrategy && (
             <OverviewItem
@@ -502,6 +521,19 @@ export const WorkloadOverview: React.FC<WorkloadOverviewProps> = ({
       {/* StatefulSet-specific fields */}
       {isStatefulSet && (
         <>
+          {/* Up-to-date — only surface when there's revision drift. */}
+          {(() => {
+            const createdCount = parseLeadingCount(replicas);
+            if (
+              typeof upToDate === 'number' &&
+              typeof createdCount === 'number' &&
+              upToDate < createdCount
+            ) {
+              return <OverviewItem label="Up-to-date" value={`${upToDate} of ${createdCount}`} />;
+            }
+            return null;
+          })()}
+
           {/* Update strategy — chip + params */}
           {updateStrategy && (
             <OverviewItem
@@ -527,8 +559,12 @@ export const WorkloadOverview: React.FC<WorkloadOverviewProps> = ({
           {/* Only show if non-default */}
           {podManagementPolicy && podManagementPolicy !== 'OrderedReady' && (
             <OverviewItem
-              label="Pod Management"
-              value={<StatusChip variant="info">{podManagementPolicy}</StatusChip>}
+              label="Pod Mgmt"
+              value={
+                <StatusChip variant="info" tooltip={podManagementTooltip(podManagementPolicy)}>
+                  {podManagementPolicy}
+                </StatusChip>
+              }
             />
           )}
 
@@ -537,6 +573,15 @@ export const WorkloadOverview: React.FC<WorkloadOverviewProps> = ({
             <OverviewItem label="Min Ready" value={`${minReadySeconds}s`} />
           )}
         </>
+      )}
+
+      {/* Pod-template properties (SA, placement) live below the
+          rollout/config block, separated for clarity — these describe
+          the pods themselves, not how the controller manages them. */}
+      {((serviceAccount && serviceAccount !== 'default') ||
+        (nodeSelector && Object.keys(nodeSelector).length > 0) ||
+        (tolerations && tolerations.some((tol) => !DEFAULT_TOLERATION_RE.test(tol)))) && (
+        <div className="metadata-section-separator" />
       )}
 
       {/* ServiceAccount — only when explicitly set to a non-default SA.
