@@ -68,9 +68,11 @@ const Overview: React.FC<OverviewProps> = (props) => {
     };
   }, [clusterId, props.namespace, props.kind, props.name, isScalable]);
 
-  // Use the factory pattern to render the appropriate component
+  // Use the factory pattern to render the appropriate component.
+  // Thread `hpaManaged` through so workload overviews can surface that
+  // scaling is autonomous (e.g. in the Pods caption).
   const renderOverviewContent = () => {
-    return overviewRegistry.renderComponent(props);
+    return overviewRegistry.renderComponent({ ...props, hpaManaged });
   };
 
   // Build object data for ActionsMenu. Group/version come from the panel's

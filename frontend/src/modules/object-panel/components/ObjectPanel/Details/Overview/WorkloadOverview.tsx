@@ -54,9 +54,16 @@ interface PodStateBarProps {
   created: number;
   ready: number;
   available: number;
+  hpaManaged?: boolean;
 }
 
-const PodStateBar: React.FC<PodStateBarProps> = ({ desired, created, ready, available }) => {
+const PodStateBar: React.FC<PodStateBarProps> = ({
+  desired,
+  created,
+  ready,
+  available,
+  hpaManaged,
+}) => {
   // Clamp every band so a single misreported number can't blow out the bar.
   // The bar's denominator is `desired`; if anything exceeds desired we cap
   // it at desired so the bar never overflows.
@@ -96,6 +103,7 @@ const PodStateBar: React.FC<PodStateBarProps> = ({ desired, created, ready, avai
       <div className="podstate-caption">
         {headline}
         {drift && <span className="podstate-caption-drift">· {drift}</span>}
+        {hpaManaged && <span className="podstate-caption-hpa">(HPA managed)</span>}
       </div>
     </div>
   );
@@ -179,6 +187,9 @@ interface WorkloadOverviewProps {
   // Pod template
   serviceAccount?: string;
 
+  // Indicates an HPA is driving the replica count for this workload.
+  hpaManaged?: boolean;
+
   // Actions
   canRestart?: boolean;
   canScale?: boolean;
@@ -228,6 +239,7 @@ export const WorkloadOverview: React.FC<WorkloadOverviewProps> = ({
   podManagementPolicy,
   serviceAccount,
   currentReplicaSet,
+  hpaManaged,
   onRollback,
   labels,
   annotations,
@@ -285,6 +297,7 @@ export const WorkloadOverview: React.FC<WorkloadOverviewProps> = ({
                 created={createdCount}
                 ready={readyCount}
                 available={availableCount}
+                hpaManaged={hpaManaged}
               />
             }
           />
@@ -359,7 +372,7 @@ export const WorkloadOverview: React.FC<WorkloadOverviewProps> = ({
                     {strategy}
                   </StatusChip>
                   {strategy === 'RollingUpdate' && (
-                    <span className="overview-value-mono" style={{ marginLeft: '0.5rem' }}>
+                    <span className="overview-value" style={{ marginLeft: '0.5rem' }}>
                       surge {maxSurge || '25%'} / unavailable {maxUnavailable || '25%'}
                     </span>
                   )}

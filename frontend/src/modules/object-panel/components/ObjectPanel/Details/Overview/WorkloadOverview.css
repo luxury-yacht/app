@@ -60,6 +60,14 @@
   margin-left: 0.5rem;
 }
 
+/* "(HPA managed)" hint after the pod-state caption — explains that
+   replica counts fluctuate autonomously, so users don't read drift
+   in the pods bar as something they need to act on. */
+.podstate-caption-hpa {
+  margin-left: 0.5rem;
+  color: var(--color-text-secondary);
+}
+
 /* Inline action button styled to match `.object-panel-link`. Used next to
    the current ReplicaSet to open the rollback modal so users can browse
    prior revisions without us listing them all inline. */
