@@ -435,13 +435,9 @@ export const JobOverview: React.FC<JobOverviewProps> = (props) => {
             (props.failedJobsHistory !== undefined && props.failedJobsHistory !== 1)) && (
             <OverviewItem
               label="History Limits"
-              value={
-                <span title="Maximum number of completed/failed Job records the controller retains for inspection.">
-                  {`${props.successfulJobsHistory ?? 3} succeeded, ${
-                    props.failedJobsHistory ?? 1
-                  } failed`}
-                </span>
-              }
+              value={`${props.successfulJobsHistory ?? 3} succeeded, ${
+                props.failedJobsHistory ?? 1
+              } failed`}
             />
           )}
         </>
