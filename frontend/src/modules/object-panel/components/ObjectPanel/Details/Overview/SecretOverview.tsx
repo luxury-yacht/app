@@ -73,35 +73,36 @@ export const SecretOverview: React.FC<SecretOverviewProps> = ({ secretDetails })
         />
       )}
 
-      {/* Usage information - show actual pod names as links */}
-      {secretDetails.usedBy !== undefined && (
-        <OverviewItem
-          label="Used By"
-          value={
-            secretDetails.usedBy.length === 0 ? (
-              <StatusChip variant="info">Not in use</StatusChip>
-            ) : (
-              <div>
-                {secretDetails.usedBy.map((podName: string, index: number) => (
-                  <div key={`${podName}-${index}`} style={{ marginTop: index > 0 ? '4px' : 0 }}>
-                    <ObjectPanelLink
-                      objectRef={buildObjectReference({
-                        kind: 'pod',
-                        name: podName,
-                        namespace: secretDetails.namespace,
-                        ...clusterMeta,
-                      })}
-                      title={`Click to view pod: ${podName}`}
-                    >
-                      {podName}
-                    </ObjectPanelLink>
-                  </div>
-                ))}
-              </div>
-            )
-          }
-        />
-      )}
+      {/* Usage information — always rendered. The backend leaves UsedBy
+          nil when no pods reference this Secret (rather than emitting an
+          empty array), so undefined here means "not in use" rather than
+          "unknown". */}
+      <OverviewItem
+        label="Used By"
+        value={
+          !secretDetails.usedBy || secretDetails.usedBy.length === 0 ? (
+            <StatusChip variant="info">Not in use</StatusChip>
+          ) : (
+            <div>
+              {secretDetails.usedBy.map((podName: string, index: number) => (
+                <div key={`${podName}-${index}`} style={{ marginTop: index > 0 ? '4px' : 0 }}>
+                  <ObjectPanelLink
+                    objectRef={buildObjectReference({
+                      kind: 'pod',
+                      name: podName,
+                      namespace: secretDetails.namespace,
+                      ...clusterMeta,
+                    })}
+                    title={`Click to view pod: ${podName}`}
+                  >
+                    {podName}
+                  </ObjectPanelLink>
+                </div>
+              ))}
+            </div>
+          )
+        }
+      />
 
       {/* Use composed component for metadata */}
       <ResourceMetadata labels={secretDetails.labels} annotations={secretDetails.annotations} />
