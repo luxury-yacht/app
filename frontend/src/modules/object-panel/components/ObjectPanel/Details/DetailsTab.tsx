@@ -325,14 +325,25 @@ const DetailsTabContent: React.FC<DetailsTabProps> = ({
 
           if (!shouldShowContainers) return null;
 
+          const initContainers =
+            podDetails?.initContainers ||
+            deploymentDetails?.initContainers ||
+            daemonSetDetails?.initContainers ||
+            statefulSetDetails?.initContainers ||
+            replicaSetDetails?.initContainers;
+
           const hasContainers =
             (podDetails &&
               (podDetails.containers?.length > 0 ||
                 (podDetails.initContainers?.length ?? 0) > 0)) ||
             (deploymentDetails?.containers?.length ?? 0) > 0 ||
+            (deploymentDetails?.initContainers?.length ?? 0) > 0 ||
             (daemonSetDetails?.containers?.length ?? 0) > 0 ||
+            (daemonSetDetails?.initContainers?.length ?? 0) > 0 ||
             (statefulSetDetails?.containers?.length ?? 0) > 0 ||
-            (replicaSetDetails?.containers?.length ?? 0) > 0;
+            (statefulSetDetails?.initContainers?.length ?? 0) > 0 ||
+            (replicaSetDetails?.containers?.length ?? 0) > 0 ||
+            (replicaSetDetails?.initContainers?.length ?? 0) > 0;
 
           if (!hasContainers) return null;
 
@@ -346,7 +357,7 @@ const DetailsTabContent: React.FC<DetailsTabProps> = ({
                   statefulSetDetails?.containers ||
                   replicaSetDetails?.containers
                 }
-                initContainers={podDetails?.initContainers}
+                initContainers={initContainers}
               />
             </div>
           );

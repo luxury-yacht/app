@@ -5,17 +5,19 @@
 .rules-card-list {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-lg);
+  gap: var(--spacing-xl);
 }
 
 .rules-card {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-sm);
-  background: var(--color-bg-tertiary);
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-lg);
-  padding: var(--spacing-sm) var(--spacing-md);
+  gap: var(--spacing-md);
+  /* background: var(--color-bg-tertiary); */
+  border-top: 12px solid var(--color-bg-tertiary);
+  border-left: 1px solid var(--color-bg-tertiary);
+  border-top-left-radius: var(--border-radius-lg);
+  border-top-right-radius: var(--border-radius-lg);
+  padding: 10px var(--spacing-md);
 }
 
 .rules-card-header {

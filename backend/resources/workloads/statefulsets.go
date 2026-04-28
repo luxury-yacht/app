@@ -140,6 +140,7 @@ func (s *StatefulSetService) buildStatefulSetDetails(
 		Annotations:                          statefulSet.Annotations,
 		Conditions:                           describeStatefulSetConditions(statefulSet),
 		Containers:                           describeContainers(statefulSet.Spec.Template.Spec.Containers),
+		InitContainers:                       describeContainers(statefulSet.Spec.Template.Spec.InitContainers),
 		VolumeClaimTemplates:                 describeVolumeClaimTemplates(statefulSet.Spec.VolumeClaimTemplates),
 		Pods:                                 podInfos,
 		PodMetricsSummary:                    podSummary,

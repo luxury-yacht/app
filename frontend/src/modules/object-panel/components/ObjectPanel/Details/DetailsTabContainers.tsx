@@ -107,7 +107,7 @@ const ContainerCard: React.FC<{ container: Container }> = ({ container }) => {
         )}
       </div>
 
-      <div className="containers-image" title={container.image}>
+      <div className="containers-image">
         <span className="containers-image-name">{parsed.name}</span>
         <span className="containers-image-sep">{parsed.isDigest ? '@' : ':'}</span>
         <span className="containers-image-ref">{formatRef(parsed)}</span>

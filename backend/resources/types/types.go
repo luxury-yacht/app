@@ -1067,7 +1067,8 @@ type ReplicaSetDetails struct {
 	Conditions []string `json:"conditions,omitempty"`
 
 	// Template information
-	Containers []PodDetailInfoContainer `json:"containers,omitempty"`
+	Containers     []PodDetailInfoContainer `json:"containers,omitempty"`
+	InitContainers []PodDetailInfoContainer `json:"initContainers,omitempty"`
 
 	// Pod information
 	Pods              []PodSimpleInfo    `json:"pods,omitempty"`
@@ -1117,7 +1118,8 @@ type DeploymentDetails struct {
 	Conditions []string `json:"conditions,omitempty"`
 
 	// Template information
-	Containers []PodDetailInfoContainer `json:"containers,omitempty"`
+	Containers     []PodDetailInfoContainer `json:"containers,omitempty"`
+	InitContainers []PodDetailInfoContainer `json:"initContainers,omitempty"`
 
 	// Pod information
 	Pods              []PodSimpleInfo    `json:"pods,omitempty"`
@@ -1177,7 +1179,8 @@ type StatefulSetDetails struct {
 	Conditions []string `json:"conditions,omitempty"`
 
 	// Template information
-	Containers []PodDetailInfoContainer `json:"containers,omitempty"`
+	Containers     []PodDetailInfoContainer `json:"containers,omitempty"`
+	InitContainers []PodDetailInfoContainer `json:"initContainers,omitempty"`
 
 	// Volume claim templates
 	VolumeClaimTemplates []string `json:"volumeClaimTemplates,omitempty"`
@@ -1238,7 +1241,8 @@ type DaemonSetDetails struct {
 	Conditions []string `json:"conditions,omitempty"`
 
 	// Template information
-	Containers []PodDetailInfoContainer `json:"containers,omitempty"`
+	Containers     []PodDetailInfoContainer `json:"containers,omitempty"`
+	InitContainers []PodDetailInfoContainer `json:"initContainers,omitempty"`
 
 	// Pod information
 	Pods              []PodSimpleInfo    `json:"pods,omitempty"`

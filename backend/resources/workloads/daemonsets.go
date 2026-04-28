@@ -125,6 +125,7 @@ func (s *DaemonSetService) buildDaemonSetDetails(
 		NodeSelector:       daemonSet.Spec.Template.Spec.NodeSelector,
 		Conditions:         describeDaemonSetConditions(daemonSet),
 		Containers:         describeContainers(daemonSet.Spec.Template.Spec.Containers),
+		InitContainers:     describeContainers(daemonSet.Spec.Template.Spec.InitContainers),
 		Pods:               podInfos,
 		PodMetricsSummary:  podSummary,
 		ObservedGeneration: daemonSet.Status.ObservedGeneration,

@@ -1805,6 +1805,7 @@ export namespace types {
 	    nodeSelector?: Record<string, string>;
 	    conditions?: string[];
 	    containers?: PodDetailInfoContainer[];
+	    initContainers?: PodDetailInfoContainer[];
 	    pods?: PodSimpleInfo[];
 	    podMetricsSummary?: PodMetricsSummary;
 	    observedGeneration?: number;
@@ -1845,6 +1846,7 @@ export namespace types {
 	        this.nodeSelector = source["nodeSelector"];
 	        this.conditions = source["conditions"];
 	        this.containers = this.convertValues(source["containers"], PodDetailInfoContainer);
+	        this.initContainers = this.convertValues(source["initContainers"], PodDetailInfoContainer);
 	        this.pods = this.convertValues(source["pods"], PodSimpleInfo);
 	        this.podMetricsSummary = this.convertValues(source["podMetricsSummary"], PodMetricsSummary);
 	        this.observedGeneration = source["observedGeneration"];
@@ -1969,6 +1971,7 @@ export namespace types {
 	    annotations?: Record<string, string>;
 	    conditions?: string[];
 	    containers?: PodDetailInfoContainer[];
+	    initContainers?: PodDetailInfoContainer[];
 	    pods?: PodSimpleInfo[];
 	    podMetricsSummary?: PodMetricsSummary;
 	    currentRevision?: string;
@@ -2013,6 +2016,7 @@ export namespace types {
 	        this.annotations = source["annotations"];
 	        this.conditions = source["conditions"];
 	        this.containers = this.convertValues(source["containers"], PodDetailInfoContainer);
+	        this.initContainers = this.convertValues(source["initContainers"], PodDetailInfoContainer);
 	        this.pods = this.convertValues(source["pods"], PodSimpleInfo);
 	        this.podMetricsSummary = this.convertValues(source["podMetricsSummary"], PodMetricsSummary);
 	        this.currentRevision = source["currentRevision"];
@@ -4031,6 +4035,7 @@ export namespace types {
 	    annotations?: Record<string, string>;
 	    conditions?: string[];
 	    containers?: PodDetailInfoContainer[];
+	    initContainers?: PodDetailInfoContainer[];
 	    pods?: PodSimpleInfo[];
 	    podMetricsSummary?: PodMetricsSummary;
 	    observedGeneration?: number;
@@ -4063,6 +4068,7 @@ export namespace types {
 	        this.annotations = source["annotations"];
 	        this.conditions = source["conditions"];
 	        this.containers = this.convertValues(source["containers"], PodDetailInfoContainer);
+	        this.initContainers = this.convertValues(source["initContainers"], PodDetailInfoContainer);
 	        this.pods = this.convertValues(source["pods"], PodSimpleInfo);
 	        this.podMetricsSummary = this.convertValues(source["podMetricsSummary"], PodMetricsSummary);
 	        this.observedGeneration = source["observedGeneration"];
@@ -4646,6 +4652,7 @@ export namespace types {
 	    annotations?: Record<string, string>;
 	    conditions?: string[];
 	    containers?: PodDetailInfoContainer[];
+	    initContainers?: PodDetailInfoContainer[];
 	    volumeClaimTemplates?: string[];
 	    pods?: PodSimpleInfo[];
 	    podMetricsSummary?: PodMetricsSummary;
@@ -4691,6 +4698,7 @@ export namespace types {
 	        this.annotations = source["annotations"];
 	        this.conditions = source["conditions"];
 	        this.containers = this.convertValues(source["containers"], PodDetailInfoContainer);
+	        this.initContainers = this.convertValues(source["initContainers"], PodDetailInfoContainer);
 	        this.volumeClaimTemplates = source["volumeClaimTemplates"];
 	        this.pods = this.convertValues(source["pods"], PodSimpleInfo);
 	        this.podMetricsSummary = this.convertValues(source["podMetricsSummary"], PodMetricsSummary);

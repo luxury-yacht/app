@@ -105,6 +105,7 @@ func (s *DeploymentService) buildDeploymentDetails(
 
 	rsNames, currentRevision := summarizeReplicaSets(deployment, replicaSets)
 	containers := describeContainers(deployment.Spec.Template.Spec.Containers)
+	initContainers := describeContainers(deployment.Spec.Template.Spec.InitContainers)
 	maxSurge, maxUnavailable := rolloutParameters(deployment)
 
 	revisionHistory := int32(0)
@@ -148,6 +149,7 @@ func (s *DeploymentService) buildDeploymentDetails(
 		Labels:             deployment.Labels,
 		Annotations:        deployment.Annotations,
 		Containers:         containers,
+		InitContainers:     initContainers,
 		Pods:               podInfos,
 		CurrentRevision:    currentRevision,
 		ReplicaSets:        rsNames,
