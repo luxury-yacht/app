@@ -157,20 +157,35 @@ const podManagementTooltip = (policy: string): string | undefined => {
   }
 };
 
-const strategyTooltip = (strategy: string, kind: StrategyKind): string | undefined => {
+const strategyTooltip = (strategy: string, kind: StrategyKind): React.ReactNode | undefined => {
   switch (strategy) {
     case 'RollingUpdate':
       if (kind === 'deployment')
-        return 'Pods are replaced incrementally, controlled by maxSurge and maxUnavailable. Zero-downtime when configured correctly.';
+        return 'Pods are replaced incrementally, controlled by maxSurge and maxUnavailable.';
       if (kind === 'daemonset')
         return 'Pods are replaced one node at a time, respecting maxUnavailable.';
       if (kind === 'statefulset')
-        return 'Pods are replaced in reverse ordinal order, one at a time. Pods at indices below `partition` are not updated.';
+        return (
+          <>
+            Pods are replaced in reverse ordinal order, one at a time.
+            <br />
+            <br />
+            If a <code>partition</code> is set, pods with an ordinal below it stay on the old spec —
+            allowing staged rollouts.
+          </>
+        );
       return undefined;
     case 'Recreate':
-      return 'All existing pods are terminated before new ones start. Causes downtime during the transition.';
+      return (
+        <>
+          All existing pods are terminated before new ones start.
+          <br />
+          <br />
+          Causes downtime during the transition.
+        </>
+      );
     case 'OnDelete':
-      return 'Pods are not automatically replaced when the spec changes. Manual pod deletion is required to trigger an update.';
+      return 'Pods are not automatically replaced when the spec changes. Existing pods must be manually deleted.';
     default:
       return undefined;
   }
@@ -498,9 +513,9 @@ export const WorkloadOverview: React.FC<WorkloadOverviewProps> = ({
                   <StatusChip variant="info" tooltip={strategyTooltip(updateStrategy, 'daemonset')}>
                     {updateStrategy}
                   </StatusChip>
-                  {updateStrategy === 'RollingUpdate' && maxUnavailable && (
-                    <span className="overview-value-mono" style={{ marginLeft: '0.5rem' }}>
-                      max unavailable {maxUnavailable}
+                  {updateStrategy === 'RollingUpdate' && (
+                    <span className="overview-value" style={{ marginLeft: '0.5rem' }}>
+                      surge {maxSurge || '0'} / unavailable {maxUnavailable || '1'}
                     </span>
                   )}
                 </>

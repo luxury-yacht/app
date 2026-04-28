@@ -161,9 +161,9 @@ describe('WorkloadOverview', () => {
     expect(container.textContent).toContain('8 of 10 available');
     // 1 unscheduled (10 desired - 9 current).
     expect(container.textContent).toContain('1 unscheduled');
-    // DaemonSet strategy renders as chip + mono params now.
+    // DaemonSet strategy renders as chip + surge/unavailable params (matching Deployment).
     expect(container.textContent).toContain('RollingUpdate');
-    expect(container.textContent).toContain('max unavailable 10%');
+    expect(container.textContent).toContain('surge 0 / unavailable 10%');
     expect(container.textContent).toContain('Misscheduled');
     expect(container.textContent).toContain('2');
   });
@@ -215,7 +215,7 @@ describe('WorkloadOverview', () => {
         clusterId: defaultClusterId,
       })
     );
-    expect(container.textContent).toContain('Pod Management');
+    expect(container.textContent).toContain('Pod Mgmt');
     expect(container.textContent).toContain('Parallel');
     expect(container.textContent).toContain('Min Ready');
     expect(container.textContent).toContain('15s');

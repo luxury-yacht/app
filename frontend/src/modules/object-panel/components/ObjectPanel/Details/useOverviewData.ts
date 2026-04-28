@@ -215,6 +215,8 @@ export function useOverviewData(params: UseOverviewDataParams): OverviewData | n
         upToDate: daemonSetDetails.upToDate,
         available: daemonSetDetails.available,
         updateStrategy: daemonSetDetails.updateStrategy,
+        maxSurge: daemonSetDetails.maxSurge,
+        maxUnavailable: daemonSetDetails.maxUnavailable,
         serviceAccount: daemonSetDetails.serviceAccount,
         nodeSelector: daemonSetDetails.nodeSelector,
         tolerations: daemonSetDetails.tolerations,
