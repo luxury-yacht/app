@@ -23,6 +23,9 @@ interface JobLike {
 
 interface JobTimelineProps {
   jobs: JobLike[];
+  /** Called with the job name when a timeline bar is clicked. When
+   *  unset, bars render as non-interactive divs. */
+  onJobClick?: (name: string) => void;
 }
 
 interface WindowOption {
@@ -39,11 +42,24 @@ const DAY = 24 * HOUR;
 
 const WINDOWS: WindowOption[] = [
   {
+    label: '1h',
+    seconds: HOUR,
+    tickInterval: 10 * 60,
+    tickLabel: (d) =>
+      d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }),
+  },
+  {
     label: '3h',
     seconds: 3 * HOUR,
     tickInterval: 30 * 60,
     tickLabel: (d) =>
       d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }),
+  },
+  {
+    label: '6h',
+    seconds: 6 * HOUR,
+    tickInterval: HOUR,
+    tickLabel: (d) => d.toLocaleTimeString(undefined, { hour: 'numeric' }),
   },
   {
     label: '12h',
@@ -52,7 +68,7 @@ const WINDOWS: WindowOption[] = [
     tickLabel: (d) => d.toLocaleTimeString(undefined, { hour: 'numeric' }),
   },
   {
-    label: '24h',
+    label: '1d',
     seconds: 24 * HOUR,
     tickInterval: 4 * HOUR,
     tickLabel: (d) => d.toLocaleTimeString(undefined, { hour: 'numeric' }),
@@ -72,7 +88,7 @@ const WINDOWS: WindowOption[] = [
   },
 ];
 
-const DEFAULT_WINDOW = WINDOWS[0]; // 3h
+const DEFAULT_WINDOW = WINDOWS[1]; // 3h
 
 const parseStart = (raw: unknown): number | null => {
   if (typeof raw !== 'string' || !raw) return null;
@@ -127,7 +143,7 @@ const MIN_BAR_WIDTH_PCT = 0.4; // ~2-3px on a typical strip
 const ROW_HEIGHT = 12;
 const ROW_GAP = 2;
 
-export const JobTimeline: React.FC<JobTimelineProps> = ({ jobs }) => {
+export const JobTimeline: React.FC<JobTimelineProps> = ({ jobs, onJobClick }) => {
   const [windowOpt, setWindowOpt] = useState<WindowOption>(DEFAULT_WINDOW);
 
   const { runs, rowCount, ticks, now } = useMemo(() => {
@@ -210,21 +226,32 @@ export const JobTimeline: React.FC<JobTimelineProps> = ({ jobs }) => {
           ]
             .filter(Boolean)
             .join(' · ');
-          return (
-            <div
-              key={`${r.job.name ?? 'job'}-${i}`}
-              className={`job-timeline-bar ${variantClass(r.job.status)}${
-                r.clippedStart ? ' job-timeline-bar--clipped' : ''
-              }`}
-              style={{
-                left: `${r.leftPct}%`,
-                width: `${r.widthPct}%`,
-                top: r.row * (ROW_HEIGHT + ROW_GAP),
-                height: ROW_HEIGHT,
-              }}
-              title={tooltip}
-            />
-          );
+          const className = `job-timeline-bar ${variantClass(r.job.status)}${
+            r.clippedStart ? ' job-timeline-bar--clipped' : ''
+          }${onJobClick && r.job.name ? ' job-timeline-bar--clickable' : ''}`;
+          const style: React.CSSProperties = {
+            left: `${r.leftPct}%`,
+            width: `${r.widthPct}%`,
+            top: r.row * (ROW_HEIGHT + ROW_GAP),
+            height: ROW_HEIGHT,
+          };
+          const key = `${r.job.name ?? 'job'}-${i}`;
+
+          if (onJobClick && r.job.name) {
+            const jobName = r.job.name;
+            return (
+              <button
+                key={key}
+                type="button"
+                className={className}
+                style={style}
+                title={tooltip}
+                aria-label={`Open job ${jobName}`}
+                onClick={() => onJobClick(jobName)}
+              />
+            );
+          }
+          return <div key={key} className={className} style={style} title={tooltip} />;
         })}
       </div>
 

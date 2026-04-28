@@ -2,11 +2,13 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/JobOverview.tsx
  */
 
-import React from 'react';
+import React, { useCallback } from 'react';
 import { OverviewItem } from '@modules/object-panel/components/ObjectPanel/Details/Overview/shared/OverviewItem';
+import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
 import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
+import { buildObjectReference } from '@shared/utils/objectIdentity';
 import { formatAge, formatFullDate } from '@/utils/ageFormatter';
 import { JobTimeline } from './JobTimeline';
 import './shared/OverviewBlocks.css';
@@ -134,9 +136,30 @@ export const JobOverview: React.FC<JobOverviewProps> = (props) => {
   const isJob = props.kind?.toLowerCase() === 'job';
   const isCronJob = props.kind?.toLowerCase() === 'cronjob';
 
+  const { openWithObject, objectData } = useObjectPanel();
+
   const activeCount = Array.isArray(props.activeJobs)
     ? props.activeJobs.length
     : (props.activeJobs ?? 0);
+
+  // Open the Job in the panel when a timeline bar is clicked. Owned
+  // Jobs share the CronJob's namespace, and the cluster context comes
+  // from the panel's current objectData.
+  const onJobClick = useCallback(
+    (jobName: string) => {
+      if (!namespace) return;
+      openWithObject(
+        buildObjectReference({
+          kind: 'Job',
+          name: jobName,
+          namespace,
+          clusterId: objectData?.clusterId ?? undefined,
+          clusterName: objectData?.clusterName ?? undefined,
+        })
+      );
+    },
+    [namespace, objectData?.clusterId, objectData?.clusterName, openWithObject]
+  );
 
   return (
     <>
@@ -305,7 +328,7 @@ export const JobOverview: React.FC<JobOverviewProps> = (props) => {
             <OverviewItem
               label="History"
               fullWidth
-              value={<JobTimeline jobs={props.jobs} />}
+              value={<JobTimeline jobs={props.jobs} onJobClick={onJobClick} />}
             />
           )}
 

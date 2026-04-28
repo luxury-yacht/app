@@ -46,7 +46,7 @@
   width: 100%;
   background: var(--color-bg-tertiary);
   border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-md);
+  /* border-radius: var(--border-radius-md); */
   overflow: hidden;
   min-height: 12px;
 }
@@ -65,6 +65,25 @@
   position: absolute;
   border-radius: 2px;
   cursor: default;
+  /* Reset <button> defaults so clickable bars look identical to the
+     non-interactive <div> variant. */
+  padding: 0;
+  border: none;
+  font: inherit;
+  color: inherit;
+}
+
+/* Clickable variant — pointer cursor + subtle hover/focus affordance
+   so users can tell a bar is interactive without changing its color
+   (which encodes outcome). */
+.job-timeline-bar--clickable {
+  cursor: pointer;
+}
+
+.job-timeline-bar--clickable:hover,
+.job-timeline-bar--clickable:focus-visible {
+  outline: 1px solid var(--color-text);
+  outline-offset: 1px;
 }
 
 .job-timeline-bar--healthy {

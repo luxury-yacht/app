@@ -81,6 +81,28 @@ describe('JobTimeline', () => {
     expect(container.textContent).toContain('No runs in last');
   });
 
+  it('invokes onJobClick with the job name when a bar is clicked', async () => {
+    const onJobClick = vi.fn();
+    await renderTimeline({
+      onJobClick,
+      jobs: [
+        {
+          name: 'job-a',
+          status: 'Complete',
+          startTime: '2024-06-15T11:00:00Z',
+          durationSeconds: 60,
+        },
+      ],
+    });
+
+    const bar = container.querySelector<HTMLButtonElement>('.job-timeline-bar--clickable');
+    expect(bar).toBeTruthy();
+    await act(async () => {
+      bar!.click();
+    });
+    expect(onJobClick).toHaveBeenCalledWith('job-a');
+  });
+
   it('switches window via the chip buttons and re-filters', async () => {
     await renderTimeline({
       jobs: [

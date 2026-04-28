@@ -8,6 +8,13 @@ import { act } from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { JobOverview } from './JobOverview';
 
+vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
+  useObjectPanel: () => ({
+    openWithObject: vi.fn(),
+    objectData: { clusterId: 'alpha:ctx', clusterName: 'alpha' },
+  }),
+}));
+
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
   ResourceHeader: (props: any) => (
     <div data-testid="resource-header">
