@@ -22,3 +22,22 @@
   color: var(--color-text);
   font-size: 0.8125rem;
 }
+
+/* The Tooltip component wraps the value in a `.tooltip-trigger`. With
+   `display: contents` on the row, that wrapper becomes a direct grid
+   item and the auto column stretches it edge-to-edge — which makes
+   the tooltip pop up centered on the wide cell, visibly offset right
+   of the actual text. Forcing the value column to start-align (and
+   shrink to content) keeps the trigger's bounding rect tight to the
+   text so the tooltip centers correctly. */
+.run-summary .run-summary-value,
+.run-summary .tooltip-trigger {
+  justify-self: start;
+}
+
+/* Run-summary tooltips share the chip-tooltip surface (bg-tertiary)
+   so they read as a layered overlay above the panel rather than the
+   default secondary surface. */
+.tooltip.run-summary-tooltip {
+  --tooltip-bg: var(--color-bg-tertiary);
+}

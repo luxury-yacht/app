@@ -45,37 +45,48 @@ const WINDOWS: WindowOption[] = [
     label: '1h',
     seconds: HOUR,
     tickInterval: 10 * 60,
-    tickLabel: (d) => d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }),
+    tickLabel: (d) =>
+      d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false }),
   },
   {
     label: '3h',
     seconds: 3 * HOUR,
     tickInterval: 30 * 60,
-    tickLabel: (d) => d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }),
+    tickLabel: (d) =>
+      d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false }),
   },
   {
     label: '6h',
     seconds: 6 * HOUR,
     tickInterval: HOUR,
-    tickLabel: (d) => d.toLocaleTimeString(undefined, { hour: 'numeric' }),
+    tickLabel: (d) =>
+      d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false }),
   },
   {
     label: '12h',
     seconds: 12 * HOUR,
     tickInterval: 2 * HOUR,
-    tickLabel: (d) => d.toLocaleTimeString(undefined, { hour: 'numeric' }),
+    tickLabel: (d) =>
+      d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false }),
   },
   {
     label: '1d',
     seconds: 24 * HOUR,
     tickInterval: 4 * HOUR,
-    tickLabel: (d) => d.toLocaleTimeString(undefined, { hour: 'numeric' }),
+    tickLabel: (d) =>
+      d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false }),
   },
   {
     label: '2d',
     seconds: 2 * DAY,
     tickInterval: 12 * HOUR,
-    tickLabel: (d) => d.toLocaleString(undefined, { weekday: 'short', hour: 'numeric' }),
+    tickLabel: (d) =>
+      d.toLocaleString(undefined, {
+        weekday: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      }),
   },
   {
     label: '1w',

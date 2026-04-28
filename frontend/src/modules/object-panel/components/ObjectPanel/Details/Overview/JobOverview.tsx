@@ -8,8 +8,8 @@ import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
 import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
+import Tooltip from '@shared/components/Tooltip';
 import { buildObjectReference } from '@shared/utils/objectIdentity';
-import { formatFullDate } from '@/utils/ageFormatter';
 import { JobTimeline } from './JobTimeline';
 import './shared/OverviewBlocks.css';
 import './JobOverview.css';
@@ -20,6 +20,19 @@ import './JobOverview.css';
 const normalizeTime = (t: unknown): string | undefined => {
   if (typeof t === 'string' && t.length > 0) return t;
   return undefined;
+};
+
+/** Format a timestamp as `YYYY-MM-DD HH:mm:ss` in local time. Used in
+ *  tooltips where unambiguous, sortable formatting matters more than
+ *  locale conventions. */
+const formatLocalDateTime = (iso: string): string => {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '-';
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  return (
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ` +
+    `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+  );
 };
 
 /** Format a positive duration in milliseconds as "2h 15m" / "15m" /
@@ -52,7 +65,7 @@ const TimestampValue: React.FC<{ value: unknown; missing?: string }> = ({
   if (isNaN(t)) return <>{missing}</>;
   const elapsed = Date.now() - t;
   const label = elapsed <= 0 ? 'just now' : `${formatDuration(elapsed)} ago`;
-  return <span title={formatFullDate(iso)}>{label}</span>;
+  return <span title={formatLocalDateTime(iso)}>{label}</span>;
 };
 
 /** Format a relative-time value. Future timestamps render as
@@ -105,17 +118,26 @@ const RunSummary: React.FC<RunSummaryProps> = ({
 
   return (
     <div className="run-summary">
-      {rows.map((r) => (
-        <div key={r.label} className="run-summary-row">
-          <span className="run-summary-label">{r.label}</span>
-          <span
-            className="run-summary-value"
-            title={r.iso ? formatFullDate(r.iso) : r.retention ? RETENTION_TOOLTIP : undefined}
-          >
-            {r.value}
-          </span>
-        </div>
-      ))}
+      {rows.map((r) => {
+        const tooltip = r.iso
+          ? formatLocalDateTime(r.iso)
+          : r.retention
+            ? RETENTION_TOOLTIP
+            : undefined;
+        const value = <span className="run-summary-value">{r.value}</span>;
+        return (
+          <div key={r.label} className="run-summary-row">
+            <span className="run-summary-label">{r.label}</span>
+            {tooltip ? (
+              <Tooltip content={tooltip} className="run-summary-tooltip">
+                {value}
+              </Tooltip>
+            ) : (
+              value
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 };
