@@ -92,7 +92,14 @@ describe('StorageOverview', () => {
       annotations: { owner: 'storage-admins' },
     });
 
-    expect(container.textContent).toContain('Bound');
+    // Status renders as a chip with the semantically-mapped variant.
+    const statusRow = getValueForLabel(container, 'Status');
+    expect(statusRow?.textContent).toBe('Bound');
+    expect(statusRow?.querySelector('.status-chip--healthy')).toBeTruthy();
+    // Access modes render as chips, not a comma-joined string.
+    const accessModes = getValueForLabel(container, 'Access Modes');
+    expect(accessModes?.textContent).toBe('ReadWriteOnce');
+    expect(accessModes?.querySelector('.status-chip--info')).toBeTruthy();
     const volumeLink = getLinkByText(container, 'pv-123');
     expect(volumeLink).not.toBeUndefined();
     act(() => {
@@ -139,6 +146,24 @@ describe('StorageOverview', () => {
     expect(container.textContent).toContain('Annotations');
     expect(container.textContent).toContain('owner:');
     expect(container.textContent).toContain('storage-admins');
+  });
+
+  it('surfaces the PVC data source when set (snapshot restore)', async () => {
+    await renderComponent({
+      kind: 'PersistentVolumeClaim',
+      name: 'restored',
+      namespace: 'storage',
+      status: 'Pending',
+      capacity: '20Gi',
+      accessModes: ['ReadWriteOnce'],
+      dataSource: { kind: 'VolumeSnapshot', name: 'nightly-2026-04-27' },
+    });
+
+    const dataSource = getValueForLabel(container, 'Data Source');
+    expect(dataSource?.textContent).toBe('VolumeSnapshot/nightly-2026-04-27');
+    // Pending → info chip on Status.
+    const statusRow = getValueForLabel(container, 'Status');
+    expect(statusRow?.querySelector('.status-chip--info')).toBeTruthy();
   });
 
   it('renders PV-specific fields including claim reference', async () => {

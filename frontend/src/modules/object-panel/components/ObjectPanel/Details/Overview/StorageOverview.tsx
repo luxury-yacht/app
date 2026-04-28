@@ -70,6 +70,28 @@ const pvStatusTooltip = (status?: string): string | undefined => {
   return undefined;
 };
 
+interface DataSourceLike {
+  kind: string;
+  name: string;
+}
+
+// PVC phase semantics — Bound = healthy, Pending = info (waiting for a
+// matching PV / dynamic provisioning), Lost = unhealthy (the bound PV is
+// gone — data-loss state).
+const pvcStatusVariant = (status?: string): StatusChipVariant => {
+  if (status === 'Bound') return 'healthy';
+  if (status === 'Lost') return 'unhealthy';
+  return 'info';
+};
+
+const pvcStatusTooltip = (status?: string): string | undefined => {
+  if (status === 'Lost')
+    return 'The volume that was bound to this claim is no longer accessible. Data may be lost.';
+  if (status === 'Pending')
+    return 'The claim is waiting for a matching PersistentVolume or for dynamic provisioning.';
+  return undefined;
+};
+
 // Kubernetes access mode semantics. ReadWriteOncePod was added in 1.22 and
 // is stricter than ReadWriteOnce (single pod cluster-wide vs. single node).
 const accessModeTooltip = (mode: string): string | undefined => {
@@ -102,6 +124,7 @@ interface StorageOverviewProps {
   storageClass?: string;
   volumeMode?: string;
   mountedBy?: string[];
+  dataSource?: DataSourceLike;
   // PV fields
   claimRef?: any;
   reclaimPolicy?: string;
@@ -134,13 +157,25 @@ export const StorageOverview: React.FC<StorageOverviewProps> = (props) => {
       {/* Use composed component for header */}
       <ResourceHeader kind={kind || ''} name={name || ''} namespace={namespace} age={age || ''} />
 
-      {/* PVs render their own chip-styled status row inline (with semantic
-          variant) — skip the shared ResourceStatus for that kind. */}
-      {status && normalizedKind !== 'persistentvolume' && <ResourceStatus status={status} />}
+      {/* PVs and PVCs render their own chip-styled status row inline (with
+          semantic variant) — skip the shared ResourceStatus for those kinds. */}
+      {status &&
+        normalizedKind !== 'persistentvolume' &&
+        normalizedKind !== 'persistentvolumeclaim' && <ResourceStatus status={status} />}
 
       {/* PVC-specific fields */}
       {normalizedKind === 'persistentvolumeclaim' && (
         <>
+          {status && (
+            <OverviewItem
+              label="Status"
+              value={
+                <StatusChip variant={pvcStatusVariant(status)} tooltip={pvcStatusTooltip(status)}>
+                  {status}
+                </StatusChip>
+              }
+            />
+          )}
           <OverviewItem
             label="Volume"
             value={
@@ -161,7 +196,20 @@ export const StorageOverview: React.FC<StorageOverviewProps> = (props) => {
             }
           />
           <OverviewItem label="Capacity" value={props.capacity} />
-          <OverviewItem label="Access Modes" value={props.accessModes?.join(', ')} />
+          {props.accessModes && props.accessModes.length > 0 && (
+            <OverviewItem
+              label="Access Modes"
+              value={
+                <div className="overview-condition-list">
+                  {props.accessModes.map((mode) => (
+                    <StatusChip key={mode} variant="info" tooltip={accessModeTooltip(mode)}>
+                      {mode}
+                    </StatusChip>
+                  ))}
+                </div>
+              }
+            />
+          )}
           <OverviewItem
             label="Storage Class"
             value={
@@ -182,6 +230,33 @@ export const StorageOverview: React.FC<StorageOverviewProps> = (props) => {
             }
           />
           <OverviewItem label="Volume Mode" value={props.volumeMode} />
+          {/* Data Source — set when the PVC was created from a clone
+              (kind=PersistentVolumeClaim) or a snapshot restore
+              (kind=VolumeSnapshot). Linkable when we can resolve the kind. */}
+          {props.dataSource &&
+            (() => {
+              const ds = props.dataSource;
+              const label = `${ds.kind}/${ds.name}`;
+              let ref;
+              try {
+                ref = buildObjectReference({
+                  kind: ds.kind.toLowerCase(),
+                  name: ds.name,
+                  // PVC clones are namespaced (same namespace as this PVC);
+                  // VolumeSnapshots are also namespaced.
+                  namespace,
+                  ...clusterMeta,
+                });
+              } catch {
+                ref = null;
+              }
+              return (
+                <OverviewItem
+                  label="Data Source"
+                  value={ref ? <ObjectPanelLink objectRef={ref}>{label}</ObjectPanelLink> : label}
+                />
+              );
+            })()}
           {props.mountedBy && props.mountedBy.length > 0 && (
             <OverviewItem
               label="Mounted By"
@@ -222,6 +297,24 @@ export const StorageOverview: React.FC<StorageOverviewProps> = (props) => {
                 <StatusChip variant={pvStatusVariant(status)} tooltip={pvStatusTooltip(status)}>
                   {status}
                 </StatusChip>
+              }
+            />
+          )}
+          {props.claimRef && (
+            <OverviewItem
+              label="Claim"
+              value={
+                <ObjectPanelLink
+                  objectRef={buildObjectReference({
+                    kind: 'persistentvolumeclaim',
+                    name: props.claimRef.name,
+                    namespace: props.claimRef.namespace,
+                    ...clusterMeta,
+                  })}
+                  title={`Click to view claim: ${props.claimRef.namespace}/${props.claimRef.name}`}
+                >
+                  {`${props.claimRef.namespace}/${props.claimRef.name}`}
+                </ObjectPanelLink>
               }
             />
           )}
@@ -271,24 +364,6 @@ export const StorageOverview: React.FC<StorageOverviewProps> = (props) => {
             }
           />
           <OverviewItem label="Volume Mode" value={props.volumeMode} />
-          {props.claimRef && (
-            <OverviewItem
-              label="Claim"
-              value={
-                <ObjectPanelLink
-                  objectRef={buildObjectReference({
-                    kind: 'persistentvolumeclaim',
-                    name: props.claimRef.name,
-                    namespace: props.claimRef.namespace,
-                    ...clusterMeta,
-                  })}
-                  title={`Click to view claim: ${props.claimRef.namespace}/${props.claimRef.name}`}
-                >
-                  {`${props.claimRef.namespace}/${props.claimRef.name}`}
-                </ObjectPanelLink>
-              }
-            />
-          )}
           {/* Volume Source — what does this PV actually point to. The type
               (e.g. "CSI", "NFS", "HostPath") leads as a chip, with provider-
               specific key/value details rendered beneath when present. */}

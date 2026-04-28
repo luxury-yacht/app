@@ -436,6 +436,7 @@ export function useOverviewData(params: UseOverviewDataParams): OverviewData | n
         storageClass: pvcDetails.storageClass,
         volumeMode: pvcDetails.volumeMode,
         mountedBy: pvcDetails.mountedBy,
+        dataSource: pvcDetails.dataSource,
         // Surface metadata to match the ConfigMap/Secret layout.
         labels: pvcDetails.labels,
         annotations: pvcDetails.annotations,
