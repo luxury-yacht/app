@@ -18,6 +18,11 @@ vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
   }),
 }));
 
+vi.mock('@shared/components/Tooltip', () => ({
+  __esModule: true,
+  default: ({ children }: any) => <>{children}</>,
+}));
+
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
   ResourceHeader: (props: any) => (
     <div data-testid="resource-header">
@@ -82,7 +87,8 @@ describe('WorkloadOverview', () => {
       namespace: 'default',
       age: '5m',
       ready: '1/3',
-      replicas: '3',
+      replicas: '3/3',
+      desiredReplicas: 3,
       upToDate: 2,
       available: 1,
       paused: true,
@@ -97,15 +103,20 @@ describe('WorkloadOverview', () => {
       selector: { app: 'frontend' },
     });
 
-    expect(container.textContent).toContain('Replicas');
-    expect(container.textContent).toContain('3');
+    // Pod-state bar replaces the Replicas / Up-to-date / Available rows.
+    expect(container.textContent).toContain('Pods');
+    expect(container.textContent).toContain('1 of 3 available');
+    // Up-to-date row only renders when upToDate < created — here 2 < 3.
     expect(container.textContent).toContain('Up-to-date');
-    expect(container.textContent).toContain('Available');
+    expect(container.textContent).toContain('2 of 3');
     expect(container.textContent).toContain('Paused');
     expect(container.textContent).toContain('Rollout Status');
     expect(container.textContent).toContain('Degraded');
     expect(container.textContent).toContain('Progress deadline exceeded');
-    expect(container.textContent).toContain('Rolling (max surge: 50%, max unavailable: 25%)');
+    // Strategy renders as a chip + mono params now.
+    expect(container.textContent).toContain('RollingUpdate');
+    expect(container.textContent).toContain('surge 50%');
+    expect(container.textContent).toContain('unavailable 25%');
     expect(container.textContent).toContain('Min Ready');
     expect(container.textContent).toContain('30s');
     expect(container.textContent).toContain('Deadline');
@@ -128,41 +139,48 @@ describe('WorkloadOverview', () => {
     expect(getElementByText('Message')).toBeUndefined();
   });
 
-  it('renders daemonset fields and highlights misscheduled pods', async () => {
+  it('renders daemonset pod-state bar and highlights misscheduled pods', async () => {
     await renderComponent({
       kind: 'DaemonSet',
       name: 'logs-agent',
       age: '1d',
+      ready: '8/9',
       desired: 10,
       current: 9,
+      available: 8,
       updateStrategy: 'RollingUpdate',
       maxUnavailable: '10%',
       numberMisscheduled: 2,
     });
 
-    expect(container.textContent).toContain('Desired');
-    expect(container.textContent).toContain('10');
-    expect(container.textContent).toContain('Current');
-    expect(container.textContent).toContain('9');
-    expect(container.textContent).toContain('Rolling (max unavailable: 10%)');
+    // Pod-state bar replaces Desired/Current rows.
+    expect(container.textContent).toContain('Pods');
+    expect(container.textContent).toContain('8 of 10 available');
+    // 1 unscheduled (10 desired - 9 current).
+    expect(container.textContent).toContain('1 unscheduled');
+    // DaemonSet strategy renders as chip + mono params now.
+    expect(container.textContent).toContain('RollingUpdate');
+    expect(container.textContent).toContain('max unavailable 10%');
     expect(container.textContent).toContain('Misscheduled');
     expect(container.textContent).toContain('2');
   });
 
-  it('renders replicaset replica and availability details', async () => {
+  it('renders replicaset pod-state bar and min-ready', async () => {
     await renderComponent({
       kind: 'ReplicaSet',
       name: 'web-rs',
       age: '45m',
+      ready: '2/2',
       replicas: '2/3',
+      desiredReplicas: 3,
       available: 2,
       minReadySeconds: 10,
     });
 
-    expect(container.textContent).toContain('Replicas');
-    expect(container.textContent).toContain('2/3');
-    expect(container.textContent).toContain('Available');
-    expect(container.textContent).toContain('2');
+    // Pod-state bar replaces the Replicas/Available rows.
+    expect(container.textContent).toContain('Pods');
+    expect(container.textContent).toContain('2 of 3 available');
+    expect(container.textContent).toContain('1 unscheduled');
     expect(container.textContent).toContain('Min Ready');
     expect(container.textContent).toContain('10s');
   });

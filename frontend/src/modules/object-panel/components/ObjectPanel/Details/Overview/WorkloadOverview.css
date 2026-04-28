@@ -1,0 +1,61 @@
+/* WorkloadOverview-local styles
+ *
+ * Pod-state bar: replaces the four-redundant-numbers pattern (replicas /
+ * up-to-date / ready / available) with a single segmented bar showing the
+ * pod-population pipeline at a glance.
+ *
+ * Segments stack horizontally, sized by `flex` proportional to count:
+ *   - available   (green)  — ready + minReadySeconds elapsed
+ *   - ready       (amber)  — ready but not yet available
+ *   - progressing (accent) — created but not yet ready
+ *   - unscheduled (empty)  — falls through to the bar's track bg
+ *
+ * In the steady-state case the bar is solid green; drift is immediately
+ * visible as colored segments or empty space at the right. */
+
+.podstate-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.podstate-bar {
+  display: flex;
+  width: 100%;
+  max-width: 300px;
+  height: 10px;
+  border-radius: var(--border-radius-md);
+  background: var(--color-bg-tertiary);
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+}
+
+.podstate-bar-seg {
+  height: 100%;
+}
+
+.podstate-bar-available {
+  background: var(--color-success);
+}
+
+.podstate-bar-ready {
+  background: var(--color-warning);
+}
+
+.podstate-bar-progressing {
+  background: var(--color-accent);
+}
+
+/* `unscheduled` is the absence of a colored segment — the gap reveals the
+   bar's track background. We don't define a fill class for it. */
+
+.podstate-caption {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+.podstate-caption-drift {
+  color: var(--color-warning);
+  margin-left: 0.5rem;
+}
