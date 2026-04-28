@@ -58,10 +58,8 @@ describe('AppHeader', () => {
   });
 
   it('renders header controls in the expected tab order', () => {
-    const onAboutClick = vi.fn();
-
     act(() => {
-      root.render(<AppHeader contentTitle="cluster: dev" onAboutClick={onAboutClick} />);
+      root.render(<AppHeader contentTitle="cluster: dev" />);
     });
 
     const focusables = Array.from(
@@ -72,6 +70,6 @@ describe('AppHeader', () => {
 
     expect(
       focusables.map((element) => element.getAttribute('aria-label') || element.textContent)
-    ).toEqual(['About Luxury Yacht', 'Kubeconfig', 'Favorites', 'Settings']);
+    ).toEqual(['Kubeconfig', 'Favorites', 'Settings']);
   });
 });

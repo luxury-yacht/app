@@ -20,6 +20,21 @@ vi.mock('@shared/components/kubernetes/ResourceStatus', () => ({
   ResourceStatus: (props: any) => <div data-testid="resource-status">{props.status}</div>,
 }));
 
+vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
+  useObjectPanel: () => ({
+    objectData: { clusterId: 'test-cluster', clusterName: 'test' },
+  }),
+}));
+
+vi.mock('@shared/components/ObjectPanelLink', () => ({
+  ObjectPanelLink: ({ children }: any) => <a href="#">{children}</a>,
+}));
+
+vi.mock('@shared/components/Tooltip', () => ({
+  __esModule: true,
+  default: ({ children }: any) => <>{children}</>,
+}));
+
 const getValueForLabel = (container: HTMLElement, label: string) => {
   const labelElement = Array.from(container.querySelectorAll<HTMLElement>('.overview-label')).find(
     (el) => el.textContent?.trim() === label
@@ -278,17 +293,41 @@ describe('ClusterResourceOverview', () => {
       name: 'nginx',
       controller: 'k8s.io/ingress-nginx',
       isDefault: true,
+      ingressesCount: 12,
       labels: { app: 'ingress' },
       annotations: { owner: 'platform' },
     });
 
     expect(getValueForLabel(container, 'Controller')?.textContent).toBe('k8s.io/ingress-nginx');
-    expect(getValueForLabel(container, 'Default Class')?.textContent).toBe('Yes');
+    const defaultRow = getValueForLabel(container, 'Default');
+    expect(defaultRow?.textContent).toBe('True');
+    expect(defaultRow?.querySelector('.status-chip--healthy')).toBeTruthy();
+    expect(getValueForLabel(container, 'Used by')?.textContent).toBe('12 Ingresses');
     expect(container.textContent).toContain('Labels');
     expect(container.textContent).toContain('app:');
     expect(container.textContent).toContain('ingress');
     expect(container.textContent).toContain('Annotations');
     expect(container.textContent).toContain('owner:');
     expect(container.textContent).toContain('platform');
+  });
+
+  it('renders the IngressClass parameters reference', async () => {
+    await renderComponent({
+      kind: 'IngressClass',
+      name: 'nginx',
+      controller: 'k8s.io/ingress-nginx',
+      isDefault: false,
+      parameters: {
+        kind: 'IngressParameters',
+        name: 'nginx-config',
+        scope: 'Cluster',
+      },
+    });
+
+    // CRD-backed parameter kinds can't build a strict object ref (no
+    // apiVersion on the wire), so they render as plain text rather than as
+    // a link.
+    const params = getValueForLabel(container, 'Parameters');
+    expect(params?.textContent).toBe('IngressParameters/nginx-config');
   });
 });

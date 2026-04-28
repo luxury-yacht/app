@@ -8,7 +8,12 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+
+vi.mock('@shared/components/Tooltip', () => ({
+  __esModule: true,
+  default: ({ children }: any) => <>{children}</>,
+}));
 
 import { ResourceMetadata } from './ResourceMetadata';
 

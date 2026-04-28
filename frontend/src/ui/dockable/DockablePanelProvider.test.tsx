@@ -14,6 +14,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { DockablePanelProvider, useDockablePanelContext } from './DockablePanelProvider';
 import { DockableTabBar } from './DockableTabBar';
 import { useDockablePanelEmptySpaceDropTarget } from './DockablePanelContentArea';
+import { clearPanelState } from './useDockablePanelState';
 import {
   TabDragProvider,
   TAB_DRAG_DATA_TYPE,
@@ -516,6 +517,52 @@ describe('DockablePanelProvider', () => {
 
     expect(contextRef.current!.tabGroups.floating).toHaveLength(1);
     expect(contextRef.current!.tabGroups.floating[0].tabs).toEqual(['obj-a', 'obj-b']);
+
+    await unmount();
+  });
+
+  it('moves focus to another group when the focused group is removed directly from the store', async () => {
+    const contextRef: { current: ReturnType<typeof useDockablePanelContext> | null } = {
+      current: null,
+    };
+
+    const Consumer: React.FC = () => {
+      contextRef.current = useDockablePanelContext();
+      return null;
+    };
+
+    const { unmount } = await render(
+      <DockablePanelProvider>
+        <Consumer />
+      </DockablePanelProvider>
+    );
+
+    await act(async () => {
+      contextRef.current!.registerPanel({
+        panelId: 'right-panel',
+        title: 'Right Panel',
+        position: 'right',
+      });
+      contextRef.current!.syncPanelGroup('right-panel', 'right');
+      contextRef.current!.registerPanel({
+        panelId: 'floating-panel',
+        title: 'Floating Panel',
+        position: 'floating',
+      });
+      contextRef.current!.syncPanelGroup('floating-panel', 'floating');
+      await Promise.resolve();
+    });
+
+    expect(contextRef.current!.tabGroups.floating[0].groupId).toBe('floating-1');
+
+    await act(async () => {
+      contextRef.current!.setLastFocusedGroupKey('floating-1');
+      clearPanelState('floating-panel');
+      await Promise.resolve();
+    });
+
+    expect(contextRef.current!.tabGroups.floating).toHaveLength(0);
+    expect(contextRef.current!.lastFocusedGroupKey).toBe('right');
 
     await unmount();
   });

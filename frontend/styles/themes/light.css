@@ -218,15 +218,15 @@
 
      Layout: slots 1..17 walk the wheel, 18..20 are shoulder hues, 21..24
      are earthy neutrals. */
-  --hash-color-1:  #dc2626; /* red */
-  --hash-color-2:  #ea580c; /* orange */
-  --hash-color-3:  #d97706; /* amber */
-  --hash-color-4:  #ca8a04; /* yellow */
-  --hash-color-5:  #65a30d; /* lime */
-  --hash-color-6:  #16a34a; /* green */
-  --hash-color-7:  #059669; /* emerald */
-  --hash-color-8:  #0d9488; /* teal */
-  --hash-color-9:  #0891b2; /* cyan */
+  --hash-color-1: #dc2626; /* red */
+  --hash-color-2: #ea580c; /* orange */
+  --hash-color-3: #d97706; /* amber */
+  --hash-color-4: #ca8a04; /* yellow */
+  --hash-color-5: #65a30d; /* lime */
+  --hash-color-6: #16a34a; /* green */
+  --hash-color-7: #059669; /* emerald */
+  --hash-color-8: #0d9488; /* teal */
+  --hash-color-9: #0891b2; /* cyan */
   --hash-color-10: #0284c7; /* sky */
   --hash-color-11: #2563eb; /* blue */
   --hash-color-12: #4f46e5; /* indigo */
@@ -245,7 +245,7 @@
   --hash-color-fallback: var(--color-base-500);
   /* Light theme text is already saturated against the white bg; no boost
      applied. The vars exist so badges.css uses one formula across themes. */
-  --hash-text-l-shift: 0;
+  --hash-text-l-shift: -0.2;
   --hash-text-c-mult: 1;
 
   /* Dropdown */

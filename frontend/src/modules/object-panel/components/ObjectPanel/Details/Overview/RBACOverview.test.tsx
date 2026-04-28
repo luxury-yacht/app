@@ -16,6 +16,21 @@ vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
   ),
 }));
 
+vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
+  useObjectPanel: () => ({
+    objectData: { clusterId: 'test-cluster', clusterName: 'test' },
+  }),
+}));
+
+vi.mock('@shared/components/ObjectPanelLink', () => ({
+  ObjectPanelLink: ({ children }: any) => <span>{children}</span>,
+}));
+
+vi.mock('@shared/components/Tooltip', () => ({
+  __esModule: true,
+  default: ({ children }: any) => <>{children}</>,
+}));
+
 const renderWithProps = async (
   root: ReactDOM.Root,
   props: React.ComponentProps<typeof RBACOverview>
@@ -43,26 +58,16 @@ describe('RBACOverview', () => {
     container.remove();
   });
 
-  it('renders rule details for cluster roles', async () => {
+  it('renders metadata and aggregation/used-by sections for cluster roles', async () => {
     await renderWithProps(root, {
       kind: 'ClusterRole',
       name: 'admin',
       labels: { team: 'platform' },
       annotations: { owner: 'rbac-admins' },
-      policyRules: [
-        {
-          apiGroups: ['', 'apps'],
-          resources: ['deployments', 'pods'],
-          verbs: ['get', 'list', '*'],
-          nonResourceURLs: ['/healthz'],
-        },
-      ],
+      // Rules render in DetailsTabRBACRules now (a sibling section);
+      // RBACOverview only handles header/aggregation/used-by/metadata.
     });
 
-    expect(container.textContent).toContain('Rules');
-    expect(container.textContent).toContain('deployments');
-    expect(container.textContent).toContain('* (all)');
-    expect(container.textContent).toContain('/healthz');
     expect(container.textContent).toContain('Labels');
     expect(container.textContent).toContain('team:');
     expect(container.textContent).toContain('platform');
@@ -87,7 +92,7 @@ describe('RBACOverview', () => {
     expect(container.textContent).toContain('rbac-admins');
   });
 
-  it('renders binding role references and subjects', async () => {
+  it('renders binding role reference and inline subjects list', async () => {
     await renderWithProps(root, {
       kind: 'RoleBinding',
       name: 'bind-reader',
@@ -101,15 +106,32 @@ describe('RBACOverview', () => {
     });
 
     expect(container.textContent).toContain('Role Reference');
-    expect(container.textContent).toContain('ClusterRole: read-only');
-    expect(container.textContent).toContain('ServiceAccount: default/viewer');
-    expect(container.textContent).toContain('User: alice');
+    expect(container.textContent).toContain('ClusterRole/read-only');
+    expect(container.textContent).toContain('Subjects');
+    expect(container.textContent).toContain('ServiceAccount');
+    expect(container.textContent).toContain('default/viewer');
+    expect(container.textContent).toContain('User');
+    expect(container.textContent).toContain('alice');
     expect(container.textContent).toContain('Labels');
     expect(container.textContent).toContain('env:');
     expect(container.textContent).toContain('prod');
     expect(container.textContent).toContain('Annotations');
     expect(container.textContent).toContain('managedBy:');
     expect(container.textContent).toContain('luxury-yacht');
+  });
+
+  it('flags ServiceAccount subjects in system namespaces with a warning chip', async () => {
+    await renderWithProps(root, {
+      kind: 'ClusterRoleBinding',
+      name: 'bind-system',
+      roleRef: { kind: 'ClusterRole', name: 'cluster-admin' },
+      subjects: [{ kind: 'ServiceAccount', namespace: 'kube-system', name: 'controller' }],
+    });
+
+    const warningChip = Array.from(
+      container.querySelectorAll<HTMLElement>('.status-chip--warning')
+    ).find((el) => el.textContent?.trim() === 'system');
+    expect(warningChip).toBeTruthy();
   });
 
   it('renders cluster role binding metadata', async () => {
@@ -119,12 +141,10 @@ describe('RBACOverview', () => {
       labels: { env: 'prod' },
       annotations: { owner: 'security' },
       roleRef: { kind: 'ClusterRole', name: 'admin' },
-      subjects: [{ kind: 'Group', name: 'admins' }],
     });
 
     expect(container.textContent).toContain('Role Reference');
-    expect(container.textContent).toContain('ClusterRole: admin');
-    expect(container.textContent).toContain('Group: admins');
+    expect(container.textContent).toContain('ClusterRole/admin');
     expect(container.textContent).toContain('Labels');
     expect(container.textContent).toContain('env:');
     expect(container.textContent).toContain('prod');

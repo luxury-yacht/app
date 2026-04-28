@@ -1,5 +1,7 @@
 # TODO
 
+- Show pods as cards instead of an embedded gridtable in node pods view
+
 ## Issues
 
 - Issue 40 Support object creation

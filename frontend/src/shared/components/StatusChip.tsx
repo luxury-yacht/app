@@ -39,5 +39,9 @@ export const StatusChip: React.FC<StatusChipProps> = ({
   if (!tooltip) {
     return chip;
   }
-  return <Tooltip content={tooltip}>{chip}</Tooltip>;
+  return (
+    <Tooltip content={tooltip} className="status-chip-tooltip">
+      {chip}
+    </Tooltip>
+  );
 };

@@ -59,7 +59,7 @@ func (s *Service) fetchSinglePodFull(namespace, name string) (*types.PodDetailIn
 	// Add formatted fields
 	details.Conditions = formatPodConditions(pod.Status.Conditions)
 	details.Volumes = formatPodVolumes(pod.Spec.Volumes)
-	details.Tolerations = formatPodTolerations(pod.Spec.Tolerations)
+	details.Tolerations = FormatPodTolerations(pod.Spec.Tolerations)
 	details.Affinity = buildAffinityMap(pod.Spec.Affinity)
 	details.SecurityContext = buildSecurityContextMap(pod.Spec.SecurityContext)
 
@@ -585,8 +585,8 @@ func formatPodVolumes(volumes []corev1.Volume) []string {
 	return result
 }
 
-// formatPodTolerations formats pod tolerations for display
-func formatPodTolerations(tolerations []corev1.Toleration) []string {
+// FormatPodTolerations formats pod tolerations for display
+func FormatPodTolerations(tolerations []corev1.Toleration) []string {
 	result := make([]string, 0, len(tolerations))
 	for _, tol := range tolerations {
 		tolStr := ""

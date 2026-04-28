@@ -45,15 +45,17 @@ describe('DetailsTabData', () => {
     writeTextMock.mockReset();
   });
 
-  it('renders config map data with counts', async () => {
+  it('renders config map data and binary data sections', async () => {
     const { container, cleanup } = await render(
       <DataSection data={{ key1: 'value1', key2: 'value2' }} binaryData={{ file: 'YmFzZTY0' }} />
     );
 
-    expect(container.textContent).toContain('Data(3)');
+    expect(container.textContent).toContain('Data');
     expect(container.textContent).toContain('key1');
     expect(container.textContent).toContain('Binary Data');
     expect(container.textContent).toContain('file');
+    // Header no longer renders an aggregate count.
+    expect(container.textContent).not.toMatch(/Data\(\d+\)/);
     cleanup();
   });
 

@@ -8,6 +8,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674
 	github.com/magefile/mage v1.17.2
+	github.com/robfig/cron/v3 v3.0.1
 	github.com/stretchr/testify v1.11.1
 	github.com/wailsapp/wails/v2 v2.12.0
 	golang.org/x/sync v0.20.0
@@ -145,7 +146,7 @@ require (
 	k8s.io/apiserver v0.36.0 // indirect
 	k8s.io/cli-runtime v0.36.0 // indirect
 	k8s.io/component-base v0.36.0 // indirect
-	k8s.io/kube-openapi v0.0.0-20260414162039-ec9c827d403f // indirect
+	k8s.io/kube-openapi v0.0.0-20260427204847-8949caaa1199 // indirect
 	k8s.io/kubectl v0.36.0 // indirect
 	oras.land/oras-go/v2 v2.6.0 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect

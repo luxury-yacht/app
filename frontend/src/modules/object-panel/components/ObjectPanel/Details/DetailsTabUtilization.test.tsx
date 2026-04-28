@@ -12,6 +12,11 @@ vi.mock('@shared/components/ResourceBar', () => ({
   default: vi.fn(() => <div data-testid="resource-bar" />),
 }));
 
+vi.mock('@shared/components/Tooltip', () => ({
+  __esModule: true,
+  default: ({ children }: any) => <>{children}</>,
+}));
+
 describe('DetailsTabUtilization', () => {
   const render = async (ui: React.ReactElement) => {
     const container = document.createElement('div');
@@ -51,7 +56,7 @@ describe('DetailsTabUtilization', () => {
       <Utilization cpu={{ usage: '2', allocatable: '4' }} mode="nodeMetrics" />
     );
 
-    expect(container.textContent).toContain('Allocatable');
+    expect(container.textContent).toContain('allocatable');
     cleanup();
   });
 
@@ -72,7 +77,8 @@ describe('DetailsTabUtilization', () => {
       <Utilization cpu={{ usage: '400m', request: '200m', limit: '800m' }} podCount={5} />
     );
     expect(container.textContent).toContain('5 pods');
-    expect(container.textContent).not.toContain('/');
+    // The "X/Y pods" form should not appear when readyPodCount is absent.
+    expect(container.textContent).not.toMatch(/\d+\/\d+\s+pods/);
     cleanup();
   });
 

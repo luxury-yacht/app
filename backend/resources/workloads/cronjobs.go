@@ -106,15 +106,86 @@ func buildCronJobDetails(cronJob *batchv1.CronJob, jobs *batchv1.JobList, podInf
 		Containers:              describeContainers(cronJob.Spec.JobTemplate.Spec.Template.Spec.Containers),
 	}
 
-	if !details.Suspend && details.LastScheduleTime != nil {
-		details.NextScheduleTime, details.TimeUntilNextSchedule = calculateNextSchedule(cronJob.Spec.Schedule, details.LastScheduleTime.Time)
+	if !details.Suspend {
+		details.NextScheduleTime, details.TimeUntilNextSchedule = calculateNextSchedule(cronJob.Spec.Schedule, cronJob.Spec.TimeZone)
 	}
+
+	details.LastManualTime, details.LastFailureTime = computeRunMarkers(cronJob, jobs)
 
 	details.Details = summarizeCronJob(details)
 	details.Pods = podInfos
 	details.PodMetricsSummary = podSummary
 	details.Jobs = jobInfos
 	return details
+}
+
+// computeRunMarkers walks the owned Jobs to find the most recent
+// manually-triggered run and the most recent failed run. Both values
+// are bounded by the CronJob's history retention — once a Job record
+// is GC'd we can no longer report on it, so a nil here means either
+// "never" or "older than retention."
+func computeRunMarkers(cronJob *batchv1.CronJob, jobs *batchv1.JobList) (*metav1.Time, *metav1.Time) {
+	if jobs == nil {
+		return nil, nil
+	}
+	var lastManual, lastFailure *metav1.Time
+	for i := range jobs.Items {
+		job := &jobs.Items[i]
+		if !ownedByCronJob(job.OwnerReferences, cronJob.UID) {
+			continue
+		}
+
+		// Manually-triggered jobs are tagged by the CronJob controller
+		// with `cronjob.kubernetes.io/instantiate: manual`.
+		if job.Annotations["cronjob.kubernetes.io/instantiate"] == "manual" {
+			start := job.Status.StartTime
+			if start == nil {
+				t := job.CreationTimestamp
+				start = &t
+			}
+			if lastManual == nil || start.After(lastManual.Time) {
+				lastManual = start
+			}
+		}
+
+		// A Job is "failed" when its backoffLimit is exhausted. Use
+		// CompletionTime when present, otherwise the failure-condition
+		// timestamp via Conditions, otherwise the Job's StartTime as
+		// a coarse fallback.
+		if isFailedJob(job) {
+			marker := failureTimestamp(job)
+			if marker != nil && (lastFailure == nil || marker.After(lastFailure.Time)) {
+				lastFailure = marker
+			}
+		}
+	}
+	return lastManual, lastFailure
+}
+
+func isFailedJob(job *batchv1.Job) bool {
+	backoffLimit := defaultInt32(job.Spec.BackoffLimit, 6)
+	if job.Status.Failed > 0 && backoffLimit > 0 && job.Status.Failed >= backoffLimit {
+		return true
+	}
+	for _, cond := range job.Status.Conditions {
+		if cond.Type == batchv1.JobFailed && cond.Status == corev1.ConditionTrue {
+			return true
+		}
+	}
+	return false
+}
+
+func failureTimestamp(job *batchv1.Job) *metav1.Time {
+	for _, cond := range job.Status.Conditions {
+		if cond.Type == batchv1.JobFailed && cond.Status == corev1.ConditionTrue {
+			t := cond.LastTransitionTime
+			return &t
+		}
+	}
+	if job.Status.CompletionTime != nil {
+		return job.Status.CompletionTime
+	}
+	return job.Status.StartTime
 }
 
 func describeActiveJobs(cronJob *batchv1.CronJob, jobs *batchv1.JobList) []restypes.JobReference {
@@ -240,12 +311,17 @@ func summarizeJobSimple(job *batchv1.Job) restypes.JobSimpleInfo {
 	}
 
 	// Duration: elapsed time from start to completion, or start to now if still running.
+	// Also surface in seconds so the frontend can plot bars without parsing
+	// the human-readable string back into a number.
 	if info.StartTime != nil {
 		if job.Status.CompletionTime != nil {
+			info.CompletionTime = job.Status.CompletionTime
 			duration := job.Status.CompletionTime.Time.Sub(info.StartTime.Time)
 			info.Duration = common.FormatAge(time.Now().Add(-duration))
+			info.DurationSeconds = int64(duration.Seconds())
 		} else {
 			info.Duration = common.FormatAge(info.StartTime.Time)
+			info.DurationSeconds = int64(time.Since(info.StartTime.Time).Seconds())
 		}
 	}
 

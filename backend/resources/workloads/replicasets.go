@@ -87,6 +87,7 @@ func (s *ReplicaSetService) buildReplicaSetDetails(
 		Annotations:        replicaSet.Annotations,
 		Conditions:         describeReplicaSetConditions(replicaSet),
 		Containers:         describeContainers(replicaSet.Spec.Template.Spec.Containers),
+		InitContainers:     describeContainers(replicaSet.Spec.Template.Spec.InitContainers),
 		Pods:               podInfos,
 		PodMetricsSummary:  podSummary,
 		ObservedGeneration: replicaSet.Status.ObservedGeneration,

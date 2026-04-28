@@ -18,6 +18,11 @@ vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
   }),
 }));
 
+vi.mock('@shared/components/Tooltip', () => ({
+  __esModule: true,
+  default: ({ children }: any) => <>{children}</>,
+}));
+
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
   ResourceHeader: (props: any) => (
     <div data-testid="resource-header">
@@ -87,7 +92,14 @@ describe('StorageOverview', () => {
       annotations: { owner: 'storage-admins' },
     });
 
-    expect(container.textContent).toContain('Bound');
+    // Status renders as a chip with the semantically-mapped variant.
+    const statusRow = getValueForLabel(container, 'Status');
+    expect(statusRow?.textContent).toBe('Bound');
+    expect(statusRow?.querySelector('.status-chip--healthy')).toBeTruthy();
+    // Access modes render as chips, not a comma-joined string.
+    const accessModes = getValueForLabel(container, 'Access Modes');
+    expect(accessModes?.textContent).toBe('ReadWriteOnce');
+    expect(accessModes?.querySelector('.status-chip--info')).toBeTruthy();
     const volumeLink = getLinkByText(container, 'pv-123');
     expect(volumeLink).not.toBeUndefined();
     act(() => {
@@ -136,6 +148,24 @@ describe('StorageOverview', () => {
     expect(container.textContent).toContain('storage-admins');
   });
 
+  it('surfaces the PVC data source when set (snapshot restore)', async () => {
+    await renderComponent({
+      kind: 'PersistentVolumeClaim',
+      name: 'restored',
+      namespace: 'storage',
+      status: 'Pending',
+      capacity: '20Gi',
+      accessModes: ['ReadWriteOnce'],
+      dataSource: { kind: 'VolumeSnapshot', name: 'nightly-2026-04-27' },
+    });
+
+    const dataSource = getValueForLabel(container, 'Data Source');
+    expect(dataSource?.textContent).toBe('VolumeSnapshot/nightly-2026-04-27');
+    // Pending → info chip on Status.
+    const statusRow = getValueForLabel(container, 'Status');
+    expect(statusRow?.querySelector('.status-chip--info')).toBeTruthy();
+  });
+
   it('renders PV-specific fields including claim reference', async () => {
     await renderComponent({
       kind: 'PersistentVolume',
@@ -150,7 +180,13 @@ describe('StorageOverview', () => {
       annotations: { owner: 'storage-team' },
     });
 
-    expect(getValueForLabel(container, 'Reclaim Policy')?.textContent).toBe('Retain');
+    const reclaim = getValueForLabel(container, 'Reclaim Policy');
+    expect(reclaim?.textContent).toBe('Retain');
+    expect(reclaim?.querySelector('.status-chip--info')).toBeTruthy();
+    // Access modes render as chips, not a comma-joined string.
+    const accessModes = getValueForLabel(container, 'Access Modes');
+    expect(accessModes?.textContent).toBe('ReadWriteMany');
+    expect(accessModes?.querySelector('.status-chip--info')).toBeTruthy();
     const storageClassLink = getLinkByText(container, 'nfs');
     expect(storageClassLink).not.toBeUndefined();
     act(() => {
@@ -186,6 +222,46 @@ describe('StorageOverview', () => {
     expect(container.textContent).toContain('storage-team');
   });
 
+  it('shows the PV status chip and volume source for a CSI-backed PV', async () => {
+    await renderComponent({
+      kind: 'PersistentVolume',
+      name: 'pv-csi',
+      status: 'Bound',
+      capacity: '100Gi',
+      accessModes: ['ReadWriteOnce'],
+      reclaimPolicy: 'Delete',
+      volumeMode: 'Filesystem',
+      volumeSource: {
+        type: 'CSI',
+        details: {
+          driver: 'ebs.csi.aws.com',
+          volumeHandle: 'vol-0a1b2c3d',
+          fsType: 'ext4',
+        },
+      },
+      mountOptions: ['nosuid', 'noexec'],
+      nodeAffinity: ['topology.kubernetes.io/zone in [us-east-1a]'],
+    });
+
+    // Status: Bound → healthy chip
+    const statusRow = getValueForLabel(container, 'Status');
+    expect(statusRow?.textContent).toBe('Bound');
+    expect(statusRow?.querySelector('.status-chip--healthy')).toBeTruthy();
+    // Reclaim Policy: Delete → warning chip
+    const reclaim = getValueForLabel(container, 'Reclaim Policy');
+    expect(reclaim?.querySelector('.status-chip--warning')).toBeTruthy();
+    // Volume Source surfaces type + provider details
+    const source = getValueForLabel(container, 'Source');
+    expect(source?.textContent).toContain('CSI');
+    expect(source?.textContent).toContain('ebs.csi.aws.com');
+    expect(source?.textContent).toContain('vol-0a1b2c3d');
+    // Mount options + node affinity
+    expect(getValueForLabel(container, 'Mount Options')?.textContent).toBe('nosuid, noexec');
+    expect(getValueForLabel(container, 'Node Affinity')?.textContent).toContain(
+      'topology.kubernetes.io/zone'
+    );
+  });
+
   it('renders StorageClass-specific fields', async () => {
     await renderComponent({
       kind: 'StorageClass',
@@ -204,8 +280,17 @@ describe('StorageOverview', () => {
     });
 
     expect(getValueForLabel(container, 'Provisioner')?.textContent).toBe('kubernetes.io/aws-ebs');
-    expect(getValueForLabel(container, 'Allow Expansion')?.textContent).toBe('Yes');
-    expect(getValueForLabel(container, 'Default Class')?.textContent).toBe('No');
+    const expansion = getValueForLabel(container, 'Expansion');
+    expect(expansion?.textContent).toBe('True');
+    expect(expansion?.querySelector('.status-chip--healthy')).toBeTruthy();
+    // Default = false renders as an "unhealthy" (red) "False" chip.
+    const defaultRow = getValueForLabel(container, 'Default');
+    expect(defaultRow?.textContent).toBe('False');
+    expect(defaultRow?.querySelector('.status-chip--unhealthy')).toBeTruthy();
+    // Reclaim Policy "Delete" renders as a warning chip.
+    const reclaim = getValueForLabel(container, 'Reclaim Policy');
+    expect(reclaim?.textContent).toBe('Delete');
+    expect(reclaim?.querySelector('.status-chip--warning')).toBeTruthy();
     const params = getValueForLabel(container, 'Parameters');
     expect(params?.textContent).toContain('type');
     expect(params?.textContent).toContain('gp3');
@@ -215,5 +300,30 @@ describe('StorageOverview', () => {
     expect(container.textContent).toContain('Annotations');
     expect(container.textContent).toContain('owner:');
     expect(container.textContent).toContain('storage-team');
+  });
+
+  it('shows the Default chip (True), provisioned count, and mount options', async () => {
+    await renderComponent({
+      kind: 'StorageClass',
+      name: 'standard',
+      provisioner: 'ebs.csi.aws.com',
+      reclaimPolicy: 'Retain',
+      volumeBindingMode: 'WaitForFirstConsumer',
+      allowVolumeExpansion: false,
+      isDefault: true,
+      persistentVolumesCount: 247,
+      mountOptions: ['nfsvers=4.1', 'rsize=1048576'],
+    });
+
+    const defaultRow = getValueForLabel(container, 'Default');
+    expect(defaultRow?.textContent).toBe('True');
+    expect(defaultRow?.querySelector('.status-chip--healthy')).toBeTruthy();
+    expect(getValueForLabel(container, 'Provisioned')?.textContent).toBe('247 PersistentVolumes');
+    expect(getValueForLabel(container, 'Mount Options')?.textContent).toBe(
+      'nfsvers=4.1, rsize=1048576'
+    );
+    // Retain is a non-Delete policy → info chip.
+    const reclaim = getValueForLabel(container, 'Reclaim Policy');
+    expect(reclaim?.querySelector('.status-chip--info')).toBeTruthy();
   });
 });

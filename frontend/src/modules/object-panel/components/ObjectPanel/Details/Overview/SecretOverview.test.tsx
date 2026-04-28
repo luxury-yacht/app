@@ -18,6 +18,11 @@ vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
   }),
 }));
 
+vi.mock('@shared/components/Tooltip', () => ({
+  __esModule: true,
+  default: ({ children }: any) => <>{children}</>,
+}));
+
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
   ResourceHeader: (props: any) => (
     <div data-testid="resource-header">
@@ -71,7 +76,7 @@ describe('SecretOverview', () => {
     container.remove();
   });
 
-  it('renders secret type badge and data key counts', async () => {
+  it('renders secret type as a chip', async () => {
     await renderComponent({
       secretDetails: {
         name: 'tls-secret',
@@ -87,10 +92,10 @@ describe('SecretOverview', () => {
 
     const typeValue = getValueForLabel(container, 'Type');
     expect(typeValue?.textContent).toBe('kubernetes.io/tls');
-    expect(typeValue?.querySelector('.status-badge')?.className).toContain('info');
-
-    const dataKeysValue = getValueForLabel(container, 'Data Keys');
-    expect(dataKeysValue?.textContent).toBe('2 keys');
+    // Now renders as an info-variant StatusChip rather than a legacy .status-badge.
+    expect(typeValue?.querySelector('.status-chip--info')).toBeTruthy();
+    // Data Keys row is intentionally not surfaced — DataSection covers it.
+    expect(getValueForLabel(container, 'Data Keys')).toBeNull();
   });
 
   it('navigates to pods that consume the secret', async () => {

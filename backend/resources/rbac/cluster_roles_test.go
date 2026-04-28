@@ -54,8 +54,12 @@ func TestManagerClusterRolesIncludeBindings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ClusterRole error: %v", err)
 	}
-	if len(details.Rules) != 1 || len(details.ClusterRoleBindings) != 0 {
-		t.Fatalf("unexpected single fetch details: %#v", details)
+	if len(details.Rules) != 1 {
+		t.Fatalf("unexpected single fetch rules: %#v", details.Rules)
+	}
+	if len(details.ClusterRoleBindings) != 1 || details.ClusterRoleBindings[0] != "crb-1" {
+		t.Fatalf("expected single fetch to resolve cluster role bindings, got %#v",
+			details.ClusterRoleBindings)
 	}
 
 	all, err := manager.ClusterRoles()

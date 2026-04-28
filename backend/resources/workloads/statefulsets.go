@@ -134,12 +134,16 @@ func (s *StatefulSetService) buildStatefulSetDetails(
 		MinReadySeconds:                      statefulSet.Spec.MinReadySeconds,
 		RevisionHistoryLimit:                 revisionHistory,
 		ServiceName:                          statefulSet.Spec.ServiceName,
+		ServiceAccount:                       statefulSet.Spec.Template.Spec.ServiceAccountName,
+		NodeSelector:                         statefulSet.Spec.Template.Spec.NodeSelector,
+		Tolerations:                          pods.FormatPodTolerations(statefulSet.Spec.Template.Spec.Tolerations),
 		PersistentVolumeClaimRetentionPolicy: describePVCRetention(statefulSet.Spec.PersistentVolumeClaimRetentionPolicy),
 		Selector:                             statefulSet.Spec.Selector.MatchLabels,
 		Labels:                               statefulSet.Labels,
 		Annotations:                          statefulSet.Annotations,
 		Conditions:                           describeStatefulSetConditions(statefulSet),
 		Containers:                           describeContainers(statefulSet.Spec.Template.Spec.Containers),
+		InitContainers:                       describeContainers(statefulSet.Spec.Template.Spec.InitContainers),
 		VolumeClaimTemplates:                 describeVolumeClaimTemplates(statefulSet.Spec.VolumeClaimTemplates),
 		Pods:                                 podInfos,
 		PodMetricsSummary:                    podSummary,
@@ -205,21 +209,32 @@ func describeStatefulSetConditions(statefulSet *appsv1.StatefulSet) []string {
 	return conditions
 }
 
-func describeVolumeClaimTemplates(templates []corev1.PersistentVolumeClaim) []string {
+func describeVolumeClaimTemplates(templates []corev1.PersistentVolumeClaim) []restypes.VolumeClaimTemplateSummary {
 	if len(templates) == 0 {
 		return nil
 	}
 
-	result := make([]string, 0, len(templates))
+	result := make([]restypes.VolumeClaimTemplateSummary, 0, len(templates))
 	for _, template := range templates {
-		info := template.Name
+		summary := restypes.VolumeClaimTemplateSummary{
+			Name: template.Name,
+		}
 		if template.Spec.StorageClassName != nil {
-			info += fmt.Sprintf(" (%s)", *template.Spec.StorageClassName)
+			summary.StorageClass = *template.Spec.StorageClassName
 		}
 		if storage, ok := template.Spec.Resources.Requests[corev1.ResourceStorage]; ok {
-			info += fmt.Sprintf(" - %s", storage.String())
+			summary.StorageRequest = storage.String()
 		}
-		result = append(result, info)
+		if len(template.Spec.AccessModes) > 0 {
+			summary.AccessModes = make([]string, 0, len(template.Spec.AccessModes))
+			for _, mode := range template.Spec.AccessModes {
+				summary.AccessModes = append(summary.AccessModes, string(mode))
+			}
+		}
+		if template.Spec.VolumeMode != nil {
+			summary.VolumeMode = string(*template.Spec.VolumeMode)
+		}
+		result = append(result, summary)
 	}
 
 	return result

@@ -113,7 +113,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 1rem;
+  height: 10px;
   background-color: var(--resourcebar-empty-bg);
   border-radius: 6px;
   color: var(--color-text-secondary);
@@ -126,7 +126,7 @@
 
 .resource-bar {
   position: relative;
-  height: 1rem;
+  height: 10px;
   background-color: var(--resourcebar-track-bg);
   border-radius: 6px;
   overflow: hidden;
@@ -325,4 +325,142 @@
   padding-top: 4px;
   margin-top: 4px;
   display: block;
+}
+
+/* ----------------------------------------------------------------------
+   Resource section housing
+   --------------------------------------------------------------------
+   Markup that wraps a ResourceBar to form a complete "resource section":
+   header (title + total), the bar, and a legend of values below. Used by
+   ClusterOverview's Resource Usage block and the object-panel Details
+   tab's Resource Utilization block. */
+
+.resource-bar-placeholder {
+  height: 10px;
+  border-radius: var(--border-radius-md);
+}
+
+.resource-group {
+  margin-bottom: 1.5rem;
+}
+
+.resource-group:last-child {
+  margin-bottom: 0;
+}
+
+.metric-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.metric-header h3 {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-text-secondary);
+}
+
+.metric-legend {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.metric-legend__items {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem 1.5rem;
+  flex-wrap: wrap;
+}
+
+.metric-legend__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  border-radius: var(--border-radius-md);
+  border: 1px solid transparent;
+  min-width: 5.5rem;
+}
+
+.metric-legend__item[aria-disabled="true"] {
+  opacity: 0.55;
+}
+
+.metric-legend__item--clickable {
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.metric-legend__item--clickable:focus-visible {
+  outline: none;
+}
+
+.metric-legend__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.metric-legend__dot--healthy {
+  background: var(--pod-phase-healthy);
+}
+
+.metric-legend__dot--pending {
+  background: var(--pod-phase-pending);
+}
+
+.metric-legend__dot--failing {
+  background: var(--pod-phase-failing);
+}
+
+.metric-legend__dot--restarted {
+  background: var(--pod-phase-restarted);
+}
+
+.metric-legend__dot--deployment {
+  background: var(--workload-deployment);
+}
+
+.metric-legend__dot--statefulset {
+  background: var(--workload-statefulset);
+}
+
+.metric-legend__dot--daemonset {
+  background: var(--workload-daemonset);
+}
+
+.metric-legend__dot--cronjob {
+  background: var(--workload-cronjob);
+}
+
+.metric-legend__count {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.metric-legend__label {
+  color: var(--color-text-tertiary);
+}
+
+.metric-legend__total {
+  font-size: 0.75rem;
+  color: var(--color-text-tertiary);
+  margin-left: auto;
+}
+
+.metric-legend__total-value {
+  color: var(--color-text);
+  font-weight: 500;
 }

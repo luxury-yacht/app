@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/robfig/cron/v3"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -105,7 +106,10 @@ func TestStatefulSetServiceReturnsDetail(t *testing.T) {
 	require.NotNil(t, detail.Partition)
 	require.Equal(t, int32(1), *detail.Partition)
 	require.Equal(t, map[string]string{"whenDeleted": "Delete", "whenScaled": "Retain"}, detail.PersistentVolumeClaimRetentionPolicy)
-	require.Contains(t, detail.VolumeClaimTemplates, "data (fast) - 10Gi")
+	require.Len(t, detail.VolumeClaimTemplates, 1)
+	require.Equal(t, "data", detail.VolumeClaimTemplates[0].Name)
+	require.Equal(t, "fast", detail.VolumeClaimTemplates[0].StorageClass)
+	require.Equal(t, "10Gi", detail.VolumeClaimTemplates[0].StorageRequest)
 	require.Contains(t, detail.Conditions, "Ready: True (AllReplicasReady)")
 	require.Equal(t, "Ready: 2/2, Service: db-svc, 1 PVC template(s)", detail.Details)
 	require.Equal(t, "db", detail.Name)
@@ -251,9 +255,55 @@ func TestCronJobServiceCollectsPods(t *testing.T) {
 	require.Len(t, detail.Pods, 1)
 	require.Equal(t, job.Name, detail.ActiveJobs[0].Name)
 	require.NotNil(t, detail.ActiveJobs[0].StartTime)
-	require.Equal(t, "Now", detail.NextScheduleTime)
-	require.Equal(t, "0s", detail.TimeUntilNextSchedule)
+	// `*/5 * * * *` always has a future fire-time within 5 minutes of any
+	// "now", so we expect a parseable RFC3339 value and a non-empty
+	// "until" duration. Exact values are clock-dependent.
+	require.NotEmpty(t, detail.NextScheduleTime)
+	_, err = time.Parse(time.RFC3339, detail.NextScheduleTime)
+	require.NoError(t, err)
+	require.NotEmpty(t, detail.TimeUntilNextSchedule)
 	require.Contains(t, detail.Details, "Schedule: "+cron.Spec.Schedule)
+}
+
+func TestCronJobServiceComputesNextScheduleBeforeFirstRun(t *testing.T) {
+	cron := testsupport.CronJobFixture("default", "nightly")
+	require.Nil(t, cron.Status.LastScheduleTime)
+
+	client := cgofake.NewClientset(cron.DeepCopy())
+	deps := newDeps(t, client)
+
+	service := workloads.NewCronJobService(deps)
+	detail, err := service.CronJob("default", "nightly")
+	require.NoError(t, err)
+	require.NotEmpty(t, detail.NextScheduleTime)
+	_, err = time.Parse(time.RFC3339, detail.NextScheduleTime)
+	require.NoError(t, err)
+	require.NotEmpty(t, detail.TimeUntilNextSchedule)
+}
+
+func TestCronJobServiceUsesSpecTimeZoneForNextSchedule(t *testing.T) {
+	tz := "UTC"
+	cronJob := testsupport.CronJobFixture("default", "nightly")
+	cronJob.Spec.Schedule = "0 0 * * *"
+	cronJob.Spec.TimeZone = &tz
+
+	before := time.Now()
+	client := cgofake.NewClientset(cronJob.DeepCopy())
+	deps := newDeps(t, client)
+
+	service := workloads.NewCronJobService(deps)
+	detail, err := service.CronJob("default", "nightly")
+	after := time.Now()
+	require.NoError(t, err)
+	require.NotEmpty(t, detail.NextScheduleTime)
+
+	got, err := time.Parse(time.RFC3339, detail.NextScheduleTime)
+	require.NoError(t, err)
+	schedule, err := cron.ParseStandard("TZ=UTC " + cronJob.Spec.Schedule)
+	require.NoError(t, err)
+	nextBefore := schedule.Next(before)
+	nextAfter := schedule.Next(after)
+	require.Truef(t, got.Equal(nextBefore) || got.Equal(nextAfter), "got %s, expected %s or %s", got, nextBefore, nextAfter)
 }
 
 func TestCronJobServiceCollectsJobs(t *testing.T) {

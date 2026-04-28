@@ -156,6 +156,16 @@ function focusDockableTab(panelId: string): void {
   tab?.focus();
 }
 
+function firstGroupWithTabs(tabGroups: TabGroupState): GroupKey | null {
+  if (tabGroups.right.tabs.length > 0) {
+    return 'right';
+  }
+  if (tabGroups.bottom.tabs.length > 0) {
+    return 'bottom';
+  }
+  return tabGroups.floating.find((group) => group.tabs.length > 0)?.groupId ?? null;
+}
+
 export const useDockablePanelHost = (): HTMLElement | null => {
   const contextHost = useContext(DockablePanelHostContext);
   if (contextHost === undefined) {
@@ -267,13 +277,41 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
   // is only known after tabGroups updates. Track the moved panel id so we
   // can resolve and store the focused floating group in an effect.
   const pendingFocusPanelIdRef = useRef<string | null>(null);
-  const setLastFocusedGroupKey = useCallback((key: GroupKey) => {
+  const setLastFocusedGroupKeyValue = useCallback((key: GroupKey | null) => {
     if (lastFocusedGroupKeyRef.current === key) {
       return;
     }
     lastFocusedGroupKeyRef.current = key;
     setLastFocusedGroupKeyState(key);
   }, []);
+  const setLastFocusedGroupKey = useCallback(
+    (key: GroupKey) => {
+      setLastFocusedGroupKeyValue(key);
+    },
+    [setLastFocusedGroupKeyValue]
+  );
+
+  const reconcileLastFocusedGroup = useCallback(
+    (nextTabGroups: TabGroupState) => {
+      const focusedGroupKey = lastFocusedGroupKeyRef.current;
+      if (!focusedGroupKey) {
+        return;
+      }
+      const focusedGroup = getGroupTabs(nextTabGroups, focusedGroupKey);
+      if (focusedGroup && focusedGroup.tabs.length > 0) {
+        return;
+      }
+      setLastFocusedGroupKeyValue(firstGroupWithTabs(nextTabGroups));
+    },
+    [setLastFocusedGroupKeyValue]
+  );
+
+  // Some close paths mutate tabGroups through the layout store directly
+  // (for example ObjectPanelStateContext.clearPanelState). Reconcile here
+  // so the visual focus group never points at a group that no longer exists.
+  useLayoutEffect(() => {
+    reconcileLastFocusedGroup(tabGroups);
+  }, [tabGroups, reconcileLastFocusedGroup]);
 
   // Track DOM focus shifts globally and route them to setLastFocusedGroupKey.
   // The mousedown handler on each panel already covers click activation; this
@@ -451,9 +489,13 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
   // -----------------------------------------------------------------------
   const removePanelFromGroups = useCallback(
     (panelId: string) => {
-      activeStore.setTabGroups((prev) => removePanelFromGroup(prev, panelId));
+      activeStore.setTabGroups((prev) => {
+        const next = removePanelFromGroup(prev, panelId);
+        reconcileLastFocusedGroup(next);
+        return next;
+      });
     },
-    [activeStore]
+    [activeStore, reconcileLastFocusedGroup]
   );
 
   // -----------------------------------------------------------------------
@@ -484,6 +526,7 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
         // Remove from the tab group using the snapshot we already analyzed so
         // leader hand-off and tab removal stay in sync for this close action.
         activeStore.setTabGroups(() => nextTabGroups);
+        reconcileLastFocusedGroup(nextTabGroups);
         if (nextActivePanelId) {
           window.setTimeout(() => {
             focusPanelById(nextActivePanelId);
@@ -492,7 +535,11 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
         }
       } else {
         // Panel is not grouped; still clear any stale membership defensively.
-        activeStore.setTabGroups((prev) => removePanelFromGroup(prev, panelId));
+        activeStore.setTabGroups((prev) => {
+          const next = removePanelFromGroup(prev, panelId);
+          reconcileLastFocusedGroup(next);
+          return next;
+        });
       }
 
       // Prefer external close handler, but fall back to directly closing the panel.
@@ -502,7 +549,7 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
       }
       setPanelOpenById(panelId, false);
     },
-    [activeStore]
+    [activeStore, reconcileLastFocusedGroup]
   );
 
   // -----------------------------------------------------------------------

@@ -1,34 +1,114 @@
-/* Containers Component Styles */
+/* Containers section styles — fully local; this file owns every class
+ * the section uses (card layout, image typography, resources strip,
+ * sub-grouping). */
 
-.containers-item {
-  font-size: var(--font-size-normal);
+.containers-card-list {
   display: flex;
-  flex-direction: row;
-  align-items: flex-start;
-  gap: 1rem;
+  flex-direction: column;
+  gap: 0.75rem;
 }
 
-.containers-item-full {
-  grid-column: 1 / -1;
+.containers-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  border-top: 12px solid var(--color-bg-tertiary);
+  border-left: 1px solid var(--color-bg-tertiary);
+  border-top-left-radius: var(--border-radius-lg);
+  border-top-right-radius: var(--border-radius-lg);
+  padding: 10px var(--spacing-md);
 }
 
-.containers-label {
-  font-weight: var(--font-weight-bold);
-  color: var(--color-text-secondary);
-  text-transform: uppercase;
-  min-width: 6rem;
-  flex-shrink: 0;
-}
-
-.containers-value {
-  color: var(--color-text);
-  word-break: break-all;
-  flex: 1;
+/* Card content is data, not chrome — opt back into text selection on the
+   card and *every descendant* so the name/image/resources can be copied.
+   App.css applies `.app * { user-select: none }` directly to every
+   descendant, which beats inheritance from a single ancestor — matching
+   that pattern with `.containers-card *` is what reliably overrides it. */
+.containers-card,
+.containers-card * {
   user-select: text;
   -webkit-user-select: text;
 }
 
-.containers-tag {
+.containers-card-header {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.containers-card-title {
   color: var(--color-text);
-  word-break: break-all;
+  font-weight: 500;
+  font-size: 0.8rem;
+}
+
+.containers-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.containers-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.containers-group-heading {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-text-secondary);
+}
+
+/* Image strings: name and ref share a line, with the separator (':' or '@')
+   in the muted tertiary color so name and ref both pop. */
+.containers-image {
+  font-family: var(--font-family-mono);
+  font-size: 0.7rem;
+  color: var(--color-text-secondary);
+  /* Prefer natural break points (slashes, colons); only fracture inside a
+     token if it's wider than the container. */
+  overflow-wrap: anywhere;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.containers-image-sep {
+  color: var(--color-text-tertiary);
+}
+
+.containers-image-ref {
+  color: var(--color-text);
+}
+
+/* Per-container resources row: a flex strip of "value label" pairs
+   showing CPU and Memory request/limit. Local to this section. */
+.containers-resources {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1.5rem;
+  font-size: 0.75rem;
+  background-color: var(--color-background-tertiary);
+}
+
+.containers-resource {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 5.5rem;
+}
+
+.containers-resource-value {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.containers-resource-label {
+  font-size: 0.7rem;
+  color: var(--color-text-tertiary);
 }

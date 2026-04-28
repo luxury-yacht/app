@@ -1027,6 +1027,19 @@ type PodMetricsSummary struct {
 	MemLimit   string `json:"memLimit,omitempty"`
 }
 
+// VolumeClaimTemplateSummary captures the operationally-relevant
+// fields of a StatefulSet `spec.volumeClaimTemplates[]` entry — name,
+// size request, storage class, access modes, volume mode. These are
+// template definitions; the actual per-replica PVC resources live
+// elsewhere and aren't carried here.
+type VolumeClaimTemplateSummary struct {
+	Name           string   `json:"name"`
+	StorageRequest string   `json:"storageRequest,omitempty"` // e.g. "10Gi"
+	StorageClass   string   `json:"storageClass,omitempty"`   // empty = cluster default
+	AccessModes    []string `json:"accessModes,omitempty"`    // e.g. ["ReadWriteOnce"]
+	VolumeMode     string   `json:"volumeMode,omitempty"`     // "Filesystem" (default) or "Block"
+}
+
 type ReplicaSetSummary struct {
 	Name      string `json:"name"`
 	Revision  string `json:"revision"`
@@ -1045,8 +1058,8 @@ type ReplicaSetDetails struct {
 	Details         string `json:"details"`
 	Replicas        string `json:"replicas"`
 	Ready           string `json:"ready"`
-	Available       int32  `json:"available,omitempty"`
-	DesiredReplicas int32  `json:"desiredReplicas,omitempty"`
+	Available       int32  `json:"available"`
+	DesiredReplicas int32  `json:"desiredReplicas"`
 	Age             string `json:"age"`
 
 	// Average resource utilization (per pod)
@@ -1067,7 +1080,8 @@ type ReplicaSetDetails struct {
 	Conditions []string `json:"conditions,omitempty"`
 
 	// Template information
-	Containers []PodDetailInfoContainer `json:"containers,omitempty"`
+	Containers     []PodDetailInfoContainer `json:"containers,omitempty"`
+	InitContainers []PodDetailInfoContainer `json:"initContainers,omitempty"`
 
 	// Pod information
 	Pods              []PodSimpleInfo    `json:"pods,omitempty"`
@@ -1088,8 +1102,8 @@ type DeploymentDetails struct {
 	Ready           string `json:"ready"`
 	Updated         string `json:"updated,omitempty"`
 	UpToDate        int32  `json:"upToDate,omitempty"`
-	Available       int32  `json:"available,omitempty"`
-	DesiredReplicas int32  `json:"desiredReplicas,omitempty"`
+	Available       int32  `json:"available"`
+	DesiredReplicas int32  `json:"desiredReplicas"`
 	Age             string `json:"age"`
 
 	// Average resource utilization (per pod)
@@ -1108,6 +1122,13 @@ type DeploymentDetails struct {
 	RevisionHistory  int32  `json:"revisionHistory,omitempty"`
 	ProgressDeadline int32  `json:"progressDeadline,omitempty"`
 
+	// Service information
+	ServiceAccount string `json:"serviceAccount,omitempty"`
+
+	// Pod placement constraints (from the pod template).
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+	Tolerations  []string          `json:"tolerations,omitempty"`
+
 	// Selector and labels
 	Selector    map[string]string `json:"selector,omitempty"`
 	Labels      map[string]string `json:"labels,omitempty"`
@@ -1117,7 +1138,8 @@ type DeploymentDetails struct {
 	Conditions []string `json:"conditions,omitempty"`
 
 	// Template information
-	Containers []PodDetailInfoContainer `json:"containers,omitempty"`
+	Containers     []PodDetailInfoContainer `json:"containers,omitempty"`
+	InitContainers []PodDetailInfoContainer `json:"initContainers,omitempty"`
 
 	// Pod information
 	Pods              []PodSimpleInfo    `json:"pods,omitempty"`
@@ -1125,6 +1147,7 @@ type DeploymentDetails struct {
 
 	// ReplicaSet information
 	CurrentRevision     string              `json:"currentRevision,omitempty"`
+	CurrentReplicaSet   string              `json:"currentReplicaSet,omitempty"`
 	ReplicaSets         []string            `json:"replicaSets,omitempty"`
 	ReplicaSetSummaries []ReplicaSetSummary `json:"replicaSetSummaries,omitempty"`
 
@@ -1144,8 +1167,8 @@ type StatefulSetDetails struct {
 	Replicas        string `json:"replicas"`
 	Ready           string `json:"ready"`
 	UpToDate        int32  `json:"upToDate,omitempty"`
-	Available       int32  `json:"available,omitempty"`
-	DesiredReplicas int32  `json:"desiredReplicas,omitempty"`
+	Available       int32  `json:"available"`
+	DesiredReplicas int32  `json:"desiredReplicas"`
 	Age             string `json:"age"`
 
 	// Average resource utilization (per pod)
@@ -1166,7 +1189,12 @@ type StatefulSetDetails struct {
 
 	// Service information
 	ServiceName                          string            `json:"serviceName,omitempty"`
+	ServiceAccount                       string            `json:"serviceAccount,omitempty"`
 	PersistentVolumeClaimRetentionPolicy map[string]string `json:"pvcRetentionPolicy,omitempty"`
+
+	// Pod placement constraints (from the pod template).
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+	Tolerations  []string          `json:"tolerations,omitempty"`
 
 	// Selector and labels
 	Selector    map[string]string `json:"selector,omitempty"`
@@ -1177,10 +1205,12 @@ type StatefulSetDetails struct {
 	Conditions []string `json:"conditions,omitempty"`
 
 	// Template information
-	Containers []PodDetailInfoContainer `json:"containers,omitempty"`
+	Containers     []PodDetailInfoContainer `json:"containers,omitempty"`
+	InitContainers []PodDetailInfoContainer `json:"initContainers,omitempty"`
 
-	// Volume claim templates
-	VolumeClaimTemplates []string `json:"volumeClaimTemplates,omitempty"`
+	// Volume claim templates — structured summaries of each entry in
+	// `spec.volumeClaimTemplates`.
+	VolumeClaimTemplates []VolumeClaimTemplateSummary `json:"volumeClaimTemplates,omitempty"`
 
 	// Pod information
 	Pods              []PodSimpleInfo    `json:"pods,omitempty"`
@@ -1226,19 +1256,24 @@ type DaemonSetDetails struct {
 	MinReadySeconds      int32  `json:"minReadySeconds,omitempty"`
 	RevisionHistoryLimit int32  `json:"revisionHistoryLimit,omitempty"`
 
+	// Service information
+	ServiceAccount string `json:"serviceAccount,omitempty"`
+
 	// Selector and labels
 	Selector    map[string]string `json:"selector,omitempty"`
 	Labels      map[string]string `json:"labels,omitempty"`
 	Annotations map[string]string `json:"annotations,omitempty"`
 
-	// Node selector
+	// Pod placement constraints (from the pod template).
 	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+	Tolerations  []string          `json:"tolerations,omitempty"`
 
 	// Conditions
 	Conditions []string `json:"conditions,omitempty"`
 
 	// Template information
-	Containers []PodDetailInfoContainer `json:"containers,omitempty"`
+	Containers     []PodDetailInfoContainer `json:"containers,omitempty"`
+	InitContainers []PodDetailInfoContainer `json:"initContainers,omitempty"`
 
 	// Pod information
 	Pods              []PodSimpleInfo    `json:"pods,omitempty"`
@@ -1308,6 +1343,12 @@ type CronJobDetails struct {
 	NextScheduleTime      string       `json:"nextScheduleTime,omitempty"`
 	TimeUntilNextSchedule string       `json:"timeUntilNextSchedule,omitempty"`
 
+	// Derived from owned Jobs — bounded by job-history retention. A
+	// nil value can mean "never happened" OR "happened but the job
+	// record has been garbage-collected"; the UI should hint at this.
+	LastManualTime  *metav1.Time `json:"lastManualTime,omitempty"`
+	LastFailureTime *metav1.Time `json:"lastFailureTime,omitempty"`
+
 	// Job configuration
 	ConcurrencyPolicy       string `json:"concurrencyPolicy"`
 	StartingDeadlineSeconds *int64 `json:"startingDeadlineSeconds,omitempty"`
@@ -1338,17 +1379,19 @@ type JobReference struct {
 
 // JobSimpleInfo provides a summary of a Job for list/tab views.
 type JobSimpleInfo struct {
-	Kind        string       `json:"kind"`
-	Name        string       `json:"name"`
-	Namespace   string       `json:"namespace"`
-	Status      string       `json:"status"`
-	Completions string       `json:"completions"` // e.g. "1/1"
-	Succeeded   int32        `json:"succeeded"`
-	Failed      int32        `json:"failed"`
-	Active      int32        `json:"active"`
-	StartTime   *metav1.Time `json:"startTime,omitempty"`
-	Duration    string       `json:"duration,omitempty"`
-	Age         string       `json:"age"`
+	Kind            string       `json:"kind"`
+	Name            string       `json:"name"`
+	Namespace       string       `json:"namespace"`
+	Status          string       `json:"status"`
+	Completions     string       `json:"completions"` // e.g. "1/1"
+	Succeeded       int32        `json:"succeeded"`
+	Failed          int32        `json:"failed"`
+	Active          int32        `json:"active"`
+	StartTime       *metav1.Time `json:"startTime,omitempty"`
+	CompletionTime  *metav1.Time `json:"completionTime,omitempty"`
+	Duration        string       `json:"duration,omitempty"`
+	DurationSeconds int64        `json:"durationSeconds,omitempty"`
+	Age             string       `json:"age"`
 }
 type JobTemplateDetails struct {
 	Completions             *int32                   `json:"completions,omitempty"`

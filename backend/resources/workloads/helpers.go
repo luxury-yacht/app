@@ -16,6 +16,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/pods"
 	restypes "github.com/luxury-yacht/app/backend/resources/types"
+	"github.com/robfig/cron/v3"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -317,11 +318,38 @@ func summarizeCronJob(details *restypes.CronJobDetails) string {
 	return summary
 }
 
-func calculateNextSchedule(_ string, lastSchedule time.Time) (string, string) {
-	nextTime := lastSchedule.Add(time.Minute)
-	timeUntil := time.Until(nextTime)
-	if timeUntil > 0 {
-		return nextTime.Format(time.RFC3339), common.FormatAge(time.Now().Add(-timeUntil))
+// calculateNextSchedule parses the CronJob's schedule expression and returns
+// the next firing time as RFC3339 plus a human "in 15m" string. Falls back to
+// empty values when the expression is unparseable so the frontend can hide the
+// row instead of showing wrong data.
+func calculateNextSchedule(schedule string, timeZone *string) (string, string) {
+	return calculateNextScheduleAt(schedule, timeZone, time.Now())
+}
+
+func calculateNextScheduleAt(schedule string, timeZone *string, now time.Time) (string, string) {
+	// k8s CronJob uses the standard 5-field format (no seconds) plus
+	// the @yearly/@hourly/@daily descriptors. cron.ParseStandard covers
+	// both, matching the kube-controller-manager parser.
+	expr, err := cron.ParseStandard(formatCronJobSchedule(schedule, timeZone))
+	if err != nil {
+		return "", ""
 	}
-	return "Now", "0s"
+	nextTime := expr.Next(now)
+	if nextTime.IsZero() {
+		return "", ""
+	}
+	return nextTime.Format(time.RFC3339), common.FormatAge(time.Now().Add(-nextTime.Sub(now)))
+}
+
+func formatCronJobSchedule(schedule string, timeZone *string) string {
+	if strings.Contains(schedule, "TZ") {
+		return schedule
+	}
+	if timeZone == nil {
+		return schedule
+	}
+	if _, err := time.LoadLocation(*timeZone); err != nil {
+		return schedule
+	}
+	return fmt.Sprintf("TZ=%s %s", *timeZone, schedule)
 }

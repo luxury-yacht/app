@@ -68,7 +68,6 @@ const DataSectionInner: React.FC<DataSectionProps> = ({ data, binaryData, isSecr
 
   const dataCount = displayData ? Object.keys(displayData).length : 0;
   const binaryCount = binaryKeys.length;
-  const totalCount = dataCount + binaryCount;
 
   // Add shortcut for toggling encode/decode when viewing secrets
   useShortcut({
@@ -93,13 +92,10 @@ const DataSectionInner: React.FC<DataSectionProps> = ({ data, binaryData, isSecr
   return (
     <div className="object-panel-section">
       <div className="data-section-header">
-        <div className="object-panel-section-title">
-          Data
-          {totalCount > 0 && <span className="metadata-count">({totalCount})</span>}
-        </div>
+        <div className="object-panel-section-title">Data</div>
         {isSecret && (
           <button
-            className="button danger small"
+            className="button generic small"
             onClick={() => setShowDecoded(!showDecoded)}
             title={showDecoded ? 'Show encoded values' : 'Show decoded values'}
           >
