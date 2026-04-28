@@ -257,6 +257,7 @@ export function useOverviewData(params: UseOverviewDataParams): OverviewData | n
         name: jobDetails.name,
         age: jobDetails.age,
         namespace: jobDetails.namespace,
+        status: jobDetails.status,
         completions: jobDetails.completions,
         parallelism: jobDetails.parallelism,
         backoffLimit: jobDetails.backoffLimit,
@@ -266,6 +267,13 @@ export function useOverviewData(params: UseOverviewDataParams): OverviewData | n
         startTime: jobDetails.startTime,
         completionTime: jobDetails.completionTime,
         duration: jobDetails.duration,
+        activeDeadlineSeconds: jobDetails.activeDeadlineSeconds,
+        ttlSecondsAfterFinished: jobDetails.ttlSecondsAfterFinished,
+        completionMode: jobDetails.completionMode,
+        suspend: jobDetails.suspend,
+        selector: jobDetails.selector,
+        labels: jobDetails.labels,
+        annotations: jobDetails.annotations,
       };
     }
 
@@ -280,8 +288,15 @@ export function useOverviewData(params: UseOverviewDataParams): OverviewData | n
         suspend: cronJobDetails.suspend,
         activeJobs: cronJobDetails.activeJobs,
         lastScheduleTime: cronJobDetails.lastScheduleTime,
+        lastSuccessfulTime: cronJobDetails.lastSuccessfulTime,
+        nextScheduleTime: cronJobDetails.nextScheduleTime,
+        timeUntilNextSchedule: cronJobDetails.timeUntilNextSchedule,
+        concurrencyPolicy: cronJobDetails.concurrencyPolicy,
+        startingDeadlineSeconds: cronJobDetails.startingDeadlineSeconds,
         successfulJobsHistory: cronJobDetails.successfulJobsHistory,
         failedJobsHistory: cronJobDetails.failedJobsHistory,
+        labels: cronJobDetails.labels,
+        annotations: cronJobDetails.annotations,
       };
     }
 
