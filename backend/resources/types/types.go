@@ -1045,8 +1045,8 @@ type ReplicaSetDetails struct {
 	Details         string `json:"details"`
 	Replicas        string `json:"replicas"`
 	Ready           string `json:"ready"`
-	Available       int32  `json:"available,omitempty"`
-	DesiredReplicas int32  `json:"desiredReplicas,omitempty"`
+	Available       int32  `json:"available"`
+	DesiredReplicas int32  `json:"desiredReplicas"`
 	Age             string `json:"age"`
 
 	// Average resource utilization (per pod)
@@ -1089,8 +1089,8 @@ type DeploymentDetails struct {
 	Ready           string `json:"ready"`
 	Updated         string `json:"updated,omitempty"`
 	UpToDate        int32  `json:"upToDate,omitempty"`
-	Available       int32  `json:"available,omitempty"`
-	DesiredReplicas int32  `json:"desiredReplicas,omitempty"`
+	Available       int32  `json:"available"`
+	DesiredReplicas int32  `json:"desiredReplicas"`
 	Age             string `json:"age"`
 
 	// Average resource utilization (per pod)
@@ -1111,6 +1111,10 @@ type DeploymentDetails struct {
 
 	// Service information
 	ServiceAccount string `json:"serviceAccount,omitempty"`
+
+	// Pod placement constraints (from the pod template).
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+	Tolerations  []string          `json:"tolerations,omitempty"`
 
 	// Selector and labels
 	Selector    map[string]string `json:"selector,omitempty"`
@@ -1150,8 +1154,8 @@ type StatefulSetDetails struct {
 	Replicas        string `json:"replicas"`
 	Ready           string `json:"ready"`
 	UpToDate        int32  `json:"upToDate,omitempty"`
-	Available       int32  `json:"available,omitempty"`
-	DesiredReplicas int32  `json:"desiredReplicas,omitempty"`
+	Available       int32  `json:"available"`
+	DesiredReplicas int32  `json:"desiredReplicas"`
 	Age             string `json:"age"`
 
 	// Average resource utilization (per pod)
@@ -1174,6 +1178,10 @@ type StatefulSetDetails struct {
 	ServiceName                          string            `json:"serviceName,omitempty"`
 	ServiceAccount                       string            `json:"serviceAccount,omitempty"`
 	PersistentVolumeClaimRetentionPolicy map[string]string `json:"pvcRetentionPolicy,omitempty"`
+
+	// Pod placement constraints (from the pod template).
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+	Tolerations  []string          `json:"tolerations,omitempty"`
 
 	// Selector and labels
 	Selector    map[string]string `json:"selector,omitempty"`
@@ -1242,8 +1250,9 @@ type DaemonSetDetails struct {
 	Labels      map[string]string `json:"labels,omitempty"`
 	Annotations map[string]string `json:"annotations,omitempty"`
 
-	// Node selector
+	// Pod placement constraints (from the pod template).
 	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+	Tolerations  []string          `json:"tolerations,omitempty"`
 
 	// Conditions
 	Conditions []string `json:"conditions,omitempty"`

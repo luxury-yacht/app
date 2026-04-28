@@ -829,14 +829,14 @@ func TestResolveOwnerFallsBackToNone(t *testing.T) {
 func TestFormatHelpersHandleEmptyInputs(t *testing.T) {
 	require.Empty(t, formatPodConditions(nil))
 	require.Empty(t, formatPodVolumes(nil))
-	require.Empty(t, formatPodTolerations(nil))
+	require.Empty(t, FormatPodTolerations(nil))
 	require.Nil(t, buildAffinityMap(nil))
 	require.Nil(t, buildSecurityContextMap(nil))
 }
 
 func TestFormatPodTolerationsIncludesSeconds(t *testing.T) {
 	seconds := int64(30)
-	result := formatPodTolerations([]corev1.Toleration{{
+	result := FormatPodTolerations([]corev1.Toleration{{
 		Key:               "taint",
 		Operator:          corev1.TolerationOpEqual,
 		Value:             "value",

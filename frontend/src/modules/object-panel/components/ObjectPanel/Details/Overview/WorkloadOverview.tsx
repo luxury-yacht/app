@@ -10,6 +10,11 @@ import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
 import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
 import { buildObjectReference } from '@shared/utils/objectIdentity';
+import {
+  DEFAULT_TOLERATION_RE,
+  parseToleration,
+  type ParsedToleration,
+} from './shared/tolerations';
 import './shared/OverviewBlocks.css';
 import './WorkloadOverview.css';
 
@@ -64,6 +69,19 @@ const PodStateBar: React.FC<PodStateBarProps> = ({
   available,
   hpaManaged,
 }) => {
+  // Scaled to 0 — render plain text rather than an empty bar with
+  // "0 of 0 available", which is hard to spot.
+  if (desired === 0) {
+    return (
+      <div className="podstate-summary">
+        <div className="podstate-caption">
+          <span className="podstate-caption-zero">Scaled to 0</span>
+          {hpaManaged && <span className="podstate-caption-hpa">(HPA managed)</span>}
+        </div>
+      </div>
+    );
+  }
+
   // Clamp every band so a single misreported number can't blow out the bar.
   // The bar's denominator is `desired`; if anything exceeds desired we cap
   // it at desired so the bar never overflows.
@@ -186,6 +204,8 @@ interface WorkloadOverviewProps {
 
   // Pod template
   serviceAccount?: string;
+  nodeSelector?: Record<string, string>;
+  tolerations?: string[];
 
   // Indicates an HPA is driving the replica count for this workload.
   hpaManaged?: boolean;
@@ -238,6 +258,8 @@ export const WorkloadOverview: React.FC<WorkloadOverviewProps> = ({
   numberMisscheduled,
   podManagementPolicy,
   serviceAccount,
+  nodeSelector,
+  tolerations,
   currentReplicaSet,
   hpaManaged,
   onRollback,
@@ -288,19 +310,22 @@ export const WorkloadOverview: React.FC<WorkloadOverviewProps> = ({
           return null;
         }
         return (
-          <OverviewItem
-            label="Pods"
-            fullWidth
-            value={
-              <PodStateBar
-                desired={desiredCount}
-                created={createdCount}
-                ready={readyCount}
-                available={availableCount}
-                hpaManaged={hpaManaged}
-              />
-            }
-          />
+          <>
+            <OverviewItem
+              label="Pods"
+              fullWidth
+              value={
+                <PodStateBar
+                  desired={desiredCount}
+                  created={createdCount}
+                  ready={readyCount}
+                  available={availableCount}
+                  hpaManaged={hpaManaged}
+                />
+              }
+            />
+            <div className="metadata-section-separator" />
+          </>
         );
       })()}
 
@@ -533,6 +558,50 @@ export const WorkloadOverview: React.FC<WorkloadOverviewProps> = ({
           }
         />
       )}
+
+      {/* Pod placement constraints from the pod template — surfaced
+          here (not in metadata) because they directly determine which
+          nodes pods can land on, and are common answers to "why is
+          this pod Pending". */}
+      {nodeSelector && Object.keys(nodeSelector).length > 0 && (
+        <OverviewItem
+          label="Node Selector"
+          fullWidth
+          value={
+            <div className="overview-condition-list">
+              {Object.entries(nodeSelector).map(([k, v]) => (
+                <StatusChip key={k} variant="info">
+                  {`${k}=${v}`}
+                </StatusChip>
+              ))}
+            </div>
+          }
+        />
+      )}
+
+      {(() => {
+        const parsed =
+          tolerations
+            ?.filter((tol) => !DEFAULT_TOLERATION_RE.test(tol))
+            .map(parseToleration)
+            .filter((p): p is ParsedToleration => p !== null) ?? [];
+        if (parsed.length === 0) return null;
+        return (
+          <OverviewItem
+            label="Tolerations"
+            fullWidth
+            value={
+              <div className="overview-condition-list">
+                {parsed.map((p, i) => (
+                  <StatusChip key={`${p.label}-${i}`} variant="info" tooltip={p.tooltip}>
+                    {p.label}
+                  </StatusChip>
+                ))}
+              </div>
+            }
+          />
+        );
+      })()}
 
       {/* Use composed component for metadata */}
       <ResourceMetadata

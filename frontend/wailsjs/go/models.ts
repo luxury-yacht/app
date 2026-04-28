@@ -1804,6 +1804,7 @@ export namespace types {
 	    labels?: Record<string, string>;
 	    annotations?: Record<string, string>;
 	    nodeSelector?: Record<string, string>;
+	    tolerations?: string[];
 	    conditions?: string[];
 	    containers?: PodDetailInfoContainer[];
 	    initContainers?: PodDetailInfoContainer[];
@@ -1846,6 +1847,7 @@ export namespace types {
 	        this.labels = source["labels"];
 	        this.annotations = source["annotations"];
 	        this.nodeSelector = source["nodeSelector"];
+	        this.tolerations = source["tolerations"];
 	        this.conditions = source["conditions"];
 	        this.containers = this.convertValues(source["containers"], PodDetailInfoContainer);
 	        this.initContainers = this.convertValues(source["initContainers"], PodDetailInfoContainer);
@@ -1953,8 +1955,8 @@ export namespace types {
 	    ready: string;
 	    updated?: string;
 	    upToDate?: number;
-	    available?: number;
-	    desiredReplicas?: number;
+	    available: number;
+	    desiredReplicas: number;
 	    age: string;
 	    cpuRequest?: string;
 	    cpuLimit?: string;
@@ -1969,6 +1971,8 @@ export namespace types {
 	    revisionHistory?: number;
 	    progressDeadline?: number;
 	    serviceAccount?: string;
+	    nodeSelector?: Record<string, string>;
+	    tolerations?: string[];
 	    selector?: Record<string, string>;
 	    labels?: Record<string, string>;
 	    annotations?: Record<string, string>;
@@ -2016,6 +2020,8 @@ export namespace types {
 	        this.revisionHistory = source["revisionHistory"];
 	        this.progressDeadline = source["progressDeadline"];
 	        this.serviceAccount = source["serviceAccount"];
+	        this.nodeSelector = source["nodeSelector"];
+	        this.tolerations = source["tolerations"];
 	        this.selector = source["selector"];
 	        this.labels = source["labels"];
 	        this.annotations = source["annotations"];
@@ -4026,8 +4032,8 @@ export namespace types {
 	    details: string;
 	    replicas: string;
 	    ready: string;
-	    available?: number;
-	    desiredReplicas?: number;
+	    available: number;
+	    desiredReplicas: number;
 	    age: string;
 	    cpuRequest?: string;
 	    cpuLimit?: string;
@@ -4636,8 +4642,8 @@ export namespace types {
 	    replicas: string;
 	    ready: string;
 	    upToDate?: number;
-	    available?: number;
-	    desiredReplicas?: number;
+	    available: number;
+	    desiredReplicas: number;
 	    age: string;
 	    cpuRequest?: string;
 	    cpuLimit?: string;
@@ -4654,6 +4660,8 @@ export namespace types {
 	    serviceName?: string;
 	    serviceAccount?: string;
 	    pvcRetentionPolicy?: Record<string, string>;
+	    nodeSelector?: Record<string, string>;
+	    tolerations?: string[];
 	    selector?: Record<string, string>;
 	    labels?: Record<string, string>;
 	    annotations?: Record<string, string>;
@@ -4701,6 +4709,8 @@ export namespace types {
 	        this.serviceName = source["serviceName"];
 	        this.serviceAccount = source["serviceAccount"];
 	        this.pvcRetentionPolicy = source["pvcRetentionPolicy"];
+	        this.nodeSelector = source["nodeSelector"];
+	        this.tolerations = source["tolerations"];
 	        this.selector = source["selector"];
 	        this.labels = source["labels"];
 	        this.annotations = source["annotations"];

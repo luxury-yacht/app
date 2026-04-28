@@ -146,6 +146,8 @@ func (s *DeploymentService) buildDeploymentDetails(
 		RevisionHistory:    revisionHistory,
 		ProgressDeadline:   progressDeadline,
 		ServiceAccount:     deployment.Spec.Template.Spec.ServiceAccountName,
+		NodeSelector:       deployment.Spec.Template.Spec.NodeSelector,
+		Tolerations:        pods.FormatPodTolerations(deployment.Spec.Template.Spec.Tolerations),
 		Selector:           deployment.Spec.Selector.MatchLabels,
 		Labels:             deployment.Labels,
 		Annotations:        deployment.Annotations,

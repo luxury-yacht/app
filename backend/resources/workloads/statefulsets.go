@@ -135,6 +135,8 @@ func (s *StatefulSetService) buildStatefulSetDetails(
 		RevisionHistoryLimit:                 revisionHistory,
 		ServiceName:                          statefulSet.Spec.ServiceName,
 		ServiceAccount:                       statefulSet.Spec.Template.Spec.ServiceAccountName,
+		NodeSelector:                         statefulSet.Spec.Template.Spec.NodeSelector,
+		Tolerations:                          pods.FormatPodTolerations(statefulSet.Spec.Template.Spec.Tolerations),
 		PersistentVolumeClaimRetentionPolicy: describePVCRetention(statefulSet.Spec.PersistentVolumeClaimRetentionPolicy),
 		Selector:                             statefulSet.Spec.Selector.MatchLabels,
 		Labels:                               statefulSet.Labels,

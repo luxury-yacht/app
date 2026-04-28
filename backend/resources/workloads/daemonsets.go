@@ -124,6 +124,7 @@ func (s *DaemonSetService) buildDaemonSetDetails(
 		Labels:             daemonSet.Labels,
 		Annotations:        daemonSet.Annotations,
 		NodeSelector:       daemonSet.Spec.Template.Spec.NodeSelector,
+		Tolerations:        pods.FormatPodTolerations(daemonSet.Spec.Template.Spec.Tolerations),
 		Conditions:         describeDaemonSetConditions(daemonSet),
 		Containers:         describeContainers(daemonSet.Spec.Template.Spec.Containers),
 		InitContainers:     describeContainers(daemonSet.Spec.Template.Spec.InitContainers),

@@ -60,6 +60,13 @@
   margin-left: 0.5rem;
 }
 
+/* Plain "Scaled to 0" indicator — replaces the bar entirely when the
+   workload's desired replicas is 0. Warning color signals that this
+   is operationally meaningful (and not just absent data). */
+.podstate-caption-zero {
+  color: var(--color-warning);
+}
+
 /* "(HPA managed)" hint after the pod-state caption — explains that
    replica counts fluctuate autonomously, so users don't read drift
    in the pods bar as something they need to act on. */
