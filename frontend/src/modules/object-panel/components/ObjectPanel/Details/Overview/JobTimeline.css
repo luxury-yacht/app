@@ -30,14 +30,14 @@
 }
 
 .job-timeline-window:hover {
-  color: var(--color-text);
-  border-color: var(--color-text-secondary);
-}
-
-.job-timeline-window--active {
   background: var(--color-bg-tertiary);
   color: var(--color-text);
   border-color: var(--color-accent);
+}
+
+.job-timeline-window--active {
+  color: var(--color-text);
+  border-color: var(--color-text-secondary);
 }
 
 /* Strip — relative-positioned canvas the JS-positioned bars sit on. */
@@ -59,6 +59,17 @@
   justify-content: center;
   font-size: 0.75rem;
   color: var(--color-text-secondary);
+}
+
+/* Vertical grid line marking a labeled tick position, sitting behind
+   the bars so they can still be read while serving as a visual ruler. */
+.job-timeline-gridline {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--color-text-tertiary);
+  pointer-events: none;
 }
 
 .job-timeline-bar {

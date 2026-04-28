@@ -10,7 +10,7 @@
  * get a minimum visible width so a one-second job is still findable.
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import './JobTimeline.css';
 
 interface JobLike {
@@ -45,15 +45,13 @@ const WINDOWS: WindowOption[] = [
     label: '1h',
     seconds: HOUR,
     tickInterval: 10 * 60,
-    tickLabel: (d) =>
-      d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }),
+    tickLabel: (d) => d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }),
   },
   {
     label: '3h',
     seconds: 3 * HOUR,
     tickInterval: 30 * 60,
-    tickLabel: (d) =>
-      d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }),
+    tickLabel: (d) => d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }),
   },
   {
     label: '6h',
@@ -77,8 +75,7 @@ const WINDOWS: WindowOption[] = [
     label: '2d',
     seconds: 2 * DAY,
     tickInterval: 12 * HOUR,
-    tickLabel: (d) =>
-      d.toLocaleString(undefined, { weekday: 'short', hour: 'numeric' }),
+    tickLabel: (d) => d.toLocaleString(undefined, { weekday: 'short', hour: 'numeric' }),
   },
   {
     label: '1w',
@@ -143,8 +140,40 @@ const MIN_BAR_WIDTH_PCT = 0.4; // ~2-3px on a typical strip
 const ROW_HEIGHT = 12;
 const ROW_GAP = 2;
 
+/** Minimum horizontal space (px) between adjacent tick labels — below
+ *  this they start to crowd or overlap. Tick labels are centered on
+ *  their tick, so this is effectively the minimum center-to-center
+ *  gap. Sized for labels like "11:30 AM" which are ~55-60px wide; the
+ *  rest is breathing room so adjacent labels don't visually touch. */
+const MIN_TICK_SPACING_PX = 60;
+
 export const JobTimeline: React.FC<JobTimelineProps> = ({ jobs, onJobClick }) => {
   const [windowOpt, setWindowOpt] = useState<WindowOption>(DEFAULT_WINDOW);
+  const stripRef = useRef<HTMLDivElement>(null);
+  // Default to a typical panel width so the FIRST render already picks
+  // a reasonable tick density. ResizeObserver updates this to the real
+  // measurement as soon as layout settles.
+  const [stripWidth, setStripWidth] = useState(300);
+
+  // Track the strip's rendered width so the tick density can react to
+  // panel resizing. useLayoutEffect runs synchronously after DOM commit
+  // and before paint, so the corrected width is in place by the time
+  // the user sees anything.
+  useLayoutEffect(() => {
+    const el = stripRef.current;
+    if (!el) return;
+    const measured = el.getBoundingClientRect().width;
+    if (measured > 0) setStripWidth(measured);
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const w = entry.contentRect.width;
+        if (w > 0) setStripWidth(w);
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const { runs, rowCount, ticks, now } = useMemo(() => {
     const nowMs = Date.now();
@@ -175,8 +204,16 @@ export const JobTimeline: React.FC<JobTimelineProps> = ({ jobs, onJobClick }) =>
     const stacked = stackRows(positioned);
 
     // Tick positions, anchored to the right (now) and walking back.
+    // The window's `tickInterval` is the *baseline* density; if the
+    // strip is narrower than that allows, multiply the interval until
+    // adjacent labels have at least MIN_TICK_SPACING_PX between them.
+    let tickIntervalMs = windowOpt.tickInterval * 1000;
+    const baselineSpacingPx = (tickIntervalMs / windowMs) * stripWidth;
+    if (baselineSpacingPx > 0 && baselineSpacingPx < MIN_TICK_SPACING_PX) {
+      const factor = Math.ceil(MIN_TICK_SPACING_PX / baselineSpacingPx);
+      tickIntervalMs *= factor;
+    }
     const tickList: { leftPct: number; label: string }[] = [];
-    const tickIntervalMs = windowOpt.tickInterval * 1000;
     // First tick is the most recent boundary at or before "now".
     const firstTickMs = Math.floor(nowMs / tickIntervalMs) * tickIntervalMs;
     for (let t = firstTickMs; t > cutoffMs; t -= tickIntervalMs) {
@@ -190,7 +227,7 @@ export const JobTimeline: React.FC<JobTimelineProps> = ({ jobs, onJobClick }) =>
       ticks: tickList,
       now: nowMs,
     };
-  }, [jobs, windowOpt]);
+  }, [jobs, windowOpt, stripWidth]);
 
   const stripHeight = rowCount * ROW_HEIGHT + (rowCount - 1) * ROW_GAP;
 
@@ -211,7 +248,17 @@ export const JobTimeline: React.FC<JobTimelineProps> = ({ jobs, onJobClick }) =>
         ))}
       </div>
 
-      <div className="job-timeline-strip" style={{ height: stripHeight }}>
+      <div ref={stripRef} className="job-timeline-strip" style={{ height: stripHeight }}>
+        {/* Grid lines — one vertical mark per axis tick, behind the
+            bars, so users can read where each labeled time falls
+            relative to a bar without dropping eyes to the axis. */}
+        {ticks.map((t, i) => (
+          <div
+            key={`grid-${i}`}
+            className="job-timeline-gridline"
+            style={{ left: `${t.leftPct}%` }}
+          />
+        ))}
         {runs.length === 0 && (
           <div className="job-timeline-empty">No runs in last {windowOpt.label}</div>
         )}
@@ -257,11 +304,7 @@ export const JobTimeline: React.FC<JobTimelineProps> = ({ jobs, onJobClick }) =>
 
       <div className="job-timeline-axis">
         {ticks.map((t, i) => (
-          <div
-            key={i}
-            className="job-timeline-tick"
-            style={{ left: `${t.leftPct}%` }}
-          >
+          <div key={i} className="job-timeline-tick" style={{ left: `${t.leftPct}%` }}>
             <span className="job-timeline-tick-label">{t.label}</span>
           </div>
         ))}
