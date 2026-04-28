@@ -251,8 +251,13 @@ func TestCronJobServiceCollectsPods(t *testing.T) {
 	require.Len(t, detail.Pods, 1)
 	require.Equal(t, job.Name, detail.ActiveJobs[0].Name)
 	require.NotNil(t, detail.ActiveJobs[0].StartTime)
-	require.Equal(t, "Now", detail.NextScheduleTime)
-	require.Equal(t, "0s", detail.TimeUntilNextSchedule)
+	// `*/5 * * * *` always has a future fire-time within 5 minutes of any
+	// "now", so we expect a parseable RFC3339 value and a non-empty
+	// "until" duration. Exact values are clock-dependent.
+	require.NotEmpty(t, detail.NextScheduleTime)
+	_, err = time.Parse(time.RFC3339, detail.NextScheduleTime)
+	require.NoError(t, err)
+	require.NotEmpty(t, detail.TimeUntilNextSchedule)
 	require.Contains(t, detail.Details, "Schedule: "+cron.Spec.Schedule)
 }
 

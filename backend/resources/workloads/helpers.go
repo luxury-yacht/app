@@ -16,6 +16,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/pods"
 	restypes "github.com/luxury-yacht/app/backend/resources/types"
+	"github.com/robfig/cron/v3"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -317,11 +318,26 @@ func summarizeCronJob(details *restypes.CronJobDetails) string {
 	return summary
 }
 
-func calculateNextSchedule(_ string, lastSchedule time.Time) (string, string) {
-	nextTime := lastSchedule.Add(time.Minute)
-	timeUntil := time.Until(nextTime)
-	if timeUntil > 0 {
-		return nextTime.Format(time.RFC3339), common.FormatAge(time.Now().Add(-timeUntil))
+// calculateNextSchedule parses the CronJob's schedule expression and
+// returns the next firing time as RFC3339 plus a human "in 15m" string.
+// Falls back to empty values when the expression is unparseable so the
+// frontend can hide the row instead of showing wrong data.
+//
+// The previous implementation here simply added one minute to the last
+// run, which produced "in 0s" any time the user opened the panel more
+// than a minute after the last fire — a chronic lie regardless of the
+// actual schedule.
+func calculateNextSchedule(schedule string, _ time.Time) (string, string) {
+	// k8s CronJob uses the standard 5-field format (no seconds) plus
+	// the @yearly/@hourly/@daily descriptors. cron.ParseStandard covers
+	// both, matching the kube-controller-manager parser.
+	expr, err := cron.ParseStandard(schedule)
+	if err != nil {
+		return "", ""
 	}
-	return "Now", "0s"
+	nextTime := expr.Next(time.Now())
+	if nextTime.IsZero() {
+		return "", ""
+	}
+	return nextTime.Format(time.RFC3339), common.FormatAge(time.Now().Add(-time.Until(nextTime)))
 }

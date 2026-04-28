@@ -168,10 +168,7 @@ export const JobOverview: React.FC<JobOverviewProps> = (props) => {
 
           {/* Timeline */}
           {normalizeTime(props.startTime) && (
-            <OverviewItem
-              label="Started"
-              value={<TimestampValue value={props.startTime} />}
-            />
+            <OverviewItem label="Started" value={<TimestampValue value={props.startTime} />} />
           )}
 
           {normalizeTime(props.completionTime) && (
@@ -207,17 +204,11 @@ export const JobOverview: React.FC<JobOverviewProps> = (props) => {
           )}
 
           {props.activeDeadlineSeconds !== undefined && props.activeDeadlineSeconds > 0 && (
-            <OverviewItem
-              label="Active Deadline"
-              value={`${props.activeDeadlineSeconds}s`}
-            />
+            <OverviewItem label="Active Deadline" value={`${props.activeDeadlineSeconds}s`} />
           )}
 
           {props.ttlSecondsAfterFinished !== undefined && props.ttlSecondsAfterFinished >= 0 && (
-            <OverviewItem
-              label="TTL After Finished"
-              value={`${props.ttlSecondsAfterFinished}s`}
-            />
+            <OverviewItem label="TTL Seconds" value={`${props.ttlSecondsAfterFinished}s`} />
           )}
         </>
       )}
@@ -267,10 +258,7 @@ export const JobOverview: React.FC<JobOverviewProps> = (props) => {
 
           {props.startingDeadlineSeconds !== undefined &&
             props.startingDeadlineSeconds !== null && (
-              <OverviewItem
-                label="Starting Deadline"
-                value={`${props.startingDeadlineSeconds}s`}
-              />
+              <OverviewItem label="Start Deadline" value={`${props.startingDeadlineSeconds}s`} />
             )}
 
           {/* Active runs */}
@@ -283,13 +271,13 @@ export const JobOverview: React.FC<JobOverviewProps> = (props) => {
 
           {/* Activity timeline */}
           <OverviewItem
-            label="Last Scheduled"
+            label="Last Schedule"
             value={<TimestampValue value={props.lastScheduleTime} />}
           />
 
           {normalizeTime(props.lastSuccessfulTime) && (
             <OverviewItem
-              label="Last Successful"
+              label="Last Success"
               value={<TimestampValue value={props.lastSuccessfulTime} />}
             />
           )}
