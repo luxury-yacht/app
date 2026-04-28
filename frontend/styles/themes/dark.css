@@ -254,8 +254,8 @@
      multiplier in OKLCH space, so text reads as a more vivid version of
      the slot color rather than a paler/washed-out one. Bg/border tints
      remain derived from the unmodified slot color. */
-  --hash-text-l-shift: 0.3;
-  --hash-text-c-mult: 1;
+  --hash-text-l-shift: 0.15;
+  --hash-text-c-mult: 0.5;
 
   /* Dropdown */
   --dropdown-trigger-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
