@@ -19,6 +19,17 @@
   padding: 10px var(--spacing-md);
 }
 
+/* Card content is data, not chrome — opt back into text selection on the
+   card and *every descendant* so the name/image/resources can be copied.
+   App.css applies `.app * { user-select: none }` directly to every
+   descendant, which beats inheritance from a single ancestor — matching
+   that pattern with `.containers-card *` is what reliably overrides it. */
+.containers-card,
+.containers-card * {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
 .containers-card-header {
   display: flex;
   align-items: baseline;
