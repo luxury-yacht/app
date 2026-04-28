@@ -8,25 +8,19 @@
 import './NsViewHelm.css';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
-import { useNamespaceGridTablePersistence } from '@modules/namespace/hooks/useNamespaceGridTablePersistence';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useShortNames } from '@/hooks/useShortNames';
-import { useTableSort } from '@/hooks/useTableSort';
 import * as cf from '@shared/components/tables/columnFactories';
 import React, { useMemo, useCallback } from 'react';
-import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
+import ResourceGridTableView from '@shared/components/tables/ResourceGridTableView';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
-import { useFavToggle } from '@ui/favorites/FavToggle';
-import GridTable, {
-  type GridColumnDefinition,
-  GRIDTABLE_VIRTUALIZATION_DEFAULT,
-} from '@shared/components/tables/GridTable';
+import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
-import { useNamespaceFilterOptions } from '@modules/namespace/hooks/useNamespaceFilterOptions';
+import { useNamespaceResourceGridTable } from '@shared/hooks/useResourceGridTable';
 import { buildSyntheticObjectReference } from '@shared/utils/objectIdentity';
 
 // Data interface for Helm releases
@@ -283,53 +277,17 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
       useShortResourceNames,
     ]);
 
-    const isNamespaceScoped = namespace !== ALL_NAMESPACES_SCOPE;
-
-    const {
-      sortConfig: persistedSort,
-      onSortChange,
-      columnWidths,
-      setColumnWidths,
-      columnVisibility,
-      setColumnVisibility,
-      filters: persistedFilters,
-      setFilters: setPersistedFilters,
-      resetState: resetPersistedState,
-      hydrated,
-    } = useNamespaceGridTablePersistence<HelmData>({
+    const { gridTableProps, favModal } = useNamespaceResourceGridTable<HelmData>({
       viewId: 'namespace-helm',
       namespace,
-      columns,
       data,
+      columns,
       keyExtractor,
       defaultSort: { key: 'name', direction: 'asc' },
-      filterOptions: { isNamespaceScoped },
-    });
-
-    const { sortedData, sortConfig, handleSort } = useTableSort(data, undefined, 'asc', {
-      columns,
-      controlledSort: persistedSort,
-      onChange: onSortChange,
       diagnosticsLabel:
         namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Helm' : 'Namespace Helm',
-    });
-
-    const fallbackNamespaces = useMemo(
-      () => [...new Set(data.map((r) => r.namespace).filter(Boolean))].sort(),
-      [data]
-    );
-    const availableFilterNamespaces = useNamespaceFilterOptions(namespace, fallbackNamespaces);
-
-    const { item: favToggle, modal: favModal } = useFavToggle({
-      filters: persistedFilters,
-      sortColumn: sortConfig?.key ?? null,
-      sortDirection: sortConfig?.direction ?? 'asc',
-      columnVisibility: columnVisibility ?? {},
-      setFilters: setPersistedFilters,
-      setSortConfig: onSortChange,
-      setColumnVisibility,
-      hydrated,
-      availableFilterNamespaces,
+      showNamespaceFilters: showNamespaceColumn,
+      filterOptions: { isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE },
     });
 
     const getContextMenuItems = useCallback(
@@ -368,14 +326,12 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
 
     return (
       <>
-        <ResourceLoadingBoundary
-          loading={loading ?? false}
-          dataLength={sortedData.length}
-          hasLoaded={loaded}
+        <ResourceGridTableView
+          gridTableProps={gridTableProps}
+          boundaryLoading={loading ?? false}
+          loaded={loaded}
           spinnerMessage="Loading Helm releases..."
-        >
-          <GridTable
-            data={sortedData}
+          favModal={favModal}
             columns={columns}
             diagnosticsLabel={
               namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Helm' : 'Namespace Helm'
@@ -383,36 +339,12 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
             loading={loading}
             keyExtractor={keyExtractor}
             onRowClick={handleResourceClick}
-            onSort={handleSort}
-            sortConfig={sortConfig}
             tableClassName="ns-helm-table"
             enableContextMenu={true}
             getCustomContextMenuItems={getContextMenuItems}
             useShortNames={useShortResourceNames}
             emptyMessage={emptyMessage}
-            filters={{
-              enabled: true,
-              value: persistedFilters,
-              onChange: setPersistedFilters,
-              onReset: resetPersistedState,
-              options: {
-                namespaces: availableFilterNamespaces,
-                showKindDropdown: true,
-                showNamespaceDropdown: showNamespaceColumn,
-                namespaceDropdownSearchable: showNamespaceColumn,
-                namespaceDropdownBulkActions: showNamespaceColumn,
-                preActions: [favToggle],
-              },
-            }}
-            virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}
-            columnWidths={columnWidths}
-            onColumnWidthsChange={setColumnWidths}
-            columnVisibility={columnVisibility}
-            onColumnVisibilityChange={setColumnVisibility}
-            allowHorizontalOverflow={true}
-          />
-        </ResourceLoadingBoundary>
-        {favModal}
+        />
       </>
     );
   }

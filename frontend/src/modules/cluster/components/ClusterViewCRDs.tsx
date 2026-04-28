@@ -10,25 +10,23 @@ import { errorHandler } from '@utils/errorHandler';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 import { getPermissionKey, useUserPermissions } from '@/core/capabilities';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
-import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useShortNames } from '@/hooks/useShortNames';
-import { useTableSort } from '@/hooks/useTableSort';
 import * as cf from '@shared/components/tables/columnFactories';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import React, { useMemo, useState, useCallback } from 'react';
-import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
+import ResourceGridTableView from '@shared/components/tables/ResourceGridTableView';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
-import GridTable, {
-  type GridColumnDefinition,
-  GRIDTABLE_VIRTUALIZATION_DEFAULT,
-} from '@shared/components/tables/GridTable';
+import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { formatBuiltinApiVersion } from '@shared/constants/builtinGroupVersions';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
-import { useFavToggle } from '@ui/favorites/FavToggle';
-import { buildCanonicalObjectRowKey, buildObjectReference } from '@shared/utils/objectIdentity';
+import { useClusterResourceGridTable } from '@shared/hooks/useResourceGridTable';
+import {
+  buildRequiredCanonicalObjectRowKey,
+  buildRequiredObjectReference,
+} from '@shared/utils/objectIdentity';
 
 const CLUSTER_CRD_KIND_OPTIONS = ['CustomResourceDefinition'];
 
@@ -93,25 +91,31 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
     const handleResourceClick = useCallback(
       (crd: CRDsData) => {
         openWithObject(
-          buildObjectReference({
-            kind: 'CustomResourceDefinition',
-            name: crd.name,
-            clusterId: crd.clusterId ?? undefined,
-            clusterName: crd.clusterName ?? undefined,
-          })
+          buildRequiredObjectReference(
+            {
+              kind: 'CustomResourceDefinition',
+              name: crd.name,
+              clusterId: crd.clusterId,
+              clusterName: crd.clusterName ?? undefined,
+            },
+            { fallbackClusterId: selectedClusterId }
+          )
         );
       },
-      [openWithObject]
+      [openWithObject, selectedClusterId]
     );
 
     const keyExtractor = useCallback(
       (crd: CRDsData) =>
-        buildCanonicalObjectRowKey({
-          kind: 'CustomResourceDefinition',
-          name: crd.name,
-          clusterId: crd.clusterId,
-        }),
-      []
+        buildRequiredCanonicalObjectRowKey(
+          {
+            kind: 'CustomResourceDefinition',
+            name: crd.name,
+            clusterId: crd.clusterId,
+          },
+          { fallbackClusterId: selectedClusterId }
+        ),
+      [selectedClusterId]
     );
 
     // Define columns for CRDs
@@ -125,12 +129,15 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
           onClick: handleResourceClick,
           onAltClick: (crd) =>
             navigateToView(
-              buildObjectReference({
-                kind: 'CustomResourceDefinition',
-                name: crd.name,
-                clusterId: crd.clusterId,
-                clusterName: crd.clusterName,
-              })
+              buildRequiredObjectReference(
+                {
+                  kind: 'CustomResourceDefinition',
+                  name: crd.name,
+                  clusterId: crd.clusterId,
+                  clusterName: crd.clusterName,
+                },
+                { fallbackClusterId: selectedClusterId }
+              )
             ),
         }),
         cf.createTextColumn<CRDsData>('name', 'Name', (crd) => crd.name, {
@@ -138,12 +145,15 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
           onClick: handleResourceClick,
           onAltClick: (crd) =>
             navigateToView(
-              buildObjectReference({
-                kind: 'CustomResourceDefinition',
-                name: crd.name,
-                clusterId: crd.clusterId,
-                clusterName: crd.clusterName,
-              })
+              buildRequiredObjectReference(
+                {
+                  kind: 'CustomResourceDefinition',
+                  name: crd.name,
+                  clusterId: crd.clusterId,
+                  clusterName: crd.clusterName,
+                },
+                { fallbackClusterId: selectedClusterId }
+              )
             ),
           getTitle: (crd) => `Open ${crd.name}`,
           getClassName: () => 'object-panel-link',
@@ -178,50 +188,15 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
       cf.applyColumnSizing(baseColumns, sizing);
 
       return baseColumns;
-    }, [handleResourceClick, navigateToView, useShortResourceNames]);
+    }, [handleResourceClick, navigateToView, selectedClusterId, useShortResourceNames]);
 
-    // Set up grid table persistence
-    const {
-      sortConfig: persistedSort,
-      setSortConfig: setPersistedSort,
-      columnWidths,
-      setColumnWidths,
-      columnVisibility,
-      setColumnVisibility,
-      filters: persistedFilters,
-      setFilters: setPersistedFilters,
-      resetState: resetPersistedState,
-      hydrated,
-    } = useGridTablePersistence<CRDsData>({
+    const { gridTableProps, favModal } = useClusterResourceGridTable<CRDsData>({
       viewId: 'cluster-crds',
-      clusterIdentity: selectedClusterId,
-      namespace: null,
-      isNamespaceScoped: false,
-      columns,
       data,
-      keyExtractor,
-      filterOptions: { isNamespaceScoped: false },
-    });
-
-    // Set up table sorting
-    const { sortedData, sortConfig, handleSort } = useTableSort(data, 'name', 'asc', {
       columns,
-      controlledSort: persistedSort,
-      onChange: setPersistedSort,
-    });
-
-    const availableKinds = CLUSTER_CRD_KIND_OPTIONS;
-
-    const { item: favToggle, modal: favModal } = useFavToggle({
-      filters: persistedFilters,
-      sortColumn: sortConfig?.key ?? null,
-      sortDirection: sortConfig?.direction ?? 'asc',
-      columnVisibility: columnVisibility ?? {},
-      setFilters: setPersistedFilters,
-      setSortConfig: setPersistedSort,
-      setColumnVisibility,
-      hydrated,
-      availableKinds,
+      keyExtractor,
+      availableKinds: CLUSTER_CRD_KIND_OPTIONS,
+      filterOptions: { isNamespaceScoped: false },
     });
 
     // Handle delete confirmation
@@ -272,12 +247,15 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
           ) ?? null;
 
         return buildObjectActionItems({
-          object: buildObjectReference({
-            kind: 'CustomResourceDefinition',
-            name: crd.name,
-            clusterId: crd.clusterId,
-            clusterName: crd.clusterName,
-          }),
+          object: buildRequiredObjectReference(
+            {
+              kind: 'CustomResourceDefinition',
+              name: crd.name,
+              clusterId: crd.clusterId,
+              clusterName: crd.clusterName,
+            },
+            { fallbackClusterId: selectedClusterId }
+          ),
           context: 'gridtable',
           handlers: {
             onOpen: () => handleResourceClick(crd),
@@ -288,7 +266,7 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
           },
         });
       },
-      [handleResourceClick, permissionMap]
+      [handleResourceClick, permissionMap, selectedClusterId]
     );
 
     // Resolve empty state message
@@ -296,45 +274,23 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
 
     return (
       <>
-        <ResourceLoadingBoundary
-          loading={loading ?? false}
-          dataLength={sortedData.length}
-          hasLoaded={loaded}
+        <ResourceGridTableView
+          gridTableProps={gridTableProps}
+          boundaryLoading={loading ?? false}
+          loaded={loaded}
           spinnerMessage="Loading CRDs..."
-        >
-          <GridTable
-            data={sortedData}
+          favModal={favModal}
             columns={columns}
             diagnosticsLabel="Cluster CRDs"
             loading={loading}
             keyExtractor={keyExtractor}
             onRowClick={handleResourceClick}
-            onSort={handleSort}
-            sortConfig={sortConfig}
             tableClassName="gridtable-crds"
             enableContextMenu={true}
             getCustomContextMenuItems={getContextMenuItems}
             useShortNames={useShortResourceNames}
             emptyMessage={emptyMessage}
-            filters={{
-              enabled: true,
-              value: persistedFilters,
-              onChange: setPersistedFilters,
-              onReset: resetPersistedState,
-              options: {
-                kinds: availableKinds,
-                showKindDropdown: true,
-                preActions: [favToggle],
-              },
-            }}
-            virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}
-            columnWidths={columnWidths}
-            onColumnWidthsChange={setColumnWidths}
-            columnVisibility={columnVisibility}
-            onColumnVisibilityChange={setColumnVisibility}
-            allowHorizontalOverflow={true}
-          />
-        </ResourceLoadingBoundary>
+        />
 
         <ConfirmationModal
           isOpen={deleteConfirm.show}
@@ -346,7 +302,6 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
           onConfirm={handleDeleteConfirm}
           onCancel={() => setDeleteConfirm({ show: false, resource: null })}
         />
-        {favModal}
       </>
     );
   }

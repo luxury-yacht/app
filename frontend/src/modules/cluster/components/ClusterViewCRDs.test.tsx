@@ -57,7 +57,7 @@ vi.mock('@shared/hooks/useNavigateToView', () => ({
 }));
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => ({ selectedKubeconfig: 'path:context' }),
+  useKubeconfig: () => ({ selectedKubeconfig: 'path:context', selectedClusterId: 'cluster-a' }),
 }));
 
 vi.mock('@shared/components/ResourceLoadingBoundary', () => ({

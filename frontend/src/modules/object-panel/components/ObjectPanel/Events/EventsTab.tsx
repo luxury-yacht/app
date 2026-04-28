@@ -4,17 +4,13 @@
 
 import React, { useEffect, useCallback, useMemo, useRef } from 'react';
 import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
-import GridTable, {
-  type GridColumnDefinition,
-  GRIDTABLE_VIRTUALIZATION_DEFAULT,
-} from '@shared/components/tables/GridTable';
+import GridTable, { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import {
   applyColumnSizing,
   type ColumnSizingMap,
   createTextColumn,
 } from '@shared/components/tables/columnFactories';
-import { useTableSort } from '@hooks/useTableSort';
 import { formatAge, formatFullDate } from '@utils/ageFormatter';
 import { errorHandler } from '@/utils/errorHandler';
 import { requestRefreshDomain, type DataRequestReason } from '@/core/data-access';
@@ -33,6 +29,7 @@ import {
   resolveEventObjectReference,
   splitEventObjectTarget,
 } from '@shared/utils/eventObjectIdentity';
+import { useSortableGridTable } from '@shared/hooks/useResourceGridTable';
 import type { ResolvedObjectReference } from '@shared/utils/objectIdentity';
 import type { PanelObjectData } from '../types';
 import { CLUSTER_SCOPE, INACTIVE_SCOPE } from '../constants';
@@ -394,8 +391,11 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
     return base;
   }, [canOpenRelatedObject, navigateToRelatedObject, openRelatedObject]);
 
-  const { sortedData, sortConfig, handleSort } = useTableSort(events, 'ageTimestamp', 'desc', {
+  const { gridTableProps } = useSortableGridTable({
+    data: events,
     columns,
+    defaultSortKey: 'ageTimestamp',
+    defaultSortDirection: 'desc',
   });
 
   if (eventsLoading && events.length === 0) {
@@ -442,16 +442,13 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
     <div className="object-panel-tab-content">
       <div className="events-display">
         <GridTable<EventDisplay>
-          data={sortedData}
+          {...gridTableProps}
           columns={columns}
-          sortConfig={sortConfig}
-          onSort={handleSort}
           onRowClick={(item) => {
             void openRelatedObject(item);
           }}
           keyExtractor={keyExtractor}
           className="gridtable-object-events"
-          virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}
         />
       </div>
     </div>

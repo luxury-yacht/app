@@ -9,21 +9,15 @@ import './NsViewNetwork.css';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
 import { getPermissionKey, useUserPermissions } from '@/core/capabilities';
-import { useNamespaceGridTablePersistence } from '@modules/namespace/hooks/useNamespaceGridTablePersistence';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useShortNames } from '@/hooks/useShortNames';
-import { useTableSort } from '@/hooks/useTableSort';
 import * as cf from '@shared/components/tables/columnFactories';
 import React, { useMemo, useState, useCallback } from 'react';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
-import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
+import ResourceGridTableView from '@shared/components/tables/ResourceGridTableView';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
-import GridTable, {
-  type GridColumnDefinition,
-  GRIDTABLE_VIRTUALIZATION_DEFAULT,
-} from '@shared/components/tables/GridTable';
-import { useKindFilterOptions } from '@shared/components/tables/hooks/useKindFilterOptions';
+import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import {
   formatBuiltinApiVersion,
   resolveBuiltinGroupVersion,
@@ -33,10 +27,12 @@ import { DeleteResourceByGVK } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
 import { PortForwardModal, PortForwardTarget } from '@modules/port-forward';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
-import { useFavToggle } from '@ui/favorites/FavToggle';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
-import { useNamespaceFilterOptions } from '@modules/namespace/hooks/useNamespaceFilterOptions';
-import { buildCanonicalObjectRowKey, buildObjectReference } from '@shared/utils/objectIdentity';
+import { useNamespaceResourceGridTable } from '@shared/hooks/useResourceGridTable';
+import {
+  buildRequiredCanonicalObjectRowKey,
+  buildRequiredObjectReference,
+} from '@shared/utils/objectIdentity';
 
 // Data interface for network resources
 export interface NetworkData {
@@ -87,7 +83,7 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
       (resource: NetworkData) => {
         const resolvedKind = resource.kind || resource.kindAlias;
         openWithObject(
-          buildObjectReference({
+          buildRequiredObjectReference({
             kind: resolvedKind,
             name: resource.name,
             namespace: resource.namespace,
@@ -101,7 +97,7 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
 
     const keyExtractor = useCallback(
       (resource: NetworkData) =>
-        buildCanonicalObjectRowKey({
+        buildRequiredCanonicalObjectRowKey({
           kind: resource.kind,
           name: resource.name,
           namespace: resource.namespace,
@@ -120,7 +116,7 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
           onClick: handleResourceClick,
           onAltClick: (resource) =>
             navigateToView(
-              buildObjectReference({
+              buildRequiredObjectReference({
                 kind: resource.kind,
                 name: resource.name,
                 namespace: resource.namespace,
@@ -133,7 +129,7 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
           onClick: handleResourceClick,
           onAltClick: (resource) =>
             navigateToView(
-              buildObjectReference({
+              buildRequiredObjectReference({
                 kind: resource.kind,
                 name: resource.name,
                 namespace: resource.namespace,
@@ -181,56 +177,18 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
       useShortResourceNames,
     ]);
 
-    const showNamespaceFilter = namespace === ALL_NAMESPACES_SCOPE;
+    const diagnosticsLabel =
+      namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Network' : 'Namespace Network';
 
-    const {
-      sortConfig: persistedSort,
-      onSortChange,
-      columnWidths,
-      setColumnWidths,
-      columnVisibility,
-      setColumnVisibility,
-      filters: persistedFilters,
-      setFilters: setPersistedFilters,
-      resetState: resetPersistedState,
-      hydrated,
-    } = useNamespaceGridTablePersistence<NetworkData>({
+    const { gridTableProps, favModal } = useNamespaceResourceGridTable<NetworkData>({
       viewId: 'namespace-network',
       namespace,
       columns,
       data,
       keyExtractor,
       defaultSort: { key: 'name', direction: 'asc' },
-      filterOptions: { isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE },
-    });
-
-    const { sortedData, sortConfig, handleSort } = useTableSort(data, undefined, 'asc', {
-      columns,
-      controlledSort: persistedSort,
-      onChange: onSortChange,
-      diagnosticsLabel:
-        namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Network' : 'Namespace Network',
-    });
-
-    const fallbackKinds = useKindFilterOptions(data);
-    const availableKinds = kindOptions && kindOptions.length > 0 ? kindOptions : fallbackKinds;
-    const fallbackNamespaces = useMemo(
-      () => [...new Set(data.map((r) => r.namespace).filter(Boolean))].sort(),
-      [data]
-    );
-    const availableFilterNamespaces = useNamespaceFilterOptions(namespace, fallbackNamespaces);
-
-    const { item: favToggle, modal: favModal } = useFavToggle({
-      filters: persistedFilters,
-      sortColumn: sortConfig?.key ?? null,
-      sortDirection: sortConfig?.direction ?? 'asc',
-      columnVisibility: columnVisibility ?? {},
-      setFilters: setPersistedFilters,
-      setSortConfig: onSortChange,
-      setColumnVisibility,
-      hydrated,
-      availableKinds,
-      availableFilterNamespaces,
+      availableKinds: kindOptions,
+      diagnosticsLabel,
     });
 
     const handleDeleteConfirm = useCallback(async () => {
@@ -282,7 +240,7 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
           ) ?? null;
 
         return buildObjectActionItems({
-          object: buildObjectReference({
+          object: buildRequiredObjectReference({
             kind: resource.kind,
             name: resource.name,
             namespace: resource.namespace,
@@ -338,51 +296,23 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
 
     return (
       <>
-        <ResourceLoadingBoundary
-          loading={loading}
-          dataLength={sortedData.length}
-          hasLoaded={loaded}
+        <ResourceGridTableView
+          gridTableProps={gridTableProps}
+          boundaryLoading={loading}
+          loaded={loaded}
           spinnerMessage="Loading network resources..."
-        >
-          <GridTable
-            data={sortedData}
+          favModal={favModal}
             columns={columns}
-            diagnosticsLabel={
-              namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Network' : 'Namespace Network'
-            }
+            diagnosticsLabel={diagnosticsLabel}
             loading={loading}
             keyExtractor={keyExtractor}
             onRowClick={handleResourceClick}
-            onSort={handleSort}
-            sortConfig={sortConfig}
             tableClassName="ns-network-table"
             enableContextMenu={true}
             getCustomContextMenuItems={getContextMenuItems}
             useShortNames={useShortResourceNames}
             emptyMessage={emptyMessage}
-            filters={{
-              enabled: true,
-              value: persistedFilters,
-              onChange: setPersistedFilters,
-              onReset: resetPersistedState,
-              options: {
-                kinds: availableKinds,
-                namespaces: availableFilterNamespaces,
-                showKindDropdown: true,
-                showNamespaceDropdown: showNamespaceFilter,
-                namespaceDropdownSearchable: showNamespaceFilter,
-                namespaceDropdownBulkActions: showNamespaceFilter,
-                preActions: [favToggle],
-              },
-            }}
-            virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}
-            columnWidths={columnWidths}
-            onColumnWidthsChange={setColumnWidths}
-            columnVisibility={columnVisibility}
-            onColumnVisibilityChange={setColumnVisibility}
-            allowHorizontalOverflow={true}
-          />
-        </ResourceLoadingBoundary>
+        />
 
         <ConfirmationModal
           isOpen={deleteConfirm.show}
@@ -396,7 +326,6 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
         />
 
         <PortForwardModal target={portForwardTarget} onClose={() => setPortForwardTarget(null)} />
-        {favModal}
       </>
     );
   }

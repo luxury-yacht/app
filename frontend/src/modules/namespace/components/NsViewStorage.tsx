@@ -8,31 +8,28 @@
 import './NsViewStorage.css';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
-import { useNamespaceGridTablePersistence } from '@modules/namespace/hooks/useNamespaceGridTablePersistence';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectLink } from '@shared/hooks/useObjectLink';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useShortNames } from '@/hooks/useShortNames';
-import { useTableSort } from '@/hooks/useTableSort';
 import * as cf from '@shared/components/tables/columnFactories';
 import React, { useMemo, useState, useCallback } from 'react';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
-import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
+import ResourceGridTableView from '@shared/components/tables/ResourceGridTableView';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
-import GridTable, {
-  type GridColumnDefinition,
-  GRIDTABLE_VIRTUALIZATION_DEFAULT,
-} from '@shared/components/tables/GridTable';
+import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { formatBuiltinApiVersion } from '@shared/constants/builtinGroupVersions';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { DeleteResourceByGVK } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
 import { getPermissionKey, useUserPermissions } from '@/core/capabilities';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
-import { useFavToggle } from '@ui/favorites/FavToggle';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
-import { useNamespaceFilterOptions } from '@modules/namespace/hooks/useNamespaceFilterOptions';
-import { buildCanonicalObjectRowKey, buildObjectReference } from '@shared/utils/objectIdentity';
+import { useNamespaceResourceGridTable } from '@shared/hooks/useResourceGridTable';
+import {
+  buildRequiredCanonicalObjectRowKey,
+  buildRequiredObjectReference,
+} from '@shared/utils/objectIdentity';
 
 const NAMESPACE_STORAGE_KIND_OPTIONS = ['PersistentVolumeClaim'];
 
@@ -79,7 +76,7 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
       (resource: StorageData) => {
         const resolvedKind = resource.kind || resource.kindAlias;
         openWithObject(
-          buildObjectReference({
+          buildRequiredObjectReference({
             kind: resolvedKind,
             name: resource.name,
             namespace: resource.namespace,
@@ -93,7 +90,7 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
 
     const keyExtractor = useCallback(
       (resource: StorageData) =>
-        buildCanonicalObjectRowKey({
+        buildRequiredCanonicalObjectRowKey({
           kind: resource.kindAlias ?? resource.kind,
           name: resource.name,
           namespace: resource.namespace,
@@ -112,7 +109,7 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
           onClick: handleResourceClick,
           onAltClick: (resource) =>
             navigateToView(
-              buildObjectReference({
+              buildRequiredObjectReference({
                 kind: resource.kind,
                 name: resource.name,
                 namespace: resource.namespace,
@@ -125,7 +122,7 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
           onClick: handleResourceClick,
           onAltClick: (resource) =>
             navigateToView(
-              buildObjectReference({
+              buildRequiredObjectReference({
                 kind: resource.kind,
                 name: resource.name,
                 namespace: resource.namespace,
@@ -163,7 +160,7 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
           {
             ...objectLink((resource) =>
               resource.storageClass
-                ? buildObjectReference({
+                ? buildRequiredObjectReference({
                     kind: 'StorageClass',
                     name: resource.storageClass,
                     clusterId: resource.clusterId ?? undefined,
@@ -208,55 +205,18 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
       useShortResourceNames,
     ]);
 
-    const showNamespaceFilter = namespace === ALL_NAMESPACES_SCOPE;
+    const diagnosticsLabel =
+      namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Storage' : 'Namespace Storage';
 
-    const {
-      sortConfig: persistedSort,
-      onSortChange,
-      columnWidths,
-      setColumnWidths,
-      columnVisibility,
-      setColumnVisibility,
-      filters: persistedFilters,
-      setFilters: setPersistedFilters,
-      resetState: resetPersistedState,
-      hydrated,
-    } = useNamespaceGridTablePersistence<StorageData>({
+    const { gridTableProps, favModal } = useNamespaceResourceGridTable<StorageData>({
       viewId: 'namespace-storage',
       namespace,
       columns,
       data,
       keyExtractor,
       defaultSort: { key: 'name', direction: 'asc' },
-      filterOptions: { isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE },
-    });
-
-    const { sortedData, sortConfig, handleSort } = useTableSort(data, undefined, 'asc', {
-      columns,
-      controlledSort: persistedSort,
-      onChange: onSortChange,
-      diagnosticsLabel:
-        namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Storage' : 'Namespace Storage',
-    });
-
-    const availableKinds = NAMESPACE_STORAGE_KIND_OPTIONS;
-    const fallbackNamespaces = useMemo(
-      () => [...new Set(data.map((r) => r.namespace).filter(Boolean))].sort(),
-      [data]
-    );
-    const availableFilterNamespaces = useNamespaceFilterOptions(namespace, fallbackNamespaces);
-
-    const { item: favToggle, modal: favModal } = useFavToggle({
-      filters: persistedFilters,
-      sortColumn: sortConfig?.key ?? null,
-      sortDirection: sortConfig?.direction ?? 'asc',
-      columnVisibility: columnVisibility ?? {},
-      setFilters: setPersistedFilters,
-      setSortConfig: onSortChange,
-      setColumnVisibility,
-      hydrated,
-      availableKinds,
-      availableFilterNamespaces,
+      availableKinds: NAMESPACE_STORAGE_KIND_OPTIONS,
+      diagnosticsLabel,
     });
 
     const handleDeleteConfirm = useCallback(async () => {
@@ -304,7 +264,7 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
           ) ?? null;
 
         return buildObjectActionItems({
-          object: buildObjectReference({
+          object: buildRequiredObjectReference({
             kind: resource.kind,
             name: resource.name,
             namespace: resource.namespace,
@@ -335,51 +295,23 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
 
     return (
       <>
-        <ResourceLoadingBoundary
-          loading={loading}
-          dataLength={sortedData.length}
-          hasLoaded={loaded}
+        <ResourceGridTableView
+          gridTableProps={gridTableProps}
+          boundaryLoading={loading}
+          loaded={loaded}
           spinnerMessage="Loading storage resources..."
-        >
-          <GridTable
-            data={sortedData}
+          favModal={favModal}
             columns={columns}
-            diagnosticsLabel={
-              namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Storage' : 'Namespace Storage'
-            }
+            diagnosticsLabel={diagnosticsLabel}
             loading={loading}
             keyExtractor={keyExtractor}
             onRowClick={handleResourceClick}
-            onSort={handleSort}
-            sortConfig={sortConfig}
             tableClassName="ns-storage-table"
             enableContextMenu={true}
             getCustomContextMenuItems={getContextMenuItems}
             useShortNames={useShortResourceNames}
             emptyMessage={emptyMessage}
-            filters={{
-              enabled: true,
-              value: persistedFilters,
-              onChange: setPersistedFilters,
-              onReset: resetPersistedState,
-              options: {
-                kinds: availableKinds,
-                namespaces: availableFilterNamespaces,
-                showKindDropdown: true,
-                showNamespaceDropdown: showNamespaceFilter,
-                namespaceDropdownSearchable: showNamespaceFilter,
-                namespaceDropdownBulkActions: showNamespaceFilter,
-                preActions: [favToggle],
-              },
-            }}
-            virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}
-            columnWidths={columnWidths}
-            onColumnWidthsChange={setColumnWidths}
-            columnVisibility={columnVisibility}
-            onColumnVisibilityChange={setColumnVisibility}
-            allowHorizontalOverflow={true}
-          />
-        </ResourceLoadingBoundary>
+        />
 
         <ConfirmationModal
           isOpen={deleteConfirm.show}
@@ -391,7 +323,6 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
           onConfirm={handleDeleteConfirm}
           onCancel={() => setDeleteConfirm({ show: false, resource: null })}
         />
-        {favModal}
       </>
     );
   }
