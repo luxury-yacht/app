@@ -134,6 +134,7 @@ func (s *StatefulSetService) buildStatefulSetDetails(
 		MinReadySeconds:                      statefulSet.Spec.MinReadySeconds,
 		RevisionHistoryLimit:                 revisionHistory,
 		ServiceName:                          statefulSet.Spec.ServiceName,
+		ServiceAccount:                       statefulSet.Spec.Template.Spec.ServiceAccountName,
 		PersistentVolumeClaimRetentionPolicy: describePVCRetention(statefulSet.Spec.PersistentVolumeClaimRetentionPolicy),
 		Selector:                             statefulSet.Spec.Selector.MatchLabels,
 		Labels:                               statefulSet.Labels,

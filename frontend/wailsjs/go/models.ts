@@ -1799,6 +1799,7 @@ export namespace types {
 	    maxSurge?: string;
 	    minReadySeconds?: number;
 	    revisionHistoryLimit?: number;
+	    serviceAccount?: string;
 	    selector?: Record<string, string>;
 	    labels?: Record<string, string>;
 	    annotations?: Record<string, string>;
@@ -1840,6 +1841,7 @@ export namespace types {
 	        this.maxSurge = source["maxSurge"];
 	        this.minReadySeconds = source["minReadySeconds"];
 	        this.revisionHistoryLimit = source["revisionHistoryLimit"];
+	        this.serviceAccount = source["serviceAccount"];
 	        this.selector = source["selector"];
 	        this.labels = source["labels"];
 	        this.annotations = source["annotations"];
@@ -1966,6 +1968,7 @@ export namespace types {
 	    minReadySeconds?: number;
 	    revisionHistory?: number;
 	    progressDeadline?: number;
+	    serviceAccount?: string;
 	    selector?: Record<string, string>;
 	    labels?: Record<string, string>;
 	    annotations?: Record<string, string>;
@@ -2012,6 +2015,7 @@ export namespace types {
 	        this.minReadySeconds = source["minReadySeconds"];
 	        this.revisionHistory = source["revisionHistory"];
 	        this.progressDeadline = source["progressDeadline"];
+	        this.serviceAccount = source["serviceAccount"];
 	        this.selector = source["selector"];
 	        this.labels = source["labels"];
 	        this.annotations = source["annotations"];
@@ -4648,6 +4652,7 @@ export namespace types {
 	    minReadySeconds?: number;
 	    revisionHistoryLimit?: number;
 	    serviceName?: string;
+	    serviceAccount?: string;
 	    pvcRetentionPolicy?: Record<string, string>;
 	    selector?: Record<string, string>;
 	    labels?: Record<string, string>;
@@ -4694,6 +4699,7 @@ export namespace types {
 	        this.minReadySeconds = source["minReadySeconds"];
 	        this.revisionHistoryLimit = source["revisionHistoryLimit"];
 	        this.serviceName = source["serviceName"];
+	        this.serviceAccount = source["serviceAccount"];
 	        this.pvcRetentionPolicy = source["pvcRetentionPolicy"];
 	        this.selector = source["selector"];
 	        this.labels = source["labels"];

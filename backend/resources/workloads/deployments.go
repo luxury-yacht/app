@@ -145,6 +145,7 @@ func (s *DeploymentService) buildDeploymentDetails(
 		MinReadySeconds:    deployment.Spec.MinReadySeconds,
 		RevisionHistory:    revisionHistory,
 		ProgressDeadline:   progressDeadline,
+		ServiceAccount:     deployment.Spec.Template.Spec.ServiceAccountName,
 		Selector:           deployment.Spec.Selector.MatchLabels,
 		Labels:             deployment.Labels,
 		Annotations:        deployment.Annotations,

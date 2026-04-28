@@ -119,6 +119,7 @@ func (s *DaemonSetService) buildDaemonSetDetails(
 			}
 			return 0
 		}(),
+		ServiceAccount:     daemonSet.Spec.Template.Spec.ServiceAccountName,
 		Selector:           daemonSet.Spec.Selector.MatchLabels,
 		Labels:             daemonSet.Labels,
 		Annotations:        daemonSet.Annotations,

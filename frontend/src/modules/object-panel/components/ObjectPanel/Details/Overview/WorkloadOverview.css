@@ -23,7 +23,7 @@
 .podstate-bar {
   display: flex;
   width: 100%;
-  max-width: 300px;
+  max-width: 200px;
   height: 10px;
   border-radius: var(--border-radius-md);
   background: var(--color-bg-tertiary);
@@ -64,10 +64,27 @@
    the current ReplicaSet to open the rollback modal so users can browse
    prior revisions without us listing them all inline. */
 .workload-inline-action {
-  margin-left: 0.5rem;
   background: none;
   border: none;
   padding: 0;
   cursor: pointer;
   font: inherit;
+}
+
+/* ReplicaSet block — two-line layout:
+     line 1: rs-name link
+     line 2: Revision n [limit chip] · Rollback (secondary text) */
+.workload-replicaset {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.workload-replicaset-meta {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  color: var(--color-text-secondary);
+  font-size: 0.75rem;
 }

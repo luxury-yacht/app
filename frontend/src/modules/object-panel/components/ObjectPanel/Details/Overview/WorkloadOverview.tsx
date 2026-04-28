@@ -174,8 +174,10 @@ interface WorkloadOverviewProps {
   numberMisscheduled?: number;
 
   // StatefulSet-specific
-  serviceName?: string;
   podManagementPolicy?: string;
+
+  // Pod template
+  serviceAccount?: string;
 
   // Actions
   canRestart?: boolean;
@@ -217,13 +219,14 @@ export const WorkloadOverview: React.FC<WorkloadOverviewProps> = ({
   paused,
   rolloutStatus,
   rolloutMessage,
+  currentRevision,
   selector,
   desired,
   current,
   updateStrategy,
   numberMisscheduled,
-  serviceName,
   podManagementPolicy,
+  serviceAccount,
   currentReplicaSet,
   onRollback,
   labels,
@@ -365,15 +368,16 @@ export const WorkloadOverview: React.FC<WorkloadOverviewProps> = ({
             />
           )}
 
-          {/* Current ReplicaSet — link to the active RS and a rollback
-              shortcut for accessing prior revisions. The full revision
-              history lives in the rollback modal, which is more useful
-              than listing every RS name inline. */}
+          {/* Current ReplicaSet — link to the active RS, with a rollback
+              shortcut. A non-default `revisionHistoryLimit` is surfaced
+              as a warning chip since it changes how far back rollback
+              can reach; the default of 10 is silent. */}
           {currentReplicaSet && (
             <OverviewItem
               label="ReplicaSet"
+              fullWidth
               value={
-                <>
+                <div className="workload-replicaset">
                   <ObjectPanelLink
                     objectRef={buildObjectReference({
                       kind: 'replicaset',
@@ -384,16 +388,32 @@ export const WorkloadOverview: React.FC<WorkloadOverviewProps> = ({
                   >
                     {currentReplicaSet}
                   </ObjectPanelLink>
-                  {onRollback && (
-                    <button
-                      type="button"
-                      className="object-panel-link workload-inline-action"
-                      onClick={onRollback}
-                    >
-                      Rollback
-                    </button>
+                  {(currentRevision || onRollback) && (
+                    <span className="workload-replicaset-meta">
+                      {currentRevision && <span>Revision {currentRevision}</span>}
+                      {typeof revisionHistory === 'number' &&
+                        revisionHistory > 0 &&
+                        revisionHistory !== 10 && (
+                          <StatusChip
+                            variant="warning"
+                            tooltip="The maximum number of replicasets is set to a non-default value (default is 10)."
+                          >
+                            Limit {revisionHistory}
+                          </StatusChip>
+                        )}
+                      {onRollback && <span aria-hidden>•</span>}
+                      {onRollback && (
+                        <button
+                          type="button"
+                          className="object-panel-link workload-inline-action"
+                          onClick={onRollback}
+                        >
+                          Rollback
+                        </button>
+                      )}
+                    </span>
                   )}
-                </>
+                </div>
               }
             />
           )}
@@ -405,10 +425,6 @@ export const WorkloadOverview: React.FC<WorkloadOverviewProps> = ({
 
           {progressDeadline && progressDeadline !== 600 && (
             <OverviewItem label="Deadline" value={`${progressDeadline}s`} />
-          )}
-
-          {revisionHistory && revisionHistory !== 10 && (
-            <OverviewItem label="History Limit" value={revisionHistory} />
           )}
         </>
       )}
@@ -448,26 +464,6 @@ export const WorkloadOverview: React.FC<WorkloadOverviewProps> = ({
       {/* StatefulSet-specific fields */}
       {isStatefulSet && (
         <>
-          {/* Service name is essential for StatefulSets - make it clickable */}
-          <OverviewItem
-            label="Service"
-            value={
-              serviceName ? (
-                <ObjectPanelLink
-                  objectRef={buildObjectReference({
-                    kind: 'Service',
-                    name: serviceName,
-                    namespace: namespace,
-                    ...clusterMeta,
-                  })}
-                  title="Click to view service"
-                >
-                  {serviceName}
-                </ObjectPanelLink>
-              ) : undefined
-            }
-          />
-
           {/* Update strategy — chip + params */}
           {updateStrategy && (
             <OverviewItem
@@ -503,6 +499,26 @@ export const WorkloadOverview: React.FC<WorkloadOverviewProps> = ({
             <OverviewItem label="Min Ready" value={`${minReadySeconds}s`} />
           )}
         </>
+      )}
+
+      {/* ServiceAccount — only when explicitly set to a non-default SA.
+          The implicit `default` SA is noise. */}
+      {serviceAccount && serviceAccount !== 'default' && (
+        <OverviewItem
+          label="Svc Account"
+          value={
+            <ObjectPanelLink
+              objectRef={buildObjectReference({
+                kind: 'ServiceAccount',
+                name: serviceAccount,
+                namespace,
+                ...clusterMeta,
+              })}
+            >
+              {serviceAccount}
+            </ObjectPanelLink>
+          }
+        />
       )}
 
       {/* Use composed component for metadata */}

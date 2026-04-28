@@ -1109,6 +1109,9 @@ type DeploymentDetails struct {
 	RevisionHistory  int32  `json:"revisionHistory,omitempty"`
 	ProgressDeadline int32  `json:"progressDeadline,omitempty"`
 
+	// Service information
+	ServiceAccount string `json:"serviceAccount,omitempty"`
+
 	// Selector and labels
 	Selector    map[string]string `json:"selector,omitempty"`
 	Labels      map[string]string `json:"labels,omitempty"`
@@ -1169,6 +1172,7 @@ type StatefulSetDetails struct {
 
 	// Service information
 	ServiceName                          string            `json:"serviceName,omitempty"`
+	ServiceAccount                       string            `json:"serviceAccount,omitempty"`
 	PersistentVolumeClaimRetentionPolicy map[string]string `json:"pvcRetentionPolicy,omitempty"`
 
 	// Selector and labels
@@ -1229,6 +1233,9 @@ type DaemonSetDetails struct {
 	MaxSurge             string `json:"maxSurge,omitempty"`
 	MinReadySeconds      int32  `json:"minReadySeconds,omitempty"`
 	RevisionHistoryLimit int32  `json:"revisionHistoryLimit,omitempty"`
+
+	// Service information
+	ServiceAccount string `json:"serviceAccount,omitempty"`
 
 	// Selector and labels
 	Selector    map[string]string `json:"selector,omitempty"`

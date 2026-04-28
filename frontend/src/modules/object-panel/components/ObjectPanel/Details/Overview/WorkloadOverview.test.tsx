@@ -100,6 +100,8 @@ describe('WorkloadOverview', () => {
       minReadySeconds: 30,
       progressDeadline: 120,
       revisionHistory: 5,
+      currentReplicaSet: 'frontend-abc123',
+      currentRevision: '7',
       selector: { app: 'frontend' },
     });
 
@@ -121,8 +123,9 @@ describe('WorkloadOverview', () => {
     expect(container.textContent).toContain('30s');
     expect(container.textContent).toContain('Deadline');
     expect(container.textContent).toContain('120s');
-    expect(container.textContent).toContain('History Limit');
-    expect(container.textContent).toContain('5');
+    // ReplicaSet block — current RS link + non-default history-limit chip.
+    expect(container.textContent).toContain('frontend-abc123');
+    expect(container.textContent).toContain('Limit 5');
   });
 
   it('omits rollout details when the deployment is effectively complete', async () => {
@@ -185,29 +188,29 @@ describe('WorkloadOverview', () => {
     expect(container.textContent).toContain('10s');
   });
 
-  it('renders statefulset service link and invokes navigation on click', async () => {
+  it('renders statefulset service-account link and invokes navigation on click', async () => {
     await renderComponent({
       kind: 'StatefulSet',
       name: 'db',
       namespace: 'data',
       age: '3h',
-      serviceName: 'db-primary',
+      serviceAccount: 'db-sa',
       updateStrategy: 'RollingUpdate',
       maxUnavailable: '1',
       podManagementPolicy: 'Parallel',
       minReadySeconds: 15,
     });
 
-    const serviceLink = getLinkByText('db-primary') ?? getElementByText('db-primary');
-    expect(serviceLink).not.toBeUndefined();
+    const saLink = getLinkByText('db-sa') ?? getElementByText('db-sa');
+    expect(saLink).not.toBeUndefined();
     act(() => {
-      serviceLink?.click();
+      saLink?.click();
     });
 
     expect(openWithObjectMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        kind: 'Service',
-        name: 'db-primary',
+        kind: 'ServiceAccount',
+        name: 'db-sa',
         namespace: 'data',
         clusterId: defaultClusterId,
       })
