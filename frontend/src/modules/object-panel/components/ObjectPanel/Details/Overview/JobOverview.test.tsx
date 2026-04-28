@@ -99,32 +99,31 @@ describe('JobOverview', () => {
     expect(getValueForLabel(container, 'Schedule')?.textContent).toContain('*/5 * * * *');
     expect(getValueForLabel(container, 'Status')?.textContent).toContain('Suspended');
     expect(getValueForLabel(container, 'Active Jobs')?.textContent).toBe('2');
-    expect(getValueForLabel(container, 'Last Schedule')?.textContent?.toLowerCase()).toContain(
-      'ago'
-    );
+    // Run summary collapses all timestamps into a single Runs cell.
+    const runs = getValueForLabel(container, 'Runs')?.textContent ?? '';
+    expect(runs).toContain('Last Scheduled');
+    expect(runs.toLowerCase()).toContain('ago');
+    // Suspended cronjobs say "Suspended" in the Next Scheduled row.
+    expect(runs).toContain('Suspended');
     // History only renders when limits differ from k8s defaults (3 / 1).
     expect(getValueForLabel(container, 'History Limits')?.textContent).toBe(
       '5 succeeded, 2 failed'
     );
   });
 
-  it('surfaces cronjob next-run + last-successful when present', async () => {
+  it('surfaces cronjob next-run + last-successful in the Runs block', async () => {
     await renderComponent({
       kind: 'CronJob',
       name: 'cron',
       schedule: '0 * * * *',
       nextScheduleTime: '2099-01-01T00:00:00Z',
-      timeUntilNextSchedule: '15m',
       lastSuccessfulTime: '2024-01-01T00:00:00Z',
       concurrencyPolicy: 'Forbid',
     } as any);
 
-    // Next Run is now formatted on the frontend from nextScheduleTime
-    // (year 2099 is far enough out that "in" with `d`/`h` is stable).
-    expect(getValueForLabel(container, 'Next Run')?.textContent).toMatch(/^in \d+/);
-    expect(getValueForLabel(container, 'Last Success')?.textContent?.toLowerCase()).toContain(
-      'ago'
-    );
+    const runs = getValueForLabel(container, 'Runs')?.textContent ?? '';
+    expect(runs).toMatch(/Next Scheduledin \d+/);
+    expect(runs).toMatch(/Last Success.*ago/);
     expect(getValueForLabel(container, 'Concurrency')?.textContent).toContain('Forbid');
   });
 

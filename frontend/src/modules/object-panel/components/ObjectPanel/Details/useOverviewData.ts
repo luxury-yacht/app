@@ -289,6 +289,8 @@ export function useOverviewData(params: UseOverviewDataParams): OverviewData | n
         activeJobs: cronJobDetails.activeJobs,
         lastScheduleTime: cronJobDetails.lastScheduleTime,
         lastSuccessfulTime: cronJobDetails.lastSuccessfulTime,
+        lastManualTime: cronJobDetails.lastManualTime,
+        lastFailureTime: cronJobDetails.lastFailureTime,
         nextScheduleTime: cronJobDetails.nextScheduleTime,
         timeUntilNextSchedule: cronJobDetails.timeUntilNextSchedule,
         concurrencyPolicy: cronJobDetails.concurrencyPolicy,

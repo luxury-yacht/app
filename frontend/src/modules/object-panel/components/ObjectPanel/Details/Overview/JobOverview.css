@@ -1,0 +1,24 @@
+/* Run-summary block: single tabular value cell collapsing the
+   five run-info readouts (Next Scheduled, Last Scheduled, Last
+   Manual, Last Success, Last Failure). */
+
+.run-summary {
+  display: grid;
+  grid-template-columns: max-content auto;
+  column-gap: 0.75rem;
+  row-gap: 2px;
+}
+
+.run-summary-row {
+  display: contents;
+}
+
+.run-summary-label {
+  color: var(--color-text-secondary);
+  font-size: 0.8125rem;
+}
+
+.run-summary-value {
+  color: var(--color-text);
+  font-size: 0.8125rem;
+}

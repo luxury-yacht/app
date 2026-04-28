@@ -1668,6 +1668,8 @@ export namespace types {
 	    lastSuccessfulTime?: v1.Time;
 	    nextScheduleTime?: string;
 	    timeUntilNextSchedule?: string;
+	    lastManualTime?: v1.Time;
+	    lastFailureTime?: v1.Time;
 	    concurrencyPolicy: string;
 	    startingDeadlineSeconds?: number;
 	    successfulJobsHistory: number;
@@ -1697,6 +1699,8 @@ export namespace types {
 	        this.lastSuccessfulTime = this.convertValues(source["lastSuccessfulTime"], v1.Time);
 	        this.nextScheduleTime = source["nextScheduleTime"];
 	        this.timeUntilNextSchedule = source["timeUntilNextSchedule"];
+	        this.lastManualTime = this.convertValues(source["lastManualTime"], v1.Time);
+	        this.lastFailureTime = this.convertValues(source["lastFailureTime"], v1.Time);
 	        this.concurrencyPolicy = source["concurrencyPolicy"];
 	        this.startingDeadlineSeconds = source["startingDeadlineSeconds"];
 	        this.successfulJobsHistory = source["successfulJobsHistory"];

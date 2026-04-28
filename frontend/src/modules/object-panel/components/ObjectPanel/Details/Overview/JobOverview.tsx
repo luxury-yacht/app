@@ -9,9 +9,10 @@ import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
 import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
 import { buildObjectReference } from '@shared/utils/objectIdentity';
-import { formatAge, formatFullDate } from '@/utils/ageFormatter';
+import { formatFullDate } from '@/utils/ageFormatter';
 import { JobTimeline } from './JobTimeline';
 import './shared/OverviewBlocks.css';
+import './JobOverview.css';
 
 /** k8s metav1.Time arrives as an RFC3339 string at runtime even though
  *  the wails-generated type claims `v1.Time`. Treat anything that isn't
@@ -21,26 +22,12 @@ const normalizeTime = (t: unknown): string | undefined => {
   return undefined;
 };
 
-/** Render a timestamp as relative age plus a tooltip with the full date.
- *  Uses a chip-less span — these aren't statuses, just timestamps. */
-const TimestampValue: React.FC<{ value: unknown; missing?: string }> = ({
-  value,
-  missing = 'Never',
-}) => {
-  const iso = normalizeTime(value);
-  if (!iso) return <>{missing}</>;
-  return <span title={formatFullDate(iso)}>{formatAge(iso)} ago</span>;
-};
-
-/** Format a future timestamp as "in 2h 15m" / "in 15m" / "in 30s".
- *  Includes minutes alongside hours so the readout doesn't jump in
- *  hour-sized increments — important for "Next Run", which is the
- *  field the user actually checks for "when does this fire next". */
-const formatTimeUntil = (iso: string): string => {
-  const target = new Date(iso).getTime();
-  if (isNaN(target)) return '';
-  const ms = target - Date.now();
-  if (ms <= 0) return 'now';
+/** Format a positive duration in milliseconds as "2h 15m" / "15m" /
+ *  "30s" / "3d 4h". Includes the second-largest unit alongside the
+ *  largest so the readout doesn't jump in hour- or day-sized
+ *  increments — useful for both "in X" (future) and "X ago" (past). */
+const formatDuration = (ms: number): string => {
+  if (ms <= 0) return '0s';
   const totalSec = Math.floor(ms / 1000);
   const days = Math.floor(totalSec / 86_400);
   const hours = Math.floor((totalSec % 86_400) / 3600);
@@ -50,6 +37,87 @@ const formatTimeUntil = (iso: string): string => {
   if (hours > 0) return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
   if (mins > 0) return `${mins}m`;
   return `${secs}s`;
+};
+
+/** Render a timestamp as relative time plus a tooltip with the full
+ *  date. Uses the same h+m / d+h granularity as the "Next Run" cell so
+ *  every relative-time readout in this view follows one rule. */
+const TimestampValue: React.FC<{ value: unknown; missing?: string }> = ({
+  value,
+  missing = 'Never',
+}) => {
+  const iso = normalizeTime(value);
+  if (!iso) return <>{missing}</>;
+  const t = new Date(iso).getTime();
+  if (isNaN(t)) return <>{missing}</>;
+  const elapsed = Date.now() - t;
+  const label = elapsed <= 0 ? 'just now' : `${formatDuration(elapsed)} ago`;
+  return <span title={formatFullDate(iso)}>{label}</span>;
+};
+
+/** Format a relative-time value. Future timestamps render as
+ *  "in 2h 15m"; past as "2h 15m ago"; nil as "—". */
+const formatRelative = (raw: unknown): string => {
+  const iso = normalizeTime(raw);
+  if (!iso) return '—';
+  const t = new Date(iso).getTime();
+  if (isNaN(t)) return '—';
+  const ms = t - Date.now();
+  if (ms > 0) return `in ${formatDuration(ms)}`;
+  if (ms === 0) return 'just now';
+  return `${formatDuration(-ms)} ago`;
+};
+
+/** Tooltip for the row when its value is "—" — Last Manual / Last
+ *  Failure can be missing because nothing has happened, OR because
+ *  the underlying Job record was GC'd. We can't tell which from the
+ *  data, so we say so. */
+const RETENTION_TOOLTIP =
+  'Empty when no such run exists, or when the Job record has been garbage-collected per the CronJob’s history retention.';
+
+interface RunSummaryProps {
+  suspend?: boolean;
+  nextScheduleTime?: string;
+  lastScheduleTime?: unknown;
+  lastManualTime?: unknown;
+  lastSuccessfulTime?: unknown;
+  lastFailureTime?: unknown;
+}
+
+/** Tabular block of recent run timestamps. Hidden rows just render an
+ *  em-dash so the column alignment never wobbles. */
+const RunSummary: React.FC<RunSummaryProps> = ({
+  suspend,
+  nextScheduleTime,
+  lastScheduleTime,
+  lastManualTime,
+  lastSuccessfulTime,
+  lastFailureTime,
+}) => {
+  const nextStr = suspend ? 'Suspended' : formatRelative(nextScheduleTime);
+  const rows: Array<{ label: string; value: string; retention?: boolean; iso?: string }> = [
+    { label: 'Next Scheduled', value: nextStr, iso: nextScheduleTime },
+    { label: 'Last Scheduled', value: formatRelative(lastScheduleTime), iso: normalizeTime(lastScheduleTime) },
+    { label: 'Last Manual', value: formatRelative(lastManualTime), iso: normalizeTime(lastManualTime), retention: true },
+    { label: 'Last Success', value: formatRelative(lastSuccessfulTime), iso: normalizeTime(lastSuccessfulTime) },
+    { label: 'Last Failure', value: formatRelative(lastFailureTime), iso: normalizeTime(lastFailureTime), retention: true },
+  ];
+
+  return (
+    <div className="run-summary">
+      {rows.map((r) => (
+        <div key={r.label} className="run-summary-row">
+          <span className="run-summary-label">{r.label}</span>
+          <span
+            className="run-summary-value"
+            title={r.iso ? formatFullDate(r.iso) : r.retention ? RETENTION_TOOLTIP : undefined}
+          >
+            {r.value}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
 };
 
 /** Concurrency policy tooltips — these change what happens when a run
@@ -118,6 +186,8 @@ interface JobOverviewProps {
   }>;
   lastScheduleTime?: unknown;
   lastSuccessfulTime?: unknown;
+  lastManualTime?: unknown;
+  lastFailureTime?: unknown;
   nextScheduleTime?: string;
   timeUntilNextSchedule?: string;
   concurrencyPolicy?: string;
@@ -277,22 +347,6 @@ export const JobOverview: React.FC<JobOverviewProps> = (props) => {
 
           <OverviewItem label="Schedule" value={<code>{props.schedule}</code>} />
 
-          {/* Next-run information — the most operationally useful field
-              for a CronJob. Hidden when suspended (it won't fire). */}
-          {!props.suspend && props.nextScheduleTime && (
-            <OverviewItem
-              label="Next Run"
-              value={
-                <span title={formatFullDate(props.nextScheduleTime)}>
-                  {(() => {
-                    const until = formatTimeUntil(props.nextScheduleTime);
-                    return until ? `in ${until}` : formatFullDate(props.nextScheduleTime);
-                  })()}
-                </span>
-              }
-            />
-          )}
-
           {/* Concurrency policy — chip with tooltip when non-default. */}
           {props.concurrencyPolicy && props.concurrencyPolicy !== 'Allow' && (
             <OverviewItem
@@ -332,18 +386,25 @@ export const JobOverview: React.FC<JobOverviewProps> = (props) => {
             />
           )}
 
-          {/* Activity timeline */}
+          {/* Run summary — collapses Next Scheduled, Last Scheduled,
+              Last Manual, Last Success, Last Failure into one labeled
+              block. Last Manual / Last Failure are bounded by Job
+              retention; "—" can mean either "never" or "older than the
+              retained history" — the tooltip clarifies. */}
           <OverviewItem
-            label="Last Schedule"
-            value={<TimestampValue value={props.lastScheduleTime} />}
+            label="Runs"
+            fullWidth
+            value={
+              <RunSummary
+                suspend={props.suspend}
+                nextScheduleTime={props.nextScheduleTime}
+                lastScheduleTime={props.lastScheduleTime}
+                lastManualTime={props.lastManualTime}
+                lastSuccessfulTime={props.lastSuccessfulTime}
+                lastFailureTime={props.lastFailureTime}
+              />
+            }
           />
-
-          {normalizeTime(props.lastSuccessfulTime) && (
-            <OverviewItem
-              label="Last Success"
-              value={<TimestampValue value={props.lastSuccessfulTime} />}
-            />
-          )}
 
           {/* History retention — these are caps on how many old job
               records to keep, not an outcome count. Render as-is when

@@ -1329,6 +1329,12 @@ type CronJobDetails struct {
 	NextScheduleTime      string       `json:"nextScheduleTime,omitempty"`
 	TimeUntilNextSchedule string       `json:"timeUntilNextSchedule,omitempty"`
 
+	// Derived from owned Jobs — bounded by job-history retention. A
+	// nil value can mean "never happened" OR "happened but the job
+	// record has been garbage-collected"; the UI should hint at this.
+	LastManualTime  *metav1.Time `json:"lastManualTime,omitempty"`
+	LastFailureTime *metav1.Time `json:"lastFailureTime,omitempty"`
+
 	// Job configuration
 	ConcurrencyPolicy       string `json:"concurrencyPolicy"`
 	StartingDeadlineSeconds *int64 `json:"startingDeadlineSeconds,omitempty"`
