@@ -220,4 +220,45 @@ describe('WorkloadOverview', () => {
     expect(container.textContent).toContain('Min Ready');
     expect(container.textContent).toContain('15s');
   });
+
+  it('surfaces deployment Available=False and ReplicaFailure conditions', async () => {
+    await renderComponent({
+      kind: 'Deployment',
+      name: 'broken',
+      age: '1h',
+      ready: '0/3',
+      replicas: '0/3',
+      desiredReplicas: 3,
+      available: 0,
+      conditions: [
+        'Available: False (MinimumReplicasUnavailable) - Deployment does not have minimum availability.',
+        'ReplicaFailure: True (FailedCreate) - pods "broken-7c..." is forbidden: exceeded quota',
+        'Progressing: False (ProgressDeadlineExceeded)',
+      ],
+    });
+
+    expect(container.textContent).toContain('Availability');
+    expect(container.textContent).toContain('Unavailable');
+    expect(container.textContent).toContain('Replica Failure');
+    expect(container.textContent).toContain('FailedCreate');
+  });
+
+  it('omits availability/replica-failure rows when conditions are healthy', async () => {
+    await renderComponent({
+      kind: 'Deployment',
+      name: 'ok',
+      age: '1h',
+      ready: '3/3',
+      replicas: '3/3',
+      desiredReplicas: 3,
+      available: 3,
+      conditions: [
+        'Available: True (MinimumReplicasAvailable)',
+        'Progressing: True (NewReplicaSetAvailable)',
+      ],
+    });
+
+    expect(getElementByText('Availability')).toBeUndefined();
+    expect(getElementByText('Replica Failure')).toBeUndefined();
+  });
 });

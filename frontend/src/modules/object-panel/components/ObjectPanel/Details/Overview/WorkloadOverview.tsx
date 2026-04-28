@@ -127,6 +127,39 @@ const PodStateBar: React.FC<PodStateBarProps> = ({
   );
 };
 
+/** Parse one of the backend's pre-formatted condition strings, e.g.
+ *    "Available: True"
+ *    "Progressing: True (NewReplicaSetAvailable)"
+ *    "ReplicaFailure: True (FailedCreate) - pods \"...\" is forbidden"
+ *  Returns the structured pieces. Returns null if the string doesn't
+ *  start with the expected `Type: Status` shape. */
+interface ParsedCondition {
+  type: string;
+  status: string;
+  reason?: string;
+  message?: string;
+}
+const parseCondition = (raw: string): ParsedCondition | null => {
+  // Type: Status [(Reason)] [- Message]
+  const m = raw.match(/^([A-Za-z]+):\s*([A-Za-z]+)\s*(?:\(([^)]+)\))?(?:\s*-\s*(.+))?$/);
+  if (!m) return null;
+  return {
+    type: m[1],
+    status: m[2],
+    reason: m[3],
+    message: m[4]?.trim(),
+  };
+};
+
+const findCondition = (conditions: string[] | undefined, type: string): ParsedCondition | null => {
+  if (!conditions) return null;
+  for (const raw of conditions) {
+    const parsed = parseCondition(raw);
+    if (parsed && parsed.type === type) return parsed;
+  }
+  return null;
+};
+
 // Map Deployment.status.conditions[type=Progressing].reason / rolloutStatus
 // to a chip variant. Complete states are filtered out at the call site so
 // they don't render at all; this helper handles the rest.
@@ -238,7 +271,7 @@ interface WorkloadOverviewProps {
   observedGeneration?: number;
   currentRevision?: string;
   selector?: Record<string, string>;
-  deploymentConditions?: string[];
+  conditions?: string[];
   currentReplicaSet?: string;
 
   // DaemonSet-specific
@@ -308,6 +341,7 @@ export const WorkloadOverview: React.FC<WorkloadOverviewProps> = ({
   rolloutStatus,
   rolloutMessage,
   currentRevision,
+  conditions,
   selector,
   desired,
   current,
@@ -419,6 +453,44 @@ export const WorkloadOverview: React.FC<WorkloadOverviewProps> = ({
               value={<StatusChip variant="warning">Paused</StatusChip>}
             />
           )}
+
+          {/* `Available=False` — no ready replicas at all, even if the
+              rollout-status row reads "progressing." Distinct enough
+              from rollout state to deserve its own chip. */}
+          {(() => {
+            const c = findCondition(conditions, 'Available');
+            if (!c || c.status !== 'False') return null;
+            const tip = [c.reason, c.message].filter(Boolean).join(' — ') || undefined;
+            return (
+              <OverviewItem
+                label="Availability"
+                value={
+                  <StatusChip variant="unhealthy" tooltip={tip}>
+                    Unavailable
+                  </StatusChip>
+                }
+              />
+            );
+          })()}
+
+          {/* `ReplicaFailure=True` — the controller couldn't create
+              pods (quota exceeded, admission denied, etc). Currently
+              invisible despite being a clear-cut error state. */}
+          {(() => {
+            const c = findCondition(conditions, 'ReplicaFailure');
+            if (!c || c.status !== 'True') return null;
+            const tip = [c.reason, c.message].filter(Boolean).join(' — ') || undefined;
+            return (
+              <OverviewItem
+                label="Replica Failure"
+                value={
+                  <StatusChip variant="unhealthy" tooltip={tip}>
+                    {c.reason || 'Failed'}
+                  </StatusChip>
+                }
+              />
+            );
+          })()}
 
           {/* Rollout status - only show if actually progressing or failed */}
           {(() => {
