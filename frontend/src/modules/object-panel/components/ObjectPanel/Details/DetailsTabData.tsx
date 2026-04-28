@@ -95,7 +95,7 @@ const DataSectionInner: React.FC<DataSectionProps> = ({ data, binaryData, isSecr
         <div className="object-panel-section-title">Data</div>
         {isSecret && (
           <button
-            className="button danger small"
+            className="button generic small"
             onClick={() => setShowDecoded(!showDecoded)}
             title={showDecoded ? 'Show encoded values' : 'Show decoded values'}
           >
