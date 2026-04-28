@@ -11,6 +11,11 @@ import { PolicyOverview } from './PolicyOverview';
 const openWithObjectMock = vi.fn();
 const defaultClusterId = 'alpha:ctx';
 
+vi.mock('@shared/components/Tooltip', () => ({
+  __esModule: true,
+  default: ({ children }: any) => <>{children}</>,
+}));
+
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
   ResourceHeader: (props: any) => (
     <div data-testid="resource-header">

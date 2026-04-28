@@ -29,6 +29,26 @@ const TimestampValue: React.FC<{ value: unknown; missing?: string }> = ({
   return <span title={formatFullDate(iso)}>{formatAge(iso)} ago</span>;
 };
 
+/** Format a future timestamp as "in 2h 15m" / "in 15m" / "in 30s".
+ *  Includes minutes alongside hours so the readout doesn't jump in
+ *  hour-sized increments — important for "Next Run", which is the
+ *  field the user actually checks for "when does this fire next". */
+const formatTimeUntil = (iso: string): string => {
+  const target = new Date(iso).getTime();
+  if (isNaN(target)) return '';
+  const ms = target - Date.now();
+  if (ms <= 0) return 'now';
+  const totalSec = Math.floor(ms / 1000);
+  const days = Math.floor(totalSec / 86_400);
+  const hours = Math.floor((totalSec % 86_400) / 3600);
+  const mins = Math.floor((totalSec % 3600) / 60);
+  const secs = totalSec % 60;
+  if (days > 0) return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
+  if (hours > 0) return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+  if (mins > 0) return `${mins}m`;
+  return `${secs}s`;
+};
+
 /** Concurrency policy tooltips — these change what happens when a run
  *  is still active at the next schedule tick, so worth explaining. */
 const concurrencyTooltip = (policy: string): string | undefined => {
@@ -233,9 +253,10 @@ export const JobOverview: React.FC<JobOverviewProps> = (props) => {
               label="Next Run"
               value={
                 <span title={formatFullDate(props.nextScheduleTime)}>
-                  {props.timeUntilNextSchedule
-                    ? `in ${props.timeUntilNextSchedule}`
-                    : formatFullDate(props.nextScheduleTime)}
+                  {(() => {
+                    const until = formatTimeUntil(props.nextScheduleTime);
+                    return until ? `in ${until}` : formatFullDate(props.nextScheduleTime);
+                  })()}
                 </span>
               }
             />

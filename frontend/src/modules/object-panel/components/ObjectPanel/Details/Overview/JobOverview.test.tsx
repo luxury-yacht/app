@@ -92,7 +92,7 @@ describe('JobOverview', () => {
     expect(getValueForLabel(container, 'Schedule')?.textContent).toContain('*/5 * * * *');
     expect(getValueForLabel(container, 'Status')?.textContent).toContain('Suspended');
     expect(getValueForLabel(container, 'Active Jobs')?.textContent).toBe('2');
-    expect(getValueForLabel(container, 'Last Scheduled')?.textContent?.toLowerCase()).toContain(
+    expect(getValueForLabel(container, 'Last Schedule')?.textContent?.toLowerCase()).toContain(
       'ago'
     );
     // History only renders when limits differ from k8s defaults (3 / 1).
@@ -112,8 +112,10 @@ describe('JobOverview', () => {
       concurrencyPolicy: 'Forbid',
     } as any);
 
-    expect(getValueForLabel(container, 'Next Run')?.textContent).toContain('in 15m');
-    expect(getValueForLabel(container, 'Last Successful')?.textContent?.toLowerCase()).toContain(
+    // Next Run is now formatted on the frontend from nextScheduleTime
+    // (year 2099 is far enough out that "in" with `d`/`h` is stable).
+    expect(getValueForLabel(container, 'Next Run')?.textContent).toMatch(/^in \d+/);
+    expect(getValueForLabel(container, 'Last Success')?.textContent?.toLowerCase()).toContain(
       'ago'
     );
     expect(getValueForLabel(container, 'Concurrency')?.textContent).toContain('Forbid');
