@@ -49,13 +49,11 @@ export const parseToleration = (raw: string): ParsedToleration | null => {
     value = parts[2];
   }
 
-  const label = !key
-    ? 'Exists'
-    : key + (value ? `=${value}` : '') + (effect ? `:${effect}` : '');
+  const label = !key ? 'Exists' : key + (value ? `=${value}` : '') + (effect ? `:${effect}` : '');
 
   const tooltipParts: string[] = [];
   if (!key) {
-    tooltipParts.push('Tolerates any taint.');
+    tooltipParts.push('Tolerates any taint. Can deploy to any node.');
   } else if (!value) {
     tooltipParts.push('Tolerates any value for this key.');
   }
