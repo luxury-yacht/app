@@ -1127,6 +1127,7 @@ type DeploymentDetails struct {
 
 	// ReplicaSet information
 	CurrentRevision     string              `json:"currentRevision,omitempty"`
+	CurrentReplicaSet   string              `json:"currentReplicaSet,omitempty"`
 	ReplicaSets         []string            `json:"replicaSets,omitempty"`
 	ReplicaSetSummaries []ReplicaSetSummary `json:"replicaSetSummaries,omitempty"`
 

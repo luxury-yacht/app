@@ -59,3 +59,15 @@
   color: var(--color-warning);
   margin-left: 0.5rem;
 }
+
+/* Inline action button styled to match `.object-panel-link`. Used next to
+   the current ReplicaSet to open the rollback modal so users can browse
+   prior revisions without us listing them all inline. */
+.workload-inline-action {
+  margin-left: 0.5rem;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+}

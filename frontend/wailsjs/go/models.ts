@@ -1975,6 +1975,7 @@ export namespace types {
 	    pods?: PodSimpleInfo[];
 	    podMetricsSummary?: PodMetricsSummary;
 	    currentRevision?: string;
+	    currentReplicaSet?: string;
 	    replicaSets?: string[];
 	    replicaSetSummaries?: ReplicaSetSummary[];
 	    observedGeneration?: number;
@@ -2020,6 +2021,7 @@ export namespace types {
 	        this.pods = this.convertValues(source["pods"], PodSimpleInfo);
 	        this.podMetricsSummary = this.convertValues(source["podMetricsSummary"], PodMetricsSummary);
 	        this.currentRevision = source["currentRevision"];
+	        this.currentReplicaSet = source["currentReplicaSet"];
 	        this.replicaSets = source["replicaSets"];
 	        this.replicaSetSummaries = this.convertValues(source["replicaSetSummaries"], ReplicaSetSummary);
 	        this.observedGeneration = source["observedGeneration"];

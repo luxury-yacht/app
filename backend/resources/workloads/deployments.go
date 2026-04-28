@@ -103,7 +103,7 @@ func (s *DeploymentService) buildDeploymentDetails(
 	podInfos := buildPodSummaries("Deployment", deployment.Name, "apps/v1", podsList, podMetrics)
 	podSummary, _ := summarizePodMetrics(podsList, podMetrics)
 
-	rsNames, currentRevision := summarizeReplicaSets(deployment, replicaSets)
+	rsNames, currentRevision, currentRSName := summarizeReplicaSets(deployment, replicaSets)
 	containers := describeContainers(deployment.Spec.Template.Spec.Containers)
 	initContainers := describeContainers(deployment.Spec.Template.Spec.InitContainers)
 	maxSurge, maxUnavailable := rolloutParameters(deployment)
@@ -152,6 +152,7 @@ func (s *DeploymentService) buildDeploymentDetails(
 		InitContainers:     initContainers,
 		Pods:               podInfos,
 		CurrentRevision:    currentRevision,
+		CurrentReplicaSet:  currentRSName,
 		ReplicaSets:        rsNames,
 		ObservedGeneration: deployment.Status.ObservedGeneration,
 		Paused:             deployment.Spec.Paused,
@@ -187,21 +188,24 @@ func (s *DeploymentService) getDeploymentPods(deployment *appsv1.Deployment) ([]
 	return filteredPods, metrics, replicaSets, nil
 }
 
-func summarizeReplicaSets(deployment *appsv1.Deployment, replicaSets *appsv1.ReplicaSetList) ([]string, string) {
+func summarizeReplicaSets(deployment *appsv1.Deployment, replicaSets *appsv1.ReplicaSetList) ([]string, string, string) {
 	if replicaSets == nil {
-		return nil, ""
+		return nil, "", ""
 	}
 
 	var names []string
 	var currentRevision string
+	var currentRSName string
+	deploymentRevision := deployment.Annotations["deployment.kubernetes.io/revision"]
 
 	for _, rs := range replicaSets.Items {
 		for _, owner := range rs.OwnerReferences {
 			if owner.UID == deployment.UID {
 				names = append(names, rs.Name)
 				if revision, ok := rs.Annotations["deployment.kubernetes.io/revision"]; ok {
-					if deploymentRevision, dok := deployment.Annotations["deployment.kubernetes.io/revision"]; dok && revision == deploymentRevision {
+					if deploymentRevision != "" && revision == deploymentRevision {
 						currentRevision = revision
+						currentRSName = rs.Name
 					}
 				}
 				break
@@ -210,7 +214,7 @@ func summarizeReplicaSets(deployment *appsv1.Deployment, replicaSets *appsv1.Rep
 	}
 
 	sort.Strings(names)
-	return names, currentRevision
+	return names, currentRevision, currentRSName
 }
 
 func describeDeploymentConditions(deployment *appsv1.Deployment) ([]string, string, string) {

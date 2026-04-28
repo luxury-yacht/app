@@ -165,7 +165,7 @@ interface WorkloadOverviewProps {
   currentRevision?: string;
   selector?: Record<string, string>;
   deploymentConditions?: string[];
-  replicaSets?: string[];
+  currentReplicaSet?: string;
 
   // DaemonSet-specific
   desired?: number;
@@ -182,6 +182,7 @@ interface WorkloadOverviewProps {
   canScale?: boolean;
   canDelete?: boolean;
   onRestart?: () => void;
+  onRollback?: () => void;
   onScale?: () => void;
 
   // Metadata
@@ -223,7 +224,8 @@ export const WorkloadOverview: React.FC<WorkloadOverviewProps> = ({
   numberMisscheduled,
   serviceName,
   podManagementPolicy,
-  replicaSets,
+  currentReplicaSet,
+  onRollback,
   labels,
   annotations,
 }) => {
@@ -363,28 +365,35 @@ export const WorkloadOverview: React.FC<WorkloadOverviewProps> = ({
             />
           )}
 
-          {/* ReplicaSets — revision history. Each entry links to its panel. */}
-          {replicaSets && replicaSets.length > 0 && (
+          {/* Current ReplicaSet — link to the active RS and a rollback
+              shortcut for accessing prior revisions. The full revision
+              history lives in the rollback modal, which is more useful
+              than listing every RS name inline. */}
+          {currentReplicaSet && (
             <OverviewItem
-              label="ReplicaSets"
-              fullWidth
+              label="ReplicaSet"
               value={
-                <div className="overview-stacked">
-                  {replicaSets.map((rsName, i) => (
-                    <div key={`${rsName}-${i}`}>
-                      <ObjectPanelLink
-                        objectRef={buildObjectReference({
-                          kind: 'replicaset',
-                          name: rsName,
-                          namespace,
-                          ...clusterMeta,
-                        })}
-                      >
-                        {rsName}
-                      </ObjectPanelLink>
-                    </div>
-                  ))}
-                </div>
+                <>
+                  <ObjectPanelLink
+                    objectRef={buildObjectReference({
+                      kind: 'replicaset',
+                      name: currentReplicaSet,
+                      namespace,
+                      ...clusterMeta,
+                    })}
+                  >
+                    {currentReplicaSet}
+                  </ObjectPanelLink>
+                  {onRollback && (
+                    <button
+                      type="button"
+                      className="object-panel-link workload-inline-action"
+                      onClick={onRollback}
+                    >
+                      Rollback
+                    </button>
+                  )}
+                </>
               }
             />
           )}

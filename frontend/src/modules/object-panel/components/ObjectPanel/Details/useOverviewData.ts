@@ -173,9 +173,9 @@ export function useOverviewData(params: UseOverviewDataParams): OverviewData | n
         rolloutMessage: deploymentDetails.rolloutMessage,
         observedGeneration: deploymentDetails.observedGeneration,
         currentRevision: deploymentDetails.currentRevision,
+        currentReplicaSet: deploymentDetails.currentReplicaSet,
         selector: deploymentDetails.selector,
         conditions: deploymentDetails.conditions,
-        replicaSets: deploymentDetails.replicaSets,
         labels: deploymentDetails.labels,
         annotations: deploymentDetails.annotations,
       };

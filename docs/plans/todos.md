@@ -1,6 +1,7 @@
 # TODO
 
 - Show pods as cards instead of an embedded gridtable in node pods view
+- Format Jobs
 
 ## Issues
 
