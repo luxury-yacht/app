@@ -148,6 +148,30 @@ describe('useOverviewData', () => {
     expect(result!.strategy).toBe('RollingUpdate');
   });
 
+  it('maps StatefulSet rollout details from the workloads group', () => {
+    const params = emptyParams({ kind: 'StatefulSet', namespace: 'data', name: 'db' });
+    params.statefulSetDetails = {
+      name: 'db',
+      age: '12d',
+      namespace: 'data',
+      replicas: '3/3',
+      desiredReplicas: 3,
+      ready: '3/3',
+      upToDate: 3,
+      available: 3,
+      updateStrategy: 'RollingUpdate',
+      maxUnavailable: '25%',
+      podManagementPolicy: 'OrderedReady',
+      labels: { app: 'db' },
+      annotations: {},
+    } as any;
+
+    const result = renderHook(params);
+    expect(result!.kind).toBe('StatefulSet');
+    expect(result!.maxUnavailable).toBe('25%');
+    expect(result!.updateStrategy).toBe('RollingUpdate');
+  });
+
   // -----------------------------------------------------------------------
   // Config group
   // -----------------------------------------------------------------------

@@ -240,6 +240,7 @@ export function useOverviewData(params: UseOverviewDataParams): OverviewData | n
         upToDate: statefulSetDetails.upToDate,
         available: statefulSetDetails.available,
         updateStrategy: statefulSetDetails.updateStrategy,
+        maxUnavailable: statefulSetDetails.maxUnavailable,
         serviceAccount: statefulSetDetails.serviceAccount,
         nodeSelector: statefulSetDetails.nodeSelector,
         tolerations: statefulSetDetails.tolerations,
