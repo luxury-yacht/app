@@ -20,7 +20,7 @@
   font-weight: var(--font-weight-bold);
   color: var(--color-text-secondary);
   text-transform: uppercase;
-  min-width: 8rem;
+  min-width: 7rem;
   text-align: left;
 }
 
@@ -191,22 +191,6 @@
   padding: var(--spacing-lg);
   margin: var(--spacing-sm);
   border-radius: var(--border-radius-lg);
-  transition:
-    height 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-    padding 0.3s ease-out,
-    margin 0.3s ease-out,
-    transform 0.3s ease-out;
-  transform-origin: top;
-  will-change: height;
-}
-
-@keyframes sectionResize {
-  from {
-    max-height: var(--previous-height, auto);
-  }
-  to {
-    max-height: var(--current-height, auto);
-  }
 }
 
 .object-panel-section-header {
@@ -228,12 +212,6 @@
   gap: 0.5rem;
   position: relative;
   min-height: 100px;
-  transition:
-    height 0.3s ease-out,
-    transform 0.3s ease-out,
-    opacity 0.3s ease-out;
-  transform-origin: top;
-  will-change: height;
 }
 
 .object-panel-section-title {
