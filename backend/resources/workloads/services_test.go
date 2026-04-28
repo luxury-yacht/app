@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/robfig/cron/v3"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -262,6 +263,47 @@ func TestCronJobServiceCollectsPods(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, detail.TimeUntilNextSchedule)
 	require.Contains(t, detail.Details, "Schedule: "+cron.Spec.Schedule)
+}
+
+func TestCronJobServiceComputesNextScheduleBeforeFirstRun(t *testing.T) {
+	cron := testsupport.CronJobFixture("default", "nightly")
+	require.Nil(t, cron.Status.LastScheduleTime)
+
+	client := cgofake.NewClientset(cron.DeepCopy())
+	deps := newDeps(t, client)
+
+	service := workloads.NewCronJobService(deps)
+	detail, err := service.CronJob("default", "nightly")
+	require.NoError(t, err)
+	require.NotEmpty(t, detail.NextScheduleTime)
+	_, err = time.Parse(time.RFC3339, detail.NextScheduleTime)
+	require.NoError(t, err)
+	require.NotEmpty(t, detail.TimeUntilNextSchedule)
+}
+
+func TestCronJobServiceUsesSpecTimeZoneForNextSchedule(t *testing.T) {
+	tz := "UTC"
+	cronJob := testsupport.CronJobFixture("default", "nightly")
+	cronJob.Spec.Schedule = "0 0 * * *"
+	cronJob.Spec.TimeZone = &tz
+
+	before := time.Now()
+	client := cgofake.NewClientset(cronJob.DeepCopy())
+	deps := newDeps(t, client)
+
+	service := workloads.NewCronJobService(deps)
+	detail, err := service.CronJob("default", "nightly")
+	after := time.Now()
+	require.NoError(t, err)
+	require.NotEmpty(t, detail.NextScheduleTime)
+
+	got, err := time.Parse(time.RFC3339, detail.NextScheduleTime)
+	require.NoError(t, err)
+	schedule, err := cron.ParseStandard("TZ=UTC " + cronJob.Spec.Schedule)
+	require.NoError(t, err)
+	nextBefore := schedule.Next(before)
+	nextAfter := schedule.Next(after)
+	require.Truef(t, got.Equal(nextBefore) || got.Equal(nextAfter), "got %s, expected %s or %s", got, nextBefore, nextAfter)
 }
 
 func TestCronJobServiceCollectsJobs(t *testing.T) {

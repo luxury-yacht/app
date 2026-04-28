@@ -81,6 +81,35 @@ describe('JobTimeline', () => {
     expect(container.textContent).toContain('No runs in last');
   });
 
+  it('keeps active runs visible even when their snapshot duration ended before the window', async () => {
+    await renderTimeline({
+      jobs: [
+        {
+          name: 'old-completed',
+          status: 'Complete',
+          startTime: '2024-06-15T08:00:00Z',
+          durationSeconds: 60,
+        },
+        {
+          name: 'old-running',
+          status: 'Running',
+          startTime: '2024-06-15T08:00:00Z',
+          durationSeconds: 60,
+        },
+        {
+          name: 'old-active',
+          status: 'Active',
+          startTime: '2024-06-15T08:30:00Z',
+          durationSeconds: 30,
+        },
+      ],
+    });
+
+    const bars = container.querySelectorAll('.job-timeline-bar');
+    expect(bars).toHaveLength(2);
+    expect(container.querySelectorAll('.job-timeline-bar--running')).toHaveLength(2);
+  });
+
   it('invokes onJobClick with the job name when a bar is clicked', async () => {
     const onJobClick = vi.fn();
     await renderTimeline({

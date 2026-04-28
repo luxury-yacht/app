@@ -112,6 +112,11 @@ const variantClass = (status?: string): string => {
   return 'job-timeline-bar--info';
 };
 
+const isActiveStatus = (status?: string): boolean => {
+  const s = (status ?? '').toLowerCase();
+  return s.includes('run') || s.includes('active');
+};
+
 interface PositionedJob {
   job: JobLike;
   /** % of strip width from the left. */
@@ -196,7 +201,7 @@ export const JobTimeline: React.FC<JobTimelineProps> = ({ jobs, onJobClick }) =>
       const startMs = parseStart(job.startTime);
       if (startMs === null) continue;
       const dur = Math.max(0, (job.durationSeconds ?? 0) * 1000);
-      const endMs = startMs + dur;
+      const endMs = isActiveStatus(job.status) ? nowMs : startMs + dur;
       // Skip runs that ended before the window started.
       if (endMs < cutoffMs) continue;
 

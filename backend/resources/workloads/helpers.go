@@ -318,26 +318,38 @@ func summarizeCronJob(details *restypes.CronJobDetails) string {
 	return summary
 }
 
-// calculateNextSchedule parses the CronJob's schedule expression and
-// returns the next firing time as RFC3339 plus a human "in 15m" string.
-// Falls back to empty values when the expression is unparseable so the
-// frontend can hide the row instead of showing wrong data.
-//
-// The previous implementation here simply added one minute to the last
-// run, which produced "in 0s" any time the user opened the panel more
-// than a minute after the last fire — a chronic lie regardless of the
-// actual schedule.
-func calculateNextSchedule(schedule string, _ time.Time) (string, string) {
+// calculateNextSchedule parses the CronJob's schedule expression and returns
+// the next firing time as RFC3339 plus a human "in 15m" string. Falls back to
+// empty values when the expression is unparseable so the frontend can hide the
+// row instead of showing wrong data.
+func calculateNextSchedule(schedule string, timeZone *string) (string, string) {
+	return calculateNextScheduleAt(schedule, timeZone, time.Now())
+}
+
+func calculateNextScheduleAt(schedule string, timeZone *string, now time.Time) (string, string) {
 	// k8s CronJob uses the standard 5-field format (no seconds) plus
 	// the @yearly/@hourly/@daily descriptors. cron.ParseStandard covers
 	// both, matching the kube-controller-manager parser.
-	expr, err := cron.ParseStandard(schedule)
+	expr, err := cron.ParseStandard(formatCronJobSchedule(schedule, timeZone))
 	if err != nil {
 		return "", ""
 	}
-	nextTime := expr.Next(time.Now())
+	nextTime := expr.Next(now)
 	if nextTime.IsZero() {
 		return "", ""
 	}
-	return nextTime.Format(time.RFC3339), common.FormatAge(time.Now().Add(-time.Until(nextTime)))
+	return nextTime.Format(time.RFC3339), common.FormatAge(time.Now().Add(-nextTime.Sub(now)))
+}
+
+func formatCronJobSchedule(schedule string, timeZone *string) string {
+	if strings.Contains(schedule, "TZ") {
+		return schedule
+	}
+	if timeZone == nil {
+		return schedule
+	}
+	if _, err := time.LoadLocation(*timeZone); err != nil {
+		return schedule
+	}
+	return fmt.Sprintf("TZ=%s %s", *timeZone, schedule)
 }

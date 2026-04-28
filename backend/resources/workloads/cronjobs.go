@@ -106,8 +106,8 @@ func buildCronJobDetails(cronJob *batchv1.CronJob, jobs *batchv1.JobList, podInf
 		Containers:              describeContainers(cronJob.Spec.JobTemplate.Spec.Template.Spec.Containers),
 	}
 
-	if !details.Suspend && details.LastScheduleTime != nil {
-		details.NextScheduleTime, details.TimeUntilNextSchedule = calculateNextSchedule(cronJob.Spec.Schedule, details.LastScheduleTime.Time)
+	if !details.Suspend {
+		details.NextScheduleTime, details.TimeUntilNextSchedule = calculateNextSchedule(cronJob.Spec.Schedule, cronJob.Spec.TimeZone)
 	}
 
 	details.LastManualTime, details.LastFailureTime = computeRunMarkers(cronJob, jobs)
