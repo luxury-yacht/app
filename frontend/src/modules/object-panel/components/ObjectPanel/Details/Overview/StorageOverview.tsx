@@ -7,9 +7,46 @@ import { OverviewItem } from '@modules/object-panel/components/ObjectPanel/Detai
 import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
 import { ResourceStatus } from '@shared/components/kubernetes/ResourceStatus';
+import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { buildObjectReference } from '@shared/utils/objectIdentity';
+import './shared/OverviewBlocks.css';
+
+interface TopologyLabelRequirement {
+  key: string;
+  values: string[];
+}
+
+interface TopologySelector {
+  matchLabelExpressions: TopologyLabelRequirement[];
+}
+
+const reclaimPolicyVariant = (policy?: string): StatusChipVariant => {
+  if (policy === 'Delete') return 'warning';
+  return 'info';
+};
+
+const reclaimPolicyTooltip = (policy?: string): string | undefined => {
+  if (policy === 'Delete')
+    return 'Volumes are destroyed when their PVC is deleted. Data is not recoverable.';
+  if (policy === 'Retain')
+    return 'Volumes are kept after their PVC is deleted. Manual cleanup required.';
+  return undefined;
+};
+
+const bindingModeVariant = (mode?: string): StatusChipVariant => {
+  if (mode === 'Immediate') return 'warning';
+  return 'info';
+};
+
+const bindingModeTooltip = (mode?: string): string | undefined => {
+  if (mode === 'Immediate')
+    return 'Volumes are bound as soon as the PVC is created, without considering where pods will be scheduled. In multi-zone clusters this can result in volumes that can’t actually be used by their pods.';
+  if (mode === 'WaitForFirstConsumer')
+    return 'Volume binding is delayed until a pod is scheduled, so the provisioner can match the pod’s zone and topology constraints.';
+  return undefined;
+};
 
 interface StorageOverviewProps {
   kind?: string;
@@ -35,6 +72,9 @@ interface StorageOverviewProps {
   allowVolumeExpansion?: boolean;
   isDefault?: boolean;
   parameters?: Record<string, string>;
+  mountOptions?: string[];
+  allowedTopologies?: TopologySelector[];
+  persistentVolumesCount?: number;
 }
 
 // Storage resources Overview
@@ -181,11 +221,97 @@ export const StorageOverview: React.FC<StorageOverviewProps> = (props) => {
       {/* StorageClass-specific fields */}
       {normalizedKind === 'storageclass' && (
         <>
-          <OverviewItem label="Provisioner" value={props.provisioner} />
-          <OverviewItem label="Reclaim Policy" value={props.reclaimPolicy} />
-          <OverviewItem label="Binding Mode" value={props.volumeBindingMode} />
-          <OverviewItem label="Allow Expansion" value={props.allowVolumeExpansion ? 'Yes' : 'No'} />
-          <OverviewItem label="Default Class" value={props.isDefault ? 'Yes' : 'No'} />
+          <OverviewItem
+            label="Default"
+            value={
+              <StatusChip
+                variant={props.isDefault ? 'healthy' : 'unhealthy'}
+                tooltip={
+                  props.isDefault
+                    ? 'PVCs that omit storageClassName are bound to this StorageClass.'
+                    : 'PVCs that omit storageClassName are not bound to this StorageClass.'
+                }
+              >
+                {props.isDefault ? 'True' : 'False'}
+              </StatusChip>
+            }
+          />
+          <OverviewItem
+            label="Provisioner"
+            value={<span className="overview-value-mono">{props.provisioner}</span>}
+          />
+          <OverviewItem
+            label="Reclaim Policy"
+            value={
+              <StatusChip
+                variant={reclaimPolicyVariant(props.reclaimPolicy)}
+                tooltip={reclaimPolicyTooltip(props.reclaimPolicy)}
+              >
+                {props.reclaimPolicy}
+              </StatusChip>
+            }
+          />
+          <OverviewItem
+            label="Binding Mode"
+            value={
+              <StatusChip
+                variant={bindingModeVariant(props.volumeBindingMode)}
+                tooltip={bindingModeTooltip(props.volumeBindingMode)}
+              >
+                {props.volumeBindingMode}
+              </StatusChip>
+            }
+          />
+          <OverviewItem
+            label="Expansion"
+            value={
+              <StatusChip
+                variant={props.allowVolumeExpansion ? 'healthy' : 'unhealthy'}
+                tooltip={
+                  props.allowVolumeExpansion
+                    ? 'PVCs using this StorageClass can be resized after creation.'
+                    : 'PVCs using this StorageClass cannot be resized after creation.'
+                }
+              >
+                {props.allowVolumeExpansion ? 'True' : 'False'}
+              </StatusChip>
+            }
+          />
+          {typeof props.persistentVolumesCount === 'number' && props.persistentVolumesCount > 0 && (
+            <OverviewItem
+              label="Provisioned"
+              value={
+                props.persistentVolumesCount === 1
+                  ? '1 PersistentVolume'
+                  : `${props.persistentVolumesCount} PersistentVolumes`
+              }
+            />
+          )}
+          {props.mountOptions && props.mountOptions.length > 0 && (
+            <OverviewItem
+              label="Mount Options"
+              value={<span className="overview-value-mono">{props.mountOptions.join(', ')}</span>}
+            />
+          )}
+          {props.allowedTopologies && props.allowedTopologies.length > 0 && (
+            <OverviewItem
+              label="Allowed Topologies"
+              fullWidth
+              value={
+                <div className="overview-stacked">
+                  {props.allowedTopologies.map((selector, si) => (
+                    <div key={si} className="overview-condition-list">
+                      {selector.matchLabelExpressions.map((req, ri) => (
+                        <StatusChip key={`${si}-${ri}`} variant="info">
+                          {req.key}: {req.values.join(', ')}
+                        </StatusChip>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              }
+            />
+          )}
           {props.parameters && Object.keys(props.parameters).length > 0 && (
             <OverviewItem
               label="Parameters"

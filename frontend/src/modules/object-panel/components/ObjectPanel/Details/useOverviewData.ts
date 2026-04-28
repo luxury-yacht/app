@@ -473,6 +473,9 @@ export function useOverviewData(params: UseOverviewDataParams): OverviewData | n
         allowVolumeExpansion: storageClassDetails.allowVolumeExpansion,
         isDefault: storageClassDetails.isDefault,
         parameters: storageClassDetails.parameters,
+        mountOptions: storageClassDetails.mountOptions,
+        allowedTopologies: storageClassDetails.allowedTopologies,
+        persistentVolumesCount: storageClassDetails.persistentVolumes?.length ?? 0,
         // Surface metadata to match the ConfigMap/Secret layout.
         labels: storageClassDetails.labels,
         annotations: storageClassDetails.annotations,
