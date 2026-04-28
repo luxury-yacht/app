@@ -8,6 +8,7 @@ import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
 import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
 import { formatAge, formatFullDate } from '@/utils/ageFormatter';
+import { JobTimeline } from './JobTimeline';
 import './shared/OverviewBlocks.css';
 
 /** k8s metav1.Time arrives as an RFC3339 string at runtime even though
@@ -106,6 +107,13 @@ interface JobOverviewProps {
   // CronJob fields
   schedule?: string;
   activeJobs?: number | any[];
+  jobs?: Array<{
+    name?: string;
+    status?: string;
+    startTime?: unknown;
+    durationSeconds?: number;
+    duration?: string;
+  }>;
   lastScheduleTime?: unknown;
   lastSuccessfulTime?: unknown;
   nextScheduleTime?: string;
@@ -287,6 +295,17 @@ export const JobOverview: React.FC<JobOverviewProps> = (props) => {
             <OverviewItem
               label="Active Jobs"
               value={<StatusChip variant="info">{activeCount}</StatusChip>}
+            />
+          )}
+
+          {/* Run-history timeline — visual strip of recent runs sized
+              by duration and colored by outcome. Rendered only when we
+              have at least one Job record to plot. */}
+          {props.jobs && props.jobs.length > 0 && (
+            <OverviewItem
+              label="History"
+              fullWidth
+              value={<JobTimeline jobs={props.jobs} />}
             />
           )}
 

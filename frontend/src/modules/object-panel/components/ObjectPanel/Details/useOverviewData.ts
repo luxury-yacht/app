@@ -295,6 +295,7 @@ export function useOverviewData(params: UseOverviewDataParams): OverviewData | n
         startingDeadlineSeconds: cronJobDetails.startingDeadlineSeconds,
         successfulJobsHistory: cronJobDetails.successfulJobsHistory,
         failedJobsHistory: cronJobDetails.failedJobsHistory,
+        jobs: cronJobDetails.jobs,
         labels: cronJobDetails.labels,
         annotations: cronJobDetails.annotations,
       };

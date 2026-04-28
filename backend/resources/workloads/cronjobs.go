@@ -240,12 +240,17 @@ func summarizeJobSimple(job *batchv1.Job) restypes.JobSimpleInfo {
 	}
 
 	// Duration: elapsed time from start to completion, or start to now if still running.
+	// Also surface in seconds so the frontend can plot bars without parsing
+	// the human-readable string back into a number.
 	if info.StartTime != nil {
 		if job.Status.CompletionTime != nil {
+			info.CompletionTime = job.Status.CompletionTime
 			duration := job.Status.CompletionTime.Time.Sub(info.StartTime.Time)
 			info.Duration = common.FormatAge(time.Now().Add(-duration))
+			info.DurationSeconds = int64(duration.Seconds())
 		} else {
 			info.Duration = common.FormatAge(info.StartTime.Time)
+			info.DurationSeconds = int64(time.Since(info.StartTime.Time).Seconds())
 		}
 	}
 

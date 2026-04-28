@@ -1580,7 +1580,9 @@ export namespace types {
 	    failed: number;
 	    active: number;
 	    startTime?: v1.Time;
+	    completionTime?: v1.Time;
 	    duration?: string;
+	    durationSeconds?: number;
 	    age: string;
 	
 	    static createFrom(source: any = {}) {
@@ -1598,7 +1600,9 @@ export namespace types {
 	        this.failed = source["failed"];
 	        this.active = source["active"];
 	        this.startTime = this.convertValues(source["startTime"], v1.Time);
+	        this.completionTime = this.convertValues(source["completionTime"], v1.Time);
 	        this.duration = source["duration"];
+	        this.durationSeconds = source["durationSeconds"];
 	        this.age = source["age"];
 	    }
 	

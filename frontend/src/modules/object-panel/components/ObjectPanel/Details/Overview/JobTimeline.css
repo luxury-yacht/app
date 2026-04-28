@@ -1,0 +1,118 @@
+/* JobTimeline — horizontal strip showing recent CronJob runs.
+   Bars are positioned/sized in JS; this file handles only colors,
+   tick lines, and the window-selector chips. */
+
+.job-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+/* Window selector — minimal pill buttons mirroring StatusChip
+   sizing so the strip header doesn't introduce a new visual weight. */
+.job-timeline-controls {
+  display: flex;
+  gap: 4px;
+}
+
+.job-timeline-window {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  border-radius: var(--border-radius-round);
+  padding: 1px 8px;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-badge);
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  text-transform: uppercase;
+}
+
+.job-timeline-window:hover {
+  color: var(--color-text);
+  border-color: var(--color-text-secondary);
+}
+
+.job-timeline-window--active {
+  background: var(--color-bg-tertiary);
+  color: var(--color-text);
+  border-color: var(--color-accent);
+}
+
+/* Strip — relative-positioned canvas the JS-positioned bars sit on. */
+.job-timeline-strip {
+  position: relative;
+  width: 100%;
+  background: var(--color-bg-tertiary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  overflow: hidden;
+  min-height: 12px;
+}
+
+.job-timeline-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+.job-timeline-bar {
+  position: absolute;
+  border-radius: 2px;
+  cursor: default;
+}
+
+.job-timeline-bar--healthy {
+  background: var(--color-success);
+}
+
+.job-timeline-bar--unhealthy {
+  background: var(--color-error);
+}
+
+.job-timeline-bar--running {
+  /* Subtle stripe pattern for in-progress runs so they read as
+     "still happening" rather than a normal completed bar. */
+  background: repeating-linear-gradient(
+    45deg,
+    var(--color-accent),
+    var(--color-accent) 4px,
+    rgba(255, 255, 255, 0.15) 4px,
+    rgba(255, 255, 255, 0.15) 8px
+  );
+}
+
+.job-timeline-bar--info {
+  background: var(--color-accent);
+}
+
+/* Runs that started before the visible window get a soft fade on
+   the left edge so it's clear the bar continues off-screen. */
+.job-timeline-bar--clipped {
+  mask-image: linear-gradient(to right, transparent, black 8%);
+  -webkit-mask-image: linear-gradient(to right, transparent, black 8%);
+}
+
+/* Axis ticks rendered below the strip — labels float left of each
+   tick mark so they read naturally left-to-right. */
+.job-timeline-axis {
+  position: relative;
+  height: 14px;
+}
+
+.job-timeline-tick {
+  position: absolute;
+  transform: translateX(-50%);
+  font-size: 0.7rem;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.job-timeline-tick-label {
+  display: inline-block;
+}
