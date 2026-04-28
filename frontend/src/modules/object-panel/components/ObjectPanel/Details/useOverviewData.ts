@@ -719,6 +719,7 @@ export function useOverviewData(params: UseOverviewDataParams): OverviewData | n
         controller: ingressClassDetails.controller,
         isDefault: ingressClassDetails.isDefault,
         parameters: ingressClassDetails.parameters,
+        ingressesCount: ingressClassDetails.ingresses?.length ?? 0,
         // Surface metadata to match the ConfigMap/Secret layout.
         labels: ingressClassDetails.labels,
         annotations: ingressClassDetails.annotations,

@@ -209,9 +209,9 @@ describe('StorageOverview', () => {
     });
 
     expect(getValueForLabel(container, 'Provisioner')?.textContent).toBe('kubernetes.io/aws-ebs');
-    const allowExpansion = getValueForLabel(container, 'Allow Expansion');
-    expect(allowExpansion?.textContent).toBe('True');
-    expect(allowExpansion?.querySelector('.status-chip--healthy')).toBeTruthy();
+    const expansion = getValueForLabel(container, 'Expansion');
+    expect(expansion?.textContent).toBe('True');
+    expect(expansion?.querySelector('.status-chip--healthy')).toBeTruthy();
     // Default = false renders as an "unhealthy" (red) "False" chip.
     const defaultRow = getValueForLabel(container, 'Default');
     expect(defaultRow?.textContent).toBe('False');
