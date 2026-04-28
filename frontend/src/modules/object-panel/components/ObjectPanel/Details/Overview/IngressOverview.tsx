@@ -5,38 +5,110 @@
 import React from 'react';
 import { types } from '@wailsjs/go/models';
 import { OverviewItem } from '@modules/object-panel/components/ObjectPanel/Details/Overview/shared/OverviewItem';
+import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
+import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
+import { StatusChip } from '@shared/components/StatusChip';
+import { buildObjectReference } from '@shared/utils/objectIdentity';
 import './shared/OverviewBlocks.css';
 
 interface IngressOverviewProps {
   ingressDetails: types.IngressDetails | null;
 }
 
-const formatBackend = (backend: types.IngressBackendDetails): string =>
-  backend.serviceName ? `${backend.serviceName}:${backend.servicePort}` : (backend.resource ?? '');
+interface ClusterMeta {
+  clusterId?: string;
+  clusterName?: string;
+}
+
+const pathTypeTooltip = (pathType: string): string | undefined => {
+  switch (pathType) {
+    case 'Prefix':
+      return 'URL paths matching this prefix (segment-aligned) are routed to the backend.';
+    case 'Exact':
+      return 'URL must match this path exactly, case-sensitive.';
+    case 'ImplementationSpecific':
+      return 'Path matching is left to the IngressClass controller; semantics vary by implementation.';
+    default:
+      return undefined;
+  }
+};
+
+const renderBackend = (
+  backend: types.IngressBackendDetails,
+  namespace: string,
+  clusterMeta: ClusterMeta
+): React.ReactNode => {
+  if (backend.serviceName) {
+    const portSuffix = backend.servicePort ? `:${backend.servicePort}` : '';
+    return (
+      <ObjectPanelLink
+        objectRef={buildObjectReference({
+          kind: 'service',
+          name: backend.serviceName,
+          namespace,
+          ...clusterMeta,
+        })}
+      >
+        {backend.serviceName}
+        {portSuffix}
+      </ObjectPanelLink>
+    );
+  }
+  return backend.resource ?? '';
+};
 
 export const IngressOverview: React.FC<IngressOverviewProps> = ({ ingressDetails }) => {
+  const { objectData } = useObjectPanel();
+  const clusterMeta: ClusterMeta = {
+    clusterId: objectData?.clusterId ?? undefined,
+    clusterName: objectData?.clusterName ?? undefined,
+  };
+
   if (!ingressDetails) return null;
+  const namespace = ingressDetails.namespace;
+  const lbAddresses = ingressDetails.loadBalancerStatus ?? [];
 
   return (
     <>
       <ResourceHeader
         kind="Ingress"
         name={ingressDetails.name}
-        namespace={ingressDetails.namespace}
+        namespace={namespace}
         age={ingressDetails.age}
       />
 
-      {ingressDetails.ingressClassName && (
-        <OverviewItem label="Ingress Class" value={ingressDetails.ingressClassName} />
-      )}
+      {/* Address — surfaced near the top because it's the most-asked
+          question for an Ingress ("what URL does this expose?"). When the
+          controller hasn't assigned an address yet, render an info chip so
+          the row still appears and the empty state is explicit. */}
+      <OverviewItem
+        label="Address"
+        value={
+          lbAddresses.length > 0 ? (
+            lbAddresses.join(', ')
+          ) : (
+            <StatusChip variant="info">no address</StatusChip>
+          )
+        }
+        fullWidth={lbAddresses.length > 1}
+      />
 
-      {ingressDetails.loadBalancerStatus && ingressDetails.loadBalancerStatus.length > 0 && (
+      {ingressDetails.ingressClassName && (
         <OverviewItem
-          label="Load Balancer"
-          value={ingressDetails.loadBalancerStatus.join(', ')}
-          fullWidth={ingressDetails.loadBalancerStatus.length > 1}
+          label="Ingress Class"
+          value={
+            <ObjectPanelLink
+              objectRef={buildObjectReference({
+                kind: 'ingressclass',
+                name: ingressDetails.ingressClassName,
+                ...clusterMeta,
+              })}
+            >
+              {ingressDetails.ingressClassName}
+            </ObjectPanelLink>
+          }
         />
       )}
 
@@ -56,8 +128,14 @@ export const IngressOverview: React.FC<IngressOverviewProps> = ({ ingressDetails
                         <div key={`path-${pathIndex}-${path.path ?? '/'}`} className="overview-row">
                           <span className="overview-row-label">{path.path || '/'}</span>
                           <span className="overview-row-value">
-                            {path.pathType ? `(${path.pathType}) ` : ''}→{' '}
-                            {formatBackend(path.backend)}
+                            {path.pathType && (
+                              <>
+                                <StatusChip variant="info" tooltip={pathTypeTooltip(path.pathType)}>
+                                  {path.pathType}
+                                </StatusChip>{' '}
+                              </>
+                            )}
+                            → {renderBackend(path.backend, namespace, clusterMeta)}
                           </span>
                         </div>
                       ))}
@@ -85,13 +163,31 @@ export const IngressOverview: React.FC<IngressOverviewProps> = ({ ingressDetails
                     {tls.hosts && tls.hosts.length > 0 && (
                       <div className="overview-row">
                         <span className="overview-row-label">Hosts</span>
-                        <span className="overview-row-value">{tls.hosts.join(', ')}</span>
+                        <span className="overview-row-value">
+                          {tls.hosts.map((host, i) => (
+                            <React.Fragment key={host}>
+                              {i > 0 && ' '}
+                              <StatusChip variant="info">{host}</StatusChip>
+                            </React.Fragment>
+                          ))}
+                        </span>
                       </div>
                     )}
                     {tls.secretName && (
                       <div className="overview-row">
                         <span className="overview-row-label">Secret</span>
-                        <span className="overview-row-value">{tls.secretName}</span>
+                        <span className="overview-row-value">
+                          <ObjectPanelLink
+                            objectRef={buildObjectReference({
+                              kind: 'secret',
+                              name: tls.secretName,
+                              namespace,
+                              ...clusterMeta,
+                            })}
+                          >
+                            {tls.secretName}
+                          </ObjectPanelLink>
+                        </span>
                       </div>
                     )}
                   </div>
@@ -106,7 +202,7 @@ export const IngressOverview: React.FC<IngressOverviewProps> = ({ ingressDetails
       {ingressDetails.defaultBackend && (
         <OverviewItem
           label="Default Backend"
-          value={formatBackend(ingressDetails.defaultBackend)}
+          value={renderBackend(ingressDetails.defaultBackend, namespace, clusterMeta)}
         />
       )}
 
