@@ -455,6 +455,9 @@ export function useOverviewData(params: UseOverviewDataParams): OverviewData | n
         claimRef: pvDetails.claimRef,
         storageClass: pvDetails.storageClass,
         volumeMode: pvDetails.volumeMode,
+        volumeSource: pvDetails.volumeSource,
+        mountOptions: pvDetails.mountOptions,
+        nodeAffinity: pvDetails.nodeAffinity,
         // Surface metadata to match the ConfigMap/Secret layout.
         labels: pvDetails.labels,
         annotations: pvDetails.annotations,

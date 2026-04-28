@@ -48,6 +48,45 @@ const bindingModeTooltip = (mode?: string): string | undefined => {
   return undefined;
 };
 
+interface VolumeSourceLike {
+  type: string;
+  details?: Record<string, string>;
+}
+
+// PV phase semantics — Bound = healthy, Available = info (waiting to be
+// claimed), Released = warning (claim is gone but the PV hasn't been
+// reclaimed; orphan state worth flagging), Failed = unhealthy, Pending = info.
+const pvStatusVariant = (status?: string): StatusChipVariant => {
+  if (status === 'Bound') return 'healthy';
+  if (status === 'Released') return 'warning';
+  if (status === 'Failed') return 'unhealthy';
+  return 'info';
+};
+
+const pvStatusTooltip = (status?: string): string | undefined => {
+  if (status === 'Released')
+    return 'The bound PVC has been deleted but this volume has not yet been reclaimed. Manual cleanup may be required.';
+  if (status === 'Failed') return 'Automatic reclamation of this volume has failed.';
+  return undefined;
+};
+
+// Kubernetes access mode semantics. ReadWriteOncePod was added in 1.22 and
+// is stricter than ReadWriteOnce (single pod cluster-wide vs. single node).
+const accessModeTooltip = (mode: string): string | undefined => {
+  switch (mode) {
+    case 'ReadWriteOnce':
+      return 'Mounted read-write by a single node. Multiple pods on the same node can share the volume.';
+    case 'ReadOnlyMany':
+      return 'Mounted read-only by many nodes simultaneously.';
+    case 'ReadWriteMany':
+      return 'Mounted read-write by many nodes simultaneously.';
+    case 'ReadWriteOncePod':
+      return 'Mounted read-write by a single pod across the entire cluster. Stricter than ReadWriteOnce. Available on Kubernetes 1.22+.';
+    default:
+      return undefined;
+  }
+};
+
 interface StorageOverviewProps {
   kind?: string;
   name?: string;
@@ -66,6 +105,9 @@ interface StorageOverviewProps {
   // PV fields
   claimRef?: any;
   reclaimPolicy?: string;
+  volumeSource?: VolumeSourceLike;
+  nodeAffinity?: string[];
+  // mountOptions also lives on StorageClass — declared below.
   // StorageClass fields
   provisioner?: string;
   volumeBindingMode?: string;
@@ -92,8 +134,9 @@ export const StorageOverview: React.FC<StorageOverviewProps> = (props) => {
       {/* Use composed component for header */}
       <ResourceHeader kind={kind || ''} name={name || ''} namespace={namespace} age={age || ''} />
 
-      {/* Use composed component for status */}
-      {status && <ResourceStatus status={status} />}
+      {/* PVs render their own chip-styled status row inline (with semantic
+          variant) — skip the shared ResourceStatus for that kind. */}
+      {status && normalizedKind !== 'persistentvolume' && <ResourceStatus status={status} />}
 
       {/* PVC-specific fields */}
       {normalizedKind === 'persistentvolumeclaim' && (
@@ -172,9 +215,42 @@ export const StorageOverview: React.FC<StorageOverviewProps> = (props) => {
       {/* PV-specific fields */}
       {normalizedKind === 'persistentvolume' && (
         <>
+          {status && (
+            <OverviewItem
+              label="Status"
+              value={
+                <StatusChip variant={pvStatusVariant(status)} tooltip={pvStatusTooltip(status)}>
+                  {status}
+                </StatusChip>
+              }
+            />
+          )}
           <OverviewItem label="Capacity" value={props.capacity} />
-          <OverviewItem label="Access Modes" value={props.accessModes?.join(', ')} />
-          <OverviewItem label="Reclaim Policy" value={props.reclaimPolicy} />
+          {props.accessModes && props.accessModes.length > 0 && (
+            <OverviewItem
+              label="Access Modes"
+              value={
+                <div className="overview-condition-list">
+                  {props.accessModes.map((mode) => (
+                    <StatusChip key={mode} variant="info" tooltip={accessModeTooltip(mode)}>
+                      {mode}
+                    </StatusChip>
+                  ))}
+                </div>
+              }
+            />
+          )}
+          <OverviewItem
+            label="Reclaim Policy"
+            value={
+              <StatusChip
+                variant={reclaimPolicyVariant(props.reclaimPolicy)}
+                tooltip={reclaimPolicyTooltip(props.reclaimPolicy)}
+              >
+                {props.reclaimPolicy}
+              </StatusChip>
+            }
+          />
           <OverviewItem
             label="Storage Class"
             value={
@@ -210,6 +286,52 @@ export const StorageOverview: React.FC<StorageOverviewProps> = (props) => {
                 >
                   {`${props.claimRef.namespace}/${props.claimRef.name}`}
                 </ObjectPanelLink>
+              }
+            />
+          )}
+          {/* Volume Source — what does this PV actually point to. The type
+              (e.g. "CSI", "NFS", "HostPath") leads as a chip, with provider-
+              specific key/value details rendered beneath when present. */}
+          {props.volumeSource && props.volumeSource.type && (
+            <OverviewItem
+              label="Source"
+              fullWidth
+              value={
+                <div className="overview-stacked">
+                  <div>
+                    <StatusChip variant="info">{props.volumeSource.type}</StatusChip>
+                  </div>
+                  {props.volumeSource.details &&
+                    Object.keys(props.volumeSource.details).length > 0 && (
+                      <div className="storage-parameters-list">
+                        {Object.entries(props.volumeSource.details).map(([key, value]) => (
+                          <div key={key} className="storage-parameters-item">
+                            <span className="storage-parameters-key">{key}:</span>
+                            <span className="storage-parameters-value">{value || '-'}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                </div>
+              }
+            />
+          )}
+          {props.mountOptions && props.mountOptions.length > 0 && (
+            <OverviewItem
+              label="Mount Options"
+              value={<span className="overview-value-mono">{props.mountOptions.join(', ')}</span>}
+            />
+          )}
+          {props.nodeAffinity && props.nodeAffinity.length > 0 && (
+            <OverviewItem
+              label="Node Affinity"
+              fullWidth
+              value={
+                <div className="overview-stacked">
+                  {props.nodeAffinity.map((entry, i) => (
+                    <span key={i}>{entry}</span>
+                  ))}
+                </div>
               }
             />
           )}

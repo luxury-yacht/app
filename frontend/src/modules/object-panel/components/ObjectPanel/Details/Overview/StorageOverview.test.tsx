@@ -155,7 +155,13 @@ describe('StorageOverview', () => {
       annotations: { owner: 'storage-team' },
     });
 
-    expect(getValueForLabel(container, 'Reclaim Policy')?.textContent).toBe('Retain');
+    const reclaim = getValueForLabel(container, 'Reclaim Policy');
+    expect(reclaim?.textContent).toBe('Retain');
+    expect(reclaim?.querySelector('.status-chip--info')).toBeTruthy();
+    // Access modes render as chips, not a comma-joined string.
+    const accessModes = getValueForLabel(container, 'Access Modes');
+    expect(accessModes?.textContent).toBe('ReadWriteMany');
+    expect(accessModes?.querySelector('.status-chip--info')).toBeTruthy();
     const storageClassLink = getLinkByText(container, 'nfs');
     expect(storageClassLink).not.toBeUndefined();
     act(() => {
@@ -189,6 +195,46 @@ describe('StorageOverview', () => {
     expect(container.textContent).toContain('Annotations');
     expect(container.textContent).toContain('owner:');
     expect(container.textContent).toContain('storage-team');
+  });
+
+  it('shows the PV status chip and volume source for a CSI-backed PV', async () => {
+    await renderComponent({
+      kind: 'PersistentVolume',
+      name: 'pv-csi',
+      status: 'Bound',
+      capacity: '100Gi',
+      accessModes: ['ReadWriteOnce'],
+      reclaimPolicy: 'Delete',
+      volumeMode: 'Filesystem',
+      volumeSource: {
+        type: 'CSI',
+        details: {
+          driver: 'ebs.csi.aws.com',
+          volumeHandle: 'vol-0a1b2c3d',
+          fsType: 'ext4',
+        },
+      },
+      mountOptions: ['nosuid', 'noexec'],
+      nodeAffinity: ['topology.kubernetes.io/zone in [us-east-1a]'],
+    });
+
+    // Status: Bound → healthy chip
+    const statusRow = getValueForLabel(container, 'Status');
+    expect(statusRow?.textContent).toBe('Bound');
+    expect(statusRow?.querySelector('.status-chip--healthy')).toBeTruthy();
+    // Reclaim Policy: Delete → warning chip
+    const reclaim = getValueForLabel(container, 'Reclaim Policy');
+    expect(reclaim?.querySelector('.status-chip--warning')).toBeTruthy();
+    // Volume Source surfaces type + provider details
+    const source = getValueForLabel(container, 'Source');
+    expect(source?.textContent).toContain('CSI');
+    expect(source?.textContent).toContain('ebs.csi.aws.com');
+    expect(source?.textContent).toContain('vol-0a1b2c3d');
+    // Mount options + node affinity
+    expect(getValueForLabel(container, 'Mount Options')?.textContent).toBe('nosuid, noexec');
+    expect(getValueForLabel(container, 'Node Affinity')?.textContent).toContain(
+      'topology.kubernetes.io/zone'
+    );
   });
 
   it('renders StorageClass-specific fields', async () => {
