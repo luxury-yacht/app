@@ -1027,6 +1027,19 @@ type PodMetricsSummary struct {
 	MemLimit   string `json:"memLimit,omitempty"`
 }
 
+// VolumeClaimTemplateSummary captures the operationally-relevant
+// fields of a StatefulSet `spec.volumeClaimTemplates[]` entry — name,
+// size request, storage class, access modes, volume mode. These are
+// template definitions; the actual per-replica PVC resources live
+// elsewhere and aren't carried here.
+type VolumeClaimTemplateSummary struct {
+	Name           string   `json:"name"`
+	StorageRequest string   `json:"storageRequest,omitempty"` // e.g. "10Gi"
+	StorageClass   string   `json:"storageClass,omitempty"`   // empty = cluster default
+	AccessModes    []string `json:"accessModes,omitempty"`    // e.g. ["ReadWriteOnce"]
+	VolumeMode     string   `json:"volumeMode,omitempty"`     // "Filesystem" (default) or "Block"
+}
+
 type ReplicaSetSummary struct {
 	Name      string `json:"name"`
 	Revision  string `json:"revision"`
@@ -1195,8 +1208,9 @@ type StatefulSetDetails struct {
 	Containers     []PodDetailInfoContainer `json:"containers,omitempty"`
 	InitContainers []PodDetailInfoContainer `json:"initContainers,omitempty"`
 
-	// Volume claim templates
-	VolumeClaimTemplates []string `json:"volumeClaimTemplates,omitempty"`
+	// Volume claim templates — structured summaries of each entry in
+	// `spec.volumeClaimTemplates`.
+	VolumeClaimTemplates []VolumeClaimTemplateSummary `json:"volumeClaimTemplates,omitempty"`
 
 	// Pod information
 	Pods              []PodSimpleInfo    `json:"pods,omitempty"`

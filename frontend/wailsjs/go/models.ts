@@ -4642,6 +4642,26 @@ export namespace types {
 	        this.command = source["command"];
 	    }
 	}
+	export class VolumeClaimTemplateSummary {
+	    name: string;
+	    storageRequest?: string;
+	    storageClass?: string;
+	    accessModes?: string[];
+	    volumeMode?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new VolumeClaimTemplateSummary(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.storageRequest = source["storageRequest"];
+	        this.storageClass = source["storageClass"];
+	        this.accessModes = source["accessModes"];
+	        this.volumeMode = source["volumeMode"];
+	    }
+	}
 	export class StatefulSetDetails {
 	    kind: string;
 	    name: string;
@@ -4676,7 +4696,7 @@ export namespace types {
 	    conditions?: string[];
 	    containers?: PodDetailInfoContainer[];
 	    initContainers?: PodDetailInfoContainer[];
-	    volumeClaimTemplates?: string[];
+	    volumeClaimTemplates?: VolumeClaimTemplateSummary[];
 	    pods?: PodSimpleInfo[];
 	    podMetricsSummary?: PodMetricsSummary;
 	    currentRevision?: string;
@@ -4725,7 +4745,7 @@ export namespace types {
 	        this.conditions = source["conditions"];
 	        this.containers = this.convertValues(source["containers"], PodDetailInfoContainer);
 	        this.initContainers = this.convertValues(source["initContainers"], PodDetailInfoContainer);
-	        this.volumeClaimTemplates = source["volumeClaimTemplates"];
+	        this.volumeClaimTemplates = this.convertValues(source["volumeClaimTemplates"], VolumeClaimTemplateSummary);
 	        this.pods = this.convertValues(source["pods"], PodSimpleInfo);
 	        this.podMetricsSummary = this.convertValues(source["podMetricsSummary"], PodMetricsSummary);
 	        this.currentRevision = source["currentRevision"];
@@ -4916,6 +4936,7 @@ export namespace types {
 		    return a;
 		}
 	}
+	
 	
 	
 	

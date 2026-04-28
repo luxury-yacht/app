@@ -143,6 +143,25 @@ const rolloutStatusVariant = (status: string): StatusChipVariant => {
  *  ordinal order respecting `partition`), so the kind disambiguates. */
 type StrategyKind = 'deployment' | 'daemonset' | 'statefulset';
 
+/** PVC accessMode tooltips. These describe how many nodes/pods can
+ *  mount the volume simultaneously, which directly affects scheduling
+ *  and is a frequent source of "PV won't bind" / "pods stuck pending"
+ *  troubleshooting. */
+const accessModeTooltip = (mode: string): string | undefined => {
+  switch (mode) {
+    case 'ReadWriteOnce':
+      return 'Only one node can mount the volume read/write at a time.';
+    case 'ReadOnlyMany':
+      return 'Many nodes can mount the volume read-only. Useful for shared static content.';
+    case 'ReadWriteMany':
+      return 'Many nodes can mount the volume read/write at the same time. Requires a backing storage class that supports it.';
+    case 'ReadWriteOncePod':
+      return 'Only one pod can mount the volume read/write at a time. Stricter than ReadWriteOnce, which is per-node.';
+    default:
+      return undefined;
+  }
+};
+
 /** StatefulSet `podManagementPolicy` tooltips. The default `OrderedReady`
  *  is normally not surfaced (filtered at the call site), but we cover it
  *  so the helper is complete. */
@@ -230,6 +249,15 @@ interface WorkloadOverviewProps {
 
   // StatefulSet-specific
   podManagementPolicy?: string;
+  partition?: number | null;
+  volumeClaimTemplates?: Array<{
+    name: string;
+    storageRequest?: string;
+    storageClass?: string;
+    accessModes?: string[];
+    volumeMode?: string;
+  }>;
+  pvcRetentionPolicy?: Record<string, string>;
 
   // Pod template
   serviceAccount?: string;
@@ -286,6 +314,9 @@ export const WorkloadOverview: React.FC<WorkloadOverviewProps> = ({
   updateStrategy,
   numberMisscheduled,
   podManagementPolicy,
+  partition,
+  volumeClaimTemplates,
+  pvcRetentionPolicy,
   serviceAccount,
   nodeSelector,
   tolerations,
@@ -549,7 +580,11 @@ export const WorkloadOverview: React.FC<WorkloadOverviewProps> = ({
             return null;
           })()}
 
-          {/* Update strategy — chip + params */}
+          {/* Update strategy — chip + params. StatefulSet RollingUpdate
+              has *two* independent params: `partition` (ordinal cutoff
+              for staged rollouts; default 0 = update everything) and
+              `maxUnavailable` (alpha gate, default 1). They were
+              previously conflated under the wrong label. */}
           {updateStrategy && (
             <OverviewItem
               label="Strategy"
@@ -561,9 +596,12 @@ export const WorkloadOverview: React.FC<WorkloadOverviewProps> = ({
                   >
                     {updateStrategy}
                   </StatusChip>
-                  {updateStrategy === 'RollingUpdate' && maxUnavailable && (
-                    <span className="overview-value-mono" style={{ marginLeft: '0.5rem' }}>
-                      partition {maxUnavailable}
+                  {updateStrategy === 'RollingUpdate' && (
+                    <span style={{ marginLeft: '0.5rem' }}>
+                      {typeof partition === 'number' && partition > 0 && (
+                        <>partition {partition} / </>
+                      )}
+                      unavailable {maxUnavailable || '1'}
                     </span>
                   )}
                 </>
@@ -586,6 +624,92 @@ export const WorkloadOverview: React.FC<WorkloadOverviewProps> = ({
           {/* Min ready seconds if set */}
           {minReadySeconds && minReadySeconds > 0 && (
             <OverviewItem label="Min Ready" value={`${minReadySeconds}s`} />
+          )}
+
+          {/* Visual separator before the volumes group, so persistent
+              storage info reads as its own section instead of mixing
+              with rollout/strategy rows. Only emitted when there's at
+              least one volume-related row to render. */}
+          {((volumeClaimTemplates && volumeClaimTemplates.length > 0) ||
+            (pvcRetentionPolicy && Object.keys(pvcRetentionPolicy).length > 0)) && (
+            <div className="metadata-section-separator" />
+          )}
+
+          {/* Volume claim templates — definitions from the
+              StatefulSet's `spec.volumeClaimTemplates`. Each row
+              captures name, requested size, storage class, and access
+              mode; volume mode is shown as a chip when set to `Block`
+              (Filesystem is the default and stays silent). The
+              actual per-replica PVCs are separate cluster resources
+              and aren't included here. */}
+          {volumeClaimTemplates && volumeClaimTemplates.length > 0 && (
+            <OverviewItem
+              label="Vol Templates"
+              fullWidth
+              value={
+                <div className="workload-volume-templates">
+                  {volumeClaimTemplates.map((tmpl) => (
+                    <div key={tmpl.name} className="workload-volume-template">
+                      <span className="workload-volume-template-name">{tmpl.name}</span>
+                      <span className="workload-volume-template-meta">
+                        {tmpl.storageRequest && <span>{tmpl.storageRequest}</span>}
+                        {tmpl.storageClass && <span>{tmpl.storageClass}</span>}
+                        {tmpl.accessModes && tmpl.accessModes.length > 0 && (
+                          <span className="workload-volume-template-modes">
+                            {tmpl.accessModes.map((mode) => (
+                              <StatusChip
+                                key={mode}
+                                variant="info"
+                                tooltip={accessModeTooltip(mode)}
+                              >
+                                {mode}
+                              </StatusChip>
+                            ))}
+                          </span>
+                        )}
+                        {tmpl.volumeMode === 'Block' && (
+                          <StatusChip
+                            variant="warning"
+                            tooltip="Block devices are presented as an unformatted disk, bypassing the filesystem layer."
+                          >
+                            Block
+                          </StatusChip>
+                        )}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              }
+            />
+          )}
+
+          {/* PVC retention — `whenScaled` and `whenDeleted` control
+              what happens to the per-pod PVCs when the StatefulSet
+              scales down or is deleted. Default is `Retain` for both;
+              non-default `Delete` is a destructive choice that loses
+              data, so it gets a warning chip. */}
+          {pvcRetentionPolicy && Object.keys(pvcRetentionPolicy).length > 0 && (
+            <OverviewItem
+              label="PVC Retention"
+              fullWidth
+              value={
+                <div className="overview-condition-list">
+                  {Object.entries(pvcRetentionPolicy).map(([phase, policy]) => (
+                    <StatusChip
+                      key={phase}
+                      variant={policy === 'Delete' ? 'warning' : 'info'}
+                      tooltip={
+                        policy === 'Delete'
+                          ? `PVCs are deleted when ${phase === 'whenScaled' ? 'pods are scaled down' : 'the StatefulSet is deleted'}. Data is lost.`
+                          : `PVCs are kept when ${phase === 'whenScaled' ? 'pods are scaled down' : 'the StatefulSet is deleted'}.`
+                      }
+                    >
+                      {phase}: {policy}
+                    </StatusChip>
+                  ))}
+                </div>
+              }
+            />
           )}
         </>
       )}
