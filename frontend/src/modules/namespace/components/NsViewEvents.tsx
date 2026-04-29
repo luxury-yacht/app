@@ -253,6 +253,7 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
       rowIdentity: sortRowIdentity,
       filterAccessors: { getSearchText },
       showNamespaceFilters: showNamespaceFilter,
+      showKindDropdown: false,
       diagnosticsLabel:
         namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Events' : 'Namespace Events',
       filterOptions: { isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE },

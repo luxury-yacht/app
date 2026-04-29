@@ -119,20 +119,3 @@ export interface QueryResourceGridTableParams<T extends ResourceGridTableRow> {
   rowIdentity?: (item: T, index: number) => string;
   virtualization?: GridTableVirtualizationOptions;
 }
-
-export interface SortableGridTableParams<T> {
-  data: T[];
-  columns: GridColumnDefinition<T>[];
-  defaultSortKey: string;
-  defaultSortDirection?: SortDirection;
-  diagnosticsLabel?: string;
-  rowIdentity?: (item: T, index: number) => string;
-  virtualization?: GridTableVirtualizationOptions;
-}
-
-export interface SortableGridTableResult<T> {
-  gridTableProps: Pick<
-    GridTableBindingProps<T>,
-    'data' | 'onSort' | 'sortConfig' | 'virtualization'
-  >;
-}

@@ -212,7 +212,7 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
       defaultSortDirection: 'desc',
       rowIdentity: sortRowIdentity,
       filterAccessors: { getSearchText },
-      showNamespaceFilters: true,
+      showKindDropdown: false,
       filterOptions: { isNamespaceScoped: false },
     });
 

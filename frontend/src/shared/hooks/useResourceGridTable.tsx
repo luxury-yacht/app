@@ -21,8 +21,6 @@ import type {
   ResourceGridCommonParams,
   ResourceGridTableResult,
   ResourceGridTableRow,
-  SortableGridTableParams,
-  SortableGridTableResult,
 } from './resourceGridTableTypes';
 
 export function useClusterResourceGridTable<T extends ResourceGridTableRow>({
@@ -227,28 +225,6 @@ export function useQueryResourceGridTable<T extends ResourceGridTableRow>({
     gridTableProps,
     favModal,
   };
-}
-
-export function useSortableGridTable<T>({
-  data,
-  columns,
-  defaultSortKey,
-  defaultSortDirection = 'asc',
-  diagnosticsLabel,
-  rowIdentity,
-  virtualization = GRIDTABLE_VIRTUALIZATION_DEFAULT,
-}: SortableGridTableParams<T>): SortableGridTableResult<T> {
-  const { gridTableProps } = useGridTableBinding({
-    data,
-    columns,
-    defaultSortKey,
-    defaultSortDirection,
-    diagnosticsLabel,
-    rowIdentity,
-    virtualization,
-  });
-
-  return { gridTableProps };
 }
 
 function useResourceGridTableCommon<T extends ResourceGridTableRow>({

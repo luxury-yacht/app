@@ -11,6 +11,7 @@ import {
   type ColumnSizingMap,
   createTextColumn,
 } from '@shared/components/tables/columnFactories';
+import { useTableSort } from '@hooks/useTableSort';
 import { formatAge, formatFullDate } from '@utils/ageFormatter';
 import { errorHandler } from '@/utils/errorHandler';
 import { requestRefreshDomain, type DataRequestReason } from '@/core/data-access';
@@ -29,7 +30,6 @@ import {
   resolveEventObjectReference,
   splitEventObjectTarget,
 } from '@shared/utils/eventObjectIdentity';
-import { useSortableGridTable } from '@shared/hooks/useResourceGridTable';
 import type { ResolvedObjectReference } from '@shared/utils/objectIdentity';
 import type { PanelObjectData } from '../types';
 import { CLUSTER_SCOPE, INACTIVE_SCOPE } from '../constants';
@@ -391,11 +391,8 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
     return base;
   }, [canOpenRelatedObject, navigateToRelatedObject, openRelatedObject]);
 
-  const { gridTableProps } = useSortableGridTable({
-    data: events,
+  const { sortedData, sortConfig, handleSort } = useTableSort(events, 'ageTimestamp', 'desc', {
     columns,
-    defaultSortKey: 'ageTimestamp',
-    defaultSortDirection: 'desc',
   });
 
   if (eventsLoading && events.length === 0) {
@@ -442,8 +439,10 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
     <div className="object-panel-tab-content">
       <div className="events-display">
         <GridTable<EventDisplay>
-          {...gridTableProps}
+          data={sortedData}
           columns={columns}
+          sortConfig={sortConfig}
+          onSort={handleSort}
           onRowClick={(item) => {
             void openRelatedObject(item);
           }}
