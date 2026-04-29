@@ -286,6 +286,7 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
       defaultSort: { key: 'name', direction: 'asc' },
       diagnosticsLabel:
         namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Helm' : 'Namespace Helm',
+      showKindDropdown: true,
       showNamespaceFilters: showNamespaceColumn,
       filterOptions: { isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE },
     });

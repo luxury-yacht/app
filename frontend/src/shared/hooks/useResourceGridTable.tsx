@@ -69,7 +69,7 @@ export function useNamespaceResourceGridTable<T extends ResourceGridTableRow>({
   keyExtractor,
   filterOptions,
   defaultSort = { key: 'name', direction: 'asc' },
-  showNamespaceFilters = namespace === ALL_NAMESPACES_SCOPE,
+  showNamespaceFilters = false,
   ...common
 }: NamespaceResourceGridTableParams<T>): ResourceGridTableResult<T> {
   const persistence = useNamespaceGridTablePersistence<T>({
@@ -243,7 +243,7 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
   defaultSortDirection = 'asc',
   namespace = '',
   showNamespaceFilters = false,
-  showKindDropdown = true,
+  showKindDropdown = false,
   getTrailingFilterActions,
   transformSortedData,
 }: ResourceGridCommonParams<T>): ResourceGridTableResult<T> {

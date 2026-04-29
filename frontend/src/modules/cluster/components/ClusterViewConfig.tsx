@@ -151,6 +151,7 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
       data,
       keyExtractor,
       availableKinds: kindOptions,
+      showKindDropdown: true,
       diagnosticsLabel: 'Cluster Configuration',
     });
 

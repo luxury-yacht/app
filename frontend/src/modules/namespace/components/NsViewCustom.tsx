@@ -309,6 +309,7 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
       keyExtractor,
       defaultSort: { key: 'name', direction: 'asc' },
       availableKinds: kindOptions ?? [],
+      showKindDropdown: true,
       kindDropdownSearchable: true,
       kindDropdownBulkActions: true,
       showNamespaceFilters: showNamespaceFilter,

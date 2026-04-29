@@ -340,6 +340,7 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
         namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Autoscaling' : 'Namespace Autoscaling',
       availableKinds:
         kindOptions && kindOptions.length > 0 ? kindOptions : NAMESPACE_AUTOSCALING_KIND_OPTIONS,
+      showKindDropdown: true,
       showNamespaceFilters: showNamespaceFilter,
       filterOptions: { isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE },
     });

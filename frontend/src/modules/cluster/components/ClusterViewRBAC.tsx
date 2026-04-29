@@ -151,6 +151,7 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
       data,
       keyExtractor,
       availableKinds: kindOptions,
+      showKindDropdown: true,
       diagnosticsLabel: 'Cluster RBAC',
     });
 

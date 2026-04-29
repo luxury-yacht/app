@@ -196,6 +196,7 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
       columns,
       keyExtractor,
       availableKinds: CLUSTER_CRD_KIND_OPTIONS,
+      showKindDropdown: true,
       filterOptions: { isNamespaceScoped: false },
     });
 

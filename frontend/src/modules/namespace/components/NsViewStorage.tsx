@@ -216,6 +216,8 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
       keyExtractor,
       defaultSort: { key: 'name', direction: 'asc' },
       availableKinds: NAMESPACE_STORAGE_KIND_OPTIONS,
+      showKindDropdown: true,
+      showNamespaceFilters: namespace === ALL_NAMESPACES_SCOPE,
       diagnosticsLabel,
     });
 

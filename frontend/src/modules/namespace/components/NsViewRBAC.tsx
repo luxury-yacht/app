@@ -194,6 +194,8 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
       keyExtractor,
       defaultSort: { key: 'name', direction: 'asc' },
       availableKinds: kindOptions,
+      showKindDropdown: true,
+      showNamespaceFilters: namespace === ALL_NAMESPACES_SCOPE,
       diagnosticsLabel,
     });
 

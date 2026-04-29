@@ -196,6 +196,7 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
       defaultSort: { key: 'name', direction: 'asc' },
       rowIdentity: keyExtractor,
       availableKinds: kindOptions,
+      showKindDropdown: true,
       filterAccessors: {
         getKind: (row) => row.kind,
         getNamespace: (row) => row.namespace ?? '',

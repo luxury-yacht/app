@@ -275,6 +275,7 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
       data,
       keyExtractor,
       availableKinds: CLUSTER_STORAGE_KIND_OPTIONS,
+      showKindDropdown: true,
       diagnosticsLabel: 'Cluster Storage',
     });
 

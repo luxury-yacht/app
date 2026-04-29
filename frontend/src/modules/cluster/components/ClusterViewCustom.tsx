@@ -253,6 +253,7 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
       columns,
       keyExtractor,
       availableKinds: kindOptions ?? [],
+      showKindDropdown: true,
       kindDropdownSearchable: true,
       kindDropdownBulkActions: true,
       filterOptions: { isNamespaceScoped: false },
