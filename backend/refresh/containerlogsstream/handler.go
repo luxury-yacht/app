@@ -19,12 +19,6 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 )
 
-const (
-	defaultTailLines = 1000
-	maxTailLines     = 10000
-	batchMaxSize     = 64
-)
-
 const logPermissionResource = "core/pods/log"
 const transportDropWarning = "Live container logs stream dropped one or more log entries due to client backlog. These lines were not intentionally filtered."
 
@@ -326,10 +320,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 			lastDelivery = time.Now()
 			if batch == nil {
-				batch = make([]Entry, 0, batchMaxSize)
+				batch = make([]Entry, 0, config.ContainerLogsStreamBatchMaxSize)
 			}
 			batch = append(batch, entry)
-			if len(batch) >= batchMaxSize {
+			if len(batch) >= config.ContainerLogsStreamBatchMaxSize {
 				if flushBatch() {
 					return
 				}
@@ -441,10 +435,10 @@ func parseOptions(r *http.Request) (Options, error) {
 	}
 	include := strings.TrimSpace(r.URL.Query().Get("include"))
 	exclude := strings.TrimSpace(r.URL.Query().Get("exclude"))
-	tail := defaultTailLines
+	tail := config.ContainerLogsStreamDefaultTailLines
 	if rawTail := strings.TrimSpace(r.URL.Query().Get("tailLines")); rawTail != "" {
 		if parsed, err := strconv.Atoi(rawTail); err == nil && parsed > 0 {
-			tail = min(parsed, maxTailLines)
+			tail = min(parsed, config.ContainerLogsStreamMaxTailLines)
 		}
 	}
 	lineFilter, err := containerlogs.NewLineFilter(include, exclude)

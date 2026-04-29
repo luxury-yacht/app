@@ -98,10 +98,6 @@ export function DrainNode(arg1, arg2, arg3) {
   return window['go']['backend']['App']['DrainNode'](arg1, arg2, arg3);
 }
 
-export function EvaluateCapabilities(arg1) {
-  return window['go']['backend']['App']['EvaluateCapabilities'](arg1);
-}
-
 export function FetchContainerLogs(arg1, arg2) {
   return window['go']['backend']['App']['FetchContainerLogs'](arg1, arg2);
 }

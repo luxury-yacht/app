@@ -78,7 +78,14 @@ export const LabelsAndAnnotations: React.FC<LabelsAndAnnotationsProps> = ({
                 >
                   {displayValue}
                 </span>
-                {isSelector && <StatusChip variant="info">Selector</StatusChip>}
+                {isSelector && (
+                  <StatusChip
+                    variant="info"
+                    tooltip="This label/value pair is used to identify which pods belong to this workload."
+                  >
+                    Selector
+                  </StatusChip>
+                )}
               </div>
             );
           })}

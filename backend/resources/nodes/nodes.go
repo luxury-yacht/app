@@ -227,7 +227,7 @@ func (s *Service) drainPod(pod corev1.Pod, options restypes.DrainNodeOptions, jo
 	job.AddPodEvent("evicting", pod.Namespace, pod.Name, "Evicting pod", false)
 	success := true
 
-	podCtx, podCancel := context.WithTimeout(s.deps.Context, 30*time.Second)
+	podCtx, podCancel := context.WithTimeout(s.deps.Context, config.NodeDrainPodOperationTimeout)
 	defer podCancel()
 
 	client := s.deps.KubernetesClient
@@ -346,7 +346,7 @@ func (s *Service) waitForPodsToTerminate(nodeName string, options restypes.Drain
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		// Use timeout context for each poll iteration
-		pollCtx, pollCancel := context.WithTimeout(s.deps.Context, 10*time.Second)
+		pollCtx, pollCancel := context.WithTimeout(s.deps.Context, config.NodeDrainPollTimeout)
 		remaining, err := client.CoreV1().Pods("").List(pollCtx, metav1.ListOptions{
 			FieldSelector: nodePodFieldSelector(nodeName),
 		})
@@ -429,7 +429,6 @@ func (s *Service) buildNodeDetails(node *corev1.Node, pods []corev1.Pod, nodeMet
 		KernelVersion:    node.Status.NodeInfo.KernelVersion,
 		ContainerRuntime: node.Status.NodeInfo.ContainerRuntimeVersion,
 		KubeletVersion:   node.Status.NodeInfo.KubeletVersion,
-		Version:          node.Status.NodeInfo.KubeletVersion,
 		Labels:           node.Labels,
 		Annotations:      node.Annotations,
 		PodsList:         podsList,
@@ -450,6 +449,14 @@ func (s *Service) buildNodeDetails(node *corev1.Node, pods []corev1.Pod, nodeMet
 			Status:  string(condition.Status),
 			Reason:  condition.Reason,
 			Message: condition.Message,
+		})
+	}
+
+	for _, taint := range node.Spec.Taints {
+		details.Taints = append(details.Taints, restypes.NodeTaint{
+			Key:    taint.Key,
+			Value:  taint.Value,
+			Effect: string(taint.Effect),
 		})
 	}
 

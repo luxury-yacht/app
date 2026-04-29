@@ -3,17 +3,35 @@
  */
 
 import React from 'react';
+import { types } from '@wailsjs/go/models';
 import { OverviewItem } from '@modules/object-panel/components/ObjectPanel/Details/Overview/shared/OverviewItem';
 import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceStatus } from '@shared/components/kubernetes/ResourceStatus';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
+import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
+import './shared/OverviewBlocks.css';
+
+// For pressure-style conditions (MemoryPressure, DiskPressure, PIDPressure,
+// NetworkUnavailable), `True` means the bad state exists; for the rest
+// (Ready, etc.), `True` is healthy.
+const PRESSURE_CONDITION_TYPES = new Set([
+  'MemoryPressure',
+  'DiskPressure',
+  'PIDPressure',
+  'NetworkUnavailable',
+]);
+
+const nodeConditionVariant = (type: string, status: string): StatusChipVariant => {
+  if (status === 'Unknown') return 'warning';
+  const healthyStatus = PRESSURE_CONDITION_TYPES.has(type) ? 'False' : 'True';
+  return status === healthyStatus ? 'healthy' : 'unhealthy';
+};
 
 interface NodeOverviewProps {
   name: string;
   age: string;
   status?: string;
   roles?: string;
-  version?: string;
   os?: string;
   osImage?: string;
   architecture?: string;
@@ -26,8 +44,8 @@ interface NodeOverviewProps {
   podsCapacity?: string;
   podsCount?: number;
   storageCapacity?: string;
-  taints?: any[];
-  conditions?: any[];
+  taints?: types.NodeTaint[];
+  conditions?: types.NodeCondition[];
   labels?: Record<string, string>;
   annotations?: Record<string, string>;
 }
@@ -37,12 +55,12 @@ export const NodeOverview: React.FC<NodeOverviewProps> = ({
   age,
   status,
   roles,
-  version,
   os,
   osImage,
   architecture,
   containerRuntime,
   kernelVersion,
+  kubeletVersion,
   hostname,
   internalIP,
   externalIP,
@@ -61,7 +79,49 @@ export const NodeOverview: React.FC<NodeOverviewProps> = ({
 
       {/* Use composed component for status */}
       {status && <ResourceStatus status={status} />}
-      {roles && <OverviewItem label="Roles" value={roles} />}
+
+      {conditions && conditions.length > 0 && (
+        <>
+          <OverviewItem
+            label="Conditions"
+            value={
+              <div className="overview-condition-list">
+                {conditions
+                  .filter((condition) => Boolean(condition.kind))
+                  .map((condition) => (
+                    <StatusChip
+                      key={condition.kind}
+                      variant={nodeConditionVariant(condition.kind, condition.status)}
+                      tooltip={condition.message || condition.reason || undefined}
+                    >
+                      {condition.kind}
+                    </StatusChip>
+                  ))}
+              </div>
+            }
+          />
+          <div className="metadata-section-separator" />
+        </>
+      )}
+
+      {roles && (
+        <OverviewItem
+          label="Roles"
+          value={
+            <div className="overview-condition-list">
+              {roles
+                .split(',')
+                .map((role) => role.trim())
+                .filter(Boolean)
+                .map((role) => (
+                  <StatusChip key={role} variant="info">
+                    {role}
+                  </StatusChip>
+                ))}
+            </div>
+          }
+        />
+      )}
 
       {/* Network information */}
       {internalIP && <OverviewItem label="Internal IP" value={internalIP} />}
@@ -71,90 +131,37 @@ export const NodeOverview: React.FC<NodeOverviewProps> = ({
       {/* Pod count and capacity. If either value is unknown, display `unknown` */}
       <OverviewItem label="Pods" value={`${podsCount ?? 'unknown'}/${podsCapacity ?? 'unknown'}`} />
 
-      {/* Version information - combine related fields */}
-      {version && <OverviewItem label="Kubernetes" value={version} />}
-
-      {/* System information - only show if different from defaults or important */}
-      {os && osImage && <OverviewItem label="OS" value={`${os}/${architecture || 'unknown'}`} />}
-
-      {osImage && <OverviewItem label="OS Image" value={osImage} />}
-
-      {containerRuntime && <OverviewItem label="Runtime" value={containerRuntime} />}
-
-      {/* Only show kernel if provided */}
-      {kernelVersion && <OverviewItem label="Kernel" value={kernelVersion} />}
-
       {/* Storage capacity if available */}
       {storageCapacity && <OverviewItem label="Storage" value={storageCapacity} />}
+
+      {/* System info group — visually separated from surrounding rows */}
+      {(kubeletVersion || osImage || containerRuntime || kernelVersion) && (
+        <>
+          <div className="metadata-section-separator" />
+          {kubeletVersion && <OverviewItem label="Kubelet" value={kubeletVersion} />}
+          {os && osImage && (
+            <OverviewItem label="OS" value={`${os}/${architecture || 'unknown'}`} />
+          )}
+          {osImage && <OverviewItem label="OS Image" value={osImage} />}
+          {kernelVersion && <OverviewItem label="Kernel" value={kernelVersion} />}
+          {containerRuntime && <OverviewItem label="Runtime" value={containerRuntime} />}
+          <div className="metadata-section-separator" />
+        </>
+      )}
 
       {taints && taints.length > 0 && (
         <OverviewItem
           label="Taints"
           value={
-            <div>
-              {taints.map((taint: any, index: number) => (
-                <span key={index} style={{ marginRight: index < taints.length - 1 ? '8px' : 0 }}>
-                  <span className="status-badge warning">
-                    {taint.key}
-                    {taint.value && `=${taint.value}`}:{taint.effect}
-                  </span>
-                </span>
-              ))}
-            </div>
-          }
-        />
-      )}
-
-      {conditions && conditions.length > 0 && (
-        <OverviewItem
-          label="Conditions"
-          value={
-            <div className="node-conditions">
-              {conditions
-                .filter((condition: any) => {
-                  // Only show conditions that are not in their default healthy state
-                  const isPressureCondition = condition.type?.includes('Pressure');
-                  if (isPressureCondition) {
-                    return condition.status === 'True'; // Show if pressure exists
-                  } else if (condition.type === 'Ready') {
-                    return condition.status !== 'True'; // Show if not ready
-                  }
-                  return condition.status !== 'True'; // Show other non-healthy conditions
-                })
-                .map((condition: any, index: number) => {
-                  // For pressure conditions, True is bad
-                  const isPressureCondition = condition.type?.includes('Pressure');
-                  let statusClass = 'warning';
-                  let displayText = condition.type;
-
-                  if (condition.status === 'Unknown') {
-                    statusClass = 'unknown';
-                  } else if (isPressureCondition && condition.status === 'True') {
-                    statusClass = 'error';
-                  }
-
-                  return (
-                    <span
-                      key={index}
-                      style={{ marginRight: index < conditions.length - 1 ? '8px' : 0 }}
-                    >
-                      <span
-                        className={`status-badge ${statusClass}`}
-                        style={{ fontSize: '0.85em' }}
-                      >
-                        {displayText}
-                      </span>
-                    </span>
-                  );
-                })}
-              {/* If all conditions are healthy, show a simple message */}
-              {conditions.every((condition: any) => {
-                const isPressureCondition = condition.kind?.includes('Pressure');
-                if (isPressureCondition) {
-                  return condition.status === 'False';
-                }
-                return condition.status === 'True';
-              }) && <span className="status-badge success">All Healthy</span>}
+            <div className="overview-condition-list">
+              {taints.map((taint, index) => {
+                const label = `${taint.key}${taint.value ? `=${taint.value}` : ''}:${taint.effect}`;
+                return (
+                  <StatusChip key={`${label}-${index}`} variant="warning">
+                    {label}
+                  </StatusChip>
+                );
+              })}
             </div>
           }
         />

@@ -19,11 +19,9 @@ type aggregateSnapshotService struct {
 	services     map[string]refresh.SnapshotService
 	mu           sync.RWMutex
 
-	// onFirstSnapshot is called once per cluster the first time a namespace snapshot
-	// builds successfully. Used by the lifecycle module to transition loading → ready.
-	onFirstSnapshot func(clusterID string)
-	firstSnapshotMu sync.Mutex
-	firstSnapshotOK map[string]bool
+	// onNamespaceSnapshot is called when a namespace snapshot builds successfully.
+	// Used by the lifecycle module to transition loading -> ready.
+	onNamespaceSnapshot func(clusterID string)
 }
 
 // newAggregateSnapshotService builds an aggregator for the provided cluster snapshot services.
@@ -103,10 +101,11 @@ func (s *aggregateSnapshotService) Build(ctx context.Context, domain, scope stri
 		}
 		snapshots = append(snapshots, snapshotData)
 
-		// Notify the lifecycle module on the first successful namespace snapshot
-		// for each cluster. This drives the loading → ready transition.
+		// Notify the lifecycle module on every successful namespace snapshot.
+		// The lifecycle callback is state-gated, so this also recovers clusters
+		// that re-enter loading after an in-place subsystem rebuild.
 		if domain == "namespaces" {
-			s.markFirstSnapshot(id)
+			s.notifyNamespaceSnapshot(id)
 		}
 	}
 
@@ -173,8 +172,6 @@ func (s *aggregateSnapshotService) snapshotConfig() map[string]refresh.SnapshotS
 }
 
 // Update refreshes the aggregate snapshot configuration after selection changes.
-// Clusters removed from the subsystem set have their first-snapshot tracking
-// cleared so they can re-trigger the ready transition if re-added later.
 func (s *aggregateSnapshotService) Update(clusterOrder []string, subsystems map[string]*system.Subsystem) {
 	if s == nil {
 		return
@@ -184,16 +181,6 @@ func (s *aggregateSnapshotService) Update(clusterOrder []string, subsystems map[
 	s.clusterOrder = next.clusterOrder
 	s.services = next.services
 	s.mu.Unlock()
-
-	// Clear first-snapshot tracking for clusters no longer present so they can
-	// re-trigger the ready transition if they come back (e.g., after auth recovery).
-	s.firstSnapshotMu.Lock()
-	for id := range s.firstSnapshotOK {
-		if _, ok := next.services[id]; !ok {
-			delete(s.firstSnapshotOK, id)
-		}
-	}
-	s.firstSnapshotMu.Unlock()
 }
 
 // isSingleClusterDomain restricts object-scoped and catalog domains to one cluster for now.
@@ -206,23 +193,12 @@ func isSingleClusterDomain(domain string) bool {
 	}
 }
 
-// markFirstSnapshot fires the onFirstSnapshot callback exactly once per cluster.
-func (s *aggregateSnapshotService) markFirstSnapshot(clusterID string) {
-	if s.onFirstSnapshot == nil {
+// notifyNamespaceSnapshot fires the lifecycle callback for a successful namespace snapshot.
+func (s *aggregateSnapshotService) notifyNamespaceSnapshot(clusterID string) {
+	if s.onNamespaceSnapshot == nil {
 		return
 	}
-	s.firstSnapshotMu.Lock()
-	if s.firstSnapshotOK[clusterID] {
-		s.firstSnapshotMu.Unlock()
-		return
-	}
-	if s.firstSnapshotOK == nil {
-		s.firstSnapshotOK = make(map[string]bool)
-	}
-	s.firstSnapshotOK[clusterID] = true
-	s.firstSnapshotMu.Unlock()
-
-	s.onFirstSnapshot(clusterID)
+	s.onNamespaceSnapshot(clusterID)
 }
 
 // formatClusterWarning prefixes a cluster identifier onto a warning message.

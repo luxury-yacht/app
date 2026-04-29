@@ -33,17 +33,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/rest"
 )
-
-// defaultGVKResolveTimeout bounds the time spent talking to discovery and
-// the apiextensions API during a single GVK resolution. Matches the
-// mutationRequestTimeout used by the existing YAML edit path.
-const defaultGVKResolveTimeout = 15 * time.Second
 
 // ResolveGVRForGVK turns a fully-qualified GroupVersionKind into the
 // matching GroupVersionResource + namespaced flag for the supplied
@@ -71,7 +67,7 @@ func ResolveGVRForGVK(ctx context.Context, deps Dependencies, gvk schema.GroupVe
 
 	discoveryClient := deps.KubernetesClient.Discovery()
 	if deps.RestConfig != nil {
-		timeout := defaultGVKResolveTimeout
+		timeout := config.GVKResolveTimeout
 		if deadline, ok := ctx.Deadline(); ok {
 			if remaining := time.Until(deadline); remaining > 0 && remaining < timeout {
 				timeout = remaining

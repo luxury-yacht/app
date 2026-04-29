@@ -28,7 +28,21 @@ import type {
   NamespaceHelmSummary,
   NamespaceCustomSummary,
 } from '@/core/refresh/types';
-import { queryNamespacePermissions } from '@/core/capabilities';
+import {
+  ALL_NAMESPACE_PERMISSIONS,
+  AUTOSCALING_PERMISSIONS,
+  CONFIG_PERMISSIONS,
+  EVENT_PERMISSIONS,
+  NETWORK_PERMISSIONS,
+  POD_PERMISSIONS,
+  QUOTA_PERMISSIONS,
+  RBAC_PERMISSIONS,
+  STORAGE_PERMISSIONS,
+  WORKLOAD_PERMISSIONS,
+  queryNamespacePermissions,
+  queryNamespacesPermissions,
+  type PermissionSpecList,
+} from '@/core/capabilities';
 import {
   refreshOrchestrator,
   useRefreshScopedDomain,
@@ -89,6 +103,19 @@ const DOMAIN_BY_RESOURCE: Partial<Record<NamespaceViewType, RefreshDomain | null
   custom: 'namespace-custom',
   helm: 'namespace-helm',
   events: 'namespace-events',
+};
+
+const PERMISSIONS_BY_RESOURCE: Partial<Record<NamespaceViewType, PermissionSpecList[]>> = {
+  browse: ALL_NAMESPACE_PERMISSIONS,
+  pods: [POD_PERMISSIONS],
+  workloads: [WORKLOAD_PERMISSIONS],
+  config: [CONFIG_PERMISSIONS],
+  network: [NETWORK_PERMISSIONS],
+  rbac: [RBAC_PERMISSIONS],
+  storage: [STORAGE_PERMISSIONS],
+  autoscaling: [AUTOSCALING_PERMISSIONS],
+  quotas: [QUOTA_PERMISSIONS],
+  events: [EVENT_PERMISSIONS],
 };
 
 // Filter merged namespace payloads to the active cluster tab.
@@ -994,46 +1021,73 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     queryNamespacePermissions(capabilityNamespace, namespaceClusterId ?? null);
   }, [currentNamespace, namespaceClusterId]);
 
-  // All Namespaces: collect distinct (clusterId, namespace) pairs from
-  // loaded domain data and query permissions for each. queryNamespacePermissions
-  // skips namespaces that already have fresh results within TTL, so this
-  // effect can fire on every data update without causing redundant queries.
-  // Only genuinely new namespaces trigger an actual QueryPermissions call.
+  // All Namespaces: collect distinct (clusterId, namespace) pairs from the
+  // active tab and query that tab's permission specs in one store call.
+  // Browse spans resource types, so it intentionally falls back to all loaded
+  // domain data and the full namespace permission set.
   useEffect(() => {
     if (getCapabilityNamespace(currentNamespace) !== null) {
       return;
     }
 
-    const allDomainData = [
-      workloads.data,
-      pods.data,
-      config.data,
-      network.data,
-      rbac.data,
-      storage.data,
-      autoscaling.data,
-      quotas.data,
-      custom.data,
-      events.data,
-    ];
+    const activeKey = activeResourceType ?? DEFAULT_NAMESPACE_VIEW;
+    const specLists = PERMISSIONS_BY_RESOURCE[activeKey] ?? [];
+    if (specLists.length === 0) {
+      return;
+    }
+
+    const activeDomainData =
+      activeKey === 'browse'
+        ? [
+            workloads.data,
+            pods.data,
+            config.data,
+            network.data,
+            rbac.data,
+            storage.data,
+            autoscaling.data,
+            quotas.data,
+            custom.data,
+            events.data,
+          ]
+        : [
+            {
+              pods: pods.data,
+              workloads: workloads.data,
+              config: config.data,
+              network: network.data,
+              rbac: rbac.data,
+              storage: storage.data,
+              autoscaling: autoscaling.data,
+              quotas: quotas.data,
+              custom: custom.data,
+              helm: helm.data,
+              events: events.data,
+            }[activeKey],
+          ];
 
     const seen = new Set<string>();
-    for (const domainList of allDomainData) {
+    const targets: Array<{ namespace: string; clusterId: string }> = [];
+    for (const domainList of activeDomainData) {
       if (!Array.isArray(domainList)) continue;
       for (const obj of domainList) {
         const ns = obj?.namespace;
         const cid = obj?.clusterId ?? namespaceClusterId;
         if (ns && cid) {
-          seen.add(`${cid}|${ns}`);
+          const key = `${cid}|${ns.toLowerCase()}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            targets.push({ namespace: ns, clusterId: cid });
+          }
         }
       }
     }
 
-    for (const key of seen) {
-      const [cid, ns] = key.split('|');
-      queryNamespacePermissions(ns, cid);
+    if (targets.length > 0) {
+      void queryNamespacesPermissions(targets, { specLists });
     }
   }, [
+    activeResourceType,
     currentNamespace,
     namespaceClusterId,
     workloads.data,
@@ -1045,6 +1099,7 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     autoscaling.data,
     quotas.data,
     custom.data,
+    helm.data,
     events.data,
   ]);
 

@@ -9,6 +9,11 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	authorizationv1 "k8s.io/api/authorization/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes/fake"
+	cgotesting "k8s.io/client-go/testing"
 )
 
 func TestCheckerUsesCacheUntilExpiry(t *testing.T) {
@@ -69,6 +74,27 @@ func TestCheckerReturnsErrorWithoutCacheOnTransient(t *testing.T) {
 
 	_, err := checker.Can(context.Background(), "", "pods", "list")
 	require.Error(t, err)
+}
+
+func TestCheckerRetriesTransientAuthorizationError(t *testing.T) {
+	client := fake.NewClientset()
+	calls := 0
+	client.Fake.PrependReactor("create", "selfsubjectaccessreviews", func(action cgotesting.Action) (bool, runtime.Object, error) {
+		calls++
+		if calls == 1 {
+			return true, nil, apierrors.NewTooManyRequests("busy", 0)
+		}
+		review := action.(cgotesting.CreateAction).GetObject().(*authorizationv1.SelfSubjectAccessReview)
+		review.Status = authorizationv1.SubjectAccessReviewStatus{Allowed: true}
+		return true, review, nil
+	})
+
+	checker := NewChecker(client, "cluster-a", time.Minute)
+	decision, err := checker.Can(context.Background(), "", "pods", "get")
+	require.NoError(t, err)
+	require.True(t, decision.Allowed)
+	require.Equal(t, DecisionSourceFresh, decision.Source)
+	require.Equal(t, 2, calls)
 }
 
 func TestCheckerCacheKeyIncludesClusterID(t *testing.T) {

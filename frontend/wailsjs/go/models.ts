@@ -590,70 +590,6 @@ export namespace backend {
 
 export namespace capabilities {
 	
-	export class CheckRequest {
-	    id: string;
-	    clusterId?: string;
-	    group?: string;
-	    version?: string;
-	    verb: string;
-	    resourceKind: string;
-	    namespace?: string;
-	    name?: string;
-	    subresource?: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new CheckRequest(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.id = source["id"];
-	        this.clusterId = source["clusterId"];
-	        this.group = source["group"];
-	        this.version = source["version"];
-	        this.verb = source["verb"];
-	        this.resourceKind = source["resourceKind"];
-	        this.namespace = source["namespace"];
-	        this.name = source["name"];
-	        this.subresource = source["subresource"];
-	    }
-	}
-	export class CheckResult {
-	    id: string;
-	    clusterId?: string;
-	    group?: string;
-	    version?: string;
-	    verb: string;
-	    resourceKind: string;
-	    namespace?: string;
-	    name?: string;
-	    subresource?: string;
-	    allowed: boolean;
-	    deniedReason?: string;
-	    evaluationError?: string;
-	    error?: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new CheckResult(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.id = source["id"];
-	        this.clusterId = source["clusterId"];
-	        this.group = source["group"];
-	        this.version = source["version"];
-	        this.verb = source["verb"];
-	        this.resourceKind = source["resourceKind"];
-	        this.namespace = source["namespace"];
-	        this.name = source["name"];
-	        this.subresource = source["subresource"];
-	        this.allowed = source["allowed"];
-	        this.deniedReason = source["deniedReason"];
-	        this.evaluationError = source["evaluationError"];
-	        this.error = source["error"];
-	    }
-	}
 	export class NamespaceDiagnostics {
 	    key: string;
 	    clusterId: string;
@@ -1705,7 +1641,9 @@ export namespace types {
 	    failed: number;
 	    active: number;
 	    startTime?: v1.Time;
+	    completionTime?: v1.Time;
 	    duration?: string;
+	    durationSeconds?: number;
 	    age: string;
 	
 	    static createFrom(source: any = {}) {
@@ -1723,7 +1661,9 @@ export namespace types {
 	        this.failed = source["failed"];
 	        this.active = source["active"];
 	        this.startTime = this.convertValues(source["startTime"], v1.Time);
+	        this.completionTime = this.convertValues(source["completionTime"], v1.Time);
 	        this.duration = source["duration"];
+	        this.durationSeconds = source["durationSeconds"];
 	        this.age = source["age"];
 	    }
 	
@@ -1789,6 +1729,8 @@ export namespace types {
 	    lastSuccessfulTime?: v1.Time;
 	    nextScheduleTime?: string;
 	    timeUntilNextSchedule?: string;
+	    lastManualTime?: v1.Time;
+	    lastFailureTime?: v1.Time;
 	    concurrencyPolicy: string;
 	    startingDeadlineSeconds?: number;
 	    successfulJobsHistory: number;
@@ -1818,6 +1760,8 @@ export namespace types {
 	        this.lastSuccessfulTime = this.convertValues(source["lastSuccessfulTime"], v1.Time);
 	        this.nextScheduleTime = source["nextScheduleTime"];
 	        this.timeUntilNextSchedule = source["timeUntilNextSchedule"];
+	        this.lastManualTime = this.convertValues(source["lastManualTime"], v1.Time);
+	        this.lastFailureTime = this.convertValues(source["lastFailureTime"], v1.Time);
 	        this.concurrencyPolicy = source["concurrencyPolicy"];
 	        this.startingDeadlineSeconds = source["startingDeadlineSeconds"];
 	        this.successfulJobsHistory = source["successfulJobsHistory"];
@@ -1924,12 +1868,15 @@ export namespace types {
 	    maxSurge?: string;
 	    minReadySeconds?: number;
 	    revisionHistoryLimit?: number;
+	    serviceAccount?: string;
 	    selector?: Record<string, string>;
 	    labels?: Record<string, string>;
 	    annotations?: Record<string, string>;
 	    nodeSelector?: Record<string, string>;
+	    tolerations?: string[];
 	    conditions?: string[];
 	    containers?: PodDetailInfoContainer[];
+	    initContainers?: PodDetailInfoContainer[];
 	    pods?: PodSimpleInfo[];
 	    podMetricsSummary?: PodMetricsSummary;
 	    observedGeneration?: number;
@@ -1964,12 +1911,15 @@ export namespace types {
 	        this.maxSurge = source["maxSurge"];
 	        this.minReadySeconds = source["minReadySeconds"];
 	        this.revisionHistoryLimit = source["revisionHistoryLimit"];
+	        this.serviceAccount = source["serviceAccount"];
 	        this.selector = source["selector"];
 	        this.labels = source["labels"];
 	        this.annotations = source["annotations"];
 	        this.nodeSelector = source["nodeSelector"];
+	        this.tolerations = source["tolerations"];
 	        this.conditions = source["conditions"];
 	        this.containers = this.convertValues(source["containers"], PodDetailInfoContainer);
+	        this.initContainers = this.convertValues(source["initContainers"], PodDetailInfoContainer);
 	        this.pods = this.convertValues(source["pods"], PodSimpleInfo);
 	        this.podMetricsSummary = this.convertValues(source["podMetricsSummary"], PodMetricsSummary);
 	        this.observedGeneration = source["observedGeneration"];
@@ -2074,8 +2024,8 @@ export namespace types {
 	    ready: string;
 	    updated?: string;
 	    upToDate?: number;
-	    available?: number;
-	    desiredReplicas?: number;
+	    available: number;
+	    desiredReplicas: number;
 	    age: string;
 	    cpuRequest?: string;
 	    cpuLimit?: string;
@@ -2089,14 +2039,19 @@ export namespace types {
 	    minReadySeconds?: number;
 	    revisionHistory?: number;
 	    progressDeadline?: number;
+	    serviceAccount?: string;
+	    nodeSelector?: Record<string, string>;
+	    tolerations?: string[];
 	    selector?: Record<string, string>;
 	    labels?: Record<string, string>;
 	    annotations?: Record<string, string>;
 	    conditions?: string[];
 	    containers?: PodDetailInfoContainer[];
+	    initContainers?: PodDetailInfoContainer[];
 	    pods?: PodSimpleInfo[];
 	    podMetricsSummary?: PodMetricsSummary;
 	    currentRevision?: string;
+	    currentReplicaSet?: string;
 	    replicaSets?: string[];
 	    replicaSetSummaries?: ReplicaSetSummary[];
 	    observedGeneration?: number;
@@ -2133,14 +2088,19 @@ export namespace types {
 	        this.minReadySeconds = source["minReadySeconds"];
 	        this.revisionHistory = source["revisionHistory"];
 	        this.progressDeadline = source["progressDeadline"];
+	        this.serviceAccount = source["serviceAccount"];
+	        this.nodeSelector = source["nodeSelector"];
+	        this.tolerations = source["tolerations"];
 	        this.selector = source["selector"];
 	        this.labels = source["labels"];
 	        this.annotations = source["annotations"];
 	        this.conditions = source["conditions"];
 	        this.containers = this.convertValues(source["containers"], PodDetailInfoContainer);
+	        this.initContainers = this.convertValues(source["initContainers"], PodDetailInfoContainer);
 	        this.pods = this.convertValues(source["pods"], PodSimpleInfo);
 	        this.podMetricsSummary = this.convertValues(source["podMetricsSummary"], PodMetricsSummary);
 	        this.currentRevision = source["currentRevision"];
+	        this.currentReplicaSet = source["currentReplicaSet"];
 	        this.replicaSets = source["replicaSets"];
 	        this.replicaSetSummaries = this.convertValues(source["replicaSetSummaries"], ReplicaSetSummary);
 	        this.observedGeneration = source["observedGeneration"];
@@ -3555,7 +3515,6 @@ export namespace types {
 	    unschedulable: boolean;
 	    roles: string;
 	    age: string;
-	    version: string;
 	    internalIP: string;
 	    externalIP?: string;
 	    hostname: string;
@@ -3601,7 +3560,6 @@ export namespace types {
 	        this.unschedulable = source["unschedulable"];
 	        this.roles = source["roles"];
 	        this.age = source["age"];
-	        this.version = source["version"];
 	        this.internalIP = source["internalIP"];
 	        this.externalIP = source["externalIP"];
 	        this.hostname = source["hostname"];
@@ -4143,8 +4101,8 @@ export namespace types {
 	    details: string;
 	    replicas: string;
 	    ready: string;
-	    available?: number;
-	    desiredReplicas?: number;
+	    available: number;
+	    desiredReplicas: number;
 	    age: string;
 	    cpuRequest?: string;
 	    cpuLimit?: string;
@@ -4158,6 +4116,7 @@ export namespace types {
 	    annotations?: Record<string, string>;
 	    conditions?: string[];
 	    containers?: PodDetailInfoContainer[];
+	    initContainers?: PodDetailInfoContainer[];
 	    pods?: PodSimpleInfo[];
 	    podMetricsSummary?: PodMetricsSummary;
 	    observedGeneration?: number;
@@ -4190,6 +4149,7 @@ export namespace types {
 	        this.annotations = source["annotations"];
 	        this.conditions = source["conditions"];
 	        this.containers = this.convertValues(source["containers"], PodDetailInfoContainer);
+	        this.initContainers = this.convertValues(source["initContainers"], PodDetailInfoContainer);
 	        this.pods = this.convertValues(source["pods"], PodSimpleInfo);
 	        this.podMetricsSummary = this.convertValues(source["podMetricsSummary"], PodMetricsSummary);
 	        this.observedGeneration = source["observedGeneration"];
@@ -4743,6 +4703,26 @@ export namespace types {
 	        this.command = source["command"];
 	    }
 	}
+	export class VolumeClaimTemplateSummary {
+	    name: string;
+	    storageRequest?: string;
+	    storageClass?: string;
+	    accessModes?: string[];
+	    volumeMode?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new VolumeClaimTemplateSummary(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.storageRequest = source["storageRequest"];
+	        this.storageClass = source["storageClass"];
+	        this.accessModes = source["accessModes"];
+	        this.volumeMode = source["volumeMode"];
+	    }
+	}
 	export class StatefulSetDetails {
 	    kind: string;
 	    name: string;
@@ -4751,8 +4731,8 @@ export namespace types {
 	    replicas: string;
 	    ready: string;
 	    upToDate?: number;
-	    available?: number;
-	    desiredReplicas?: number;
+	    available: number;
+	    desiredReplicas: number;
 	    age: string;
 	    cpuRequest?: string;
 	    cpuLimit?: string;
@@ -4767,13 +4747,17 @@ export namespace types {
 	    minReadySeconds?: number;
 	    revisionHistoryLimit?: number;
 	    serviceName?: string;
+	    serviceAccount?: string;
 	    pvcRetentionPolicy?: Record<string, string>;
+	    nodeSelector?: Record<string, string>;
+	    tolerations?: string[];
 	    selector?: Record<string, string>;
 	    labels?: Record<string, string>;
 	    annotations?: Record<string, string>;
 	    conditions?: string[];
 	    containers?: PodDetailInfoContainer[];
-	    volumeClaimTemplates?: string[];
+	    initContainers?: PodDetailInfoContainer[];
+	    volumeClaimTemplates?: VolumeClaimTemplateSummary[];
 	    pods?: PodSimpleInfo[];
 	    podMetricsSummary?: PodMetricsSummary;
 	    currentRevision?: string;
@@ -4812,13 +4796,17 @@ export namespace types {
 	        this.minReadySeconds = source["minReadySeconds"];
 	        this.revisionHistoryLimit = source["revisionHistoryLimit"];
 	        this.serviceName = source["serviceName"];
+	        this.serviceAccount = source["serviceAccount"];
 	        this.pvcRetentionPolicy = source["pvcRetentionPolicy"];
+	        this.nodeSelector = source["nodeSelector"];
+	        this.tolerations = source["tolerations"];
 	        this.selector = source["selector"];
 	        this.labels = source["labels"];
 	        this.annotations = source["annotations"];
 	        this.conditions = source["conditions"];
 	        this.containers = this.convertValues(source["containers"], PodDetailInfoContainer);
-	        this.volumeClaimTemplates = source["volumeClaimTemplates"];
+	        this.initContainers = this.convertValues(source["initContainers"], PodDetailInfoContainer);
+	        this.volumeClaimTemplates = this.convertValues(source["volumeClaimTemplates"], VolumeClaimTemplateSummary);
 	        this.pods = this.convertValues(source["pods"], PodSimpleInfo);
 	        this.podMetricsSummary = this.convertValues(source["podMetricsSummary"], PodMetricsSummary);
 	        this.currentRevision = source["currentRevision"];
@@ -5009,6 +4997,7 @@ export namespace types {
 		    return a;
 		}
 	}
+	
 	
 	
 	

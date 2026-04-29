@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/capabilities"
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/parallel"
 	authorizationv1 "k8s.io/api/authorization/v1"
 )
@@ -195,8 +196,8 @@ func (s *Service) runLoop(ctx context.Context) error {
 	resyncInterval := s.opts.ResyncInterval
 	if s.opts.EnableReactiveUpdates && s.deps.InformerFactory != nil {
 		// With reactive updates the full resync is a consistency safety net.
-		if resyncInterval < 5*time.Minute {
-			resyncInterval = 5 * time.Minute
+		if resyncInterval < config.ObjectCatalogReactiveMinResyncInterval {
+			resyncInterval = config.ObjectCatalogReactiveMinResyncInterval
 		}
 	}
 	ticker := time.NewTicker(resyncInterval)

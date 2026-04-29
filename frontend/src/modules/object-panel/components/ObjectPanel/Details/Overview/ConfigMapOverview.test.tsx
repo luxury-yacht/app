@@ -18,6 +18,11 @@ vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
   }),
 }));
 
+vi.mock('@shared/components/Tooltip', () => ({
+  __esModule: true,
+  default: ({ children }: any) => <>{children}</>,
+}));
+
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
   ResourceHeader: (props: any) => (
     <div data-testid="resource-header">
@@ -71,7 +76,7 @@ describe('ConfigMapOverview', () => {
     container.remove();
   });
 
-  it('shows data key counts and pod usage links', async () => {
+  it('shows pod usage links', async () => {
     await renderComponent({
       configMapDetails: {
         name: 'app-config',
@@ -85,10 +90,10 @@ describe('ConfigMapOverview', () => {
       } as any,
     });
 
-    expect(container.textContent).toContain('Data Keys');
-    expect(getValueForLabel('Data Keys')?.textContent).toBe('2 keys');
-    expect(container.textContent).toContain('Binary Data');
-    expect(getValueForLabel('Binary Data')?.textContent).toBe('1 key');
+    // Data/Binary key counts are intentionally not surfaced in the overview —
+    // the DataSection below covers the actual keys.
+    expect(getValueForLabel('Data Keys')).toBeNull();
+    expect(getValueForLabel('Binary Data')).toBeNull();
 
     const podLink = getLinkByText(container, 'pod-a');
     expect(podLink).not.toBeUndefined();

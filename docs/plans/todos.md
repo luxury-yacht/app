@@ -1,5 +1,7 @@
 # TODO
 
+- Show pods as cards instead of an embedded gridtable in node pods view
+
 ## Issues
 
 - Issue 40 Support object creation
@@ -8,6 +10,10 @@
 
 - Object relationships map
 - Traffic flow map
+
+- Configurable backend thresholds
+  - QPS (500) and Burst (1000)
+  - SSRR concurrency cap (32)
 
 - Gridtable improvements
 - Allow column order change via drag

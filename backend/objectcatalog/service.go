@@ -6,25 +6,12 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 const (
-	defaultResyncInterval             = 1 * time.Minute
-	defaultPageSize                   = 50
-	defaultListWorkers                = 32
-	defaultNamespaceWorkers           = 16
-	defaultEvictionTTL                = 10 * time.Minute
-	defaultInformerPromotionThreshold = 5000
-	defaultStreamingBatchSize         = 100
-	defaultStreamingFlushInterval     = 500 * time.Millisecond
-	componentName                     = "ObjectCatalog"
-	defaultQueryLimit                 = 1000
-	maxQueryLimit                     = 10000
-	listRetryMaxAttempts              = 3
-	listRetryInitialBackoff           = 200 * time.Millisecond
-	listRetryMaxBackoff               = 2 * time.Second
-	discoveryRequestTimeout           = 15 * time.Second
+	componentName = "ObjectCatalog"
 )
 
 var streamingResourcePriority = map[string]int{
@@ -116,14 +103,14 @@ type summaryChunk struct {
 // NewService constructs a catalog service with the provided dependencies and options.
 func NewService(deps Dependencies, opts *Options) *Service {
 	serviceOpts := Options{
-		ResyncInterval:             defaultResyncInterval,
-		PageSize:                   defaultPageSize,
+		ResyncInterval:             config.ObjectCatalogResyncInterval,
+		PageSize:                   config.ObjectCatalogPageSize,
 		ListWorkers:                adjustedListWorkers(),
-		NamespaceWorkers:           defaultNamespaceWorkers,
-		InformerPromotionThreshold: defaultInformerPromotionThreshold,
-		EvictionTTL:                defaultEvictionTTL,
-		StreamingBatchSize:         defaultStreamingBatchSize,
-		StreamingFlushInterval:     defaultStreamingFlushInterval,
+		NamespaceWorkers:           config.ObjectCatalogNamespaceWorkers,
+		InformerPromotionThreshold: config.ObjectCatalogInformerPromotionThreshold,
+		EvictionTTL:                config.ObjectCatalogEvictionTTL,
+		StreamingBatchSize:         config.ObjectCatalogStreamingBatchSize,
+		StreamingFlushInterval:     config.ObjectCatalogStreamingFlushInterval,
 		EnableReactiveUpdates:      true,
 	}
 	if opts != nil {

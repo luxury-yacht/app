@@ -99,7 +99,7 @@ interface PortForwardAvailability {
 
 // Kinds that support each action
 export const RESTARTABLE_KINDS = ['Deployment', 'StatefulSet', 'DaemonSet'];
-export const ROLLBACKABLE_KINDS = ['Deployment', 'StatefulSet', 'DaemonSet'];
+const ROLLBACKABLE_KINDS = ['Deployment', 'StatefulSet', 'DaemonSet'];
 export const SCALABLE_KINDS = ['Deployment', 'StatefulSet', 'ReplicaSet'];
 let nextObjectDiffRequestId = 1;
 

@@ -1,43 +1,47 @@
-/* RBAC Overview Styles */
+/* RBAC Overview Styles
+ *
+ * Local styles for the inline Subjects list rendered for RoleBindings and
+ * ClusterRoleBindings. Subjects are bucketed by kind (ServiceAccount /
+ * User / Group / other), with one block per kind. */
 
-/* Rules use the existing metadata-section styles from LabelsAndAnnotations.css */
-/* Additional styles specific to rules */
-
-.metadata-pair.rules-pair {
-  flex-direction: column;
-  padding: var(--spacing-sm);
-}
-
-.rule-details {
+.rbac-subjects-list {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
-  padding-left: 1rem;
-  width: 100%;
+  gap: var(--spacing-md);
 }
 
-.rule-field {
+.rbac-subjects-group {
   display: flex;
-  gap: 0rem;
-  align-items: baseline;
+  flex-direction: column;
+  gap: var(--spacing-xs);
 }
 
-.field-label {
+/* Per-kind heading (e.g. "ServiceAccounts"). Hidden by the component when
+   only one kind is present in the binding. */
+.rbac-subjects-group-heading {
   font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
   color: var(--color-text-secondary);
-  min-width: 5rem;
-  flex-shrink: 0;
 }
 
-.field-value {
+.rbac-subjects-names {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rbac-subjects-name-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+}
+
+.rbac-subjects-name {
   font-family: var(--font-family-mono);
-  font-size: 0.7rem;
+  font-size: var(--font-size-mono);
   color: var(--color-text);
-  word-break: break-word;
-  user-select: text;
-  -webkit-user-select: text;
-}
-
-.field-value.verbs {
-  color: var(--accent-primary);
+  overflow-wrap: anywhere;
 }

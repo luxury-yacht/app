@@ -2,7 +2,7 @@
  * frontend/src/core/capabilities/permissionStore.ts
  *
  * Core permission store backed by the QueryPermissions Wails endpoint.
- * Replaces the CapabilityEntry store with a PermissionEntry result map.
+ * Stores permission results from QueryPermissions.
  * Manages periodic refresh, diagnostics, and event bus integration.
  */
 
@@ -177,6 +177,11 @@ interface PendingSpecItem {
   namespace: string | null;
 }
 
+export interface NamespacePermissionTarget {
+  namespace: string;
+  clusterId: string | null;
+}
+
 let currentClusterId = '';
 let version = 0;
 
@@ -203,6 +208,14 @@ const pendingSpecs = new Map<string, PendingSpecItem[]>();
 
 // Timestamps for periodic refresh.
 const lastQueryTimestamps = new Map<string, number>();
+const namespaceQueryMetadata = new Map<
+  string,
+  {
+    clusterId: string;
+    namespace: string;
+    specLists: PermissionSpecList[];
+  }
+>();
 let refreshTimerId: ReturnType<typeof setInterval> | null = null;
 
 let unsubChanging: UnsubscribeFn | null = null;
@@ -354,6 +367,64 @@ interface QueryBatchItem {
   feature: string;
 }
 
+interface NamespaceQueryTarget {
+  requestKey: string;
+  diagnosticsKey: string;
+  clusterId: string;
+  namespace: string;
+  specLists: PermissionSpecList[];
+  batch: QueryBatchItem[];
+  batchSpecs: PermissionSpec[];
+  startedAt: number;
+}
+
+const MAX_PERMISSION_QUERY_ITEMS = 5000;
+
+const getSpecListsRequestKeySegment = (specLists: PermissionSpecList[]): string =>
+  specLists
+    .map(
+      (list) =>
+        `${list.feature}:${list.specs
+          .map(
+            (spec) =>
+              `${spec.group ?? ''}/${spec.version ?? ''}/${spec.kind}:${spec.verb}:${
+                spec.subresource ?? ''
+              }`
+          )
+          .join(',')}`
+    )
+    .join('|') || 'empty';
+
+const buildNamespaceRequestKey = (
+  clusterId: string,
+  namespace: string,
+  specLists: PermissionSpecList[]
+): string =>
+  `${clusterId}|${namespace.toLowerCase()}|specs:${getSpecListsRequestKeySegment(specLists)}`;
+
+const splitNamespaceTargets = (targets: NamespaceQueryTarget[]): NamespaceQueryTarget[][] => {
+  const chunks: NamespaceQueryTarget[][] = [];
+  let current: NamespaceQueryTarget[] = [];
+  let currentSize = 0;
+
+  for (const target of targets) {
+    if (current.length > 0 && currentSize + target.batch.length > MAX_PERMISSION_QUERY_ITEMS) {
+      chunks.push(current);
+      current = [];
+      currentSize = 0;
+    }
+
+    current.push(target);
+    currentSize += target.batch.length;
+  }
+
+  if (current.length > 0) {
+    chunks.push(current);
+  }
+
+  return chunks;
+};
+
 /**
  * Expands permission spec lists into individual query batch items.
  * The feature string is carried from the list onto each item. Specs
@@ -433,6 +504,170 @@ const applyResults = (results: QueryResponseResult[], batchItems: QueryBatchItem
 };
 
 /**
+ * Query permissions for many namespaces. The request key includes the
+ * requested spec list set, so a Pods-only discovery pass does not suppress
+ * a later Workloads discovery pass for the same namespace.
+ */
+export const queryNamespacesPermissions = async (
+  targets: NamespacePermissionTarget[],
+  options?: { force?: boolean; specLists?: PermissionSpecList[] }
+): Promise<void> => {
+  const specLists = options?.specLists ?? ALL_NAMESPACE_PERMISSIONS;
+  if (targets.length === 0 || specLists.length === 0) return;
+
+  const seen = new Set<string>();
+  const queryTargets: NamespaceQueryTarget[] = [];
+
+  for (const target of targets) {
+    const namespace = target.namespace.trim();
+    const cid = (target.clusterId || currentClusterId).trim();
+    if (!cid || !namespace) continue;
+
+    const requestKey = buildNamespaceRequestKey(cid, namespace, specLists);
+    if (seen.has(requestKey) || inFlightQueries.has(requestKey)) continue;
+    seen.add(requestKey);
+
+    if (!options?.force) {
+      const lastQuery = lastQueryTimestamps.get(requestKey);
+      if (lastQuery && Date.now() - lastQuery < PERMISSION_REFRESH_INTERVAL_MS) {
+        continue;
+      }
+    }
+
+    const batch = buildBatch(specLists, namespace, cid);
+    if (batch.length === 0) continue;
+
+    const diagnosticsKey = `${cid}|${namespace.toLowerCase()}`;
+    const batchSpecs: PermissionSpec[] = batch.map((item) => ({
+      kind: item.resourceKind,
+      verb: item.verb,
+      subresource: item.subresource || undefined,
+      group: item.group || undefined,
+      version: item.version || undefined,
+    }));
+
+    queryTargets.push({
+      requestKey,
+      diagnosticsKey,
+      clusterId: cid,
+      namespace,
+      specLists,
+      batch,
+      batchSpecs,
+      startedAt: Date.now(),
+    });
+  }
+
+  if (queryTargets.length === 0) return;
+
+  for (const target of queryTargets) {
+    pendingSpecs.set(
+      target.requestKey,
+      target.batch.map((item) => ({
+        spec: {
+          kind: item.resourceKind,
+          verb: item.verb,
+          subresource: item.subresource || undefined,
+          group: item.group || undefined,
+          version: item.version || undefined,
+        },
+        feature: item.feature,
+        clusterId: target.clusterId,
+        namespace: target.namespace,
+      }))
+    );
+    inFlightQueries.add(target.requestKey);
+    beginQueryDiagnostics(
+      target.diagnosticsKey,
+      target.clusterId,
+      target.namespace,
+      'ssrr',
+      target.batchSpecs,
+      target.batch.length
+    );
+  }
+  notify();
+
+  const chunks = splitNamespaceTargets(queryTargets);
+
+  await Promise.all(
+    chunks.map(async (chunk) => {
+      const chunkBatch = chunk.flatMap((target) => target.batch);
+      const payload: QueryPayloadItem[] = chunkBatch.map((item) => ({
+        id: item.id,
+        clusterId: item.clusterId,
+        group: item.group || undefined,
+        version: item.version || undefined,
+        resourceKind: item.resourceKind,
+        verb: item.verb,
+        namespace: item.namespace,
+        subresource: item.subresource,
+        name: item.name,
+      }));
+
+      try {
+        const response = await QueryPermissions(payload);
+        applyResults(response.results, chunkBatch);
+        for (const target of chunk) {
+          const nsDiag = response.diagnostics?.find((d) => d.key === target.diagnosticsKey);
+          completeQueryDiagnostics(
+            target.diagnosticsKey,
+            true,
+            null,
+            target.startedAt,
+            nsDiag?.ssarFallbackCount,
+            nsDiag?.ssrrRuleCount,
+            nsDiag?.ssrrIncomplete,
+            nsDiag?.method as 'ssrr' | 'ssar' | undefined,
+            target.batch.length
+          );
+        }
+      } catch (err) {
+        const queryError = String(err);
+        for (const item of chunkBatch) {
+          permissionResults.set(item.id, {
+            allowed: false,
+            source: 'error',
+            reason: queryError,
+            descriptor: {
+              clusterId: item.clusterId,
+              group: item.group || null,
+              version: item.version || null,
+              resourceKind: item.resourceKind,
+              verb: item.verb,
+              namespace: item.namespace || null,
+              subresource: item.subresource || null,
+            },
+            feature: item.feature,
+          });
+        }
+        for (const target of chunk) {
+          completeQueryDiagnostics(
+            target.diagnosticsKey,
+            false,
+            queryError,
+            target.startedAt,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            target.batch.length
+          );
+        }
+      } finally {
+        for (const target of chunk) {
+          inFlightQueries.delete(target.requestKey);
+          pendingSpecs.delete(target.requestKey);
+          recordNamespaceQueryTimestamp(target);
+        }
+      }
+    })
+  );
+
+  notify();
+};
+
+/**
  * Query permissions for a namespace's full spec set.
  * Called from NamespaceContext, NsResourcesContext, and ObjectPanel.
  */
@@ -441,108 +676,7 @@ export const queryNamespacePermissions = (
   clusterId: string | null,
   options?: { force?: boolean }
 ): void => {
-  const cid = clusterId || currentClusterId;
-  if (!cid || !namespace) return;
-
-  const queryKey = `${cid}|${namespace.toLowerCase()}`;
-  if (inFlightQueries.has(queryKey)) return;
-
-  // Skip if we already have fresh results within the TTL window,
-  // unless force is set. This prevents redundant re-queries when
-  // the All Namespaces effect runs on every data update.
-  if (!options?.force) {
-    const lastQuery = lastQueryTimestamps.get(queryKey);
-    if (lastQuery && Date.now() - lastQuery < PERMISSION_REFRESH_INTERVAL_MS) {
-      return;
-    }
-  }
-
-  const batch = buildBatch(ALL_NAMESPACE_PERMISSIONS, namespace, cid);
-  if (batch.length === 0) return;
-
-  const batchSpecs: PermissionSpec[] = batch.map((item) => ({
-    kind: item.resourceKind,
-    verb: item.verb,
-    subresource: item.subresource || undefined,
-  }));
-
-  // Register pending specs for immediate UI feedback.
-  pendingSpecs.set(
-    queryKey,
-    batch.map((item) => ({
-      spec: {
-        kind: item.resourceKind,
-        verb: item.verb,
-        subresource: item.subresource || undefined,
-      },
-      feature: item.feature,
-      clusterId: cid,
-      namespace,
-    }))
-  );
-  notify();
-
-  inFlightQueries.add(queryKey);
-  const startTime = Date.now();
-  beginQueryDiagnostics(queryKey, cid, namespace, 'ssrr', batchSpecs, batch.length);
-
-  const payload: QueryPayloadItem[] = batch.map((item) => ({
-    id: item.id,
-    clusterId: item.clusterId,
-    group: item.group || undefined,
-    version: item.version || undefined,
-    resourceKind: item.resourceKind,
-    verb: item.verb,
-    namespace: item.namespace,
-    subresource: item.subresource,
-    name: item.name,
-  }));
-
-  // QueryPermissions returns { results, diagnostics } — the backend
-  // populates real SSRR metadata (incomplete, ruleCount, fallbackCount).
-  QueryPermissions(payload)
-    .then((response) => {
-      applyResults(response.results, batch);
-      // Use backend-provided diagnostics instead of fabricating locally.
-      const nsDiag = response.diagnostics?.find((d) => d.key === queryKey);
-      completeQueryDiagnostics(
-        queryKey,
-        true,
-        null,
-        startTime,
-        nsDiag?.ssarFallbackCount,
-        nsDiag?.ssrrRuleCount,
-        nsDiag?.ssrrIncomplete,
-        nsDiag?.method as 'ssrr' | 'ssar' | undefined
-      );
-    })
-    .catch((err) => {
-      const queryError = String(err);
-      for (const item of batch) {
-        permissionResults.set(item.id, {
-          allowed: false,
-          source: 'error',
-          reason: queryError,
-          descriptor: {
-            clusterId: item.clusterId,
-            group: item.group || null,
-            version: item.version || null,
-            resourceKind: item.resourceKind,
-            verb: item.verb,
-            namespace: item.namespace || null,
-            subresource: item.subresource || null,
-          },
-          feature: item.feature,
-        });
-      }
-      completeQueryDiagnostics(queryKey, false, queryError, startTime);
-    })
-    .finally(() => {
-      inFlightQueries.delete(queryKey);
-      pendingSpecs.delete(queryKey);
-      recordQueryTimestamp(queryKey);
-      notify();
-    });
+  void queryNamespacesPermissions([{ namespace, clusterId }], options);
 };
 
 /**
@@ -766,8 +900,6 @@ export const subscribeUserPermissions = (listener: Listener): (() => void) => {
 
 export const getUserPermissionMap = (): PermissionMap => permissionMap;
 
-export const getStoreVersion = (): number => version;
-
 // ---------------------------------------------------------------------------
 // Diagnostics — populates PermissionQueryDiagnostics per (clusterId|namespace)
 // ---------------------------------------------------------------------------
@@ -847,15 +979,19 @@ const completeQueryDiagnostics = (
   ssarFallbackCount?: number,
   ssrrRuleCount?: number,
   ssrrIncomplete?: boolean,
-  method?: 'ssrr' | 'ssar'
+  method?: 'ssrr' | 'ssar',
+  completedCheckCount?: number
 ): void => {
   const diag = diagnosticsMap.get(queryKey);
   if (!diag) return;
 
   const now = Date.now();
-  diag.pendingCount = 0;
-  diag.inFlightCount = 0;
-  diag.inFlightStartedAt = undefined;
+  const completedCount = completedCheckCount ?? diag.inFlightCount;
+  diag.pendingCount = Math.max(diag.pendingCount - completedCount, 0);
+  diag.inFlightCount = Math.max(diag.inFlightCount - completedCount, 0);
+  if (diag.inFlightCount === 0) {
+    diag.inFlightStartedAt = undefined;
+  }
   diag.lastRunDurationMs = now - startTime;
   diag.lastRunCompletedAt = now;
   diag.lastResult = success ? 'success' : 'error';
@@ -898,6 +1034,15 @@ const recordQueryTimestamp = (queryKey: string): void => {
   lastQueryTimestamps.set(queryKey, Date.now());
 };
 
+const recordNamespaceQueryTimestamp = (target: NamespaceQueryTarget): void => {
+  lastQueryTimestamps.set(target.requestKey, Date.now());
+  namespaceQueryMetadata.set(target.requestKey, {
+    clusterId: target.clusterId,
+    namespace: target.namespace,
+    specLists: target.specLists,
+  });
+};
+
 /** Stagger interval between namespace refreshes in All Namespaces sessions. */
 const STAGGER_INTERVAL_MS = 500;
 
@@ -910,35 +1055,49 @@ const STAGGER_INTERVAL_MS = 500;
  */
 const refreshExpiredQueries = (): void => {
   const now = Date.now();
-  const expired: Array<{ clusterId: string; namespace: string }> = [];
+  const expiredNamespaces: Array<{
+    clusterId: string;
+    namespace: string;
+    specLists: PermissionSpecList[];
+  }> = [];
+  const expiredClusters: string[] = [];
 
   for (const [queryKey, timestamp] of lastQueryTimestamps) {
     if (now - timestamp < PERMISSION_REFRESH_INTERVAL_MS) continue;
+
+    const namespaceMetadata = namespaceQueryMetadata.get(queryKey);
+    if (namespaceMetadata) {
+      expiredNamespaces.push(namespaceMetadata);
+      continue;
+    }
 
     const pipeIdx = queryKey.indexOf('|');
     if (pipeIdx < 0) continue;
     const clusterId = queryKey.slice(0, pipeIdx);
     const namespace = queryKey.slice(pipeIdx + 1);
-    expired.push({ clusterId, namespace });
+    if (namespace === '__cluster__') {
+      expiredClusters.push(clusterId);
+    }
   }
 
   // Cluster-scoped refreshes fire immediately (small batch, no stagger).
   // Namespace-scoped refreshes are staggered.
+  for (const clusterId of expiredClusters) {
+    queryClusterPermissions(clusterId);
+  }
+
   let staggerDelay = 0;
-  for (const { clusterId, namespace } of expired) {
-    if (namespace === '__cluster__') {
-      queryClusterPermissions(clusterId);
+  for (const { clusterId, namespace, specLists } of expiredNamespaces) {
+    if (staggerDelay === 0) {
+      void queryNamespacesPermissions([{ namespace, clusterId }], { force: true, specLists });
     } else {
-      if (staggerDelay === 0) {
-        queryNamespacePermissions(namespace, clusterId, { force: true });
-      } else {
-        setTimeout(
-          () => queryNamespacePermissions(namespace, clusterId, { force: true }),
-          staggerDelay
-        );
-      }
-      staggerDelay += STAGGER_INTERVAL_MS;
+      setTimeout(
+        () =>
+          void queryNamespacesPermissions([{ namespace, clusterId }], { force: true, specLists }),
+        staggerDelay
+      );
     }
+    staggerDelay += STAGGER_INTERVAL_MS;
   }
 };
 
@@ -1007,6 +1166,7 @@ export const resetPermissionStore = (): void => {
   pendingSpecs.clear();
   inFlightQueries.clear();
   lastQueryTimestamps.clear();
+  namespaceQueryMetadata.clear();
   diagnosticsMap.clear();
   diagnosticsDirty = true;
   permissionMap = new Map();

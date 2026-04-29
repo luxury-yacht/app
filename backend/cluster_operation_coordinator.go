@@ -4,10 +4,9 @@ import (
 	"context"
 	"errors"
 	"sync"
-	"time"
-)
 
-const defaultClusterOperationTimeout = 90 * time.Second
+	"github.com/luxury-yacht/app/backend/internal/config"
+)
 
 // clusterOperationCoordinator enforces one in-flight operation per cluster ID.
 // Starting a new operation for the same cluster cancels the previous operation context.
@@ -114,7 +113,7 @@ func (a *App) runClusterOperation(
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	opCtx, cancel := context.WithTimeout(ctx, defaultClusterOperationTimeout)
+	opCtx, cancel := context.WithTimeout(ctx, config.ClusterOperationTimeout)
 	defer cancel()
 
 	if a == nil || a.clusterOps == nil {

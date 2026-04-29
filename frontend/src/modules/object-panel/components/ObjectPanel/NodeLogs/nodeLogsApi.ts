@@ -54,11 +54,6 @@ export const getCachedNodeLogDiscovery = (
   return cached ? cloneNodeLogDiscoveryResponse(cached) : null;
 };
 
-export const resetNodeLogDiscoveryCacheForTesting = (): void => {
-  nodeLogDiscoveryCache.clear();
-  nodeLogDiscoveryInflight.clear();
-};
-
 export const discoverNodeLogs = async (
   clusterId: string,
   nodeName: string

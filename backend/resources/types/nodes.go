@@ -24,7 +24,6 @@ type NodeDetails struct {
 	Unschedulable     bool              `json:"unschedulable"`
 	Roles             string            `json:"roles"`
 	Age               string            `json:"age"`
-	Version           string            `json:"version"`
 	InternalIP        string            `json:"internalIP"`
 	ExternalIP        string            `json:"externalIP,omitempty"`
 	Hostname          string            `json:"hostname"`

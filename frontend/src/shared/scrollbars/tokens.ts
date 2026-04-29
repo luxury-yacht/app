@@ -1,8 +1,8 @@
-export const DEFAULT_SCROLLBAR_ACTIVE_TIMEOUT_MS = 900;
-export const DEFAULT_SCROLLBAR_FADE_IN_DURATION_MS = 100;
-export const DEFAULT_SCROLLBAR_FADE_OUT_DURATION_MS = 1000;
+const DEFAULT_SCROLLBAR_ACTIVE_TIMEOUT_MS = 900;
+const DEFAULT_SCROLLBAR_FADE_IN_DURATION_MS = 100;
+const DEFAULT_SCROLLBAR_FADE_OUT_DURATION_MS = 1000;
 
-export const parseScrollbarDurationMs = (
+const parseScrollbarDurationMs = (
   value: string,
   fallback = DEFAULT_SCROLLBAR_ACTIVE_TIMEOUT_MS
 ): number => {
@@ -25,7 +25,7 @@ export const parseScrollbarDurationMs = (
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
-export const readScrollbarTokenStyles = (element?: Element | null): CSSStyleDeclaration =>
+const readScrollbarTokenStyles = (element?: Element | null): CSSStyleDeclaration =>
   getComputedStyle(element ?? document.documentElement);
 
 export const readScrollbarActiveTimeoutMs = (element?: Element | null): number =>

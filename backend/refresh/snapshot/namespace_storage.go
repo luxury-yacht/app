@@ -12,13 +12,13 @@ import (
 	informers "k8s.io/client-go/informers"
 	corelisters "k8s.io/client-go/listers/core/v1"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 )
 
 const (
 	namespaceStorageDomainName       = "namespace-storage"
-	namespaceStorageEntryLimit       = 1000
 	errNamespaceStorageScopeRequired = "namespace scope is required"
 )
 
@@ -130,8 +130,8 @@ func (b *NamespaceStorageBuilder) buildSnapshot(
 		return resources[i].Namespace < resources[j].Namespace
 	})
 
-	if len(resources) > namespaceStorageEntryLimit {
-		resources = resources[:namespaceStorageEntryLimit]
+	if len(resources) > config.SnapshotNamespaceStorageEntryLimit {
+		resources = resources[:config.SnapshotNamespaceStorageEntryLimit]
 	}
 
 	return &refresh.Snapshot{

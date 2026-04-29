@@ -185,10 +185,7 @@ export const AppLayout: React.FC = () => {
 
   return (
     <div className="app-container">
-      <AppHeader
-        contentTitle={getContentTitle()}
-        onAboutClick={() => viewState.setIsAboutOpen(true)}
-      />
+      <AppHeader contentTitle={getContentTitle()} />
       <ClusterTabs />
 
       <main

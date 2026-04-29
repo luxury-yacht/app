@@ -19,6 +19,7 @@ import (
 	batchlisters "k8s.io/client-go/listers/batch/v1"
 	corelisters "k8s.io/client-go/listers/core/v1"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
@@ -27,7 +28,6 @@ import (
 
 const (
 	namespaceWorkloadsDomainName = "namespace-workloads"
-	namespaceWorkloadsEntryLimit = 1000
 	errNamespaceScopeRequired    = "namespace scope is required"
 )
 
@@ -326,8 +326,8 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 
 	sortWorkloadSummaries(items)
 
-	if len(items) > namespaceWorkloadsEntryLimit {
-		items = items[:namespaceWorkloadsEntryLimit]
+	if len(items) > config.SnapshotNamespaceWorkloadsEntryLimit {
+		items = items[:config.SnapshotNamespaceWorkloadsEntryLimit]
 	}
 
 	return &refresh.Snapshot{

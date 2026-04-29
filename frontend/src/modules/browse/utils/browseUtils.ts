@@ -59,7 +59,7 @@ export type DedupeResult = {
  * Deduplicates catalog items by UID, keeping the last occurrence.
  * Items without a UID are kept as-is.
  */
-export const dedupeByUID = (incoming: CatalogItem[]): DedupeResult => {
+const dedupeByUID = (incoming: CatalogItem[]): DedupeResult => {
   if (incoming.length === 0) {
     return { items: [], indexByUid: new Map() };
   }

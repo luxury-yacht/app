@@ -11,6 +11,7 @@ import (
 	informers "k8s.io/client-go/informers"
 	corelisters "k8s.io/client-go/listers/core/v1"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 )
@@ -118,8 +119,8 @@ func (b *NamespaceEventsBuilder) Build(ctx context.Context, scope string) (*refr
 	})
 
 	originalCount := len(events)
-	if originalCount > namespaceEventsLimit {
-		events = events[:namespaceEventsLimit]
+	if originalCount > config.SnapshotNamespaceEventsLimit {
+		events = events[:config.SnapshotNamespaceEventsLimit]
 	}
 
 	summaries := make([]EventSummary, 0, len(events))

@@ -3,6 +3,8 @@ package backend
 import (
 	"sync"
 	"time"
+
+	"github.com/luxury-yacht/app/backend/internal/config"
 )
 
 // ClusterLifecycleState represents the current lifecycle phase of a cluster connection.
@@ -18,8 +20,6 @@ const (
 	ClusterStateDisconnected ClusterLifecycleState = "disconnected"
 	ClusterStateReconnecting ClusterLifecycleState = "reconnecting"
 )
-
-const defaultSlowLoadingThreshold = 10 * time.Second
 
 // clusterLifecycleEntry tracks the current state and any pending slow-loading timer
 // for a single cluster.
@@ -39,9 +39,9 @@ type clusterLifecycle struct {
 	slowThreshold time.Duration
 }
 
-// newClusterLifecycle creates a lifecycle tracker with the default 10s slow-loading threshold.
+// newClusterLifecycle creates a lifecycle tracker with the default slow-loading threshold.
 func newClusterLifecycle(emitter func(clusterId, state, previousState string)) *clusterLifecycle {
-	return newClusterLifecycleWithSlowThreshold(emitter, defaultSlowLoadingThreshold)
+	return newClusterLifecycleWithSlowThreshold(emitter, config.ClusterLifecycleSlowLoadingThreshold)
 }
 
 // newClusterLifecycleWithSlowThreshold creates a lifecycle tracker with a custom

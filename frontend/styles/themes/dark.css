@@ -12,7 +12,7 @@
   --color-text: var(--color-base-100);
   --color-text-secondary: var(--color-base-400);
   --color-text-tertiary: var(--color-base-500);
-  --color-border: var(--color-base-700);
+  --color-border: var(--color-base-600);
   --color-accent: var(--color-accent-dark-500);
   --color-accent-hover: var(--color-accent-dark-400);
   --color-accent-bg: rgba(245, 158, 11, 0.15);
@@ -254,8 +254,8 @@
      multiplier in OKLCH space, so text reads as a more vivid version of
      the slot color rather than a paler/washed-out one. Bg/border tints
      remain derived from the unmodified slot color. */
-  --hash-text-l-shift: 0.3;
-  --hash-text-c-mult: 1;
+  --hash-text-l-shift: 0.15;
+  --hash-text-c-mult: 0.5;
 
   /* Dropdown */
   --dropdown-trigger-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);

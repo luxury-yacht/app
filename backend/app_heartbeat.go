@@ -10,10 +10,6 @@ import (
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
-const (
-	heartbeatTimeout = 5 * time.Second
-)
-
 // healthStatus distinguishes the outcome of a cluster health check.
 type healthStatus int
 
@@ -120,7 +116,7 @@ func (a *App) checkClusterHealth(cc *clusterClients) healthStatus {
 	}
 
 	// Create a context with timeout for the health check
-	ctx, cancel := context.WithTimeout(a.CtxOrBackground(), heartbeatTimeout)
+	ctx, cancel := context.WithTimeout(a.CtxOrBackground(), config.ClusterHealthHeartbeatTimeout)
 	defer cancel()
 
 	// Call /readyz endpoint to check cluster health

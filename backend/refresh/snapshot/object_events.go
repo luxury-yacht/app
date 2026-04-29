@@ -16,6 +16,7 @@ import (
 	corelisters "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 )
@@ -246,9 +247,9 @@ func involvedObjectMatchesAPIVersion(evt *corev1.Event, apiVersion string) bool 
 
 func (b *ObjectEventsBuilder) buildSnapshot(meta ClusterMeta, scope string, events []*corev1.Event, version uint64) *refresh.Snapshot {
 	totalItems := len(events)
-	summaries := make([]ObjectEventSummary, 0, min(totalItems, objectEventsLimit))
+	summaries := make([]ObjectEventSummary, 0, min(totalItems, config.SnapshotObjectEventsLimit))
 	for _, evt := range events {
-		if len(summaries) >= objectEventsLimit {
+		if len(summaries) >= config.SnapshotObjectEventsLimit {
 			break
 		}
 		if evt == nil || evt.InvolvedObject.Name == "" {

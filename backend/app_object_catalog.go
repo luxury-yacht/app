@@ -147,7 +147,7 @@ func (a *App) startObjectCatalogForTarget(target catalogTarget) error {
 		return fmt.Errorf("cluster clients unavailable")
 	}
 
-	subsystem := a.refreshSubsystems[target.meta.ID]
+	subsystem := a.getRefreshSubsystem(target.meta.ID)
 	if subsystem == nil || subsystem.InformerFactory == nil {
 		return fmt.Errorf("refresh subsystem informers unavailable")
 	}

@@ -5,6 +5,12 @@
      - text: bright same-hue
      - border: same hue at ~20-25% alpha for definition without weight */
 
+/* Tooltip override for StatusChip — uses bg-tertiary so the tooltip
+   reads as a layered surface above the chip's tinted background. */
+.tooltip.status-chip-tooltip {
+  --tooltip-bg: var(--color-bg-tertiary);
+}
+
 .status-chip {
   display: inline-block;
   padding: 1px 6px;

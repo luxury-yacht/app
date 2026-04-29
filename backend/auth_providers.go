@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"k8s.io/client-go/util/homedir"
 
@@ -21,7 +22,7 @@ import (
 )
 
 var (
-	envSetupTimeout   = 500 * time.Millisecond
+	envSetupTimeout   = config.AuthEnvironmentSetupTimeout
 	envSetupOnce      sync.Once
 	defaultShellPaths = []string{
 		"/bin/zsh",

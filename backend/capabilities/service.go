@@ -15,6 +15,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/internal/k8sretry"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	authorizationv1 "k8s.io/api/authorization/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -35,12 +37,6 @@ type Dependencies struct {
 	RateLimiterFactory   func(qps float64) RateLimiter
 	Now                  func() time.Time
 }
-
-const (
-	defaultWorkerCount       = 32
-	defaultRequestsPerSecond = 0 // unlimited
-	defaultSlowThreshold     = 750 * time.Millisecond
-)
 
 // RateLimiter gates outbound SelfSubjectAccessReview requests.
 type RateLimiter interface {
@@ -132,14 +128,21 @@ func (s *Service) Evaluate(ctx context.Context, checks []ReviewAttributes) ([]Ch
 				}
 
 				start := nowFn()
-				response, err := s.deps.Common.KubernetesClient.AuthorizationV1().
-					SelfSubjectAccessReviews().
-					Create(ctx, review, metav1.CreateOptions{})
+				var response *authorizationv1.SelfSubjectAccessReview
+				err := k8sretry.Do(ctx, capabilityReviewRetryPolicy(), func(callCtx context.Context) error {
+					var err error
+					response, err = s.deps.Common.KubernetesClient.AuthorizationV1().
+						SelfSubjectAccessReviews().
+						Create(callCtx, review, metav1.CreateOptions{})
+					return err
+				})
 				duration := nowFn().Sub(start)
 
 				if err != nil {
 					s.logError(fmt.Sprintf("Capability check %s failed: %v", job.check.ID, err))
 					result.Error = err.Error()
+				} else if response == nil {
+					result.Error = "permission review returned no response"
 				} else {
 					result.Allowed = response.Status.Allowed
 					result.DeniedReason = response.Status.Reason
@@ -203,6 +206,14 @@ func (s *Service) Evaluate(ctx context.Context, checks []ReviewAttributes) ([]Ch
 	return results, nil
 }
 
+func capabilityReviewRetryPolicy() k8sretry.Policy {
+	return k8sretry.Policy{
+		MaxAttempts:    config.PermissionReviewRetryMaxAttempts,
+		InitialBackoff: config.PermissionReviewRetryInitialBackoff,
+		MaxBackoff:     config.PermissionReviewRetryMaxBackoff,
+	}
+}
+
 func (s *Service) ensureClient() error {
 	if s.deps.Common.KubernetesClient == nil {
 		return fmt.Errorf("kubernetes client not initialized")
@@ -239,7 +250,7 @@ func (s *Service) resolveWorkerCount(requestCount int) int {
 	}
 	count := s.deps.WorkerCount
 	if count <= 0 {
-		count = defaultWorkerCount
+		count = config.AuthorizationReviewWorkerCount
 	}
 	if count > requestCount {
 		count = requestCount
@@ -254,7 +265,7 @@ func (s *Service) resolveSlowThreshold() time.Duration {
 	if s.deps.SlowRequestThreshold > 0 {
 		return s.deps.SlowRequestThreshold
 	}
-	return defaultSlowThreshold
+	return config.AuthorizationReviewSlowThreshold
 }
 
 func (s *Service) buildRateLimiter() RateLimiter {
@@ -263,7 +274,7 @@ func (s *Service) buildRateLimiter() RateLimiter {
 	}
 	qps := s.deps.RequestsPerSecond
 	if qps <= 0 {
-		qps = defaultRequestsPerSecond
+		qps = config.AuthorizationReviewRequestsPerSecond
 	}
 	if qps <= 0 {
 		return nil

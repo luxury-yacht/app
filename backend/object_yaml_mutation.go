@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	"time"
 
 	"github.com/evanphx/json-patch/v5"
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -27,7 +27,6 @@ import (
 )
 
 const objectYAMLErrorPrefix = "ObjectYAMLError:"
-const mutationRequestTimeout = 15 * time.Second
 const objectYAMLFieldManager = "luxury-yacht-yaml-editor"
 
 type objectYAMLError struct {
@@ -83,7 +82,7 @@ func (a *App) mutationContext() (context.Context, context.CancelFunc) {
 	if _, hasDeadline := base.Deadline(); hasDeadline {
 		return base, func() {}
 	}
-	return context.WithTimeout(base, mutationRequestTimeout)
+	return context.WithTimeout(base, config.ObjectYAMLMutationRequestTimeout)
 }
 
 // ValidateObjectYaml performs a dry-run kubectl-edit-style patch to ensure the YAML is valid and safe to apply.

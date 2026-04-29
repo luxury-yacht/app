@@ -55,3 +55,43 @@ func TestCanServeCachedResponseAllowedKeepsCaches(t *testing.T) {
 		t.Fatalf("expected detail cache entry to remain on allow")
 	}
 }
+
+func TestCachedPermissionAttributesUsesBuiltinCatalog(t *testing.T) {
+	group, resource, verb, ok := cachedPermissionAttributes("Pod")
+	if !ok {
+		t.Fatalf("expected Pod cache permission attributes")
+	}
+	if group != "" || resource != "pods" || verb != "get" {
+		t.Fatalf("unexpected Pod permission attributes: group=%q resource=%q verb=%q", group, resource, verb)
+	}
+
+	group, resource, verb, ok = cachedPermissionAttributes("HelmManifest")
+	if !ok {
+		t.Fatalf("expected Helm cache permission attributes")
+	}
+	if group != "" || resource != "secrets" || verb != "get" {
+		t.Fatalf("unexpected Helm permission attributes: group=%q resource=%q verb=%q", group, resource, verb)
+	}
+
+	group, resource, verb, ok = cachedPermissionAttributes("Gateway")
+	if !ok {
+		t.Fatalf("expected Gateway cache permission attributes")
+	}
+	if group != "gateway.networking.k8s.io" || resource != "gateways" || verb != "get" {
+		t.Fatalf("unexpected Gateway permission attributes: group=%q resource=%q verb=%q", group, resource, verb)
+	}
+}
+
+func TestBuiltinObjectDetailFetchersHaveCachePermissionPolicy(t *testing.T) {
+	for kind := range objectDetailFetchers {
+		if kind == helmReleaseKind {
+			continue
+		}
+		if _, ok := lookupBuiltinResourceByKind(kind); !ok {
+			continue
+		}
+		if !isBuiltinDetailCachePermissionKind(kind) {
+			t.Fatalf("built-in object detail kind %q is missing cache permission policy", kind)
+		}
+	}
+}

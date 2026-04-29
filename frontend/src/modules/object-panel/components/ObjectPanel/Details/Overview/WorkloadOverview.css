@@ -1,0 +1,148 @@
+/* WorkloadOverview-local styles
+ *
+ * Pod-state bar: replaces the four-redundant-numbers pattern (replicas /
+ * up-to-date / ready / available) with a single segmented bar showing the
+ * pod-population pipeline at a glance.
+ *
+ * Segments stack horizontally, sized by `flex` proportional to count:
+ *   - available   (green)  — ready + minReadySeconds elapsed
+ *   - ready       (amber)  — ready but not yet available
+ *   - progressing (accent) — created but not yet ready
+ *   - unscheduled (empty)  — falls through to the bar's track bg
+ *
+ * In the steady-state case the bar is solid green; drift is immediately
+ * visible as colored segments or empty space at the right. */
+
+.podstate-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.podstate-bar {
+  display: flex;
+  width: 100%;
+  max-width: 200px;
+  height: 10px;
+  border-radius: var(--border-radius-md);
+  background: var(--color-bg-tertiary);
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+}
+
+.podstate-bar-seg {
+  height: 100%;
+}
+
+.podstate-bar-available {
+  background: var(--color-success);
+}
+
+.podstate-bar-ready {
+  background: var(--color-warning);
+}
+
+.podstate-bar-progressing {
+  background: var(--color-accent);
+}
+
+/* `unscheduled` is the absence of a colored segment — the gap reveals the
+   bar's track background. We don't define a fill class for it. */
+
+.podstate-caption {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+.podstate-caption-drift {
+  color: var(--color-warning);
+  margin-left: 0.5rem;
+}
+
+/* Plain "Scaled to 0" indicator — replaces the bar entirely when the
+   workload's desired replicas is 0. Warning color signals that this
+   is operationally meaningful (and not just absent data). */
+.podstate-caption-zero {
+  color: var(--color-warning);
+}
+
+/* "(HPA managed)" hint after the pod-state caption — explains that
+   replica counts fluctuate autonomously, so users don't read drift
+   in the pods bar as something they need to act on. */
+.podstate-caption-hpa {
+  margin-left: 0.5rem;
+  color: var(--color-text-secondary);
+}
+
+/* Inline action button styled to match `.object-panel-link`. Used next to
+   the current ReplicaSet to open the rollback modal so users can browse
+   prior revisions without us listing them all inline. */
+.workload-inline-action {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+}
+
+/* ReplicaSet block — two-line layout:
+     line 1: rs-name link
+     line 2: Revision n [limit chip] · Rollback (secondary text) */
+.workload-replicaset {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.workload-replicaset-meta {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+}
+
+/* Volume-template list — one row per template with the name, then a
+   muted secondary line carrying size / class / access-mode separated
+   by middots. Volume-mode `Block` (rare) gets called out as a chip. */
+.workload-volume-templates {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.workload-volume-template {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.workload-volume-template-name {
+  color: var(--color-text);
+}
+
+.workload-volume-template-meta {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+}
+
+/* Middot separator between meta items. */
+.workload-volume-template-meta > span + span::before {
+  content: "·";
+  margin-right: 0.5rem;
+  color: var(--color-text-secondary);
+}
+
+/* Access-mode chip group — sits inside one meta item so adjacent
+   chips don't get middots between them. */
+.workload-volume-template-modes {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}

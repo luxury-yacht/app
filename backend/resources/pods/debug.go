@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/resources/types"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -22,10 +23,10 @@ import (
 var (
 	// debugContainerPollInterval controls how frequently pod status is checked.
 	// Tests can override this for faster timeout coverage.
-	debugContainerPollInterval = 500 * time.Millisecond
+	debugContainerPollInterval = config.DebugContainerPollInterval
 	// debugContainerPollTimeout controls how long to wait for Running status.
 	// Tests can override this for faster timeout coverage.
-	debugContainerPollTimeout = 30 * time.Second
+	debugContainerPollTimeout = config.DebugContainerPollTimeout
 )
 
 // CreateDebugContainer adds an ephemeral debug container to the specified pod

@@ -19,13 +19,13 @@ import (
 	gatewayinformers "sigs.k8s.io/gateway-api/pkg/client/informers/externalversions"
 	gatewaylisters "sigs.k8s.io/gateway-api/pkg/client/listers/apis/v1"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 )
 
 const (
 	namespaceNetworkDomainName       = "namespace-network"
-	namespaceNetworkEntryLimit       = 1000
 	errNamespaceNetworkScopeRequired = "namespace scope is required"
 )
 
@@ -415,8 +415,8 @@ func (b *NamespaceNetworkBuilder) buildSnapshot(
 
 	sortNetworkSummaries(resources)
 
-	if len(resources) > namespaceNetworkEntryLimit {
-		resources = resources[:namespaceNetworkEntryLimit]
+	if len(resources) > config.SnapshotNamespaceNetworkEntryLimit {
+		resources = resources[:config.SnapshotNamespaceNetworkEntryLimit]
 	}
 
 	return &refresh.Snapshot{

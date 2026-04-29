@@ -24,7 +24,6 @@ var assets embed.FS
 func main() {
 	// Exit early when running as the exec helper wrapper.
 	backend.MaybeRunExecWrapper()
-	prepareLinuxScrollbarRuntime()
 
 	// Create an instance of the app structure
 	app := backend.NewApp()
@@ -34,7 +33,6 @@ func main() {
 
 	// Custom startup that sets up menu updates
 	onStartup := func(ctx context.Context) {
-		installLinuxScrollbarStyle()
 		app.Startup(ctx)
 
 		if goruntime.GOOS == "linux" {

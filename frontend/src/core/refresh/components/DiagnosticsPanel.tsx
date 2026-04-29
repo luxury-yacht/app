@@ -397,7 +397,6 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
   const { viewType, activeClusterTab, activeNamespaceTab } = useViewState();
   const { selectedNamespace } = useNamespace();
   const { selectedClusterId, getClusterMeta } = useKubeconfig();
-  const [showAllPermissions, setShowAllPermissions] = useState(false);
   const [diagnosticsClock, setDiagnosticsClock] = useState(() => Date.now());
 
   useEffect(() => {
@@ -1682,9 +1681,9 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
   }, [capabilityDiagnostics, diagnosticsClock, permissionMap]);
 
   const permissionRows = useMemo(() => {
-    const scopedFeatures = showAllPermissions
-      ? null
-      : new Set(getScopedFeaturesForView(viewType, activeClusterTab ?? null, activeNamespaceTab));
+    const scopedFeatures = new Set(
+      getScopedFeaturesForView(viewType, activeClusterTab ?? null, activeNamespaceTab)
+    );
     const hasFeatureFilters = scopedFeatures != null && scopedFeatures.size > 0;
     // Treat the "All Namespaces" synthetic scope as "no filter" — show all
     // namespace-scoped permission rows rather than matching against the literal
@@ -1743,10 +1742,6 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         return false;
       }
 
-      if (showAllPermissions) {
-        return true;
-      }
-
       const matchesFeature =
         !hasFeatureFilters || (row.feature && scopedFeatures?.has(row.feature));
 
@@ -1801,7 +1796,6 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
   }, [
     permissionMap,
     capabilityDescriptorIndex,
-    showAllPermissions,
     viewType,
     activeClusterTab,
     activeNamespaceTab,
@@ -2173,13 +2167,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
   );
 
   // Effective Permissions tab content.
-  const effectivePermissionsContent = (
-    <EffectivePermissionsTable
-      rows={permissionRows}
-      showAllPermissions={showAllPermissions}
-      onToggleShowAll={() => setShowAllPermissions((prev) => !prev)}
-    />
-  );
+  const effectivePermissionsContent = <EffectivePermissionsTable rows={permissionRows} />;
 
   const brokerReadRows = useMemo<BrokerReadRow[]>(() => {
     return brokerReadDiagnostics.map((entry) => {

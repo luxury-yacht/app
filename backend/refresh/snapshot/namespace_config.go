@@ -12,13 +12,13 @@ import (
 	informers "k8s.io/client-go/informers"
 	corelisters "k8s.io/client-go/listers/core/v1"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 )
 
 const (
 	namespaceConfigDomainName       = "namespace-config"
-	catalogNamespaceConfigLimit     = 1000
 	errNamespaceConfigScopeRequired = "namespace scope is required"
 )
 
@@ -168,8 +168,8 @@ func (b *NamespaceConfigBuilder) buildSnapshot(
 
 	sortConfigSummaries(resources)
 
-	if len(resources) > catalogNamespaceConfigLimit {
-		resources = resources[:catalogNamespaceConfigLimit]
+	if len(resources) > config.SnapshotNamespaceConfigEntryLimit {
+		resources = resources[:config.SnapshotNamespaceConfigEntryLimit]
 	}
 
 	return &refresh.Snapshot{
@@ -181,7 +181,7 @@ func (b *NamespaceConfigBuilder) buildSnapshot(
 			Resources:   resources,
 			Kinds:       snapshotSortedKinds(resources, func(resource ConfigSummary) string { return resource.Kind }),
 		},
-		Stats:   refresh.SnapshotStats{ItemCount: len(resources)},
+		Stats: refresh.SnapshotStats{ItemCount: len(resources)},
 	}, nil
 }
 

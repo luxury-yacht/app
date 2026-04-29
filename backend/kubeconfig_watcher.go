@@ -7,10 +7,9 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 )
-
-const kubeconfigWatcherDebounceInterval = 500 * time.Millisecond
 
 // watchedPath describes a watched directory and an optional filename filter.
 type watchedPath struct {
@@ -103,7 +102,7 @@ func (w *kubeconfigWatcher) eventLoop() {
 			if debounceTimer != nil {
 				debounceTimer.Stop()
 			}
-			debounceTimer = time.NewTimer(kubeconfigWatcherDebounceInterval)
+			debounceTimer = time.NewTimer(config.KubeconfigWatcherDebounceInterval)
 			debounceCh = debounceTimer.C
 
 		case _, ok := <-w.watcher.Errors:

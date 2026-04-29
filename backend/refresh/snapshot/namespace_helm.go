@@ -12,6 +12,7 @@ import (
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/release"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	corev1 "k8s.io/api/core/v1"
@@ -147,8 +148,7 @@ func (b *NamespaceHelmBuilder) buildAllNamespaces(
 		}, nil
 	}
 
-	const parallelism = 8
-	sem := make(chan struct{}, parallelism)
+	sem := make(chan struct{}, config.SnapshotNamespaceHelmWorkerLimit)
 
 	var (
 		mu        sync.Mutex

@@ -119,12 +119,15 @@ func (s *DaemonSetService) buildDaemonSetDetails(
 			}
 			return 0
 		}(),
+		ServiceAccount:     daemonSet.Spec.Template.Spec.ServiceAccountName,
 		Selector:           daemonSet.Spec.Selector.MatchLabels,
 		Labels:             daemonSet.Labels,
 		Annotations:        daemonSet.Annotations,
 		NodeSelector:       daemonSet.Spec.Template.Spec.NodeSelector,
+		Tolerations:        pods.FormatPodTolerations(daemonSet.Spec.Template.Spec.Tolerations),
 		Conditions:         describeDaemonSetConditions(daemonSet),
 		Containers:         describeContainers(daemonSet.Spec.Template.Spec.Containers),
+		InitContainers:     describeContainers(daemonSet.Spec.Template.Spec.InitContainers),
 		Pods:               podInfos,
 		PodMetricsSummary:  podSummary,
 		ObservedGeneration: daemonSet.Status.ObservedGeneration,

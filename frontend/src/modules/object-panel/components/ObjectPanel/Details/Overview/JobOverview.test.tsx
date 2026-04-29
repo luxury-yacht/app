@@ -8,12 +8,28 @@ import { act } from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { JobOverview } from './JobOverview';
 
+vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
+  useObjectPanel: () => ({
+    openWithObject: vi.fn(),
+    objectData: { clusterId: 'alpha:ctx', clusterName: 'alpha' },
+  }),
+}));
+
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
   ResourceHeader: (props: any) => (
     <div data-testid="resource-header">
       {props.kind}:{props.name}
     </div>
   ),
+}));
+
+vi.mock('@shared/components/kubernetes/ResourceMetadata', () => ({
+  ResourceMetadata: () => <div data-testid="resource-metadata" />,
+}));
+
+vi.mock('@shared/components/Tooltip', () => ({
+  __esModule: true,
+  default: ({ children }: any) => <>{children}</>,
 }));
 
 const getValueForLabel = (container: HTMLElement, label: string) => {
@@ -76,15 +92,39 @@ describe('JobOverview', () => {
       suspend: true,
       activeJobs: [{}, {}],
       lastScheduleTime: '2024-01-01T00:00:00Z',
-      successfulJobsHistory: 3,
-      failedJobsHistory: 1,
+      successfulJobsHistory: 5,
+      failedJobsHistory: 2,
     } as any);
 
     expect(getValueForLabel(container, 'Schedule')?.textContent).toContain('*/5 * * * *');
     expect(getValueForLabel(container, 'Status')?.textContent).toContain('Suspended');
     expect(getValueForLabel(container, 'Active Jobs')?.textContent).toBe('2');
-    expect(getValueForLabel(container, 'Last Scheduled')?.textContent).toContain('2024-01-01');
-    expect(getValueForLabel(container, 'History')?.textContent).toBe('3 succeeded, 1 failed');
+    // Run summary collapses all timestamps into a single Runs cell.
+    const runs = getValueForLabel(container, 'Runs')?.textContent ?? '';
+    expect(runs).toContain('Last Scheduled');
+    expect(runs.toLowerCase()).toContain('ago');
+    // Suspended cronjobs say "Suspended" in the Next Scheduled row.
+    expect(runs).toContain('Suspended');
+    // History only renders when limits differ from k8s defaults (3 / 1).
+    expect(getValueForLabel(container, 'History Limits')?.textContent).toBe(
+      '5 succeeded, 2 failed'
+    );
+  });
+
+  it('surfaces cronjob next-run + last-successful in the Runs block', async () => {
+    await renderComponent({
+      kind: 'CronJob',
+      name: 'cron',
+      schedule: '0 * * * *',
+      nextScheduleTime: '2099-01-01T00:00:00Z',
+      lastSuccessfulTime: '2024-01-01T00:00:00Z',
+      concurrencyPolicy: 'Forbid',
+    } as any);
+
+    const runs = getValueForLabel(container, 'Runs')?.textContent ?? '';
+    expect(runs).toMatch(/Next Scheduledin \d+/);
+    expect(runs).toMatch(/Last Success.*ago/);
+    expect(getValueForLabel(container, 'Concurrency')?.textContent).toContain('Forbid');
   });
 
   // Note: CronJob trigger/suspend actions are tested in ActionsMenu.test.tsx

@@ -32,6 +32,11 @@ vi.mock('@shared/components/kubernetes/ResourceStatus', () => ({
   ),
 }));
 
+vi.mock('@shared/components/Tooltip', () => ({
+  __esModule: true,
+  default: ({ children }: any) => <>{children}</>,
+}));
+
 vi.mock('@shared/components/kubernetes/ResourceMetadata', () => ({
   ResourceMetadata: () => <div data-testid="resource-metadata" />,
 }));
@@ -96,7 +101,12 @@ describe('PodOverview', () => {
     expect(restartBadge?.textContent?.trim()).toBe('3');
     expect(container.textContent).toContain('QoS');
     expect(container.textContent).toContain('Guaranteed');
-    expect(container.textContent).toContain('Host Network');
+    // Host networking renders as a "Host" row containing a Network chip.
+    expect(container.textContent).toContain('Host');
+    const hostNetworkChip = Array.from(
+      container.querySelectorAll<HTMLElement>('.status-chip--warning')
+    ).find((el) => el.textContent?.trim() === 'Network');
+    expect(hostNetworkChip).toBeTruthy();
   });
 
   it('navigates to owner resources when owner link is clicked', async () => {

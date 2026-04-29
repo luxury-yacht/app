@@ -20,7 +20,7 @@ export interface ConnectivityPresentationInput {
   authState: ClusterAuthState;
 }
 
-export const formatClusterLabel = (clusterName?: string, clusterId?: string): string => {
+const formatClusterLabel = (clusterName?: string, clusterId?: string): string => {
   const name = clusterName?.trim();
   if (name) {
     return name;

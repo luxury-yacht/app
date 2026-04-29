@@ -10,6 +10,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	apiextinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -31,11 +32,6 @@ type watchEvent struct {
 	key       string
 	obj       metav1.Object
 }
-
-const (
-	watchPendingBufferSize = 8192
-	watchDebounceInterval  = 200 * time.Millisecond
-)
 
 var watchInformerAccessor = map[schema.GroupResource]func(informers.SharedInformerFactory) cache.SharedIndexInformer{
 	{Group: "", Resource: "pods"}:                                          func(f informers.SharedInformerFactory) cache.SharedIndexInformer { return f.Core().V1().Pods().Informer() },
@@ -74,7 +70,7 @@ type watchNotifier struct {
 func newWatchNotifier(ctx context.Context, svc *Service) *watchNotifier {
 	return &watchNotifier{
 		service: svc,
-		pending: make(chan watchEvent, watchPendingBufferSize),
+		pending: make(chan watchEvent, config.ObjectCatalogWatchPendingBufferSize),
 		ctx:     ctx,
 	}
 }
@@ -154,7 +150,7 @@ func (n *watchNotifier) run() {
 			}
 			batch = append(batch, evt)
 			if timer == nil {
-				timer = time.NewTimer(watchDebounceInterval)
+				timer = time.NewTimer(config.ObjectCatalogWatchDebounceInterval)
 				timerC = timer.C
 			} else {
 				if !timer.Stop() {
@@ -163,7 +159,7 @@ func (n *watchNotifier) run() {
 					default:
 					}
 				}
-				timer.Reset(watchDebounceInterval)
+				timer.Reset(config.ObjectCatalogWatchDebounceInterval)
 			}
 		case <-timerC:
 			if len(batch) > 0 {

@@ -13,13 +13,13 @@ import (
 	corelisters "k8s.io/client-go/listers/core/v1"
 	policylisters "k8s.io/client-go/listers/policy/v1"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 )
 
 const (
 	namespaceQuotasDomainName = "namespace-quotas"
-	namespaceQuotasEntryLimit = 1000
 )
 
 // NamespaceQuotasPermissions indicates which resources should be included in the domain.
@@ -213,8 +213,8 @@ func (b *NamespaceQuotasBuilder) buildSnapshot(
 		return resources[i].Namespace < resources[j].Namespace
 	})
 
-	if len(resources) > namespaceQuotasEntryLimit {
-		resources = resources[:namespaceQuotasEntryLimit]
+	if len(resources) > config.SnapshotNamespaceQuotasEntryLimit {
+		resources = resources[:config.SnapshotNamespaceQuotasEntryLimit]
 	}
 
 	return &refresh.Snapshot{
@@ -226,7 +226,7 @@ func (b *NamespaceQuotasBuilder) buildSnapshot(
 			Resources:   resources,
 			Kinds:       snapshotSortedKinds(resources, func(resource QuotaSummary) string { return resource.Kind }),
 		},
-		Stats:   refresh.SnapshotStats{ItemCount: len(resources)},
+		Stats: refresh.SnapshotStats{ItemCount: len(resources)},
 	}, nil
 }
 

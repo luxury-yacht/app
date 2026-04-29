@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/authstate"
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/errorcapture"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 )
@@ -105,8 +106,8 @@ func (a *App) teardownClusterSubsystem(clusterID string) {
 	// Stop permission revalidation for this cluster
 	a.stopRefreshPermissionRevalidation(clusterID)
 
-	// Get and remove the subsystem for this cluster
-	subsystem := a.refreshSubsystems[clusterID]
+	// Get and remove the subsystem for this cluster.
+	subsystem := a.takeRefreshSubsystem(clusterID)
 	if subsystem == nil {
 		return
 	}
@@ -120,12 +121,10 @@ func (a *App) teardownClusterSubsystem(clusterID string) {
 		subsystem.ResourceStream.Stop()
 	}
 
-	// Shutdown the manager with timeout
-	const shutdownTimeout = time.Second
 	if subsystem.Manager != nil {
 		done := make(chan struct{})
 		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+			ctx, cancel := context.WithTimeout(context.Background(), config.RefreshShutdownTimeout)
 			defer cancel()
 			if err := subsystem.Manager.Shutdown(ctx); err != nil && a.logger != nil {
 				a.logger.Warn(fmt.Sprintf("Failed to shutdown refresh manager for cluster %s: %v", clusterID, err), logsources.Auth, clusterID, clusterID)
@@ -134,15 +133,12 @@ func (a *App) teardownClusterSubsystem(clusterID string) {
 		}()
 		select {
 		case <-done:
-		case <-time.After(shutdownTimeout):
+		case <-time.After(config.RefreshShutdownTimeout):
 			if a.logger != nil {
 				a.logger.Warn(fmt.Sprintf("Timed out waiting for refresh manager shutdown for cluster %s", clusterID), logsources.Auth, clusterID, clusterID)
 			}
 		}
 	}
-
-	// Remove from the subsystems map
-	delete(a.refreshSubsystems, clusterID)
 
 	// Shutdown the informer factory if present
 	if subsystem.InformerFactory != nil {
@@ -241,12 +237,13 @@ func (a *App) rebuildClusterSubsystem(clusterID string) {
 		}()
 	}
 
-	// Store the subsystem
-	a.refreshSubsystems[clusterID] = subsystem
+	// Store the subsystem.
+	a.setRefreshSubsystem(clusterID, subsystem)
 
 	// Build cluster order from current subsystems
-	clusterOrder := make([]string, 0, len(a.refreshSubsystems))
-	for id := range a.refreshSubsystems {
+	subsystems := a.snapshotRefreshSubsystems()
+	clusterOrder := make([]string, 0, len(subsystems))
+	for id := range subsystems {
 		clusterOrder = append(clusterOrder, id)
 	}
 
@@ -254,7 +251,7 @@ func (a *App) rebuildClusterSubsystem(clusterID string) {
 	// failures during initial startup), bootstrap the full HTTP infrastructure
 	// now that we have at least one working subsystem.
 	if a.refreshHTTPServer == nil || a.refreshAggregates == nil {
-		mux, aggregates, muxErr := a.buildRefreshMux(a.refreshSubsystems, clusterOrder)
+		mux, aggregates, muxErr := a.buildRefreshMux(subsystems, clusterOrder)
 		if muxErr != nil {
 			if a.logger != nil {
 				a.logger.Error(fmt.Sprintf("Failed to build refresh mux after cluster %s recovery: %v", clusterID, muxErr), logsources.Auth, clusterID, clusterName)
@@ -262,7 +259,7 @@ func (a *App) rebuildClusterSubsystem(clusterID string) {
 			return
 		}
 		a.refreshAggregates = aggregates
-		if srvErr := a.startRefreshHTTPServer(mux, a.refreshSubsystems); srvErr != nil {
+		if srvErr := a.startRefreshHTTPServer(mux, subsystems); srvErr != nil {
 			if a.logger != nil {
 				a.logger.Error(fmt.Sprintf("Failed to start refresh HTTP server after cluster %s recovery: %v", clusterID, srvErr), logsources.Auth, clusterID, clusterName)
 			}
@@ -273,7 +270,7 @@ func (a *App) rebuildClusterSubsystem(clusterID string) {
 		}
 	} else {
 		// Update the aggregate handlers so they know about the new subsystem.
-		if err := a.refreshAggregates.Update(clusterOrder, a.refreshSubsystems); err != nil {
+		if err := a.refreshAggregates.Update(clusterOrder, subsystems); err != nil {
 			if a.logger != nil {
 				a.logger.Error(fmt.Sprintf("Failed to update aggregates for cluster %s: %v", clusterID, err), logsources.Auth, clusterID, clusterName)
 			}

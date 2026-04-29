@@ -22,7 +22,20 @@ func (s *Service) ClusterRole(name string) (*types.ClusterRoleDetails, error) {
 		s.deps.Logger.Error(fmt.Sprintf("Failed to get cluster role %s: %v", name, err), "RBAC")
 		return nil, fmt.Errorf("failed to get cluster role: %v", err)
 	}
-	return s.buildClusterRoleDetails(cr, nil, nil), nil
+
+	var clusterRoleBindings []string
+	if crbs, err := s.deps.KubernetesClient.RbacV1().ClusterRoleBindings().List(s.deps.Context, metav1.ListOptions{}); err != nil {
+		s.deps.Logger.Warn(fmt.Sprintf("Failed to list cluster role bindings: %v", err), "RBAC")
+	} else {
+		for i := range crbs.Items {
+			binding := crbs.Items[i]
+			if binding.RoleRef.Kind == "ClusterRole" && binding.RoleRef.Name == name {
+				clusterRoleBindings = append(clusterRoleBindings, binding.Name)
+			}
+		}
+	}
+
+	return s.buildClusterRoleDetails(cr, clusterRoleBindings, nil), nil
 }
 
 func (s *Service) ClusterRoles() ([]*types.ClusterRoleDetails, error) {

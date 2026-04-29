@@ -32,7 +32,7 @@ const hasSameShallowObjectShape = (
   );
 };
 
-export const reusePreviousSelectionReference = <T>(previous: T | undefined, next: T): T => {
+const reusePreviousSelectionReference = <T>(previous: T | undefined, next: T): T => {
   if (previous === undefined || Object.is(previous, next)) {
     return previous ?? next;
   }
@@ -45,7 +45,7 @@ export const reusePreviousSelectionReference = <T>(previous: T | undefined, next
   return next;
 };
 
-export const reusePreviousKeyedArrayReference = <T>(
+const reusePreviousKeyedArrayReference = <T>(
   previous: T[] | undefined,
   next: T[],
   getKey: (item: T) => string

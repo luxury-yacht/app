@@ -53,7 +53,7 @@ func (a *App) setupRefreshSubsystem() error {
 	if len(subsystems) == 0 {
 		a.logger.Warn("No refresh subsystems created (all clusters may have auth failures)", logsources.Refresh)
 		// Initialize empty state but don't fail - clusters may recover later.
-		a.refreshSubsystems = make(map[string]*system.Subsystem)
+		a.replaceRefreshSubsystems(nil)
 		return nil
 	}
 
@@ -267,9 +267,9 @@ func (a *App) buildRefreshMux(
 	// Wrap the base refresh API with aggregate services for multi-cluster domains.
 	aggregateService := newAggregateSnapshotService(clusterOrder, subsystems)
 
-	// Wire the lifecycle transition: when a cluster's namespace domain first serves
+	// Wire the lifecycle transition: when a cluster's namespace domain serves
 	// data successfully, move it from loading/loading_slow to ready.
-	aggregateService.onFirstSnapshot = func(clusterID string) {
+	aggregateService.onNamespaceSnapshot = func(clusterID string) {
 		if a.clusterLifecycle == nil {
 			return
 		}
@@ -384,7 +384,7 @@ func (a *App) startRefreshHTTPServer(
 	a.refreshListener = listener
 	a.refreshBaseURL = "http://" + listener.Addr().String()
 	a.refreshServerDone = make(chan struct{})
-	a.refreshSubsystems = subsystems
+	a.replaceRefreshSubsystems(subsystems)
 
 	// Use first available subsystem for telemetry (for global telemetry needs).
 	a.telemetryRecorder = nil
