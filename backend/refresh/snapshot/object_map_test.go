@@ -1,0 +1,248 @@
+package snapshot
+
+import (
+	"context"
+	"testing"
+
+	appsv1 "k8s.io/api/apps/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
+	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
+	networkingv1 "k8s.io/api/networking/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes/fake"
+)
+
+func TestObjectMapBuildsRecursiveCoreRelationships(t *testing.T) {
+	client := fake.NewSimpleClientset(objectMapFixtureObjects()...)
+	builder := &objectMapBuilder{client: client}
+	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"})
+
+	snap, err := builder.Build(ctx, "default:apps/v1:Deployment:web?maxDepth=5&maxNodes=100")
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+	payload := snap.Payload.(ObjectMapSnapshotPayload)
+
+	if payload.Seed.ClusterID != "cluster-a" || payload.Seed.Group != "apps" || payload.Seed.Version != "v1" || payload.Seed.Kind != "Deployment" {
+		t.Fatalf("seed identity is incomplete: %#v", payload.Seed)
+	}
+	for _, node := range payload.Nodes {
+		if node.Ref.ClusterID == "" || node.Ref.Version == "" || node.Ref.Kind == "" || node.Ref.Name == "" {
+			t.Fatalf("node identity is incomplete: %#v", node)
+		}
+	}
+
+	assertEdge(t, payload, "Deployment", "web", "ReplicaSet", "web-rs", "owner")
+	assertEdge(t, payload, "ReplicaSet", "web-rs", "Pod", "web-pod", "owner")
+	assertEdge(t, payload, "Service", "web", "Pod", "web-pod", "selector")
+	assertEdge(t, payload, "Service", "web", "EndpointSlice", "web-slice", "endpoint")
+	assertEdge(t, payload, "EndpointSlice", "web-slice", "Pod", "web-pod", "endpoint")
+	assertEdge(t, payload, "Pod", "web-pod", "Node", "node-1", "schedules")
+	assertEdge(t, payload, "Pod", "web-pod", "ServiceAccount", "builder", "uses")
+	assertEdge(t, payload, "Pod", "web-pod", "ConfigMap", "app-config", "uses")
+	assertEdge(t, payload, "Pod", "web-pod", "Secret", "app-secret", "uses")
+	assertEdge(t, payload, "Pod", "web-pod", "PersistentVolumeClaim", "data", "mounts")
+	assertEdge(t, payload, "PersistentVolumeClaim", "data", "PersistentVolume", "pv-data", "storage")
+	assertEdge(t, payload, "HorizontalPodAutoscaler", "web", "Deployment", "web", "scales")
+	assertEdge(t, payload, "Ingress", "web", "Service", "web", "routes")
+
+	if snap.Domain != objectMapDomain || snap.Stats.ItemCount != len(payload.Nodes) || snap.Stats.Truncated {
+		t.Fatalf("unexpected snapshot stats: %#v", snap.Stats)
+	}
+}
+
+func TestObjectMapEnforcesVersionedSeedScope(t *testing.T) {
+	client := fake.NewSimpleClientset(objectMapFixtureObjects()...)
+	builder := &objectMapBuilder{client: client}
+	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a"})
+
+	if _, err := builder.Build(ctx, "default:Deployment:web"); err == nil {
+		t.Fatal("expected legacy kind-only scope to fail")
+	}
+}
+
+func TestObjectMapAppliesNodeCap(t *testing.T) {
+	objects := []runtime.Object{
+		serviceFixture("default", "web", "svc-uid", map[string]string{"app": "web"}),
+	}
+	for i := 0; i < 6; i++ {
+		objects = append(objects, podFixture("default", "web-pod-"+string(rune('a'+i)), "pod-"+string(rune('a'+i)), "", map[string]string{"app": "web"}))
+	}
+	client := fake.NewSimpleClientset(objects...)
+	builder := &objectMapBuilder{client: client}
+	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a"})
+
+	snap, err := builder.Build(ctx, "default:/v1:Service:web?maxDepth=1&maxNodes=3")
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+	payload := snap.Payload.(ObjectMapSnapshotPayload)
+	if !payload.Truncated || !snap.Stats.Truncated {
+		t.Fatalf("expected truncation, payload=%#v stats=%#v", payload, snap.Stats)
+	}
+	if len(payload.Nodes) != 3 {
+		t.Fatalf("expected node cap to keep 3 nodes, got %d", len(payload.Nodes))
+	}
+}
+
+func objectMapFixtureObjects() []runtime.Object {
+	deploy := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "web",
+			Namespace: "default",
+			UID:       types.UID("deploy-uid"),
+			Labels:    map[string]string{"app": "web"},
+		},
+		Spec: appsv1.DeploymentSpec{
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					ServiceAccountName: "builder",
+					Volumes: []corev1.Volume{
+						{Name: "config", VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{LocalObjectReference: corev1.LocalObjectReference{Name: "app-config"}}}},
+						{Name: "secret", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: "app-secret"}}},
+					},
+				},
+			},
+		},
+	}
+	rs := &appsv1.ReplicaSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "web-rs",
+			Namespace:       "default",
+			UID:             types.UID("rs-uid"),
+			OwnerReferences: []metav1.OwnerReference{ownerRef("apps/v1", "Deployment", "web", "deploy-uid")},
+		},
+	}
+	pod := podFixture("default", "web-pod", "pod-uid", "rs-uid", map[string]string{"app": "web"})
+	service := serviceFixture("default", "web", "svc-uid", map[string]string{"app": "web"})
+	slice := &discoveryv1.EndpointSlice{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "web-slice",
+			Namespace: "default",
+			UID:       types.UID("slice-uid"),
+			Labels:    map[string]string{discoveryv1.LabelServiceName: "web"},
+		},
+		Endpoints: []discoveryv1.Endpoint{{
+			TargetRef: &corev1.ObjectReference{APIVersion: "v1", Kind: "Pod", Namespace: "default", Name: "web-pod", UID: types.UID("pod-uid")},
+		}},
+	}
+	pvc := &corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{Name: "data", Namespace: "default", UID: types.UID("pvc-uid")},
+		Spec: corev1.PersistentVolumeClaimSpec{
+			VolumeName: "pv-data",
+			Resources: corev1.VolumeResourceRequirements{
+				Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("1Gi")},
+			},
+		},
+	}
+	pv := &corev1.PersistentVolume{ObjectMeta: metav1.ObjectMeta{Name: "pv-data", UID: types.UID("pv-uid")}}
+	hpa := &autoscalingv2.HorizontalPodAutoscaler{
+		ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "default", UID: types.UID("hpa-uid")},
+		Spec: autoscalingv2.HorizontalPodAutoscalerSpec{
+			ScaleTargetRef: autoscalingv2.CrossVersionObjectReference{APIVersion: "apps/v1", Kind: "Deployment", Name: "web"},
+			MinReplicas:    int32Ptr(1),
+			MaxReplicas:    3,
+		},
+	}
+	ingress := &networkingv1.Ingress{
+		ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "default", UID: types.UID("ingress-uid")},
+		Spec: networkingv1.IngressSpec{
+			DefaultBackend: &networkingv1.IngressBackend{
+				Service: &networkingv1.IngressServiceBackend{Name: "web"},
+			},
+		},
+	}
+
+	return []runtime.Object{
+		deploy,
+		rs,
+		pod,
+		service,
+		slice,
+		pvc,
+		pv,
+		&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "app-config", Namespace: "default", UID: types.UID("cm-uid")}},
+		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "app-secret", Namespace: "default", UID: types.UID("secret-uid")}},
+		&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "builder", Namespace: "default", UID: types.UID("sa-uid")}},
+		&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node-1", UID: types.UID("node-uid")}},
+		hpa,
+		ingress,
+		&batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "unused-job", Namespace: "default", UID: types.UID("job-uid")}},
+	}
+}
+
+func podFixture(namespace, name, uid, ownerUID string, labels map[string]string) *corev1.Pod {
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace, UID: types.UID(uid), Labels: labels},
+		Spec: corev1.PodSpec{
+			NodeName:           "node-1",
+			ServiceAccountName: "builder",
+			Volumes: []corev1.Volume{
+				{Name: "data", VolumeSource: corev1.VolumeSource{PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{ClaimName: "data"}}},
+				{Name: "config", VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{LocalObjectReference: corev1.LocalObjectReference{Name: "app-config"}}}},
+				{Name: "secret", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: "app-secret"}}},
+			},
+			Containers: []corev1.Container{{
+				Name:  "app",
+				Image: "example/app:1",
+				EnvFrom: []corev1.EnvFromSource{{
+					ConfigMapRef: &corev1.ConfigMapEnvSource{LocalObjectReference: corev1.LocalObjectReference{Name: "app-config"}},
+				}},
+			}},
+		},
+	}
+	if ownerUID != "" {
+		pod.OwnerReferences = []metav1.OwnerReference{ownerRef("apps/v1", "ReplicaSet", "web-rs", ownerUID)}
+	}
+	return pod
+}
+
+func serviceFixture(namespace, name, uid string, selector map[string]string) *corev1.Service {
+	return &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace, UID: types.UID(uid)},
+		Spec:       corev1.ServiceSpec{Selector: selector},
+	}
+}
+
+func ownerRef(apiVersion, kind, name, uid string) metav1.OwnerReference {
+	controller := true
+	return metav1.OwnerReference{
+		APIVersion: apiVersion,
+		Kind:       kind,
+		Name:       name,
+		UID:        types.UID(uid),
+		Controller: &controller,
+	}
+}
+
+func assertEdge(t *testing.T, payload ObjectMapSnapshotPayload, sourceKind, sourceName, targetKind, targetName, edgeType string) {
+	t.Helper()
+	sourceID := nodeIDByKindName(t, payload, sourceKind, sourceName)
+	targetID := nodeIDByKindName(t, payload, targetKind, targetName)
+	for _, edge := range payload.Edges {
+		if edge.Source == sourceID && edge.Target == targetID && edge.Type == edgeType {
+			return
+		}
+	}
+	t.Fatalf("missing %s edge %s/%s -> %s/%s; edges=%#v", edgeType, sourceKind, sourceName, targetKind, targetName, payload.Edges)
+}
+
+func nodeIDByKindName(t *testing.T, payload ObjectMapSnapshotPayload, kind, name string) string {
+	t.Helper()
+	for _, node := range payload.Nodes {
+		if node.Ref.Kind == kind && node.Ref.Name == name {
+			return node.ID
+		}
+	}
+	t.Fatalf("missing node %s/%s; nodes=%#v", kind, name, payload.Nodes)
+	return ""
+}
+
+func int32Ptr(value int32) *int32 {
+	return &value
+}

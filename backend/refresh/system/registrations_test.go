@@ -40,6 +40,7 @@ func TestDomainRegistrationOrder(t *testing.T) {
 		"object-helm-manifest",
 		"object-helm-values",
 		"object-events",
+		"object-map",
 		"object-maintenance",
 	}
 
