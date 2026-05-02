@@ -194,6 +194,47 @@
   opacity: 0.25;
 }
 
+/* Expand/collapse badge in the top-right corner of the current
+ * ReplicaSet card. Click toggles visibility of sibling RSs. */
+.object-map-node__badge {
+  cursor: pointer;
+}
+
+.object-map-node__badge-bg {
+  fill: var(--color-accent-bg);
+  stroke: var(--color-accent);
+  stroke-width: 1;
+  transition:
+    fill 120ms ease,
+    stroke-width 120ms ease;
+}
+
+.object-map-node__badge-text {
+  font-size: 10px;
+  font-weight: 700;
+  fill: var(--color-accent);
+  /* Pointer events on the parent <g> are sufficient; keep text
+   * non-interactive so clicks always land on the rect. */
+  pointer-events: none;
+  user-select: none;
+}
+
+.object-map-node__badge:hover .object-map-node__badge-bg {
+  fill: var(--color-accent);
+}
+
+.object-map-node__badge:hover .object-map-node__badge-text {
+  fill: var(--color-text-inverse);
+}
+
+.object-map-node__badge:focus {
+  outline: none;
+}
+
+.object-map-node__badge:focus-visible .object-map-node__badge-bg {
+  stroke-width: 2;
+}
+
 /* --- Edge tooltip (also native SVG so the transform applies cleanly) -- */
 
 .object-map__edge-tooltip {

@@ -27,6 +27,12 @@ import React, { useCallback, useMemo, useState } from 'react';
 import './ObjectMap.css';
 import type { ObjectMapSnapshotPayload } from '@core/refresh/types';
 import {
+  computeCollapseInfo,
+  filterByCollapseInfo,
+  type DeploymentGroup,
+} from './objectMapCollapse';
+import { dedupeServiceEdges } from './objectMapDedupe';
+import {
   computeObjectMapLayout,
   type PositionedEdge,
   type PositionedNode,
@@ -88,6 +94,12 @@ const TOOLTIP_HEIGHT_DOUBLE = 44;
 const TOOLTIP_LABEL_MAX_CHARS = 30;
 const TOOLTIP_TRACE_MAX_CHARS = 36;
 
+// Expand/collapse badge sizing (top-right corner of an RS card).
+const BADGE_WIDTH = 28;
+const BADGE_HEIGHT = 16;
+const BADGE_MARGIN = 4;
+const BADGE_TEXT_BASELINE = 12;
+
 const truncate = (text: string, maxChars: number): string => {
   if (text.length <= maxChars) return text;
   // Use a single-character ellipsis (U+2026) so the visible width
@@ -125,11 +137,22 @@ const buildEdgeClass = (edge: PositionedEdge, selectionState: SelectionState): s
   return `${base} object-map-edge--dimmed`;
 };
 
+interface NodeBadge {
+  /** Deployment id whose RS group this badge controls. */
+  deploymentId: string;
+  /** Number of RSs hidden when the group is collapsed. */
+  hiddenCount: number;
+  /** True when the group is currently expanded (badge shows "−"). */
+  expanded: boolean;
+}
+
 const ObjectMapNodeCard: React.FC<{
   node: PositionedNode;
   className: string;
+  badge: NodeBadge | null;
   onSelect: (id: string) => void;
-}> = ({ node, className, onSelect }) => {
+  onToggleGroup: (deploymentId: string) => void;
+}> = ({ node, className, badge, onSelect, onToggleGroup }) => {
   const handleClick = useCallback(
     (event: React.MouseEvent<SVGGElement>) => {
       // Stop the SVG-level "background click clears selection" handler
@@ -154,6 +177,26 @@ const ObjectMapNodeCard: React.FC<{
   const stopPointer = useCallback((event: React.PointerEvent) => {
     event.stopPropagation();
   }, []);
+
+  const handleBadgeClick = useCallback(
+    (event: React.MouseEvent<SVGGElement>) => {
+      // Don't bubble — badge clicks must not also select the parent node.
+      event.stopPropagation();
+      if (badge) onToggleGroup(badge.deploymentId);
+    },
+    [badge, onToggleGroup]
+  );
+
+  const handleBadgeKeyDown = useCallback(
+    (event: React.KeyboardEvent<SVGGElement>) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        event.stopPropagation();
+        if (badge) onToggleGroup(badge.deploymentId);
+      }
+    },
+    [badge, onToggleGroup]
+  );
 
   return (
     <g
@@ -186,6 +229,39 @@ const ObjectMapNodeCard: React.FC<{
       <text className="object-map-node__namespace" x={NODE_PADDING_X} y={NODE_NAMESPACE_BASELINE_Y}>
         {truncate(formatNamespace(node.ref), NAMESPACE_MAX_CHARS)}
       </text>
+      {badge && (
+        <g
+          className="object-map-node__badge"
+          transform={`translate(${node.width - BADGE_WIDTH - BADGE_MARGIN} ${BADGE_MARGIN})`}
+          onClick={handleBadgeClick}
+          onKeyDown={handleBadgeKeyDown}
+          onPointerDown={stopPointer}
+          onPointerUp={stopPointer}
+          tabIndex={0}
+          role="button"
+          aria-label={
+            badge.expanded
+              ? 'Collapse other ReplicaSets'
+              : `Show ${badge.hiddenCount} hidden ReplicaSet${badge.hiddenCount === 1 ? '' : 's'}`
+          }
+        >
+          <rect
+            className="object-map-node__badge-bg"
+            width={BADGE_WIDTH}
+            height={BADGE_HEIGHT}
+            rx={3}
+            ry={3}
+          />
+          <text
+            className="object-map-node__badge-text"
+            x={BADGE_WIDTH / 2}
+            y={BADGE_TEXT_BASELINE}
+            textAnchor="middle"
+          >
+            {badge.expanded ? '−' : `+${badge.hiddenCount}`}
+          </text>
+        </g>
+      )}
     </g>
   );
 };
@@ -210,9 +286,62 @@ const ObjectMap: React.FC<ObjectMapProps> = ({ payload, resetToken = 0 }) => {
     );
   }, [payload]);
 
+  // Per-Deployment expand state for the ReplicaSet collapse feature.
+  // Default empty = every Deployment is collapsed; the user toggles a
+  // group by clicking the +N badge on its current RS.
+  const [expandedDeployments, setExpandedDeployments] = useState<Set<string>>(() => new Set());
+
+  const handleToggleGroup = useCallback((deploymentId: string) => {
+    setExpandedDeployments((prev) => {
+      const next = new Set(prev);
+      if (next.has(deploymentId)) {
+        next.delete(deploymentId);
+      } else {
+        next.add(deploymentId);
+      }
+      return next;
+    });
+  }, []);
+
+  // Pre-process edges to drop redundant Service relationships (e.g.,
+  // direct selector lines that duplicate the endpoint chain). Runs
+  // before collapse and layout so downstream passes see the
+  // already-deduplicated graph.
+  const dedupedEdges = useMemo(
+    () => dedupeServiceEdges(payload.nodes, payload.edges),
+    [payload.nodes, payload.edges]
+  );
+
+  const collapseInfo = useMemo(
+    () => computeCollapseInfo(payload.nodes, dedupedEdges, seedId, expandedDeployments),
+    [payload.nodes, dedupedEdges, seedId, expandedDeployments]
+  );
+
+  const filtered = useMemo(
+    () => filterByCollapseInfo(payload.nodes, dedupedEdges, collapseInfo.visibleNodeIds),
+    [payload.nodes, dedupedEdges, collapseInfo.visibleNodeIds]
+  );
+
   const layout = useMemo(
-    () => computeObjectMapLayout(payload.nodes, payload.edges, seedId),
-    [payload.nodes, payload.edges, seedId]
+    () => computeObjectMapLayout(filtered.nodes, filtered.edges, seedId),
+    [filtered.nodes, filtered.edges, seedId]
+  );
+
+  // Resolve a per-node badge spec from the collapse info. Memoized so
+  // we don't rebuild the lookup on every render frame; downstream
+  // ObjectMapNodeCard consumers get a stable null when a node has no
+  // badge.
+  const badgeForNode = useCallback(
+    (nodeId: string): NodeBadge | null => {
+      const group: DeploymentGroup | undefined = collapseInfo.groupsByCurrentRs.get(nodeId);
+      if (!group) return null;
+      return {
+        deploymentId: group.deploymentId,
+        hiddenCount: group.collapsibleRsIds.length,
+        expanded: expandedDeployments.has(group.deploymentId),
+      };
+    },
+    [collapseInfo.groupsByCurrentRs, expandedDeployments]
   );
 
   const {
@@ -388,7 +517,9 @@ const ObjectMap: React.FC<ObjectMapProps> = ({ payload, resetToken = 0 }) => {
                   key={node.id}
                   node={node}
                   className={buildNodeClass(node, selectionState)}
+                  badge={badgeForNode(node.id)}
                   onSelect={handleNodeClick}
+                  onToggleGroup={handleToggleGroup}
                 />
               ))}
             </g>
