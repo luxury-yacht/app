@@ -74,7 +74,7 @@ vi.mock('@wailsjs/go/backend/App', () => ({
 }));
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => ({ selectedKubeconfig: 'path:context' }),
+  useKubeconfig: () => ({ selectedKubeconfig: 'path:context', selectedClusterId: 'cluster-a' }),
 }));
 
 vi.mock('@shared/components/ResourceLoadingBoundary', () => ({

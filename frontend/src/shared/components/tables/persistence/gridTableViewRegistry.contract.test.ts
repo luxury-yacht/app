@@ -1,8 +1,8 @@
 /**
  * frontend/src/shared/components/tables/persistence/gridTableViewRegistry.contract.test.ts
  *
- * Contract test: every viewId passed to useGridTablePersistence or
- * useNamespaceGridTablePersistence must exist in gridTableViewRegistry.
+ * Contract test: every viewId passed to a grid table persistence hook must
+ * exist in gridTableViewRegistry.
  *
  * This prevents registry drift — if a new view is added but its viewId is not
  * registered, GC will silently delete the persisted state for that view.
@@ -42,7 +42,8 @@ function walkSourceFiles(dir: string): string[] {
  */
 function extractViewIds(sourceRoot: string): { viewId: string; file: string }[] {
   const files = walkSourceFiles(sourceRoot);
-  const hookPattern = /useGridTablePersistence|useNamespaceGridTablePersistence/;
+  const hookPattern =
+    /useGridTablePersistence|useNamespaceGridTablePersistence|useClusterResourceGridTable|useNamespaceResourceGridTable|useObjectPanelResourceGridTable/;
   const staticViewIdPattern = /viewId:\s*['"]([^'"]+)['"]/g;
   const dynamicViewIdPattern = /viewId:\s*([a-zA-Z_$][a-zA-Z0-9_$]*)/g;
 

@@ -19,17 +19,16 @@
 
 import React, { useCallback, useMemo, useState } from 'react';
 import './BrowseView.css';
-import GridTable, { GRIDTABLE_VIRTUALIZATION_DEFAULT } from '@shared/components/tables/GridTable';
+import { GRIDTABLE_VIRTUALIZATION_DEFAULT } from '@shared/components/tables/GridTable';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import RollbackModal from '@shared/components/modals/RollbackModal';
-import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
+import ResourceGridTableView from '@shared/components/tables/ResourceGridTableView';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 import { getPermissionKey, queryKindPermissions, useUserPermissions } from '@/core/capabilities';
 import { DeleteResourceByGVK, RestartWorkload } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
 import type { CatalogItem } from '@/core/refresh/types';
-import { useTableSort } from '@/hooks/useTableSort';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useShortNames } from '@/hooks/useShortNames';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
@@ -44,9 +43,12 @@ import {
   toTableRows,
   type BrowseTableRow,
 } from '@modules/browse/hooks/useBrowseColumns';
-import { buildCanonicalObjectRowKey, buildObjectReference } from '@shared/utils/objectIdentity';
+import {
+  buildRequiredCanonicalObjectRowKey,
+  buildRequiredObjectReference,
+} from '@shared/utils/objectIdentity';
 import type { BrowseViewProps, BrowseScope } from './BrowseView.types';
-import { useFavToggle } from '@ui/favorites/FavToggle';
+import { useQueryResourceGridTable } from '@shared/hooks/useResourceGridTable';
 
 const VIRTUALIZATION_THRESHOLD = 80;
 
@@ -111,6 +113,12 @@ const BrowseView: React.FC<BrowseViewProps> = ({
   const showNamespaceColumn = scope === 'all-namespaces';
   // For cluster scope, only show cluster-scoped objects (not namespace-scoped)
   const clusterScopedOnly = isClusterScoped;
+  const diagnosticsLabel =
+    scope === 'namespace'
+      ? 'Namespace Browse'
+      : isClusterScoped
+        ? 'Cluster Browse'
+        : 'All Namespaces Browse';
 
   // Build pinned namespaces array: empty for cluster/all-namespaces, single item for namespace scope
   const pinnedNamespaces = useMemo(() => {
@@ -152,7 +160,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
   const handleOpen = useCallback(
     (row: BrowseTableRow) => {
       openWithObject(
-        buildObjectReference({
+        buildRequiredObjectReference({
           kind: row.item.kind,
           name: row.item.name,
           namespace: row.item.namespace ?? undefined,
@@ -277,7 +285,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
       }
 
       return buildObjectActionItems({
-        object: buildObjectReference({
+        object: buildRequiredObjectReference({
           kind: row.item.kind,
           name: row.item.name,
           namespace: row.item.namespace,
@@ -317,7 +325,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
   // Key extractor for the table
   const keyExtractor = useCallback(
     (row: BrowseTableRow) =>
-      buildCanonicalObjectRowKey({
+      buildRequiredCanonicalObjectRowKey({
         kind: row.item.kind,
         name: row.item.name,
         namespace: row.item.namespace,
@@ -397,63 +405,32 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     [items, useShortResourceNames]
   );
 
-  // Apply sorting
-  const { sortedData, sortConfig, handleSort } = useTableSort<BrowseTableRow>(rows, 'kind', 'asc', {
-    controlledSort: persistence.sortConfig,
-    onChange: persistence.setSortConfig,
-    diagnosticsLabel:
-      scope === 'namespace'
-        ? 'Namespace Browse'
-        : isClusterScoped
-          ? 'Cluster Browse'
-          : 'All Namespaces Browse',
-  });
-
-  const { item: favToggle, modal: favModal } = useFavToggle({
-    filters: persistence.filters,
-    sortColumn: sortConfig?.key ?? null,
-    sortDirection: sortConfig?.direction ?? 'asc',
-    columnVisibility: persistence.columnVisibility ?? {},
-    setFilters: persistence.setFilters,
-    setSortConfig: persistence.setSortConfig,
-    setColumnVisibility: persistence.setColumnVisibility,
-    hydrated: persistence.hydrated,
-    availableKinds: filterOptions.kinds,
-    availableFilterNamespaces: filterOptions.namespaces,
-  });
-
-  // Build grid filters configuration
-  const gridFilters = useMemo(
+  const gridFilterOptions = useMemo(
     () => ({
-      enabled: true,
-      value: persistence.filters,
-      onChange: persistence.setFilters,
-      onReset: persistence.resetState,
-      options: {
-        searchBehavior: 'query' as const,
-        kinds: filterOptions.kinds,
-        namespaces: filterOptions.namespaces,
-        showKindDropdown: true,
-        showNamespaceDropdown: showNamespaceColumn,
-        kindDropdownSearchable: true,
-        kindDropdownBulkActions: true,
-        namespaceDropdownSearchable: true,
-        includeClusterScopedSyntheticNamespace: false,
-        totalCount,
-        preActions: [favToggle],
-      },
-    }),
-    [
-      persistence.filters,
-      persistence.setFilters,
-      persistence.resetState,
-      filterOptions.kinds,
-      filterOptions.namespaces,
-      showNamespaceColumn,
-      favToggle,
+      searchBehavior: 'query' as const,
+      kinds: filterOptions.kinds,
+      namespaces: filterOptions.namespaces,
+      showKindDropdown: true,
+      showNamespaceDropdown: showNamespaceColumn,
+      kindDropdownSearchable: true,
+      kindDropdownBulkActions: true,
+      namespaceDropdownSearchable: true,
+      includeClusterScopedSyntheticNamespace: false,
       totalCount,
-    ]
+    }),
+    [filterOptions.kinds, filterOptions.namespaces, showNamespaceColumn, totalCount]
   );
+
+  const { gridTableProps, favModal } = useQueryResourceGridTable<BrowseTableRow>({
+    data: rows,
+    columns,
+    persistence,
+    defaultSortKey: 'kind',
+    defaultSortDirection: 'asc',
+    diagnosticsLabel,
+    filterOptions: gridFilterOptions,
+    virtualization: virtualizationOptions,
+  });
 
   // Resolve class names and messages
   const resolvedTableClassName =
@@ -468,43 +445,25 @@ const BrowseView: React.FC<BrowseViewProps> = ({
 
   return (
     <>
-      <ResourceLoadingBoundary
-        loading={loading}
-        dataLength={sortedData.length}
-        hasLoaded={hasLoadedOnce}
+      <ResourceGridTableView
+        gridTableProps={gridTableProps}
+        boundaryLoading={loading}
+        loaded={hasLoadedOnce}
         spinnerMessage={resolvedLoadingMessage}
         allowPartial
         suppressEmptyWarning
-      >
-        <GridTable<BrowseTableRow>
-          data={sortedData}
-          columns={columns}
-          diagnosticsLabel={
-            scope === 'namespace'
-              ? 'Namespace Browse'
-              : isClusterScoped
-                ? 'Cluster Browse'
-                : 'All Namespaces Browse'
-          }
-          diagnosticsMode="query"
-          keyExtractor={keyExtractor}
-          onRowClick={handleOpen}
-          onSort={handleSort}
-          sortConfig={sortConfig}
-          tableClassName={resolvedTableClassName}
-          useShortNames={useShortResourceNames}
-          enableContextMenu
-          getCustomContextMenuItems={getContextMenuItems}
-          filters={gridFilters}
-          virtualization={virtualizationOptions}
-          allowHorizontalOverflow={true}
-          emptyMessage={resolvedEmptyMessage}
-          columnWidths={persistence.columnWidths}
-          onColumnWidthsChange={persistence.setColumnWidths}
-          columnVisibility={persistence.columnVisibility}
-          onColumnVisibilityChange={persistence.setColumnVisibility}
-        />
-      </ResourceLoadingBoundary>
+        favModal={favModal}
+        columns={columns}
+        diagnosticsLabel={diagnosticsLabel}
+        diagnosticsMode="query"
+        keyExtractor={keyExtractor}
+        onRowClick={handleOpen}
+        tableClassName={resolvedTableClassName}
+        useShortNames={useShortResourceNames}
+        enableContextMenu
+        getCustomContextMenuItems={getContextMenuItems}
+        emptyMessage={resolvedEmptyMessage}
+      />
       <ConfirmationModal
         isOpen={deleteConfirm.show}
         title={`Delete ${deleteConfirm.item?.kind || 'Resource'}`}
@@ -544,8 +503,6 @@ const BrowseView: React.FC<BrowseViewProps> = ({
             kind={rollbackTarget.kind}
           />
         )}
-
-      {favModal}
     </>
   );
 };

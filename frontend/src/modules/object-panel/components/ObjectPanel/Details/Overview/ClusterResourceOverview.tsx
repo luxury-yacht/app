@@ -10,7 +10,7 @@ import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
 import { ResourceStatus } from '@shared/components/kubernetes/ResourceStatus';
 import { StatusChip } from '@shared/components/StatusChip';
-import { buildObjectReference } from '@shared/utils/objectIdentity';
+import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
 import '@styles/components/badges.css';
 
 interface IngressClassParametersLike {
@@ -218,7 +218,7 @@ export const ClusterResourceOverview: React.FC<ClusterResourceOverviewProps> = (
               // back to plain text in that case rather than throwing.
               let ref;
               try {
-                ref = buildObjectReference({
+                ref = buildRequiredObjectReference({
                   kind: params.kind.toLowerCase(),
                   name: params.name,
                   namespace: params.scope === 'Namespace' ? params.namespace : undefined,

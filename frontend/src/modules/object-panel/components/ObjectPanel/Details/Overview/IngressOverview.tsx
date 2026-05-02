@@ -10,7 +10,7 @@ import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
 import { StatusChip } from '@shared/components/StatusChip';
-import { buildObjectReference } from '@shared/utils/objectIdentity';
+import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
 import './shared/OverviewBlocks.css';
 
 interface IngressOverviewProps {
@@ -44,7 +44,7 @@ const renderBackend = (
     const portSuffix = backend.servicePort ? `:${backend.servicePort}` : '';
     return (
       <ObjectPanelLink
-        objectRef={buildObjectReference({
+        objectRef={buildRequiredObjectReference({
           kind: 'service',
           name: backend.serviceName,
           namespace,
@@ -100,7 +100,7 @@ export const IngressOverview: React.FC<IngressOverviewProps> = ({ ingressDetails
           label="Ingress Class"
           value={
             <ObjectPanelLink
-              objectRef={buildObjectReference({
+              objectRef={buildRequiredObjectReference({
                 kind: 'ingressclass',
                 name: ingressDetails.ingressClassName,
                 ...clusterMeta,
@@ -178,7 +178,7 @@ export const IngressOverview: React.FC<IngressOverviewProps> = ({ ingressDetails
                         <span className="overview-row-label">Secret</span>
                         <span className="overview-row-value">
                           <ObjectPanelLink
-                            objectRef={buildObjectReference({
+                            objectRef={buildRequiredObjectReference({
                               kind: 'secret',
                               name: tls.secretName,
                               namespace,

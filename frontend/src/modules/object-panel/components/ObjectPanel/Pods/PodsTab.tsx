@@ -3,10 +3,7 @@
  */
 
 import React, { useCallback, useMemo } from 'react';
-import GridTable, {
-  GRIDTABLE_VIRTUALIZATION_DEFAULT,
-  type GridColumnDefinition,
-} from '@shared/components/tables/GridTable';
+import GridTable, { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import {
   applyColumnSizing,
   createAgeColumn,
@@ -16,23 +13,22 @@ import {
   upsertNamespaceColumn,
   type ColumnSizingMap,
 } from '@shared/components/tables/columnFactories';
-import { useTableSort } from '@hooks/useTableSort';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectLink } from '@shared/hooks/useObjectLink';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { getPodStatusSeverity } from '@utils/podStatusSeverity';
 import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
-import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
 import { getMetricsBannerInfo } from '@shared/utils/metricsAvailability';
 import type { PodSnapshotEntry, PodMetricsInfo } from '@/core/refresh/types';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import '../shared.css';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
+import { useObjectPanelResourceGridTable } from '@shared/hooks/useResourceGridTable';
 import {
-  buildCanonicalObjectRowKey,
-  buildObjectReference,
-  buildRelatedObjectReference,
+  buildRequiredCanonicalObjectRowKey,
+  buildRequiredObjectReference,
+  buildRequiredRelatedObjectReference,
 } from '@shared/utils/objectIdentity';
 
 interface PodsTabProps {
@@ -75,13 +71,16 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
 
   const keyExtractor = useCallback(
     (pod: PodSnapshotEntry) =>
-      buildCanonicalObjectRowKey({
-        kind: 'Pod',
-        name: pod.name,
-        namespace: pod.namespace,
-        clusterId: pod.clusterId,
-      }),
-    []
+      buildRequiredCanonicalObjectRowKey(
+        {
+          kind: 'Pod',
+          name: pod.name,
+          namespace: pod.namespace,
+          clusterId: pod.clusterId,
+        },
+        { fallbackClusterId: objectData?.clusterId }
+      ),
+    [objectData?.clusterId]
   );
   // Ensure pod navigation keeps the active cluster context for object detail scopes.
   const getPodClusterMeta = useCallback(
@@ -94,15 +93,19 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
   const handlePodOpen = useCallback(
     (pod: PodSnapshotEntry) => {
       openWithObject(
-        buildObjectReference({
-          kind: 'Pod',
-          name: pod.name,
-          namespace: pod.namespace,
-          ...getPodClusterMeta(pod),
-        })
+        buildRequiredObjectReference(
+          {
+            kind: 'Pod',
+            name: pod.name,
+            namespace: pod.namespace,
+            clusterId: pod.clusterId,
+            clusterName: pod.clusterName ?? undefined,
+          },
+          { fallbackClusterId: objectData?.clusterId }
+        )
       );
     },
-    [getPodClusterMeta, openWithObject]
+    [objectData?.clusterId, openWithObject]
   );
   const handleNamespaceSelect = useCallback(
     (pod: PodSnapshotEntry) => {
@@ -128,13 +131,16 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
         onClick: handlePodOpen,
         onAltClick: (pod) =>
           navigateToView(
-            buildObjectReference({
-              kind: 'Pod',
-              name: pod.name,
-              namespace: pod.namespace,
-              clusterId: pod.clusterId,
-              clusterName: pod.clusterName,
-            })
+            buildRequiredObjectReference(
+              {
+                kind: 'Pod',
+                name: pod.name,
+                namespace: pod.namespace,
+                clusterId: pod.clusterId,
+                clusterName: pod.clusterName,
+              },
+              { fallbackClusterId: objectData?.clusterId }
+            )
           ),
         sortable: false,
       }),
@@ -142,13 +148,16 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
         onClick: handlePodOpen,
         onAltClick: (pod) =>
           navigateToView(
-            buildObjectReference({
-              kind: 'Pod',
-              name: pod.name,
-              namespace: pod.namespace,
-              clusterId: pod.clusterId,
-              clusterName: pod.clusterName,
-            })
+            buildRequiredObjectReference(
+              {
+                kind: 'Pod',
+                name: pod.name,
+                namespace: pod.namespace,
+                clusterId: pod.clusterId,
+                clusterName: pod.clusterName,
+              },
+              { fallbackClusterId: objectData?.clusterId }
+            )
           ),
         getClassName: () => 'object-panel-link',
         getTitle: (pod) => pod.name,
@@ -170,12 +179,15 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
       createTextColumn<PodSnapshotEntry>('owner', 'Owner', (pod) => workloadNameFromOwner(pod), {
         ...objectLink((pod) =>
           pod.ownerKind && pod.ownerName
-            ? buildRelatedObjectReference({
-                kind: pod.ownerKind,
-                name: pod.ownerName,
-                namespace: pod.namespace,
-                ...getPodClusterMeta(pod),
-              })
+            ? buildRequiredRelatedObjectReference(
+                {
+                  kind: pod.ownerKind,
+                  name: pod.ownerName,
+                  namespace: pod.namespace,
+                  ...getPodClusterMeta(pod),
+                },
+                { fallbackClusterId: objectData?.clusterId }
+              )
             : undefined
         ),
         isInteractive: (pod) => Boolean(pod.ownerKind && pod.ownerName),
@@ -184,11 +196,15 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
       createTextColumn<PodSnapshotEntry>('node', 'Node', (pod) => pod.node || '—', {
         ...objectLink((pod) =>
           pod.node
-            ? buildObjectReference({
-                kind: 'Node',
-                name: pod.node,
-                ...getPodClusterMeta(pod),
-              })
+            ? buildRequiredObjectReference(
+                {
+                  kind: 'Node',
+                  name: pod.node,
+                  clusterId: pod.clusterId,
+                  clusterName: pod.clusterName ?? undefined,
+                },
+                { fallbackClusterId: objectData?.clusterId }
+              )
             : undefined
         ),
         isInteractive: (pod) => Boolean(pod.node),
@@ -248,52 +264,32 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
     metrics?.stale,
     metricsLastUpdated,
     navigateToView,
+    objectData?.clusterId,
     objectLink,
     getPodClusterMeta,
   ]);
-
-  const {
-    sortConfig,
-    setSortConfig,
-    columnWidths,
-    setColumnWidths,
-    columnVisibility,
-    setColumnVisibility,
-    filters,
-    setFilters,
-    resetState,
-  } = useGridTablePersistence<PodSnapshotEntry>({
-    viewId: 'object-panel-pods',
-    // Use the panel-scoped cluster ID, not the global sidebar selection.
-    // Multi-cluster rule (AGENTS.md): persistence is keyed per cluster
-    // so column widths/sort don't bleed between clusters. Disable
-    // persistence when clusterId is missing rather than falling through
-    // to a global storage bucket.
-    clusterIdentity: objectData?.clusterId ?? '',
-    enabled: Boolean(objectData?.clusterId),
-    namespace: null,
-    isNamespaceScoped: false,
-    columns,
-    data: pods,
-    keyExtractor,
-  });
-
-  const {
-    sortedData,
-    sortConfig: tableSort,
-    handleSort,
-  } = useTableSort(pods, undefined, 'asc', {
-    columns,
-    controlledSort: sortConfig,
-    onChange: setSortConfig,
-    rowIdentity: keyExtractor,
-    diagnosticsLabel: 'Object Panel Pods',
-  });
 
   const getSearchTokens = useCallback((pod: PodSnapshotEntry) => {
     const tokens = [pod.name, pod.namespace, pod.node, pod.ownerName, pod.ownerKind];
     return tokens.filter((token): token is string => Boolean(token));
   }, []);
+
+  const { gridTableProps } = useObjectPanelResourceGridTable<PodSnapshotEntry>({
+    viewId: 'object-panel-pods',
+    clusterIdentity: objectData?.clusterId ?? '',
+    enabled: Boolean(objectData?.clusterId),
+    data: pods,
+    columns,
+    keyExtractor,
+    defaultSort: { key: 'name', direction: 'asc' },
+    rowIdentity: keyExtractor,
+    diagnosticsLabel: 'Object Panel Pods',
+    filterAccessors: {
+      getKind: () => 'Pod',
+      getNamespace: (pod) => pod.namespace,
+      getSearchText: getSearchTokens,
+    },
+  });
 
   return (
     <div className="object-panel-pods">
@@ -307,28 +303,30 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
       <div className="object-panel-pods__table">
         <ResourceLoadingBoundary
           loading={loading}
-          dataLength={sortedData.length}
-          hasLoaded={!loading || sortedData.length > 0}
+          dataLength={gridTableProps.data.length}
+          hasLoaded={!loading || gridTableProps.data.length > 0}
           spinnerMessage="Loading pods..."
         >
           <GridTable<PodSnapshotEntry>
-            data={sortedData}
+            {...gridTableProps}
             columns={columns}
             diagnosticsLabel="Object Panel Pods"
             diagnosticsMode="live"
-            onSort={handleSort}
-            sortConfig={tableSort}
             keyExtractor={keyExtractor}
             onRowClick={handlePodOpen}
             enableContextMenu
             getCustomContextMenuItems={(pod) =>
               buildObjectActionItems({
-                object: buildObjectReference({
-                  kind: 'Pod',
-                  name: pod.name,
-                  namespace: pod.namespace,
-                  ...getPodClusterMeta(pod),
-                }),
+                object: buildRequiredObjectReference(
+                  {
+                    kind: 'Pod',
+                    name: pod.name,
+                    namespace: pod.namespace,
+                    clusterId: pod.clusterId,
+                    clusterName: pod.clusterName ?? undefined,
+                  },
+                  { fallbackClusterId: objectData?.clusterId }
+                ),
                 context: 'gridtable',
                 handlers: {
                   onOpen: () => handlePodOpen(pod),
@@ -337,27 +335,9 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
               })
             }
             tableClassName="gridtable-pods gridtable-pods--namespaced"
-            filters={{
-              enabled: true,
-              value: filters,
-              onChange: setFilters,
-              onReset: resetState,
-              options: {},
-              accessors: {
-                getKind: () => 'Pod',
-                getNamespace: (pod) => pod.namespace,
-                getSearchText: getSearchTokens,
-              },
-            }}
-            virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}
-            columnWidths={columnWidths}
-            onColumnWidthsChange={setColumnWidths}
-            columnVisibility={columnVisibility}
-            onColumnVisibilityChange={setColumnVisibility}
-            allowHorizontalOverflow={true}
-            loading={loading && sortedData.length === 0}
+            loading={loading && gridTableProps.data.length === 0}
             loadingOverlay={{
-              show: loading && sortedData.length > 0,
+              show: loading && gridTableProps.data.length > 0,
               message: 'Updating pods…',
             }}
             hideHeader={!isActive}

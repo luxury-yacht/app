@@ -6,10 +6,7 @@
  */
 
 import React, { useCallback, useMemo } from 'react';
-import GridTable, {
-  GRIDTABLE_VIRTUALIZATION_DEFAULT,
-  type GridColumnDefinition,
-} from '@shared/components/tables/GridTable';
+import GridTable, { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import {
   applyColumnSizing,
   createAgeColumn,
@@ -18,17 +15,19 @@ import {
   upsertNamespaceColumn,
   type ColumnSizingMap,
 } from '@shared/components/tables/columnFactories';
-import { useTableSort } from '@hooks/useTableSort';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
-import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
 import type { types } from '@wailsjs/go/models';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import '../shared.css';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
-import { buildCanonicalObjectRowKey, buildObjectReference } from '@shared/utils/objectIdentity';
+import { useObjectPanelResourceGridTable } from '@shared/hooks/useResourceGridTable';
+import {
+  buildRequiredCanonicalObjectRowKey,
+  buildRequiredObjectReference,
+} from '@shared/utils/objectIdentity';
 
 // Row type for the jobs table, combining job info with cluster context.
 interface JobRow {
@@ -106,34 +105,34 @@ export const JobsTab: React.FC<JobsTabProps> = ({
 
   const keyExtractor = useCallback(
     (job: JobRow) =>
-      buildCanonicalObjectRowKey({
-        kind: 'Job',
-        name: job.name,
-        namespace: job.namespace,
-        clusterId: job.clusterId,
-      }),
-    []
-  );
-
-  const getJobClusterMeta = useCallback(
-    (job: JobRow) => ({
-      clusterId: job.clusterId ?? undefined,
-      clusterName: job.clusterName ?? undefined,
-    }),
-    []
-  );
-  const handleJobOpen = useCallback(
-    (job: JobRow) => {
-      openWithObject(
-        buildObjectReference({
+      buildRequiredCanonicalObjectRowKey(
+        {
           kind: 'Job',
           name: job.name,
           namespace: job.namespace,
-          ...getJobClusterMeta(job),
-        })
+          clusterId: job.clusterId,
+        },
+        { fallbackClusterId: objectData?.clusterId }
+      ),
+    [objectData?.clusterId]
+  );
+
+  const handleJobOpen = useCallback(
+    (job: JobRow) => {
+      openWithObject(
+        buildRequiredObjectReference(
+          {
+            kind: 'Job',
+            name: job.name,
+            namespace: job.namespace,
+            clusterId: job.clusterId,
+            clusterName: job.clusterName ?? undefined,
+          },
+          { fallbackClusterId: objectData?.clusterId }
+        )
       );
     },
-    [getJobClusterMeta, openWithObject]
+    [objectData?.clusterId, openWithObject]
   );
 
   const handleNamespaceSelect = useCallback(
@@ -155,13 +154,16 @@ export const JobsTab: React.FC<JobsTabProps> = ({
         onClick: handleJobOpen,
         onAltClick: (job) =>
           navigateToView(
-            buildObjectReference({
-              kind: 'Job',
-              name: job.name,
-              namespace: job.namespace,
-              clusterId: job.clusterId,
-              clusterName: job.clusterName,
-            })
+            buildRequiredObjectReference(
+              {
+                kind: 'Job',
+                name: job.name,
+                namespace: job.namespace,
+                clusterId: job.clusterId,
+                clusterName: job.clusterName,
+              },
+              { fallbackClusterId: objectData?.clusterId }
+            )
           ),
         sortable: false,
       }),
@@ -169,13 +171,16 @@ export const JobsTab: React.FC<JobsTabProps> = ({
         onClick: handleJobOpen,
         onAltClick: (job) =>
           navigateToView(
-            buildObjectReference({
-              kind: 'Job',
-              name: job.name,
-              namespace: job.namespace,
-              clusterId: job.clusterId,
-              clusterName: job.clusterName,
-            })
+            buildRequiredObjectReference(
+              {
+                kind: 'Job',
+                name: job.name,
+                namespace: job.namespace,
+                clusterId: job.clusterId,
+                clusterName: job.clusterName,
+              },
+              { fallbackClusterId: objectData?.clusterId }
+            )
           ),
         getClassName: () => 'object-panel-link',
         getTitle: (job) => job.name,
@@ -209,77 +214,58 @@ export const JobsTab: React.FC<JobsTabProps> = ({
 
     applyColumnSizing(base, COLUMN_SIZING);
     return base;
-  }, [handleJobOpen, handleNamespaceSelect, navigateToView]);
-
-  const {
-    sortConfig,
-    setSortConfig,
-    columnWidths,
-    setColumnWidths,
-    columnVisibility,
-    setColumnVisibility,
-    filters,
-    setFilters,
-    resetState,
-  } = useGridTablePersistence<JobRow>({
-    viewId: 'object-panel-jobs',
-    // Use the panel-scoped cluster ID, not the global sidebar selection.
-    // Multi-cluster rule (AGENTS.md): persistence is keyed per cluster
-    // so column widths/sort don't bleed between clusters. Disable
-    // persistence when clusterId is missing rather than falling through
-    // to a global storage bucket.
-    clusterIdentity: objectData?.clusterId ?? '',
-    enabled: Boolean(objectData?.clusterId),
-    namespace: null,
-    isNamespaceScoped: false,
-    columns,
-    data: jobRows,
-    keyExtractor,
-  });
-
-  const {
-    sortedData,
-    sortConfig: tableSort,
-    handleSort,
-  } = useTableSort(jobRows, undefined, 'asc', {
-    columns,
-    controlledSort: sortConfig,
-    onChange: setSortConfig,
-    diagnosticsLabel: 'Object Panel Jobs',
-  });
+  }, [handleJobOpen, handleNamespaceSelect, navigateToView, objectData?.clusterId]);
 
   const getSearchTokens = useCallback((job: JobRow) => {
     const tokens = [job.name, job.namespace, job.status];
     return tokens.filter((token): token is string => Boolean(token));
   }, []);
 
+  const { gridTableProps } = useObjectPanelResourceGridTable<JobRow>({
+    viewId: 'object-panel-jobs',
+    clusterIdentity: objectData?.clusterId ?? '',
+    enabled: Boolean(objectData?.clusterId),
+    data: jobRows,
+    columns,
+    keyExtractor,
+    diagnosticsLabel: 'Object Panel Jobs',
+    defaultSort: { key: 'name', direction: 'asc' },
+    filterAccessors: {
+      getKind: () => 'Job',
+      getNamespace: (job) => job.namespace,
+      getSearchText: getSearchTokens,
+    },
+  });
+
   return (
     <div className="object-panel-pods">
       <div className="object-panel-pods__table">
         <ResourceLoadingBoundary
           loading={loading}
-          dataLength={sortedData.length}
-          hasLoaded={!loading || sortedData.length > 0}
+          dataLength={gridTableProps.data.length}
+          hasLoaded={!loading || gridTableProps.data.length > 0}
           spinnerMessage="Loading jobs..."
         >
           <GridTable<JobRow>
-            data={sortedData}
+            {...gridTableProps}
             columns={columns}
             diagnosticsLabel="Object Panel Jobs"
             diagnosticsMode="live"
-            onSort={handleSort}
-            sortConfig={tableSort}
             keyExtractor={keyExtractor}
             onRowClick={handleJobOpen}
             enableContextMenu
             getCustomContextMenuItems={(job) =>
               buildObjectActionItems({
-                object: buildObjectReference({
-                  kind: 'Job',
-                  name: job.name,
-                  namespace: job.namespace,
-                  ...getJobClusterMeta(job),
-                }),
+                object: buildRequiredObjectReference(
+                  {
+                    kind: 'Job',
+                    name: job.name,
+                    namespace: job.namespace,
+                    clusterId: job.clusterId,
+                    clusterName: job.clusterName ?? undefined,
+                  },
+                  { fallbackClusterId: objectData?.clusterId }
+                ),
                 context: 'gridtable',
                 handlers: {
                   onOpen: () => handleJobOpen(job),
@@ -288,27 +274,9 @@ export const JobsTab: React.FC<JobsTabProps> = ({
               })
             }
             tableClassName="gridtable-pods gridtable-pods--namespaced"
-            filters={{
-              enabled: true,
-              value: filters,
-              onChange: setFilters,
-              onReset: resetState,
-              options: {},
-              accessors: {
-                getKind: () => 'Job',
-                getNamespace: (job) => job.namespace,
-                getSearchText: getSearchTokens,
-              },
-            }}
-            virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}
-            columnWidths={columnWidths}
-            onColumnWidthsChange={setColumnWidths}
-            columnVisibility={columnVisibility}
-            onColumnVisibilityChange={setColumnVisibility}
-            allowHorizontalOverflow={true}
-            loading={loading && sortedData.length === 0}
+            loading={loading && gridTableProps.data.length === 0}
             loadingOverlay={{
-              show: loading && sortedData.length > 0,
+              show: loading && gridTableProps.data.length > 0,
               message: 'Updating jobs\u2026',
             }}
             hideHeader={!isActive}

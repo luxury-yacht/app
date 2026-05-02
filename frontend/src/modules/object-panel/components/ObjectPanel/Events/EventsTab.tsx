@@ -4,10 +4,7 @@
 
 import React, { useEffect, useCallback, useMemo, useRef } from 'react';
 import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
-import GridTable, {
-  type GridColumnDefinition,
-  GRIDTABLE_VIRTUALIZATION_DEFAULT,
-} from '@shared/components/tables/GridTable';
+import GridTable, { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import {
   applyColumnSizing,
@@ -451,7 +448,6 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
           }}
           keyExtractor={keyExtractor}
           className="gridtable-object-events"
-          virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}
         />
       </div>
     </div>

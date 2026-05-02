@@ -10,7 +10,7 @@ import { ResourceStatus } from '@shared/components/kubernetes/ResourceStatus';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
-import { buildRelatedObjectReference } from '@shared/utils/objectIdentity';
+import { buildRequiredRelatedObjectReference } from '@shared/utils/objectIdentity';
 import './shared/LabelsAndAnnotations.css';
 import './HelmOverview.css';
 
@@ -118,7 +118,7 @@ export const HelmOverview: React.FC<HelmOverviewProps> = ({
               .map((resource: types.HelmResource, idx: number) => {
                 const resourceRef = (() => {
                   try {
-                    return buildRelatedObjectReference({
+                    return buildRequiredRelatedObjectReference({
                       kind: resource.kind.toLowerCase(),
                       // Prefer the manifest apiVersion so CRD-backed
                       // managed resources keep their real GVK.

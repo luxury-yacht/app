@@ -100,6 +100,7 @@ vi.mock('@wailsjs/go/backend/App', () => ({
 const basePV = {
   kind: 'PersistentVolume',
   name: 'pv-1',
+  clusterId: 'cluster-a',
   capacity: '10Gi',
   accessModes: 'ReadWriteOnce',
   status: 'Bound',

@@ -105,6 +105,7 @@ vi.mock('@/core/capabilities', () => ({
 const baseConfig = {
   kind: 'StorageClass',
   name: 'standard',
+  clusterId: 'cluster-a',
   age: '1d',
 };
 

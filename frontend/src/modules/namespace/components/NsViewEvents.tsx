@@ -9,31 +9,29 @@ import './NsViewEvents.css';
 import { formatAge } from '@/utils/ageFormatter';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
-import { useNamespaceGridTablePersistence } from '@modules/namespace/hooks/useNamespaceGridTablePersistence';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useShortNames } from '@/hooks/useShortNames';
-import { useTableSort } from '@/hooks/useTableSort';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import * as cf from '@shared/components/tables/columnFactories';
 import React, { useMemo, useCallback } from 'react';
-import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
+import ResourceGridTableView from '@shared/components/tables/ResourceGridTableView';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
-import GridTable, {
-  type GridColumnDefinition,
-  GRIDTABLE_VIRTUALIZATION_DEFAULT,
-} from '@shared/components/tables/GridTable';
+import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
-import { useFavToggle } from '@ui/favorites/FavToggle';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
-import { useNamespaceFilterOptions } from '@modules/namespace/hooks/useNamespaceFilterOptions';
+import { useNamespaceResourceGridTable } from '@shared/hooks/useResourceGridTable';
 import {
   canResolveEventObjectReference,
   resolveEventObjectReference,
   splitEventObjectTarget,
 } from '@shared/utils/eventObjectIdentity';
-import { buildCanonicalObjectRowKey, buildObjectReference } from '@shared/utils/objectIdentity';
+import {
+  buildRequiredCanonicalObjectRowKey,
+  buildRequiredObjectReference,
+} from '@shared/utils/objectIdentity';
 
 export interface EventData {
   kind: string;
@@ -43,7 +41,7 @@ export interface EventData {
   reason: string;
   object: string;
   message: string;
-  clusterId?: string;
+  clusterId: string;
   clusterName?: string;
   objectNamespace?: string;
   objectUid?: string;
@@ -68,6 +66,7 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
   ({ namespace, data, loading = false, loaded = false, showNamespaceColumn = false }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
+    const { selectedClusterId } = useKubeconfig();
     const useShortResourceNames = useShortNames();
     const namespaceColumnLink = useNamespaceColumnLink<EventData>('events', (event) =>
       event.objectNamespace && event.objectNamespace.length > 0
@@ -98,10 +97,10 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
         objectNamespace: event.objectNamespace,
         eventNamespace: event.namespace,
         defaultNamespace: namespace,
-        clusterId: event.clusterId ?? undefined,
+        clusterId: event.clusterId ?? selectedClusterId ?? undefined,
         clusterName: event.clusterName ?? undefined,
       }),
-      [namespace]
+      [namespace, selectedClusterId]
     );
 
     const canOpenEventObject = useCallback(
@@ -145,16 +144,19 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
 
     const sortRowIdentity = useCallback(
       (event: EventData) =>
-        buildCanonicalObjectRowKey({
-          kind: 'Event',
-          name: `${event.reason}:${event.source}:${event.object}`,
-          namespace:
-            (event.objectNamespace && event.objectNamespace.length > 0
-              ? event.objectNamespace
-              : event.namespace) ?? namespace,
-          clusterId: event.clusterId,
-        }),
-      [namespace]
+        buildRequiredCanonicalObjectRowKey(
+          {
+            kind: 'Event',
+            name: `${event.reason}:${event.source}:${event.object}`,
+            namespace:
+              (event.objectNamespace && event.objectNamespace.length > 0
+                ? event.objectNamespace
+                : event.namespace) ?? namespace,
+            clusterId: event.clusterId,
+          },
+          { fallbackClusterId: selectedClusterId }
+        ),
+      [namespace, selectedClusterId]
     );
 
     // Define columns for Events
@@ -241,52 +243,20 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
 
     const showNamespaceFilter = namespace === ALL_NAMESPACES_SCOPE;
 
-    const {
-      sortConfig: persistedSort,
-      onSortChange,
-      columnWidths,
-      setColumnWidths,
-      columnVisibility,
-      setColumnVisibility,
-      filters: persistedFilters,
-      setFilters: setPersistedFilters,
-      resetState: resetPersistedState,
-      hydrated,
-    } = useNamespaceGridTablePersistence<EventData>({
+    const { gridTableProps, favModal } = useNamespaceResourceGridTable<EventData>({
       viewId: 'namespace-events',
       namespace,
-      columns,
       data,
+      columns,
       keyExtractor,
       defaultSort: { key: 'ageTimestamp', direction: 'desc' },
-      filterOptions: { isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE },
-    });
-
-    const { sortedData, sortConfig, handleSort } = useTableSort(data, undefined, 'asc', {
-      columns,
-      controlledSort: persistedSort,
-      onChange: onSortChange,
       rowIdentity: sortRowIdentity,
+      filterAccessors: { getSearchText },
+      showNamespaceFilters: showNamespaceFilter,
+      showKindDropdown: false,
       diagnosticsLabel:
         namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Events' : 'Namespace Events',
-    });
-
-    const fallbackNamespaces = useMemo(
-      () => [...new Set(data.map((r) => r.namespace).filter(Boolean) as string[])].sort(),
-      [data]
-    );
-    const availableFilterNamespaces = useNamespaceFilterOptions(namespace, fallbackNamespaces);
-
-    const { item: favToggle, modal: favModal } = useFavToggle({
-      filters: persistedFilters,
-      sortColumn: sortConfig?.key ?? null,
-      sortDirection: sortConfig?.direction ?? 'asc',
-      columnVisibility: columnVisibility ?? {},
-      setFilters: setPersistedFilters,
-      setSortConfig: onSortChange,
-      setColumnVisibility,
-      hydrated,
-      availableFilterNamespaces,
+      filterOptions: { isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE },
     });
 
     // Get context menu items
@@ -298,7 +268,7 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
         }
 
         return buildObjectActionItems({
-          object: buildObjectReference(
+          object: buildRequiredObjectReference(
             {
               kind: 'Event',
               name: event.reason,
@@ -306,6 +276,7 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
               clusterId: event.clusterId,
               clusterName: event.clusterName,
             },
+            { fallbackClusterId: selectedClusterId },
             { involvedObject: event.object }
           ),
           context: 'gridtable',
@@ -317,7 +288,7 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
           permissions: {},
         });
       },
-      [canOpenEventObject, handleEventClick]
+      [canOpenEventObject, handleEventClick, selectedClusterId]
     );
 
     const emptyMessage = useMemo(
@@ -331,54 +302,26 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
 
     return (
       <>
-        <ResourceLoadingBoundary
-          loading={loading ?? false}
-          dataLength={sortedData.length}
-          hasLoaded={loaded}
+        <ResourceGridTableView
+          gridTableProps={gridTableProps}
+          boundaryLoading={loading ?? false}
+          loaded={loaded}
           spinnerMessage="Loading events..."
-        >
-          <GridTable
-            data={sortedData}
-            columns={columns}
-            diagnosticsLabel={
-              namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Events' : 'Namespace Events'
-            }
-            diagnosticsMode="live"
-            loading={loading}
-            keyExtractor={keyExtractor}
-            onRowClick={handleEventClick}
-            onSort={handleSort}
-            sortConfig={sortConfig}
-            tableClassName="gridtable-ns-events"
-            enableContextMenu={true}
-            getCustomContextMenuItems={getContextMenuItems}
-            useShortNames={useShortResourceNames}
-            emptyMessage={emptyMessage}
-            filters={{
-              enabled: true,
-              value: persistedFilters,
-              onChange: setPersistedFilters,
-              onReset: resetPersistedState,
-              accessors: {
-                getSearchText,
-              },
-              options: {
-                namespaces: availableFilterNamespaces,
-                showNamespaceDropdown: showNamespaceFilter,
-                namespaceDropdownSearchable: showNamespaceFilter,
-                namespaceDropdownBulkActions: showNamespaceFilter,
-                preActions: [favToggle],
-              },
-            }}
-            virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}
-            columnWidths={columnWidths}
-            onColumnWidthsChange={setColumnWidths}
-            columnVisibility={columnVisibility}
-            onColumnVisibilityChange={setColumnVisibility}
-            allowHorizontalOverflow={true}
-          />
-        </ResourceLoadingBoundary>
-        {favModal}
+          favModal={favModal}
+          columns={columns}
+          diagnosticsLabel={
+            namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Events' : 'Namespace Events'
+          }
+          diagnosticsMode="live"
+          loading={loading}
+          keyExtractor={keyExtractor}
+          onRowClick={handleEventClick}
+          tableClassName="gridtable-ns-events"
+          enableContextMenu={true}
+          getCustomContextMenuItems={getContextMenuItems}
+          useShortNames={useShortResourceNames}
+          emptyMessage={emptyMessage}
+        />
       </>
     );
   }
