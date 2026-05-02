@@ -9,7 +9,7 @@ import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
 import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
 import Tooltip from '@shared/components/Tooltip';
-import { buildObjectReference } from '@shared/utils/objectIdentity';
+import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
 import { JobTimeline } from './JobTimeline';
 import './shared/OverviewBlocks.css';
 import './JobOverview.css';
@@ -259,7 +259,7 @@ export const JobOverview: React.FC<JobOverviewProps> = (props) => {
     (jobName: string) => {
       if (!namespace) return;
       openWithObject(
-        buildObjectReference({
+        buildRequiredObjectReference({
           kind: 'Job',
           name: jobName,
           namespace,

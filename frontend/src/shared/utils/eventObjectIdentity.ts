@@ -3,7 +3,10 @@ import {
   resolveBuiltinGroupVersion,
 } from '@shared/constants/builtinGroupVersions';
 import { readCatalogObjectByUID, requestData } from '@/core/data-access';
-import { buildObjectReference, type ResolvedObjectReference } from '@shared/utils/objectIdentity';
+import {
+  buildRequiredObjectReference,
+  type ResolvedObjectReference,
+} from '@shared/utils/objectIdentity';
 
 export interface ParsedEventObjectTarget {
   objectType: string;
@@ -67,19 +70,23 @@ export function buildEventObjectReference(
     return undefined;
   }
 
-  return buildObjectReference({
-    kind: parsed.objectType,
-    name: parsed.objectName,
-    namespace:
-      normalizeOptional(input.objectNamespace) ??
-      normalizeOptional(input.eventNamespace) ??
-      normalizeOptional(input.defaultNamespace),
-    group: apiVersionParts.group ?? (sameKindAsFallback ? input.fallbackGroup : undefined),
-    version,
-    clusterId: input.clusterId,
-    clusterName: input.clusterName,
-    uid: input.objectUid,
-  });
+  try {
+    return buildRequiredObjectReference({
+      kind: parsed.objectType,
+      name: parsed.objectName,
+      namespace:
+        normalizeOptional(input.objectNamespace) ??
+        normalizeOptional(input.eventNamespace) ??
+        normalizeOptional(input.defaultNamespace),
+      group: apiVersionParts.group ?? (sameKindAsFallback ? input.fallbackGroup : undefined),
+      version,
+      clusterId: input.clusterId,
+      clusterName: input.clusterName,
+      uid: input.objectUid,
+    });
+  } catch {
+    return undefined;
+  }
 }
 
 export function canResolveEventObjectReference(input: EventObjectReferenceInput): boolean {
@@ -114,7 +121,7 @@ export async function resolveEventObjectReference(
       return undefined;
     }
 
-    return buildObjectReference(match);
+    return buildRequiredObjectReference(match);
   } catch {
     return undefined;
   }

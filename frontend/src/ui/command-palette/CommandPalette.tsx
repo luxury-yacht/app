@@ -17,7 +17,7 @@ import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { getDisplayKind, aliasToKindMap, canonicalKinds } from '@/utils/kindAliasMap';
 import { getKindColorClass } from '@shared/utils/kindBadgeColors';
 import { useShortNames } from '@/hooks/useShortNames';
-import { buildObjectReference } from '@shared/utils/objectIdentity';
+import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
 import { Command } from './CommandPaletteCommands';
 import { isMacPlatform } from '@/utils/platform';
 import { ErrorBoundary } from '@shared/components/errors/ErrorBoundary';
@@ -510,7 +510,7 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
       const catalogItem = item.item;
       close();
       setTimeout(() => {
-        openWithObject(buildObjectReference(catalogItem));
+        openWithObject(buildRequiredObjectReference(catalogItem));
       }, 100);
     },
     [close, openWithObject]

@@ -41,7 +41,7 @@ export interface EventData {
   reason: string;
   object: string;
   message: string;
-  clusterId?: string;
+  clusterId: string;
   clusterName?: string;
   objectNamespace?: string;
   objectUid?: string;

@@ -33,7 +33,7 @@ interface ConfigData {
   kind: string;
   kindAlias?: string;
   name: string;
-  clusterId?: string;
+  clusterId: string;
   clusterName?: string;
   age?: string;
 }

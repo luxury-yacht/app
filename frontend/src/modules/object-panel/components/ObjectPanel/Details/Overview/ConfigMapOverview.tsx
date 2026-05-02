@@ -10,7 +10,7 @@ import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata
 import { StatusChip } from '@shared/components/StatusChip';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
-import { buildObjectReference } from '@shared/utils/objectIdentity';
+import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
 
 interface ConfigMapOverviewProps {
   configMapDetails: types.ConfigMapDetails | null;
@@ -49,7 +49,7 @@ export const ConfigMapOverview: React.FC<ConfigMapOverviewProps> = ({ configMapD
               {configMapDetails.usedBy.map((podName: string, index: number) => (
                 <div key={`${podName}-${index}`} style={{ marginTop: index > 0 ? '4px' : 0 }}>
                   <ObjectPanelLink
-                    objectRef={buildObjectReference({
+                    objectRef={buildRequiredObjectReference({
                       kind: 'pod',
                       name: podName,
                       namespace: configMapDetails.namespace,

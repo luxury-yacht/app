@@ -11,7 +11,7 @@ import { ResourceStatus } from '@shared/components/kubernetes/ResourceStatus';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
 import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
 import {
-  buildObjectReference,
+  buildRequiredObjectReference,
   buildRequiredRelatedObjectReference,
 } from '@shared/utils/objectIdentity';
 import {
@@ -155,7 +155,7 @@ export const PodOverview: React.FC<PodOverviewProps> = ({
           label="Node"
           value={
             <ObjectPanelLink
-              objectRef={buildObjectReference({
+              objectRef={buildRequiredObjectReference({
                 kind: 'node',
                 name: node,
                 ...clusterMeta,
@@ -227,7 +227,7 @@ export const PodOverview: React.FC<PodOverviewProps> = ({
               label="Service Account"
               value={
                 <ObjectPanelLink
-                  objectRef={buildObjectReference({
+                  objectRef={buildRequiredObjectReference({
                     kind: 'serviceaccount',
                     name: serviceAccount,
                     namespace: namespace,

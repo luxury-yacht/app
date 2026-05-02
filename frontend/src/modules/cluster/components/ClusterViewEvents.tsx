@@ -36,7 +36,7 @@ interface EventData {
   kindAlias?: string;
   name: string;
   namespace: string;
-  clusterId?: string;
+  clusterId: string;
   clusterName?: string;
   objectNamespace?: string;
   objectUid?: string;

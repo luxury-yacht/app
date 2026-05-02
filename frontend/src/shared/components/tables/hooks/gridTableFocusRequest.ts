@@ -1,5 +1,5 @@
 import type { KubernetesObjectReference } from '@/types/view-state';
-import { buildCanonicalObjectRowKey } from '@shared/utils/objectIdentity';
+import { buildRequiredCanonicalObjectRowKey } from '@shared/utils/objectIdentity';
 
 export interface GridTableFocusRequest {
   kind: string;
@@ -31,7 +31,7 @@ export const buildGridTableFocusRequest = (
 
   let rowKey: string | undefined;
   try {
-    rowKey = buildCanonicalObjectRowKey({
+    rowKey = buildRequiredCanonicalObjectRowKey({
       kind,
       name,
       namespace,

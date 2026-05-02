@@ -37,7 +37,7 @@ export interface CustomResourceData {
   name: string;
   namespace: string;
   // Multi-cluster metadata used for per-tab actions and stable row keys.
-  clusterId?: string;
+  clusterId: string;
   clusterName?: string;
   apiGroup?: string;
   apiVersion?: string;

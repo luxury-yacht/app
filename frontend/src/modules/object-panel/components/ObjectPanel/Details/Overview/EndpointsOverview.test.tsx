@@ -23,6 +23,7 @@ vi.mock('@shared/components/kubernetes/ResourceMetadata', () => ({
 vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
   useObjectPanel: () => ({
     openWithObject: vi.fn(),
+    objectData: { clusterId: 'test-cluster', clusterName: 'test' },
   }),
 }));
 

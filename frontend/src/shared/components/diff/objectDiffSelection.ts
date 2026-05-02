@@ -1,5 +1,5 @@
 import type { ObjectIdentityInput } from '@shared/utils/objectIdentity';
-import { buildObjectReference } from '@shared/utils/objectIdentity';
+import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
 
 /**
  * Generic diff/open workflows should preserve the same identity backbone as
@@ -23,13 +23,14 @@ export const buildObjectDiffSelection = (
   input: ObjectIdentityInput
 ): ObjectDiffSelectionSeed | null => {
   try {
-    const ref = buildObjectReference(input);
-    if (!ref.clusterId) {
+    const ref = buildRequiredObjectReference(input);
+    const clusterId = ref.clusterId;
+    if (!clusterId) {
       return null;
     }
 
     return {
-      clusterId: ref.clusterId,
+      clusterId,
       clusterName: ref.clusterName,
       namespace: ref.namespace,
       group: ref.group,

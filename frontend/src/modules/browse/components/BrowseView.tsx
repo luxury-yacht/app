@@ -43,7 +43,10 @@ import {
   toTableRows,
   type BrowseTableRow,
 } from '@modules/browse/hooks/useBrowseColumns';
-import { buildCanonicalObjectRowKey, buildObjectReference } from '@shared/utils/objectIdentity';
+import {
+  buildRequiredCanonicalObjectRowKey,
+  buildRequiredObjectReference,
+} from '@shared/utils/objectIdentity';
 import type { BrowseViewProps, BrowseScope } from './BrowseView.types';
 import { useQueryResourceGridTable } from '@shared/hooks/useResourceGridTable';
 
@@ -157,7 +160,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
   const handleOpen = useCallback(
     (row: BrowseTableRow) => {
       openWithObject(
-        buildObjectReference({
+        buildRequiredObjectReference({
           kind: row.item.kind,
           name: row.item.name,
           namespace: row.item.namespace ?? undefined,
@@ -282,7 +285,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
       }
 
       return buildObjectActionItems({
-        object: buildObjectReference({
+        object: buildRequiredObjectReference({
           kind: row.item.kind,
           name: row.item.name,
           namespace: row.item.namespace,
@@ -322,7 +325,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
   // Key extractor for the table
   const keyExtractor = useCallback(
     (row: BrowseTableRow) =>
-      buildCanonicalObjectRowKey({
+      buildRequiredCanonicalObjectRowKey({
         kind: row.item.kind,
         name: row.item.name,
         namespace: row.item.namespace,

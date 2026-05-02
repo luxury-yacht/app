@@ -10,7 +10,7 @@ import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata
 import { StatusChip } from '@shared/components/StatusChip';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
-import { buildObjectReference } from '@shared/utils/objectIdentity';
+import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
 
 interface SecretOverviewProps {
   secretDetails: types.SecretDetails | null;
@@ -87,7 +87,7 @@ export const SecretOverview: React.FC<SecretOverviewProps> = ({ secretDetails })
               {secretDetails.usedBy.map((podName: string, index: number) => (
                 <div key={`${podName}-${index}`} style={{ marginTop: index > 0 ? '4px' : 0 }}>
                   <ObjectPanelLink
-                    objectRef={buildObjectReference({
+                    objectRef={buildRequiredObjectReference({
                       kind: 'pod',
                       name: podName,
                       namespace: secretDetails.namespace,

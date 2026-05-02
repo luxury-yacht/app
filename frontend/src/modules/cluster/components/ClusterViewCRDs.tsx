@@ -35,7 +35,7 @@ interface CRDsData {
   kind: string;
   kindAlias?: string;
   name: string;
-  clusterId?: string;
+  clusterId: string;
   clusterName?: string;
   group: string;
   scope: string;

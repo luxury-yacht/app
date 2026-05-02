@@ -33,7 +33,7 @@ interface ClusterCustomData {
   kind: string;
   kindAlias?: string;
   name: string;
-  clusterId?: string;
+  clusterId: string;
   clusterName?: string;
   apiGroup?: string;
   /** API version for the owning CRD. Paired with apiGroup so the object

@@ -105,6 +105,7 @@ vi.mock('@/core/capabilities', () => ({
 const baseRBAC = {
   kind: 'ClusterRole',
   name: 'admin',
+  clusterId: 'cluster-a',
   details: 'All permissions',
   age: '1d',
 };

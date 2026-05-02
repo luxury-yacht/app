@@ -67,6 +67,7 @@ describe('buildEventObjectReference', () => {
         object: 'Database/primary',
         objectUid: 'db-uid',
         eventNamespace: 'databases',
+        clusterId: 'cluster-a',
         fallbackKind: 'Database',
         fallbackGroup: 'db.example.io',
         fallbackVersion: 'v1',
@@ -77,7 +78,7 @@ describe('buildEventObjectReference', () => {
       namespace: 'databases',
       group: 'db.example.io',
       version: 'v1',
-      clusterId: undefined,
+      clusterId: 'cluster-a',
       clusterName: undefined,
       kindAlias: undefined,
       resource: undefined,
@@ -89,6 +90,16 @@ describe('buildEventObjectReference', () => {
     expect(
       buildEventObjectReference({
         object: 'Database/primary',
+      })
+    ).toBeUndefined();
+  });
+
+  it('returns undefined when the event object has no cluster identity', () => {
+    expect(
+      buildEventObjectReference({
+        object: 'Pod/api',
+        objectApiVersion: 'v1',
+        eventNamespace: 'default',
       })
     ).toBeUndefined();
   });

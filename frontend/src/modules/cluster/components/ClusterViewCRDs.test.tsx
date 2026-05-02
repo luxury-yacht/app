@@ -109,6 +109,7 @@ const baseCRD = {
   name: 'foos.example.com',
   group: 'example.com',
   scope: 'Namespaced',
+  clusterId: 'cluster-a',
   age: '1d',
 };
 

@@ -9,7 +9,7 @@ import { useMemo } from 'react';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import * as cf from '@shared/components/tables/columnFactories';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
-import { buildObjectReference } from '@shared/utils/objectIdentity';
+import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
 import { formatAge, formatFullDate } from '@/utils/ageFormatter';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 import type { CatalogItem } from '@/core/refresh/types';
@@ -107,12 +107,12 @@ export function useBrowseColumns({
         getDisplayText: (row) => row.kindDisplay,
         sortValue: (row) => row.kind,
         onClick: onRowClick,
-        onAltClick: (row) => navigateToView(buildObjectReference(row.item)),
+        onAltClick: (row) => navigateToView(buildRequiredObjectReference(row.item)),
       }),
       cf.createTextColumn<BrowseTableRow>('name', 'Name', (row) => row.name, {
         sortable: true,
         onClick: (row) => onRowClick(row),
-        onAltClick: (row) => navigateToView(buildObjectReference(row.item)),
+        onAltClick: (row) => navigateToView(buildRequiredObjectReference(row.item)),
         getClassName: () => 'object-panel-link',
       }),
     ];

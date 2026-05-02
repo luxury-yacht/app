@@ -9,7 +9,7 @@ import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
 import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
-import { buildObjectReference } from '@shared/utils/objectIdentity';
+import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
 import {
   DEFAULT_TOLERATION_RE,
   parseToleration,
@@ -549,7 +549,7 @@ export const WorkloadOverview: React.FC<WorkloadOverviewProps> = ({
               value={
                 <div className="workload-replicaset">
                   <ObjectPanelLink
-                    objectRef={buildObjectReference({
+                    objectRef={buildRequiredObjectReference({
                       kind: 'replicaset',
                       name: currentReplicaSet,
                       namespace,
@@ -802,7 +802,7 @@ export const WorkloadOverview: React.FC<WorkloadOverviewProps> = ({
           label="Svc Account"
           value={
             <ObjectPanelLink
-              objectRef={buildObjectReference({
+              objectRef={buildRequiredObjectReference({
                 kind: 'ServiceAccount',
                 name: serviceAccount,
                 namespace,

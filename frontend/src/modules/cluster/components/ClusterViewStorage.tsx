@@ -35,7 +35,7 @@ interface StorageData {
   kind: string;
   kindAlias?: string;
   name: string;
-  clusterId?: string;
+  clusterId: string;
   clusterName?: string;
   capacity: string;
   accessModes: string;

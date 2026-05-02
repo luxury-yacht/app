@@ -192,7 +192,7 @@ function findOpenWithObjectHelperBackedLiterals(
 ): Array<{ start: number; body: string }> {
   return findObjectLiteralsAfter(
     source,
-    /openWithObject(?:Ref\.current)?\s*\(\s*build(?:Related|Synthetic)?ObjectReference\s*\(\s*\{/g,
+    /openWithObject(?:Ref\.current)?\s*\(\s*build(?:Required(?:Related)?|Related|Synthetic)?ObjectReference\s*\(\s*\{/g,
     'openWithObject(buildObjectReference)'
   );
 }
@@ -202,7 +202,7 @@ function findObjectPanelLinkHelperBackedLiterals(
 ): Array<{ start: number; body: string }> {
   return findObjectLiteralsAfter(
     source,
-    /objectRef\s*=\s*\{\s*build(?:Related|Synthetic)?ObjectReference\s*\(\s*\{/g,
+    /objectRef\s*=\s*\{\s*build(?:Required(?:Related)?|Related|Synthetic)?ObjectReference\s*\(\s*\{/g,
     'objectRef={buildObjectReference({...})}'
   );
 }
