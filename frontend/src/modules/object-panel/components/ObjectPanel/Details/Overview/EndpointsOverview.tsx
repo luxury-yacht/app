@@ -10,7 +10,7 @@ import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { StatusChip } from '@shared/components/StatusChip';
-import { buildObjectReference } from '@shared/utils/objectIdentity';
+import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
 import './shared/OverviewBlocks.css';
 import './EndpointsOverview.css';
 
@@ -41,9 +41,9 @@ const TargetRefLink: React.FC<{
   if (!parsed) {
     return <span className="address-target">{targetRef}</span>;
   }
-  let objectRef: ReturnType<typeof buildObjectReference> | null;
+  let objectRef: ReturnType<typeof buildRequiredObjectReference> | null;
   try {
-    objectRef = buildObjectReference({
+    objectRef = buildRequiredObjectReference({
       kind: parsed.kind,
       name: parsed.name,
       namespace,
@@ -84,7 +84,7 @@ const AddressRow: React.FC<{
         <span className="address-on">on</span>
         <ObjectPanelLink
           className="address-node"
-          objectRef={buildObjectReference({
+          objectRef={buildRequiredObjectReference({
             kind: 'Node',
             name: address.nodeName,
             ...clusterMeta,

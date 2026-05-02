@@ -97,7 +97,9 @@ To install Wails:
 go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
 ```
 
-Once Wails is installed, run `wails doctor` to see what other dependencies are required for your OS.
+Once Wails is installed, run `wails doctor` to see what other dependencies you'll need to install.
+
+📝 _If `wails` is not found, make sure your go `bin` path (typically `$HOME/go/bin`) is in your `PATH`._
 
 #### Staticcheck
 

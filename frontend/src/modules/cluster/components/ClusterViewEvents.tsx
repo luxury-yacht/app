@@ -9,38 +9,34 @@ import './ClusterViewEvents.css';
 import { formatAge } from '@/utils/ageFormatter';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
-import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useShortNames } from '@/hooks/useShortNames';
-import { useTableSort } from '@/hooks/useTableSort';
 import * as cf from '@shared/components/tables/columnFactories';
 import React, { useMemo, useCallback } from 'react';
-import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
+import ResourceGridTableView from '@shared/components/tables/ResourceGridTableView';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
-import GridTable, {
-  type GridColumnDefinition,
-  GRIDTABLE_VIRTUALIZATION_DEFAULT,
-} from '@shared/components/tables/GridTable';
+import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
-import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
-import { useNamespaceFilterOptions } from '@modules/namespace/hooks/useNamespaceFilterOptions';
-import { useFavToggle } from '@ui/favorites/FavToggle';
+import { useClusterResourceGridTable } from '@shared/hooks/useResourceGridTable';
 import {
   canResolveEventObjectReference,
   resolveEventObjectReference,
   splitEventObjectTarget,
 } from '@shared/utils/eventObjectIdentity';
-import { buildCanonicalObjectRowKey, buildObjectReference } from '@shared/utils/objectIdentity';
+import {
+  buildRequiredCanonicalObjectRowKey,
+  buildRequiredObjectReference,
+} from '@shared/utils/objectIdentity';
 
 interface EventData {
   kind: string;
   kindAlias?: string;
   name: string;
   namespace: string;
-  clusterId?: string;
+  clusterId: string;
   clusterName?: string;
   objectNamespace?: string;
   objectUid?: string;
@@ -87,16 +83,19 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
     }, []);
 
     // Build an object reference from an event's involved object for navigation.
-    const getEventObjectRefInput = useCallback((event: EventData) => {
-      return {
-        object: event.object,
-        objectUid: event.objectUid,
-        objectApiVersion: event.objectApiVersion,
-        objectNamespace: event.objectNamespace,
-        clusterId: event.clusterId ?? undefined,
-        clusterName: event.clusterName ?? undefined,
-      };
-    }, []);
+    const getEventObjectRefInput = useCallback(
+      (event: EventData) => {
+        return {
+          object: event.object,
+          objectUid: event.objectUid,
+          objectApiVersion: event.objectApiVersion,
+          objectNamespace: event.objectNamespace,
+          clusterId: event.clusterId ?? selectedClusterId ?? undefined,
+          clusterName: event.clusterName ?? undefined,
+        };
+      },
+      [selectedClusterId]
+    );
 
     const canOpenEventObject = useCallback(
       (event: EventData) => canResolveEventObjectReference(getEventObjectRefInput(event)),
@@ -134,13 +133,16 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
 
     const sortRowIdentity = useCallback(
       (event: EventData) =>
-        buildCanonicalObjectRowKey({
-          kind: 'Event',
-          name: event.name,
-          namespace: event.namespace,
-          clusterId: event.clusterId,
-        }),
-      []
+        buildRequiredCanonicalObjectRowKey(
+          {
+            kind: 'Event',
+            name: event.name,
+            namespace: event.namespace,
+            clusterId: event.clusterId,
+          },
+          { fallbackClusterId: selectedClusterId }
+        ),
+      [selectedClusterId]
     );
 
     // Define columns for Events
@@ -201,56 +203,17 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
       return baseColumns;
     }, [canOpenEventObject, handleEventAltClick, handleEventClick, useShortResourceNames]);
 
-    // Set up grid table persistence
-    const {
-      sortConfig: persistedSort,
-      setSortConfig: setPersistedSort,
-      columnWidths,
-      setColumnWidths,
-      columnVisibility,
-      setColumnVisibility,
-      filters: persistedFilters,
-      setFilters: setPersistedFilters,
-      resetState: resetPersistedState,
-      hydrated,
-    } = useGridTablePersistence<EventData>({
+    const { gridTableProps, favModal } = useClusterResourceGridTable<EventData>({
       viewId: 'cluster-events',
-      clusterIdentity: selectedClusterId,
-      namespace: null,
-      isNamespaceScoped: false,
-      columns,
       data,
-      keyExtractor,
-      filterOptions: { isNamespaceScoped: false },
-    });
-
-    // Set up table sorting
-    const { sortedData, sortConfig, handleSort } = useTableSort(data, 'ageTimestamp', 'desc', {
       columns,
-      controlledSort: persistedSort,
-      onChange: setPersistedSort,
+      keyExtractor,
+      defaultSortKey: 'ageTimestamp',
+      defaultSortDirection: 'desc',
       rowIdentity: sortRowIdentity,
-    });
-
-    const fallbackNamespaces = useMemo(
-      () => [...new Set(data.map((r) => r.namespace).filter(Boolean))].sort(),
-      [data]
-    );
-    const availableFilterNamespaces = useNamespaceFilterOptions(
-      ALL_NAMESPACES_SCOPE,
-      fallbackNamespaces
-    );
-
-    const { item: favToggle, modal: favModal } = useFavToggle({
-      filters: persistedFilters,
-      sortColumn: sortConfig?.key ?? null,
-      sortDirection: sortConfig?.direction ?? 'asc',
-      columnVisibility: columnVisibility ?? {},
-      setFilters: setPersistedFilters,
-      setSortConfig: setPersistedSort,
-      setColumnVisibility,
-      hydrated,
-      availableFilterNamespaces,
+      filterAccessors: { getSearchText },
+      showKindDropdown: false,
+      filterOptions: { isNamespaceScoped: false },
     });
 
     // Get context menu items
@@ -262,7 +225,7 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
         }
 
         return buildObjectActionItems({
-          object: buildObjectReference(
+          object: buildRequiredObjectReference(
             {
               kind: 'Event',
               name: event.name,
@@ -270,6 +233,7 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
               clusterId: event.clusterId,
               clusterName: event.clusterName,
             },
+            { fallbackClusterId: selectedClusterId },
             { involvedObject: event.object }
           ),
           context: 'gridtable',
@@ -281,7 +245,7 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
           permissions: {},
         });
       },
-      [canOpenEventObject, handleEventClick]
+      [canOpenEventObject, handleEventClick, selectedClusterId]
     );
 
     // Resolve empty state message
@@ -292,49 +256,24 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
 
     return (
       <>
-        <ResourceLoadingBoundary
-          loading={loading ?? false}
-          dataLength={sortedData.length}
-          hasLoaded={loaded}
+        <ResourceGridTableView
+          gridTableProps={gridTableProps}
+          boundaryLoading={loading ?? false}
+          loaded={loaded}
           spinnerMessage="Loading events..."
-        >
-          <GridTable
-            data={sortedData}
-            columns={columns}
-            diagnosticsLabel="Cluster Events"
-            diagnosticsMode="live"
-            loading={loading}
-            keyExtractor={keyExtractor}
-            onRowClick={handleEventClick}
-            onSort={handleSort}
-            sortConfig={sortConfig}
-            tableClassName="gridtable-cluster-events"
-            enableContextMenu={true}
-            getCustomContextMenuItems={getContextMenuItems}
-            useShortNames={useShortResourceNames}
-            emptyMessage={emptyMessage}
-            filters={{
-              enabled: true,
-              value: persistedFilters,
-              onChange: setPersistedFilters,
-              onReset: resetPersistedState,
-              accessors: {
-                getSearchText,
-              },
-              options: {
-                namespaces: availableFilterNamespaces,
-                preActions: [favToggle],
-              },
-            }}
-            virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}
-            columnWidths={columnWidths}
-            onColumnWidthsChange={setColumnWidths}
-            columnVisibility={columnVisibility}
-            onColumnVisibilityChange={setColumnVisibility}
-            allowHorizontalOverflow={true}
-          />
-        </ResourceLoadingBoundary>
-        {favModal}
+          favModal={favModal}
+          columns={columns}
+          diagnosticsLabel="Cluster Events"
+          diagnosticsMode="live"
+          loading={loading}
+          keyExtractor={keyExtractor}
+          onRowClick={handleEventClick}
+          tableClassName="gridtable-cluster-events"
+          enableContextMenu={true}
+          getCustomContextMenuItems={getContextMenuItems}
+          useShortNames={useShortResourceNames}
+          emptyMessage={emptyMessage}
+        />
       </>
     );
   }

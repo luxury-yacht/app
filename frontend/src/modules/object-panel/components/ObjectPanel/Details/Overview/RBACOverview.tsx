@@ -9,7 +9,7 @@ import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
 import { StatusChip } from '@shared/components/StatusChip';
-import { buildObjectReference } from '@shared/utils/objectIdentity';
+import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
 import './shared/LabelsAndAnnotations.css';
 import './RBACOverview.css';
 
@@ -85,7 +85,7 @@ const SubjectGroups: React.FC<{
               const nameNode =
                 isSA && subject.namespace ? (
                   <ObjectPanelLink
-                    objectRef={buildObjectReference({
+                    objectRef={buildRequiredObjectReference({
                       kind: 'serviceaccount',
                       name: subject.name,
                       namespace: subject.namespace,
@@ -209,7 +209,7 @@ export const RBACOverview: React.FC<RBACOverviewProps> = (props) => {
                 {usedByBindings.map((bindingName) => (
                   <ObjectPanelLink
                     key={bindingName}
-                    objectRef={buildObjectReference({
+                    objectRef={buildRequiredObjectReference({
                       kind: usedByKind,
                       name: bindingName,
                       namespace: usedByKind === 'rolebinding' ? namespace : undefined,
@@ -232,7 +232,7 @@ export const RBACOverview: React.FC<RBACOverviewProps> = (props) => {
               label="Role Reference"
               value={
                 <ObjectPanelLink
-                  objectRef={buildObjectReference({
+                  objectRef={buildRequiredObjectReference({
                     kind: props.roleRef.kind.toLowerCase(),
                     name: props.roleRef.name,
                     // RoleBindings can reference either a (namespaced) Role

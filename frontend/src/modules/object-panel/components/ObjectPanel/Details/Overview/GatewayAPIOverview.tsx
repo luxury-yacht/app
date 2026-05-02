@@ -10,7 +10,7 @@ import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChi
 import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
-import { buildObjectReference } from '@shared/utils/objectIdentity';
+import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
 import './shared/OverviewBlocks.css';
 
 interface GatewayAPIOverviewProps {
@@ -73,7 +73,7 @@ const RefLink: React.FC<{
     const label = omitNamespace ? `${ref.kind}/${ref.name}` : objectRefLabel(ref);
     return (
       <ObjectPanelLink
-        objectRef={buildObjectReference({
+        objectRef={buildRequiredObjectReference({
           kind: ref.kind,
           name: ref.name,
           namespace: ref.namespace,

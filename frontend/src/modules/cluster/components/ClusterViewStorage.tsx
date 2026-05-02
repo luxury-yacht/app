@@ -10,25 +10,23 @@ import { errorHandler } from '@utils/errorHandler';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 import { getPermissionKey, useUserPermissions } from '@/core/capabilities';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
-import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useShortNames } from '@/hooks/useShortNames';
-import { useTableSort } from '@/hooks/useTableSort';
 import * as cf from '@shared/components/tables/columnFactories';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import React, { useMemo, useState, useCallback } from 'react';
-import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
+import ResourceGridTableView from '@shared/components/tables/ResourceGridTableView';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
-import GridTable, {
-  type GridColumnDefinition,
-  GRIDTABLE_VIRTUALIZATION_DEFAULT,
-} from '@shared/components/tables/GridTable';
+import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { formatBuiltinApiVersion } from '@shared/constants/builtinGroupVersions';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
-import { useFavToggle } from '@ui/favorites/FavToggle';
-import { buildCanonicalObjectRowKey, buildObjectReference } from '@shared/utils/objectIdentity';
+import { useClusterResourceGridTable } from '@shared/hooks/useResourceGridTable';
+import {
+  buildRequiredCanonicalObjectRowKey,
+  buildRequiredObjectReference,
+} from '@shared/utils/objectIdentity';
 
 const CLUSTER_STORAGE_KIND_OPTIONS = ['PersistentVolume'];
 
@@ -37,7 +35,7 @@ interface StorageData {
   kind: string;
   kindAlias?: string;
   name: string;
-  clusterId?: string;
+  clusterId: string;
   clusterName?: string;
   capacity: string;
   accessModes: string;
@@ -74,15 +72,18 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
     const handleResourceClick = useCallback(
       (pv: StorageData) => {
         openWithObject(
-          buildObjectReference({
-            kind: 'PersistentVolume',
-            name: pv.name,
-            clusterId: pv.clusterId ?? undefined,
-            clusterName: pv.clusterName ?? undefined,
-          })
+          buildRequiredObjectReference(
+            {
+              kind: 'PersistentVolume',
+              name: pv.name,
+              clusterId: pv.clusterId ?? undefined,
+              clusterName: pv.clusterName ?? undefined,
+            },
+            { fallbackClusterId: selectedClusterId }
+          )
         );
       },
-      [openWithObject]
+      [openWithObject, selectedClusterId]
     );
 
     const getClaimTarget = useCallback((pv: StorageData) => {
@@ -103,26 +104,32 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
           return;
         }
         openWithObject(
-          buildObjectReference({
-            kind: 'PersistentVolumeClaim',
-            namespace: target.namespace,
-            name: target.name,
-            clusterId: pv.clusterId ?? undefined,
-            clusterName: pv.clusterName ?? undefined,
-          })
+          buildRequiredObjectReference(
+            {
+              kind: 'PersistentVolumeClaim',
+              namespace: target.namespace,
+              name: target.name,
+              clusterId: pv.clusterId ?? undefined,
+              clusterName: pv.clusterName ?? undefined,
+            },
+            { fallbackClusterId: selectedClusterId }
+          )
         );
       },
-      [getClaimTarget, openWithObject]
+      [getClaimTarget, openWithObject, selectedClusterId]
     );
 
     const keyExtractor = useCallback(
       (pv: StorageData) =>
-        buildCanonicalObjectRowKey({
-          kind: 'PersistentVolume',
-          name: pv.name,
-          clusterId: pv.clusterId,
-        }),
-      []
+        buildRequiredCanonicalObjectRowKey(
+          {
+            kind: 'PersistentVolume',
+            name: pv.name,
+            clusterId: pv.clusterId,
+          },
+          { fallbackClusterId: selectedClusterId }
+        ),
+      [selectedClusterId]
     );
 
     // Define columns for PVs
@@ -136,24 +143,30 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
           onClick: handleResourceClick,
           onAltClick: (pv) =>
             navigateToView(
-              buildObjectReference({
-                kind: pv.kind || 'PersistentVolume',
-                name: pv.name,
-                clusterId: pv.clusterId,
-                clusterName: pv.clusterName,
-              })
+              buildRequiredObjectReference(
+                {
+                  kind: pv.kind || 'PersistentVolume',
+                  name: pv.name,
+                  clusterId: pv.clusterId,
+                  clusterName: pv.clusterName,
+                },
+                { fallbackClusterId: selectedClusterId }
+              )
             ),
         }),
         cf.createTextColumn<StorageData>('name', 'Name', {
           onClick: handleResourceClick,
           onAltClick: (pv) =>
             navigateToView(
-              buildObjectReference({
-                kind: pv.kind || 'PersistentVolume',
-                name: pv.name,
-                clusterId: pv.clusterId,
-                clusterName: pv.clusterName,
-              })
+              buildRequiredObjectReference(
+                {
+                  kind: pv.kind || 'PersistentVolume',
+                  name: pv.name,
+                  clusterId: pv.clusterId,
+                  clusterName: pv.clusterName,
+                },
+                { fallbackClusterId: selectedClusterId }
+              )
             ),
           getClassName: () => 'object-panel-link',
         }),
@@ -175,12 +188,15 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
                 return;
               }
               openWithObject(
-                buildObjectReference({
-                  kind: 'StorageClass',
-                  name: pv.storageClass,
-                  clusterId: pv.clusterId ?? undefined,
-                  clusterName: pv.clusterName ?? undefined,
-                })
+                buildRequiredObjectReference(
+                  {
+                    kind: 'StorageClass',
+                    name: pv.storageClass,
+                    clusterId: pv.clusterId ?? undefined,
+                    clusterName: pv.clusterName ?? undefined,
+                  },
+                  { fallbackClusterId: selectedClusterId }
+                )
               );
             },
             onAltClick: (pv) => {
@@ -188,12 +204,15 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
                 return;
               }
               navigateToView(
-                buildObjectReference({
-                  kind: 'StorageClass',
-                  name: pv.storageClass,
-                  clusterId: pv.clusterId,
-                  clusterName: pv.clusterName,
-                })
+                buildRequiredObjectReference(
+                  {
+                    kind: 'StorageClass',
+                    name: pv.storageClass,
+                    clusterId: pv.clusterId,
+                    clusterName: pv.clusterName,
+                  },
+                  { fallbackClusterId: selectedClusterId }
+                )
               );
             },
             isInteractive: (pv) => Boolean(pv.storageClass),
@@ -209,13 +228,16 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
               return;
             }
             navigateToView(
-              buildObjectReference({
-                kind: 'PersistentVolumeClaim',
-                namespace: target.namespace,
-                name: target.name,
-                clusterId: pv.clusterId,
-                clusterName: pv.clusterName,
-              })
+              buildRequiredObjectReference(
+                {
+                  kind: 'PersistentVolumeClaim',
+                  namespace: target.namespace,
+                  name: target.name,
+                  clusterId: pv.clusterId,
+                  clusterName: pv.clusterName,
+                },
+                { fallbackClusterId: selectedClusterId }
+              )
             );
           },
           isInteractive: (pv) => Boolean(getClaimTarget(pv)),
@@ -243,49 +265,18 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
       handleResourceClick,
       navigateToView,
       openWithObject,
+      selectedClusterId,
       useShortResourceNames,
     ]);
 
-    const {
-      sortConfig: persistedSort,
-      setSortConfig: setPersistedSort,
-      columnWidths,
-      setColumnWidths,
-      columnVisibility,
-      setColumnVisibility,
-      filters: persistedFilters,
-      setFilters: setPersistedFilters,
-      resetState: resetPersistedState,
-      hydrated,
-    } = useGridTablePersistence<StorageData>({
+    const { gridTableProps, favModal } = useClusterResourceGridTable<StorageData>({
       viewId: 'cluster-storage',
-      clusterIdentity: selectedClusterId,
-      namespace: null,
-      isNamespaceScoped: false,
       columns,
       data,
       keyExtractor,
-      filterOptions: { isNamespaceScoped: false },
-    });
-
-    const { sortedData, sortConfig, handleSort } = useTableSort(data, 'name', 'asc', {
-      columns,
-      controlledSort: persistedSort,
-      onChange: setPersistedSort,
-    });
-
-    const availableKinds = CLUSTER_STORAGE_KIND_OPTIONS;
-
-    const { item: favToggle, modal: favModal } = useFavToggle({
-      filters: persistedFilters,
-      sortColumn: sortConfig?.key ?? null,
-      sortDirection: sortConfig?.direction ?? 'asc',
-      columnVisibility: columnVisibility ?? {},
-      setFilters: setPersistedFilters,
-      setSortConfig: setPersistedSort,
-      setColumnVisibility,
-      hydrated,
-      availableKinds,
+      availableKinds: CLUSTER_STORAGE_KIND_OPTIONS,
+      showKindDropdown: true,
+      diagnosticsLabel: 'Cluster Storage',
     });
 
     // Handle delete confirmation
@@ -336,12 +327,15 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
           ) ?? null;
 
         return buildObjectActionItems({
-          object: buildObjectReference({
-            kind: 'PersistentVolume',
-            name: pv.name,
-            clusterId: pv.clusterId,
-            clusterName: pv.clusterName,
-          }),
+          object: buildRequiredObjectReference(
+            {
+              kind: 'PersistentVolume',
+              name: pv.name,
+              clusterId: pv.clusterId,
+              clusterName: pv.clusterName,
+            },
+            { fallbackClusterId: selectedClusterId }
+          ),
           context: 'gridtable',
           handlers: {
             onOpen: () => handleResourceClick(pv),
@@ -352,7 +346,7 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
           },
         });
       },
-      [handleResourceClick, permissionMap]
+      [handleResourceClick, permissionMap, selectedClusterId]
     );
 
     const emptyMessage = useMemo(
@@ -362,45 +356,23 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
 
     return (
       <>
-        <ResourceLoadingBoundary
-          loading={loading ?? false}
-          dataLength={sortedData.length}
-          hasLoaded={loaded}
+        <ResourceGridTableView
+          gridTableProps={gridTableProps}
+          boundaryLoading={loading ?? false}
+          loaded={loaded}
           spinnerMessage="Loading storage resources..."
-        >
-          <GridTable
-            data={sortedData}
-            columns={columns}
-            diagnosticsLabel="Cluster Storage"
-            loading={loading}
-            keyExtractor={keyExtractor}
-            onRowClick={handleResourceClick}
-            onSort={handleSort}
-            sortConfig={sortConfig}
-            tableClassName="gridtable-pvs"
-            enableContextMenu={true}
-            getCustomContextMenuItems={getContextMenuItems}
-            useShortNames={useShortResourceNames}
-            emptyMessage={emptyMessage}
-            filters={{
-              enabled: true,
-              value: persistedFilters,
-              onChange: setPersistedFilters,
-              onReset: resetPersistedState,
-              options: {
-                kinds: availableKinds,
-                showKindDropdown: true,
-                preActions: [favToggle],
-              },
-            }}
-            virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}
-            columnWidths={columnWidths}
-            onColumnWidthsChange={setColumnWidths}
-            columnVisibility={columnVisibility}
-            onColumnVisibilityChange={setColumnVisibility}
-            allowHorizontalOverflow={true}
-          />
-        </ResourceLoadingBoundary>
+          favModal={favModal}
+          columns={columns}
+          diagnosticsLabel="Cluster Storage"
+          loading={loading}
+          keyExtractor={keyExtractor}
+          onRowClick={handleResourceClick}
+          tableClassName="gridtable-pvs"
+          enableContextMenu={true}
+          getCustomContextMenuItems={getContextMenuItems}
+          useShortNames={useShortResourceNames}
+          emptyMessage={emptyMessage}
+        />
 
         <ConfirmationModal
           isOpen={deleteConfirm.show}
@@ -412,7 +384,6 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
           onConfirm={handleDeleteConfirm}
           onCancel={() => setDeleteConfirm({ show: false, resource: null })}
         />
-        {favModal}
       </>
     );
   }

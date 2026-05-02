@@ -12,30 +12,28 @@ import { getPermissionKey, queryKindPermissions, useUserPermissions } from '@/co
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
-import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useShortNames } from '@/hooks/useShortNames';
-import { useTableSort } from '@/hooks/useTableSort';
 import * as cf from '@shared/components/tables/columnFactories';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import React, { useMemo, useState, useCallback } from 'react';
-import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
+import ResourceGridTableView from '@shared/components/tables/ResourceGridTableView';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
-import GridTable, {
-  type GridColumnDefinition,
-  GRIDTABLE_VIRTUALIZATION_DEFAULT,
-} from '@shared/components/tables/GridTable';
-import { useFavToggle } from '@ui/favorites/FavToggle';
-import { buildCanonicalObjectRowKey, buildObjectReference } from '@shared/utils/objectIdentity';
+import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
+import { useClusterResourceGridTable } from '@shared/hooks/useResourceGridTable';
+import {
+  buildRequiredCanonicalObjectRowKey,
+  buildRequiredObjectReference,
+} from '@shared/utils/objectIdentity';
 
 // Define the data structure for cluster custom resources
 interface ClusterCustomData {
   kind: string;
   kindAlias?: string;
   name: string;
-  clusterId?: string;
+  clusterId: string;
   clusterName?: string;
   apiGroup?: string;
   /** API version for the owning CRD. Paired with apiGroup so the object
@@ -86,15 +84,16 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
         // resolution can disambiguate colliding Kinds. See
         //  step 1.
         openWithObject(
-          buildObjectReference(
+          buildRequiredObjectReference(
             {
               kind: resource.kind,
               name: resource.name,
               group: resource.apiGroup,
               version: resource.apiVersion,
-              clusterId: resource.clusterId ?? undefined,
+              clusterId: resource.clusterId,
               clusterName: resource.clusterName ?? undefined,
             },
+            { fallbackClusterId: selectedClusterId },
             {
               age: resource.age,
               labels: resource.labels,
@@ -103,7 +102,7 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
           )
         );
       },
-      [openWithObject]
+      [openWithObject, selectedClusterId]
     );
 
     // Click handler for the CRD column. Opens the owning
@@ -116,27 +115,33 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
           return;
         }
         openWithObject(
-          buildObjectReference({
-            kind: 'CustomResourceDefinition',
-            name: resource.crdName,
-            clusterId: resource.clusterId ?? undefined,
-            clusterName: resource.clusterName ?? undefined,
-          })
+          buildRequiredObjectReference(
+            {
+              kind: 'CustomResourceDefinition',
+              name: resource.crdName,
+              clusterId: resource.clusterId,
+              clusterName: resource.clusterName ?? undefined,
+            },
+            { fallbackClusterId: selectedClusterId }
+          )
         );
       },
-      [openWithObject]
+      [openWithObject, selectedClusterId]
     );
 
     const keyExtractor = useCallback(
       (resource: ClusterCustomData) =>
-        buildCanonicalObjectRowKey({
-          kind: resource.kind,
-          name: resource.name,
-          clusterId: resource.clusterId,
-          group: resource.apiGroup,
-          version: resource.apiVersion,
-        }),
-      []
+        buildRequiredCanonicalObjectRowKey(
+          {
+            kind: resource.kind,
+            name: resource.name,
+            clusterId: resource.clusterId,
+            group: resource.apiGroup,
+            version: resource.apiVersion,
+          },
+          { fallbackClusterId: selectedClusterId }
+        ),
+      [selectedClusterId]
     );
 
     // Define columns for the custom resources
@@ -150,14 +155,17 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
           onClick: handleResourceClick,
           onAltClick: (resource) =>
             navigateToView(
-              buildObjectReference({
-                kind: resource.kind,
-                name: resource.name,
-                clusterId: resource.clusterId,
-                clusterName: resource.clusterName,
-                group: resource.apiGroup,
-                version: resource.apiVersion,
-              })
+              buildRequiredObjectReference(
+                {
+                  kind: resource.kind,
+                  name: resource.name,
+                  clusterId: resource.clusterId,
+                  clusterName: resource.clusterName,
+                  group: resource.apiGroup,
+                  version: resource.apiVersion,
+                },
+                { fallbackClusterId: selectedClusterId }
+              )
             ),
         }),
         cf.createTextColumn<ClusterCustomData>('name', 'Name', {
@@ -165,14 +173,17 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
           onClick: handleResourceClick,
           onAltClick: (resource) =>
             navigateToView(
-              buildObjectReference({
-                kind: resource.kind,
-                name: resource.name,
-                clusterId: resource.clusterId,
-                clusterName: resource.clusterName,
-                group: resource.apiGroup,
-                version: resource.apiVersion,
-              })
+              buildRequiredObjectReference(
+                {
+                  kind: resource.kind,
+                  name: resource.name,
+                  clusterId: resource.clusterId,
+                  clusterName: resource.clusterName,
+                  group: resource.apiGroup,
+                  version: resource.apiVersion,
+                },
+                { fallbackClusterId: selectedClusterId }
+              )
             ),
           getClassName: () => 'object-panel-link',
         }),
@@ -197,12 +208,15 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
                   return;
                 }
                 navigateToView(
-                  buildObjectReference({
-                    kind: 'CustomResourceDefinition',
-                    name: resource.crdName,
-                    clusterId: resource.clusterId,
-                    clusterName: resource.clusterName,
-                  })
+                  buildRequiredObjectReference(
+                    {
+                      kind: 'CustomResourceDefinition',
+                      name: resource.crdName,
+                      clusterId: resource.clusterId,
+                      clusterName: resource.clusterName,
+                    },
+                    { fallbackClusterId: selectedClusterId }
+                  )
                 );
               },
               isInteractive: (resource) => Boolean(resource.crdName),
@@ -225,50 +239,24 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
       cf.applyColumnSizing(baseColumns, sizing);
 
       return baseColumns;
-    }, [handleResourceClick, handleCRDClick, navigateToView, useShortResourceNames]);
+    }, [
+      handleResourceClick,
+      handleCRDClick,
+      navigateToView,
+      selectedClusterId,
+      useShortResourceNames,
+    ]);
 
-    // Set up grid table persistence
-    const {
-      sortConfig: persistedSort,
-      setSortConfig: setPersistedSort,
-      columnWidths,
-      setColumnWidths,
-      columnVisibility,
-      setColumnVisibility,
-      filters: persistedFilters,
-      setFilters: setPersistedFilters,
-      resetState: resetPersistedState,
-      hydrated,
-    } = useGridTablePersistence<ClusterCustomData>({
+    const { gridTableProps, favModal } = useClusterResourceGridTable<ClusterCustomData>({
       viewId: 'cluster-custom',
-      clusterIdentity: selectedClusterId,
-      namespace: null,
-      isNamespaceScoped: false,
-      columns,
       data,
-      keyExtractor,
-      filterOptions: { isNamespaceScoped: false },
-    });
-
-    // Set up table sorting
-    const { sortedData, sortConfig, handleSort } = useTableSort(data, 'name', 'asc', {
       columns,
-      controlledSort: persistedSort,
-      onChange: setPersistedSort,
-    });
-
-    const availableKinds = useMemo(() => kindOptions ?? [], [kindOptions]);
-
-    const { item: favToggle, modal: favModal } = useFavToggle({
-      filters: persistedFilters,
-      sortColumn: sortConfig?.key ?? null,
-      sortDirection: sortConfig?.direction ?? 'asc',
-      columnVisibility: columnVisibility ?? {},
-      setFilters: setPersistedFilters,
-      setSortConfig: setPersistedSort,
-      setColumnVisibility,
-      hydrated,
-      availableKinds,
+      keyExtractor,
+      availableKinds: kindOptions ?? [],
+      showKindDropdown: true,
+      kindDropdownSearchable: true,
+      kindDropdownBulkActions: true,
+      filterOptions: { isNamespaceScoped: false },
     });
 
     // Handle delete confirmation
@@ -335,14 +323,17 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
         }
 
         return buildObjectActionItems({
-          object: buildObjectReference({
-            kind: resource.kind,
-            name: resource.name,
-            clusterId: resource.clusterId,
-            clusterName: resource.clusterName,
-            group: resource.apiGroup ?? undefined,
-            version: resource.apiVersion ?? undefined,
-          }),
+          object: buildRequiredObjectReference(
+            {
+              kind: resource.kind,
+              name: resource.name,
+              clusterId: resource.clusterId,
+              clusterName: resource.clusterName,
+              group: resource.apiGroup ?? undefined,
+              version: resource.apiVersion ?? undefined,
+            },
+            { fallbackClusterId: selectedClusterId }
+          ),
           context: 'gridtable',
           handlers: {
             onOpen: () => handleResourceClick(resource),
@@ -353,7 +344,7 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
           },
         });
       },
-      [handleResourceClick, permissionMap]
+      [handleResourceClick, permissionMap, selectedClusterId]
     );
 
     // Resolve empty state message
@@ -364,47 +355,23 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
 
     return (
       <>
-        <ResourceLoadingBoundary
-          loading={loading ?? false}
-          dataLength={sortedData.length}
-          hasLoaded={loaded}
+        <ResourceGridTableView
+          gridTableProps={gridTableProps}
+          boundaryLoading={loading ?? false}
+          loaded={loaded}
           spinnerMessage="Loading cluster custom resources..."
-        >
-          <GridTable
-            data={sortedData}
-            columns={columns}
-            diagnosticsLabel="Cluster Custom"
-            loading={loading}
-            keyExtractor={keyExtractor}
-            onRowClick={handleResourceClick}
-            onSort={handleSort}
-            sortConfig={sortConfig}
-            tableClassName="cluster-custom-table"
-            enableContextMenu={true}
-            getCustomContextMenuItems={getContextMenuItems}
-            useShortNames={useShortResourceNames}
-            emptyMessage={emptyMessage}
-            filters={{
-              enabled: true,
-              value: persistedFilters,
-              onChange: setPersistedFilters,
-              onReset: resetPersistedState,
-              options: {
-                kinds: availableKinds,
-                showKindDropdown: true,
-                kindDropdownSearchable: true,
-                kindDropdownBulkActions: true,
-                preActions: [favToggle],
-              },
-            }}
-            virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}
-            columnWidths={columnWidths}
-            onColumnWidthsChange={setColumnWidths}
-            columnVisibility={columnVisibility}
-            onColumnVisibilityChange={setColumnVisibility}
-            allowHorizontalOverflow={true}
-          />
-        </ResourceLoadingBoundary>
+          favModal={favModal}
+          columns={columns}
+          diagnosticsLabel="Cluster Custom"
+          loading={loading}
+          keyExtractor={keyExtractor}
+          onRowClick={handleResourceClick}
+          tableClassName="cluster-custom-table"
+          enableContextMenu={true}
+          getCustomContextMenuItems={getContextMenuItems}
+          useShortNames={useShortResourceNames}
+          emptyMessage={emptyMessage}
+        />
 
         <ConfirmationModal
           isOpen={deleteConfirm.show}
@@ -416,7 +383,6 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
           onConfirm={handleDeleteConfirm}
           onCancel={() => setDeleteConfirm({ show: false, resource: null })}
         />
-        {favModal}
       </>
     );
   }

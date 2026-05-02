@@ -8,23 +8,18 @@
 import './ClusterViewNodes.css';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
-import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useRefreshScopedDomain } from '@/core/refresh';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { useShortNames } from '@/hooks/useShortNames';
-import { useTableSort } from '@/hooks/useTableSort';
 import * as cf from '@shared/components/tables/columnFactories';
 import React, { useCallback, useMemo } from 'react';
-import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
+import ResourceGridTableView from '@shared/components/tables/ResourceGridTableView';
 import type { ClusterNodeRow } from '@modules/cluster/contexts/ClusterResourcesContext';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
-import GridTable, {
-  type GridColumnDefinition,
-  GRIDTABLE_VIRTUALIZATION_DEFAULT,
-} from '@shared/components/tables/GridTable';
+import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import {
   calculateCpuOvercommitted,
   calculateMemoryOvercommitted,
@@ -32,9 +27,11 @@ import {
   parseMemToMB,
 } from '@/utils/resourceCalculations';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
-import { useMetadataSearch } from '@shared/components/tables/hooks/useMetadataSearch';
-import { useFavToggle } from '@ui/favorites/FavToggle';
-import { buildCanonicalObjectRowKey, buildObjectReference } from '@shared/utils/objectIdentity';
+import { useClusterResourceGridTable } from '@shared/hooks/useResourceGridTable';
+import {
+  buildRequiredCanonicalObjectRowKey,
+  buildRequiredObjectReference,
+} from '@shared/utils/objectIdentity';
 
 // Define props for NodesViewGrid component
 interface NodesViewProps {
@@ -72,15 +69,18 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
     const handleNodeClick = useCallback(
       (node: ClusterNodeRow) => {
         openWithObject(
-          buildObjectReference({
-            kind: 'Node',
-            name: node.name,
-            clusterId: node.clusterId ?? undefined,
-            clusterName: node.clusterName ?? undefined,
-          })
+          buildRequiredObjectReference(
+            {
+              kind: 'Node',
+              name: node.name,
+              clusterId: node.clusterId,
+              clusterName: node.clusterName ?? undefined,
+            },
+            { fallbackClusterId: selectedClusterId }
+          )
         );
       },
-      [openWithObject]
+      [openWithObject, selectedClusterId]
     );
 
     const tableColumns = useMemo<GridColumnDefinition<ClusterNodeRow>[]>(() => {
@@ -119,12 +119,15 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
           onClick: (row) => handleNodeClick(row),
           onAltClick: (row) =>
             navigateToView(
-              buildObjectReference({
-                kind: 'Node',
-                name: row.name,
-                clusterId: row.clusterId,
-                clusterName: row.clusterName,
-              })
+              buildRequiredObjectReference(
+                {
+                  kind: 'Node',
+                  name: row.name,
+                  clusterId: row.clusterId,
+                  clusterName: row.clusterName,
+                },
+                { fallbackClusterId: selectedClusterId }
+              )
             ),
           isInteractive: () => true,
           sortValue: () => 'node',
@@ -133,12 +136,15 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
           onClick: (row) => handleNodeClick(row),
           onAltClick: (row) =>
             navigateToView(
-              buildObjectReference({
-                kind: 'Node',
-                name: row.name,
-                clusterId: row.clusterId,
-                clusterName: row.clusterName,
-              })
+              buildRequiredObjectReference(
+                {
+                  kind: 'Node',
+                  name: row.name,
+                  clusterId: row.clusterId,
+                  clusterName: row.clusterName,
+                },
+                { fallbackClusterId: selectedClusterId }
+              )
             ),
           // Use the shared link styling for object panel navigation.
           getClassName: () => 'object-panel-link',
@@ -245,6 +251,7 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
       metricsInfo?.lastError,
       metricsInfo?.collectedAt,
       navigateToView,
+      selectedClusterId,
       useShortResourceNames,
     ]);
 
@@ -252,78 +259,48 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
 
     const keyExtractor = useCallback(
       (row: ClusterNodeRow) =>
-        buildCanonicalObjectRowKey({
-          kind: 'Node',
-          name: row.name,
-          clusterId: row.clusterId,
-        }),
-      []
+        buildRequiredCanonicalObjectRowKey(
+          {
+            kind: 'Node',
+            name: row.name,
+            clusterId: row.clusterId,
+          },
+          { fallbackClusterId: selectedClusterId }
+        ),
+      [selectedClusterId]
     );
 
-    // Set up grid table persistence
-    const {
-      sortConfig: persistedSort,
-      setSortConfig: setPersistedSort,
-      columnWidths,
-      setColumnWidths,
-      columnVisibility,
-      setColumnVisibility,
-      filters: persistedFilters,
-      setFilters: setPersistedFilters,
-      resetState: resetPersistedState,
-      hydrated,
-    } = useGridTablePersistence<ClusterNodeRow>({
+    const { gridTableProps, favModal } = useClusterResourceGridTable<ClusterNodeRow>({
       viewId: 'cluster-nodes',
-      clusterIdentity: selectedClusterId,
-      namespace: null,
-      isNamespaceScoped: false,
+      data,
+      persistenceData: [],
       columns: tableColumns,
-      data: [],
       keyExtractor,
+      showKindDropdown: false,
+      filterAccessors: {
+        getSearchText: (row) => [row.name, row.kind],
+      },
+      metadataSearch: {
+        getDefaultValues: (row) => [row.name, row.kind],
+        getMetadataMaps: (row) => [row.labels, row.annotations],
+      },
+      diagnosticsLabel: 'Cluster Nodes',
       filterOptions: { isNamespaceScoped: false },
-    });
-
-    // Metadata-aware search: when toggled on, includes labels and annotations.
-    // State is stored in persistedFilters.includeMetadata so it persists across cluster switches.
-    const { includeMetadata, setIncludeMetadata, metadataToggle, getSearchText } =
-      useMetadataSearch<ClusterNodeRow>({
-        getDefaultValues: useCallback((row: ClusterNodeRow) => [row.name, row.kind], []),
-        getMetadataMaps: useCallback((row: ClusterNodeRow) => [row.labels, row.annotations], []),
-        filters: persistedFilters,
-        onFiltersChange: setPersistedFilters,
-      });
-
-    // Set up table sorting
-    const { sortedData, sortConfig, handleSort } = useTableSort(data, 'name', 'asc', {
-      columns: tableColumns,
-      controlledSort: persistedSort,
-      onChange: setPersistedSort,
-    });
-
-    // Nodes view only shows Node kind - no availableKinds or availableFilterNamespaces needed.
-    const { item: favToggle, modal: favModal } = useFavToggle({
-      filters: persistedFilters,
-      includeMetadata,
-      sortColumn: sortConfig?.key ?? null,
-      sortDirection: sortConfig?.direction ?? 'asc',
-      columnVisibility: columnVisibility ?? {},
-      setFilters: setPersistedFilters,
-      setSortConfig: setPersistedSort,
-      setColumnVisibility,
-      setIncludeMetadata,
-      hydrated,
     });
 
     // Get context menu items
     const getRowContextMenuItems = useCallback(
       (row: ClusterNodeRow, _columnKey: string): ContextMenuItem[] => {
         return buildObjectActionItems({
-          object: buildObjectReference({
-            kind: 'Node',
-            name: row.name,
-            clusterId: row.clusterId,
-            clusterName: row.clusterName,
-          }),
+          object: buildRequiredObjectReference(
+            {
+              kind: 'Node',
+              name: row.name,
+              clusterId: row.clusterId,
+              clusterName: row.clusterName,
+            },
+            { fallbackClusterId: selectedClusterId }
+          ),
           context: 'gridtable',
           handlers: {
             onOpen: () => handleNodeClick(row),
@@ -331,52 +308,28 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
           permissions: {},
         });
       },
-      [handleNodeClick]
+      [handleNodeClick, selectedClusterId]
     );
 
     return (
       <>
-        <ResourceLoadingBoundary
-          loading={loading && false}
-          dataLength={sortedData.length}
-          hasLoaded={loaded}
+        <ResourceGridTableView
+          gridTableProps={gridTableProps}
+          boundaryLoading={loading && false}
+          loaded={loaded}
           spinnerMessage="Loading nodes..."
-        >
-          <GridTable
-            data={sortedData}
-            columns={tableColumns}
-            diagnosticsLabel="Cluster Nodes"
-            diagnosticsMode="live"
-            loading={loading}
-            keyExtractor={keyExtractor}
-            onRowClick={handleNodeClick}
-            onSort={handleSort}
-            sortConfig={sortConfig}
-            tableClassName="gridtable-nodes"
-            enableContextMenu={true}
-            getCustomContextMenuItems={getRowContextMenuItems}
-            emptyMessage={emptyMessage}
-            filters={{
-              enabled: true,
-              value: persistedFilters,
-              onChange: setPersistedFilters,
-              onReset: resetPersistedState,
-              accessors: {
-                getSearchText,
-              },
-              options: {
-                preActions: [metadataToggle, favToggle],
-              },
-            }}
-            virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}
-            columnWidths={columnWidths}
-            onColumnWidthsChange={setColumnWidths}
-            columnVisibility={columnVisibility}
-            onColumnVisibilityChange={setColumnVisibility}
-            allowHorizontalOverflow={true}
-          />
-        </ResourceLoadingBoundary>
-        {favModal}
+          favModal={favModal}
+          columns={tableColumns}
+          diagnosticsLabel="Cluster Nodes"
+          diagnosticsMode="live"
+          loading={loading}
+          keyExtractor={keyExtractor}
+          onRowClick={handleNodeClick}
+          tableClassName="gridtable-nodes"
+          enableContextMenu={true}
+          getCustomContextMenuItems={getRowContextMenuItems}
+          emptyMessage={emptyMessage}
+        />
       </>
     );
   }

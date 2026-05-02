@@ -4,6 +4,9 @@ import {
   buildCanonicalObjectRowKey,
   buildObjectReference,
   buildRelatedObjectReference,
+  buildRequiredCanonicalObjectRowKey,
+  buildRequiredObjectReference,
+  buildRequiredRelatedObjectReference,
   buildSyntheticObjectReference,
 } from './objectIdentity';
 
@@ -59,6 +62,47 @@ describe('objectIdentity', () => {
         version: 'v1alpha1',
       })
     ).toBe('alpha:ctx|rds.services.k8s.aws/v1alpha1/DBInstance/ops/db-a');
+  });
+
+  it('requires clusterId for strict object references', () => {
+    expect(() =>
+      buildRequiredObjectReference({
+        kind: 'Pod',
+        name: 'api',
+        namespace: 'team-a',
+      })
+    ).toThrow(/clusterId/);
+  });
+
+  it('uses a fallback clusterId for strict object references', () => {
+    expect(
+      buildRequiredObjectReference(
+        {
+          kind: 'Pod',
+          name: 'api',
+          namespace: 'team-a',
+        },
+        { fallbackClusterId: 'alpha:ctx' }
+      )
+    ).toEqual(
+      expect.objectContaining({
+        kind: 'Pod',
+        clusterId: 'alpha:ctx',
+        group: '',
+        version: 'v1',
+      })
+    );
+  });
+
+  it('builds strict canonical row keys with a required clusterId', () => {
+    expect(
+      buildRequiredCanonicalObjectRowKey({
+        kind: 'Pod',
+        name: 'api',
+        namespace: 'team-a',
+        clusterId: 'alpha:ctx',
+      })
+    ).toBe('alpha:ctx|/v1/Pod/team-a/api');
   });
 
   it('throws when a custom resource omits apiVersion', () => {
@@ -122,6 +166,37 @@ describe('objectIdentity', () => {
       expect.objectContaining({
         group: '',
         version: 'v1',
+      })
+    );
+  });
+
+  it('requires clusterId for strict related-object references', () => {
+    expect(() =>
+      buildRequiredRelatedObjectReference({
+        kind: 'Deployment',
+        name: 'api',
+        namespace: 'team-a',
+      })
+    ).toThrow(/clusterId/);
+  });
+
+  it('uses fallback clusterId and explicit apiVersion for strict related-object references', () => {
+    expect(
+      buildRequiredRelatedObjectReference(
+        {
+          kind: 'DBInstance',
+          name: 'db-a',
+          namespace: 'ops',
+          apiVersion: 'rds.services.k8s.aws/v1alpha1',
+        },
+        { fallbackClusterId: 'alpha:ctx' }
+      )
+    ).toEqual(
+      expect.objectContaining({
+        kind: 'DBInstance',
+        clusterId: 'alpha:ctx',
+        group: 'rds.services.k8s.aws',
+        version: 'v1alpha1',
       })
     );
   });

@@ -19,7 +19,7 @@ import {
   requestAppState,
 } from '@/core/app-state-access';
 import { objectPanelId } from '@/core/contexts/ObjectPanelStateContext';
-import { buildObjectReference } from '@shared/utils/objectIdentity';
+import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
 import '@modules/port-forward/PortForwardsPanel.css';
 import './SessionsStatus.css';
 
@@ -186,7 +186,7 @@ const SessionsStatus: React.FC = () => {
 
   const openShellSessionTab = useCallback(
     (session: ShellSessionInfo) => {
-      const targetRef = buildObjectReference({
+      const targetRef = buildRequiredObjectReference({
         kind: 'Pod',
         name: session.podName,
         namespace: session.namespace,

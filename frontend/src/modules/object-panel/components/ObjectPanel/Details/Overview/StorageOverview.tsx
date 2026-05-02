@@ -10,7 +10,7 @@ import { ResourceStatus } from '@shared/components/kubernetes/ResourceStatus';
 import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
-import { buildObjectReference } from '@shared/utils/objectIdentity';
+import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
 import './shared/OverviewBlocks.css';
 
 interface TopologyLabelRequirement {
@@ -181,7 +181,7 @@ export const StorageOverview: React.FC<StorageOverviewProps> = (props) => {
             value={
               props.volumeName ? (
                 <ObjectPanelLink
-                  objectRef={buildObjectReference({
+                  objectRef={buildRequiredObjectReference({
                     kind: 'persistentvolume',
                     name: props.volumeName,
                     ...clusterMeta,
@@ -215,7 +215,7 @@ export const StorageOverview: React.FC<StorageOverviewProps> = (props) => {
             value={
               props.storageClass ? (
                 <ObjectPanelLink
-                  objectRef={buildObjectReference({
+                  objectRef={buildRequiredObjectReference({
                     kind: 'storageclass',
                     name: props.storageClass,
                     ...clusterMeta,
@@ -239,7 +239,7 @@ export const StorageOverview: React.FC<StorageOverviewProps> = (props) => {
               const label = `${ds.kind}/${ds.name}`;
               let ref;
               try {
-                ref = buildObjectReference({
+                ref = buildRequiredObjectReference({
                   kind: ds.kind.toLowerCase(),
                   name: ds.name,
                   // PVC clones are namespaced (same namespace as this PVC);
@@ -265,7 +265,7 @@ export const StorageOverview: React.FC<StorageOverviewProps> = (props) => {
                   {props.mountedBy.map((podName, index) => (
                     <div key={`${podName}-${index}`}>
                       <ObjectPanelLink
-                        objectRef={buildObjectReference({
+                        objectRef={buildRequiredObjectReference({
                           kind: 'pod',
                           name: podName,
                           namespace: namespace,
@@ -305,7 +305,7 @@ export const StorageOverview: React.FC<StorageOverviewProps> = (props) => {
               label="Claim"
               value={
                 <ObjectPanelLink
-                  objectRef={buildObjectReference({
+                  objectRef={buildRequiredObjectReference({
                     kind: 'persistentvolumeclaim',
                     name: props.claimRef.name,
                     namespace: props.claimRef.namespace,
@@ -349,7 +349,7 @@ export const StorageOverview: React.FC<StorageOverviewProps> = (props) => {
             value={
               props.storageClass ? (
                 <ObjectPanelLink
-                  objectRef={buildObjectReference({
+                  objectRef={buildRequiredObjectReference({
                     kind: 'storageclass',
                     name: props.storageClass,
                     ...clusterMeta,

@@ -17,6 +17,10 @@ vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
   }),
 }));
 
+vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
+  useKubeconfig: () => ({ selectedKubeconfig: 'path:context', selectedClusterId: 'cluster-a' }),
+}));
+
 import NsViewRBAC, { type RBACData } from '@modules/namespace/components/NsViewRBAC';
 
 const { gridTablePropsRef, confirmationPropsRef, openWithObjectMock, deleteResourceByGVKMock } =
