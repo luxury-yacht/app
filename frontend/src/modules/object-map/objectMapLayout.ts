@@ -1,35 +1,38 @@
 /**
  * frontend/src/modules/object-map/objectMapLayout.ts
  *
- * Role-based directional layered layout for the object map. Three passes:
+ * Seed-anchored compact min-length layered layout. Four passes:
  *
- *   (1) Column assignment uses Sugiyama-style longest-path layering on
- *       the directed edge graph: every node's column = max(predecessor
- *       column + 1) along outgoing-edge direction. Anchored on the
- *       seed (shifted so seedColumn = 0). Because every K8s edge has a
- *       natural left-to-right direction (owner→child, controller→
- *       instance, consumer→resource), this places ancestors strictly
- *       left of the seed and dependencies strictly to the right.
- *       Critically: same-column edges become impossible by construction
- *       in any acyclic graph, so the spurious "loop-back" arcs that
- *       the previous BFS-depth model produced (e.g. ReplicaSet and the
- *       ConfigMap its template references both at depth=1 from a Pod
- *       seed) disappear.
+ *   (1) Longest-path layering. Sugiyama-style: every node's column =
+ *       max(predecessor column + 1) along directed edges. This
+ *       guarantees every edge spans at least one column going strictly
+ *       left-to-right (no same-column edges, no backward edges) in any
+ *       acyclic graph.
  *
- *   (2) Within each column, nodes are reordered by Sugiyama-style
- *       barycenter sweeps over their cross-column neighbours, so
- *       connected siblings end up vertically aligned and crossings
- *       drop sharply.
+ *   (2) Shift so the seed sits at column 0. Anchored layout — left of
+ *       the seed = ancestors and consumers, right of the seed =
+ *       descendants and dependencies.
  *
- *   (3) Edges are routed as cubic beziers between source-right and
- *       target-left anchors, drape-shaped via control points pulled
- *       into the gutters.
+ *   (3) Backward pass: pull graph "sources" (in-degree-zero nodes
+ *       other than the seed) rightward to sit adjacent to their
+ *       leftmost successor. Without this step, sources land at the
+ *       leftmost column even when they have only one edge connecting
+ *       them to the rest of the graph — e.g., a Karpenter NodeClaim
+ *       that owns the Pod's Node would otherwise be many columns left
+ *       of Node despite the direct owner edge between them. The
+ *       no-same-column-edges guarantee from step (1) is preserved
+ *       because moving a source rightward can only shorten its
+ *       outgoing edges, never violate them.
  *
- * Cycles (rare in K8s but defensively handled): nodes the topological
- * sort cannot reach fall back to the backend's BFS depth as their
- * column. The same-column edge routing remains as a defensive fallback
- * for that case so cycle-trapped pairs still draw without crossing
- * through node bodies.
+ *   (4) Within each column, barycenter sweeps reorder nodes so
+ *       connected siblings line up across columns, dropping the
+ *       overall edge-crossing count sharply.
+ *
+ * Edges are routed as cubic beziers between source-right and target-
+ * left anchors. The same-column rightward-arc fallback is retained for
+ * the rare cycle case where the topological pass can't drain all
+ * nodes; cycles cause the backend BFS depth to be used as a fallback
+ * column, which can collide.
  */
 
 import type { ObjectMapEdge, ObjectMapNode } from '@core/refresh/types';
@@ -103,14 +106,21 @@ const compareForColumn = (a: ObjectMapNode, b: ObjectMapNode): number => {
 };
 
 /**
- * Assign each node a column index using Sugiyama-style longest-path
- * layering. Edges are treated as directed (source → target). After the
- * topological pass, the result is shifted so the seed sits at column 0.
+ * Assign each node a column index via compact min-length layered
+ * layout. Three steps:
  *
- * Cycles: any node whose in-degree never reaches zero (i.e., it sits in
- * a strongly-connected component the sort cannot drain) falls back to
- * its backend-provided BFS depth. K8s graphs are normally acyclic so
- * this branch should rarely fire in practice.
+ *   1. Longest-path layering (Kahn's algorithm) propagates from
+ *      sources, giving each node column = max(predecessor + 1). This
+ *      guarantees every edge spans at least one column.
+ *   2. Shift so the seed sits at column 0.
+ *   3. Pull graph sources (in-degree-zero nodes, not the seed)
+ *      rightward to sit adjacent to their leftmost successor — the
+ *      slack-on-the-left a source has by definition. Preserves the
+ *      "every edge spans ≥ 1 column" invariant because moving a source
+ *      right can only shorten its outgoing edges.
+ *
+ * Cycles fall back to backend BFS depth (defensive — K8s graphs are
+ * normally acyclic).
  */
 const computeNodeColumns = (
   nodes: ObjectMapNode[],
@@ -118,38 +128,37 @@ const computeNodeColumns = (
   seedId: string
 ): Map<string, number> => {
   const validIds = new Set(nodes.map((n) => n.id));
-  const adj = new Map<string, string[]>();
+  const out = new Map<string, string[]>();
   const inDegree = new Map<string, number>();
   nodes.forEach((n) => inDegree.set(n.id, 0));
 
   edges.forEach((edge) => {
-    // Skip edges that reference unknown nodes or self-loops; both would
-    // poison the topological pass without adding layout signal.
     if (!validIds.has(edge.source) || !validIds.has(edge.target)) return;
     if (edge.source === edge.target) return;
-    let outs = adj.get(edge.source);
+    let outs = out.get(edge.source);
     if (!outs) {
       outs = [];
-      adj.set(edge.source, outs);
+      out.set(edge.source, outs);
     }
     outs.push(edge.target);
     inDegree.set(edge.target, (inDegree.get(edge.target) ?? 0) + 1);
   });
 
+  // Step 1: longest-path layering. Sources start at column 0; each
+  // other node lands at max(predecessor column + 1).
   const column = new Map<string, number>();
-  const remainingIn = new Map(inDegree);
+  const remaining = new Map(inDegree);
   const queue: string[] = [];
-  inDegree.forEach((d, id) => {
-    if (d === 0) {
+  inDegree.forEach((degree, id) => {
+    if (degree === 0) {
       column.set(id, 0);
       queue.push(id);
     }
   });
-
   while (queue.length > 0) {
     const u = queue.shift()!;
     const cu = column.get(u)!;
-    const outs = adj.get(u);
+    const outs = out.get(u);
     if (!outs) continue;
     for (const v of outs) {
       const cv = column.get(v);
@@ -157,32 +166,49 @@ const computeNodeColumns = (
       if (cv === undefined || candidate > cv) {
         column.set(v, candidate);
       }
-      const newDegree = remainingIn.get(v)! - 1;
-      remainingIn.set(v, newDegree);
-      if (newDegree === 0) {
+      const newRemaining = remaining.get(v)! - 1;
+      remaining.set(v, newRemaining);
+      if (newRemaining === 0) {
         queue.push(v);
       }
     }
   }
 
-  // Defensive fallback for nodes the sort never reached (cycles).
-  // Backend BFS depth is the best proxy we have for "where they ought
-  // to be" relative to the seed; it preserves the old behaviour for
-  // anything pathological.
+  // Defensive fallback for nodes the topological pass never reached
+  // (cycles). K8s graphs are normally acyclic so this should not fire.
   nodes.forEach((node) => {
     if (!column.has(node.id)) {
       column.set(node.id, node.depth);
     }
   });
 
-  // Anchor the seed at column 0 by shifting the whole layout. We don't
-  // anchor during the topological pass because the seed isn't
-  // necessarily a source — for a Pod seed, ancestors (RS, Deployment,
-  // HPA) feed in from the left and the seed lands several columns in.
+  // Step 2: anchor the seed at column 0.
   const seedColumn = column.get(seedId);
   if (seedColumn !== undefined && seedColumn !== 0) {
     column.forEach((value, id) => column.set(id, value - seedColumn));
   }
+
+  // Step 3: pull each true source (in-degree zero, not the seed) right
+  // to sit one column left of its leftmost successor. Doesn't violate
+  // any constraint because the source has no predecessors and its
+  // outgoing edges still satisfy col(target) >= col(source) + 1 after
+  // the move.
+  inDegree.forEach((degree, id) => {
+    if (degree !== 0) return;
+    if (id === seedId) return;
+    const outs = out.get(id);
+    if (!outs || outs.length === 0) return;
+    let minSuccessorColumn = Infinity;
+    for (const successor of outs) {
+      const sc = column.get(successor);
+      if (sc !== undefined) {
+        minSuccessorColumn = Math.min(minSuccessorColumn, sc);
+      }
+    }
+    if (minSuccessorColumn !== Infinity) {
+      column.set(id, minSuccessorColumn - 1);
+    }
+  });
 
   return column;
 };

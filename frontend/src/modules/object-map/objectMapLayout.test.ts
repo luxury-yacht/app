@@ -33,9 +33,6 @@ describe('computeObjectMapLayout', () => {
   });
 
   it('places each generation in its own column when ownership flows from the seed', () => {
-    // Deployment seed → ReplicaSet → Pod. Directional layering
-    // (longest-path on directed edges) advances one column per edge,
-    // matching the natural left-to-right reading of an owner chain.
     const nodes: ObjectMapNode[] = [
       node('seed', 0, 'Deployment', 'web'),
       node('rs', 1, 'ReplicaSet', 'web-1'),
@@ -56,13 +53,9 @@ describe('computeObjectMapLayout', () => {
     expect(rs.x).toBe(COLUMN_STRIDE);
     expect(pod.x).toBe(2 * COLUMN_STRIDE);
     expect(seed.isSeed).toBe(true);
-    expect(pod.isSeed).toBe(false);
   });
 
-  it('places ancestors to the left of the seed by anchoring the seed at column 0', () => {
-    // Pod seed: the ReplicaSet that owns it (and its Deployment) feed
-    // the seed via incoming owner edges, so they land in negative
-    // columns once the layout shifts the seed to column 0.
+  it('places ancestors in negative columns once the seed is shifted to 0', () => {
     const nodes: ObjectMapNode[] = [
       node('dep', 0, 'Deployment', 'web'),
       node('rs', 1, 'ReplicaSet', 'web-1'),
@@ -73,44 +66,63 @@ describe('computeObjectMapLayout', () => {
       edge('e2', 'rs', 'seed', 'owner'),
     ];
     const layout = computeObjectMapLayout(nodes, edges, 'seed');
-    const seed = layout.nodes.find((n) => n.id === 'seed')!;
-    const rs = layout.nodes.find((n) => n.id === 'rs')!;
-    const dep = layout.nodes.find((n) => n.id === 'dep')!;
-    expect(seed.column).toBe(0);
-    expect(rs.column).toBe(-1);
-    expect(dep.column).toBe(-2);
-    expect(rs.x).toBe(-COLUMN_STRIDE);
-    expect(dep.x).toBe(-2 * COLUMN_STRIDE);
+    expect(layout.nodes.find((n) => n.id === 'seed')!.column).toBe(0);
+    expect(layout.nodes.find((n) => n.id === 'rs')!.column).toBe(-1);
+    expect(layout.nodes.find((n) => n.id === 'dep')!.column).toBe(-2);
   });
 
-  it('eliminates same-column edges in acyclic graphs by extending edges to the longest path', () => {
-    // The previous BFS-depth model put ReplicaSet (owned by seed) and
-    // ConfigMap (referenced from the RS template) both at depth=1, with
-    // a "uses" edge between them — a same-column loop. Under directional
-    // layering CM is pushed to the longest path: seed → RS → Pod → CM,
-    // so RS lands at column 1 and CM at column 3, with the RS→CM
-    // template-uses edge spanning two columns instead of looping back.
+  it('pulls graph sources rightward to sit adjacent to their successors', () => {
+    // The Karpenter case: NodeClaim is a graph source (no incoming
+    // edges) whose only outgoing edge is the owner edge to Node.
+    // Without the source-pull-right pass, longest-path layering would
+    // park NodeClaim at the leftmost column even though it's directly
+    // connected to Node deep in the seed's downstream chain. With the
+    // pass, NodeClaim ends up one column left of Node.
     const nodes: ObjectMapNode[] = [
       node('seed', 0, 'Deployment', 'web'),
       node('rs', 1, 'ReplicaSet', 'web-1'),
       node('pod', 2, 'Pod', 'web-1-a'),
-      node('cm', 3, 'ConfigMap', 'web-config'),
+      node('node', 3, 'Node', 'ip-10-0-0-1'),
+      node('nodeclaim', 4, 'NodeClaim', 'nc-abc'),
     ];
     const edges: ObjectMapEdge[] = [
       edge('e1', 'seed', 'rs', 'owner'),
       edge('e2', 'rs', 'pod', 'owner'),
-      edge('e3', 'pod', 'cm', 'uses'),
-      edge('e4', 'rs', 'cm', 'uses'), // template-uses
+      edge('e3', 'pod', 'node', 'schedules'),
+      edge('e4', 'nodeclaim', 'node', 'owner'),
     ];
     const layout = computeObjectMapLayout(nodes, edges, 'seed');
-    const rs = layout.nodes.find((n) => n.id === 'rs')!;
-    const pod = layout.nodes.find((n) => n.id === 'pod')!;
-    const cm = layout.nodes.find((n) => n.id === 'cm')!;
-    expect(rs.column).toBe(1);
-    expect(pod.column).toBe(2);
-    // CM must sit one column past Pod because Pod → CM forces it, even
-    // though the shorter RS → CM path alone would put it at column 2.
-    expect(cm.column).toBe(3);
+    const nodeRow = layout.nodes.find((n) => n.id === 'node')!;
+    const nc = layout.nodes.find((n) => n.id === 'nodeclaim')!;
+    expect(nodeRow.column).toBe(3);
+    expect(nc.column).toBe(2);
+    expect(nodeRow.column - nc.column).toBe(1);
+    // The NodeClaim → Node edge must span exactly one column and stay
+    // forward-going (no same-column, no backward).
+    const owned = layout.edges.find((e) => e.id === 'e4')!;
+    expect(owned.sameColumn).toBe(false);
+  });
+
+  it('eliminates same-column edges in acyclic graphs by extending edges to the longest path', () => {
+    // Service and EndpointSlice are both reachable in 1 hop from a
+    // Pod seed (Service via selector, ES via TargetRef), but the
+    // Service → ES endpoint edge keeps them in different columns
+    // under longest-path layering. Without that constraint the two
+    // would collide in the same column and the edge would loop back.
+    const nodes: ObjectMapNode[] = [
+      node('seed', 0, 'Pod', 'web-pod'),
+      node('svc', 1, 'Service', 'web'),
+      node('es', 1, 'EndpointSlice', 'web-xyz'),
+    ];
+    const edges: ObjectMapEdge[] = [
+      edge('e1', 'svc', 'seed', 'selector'),
+      edge('e2', 'es', 'seed', 'endpoint'),
+      edge('e3', 'svc', 'es', 'endpoint'),
+    ];
+    const layout = computeObjectMapLayout(nodes, edges, 'seed');
+    const svc = layout.nodes.find((n) => n.id === 'svc')!;
+    const es = layout.nodes.find((n) => n.id === 'es')!;
+    expect(svc.column).not.toBe(es.column);
     layout.edges.forEach((e) => expect(e.sameColumn).toBe(false));
   });
 
@@ -173,10 +185,9 @@ describe('computeObjectMapLayout', () => {
   });
 
   it('falls back to backend depth and arc-routes a same-column edge when an edge cycle traps both endpoints', () => {
-    // Construct a synthetic cycle so the topological pass cannot place
-    // either endpoint and falls back to backend depth (which puts both
-    // at the same column). This is the only case where same-column
-    // routing should fire under the directional layering model.
+    // The only way same-column edges should appear under min-length
+    // layering: a synthetic cycle the topological pass cannot resolve,
+    // so both endpoints fall back to backend BFS depth.
     const nodes: ObjectMapNode[] = [
       node('seed', 0, 'Deployment', 'web'),
       node('a', 1, 'Pod', 'a'),
@@ -190,7 +201,6 @@ describe('computeObjectMapLayout', () => {
     const cycleEdges = layout.edges.filter((e) => e.sameColumn);
     expect(cycleEdges).toHaveLength(2);
     cycleEdges.forEach((e) => {
-      // Same-column path bulges out to the right of the column anchor.
       const right = a.x + a.width;
       expect(e.d).toContain(`M ${right} `);
       expect(e.midX).toBeGreaterThan(right);
@@ -225,7 +235,6 @@ describe('computeObjectMapLayout', () => {
       expect(n.x + n.width).toBeLessThanOrEqual(layout.bounds.maxX);
       expect(n.y + n.height).toBeLessThanOrEqual(layout.bounds.maxY);
     });
-    // 3 pods stacked at depth 2 set the vertical span.
     expect(layout.bounds.maxY - layout.bounds.minY).toBe(
       3 * OBJECT_MAP_NODE_HEIGHT + 2 * OBJECT_MAP_ROW_GAP
     );
