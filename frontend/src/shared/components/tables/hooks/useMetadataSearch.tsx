@@ -15,6 +15,8 @@ import type { IconBarItem } from '@shared/components/IconBar/IconBar';
 import type { GridTableFilterState } from '@shared/components/tables/GridTable.types';
 
 export interface UseMetadataSearchOptions<T> {
+  /** Whether to create the metadata toggle item. */
+  enabled?: boolean;
   /** Return the default (non-metadata) search strings for a row. */
   getDefaultValues: (row: T) => string[];
   /** Return metadata maps (e.g. labels, annotations) to include when the toggle is on. */
@@ -31,7 +33,7 @@ export interface UseMetadataSearchResult<T> {
   /** Set the metadata toggle state directly (used to restore from favorites). */
   setIncludeMetadata: (value: boolean) => void;
   /** IconBar toggle item for the metadata search toggle. */
-  metadataToggle: IconBarItem;
+  metadataToggle: IconBarItem | null;
   /** Custom getSearchText accessor to pass to filters.accessors.getSearchText. */
   getSearchText: (row: T) => string[];
 }
@@ -54,7 +56,7 @@ export interface UseMetadataSearchResult<T> {
 export function useMetadataSearch<T>(
   options: UseMetadataSearchOptions<T>
 ): UseMetadataSearchResult<T> {
-  const { getDefaultValues, getMetadataMaps, filters, onFiltersChange } = options;
+  const { enabled = true, getDefaultValues, getMetadataMaps, filters, onFiltersChange } = options;
   const includeMetadata = filters.includeMetadata;
 
   const setIncludeMetadata = useCallback(
@@ -64,16 +66,19 @@ export function useMetadataSearch<T>(
     [filters, onFiltersChange]
   );
 
-  const metadataToggle = useMemo<IconBarItem>(
-    () => ({
-      type: 'toggle' as const,
-      id: 'include-metadata',
-      icon: <MetadataIcon width={16} height={16} />,
-      active: includeMetadata,
-      onClick: () => setIncludeMetadata(!includeMetadata),
-      title: 'Include metadata',
-    }),
-    [includeMetadata, setIncludeMetadata]
+  const metadataToggle = useMemo<IconBarItem | null>(
+    () =>
+      enabled
+        ? {
+            type: 'toggle' as const,
+            id: 'include-metadata',
+            icon: <MetadataIcon width={16} height={16} />,
+            active: includeMetadata,
+            onClick: () => setIncludeMetadata(!includeMetadata),
+            title: 'Include metadata',
+          }
+        : null,
+    [enabled, includeMetadata, setIncludeMetadata]
   );
 
   const getSearchText = useCallback(

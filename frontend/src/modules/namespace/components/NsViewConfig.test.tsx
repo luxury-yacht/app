@@ -18,6 +18,10 @@ vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
   }),
 }));
 
+vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
+  useKubeconfig: () => ({ selectedKubeconfig: 'path:context', selectedClusterId: 'cluster-a' }),
+}));
+
 const objectPanelMock = vi.hoisted(() => ({
   openWithObject: vi.fn(),
 }));

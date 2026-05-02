@@ -18,6 +18,10 @@ vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
   }),
 }));
 
+vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
+  useKubeconfig: () => ({ selectedKubeconfig: 'path:context', selectedClusterId: 'cluster-a' }),
+}));
+
 import NsViewNetwork, { type NetworkData } from '@modules/namespace/components/NsViewNetwork';
 
 const {

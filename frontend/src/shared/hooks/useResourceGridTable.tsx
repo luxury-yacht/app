@@ -3,13 +3,12 @@ import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useNamespaceFilterOptions } from '@modules/namespace/hooks/useNamespaceFilterOptions';
 import { useNamespaceGridTablePersistence } from '@modules/namespace/hooks/useNamespaceGridTablePersistence';
-import type { IconBarItem } from '@shared/components/IconBar/IconBar';
-import { MetadataIcon } from '@shared/components/icons/MenuIcons';
 import {
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
   type GridTableFilterConfig,
 } from '@shared/components/tables/GridTable';
 import { useKindFilterOptions } from '@shared/components/tables/hooks/useKindFilterOptions';
+import { useMetadataSearch } from '@shared/components/tables/hooks/useMetadataSearch';
 import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
 import { useFavToggle } from '@ui/favorites/FavToggle';
 import { useGridTableBinding } from './useGridTableBinding';
@@ -266,67 +265,43 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
   );
   const availableFilterNamespaces = useNamespaceFilterOptions(namespace, fallbackNamespaces);
   const useMetadata = Boolean(metadataSearch);
-  const includeMetadata = persistence.filters.includeMetadata;
-  const setIncludeMetadata = useCallback(
-    (value: boolean) => {
-      persistence.setFilters({ ...persistence.filters, includeMetadata: value });
-    },
-    [persistence]
+  const getDefaultMetadataSearchValues = useCallback(
+    (row: T) => metadataSearch?.getDefaultValues(row) ?? [],
+    [metadataSearch]
   );
-  const metadataSearchText = useCallback(
-    (row: T): string[] => {
-      if (!metadataSearch) {
-        return [];
-      }
-
-      const values: string[] = metadataSearch.getDefaultValues(row).filter(Boolean);
-      if (includeMetadata) {
-        for (const map of metadataSearch.getMetadataMaps(row)) {
-          if (!map) continue;
-          for (const [key, value] of Object.entries(map)) {
-            values.push(key, value, `${key}: ${value}`);
-          }
-        }
-      }
-      return values;
-    },
-    [includeMetadata, metadataSearch]
+  const getMetadataSearchMaps = useCallback(
+    (row: T) => metadataSearch?.getMetadataMaps(row) ?? [],
+    [metadataSearch]
   );
-  const metadataToggle = useMemo<IconBarItem | null>(() => {
-    if (!metadataSearch) {
-      return null;
-    }
-
-    return {
-      type: 'toggle',
-      id: 'include-metadata',
-      icon: <MetadataIcon width={16} height={16} />,
-      active: includeMetadata,
-      onClick: () => setIncludeMetadata(!includeMetadata),
-      title: 'Include metadata',
-    };
-  }, [includeMetadata, metadataSearch, setIncludeMetadata]);
+  const metadata = useMetadataSearch<T>({
+    enabled: useMetadata,
+    getDefaultValues: getDefaultMetadataSearchValues,
+    getMetadataMaps: getMetadataSearchMaps,
+    filters: persistence.filters,
+    onFiltersChange: persistence.setFilters,
+  });
+  const metadataToggle = useMetadata ? metadata.metadataToggle : null;
   const effectiveFilterAccessors = useMemo<GridTableFilterConfig<T>['accessors']>(
     () =>
       useMetadata
         ? {
             ...filterAccessors,
-            getSearchText: metadataSearchText,
+            getSearchText: metadata.getSearchText,
           }
         : filterAccessors,
-    [filterAccessors, metadataSearchText, useMetadata]
+    [filterAccessors, metadata.getSearchText, useMetadata]
   );
 
   const { item: favToggle, modal: favModal } = useFavToggle({
     filters: persistence.filters,
-    includeMetadata: useMetadata ? includeMetadata : undefined,
+    includeMetadata: useMetadata ? metadata.includeMetadata : undefined,
     sortColumn: sortConfig?.key ?? null,
     sortDirection: sortConfig?.direction ?? 'asc',
     columnVisibility: persistence.columnVisibility ?? {},
     setFilters: persistence.setFilters,
     setSortConfig: persistence.setSortConfig,
     setColumnVisibility: persistence.setColumnVisibility,
-    setIncludeMetadata: useMetadata ? setIncludeMetadata : undefined,
+    setIncludeMetadata: useMetadata ? metadata.setIncludeMetadata : undefined,
     hydrated: persistence.hydrated,
     availableKinds,
     availableFilterNamespaces: showNamespaceFilters ? availableFilterNamespaces : undefined,

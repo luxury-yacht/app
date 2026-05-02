@@ -8,6 +8,7 @@
 import './NsViewRBAC.css';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useShortNames } from '@/hooks/useShortNames';
@@ -87,6 +88,7 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
   }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
+    const { selectedClusterId } = useKubeconfig();
     const useShortResourceNames = useShortNames();
     const namespaceColumnLink = useNamespaceColumnLink<RBACData>('rbac');
     const permissionMap = useUserPermissions();
@@ -99,27 +101,33 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
       (resource: RBACData) => {
         const resolvedKind = resource.kind || resource.kindAlias;
         openWithObject(
-          buildRequiredObjectReference({
-            kind: resolvedKind,
-            name: resource.name,
-            namespace: resource.namespace,
-            clusterId: resource.clusterId ?? undefined,
-            clusterName: resource.clusterName ?? undefined,
-          })
+          buildRequiredObjectReference(
+            {
+              kind: resolvedKind,
+              name: resource.name,
+              namespace: resource.namespace,
+              clusterId: resource.clusterId,
+              clusterName: resource.clusterName ?? undefined,
+            },
+            { fallbackClusterId: selectedClusterId }
+          )
         );
       },
-      [openWithObject]
+      [openWithObject, selectedClusterId]
     );
 
     const keyExtractor = useCallback(
       (resource: RBACData) =>
-        buildRequiredCanonicalObjectRowKey({
-          kind: resource.kind || resource.kindAlias,
-          name: resource.name,
-          namespace: resource.namespace,
-          clusterId: resource.clusterId,
-        }),
-      []
+        buildRequiredCanonicalObjectRowKey(
+          {
+            kind: resource.kind || resource.kindAlias,
+            name: resource.name,
+            namespace: resource.namespace,
+            clusterId: resource.clusterId,
+          },
+          { fallbackClusterId: selectedClusterId }
+        ),
+      [selectedClusterId]
     );
 
     const columns: GridColumnDefinition<RBACData>[] = useMemo(() => {
@@ -132,26 +140,32 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
           onClick: handleResourceClick,
           onAltClick: (resource) =>
             navigateToView(
-              buildRequiredObjectReference({
-                kind: resource.kind,
-                name: resource.name,
-                namespace: resource.namespace,
-                clusterId: resource.clusterId ?? undefined,
-                clusterName: resource.clusterName ?? undefined,
-              })
+              buildRequiredObjectReference(
+                {
+                  kind: resource.kind,
+                  name: resource.name,
+                  namespace: resource.namespace,
+                  clusterId: resource.clusterId,
+                  clusterName: resource.clusterName ?? undefined,
+                },
+                { fallbackClusterId: selectedClusterId }
+              )
             ),
         }),
         cf.createTextColumn<RBACData>('name', 'Name', {
           onClick: handleResourceClick,
           onAltClick: (resource) =>
             navigateToView(
-              buildRequiredObjectReference({
-                kind: resource.kind,
-                name: resource.name,
-                namespace: resource.namespace,
-                clusterId: resource.clusterId ?? undefined,
-                clusterName: resource.clusterName ?? undefined,
-              })
+              buildRequiredObjectReference(
+                {
+                  kind: resource.kind,
+                  name: resource.name,
+                  namespace: resource.namespace,
+                  clusterId: resource.clusterId,
+                  clusterName: resource.clusterName ?? undefined,
+                },
+                { fallbackClusterId: selectedClusterId }
+              )
             ),
           getClassName: () => 'object-panel-link',
         }),
@@ -179,6 +193,7 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
       handleResourceClick,
       namespaceColumnLink,
       navigateToView,
+      selectedClusterId,
       showNamespaceColumn,
       useShortResourceNames,
     ]);
@@ -206,7 +221,8 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
       try {
         // Multi-cluster rule (AGENTS.md): every backend command must
         // carry a resolved clusterId.
-        if (!resource.clusterId) {
+        const clusterId = resource.clusterId ?? selectedClusterId ?? null;
+        if (!clusterId) {
           throw new Error(`Cannot delete ${resource.kind}/${resource.name}: clusterId is missing`);
         }
         // Built-in RBAC kinds (Role/RoleBinding/ServiceAccount) resolve via
@@ -219,7 +235,7 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
           );
         }
         await DeleteResourceByGVK(
-          resource.clusterId,
+          clusterId,
           apiVersion,
           resource.kind,
           resource.namespace,
@@ -234,23 +250,27 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
         });
         setDeleteConfirm({ show: false, resource: null });
       }
-    }, [deleteConfirm.resource]);
+    }, [deleteConfirm.resource, selectedClusterId]);
 
     const getContextMenuItems = useCallback(
       (resource: RBACData): ContextMenuItem[] => {
+        const clusterId = resource.clusterId ?? selectedClusterId ?? undefined;
         const deleteStatus =
           permissionMap.get(
-            getPermissionKey(resource.kind, 'delete', resource.namespace, null, resource.clusterId)
+            getPermissionKey(resource.kind, 'delete', resource.namespace, null, clusterId)
           ) ?? null;
 
         return buildObjectActionItems({
-          object: buildRequiredObjectReference({
-            kind: resource.kind,
-            name: resource.name,
-            namespace: resource.namespace,
-            clusterId: resource.clusterId,
-            clusterName: resource.clusterName,
-          }),
+          object: buildRequiredObjectReference(
+            {
+              kind: resource.kind,
+              name: resource.name,
+              namespace: resource.namespace,
+              clusterId: resource.clusterId,
+              clusterName: resource.clusterName,
+            },
+            { fallbackClusterId: selectedClusterId }
+          ),
           context: 'gridtable',
           handlers: {
             onOpen: () => handleResourceClick(resource),
@@ -261,7 +281,7 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
           },
         });
       },
-      [handleResourceClick, permissionMap]
+      [handleResourceClick, permissionMap, selectedClusterId]
     );
 
     const emptyMessage = useMemo(

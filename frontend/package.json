@@ -31,7 +31,7 @@
     "dayjs": "^1.11.20",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
-    "yaml": "^2.8.3"
+    "yaml": "^2.8.4"
   },
   "devDependencies": {
     "@storybook/react": "^10.3.6",
@@ -43,11 +43,11 @@
     "@typescript-eslint/parser": "^8.59.1",
     "@vitejs/plugin-react": "^6.0.1",
     "@vitest/coverage-v8": "^4.1.5",
-    "eslint": "^10.2.1",
+    "eslint": "^10.3.0",
     "eslint-import-resolver-typescript": "^4.4.4",
     "eslint-plugin-react-hooks": "^7.1.1",
     "jsdom": "^29.1.1",
-    "knip": "^6.9.0",
+    "knip": "^6.11.0",
     "prettier": "^3.8.3",
     "storybook": "^10.3.6",
     "typescript": "^6.0.3",

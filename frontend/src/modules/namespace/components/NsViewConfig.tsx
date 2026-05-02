@@ -9,6 +9,7 @@ import './NsViewConfig.css';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
 import { getPermissionKey, useUserPermissions } from '@/core/capabilities';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useShortNames } from '@/hooks/useShortNames';
@@ -66,6 +67,7 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
   }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
+    const { selectedClusterId } = useKubeconfig();
     const useShortResourceNames = useShortNames();
     const namespaceColumnLink = useNamespaceColumnLink<ConfigData>('config');
     const permissionMap = useUserPermissions();
@@ -78,27 +80,33 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
       (resource: ConfigData) => {
         const resolvedKind = resource.kind || resource.kindAlias;
         openWithObject(
-          buildRequiredObjectReference({
-            kind: resolvedKind,
-            name: resource.name,
-            namespace: resource.namespace,
-            clusterId: resource.clusterId ?? undefined,
-            clusterName: resource.clusterName ?? undefined,
-          })
+          buildRequiredObjectReference(
+            {
+              kind: resolvedKind,
+              name: resource.name,
+              namespace: resource.namespace,
+              clusterId: resource.clusterId,
+              clusterName: resource.clusterName ?? undefined,
+            },
+            { fallbackClusterId: selectedClusterId }
+          )
         );
       },
-      [openWithObject]
+      [openWithObject, selectedClusterId]
     );
 
     const keyExtractor = useCallback(
       (resource: ConfigData) =>
-        buildRequiredCanonicalObjectRowKey({
-          kind: resource.kindAlias ?? resource.kind,
-          name: resource.name,
-          namespace: resource.namespace,
-          clusterId: resource.clusterId,
-        }),
-      []
+        buildRequiredCanonicalObjectRowKey(
+          {
+            kind: resource.kindAlias ?? resource.kind,
+            name: resource.name,
+            namespace: resource.namespace,
+            clusterId: resource.clusterId,
+          },
+          { fallbackClusterId: selectedClusterId }
+        ),
+      [selectedClusterId]
     );
 
     const columns: GridColumnDefinition<ConfigData>[] = useMemo(() => {
@@ -111,26 +119,32 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
           onClick: handleResourceClick,
           onAltClick: (resource) =>
             navigateToView(
-              buildRequiredObjectReference({
-                kind: resource.kind,
-                name: resource.name,
-                namespace: resource.namespace,
-                clusterId: resource.clusterId ?? undefined,
-                clusterName: resource.clusterName ?? undefined,
-              })
+              buildRequiredObjectReference(
+                {
+                  kind: resource.kind,
+                  name: resource.name,
+                  namespace: resource.namespace,
+                  clusterId: resource.clusterId,
+                  clusterName: resource.clusterName ?? undefined,
+                },
+                { fallbackClusterId: selectedClusterId }
+              )
             ),
         }),
         cf.createTextColumn<ConfigData>('name', 'Name', {
           onClick: handleResourceClick,
           onAltClick: (resource) =>
             navigateToView(
-              buildRequiredObjectReference({
-                kind: resource.kind,
-                name: resource.name,
-                namespace: resource.namespace,
-                clusterId: resource.clusterId ?? undefined,
-                clusterName: resource.clusterName ?? undefined,
-              })
+              buildRequiredObjectReference(
+                {
+                  kind: resource.kind,
+                  name: resource.name,
+                  namespace: resource.namespace,
+                  clusterId: resource.clusterId,
+                  clusterName: resource.clusterName ?? undefined,
+                },
+                { fallbackClusterId: selectedClusterId }
+              )
             ),
           getClassName: () => 'object-panel-link',
         }),
@@ -170,6 +184,7 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
       handleResourceClick,
       namespaceColumnLink,
       navigateToView,
+      selectedClusterId,
       showNamespaceColumn,
       useShortResourceNames,
     ]);
@@ -200,7 +215,8 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
         // Multi-cluster rule (AGENTS.md): every backend command must
         // carry a resolved clusterId. Fail loud here rather than passing
         // an empty string to the Wails layer.
-        if (!resource.clusterId) {
+        const clusterId = resource.clusterId ?? selectedClusterId ?? null;
+        if (!clusterId) {
           throw new Error(`Cannot delete ${resource.kind}/${resource.name}: clusterId is missing`);
         }
         // Built-in ConfigMap/Secret resolve via the lookup table. Any miss
@@ -214,7 +230,7 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
           );
         }
         await DeleteResourceByGVK(
-          resource.clusterId,
+          clusterId,
           apiVersion,
           resource.kind,
           resource.namespace,
@@ -229,23 +245,27 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
         });
         setDeleteConfirm({ show: false, resource: null });
       }
-    }, [deleteConfirm.resource]);
+    }, [deleteConfirm.resource, selectedClusterId]);
 
     const getContextMenuItems = useCallback(
       (resource: ConfigData): ContextMenuItem[] => {
+        const clusterId = resource.clusterId ?? selectedClusterId ?? undefined;
         const deleteStatus =
           permissionMap.get(
-            getPermissionKey(resource.kind, 'delete', resource.namespace, null, resource.clusterId)
+            getPermissionKey(resource.kind, 'delete', resource.namespace, null, clusterId)
           ) ?? null;
 
         return buildObjectActionItems({
-          object: buildRequiredObjectReference({
-            kind: resource.kind,
-            name: resource.name,
-            namespace: resource.namespace,
-            clusterId: resource.clusterId,
-            clusterName: resource.clusterName,
-          }),
+          object: buildRequiredObjectReference(
+            {
+              kind: resource.kind,
+              name: resource.name,
+              namespace: resource.namespace,
+              clusterId: resource.clusterId,
+              clusterName: resource.clusterName,
+            },
+            { fallbackClusterId: selectedClusterId }
+          ),
           context: 'gridtable',
           handlers: {
             onOpen: () => handleResourceClick(resource),
@@ -256,7 +276,7 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
           },
         });
       },
-      [handleResourceClick, permissionMap]
+      [handleResourceClick, permissionMap, selectedClusterId]
     );
 
     const emptyMessage = useMemo(

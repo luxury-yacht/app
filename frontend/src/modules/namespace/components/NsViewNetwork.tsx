@@ -9,6 +9,7 @@ import './NsViewNetwork.css';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
 import { getPermissionKey, useUserPermissions } from '@/core/capabilities';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useShortNames } from '@/hooks/useShortNames';
@@ -70,6 +71,7 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
   }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
+    const { selectedClusterId } = useKubeconfig();
     const useShortResourceNames = useShortNames();
     const namespaceColumnLink = useNamespaceColumnLink<NetworkData>('network');
     const permissionMap = useUserPermissions();
@@ -83,27 +85,33 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
       (resource: NetworkData) => {
         const resolvedKind = resource.kind || resource.kindAlias;
         openWithObject(
-          buildRequiredObjectReference({
-            kind: resolvedKind,
-            name: resource.name,
-            namespace: resource.namespace,
-            clusterId: resource.clusterId ?? undefined,
-            clusterName: resource.clusterName ?? undefined,
-          })
+          buildRequiredObjectReference(
+            {
+              kind: resolvedKind,
+              name: resource.name,
+              namespace: resource.namespace,
+              clusterId: resource.clusterId,
+              clusterName: resource.clusterName ?? undefined,
+            },
+            { fallbackClusterId: selectedClusterId }
+          )
         );
       },
-      [openWithObject]
+      [openWithObject, selectedClusterId]
     );
 
     const keyExtractor = useCallback(
       (resource: NetworkData) =>
-        buildRequiredCanonicalObjectRowKey({
-          kind: resource.kind,
-          name: resource.name,
-          namespace: resource.namespace,
-          clusterId: resource.clusterId,
-        }),
-      []
+        buildRequiredCanonicalObjectRowKey(
+          {
+            kind: resource.kind,
+            name: resource.name,
+            namespace: resource.namespace,
+            clusterId: resource.clusterId,
+          },
+          { fallbackClusterId: selectedClusterId }
+        ),
+      [selectedClusterId]
     );
 
     const columns: GridColumnDefinition<NetworkData>[] = useMemo(() => {
@@ -116,26 +124,32 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
           onClick: handleResourceClick,
           onAltClick: (resource) =>
             navigateToView(
-              buildRequiredObjectReference({
-                kind: resource.kind,
-                name: resource.name,
-                namespace: resource.namespace,
-                clusterId: resource.clusterId ?? undefined,
-                clusterName: resource.clusterName ?? undefined,
-              })
+              buildRequiredObjectReference(
+                {
+                  kind: resource.kind,
+                  name: resource.name,
+                  namespace: resource.namespace,
+                  clusterId: resource.clusterId,
+                  clusterName: resource.clusterName ?? undefined,
+                },
+                { fallbackClusterId: selectedClusterId }
+              )
             ),
         }),
         cf.createTextColumn<NetworkData>('name', 'Name', {
           onClick: handleResourceClick,
           onAltClick: (resource) =>
             navigateToView(
-              buildRequiredObjectReference({
-                kind: resource.kind,
-                name: resource.name,
-                namespace: resource.namespace,
-                clusterId: resource.clusterId ?? undefined,
-                clusterName: resource.clusterName ?? undefined,
-              })
+              buildRequiredObjectReference(
+                {
+                  kind: resource.kind,
+                  name: resource.name,
+                  namespace: resource.namespace,
+                  clusterId: resource.clusterId,
+                  clusterName: resource.clusterName ?? undefined,
+                },
+                { fallbackClusterId: selectedClusterId }
+              )
             ),
           getClassName: () => 'object-panel-link',
         }),
@@ -173,6 +187,7 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
       handleResourceClick,
       namespaceColumnLink,
       navigateToView,
+      selectedClusterId,
       showNamespaceColumn,
       useShortResourceNames,
     ]);
@@ -200,7 +215,8 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
       try {
         // Multi-cluster rule (AGENTS.md): every backend command must
         // carry a resolved clusterId.
-        if (!resource.clusterId) {
+        const clusterId = resource.clusterId ?? selectedClusterId ?? null;
+        if (!clusterId) {
           throw new Error(`Cannot delete ${resource.kind}/${resource.name}: clusterId is missing`);
         }
         // Built-in network resources (Service/Ingress/NetworkPolicy/EndpointSlice)
@@ -213,7 +229,7 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
           );
         }
         await DeleteResourceByGVK(
-          resource.clusterId,
+          clusterId,
           apiVersion,
           resource.kind,
           resource.namespace,
@@ -228,34 +244,38 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
         });
         setDeleteConfirm({ show: false, resource: null });
       }
-    }, [deleteConfirm.resource]);
+    }, [deleteConfirm.resource, selectedClusterId]);
 
     const getContextMenuItems = useCallback(
       (resource: NetworkData): ContextMenuItem[] => {
+        const clusterId = resource.clusterId ?? selectedClusterId ?? undefined;
         const deleteStatus =
           permissionMap.get(
-            getPermissionKey(resource.kind, 'delete', resource.namespace, null, resource.clusterId)
+            getPermissionKey(resource.kind, 'delete', resource.namespace, null, clusterId)
           ) ?? null;
         const portForwardStatus =
           permissionMap.get(
-            getPermissionKey('Pod', 'create', resource.namespace, 'portforward', resource.clusterId)
+            getPermissionKey('Pod', 'create', resource.namespace, 'portforward', clusterId)
           ) ?? null;
 
         return buildObjectActionItems({
-          object: buildRequiredObjectReference({
-            kind: resource.kind,
-            name: resource.name,
-            namespace: resource.namespace,
-            clusterId: resource.clusterId,
-            clusterName: resource.clusterName,
-          }),
+          object: buildRequiredObjectReference(
+            {
+              kind: resource.kind,
+              name: resource.name,
+              namespace: resource.namespace,
+              clusterId: resource.clusterId,
+              clusterName: resource.clusterName,
+            },
+            { fallbackClusterId: selectedClusterId }
+          ),
           context: 'gridtable',
           handlers: {
             onOpen: () => handleResourceClick(resource),
             onPortForward: () => {
               // Multi-cluster rule (AGENTS.md): port-forward is a backend
               // command and must carry a resolved clusterId.
-              if (!resource.clusterId) {
+              if (!clusterId) {
                 errorHandler.handle(
                   new Error(
                     `Cannot open port-forward for ${resource.kind}/${resource.name}: clusterId is missing`
@@ -271,7 +291,7 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
                 version: targetGVK.version ?? 'v1',
                 name: resource.name,
                 namespace: resource.namespace,
-                clusterId: resource.clusterId,
+                clusterId,
                 clusterName: resource.clusterName ?? '',
                 ports: [],
               });
@@ -284,7 +304,7 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
           },
         });
       },
-      [handleResourceClick, permissionMap]
+      [handleResourceClick, permissionMap, selectedClusterId]
     );
 
     const emptyMessage = useMemo(
