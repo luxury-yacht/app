@@ -63,11 +63,17 @@
   display: block;
   width: 100%;
   height: 100%;
+  /* Inherit the page font into SVG <text>; without this, some engines
+   * fall back to a generic serif which doesn't match the surrounding
+   * UI. */
+  font-family: inherit;
 }
 
 .object-map__viewport {
   transform-origin: 0 0;
 }
+
+/* --- Edges (native SVG <path>) ----------------------------------- */
 
 .object-map__edges path {
   fill: none;
@@ -113,63 +119,6 @@
   stroke: var(--color-text-tertiary);
 }
 
-.object-map-node {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: flex-start;
-  padding: 6px 10px;
-  background: var(--color-bg);
-  color: var(--color-text);
-  border: var(--border-width) solid var(--color-border);
-  border-radius: var(--border-radius-md);
-  cursor: pointer;
-  text-align: left;
-  font: inherit;
-  overflow: hidden;
-  transition:
-    border-color 120ms ease,
-    box-shadow 120ms ease;
-}
-
-.object-map-node:hover {
-  border-color: var(--color-accent);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
-}
-
-.object-map-node:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 1px;
-}
-
-.object-map-node--seed {
-  border-color: var(--color-accent);
-  border-width: 2px;
-  box-shadow: 0 0 0 2px var(--color-accent-bg);
-}
-
-.object-map-node--selected {
-  border-color: var(--color-accent);
-  border-width: 2px;
-  box-shadow:
-    0 0 0 3px var(--color-accent-bg),
-    0 2px 8px rgba(0, 0, 0, 0.15);
-}
-
-.object-map-node--connected {
-  border-color: var(--color-accent);
-}
-
-/* Dimmed nodes/edges when a selection is active. We dim via opacity
- * rather than a separate colour so kind-specific palettes remain
- * recognisable; the contrast against the highlighted set is enough to
- * read the connectivity. */
-.object-map-node--dimmed {
-  opacity: 0.25;
-}
-
 .object-map-edge--highlighted {
   stroke-width: 2.5;
 }
@@ -178,59 +127,97 @@
   opacity: 0.15;
 }
 
+/* --- Nodes (native SVG <g> + <rect> + <text>) -------------------- */
+
+.object-map-node {
+  cursor: pointer;
+}
+
+.object-map-node:focus {
+  outline: none;
+}
+
+.object-map-node:focus-visible .object-map-node__bg {
+  stroke: var(--color-accent);
+  stroke-width: 2;
+}
+
+.object-map-node__bg {
+  fill: var(--color-bg);
+  stroke: var(--color-border);
+  stroke-width: 1;
+  transition: stroke 120ms ease;
+}
+
+.object-map-node:hover .object-map-node__bg {
+  stroke: var(--color-accent);
+}
+
 .object-map-node__kind {
-  font-size: 0.75rem;
+  font-size: 11px;
   font-weight: 600;
-  color: var(--color-accent);
+  fill: var(--color-accent);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  line-height: 1;
+  letter-spacing: 0.5px;
 }
 
 .object-map-node__name {
-  font-size: 0.95rem;
+  font-size: 14px;
   font-weight: 600;
-  margin-top: 2px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
+  fill: var(--color-text);
 }
 
 .object-map-node__namespace {
-  font-size: 0.75rem;
-  color: var(--color-text-secondary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
+  font-size: 11px;
+  fill: var(--color-text-secondary);
 }
+
+.object-map-node--seed .object-map-node__bg {
+  stroke: var(--color-accent);
+  stroke-width: 2;
+}
+
+.object-map-node--selected .object-map-node__bg {
+  stroke: var(--color-accent);
+  stroke-width: 2.5;
+}
+
+.object-map-node--connected .object-map-node__bg {
+  stroke: var(--color-accent);
+  stroke-width: 1.5;
+}
+
+/* Dim everything else when a selection is active. Opacity on the <g>
+ * cascades to all children — the kind/name/namespace text and the
+ * background rect all fade together. */
+.object-map-node--dimmed {
+  opacity: 0.25;
+}
+
+/* --- Edge tooltip (also native SVG so the transform applies cleanly) -- */
 
 .object-map__edge-tooltip {
   pointer-events: none;
 }
 
-.object-map__edge-tooltip-card {
-  background: var(--color-bg);
-  color: var(--color-text);
-  border: var(--border-width) solid var(--color-border);
-  border-radius: var(--border-radius-sm);
-  padding: 4px 8px;
-  font-size: 0.75rem;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.object-map__edge-tooltip-bg {
+  fill: var(--color-bg);
+  stroke: var(--color-border);
+  stroke-width: 1;
 }
 
 .object-map__edge-tooltip-label {
+  font-size: 11px;
   font-weight: 600;
+  fill: var(--color-text);
 }
 
 .object-map__edge-tooltip-trace {
-  color: var(--color-text-tertiary);
-  font-size: 0.7rem;
+  font-size: 10px;
+  fill: var(--color-text-tertiary);
 }
+
+/* --- Banners and warnings (HTML, outside the transformed SVG) ------- */
 
 .object-map__banner {
   padding: var(--spacing-sm) var(--spacing-md);

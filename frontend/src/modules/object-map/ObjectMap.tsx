@@ -6,6 +6,16 @@
  * The wrapping MapTab manages refresh/scope/lifecycle so this component
  * can be relocated into a different host without rewiring.
  *
+ * Why pure SVG (no foreignObject): WebKit (and therefore Wails on
+ * macOS) renders foreignObject content inconsistently when the parent
+ * SVG has a non-identity transform — some elements scale with the
+ * transform, some render at native HTML pixel size. Both versions can
+ * appear in the same view, producing "ghost" cards at the wrong size
+ * and position. Native SVG primitives transform uniformly across all
+ * engines, so node cards are built from <rect> + <text>. The
+ * trade-off: SVG <text> has no text-overflow:ellipsis, so we truncate
+ * strings by character count.
+ *
  * Click semantics: clicking a node selects it, which highlights the
  * node, its direct neighbours, and the edges connecting them while
  * dimming everything else. Clicking the background or the same node
@@ -38,6 +48,54 @@ interface HoverEdge {
   tracedBy?: string;
 }
 
+interface SelectionState {
+  activeId: string | null;
+  connectedIds: Set<string>;
+  connectedEdgeIds: Set<string>;
+}
+
+const EMPTY_SELECTION: SelectionState = {
+  activeId: null,
+  connectedIds: new Set(),
+  connectedEdgeIds: new Set(),
+};
+
+// Layout constants for the SVG node card. These match the visual
+// hierarchy of the previous HTML version (kind small + uppercase, name
+// medium + bold, namespace small + muted). Vertical positions are y
+// coordinates of each text line's BASELINE (SVG default
+// dominant-baseline = "alphabetic").
+const NODE_PADDING_X = 10;
+const NODE_KIND_BASELINE_Y = 18;
+const NODE_NAME_BASELINE_Y = 38;
+const NODE_NAMESPACE_BASELINE_Y = 56;
+const NODE_CORNER_RADIUS = 6;
+
+// Char limits per line, chosen so the longest realistic content fits
+// within the node's interior width (~200px after padding) at the
+// configured font sizes. Refined empirically — the kind line never
+// approaches the limit (longest built-in is "ENDPOINTSLICE" at 13
+// chars), the name line is the one that truncates often.
+const KIND_MAX_CHARS = 26;
+const NAME_MAX_CHARS = 22;
+const NAMESPACE_MAX_CHARS = 28;
+
+// Edge tooltip dimensions, sized so the rectangular background fits a
+// short label and an optional `tracedBy` line above the edge midpoint.
+const TOOLTIP_WIDTH = 200;
+const TOOLTIP_HEIGHT_SINGLE = 28;
+const TOOLTIP_HEIGHT_DOUBLE = 44;
+const TOOLTIP_LABEL_MAX_CHARS = 30;
+const TOOLTIP_TRACE_MAX_CHARS = 36;
+
+const truncate = (text: string, maxChars: number): string => {
+  if (text.length <= maxChars) return text;
+  // Use a single-character ellipsis (U+2026) so the visible width
+  // matches a single-glyph slot — three dots would push the truncation
+  // past the budget.
+  return `${text.slice(0, maxChars - 1)}…`;
+};
+
 const formatNamespace = (ref: PositionedNode['ref']): string =>
   ref.namespace?.trim() ? ref.namespace : 'cluster-scoped';
 
@@ -67,58 +125,68 @@ const buildEdgeClass = (edge: PositionedEdge, selectionState: SelectionState): s
   return `${base} object-map-edge--dimmed`;
 };
 
-interface SelectionState {
-  activeId: string | null;
-  connectedIds: Set<string>;
-  connectedEdgeIds: Set<string>;
-}
-
-const EMPTY_SELECTION: SelectionState = {
-  activeId: null,
-  connectedIds: new Set(),
-  connectedEdgeIds: new Set(),
-};
-
 const ObjectMapNodeCard: React.FC<{
   node: PositionedNode;
   className: string;
-  onClick: (id: string) => void;
-}> = ({ node, className, onClick }) => {
-  const handleClick = useCallback(() => {
-    onClick(node.id);
-  }, [node.id, onClick]);
-
-  const handleKeyDown = useCallback(
-    (event: React.KeyboardEvent<HTMLButtonElement>) => {
-      if (event.key === 'Enter' || event.key === ' ') {
-        event.preventDefault();
-        onClick(node.id);
-      }
+  onSelect: (id: string) => void;
+}> = ({ node, className, onSelect }) => {
+  const handleClick = useCallback(
+    (event: React.MouseEvent<SVGGElement>) => {
+      // Stop the SVG-level "background click clears selection" handler
+      // from firing for clicks that landed on a node.
+      event.stopPropagation();
+      onSelect(node.id);
     },
-    [node.id, onClick]
+    [node.id, onSelect]
   );
 
-  // Stop pan-drag from kicking in when the user click-drags a node. The
-  // outer pointer-handlers run on the SVG background; node interactions
-  // shouldn't double as a pan.
+  const handleKeyDown = useCallback(
+    (event: React.KeyboardEvent<SVGGElement>) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        onSelect(node.id);
+      }
+    },
+    [node.id, onSelect]
+  );
+
+  // Stop pan-drag from kicking in when the user click-drags a node.
   const stopPointer = useCallback((event: React.PointerEvent) => {
     event.stopPropagation();
   }, []);
 
   return (
-    <button
-      type="button"
+    <g
       className={className}
+      transform={`translate(${node.x} ${node.y})`}
       onClick={handleClick}
       onKeyDown={handleKeyDown}
       onPointerDown={stopPointer}
       onPointerUp={stopPointer}
-      title={`${node.ref.kind}: ${node.ref.name}`}
+      tabIndex={0}
+      role="button"
+      aria-label={`${node.ref.kind}: ${node.ref.name}`}
     >
-      <div className="object-map-node__kind">{node.ref.kind}</div>
-      <div className="object-map-node__name">{node.ref.name}</div>
-      <div className="object-map-node__namespace">{formatNamespace(node.ref)}</div>
-    </button>
+      <title>
+        {node.ref.kind}: {node.ref.name}
+      </title>
+      <rect
+        className="object-map-node__bg"
+        width={node.width}
+        height={node.height}
+        rx={NODE_CORNER_RADIUS}
+        ry={NODE_CORNER_RADIUS}
+      />
+      <text className="object-map-node__kind" x={NODE_PADDING_X} y={NODE_KIND_BASELINE_Y}>
+        {truncate(node.ref.kind, KIND_MAX_CHARS)}
+      </text>
+      <text className="object-map-node__name" x={NODE_PADDING_X} y={NODE_NAME_BASELINE_Y}>
+        {truncate(node.ref.name, NAME_MAX_CHARS)}
+      </text>
+      <text className="object-map-node__namespace" x={NODE_PADDING_X} y={NODE_NAMESPACE_BASELINE_Y}>
+        {truncate(formatNamespace(node.ref), NAMESPACE_MAX_CHARS)}
+      </text>
+    </g>
   );
 };
 
@@ -230,11 +298,10 @@ const ObjectMap: React.FC<ObjectMapProps> = ({ payload, resetToken = 0 }) => {
       // Releasing a pan also fires a click; ignore those so the pan
       // doesn't unintentionally clear a selection the user is reading.
       if (wasDrag()) return;
-      // Node buttons stop their click propagation, so anything that
-      // bubbles up to the canvas is by definition a background click.
-      // Defensive check kept for safety against future markup changes.
+      // Node groups stop propagation on their own click handlers, so
+      // anything that bubbles up here is a background click.
       const target = event.target as Element | null;
-      if (target && target.closest('button.object-map-node')) {
+      if (target && target.closest('g.object-map-node')) {
         return;
       }
       setActiveNodeId(null);
@@ -317,19 +384,12 @@ const ObjectMap: React.FC<ObjectMapProps> = ({ payload, resetToken = 0 }) => {
             </g>
             <g className="object-map__nodes">
               {layout.nodes.map((node) => (
-                <foreignObject
+                <ObjectMapNodeCard
                   key={node.id}
-                  x={node.x}
-                  y={node.y}
-                  width={node.width}
-                  height={node.height}
-                >
-                  <ObjectMapNodeCard
-                    node={node}
-                    className={buildNodeClass(node, selectionState)}
-                    onClick={handleNodeClick}
-                  />
-                </foreignObject>
+                  node={node}
+                  className={buildNodeClass(node, selectionState)}
+                  onSelect={handleNodeClick}
+                />
               ))}
             </g>
             {hoverEdge && (
@@ -337,14 +397,33 @@ const ObjectMap: React.FC<ObjectMapProps> = ({ payload, resetToken = 0 }) => {
                 className="object-map__edge-tooltip"
                 transform={`translate(${hoverEdge.midX} ${hoverEdge.midY})`}
               >
-                <foreignObject x={-100} y={-44} width={200} height={48}>
-                  <div className="object-map__edge-tooltip-card">
-                    <div className="object-map__edge-tooltip-label">{hoverEdge.label}</div>
-                    {hoverEdge.tracedBy && (
-                      <div className="object-map__edge-tooltip-trace">{hoverEdge.tracedBy}</div>
-                    )}
-                  </div>
-                </foreignObject>
+                <rect
+                  className="object-map__edge-tooltip-bg"
+                  x={-TOOLTIP_WIDTH / 2}
+                  y={hoverEdge.tracedBy ? -TOOLTIP_HEIGHT_DOUBLE - 4 : -TOOLTIP_HEIGHT_SINGLE - 4}
+                  width={TOOLTIP_WIDTH}
+                  height={hoverEdge.tracedBy ? TOOLTIP_HEIGHT_DOUBLE : TOOLTIP_HEIGHT_SINGLE}
+                  rx={4}
+                  ry={4}
+                />
+                <text
+                  className="object-map__edge-tooltip-label"
+                  x={0}
+                  y={hoverEdge.tracedBy ? -28 : -14}
+                  textAnchor="middle"
+                >
+                  {truncate(hoverEdge.label, TOOLTIP_LABEL_MAX_CHARS)}
+                </text>
+                {hoverEdge.tracedBy && (
+                  <text
+                    className="object-map__edge-tooltip-trace"
+                    x={0}
+                    y={-12}
+                    textAnchor="middle"
+                  >
+                    {truncate(hoverEdge.tracedBy, TOOLTIP_TRACE_MAX_CHARS)}
+                  </text>
+                )}
               </g>
             )}
           </g>

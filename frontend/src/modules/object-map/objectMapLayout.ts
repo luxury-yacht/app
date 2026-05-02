@@ -1,23 +1,35 @@
 /**
  * frontend/src/modules/object-map/objectMapLayout.ts
  *
- * Depth-based horizontal-LR layout for the object map. Two passes:
+ * Role-based directional layered layout for the object map. Three passes:
  *
- *   (1) Column assignment uses the backend's `depth` (BFS hops from the
- *       seed) directly as the column index. This preserves the seed-
- *       distance semantics that make the visual readable as a
- *       neighbourhood map.
+ *   (1) Column assignment uses Sugiyama-style longest-path layering on
+ *       the directed edge graph: every node's column = max(predecessor
+ *       column + 1) along outgoing-edge direction. Anchored on the
+ *       seed (shifted so seedColumn = 0). Because every K8s edge has a
+ *       natural left-to-right direction (owner→child, controller→
+ *       instance, consumer→resource), this places ancestors strictly
+ *       left of the seed and dependencies strictly to the right.
+ *       Critically: same-column edges become impossible by construction
+ *       in any acyclic graph, so the spurious "loop-back" arcs that
+ *       the previous BFS-depth model produced (e.g. ReplicaSet and the
+ *       ConfigMap its template references both at depth=1 from a Pod
+ *       seed) disappear.
  *
  *   (2) Within each column, nodes are reordered by Sugiyama-style
- *       barycenter sweeps over their cross-column neighbours. Without
- *       this step the column order is alphabetic and edges cross
- *       wildly. With it, connected siblings end up vertically aligned
- *       and crossings drop sharply.
+ *       barycenter sweeps over their cross-column neighbours, so
+ *       connected siblings end up vertically aligned and crossings
+ *       drop sharply.
  *
- * Same-column edges (which arise naturally because BFS depth is
- * undirected — Service and EndpointSlice often land at the same depth)
- * are routed as wide rightward arcs that bulge out of the gutter
- * instead of straight lines that overlap node bodies.
+ *   (3) Edges are routed as cubic beziers between source-right and
+ *       target-left anchors, drape-shaped via control points pulled
+ *       into the gutters.
+ *
+ * Cycles (rare in K8s but defensively handled): nodes the topological
+ * sort cannot reach fall back to the backend's BFS depth as their
+ * column. The same-column edge routing remains as a defensive fallback
+ * for that case so cycle-trapped pairs still draw without crossing
+ * through node bodies.
  */
 
 import type { ObjectMapEdge, ObjectMapNode } from '@core/refresh/types';
@@ -42,7 +54,10 @@ export interface PositionedNode {
   y: number;
   width: number;
   height: number;
-  depth: number;
+  // Layout column relative to the seed (seed = 0; ancestors negative;
+  // descendants/dependencies positive). Computed by the directional
+  // layering pass — NOT the backend's BFS depth.
+  column: number;
   isSeed: boolean;
   ref: ObjectMapNode['ref'];
 }
@@ -55,16 +70,17 @@ export interface PositionedEdge {
   label: string;
   tracedBy?: string;
   // Cubic bezier path string. Cross-column edges run from source-right
-  // to target-left through the gutter; same-column edges arc rightward.
+  // to target-left through the gutter; same-column edges arc rightward
+  // (defensive fallback for the rare cycle case).
   d: string;
   // Cached midpoint for the hover label. The edge handler runs on every
   // pointer move, so we don't recompute the bezier each time.
   midX: number;
   midY: number;
-  // True when the edge endpoints share a depth column. Consumers may
-  // want to treat these differently (e.g. de-emphasise visually) — the
-  // backend tracer doesn't know about layout, so this is the only place
-  // the distinction is materialised.
+  // True when the edge endpoints share a column. Should be exceedingly
+  // rare under directional layering — only happens when both endpoints
+  // are in a cycle the topological sort couldn't break. Kept as a
+  // signal so renderers and tests can distinguish.
   sameColumn: boolean;
 }
 
@@ -84,6 +100,91 @@ const compareForColumn = (a: ObjectMapNode, b: ObjectMapNode): number => {
     return aNs.localeCompare(bNs);
   }
   return a.ref.name.localeCompare(b.ref.name);
+};
+
+/**
+ * Assign each node a column index using Sugiyama-style longest-path
+ * layering. Edges are treated as directed (source → target). After the
+ * topological pass, the result is shifted so the seed sits at column 0.
+ *
+ * Cycles: any node whose in-degree never reaches zero (i.e., it sits in
+ * a strongly-connected component the sort cannot drain) falls back to
+ * its backend-provided BFS depth. K8s graphs are normally acyclic so
+ * this branch should rarely fire in practice.
+ */
+const computeNodeColumns = (
+  nodes: ObjectMapNode[],
+  edges: ObjectMapEdge[],
+  seedId: string
+): Map<string, number> => {
+  const validIds = new Set(nodes.map((n) => n.id));
+  const adj = new Map<string, string[]>();
+  const inDegree = new Map<string, number>();
+  nodes.forEach((n) => inDegree.set(n.id, 0));
+
+  edges.forEach((edge) => {
+    // Skip edges that reference unknown nodes or self-loops; both would
+    // poison the topological pass without adding layout signal.
+    if (!validIds.has(edge.source) || !validIds.has(edge.target)) return;
+    if (edge.source === edge.target) return;
+    let outs = adj.get(edge.source);
+    if (!outs) {
+      outs = [];
+      adj.set(edge.source, outs);
+    }
+    outs.push(edge.target);
+    inDegree.set(edge.target, (inDegree.get(edge.target) ?? 0) + 1);
+  });
+
+  const column = new Map<string, number>();
+  const remainingIn = new Map(inDegree);
+  const queue: string[] = [];
+  inDegree.forEach((d, id) => {
+    if (d === 0) {
+      column.set(id, 0);
+      queue.push(id);
+    }
+  });
+
+  while (queue.length > 0) {
+    const u = queue.shift()!;
+    const cu = column.get(u)!;
+    const outs = adj.get(u);
+    if (!outs) continue;
+    for (const v of outs) {
+      const cv = column.get(v);
+      const candidate = cu + 1;
+      if (cv === undefined || candidate > cv) {
+        column.set(v, candidate);
+      }
+      const newDegree = remainingIn.get(v)! - 1;
+      remainingIn.set(v, newDegree);
+      if (newDegree === 0) {
+        queue.push(v);
+      }
+    }
+  }
+
+  // Defensive fallback for nodes the sort never reached (cycles).
+  // Backend BFS depth is the best proxy we have for "where they ought
+  // to be" relative to the seed; it preserves the old behaviour for
+  // anything pathological.
+  nodes.forEach((node) => {
+    if (!column.has(node.id)) {
+      column.set(node.id, node.depth);
+    }
+  });
+
+  // Anchor the seed at column 0 by shifting the whole layout. We don't
+  // anchor during the topological pass because the seed isn't
+  // necessarily a source — for a Pod seed, ancestors (RS, Deployment,
+  // HPA) feed in from the left and the seed lands several columns in.
+  const seedColumn = column.get(seedId);
+  if (seedColumn !== undefined && seedColumn !== 0) {
+    column.forEach((value, id) => column.set(id, value - seedColumn));
+  }
+
+  return column;
 };
 
 const buildCrossColumnPath = (
@@ -106,7 +207,8 @@ const buildSameColumnPath = (
 ): string => {
   // Both endpoints sit at the same x; bulge the bezier rightward into
   // the gutter so the line never crosses node bodies. Control points
-  // pulled out by `arcStretch` produce a smooth half-loop.
+  // pulled out by `arcStretch` produce a smooth half-loop. Only fires
+  // for cycle-trapped pairs under the directional layering model.
   const c1x = anchorX + arcStretch;
   const c2x = anchorX + arcStretch;
   return `M ${anchorX} ${sourceY} C ${c1x} ${sourceY}, ${c2x} ${targetY}, ${anchorX} ${targetY}`;
@@ -114,19 +216,17 @@ const buildSameColumnPath = (
 
 const buildCrossColumnAdjacency = (
   edges: ObjectMapEdge[],
-  depthOf: Map<string, number>
+  columnOf: Map<string, number>
 ): Map<string, string[]> => {
   // We only feed cross-column edges into the barycenter sort because
-  // same-column edges would create circular constraints (each node's
-  // position would depend on its sibling's position in the same
-  // column). The end result of the sweeps still keeps same-column
-  // siblings near each other indirectly, since their cross-column
-  // neighbours tend to align.
+  // same-column edges (cycle artifacts under the new layering) would
+  // create circular constraints. Cross-column edges drive the actual
+  // visual ordering anyway.
   const adj = new Map<string, string[]>();
   edges.forEach((edge) => {
-    const sd = depthOf.get(edge.source);
-    const td = depthOf.get(edge.target);
-    if (sd === undefined || td === undefined || sd === td) {
+    const sc = columnOf.get(edge.source);
+    const tc = columnOf.get(edge.target);
+    if (sc === undefined || tc === undefined || sc === tc) {
       return;
     }
     const sList = adj.get(edge.source);
@@ -142,33 +242,34 @@ const buildCrossColumnAdjacency = (
 const orderColumnsByBarycenter = (
   columns: Map<number, ObjectMapNode[]>,
   adj: Map<string, string[]>,
-  depthOf: Map<string, number>
+  columnOf: Map<string, number>,
+  seedColumn: number
 ): void => {
-  const sortedDepths = Array.from(columns.keys()).sort((a, b) => a - b);
-  if (sortedDepths.length <= 1) {
+  const sortedColumns = Array.from(columns.keys()).sort((a, b) => a - b);
+  if (sortedColumns.length <= 1) {
     return;
   }
 
   // Initial ordering: deterministic kind/namespace/name sort. Provides
   // a stable baseline so barycenter ties resolve the same way each run.
-  sortedDepths.forEach((depth) => {
-    columns.get(depth)!.sort(compareForColumn);
+  sortedColumns.forEach((col) => {
+    columns.get(col)!.sort(compareForColumn);
   });
 
-  // Index lookup is recomputed each pass because columns mutate.
+  // Index lookup is recomputed each pass because column orderings mutate.
   const indexOf = (nodeId: string): number => {
-    const depth = depthOf.get(nodeId);
-    if (depth === undefined) return -1;
-    return columns.get(depth)!.findIndex((n) => n.id === nodeId);
+    const col = columnOf.get(nodeId);
+    if (col === undefined) return -1;
+    return columns.get(col)!.findIndex((n) => n.id === nodeId);
   };
 
-  const barycenter = (node: ObjectMapNode, neighborDepth: number): number => {
+  const barycenter = (node: ObjectMapNode, neighborColumn: number): number => {
     const neighbors = adj.get(node.id);
     if (!neighbors || neighbors.length === 0) return Infinity;
     let sum = 0;
     let count = 0;
     for (const neighborId of neighbors) {
-      if (depthOf.get(neighborId) !== neighborDepth) continue;
+      if (columnOf.get(neighborId) !== neighborColumn) continue;
       const idx = indexOf(neighborId);
       if (idx < 0) continue;
       sum += idx;
@@ -181,12 +282,12 @@ const orderColumnsByBarycenter = (
     const forward = sweep % 2 === 0;
     if (forward) {
       // Left-to-right: each column ordered by barycenter of its left neighbours.
-      for (let i = 1; i < sortedDepths.length; i += 1) {
-        const col = columns.get(sortedDepths[i])!;
-        const neighborDepth = sortedDepths[i - 1];
+      for (let i = 1; i < sortedColumns.length; i += 1) {
+        const col = columns.get(sortedColumns[i])!;
+        const neighborColumn = sortedColumns[i - 1];
         col.sort((a, b) => {
-          const ba = barycenter(a, neighborDepth);
-          const bb = barycenter(b, neighborDepth);
+          const ba = barycenter(a, neighborColumn);
+          const bb = barycenter(b, neighborColumn);
           if (ba === Infinity && bb === Infinity) return compareForColumn(a, b);
           if (ba === Infinity) return 1;
           if (bb === Infinity) return -1;
@@ -194,14 +295,16 @@ const orderColumnsByBarycenter = (
         });
       }
     } else {
-      // Right-to-left: skip the seed column (depth 0) — it has only the seed.
-      for (let i = sortedDepths.length - 2; i >= 0; i -= 1) {
-        if (sortedDepths[i] === 0) continue;
-        const col = columns.get(sortedDepths[i])!;
-        const neighborDepth = sortedDepths[i + 1];
+      // Right-to-left: skip the seed column — it pivots the layout and
+      // only contains the seed (plus any unrelated nodes that happen to
+      // share its column).
+      for (let i = sortedColumns.length - 2; i >= 0; i -= 1) {
+        if (sortedColumns[i] === seedColumn) continue;
+        const col = columns.get(sortedColumns[i])!;
+        const neighborColumn = sortedColumns[i + 1];
         col.sort((a, b) => {
-          const ba = barycenter(a, neighborDepth);
-          const bb = barycenter(b, neighborDepth);
+          const ba = barycenter(a, neighborColumn);
+          const bb = barycenter(b, neighborColumn);
           if (ba === Infinity && bb === Infinity) return compareForColumn(a, b);
           if (ba === Infinity) return 1;
           if (bb === Infinity) return -1;
@@ -221,17 +324,18 @@ export const computeObjectMapLayout = (
     return { nodes: [], edges: [], bounds: { minX: 0, minY: 0, maxX: 0, maxY: 0 } };
   }
 
-  const depthOf = new Map<string, number>();
+  const columnOf = computeNodeColumns(nodes, edges, seedId);
   const columns = new Map<number, ObjectMapNode[]>();
   nodes.forEach((node) => {
-    depthOf.set(node.id, node.depth);
-    const list = columns.get(node.depth);
+    const col = columnOf.get(node.id) ?? 0;
+    const list = columns.get(col);
     if (list) list.push(node);
-    else columns.set(node.depth, [node]);
+    else columns.set(col, [node]);
   });
 
-  const adj = buildCrossColumnAdjacency(edges, depthOf);
-  orderColumnsByBarycenter(columns, adj, depthOf);
+  const seedColumn = columnOf.get(seedId) ?? 0;
+  const adj = buildCrossColumnAdjacency(edges, columnOf);
+  orderColumnsByBarycenter(columns, adj, columnOf, seedColumn);
 
   const positioned = new Map<string, PositionedNode>();
   let minX = Infinity;
@@ -241,8 +345,8 @@ export const computeObjectMapLayout = (
 
   Array.from(columns.entries())
     .sort(([a], [b]) => a - b)
-    .forEach(([depth, columnNodes]) => {
-      const columnX = depth * COLUMN_STRIDE;
+    .forEach(([column, columnNodes]) => {
+      const columnX = column * COLUMN_STRIDE;
       const totalHeight = columnNodes.length * ROW_STRIDE - OBJECT_MAP_ROW_GAP;
       const startY = -totalHeight / 2;
       columnNodes.forEach((node, index) => {
@@ -253,7 +357,7 @@ export const computeObjectMapLayout = (
           y,
           width: OBJECT_MAP_NODE_WIDTH,
           height: OBJECT_MAP_NODE_HEIGHT,
-          depth: node.depth,
+          column,
           isSeed: node.id === seedId,
           ref: node.ref,
         });
@@ -276,12 +380,7 @@ export const computeObjectMapLayout = (
       const anchorX = source.x + source.width;
       const sourceY = source.y + source.height / 2;
       const targetY = target.y + target.height / 2;
-      // Stretch the arc by ~1.5× node width so the bulge clears
-      // intermediate siblings stacked between source and target.
       const arcStretch = source.width * 1.5;
-      // Cubic bezier midpoint at t=0.5 collapses to:
-      //   midX = 0.5*sx + 0.5*tx + 0.75*stretch
-      // which simplifies for same-column to anchorX + 0.75*stretch.
       const midX = anchorX + 0.75 * arcStretch;
       const midY = (sourceY + targetY) / 2;
       positionedEdges.push({
