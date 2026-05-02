@@ -90,6 +90,61 @@ func TestObjectMapAppliesNodeCap(t *testing.T) {
 	}
 }
 
+func TestObjectMapDoesNotFanOutThroughSharedHubResources(t *testing.T) {
+	client := fake.NewSimpleClientset(objectMapHubFixtureObjects()...)
+	builder := &objectMapBuilder{client: client}
+	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a"})
+
+	snap, err := builder.Build(ctx, "default:apps/v1:Deployment:web?maxDepth=6&maxNodes=100")
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+	payload := snap.Payload.(ObjectMapSnapshotPayload)
+
+	assertNode(t, payload, "Deployment", "web")
+	assertNode(t, payload, "Pod", "web-pod")
+	assertNode(t, payload, "Node", "node-1")
+	assertNode(t, payload, "ServiceAccount", "shared")
+	assertNode(t, payload, "ConfigMap", "shared-config")
+	assertMissingNode(t, payload, "Deployment", "api")
+	assertMissingNode(t, payload, "ReplicaSet", "api-rs")
+	assertMissingNode(t, payload, "Pod", "api-pod")
+}
+
+func TestObjectMapReverseTraversesHubEdgesFromSeed(t *testing.T) {
+	client := fake.NewSimpleClientset(objectMapHubFixtureObjects()...)
+	builder := &objectMapBuilder{client: client}
+	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a"})
+
+	nodeSnap, err := builder.Build(ctx, "__cluster__:/v1:Node:node-1?maxDepth=1&maxNodes=100")
+	if err != nil {
+		t.Fatalf("Build node map returned error: %v", err)
+	}
+	nodePayload := nodeSnap.Payload.(ObjectMapSnapshotPayload)
+	assertNode(t, nodePayload, "Pod", "web-pod")
+	assertNode(t, nodePayload, "Pod", "api-pod")
+
+	configSnap, err := builder.Build(ctx, "default:/v1:ConfigMap:shared-config?maxDepth=1&maxNodes=100")
+	if err != nil {
+		t.Fatalf("Build config map returned error: %v", err)
+	}
+	configPayload := configSnap.Payload.(ObjectMapSnapshotPayload)
+	assertNode(t, configPayload, "Deployment", "web")
+	assertNode(t, configPayload, "Deployment", "api")
+	assertNode(t, configPayload, "Pod", "web-pod")
+	assertNode(t, configPayload, "Pod", "api-pod")
+
+	serviceAccountSnap, err := builder.Build(ctx, "default:/v1:ServiceAccount:shared?maxDepth=1&maxNodes=100")
+	if err != nil {
+		t.Fatalf("Build service account map returned error: %v", err)
+	}
+	serviceAccountPayload := serviceAccountSnap.Payload.(ObjectMapSnapshotPayload)
+	assertNode(t, serviceAccountPayload, "Deployment", "web")
+	assertNode(t, serviceAccountPayload, "Deployment", "api")
+	assertNode(t, serviceAccountPayload, "Pod", "web-pod")
+	assertNode(t, serviceAccountPayload, "Pod", "api-pod")
+}
+
 func objectMapFixtureObjects() []runtime.Object {
 	deploy := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -176,6 +231,65 @@ func objectMapFixtureObjects() []runtime.Object {
 	}
 }
 
+func objectMapHubFixtureObjects() []runtime.Object {
+	webDeploy := deploymentFixture("default", "web", "deploy-web-uid", "shared", "shared-config")
+	webRS := replicaSetFixture("default", "web-rs", "rs-web-uid", "web", "deploy-web-uid")
+	webPod := podFixture("default", "web-pod", "pod-web-uid", "rs-web-uid", map[string]string{"app": "web"})
+	webPod.Spec.ServiceAccountName = "shared"
+	useConfigMap(webPod, "shared-config")
+	apiDeploy := deploymentFixture("default", "api", "deploy-api-uid", "shared", "shared-config")
+	apiRS := replicaSetFixture("default", "api-rs", "rs-api-uid", "api", "deploy-api-uid")
+	apiPod := podFixture("default", "api-pod", "pod-api-uid", "rs-api-uid", map[string]string{"app": "api"})
+	apiPod.OwnerReferences = []metav1.OwnerReference{ownerRef("apps/v1", "ReplicaSet", "api-rs", "rs-api-uid")}
+	apiPod.Spec.ServiceAccountName = "shared"
+	useConfigMap(apiPod, "shared-config")
+
+	return []runtime.Object{
+		webDeploy,
+		webRS,
+		webPod,
+		apiDeploy,
+		apiRS,
+		apiPod,
+		&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node-1", UID: types.UID("node-uid")}},
+		&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "shared", Namespace: "default", UID: types.UID("shared-sa-uid")}},
+		&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "shared-config", Namespace: "default", UID: types.UID("shared-cm-uid")}},
+		&corev1.PersistentVolumeClaim{ObjectMeta: metav1.ObjectMeta{Name: "data", Namespace: "default", UID: types.UID("pvc-uid")}},
+	}
+}
+
+func deploymentFixture(namespace, name, uid, serviceAccount, configMap string) *appsv1.Deployment {
+	return &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+			UID:       types.UID(uid),
+			Labels:    map[string]string{"app": name},
+		},
+		Spec: appsv1.DeploymentSpec{
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					ServiceAccountName: serviceAccount,
+					Volumes: []corev1.Volume{
+						{Name: "config", VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{LocalObjectReference: corev1.LocalObjectReference{Name: configMap}}}},
+					},
+				},
+			},
+		},
+	}
+}
+
+func replicaSetFixture(namespace, name, uid, ownerName, ownerUID string) *appsv1.ReplicaSet {
+	return &appsv1.ReplicaSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            name,
+			Namespace:       namespace,
+			UID:             types.UID(uid),
+			OwnerReferences: []metav1.OwnerReference{ownerRef("apps/v1", "Deployment", ownerName, ownerUID)},
+		},
+	}
+}
+
 func podFixture(namespace, name, uid, ownerUID string, labels map[string]string) *corev1.Pod {
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace, UID: types.UID(uid), Labels: labels},
@@ -200,6 +314,24 @@ func podFixture(namespace, name, uid, ownerUID string, labels map[string]string)
 		pod.OwnerReferences = []metav1.OwnerReference{ownerRef("apps/v1", "ReplicaSet", "web-rs", ownerUID)}
 	}
 	return pod
+}
+
+func useConfigMap(pod *corev1.Pod, name string) {
+	if pod == nil {
+		return
+	}
+	for volumeIndex := range pod.Spec.Volumes {
+		if pod.Spec.Volumes[volumeIndex].ConfigMap != nil {
+			pod.Spec.Volumes[volumeIndex].ConfigMap.Name = name
+		}
+	}
+	for containerIndex := range pod.Spec.Containers {
+		for envFromIndex := range pod.Spec.Containers[containerIndex].EnvFrom {
+			if pod.Spec.Containers[containerIndex].EnvFrom[envFromIndex].ConfigMapRef != nil {
+				pod.Spec.Containers[containerIndex].EnvFrom[envFromIndex].ConfigMapRef.Name = name
+			}
+		}
+	}
 }
 
 func serviceFixture(namespace, name, uid string, selector map[string]string) *corev1.Service {
@@ -241,6 +373,20 @@ func nodeIDByKindName(t *testing.T, payload ObjectMapSnapshotPayload, kind, name
 	}
 	t.Fatalf("missing node %s/%s; nodes=%#v", kind, name, payload.Nodes)
 	return ""
+}
+
+func assertNode(t *testing.T, payload ObjectMapSnapshotPayload, kind, name string) {
+	t.Helper()
+	_ = nodeIDByKindName(t, payload, kind, name)
+}
+
+func assertMissingNode(t *testing.T, payload ObjectMapSnapshotPayload, kind, name string) {
+	t.Helper()
+	for _, node := range payload.Nodes {
+		if node.Ref.Kind == kind && node.Ref.Name == name {
+			t.Fatalf("unexpected node %s/%s in payload: %#v", kind, name, payload.Nodes)
+		}
+	}
 }
 
 func int32Ptr(value int32) *int32 {

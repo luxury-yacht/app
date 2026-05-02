@@ -107,8 +107,13 @@ type objectMapIndex struct {
 type objectMapGraph struct {
 	nodes     map[string]ObjectMapNode
 	edges     map[string]ObjectMapEdge
-	adjacency map[string][]string
+	adjacency map[string][]objectMapTraversalEdge
 	truncated bool
+}
+
+type objectMapTraversalEdge struct {
+	edgeID  string
+	reverse bool
 }
 
 // RegisterObjectMapDomain wires the backend relationship graph domain into the registry.
@@ -620,11 +625,11 @@ func (idx *objectMapIndex) buildGraph(seed *objectMapRecord, maxDepth, maxNodes 
 	graph := objectMapGraph{
 		nodes:     make(map[string]ObjectMapNode),
 		edges:     make(map[string]ObjectMapEdge),
-		adjacency: make(map[string][]string),
+		adjacency: make(map[string][]objectMapTraversalEdge),
 	}
 	for _, edge := range allEdges {
-		graph.adjacency[edge.Source] = append(graph.adjacency[edge.Source], edge.ID)
-		graph.adjacency[edge.Target] = append(graph.adjacency[edge.Target], edge.ID)
+		graph.adjacency[edge.Source] = append(graph.adjacency[edge.Source], objectMapTraversalEdge{edgeID: edge.ID})
+		graph.adjacency[edge.Target] = append(graph.adjacency[edge.Target], objectMapTraversalEdge{edgeID: edge.ID, reverse: true})
 		graph.edges[edge.ID] = edge
 	}
 
@@ -639,11 +644,14 @@ func (idx *objectMapIndex) buildGraph(seed *objectMapRecord, maxDepth, maxNodes 
 		if currentDepth >= maxDepth {
 			continue
 		}
-		for _, edgeID := range graph.adjacency[currentID] {
-			edge := graph.edges[edgeID]
-			neighborID := edge.Source
-			if neighborID == currentID {
-				neighborID = edge.Target
+		for _, traversal := range graph.adjacency[currentID] {
+			edge := graph.edges[traversal.edgeID]
+			if traversal.reverse && !canTraverseObjectMapReverse(edge.Type, currentDepth) {
+				continue
+			}
+			neighborID := edge.Target
+			if traversal.reverse {
+				neighborID = edge.Source
 			}
 			if _, exists := graph.nodes[neighborID]; exists {
 				continue
@@ -673,6 +681,17 @@ func (idx *objectMapIndex) buildGraph(seed *objectMapRecord, maxDepth, maxNodes 
 	}
 	graph.edges = includedEdges
 	return graph
+}
+
+func canTraverseObjectMapReverse(edgeType string, currentDepth int) bool {
+	switch edgeType {
+	case "owner", "selector", "endpoint", "routes", "scales":
+		return true
+	case "uses", "mounts", "storage", "schedules":
+		return currentDepth == 0
+	default:
+		return false
+	}
 }
 
 func (idx *objectMapIndex) buildAllEdges() []ObjectMapEdge {
