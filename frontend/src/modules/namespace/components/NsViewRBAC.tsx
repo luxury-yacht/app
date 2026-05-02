@@ -37,7 +37,7 @@ export interface RBACData {
   kindAlias?: string;
   name: string;
   namespace: string;
-  clusterId?: string;
+  clusterId: string;
   clusterName?: string;
   // Role-specific fields
   rulesCount?: number;

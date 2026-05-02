@@ -317,6 +317,62 @@ describe('NsViewConfig ConfigViewGrid', () => {
     await unmount();
   });
 
+  it('falls back to the selected cluster when defensive rows omit clusterId', async () => {
+    permissionMapMock.map = new Map([
+      ['ConfigMap:delete:default', { allowed: true, pending: false }],
+    ]);
+    deleteResourceMock.DeleteResourceByGVK.mockResolvedValue(undefined);
+    const { clusterId: _clusterId, ...resourceWithoutCluster } = sampleData[0];
+    const defensiveResource = resourceWithoutCluster as unknown as (typeof sampleData)[number];
+
+    const module = await import('./NsViewConfig');
+    const ConfigView = module.default;
+
+    const { unmount } = await createRoot(
+      <ConfigView
+        namespace="team-a"
+        data={[defensiveResource]}
+        loaded
+        loading={false}
+        showNamespaceColumn
+      />
+    );
+
+    const { getCustomContextMenuItems, keyExtractor } = gridTablePropsRef.current;
+    expect(keyExtractor(defensiveResource)).toBe('cluster-a|/v1/ConfigMap/default/app-config');
+
+    const menuItems = getCustomContextMenuItems(defensiveResource, 'name');
+    const openAction = menuItems.find((item: any) => item.label === 'Open');
+    act(() => {
+      openAction.onClick();
+    });
+    expect(objectPanelMock.openWithObject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'ConfigMap',
+        name: 'app-config',
+        namespace: 'default',
+        clusterId: 'cluster-a',
+      })
+    );
+
+    const deleteAction = menuItems.find((item: any) => item.label === 'Delete');
+    await act(async () => {
+      deleteAction.onClick();
+    });
+    await act(async () => {
+      modalPropsRef.current.onConfirm();
+    });
+    expect(deleteResourceMock.DeleteResourceByGVK).toHaveBeenCalledWith(
+      'cluster-a',
+      'v1',
+      'ConfigMap',
+      'default',
+      'app-config'
+    );
+
+    await unmount();
+  });
+
   it('suppresses delete option when permission is denied and handles deletion errors', async () => {
     shortNamesMock.useShortNames.mockReturnValue(true);
     const permissionMap = new Map<string, { allowed: boolean; pending: boolean }>();

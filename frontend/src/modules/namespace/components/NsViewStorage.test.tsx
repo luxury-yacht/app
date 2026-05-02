@@ -315,6 +315,29 @@ describe('NsViewStorage', () => {
     );
   });
 
+  it('falls back to the selected cluster for defensive rows without clusterId', async () => {
+    const { clusterId: _clusterId, ...entryWithoutCluster } = baseStorage();
+    const entry = entryWithoutCluster as unknown as StorageData;
+    const props = await renderStorageView([entry]);
+
+    expect(props.keyExtractor(entry)).toBe('cluster-a|/v1/PersistentVolumeClaim/team-a/pvc-data');
+
+    const storageColumn = props.columns.find((column: any) => column.key === 'storageClass');
+    const renderedCell = storageColumn.render(entry);
+
+    act(() => {
+      renderedCell.props.onClick({ stopPropagation: () => {} });
+    });
+
+    expect(openWithObjectMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'StorageClass',
+        name: 'fast-ssd',
+        clusterId: 'cluster-a',
+      })
+    );
+  });
+
   it('applies status and capacity classes based on resource state', async () => {
     const pending = baseStorage({ status: 'Pending', capacity: '' });
     const failed = baseStorage({ status: 'Failed', capacity: undefined });

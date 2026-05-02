@@ -37,7 +37,7 @@ export interface QuotaData {
   kindAlias?: string;
   name: string;
   namespace: string;
-  clusterId?: string;
+  clusterId: string;
   clusterName?: string;
   details?: string;
   hard?: Record<string, string | number>;
@@ -114,7 +114,7 @@ const QuotasViewGrid: React.FC<QuotasViewProps> = React.memo(
       (resource: QuotaData) =>
         buildRequiredCanonicalObjectRowKey(
           {
-            kind: resource.kindAlias ?? resource.kind,
+            kind: resource.kind,
             name: resource.name,
             namespace: resource.namespace,
             clusterId: resource.clusterId,

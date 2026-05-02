@@ -37,7 +37,7 @@ export interface ConfigData {
   kindAlias?: string;
   name: string;
   namespace: string;
-  clusterId?: string;
+  clusterId: string;
   clusterName?: string;
   data: number; // Count of data items from backend
   age?: string;
@@ -99,7 +99,7 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
       (resource: ConfigData) =>
         buildRequiredCanonicalObjectRowKey(
           {
-            kind: resource.kindAlias ?? resource.kind,
+            kind: resource.kind,
             name: resource.name,
             namespace: resource.namespace,
             clusterId: resource.clusterId,

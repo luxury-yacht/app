@@ -41,7 +41,7 @@ export interface NetworkData {
   kindAlias?: string;
   name: string;
   namespace: string;
-  clusterId?: string;
+  clusterId: string;
   clusterName?: string;
   details: string; // Pre-formatted details from backend
   age?: string;
