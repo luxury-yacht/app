@@ -81,6 +81,7 @@ const state: RefreshStoreState = {
     pods: createInitialDomainState(),
     'object-details': createInitialDomainState(),
     'object-events': createInitialDomainState(),
+    'object-map': createInitialDomainState(),
     'object-yaml': createInitialDomainState(),
     'object-helm-manifest': createInitialDomainState(),
     'object-helm-values': createInitialDomainState(),

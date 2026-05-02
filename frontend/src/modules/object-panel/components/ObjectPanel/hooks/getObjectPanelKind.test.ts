@@ -181,4 +181,22 @@ describe('getObjectPanelKind', () => {
     expect(getObjectPanelKind({ kind: 'Pod' }).containerLogsScope).toBeNull();
     expect(getObjectPanelKind({ name: 'api' }).containerLogsScope).toBeNull();
   });
+
+  it('builds mapScope using the original-case kind so it matches the backend object-map parser', () => {
+    const result = getObjectPanelKind({
+      kind: 'Deployment',
+      name: 'api',
+      namespace: 'team-a',
+      group: 'apps',
+      version: 'v1',
+      clusterId: 'cluster-1',
+    });
+    expect(result.mapScope).toBe('cluster-1|team-a:apps/v1:Deployment:api');
+  });
+
+  it('returns null mapScope when objectData is incomplete', () => {
+    expect(getObjectPanelKind(null).mapScope).toBeNull();
+    expect(getObjectPanelKind({ kind: 'Pod' }).mapScope).toBeNull();
+    expect(getObjectPanelKind({ name: 'api' }).mapScope).toBeNull();
+  });
 });

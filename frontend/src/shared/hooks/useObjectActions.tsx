@@ -11,6 +11,7 @@ import { eventBus } from '@/core/events';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import {
   DiffIcon,
+  ObjectMapIcon,
   OpenIcon,
   RestartIcon,
   RollbackIcon,
@@ -83,6 +84,10 @@ export interface ObjectActionHandlers {
   onSuspendToggle?: () => void;
   // Event actions - view the involved object
   onViewInvolvedObject?: () => void;
+  // Object map - kind-agnostic so any view can opt in. v1 only wires
+  // this from NsViewWorkloads; the menu item is hidden when no handler
+  // is provided so other views are unaffected until they pass it.
+  onObjectMap?: () => void;
 }
 
 // Permission status type (matches what useUserPermissions returns)
@@ -202,6 +207,17 @@ export function buildObjectActionItems({
       label: 'Open',
       icon: <OpenIcon />,
       onClick: handlers.onOpen,
+    });
+  }
+
+  // Object Map - sits with the navigation block so it picks up the
+  // shared section divider (see useGridTableContextMenuItems). The
+  // handler is opt-in per call site; when omitted, no item is added.
+  if (handlers.onObjectMap) {
+    menuItems.push({
+      label: 'Object Map',
+      icon: <ObjectMapIcon />,
+      onClick: handlers.onObjectMap,
     });
   }
 

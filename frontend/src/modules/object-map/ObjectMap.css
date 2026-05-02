@@ -1,0 +1,257 @@
+.object-map {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  background: var(--color-bg);
+  color: var(--color-text);
+  position: relative;
+  overflow: hidden;
+}
+
+.object-map--empty {
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-secondary);
+}
+
+.object-map__toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-bottom: var(--border-width) solid var(--color-border);
+  background: var(--color-bg-secondary);
+}
+
+.object-map__toolbar-button {
+  height: 28px;
+  min-width: 28px;
+  padding: 0 var(--spacing-sm);
+  border: var(--border-width) solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text);
+  border-radius: var(--border-radius-sm);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+}
+
+.object-map__toolbar-button:hover {
+  background: var(--button-generic-hover);
+}
+
+.object-map__toolbar-meta {
+  margin-left: auto;
+  color: var(--color-text-secondary);
+  font-size: 0.85rem;
+}
+
+.object-map__canvas {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+}
+
+.object-map__canvas--panning {
+  cursor: grabbing;
+}
+
+.object-map__svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.object-map__viewport {
+  transform-origin: 0 0;
+}
+
+.object-map__edges path {
+  fill: none;
+  stroke-width: 1.5;
+  pointer-events: stroke;
+  cursor: help;
+  transition: stroke-width 120ms ease;
+}
+
+.object-map__edges path:hover {
+  stroke-width: 3;
+}
+
+.object-map-edge--owner {
+  stroke: var(--color-accent);
+}
+.object-map-edge--selector {
+  stroke: var(--badge-blue-text);
+}
+.object-map-edge--endpoint {
+  stroke: var(--badge-purple-text);
+}
+.object-map-edge--schedules {
+  stroke: var(--badge-teal-text);
+}
+.object-map-edge--uses {
+  stroke: var(--color-text-secondary);
+  stroke-dasharray: 4 3;
+}
+.object-map-edge--mounts {
+  stroke: var(--badge-orange-text);
+}
+.object-map-edge--storage {
+  stroke: var(--badge-pink-text);
+}
+.object-map-edge--routes {
+  stroke: var(--badge-green-text);
+}
+.object-map-edge--scales {
+  stroke: var(--color-warning);
+}
+.object-map-edge--default {
+  stroke: var(--color-text-tertiary);
+}
+
+.object-map-node {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 6px 10px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  overflow: hidden;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.object-map-node:hover {
+  border-color: var(--color-accent);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+}
+
+.object-map-node:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.object-map-node--seed {
+  border-color: var(--color-accent);
+  border-width: 2px;
+  box-shadow: 0 0 0 2px var(--color-accent-bg);
+}
+
+.object-map-node--selected {
+  border-color: var(--color-accent);
+  border-width: 2px;
+  box-shadow:
+    0 0 0 3px var(--color-accent-bg),
+    0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.object-map-node--connected {
+  border-color: var(--color-accent);
+}
+
+/* Dimmed nodes/edges when a selection is active. We dim via opacity
+ * rather than a separate colour so kind-specific palettes remain
+ * recognisable; the contrast against the highlighted set is enough to
+ * read the connectivity. */
+.object-map-node--dimmed {
+  opacity: 0.25;
+}
+
+.object-map-edge--highlighted {
+  stroke-width: 2.5;
+}
+
+.object-map-edge--dimmed {
+  opacity: 0.15;
+}
+
+.object-map-node__kind {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-accent);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  line-height: 1;
+}
+
+.object-map-node__name {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.object-map-node__namespace {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.object-map__edge-tooltip {
+  pointer-events: none;
+}
+
+.object-map__edge-tooltip-card {
+  background: var(--color-bg);
+  color: var(--color-text);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  padding: 4px 8px;
+  font-size: 0.75rem;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.object-map__edge-tooltip-label {
+  font-weight: 600;
+}
+
+.object-map__edge-tooltip-trace {
+  color: var(--color-text-tertiary);
+  font-size: 0.7rem;
+}
+
+.object-map__banner {
+  padding: var(--spacing-sm) var(--spacing-md);
+  font-size: 0.85rem;
+  border-top: var(--border-width) solid var(--color-border);
+}
+
+.object-map__banner--truncated {
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+}
+
+.object-map__warnings {
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-top: var(--border-width) solid var(--color-border);
+  background: var(--color-bg-secondary);
+  font-size: 0.85rem;
+}
+
+.object-map__warnings ul {
+  margin: var(--spacing-xs) 0 0;
+  padding-left: var(--spacing-lg);
+  color: var(--color-text-secondary);
+}

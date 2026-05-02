@@ -240,6 +240,7 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
     detailScope,
     eventsScope,
     containerLogsScope,
+    mapScope,
     helmScope,
     isHelmRelease,
     isEvent,
@@ -714,6 +715,7 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
           detailScope={detailScope}
           eventsScope={eventsScope}
           containerLogsScope={containerLogsScope}
+          mapScope={mapScope}
           helmScope={helmScope}
           objectData={objectData}
           objectKind={objectKind}

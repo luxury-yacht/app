@@ -688,3 +688,22 @@ export const RefreshIcon: React.FC<IconProps> = ({ width = 16, height = 16 }) =>
     <path d="M20 11A8.1 8.1 0 0 0 4.5 9M4 5v4h4m-4 4a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" />
   </svg>
 );
+
+export const ObjectMapIcon: React.FC<IconProps> = ({ width = 16, height = 16 }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    strokeWidth={2}
+    width={width}
+    height={height}
+  >
+    <circle cx="5" cy="12" r="2" />
+    <circle cx="19" cy="6" r="2" />
+    <circle cx="19" cy="18" r="2" />
+    <path d="M7 12h4m0 0 6-6m-6 6 6 6" />
+  </svg>
+);

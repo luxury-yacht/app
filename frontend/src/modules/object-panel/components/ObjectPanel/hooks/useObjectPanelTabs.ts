@@ -58,6 +58,7 @@ export const useObjectPanelTabs = ({
       TABS.LOGS,
       TABS.EVENTS,
       TABS.YAML,
+      TABS.MAP,
       TABS.SHELL,
       TABS.MANIFEST,
       TABS.VALUES,
@@ -66,14 +67,20 @@ export const useObjectPanelTabs = ({
 
     return orderedTabs.filter((tab) => {
       if (isHelmRelease) {
-        if (tab.id === 'events' || tab.id === 'yaml' || tab.id === 'pods' || tab.id === 'jobs') {
+        if (
+          tab.id === 'events' ||
+          tab.id === 'yaml' ||
+          tab.id === 'pods' ||
+          tab.id === 'jobs' ||
+          tab.id === 'map'
+        ) {
           return false;
         }
       } else if (tab.id === 'manifest' || tab.id === 'values') {
         return false;
       }
 
-      if (isEvent && (tab.id === 'events' || tab.id === 'yaml')) {
+      if (isEvent && (tab.id === 'events' || tab.id === 'yaml' || tab.id === 'map')) {
         return false;
       }
 

@@ -12,6 +12,16 @@ import { useDockablePanelContext } from '@ui/dockable';
 import { useObjectPanelState } from '@/core/contexts/ObjectPanelStateContext';
 import { assertObjectRefHasGVK, type KubernetesObjectReference } from '@/types/view-state';
 import { getGroupForPanel } from '@ui/dockable/tabGroupState';
+import type { ViewType } from '@modules/object-panel/components/ObjectPanel/types';
+
+export interface OpenWithObjectOptions {
+  /**
+   * Sub-tab to activate after the panel opens. Used by callers like
+   * the workloads "Object Map" right-click action that want to land on
+   * a specific tab instead of Details.
+   */
+  initialTab?: ViewType;
+}
 
 // ---------------------------------------------------------------------------
 // CurrentObjectPanelContext
@@ -65,6 +75,7 @@ export function useObjectPanel() {
     closePanel,
     onCloseObjectPanel,
     hydrateClusterMeta,
+    setObjectPanelActiveTab,
   } = useObjectPanelState();
   const { tabGroups, focusPanel } = useDockablePanelContext();
 
@@ -97,7 +108,7 @@ export function useObjectPanel() {
   }, [tabGroups, focusPanel]);
 
   const openWithObject = useCallback(
-    (obj: KubernetesObjectReference) => {
+    (obj: KubernetesObjectReference, options?: OpenWithObjectOptions) => {
       const enriched = hydrateClusterMeta(obj);
       // Runtime defense for the kind-only-objects bug. Catches programmatic
       // ref constructions (helpers, mappers, destructure-and-rebuild) that
@@ -107,6 +118,15 @@ export function useObjectPanel() {
       // app_capabilities.go, and app_permissions.go would surface it.
       assertObjectRefHasGVK(enriched);
       const panelId = onRowClick(enriched);
+
+      // Set the requested initial tab BEFORE focusing so the panel
+      // mounts on the right tab instead of flashing Details first. The
+      // active-tab map is per-panel sticky state, so calling this for
+      // a re-opened panel will also override the user's last selection
+      // — which is what we want for "right-click → Object Map".
+      if (options?.initialTab) {
+        setObjectPanelActiveTab(panelId, options.initialTab);
+      }
 
       // If the panel already exists in the dockable system, activate its tab
       // and bring the panel to the front. Newly-created panels join the
@@ -120,7 +140,7 @@ export function useObjectPanel() {
         pendingFocusPanelIdRef.current = panelId;
       }
     },
-    [onRowClick, hydrateClusterMeta, tabGroups, focusPanel]
+    [onRowClick, hydrateClusterMeta, tabGroups, focusPanel, setObjectPanelActiveTab]
   );
 
   const close = useCallback(() => {

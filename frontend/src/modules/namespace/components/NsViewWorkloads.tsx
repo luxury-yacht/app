@@ -470,6 +470,26 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
             onTrigger: () => setTriggerConfirm({ show: true, cronjob: row }),
             onSuspendToggle: () => handleSuspendToggle(row),
             onRollback: () => setRollbackTarget(row),
+            onObjectMap: () => {
+              // Opens the object panel for this row and lands on the
+              // Map tab. Same panel infrastructure as a normal row
+              // click — the dockable panel can be floated/maximized for
+              // more space, and clicking nodes inside the map opens
+              // additional panel tabs alongside.
+              openWithObject(
+                buildRequiredObjectReference(
+                  {
+                    kind: row.kind,
+                    name: row.name,
+                    namespace: row.namespace,
+                    clusterId: row.clusterId,
+                    clusterName: row.clusterName ?? undefined,
+                  },
+                  { fallbackClusterId: selectedClusterId }
+                ),
+                { initialTab: 'map' }
+              );
+            },
           },
           permissions: {
             restart: restartStatus,
@@ -481,7 +501,14 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
           },
         });
       },
-      [handleSuspendToggle, handleWorkloadClick, openScaleModal, permissionMap, selectedClusterId]
+      [
+        handleSuspendToggle,
+        handleWorkloadClick,
+        openScaleModal,
+        openWithObject,
+        permissionMap,
+        selectedClusterId,
+      ]
     );
 
     const emptyMessage = useMemo(

@@ -28,7 +28,8 @@ import { clearContainerLogsStreamScopeParams } from '@modules/object-panel/compo
  * the panel for good, which is what this helper enforces.
  */
 const evictPanelScopes = (ref: KubernetesObjectReference): void => {
-  const { detailScope, eventsScope, containerLogsScope, helmScope } = getObjectPanelKind(ref);
+  const { detailScope, eventsScope, containerLogsScope, mapScope, helmScope } =
+    getObjectPanelKind(ref);
   if (detailScope) {
     refreshOrchestrator.resetScopedDomain('object-details', detailScope);
     refreshOrchestrator.resetScopedDomain('object-yaml', detailScope);
@@ -39,6 +40,9 @@ const evictPanelScopes = (ref: KubernetesObjectReference): void => {
   if (containerLogsScope) {
     refreshOrchestrator.resetScopedDomain('container-logs', containerLogsScope);
     clearContainerLogsStreamScopeParams(containerLogsScope);
+  }
+  if (mapScope) {
+    refreshOrchestrator.resetScopedDomain('object-map', mapScope);
   }
   if (helmScope) {
     refreshOrchestrator.resetScopedDomain('object-helm-manifest', helmScope);

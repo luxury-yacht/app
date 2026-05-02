@@ -87,6 +87,7 @@ export const DOMAIN_REFRESHER_MAP: Partial<Record<RefreshDomain, RefresherName>>
   'namespace-rbac': NAMESPACE_REFRESHERS.rbac,
   'namespace-storage': NAMESPACE_REFRESHERS.storage,
   'container-logs': SYSTEM_REFRESHERS.containerLogs,
+  'object-map': SYSTEM_REFRESHERS.objectMap,
 };
 
 // Stream telemetry names for diagnostics (only set for stream-backed domains).
