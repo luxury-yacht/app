@@ -10,7 +10,10 @@ import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceStatus } from '@shared/components/kubernetes/ResourceStatus';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
 import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
-import { buildObjectReference, buildRelatedObjectReference } from '@shared/utils/objectIdentity';
+import {
+  buildObjectReference,
+  buildRequiredRelatedObjectReference,
+} from '@shared/utils/objectIdentity';
 import {
   DEFAULT_TOLERATION_RE,
   parseToleration,
@@ -93,7 +96,7 @@ export const PodOverview: React.FC<PodOverviewProps> = ({
     owner && typeof owner !== 'string'
       ? (() => {
           try {
-            return buildRelatedObjectReference({
+            return buildRequiredRelatedObjectReference({
               kind: owner.kind.toLowerCase(),
               // Prefer the OwnerReference apiVersion when present so
               // CRD-backed owners keep their real GVK.

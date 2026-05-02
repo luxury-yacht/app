@@ -28,7 +28,7 @@ import { useObjectPanelResourceGridTable } from '@shared/hooks/useResourceGridTa
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
-  buildRelatedObjectReference,
+  buildRequiredRelatedObjectReference,
 } from '@shared/utils/objectIdentity';
 
 interface PodsTabProps {
@@ -179,12 +179,15 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
       createTextColumn<PodSnapshotEntry>('owner', 'Owner', (pod) => workloadNameFromOwner(pod), {
         ...objectLink((pod) =>
           pod.ownerKind && pod.ownerName
-            ? buildRelatedObjectReference({
-                kind: pod.ownerKind,
-                name: pod.ownerName,
-                namespace: pod.namespace,
-                ...getPodClusterMeta(pod),
-              })
+            ? buildRequiredRelatedObjectReference(
+                {
+                  kind: pod.ownerKind,
+                  name: pod.ownerName,
+                  namespace: pod.namespace,
+                  ...getPodClusterMeta(pod),
+                },
+                { fallbackClusterId: objectData?.clusterId }
+              )
             : undefined
         ),
         isInteractive: (pod) => Boolean(pod.ownerKind && pod.ownerName),

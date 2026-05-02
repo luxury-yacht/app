@@ -34,7 +34,7 @@ import { useNamespaceResourceGridTable } from '@shared/hooks/useResourceGridTabl
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
-  buildRelatedObjectReference,
+  buildRequiredRelatedObjectReference,
 } from '@shared/utils/objectIdentity';
 import { parseCpuToMillicores, parseMemToMB } from '@utils/resourceCalculations';
 
@@ -166,13 +166,16 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
           return;
         }
         openWithObject(
-          buildRelatedObjectReference({
-            kind: pod.ownerKind,
-            name: pod.ownerName,
-            namespace: pod.namespace,
-            clusterId: pod.clusterId ?? selectedClusterId ?? undefined,
-            clusterName: pod.clusterName ?? undefined,
-          })
+          buildRequiredRelatedObjectReference(
+            {
+              kind: pod.ownerKind,
+              name: pod.ownerName,
+              namespace: pod.namespace,
+              clusterId: pod.clusterId,
+              clusterName: pod.clusterName ?? undefined,
+            },
+            { fallbackClusterId: selectedClusterId }
+          )
         );
       },
       [openWithObject, selectedClusterId]
@@ -306,13 +309,16 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
             onAltClick: (pod) => {
               if (pod.ownerKind && pod.ownerName) {
                 navigateToView(
-                  buildRelatedObjectReference({
-                    kind: pod.ownerKind,
-                    name: pod.ownerName,
-                    namespace: pod.namespace,
-                    clusterId: pod.clusterId ?? selectedClusterId ?? undefined,
-                    clusterName: pod.clusterName ?? undefined,
-                  })
+                  buildRequiredRelatedObjectReference(
+                    {
+                      kind: pod.ownerKind,
+                      name: pod.ownerName,
+                      namespace: pod.namespace,
+                      clusterId: pod.clusterId,
+                      clusterName: pod.clusterName ?? undefined,
+                    },
+                    { fallbackClusterId: selectedClusterId }
+                  )
                 );
               }
             },

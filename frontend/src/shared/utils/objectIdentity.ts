@@ -139,6 +139,26 @@ export const buildRelatedObjectReference = <TExtras extends object = {}>(
   );
 };
 
+export const buildRequiredRelatedObjectReference = <TExtras extends object = {}>(
+  input: RelatedObjectReferenceInput,
+  options?: RequiredObjectIdentityOptions,
+  extras?: TExtras
+): ResolvedObjectReference & TExtras => {
+  const parsedApiVersion = normalizeOptional(input.apiVersion)
+    ? parseApiVersion(input.apiVersion!)
+    : undefined;
+
+  return buildRequiredObjectReference(
+    {
+      ...input,
+      group: normalizeOptional(input.group) ?? parsedApiVersion?.group,
+      version: normalizeOptional(input.version) ?? parsedApiVersion?.version,
+    },
+    options,
+    extras
+  );
+};
+
 export const buildSyntheticObjectReference = <TExtras extends object = {}>(
   input: ObjectIdentityInput,
   extras?: TExtras

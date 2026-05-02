@@ -29,7 +29,7 @@ import { useNamespaceResourceGridTable } from '@shared/hooks/useResourceGridTabl
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
-  buildRelatedObjectReference,
+  buildRequiredRelatedObjectReference,
 } from '@shared/utils/objectIdentity';
 
 const NAMESPACE_AUTOSCALING_KIND_OPTIONS = ['HorizontalPodAutoscaler'];
@@ -141,23 +141,29 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
       [selectedClusterId]
     );
 
-    const buildScaleTargetReference = useCallback((resource: AutoscalingData) => {
-      if (!resource.scaleTargetRef) {
-        return null;
-      }
-      try {
-        return buildRelatedObjectReference({
-          kind: resource.scaleTargetRef.kind,
-          name: resource.scaleTargetRef.name,
-          namespace: resource.namespace,
-          apiVersion: resource.scaleTargetRef.apiVersion,
-          clusterId: resource.clusterId ?? undefined,
-          clusterName: resource.clusterName ?? undefined,
-        });
-      } catch {
-        return null;
-      }
-    }, []);
+    const buildScaleTargetReference = useCallback(
+      (resource: AutoscalingData) => {
+        if (!resource.scaleTargetRef) {
+          return null;
+        }
+        try {
+          return buildRequiredRelatedObjectReference(
+            {
+              kind: resource.scaleTargetRef.kind,
+              name: resource.scaleTargetRef.name,
+              namespace: resource.namespace,
+              apiVersion: resource.scaleTargetRef.apiVersion,
+              clusterId: resource.clusterId,
+              clusterName: resource.clusterName ?? undefined,
+            },
+            { fallbackClusterId: selectedClusterId }
+          );
+        } catch {
+          return null;
+        }
+      },
+      [selectedClusterId]
+    );
 
     const columns: GridColumnDefinition<AutoscalingData>[] = useMemo(() => {
       const baseColumns: GridColumnDefinition<AutoscalingData>[] = [];

@@ -6,6 +6,7 @@ import {
   buildRelatedObjectReference,
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
+  buildRequiredRelatedObjectReference,
   buildSyntheticObjectReference,
 } from './objectIdentity';
 
@@ -165,6 +166,37 @@ describe('objectIdentity', () => {
       expect.objectContaining({
         group: '',
         version: 'v1',
+      })
+    );
+  });
+
+  it('requires clusterId for strict related-object references', () => {
+    expect(() =>
+      buildRequiredRelatedObjectReference({
+        kind: 'Deployment',
+        name: 'api',
+        namespace: 'team-a',
+      })
+    ).toThrow(/clusterId/);
+  });
+
+  it('uses fallback clusterId and explicit apiVersion for strict related-object references', () => {
+    expect(
+      buildRequiredRelatedObjectReference(
+        {
+          kind: 'DBInstance',
+          name: 'db-a',
+          namespace: 'ops',
+          apiVersion: 'rds.services.k8s.aws/v1alpha1',
+        },
+        { fallbackClusterId: 'alpha:ctx' }
+      )
+    ).toEqual(
+      expect.objectContaining({
+        kind: 'DBInstance',
+        clusterId: 'alpha:ctx',
+        group: 'rds.services.k8s.aws',
+        version: 'v1alpha1',
       })
     );
   });
