@@ -316,6 +316,19 @@ const tooltipFont = (weight: number, size: number, family: string): string =>
 const edgeEndpointLabel = (node: PositionedNode | null): string =>
   node ? node.ref.name : 'Unknown';
 
+const eventTooltipPoint = (
+  event: ObjectMapPointerInput,
+  container: HTMLElement,
+  yOffset: number
+): { x: number; y: number } => {
+  const client = eventClientPoint(event);
+  const rect = container.getBoundingClientRect();
+  return {
+    x: client.x - rect.left,
+    y: client.y - rect.top + yOffset,
+  };
+};
+
 const EMPTY_SELECTION_STATE: ObjectMapSelectionState = {
   activeId: null,
   connectedIds: new Set(),
@@ -603,14 +616,12 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
   }, [refreshPalette]);
 
   const updateTooltipPosition = useCallback(() => {
-    const graph = graphRef.current;
     const edge = hoverEdgeRef.current;
-    if (!graph || graph.destroyed || !edge) {
+    if (!edge) {
       setTooltipPosition(null);
       return;
     }
-    const [x, y] = graph.getViewportByCanvas([edge.midX, edge.midY]);
-    setTooltipPosition({ x, y });
+    setTooltipPosition({ x: edge.tooltipX, y: edge.tooltipY });
   }, []);
 
   const scheduleFitGraphToView = useCallback(() => {
@@ -795,6 +806,22 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
       });
     };
 
+    const emitConnectionHover = (edge: PositionedEdge, event: G6ElementPointerEvent) => {
+      const currentPalette = paletteRef.current;
+      const point = eventTooltipPoint(event, container, currentPalette?.tooltipOffsetY ?? 0);
+      const sourceNode = findNode(layoutRef.current, edge.sourceId);
+      const targetNode = findNode(layoutRef.current, edge.targetId);
+      handlersRef.current.onHoverEdge({
+        tooltipX: point.x,
+        tooltipY: point.y,
+        sourceLabel: edgeEndpointLabel(sourceNode),
+        label: edge.label,
+        targetLabel: edgeEndpointLabel(targetNode),
+        type: edge.type,
+        tracedBy: edge.tracedBy,
+      });
+    };
+
     graph.on(NodeEvent.CLICK, (rawEvent) => {
       const event = rawEvent as G6ElementPointerEvent;
       const id = event.target.id;
@@ -852,17 +879,13 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
         }
       }
       setConnectionHoverState(edge, true);
-      const sourceNode = findNode(layoutRef.current, edge.sourceId);
-      const targetNode = findNode(layoutRef.current, edge.targetId);
-      handlersRef.current.onHoverEdge({
-        midX: edge.midX,
-        midY: edge.midY,
-        sourceLabel: edgeEndpointLabel(sourceNode),
-        label: edge.label,
-        targetLabel: edgeEndpointLabel(targetNode),
-        type: edge.type,
-        tracedBy: edge.tracedBy,
-      });
+      emitConnectionHover(edge, event);
+    });
+    graph.on(EdgeEvent.POINTER_MOVE, (rawEvent) => {
+      const event = rawEvent as G6ElementPointerEvent;
+      const edge = findEdge(layoutRef.current, event.target.id);
+      if (!edge || hoveredEdgeIdRef.current !== edge.id) return;
+      emitConnectionHover(edge, event);
     });
     graph.on(EdgeEvent.POINTER_LEAVE, (rawEvent) => {
       const event = rawEvent as G6ElementPointerEvent;

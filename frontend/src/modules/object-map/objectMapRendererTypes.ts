@@ -2,8 +2,8 @@ import type { ObjectMapReference } from '@core/refresh/types';
 import type { PositionedNode } from './objectMapLayout';
 
 export interface ObjectMapHoverEdge {
-  midX: number;
-  midY: number;
+  tooltipX: number;
+  tooltipY: number;
   sourceLabel: string;
   label: string;
   targetLabel: string;
