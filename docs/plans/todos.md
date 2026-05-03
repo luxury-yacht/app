@@ -4,7 +4,6 @@
   - Object relationships map
   - Traffic flow map
 
-- padding on full zoom
 - zoom increments
 - route tooltips
   - highlight route

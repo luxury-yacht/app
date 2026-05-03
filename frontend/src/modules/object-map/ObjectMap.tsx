@@ -130,13 +130,9 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
             type="button"
             className="object-map__toolbar-button"
             onClick={g6ViewportControls?.fitToView}
-            title={
-              model.autoFit
-                ? 'Fit to view (auto-fit is on; turn it off to use this manually)'
-                : 'Fit to view'
-            }
+            title="Fit to view"
             aria-label="Fit to view"
-            disabled={model.autoFit || !viewportControlsReady}
+            disabled={!viewportControlsReady}
           >
             <FitToViewIcon />
           </button>
