@@ -15,6 +15,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -90,7 +91,10 @@ type objectMapRecord struct {
 	service    *corev1.Service
 	slice      *discoveryv1.EndpointSlice
 	pvc        *corev1.PersistentVolumeClaim
+	pv         *corev1.PersistentVolume
+	storage    *storagev1.StorageClass
 	ingress    *networkingv1.Ingress
+	ingClass   *networkingv1.IngressClass
 	hpa        *autoscalingv2.HorizontalPodAutoscaler
 	template   *corev1.PodTemplateSpec
 	cronJobTpl *corev1.PodTemplateSpec
@@ -256,6 +260,7 @@ func (idx *objectMapIndex) collectTyped(ctx context.Context, client kubernetes.I
 	idx.collectEndpointSlices(ctx, client)
 	idx.collectPVCs(ctx, client)
 	idx.collectPVs(ctx, client)
+	idx.collectStorageClasses(ctx, client)
 	idx.collectConfigMaps(ctx, client)
 	idx.collectSecrets(ctx, client)
 	idx.collectServiceAccounts(ctx, client)
@@ -268,6 +273,7 @@ func (idx *objectMapIndex) collectTyped(ctx context.Context, client kubernetes.I
 	idx.collectCronJobs(ctx, client)
 	idx.collectHPAs(ctx, client)
 	idx.collectIngresses(ctx, client)
+	idx.collectIngressClasses(ctx, client)
 }
 
 func (idx *objectMapIndex) collectPods(ctx context.Context, client kubernetes.Interface) {
@@ -345,6 +351,23 @@ func (idx *objectMapIndex) collectPVs(ctx context.Context, client kubernetes.Int
 			ref:    refFromObject(&pv.ObjectMeta, "", "v1", "PersistentVolume", "persistentvolumes", ""),
 			owners: pv.OwnerReferences,
 			labels: cloneStringMap(pv.Labels),
+			pv:     &pv,
+		})
+	}
+}
+
+func (idx *objectMapIndex) collectStorageClasses(ctx context.Context, client kubernetes.Interface) {
+	list, err := client.StorageV1().StorageClasses().List(ctx, metav1.ListOptions{})
+	if idx.skipListError("storageclasses", err) {
+		return
+	}
+	for i := range list.Items {
+		sc := list.Items[i]
+		idx.addRecord(&objectMapRecord{
+			ref:     refFromObject(&sc.ObjectMeta, "storage.k8s.io", "v1", "StorageClass", "storageclasses", ""),
+			owners:  sc.OwnerReferences,
+			labels:  cloneStringMap(sc.Labels),
+			storage: &sc,
 		})
 	}
 }
@@ -537,6 +560,22 @@ func (idx *objectMapIndex) collectIngresses(ctx context.Context, client kubernet
 	}
 }
 
+func (idx *objectMapIndex) collectIngressClasses(ctx context.Context, client kubernetes.Interface) {
+	list, err := client.NetworkingV1().IngressClasses().List(ctx, metav1.ListOptions{})
+	if idx.skipListError("ingressclasses", err) {
+		return
+	}
+	for i := range list.Items {
+		ingClass := list.Items[i]
+		idx.addRecord(&objectMapRecord{
+			ref:      refFromObject(&ingClass.ObjectMeta, "networking.k8s.io", "v1", "IngressClass", "ingressclasses", ""),
+			owners:   ingClass.OwnerReferences,
+			labels:   cloneStringMap(ingClass.Labels),
+			ingClass: &ingClass,
+		})
+	}
+}
+
 func (idx *objectMapIndex) skipListError(resource string, err error) bool {
 	if err == nil {
 		return false
@@ -598,8 +637,17 @@ func (idx *objectMapIndex) mergeRecord(dst, src *objectMapRecord) {
 	if src.pvc != nil {
 		dst.pvc = src.pvc
 	}
+	if src.pv != nil {
+		dst.pv = src.pv
+	}
+	if src.storage != nil {
+		dst.storage = src.storage
+	}
 	if src.ingress != nil {
 		dst.ingress = src.ingress
+	}
+	if src.ingClass != nil {
+		dst.ingClass = src.ingClass
 	}
 	if src.hpa != nil {
 		dst.hpa = src.hpa
@@ -628,6 +676,9 @@ func (idx *objectMapIndex) buildGraph(seed *objectMapRecord, maxDepth, maxNodes 
 		adjacency: make(map[string][]objectMapTraversalEdge),
 	}
 	for _, edge := range allEdges {
+		if !idx.canUseObjectMapEdgeForSeed(seed, edge) {
+			continue
+		}
 		graph.adjacency[edge.Source] = append(graph.adjacency[edge.Source], objectMapTraversalEdge{edgeID: edge.ID})
 		graph.adjacency[edge.Target] = append(graph.adjacency[edge.Target], objectMapTraversalEdge{edgeID: edge.ID, reverse: true})
 		graph.edges[edge.ID] = edge
@@ -681,6 +732,15 @@ func (idx *objectMapIndex) buildGraph(seed *objectMapRecord, maxDepth, maxNodes 
 	}
 	graph.edges = includedEdges
 	return graph
+}
+
+func (idx *objectMapIndex) canUseObjectMapEdgeForSeed(seed *objectMapRecord, edge ObjectMapEdge) bool {
+	if seed == nil || !isIngressClassRef(seed.ref) {
+		return true
+	}
+	source := idx.records[edge.Source]
+	target := idx.records[edge.Target]
+	return edge.Type == "uses" && source != nil && target != nil && isIngressRef(source.ref) && isIngressClassRef(target.ref)
 }
 
 func canTraverseObjectMapReverse(edgeType string, currentDepth int) bool {
@@ -748,7 +808,19 @@ func (idx *objectMapIndex) buildAllEdges() []ObjectMapEdge {
 			target := idx.findCore("", "v1", "PersistentVolume", record.pvc.Spec.VolumeName)
 			add(record, target, "storage", "binds", "spec.volumeName")
 		}
+		if record.pvc != nil && record.pvc.Spec.StorageClassName != nil && *record.pvc.Spec.StorageClassName != "" {
+			target := idx.findStorageClass(*record.pvc.Spec.StorageClassName)
+			add(record, target, "storage", "uses class", "spec.storageClassName")
+		}
+		if record.pv != nil && record.pv.Spec.StorageClassName != "" {
+			target := idx.findStorageClass(record.pv.Spec.StorageClassName)
+			add(record, target, "storage", "uses class", "spec.storageClassName")
+		}
 		if record.ingress != nil {
+			if className, tracedBy := ingressClassName(record.ingress); className != "" {
+				target := idx.findIngressClass(className)
+				add(record, target, "uses", "uses class", tracedBy)
+			}
 			for _, serviceName := range ingressBackendServices(record.ingress) {
 				target := idx.findCore(record.ref.Namespace, "v1", "Service", serviceName)
 				add(record, target, "routes", "routes to", "spec.backend.service")
@@ -888,6 +960,14 @@ func (idx *objectMapIndex) findCore(namespace, version, kind, name string) *obje
 	return idx.byIdent[objectMapIdentityKey(namespace, "", version, kind, name)]
 }
 
+func (idx *objectMapIndex) findStorageClass(name string) *objectMapRecord {
+	return idx.byIdent[objectMapIdentityKey("", "storage.k8s.io", "v1", "StorageClass", name)]
+}
+
+func (idx *objectMapIndex) findIngressClass(name string) *objectMapRecord {
+	return idx.byIdent[objectMapIdentityKey("", "networking.k8s.io", "v1", "IngressClass", name)]
+}
+
 func (idx *objectMapIndex) matchingPods(namespace string, selector map[string]string) []*objectMapRecord {
 	if len(selector) == 0 {
 		return nil
@@ -924,6 +1004,27 @@ func labelsMatch(selector, labels map[string]string) bool {
 		}
 	}
 	return true
+}
+
+func ingressClassName(ing *networkingv1.Ingress) (string, string) {
+	if ing == nil {
+		return "", ""
+	}
+	if ing.Spec.IngressClassName != nil && strings.TrimSpace(*ing.Spec.IngressClassName) != "" {
+		return strings.TrimSpace(*ing.Spec.IngressClassName), "spec.ingressClassName"
+	}
+	if ing.Annotations != nil && strings.TrimSpace(ing.Annotations["kubernetes.io/ingress.class"]) != "" {
+		return strings.TrimSpace(ing.Annotations["kubernetes.io/ingress.class"]), "metadata.annotations[kubernetes.io/ingress.class]"
+	}
+	return "", ""
+}
+
+func isIngressRef(ref ObjectMapReference) bool {
+	return ref.Group == "networking.k8s.io" && ref.Version == "v1" && ref.Kind == "Ingress"
+}
+
+func isIngressClassRef(ref ObjectMapReference) bool {
+	return ref.Group == "networking.k8s.io" && ref.Version == "v1" && ref.Kind == "IngressClass"
 }
 
 func ingressBackendServices(ing *networkingv1.Ingress) []string {

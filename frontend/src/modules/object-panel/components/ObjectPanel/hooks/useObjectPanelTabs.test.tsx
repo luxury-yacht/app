@@ -155,6 +155,44 @@ describe('useObjectPanelTabs', () => {
     expect(labels).toEqual(['Details', 'Logs']);
   });
 
+  it('hides the Map tab for cluster webhook config objects', async () => {
+    const validating = await renderHook({
+      objectData: { kind: 'ValidatingWebhookConfiguration', name: 'admission-webhooks' },
+    });
+    expect(validating.availableTabs.map((tab) => tab.label)).toEqual([
+      'Details',
+      'Logs',
+      'Events',
+      'YAML',
+    ]);
+
+    const mutating = await renderHook({
+      objectData: { kind: 'MutatingWebhookConfiguration', name: 'mutation-webhooks' },
+    });
+    expect(mutating.availableTabs.map((tab) => tab.label)).toEqual([
+      'Details',
+      'Logs',
+      'Events',
+      'YAML',
+    ]);
+  });
+
+  it('hides the Map tab by default for unsupported object types', async () => {
+    const { availableTabs } = await renderHook({
+      objectData: { kind: 'GatewayClass', name: 'public-gateway' },
+    });
+
+    expect(availableTabs.map((tab) => tab.label)).toEqual(['Details', 'Logs', 'Events', 'YAML']);
+  });
+
+  it('keeps the Map tab for backend-supported object-map types', async () => {
+    const { availableTabs } = await renderHook({
+      objectData: { kind: 'IngressClass', name: 'public' },
+    });
+
+    expect(availableTabs.map((tab) => tab.label)).toContain('Map');
+  });
+
   it('adds the Maintenance tab for node objects', async () => {
     const { availableTabs } = await renderHook({
       objectData: { kind: 'Node', name: 'node-1' },

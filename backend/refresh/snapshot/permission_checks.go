@@ -263,6 +263,7 @@ func defaultPermissionChecks() map[string]permissionCheck {
 			listPermission("discovery.k8s.io", "endpointslices"),
 			listPermission("", "persistentvolumeclaims"),
 			listPermission("", "persistentvolumes"),
+			listPermission("storage.k8s.io", "storageclasses"),
 			listPermission("", "configmaps"),
 			listPermission("", "secrets"),
 			listPermission("", "serviceaccounts"),
@@ -275,6 +276,7 @@ func defaultPermissionChecks() map[string]permissionCheck {
 			listPermission("batch", "cronjobs"),
 			listPermission("autoscaling", "horizontalpodautoscalers"),
 			listPermission("networking.k8s.io", "ingresses"),
+			listPermission("networking.k8s.io", "ingressclasses"),
 		),
 	}
 }

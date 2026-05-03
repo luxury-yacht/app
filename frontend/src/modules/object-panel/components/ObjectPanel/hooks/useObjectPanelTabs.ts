@@ -38,6 +38,28 @@ interface ObjectPanelTabsResult {
   availableTabs: Array<{ id: string; label: string }>;
 }
 
+const MAP_SUPPORTED_KINDS = new Set([
+  'pod',
+  'service',
+  'endpointslice',
+  'persistentvolumeclaim',
+  'persistentvolume',
+  'storageclass',
+  'configmap',
+  'secret',
+  'serviceaccount',
+  'node',
+  'deployment',
+  'replicaset',
+  'statefulset',
+  'daemonset',
+  'job',
+  'cronjob',
+  'horizontalpodautoscaler',
+  'ingress',
+  'ingressclass',
+]);
+
 export const useObjectPanelTabs = ({
   capabilities,
   objectData,
@@ -82,6 +104,10 @@ export const useObjectPanelTabs = ({
 
       if (isEvent && (tab.id === 'events' || tab.id === 'yaml' || tab.id === 'map')) {
         return false;
+      }
+
+      if (tab.id === 'map') {
+        return Boolean(objectKind && MAP_SUPPORTED_KINDS.has(objectKind));
       }
 
       if ('onlyForKinds' in tab && Array.isArray(tab.onlyForKinds) && tab.onlyForKinds.length > 0) {

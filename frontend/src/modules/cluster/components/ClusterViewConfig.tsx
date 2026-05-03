@@ -47,6 +47,9 @@ interface ConfigViewProps {
   error?: string | null;
 }
 
+const supportsObjectMap = (kind: string): boolean =>
+  kind === 'StorageClass' || kind === 'IngressClass';
+
 /**
  * GridTable component for cluster configuration resources
  * Displays Storage Classes, Ingress Classes, and Admission Control resources
@@ -209,6 +212,21 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
           context: 'gridtable',
           handlers: {
             onOpen: () => handleResourceClick(resource),
+            onObjectMap: supportsObjectMap(resource.kind)
+              ? () =>
+                  openWithObject(
+                    buildRequiredObjectReference(
+                      {
+                        kind: resource.kind,
+                        name: resource.name,
+                        clusterId: resource.clusterId,
+                        clusterName: resource.clusterName,
+                      },
+                      { fallbackClusterId: selectedClusterId }
+                    ),
+                    { initialTab: 'map' }
+                  )
+              : undefined,
             onDelete: () => setDeleteConfirm({ show: true, resource }),
           },
           permissions: {
@@ -216,7 +234,7 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
           },
         });
       },
-      [handleResourceClick, permissionMap, selectedClusterId]
+      [handleResourceClick, openWithObject, permissionMap, selectedClusterId]
     );
 
     // Resolve empty state message

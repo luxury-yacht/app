@@ -10,6 +10,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -145,6 +146,91 @@ func TestObjectMapReverseTraversesHubEdgesFromSeed(t *testing.T) {
 	assertNode(t, serviceAccountPayload, "Pod", "api-pod")
 }
 
+func TestObjectMapBuildsFromStorageClass(t *testing.T) {
+	client := fake.NewSimpleClientset(objectMapStorageFixtureObjects()...)
+	builder := &objectMapBuilder{client: client}
+	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"})
+
+	snap, err := builder.Build(ctx, "__cluster__:storage.k8s.io/v1:StorageClass:fast?maxDepth=1&maxNodes=100")
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+	payload := snap.Payload.(ObjectMapSnapshotPayload)
+
+	if payload.Seed.ClusterID != "cluster-a" || payload.Seed.Group != "storage.k8s.io" || payload.Seed.Version != "v1" || payload.Seed.Kind != "StorageClass" {
+		t.Fatalf("seed identity is incomplete: %#v", payload.Seed)
+	}
+	assertNode(t, payload, "StorageClass", "fast")
+	assertNode(t, payload, "PersistentVolumeClaim", "data")
+	assertNode(t, payload, "PersistentVolume", "pv-data")
+	assertNode(t, payload, "PersistentVolumeClaim", "logs")
+	assertNode(t, payload, "PersistentVolume", "pv-logs")
+	assertEdge(t, payload, "PersistentVolumeClaim", "data", "StorageClass", "fast", "storage")
+	assertEdge(t, payload, "PersistentVolume", "pv-data", "StorageClass", "fast", "storage")
+	assertEdge(t, payload, "PersistentVolumeClaim", "logs", "StorageClass", "fast", "storage")
+	assertEdge(t, payload, "PersistentVolume", "pv-logs", "StorageClass", "fast", "storage")
+}
+
+func TestObjectMapDoesNotFanOutThroughSharedStorageClass(t *testing.T) {
+	client := fake.NewSimpleClientset(objectMapStorageFixtureObjects()...)
+	builder := &objectMapBuilder{client: client}
+	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a"})
+
+	snap, err := builder.Build(ctx, "default:/v1:PersistentVolumeClaim:data?maxDepth=2&maxNodes=100")
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+	payload := snap.Payload.(ObjectMapSnapshotPayload)
+
+	assertNode(t, payload, "PersistentVolumeClaim", "data")
+	assertNode(t, payload, "PersistentVolume", "pv-data")
+	assertNode(t, payload, "StorageClass", "fast")
+	assertEdge(t, payload, "PersistentVolumeClaim", "data", "PersistentVolume", "pv-data", "storage")
+	assertEdge(t, payload, "PersistentVolumeClaim", "data", "StorageClass", "fast", "storage")
+	assertEdge(t, payload, "PersistentVolume", "pv-data", "StorageClass", "fast", "storage")
+	assertMissingNode(t, payload, "PersistentVolumeClaim", "logs")
+	assertMissingNode(t, payload, "PersistentVolume", "pv-logs")
+}
+
+func TestObjectMapBuildsFromIngressClass(t *testing.T) {
+	client := fake.NewSimpleClientset(objectMapIngressClassFixtureObjects()...)
+	builder := &objectMapBuilder{client: client}
+	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"})
+
+	snap, err := builder.Build(ctx, "__cluster__:networking.k8s.io/v1:IngressClass:public?maxDepth=4&maxNodes=100")
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+	payload := snap.Payload.(ObjectMapSnapshotPayload)
+
+	if payload.Seed.ClusterID != "cluster-a" || payload.Seed.Group != "networking.k8s.io" || payload.Seed.Version != "v1" || payload.Seed.Kind != "IngressClass" {
+		t.Fatalf("seed identity is incomplete: %#v", payload.Seed)
+	}
+	assertNode(t, payload, "IngressClass", "public")
+	assertNode(t, payload, "Ingress", "web")
+	assertNode(t, payload, "Ingress", "api")
+	assertEdge(t, payload, "Ingress", "web", "IngressClass", "public", "uses")
+	assertEdge(t, payload, "Ingress", "api", "IngressClass", "public", "uses")
+	assertMissingNode(t, payload, "Service", "web-svc")
+}
+
+func TestObjectMapDoesNotFanOutThroughSharedIngressClass(t *testing.T) {
+	client := fake.NewSimpleClientset(objectMapIngressClassFixtureObjects()...)
+	builder := &objectMapBuilder{client: client}
+	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a"})
+
+	snap, err := builder.Build(ctx, "default:networking.k8s.io/v1:Ingress:web?maxDepth=2&maxNodes=100")
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+	payload := snap.Payload.(ObjectMapSnapshotPayload)
+
+	assertNode(t, payload, "Ingress", "web")
+	assertNode(t, payload, "IngressClass", "public")
+	assertEdge(t, payload, "Ingress", "web", "IngressClass", "public", "uses")
+	assertMissingNode(t, payload, "Ingress", "api")
+}
+
 func objectMapFixtureObjects() []runtime.Object {
 	deploy := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -255,6 +341,58 @@ func objectMapHubFixtureObjects() []runtime.Object {
 		&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "shared", Namespace: "default", UID: types.UID("shared-sa-uid")}},
 		&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "shared-config", Namespace: "default", UID: types.UID("shared-cm-uid")}},
 		&corev1.PersistentVolumeClaim{ObjectMeta: metav1.ObjectMeta{Name: "data", Namespace: "default", UID: types.UID("pvc-uid")}},
+	}
+}
+
+func objectMapStorageFixtureObjects() []runtime.Object {
+	return []runtime.Object{
+		&storagev1.StorageClass{ObjectMeta: metav1.ObjectMeta{Name: "fast", UID: types.UID("sc-fast-uid")}},
+		&corev1.PersistentVolumeClaim{
+			ObjectMeta: metav1.ObjectMeta{Name: "data", Namespace: "default", UID: types.UID("pvc-data-uid")},
+			Spec: corev1.PersistentVolumeClaimSpec{
+				StorageClassName: stringPtr("fast"),
+				VolumeName:       "pv-data",
+			},
+		},
+		&corev1.PersistentVolume{
+			ObjectMeta: metav1.ObjectMeta{Name: "pv-data", UID: types.UID("pv-data-uid")},
+			Spec:       corev1.PersistentVolumeSpec{StorageClassName: "fast"},
+		},
+		&corev1.PersistentVolumeClaim{
+			ObjectMeta: metav1.ObjectMeta{Name: "logs", Namespace: "default", UID: types.UID("pvc-logs-uid")},
+			Spec: corev1.PersistentVolumeClaimSpec{
+				StorageClassName: stringPtr("fast"),
+				VolumeName:       "pv-logs",
+			},
+		},
+		&corev1.PersistentVolume{
+			ObjectMeta: metav1.ObjectMeta{Name: "pv-logs", UID: types.UID("pv-logs-uid")},
+			Spec:       corev1.PersistentVolumeSpec{StorageClassName: "fast"},
+		},
+	}
+}
+
+func objectMapIngressClassFixtureObjects() []runtime.Object {
+	return []runtime.Object{
+		&networkingv1.IngressClass{ObjectMeta: metav1.ObjectMeta{Name: "public", UID: types.UID("ing-class-public-uid")}},
+		&networkingv1.Ingress{
+			ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "default", UID: types.UID("ing-web-uid")},
+			Spec: networkingv1.IngressSpec{
+				IngressClassName: stringPtr("public"),
+				DefaultBackend: &networkingv1.IngressBackend{
+					Service: &networkingv1.IngressServiceBackend{Name: "web-svc"},
+				},
+			},
+		},
+		serviceFixture("default", "web-svc", "svc-web-uid", nil),
+		&networkingv1.Ingress{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:        "api",
+				Namespace:   "default",
+				UID:         types.UID("ing-api-uid"),
+				Annotations: map[string]string{"kubernetes.io/ingress.class": "public"},
+			},
+		},
 	}
 }
 
@@ -390,5 +528,9 @@ func assertMissingNode(t *testing.T, payload ObjectMapSnapshotPayload, kind, nam
 }
 
 func int32Ptr(value int32) *int32 {
+	return &value
+}
+
+func stringPtr(value string) *string {
 	return &value
 }
