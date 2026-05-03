@@ -787,6 +787,26 @@ export const AutoFitIcon: React.FC<IconProps> = ({ width = 16, height = 16 }) =>
   </svg>
 );
 
+export const FocusModeIcon: React.FC<IconProps> = ({ width = 16, height = 16 }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    strokeWidth={2}
+    width={width}
+    height={height}
+  >
+    <circle cx="12" cy="12" r="3" />
+    <path d="M12 2v4" />
+    <path d="M12 18v4" />
+    <path d="M2 12h4" />
+    <path d="M18 12h4" />
+  </svg>
+);
+
 export const LegendIcon: React.FC<IconProps> = ({ width = 16, height = 16 }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"

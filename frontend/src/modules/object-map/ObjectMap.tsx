@@ -12,6 +12,7 @@ import type { ObjectMapReference, ObjectMapSnapshotPayload } from '@core/refresh
 import { isMacPlatform } from '@/utils/platform';
 import ContextMenu from '@shared/components/ContextMenu';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
+import { computeObjectMapLayout } from './objectMapLayout';
 import { objectMapEdgeClass, OBJECT_MAP_EDGE_KINDS } from './objectMapEdgeStyle';
 import { computeObjectMapSelectionState } from './objectMapSelection';
 import type { ObjectMapContextMenuRequest } from './objectMapRendererTypes';
@@ -20,6 +21,7 @@ import { useObjectMapModel } from './useObjectMapModel';
 import {
   AutoFitIcon,
   FitToViewIcon,
+  FocusModeIcon,
   LegendIcon,
   RefreshIcon,
   ResetFiltersIcon,
@@ -56,6 +58,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
 }) => {
   const model = useObjectMapModel(payload);
   const [showLegend, setShowLegend] = useState(true);
+  const [focusMode, setFocusMode] = useState(false);
   const [enabledEdgeTypes, setEnabledEdgeTypes] = useState<Set<string> | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchIndex, setSearchIndex] = useState(0);
@@ -89,13 +92,48 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
     [enabledEdgeTypes]
   );
 
-  const visibleLayout = useMemo(() => {
+  const edgeFilteredLayout = useMemo(() => {
     if (!enabledEdgeTypes) return model.layout;
     return {
       ...model.layout,
       edges: model.layout.edges.filter((edge) => enabledEdgeTypes.has(edge.type)),
     };
   }, [enabledEdgeTypes, model.layout]);
+
+  const visibleLayout = useMemo(() => {
+    if (!focusMode || !model.activeNodeId) return edgeFilteredLayout;
+
+    const focusSelectionState = computeObjectMapSelectionState(
+      edgeFilteredLayout.edges,
+      model.activeNodeId
+    );
+    const visibleNodeIds = new Set<string>([
+      model.activeNodeId,
+      ...focusSelectionState.connectedIds,
+    ]);
+
+    const focusedNodes = edgeFilteredLayout.nodes.filter((node) => visibleNodeIds.has(node.id));
+    const focusedEdges = edgeFilteredLayout.edges.filter((edge) =>
+      focusSelectionState.connectedEdgeIds.has(edge.id)
+    );
+
+    return computeObjectMapLayout(
+      focusedNodes.map((node) => ({
+        id: node.id,
+        depth: Math.abs(node.column),
+        ref: node.ref,
+      })),
+      focusedEdges.map((edge) => ({
+        id: edge.id,
+        source: edge.sourceId,
+        target: edge.targetId,
+        type: edge.type,
+        label: edge.label,
+        tracedBy: edge.tracedBy,
+      })),
+      model.activeNodeId
+    );
+  }, [edgeFilteredLayout, focusMode, model.activeNodeId]);
 
   const visibleSelectionState = useMemo(
     () => computeObjectMapSelectionState(visibleLayout.edges, model.activeNodeId),
@@ -283,6 +321,18 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
             <ResetFiltersIcon />
           </button>
           <span className="object-map__toolbar-separator" aria-hidden="true" />
+          <button
+            type="button"
+            className={`object-map__toolbar-button ${
+              focusMode ? 'object-map__toolbar-button--active' : ''
+            }`}
+            onClick={() => setFocusMode((prev) => !prev)}
+            title={focusMode ? 'Focus mode on' : 'Focus mode off'}
+            aria-label="Toggle focus mode"
+            aria-pressed={focusMode}
+          >
+            <FocusModeIcon />
+          </button>
           {onRefresh && (
             <button
               type="button"

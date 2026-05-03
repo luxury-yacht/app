@@ -276,6 +276,23 @@ const rolloutReplicaSetPayload: ObjectMapSnapshotPayload = {
   ],
 };
 
+const focusModePayload: ObjectMapSnapshotPayload = {
+  ...payload,
+  nodes: [
+    { id: 'deploy', depth: 0, ref: ref('deploy', 'Deployment', 'web', 'apps') },
+    { id: 'pod-a', depth: 1, ref: ref('pod-a', 'Pod', 'web-a', '') },
+    { id: 'pod-b', depth: 1, ref: ref('pod-b', 'Pod', 'web-b', '') },
+    { id: 'config-a', depth: 2, ref: ref('config-a', 'ConfigMap', 'web-a-config', '') },
+    { id: 'secret-a', depth: 3, ref: ref('secret-a', 'Secret', 'web-a-secret', '') },
+  ],
+  edges: [
+    { id: 'edge-a', source: 'deploy', target: 'pod-a', type: 'owner', label: 'owns' },
+    { id: 'edge-b', source: 'deploy', target: 'pod-b', type: 'owner', label: 'owns' },
+    { id: 'edge-config', source: 'pod-a', target: 'config-a', type: 'uses', label: 'uses' },
+    { id: 'edge-secret', source: 'config-a', target: 'secret-a', type: 'uses', label: 'uses' },
+  ],
+};
+
 const renderObjectMap = async ({
   testPayload = payload,
   onOpenPanel,
@@ -407,6 +424,67 @@ describe('ObjectMap', () => {
     expect(container.querySelector('.object-map__status')?.textContent).toContain(
       '2 objects / 0 relationships'
     );
+
+    cleanup();
+  });
+
+  it('toggles focus mode to redraw all recursively related objects', async () => {
+    const { container, cleanup } = await renderObjectMap({ testPayload: focusModePayload });
+    const focusToggle = container.querySelector<HTMLButtonElement>(
+      '[aria-label="Toggle focus mode"]'
+    );
+    const podA = container.querySelector<HTMLButtonElement>('[aria-label="Pod: web-a"]');
+    const podANode = container.querySelector<HTMLElement>('[data-testid="mock-node-pod-a"]');
+
+    expect(focusToggle).toBeTruthy();
+    expect(podA).toBeTruthy();
+    expect(podANode).toBeTruthy();
+    const initialPodAX = podANode!.dataset.x;
+    expect(container.querySelector('[aria-label="Deployment: web"]')).toBeTruthy();
+    expect(container.querySelector('[aria-label="Pod: web-b"]')).toBeTruthy();
+    expect(container.querySelector('[aria-label="ConfigMap: web-a-config"]')).toBeTruthy();
+    expect(container.querySelector('[aria-label="Secret: web-a-secret"]')).toBeTruthy();
+    expect(container.querySelector('[data-testid="mock-edge-edge-a"]')).toBeTruthy();
+    expect(container.querySelector('[data-testid="mock-edge-edge-b"]')).toBeTruthy();
+    expect(container.querySelector('[data-testid="mock-edge-edge-config"]')).toBeTruthy();
+    expect(container.querySelector('[data-testid="mock-edge-edge-secret"]')).toBeTruthy();
+
+    await act(async () => {
+      podA!.dispatchEvent(mouseEvent('click'));
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      focusToggle!.click();
+      await Promise.resolve();
+    });
+
+    expect(focusToggle?.getAttribute('aria-pressed')).toBe('true');
+    expect(container.querySelector('[aria-label="Deployment: web"]')).toBeTruthy();
+    expect(container.querySelector('[aria-label="Pod: web-a"]')).toBeTruthy();
+    expect(
+      container.querySelector<HTMLElement>('[data-testid="mock-node-pod-a"]')?.dataset.x
+    ).not.toBe(initialPodAX);
+    expect(container.querySelector('[aria-label="ConfigMap: web-a-config"]')).toBeTruthy();
+    expect(container.querySelector('[aria-label="Secret: web-a-secret"]')).toBeTruthy();
+    expect(container.querySelector('[aria-label="Pod: web-b"]')).toBeNull();
+    expect(container.querySelector('[data-testid="mock-edge-edge-a"]')).toBeTruthy();
+    expect(container.querySelector('[data-testid="mock-edge-edge-config"]')).toBeTruthy();
+    expect(container.querySelector('[data-testid="mock-edge-edge-secret"]')).toBeTruthy();
+    expect(container.querySelector('[data-testid="mock-edge-edge-b"]')).toBeNull();
+    expect(container.querySelector('.object-map__status')?.textContent).toContain(
+      '4 objects / 3 relationships'
+    );
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>('[aria-label="Pod: web-a"]')!
+        .dispatchEvent(mouseEvent('click'));
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('[aria-label="Pod: web-b"]')).toBeTruthy();
+    expect(container.querySelector('[data-testid="mock-edge-edge-b"]')).toBeTruthy();
 
     cleanup();
   });
