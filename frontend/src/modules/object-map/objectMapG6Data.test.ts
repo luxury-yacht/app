@@ -89,7 +89,7 @@ describe('objectMapG6Data', () => {
     expect(objectMapG6EdgeState(layout.edges[1], selectionState(null))).toEqual([]);
   });
 
-  it('parses routed SVG edge paths for the canvas renderer', () => {
+  it('parses routed SVG edge paths for the G6 renderer', () => {
     expect(parseObjectMapG6Path('M 10 20 C 30 20, 40 50, 60 50')).toEqual([
       ['M', 10, 20],
       ['C', 30, 20, 40, 50, 60, 50],

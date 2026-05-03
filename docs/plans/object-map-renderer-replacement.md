@@ -144,11 +144,11 @@ Expected result: the SVG map looks and behaves the same, but rendering is now re
 
 Expected result: renderer-independent behavior is locked down before changing the drawing backend.
 
-### Phase 3: Add the canvas renderer behind a local switch
+### Phase 3: Add the G6 renderer behind a local switch
 
-- [x] Add the renderer dependency for the spike while keeping SVG as the production default.
+- [x] Add the renderer dependency for the spike while keeping SVG as the temporary default.
 - [x] Create a renderer boundary, for example `ObjectMapRenderer`.
-- [x] Keep `svg` as the default while the canvas renderer is incomplete.
+- [x] Keep `svg` as the default while the G6 renderer is incomplete.
 - [x] Extract G6 data/state/style mapping behind a testable helper.
 - [x] Keep one G6 graph instance mounted across selection/data/callback changes.
 - [x] Register a custom G6 card node instead of using the generic one-line label.
@@ -166,18 +166,18 @@ Expected result: renderer-independent behavior is locked down before changing th
 - [x] Implement Alt-click navigate behavior.
 - [x] Preserve toolbar and legend DOM outside the renderer where possible.
 
-Expected result: developers can switch between SVG and canvas renderers while comparing behavior.
+Expected result: developers can switch between SVG and G6 renderers while comparing behavior.
 
 ### Phase 4: Performance fixtures and acceptance tests
 
 - [x] Add synthetic object-map fixtures for approximately 500 nodes / 1,000 edges.
 - [x] Add synthetic object-map fixtures for approximately 1,000 nodes / 2,000 edges.
 - [x] Measure initial graph preparation time separately from renderer interaction smoothness.
-- [ ] Measure pan/zoom while the graph is already rendered.
+- [x] Measure pan/zoom while the graph is already rendered.
 - [x] Measure dragging one node while connected edge lines update.
 - [x] Measure node selection and highlight update time.
 - [x] Add Storybook stories for manual SVG/G6 large-map comparison.
-- [ ] Run the measurements in the desktop/Wails environment, not only the browser.
+- [x] Run the measurements in the desktop/Wails environment, not only the browser.
 
 Dependency review:
 
@@ -217,10 +217,15 @@ This should be a separate feature. It is not required for first renderer parity.
 
 ## Rollout criteria
 
-- [ ] SVG and canvas renderers have behavior parity for the preserved feature list.
-- [ ] Performance fixtures show a significant improvement over the SVG renderer.
-- [ ] Wails/WebKit testing shows no ghosting or stale-frame artifacts.
+- [x] SVG and G6 renderers have behavior parity for the preserved feature list.
+- [x] Performance fixtures show a significant improvement over the SVG renderer.
+- [x] Wails/WebKit testing shows no ghosting or stale-frame artifacts.
 - [x] New dependency review is complete, if a dependency is added.
 - [x] `npm test` passes for object-map and object-panel map tests.
 - [x] `npm run typecheck` passes.
 - [x] `mage qc:prerelease` passes before presenting implementation work as complete.
+
+## Follow-up polish
+
+The renderer replacement is considered functionally complete. Remaining known work is visual
+polish only: small card/edge styling adjustments that do not block the G6 production path.

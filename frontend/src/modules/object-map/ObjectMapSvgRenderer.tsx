@@ -3,8 +3,8 @@
  *
  * Why pure SVG (no foreignObject): WebKit/Wails renders foreignObject content
  * inconsistently when a parent SVG has a non-identity transform. Native SVG
- * primitives transform uniformly, so the current renderer keeps node cards as
- * rect/text primitives until a canvas renderer replaces this path.
+ * primitives transform uniformly, so this fallback renderer keeps node cards
+ * as rect/text primitives.
  */
 
 import React, { useCallback } from 'react';

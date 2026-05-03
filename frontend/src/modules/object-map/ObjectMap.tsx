@@ -3,9 +3,8 @@
  *
  * Shell for the object-map snapshot view. Data preparation and interaction
  * state live in `useObjectMapModel`; drawing is delegated to a renderer. The
- * current renderer is still SVG, but the boundary lets a canvas renderer be
- * added without changing the map tab, backend payload, toolbar, or relationship
- * behavior.
+ * object-panel map tab uses the G6 renderer for production performance, while
+ * the SVG renderer remains available as a fallback and comparison target.
  */
 
 import React, { Suspense, useCallback, useMemo, useState } from 'react';
@@ -29,9 +28,9 @@ const ObjectMapG6Renderer = React.lazy(() => import('./ObjectMapG6Renderer'));
 
 export interface ObjectMapProps {
   payload: ObjectMapSnapshotPayload;
-  // Non-default renderer switch used while replacing the SVG renderer.
-  // Keep SVG as the production default until the canvas renderer reaches
-  // behavior parity and passes large-graph performance testing.
+  // Renderer switch kept for fallback/testing. The object-panel map tab
+  // explicitly requests G6; SVG remains useful for comparison stories and
+  // renderer-independent behavior tests.
   rendererKind?: 'svg' | 'g6';
   // Forces a refit when bumped — wire to a host's "Reset view" trigger.
   resetToken?: number;
@@ -116,7 +115,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
         onClick={isG6Renderer ? undefined : handleCanvasClick}
       >
         {rendererKind === 'g6' ? (
-          <Suspense fallback={<div className="object-map__message">Loading canvas renderer…</div>}>
+          <Suspense fallback={<div className="object-map__message">Loading map renderer…</div>}>
             <ObjectMapG6Renderer
               layout={model.layout}
               selectionState={model.selectionState}
