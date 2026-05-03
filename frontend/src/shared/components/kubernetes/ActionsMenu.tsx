@@ -2,7 +2,7 @@
  * frontend/src/shared/components/kubernetes/ActionsMenu.tsx
  *
  * Actions menu for the Object Panel. Renders a dropdown menu with available
- * actions for the current object. Uses the shared useObjectActions hook.
+ * actions for the current object through the shared object action controller.
  */
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
