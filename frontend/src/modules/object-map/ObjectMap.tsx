@@ -233,6 +233,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
             onNavigateView={onNavigateView}
             onNodeContextMenu={handleNodeContextMenu}
             autoFit={model.autoFit}
+            preserveViewportNodeId={!model.autoFit && focusMode ? model.activeNodeId : null}
             onViewportControlsChange={setG6ViewportControls}
           />
         </Suspense>

@@ -345,6 +345,28 @@ const EMPTY_SELECTION_STATE: ObjectMapSelectionState = {
 const graphNodes = (data: GraphData): NodeData[] => data.nodes ?? [];
 const graphEdges = (data: GraphData): EdgeData[] => data.edges ?? [];
 
+const nodeCenter = (
+  data: GraphData,
+  id: string | null | undefined
+): { x: number; y: number } | null => {
+  if (!id) return null;
+  const node = graphNodes(data).find((entry) => entry.id === id);
+  const x = Number(node?.style?.x);
+  const y = Number(node?.style?.y);
+  return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
+};
+
+const nodeViewportPoint = (
+  graph: Graph,
+  data: GraphData,
+  id: string | null | undefined
+): { x: number; y: number } | null => {
+  const center = nodeCenter(data, id);
+  if (!center) return null;
+  const [x, y] = graph.getViewportByCanvas([center.x, center.y]);
+  return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
+};
+
 const sameIds = <T extends { id?: string }>(previous: T[], next: T[]): boolean => {
   if (previous.length !== next.length) return false;
   const previousIds = new Set(previous.map((entry) => entry.id));
@@ -415,16 +437,35 @@ const edgeChanged = (previous: EdgeData, next: EdgeData): boolean => {
 export const applyGraphData = async (
   graph: Graph,
   previousData: GraphData,
-  nextData: GraphData
+  nextData: GraphData,
+  options: { preserveViewportNodeId?: string | null } = {}
 ): Promise<void> => {
   const previousNodes = graphNodes(previousData);
   const nextNodes = graphNodes(nextData);
   const previousEdges = graphEdges(previousData);
   const nextEdges = graphEdges(nextData);
+  const previousViewportPoint = nodeViewportPoint(
+    graph,
+    previousData,
+    options.preserveViewportNodeId
+  );
+  const preserveViewportForNode = async () => {
+    if (!previousViewportPoint) return;
+    const nextViewportPoint = nodeViewportPoint(graph, nextData, options.preserveViewportNodeId);
+    if (!nextViewportPoint) return;
+    await graph.translateBy(
+      [
+        previousViewportPoint.x - nextViewportPoint.x,
+        previousViewportPoint.y - nextViewportPoint.y,
+      ],
+      false
+    );
+  };
 
   if (!sameIds(previousNodes, nextNodes) || !sameIds(previousEdges, nextEdges)) {
     graph.setData(nextData);
     await graph.render();
+    await preserveViewportForNode();
     return;
   }
 
@@ -445,6 +486,7 @@ export const applyGraphData = async (
   if (edgeUpdates.length > 0) patch.edges = edgeUpdates;
   graph.updateData(patch);
   await graph.draw();
+  await preserveViewportForNode();
 };
 
 const applySelectionState = async (
@@ -486,6 +528,7 @@ export interface ObjectMapG6RendererProps {
   onNavigateView?: ObjectMapObjectAction;
   onNodeContextMenu?: ObjectMapContextMenuAction;
   autoFit: boolean;
+  preserveViewportNodeId?: string | null;
   onViewportControlsChange?: (controls: ObjectMapViewportControls | null) => void;
 }
 
@@ -506,6 +549,7 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
   onNavigateView,
   onNodeContextMenu,
   autoFit,
+  preserveViewportNodeId = null,
   onViewportControlsChange,
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -580,6 +624,8 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
   layoutRef.current = layout;
   const selectionStateRef = useRef(selectionState);
   selectionStateRef.current = selectionState;
+  const preserveViewportNodeIdRef = useRef(preserveViewportNodeId);
+  preserveViewportNodeIdRef.current = preserveViewportNodeId;
   hoverEdgeRef.current = hoverEdge;
 
   const refreshPalette = useCallback(() => {
@@ -731,7 +777,9 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
             ref.latest = null;
             const previousData = renderedDataRef.current;
             if (previousData) {
-              await applyGraphData(graph, previousData, latest);
+              await applyGraphData(graph, previousData, latest, {
+                preserveViewportNodeId: preserveViewportNodeIdRef.current,
+              });
             } else {
               graph.setData(latest);
               await graph.render();
