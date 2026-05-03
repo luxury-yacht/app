@@ -97,6 +97,25 @@ export interface ObjectMapLayout {
   bounds: { minX: number; minY: number; maxX: number; maxY: number };
 }
 
+export const computeObjectMapBounds = (
+  nodes: PositionedNode[]
+): { minX: number; minY: number; maxX: number; maxY: number } => {
+  if (nodes.length === 0) {
+    return { minX: 0, minY: 0, maxX: 0, maxY: 0 };
+  }
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  nodes.forEach((node) => {
+    minX = Math.min(minX, node.x);
+    minY = Math.min(minY, node.y);
+    maxX = Math.max(maxX, node.x + node.width);
+    maxY = Math.max(maxY, node.y + node.height);
+  });
+  return { minX, minY, maxX, maxY };
+};
+
 const compareForColumn = (a: ObjectMapNode, b: ObjectMapNode): number => {
   if (a.ref.kind !== b.ref.kind) {
     return a.ref.kind.localeCompare(b.ref.kind);
@@ -434,6 +453,18 @@ export const computeObjectMapLayout = (
       });
     });
 
+  return {
+    nodes: Array.from(positioned.values()),
+    edges: routeObjectMapEdges(Array.from(positioned.values()), edges),
+    bounds: minX === Infinity ? { minX: 0, minY: 0, maxX: 0, maxY: 0 } : { minX, minY, maxX, maxY },
+  };
+};
+
+export const routeObjectMapEdges = (
+  nodes: PositionedNode[],
+  edges: ObjectMapEdge[]
+): PositionedEdge[] => {
+  const positioned = new Map(nodes.map((node) => [node.id, node]));
   const positionedEdges: PositionedEdge[] = [];
   edges.forEach((edge) => {
     const source = positioned.get(edge.source);
@@ -481,10 +512,5 @@ export const computeObjectMapLayout = (
       sameColumn: false,
     });
   });
-
-  return {
-    nodes: Array.from(positioned.values()),
-    edges: positionedEdges,
-    bounds: minX === Infinity ? { minX: 0, minY: 0, maxX: 0, maxY: 0 } : { minX, minY, maxX, maxY },
-  };
+  return positionedEdges;
 };

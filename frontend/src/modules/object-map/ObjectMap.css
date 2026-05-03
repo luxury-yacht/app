@@ -172,7 +172,11 @@
 /* --- Nodes (native SVG <g> + <rect> + <text>) -------------------- */
 
 .object-map-node {
-  cursor: pointer;
+  cursor: grab;
+}
+
+.object-map-node:active {
+  cursor: grabbing;
 }
 
 .object-map-node:focus {

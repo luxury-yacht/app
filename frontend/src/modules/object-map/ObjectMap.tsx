@@ -23,7 +23,7 @@
  * panel" interaction here — the component is purely a visualisation.
  */
 
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './ObjectMap.css';
 import type { ObjectMapSnapshotPayload } from '@core/refresh/types';
 import {
@@ -33,9 +33,11 @@ import {
 } from './objectMapCollapse';
 import { dedupeServiceEdges } from './objectMapDedupe';
 import {
+  computeObjectMapBounds,
   computeObjectMapLayout,
   type PositionedEdge,
   type PositionedNode,
+  routeObjectMapEdges,
 } from './objectMapLayout';
 import { objectMapEdgeClass, OBJECT_MAP_EDGE_KINDS } from './objectMapEdgeStyle';
 import { usePanZoom } from './usePanZoom';
@@ -44,6 +46,7 @@ import {
   FitToViewIcon,
   LegendIcon,
   RefreshIcon,
+  ResetFiltersIcon,
   ZoomInIcon,
   ZoomOutIcon,
 } from '@shared/components/icons/MenuIcons';
@@ -114,6 +117,7 @@ const BADGE_WIDTH = 28;
 const BADGE_HEIGHT = 16;
 const BADGE_MARGIN = 4;
 const BADGE_TEXT_BASELINE = 12;
+const NODE_DRAG_THRESHOLD_PX = 3;
 
 const truncate = (text: string, maxChars: number): string => {
   if (text.length <= maxChars) return text;
@@ -167,7 +171,10 @@ const ObjectMapNodeCard: React.FC<{
   badge: NodeBadge | null;
   onSelect: (id: string) => void;
   onToggleGroup: (deploymentId: string) => void;
-}> = ({ node, className, badge, onSelect, onToggleGroup }) => {
+  onDragStart: (node: PositionedNode, event: React.PointerEvent<SVGGElement>) => void;
+  onDragMove: (event: React.PointerEvent<SVGGElement>) => void;
+  onDragEnd: (event: React.PointerEvent<SVGGElement>) => void;
+}> = ({ node, className, badge, onSelect, onToggleGroup, onDragStart, onDragMove, onDragEnd }) => {
   const handleClick = useCallback(
     (event: React.MouseEvent<SVGGElement>) => {
       // Stop the SVG-level "background click clears selection" handler
@@ -188,7 +195,14 @@ const ObjectMapNodeCard: React.FC<{
     [node.id, onSelect]
   );
 
-  // Stop pan-drag from kicking in when the user click-drags a node.
+  const handlePointerDown = useCallback(
+    (event: React.PointerEvent<SVGGElement>) => {
+      event.stopPropagation();
+      onDragStart(node, event);
+    },
+    [node, onDragStart]
+  );
+
   const stopPointer = useCallback((event: React.PointerEvent) => {
     event.stopPropagation();
   }, []);
@@ -219,8 +233,10 @@ const ObjectMapNodeCard: React.FC<{
       transform={`translate(${node.x} ${node.y})`}
       onClick={handleClick}
       onKeyDown={handleKeyDown}
-      onPointerDown={stopPointer}
-      onPointerUp={stopPointer}
+      onPointerDown={handlePointerDown}
+      onPointerMove={onDragMove}
+      onPointerUp={onDragEnd}
+      onPointerCancel={onDragEnd}
       tabIndex={0}
       role="button"
       aria-label={`${node.ref.kind}: ${node.ref.name}`}
@@ -280,6 +296,18 @@ const ObjectMapNodeCard: React.FC<{
     </g>
   );
 };
+
+type NodePositionOverrides = Map<string, { x: number; y: number }>;
+
+interface NodeDragState {
+  pointerId: number;
+  nodeId: string;
+  originClientX: number;
+  originClientY: number;
+  startX: number;
+  startY: number;
+  didDrag: boolean;
+}
 
 const ObjectMap: React.FC<ObjectMapProps> = ({
   payload,
@@ -342,10 +370,38 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
     [payload.nodes, dedupedEdges, collapseInfo.visibleNodeIds]
   );
 
-  const layout = useMemo(
+  const baseLayout = useMemo(
     () => computeObjectMapLayout(filtered.nodes, filtered.edges, seedId),
     [filtered.nodes, filtered.edges, seedId]
   );
+
+  const [nodePositionOverrides, setNodePositionOverrides] = useState<NodePositionOverrides>(
+    () => new Map()
+  );
+  const nodeDragRef = useRef<NodeDragState | null>(null);
+  const suppressNextNodeClickRef = useRef(false);
+
+  useEffect(() => {
+    setNodePositionOverrides(new Map());
+    nodeDragRef.current = null;
+    suppressNextNodeClickRef.current = false;
+  }, [filtered.nodes, filtered.edges]);
+
+  const layout = useMemo(() => {
+    if (nodePositionOverrides.size === 0) {
+      return baseLayout;
+    }
+    const nodes = baseLayout.nodes.map((node) => {
+      const override = nodePositionOverrides.get(node.id);
+      if (!override) return node;
+      return { ...node, x: override.x, y: override.y };
+    });
+    return {
+      nodes,
+      edges: routeObjectMapEdges(nodes, filtered.edges),
+      bounds: computeObjectMapBounds(nodes),
+    };
+  }, [baseLayout, filtered.edges, nodePositionOverrides]);
 
   // Resolve a per-node badge spec from the collapse info. Memoized so
   // we don't rebuild the lookup on every render frame; downstream
@@ -399,7 +455,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
 
   // Clear selection if it points at a node that no longer exists (e.g.
   // after a refresh removed it). Layout drives the canonical node set.
-  React.useEffect(() => {
+  useEffect(() => {
     if (activeNodeId === null) return;
     if (!layout.nodes.some((n) => n.id === activeNodeId)) {
       setActiveNodeId(null);
@@ -483,7 +539,74 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
   }, [activeNodeId, adjacency]);
 
   const handleNodeClick = useCallback((id: string) => {
+    if (suppressNextNodeClickRef.current) {
+      suppressNextNodeClickRef.current = false;
+      return;
+    }
     setActiveNodeId((prev) => (prev === id ? null : id));
+  }, []);
+
+  const handleNodeDragStart = useCallback(
+    (node: PositionedNode, event: React.PointerEvent<SVGGElement>) => {
+      if (event.button !== 0) return;
+      nodeDragRef.current = {
+        pointerId: event.pointerId,
+        nodeId: node.id,
+        originClientX: event.clientX,
+        originClientY: event.clientY,
+        startX: node.x,
+        startY: node.y,
+        didDrag: false,
+      };
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+    },
+    []
+  );
+
+  const handleNodeDragMove = useCallback(
+    (event: React.PointerEvent<SVGGElement>) => {
+      event.stopPropagation();
+      const drag = nodeDragRef.current;
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      const dxScreen = event.clientX - drag.originClientX;
+      const dyScreen = event.clientY - drag.originClientY;
+      if (!drag.didDrag && Math.hypot(dxScreen, dyScreen) >= NODE_DRAG_THRESHOLD_PX) {
+        drag.didDrag = true;
+        setAutoFit(false);
+      }
+      if (!drag.didDrag) return;
+      const nextX = drag.startX + dxScreen / viewport.scale;
+      const nextY = drag.startY + dyScreen / viewport.scale;
+      setNodePositionOverrides((prev) => {
+        const current = prev.get(drag.nodeId);
+        if (current && current.x === nextX && current.y === nextY) {
+          return prev;
+        }
+        const next = new Map(prev);
+        next.set(drag.nodeId, { x: nextX, y: nextY });
+        return next;
+      });
+    },
+    [viewport.scale]
+  );
+
+  const handleNodeDragEnd = useCallback((event: React.PointerEvent<SVGGElement>) => {
+    event.stopPropagation();
+    const drag = nodeDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    if (drag.didDrag) {
+      suppressNextNodeClickRef.current = true;
+    }
+    nodeDragRef.current = null;
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+      event.currentTarget.releasePointerCapture?.(event.pointerId);
+    }
+  }, []);
+
+  const handleResetLayout = useCallback(() => {
+    setNodePositionOverrides(new Map());
+    nodeDragRef.current = null;
+    suppressNextNodeClickRef.current = false;
   }, []);
 
   const clearHoverEdge = useCallback(() => {
@@ -559,6 +682,9 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
                   badge={badgeForNode(node.id)}
                   onSelect={handleNodeClick}
                   onToggleGroup={handleToggleGroup}
+                  onDragStart={handleNodeDragStart}
+                  onDragMove={handleNodeDragMove}
+                  onDragEnd={handleNodeDragEnd}
                 />
               ))}
             </g>
@@ -643,6 +769,16 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
             disabled={autoFit}
           >
             <FitToViewIcon />
+          </button>
+          <button
+            type="button"
+            className="object-map__toolbar-button"
+            onClick={handleResetLayout}
+            title="Reset layout"
+            aria-label="Reset layout"
+            disabled={nodePositionOverrides.size === 0}
+          >
+            <ResetFiltersIcon />
           </button>
           <button
             type="button"
