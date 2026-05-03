@@ -182,7 +182,7 @@ func TestObjectMapBuildsFromStorageClass(t *testing.T) {
 	builder := &objectMapBuilder{client: client}
 	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"})
 
-	snap, err := builder.Build(ctx, "__cluster__:storage.k8s.io/v1:StorageClass:fast?maxDepth=1&maxNodes=100")
+	snap, err := builder.Build(ctx, "__cluster__:storage.k8s.io/v1:StorageClass:fast?maxDepth=2&maxNodes=100")
 	if err != nil {
 		t.Fatalf("Build returned error: %v", err)
 	}
@@ -196,10 +196,14 @@ func TestObjectMapBuildsFromStorageClass(t *testing.T) {
 	assertNode(t, payload, "PersistentVolume", "pv-data")
 	assertNode(t, payload, "PersistentVolumeClaim", "logs")
 	assertNode(t, payload, "PersistentVolume", "pv-logs")
-	assertEdge(t, payload, "PersistentVolumeClaim", "data", "StorageClass", "fast", "storage")
+	assertNode(t, payload, "PersistentVolumeClaim", "scratch")
+	assertEdge(t, payload, "PersistentVolumeClaim", "data", "PersistentVolume", "pv-data", "storage")
 	assertEdge(t, payload, "PersistentVolume", "pv-data", "StorageClass", "fast", "storage")
-	assertEdge(t, payload, "PersistentVolumeClaim", "logs", "StorageClass", "fast", "storage")
+	assertEdge(t, payload, "PersistentVolumeClaim", "logs", "PersistentVolume", "pv-logs", "storage")
 	assertEdge(t, payload, "PersistentVolume", "pv-logs", "StorageClass", "fast", "storage")
+	assertEdge(t, payload, "PersistentVolumeClaim", "scratch", "StorageClass", "fast", "storage")
+	assertMissingEdge(t, payload, "PersistentVolumeClaim", "data", "StorageClass", "fast", "storage")
+	assertMissingEdge(t, payload, "PersistentVolumeClaim", "logs", "StorageClass", "fast", "storage")
 }
 
 func TestObjectMapDoesNotFanOutThroughSharedStorageClass(t *testing.T) {
@@ -217,10 +221,11 @@ func TestObjectMapDoesNotFanOutThroughSharedStorageClass(t *testing.T) {
 	assertNode(t, payload, "PersistentVolume", "pv-data")
 	assertNode(t, payload, "StorageClass", "fast")
 	assertEdge(t, payload, "PersistentVolumeClaim", "data", "PersistentVolume", "pv-data", "storage")
-	assertEdge(t, payload, "PersistentVolumeClaim", "data", "StorageClass", "fast", "storage")
 	assertEdge(t, payload, "PersistentVolume", "pv-data", "StorageClass", "fast", "storage")
+	assertMissingEdge(t, payload, "PersistentVolumeClaim", "data", "StorageClass", "fast", "storage")
 	assertMissingNode(t, payload, "PersistentVolumeClaim", "logs")
 	assertMissingNode(t, payload, "PersistentVolume", "pv-logs")
+	assertMissingNode(t, payload, "PersistentVolumeClaim", "scratch")
 }
 
 func TestObjectMapBuildsFromIngressClass(t *testing.T) {
@@ -444,6 +449,12 @@ func objectMapStorageFixtureObjects() []runtime.Object {
 			ObjectMeta: metav1.ObjectMeta{Name: "pv-logs", UID: types.UID("pv-logs-uid")},
 			Spec:       corev1.PersistentVolumeSpec{StorageClassName: "fast"},
 		},
+		&corev1.PersistentVolumeClaim{
+			ObjectMeta: metav1.ObjectMeta{Name: "scratch", Namespace: "default", UID: types.UID("pvc-scratch-uid")},
+			Spec: corev1.PersistentVolumeClaimSpec{
+				StorageClassName: stringPtr("fast"),
+			},
+		},
 	}
 }
 
@@ -613,6 +624,17 @@ func assertEdge(t *testing.T, payload ObjectMapSnapshotPayload, sourceKind, sour
 		}
 	}
 	t.Fatalf("missing %s edge %s/%s -> %s/%s; edges=%#v", edgeType, sourceKind, sourceName, targetKind, targetName, payload.Edges)
+}
+
+func assertMissingEdge(t *testing.T, payload ObjectMapSnapshotPayload, sourceKind, sourceName, targetKind, targetName, edgeType string) {
+	t.Helper()
+	sourceID := nodeIDByKindName(t, payload, sourceKind, sourceName)
+	targetID := nodeIDByKindName(t, payload, targetKind, targetName)
+	for _, edge := range payload.Edges {
+		if edge.Source == sourceID && edge.Target == targetID && edge.Type == edgeType {
+			t.Fatalf("unexpected %s edge %s/%s -> %s/%s; edges=%#v", edgeType, sourceKind, sourceName, targetKind, targetName, payload.Edges)
+		}
+	}
 }
 
 func nodeIDByKindName(t *testing.T, payload ObjectMapSnapshotPayload, kind, name string) string {

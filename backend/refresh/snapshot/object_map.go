@@ -903,7 +903,9 @@ func canTraverseObjectMapReverse(edgeType string, currentDepth int) bool {
 	switch edgeType {
 	case "owner", "selector", "endpoint", "routes", "scales", "grants", "binds", "aggregates":
 		return true
-	case "uses", "mounts", "storage", "schedules":
+	case "storage":
+		return currentDepth <= 1
+	case "uses", "mounts", "schedules":
 		return currentDepth == 0
 	default:
 		return false
@@ -983,7 +985,7 @@ func (idx *objectMapIndex) buildAllEdges() []ObjectMapEdge {
 			target := idx.findCore("", "v1", "PersistentVolume", record.pvc.Spec.VolumeName)
 			add(record, target, "storage", "binds", "spec.volumeName")
 		}
-		if record.pvc != nil && record.pvc.Spec.StorageClassName != nil && *record.pvc.Spec.StorageClassName != "" {
+		if record.pvc != nil && record.pvc.Spec.VolumeName == "" && record.pvc.Spec.StorageClassName != nil && *record.pvc.Spec.StorageClassName != "" {
 			target := idx.findStorageClass(*record.pvc.Spec.StorageClassName)
 			add(record, target, "storage", "uses class", "spec.storageClassName")
 		}
