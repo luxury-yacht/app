@@ -189,7 +189,7 @@
 }
 
 .object-map-node__bg {
-  fill: var(--color-bg);
+  fill: var(--color-bg-secondary);
   stroke: var(--color-border);
   stroke-width: 1;
   transition: stroke 120ms ease;
