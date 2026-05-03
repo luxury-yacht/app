@@ -11,8 +11,7 @@ import './ObjectMap.css';
 import type { ObjectMapReference, ObjectMapSnapshotPayload } from '@core/refresh/types';
 import { isMacPlatform } from '@/utils/platform';
 import ContextMenu from '@shared/components/ContextMenu';
-import { useObjectActions } from '@shared/hooks/useObjectActions';
-import { isObjectMapSupportedKind } from '@modules/object-panel/components/ObjectPanel/objectMapSupport';
+import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { objectMapEdgeClass, OBJECT_MAP_EDGE_KINDS } from './objectMapEdgeStyle';
 import type { ObjectMapContextMenuRequest } from './objectMapRendererTypes';
 import type { ObjectMapViewportControls } from './objectMapRendererTypes';
@@ -75,21 +74,17 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
 
   const viewportControlsReady = Boolean(g6ViewportControls);
   const contextMenuObject = contextMenu?.ref ?? null;
-  const contextMenuHandlers = useMemo(
-    () => ({
-      onOpen: contextMenuObject && onOpenPanel ? () => onOpenPanel(contextMenuObject) : undefined,
-      onObjectMap:
-        contextMenuObject && onOpenObjectMap && isObjectMapSupportedKind(contextMenuObject.kind)
-          ? () => onOpenObjectMap(contextMenuObject)
-          : undefined,
-    }),
-    [contextMenuObject, onOpenObjectMap, onOpenPanel]
-  );
-  const contextMenuItems = useObjectActions({
-    object: contextMenuObject,
+  const objectActions = useObjectActionController({
     context: 'gridtable',
-    handlers: contextMenuHandlers,
+    onOpen: onOpenPanel ? (object) => onOpenPanel(object as ObjectMapReference) : undefined,
+    onOpenObjectMap: onOpenObjectMap
+      ? (object) => onOpenObjectMap(object as ObjectMapReference)
+      : undefined,
   });
+  const contextMenuItems = useMemo(
+    () => objectActions.getMenuItems(contextMenuObject),
+    [contextMenuObject, objectActions]
+  );
   const handleNodeContextMenu = useCallback((request: ObjectMapContextMenuRequest) => {
     setContextMenu(request);
   }, []);
@@ -251,6 +246,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
           onClose={closeContextMenu}
         />
       )}
+      {objectActions.modals}
       {payload.truncated && (
         <div className="object-map__banner object-map__banner--truncated">
           Showing {model.layout.nodes.length} of many. Increase the depth/node limits to see more.
