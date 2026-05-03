@@ -81,10 +81,6 @@ vi.mock('@shared/components/tables/GridTable', () => ({
   GRIDTABLE_VIRTUALIZATION_DEFAULT: {},
 }));
 
-vi.mock('@shared/hooks/useObjectActions', () => ({
-  buildObjectActionItems: () => [],
-}));
-
 vi.mock('@shared/hooks/useNavigateToView', () => ({
   useNavigateToView: () => ({ navigateToView: vi.fn() }),
 }));

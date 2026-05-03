@@ -1,12 +1,10 @@
 /**
  * frontend/src/shared/hooks/useObjectActions.tsx
  *
- * Shared hook and utility for building context menu / actions menu items for Kubernetes objects.
- * Used by both GridTable context menus and Object Panel actions menus.
+ * Shared utility for building context menu / actions menu items for Kubernetes objects.
+ * Production callers should use useObjectActionController instead of calling this directly.
  */
 
-import { useMemo } from 'react';
-import { getPermissionKey, useUserPermissions } from '@/core/capabilities';
 import { eventBus } from '@/core/events';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import {
@@ -180,7 +178,8 @@ function getPortForwardAvailability(
 }
 
 /**
- * Build menu items for an object. Can be used directly or via the useObjectActions hook.
+ * Build menu items for an object. Production callers should go through
+ * useObjectActionController so permission lookup and action execution stay centralized.
  */
 export function buildObjectActionItems({
   object,
@@ -385,102 +384,4 @@ export function buildObjectActionItems({
   }
 
   return menuItems;
-}
-
-// Hook options
-export interface UseObjectActionsOptions {
-  object: ObjectActionData | null;
-  context: 'gridtable' | 'object-panel';
-  handlers: ObjectActionHandlers;
-  actionLoading?: boolean;
-}
-
-/**
- * Hook for building object action menu items. Uses useUserPermissions internally.
- * For use in React components. For callbacks, use buildObjectActionItems directly.
- */
-export function useObjectActions({
-  object,
-  context,
-  handlers,
-  actionLoading = false,
-}: UseObjectActionsOptions): ContextMenuItem[] {
-  const permissionMap = useUserPermissions();
-
-  const items = useMemo(() => {
-    if (!object) return [];
-
-    const normalizedKind = normalizeKind(object.kind);
-    const namespace = object.namespace || '';
-
-    // Get permissions from the map. Group/version are threaded through so
-    // CRD lookups produce the same key as the spec-emit side
-    // (queryKindPermissions). Built-in kinds work either way because
-    // getPermissionKey auto-resolves built-in GVK; CRDs do not, so the
-    // hook must forward what the caller supplied.
-    const clusterId = object.clusterId ?? undefined;
-    const objectGroup = object.group ?? undefined;
-    const objectVersion = object.version ?? undefined;
-    const restartStatus =
-      permissionMap.get(
-        getPermissionKey(
-          normalizedKind,
-          'patch',
-          namespace,
-          null,
-          clusterId,
-          objectGroup,
-          objectVersion
-        )
-      ) ?? null;
-    // Rollback uses the same patch permission as restart
-    const rollbackStatus = restartStatus;
-    const scaleStatus =
-      permissionMap.get(
-        getPermissionKey(
-          normalizedKind,
-          'update',
-          namespace,
-          'scale',
-          clusterId,
-          objectGroup,
-          objectVersion
-        )
-      ) ?? null;
-    const deleteStatus =
-      permissionMap.get(
-        getPermissionKey(
-          object.kind,
-          'delete',
-          namespace,
-          null,
-          clusterId,
-          objectGroup,
-          objectVersion
-        )
-      ) ?? null;
-    // Port forward requires create permission on pods/portforward subresource.
-    // Always targets core/v1 Pod regardless of the object's own kind, so the
-    // GVK is hardcoded rather than threaded from `object`.
-    const portForwardStatus =
-      permissionMap.get(
-        getPermissionKey('Pod', 'create', namespace, 'portforward', clusterId, '', 'v1')
-      ) ?? null;
-
-    return buildObjectActionItems({
-      object,
-      context,
-      handlers,
-      permissions: {
-        restart: restartStatus,
-        rollback: rollbackStatus,
-        scale: scaleStatus,
-        delete: deleteStatus,
-        portForward: portForwardStatus,
-      },
-      actionLoading,
-    });
-  }, [object, context, handlers, actionLoading, permissionMap]);
-
-  return items;
 }
