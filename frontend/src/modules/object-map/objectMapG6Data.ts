@@ -12,8 +12,10 @@ const NODE_LINE_WIDTH = 1;
 const NODE_SEED_LINE_WIDTH = 2;
 const BADGE_FONT_WEIGHT = 700;
 const BADGE_WIDTH = 28;
-const BADGE_HEIGHT = 16;
+const BADGE_HEIGHT = 14;
 const BADGE_RADIUS = 3;
+const BADGE_OFFSET_X = -24;
+const BADGE_OFFSET_Y = BADGE_HEIGHT - 8;
 
 export interface ObjectMapG6Palette {
   accent: string;
@@ -197,6 +199,8 @@ export const toObjectMapG6Data = (
               {
                 text: badge.expanded ? '\u2212' : `+${badge.hiddenCount}`,
                 placement: 'right-top',
+                offsetX: BADGE_OFFSET_X,
+                offsetY: BADGE_OFFSET_Y,
                 fill: palette.accent,
                 fontWeight: BADGE_FONT_WEIGHT,
                 backgroundWidth: BADGE_WIDTH,
