@@ -284,6 +284,7 @@ const applySelectionState = async (
   layout: ObjectMapLayout,
   selectionState: ObjectMapSelectionState
 ): Promise<void> => {
+  if (graph.destroyed) return;
   const states: Record<string, string[]> = {};
   layout.nodes.forEach((node) => {
     states[node.id] = objectMapG6NodeState(node, selectionState);
@@ -291,6 +292,7 @@ const applySelectionState = async (
   layout.edges.forEach((edge) => {
     states[edge.id] = objectMapG6EdgeState(edge, selectionState);
   });
+  if (graph.destroyed) return;
   await graph.setElementState(states, false);
 };
 
@@ -354,8 +356,9 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
     applying: false,
     latest: null,
   });
-  const [palette, setPalette] = useState<ObjectMapG6Palette>(DEFAULT_OBJECT_MAP_G6_PALETTE);
+  const [palette, setPalette] = useState<ObjectMapG6Palette | null>(null);
   const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null);
+  const graphReadyRef = useRef(false);
   const handlersRef = useRef({
     onHoverEdge,
     onClearHoverEdge,
@@ -382,9 +385,10 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
     onToggleGroup,
     badgeForNode,
   };
+  const activePalette = palette ?? DEFAULT_OBJECT_MAP_G6_PALETTE;
   const data = useMemo(
-    () => toObjectMapG6Data(layout, EMPTY_SELECTION_STATE, badgeForNode, palette),
-    [layout, badgeForNode, palette]
+    () => toObjectMapG6Data(layout, EMPTY_SELECTION_STATE, badgeForNode, activePalette),
+    [layout, badgeForNode, activePalette]
   );
   const dataRef = useRef(data);
   dataRef.current = data;
@@ -433,6 +437,13 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
     (nextLayout: ObjectMapLayout, nextSelectionState: ObjectMapSelectionState) => {
       const graph = graphRef.current;
       if (!graph || graph.destroyed) return;
+      if (!graphReadyRef.current) {
+        selectionApplyRef.current.latest = {
+          layout: nextLayout,
+          selectionState: nextSelectionState,
+        };
+        return;
+      }
       const ref = selectionApplyRef.current;
       ref.version += 1;
       ref.latest = { layout: nextLayout, selectionState: nextSelectionState };
@@ -449,9 +460,13 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
               break;
             }
           }
+        } catch (error) {
+          if (graphRef.current === graph && !graph.destroyed) {
+            console.error('[ObjectMapG6Renderer] Failed to apply selection state:', error);
+          }
         } finally {
           ref.applying = false;
-          if (ref.latest && !graph.destroyed) {
+          if (ref.latest && graphReadyRef.current && !graph.destroyed) {
             scheduleSelectionState(ref.latest.layout, ref.latest.selectionState);
           }
         }
@@ -468,6 +483,7 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
       const ref = dataApplyRef.current;
       ref.version += 1;
       ref.latest = nextData;
+      if (!graphReadyRef.current) return;
       if (ref.applying) return;
       ref.applying = true;
       const run = async () => {
@@ -483,15 +499,20 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
               graph.setData(latest);
               await graph.draw();
             }
+            if (graph.destroyed) return;
             renderedDataRef.current = latest;
             scheduleSelectionState(layoutRef.current, selectionStateRef.current);
             if (ref.version === requestedVersion) {
               break;
             }
           }
+        } catch (error) {
+          if (graphRef.current === graph && !graph.destroyed) {
+            console.error('[ObjectMapG6Renderer] Failed to apply graph data:', error);
+          }
         } finally {
           ref.applying = false;
-          if (ref.latest && !graph.destroyed) {
+          if (ref.latest && graphReadyRef.current && !graph.destroyed) {
             scheduleGraphData(ref.latest);
           }
         }
@@ -503,15 +524,15 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
 
   useEffect(() => {
     const container = containerRef.current;
-    if (!container) return;
+    if (!container || !palette) return;
     ensureObjectMapG6CardNodeRegistered();
     ensureObjectMapG6PathEdgeRegistered();
+    const initialData = dataRef.current;
     const graph = new Graph({
       container,
       autoResize: true,
       animation: false,
-      layout: { type: 'preset' },
-      data: dataRef.current,
+      data: initialData,
       behaviors: ['drag-canvas', 'zoom-canvas'],
       node: {
         type: OBJECT_MAP_G6_CARD_NODE,
@@ -615,21 +636,56 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
     graph.on(GraphEvent.AFTER_TRANSFORM, updateTooltipPosition);
     graph.on(GraphEvent.AFTER_SIZE_CHANGE, updateTooltipPosition);
 
-    void graph.render();
-    renderedDataRef.current = dataRef.current;
+    let disposed = false;
+    let initialRenderSettled = false;
+    const destroyGraph = () => {
+      if (!graph.destroyed) {
+        graph.destroy();
+      }
+    };
+    const renderInitialGraph = async () => {
+      try {
+        await graph.render();
+        initialRenderSettled = true;
+        if (disposed || graph.destroyed || graphRef.current !== graph) {
+          return;
+        }
+        renderedDataRef.current = initialData;
+        graphReadyRef.current = true;
+        scheduleSelectionState(layoutRef.current, selectionStateRef.current);
+        const pendingData = dataApplyRef.current.latest;
+        if (pendingData) {
+          scheduleGraphData(pendingData);
+        }
+      } catch (error) {
+        initialRenderSettled = true;
+        if (!disposed && graphRef.current === graph && !graph.destroyed) {
+          console.error('[ObjectMapG6Renderer] Failed to render graph:', error);
+        }
+      } finally {
+        if (disposed) {
+          destroyGraph();
+        }
+      }
+    };
+    void renderInitialGraph();
     const selectionApply = selectionApplyRef.current;
     const dataApply = dataApplyRef.current;
     return () => {
-      graph.destroy();
+      disposed = true;
       graphRef.current = null;
+      graphReadyRef.current = false;
       manualDragPointerIdRef.current = null;
       renderedDataRef.current = null;
       selectionApply.latest = null;
       selectionApply.applying = false;
       dataApply.latest = null;
       dataApply.applying = false;
+      if (initialRenderSettled) {
+        destroyGraph();
+      }
     };
-  }, [palette, updateTooltipPosition]);
+  }, [palette, scheduleGraphData, scheduleSelectionState, updateTooltipPosition]);
 
   useEffect(() => {
     const graph = graphRef.current;
