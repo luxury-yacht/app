@@ -25,29 +25,47 @@ export interface ObjectMapG6Palette {
   edgeSchedules: string;
   edgeScales: string;
   edgeUses: string;
+  edgeDefault: string;
+  edgeLineWidth: number;
+  edgeHighlightedLineWidth: number;
+  edgeHoveredLineWidth: number;
+  edgeDimmedOpacity: number;
+  edgeDash: [number, number];
+  cardRadius: number;
+  cardPaddingX: number;
+  cardKindBaselineY: number;
+  cardNameBaselineY: number;
+  cardNamespaceBaselineY: number;
+  cardKindFontSize: number;
+  cardNameFontSize: number;
+  cardNamespaceFontSize: number;
+  cardKindFontWeight: number;
+  cardNameFontWeight: number;
+  cardNamespaceFontWeight: number;
+  cardKindLetterSpacing: number;
+  nodeLineWidth: number;
+  nodeSeedLineWidth: number;
+  nodeConnectedLineWidth: number;
+  nodeSelectedLineWidth: number;
+  nodeEdgeHoveredLineWidth: number;
+  nodeDimmedOpacity: number;
+  badgeFontWeight: number;
+  badgeWidth: number;
+  badgeHeight: number;
+  badgeRadius: number;
+  tooltipWidth: number;
+  tooltipHeightSingle: number;
+  tooltipHeightDouble: number;
+  tooltipOffsetY: number;
+  tooltipRadius: number;
+  tooltipLabelYSingle: number;
+  tooltipLabelYDouble: number;
+  tooltipTraceY: number;
+  tooltipLabelMaxChars: number;
+  tooltipTraceMaxChars: number;
+  fullOpacity: number;
   fontFamily: string;
 }
-
-export const DEFAULT_OBJECT_MAP_G6_PALETTE: ObjectMapG6Palette = {
-  accent: '#2563eb',
-  accentBg: '#dbeafe',
-  background: '#ffffff',
-  backgroundSecondary: '#f8fafc',
-  border: '#cbd5e1',
-  text: '#0f172a',
-  textSecondary: '#64748b',
-  textTertiary: '#9ca3af',
-  textInverse: '#ffffff',
-  edgeRoutes: '#1d4ed8',
-  edgeEndpoint: '#60a5fa',
-  edgeStorage: '#7e22ce',
-  edgeMounts: '#c084fc',
-  edgeSchedules: '#16a34a',
-  edgeScales: '#eab308',
-  edgeUses: '#6b7280',
-  fontFamily:
-    '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, "Helvetica Neue", Arial, sans-serif',
-};
 
 const truncate = (text: string, maxChars: number): string => {
   if (text.length <= maxChars) return text;
@@ -57,11 +75,7 @@ const truncate = (text: string, maxChars: number): string => {
 const formatNamespace = (node: PositionedNode): string =>
   node.ref.namespace?.trim() ? node.ref.namespace : 'cluster-scoped';
 
-export const objectMapG6EdgeStroke = (type: string): string => {
-  return objectMapG6EdgeStrokeForPalette(type, DEFAULT_OBJECT_MAP_G6_PALETTE);
-};
-
-const objectMapG6EdgeStrokeForPalette = (type: string, palette: ObjectMapG6Palette): string => {
+export const objectMapG6EdgeStroke = (type: string, palette: ObjectMapG6Palette): string => {
   switch (type.trim().toLowerCase()) {
     case 'owner':
       return palette.accent;
@@ -82,7 +96,7 @@ const objectMapG6EdgeStrokeForPalette = (type: string, palette: ObjectMapG6Palet
     case 'uses':
       return palette.edgeUses;
     default:
-      return palette.textTertiary;
+      return palette.edgeDefault;
   }
 };
 
@@ -147,7 +161,7 @@ export const toObjectMapG6Data = (
   layout: ObjectMapLayout,
   selectionState: ObjectMapSelectionState,
   badgeForNode: ObjectMapNodeBadgeLookup,
-  palette: ObjectMapG6Palette = DEFAULT_OBJECT_MAP_G6_PALETTE
+  palette: ObjectMapG6Palette
 ): GraphData => ({
   nodes: layout.nodes.map<NodeData>((node) => {
     const badge = badgeForNode(node.id);
@@ -170,16 +184,28 @@ export const toObjectMapG6Data = (
         x: node.x + node.width / 2,
         y: node.y + node.height / 2,
         size: [node.width, node.height],
-        radius: 6,
+        radius: palette.cardRadius,
         fill: palette.backgroundSecondary,
         stroke: node.isSeed ? palette.accent : palette.border,
-        lineWidth: node.isSeed ? 2 : 1,
-        opacity: 1,
+        lineWidth: node.isSeed ? palette.nodeSeedLineWidth : palette.nodeLineWidth,
+        opacity: palette.fullOpacity,
         label: false,
         cardKindText: kindLabel.toUpperCase(),
         cardNameText: nameLabel,
         cardNamespaceText: namespaceLabel,
         cardFontFamily: palette.fontFamily,
+        cardRadius: palette.cardRadius,
+        cardPaddingX: palette.cardPaddingX,
+        cardKindBaselineY: palette.cardKindBaselineY,
+        cardNameBaselineY: palette.cardNameBaselineY,
+        cardNamespaceBaselineY: palette.cardNamespaceBaselineY,
+        cardKindFontSize: palette.cardKindFontSize,
+        cardNameFontSize: palette.cardNameFontSize,
+        cardNamespaceFontSize: palette.cardNamespaceFontSize,
+        cardKindFontWeight: palette.cardKindFontWeight,
+        cardNameFontWeight: palette.cardNameFontWeight,
+        cardNamespaceFontWeight: palette.cardNamespaceFontWeight,
+        cardKindLetterSpacing: palette.cardKindLetterSpacing,
         cardKindFill: palette.accent,
         cardNameFill: palette.text,
         cardNamespaceFill: palette.textSecondary,
@@ -189,12 +215,12 @@ export const toObjectMapG6Data = (
                 text: badge.expanded ? '\u2212' : `+${badge.hiddenCount}`,
                 placement: 'right-top',
                 fill: palette.accent,
-                fontWeight: 700,
-                backgroundWidth: 28,
-                backgroundHeight: 16,
+                fontWeight: palette.badgeFontWeight,
+                backgroundWidth: palette.badgeWidth,
+                backgroundHeight: palette.badgeHeight,
                 backgroundFill: palette.accentBg,
                 backgroundStroke: palette.accent,
-                backgroundRadius: 3,
+                backgroundRadius: palette.badgeRadius,
               },
             ]
           : undefined,
@@ -217,10 +243,12 @@ export const toObjectMapG6Data = (
     states: objectMapG6EdgeState(edge, selectionState),
     style: {
       objectMapPath: parseObjectMapG6Path(edge.d),
-      stroke: objectMapG6EdgeStrokeForPalette(edge.type, palette),
-      lineWidth: selectionState.connectedEdgeIds.has(edge.id) ? 2.5 : 1.5,
-      opacity: 1,
-      lineDash: edge.type.trim().toLowerCase() === 'uses' ? [4, 3] : undefined,
+      stroke: objectMapG6EdgeStroke(edge.type, palette),
+      lineWidth: selectionState.connectedEdgeIds.has(edge.id)
+        ? palette.edgeHighlightedLineWidth
+        : palette.edgeLineWidth,
+      opacity: palette.fullOpacity,
+      lineDash: edge.type.trim().toLowerCase() === 'uses' ? palette.edgeDash : undefined,
     },
   })),
 });

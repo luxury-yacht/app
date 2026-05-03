@@ -9,6 +9,7 @@ import {
   toObjectMapG6Data,
 } from './objectMapG6Data';
 import { OBJECT_MAP_G6_CARD_NODE, OBJECT_MAP_G6_PATH_EDGE } from './objectMapG6Constants';
+import type { ObjectMapG6Palette } from './objectMapG6Data';
 import type { ObjectMapSelectionState } from './objectMapRendererTypes';
 
 const ref = (kind: string, name: string, namespace?: string): ObjectMapReference => ({
@@ -67,12 +68,72 @@ const layout: ObjectMapLayout = {
   bounds: { minX: -320, minY: 20, maxX: 540, maxY: 84 },
 };
 
+const palette: ObjectMapG6Palette = {
+  accent: '#2563eb',
+  accentBg: '#dbeafe',
+  background: '#ffffff',
+  backgroundSecondary: '#f8fafc',
+  border: '#cbd5e1',
+  text: '#0f172a',
+  textSecondary: '#64748b',
+  textTertiary: '#9ca3af',
+  textInverse: '#ffffff',
+  edgeRoutes: '#1d4ed8',
+  edgeEndpoint: '#60a5fa',
+  edgeStorage: '#7e22ce',
+  edgeMounts: '#c084fc',
+  edgeSchedules: '#16a34a',
+  edgeScales: '#eab308',
+  edgeUses: '#6b7280',
+  edgeDefault: '#9ca3af',
+  edgeLineWidth: 1.5,
+  edgeHighlightedLineWidth: 2.5,
+  edgeHoveredLineWidth: 4,
+  edgeDimmedOpacity: 0.15,
+  edgeDash: [4, 3],
+  cardRadius: 6,
+  cardPaddingX: 10,
+  cardKindBaselineY: 18,
+  cardNameBaselineY: 38,
+  cardNamespaceBaselineY: 56,
+  cardKindFontSize: 11,
+  cardNameFontSize: 11,
+  cardNamespaceFontSize: 11,
+  cardKindFontWeight: 600,
+  cardNameFontWeight: 600,
+  cardNamespaceFontWeight: 400,
+  cardKindLetterSpacing: 0.5,
+  nodeLineWidth: 1,
+  nodeSeedLineWidth: 2,
+  nodeConnectedLineWidth: 1.5,
+  nodeSelectedLineWidth: 2.5,
+  nodeEdgeHoveredLineWidth: 2.5,
+  nodeDimmedOpacity: 0.25,
+  badgeFontWeight: 700,
+  badgeWidth: 28,
+  badgeHeight: 16,
+  badgeRadius: 3,
+  tooltipWidth: 200,
+  tooltipHeightSingle: 28,
+  tooltipHeightDouble: 44,
+  tooltipOffsetY: 4,
+  tooltipRadius: 4,
+  tooltipLabelYSingle: -14,
+  tooltipLabelYDouble: -28,
+  tooltipTraceY: -12,
+  tooltipLabelMaxChars: 30,
+  tooltipTraceMaxChars: 36,
+  fullOpacity: 1,
+  fontFamily:
+    '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, "Helvetica Neue", Arial, sans-serif',
+};
+
 describe('objectMapG6Data', () => {
   it('maps edge types to stable canvas strokes', () => {
-    expect(objectMapG6EdgeStroke('owner')).toBe('#2563eb');
-    expect(objectMapG6EdgeStroke(' routes ')).toBe('#1d4ed8');
-    expect(objectMapG6EdgeStroke('uses')).toBe('#6b7280');
-    expect(objectMapG6EdgeStroke('unknown')).toBe('#9ca3af');
+    expect(objectMapG6EdgeStroke('owner', palette)).toBe('#2563eb');
+    expect(objectMapG6EdgeStroke(' routes ', palette)).toBe('#1d4ed8');
+    expect(objectMapG6EdgeStroke('uses', palette)).toBe('#6b7280');
+    expect(objectMapG6EdgeStroke('unknown', palette)).toBe('#9ca3af');
   });
 
   it('computes node and edge states from the shared selection state', () => {
@@ -97,8 +158,12 @@ describe('objectMapG6Data', () => {
   });
 
   it('builds preset-positioned graph data with node metadata, badges, and edge metadata', () => {
-    const graphData = toObjectMapG6Data(layout, selectionState('deploy'), (nodeId) =>
-      nodeId === 'deploy' ? { deploymentId: 'deploy', hiddenCount: 2, expanded: false } : null
+    const graphData = toObjectMapG6Data(
+      layout,
+      selectionState('deploy'),
+      (nodeId) =>
+        nodeId === 'deploy' ? { deploymentId: 'deploy', hiddenCount: 2, expanded: false } : null,
+      palette
     );
 
     expect(graphData.nodes).toHaveLength(3);

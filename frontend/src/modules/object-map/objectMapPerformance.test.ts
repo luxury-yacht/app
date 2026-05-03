@@ -3,6 +3,7 @@ import { computeCollapseInfo, filterByCollapseInfo } from './objectMapCollapse';
 import { dedupeServiceEdges } from './objectMapDedupe';
 import { filterByDirectionalReachability } from './objectMapDirectionalFilter';
 import { toObjectMapG6Data } from './objectMapG6Data';
+import type { ObjectMapG6Palette } from './objectMapG6Data';
 import { computeObjectMapLayout, routeObjectMapEdges } from './objectMapLayout';
 import { createObjectMapPerformanceFixture } from './objectMapPerformanceFixtures';
 import { computeObjectMapSelectionState } from './objectMapSelection';
@@ -12,6 +13,66 @@ const EMPTY_SELECTION: ObjectMapSelectionState = {
   activeId: null,
   connectedIds: new Set(),
   connectedEdgeIds: new Set(),
+};
+
+const PALETTE: ObjectMapG6Palette = {
+  accent: '#2563eb',
+  accentBg: '#dbeafe',
+  background: '#ffffff',
+  backgroundSecondary: '#f8fafc',
+  border: '#cbd5e1',
+  text: '#0f172a',
+  textSecondary: '#64748b',
+  textTertiary: '#9ca3af',
+  textInverse: '#ffffff',
+  edgeRoutes: '#1d4ed8',
+  edgeEndpoint: '#60a5fa',
+  edgeStorage: '#7e22ce',
+  edgeMounts: '#c084fc',
+  edgeSchedules: '#16a34a',
+  edgeScales: '#eab308',
+  edgeUses: '#6b7280',
+  edgeDefault: '#9ca3af',
+  edgeLineWidth: 1.5,
+  edgeHighlightedLineWidth: 2.5,
+  edgeHoveredLineWidth: 4,
+  edgeDimmedOpacity: 0.15,
+  edgeDash: [4, 3],
+  cardRadius: 6,
+  cardPaddingX: 10,
+  cardKindBaselineY: 18,
+  cardNameBaselineY: 38,
+  cardNamespaceBaselineY: 56,
+  cardKindFontSize: 11,
+  cardNameFontSize: 11,
+  cardNamespaceFontSize: 11,
+  cardKindFontWeight: 600,
+  cardNameFontWeight: 600,
+  cardNamespaceFontWeight: 400,
+  cardKindLetterSpacing: 0.5,
+  nodeLineWidth: 1,
+  nodeSeedLineWidth: 2,
+  nodeConnectedLineWidth: 1.5,
+  nodeSelectedLineWidth: 2.5,
+  nodeEdgeHoveredLineWidth: 2.5,
+  nodeDimmedOpacity: 0.25,
+  badgeFontWeight: 700,
+  badgeWidth: 28,
+  badgeHeight: 16,
+  badgeRadius: 3,
+  tooltipWidth: 200,
+  tooltipHeightSingle: 28,
+  tooltipHeightDouble: 44,
+  tooltipOffsetY: 4,
+  tooltipRadius: 4,
+  tooltipLabelYSingle: -14,
+  tooltipLabelYDouble: -28,
+  tooltipTraceY: -12,
+  tooltipLabelMaxChars: 30,
+  tooltipTraceMaxChars: 36,
+  fullOpacity: 1,
+  fontFamily:
+    '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, "Helvetica Neue", Arial, sans-serif',
 };
 
 const prepareFixture = (nodeCount: number, edgeCount: number) => {
@@ -34,7 +95,7 @@ const prepareFixture = (nodeCount: number, edgeCount: number) => {
     collapseInfo.visibleNodeIds
   );
   const layout = computeObjectMapLayout(visible.nodes, visible.edges, payload.nodes[0].id);
-  const graphData = toObjectMapG6Data(layout, EMPTY_SELECTION, () => null);
+  const graphData = toObjectMapG6Data(layout, EMPTY_SELECTION, () => null, PALETTE);
   return { payload, visible, layout, graphData };
 };
 

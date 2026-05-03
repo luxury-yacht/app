@@ -6,12 +6,7 @@ import type { ObjectMapLayout, PositionedEdge, PositionedNode } from './objectMa
 import { ensureObjectMapG6CardNodeRegistered } from './objectMapG6CardNode';
 import { ensureObjectMapG6PathEdgeRegistered } from './objectMapG6PathEdge';
 import { OBJECT_MAP_G6_CARD_NODE } from './objectMapG6Constants';
-import {
-  DEFAULT_OBJECT_MAP_G6_PALETTE,
-  objectMapG6EdgeState,
-  objectMapG6NodeState,
-  toObjectMapG6Data,
-} from './objectMapG6Data';
+import { objectMapG6EdgeState, objectMapG6NodeState, toObjectMapG6Data } from './objectMapG6Data';
 import type { ObjectMapG6Palette } from './objectMapG6Data';
 import type {
   ObjectMapHoverEdge,
@@ -24,11 +19,6 @@ import type {
   ObjectMapViewportControls,
 } from './objectMapRendererTypes';
 
-const TOOLTIP_WIDTH = 200;
-const TOOLTIP_HEIGHT_SINGLE = 28;
-const TOOLTIP_HEIGHT_DOUBLE = 44;
-const TOOLTIP_LABEL_MAX_CHARS = 30;
-const TOOLTIP_TRACE_MAX_CHARS = 36;
 const WHEEL_ZOOM_DELTA_LIMIT = 50;
 const WHEEL_ZOOM_SENSITIVITY = 1;
 
@@ -38,47 +28,142 @@ const findNode = (layout: ObjectMapLayout, id: string): PositionedNode | null =>
 const findEdge = (layout: ObjectMapLayout, id: string): PositionedEdge | null =>
   layout.edges.find((edge) => edge.id === id) ?? null;
 
-const cssVar = (styles: CSSStyleDeclaration, name: string, fallback: string): string =>
-  styles.getPropertyValue(name).trim() || fallback;
+const cssVar = (styles: CSSStyleDeclaration, name: string): string =>
+  styles.getPropertyValue(name).trim();
+
+const cssColorVar = (element: HTMLElement, styles: CSSStyleDeclaration, name: string): string => {
+  const raw = cssVar(styles, name);
+  if (!raw.includes('var(')) return raw;
+  const probe = document.createElement('span');
+  probe.style.position = 'absolute';
+  probe.style.visibility = 'hidden';
+  probe.style.color = `var(${name})`;
+  const probeRoot = element.parentElement ?? element;
+  probeRoot.appendChild(probe);
+  const resolved = window.getComputedStyle(probe).color.trim();
+  probe.remove();
+  return resolved || raw;
+};
+
+const cssNumber = (styles: CSSStyleDeclaration, name: string): number => {
+  const value = Number.parseFloat(cssVar(styles, name));
+  return Number.isFinite(value) ? value : 0;
+};
 
 const readPalette = (element: HTMLElement): ObjectMapG6Palette => {
   const styles = window.getComputedStyle(element);
   return {
-    accent: cssVar(styles, '--color-accent', DEFAULT_OBJECT_MAP_G6_PALETTE.accent),
-    accentBg: cssVar(styles, '--color-accent-bg', DEFAULT_OBJECT_MAP_G6_PALETTE.accentBg),
-    background: cssVar(styles, '--color-bg', DEFAULT_OBJECT_MAP_G6_PALETTE.background),
-    backgroundSecondary: cssVar(
-      styles,
-      '--color-bg-secondary',
-      DEFAULT_OBJECT_MAP_G6_PALETTE.backgroundSecondary
-    ),
-    border: cssVar(styles, '--color-border', DEFAULT_OBJECT_MAP_G6_PALETTE.border),
-    text: cssVar(styles, '--color-text', DEFAULT_OBJECT_MAP_G6_PALETTE.text),
-    textSecondary: cssVar(
-      styles,
-      '--color-text-secondary',
-      DEFAULT_OBJECT_MAP_G6_PALETTE.textSecondary
-    ),
-    textTertiary: cssVar(
-      styles,
-      '--color-text-tertiary',
-      DEFAULT_OBJECT_MAP_G6_PALETTE.textTertiary
-    ),
-    textInverse: cssVar(styles, '--color-text-inverse', DEFAULT_OBJECT_MAP_G6_PALETTE.textInverse),
-    edgeRoutes: DEFAULT_OBJECT_MAP_G6_PALETTE.edgeRoutes,
-    edgeEndpoint: DEFAULT_OBJECT_MAP_G6_PALETTE.edgeEndpoint,
-    edgeStorage: DEFAULT_OBJECT_MAP_G6_PALETTE.edgeStorage,
-    edgeMounts: DEFAULT_OBJECT_MAP_G6_PALETTE.edgeMounts,
-    edgeSchedules: cssVar(
-      styles,
-      '--badge-green-text',
-      DEFAULT_OBJECT_MAP_G6_PALETTE.edgeSchedules
-    ),
-    edgeScales: DEFAULT_OBJECT_MAP_G6_PALETTE.edgeScales,
-    edgeUses: cssVar(styles, '--color-text-secondary', DEFAULT_OBJECT_MAP_G6_PALETTE.edgeUses),
-    fontFamily: styles.fontFamily || DEFAULT_OBJECT_MAP_G6_PALETTE.fontFamily,
+    accent: cssColorVar(element, styles, '--color-accent'),
+    accentBg: cssColorVar(element, styles, '--color-accent-bg'),
+    background: cssColorVar(element, styles, '--color-bg'),
+    backgroundSecondary: cssColorVar(element, styles, '--color-bg-secondary'),
+    border: cssColorVar(element, styles, '--color-border'),
+    text: cssColorVar(element, styles, '--color-text'),
+    textSecondary: cssColorVar(element, styles, '--color-text-secondary'),
+    textTertiary: cssColorVar(element, styles, '--color-text-tertiary'),
+    textInverse: cssColorVar(element, styles, '--color-text-inverse'),
+    edgeRoutes: cssColorVar(element, styles, '--object-map-edge-routes'),
+    edgeEndpoint: cssColorVar(element, styles, '--object-map-edge-endpoint'),
+    edgeStorage: cssColorVar(element, styles, '--object-map-edge-storage'),
+    edgeMounts: cssColorVar(element, styles, '--object-map-edge-mounts'),
+    edgeSchedules: cssColorVar(element, styles, '--object-map-edge-schedules'),
+    edgeScales: cssColorVar(element, styles, '--object-map-edge-scales'),
+    edgeUses: cssColorVar(element, styles, '--object-map-edge-uses'),
+    edgeDefault: cssColorVar(element, styles, '--object-map-edge-default'),
+    edgeLineWidth: cssNumber(styles, '--object-map-edge-line-width'),
+    edgeHighlightedLineWidth: cssNumber(styles, '--object-map-edge-highlighted-line-width'),
+    edgeHoveredLineWidth: cssNumber(styles, '--object-map-edge-hovered-line-width'),
+    edgeDimmedOpacity: cssNumber(styles, '--object-map-edge-dimmed-opacity'),
+    edgeDash: [
+      cssNumber(styles, '--object-map-edge-dash-length'),
+      cssNumber(styles, '--object-map-edge-dash-gap'),
+    ],
+    cardRadius: cssNumber(styles, '--object-map-card-radius'),
+    cardPaddingX: cssNumber(styles, '--object-map-card-padding-x'),
+    cardKindBaselineY: cssNumber(styles, '--object-map-card-kind-baseline-y'),
+    cardNameBaselineY: cssNumber(styles, '--object-map-card-name-baseline-y'),
+    cardNamespaceBaselineY: cssNumber(styles, '--object-map-card-namespace-baseline-y'),
+    cardKindFontSize: cssNumber(styles, '--object-map-card-kind-font-size'),
+    cardNameFontSize: cssNumber(styles, '--object-map-card-name-font-size'),
+    cardNamespaceFontSize: cssNumber(styles, '--object-map-card-namespace-font-size'),
+    cardKindFontWeight: cssNumber(styles, '--object-map-card-kind-font-weight'),
+    cardNameFontWeight: cssNumber(styles, '--object-map-card-name-font-weight'),
+    cardNamespaceFontWeight: cssNumber(styles, '--object-map-card-namespace-font-weight'),
+    cardKindLetterSpacing: cssNumber(styles, '--object-map-card-kind-letter-spacing'),
+    nodeLineWidth: cssNumber(styles, '--object-map-node-line-width'),
+    nodeSeedLineWidth: cssNumber(styles, '--object-map-node-seed-line-width'),
+    nodeConnectedLineWidth: cssNumber(styles, '--object-map-node-connected-line-width'),
+    nodeSelectedLineWidth: cssNumber(styles, '--object-map-node-selected-line-width'),
+    nodeEdgeHoveredLineWidth: cssNumber(styles, '--object-map-node-edge-hovered-line-width'),
+    nodeDimmedOpacity: cssNumber(styles, '--object-map-node-dimmed-opacity'),
+    badgeFontWeight: cssNumber(styles, '--object-map-badge-font-weight'),
+    badgeWidth: cssNumber(styles, '--object-map-badge-width'),
+    badgeHeight: cssNumber(styles, '--object-map-badge-height'),
+    badgeRadius: cssNumber(styles, '--object-map-badge-radius'),
+    tooltipWidth: cssNumber(styles, '--object-map-tooltip-width'),
+    tooltipHeightSingle: cssNumber(styles, '--object-map-tooltip-height-single'),
+    tooltipHeightDouble: cssNumber(styles, '--object-map-tooltip-height-double'),
+    tooltipOffsetY: cssNumber(styles, '--object-map-tooltip-offset-y'),
+    tooltipRadius: cssNumber(styles, '--object-map-tooltip-radius'),
+    tooltipLabelYSingle: cssNumber(styles, '--object-map-tooltip-label-y-single'),
+    tooltipLabelYDouble: cssNumber(styles, '--object-map-tooltip-label-y-double'),
+    tooltipTraceY: cssNumber(styles, '--object-map-tooltip-trace-y'),
+    tooltipLabelMaxChars: cssNumber(styles, '--object-map-tooltip-label-max-chars'),
+    tooltipTraceMaxChars: cssNumber(styles, '--object-map-tooltip-trace-max-chars'),
+    fullOpacity: cssNumber(styles, '--object-map-full-opacity'),
+    fontFamily: styles.fontFamily,
   };
 };
+
+const samePalette = (previous: ObjectMapG6Palette | null, next: ObjectMapG6Palette): boolean => {
+  if (!previous) return false;
+  return (Object.keys(next) as Array<keyof ObjectMapG6Palette>).every((key) => {
+    const previousValue = previous[key];
+    const nextValue = next[key];
+    if (Array.isArray(previousValue) && Array.isArray(nextValue)) {
+      return (
+        previousValue.length === nextValue.length &&
+        previousValue.every((value, index) => value === nextValue[index])
+      );
+    }
+    return previousValue === nextValue;
+  });
+};
+
+const objectMapG6NodeOptions = (palette: ObjectMapG6Palette) => ({
+  type: OBJECT_MAP_G6_CARD_NODE,
+  state: {
+    selected: {
+      stroke: palette.accent,
+      lineWidth: palette.nodeSelectedLineWidth,
+      opacity: palette.fullOpacity,
+    },
+    connected: {
+      stroke: palette.accent,
+      lineWidth: palette.nodeConnectedLineWidth,
+      opacity: palette.fullOpacity,
+    },
+    edgeHovered: {
+      stroke: palette.accent,
+      lineWidth: palette.nodeEdgeHoveredLineWidth,
+      opacity: palette.fullOpacity,
+    },
+    dimmed: { opacity: palette.nodeDimmedOpacity },
+    seed: {
+      stroke: palette.accent,
+      lineWidth: palette.nodeSeedLineWidth,
+      opacity: palette.fullOpacity,
+    },
+  },
+});
+
+const objectMapG6EdgeOptions = (palette: ObjectMapG6Palette) => ({
+  state: {
+    hovered: { lineWidth: palette.edgeHoveredLineWidth, opacity: palette.fullOpacity },
+    highlighted: { lineWidth: palette.edgeHighlightedLineWidth, opacity: palette.fullOpacity },
+    dimmed: { opacity: palette.edgeDimmedOpacity },
+  },
+});
 
 const isMacPlatform = (): boolean =>
   typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.platform);
@@ -216,10 +301,10 @@ const lineDashChanged = (previous?: unknown, next?: unknown): boolean => {
   return previous.length !== next.length || previous.some((value, index) => value !== next[index]);
 };
 
-const badgeText = (node: NodeData): string | undefined => {
+const badgeSignature = (node: NodeData): string | undefined => {
   const badges = node.style?.badges;
   if (!Array.isArray(badges)) return undefined;
-  return badges.map((badge) => badge?.text).join('|');
+  return JSON.stringify(badges);
 };
 
 const nodeChanged = (previous: NodeData, next: NodeData): boolean => {
@@ -239,11 +324,28 @@ const nodeChanged = (previous: NodeData, next: NodeData): boolean => {
     previousStyle.fill !== nextStyle.fill ||
     previousStyle.stroke !== nextStyle.stroke ||
     previousStyle.lineWidth !== nextStyle.lineWidth ||
+    previousStyle.radius !== nextStyle.radius ||
     previousStyle.opacity !== nextStyle.opacity ||
     previousStyle.cardKindText !== nextStyle.cardKindText ||
     previousStyle.cardNameText !== nextStyle.cardNameText ||
     previousStyle.cardNamespaceText !== nextStyle.cardNamespaceText ||
-    badgeText(previous) !== badgeText(next)
+    previousStyle.cardFontFamily !== nextStyle.cardFontFamily ||
+    previousStyle.cardRadius !== nextStyle.cardRadius ||
+    previousStyle.cardPaddingX !== nextStyle.cardPaddingX ||
+    previousStyle.cardKindBaselineY !== nextStyle.cardKindBaselineY ||
+    previousStyle.cardNameBaselineY !== nextStyle.cardNameBaselineY ||
+    previousStyle.cardNamespaceBaselineY !== nextStyle.cardNamespaceBaselineY ||
+    previousStyle.cardKindFontSize !== nextStyle.cardKindFontSize ||
+    previousStyle.cardNameFontSize !== nextStyle.cardNameFontSize ||
+    previousStyle.cardNamespaceFontSize !== nextStyle.cardNamespaceFontSize ||
+    previousStyle.cardKindFontWeight !== nextStyle.cardKindFontWeight ||
+    previousStyle.cardNameFontWeight !== nextStyle.cardNameFontWeight ||
+    previousStyle.cardNamespaceFontWeight !== nextStyle.cardNamespaceFontWeight ||
+    previousStyle.cardKindLetterSpacing !== nextStyle.cardKindLetterSpacing ||
+    previousStyle.cardKindFill !== nextStyle.cardKindFill ||
+    previousStyle.cardNameFill !== nextStyle.cardNameFill ||
+    previousStyle.cardNamespaceFill !== nextStyle.cardNamespaceFill ||
+    badgeSignature(previous) !== badgeSignature(next)
   );
 };
 
@@ -385,6 +487,9 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
     latest: null,
   });
   const [palette, setPalette] = useState<ObjectMapG6Palette | null>(null);
+  const paletteReady = palette !== null;
+  const paletteRef = useRef<ObjectMapG6Palette | null>(null);
+  paletteRef.current = palette;
   const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null);
   const graphReadyRef = useRef(false);
   const handlersRef = useRef({
@@ -413,10 +518,12 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
     onToggleGroup,
     badgeForNode,
   };
-  const activePalette = palette ?? DEFAULT_OBJECT_MAP_G6_PALETTE;
-  const data = useMemo(
-    () => toObjectMapG6Data(layout, EMPTY_SELECTION_STATE, badgeForNode, activePalette),
-    [layout, badgeForNode, activePalette]
+  const data = useMemo<GraphData>(
+    () =>
+      palette
+        ? toObjectMapG6Data(layout, EMPTY_SELECTION_STATE, badgeForNode, palette)
+        : { nodes: [], edges: [] },
+    [layout, badgeForNode, palette]
   );
   const dataRef = useRef(data);
   dataRef.current = data;
@@ -427,11 +534,49 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
   selectionStateRef.current = selectionState;
   hoverEdgeRef.current = hoverEdge;
 
-  useLayoutEffect(() => {
+  const refreshPalette = useCallback(() => {
     const container = containerRef.current;
     if (!container) return;
-    setPalette(readPalette(container));
+    const nextPalette = readPalette(container);
+    setPalette((previousPalette) =>
+      samePalette(previousPalette, nextPalette) ? previousPalette : nextPalette
+    );
   }, []);
+
+  useLayoutEffect(() => {
+    refreshPalette();
+  }, [refreshPalette]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    let frame = 0;
+    const schedulePaletteRefresh = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(refreshPalette);
+    };
+    const observer = new MutationObserver(schedulePaletteRefresh);
+    const observed = new Set<HTMLElement>([document.documentElement, document.body, container]);
+    const objectMapRoot = container.closest<HTMLElement>('.object-map');
+    if (objectMapRoot) observed.add(objectMapRoot);
+    observed.forEach((element) => {
+      observer.observe(element, {
+        attributes: true,
+        attributeFilter: ['class', 'style', 'data-theme', 'data-color-scheme', 'data-theme-name'],
+      });
+    });
+    const colorSchemeQuery =
+      typeof window.matchMedia === 'function'
+        ? window.matchMedia('(prefers-color-scheme: dark)')
+        : null;
+    colorSchemeQuery?.addEventListener('change', schedulePaletteRefresh);
+    schedulePaletteRefresh();
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+      colorSchemeQuery?.removeEventListener('change', schedulePaletteRefresh);
+    };
+  }, [refreshPalette]);
 
   const updateTooltipPosition = useCallback(() => {
     const graph = graphRef.current;
@@ -557,7 +702,8 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
 
   useEffect(() => {
     const container = containerRef.current;
-    if (!container || !palette) return;
+    const initialPalette = paletteRef.current;
+    if (!container || !paletteReady || !initialPalette) return;
     ensureObjectMapG6CardNodeRegistered();
     ensureObjectMapG6PathEdgeRegistered();
     const initialData = dataRef.current;
@@ -574,23 +720,8 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
           range: Infinity,
         },
       ],
-      node: {
-        type: OBJECT_MAP_G6_CARD_NODE,
-        state: {
-          selected: { stroke: palette.accent, lineWidth: 2.5, opacity: 1 },
-          connected: { stroke: palette.accent, lineWidth: 1.5, opacity: 1 },
-          edgeHovered: { stroke: palette.accent, lineWidth: 2.5, opacity: 1 },
-          dimmed: { opacity: 0.25 },
-          seed: { stroke: palette.accent, lineWidth: 2, opacity: 1 },
-        },
-      },
-      edge: {
-        state: {
-          hovered: { lineWidth: 4, opacity: 1 },
-          highlighted: { lineWidth: 2.5, opacity: 1 },
-          dimmed: { opacity: 0.15 },
-        },
-      },
+      node: objectMapG6NodeOptions(initialPalette),
+      edge: objectMapG6EdgeOptions(initialPalette),
     });
     graphRef.current = graph;
 
@@ -779,13 +910,20 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
         destroyGraph();
       }
     };
-  }, [palette, scheduleGraphData, scheduleSelectionState, updateTooltipPosition]);
+  }, [paletteReady, scheduleGraphData, scheduleSelectionState, updateTooltipPosition]);
 
   useEffect(() => {
     const graph = graphRef.current;
-    if (!graph || graph.destroyed) return;
+    if (!graph || graph.destroyed || !palette || !graphReadyRef.current) return;
+    graph.setNode(objectMapG6NodeOptions(palette));
+    graph.setEdge(objectMapG6EdgeOptions(palette));
+  }, [palette]);
+
+  useEffect(() => {
+    const graph = graphRef.current;
+    if (!graph || graph.destroyed || !palette) return;
     scheduleGraphData(data);
-  }, [data, scheduleGraphData]);
+  }, [data, palette, scheduleGraphData]);
 
   useEffect(() => {
     const graph = graphRef.current;
@@ -847,31 +985,42 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
     <div className="object-map__g6-stack">
       <div ref={containerRef} className="object-map__g6" data-testid="object-map-g6" />
       <svg className="object-map__g6-overlay" width="100%" height="100%" aria-hidden="true">
-        {hoverEdge && tooltipPosition && (
+        {palette && hoverEdge && tooltipPosition && (
           <g
             className="object-map__edge-tooltip"
             transform={`translate(${tooltipPosition.x} ${tooltipPosition.y})`}
           >
             <rect
               className="object-map__edge-tooltip-bg"
-              x={-TOOLTIP_WIDTH / 2}
-              y={hoverEdge.tracedBy ? -TOOLTIP_HEIGHT_DOUBLE - 4 : -TOOLTIP_HEIGHT_SINGLE - 4}
-              width={TOOLTIP_WIDTH}
-              height={hoverEdge.tracedBy ? TOOLTIP_HEIGHT_DOUBLE : TOOLTIP_HEIGHT_SINGLE}
-              rx={4}
-              ry={4}
+              x={-palette.tooltipWidth / 2}
+              y={
+                hoverEdge.tracedBy
+                  ? -palette.tooltipHeightDouble - palette.tooltipOffsetY
+                  : -palette.tooltipHeightSingle - palette.tooltipOffsetY
+              }
+              width={palette.tooltipWidth}
+              height={
+                hoverEdge.tracedBy ? palette.tooltipHeightDouble : palette.tooltipHeightSingle
+              }
+              rx={palette.tooltipRadius}
+              ry={palette.tooltipRadius}
             />
             <text
               className="object-map__edge-tooltip-label"
               x={0}
-              y={hoverEdge.tracedBy ? -28 : -14}
+              y={hoverEdge.tracedBy ? palette.tooltipLabelYDouble : palette.tooltipLabelYSingle}
               textAnchor="middle"
             >
-              {truncate(hoverEdge.label, TOOLTIP_LABEL_MAX_CHARS)}
+              {truncate(hoverEdge.label, palette.tooltipLabelMaxChars)}
             </text>
             {hoverEdge.tracedBy && (
-              <text className="object-map__edge-tooltip-trace" x={0} y={-12} textAnchor="middle">
-                {truncate(hoverEdge.tracedBy, TOOLTIP_TRACE_MAX_CHARS)}
+              <text
+                className="object-map__edge-tooltip-trace"
+                x={0}
+                y={palette.tooltipTraceY}
+                textAnchor="middle"
+              >
+                {truncate(hoverEdge.tracedBy, palette.tooltipTraceMaxChars)}
               </text>
             )}
           </g>

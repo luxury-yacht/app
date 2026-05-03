@@ -7,6 +7,55 @@
   color: var(--color-text);
   position: relative;
   overflow: hidden;
+  --object-map-edge-owner: var(--color-accent);
+  --object-map-edge-routes: #1d4ed8;
+  --object-map-edge-selector: var(--badge-blue-text);
+  --object-map-edge-endpoint: #60a5fa;
+  --object-map-edge-storage: #7e22ce;
+  --object-map-edge-mounts: #c084fc;
+  --object-map-edge-schedules: var(--badge-green-text);
+  --object-map-edge-scales: #eab308;
+  --object-map-edge-uses: var(--color-text-secondary);
+  --object-map-edge-default: var(--color-text-tertiary);
+  --object-map-edge-dash-length: 4;
+  --object-map-edge-dash-gap: 3;
+  --object-map-edge-line-width: 1.5;
+  --object-map-edge-highlighted-line-width: 2.5;
+  --object-map-edge-hovered-line-width: 4;
+  --object-map-edge-dimmed-opacity: 0.15;
+  --object-map-card-radius: 6;
+  --object-map-card-padding-x: 10;
+  --object-map-card-kind-baseline-y: 18;
+  --object-map-card-name-baseline-y: 38;
+  --object-map-card-namespace-baseline-y: 56;
+  --object-map-card-kind-font-size: 11;
+  --object-map-card-name-font-size: 11;
+  --object-map-card-namespace-font-size: 11;
+  --object-map-card-kind-font-weight: 600;
+  --object-map-card-name-font-weight: 600;
+  --object-map-card-namespace-font-weight: 400;
+  --object-map-card-kind-letter-spacing: 0.5;
+  --object-map-node-line-width: 1;
+  --object-map-node-seed-line-width: 2;
+  --object-map-node-connected-line-width: 1.5;
+  --object-map-node-selected-line-width: 2.5;
+  --object-map-node-edge-hovered-line-width: 2.5;
+  --object-map-node-dimmed-opacity: 0.25;
+  --object-map-badge-font-weight: 700;
+  --object-map-badge-width: 28;
+  --object-map-badge-height: 16;
+  --object-map-badge-radius: 3;
+  --object-map-tooltip-width: 200;
+  --object-map-tooltip-height-single: 28;
+  --object-map-tooltip-height-double: 44;
+  --object-map-tooltip-offset-y: 4;
+  --object-map-tooltip-radius: 4;
+  --object-map-tooltip-label-y-single: -14;
+  --object-map-tooltip-label-y-double: -28;
+  --object-map-tooltip-trace-y: -12;
+  --object-map-tooltip-label-max-chars: 30;
+  --object-map-tooltip-trace-max-chars: 36;
+  --object-map-full-opacity: 1;
 }
 
 .object-map--empty {
@@ -134,47 +183,47 @@
  * storage: storage (PV binding, deeper) → mounts (Pod-side reference,
  * shallower).
  *
- * Raw hex is used where the badge token palette doesn't have the
- * specific shade we need. */
+ * CSS custom properties above are the source of truth for the HTML
+ * legend and the G6 canvas renderer. */
 .object-map-edge--owner {
-  stroke: var(--color-accent);
+  stroke: var(--object-map-edge-owner);
 }
 
 /* Network family — blue shades. */
 .object-map-edge--routes {
-  stroke: #1d4ed8;
+  stroke: var(--object-map-edge-routes);
 }
 .object-map-edge--selector {
-  stroke: var(--badge-blue-text);
+  stroke: var(--object-map-edge-selector);
 }
 .object-map-edge--endpoint {
-  stroke: #60a5fa;
+  stroke: var(--object-map-edge-endpoint);
 }
 
 /* Storage family — purple shades. */
 .object-map-edge--storage {
-  stroke: #7e22ce;
+  stroke: var(--object-map-edge-storage);
 }
 .object-map-edge--mounts {
-  stroke: #c084fc;
+  stroke: var(--object-map-edge-mounts);
 }
 
 /* Scheduling — green. */
 .object-map-edge--schedules {
-  stroke: var(--badge-green-text);
+  stroke: var(--object-map-edge-schedules);
 }
 
 /* Scaling — yellow. */
 .object-map-edge--scales {
-  stroke: #eab308;
+  stroke: var(--object-map-edge-scales);
 }
 
 .object-map-edge--uses {
-  stroke: var(--color-text-secondary);
-  stroke-dasharray: 4 3;
+  stroke: var(--object-map-edge-uses);
+  stroke-dasharray: var(--object-map-edge-dash-length) var(--object-map-edge-dash-gap);
 }
 .object-map-edge--default {
-  stroke: var(--color-text-tertiary);
+  stroke: var(--object-map-edge-default);
 }
 
 /* --- Edge tooltip overlay ------------------------------------------ */
@@ -240,7 +289,7 @@
 /* Use the highlighted edge weight so legend colours read at full
  * intensity instead of SVG's muted 1px default. */
 .object-map__legend-swatch line {
-  stroke-width: 2.5;
+  stroke-width: var(--object-map-edge-highlighted-line-width);
 }
 
 .object-map__legend-label {
