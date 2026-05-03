@@ -150,6 +150,26 @@ export const usePanZoom = (
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fitTrigger, fitPadding, minScale, maxScale, resetToken]);
 
+  // Refit on container resize when autoFit is on. The bounds-driven
+  // effect above handles "the layout changed" but not "the window
+  // got smaller" — the laid-out bounds stay constant while the
+  // viewport shrinks, leaving content overflowing or off-screen
+  // until the user manually clicks Fit. ResizeObserver closes the
+  // gap.
+  useEffect(() => {
+    if (!autoFit) return;
+    const container = containerRef.current;
+    if (!container || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => {
+      if (!bounds) return;
+      const rect = container.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return;
+      setViewport(computeFit(rect.width, rect.height, bounds, fitPadding, minScale, maxScale));
+    });
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [autoFit, bounds, fitPadding, minScale, maxScale]);
+
   const zoomAt = useCallback(
     (cursorX: number, cursorY: number, factor: number) => {
       setViewport((prev) => {
