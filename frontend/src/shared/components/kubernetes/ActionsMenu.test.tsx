@@ -16,8 +16,8 @@ import type { ObjectActionData } from '@shared/hooks/useObjectActions';
 
 // Spy-backed permission mock so tests can assert that getPermissionKey is
 // called with the full GVK (regression: PR #139 made the backend reject
-// queries without apiVersion, and CRD lookups in useObjectActions silently
-// missed the permission map when group/version weren't threaded through).
+// queries without apiVersion, and CRD lookups in the shared action path
+// silently missed the permission map when group/version weren't threaded through).
 const getPermissionKeySpy = vi.fn(
   (
     kind: string,
