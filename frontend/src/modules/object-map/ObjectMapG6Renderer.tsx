@@ -78,38 +78,26 @@ const readPalette = (element: HTMLElement): ObjectMapG6Palette => {
       cssNumber(styles, '--object-map-edge-dash-length'),
       cssNumber(styles, '--object-map-edge-dash-gap'),
     ],
-    cardRadius: cssNumber(styles, '--object-map-card-radius'),
-    cardPaddingX: cssNumber(styles, '--object-map-card-padding-x'),
-    cardKindBaselineY: cssNumber(styles, '--object-map-card-kind-baseline-y'),
-    cardNameBaselineY: cssNumber(styles, '--object-map-card-name-baseline-y'),
-    cardNamespaceBaselineY: cssNumber(styles, '--object-map-card-namespace-baseline-y'),
-    cardKindFontSize: cssNumber(styles, '--object-map-card-kind-font-size'),
-    cardNameFontSize: cssNumber(styles, '--object-map-card-name-font-size'),
-    cardNamespaceFontSize: cssNumber(styles, '--object-map-card-namespace-font-size'),
-    cardKindFontWeight: cssNumber(styles, '--object-map-card-kind-font-weight'),
-    cardNameFontWeight: cssNumber(styles, '--object-map-card-name-font-weight'),
-    cardNamespaceFontWeight: cssNumber(styles, '--object-map-card-namespace-font-weight'),
-    cardKindLetterSpacing: cssNumber(styles, '--object-map-card-kind-letter-spacing'),
-    nodeLineWidth: cssNumber(styles, '--object-map-node-line-width'),
-    nodeSeedLineWidth: cssNumber(styles, '--object-map-node-seed-line-width'),
     nodeConnectedLineWidth: cssNumber(styles, '--object-map-node-connected-line-width'),
     nodeSelectedLineWidth: cssNumber(styles, '--object-map-node-selected-line-width'),
     nodeEdgeHoveredLineWidth: cssNumber(styles, '--object-map-node-edge-hovered-line-width'),
     nodeDimmedOpacity: cssNumber(styles, '--object-map-node-dimmed-opacity'),
-    badgeFontWeight: cssNumber(styles, '--object-map-badge-font-weight'),
-    badgeWidth: cssNumber(styles, '--object-map-badge-width'),
-    badgeHeight: cssNumber(styles, '--object-map-badge-height'),
-    badgeRadius: cssNumber(styles, '--object-map-badge-radius'),
     tooltipWidth: cssNumber(styles, '--object-map-tooltip-width'),
-    tooltipHeightSingle: cssNumber(styles, '--object-map-tooltip-height-single'),
-    tooltipHeightDouble: cssNumber(styles, '--object-map-tooltip-height-double'),
+    tooltipHeight: cssNumber(styles, '--object-map-tooltip-height'),
     tooltipOffsetY: cssNumber(styles, '--object-map-tooltip-offset-y'),
     tooltipRadius: cssNumber(styles, '--object-map-tooltip-radius'),
-    tooltipLabelYSingle: cssNumber(styles, '--object-map-tooltip-label-y-single'),
-    tooltipLabelYDouble: cssNumber(styles, '--object-map-tooltip-label-y-double'),
-    tooltipTraceY: cssNumber(styles, '--object-map-tooltip-trace-y'),
+    tooltipSourceY: cssNumber(styles, '--object-map-tooltip-source-y'),
+    tooltipRelationshipY: cssNumber(styles, '--object-map-tooltip-relationship-y'),
+    tooltipTargetY: cssNumber(styles, '--object-map-tooltip-target-y'),
     tooltipLabelMaxChars: cssNumber(styles, '--object-map-tooltip-label-max-chars'),
-    tooltipTraceMaxChars: cssNumber(styles, '--object-map-tooltip-trace-max-chars'),
+    tooltipHorizontalPadding: cssNumber(styles, '--object-map-tooltip-horizontal-padding'),
+    tooltipNameFontSize: cssNumber(styles, '--object-map-tooltip-name-font-size'),
+    tooltipNameFontWeight: cssNumber(styles, '--object-map-tooltip-name-font-weight'),
+    tooltipRelationshipFontSize: cssNumber(styles, '--object-map-tooltip-relationship-font-size'),
+    tooltipRelationshipFontWeight: cssNumber(
+      styles,
+      '--object-map-tooltip-relationship-font-weight'
+    ),
     fitViewPadding: cssNumber(styles, '--object-map-fit-view-padding'),
     fullOpacity: cssNumber(styles, '--object-map-full-opacity'),
     fontFamily: styles.fontFamily,
@@ -152,7 +140,6 @@ const objectMapG6NodeOptions = (palette: ObjectMapG6Palette) => ({
     dimmed: { opacity: palette.nodeDimmedOpacity },
     seed: {
       stroke: palette.accent,
-      lineWidth: palette.nodeSeedLineWidth,
       opacity: palette.fullOpacity,
     },
   },
@@ -295,6 +282,38 @@ const truncate = (text: string, maxChars: number): string => {
   return `${text.slice(0, maxChars - 1)}\u2026`;
 };
 
+const measuredTextCanvas =
+  typeof document === 'undefined' ? null : document.createElement('canvas');
+
+const textWidth = (text: string, font: string): number => {
+  const context = measuredTextCanvas?.getContext('2d');
+  if (!context) return text.length;
+  context.font = font;
+  return context.measureText(text).width;
+};
+
+const truncateToWidth = (text: string, maxWidth: number, font: string): string => {
+  if (maxWidth <= 0 || textWidth(text, font) <= maxWidth) return text;
+  const ellipsis = '\u2026';
+  let low = 0;
+  let high = text.length;
+  while (low < high) {
+    const mid = Math.ceil((low + high) / 2);
+    if (textWidth(`${text.slice(0, mid)}${ellipsis}`, font) <= maxWidth) {
+      low = mid;
+    } else {
+      high = mid - 1;
+    }
+  }
+  return `${text.slice(0, low)}${ellipsis}`;
+};
+
+const tooltipFont = (weight: number, size: number, family: string): string =>
+  `${weight} ${size}px ${family}`;
+
+const edgeEndpointLabel = (node: PositionedNode | null): string =>
+  node ? node.ref.name : 'Unknown';
+
 const EMPTY_SELECTION_STATE: ObjectMapSelectionState = {
   activeId: null,
   connectedIds: new Set(),
@@ -345,18 +364,6 @@ const nodeChanged = (previous: NodeData, next: NodeData): boolean => {
     previousStyle.cardNameText !== nextStyle.cardNameText ||
     previousStyle.cardNamespaceText !== nextStyle.cardNamespaceText ||
     previousStyle.cardFontFamily !== nextStyle.cardFontFamily ||
-    previousStyle.cardRadius !== nextStyle.cardRadius ||
-    previousStyle.cardPaddingX !== nextStyle.cardPaddingX ||
-    previousStyle.cardKindBaselineY !== nextStyle.cardKindBaselineY ||
-    previousStyle.cardNameBaselineY !== nextStyle.cardNameBaselineY ||
-    previousStyle.cardNamespaceBaselineY !== nextStyle.cardNamespaceBaselineY ||
-    previousStyle.cardKindFontSize !== nextStyle.cardKindFontSize ||
-    previousStyle.cardNameFontSize !== nextStyle.cardNameFontSize ||
-    previousStyle.cardNamespaceFontSize !== nextStyle.cardNamespaceFontSize ||
-    previousStyle.cardKindFontWeight !== nextStyle.cardKindFontWeight ||
-    previousStyle.cardNameFontWeight !== nextStyle.cardNameFontWeight ||
-    previousStyle.cardNamespaceFontWeight !== nextStyle.cardNamespaceFontWeight ||
-    previousStyle.cardKindLetterSpacing !== nextStyle.cardKindLetterSpacing ||
     previousStyle.cardKindFill !== nextStyle.cardKindFill ||
     previousStyle.cardNameFill !== nextStyle.cardNameFill ||
     previousStyle.cardNamespaceFill !== nextStyle.cardNamespaceFill ||
@@ -843,10 +850,14 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
         }
       }
       setConnectionHoverState(edge, true);
+      const sourceNode = findNode(layoutRef.current, edge.sourceId);
+      const targetNode = findNode(layoutRef.current, edge.targetId);
       handlersRef.current.onHoverEdge({
         midX: edge.midX,
         midY: edge.midY,
+        sourceLabel: edgeEndpointLabel(sourceNode),
         label: edge.label,
+        targetLabel: edgeEndpointLabel(targetNode),
         type: edge.type,
         tracedBy: edge.tracedBy,
       });
@@ -1005,11 +1016,36 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
     updateTooltipPosition();
   }, [hoverEdge, updateTooltipPosition]);
 
+  const tooltipText = useMemo(() => {
+    if (!palette || !hoverEdge) return null;
+    const maxTextWidth = palette.tooltipWidth - palette.tooltipHorizontalPadding * 2;
+    const maxChars = Math.max(1, Math.floor(palette.tooltipLabelMaxChars));
+    const nameFont = tooltipFont(
+      palette.tooltipNameFontWeight,
+      palette.tooltipNameFontSize,
+      palette.fontFamily
+    );
+    const relationshipFont = tooltipFont(
+      palette.tooltipRelationshipFontWeight,
+      palette.tooltipRelationshipFontSize,
+      palette.fontFamily
+    );
+    return {
+      source: truncateToWidth(truncate(hoverEdge.sourceLabel, maxChars), maxTextWidth, nameFont),
+      relationship: truncateToWidth(
+        truncate(hoverEdge.label, maxChars),
+        maxTextWidth,
+        relationshipFont
+      ),
+      target: truncateToWidth(truncate(hoverEdge.targetLabel, maxChars), maxTextWidth, nameFont),
+    };
+  }, [hoverEdge, palette]);
+
   return (
     <div className="object-map__g6-stack">
       <div ref={containerRef} className="object-map__g6" data-testid="object-map-g6" />
       <svg className="object-map__g6-overlay" width="100%" height="100%" aria-hidden="true">
-        {palette && hoverEdge && tooltipPosition && (
+        {palette && tooltipText && tooltipPosition && (
           <g
             className="object-map__edge-tooltip"
             transform={`translate(${tooltipPosition.x} ${tooltipPosition.y})`}
@@ -1017,36 +1053,36 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
             <rect
               className="object-map__edge-tooltip-bg"
               x={-palette.tooltipWidth / 2}
-              y={
-                hoverEdge.tracedBy
-                  ? -palette.tooltipHeightDouble - palette.tooltipOffsetY
-                  : -palette.tooltipHeightSingle - palette.tooltipOffsetY
-              }
+              y={-palette.tooltipHeight - palette.tooltipOffsetY}
               width={palette.tooltipWidth}
-              height={
-                hoverEdge.tracedBy ? palette.tooltipHeightDouble : palette.tooltipHeightSingle
-              }
+              height={palette.tooltipHeight}
               rx={palette.tooltipRadius}
               ry={palette.tooltipRadius}
             />
             <text
-              className="object-map__edge-tooltip-label"
+              className="object-map__edge-tooltip-source"
               x={0}
-              y={hoverEdge.tracedBy ? palette.tooltipLabelYDouble : palette.tooltipLabelYSingle}
+              y={palette.tooltipSourceY}
               textAnchor="middle"
             >
-              {truncate(hoverEdge.label, palette.tooltipLabelMaxChars)}
+              {tooltipText.source}
             </text>
-            {hoverEdge.tracedBy && (
-              <text
-                className="object-map__edge-tooltip-trace"
-                x={0}
-                y={palette.tooltipTraceY}
-                textAnchor="middle"
-              >
-                {truncate(hoverEdge.tracedBy, palette.tooltipTraceMaxChars)}
-              </text>
-            )}
+            <text
+              className="object-map__edge-tooltip-relationship"
+              x={0}
+              y={palette.tooltipRelationshipY}
+              textAnchor="middle"
+            >
+              {tooltipText.relationship}
+            </text>
+            <text
+              className="object-map__edge-tooltip-target"
+              x={0}
+              y={palette.tooltipTargetY}
+              textAnchor="middle"
+            >
+              {tooltipText.target}
+            </text>
           </g>
         )}
       </svg>

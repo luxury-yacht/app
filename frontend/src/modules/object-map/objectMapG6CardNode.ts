@@ -4,23 +4,17 @@ import { BaseNode, ExtensionCategory, register } from '@antv/g6';
 import type { BaseNodeStyleProps } from '@antv/g6';
 import { OBJECT_MAP_G6_CARD_NODE } from './objectMapG6Constants';
 
+const NODE_PADDING_X = 10;
+const NODE_KIND_BASELINE_Y = 18;
+const NODE_NAME_BASELINE_Y = 38;
+const NODE_NAMESPACE_BASELINE_Y = 56;
+const NODE_CORNER_RADIUS = 6;
+
 interface ObjectMapG6CardNodeStyleProps extends BaseNodeStyleProps {
   cardKindText?: string;
   cardNameText?: string;
   cardNamespaceText?: string;
   cardFontFamily?: string;
-  cardRadius?: number;
-  cardPaddingX?: number;
-  cardKindBaselineY?: number;
-  cardNameBaselineY?: number;
-  cardNamespaceBaselineY?: number;
-  cardKindFontSize?: number;
-  cardNameFontSize?: number;
-  cardNamespaceFontSize?: number;
-  cardKindFontWeight?: number;
-  cardNameFontWeight?: number;
-  cardNamespaceFontWeight?: number;
-  cardKindLetterSpacing?: number;
   cardKindFill?: string;
   cardNameFill?: string;
   cardNamespaceFill?: string;
@@ -39,7 +33,7 @@ class ObjectMapG6CardNode extends BaseNode<ObjectMapG6CardNodeStyleProps> {
       height,
       x: -width / 2,
       y: -height / 2,
-      radius: attributes.cardRadius,
+      radius: NODE_CORNER_RADIUS,
     };
   }
 
@@ -55,17 +49,16 @@ class ObjectMapG6CardNode extends BaseNode<ObjectMapG6CardNodeStyleProps> {
     text: string,
     baselineY: number,
     fill: string,
-    fontSize: number,
     fontWeight: TextStyleProps['fontWeight'],
     letterSpacing = 0
   ): TextStyleProps {
     const [width, height] = this.getSize(attributes);
     return {
-      x: -width / 2 + attributes.cardPaddingX,
+      x: -width / 2 + NODE_PADDING_X,
       y: -height / 2 + baselineY,
       text,
       fill,
-      fontSize,
+      fontSize: 11,
       fontWeight,
       fontFamily: attributes.cardFontFamily,
       letterSpacing,
@@ -86,11 +79,10 @@ class ObjectMapG6CardNode extends BaseNode<ObjectMapG6CardNodeStyleProps> {
       this.getTextStyle(
         attributes,
         attributes.cardKindText,
-        attributes.cardKindBaselineY,
+        NODE_KIND_BASELINE_Y,
         attributes.cardKindFill,
-        attributes.cardKindFontSize,
-        attributes.cardKindFontWeight,
-        attributes.cardKindLetterSpacing
+        600,
+        0.5
       ),
       container
     );
@@ -100,10 +92,9 @@ class ObjectMapG6CardNode extends BaseNode<ObjectMapG6CardNodeStyleProps> {
       this.getTextStyle(
         attributes,
         attributes.cardNameText,
-        attributes.cardNameBaselineY,
+        NODE_NAME_BASELINE_Y,
         attributes.cardNameFill,
-        attributes.cardNameFontSize,
-        attributes.cardNameFontWeight
+        600
       ),
       container
     );
@@ -113,10 +104,9 @@ class ObjectMapG6CardNode extends BaseNode<ObjectMapG6CardNodeStyleProps> {
       this.getTextStyle(
         attributes,
         attributes.cardNamespaceText,
-        attributes.cardNamespaceBaselineY,
+        NODE_NAMESPACE_BASELINE_Y,
         attributes.cardNamespaceFill,
-        attributes.cardNamespaceFontSize,
-        attributes.cardNamespaceFontWeight
+        400
       ),
       container
     );

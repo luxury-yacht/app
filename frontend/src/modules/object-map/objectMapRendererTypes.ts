@@ -4,7 +4,9 @@ import type { PositionedNode } from './objectMapLayout';
 export interface ObjectMapHoverEdge {
   midX: number;
   midY: number;
+  sourceLabel: string;
   label: string;
+  targetLabel: string;
   type: string;
   tracedBy?: string;
 }

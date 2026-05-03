@@ -7,6 +7,13 @@ import type { ObjectMapNodeBadgeLookup, ObjectMapSelectionState } from './object
 const NODE_KIND_MAX_CHARS = 26;
 const NODE_NAME_MAX_CHARS = 32;
 const NODE_NAMESPACE_MAX_CHARS = 28;
+const NODE_CARD_RADIUS = 6;
+const NODE_LINE_WIDTH = 1;
+const NODE_SEED_LINE_WIDTH = 2;
+const BADGE_FONT_WEIGHT = 700;
+const BADGE_WIDTH = 28;
+const BADGE_HEIGHT = 16;
+const BADGE_RADIUS = 3;
 
 export interface ObjectMapG6Palette {
   accent: string;
@@ -31,38 +38,23 @@ export interface ObjectMapG6Palette {
   edgeHoveredLineWidth: number;
   edgeDimmedOpacity: number;
   edgeDash: [number, number];
-  cardRadius: number;
-  cardPaddingX: number;
-  cardKindBaselineY: number;
-  cardNameBaselineY: number;
-  cardNamespaceBaselineY: number;
-  cardKindFontSize: number;
-  cardNameFontSize: number;
-  cardNamespaceFontSize: number;
-  cardKindFontWeight: number;
-  cardNameFontWeight: number;
-  cardNamespaceFontWeight: number;
-  cardKindLetterSpacing: number;
-  nodeLineWidth: number;
-  nodeSeedLineWidth: number;
   nodeConnectedLineWidth: number;
   nodeSelectedLineWidth: number;
   nodeEdgeHoveredLineWidth: number;
   nodeDimmedOpacity: number;
-  badgeFontWeight: number;
-  badgeWidth: number;
-  badgeHeight: number;
-  badgeRadius: number;
   tooltipWidth: number;
-  tooltipHeightSingle: number;
-  tooltipHeightDouble: number;
+  tooltipHeight: number;
   tooltipOffsetY: number;
   tooltipRadius: number;
-  tooltipLabelYSingle: number;
-  tooltipLabelYDouble: number;
-  tooltipTraceY: number;
+  tooltipSourceY: number;
+  tooltipRelationshipY: number;
+  tooltipTargetY: number;
   tooltipLabelMaxChars: number;
-  tooltipTraceMaxChars: number;
+  tooltipHorizontalPadding: number;
+  tooltipNameFontSize: number;
+  tooltipNameFontWeight: number;
+  tooltipRelationshipFontSize: number;
+  tooltipRelationshipFontWeight: number;
   fitViewPadding: number;
   fullOpacity: number;
   fontFamily: string;
@@ -185,28 +177,16 @@ export const toObjectMapG6Data = (
         x: node.x + node.width / 2,
         y: node.y + node.height / 2,
         size: [node.width, node.height],
-        radius: palette.cardRadius,
+        radius: NODE_CARD_RADIUS,
         fill: palette.backgroundSecondary,
         stroke: node.isSeed ? palette.accent : palette.border,
-        lineWidth: node.isSeed ? palette.nodeSeedLineWidth : palette.nodeLineWidth,
+        lineWidth: node.isSeed ? NODE_SEED_LINE_WIDTH : NODE_LINE_WIDTH,
         opacity: palette.fullOpacity,
         label: false,
         cardKindText: kindLabel.toUpperCase(),
         cardNameText: nameLabel,
         cardNamespaceText: namespaceLabel,
         cardFontFamily: palette.fontFamily,
-        cardRadius: palette.cardRadius,
-        cardPaddingX: palette.cardPaddingX,
-        cardKindBaselineY: palette.cardKindBaselineY,
-        cardNameBaselineY: palette.cardNameBaselineY,
-        cardNamespaceBaselineY: palette.cardNamespaceBaselineY,
-        cardKindFontSize: palette.cardKindFontSize,
-        cardNameFontSize: palette.cardNameFontSize,
-        cardNamespaceFontSize: palette.cardNamespaceFontSize,
-        cardKindFontWeight: palette.cardKindFontWeight,
-        cardNameFontWeight: palette.cardNameFontWeight,
-        cardNamespaceFontWeight: palette.cardNamespaceFontWeight,
-        cardKindLetterSpacing: palette.cardKindLetterSpacing,
         cardKindFill: palette.accent,
         cardNameFill: palette.text,
         cardNamespaceFill: palette.textSecondary,
@@ -216,12 +196,12 @@ export const toObjectMapG6Data = (
                 text: badge.expanded ? '\u2212' : `+${badge.hiddenCount}`,
                 placement: 'right-top',
                 fill: palette.accent,
-                fontWeight: palette.badgeFontWeight,
-                backgroundWidth: palette.badgeWidth,
-                backgroundHeight: palette.badgeHeight,
+                fontWeight: BADGE_FONT_WEIGHT,
+                backgroundWidth: BADGE_WIDTH,
+                backgroundHeight: BADGE_HEIGHT,
                 backgroundFill: palette.accentBg,
                 backgroundStroke: palette.accent,
-                backgroundRadius: palette.badgeRadius,
+                backgroundRadius: BADGE_RADIUS,
               },
             ]
           : undefined,
