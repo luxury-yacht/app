@@ -38,7 +38,7 @@
   --object-map-tooltip-horizontal-padding: 12;
   --object-map-tooltip-name-font-size: 11;
   --object-map-tooltip-name-font-weight: 600;
-  --object-map-tooltip-relationship-font-size: 10;
+  --object-map-tooltip-relationship-font-size: 11;
   --object-map-tooltip-relationship-font-weight: 400;
   --object-map-fit-view-padding: 16;
   --object-map-full-opacity: 1;
@@ -234,7 +234,7 @@
 .object-map__edge-tooltip-relationship {
   font-size: calc(var(--object-map-tooltip-relationship-font-size) * 1px);
   font-weight: var(--object-map-tooltip-relationship-font-weight);
-  fill: var(--color-warning);
+  fill: var(--color-text-secondary);
 }
 
 /* --- Legend overlay (HTML, positioned absolutely over the canvas) -- */
