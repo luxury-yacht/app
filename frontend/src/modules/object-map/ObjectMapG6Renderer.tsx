@@ -304,15 +304,20 @@ const applyGraphData = async (
 const applySelectionState = async (
   graph: Graph,
   layout: ObjectMapLayout,
-  selectionState: ObjectMapSelectionState
+  selectionState: ObjectMapSelectionState,
+  hoveredEdgeId: string | null = null
 ): Promise<void> => {
   if (graph.destroyed) return;
   const states: Record<string, string[]> = {};
+  const hoveredEdge = hoveredEdgeId ? findEdge(layout, hoveredEdgeId) : null;
+  const hoveredNodeIds = new Set(hoveredEdge ? [hoveredEdge.sourceId, hoveredEdge.targetId] : []);
   layout.nodes.forEach((node) => {
-    states[node.id] = objectMapG6NodeState(node, selectionState);
+    const nodeStates = objectMapG6NodeState(node, selectionState);
+    states[node.id] = hoveredNodeIds.has(node.id) ? [...nodeStates, 'edgeHovered'] : nodeStates;
   });
   layout.edges.forEach((edge) => {
-    states[edge.id] = objectMapG6EdgeState(edge, selectionState);
+    const edgeStates = objectMapG6EdgeState(edge, selectionState);
+    states[edge.id] = edge.id === hoveredEdgeId ? [...edgeStates, 'hovered'] : edgeStates;
   });
   if (graph.destroyed) return;
   await graph.setElementState(states, false);
@@ -358,6 +363,7 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const graphRef = useRef<Graph | null>(null);
   const hoverEdgeRef = useRef(hoverEdge);
+  const hoveredEdgeIdRef = useRef<string | null>(null);
   const ignoreNextCanvasClickRef = useRef(false);
   const manualDragPointerIdRef = useRef<number | null>(null);
   const selectionApplyRef = useRef<{
@@ -477,7 +483,12 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
             const requestedVersion = ref.version;
             const latest = ref.latest;
             ref.latest = null;
-            await applySelectionState(graph, latest.layout, latest.selectionState);
+            await applySelectionState(
+              graph,
+              latest.layout,
+              latest.selectionState,
+              hoveredEdgeIdRef.current
+            );
             if (ref.version === requestedVersion) {
               break;
             }
@@ -568,12 +579,14 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
         state: {
           selected: { stroke: palette.accent, lineWidth: 2.5, opacity: 1 },
           connected: { stroke: palette.accent, lineWidth: 1.5, opacity: 1 },
+          edgeHovered: { stroke: palette.accent, lineWidth: 2.5, opacity: 1 },
           dimmed: { opacity: 0.25 },
           seed: { stroke: palette.accent, lineWidth: 2, opacity: 1 },
         },
       },
       edge: {
         state: {
+          hovered: { lineWidth: 4, opacity: 1 },
           highlighted: { lineWidth: 2.5, opacity: 1 },
           dimmed: { opacity: 0.15 },
         },
@@ -592,6 +605,26 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
       if (manualDragPointerIdRef.current !== pointerId) return;
       handlersRef.current.onNodeDragEnd(toObjectMapPointerInput(event, graph));
       manualDragPointerIdRef.current = null;
+    };
+
+    const setConnectionHoverState = (edge: PositionedEdge, hovered: boolean) => {
+      if (graph.destroyed) return;
+      const states: Record<string, string[]> = {
+        [edge.id]: hovered
+          ? [...objectMapG6EdgeState(edge, selectionStateRef.current), 'hovered']
+          : objectMapG6EdgeState(edge, selectionStateRef.current),
+      };
+      [edge.sourceId, edge.targetId].forEach((nodeId) => {
+        const node = findNode(layoutRef.current, nodeId);
+        if (!node) return;
+        const nodeStates = objectMapG6NodeState(node, selectionStateRef.current);
+        states[nodeId] = hovered ? [...nodeStates, 'edgeHovered'] : nodeStates;
+      });
+      void graph.setElementState(states, false).catch((error: unknown) => {
+        if (graphRef.current === graph && !graph.destroyed) {
+          console.error('[ObjectMapG6Renderer] Failed to apply connection hover state:', error);
+        }
+      });
     };
 
     graph.on(NodeEvent.CLICK, (rawEvent) => {
@@ -642,6 +675,15 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
       const event = rawEvent as G6ElementPointerEvent;
       const edge = findEdge(layoutRef.current, event.target.id);
       if (!edge) return;
+      const previousHoverEdgeId = hoveredEdgeIdRef.current;
+      hoveredEdgeIdRef.current = edge.id;
+      if (previousHoverEdgeId && previousHoverEdgeId !== edge.id) {
+        const previousEdge = findEdge(layoutRef.current, previousHoverEdgeId);
+        if (previousEdge) {
+          setConnectionHoverState(previousEdge, false);
+        }
+      }
+      setConnectionHoverState(edge, true);
       handlersRef.current.onHoverEdge({
         midX: edge.midX,
         midY: edge.midY,
@@ -650,7 +692,15 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
         tracedBy: edge.tracedBy,
       });
     });
-    graph.on(EdgeEvent.POINTER_LEAVE, () => handlersRef.current.onClearHoverEdge());
+    graph.on(EdgeEvent.POINTER_LEAVE, (rawEvent) => {
+      const event = rawEvent as G6ElementPointerEvent;
+      const edge = findEdge(layoutRef.current, event.target.id);
+      if (edge && hoveredEdgeIdRef.current === edge.id) {
+        hoveredEdgeIdRef.current = null;
+        setConnectionHoverState(edge, false);
+      }
+      handlersRef.current.onClearHoverEdge();
+    });
     graph.on(CanvasEvent.CLICK, (rawEvent) => {
       const event = rawEvent as G6ElementPointerEvent;
       if (event.targetType && event.targetType !== 'canvas') {
@@ -717,6 +767,7 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
       disposed = true;
       graphRef.current = null;
       graphReadyRef.current = false;
+      hoveredEdgeIdRef.current = null;
       manualDragPointerIdRef.current = null;
       renderedDataRef.current = null;
       selectionApply.latest = null;
