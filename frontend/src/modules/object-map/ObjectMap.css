@@ -28,12 +28,12 @@
   --object-map-node-edge-hovered-line-width: 2.5;
   --object-map-node-dimmed-opacity: 0.25;
   --object-map-tooltip-width: 220;
-  --object-map-tooltip-height: 58;
+  --object-map-tooltip-height: 64;
   --object-map-tooltip-offset-y: 4;
   --object-map-tooltip-radius: 4;
-  --object-map-tooltip-source-y: -40;
-  --object-map-tooltip-relationship-y: -25;
-  --object-map-tooltip-target-y: -10;
+  --object-map-tooltip-source-y: -46;
+  --object-map-tooltip-relationship-y: -31;
+  --object-map-tooltip-target-y: -16;
   --object-map-tooltip-label-max-chars: 38;
   --object-map-tooltip-horizontal-padding: 12;
   --object-map-tooltip-name-font-size: 11;
@@ -219,7 +219,7 @@
 }
 
 .object-map__edge-tooltip-bg {
-  fill: var(--color-bg);
+  fill: var(--color-bg-tertiary);
   stroke: var(--color-border);
   stroke-width: 1;
 }
@@ -234,7 +234,7 @@
 .object-map__edge-tooltip-relationship {
   font-size: calc(var(--object-map-tooltip-relationship-font-size) * 1px);
   font-weight: var(--object-map-tooltip-relationship-font-weight);
-  fill: var(--color-text-tertiary);
+  fill: var(--color-warning);
 }
 
 /* --- Legend overlay (HTML, positioned absolutely over the canvas) -- */

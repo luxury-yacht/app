@@ -64,7 +64,8 @@ class ObjectMapG6CardNode extends BaseNode<ObjectMapG6CardNodeStyleProps> {
       letterSpacing,
       textBaseline: 'alphabetic',
       maxLines: 1,
-      wordWrap: false,
+      wordWrap: true,
+      wordWrapWidth: width - NODE_PADDING_X * 2,
       textOverflow: '...',
     };
   }
