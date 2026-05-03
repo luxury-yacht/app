@@ -2,15 +2,13 @@
  * frontend/src/modules/object-map/ObjectMap.tsx
  *
  * Shell for the object-map snapshot view. Data preparation and interaction
- * state live in `useObjectMapModel`; drawing is delegated to a renderer. The
- * object-panel map tab uses the G6 renderer for production performance, while
- * the SVG renderer remains available as a fallback and comparison target.
+ * state live in `useObjectMapModel`; drawing is delegated to the lazy-loaded
+ * G6 renderer so the heavy graph dependency stays out of the initial bundle.
  */
 
-import React, { Suspense, useCallback, useMemo, useState } from 'react';
+import React, { Suspense, useMemo, useState } from 'react';
 import './ObjectMap.css';
 import type { ObjectMapReference, ObjectMapSnapshotPayload } from '@core/refresh/types';
-import ObjectMapSvgRenderer from './ObjectMapSvgRenderer';
 import { objectMapEdgeClass, OBJECT_MAP_EDGE_KINDS } from './objectMapEdgeStyle';
 import type { ObjectMapViewportControls } from './objectMapRendererTypes';
 import { useObjectMapModel } from './useObjectMapModel';
@@ -28,12 +26,6 @@ const ObjectMapG6Renderer = React.lazy(() => import('./ObjectMapG6Renderer'));
 
 export interface ObjectMapProps {
   payload: ObjectMapSnapshotPayload;
-  // Renderer switch kept for fallback/testing. The object-panel map tab
-  // explicitly requests G6; SVG remains useful for comparison stories and
-  // renderer-independent behavior tests.
-  rendererKind?: 'svg' | 'g6';
-  // Forces a refit when bumped — wire to a host's "Reset view" trigger.
-  resetToken?: number;
   // Optional refresh callback. When provided, a "Refresh" button
   // appears in the toolbar; the host wires it to whatever fetch flow
   // it owns. Without it, the button is omitted (so the component is
@@ -50,19 +42,16 @@ export interface ObjectMapProps {
 
 const ObjectMap: React.FC<ObjectMapProps> = ({
   payload,
-  rendererKind = 'svg',
-  resetToken = 0,
   onRefresh,
   isRefreshing = false,
   onOpenPanel,
   onNavigateView,
 }) => {
-  const model = useObjectMapModel(payload, { resetToken });
+  const model = useObjectMapModel(payload);
   const [showLegend, setShowLegend] = useState(true);
   const [g6ViewportControls, setG6ViewportControls] = useState<ObjectMapViewportControls | null>(
     null
   );
-  const isG6Renderer = rendererKind === 'g6';
 
   const visibleEdgeTypes = useMemo(() => {
     const types = new Set<string>();
@@ -75,22 +64,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
     [visibleEdgeTypes]
   );
 
-  const handleCanvasClick = useCallback(
-    (event: React.MouseEvent) => {
-      if (model.panZoom.wasDrag()) return;
-      const target = event.target as Element | null;
-      if (target && target.closest('g.object-map-node')) {
-        return;
-      }
-      model.clearSelection();
-    },
-    [model]
-  );
-
-  const zoomOut = isG6Renderer ? g6ViewportControls?.zoomOut : model.panZoom.zoomOut;
-  const zoomIn = isG6Renderer ? g6ViewportControls?.zoomIn : model.panZoom.zoomIn;
-  const fitToView = isG6Renderer ? g6ViewportControls?.fitToView : model.panZoom.resetView;
-  const viewportControlsReady = !isG6Renderer || Boolean(g6ViewportControls);
+  const viewportControlsReady = Boolean(g6ViewportControls);
 
   if (model.layout.nodes.length === 0) {
     return (
@@ -102,43 +76,10 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
 
   return (
     <div className="object-map" data-testid="object-map">
-      <div
-        ref={model.panZoom.containerRef}
-        className={`object-map__canvas ${
-          !isG6Renderer && model.panZoom.isPanning ? 'object-map__canvas--panning' : ''
-        }`}
-        onWheel={isG6Renderer ? undefined : model.panZoom.onWheel}
-        onPointerDown={isG6Renderer ? undefined : model.panZoom.onPointerDown}
-        onPointerMove={isG6Renderer ? undefined : model.panZoom.onPointerMove}
-        onPointerUp={isG6Renderer ? undefined : model.panZoom.onPointerUp}
-        onPointerCancel={isG6Renderer ? undefined : model.panZoom.onPointerUp}
-        onClick={isG6Renderer ? undefined : handleCanvasClick}
-      >
-        {rendererKind === 'g6' ? (
-          <Suspense fallback={<div className="object-map__message">Loading map renderer…</div>}>
-            <ObjectMapG6Renderer
-              layout={model.layout}
-              selectionState={model.selectionState}
-              hoverEdge={model.hoverEdge}
-              onHoverEdge={model.setHoverEdge}
-              onClearHoverEdge={model.clearHoverEdge}
-              badgeForNode={model.badgeForNode}
-              onSelectNode={model.selectNode}
-              onToggleGroup={model.toggleGroup}
-              onNodeDragStart={model.startNodeDrag}
-              onNodeDragMove={model.moveNodeDrag}
-              onNodeDragEnd={model.endNodeDrag}
-              onClearSelection={model.clearSelection}
-              onOpenPanel={onOpenPanel}
-              onNavigateView={onNavigateView}
-              autoFit={model.autoFit}
-              onViewportControlsChange={setG6ViewportControls}
-            />
-          </Suspense>
-        ) : (
-          <ObjectMapSvgRenderer
+      <div className="object-map__canvas">
+        <Suspense fallback={<div className="object-map__message">Loading map renderer…</div>}>
+          <ObjectMapG6Renderer
             layout={model.layout}
-            viewport={model.panZoom.viewport}
             selectionState={model.selectionState}
             hoverEdge={model.hoverEdge}
             onHoverEdge={model.setHoverEdge}
@@ -149,10 +90,13 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
             onNodeDragStart={model.startNodeDrag}
             onNodeDragMove={model.moveNodeDrag}
             onNodeDragEnd={model.endNodeDrag}
+            onClearSelection={model.clearSelection}
             onOpenPanel={onOpenPanel}
             onNavigateView={onNavigateView}
+            autoFit={model.autoFit}
+            onViewportControlsChange={setG6ViewportControls}
           />
-        )}
+        </Suspense>
         <div
           className="object-map__toolbar"
           role="toolbar"
@@ -164,7 +108,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
           <button
             type="button"
             className="object-map__toolbar-button"
-            onClick={zoomOut}
+            onClick={g6ViewportControls?.zoomOut}
             title="Zoom out"
             aria-label="Zoom out"
             disabled={!viewportControlsReady}
@@ -174,7 +118,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
           <button
             type="button"
             className="object-map__toolbar-button"
-            onClick={zoomIn}
+            onClick={g6ViewportControls?.zoomIn}
             title="Zoom in"
             aria-label="Zoom in"
             disabled={!viewportControlsReady}
@@ -185,7 +129,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
           <button
             type="button"
             className="object-map__toolbar-button"
-            onClick={fitToView}
+            onClick={g6ViewportControls?.fitToView}
             title={
               model.autoFit
                 ? 'Fit to view (auto-fit is on; turn it off to use this manually)'

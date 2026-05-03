@@ -1,9 +1,8 @@
 /**
  * frontend/src/modules/object-map/objectMapEdgeStyle.ts
  *
- * Maps backend edge `type` values to a CSS class so each edge picks up
- * the right stroke colour from ObjectMap.css. Keep this list in sync
- * with the tracer categories in backend/refresh/snapshot/object_map.go.
+ * Maps backend edge `type` values to legend CSS classes. Keep this list
+ * in sync with the tracer categories in backend/refresh/snapshot/object_map.go.
  */
 
 interface EdgeKindMeta {

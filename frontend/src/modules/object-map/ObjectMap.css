@@ -86,20 +86,6 @@
   touch-action: none;
 }
 
-.object-map__canvas--panning {
-  cursor: grabbing;
-}
-
-.object-map__svg {
-  display: block;
-  width: 100%;
-  height: 100%;
-  /* Inherit the page font into SVG <text>; without this, some engines
-   * fall back to a generic serif which doesn't match the surrounding
-   * UI. */
-  font-family: inherit;
-}
-
 .object-map__g6-stack {
   position: relative;
   width: 100%;
@@ -132,25 +118,9 @@
   font-size: 0.875rem;
 }
 
-.object-map__viewport {
-  transform-origin: 0 0;
-}
-
-/* --- Edges (native SVG <path>) ----------------------------------- */
-
-.object-map__edges path {
-  fill: none;
-  stroke-width: 1.5;
-  pointer-events: stroke;
-  cursor: help;
-  transition: stroke-width 120ms ease;
-}
-
-.object-map__edges path:hover {
-  stroke-width: 3;
-}
-
-/* Edge colours grouped by relationship family:
+/* Edge colours grouped by relationship family. These classes are used
+ * by the HTML legend swatches; the G6 renderer reads the same palette
+ * mapping in TypeScript for canvas edges.
  *   - Blue family   = network (routes, selector, endpoint)
  *   - Purple family = storage (mounts, storage)
  *   - Green         = scheduling (schedules)
@@ -207,127 +177,7 @@
   stroke: var(--color-text-tertiary);
 }
 
-.object-map-edge--highlighted {
-  stroke-width: 2.5;
-}
-
-.object-map-edge--dimmed {
-  opacity: 0.15;
-}
-
-/* --- Nodes (native SVG <g> + <rect> + <text>) -------------------- */
-
-.object-map-node {
-  cursor: grab;
-}
-
-.object-map-node:active {
-  cursor: grabbing;
-}
-
-.object-map-node:focus {
-  outline: none;
-}
-
-.object-map-node:focus-visible .object-map-node__bg {
-  stroke: var(--color-accent);
-  stroke-width: 2;
-}
-
-.object-map-node__bg {
-  fill: var(--color-bg-secondary);
-  stroke: var(--color-border);
-  stroke-width: 1;
-  transition: stroke 120ms ease;
-}
-
-.object-map-node:hover .object-map-node__bg {
-  stroke: var(--color-accent);
-}
-
-.object-map-node__kind {
-  font-size: 11px;
-  font-weight: 600;
-  fill: var(--color-accent);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.object-map-node__name {
-  font-size: 11px;
-  font-weight: 600;
-  fill: var(--color-text);
-}
-
-.object-map-node__namespace {
-  font-size: 11px;
-  fill: var(--color-text-secondary);
-}
-
-.object-map-node--seed .object-map-node__bg {
-  stroke: var(--color-accent);
-  stroke-width: 2;
-}
-
-.object-map-node--selected .object-map-node__bg {
-  stroke: var(--color-accent);
-  stroke-width: 2.5;
-}
-
-.object-map-node--connected .object-map-node__bg {
-  stroke: var(--color-accent);
-  stroke-width: 1.5;
-}
-
-/* Dim everything else when a selection is active. Opacity on the <g>
- * cascades to all children — the kind/name/namespace text and the
- * background rect all fade together. */
-.object-map-node--dimmed {
-  opacity: 0.25;
-}
-
-/* Expand/collapse badge in the top-right corner of the current
- * ReplicaSet card. Click toggles visibility of sibling RSs. */
-.object-map-node__badge {
-  cursor: pointer;
-}
-
-.object-map-node__badge-bg {
-  fill: var(--color-accent-bg);
-  stroke: var(--color-accent);
-  stroke-width: 1;
-  transition:
-    fill 120ms ease,
-    stroke-width 120ms ease;
-}
-
-.object-map-node__badge-text {
-  font-size: 10px;
-  font-weight: 700;
-  fill: var(--color-accent);
-  /* Pointer events on the parent <g> are sufficient; keep text
-   * non-interactive so clicks always land on the rect. */
-  pointer-events: none;
-  user-select: none;
-}
-
-.object-map-node__badge:hover .object-map-node__badge-bg {
-  fill: var(--color-accent);
-}
-
-.object-map-node__badge:hover .object-map-node__badge-text {
-  fill: var(--color-text-inverse);
-}
-
-.object-map-node__badge:focus {
-  outline: none;
-}
-
-.object-map-node__badge:focus-visible .object-map-node__badge-bg {
-  stroke-width: 2;
-}
-
-/* --- Edge tooltip (also native SVG so the transform applies cleanly) -- */
+/* --- Edge tooltip overlay ------------------------------------------ */
 
 .object-map__edge-tooltip {
   pointer-events: none;
@@ -370,7 +220,7 @@
    * legend itself is non-interactive so a click that grazes it doesn't
    * accidentally start a pan or clear the selection. */
   pointer-events: none;
-  /* Keep the legend above SVG content but below modals/dropdowns
+  /* Keep the legend above map content but below modals/dropdowns
    * elsewhere in the app. */
   z-index: 1;
 }
@@ -387,11 +237,8 @@
    * SVG <line> inside this swatch picks them up automatically. */
 }
 
-/* Match the legend swatch's stroke weight to the highlighted edge
- * weight so the colours read at full intensity. The actual edge paths
- * pick up 1.5px from `.object-map__edges path` above, but lines in
- * the legend swatch aren't descendants of that group and would
- * otherwise fall back to SVG's 1px default and look muted. */
+/* Use the highlighted edge weight so legend colours read at full
+ * intensity instead of SVG's muted 1px default. */
 .object-map__legend-swatch line {
   stroke-width: 2.5;
 }
@@ -407,7 +254,7 @@
   color: var(--color-accent);
 }
 
-/* --- Banners and warnings (HTML, outside the transformed SVG) ------- */
+/* --- Banners and warnings ------------------------------------------- */
 
 .object-map__banner {
   padding: var(--spacing-sm) var(--spacing-md);

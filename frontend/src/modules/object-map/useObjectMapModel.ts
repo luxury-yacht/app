@@ -14,7 +14,6 @@ import {
   type ObjectMapLayout,
   type PositionedNode,
 } from './objectMapLayout';
-import { usePanZoom } from './usePanZoom';
 import { computeObjectMapSelectionState } from './objectMapSelection';
 import type {
   ObjectMapHoverEdge,
@@ -38,15 +37,7 @@ interface NodeDragState {
 
 const NODE_DRAG_THRESHOLD_PX = 3;
 
-export interface ObjectMapModelOptions {
-  resetToken?: number;
-}
-
-export const useObjectMapModel = (
-  payload: ObjectMapSnapshotPayload,
-  options: ObjectMapModelOptions = {}
-) => {
-  const resetToken = options.resetToken ?? 0;
+export const useObjectMapModel = (payload: ObjectMapSnapshotPayload) => {
   const seedId = useMemo(() => {
     const ref = payload.seed;
     const namespace = ref.namespace ?? '';
@@ -158,7 +149,6 @@ export const useObjectMapModel = (
   );
 
   const [autoFit, setAutoFit] = useState(true);
-  const panZoom = usePanZoom(layout.bounds, { resetToken, autoFit });
 
   const [hoverEdge, setHoverEdge] = useState<ObjectMapHoverEdge | null>(null);
   const [activeNodeId, setActiveNodeId] = useState<string | null>(null);
@@ -198,42 +188,35 @@ export const useObjectMapModel = (
     };
   }, []);
 
-  const moveNodeDrag = useCallback(
-    (pointer: ObjectMapPointer) => {
-      const drag = nodeDragRef.current;
-      if (!drag || drag.pointerId !== pointer.pointerId) return;
-      const dxScreen = pointer.clientX - drag.originClientX;
-      const dyScreen = pointer.clientY - drag.originClientY;
-      if (!drag.didDrag && Math.hypot(dxScreen, dyScreen) >= NODE_DRAG_THRESHOLD_PX) {
-        drag.didDrag = true;
-        setAutoFit(false);
+  const moveNodeDrag = useCallback((pointer: ObjectMapPointer) => {
+    const drag = nodeDragRef.current;
+    if (!drag || drag.pointerId !== pointer.pointerId) return;
+    const dxScreen = pointer.clientX - drag.originClientX;
+    const dyScreen = pointer.clientY - drag.originClientY;
+    if (!drag.didDrag && Math.hypot(dxScreen, dyScreen) >= NODE_DRAG_THRESHOLD_PX) {
+      drag.didDrag = true;
+      setAutoFit(false);
+    }
+    if (!drag.didDrag) return;
+    const hasLayoutCoordinates =
+      drag.originLayoutX !== undefined &&
+      drag.originLayoutY !== undefined &&
+      pointer.layoutX !== undefined &&
+      pointer.layoutY !== undefined;
+    const dxLayout = hasLayoutCoordinates ? pointer.layoutX! - drag.originLayoutX! : dxScreen;
+    const dyLayout = hasLayoutCoordinates ? pointer.layoutY! - drag.originLayoutY! : dyScreen;
+    const nextX = drag.startX + dxLayout;
+    const nextY = drag.startY + dyLayout;
+    setNodePositionOverrides((prev) => {
+      const current = prev.get(drag.nodeId);
+      if (current && current.x === nextX && current.y === nextY) {
+        return prev;
       }
-      if (!drag.didDrag) return;
-      const hasLayoutCoordinates =
-        drag.originLayoutX !== undefined &&
-        drag.originLayoutY !== undefined &&
-        pointer.layoutX !== undefined &&
-        pointer.layoutY !== undefined;
-      const dxLayout = hasLayoutCoordinates
-        ? pointer.layoutX! - drag.originLayoutX!
-        : dxScreen / panZoom.viewport.scale;
-      const dyLayout = hasLayoutCoordinates
-        ? pointer.layoutY! - drag.originLayoutY!
-        : dyScreen / panZoom.viewport.scale;
-      const nextX = drag.startX + dxLayout;
-      const nextY = drag.startY + dyLayout;
-      setNodePositionOverrides((prev) => {
-        const current = prev.get(drag.nodeId);
-        if (current && current.x === nextX && current.y === nextY) {
-          return prev;
-        }
-        const next = new Map(prev);
-        next.set(drag.nodeId, { x: nextX, y: nextY });
-        return next;
-      });
-    },
-    [panZoom.viewport.scale]
-  );
+      const next = new Map(prev);
+      next.set(drag.nodeId, { x: nextX, y: nextY });
+      return next;
+    });
+  }, []);
 
   const endNodeDrag = useCallback((pointer: ObjectMapPointer) => {
     const drag = nodeDragRef.current;
@@ -263,7 +246,6 @@ export const useObjectMapModel = (
     badgeForNode,
     autoFit,
     setAutoFit,
-    panZoom,
     hoverEdge,
     setHoverEdge,
     clearHoverEdge,

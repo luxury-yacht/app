@@ -61,10 +61,7 @@ export const objectMapG6EdgeStroke = (type: string): string => {
   return objectMapG6EdgeStrokeForPalette(type, DEFAULT_OBJECT_MAP_G6_PALETTE);
 };
 
-export const objectMapG6EdgeStrokeForPalette = (
-  type: string,
-  palette: ObjectMapG6Palette
-): string => {
+const objectMapG6EdgeStrokeForPalette = (type: string, palette: ObjectMapG6Palette): string => {
   switch (type.trim().toLowerCase()) {
     case 'owner':
       return palette.accent;

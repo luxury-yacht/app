@@ -29,9 +29,9 @@ export interface ObjectMapPointer {
   button?: number;
   clientX: number;
   clientY: number;
-  /** Renderer-local layout coordinate. SVG derives this from screen delta / scale. */
+  /** Renderer-local layout coordinate for drag math. */
   layoutX?: number;
-  /** Renderer-local layout coordinate. SVG derives this from screen delta / scale. */
+  /** Renderer-local layout coordinate for drag math. */
   layoutY?: number;
 }
 

@@ -4,6 +4,164 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ObjectMapReference, ObjectMapSnapshotPayload } from '@core/refresh/types';
 import ObjectMap from './ObjectMap';
 
+vi.mock('./ObjectMapG6Renderer', () => {
+  const MockObjectMapG6Renderer = (props: {
+    layout: {
+      nodes: Array<{
+        id: string;
+        x: number;
+        y: number;
+        ref: ObjectMapReference;
+      }>;
+      edges: Array<{
+        id: string;
+        d: string;
+        sourceId: string;
+        targetId: string;
+        label: string;
+      }>;
+    };
+    selectionState: {
+      activeId: string | null;
+      connectedIds: Set<string>;
+      connectedEdgeIds: Set<string>;
+    };
+    badgeForNode: (nodeId: string) => { deploymentId: string; hiddenCount: number } | null;
+    onSelectNode: (id: string) => void;
+    onToggleGroup: (deploymentId: string) => void;
+    onNodeDragStart: (
+      node: { id: string; x: number; y: number; ref: ObjectMapReference },
+      pointer: {
+        pointerId: number;
+        button: number;
+        clientX: number;
+        clientY: number;
+        layoutX: number;
+        layoutY: number;
+      }
+    ) => void;
+    onNodeDragMove: (pointer: {
+      pointerId: number;
+      button: number;
+      clientX: number;
+      clientY: number;
+      layoutX: number;
+      layoutY: number;
+    }) => void;
+    onNodeDragEnd: (pointer: {
+      pointerId: number;
+      button: number;
+      clientX: number;
+      clientY: number;
+      layoutX: number;
+      layoutY: number;
+    }) => void;
+    onClearSelection: () => void;
+    onOpenPanel?: (ref: ObjectMapReference) => void;
+    onNavigateView?: (ref: ObjectMapReference) => void;
+  }) => {
+    const firstNode = props.layout.nodes[0];
+
+    return (
+      <div data-testid="object-map-g6-mock">
+        <button type="button" data-testid="mock-clear-selection" onClick={props.onClearSelection}>
+          clear
+        </button>
+        {firstNode && (
+          <button
+            type="button"
+            data-testid="mock-drag-first-node"
+            onClick={() => {
+              props.onNodeDragStart(firstNode, {
+                pointerId: 1,
+                button: 0,
+                clientX: 10,
+                clientY: 10,
+                layoutX: firstNode.x,
+                layoutY: firstNode.y,
+              });
+              props.onNodeDragMove({
+                pointerId: 1,
+                button: 0,
+                clientX: 70,
+                clientY: 30,
+                layoutX: firstNode.x + 60,
+                layoutY: firstNode.y + 20,
+              });
+              props.onNodeDragEnd({
+                pointerId: 1,
+                button: 0,
+                clientX: 70,
+                clientY: 30,
+                layoutX: firstNode.x + 60,
+                layoutY: firstNode.y + 20,
+              });
+            }}
+          >
+            drag
+          </button>
+        )}
+        <div data-testid="mock-nodes">
+          {props.layout.nodes.map((node) => {
+            const badge = props.badgeForNode(node.id);
+            return (
+              <div
+                key={node.id}
+                data-testid={`mock-node-${node.id}`}
+                data-active={props.selectionState.activeId === node.id}
+                data-connected={props.selectionState.connectedIds.has(node.id)}
+                data-x={node.x}
+                data-y={node.y}
+              >
+                <button
+                  type="button"
+                  aria-label={`${node.ref.kind}: ${node.ref.name}`}
+                  onClick={(event) => {
+                    if (event.metaKey || event.ctrlKey) {
+                      props.onOpenPanel?.(node.ref);
+                      return;
+                    }
+                    if (event.altKey) {
+                      props.onNavigateView?.(node.ref);
+                      return;
+                    }
+                    props.onSelectNode(node.id);
+                  }}
+                >
+                  {node.ref.name}
+                </button>
+                {badge && (
+                  <button
+                    type="button"
+                    aria-label={`Show ${badge.hiddenCount} hidden ReplicaSet`}
+                    onClick={() => props.onToggleGroup(badge.deploymentId)}
+                  >
+                    badge
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        <div data-testid="mock-edges">
+          {props.layout.edges.map((edge) => (
+            <div
+              key={edge.id}
+              data-testid={`mock-edge-${edge.id}`}
+              data-path={edge.d}
+              data-highlighted={props.selectionState.connectedEdgeIds.has(edge.id)}
+            >
+              {edge.label}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  return { default: MockObjectMapG6Renderer };
+});
+
 const ref = (
   id: string,
   kind: string,
@@ -77,6 +235,18 @@ const renderObjectMap = async ({
     await Promise.resolve();
   });
 
+  for (
+    let attempts = 0;
+    attempts < 5 &&
+    !container.querySelector('[data-testid="object-map-g6-mock"]') &&
+    !container.querySelector('[data-testid="object-map-empty"]');
+    attempts += 1
+  ) {
+    await act(async () => {
+      await Promise.resolve();
+    });
+  }
+
   return {
     container,
     cleanup: () => {
@@ -84,23 +254,6 @@ const renderObjectMap = async ({
       container.remove();
     },
   };
-};
-
-const pointerEvent = (
-  type: string,
-  init: { pointerId: number; clientX: number; clientY: number; button?: number }
-): Event => {
-  const event = new Event(type, { bubbles: true, cancelable: true }) as Event & {
-    pointerId: number;
-    clientX: number;
-    clientY: number;
-    button: number;
-  };
-  event.pointerId = init.pointerId;
-  event.clientX = init.clientX;
-  event.clientY = init.clientY;
-  event.button = init.button ?? 0;
-  return event;
 };
 
 const mouseEvent = (type: string, init: MouseEventInit = {}): MouseEvent =>
@@ -113,45 +266,53 @@ afterEach(() => {
 describe('ObjectMap', () => {
   it('selects a node, highlights connected paths, and clears selection', async () => {
     const { container, cleanup } = await renderObjectMap();
-    const deploy = container.querySelector<SVGGElement>('[aria-label="Deployment: web"]');
-    const pod = container.querySelector<SVGGElement>('[aria-label="Pod: web-abc"]');
-    const edge = container.querySelector<SVGPathElement>('.object-map__edges path');
-    const canvas = container.querySelector<HTMLDivElement>('.object-map__canvas');
+    const deploy = container.querySelector<HTMLButtonElement>('[aria-label="Deployment: web"]');
+    const podNode = container.querySelector<HTMLElement>('[data-testid="mock-node-pod"]');
+    const edge = container.querySelector<HTMLElement>('[data-testid="mock-edge-edge-1"]');
+    const clear = container.querySelector<HTMLButtonElement>(
+      '[data-testid="mock-clear-selection"]'
+    );
 
     expect(deploy).toBeTruthy();
-    expect(pod).toBeTruthy();
+    expect(podNode).toBeTruthy();
     expect(edge).toBeTruthy();
-    expect(canvas).toBeTruthy();
+    expect(clear).toBeTruthy();
 
     await act(async () => {
       deploy!.dispatchEvent(mouseEvent('click'));
       await Promise.resolve();
     });
 
-    expect(deploy!.classList.contains('object-map-node--selected')).toBe(true);
-    expect(pod!.classList.contains('object-map-node--connected')).toBe(true);
-    expect(edge!.classList.contains('object-map-edge--highlighted')).toBe(true);
+    expect(
+      container.querySelector<HTMLElement>('[data-testid="mock-node-deploy"]')?.dataset.active
+    ).toBe('true');
+    expect(podNode?.dataset.connected).toBe('true');
+    expect(edge?.dataset.highlighted).toBe('true');
 
     await act(async () => {
       deploy!.dispatchEvent(mouseEvent('click'));
       await Promise.resolve();
     });
 
-    expect(deploy!.classList.contains('object-map-node--selected')).toBe(false);
-    expect(edge!.classList.contains('object-map-edge--highlighted')).toBe(false);
+    expect(
+      container.querySelector<HTMLElement>('[data-testid="mock-node-deploy"]')?.dataset.active
+    ).toBe('false');
+    expect(edge?.dataset.highlighted).toBe('false');
 
     await act(async () => {
-      pod!.dispatchEvent(mouseEvent('click'));
+      container
+        .querySelector<HTMLButtonElement>('[aria-label="Pod: web-abc"]')!
+        .dispatchEvent(mouseEvent('click'));
       await Promise.resolve();
     });
-    expect(pod!.classList.contains('object-map-node--selected')).toBe(true);
+    expect(podNode?.dataset.active).toBe('true');
 
     await act(async () => {
-      canvas!.dispatchEvent(mouseEvent('click'));
+      clear!.click();
       await Promise.resolve();
     });
 
-    expect(pod!.classList.contains('object-map-node--selected')).toBe(false);
+    expect(podNode?.dataset.active).toBe('false');
 
     cleanup();
   });
@@ -160,7 +321,7 @@ describe('ObjectMap', () => {
     const onOpenPanel = vi.fn();
     const onNavigateView = vi.fn();
     const { container, cleanup } = await renderObjectMap({ onOpenPanel, onNavigateView });
-    const pod = container.querySelector<SVGGElement>('[aria-label="Pod: web-abc"]');
+    const pod = container.querySelector<HTMLButtonElement>('[aria-label="Pod: web-abc"]');
 
     expect(pod).toBeTruthy();
 
@@ -210,45 +371,23 @@ describe('ObjectMap', () => {
     cleanup();
   });
 
-  it('shows and clears edge hover tooltip data', async () => {
-    const { container, cleanup } = await renderObjectMap();
-    const edge = container.querySelector<SVGPathElement>('.object-map__edges path');
-
-    expect(edge).toBeTruthy();
-
-    await act(async () => {
-      edge!.dispatchEvent(mouseEvent('mouseover'));
-      await Promise.resolve();
-    });
-
-    expect(container.querySelector('.object-map__edge-tooltip-label')?.textContent).toBe('owns');
-
-    await act(async () => {
-      edge!.dispatchEvent(mouseEvent('mouseout'));
-      await Promise.resolve();
-    });
-
-    expect(container.querySelector('.object-map__edge-tooltip-label')).toBeNull();
-
-    cleanup();
-  });
-
   it('collapses and expands older ReplicaSets', async () => {
     const { container, cleanup } = await renderObjectMap({ testPayload: collapsePayload });
 
     expect(container.querySelector('[aria-label="ReplicaSet: web-new"]')).toBeTruthy();
     expect(container.querySelector('[aria-label="ReplicaSet: web-old"]')).toBeNull();
 
-    const badge = container.querySelector<SVGGElement>('[aria-label="Show 1 hidden ReplicaSet"]');
+    const badge = container.querySelector<HTMLButtonElement>(
+      '[aria-label="Show 1 hidden ReplicaSet"]'
+    );
     expect(badge).toBeTruthy();
 
     await act(async () => {
-      badge!.dispatchEvent(mouseEvent('click'));
+      badge!.click();
       await Promise.resolve();
     });
 
     expect(container.querySelector('[aria-label="ReplicaSet: web-old"]')).toBeTruthy();
-    expect(container.querySelector('[aria-label="Collapse other ReplicaSets"]')).toBeTruthy();
 
     cleanup();
   });
@@ -285,29 +424,31 @@ describe('ObjectMap', () => {
 
   it('drags nodes, reroutes edges, and resets manual layout', async () => {
     const { container, cleanup } = await renderObjectMap();
-    const node = container.querySelector<SVGGElement>('[aria-label="Deployment: web"]');
-    const edge = container.querySelector<SVGPathElement>('.object-map__edges path');
+    const node = container.querySelector<HTMLElement>('[data-testid="mock-node-deploy"]');
+    const edge = container.querySelector<HTMLElement>('[data-testid="mock-edge-edge-1"]');
+    const dragButton = container.querySelector<HTMLButtonElement>(
+      '[data-testid="mock-drag-first-node"]'
+    );
     const resetButton = container.querySelector<HTMLButtonElement>(
       'button[aria-label="Reset layout"]'
     );
 
     expect(node).toBeTruthy();
     expect(edge).toBeTruthy();
+    expect(dragButton).toBeTruthy();
     expect(resetButton).toBeTruthy();
     expect(resetButton?.disabled).toBe(true);
 
-    const initialTransform = node!.getAttribute('transform');
-    const initialPath = edge!.getAttribute('d');
+    const initialX = node!.dataset.x;
+    const initialPath = edge!.dataset.path;
 
     await act(async () => {
-      node!.dispatchEvent(pointerEvent('pointerdown', { pointerId: 1, clientX: 10, clientY: 10 }));
-      node!.dispatchEvent(pointerEvent('pointermove', { pointerId: 1, clientX: 70, clientY: 30 }));
-      node!.dispatchEvent(pointerEvent('pointerup', { pointerId: 1, clientX: 70, clientY: 30 }));
+      dragButton!.click();
       await Promise.resolve();
     });
 
-    expect(node!.getAttribute('transform')).not.toBe(initialTransform);
-    expect(edge!.getAttribute('d')).not.toBe(initialPath);
+    expect(node!.dataset.x).not.toBe(initialX);
+    expect(edge!.dataset.path).not.toBe(initialPath);
     expect(resetButton?.disabled).toBe(false);
 
     await act(async () => {
@@ -315,8 +456,8 @@ describe('ObjectMap', () => {
       await Promise.resolve();
     });
 
-    expect(node!.getAttribute('transform')).toBe(initialTransform);
-    expect(edge!.getAttribute('d')).toBe(initialPath);
+    expect(node!.dataset.x).toBe(initialX);
+    expect(edge!.dataset.path).toBe(initialPath);
     expect(resetButton?.disabled).toBe(true);
 
     cleanup();

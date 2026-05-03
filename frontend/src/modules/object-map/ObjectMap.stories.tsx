@@ -2,7 +2,7 @@
  * frontend/src/modules/object-map/ObjectMap.stories.tsx
  *
  * Storybook stories for the ObjectMap component, including large fixtures
- * used to compare SVG and G6 renderer behavior during manual performance checks.
+ * used for manual G6 renderer performance checks.
  */
 
 import type { Meta, StoryObj } from '@storybook/react';
@@ -34,29 +34,20 @@ const meta: Meta<typeof ObjectMap> = {
 export default meta;
 type Story = StoryObj<typeof ObjectMap>;
 
-/** G6 renderer with 500 nodes and 1,000 edges. */
-export const G6FiveHundredNodes: Story = {
+/** 500 nodes and 1,000 edges. */
+export const FiveHundredNodes: Story = {
   render: () => (
     <ObjectMapStoryShell>
-      <ObjectMap payload={fiveHundredNodeFixture} rendererKind="g6" />
+      <ObjectMap payload={fiveHundredNodeFixture} />
     </ObjectMapStoryShell>
   ),
 };
 
-/** SVG renderer with 500 nodes and 1,000 edges, for side-by-side comparison. */
-export const SvgFiveHundredNodes: Story = {
+/** 1,000 nodes and 2,000 edges. */
+export const ThousandNodes: Story = {
   render: () => (
     <ObjectMapStoryShell>
-      <ObjectMap payload={fiveHundredNodeFixture} rendererKind="svg" />
-    </ObjectMapStoryShell>
-  ),
-};
-
-/** G6 renderer with 1,000 nodes and 2,000 edges. */
-export const G6ThousandNodes: Story = {
-  render: () => (
-    <ObjectMapStoryShell>
-      <ObjectMap payload={thousandNodeFixture} rendererKind="g6" />
+      <ObjectMap payload={thousandNodeFixture} />
     </ObjectMapStoryShell>
   ),
 };

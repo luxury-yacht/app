@@ -11,10 +11,6 @@ import { buildClusterScope, buildObjectScope } from '@core/refresh/clusterScope'
 
 const CLUSTER_SCOPE_TOKEN = '__cluster__';
 
-// Backend defaults from snapshot/object_map.go — kept here so the modal
-// can tell the user what they're getting without round-tripping a request.
-export const OBJECT_MAP_DEFAULT_DEPTH = 4;
-export const OBJECT_MAP_DEFAULT_NODES = 250;
 export const OBJECT_MAP_MAX_DEPTH = 12;
 export const OBJECT_MAP_MAX_NODES = 1000;
 
