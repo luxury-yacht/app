@@ -60,6 +60,8 @@ export interface ObjectActionData {
   version?: string;
   resource?: string;
   uid?: string;
+  requiresExplicitVersion?: boolean;
+  explicitVersionProvided?: boolean;
   // For workload-specific actions
   status?: string;
   ready?: string;

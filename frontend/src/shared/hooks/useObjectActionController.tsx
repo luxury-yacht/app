@@ -18,17 +18,23 @@ import {
   buildObjectActionItems,
   normalizeKind,
   type ObjectActionData,
+  type ObjectActionHandlers,
 } from '@shared/hooks/useObjectActions';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
+import type { KubernetesObjectReference } from '@/types/view-state';
 
 type ObjectActionContext = 'gridtable' | 'object-panel';
+type ObjectActionReference = ObjectActionData & KubernetesObjectReference;
 
 interface ObjectActionControllerOptions {
   context: ObjectActionContext;
   actionLoading?: boolean;
   queryMissingPermissions?: boolean;
-  onOpen?: (object: ObjectActionData) => void;
-  onOpenObjectMap?: (object: ObjectActionData) => void;
+  useDefaultHandlers?: boolean;
+  onOpen?: (object: ObjectActionReference) => void;
+  onOpenObjectMap?: (object: ObjectActionReference) => void;
+  onViewInvolvedObject?: (object: ObjectActionReference) => void;
+  handlerOverrides?: ObjectActionHandlers;
   onAfterAction?: (object: ObjectActionData, action: string) => void;
   onAfterDelete?: (object: ObjectActionData) => void;
 }
@@ -51,6 +57,11 @@ const extractDesiredReplicas = (object: ObjectActionData): number => {
 };
 
 const apiVersionFor = (object: ObjectActionData): string => {
+  if (object.requiresExplicitVersion && !object.explicitVersionProvided) {
+    throw new Error(
+      `Cannot delete ${object.kind}/${object.name}: apiVersion missing on custom resource row`
+    );
+  }
   const version = object.version?.trim();
   if (!version) {
     throw new Error(`Cannot delete ${object.kind}/${object.name}: apiVersion is missing`);
@@ -82,8 +93,11 @@ export const useObjectActionController = ({
   context,
   actionLoading = false,
   queryMissingPermissions = false,
+  useDefaultHandlers = true,
   onOpen,
   onOpenObjectMap,
+  onViewInvolvedObject,
+  handlerOverrides,
   onAfterAction,
   onAfterDelete,
 }: ObjectActionControllerOptions) => {
@@ -108,6 +122,7 @@ export const useObjectActionController = ({
   const getMenuItems = useCallback(
     (object: ObjectActionData | null): ContextMenuItem[] => {
       if (!object) return [];
+      const actionObject = object as ObjectActionReference;
       const namespace = object.namespace ?? null;
       const clusterId = object.clusterId ?? null;
       const group = object.group ?? null;
@@ -138,51 +153,74 @@ export const useObjectActionController = ({
         object,
         context,
         handlers: {
-          onOpen: onOpen ? () => onOpen(object) : undefined,
+          onOpen: onOpen ? () => onOpen(actionObject) : undefined,
           onObjectMap:
             onOpenObjectMap && isObjectMapSupportedKind(object.kind)
-              ? () => onOpenObjectMap(object)
+              ? () => onOpenObjectMap(actionObject)
               : undefined,
-          onRestart: () => setRestartTarget(object),
-          onRollback: () => setRollbackTarget(object),
-          onScale: () =>
-            setScaleState({
-              object,
-              value: extractDesiredReplicas(object),
-              loading: false,
-              error: null,
-            }),
-          onDelete: () => setDeleteTarget(object),
-          onPortForward: () => {
-            try {
-              setPortForwardTarget(portForwardTargetFor(object));
-            } catch (error) {
-              errorHandler.handle(error, {
-                action: 'portForward',
-                kind: object.kind,
-                name: object.name,
-              });
-            }
-          },
-          onTrigger: () => setTriggerTarget(object),
-          onSuspendToggle: async () => {
-            const isSuspended = object.status === 'Suspended';
-            try {
-              await SuspendCronJob(
-                requireClusterId(object, isSuspended ? 'resume' : 'suspend'),
-                object.namespace ?? '',
-                object.name,
-                !isSuspended
-              );
-              onAfterAction?.(object, isSuspended ? 'resume' : 'suspend');
-            } catch (error) {
-              errorHandler.handle(error, {
-                action: isSuspended ? 'resume' : 'suspend',
-                kind: object.kind,
-                name: object.name,
-              });
-            }
-          },
+          onViewInvolvedObject: onViewInvolvedObject
+            ? () => onViewInvolvedObject(actionObject)
+            : undefined,
+          onRestart:
+            handlerOverrides?.onRestart ??
+            (useDefaultHandlers ? () => setRestartTarget(object) : undefined),
+          onRollback:
+            handlerOverrides?.onRollback ??
+            (useDefaultHandlers ? () => setRollbackTarget(object) : undefined),
+          onScale:
+            handlerOverrides?.onScale ??
+            (useDefaultHandlers
+              ? () =>
+                  setScaleState({
+                    object,
+                    value: extractDesiredReplicas(object),
+                    loading: false,
+                    error: null,
+                  })
+              : undefined),
+          onDelete:
+            handlerOverrides?.onDelete ??
+            (useDefaultHandlers ? () => setDeleteTarget(object) : undefined),
+          onPortForward:
+            handlerOverrides?.onPortForward ??
+            (useDefaultHandlers
+              ? () => {
+                  try {
+                    setPortForwardTarget(portForwardTargetFor(object));
+                  } catch (error) {
+                    errorHandler.handle(error, {
+                      action: 'portForward',
+                      kind: object.kind,
+                      name: object.name,
+                    });
+                  }
+                }
+              : undefined),
+          onTrigger:
+            handlerOverrides?.onTrigger ??
+            (useDefaultHandlers ? () => setTriggerTarget(object) : undefined),
+          onSuspendToggle:
+            handlerOverrides?.onSuspendToggle ??
+            (useDefaultHandlers
+              ? async () => {
+                  const isSuspended = object.status === 'Suspended';
+                  try {
+                    await SuspendCronJob(
+                      requireClusterId(object, isSuspended ? 'resume' : 'suspend'),
+                      object.namespace ?? '',
+                      object.name,
+                      !isSuspended
+                    );
+                    onAfterAction?.(object, isSuspended ? 'resume' : 'suspend');
+                  } catch (error) {
+                    errorHandler.handle(error, {
+                      action: isSuspended ? 'resume' : 'suspend',
+                      kind: object.kind,
+                      name: object.name,
+                    });
+                  }
+                }
+              : undefined),
         },
         permissions: {
           restart: restartStatus,
@@ -197,11 +235,14 @@ export const useObjectActionController = ({
     [
       actionLoading,
       context,
+      handlerOverrides,
       onAfterAction,
       onOpen,
       onOpenObjectMap,
+      onViewInvolvedObject,
       permissionMap,
       queryMissingPermissions,
+      useDefaultHandlers,
     ]
   );
 

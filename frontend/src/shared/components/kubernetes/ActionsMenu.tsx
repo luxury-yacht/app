@@ -6,7 +6,8 @@
  */
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { useObjectActions, type ObjectActionData } from '@shared/hooks/useObjectActions';
+import { type ObjectActionData } from '@shared/hooks/useObjectActions';
+import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { PortForwardModal, type PortForwardTarget } from '@modules/port-forward';
 import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
 import ScaleModal from '@shared/components/modals/ScaleModal';
@@ -103,13 +104,18 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
       [object, hpaManaged]
     );
 
-    // Get menu items from shared hook
-    const menuItems = useObjectActions({
-      object: actionObject,
+    const objectActions = useObjectActionController({
       context: 'object-panel',
-      handlers,
       actionLoading,
+      useDefaultHandlers: false,
+      handlerOverrides: handlers,
     });
+
+    // Get menu items from the centralized action controller.
+    const menuItems = useMemo(
+      () => objectActions.getMenuItems(actionObject),
+      [actionObject, objectActions]
+    );
 
     // Close menu when clicking outside
     useEffect(() => {

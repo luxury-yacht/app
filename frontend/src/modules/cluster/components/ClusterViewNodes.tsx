@@ -26,7 +26,7 @@ import {
   parseCpuToMillicores,
   parseMemToMB,
 } from '@/utils/resourceCalculations';
-import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
+import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useClusterResourceGridTable } from '@shared/hooks/useResourceGridTable';
 import {
   buildRequiredCanonicalObjectRowKey,
@@ -288,11 +288,17 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
       filterOptions: { isNamespaceScoped: false },
     });
 
+    const objectActions = useObjectActionController({
+      context: 'gridtable',
+      useDefaultHandlers: false,
+      onOpen: (object) => openWithObject(object),
+    });
+
     // Get context menu items
     const getRowContextMenuItems = useCallback(
       (row: ClusterNodeRow, _columnKey: string): ContextMenuItem[] => {
-        return buildObjectActionItems({
-          object: buildRequiredObjectReference(
+        return objectActions.getMenuItems(
+          buildRequiredObjectReference(
             {
               kind: 'Node',
               name: row.name,
@@ -300,15 +306,10 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
               clusterName: row.clusterName,
             },
             { fallbackClusterId: selectedClusterId }
-          ),
-          context: 'gridtable',
-          handlers: {
-            onOpen: () => handleNodeClick(row),
-          },
-          permissions: {},
-        });
+          )
+        );
       },
-      [handleNodeClick, selectedClusterId]
+      [objectActions, selectedClusterId]
     );
 
     return (
@@ -330,6 +331,7 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
           getCustomContextMenuItems={getRowContextMenuItems}
           emptyMessage={emptyMessage}
         />
+        {objectActions.modals}
       </>
     );
   }

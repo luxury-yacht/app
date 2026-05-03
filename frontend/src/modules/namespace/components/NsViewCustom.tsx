@@ -13,16 +13,12 @@ import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useShortNames } from '@/hooks/useShortNames';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import * as cf from '@shared/components/tables/columnFactories';
-import React, { useMemo, useState, useCallback } from 'react';
-import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
+import React, { useMemo, useCallback } from 'react';
 import ResourceGridTableView from '@shared/components/tables/ResourceGridTableView';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
-import { DeleteResourceByGVK } from '@wailsjs/go/backend/App';
-import { errorHandler } from '@utils/errorHandler';
-import { getPermissionKey, queryKindPermissions, useUserPermissions } from '@/core/capabilities';
-import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
+import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
 import { useNamespaceResourceGridTable } from '@shared/hooks/useResourceGridTable';
 import {
@@ -101,11 +97,6 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
     const { selectedClusterId } = useKubeconfig();
     const useShortResourceNames = useShortNames();
     const namespaceColumnLink = useNamespaceColumnLink<CustomResourceData>('custom');
-    const permissionMap = useUserPermissions();
-    const [deleteConfirm, setDeleteConfirm] = useState<{
-      show: boolean;
-      resource: CustomResourceData | null;
-    }>({ show: false, resource: null });
 
     const handleResourceClick = useCallback(
       (resource: CustomResourceData) => {
@@ -156,7 +147,14 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
               clusterId: resource.clusterId,
               clusterName: resource.clusterName ?? undefined,
             },
-            { fallbackClusterId: selectedClusterId }
+            { fallbackClusterId: selectedClusterId },
+            {
+              age: resource.age,
+              labels: resource.labels,
+              annotations: resource.annotations,
+              requiresExplicitVersion: true,
+              explicitVersionProvided: Boolean(resource.apiVersion),
+            }
           )
         );
       },
@@ -317,83 +315,17 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
       filterOptions: { isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE },
     });
 
-    const handleDeleteConfirm = useCallback(async () => {
-      if (!deleteConfirm.resource) return;
-      const resource = deleteConfirm.resource;
-      const resolvedKind = resource.kind || resource.kindAlias || 'CustomResource';
-
-      try {
-        // Multi-cluster rule (AGENTS.md): every backend command must
-        // carry a resolved clusterId.
-        const clusterId = resource.clusterId ?? selectedClusterId ?? null;
-        if (!clusterId) {
-          throw new Error(`Cannot delete ${resolvedKind}/${resource.name}: clusterId is missing`);
-        }
-        // CustomResourceData always carries apiGroup/apiVersion from the
-        // catalog. A missing apiVersion here means the upstream data source
-        // dropped it — fail loud rather than fall back to the retired
-        // kind-only resolver (which is first-match-wins across colliding
-        // CRDs).
-        if (!resource.apiVersion) {
-          throw new Error(
-            `Cannot delete ${resolvedKind}/${resource.name}: apiVersion missing on custom resource row`
-          );
-        }
-        const apiVersion = resource.apiGroup
-          ? `${resource.apiGroup}/${resource.apiVersion}`
-          : resource.apiVersion;
-        await DeleteResourceByGVK(
-          clusterId,
-          apiVersion,
-          resolvedKind,
-          resource.namespace,
-          resource.name
-        );
-        setDeleteConfirm({ show: false, resource: null });
-      } catch (error) {
-        errorHandler.handle(error, {
-          action: 'delete',
-          kind: resource.kind,
-          name: resource.name,
-        });
-        setDeleteConfirm({ show: false, resource: null });
-      }
-    }, [deleteConfirm.resource, selectedClusterId]);
+    const objectActions = useObjectActionController({
+      context: 'gridtable',
+      queryMissingPermissions: true,
+      onOpen: (object) => openWithObject(object),
+    });
 
     const getContextMenuItems = useCallback(
       (resource: CustomResourceData): ContextMenuItem[] => {
         const kind = resource.kind || resource.kindAlias || 'CustomResource';
-        const group = resource.apiGroup ?? null;
-        const version = resource.apiVersion ?? null;
-        // Permission lookup carries group/version so two CRDs sharing a
-        // Kind don't share a cache slot. CustomResourceData provides both
-        // fields.
-        const deleteStatus =
-          permissionMap.get(
-            getPermissionKey(
-              kind,
-              'delete',
-              resource.namespace,
-              null,
-              resource.clusterId,
-              group,
-              version
-            )
-          ) ?? null;
-
-        // Lazy-load permissions for CRD kinds not in the static spec lists.
-        if (!deleteStatus) {
-          queryKindPermissions(
-            kind,
-            resource.namespace,
-            resource.clusterId ?? null,
-            group,
-            version
-          );
-        }
-
-        return buildObjectActionItems({
-          object: buildRequiredObjectReference(
+        return objectActions.getMenuItems(
+          buildRequiredObjectReference(
             {
               kind,
               kindAlias: resource.kindAlias,
@@ -404,19 +336,18 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
               group: resource.apiGroup ?? undefined,
               version: resource.apiVersion ?? undefined,
             },
-            { fallbackClusterId: selectedClusterId }
-          ),
-          context: 'gridtable',
-          handlers: {
-            onOpen: () => handleResourceClick(resource),
-            onDelete: () => setDeleteConfirm({ show: true, resource }),
-          },
-          permissions: {
-            delete: deleteStatus,
-          },
-        });
+            { fallbackClusterId: selectedClusterId },
+            {
+              age: resource.age,
+              labels: resource.labels,
+              annotations: resource.annotations,
+              requiresExplicitVersion: true,
+              explicitVersionProvided: Boolean(resource.apiVersion),
+            }
+          )
+        );
       },
-      [handleResourceClick, permissionMap, selectedClusterId]
+      [objectActions, selectedClusterId]
     );
 
     const emptyMessage = useMemo(
@@ -448,16 +379,7 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
           emptyMessage={emptyMessage}
         />
 
-        <ConfirmationModal
-          isOpen={deleteConfirm.show}
-          title={`Delete ${deleteConfirm.resource?.kind || deleteConfirm.resource?.kindAlias || 'Resource'}`}
-          message={`Are you sure you want to delete ${(deleteConfirm.resource?.kind || deleteConfirm.resource?.kindAlias || 'resource').toLowerCase()} "${deleteConfirm.resource?.name}"?\n\nThis action cannot be undone.`}
-          confirmText="Delete"
-          cancelText="Cancel"
-          confirmButtonClass="danger"
-          onConfirm={handleDeleteConfirm}
-          onCancel={() => setDeleteConfirm({ show: false, resource: null })}
-        />
+        {objectActions.modals}
       </>
     );
   }

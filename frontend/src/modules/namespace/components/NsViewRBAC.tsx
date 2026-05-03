@@ -13,17 +13,12 @@ import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useShortNames } from '@/hooks/useShortNames';
 import * as cf from '@shared/components/tables/columnFactories';
-import React, { useMemo, useState, useCallback } from 'react';
-import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
+import React, { useMemo, useCallback } from 'react';
 import ResourceGridTableView from '@shared/components/tables/ResourceGridTableView';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
-import { formatBuiltinApiVersion } from '@shared/constants/builtinGroupVersions';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
-import { DeleteResourceByGVK } from '@wailsjs/go/backend/App';
-import { errorHandler } from '@utils/errorHandler';
-import { getPermissionKey, useUserPermissions } from '@/core/capabilities';
-import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
+import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
 import { useNamespaceResourceGridTable } from '@shared/hooks/useResourceGridTable';
 import {
@@ -91,11 +86,6 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
     const { selectedClusterId } = useKubeconfig();
     const useShortResourceNames = useShortNames();
     const namespaceColumnLink = useNamespaceColumnLink<RBACData>('rbac');
-    const permissionMap = useUserPermissions();
-    const [deleteConfirm, setDeleteConfirm] = useState<{
-      show: boolean;
-      resource: RBACData | null;
-    }>({ show: false, resource: null });
 
     const handleResourceClick = useCallback(
       (resource: RBACData) => {
@@ -214,54 +204,15 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
       diagnosticsLabel,
     });
 
-    const handleDeleteConfirm = useCallback(async () => {
-      if (!deleteConfirm.resource) return;
-      const resource = deleteConfirm.resource;
-
-      try {
-        // Multi-cluster rule (AGENTS.md): every backend command must
-        // carry a resolved clusterId.
-        const clusterId = resource.clusterId ?? selectedClusterId ?? null;
-        if (!clusterId) {
-          throw new Error(`Cannot delete ${resource.kind}/${resource.name}: clusterId is missing`);
-        }
-        // Built-in RBAC kinds (Role/RoleBinding/ServiceAccount) resolve via
-        // the lookup table. A miss means a non-built-in kind slipped into
-        // this view — fail loud.
-        const apiVersion = formatBuiltinApiVersion(resource.kind);
-        if (!apiVersion) {
-          throw new Error(
-            `Cannot delete ${resource.kind}/${resource.name}: not a known built-in kind`
-          );
-        }
-        await DeleteResourceByGVK(
-          clusterId,
-          apiVersion,
-          resource.kind,
-          resource.namespace,
-          resource.name
-        );
-        setDeleteConfirm({ show: false, resource: null });
-      } catch (error) {
-        errorHandler.handle(error, {
-          action: 'delete',
-          kind: resource.kind,
-          name: resource.name,
-        });
-        setDeleteConfirm({ show: false, resource: null });
-      }
-    }, [deleteConfirm.resource, selectedClusterId]);
+    const objectActions = useObjectActionController({
+      context: 'gridtable',
+      onOpen: (object) => openWithObject(object),
+    });
 
     const getContextMenuItems = useCallback(
       (resource: RBACData): ContextMenuItem[] => {
-        const clusterId = resource.clusterId ?? selectedClusterId ?? undefined;
-        const deleteStatus =
-          permissionMap.get(
-            getPermissionKey(resource.kind, 'delete', resource.namespace, null, clusterId)
-          ) ?? null;
-
-        return buildObjectActionItems({
-          object: buildRequiredObjectReference(
+        return objectActions.getMenuItems(
+          buildRequiredObjectReference(
             {
               kind: resource.kind,
               name: resource.name,
@@ -270,18 +221,10 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
               clusterName: resource.clusterName,
             },
             { fallbackClusterId: selectedClusterId }
-          ),
-          context: 'gridtable',
-          handlers: {
-            onOpen: () => handleResourceClick(resource),
-            onDelete: () => setDeleteConfirm({ show: true, resource }),
-          },
-          permissions: {
-            delete: deleteStatus,
-          },
-        });
+          )
+        );
       },
-      [handleResourceClick, permissionMap, selectedClusterId]
+      [objectActions, selectedClusterId]
     );
 
     const emptyMessage = useMemo(
@@ -313,16 +256,7 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
           emptyMessage={emptyMessage}
         />
 
-        <ConfirmationModal
-          isOpen={deleteConfirm.show}
-          title={`Delete ${deleteConfirm.resource?.kind || 'Resource'}`}
-          message={`Are you sure you want to delete ${deleteConfirm.resource?.kind.toLowerCase()} "${deleteConfirm.resource?.name}"?\n\nThis action cannot be undone.`}
-          confirmText="Delete"
-          cancelText="Cancel"
-          confirmButtonClass="danger"
-          onConfirm={handleDeleteConfirm}
-          onCancel={() => setDeleteConfirm({ show: false, resource: null })}
-        />
+        {objectActions.modals}
       </>
     );
   }

@@ -22,7 +22,7 @@ import type { types } from '@wailsjs/go/models';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import '../shared.css';
-import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
+import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useObjectPanelResourceGridTable } from '@shared/hooks/useResourceGridTable';
 import {
   buildRequiredCanonicalObjectRowKey,
@@ -237,6 +237,12 @@ export const JobsTab: React.FC<JobsTabProps> = ({
     },
   });
 
+  const objectActions = useObjectActionController({
+    context: 'gridtable',
+    useDefaultHandlers: false,
+    onOpen: (object) => openWithObject(object),
+  });
+
   return (
     <div className="object-panel-pods">
       <div className="object-panel-pods__table">
@@ -255,8 +261,8 @@ export const JobsTab: React.FC<JobsTabProps> = ({
             onRowClick={handleJobOpen}
             enableContextMenu
             getCustomContextMenuItems={(job) =>
-              buildObjectActionItems({
-                object: buildRequiredObjectReference(
+              objectActions.getMenuItems(
+                buildRequiredObjectReference(
                   {
                     kind: 'Job',
                     name: job.name,
@@ -265,13 +271,8 @@ export const JobsTab: React.FC<JobsTabProps> = ({
                     clusterName: job.clusterName ?? undefined,
                   },
                   { fallbackClusterId: objectData?.clusterId }
-                ),
-                context: 'gridtable',
-                handlers: {
-                  onOpen: () => handleJobOpen(job),
-                },
-                permissions: {},
-              })
+                )
+              )
             }
             tableClassName="gridtable-pods gridtable-pods--namespaced"
             loading={loading && gridTableProps.data.length === 0}
@@ -283,6 +284,7 @@ export const JobsTab: React.FC<JobsTabProps> = ({
           />
         </ResourceLoadingBoundary>
       </div>
+      {objectActions.modals}
     </div>
   );
 };
