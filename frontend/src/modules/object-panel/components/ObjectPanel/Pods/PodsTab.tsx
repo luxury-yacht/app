@@ -295,6 +295,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
     context: 'gridtable',
     useDefaultHandlers: false,
     onOpen: (object) => openWithObject(object),
+    onOpenObjectMap: (object) => openWithObject(object, { initialTab: 'map' }),
   });
 
   return (

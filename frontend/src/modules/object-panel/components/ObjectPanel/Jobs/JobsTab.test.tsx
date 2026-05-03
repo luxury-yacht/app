@@ -190,6 +190,38 @@ describe('JobsTab', () => {
     );
   });
 
+  it('opens the Object Map from the job context menu', () => {
+    const job = makeJob({ name: 'nightly', namespace: 'ops' });
+
+    act(() => {
+      root.render(
+        <JobsTab jobs={[job]} loading={false} isActive={true} clusterId={PANEL_CLUSTER_ID} />
+      );
+    });
+
+    const row = gridTablePropsRef.current.data[0];
+    const objectMapItem = gridTablePropsRef.current
+      .getCustomContextMenuItems(row)
+      .find((item: any) => item.label === 'Object Map');
+    expect(objectMapItem).toBeTruthy();
+
+    act(() => {
+      objectMapItem?.onClick?.();
+    });
+
+    expect(mockOpenWithObject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'Job',
+        name: 'nightly',
+        namespace: 'ops',
+        clusterId: PANEL_CLUSTER_ID,
+        group: 'batch',
+        version: 'v1',
+      }),
+      { initialTab: 'map' }
+    );
+  });
+
   it('uses the shared filter placeholder for the local table filter', () => {
     act(() => {
       root.render(<JobsTab jobs={[]} loading={false} isActive={true} />);

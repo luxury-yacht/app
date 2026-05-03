@@ -241,6 +241,7 @@ export const JobsTab: React.FC<JobsTabProps> = ({
     context: 'gridtable',
     useDefaultHandlers: false,
     onOpen: (object) => openWithObject(object),
+    onOpenObjectMap: (object) => openWithObject(object, { initialTab: 'map' }),
   });
 
   return (

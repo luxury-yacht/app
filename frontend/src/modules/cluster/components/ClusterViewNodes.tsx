@@ -292,6 +292,7 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
       context: 'gridtable',
       useDefaultHandlers: false,
       onOpen: (object) => openWithObject(object),
+      onOpenObjectMap: (object) => openWithObject(object, { initialTab: 'map' }),
     });
 
     // Get context menu items

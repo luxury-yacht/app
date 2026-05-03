@@ -1,13 +1,15 @@
 /**
- * frontend/src/modules/namespace/components/NsViewRBAC.test.tsx
+ * frontend/src/modules/namespace/components/NsViewAutoscaling.test.tsx
  *
- * Test suite for NsViewRBAC.
- * Covers key behaviors and edge cases for NsViewRBAC.
+ * Focused coverage for autoscaling context-menu actions.
  */
 
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import NsViewAutoscaling, {
+  type AutoscalingData,
+} from '@modules/namespace/components/NsViewAutoscaling';
 
 vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
   useNamespaceColumnLink: () => ({
@@ -21,20 +23,14 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: () => ({ selectedKubeconfig: 'path:context', selectedClusterId: 'cluster-a' }),
 }));
 
-import NsViewRBAC, { type RBACData } from '@modules/namespace/components/NsViewRBAC';
-
-const { gridTablePropsRef, confirmationPropsRef, openWithObjectMock, deleteResourceByGVKMock } =
-  vi.hoisted(() => ({
-    gridTablePropsRef: { current: null as any },
-    confirmationPropsRef: { current: null as any },
-    openWithObjectMock: vi.fn(),
-    deleteResourceByGVKMock: vi.fn().mockResolvedValue(undefined),
-  }));
+const { gridTablePropsRef, openWithObjectMock } = vi.hoisted(() => ({
+  gridTablePropsRef: { current: null as any },
+  openWithObjectMock: vi.fn(),
+}));
 
 vi.mock('@core/contexts/FavoritesContext', () => ({
   useFavorites: () => ({
     favorites: [],
-
     addFavorite: vi.fn(),
     updateFavorite: vi.fn(),
     deleteFavorite: vi.fn(),
@@ -62,17 +58,7 @@ vi.mock('@shared/components/tables/GridTable', async () => {
     ...actual,
     default: (props: any) => {
       gridTablePropsRef.current = props;
-      return (
-        <table data-testid="grid-table">
-          <tbody>
-            {props.data.map((row: any, index: number) => (
-              <tr key={index}>
-                <td>{row.name}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      );
+      return <div data-testid="grid-table" />;
     },
   };
 });
@@ -86,14 +72,11 @@ vi.mock('@shared/hooks/useNavigateToView', () => ({
 }));
 
 vi.mock('@shared/components/modals/ConfirmationModal', () => ({
-  default: (props: any) => {
-    confirmationPropsRef.current = props;
-    return null;
-  },
+  default: () => null,
 }));
 
 vi.mock('@wailsjs/go/backend/App', () => ({
-  DeleteResourceByGVK: (...args: unknown[]) => deleteResourceByGVKMock(...args),
+  DeleteResourceByGVK: vi.fn(),
 }));
 
 vi.mock('@/hooks/useTableSort', () => ({
@@ -135,16 +118,11 @@ vi.mock('@shared/components/icons/MenuIcons', () => ({
 }));
 
 vi.mock('@/core/capabilities', () => ({
-  useUserPermissions: () =>
-    new Map([
-      ['Role:delete', { allowed: true, pending: false }],
-      ['RoleBinding:delete', { allowed: true, pending: false }],
-      ['ServiceAccount:delete', { allowed: true, pending: false }],
-    ]),
+  useUserPermissions: () => new Map(),
   getPermissionKey: (kind: string, action: string) => `${kind}:${action}`,
 }));
 
-describe('NsViewRBAC', () => {
+describe('NsViewAutoscaling', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
 
@@ -157,10 +135,7 @@ describe('NsViewRBAC', () => {
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
     gridTablePropsRef.current = null;
-    confirmationPropsRef.current = null;
     openWithObjectMock.mockReset();
-    deleteResourceByGVKMock.mockReset();
-    deleteResourceByGVKMock.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -170,22 +145,27 @@ describe('NsViewRBAC', () => {
     container.remove();
   });
 
-  const baseRBAC = (overrides: Partial<RBACData> = {}): RBACData => ({
-    kind: 'Role',
-    name: 'view',
+  const baseHpa = (overrides: Partial<AutoscalingData> = {}): AutoscalingData => ({
+    kind: 'HorizontalPodAutoscaler',
+    name: 'web',
     namespace: 'team-a',
     clusterId: 'alpha:ctx',
-    rulesCount: 3,
-    age: '5h',
+    target: 'Deployment/web',
+    minReplicas: 1,
+    maxReplicas: 5,
+    currentReplicas: 2,
+    age: '10m',
     ...overrides,
   });
 
-  const renderRBACView = async (rows: RBACData[] = [baseRBAC()]) => {
+  it('opens the Object Map for HorizontalPodAutoscaler rows', async () => {
+    const entry = baseHpa();
+
     await act(async () => {
       root.render(
-        <NsViewRBAC
+        <NsViewAutoscaling
           namespace="team-a"
-          data={rows}
+          data={[entry]}
           loading={false}
           loaded={true}
           showNamespaceColumn={true}
@@ -193,62 +173,8 @@ describe('NsViewRBAC', () => {
       );
       await Promise.resolve();
     });
-    return gridTablePropsRef.current;
-  };
 
-  it('provides open action for RBAC rows', async () => {
-    const entry = baseRBAC();
-    const props = await renderRBACView([entry]);
-    const openItem = props
-      .getCustomContextMenuItems(entry, 'name')
-      .find((item: any) => item.label === 'Open');
-    expect(openItem).toBeTruthy();
-
-    act(() => {
-      openItem?.onClick?.();
-    });
-    expect(openWithObjectMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: 'Role',
-        name: 'view',
-        namespace: 'team-a',
-        clusterId: 'alpha:ctx',
-      })
-    );
-  });
-
-  it('deletes RBAC entries on confirmation', async () => {
-    const entry = baseRBAC();
-    const props = await renderRBACView([entry]);
-
-    const deleteItem = props
-      .getCustomContextMenuItems(entry, 'name')
-      .find((item: any) => item.label === 'Delete');
-    expect(deleteItem).toBeTruthy();
-
-    act(() => {
-      deleteItem?.onClick?.();
-    });
-    expect(confirmationPropsRef.current?.isOpen).toBe(true);
-
-    await act(async () => {
-      await confirmationPropsRef.current?.onConfirm?.();
-    });
-
-    // Role is rbac.authorization.k8s.io/v1, resolved through formatBuiltinApiVersion.
-    expect(deleteResourceByGVKMock).toHaveBeenCalledWith(
-      'alpha:ctx',
-      'rbac.authorization.k8s.io/v1',
-      'Role',
-      'team-a',
-      'view'
-    );
-  });
-
-  it('opens the Object Map for ServiceAccount rows', async () => {
-    const entry = baseRBAC({ kind: 'ServiceAccount', name: 'builder' });
-    const props = await renderRBACView([entry]);
-    const objectMapItem = props
+    const objectMapItem = gridTablePropsRef.current
       .getCustomContextMenuItems(entry, 'name')
       .find((item: any) => item.label === 'Object Map');
     expect(objectMapItem).toBeTruthy();
@@ -259,12 +185,12 @@ describe('NsViewRBAC', () => {
 
     expect(openWithObjectMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        kind: 'ServiceAccount',
-        name: 'builder',
+        kind: 'HorizontalPodAutoscaler',
+        name: 'web',
         namespace: 'team-a',
         clusterId: 'alpha:ctx',
-        group: '',
-        version: 'v1',
+        group: 'autoscaling',
+        version: 'v2',
       }),
       { initialTab: 'map' }
     );

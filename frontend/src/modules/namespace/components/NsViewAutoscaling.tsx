@@ -344,6 +344,7 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
     const objectActions = useObjectActionController({
       context: 'gridtable',
       onOpen: (object) => openWithObject(object),
+      onOpenObjectMap: (object) => openWithObject(object, { initialTab: 'map' }),
     });
 
     const getContextMenuItems = useCallback(

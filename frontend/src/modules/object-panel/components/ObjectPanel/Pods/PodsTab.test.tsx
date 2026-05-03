@@ -19,6 +19,7 @@ const { useTableSortMock } = vi.hoisted(() => ({
     })
   ),
 }));
+const mockOpenWithObject = vi.hoisted(() => vi.fn());
 
 // Track calls to useGridTablePersistence so we can inspect clusterIdentity.
 const gridTablePropsRef: { current: any } = { current: null };
@@ -44,7 +45,7 @@ const SIDEBAR_CLUSTER_ID = 'sidebar-cluster-B';
 // Return a panel-scoped objectData with a specific clusterId.
 vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
   useObjectPanel: () => ({
-    openWithObject: vi.fn(),
+    openWithObject: mockOpenWithObject,
     objectData: {
       clusterId: PANEL_CLUSTER_ID,
       clusterName: 'Panel Cluster A',
@@ -108,6 +109,7 @@ describe('PodsTab', () => {
 
   beforeEach(() => {
     mockUseGridTablePersistence.mockClear();
+    mockOpenWithObject.mockClear();
     gridTablePropsRef.current = null;
     useTableSortMock.mockClear();
     container = document.createElement('div');
@@ -155,6 +157,50 @@ describe('PodsTab', () => {
     });
 
     expect(gridTablePropsRef.current.keyExtractor(pod)).toBe('panel-cluster-A|/v1/Pod/team-a/api');
+  });
+
+  it('opens the Object Map from the pod context menu', () => {
+    const pod = {
+      name: 'api',
+      namespace: 'team-a',
+      clusterId: PANEL_CLUSTER_ID,
+      clusterName: 'Panel Cluster A',
+      ownerKind: 'Deployment',
+      ownerName: 'api',
+      node: 'node-a',
+      status: 'Running',
+      ready: '1/1',
+      restarts: 0,
+      age: '1m',
+    } as any;
+
+    act(() => {
+      root.render(
+        <PodsTab pods={[pod]} metrics={null} loading={false} error={null} isActive={true} />
+      );
+    });
+
+    const objectMapItem = gridTablePropsRef.current
+      .getCustomContextMenuItems(pod)
+      .find((item: any) => item.label === 'Object Map');
+    expect(objectMapItem).toBeTruthy();
+
+    act(() => {
+      objectMapItem?.onClick?.();
+    });
+
+    expect(mockOpenWithObject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'Pod',
+        name: 'api',
+        namespace: 'team-a',
+        clusterId: PANEL_CLUSTER_ID,
+        clusterName: 'Panel Cluster A',
+        group: '',
+        version: 'v1',
+      }),
+      { initialTab: 'map' }
+    );
   });
 
   it('passes rowIdentity into useTableSort for live pod reuse', () => {

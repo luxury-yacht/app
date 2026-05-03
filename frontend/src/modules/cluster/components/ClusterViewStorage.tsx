@@ -272,6 +272,7 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
     const objectActions = useObjectActionController({
       context: 'gridtable',
       onOpen: (object) => openWithObject(object),
+      onOpenObjectMap: (object) => openWithObject(object, { initialTab: 'map' }),
     });
 
     // Get context menu items

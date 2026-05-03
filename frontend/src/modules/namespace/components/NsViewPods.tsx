@@ -168,6 +168,25 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
           )
         );
       },
+      onOpenObjectMap: (object) => {
+        openWithObject(
+          buildRequiredObjectReference(
+            {
+              kind: object.kind,
+              name: object.name,
+              namespace: object.namespace,
+              clusterId: object.clusterId,
+              clusterName: object.clusterName,
+              group: object.group,
+              version: object.version,
+              resource: object.resource,
+              uid: object.uid,
+            },
+            { fallbackClusterId: selectedClusterId }
+          ),
+          { initialTab: 'map' }
+        );
+      },
     });
 
     const handleOwnerOpen = useCallback(
