@@ -44,6 +44,7 @@ export interface ObjectMapG6Palette {
   nodeDimmedOpacity: number;
   tooltipWidth: number;
   tooltipHeight: number;
+  tooltipOffsetY: number;
   tooltipArrowWidth: number;
   tooltipArrowHeight: number;
   tooltipRadius: number;

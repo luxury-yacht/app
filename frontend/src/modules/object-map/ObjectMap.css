@@ -29,12 +29,13 @@
   --object-map-node-dimmed-opacity: 0.25;
   --object-map-tooltip-width: 220;
   --object-map-tooltip-height: 64;
+  --object-map-tooltip-offset-y: 6;
   --object-map-tooltip-arrow-width: 12;
   --object-map-tooltip-arrow-height: 6;
   --object-map-tooltip-radius: 4;
-  --object-map-tooltip-source-y: -46;
-  --object-map-tooltip-relationship-y: -31;
-  --object-map-tooltip-target-y: -16;
+  --object-map-tooltip-source-y: -56;
+  --object-map-tooltip-relationship-y: -40;
+  --object-map-tooltip-target-y: -24;
   --object-map-tooltip-label-max-chars: 38;
   --object-map-tooltip-horizontal-padding: 12;
   --object-map-tooltip-name-font-size: 11;
