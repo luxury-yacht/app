@@ -6,21 +6,6 @@
   min-height: 0;
 }
 
-.map-tab__toolbar {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-sm) var(--spacing-md);
-  border-bottom: var(--border-width) solid var(--color-border);
-  background: var(--color-bg-secondary);
-}
-
-.map-tab__meta {
-  margin-left: auto;
-  color: var(--color-text-secondary);
-  font-size: 0.85rem;
-}
-
 .map-tab__body {
   flex: 1;
   display: flex;

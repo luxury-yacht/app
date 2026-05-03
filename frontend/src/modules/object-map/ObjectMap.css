@@ -37,8 +37,13 @@
   font-weight: 600;
 }
 
-.object-map__toolbar-button:hover {
+.object-map__toolbar-button:hover:not(:disabled) {
   background: var(--button-generic-hover);
+}
+
+.object-map__toolbar-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .object-map__toolbar-meta {
@@ -256,6 +261,54 @@
 .object-map__edge-tooltip-trace {
   font-size: 10px;
   fill: var(--color-text-tertiary);
+}
+
+/* --- Legend overlay (HTML, positioned absolutely over the canvas) -- */
+
+.object-map__legend {
+  position: absolute;
+  top: var(--spacing-md);
+  right: var(--spacing-md);
+  background: var(--color-bg);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  padding: var(--spacing-sm) var(--spacing-md);
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  /* Pan/zoom interactions land on the canvas div behind us; the
+   * legend itself is non-interactive so a click that grazes it doesn't
+   * accidentally start a pan or clear the selection. */
+  pointer-events: none;
+  /* Keep the legend above SVG content but below modals/dropdowns
+   * elsewhere in the app. */
+  z-index: 1;
+}
+
+.object-map__legend-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.object-map__legend-swatch {
+  flex-shrink: 0;
+  /* The edge-style classes set stroke colours via fill:none + stroke;
+   * SVG <line> inside this swatch picks them up automatically. */
+}
+
+.object-map__legend-label {
+  white-space: nowrap;
+  color: var(--color-text);
+}
+
+.object-map__toolbar-button--active {
+  background: var(--color-accent-bg);
+  border-color: var(--color-accent);
+  color: var(--color-accent);
 }
 
 /* --- Banners and warnings (HTML, outside the transformed SVG) ------- */

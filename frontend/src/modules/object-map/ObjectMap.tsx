@@ -37,13 +37,20 @@ import {
   type PositionedEdge,
   type PositionedNode,
 } from './objectMapLayout';
-import { objectMapEdgeClass } from './objectMapEdgeStyle';
+import { objectMapEdgeClass, OBJECT_MAP_EDGE_KINDS } from './objectMapEdgeStyle';
 import { usePanZoom } from './usePanZoom';
 
 export interface ObjectMapProps {
   payload: ObjectMapSnapshotPayload;
   // Forces a refit when bumped — wire to a host's "Reset view" trigger.
   resetToken?: number;
+  // Optional refresh callback. When provided, a "Refresh" button
+  // appears in the toolbar; the host wires it to whatever fetch flow
+  // it owns. Without it, the button is omitted (so the component is
+  // still usable in non-fetching contexts like Storybook).
+  onRefresh?: () => void;
+  // Disables the refresh button while a fetch is in flight.
+  isRefreshing?: boolean;
 }
 
 interface HoverEdge {
@@ -266,7 +273,12 @@ const ObjectMapNodeCard: React.FC<{
   );
 };
 
-const ObjectMap: React.FC<ObjectMapProps> = ({ payload, resetToken = 0 }) => {
+const ObjectMap: React.FC<ObjectMapProps> = ({
+  payload,
+  resetToken = 0,
+  onRefresh,
+  isRefreshing = false,
+}) => {
   const seedId = useMemo(() => {
     const ref = payload.seed;
     const namespace = ref.namespace ?? '';
@@ -344,6 +356,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({ payload, resetToken = 0 }) => {
     [collapseInfo.groupsByCurrentRs, expandedDeployments]
   );
 
+  const [autoFit, setAutoFit] = useState(true);
   const {
     viewport,
     containerRef,
@@ -356,10 +369,25 @@ const ObjectMap: React.FC<ObjectMapProps> = ({ payload, resetToken = 0 }) => {
     resetView,
     isPanning,
     wasDrag,
-  } = usePanZoom(layout.bounds, { resetToken });
+  } = usePanZoom(layout.bounds, { resetToken, autoFit });
 
   const [hoverEdge, setHoverEdge] = useState<HoverEdge | null>(null);
   const [activeNodeId, setActiveNodeId] = useState<string | null>(null);
+  const [showLegend, setShowLegend] = useState(true);
+
+  // Edge types that actually appear in the rendered layout. The legend
+  // filters to this set so the panel stays compact and only mentions
+  // colours the user is currently looking at.
+  const visibleEdgeTypes = useMemo(() => {
+    const types = new Set<string>();
+    layout.edges.forEach((edge) => types.add(edge.type.trim().toLowerCase()));
+    return types;
+  }, [layout.edges]);
+
+  const legendEntries = useMemo(
+    () => OBJECT_MAP_EDGE_KINDS.filter((entry) => visibleEdgeTypes.has(entry.type)),
+    [visibleEdgeTypes]
+  );
 
   // Clear selection if it points at a node that no longer exists (e.g.
   // after a refresh removed it). Layout drives the canonical node set.
@@ -469,13 +497,52 @@ const ObjectMap: React.FC<ObjectMapProps> = ({ payload, resetToken = 0 }) => {
           type="button"
           className="object-map__toolbar-button"
           onClick={resetView}
-          title="Fit to view"
+          title={
+            autoFit
+              ? 'Fit to view (auto-fit is on; turn it off to use this manually)'
+              : 'Fit to view'
+          }
+          disabled={autoFit}
         >
           Fit
         </button>
-        <span className="object-map__toolbar-meta">
-          {layout.nodes.length} nodes · {layout.edges.length} edges
-        </span>
+        <button
+          type="button"
+          className={`object-map__toolbar-button ${
+            autoFit ? 'object-map__toolbar-button--active' : ''
+          }`}
+          onClick={() => setAutoFit((prev) => !prev)}
+          title={
+            autoFit
+              ? 'Auto-fit on (viewport recenters when the graph changes)'
+              : 'Auto-fit off (your pan/zoom is preserved across changes)'
+          }
+          aria-pressed={autoFit}
+        >
+          Auto-fit
+        </button>
+        <button
+          type="button"
+          className={`object-map__toolbar-button ${
+            showLegend ? 'object-map__toolbar-button--active' : ''
+          }`}
+          onClick={() => setShowLegend((prev) => !prev)}
+          title={showLegend ? 'Hide legend' : 'Show legend'}
+          aria-pressed={showLegend}
+        >
+          Legend
+        </button>
+        {onRefresh && (
+          <button
+            type="button"
+            className="object-map__toolbar-button"
+            onClick={onRefresh}
+            title="Refresh"
+            disabled={isRefreshing}
+          >
+            Refresh
+          </button>
+        )}
       </div>
       <div
         ref={containerRef}
@@ -559,6 +626,18 @@ const ObjectMap: React.FC<ObjectMapProps> = ({ payload, resetToken = 0 }) => {
             )}
           </g>
         </svg>
+        {showLegend && legendEntries.length > 0 && (
+          <div className="object-map__legend" role="region" aria-label="Edge color legend">
+            {legendEntries.map((entry) => (
+              <div key={entry.type} className="object-map__legend-row">
+                <svg className="object-map__legend-swatch" width={26} height={6} aria-hidden="true">
+                  <line x1={0} y1={3} x2={26} y2={3} className={objectMapEdgeClass(entry.type)} />
+                </svg>
+                <span className="object-map__legend-label">{entry.label}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
       {payload.truncated && (
         <div className="object-map__banner object-map__banner--truncated">

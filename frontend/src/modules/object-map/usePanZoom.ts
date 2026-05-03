@@ -26,13 +26,18 @@ export interface UsePanZoomOptions {
   minScale?: number;
   maxScale?: number;
   zoomStep?: number;
-  // When the layout bounds change (e.g. a new snapshot arrives), we
-  // recompute a "fit to view" transform once. This token lets the
-  // consumer force a refit (e.g. after the user clicks "Reset view")
-  // without altering the bounds.
+  // Bumping this token forces a one-shot refit, regardless of
+  // `autoFit`. Use it for explicit user actions (Fit button, snapshot
+  // arrival) so the viewport recenters even when the consumer has
+  // disabled auto-fit.
   resetToken?: number;
   // Padding around the laid-out content when fitting to view.
   fitPadding?: number;
+  // When true (default), the viewport recomputes a fit-to-view
+  // transform whenever the layout bounds change. When false, bounds
+  // changes are ignored — the user's manual pan/zoom survives layout
+  // updates, and only `resetToken` bumps trigger a refit.
+  autoFit?: boolean;
 }
 
 const DEFAULTS = {
@@ -103,6 +108,7 @@ export const usePanZoom = (
   const zoomStep = options.zoomStep ?? DEFAULTS.zoomStep;
   const fitPadding = options.fitPadding ?? DEFAULTS.fitPadding;
   const resetToken = options.resetToken ?? 0;
+  const autoFit = options.autoFit ?? true;
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [viewport, setViewport] = useState<PanZoomViewport>({ x: 0, y: 0, scale: 1 });
@@ -118,10 +124,18 @@ export const usePanZoom = (
   // click event that follows pointerup.
   const didDragRef = useRef(false);
 
-  // Refit when the bounds change OR when the consumer forces a reset.
-  // Identity-stability of `bounds` is the consumer's responsibility:
-  // the only caller (ObjectMap) passes `layout.bounds` from a memoized
-  // layout, so the reference is stable when inputs don't change.
+  // Refit when:
+  //   - resetToken bumps (always — explicit user / consumer action)
+  //   - bounds change AND autoFit is on
+  //   - autoFit toggles on (the dep below transitions from null to
+  //     bounds, triggering one refit so the viewport snaps back into
+  //     a sensible position immediately).
+  // The `autoFit ? bounds : null` dep below is the conditional-
+  // reactivity trick: when autoFit is off, fitTrigger is constant
+  // (null) so bounds changes don't re-trigger the effect; when on, it
+  // tracks bounds normally. We keep `bounds` itself out of the dep
+  // array intentionally and silence exhaustive-deps on the effect.
+  const fitTrigger = autoFit ? bounds : null;
   useEffect(() => {
     if (!bounds || !containerRef.current) {
       return;
@@ -131,7 +145,10 @@ export const usePanZoom = (
       return;
     }
     setViewport(computeFit(rect.width, rect.height, bounds, fitPadding, minScale, maxScale));
-  }, [bounds, fitPadding, minScale, maxScale, resetToken]);
+    // bounds is read above but intentionally NOT in deps when autoFit
+    // is off; fitTrigger captures that conditional reactivity for us.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fitTrigger, fitPadding, minScale, maxScale, resetToken]);
 
   const zoomAt = useCallback(
     (cursorX: number, cursorY: number, factor: number) => {

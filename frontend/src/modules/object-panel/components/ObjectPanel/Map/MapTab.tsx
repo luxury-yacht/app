@@ -81,30 +81,25 @@ const MapTab: React.FC<MapTabProps> = ({ objectData, isActive, mapScope }) => {
 
   const payload = snapshot.data as ObjectMapSnapshotPayload | null;
   const loading = isLoadingState(snapshot.status) && !payload;
+  const handleRefresh = useCallback(() => fetchMap('user'), [fetchMap]);
+  // ObjectMap renders the Refresh button; only expose it when we
+  // have a scope to fetch against.
+  const onRefresh = mapScope ? handleRefresh : undefined;
 
   return (
     <div className="object-panel-tab-content map-tab" data-testid="map-tab">
-      <div className="map-tab__toolbar">
-        <button
-          type="button"
-          className="button generic"
-          onClick={() => fetchMap('user')}
-          disabled={!mapScope || isLoadingState(snapshot.status)}
-        >
-          Refresh
-        </button>
-        {payload && (
-          <span className="map-tab__meta">
-            {payload.nodes.length} nodes · {payload.edges.length} edges
-          </span>
-        )}
-      </div>
       <div className="map-tab__body">
         {snapshot.error && !payload && (
           <div className="map-tab__message map-tab__message--error">{snapshot.error}</div>
         )}
         {loading && <div className="map-tab__message">Loading object map…</div>}
-        {payload && <ObjectMap payload={payload} />}
+        {payload && (
+          <ObjectMap
+            payload={payload}
+            onRefresh={onRefresh}
+            isRefreshing={isLoadingState(snapshot.status)}
+          />
+        )}
         {!loading && !payload && !snapshot.error && (
           <div className="map-tab__message">No data yet.</div>
         )}
