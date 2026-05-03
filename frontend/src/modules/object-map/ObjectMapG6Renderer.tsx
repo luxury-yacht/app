@@ -135,7 +135,7 @@ const objectMapG6NodeOptions = (palette: ObjectMapG6Palette) => ({
   state: {
     selected: {
       stroke: palette.accent,
-      lineWidth: palette.nodeSelectedLineWidth,
+      lineWidth: palette.nodeSelectedLineWidth + 1,
       opacity: palette.fullOpacity,
     },
     connected: {
