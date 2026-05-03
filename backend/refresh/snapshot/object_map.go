@@ -901,7 +901,7 @@ func (idx *objectMapIndex) canUseObjectMapEdgeForSeed(seed *objectMapRecord, edg
 
 func canTraverseObjectMapReverse(edgeType string, currentDepth int) bool {
 	switch edgeType {
-	case "owner", "selector", "endpoint", "routes", "scales", "roleRef", "subject", "aggregates":
+	case "owner", "selector", "endpoint", "routes", "scales", "grants", "binds", "aggregates":
 		return true
 	case "uses", "mounts", "storage", "schedules":
 		return currentDepth == 0
@@ -1018,10 +1018,10 @@ func (idx *objectMapIndex) buildAllEdges() []ObjectMapEdge {
 		}
 		if record.clusterRoleBinding != nil {
 			target := idx.clusterRoleBindingRoleRef(record.clusterRoleBinding.RoleRef)
-			add(record, target, "roleRef", "grants", "roleRef")
+			add(record, target, "grants", "grants", "roleRef")
 			for _, subject := range record.clusterRoleBinding.Subjects {
 				target := idx.clusterRoleBindingSubject(subject)
-				add(record, target, "subject", "binds", "subjects")
+				add(record, target, "binds", "binds", "subjects")
 			}
 		}
 		if record.template != nil {

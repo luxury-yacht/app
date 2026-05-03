@@ -280,8 +280,8 @@ func TestObjectMapBuildsFromClusterRole(t *testing.T) {
 	assertNode(t, payload, "ClusterRole", "view")
 	assertNode(t, payload, "ClusterRoleBinding", "admin-binding")
 	assertNode(t, payload, "ServiceAccount", "builder")
-	assertEdge(t, payload, "ClusterRoleBinding", "admin-binding", "ClusterRole", "admin", "roleRef")
-	assertEdge(t, payload, "ClusterRoleBinding", "admin-binding", "ServiceAccount", "builder", "subject")
+	assertEdge(t, payload, "ClusterRoleBinding", "admin-binding", "ClusterRole", "admin", "grants")
+	assertEdge(t, payload, "ClusterRoleBinding", "admin-binding", "ServiceAccount", "builder", "binds")
 	assertEdge(t, payload, "ClusterRole", "admin", "ClusterRole", "view", "aggregates")
 }
 
@@ -302,8 +302,8 @@ func TestObjectMapBuildsFromClusterRoleBinding(t *testing.T) {
 	assertNode(t, payload, "ClusterRoleBinding", "admin-binding")
 	assertNode(t, payload, "ClusterRole", "admin")
 	assertNode(t, payload, "ServiceAccount", "builder")
-	assertEdge(t, payload, "ClusterRoleBinding", "admin-binding", "ClusterRole", "admin", "roleRef")
-	assertEdge(t, payload, "ClusterRoleBinding", "admin-binding", "ServiceAccount", "builder", "subject")
+	assertEdge(t, payload, "ClusterRoleBinding", "admin-binding", "ClusterRole", "admin", "grants")
+	assertEdge(t, payload, "ClusterRoleBinding", "admin-binding", "ServiceAccount", "builder", "binds")
 }
 
 func objectMapFixtureObjects() []runtime.Object {

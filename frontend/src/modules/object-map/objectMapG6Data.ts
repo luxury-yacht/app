@@ -33,6 +33,9 @@ export interface ObjectMapG6Palette {
   edgeMounts: string;
   edgeSchedules: string;
   edgeScales: string;
+  edgeGrants: string;
+  edgeBinds: string;
+  edgeAggregates: string;
   edgeUses: string;
   edgeDefault: string;
   edgeLineWidth: number;
@@ -90,6 +93,12 @@ export const objectMapG6EdgeStroke = (type: string, palette: ObjectMapG6Palette)
       return palette.edgeSchedules;
     case 'scales':
       return palette.edgeScales;
+    case 'grants':
+      return palette.edgeGrants;
+    case 'binds':
+      return palette.edgeBinds;
+    case 'aggregates':
+      return palette.edgeAggregates;
     case 'uses':
       return palette.edgeUses;
     default:

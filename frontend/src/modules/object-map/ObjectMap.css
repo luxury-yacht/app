@@ -15,6 +15,9 @@
   --object-map-edge-mounts: #c084fc;
   --object-map-edge-schedules: var(--badge-green-text);
   --object-map-edge-scales: #eab308;
+  --object-map-edge-grants: var(--badge-orange-text);
+  --object-map-edge-binds: var(--badge-purple-text);
+  --object-map-edge-aggregates: var(--badge-pink-text);
   --object-map-edge-uses: var(--color-text-secondary);
   --object-map-edge-default: var(--color-text-tertiary);
   --object-map-edge-dash-length: 4;
@@ -162,6 +165,7 @@
  *   - Purple family = storage (mounts, storage)
  *   - Green         = scheduling (schedules)
  *   - Yellow        = scaling (scales)
+ *   - Orange/purple/pink = RBAC (grants, binds, aggregates)
  * Plus structural (owner = accent) and reference (uses = gray dashed).
  *
  * Within a family, darker shade = outer/structural, lighter shade =
@@ -204,6 +208,17 @@
 /* Scaling — yellow. */
 .object-map-edge--scales {
   stroke: var(--object-map-edge-scales);
+}
+
+/* RBAC — warm shades. */
+.object-map-edge--grants {
+  stroke: var(--object-map-edge-grants);
+}
+.object-map-edge--binds {
+  stroke: var(--object-map-edge-binds);
+}
+.object-map-edge--aggregates {
+  stroke: var(--object-map-edge-aggregates);
 }
 
 .object-map-edge--uses {
