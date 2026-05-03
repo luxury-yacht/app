@@ -29,7 +29,8 @@ export interface ObjectMapG6Palette {
   textInverse: string;
   edgeRoutes: string;
   edgeEndpoint: string;
-  edgeStorage: string;
+  edgeVolumeBinding: string;
+  edgeStorageClass: string;
   edgeMounts: string;
   edgeSchedules: string;
   edgeScales: string;
@@ -85,8 +86,10 @@ export const objectMapG6EdgeStroke = (type: string, palette: ObjectMapG6Palette)
       return palette.accent;
     case 'endpoint':
       return palette.edgeEndpoint;
-    case 'storage':
-      return palette.edgeStorage;
+    case 'volume-binding':
+      return palette.edgeVolumeBinding;
+    case 'storage-class':
+      return palette.edgeStorageClass;
     case 'mounts':
       return palette.edgeMounts;
     case 'schedules':

@@ -65,7 +65,8 @@ const readPalette = (element: HTMLElement): ObjectMapG6Palette => {
     textInverse: cssColorVar(element, styles, '--color-text-inverse'),
     edgeRoutes: cssColorVar(element, styles, '--object-map-edge-routes'),
     edgeEndpoint: cssColorVar(element, styles, '--object-map-edge-endpoint'),
-    edgeStorage: cssColorVar(element, styles, '--object-map-edge-storage'),
+    edgeVolumeBinding: cssColorVar(element, styles, '--object-map-edge-volume-binding'),
+    edgeStorageClass: cssColorVar(element, styles, '--object-map-edge-storage-class'),
     edgeMounts: cssColorVar(element, styles, '--object-map-edge-mounts'),
     edgeSchedules: cssColorVar(element, styles, '--object-map-edge-schedules'),
     edgeScales: cssColorVar(element, styles, '--object-map-edge-scales'),
@@ -1049,6 +1050,15 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
       },
       fitToView: () => {
         scheduleFitGraphToView();
+      },
+      focusNode: (nodeId: string) => {
+        const graph = graphRef.current;
+        if (!graph || graph.destroyed) return;
+        void graph.focusElement(nodeId, false).catch((error: unknown) => {
+          if (graphRef.current === graph && !graph.destroyed) {
+            console.error('[ObjectMapG6Renderer] Failed to focus node:', error);
+          }
+        });
       },
     };
     onViewportControlsChange(controls);

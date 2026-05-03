@@ -49,7 +49,7 @@ func TestObjectMapBuildsRecursiveCoreRelationships(t *testing.T) {
 	assertEdge(t, payload, "Pod", "web-pod", "ConfigMap", "app-config", "uses")
 	assertEdge(t, payload, "Pod", "web-pod", "Secret", "app-secret", "uses")
 	assertEdge(t, payload, "Pod", "web-pod", "PersistentVolumeClaim", "data", "mounts")
-	assertEdge(t, payload, "PersistentVolumeClaim", "data", "PersistentVolume", "pv-data", "storage")
+	assertEdge(t, payload, "PersistentVolumeClaim", "data", "PersistentVolume", "pv-data", "volume-binding")
 	assertEdge(t, payload, "HorizontalPodAutoscaler", "web", "Deployment", "web", "scales")
 	assertEdge(t, payload, "Ingress", "web", "Service", "web", "routes")
 
@@ -197,13 +197,13 @@ func TestObjectMapBuildsFromStorageClass(t *testing.T) {
 	assertNode(t, payload, "PersistentVolumeClaim", "logs")
 	assertNode(t, payload, "PersistentVolume", "pv-logs")
 	assertNode(t, payload, "PersistentVolumeClaim", "scratch")
-	assertEdge(t, payload, "PersistentVolumeClaim", "data", "PersistentVolume", "pv-data", "storage")
-	assertEdge(t, payload, "PersistentVolume", "pv-data", "StorageClass", "fast", "storage")
-	assertEdge(t, payload, "PersistentVolumeClaim", "logs", "PersistentVolume", "pv-logs", "storage")
-	assertEdge(t, payload, "PersistentVolume", "pv-logs", "StorageClass", "fast", "storage")
-	assertEdge(t, payload, "PersistentVolumeClaim", "scratch", "StorageClass", "fast", "storage")
-	assertMissingEdge(t, payload, "PersistentVolumeClaim", "data", "StorageClass", "fast", "storage")
-	assertMissingEdge(t, payload, "PersistentVolumeClaim", "logs", "StorageClass", "fast", "storage")
+	assertEdge(t, payload, "PersistentVolumeClaim", "data", "PersistentVolume", "pv-data", "volume-binding")
+	assertEdge(t, payload, "PersistentVolume", "pv-data", "StorageClass", "fast", "storage-class")
+	assertEdge(t, payload, "PersistentVolumeClaim", "logs", "PersistentVolume", "pv-logs", "volume-binding")
+	assertEdge(t, payload, "PersistentVolume", "pv-logs", "StorageClass", "fast", "storage-class")
+	assertEdge(t, payload, "PersistentVolumeClaim", "scratch", "StorageClass", "fast", "storage-class")
+	assertMissingEdge(t, payload, "PersistentVolumeClaim", "data", "StorageClass", "fast", "storage-class")
+	assertMissingEdge(t, payload, "PersistentVolumeClaim", "logs", "StorageClass", "fast", "storage-class")
 }
 
 func TestObjectMapDoesNotFanOutThroughSharedStorageClass(t *testing.T) {
@@ -220,12 +220,40 @@ func TestObjectMapDoesNotFanOutThroughSharedStorageClass(t *testing.T) {
 	assertNode(t, payload, "PersistentVolumeClaim", "data")
 	assertNode(t, payload, "PersistentVolume", "pv-data")
 	assertNode(t, payload, "StorageClass", "fast")
-	assertEdge(t, payload, "PersistentVolumeClaim", "data", "PersistentVolume", "pv-data", "storage")
-	assertEdge(t, payload, "PersistentVolume", "pv-data", "StorageClass", "fast", "storage")
-	assertMissingEdge(t, payload, "PersistentVolumeClaim", "data", "StorageClass", "fast", "storage")
+	assertEdge(t, payload, "PersistentVolumeClaim", "data", "PersistentVolume", "pv-data", "volume-binding")
+	assertEdge(t, payload, "PersistentVolume", "pv-data", "StorageClass", "fast", "storage-class")
+	assertMissingEdge(t, payload, "PersistentVolumeClaim", "data", "StorageClass", "fast", "storage-class")
 	assertMissingNode(t, payload, "PersistentVolumeClaim", "logs")
 	assertMissingNode(t, payload, "PersistentVolume", "pv-logs")
 	assertMissingNode(t, payload, "PersistentVolumeClaim", "scratch")
+}
+
+func TestObjectMapReverseTraversalPolicies(t *testing.T) {
+	tests := []struct {
+		name         string
+		edgeType     string
+		currentDepth int
+		want         bool
+	}{
+		{name: "structural relationships can recurse", edgeType: "owner", currentDepth: 5, want: true},
+		{name: "RBAC grants can recurse", edgeType: "grants", currentDepth: 3, want: true},
+		{name: "RBAC subject binds can recurse", edgeType: "binds", currentDepth: 3, want: true},
+		{name: "storage class reverse traversal only starts at seed", edgeType: "storage-class", currentDepth: 0, want: true},
+		{name: "storage class does not fan out beyond seed", edgeType: "storage-class", currentDepth: 1, want: false},
+		{name: "volume binding supports StorageClass to PV to PVC", edgeType: "volume-binding", currentDepth: 1, want: true},
+		{name: "volume binding stops after one hop past PV", edgeType: "volume-binding", currentDepth: 2, want: false},
+		{name: "mounts only reverse from seed", edgeType: "mounts", currentDepth: 0, want: true},
+		{name: "mounts do not fan out beyond seed", edgeType: "mounts", currentDepth: 1, want: false},
+		{name: "unknown relationships do not reverse", edgeType: "unknown", currentDepth: 0, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := canTraverseObjectMapReverse(tt.edgeType, tt.currentDepth); got != tt.want {
+				t.Fatalf("canTraverseObjectMapReverse(%q, %d) = %v, want %v", tt.edgeType, tt.currentDepth, got, tt.want)
+			}
+		})
+	}
 }
 
 func TestObjectMapBuildsFromIngressClass(t *testing.T) {

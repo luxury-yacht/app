@@ -23,7 +23,16 @@ const KINDS: Array<{ kind: string; group: string; version: string; namespace?: s
   { kind: 'Node', group: '', version: 'v1' },
 ];
 
-const EDGE_TYPES = ['owner', 'routes', 'uses', 'mounts', 'storage', 'scales', 'schedules'];
+const EDGE_TYPES = [
+  'owner',
+  'routes',
+  'uses',
+  'mounts',
+  'volume-binding',
+  'storage-class',
+  'scales',
+  'schedules',
+];
 
 const refFor = (index: number): ObjectMapReference => {
   const meta = KINDS[index % KINDS.length];

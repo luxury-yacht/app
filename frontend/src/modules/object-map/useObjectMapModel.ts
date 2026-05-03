@@ -181,6 +181,14 @@ export const useObjectMapModel = (payload: ObjectMapSnapshotPayload) => {
     setActiveNodeId((prev) => (prev === id ? null : id));
   }, []);
 
+  const focusNode = useCallback(
+    (id: string) => {
+      if (!layout.nodes.some((node) => node.id === id)) return;
+      setActiveNodeId(id);
+    },
+    [layout.nodes]
+  );
+
   const startNodeDrag = useCallback((node: PositionedNode, pointer: ObjectMapPointer) => {
     if (pointer.button !== 0) return;
     nodeDragRef.current = {
@@ -258,7 +266,9 @@ export const useObjectMapModel = (payload: ObjectMapSnapshotPayload) => {
     setHoverEdge,
     clearHoverEdge,
     selectionState,
+    activeNodeId,
     selectNode,
+    focusNode,
     toggleGroup,
     startNodeDrag,
     moveNodeDrag,

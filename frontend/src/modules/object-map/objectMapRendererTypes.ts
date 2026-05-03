@@ -56,4 +56,5 @@ export interface ObjectMapViewportControls {
   zoomIn: () => void;
   zoomOut: () => void;
   fitToView: () => void;
+  focusNode: (nodeId: string) => void;
 }

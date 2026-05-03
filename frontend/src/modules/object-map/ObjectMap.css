@@ -11,7 +11,8 @@
   --object-map-edge-routes: #1d4ed8;
   --object-map-edge-selector: var(--badge-blue-text);
   --object-map-edge-endpoint: #60a5fa;
-  --object-map-edge-storage: #7e22ce;
+  --object-map-edge-volume-binding: #7e22ce;
+  --object-map-edge-storage-class: var(--badge-lime-text);
   --object-map-edge-mounts: #c084fc;
   --object-map-edge-schedules: var(--badge-green-text);
   --object-map-edge-scales: #eab308;
@@ -118,6 +119,38 @@
   background: var(--color-border);
 }
 
+.object-map__search {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  height: 28px;
+  margin-right: var(--spacing-xs);
+}
+
+.object-map__search-input {
+  width: 150px;
+  height: 26px;
+  padding: 0 var(--spacing-sm);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  background: var(--color-bg-secondary);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.75rem;
+}
+
+.object-map__search-input:focus {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.object-map__search-count {
+  min-width: 3.5ch;
+  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+  text-align: right;
+}
+
 .object-map__canvas {
   flex: 1;
   position: relative;
@@ -162,7 +195,7 @@
  * by the HTML legend swatches; the G6 renderer reads the same palette
  * mapping in TypeScript for canvas edges.
  *   - Blue family   = network (routes, selector, endpoint)
- *   - Purple family = storage (mounts, storage)
+ *   - Purple/lime family = storage (mounts, volume binding, storage class)
  *   - Green         = scheduling (schedules)
  *   - Yellow        = scaling (scales)
  *   - Orange/purple/pink = RBAC (grants, binds, aggregates)
@@ -172,8 +205,8 @@
  * inner/specific. So the network family reads dark → light as
  * external traffic moves into the cluster: routes (Ingress) →
  * selector (Service→Pod) → endpoint (specific targets). Same for
- * storage: storage (PV binding, deeper) → mounts (Pod-side reference,
- * shallower).
+ * storage: volume binding (PVC→PV, deeper) → mounts (Pod-side
+ * reference, shallower), with storage class as the provisioner link.
  *
  * CSS custom properties above are the source of truth for the HTML
  * legend and the G6 canvas renderer. */
@@ -193,8 +226,11 @@
 }
 
 /* Storage family — purple shades. */
-.object-map-edge--storage {
-  stroke: var(--object-map-edge-storage);
+.object-map-edge--volume-binding {
+  stroke: var(--object-map-edge-volume-binding);
+}
+.object-map-edge--storage-class {
+  stroke: var(--object-map-edge-storage-class);
 }
 .object-map-edge--mounts {
   stroke: var(--object-map-edge-mounts);
@@ -276,19 +312,32 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  /* Pan/zoom interactions land on the canvas div behind us; the
-   * legend itself is non-interactive so a click that grazes it doesn't
-   * accidentally start a pan or clear the selection. */
-  pointer-events: none;
+  pointer-events: auto;
   /* Keep the legend above map content but below modals/dropdowns
    * elsewhere in the app. */
   z-index: 1;
 }
 
 .object-map__legend-row {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.object-map__legend-row:hover {
+  color: var(--color-text);
+}
+
+.object-map__legend-row--disabled {
+  opacity: 0.4;
 }
 
 .object-map__legend-swatch {
@@ -336,6 +385,21 @@
   background: var(--color-accent-bg);
   border-color: var(--color-accent);
   color: var(--color-accent);
+}
+
+.object-map__status {
+  position: absolute;
+  right: var(--spacing-md);
+  bottom: var(--spacing-md);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  background: var(--color-bg);
+  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  z-index: 1;
+  pointer-events: none;
 }
 
 /* --- Banners and warnings ------------------------------------------- */

@@ -52,7 +52,7 @@ describe('filterByDirectionalReachability', () => {
       e('e8', 'pod', 'cm', 'uses'),
       e('e9', 'pod', 'secret', 'uses'),
       e('e10', 'pod', 'pvc', 'mounts'),
-      e('e11', 'pvc', 'pv', 'storage'),
+      e('e11', 'pvc', 'pv', 'volume-binding'),
     ];
 
     const result = filterByDirectionalReachability(nodes, edges, 'node');

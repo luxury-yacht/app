@@ -32,6 +32,115 @@ const (
 	maxObjectMapNodes     = 1000
 )
 
+const (
+	objectMapEdgeOwner         = "owner"
+	objectMapEdgeSelector      = "selector"
+	objectMapEdgeEndpoint      = "endpoint"
+	objectMapEdgeRoutes        = "routes"
+	objectMapEdgeScales        = "scales"
+	objectMapEdgeGrants        = "grants"
+	objectMapEdgeBinds         = "binds"
+	objectMapEdgeAggregates    = "aggregates"
+	objectMapEdgeUses          = "uses"
+	objectMapEdgeMounts        = "mounts"
+	objectMapEdgeSchedules     = "schedules"
+	objectMapEdgeVolumeBinding = "volume-binding"
+	objectMapEdgeStorageClass  = "storage-class"
+)
+
+type objectMapReverseTraversalPolicy int
+
+const (
+	objectMapReverseNever objectMapReverseTraversalPolicy = iota
+	objectMapReverseAnyDepth
+	objectMapReverseSeedOnly
+	objectMapReverseDepthOne
+)
+
+type objectMapRelationship struct {
+	typ             string
+	label           string
+	reversePolicy   objectMapReverseTraversalPolicy
+	defaultTracedBy string
+}
+
+var objectMapRelationships = map[string]objectMapRelationship{
+	objectMapEdgeOwner: {
+		typ:           objectMapEdgeOwner,
+		label:         "owns",
+		reversePolicy: objectMapReverseAnyDepth,
+	},
+	objectMapEdgeSelector: {
+		typ:             objectMapEdgeSelector,
+		label:           "selects",
+		reversePolicy:   objectMapReverseAnyDepth,
+		defaultTracedBy: "spec.selector",
+	},
+	objectMapEdgeEndpoint: {
+		typ:           objectMapEdgeEndpoint,
+		label:         "has endpoints",
+		reversePolicy: objectMapReverseAnyDepth,
+	},
+	objectMapEdgeRoutes: {
+		typ:           objectMapEdgeRoutes,
+		label:         "routes to",
+		reversePolicy: objectMapReverseAnyDepth,
+	},
+	objectMapEdgeScales: {
+		typ:             objectMapEdgeScales,
+		label:           "scales",
+		reversePolicy:   objectMapReverseAnyDepth,
+		defaultTracedBy: "spec.scaleTargetRef",
+	},
+	objectMapEdgeGrants: {
+		typ:             objectMapEdgeGrants,
+		label:           "grants",
+		reversePolicy:   objectMapReverseAnyDepth,
+		defaultTracedBy: "roleRef",
+	},
+	objectMapEdgeBinds: {
+		typ:             objectMapEdgeBinds,
+		label:           "binds",
+		reversePolicy:   objectMapReverseAnyDepth,
+		defaultTracedBy: "subjects",
+	},
+	objectMapEdgeAggregates: {
+		typ:             objectMapEdgeAggregates,
+		label:           "aggregates",
+		reversePolicy:   objectMapReverseAnyDepth,
+		defaultTracedBy: "aggregationRule.clusterRoleSelectors",
+	},
+	objectMapEdgeUses: {
+		typ:           objectMapEdgeUses,
+		label:         "uses",
+		reversePolicy: objectMapReverseSeedOnly,
+	},
+	objectMapEdgeMounts: {
+		typ:             objectMapEdgeMounts,
+		label:           "mounts",
+		reversePolicy:   objectMapReverseSeedOnly,
+		defaultTracedBy: "volumes",
+	},
+	objectMapEdgeSchedules: {
+		typ:             objectMapEdgeSchedules,
+		label:           "scheduled on",
+		reversePolicy:   objectMapReverseSeedOnly,
+		defaultTracedBy: "spec.nodeName",
+	},
+	objectMapEdgeVolumeBinding: {
+		typ:             objectMapEdgeVolumeBinding,
+		label:           "binds volume",
+		reversePolicy:   objectMapReverseDepthOne,
+		defaultTracedBy: "spec.volumeName",
+	},
+	objectMapEdgeStorageClass: {
+		typ:             objectMapEdgeStorageClass,
+		label:           "uses class",
+		reversePolicy:   objectMapReverseSeedOnly,
+		defaultTracedBy: "spec.storageClassName",
+	},
+}
+
 // ObjectMapReference is the canonical identity for a graph node.
 type ObjectMapReference struct {
 	ClusterID   string `json:"clusterId"`
@@ -896,16 +1005,20 @@ func (idx *objectMapIndex) canUseObjectMapEdgeForSeed(seed *objectMapRecord, edg
 	}
 	source := idx.records[edge.Source]
 	target := idx.records[edge.Target]
-	return edge.Type == "uses" && source != nil && target != nil && isIngressRef(source.ref) && isIngressClassRef(target.ref)
+	return edge.Type == objectMapEdgeUses && source != nil && target != nil && isIngressRef(source.ref) && isIngressClassRef(target.ref)
 }
 
 func canTraverseObjectMapReverse(edgeType string, currentDepth int) bool {
-	switch edgeType {
-	case "owner", "selector", "endpoint", "routes", "scales", "grants", "binds", "aggregates":
+	relationship, ok := objectMapRelationships[edgeType]
+	if !ok {
+		return false
+	}
+	switch relationship.reversePolicy {
+	case objectMapReverseAnyDepth:
 		return true
-	case "storage":
+	case objectMapReverseDepthOne:
 		return currentDepth <= 1
-	case "uses", "mounts", "schedules":
+	case objectMapReverseSeedOnly:
 		return currentDepth == 0
 	default:
 		return false
@@ -956,17 +1069,19 @@ func (idx *objectMapIndex) buildAllEdges() []ObjectMapEdge {
 	for _, record := range idx.records {
 		for _, owner := range record.owners {
 			ownerRecord := idx.resolveOwner(record, owner)
-			add(ownerRecord, record, "owner", "owns", owner.Name)
+			add(ownerRecord, record, objectMapEdgeOwner, objectMapRelationships[objectMapEdgeOwner].label, owner.Name)
 		}
 	}
 
 	for _, record := range idx.records {
 		if record.service != nil {
 			for _, pod := range idx.matchingPods(record.ref.Namespace, record.service.Spec.Selector) {
-				add(record, pod, "selector", "selects", "spec.selector")
+				relationship := objectMapRelationships[objectMapEdgeSelector]
+				add(record, pod, relationship.typ, relationship.label, relationship.defaultTracedBy)
 			}
 			for _, slice := range idx.endpointSlicesForService(record.ref.Namespace, record.ref.Name) {
-				add(record, slice, "endpoint", "has endpoints", discoveryv1.LabelServiceName)
+				relationship := objectMapRelationships[objectMapEdgeEndpoint]
+				add(record, slice, relationship.typ, relationship.label, discoveryv1.LabelServiceName)
 			}
 		}
 		if record.slice != nil {
@@ -975,7 +1090,7 @@ func (idx *objectMapIndex) buildAllEdges() []ObjectMapEdge {
 					continue
 				}
 				target := idx.resolveCoreObjectRef(record.ref.Namespace, endpoint.TargetRef)
-				add(record, target, "endpoint", "routes to", "endpoints.targetRef")
+				add(record, target, objectMapEdgeEndpoint, "routes to", "endpoints.targetRef")
 			}
 		}
 		if record.pod != nil {
@@ -983,24 +1098,28 @@ func (idx *objectMapIndex) buildAllEdges() []ObjectMapEdge {
 		}
 		if record.pvc != nil && record.pvc.Spec.VolumeName != "" {
 			target := idx.findCore("", "v1", "PersistentVolume", record.pvc.Spec.VolumeName)
-			add(record, target, "storage", "binds", "spec.volumeName")
+			relationship := objectMapRelationships[objectMapEdgeVolumeBinding]
+			add(record, target, relationship.typ, relationship.label, relationship.defaultTracedBy)
 		}
 		if record.pvc != nil && record.pvc.Spec.VolumeName == "" && record.pvc.Spec.StorageClassName != nil && *record.pvc.Spec.StorageClassName != "" {
 			target := idx.findStorageClass(*record.pvc.Spec.StorageClassName)
-			add(record, target, "storage", "uses class", "spec.storageClassName")
+			relationship := objectMapRelationships[objectMapEdgeStorageClass]
+			add(record, target, relationship.typ, relationship.label, relationship.defaultTracedBy)
 		}
 		if record.pv != nil && record.pv.Spec.StorageClassName != "" {
 			target := idx.findStorageClass(record.pv.Spec.StorageClassName)
-			add(record, target, "storage", "uses class", "spec.storageClassName")
+			relationship := objectMapRelationships[objectMapEdgeStorageClass]
+			add(record, target, relationship.typ, relationship.label, relationship.defaultTracedBy)
 		}
 		if record.ingress != nil {
 			if className, tracedBy := ingressClassName(record.ingress); className != "" {
 				target := idx.findIngressClass(className)
-				add(record, target, "uses", "uses class", tracedBy)
+				add(record, target, objectMapEdgeUses, "uses class", tracedBy)
 			}
 			for _, serviceName := range ingressBackendServices(record.ingress) {
 				target := idx.findCore(record.ref.Namespace, "v1", "Service", serviceName)
-				add(record, target, "routes", "routes to", "spec.backend.service")
+				relationship := objectMapRelationships[objectMapEdgeRoutes]
+				add(record, target, relationship.typ, relationship.label, "spec.backend.service")
 			}
 		}
 		if record.hpa != nil {
@@ -1009,21 +1128,25 @@ func (idx *objectMapIndex) buildAllEdges() []ObjectMapEdge {
 				continue
 			}
 			target := idx.byIdent[objectMapIdentityKey(record.ref.Namespace, gv.Group, gv.Version, record.hpa.Spec.ScaleTargetRef.Kind, record.hpa.Spec.ScaleTargetRef.Name)]
-			add(record, target, "scales", "scales", "spec.scaleTargetRef")
+			relationship := objectMapRelationships[objectMapEdgeScales]
+			add(record, target, relationship.typ, relationship.label, relationship.defaultTracedBy)
 		}
 		if record.clusterRole != nil && record.clusterRole.AggregationRule != nil {
 			for _, selector := range record.clusterRole.AggregationRule.ClusterRoleSelectors {
 				for _, target := range idx.clusterRolesMatchingSelector(selector) {
-					add(record, target, "aggregates", "aggregates", "aggregationRule.clusterRoleSelectors")
+					relationship := objectMapRelationships[objectMapEdgeAggregates]
+					add(record, target, relationship.typ, relationship.label, relationship.defaultTracedBy)
 				}
 			}
 		}
 		if record.clusterRoleBinding != nil {
 			target := idx.clusterRoleBindingRoleRef(record.clusterRoleBinding.RoleRef)
-			add(record, target, "grants", "grants", "roleRef")
+			relationship := objectMapRelationships[objectMapEdgeGrants]
+			add(record, target, relationship.typ, relationship.label, relationship.defaultTracedBy)
 			for _, subject := range record.clusterRoleBinding.Subjects {
 				target := idx.clusterRoleBindingSubject(subject)
-				add(record, target, "binds", "binds", "subjects")
+				relationship := objectMapRelationships[objectMapEdgeBinds]
+				add(record, target, relationship.typ, relationship.label, relationship.defaultTracedBy)
 			}
 		}
 		if record.template != nil {
@@ -1044,13 +1167,15 @@ func (idx *objectMapIndex) buildAllEdges() []ObjectMapEdge {
 func (idx *objectMapIndex) addPodEdges(record *objectMapRecord, add func(*objectMapRecord, *objectMapRecord, string, string, string)) {
 	pod := record.pod
 	if pod.Spec.NodeName != "" {
-		add(record, idx.findCore("", "v1", "Node", pod.Spec.NodeName), "schedules", "scheduled on", "spec.nodeName")
+		relationship := objectMapRelationships[objectMapEdgeSchedules]
+		add(record, idx.findCore("", "v1", "Node", pod.Spec.NodeName), relationship.typ, relationship.label, relationship.defaultTracedBy)
 	}
 	serviceAccount := pod.Spec.ServiceAccountName
 	if serviceAccount == "" {
 		serviceAccount = "default"
 	}
-	add(record, idx.findCore(record.ref.Namespace, "v1", "ServiceAccount", serviceAccount), "uses", "uses", "spec.serviceAccountName")
+	relationship := objectMapRelationships[objectMapEdgeUses]
+	add(record, idx.findCore(record.ref.Namespace, "v1", "ServiceAccount", serviceAccount), relationship.typ, relationship.label, "spec.serviceAccountName")
 	for _, volume := range pod.Spec.Volumes {
 		idx.addVolumeEdges(record, record.ref.Namespace, volume, add)
 	}
@@ -1065,7 +1190,8 @@ func (idx *objectMapIndex) addPodTemplateEdges(record *objectMapRecord, tpl *cor
 	}
 	serviceAccount := tpl.Spec.ServiceAccountName
 	if serviceAccount != "" {
-		add(record, idx.findCore(record.ref.Namespace, "v1", "ServiceAccount", serviceAccount), "uses", "uses", "template.spec.serviceAccountName")
+		relationship := objectMapRelationships[objectMapEdgeUses]
+		add(record, idx.findCore(record.ref.Namespace, "v1", "ServiceAccount", serviceAccount), relationship.typ, relationship.label, "template.spec.serviceAccountName")
 	}
 	for _, volume := range tpl.Spec.Volumes {
 		idx.addVolumeEdges(record, record.ref.Namespace, volume, add)
@@ -1077,23 +1203,28 @@ func (idx *objectMapIndex) addPodTemplateEdges(record *objectMapRecord, tpl *cor
 
 func (idx *objectMapIndex) addVolumeEdges(record *objectMapRecord, namespace string, volume corev1.Volume, add func(*objectMapRecord, *objectMapRecord, string, string, string)) {
 	if volume.ConfigMap != nil && volume.ConfigMap.Name != "" {
-		add(record, idx.findCore(namespace, "v1", "ConfigMap", volume.ConfigMap.Name), "uses", "uses", "volume.configMap")
+		relationship := objectMapRelationships[objectMapEdgeUses]
+		add(record, idx.findCore(namespace, "v1", "ConfigMap", volume.ConfigMap.Name), relationship.typ, relationship.label, "volume.configMap")
 	}
 	if volume.Secret != nil && volume.Secret.SecretName != "" {
-		add(record, idx.findCore(namespace, "v1", "Secret", volume.Secret.SecretName), "uses", "uses", "volume.secret")
+		relationship := objectMapRelationships[objectMapEdgeUses]
+		add(record, idx.findCore(namespace, "v1", "Secret", volume.Secret.SecretName), relationship.typ, relationship.label, "volume.secret")
 	}
 	if volume.PersistentVolumeClaim != nil && volume.PersistentVolumeClaim.ClaimName != "" {
-		add(record, idx.findCore(namespace, "v1", "PersistentVolumeClaim", volume.PersistentVolumeClaim.ClaimName), "mounts", "mounts", "volume.persistentVolumeClaim")
+		relationship := objectMapRelationships[objectMapEdgeMounts]
+		add(record, idx.findCore(namespace, "v1", "PersistentVolumeClaim", volume.PersistentVolumeClaim.ClaimName), relationship.typ, relationship.label, "volume.persistentVolumeClaim")
 	}
 }
 
 func (idx *objectMapIndex) addContainerEdges(record *objectMapRecord, namespace string, container corev1.Container, add func(*objectMapRecord, *objectMapRecord, string, string, string)) {
 	for _, envFrom := range container.EnvFrom {
 		if envFrom.ConfigMapRef != nil && envFrom.ConfigMapRef.Name != "" {
-			add(record, idx.findCore(namespace, "v1", "ConfigMap", envFrom.ConfigMapRef.Name), "uses", "uses", "envFrom.configMapRef")
+			relationship := objectMapRelationships[objectMapEdgeUses]
+			add(record, idx.findCore(namespace, "v1", "ConfigMap", envFrom.ConfigMapRef.Name), relationship.typ, relationship.label, "envFrom.configMapRef")
 		}
 		if envFrom.SecretRef != nil && envFrom.SecretRef.Name != "" {
-			add(record, idx.findCore(namespace, "v1", "Secret", envFrom.SecretRef.Name), "uses", "uses", "envFrom.secretRef")
+			relationship := objectMapRelationships[objectMapEdgeUses]
+			add(record, idx.findCore(namespace, "v1", "Secret", envFrom.SecretRef.Name), relationship.typ, relationship.label, "envFrom.secretRef")
 		}
 	}
 	for _, env := range container.Env {
@@ -1101,10 +1232,12 @@ func (idx *objectMapIndex) addContainerEdges(record *objectMapRecord, namespace 
 			continue
 		}
 		if env.ValueFrom.ConfigMapKeyRef != nil && env.ValueFrom.ConfigMapKeyRef.Name != "" {
-			add(record, idx.findCore(namespace, "v1", "ConfigMap", env.ValueFrom.ConfigMapKeyRef.Name), "uses", "uses", "env.configMapKeyRef")
+			relationship := objectMapRelationships[objectMapEdgeUses]
+			add(record, idx.findCore(namespace, "v1", "ConfigMap", env.ValueFrom.ConfigMapKeyRef.Name), relationship.typ, relationship.label, "env.configMapKeyRef")
 		}
 		if env.ValueFrom.SecretKeyRef != nil && env.ValueFrom.SecretKeyRef.Name != "" {
-			add(record, idx.findCore(namespace, "v1", "Secret", env.ValueFrom.SecretKeyRef.Name), "uses", "uses", "env.secretKeyRef")
+			relationship := objectMapRelationships[objectMapEdgeUses]
+			add(record, idx.findCore(namespace, "v1", "Secret", env.ValueFrom.SecretKeyRef.Name), relationship.typ, relationship.label, "env.secretKeyRef")
 		}
 	}
 }

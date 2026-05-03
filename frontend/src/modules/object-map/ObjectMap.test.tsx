@@ -385,6 +385,58 @@ describe('ObjectMap', () => {
     cleanup();
   });
 
+  it('filters relationships from the legend without removing objects', async () => {
+    const { container, cleanup } = await renderObjectMap();
+    const ownerToggle = Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(
+      (button) => button.textContent === 'Ownership'
+    );
+
+    expect(ownerToggle).toBeTruthy();
+    expect(container.querySelector('[data-testid="mock-edge-edge-1"]')).toBeTruthy();
+    expect(container.querySelector('[aria-label="Deployment: web"]')).toBeTruthy();
+    expect(container.querySelector('[aria-label="Pod: web-abc"]')).toBeTruthy();
+
+    await act(async () => {
+      ownerToggle!.click();
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('[data-testid="mock-edge-edge-1"]')).toBeNull();
+    expect(container.querySelector('[aria-label="Deployment: web"]')).toBeTruthy();
+    expect(container.querySelector('[aria-label="Pod: web-abc"]')).toBeTruthy();
+    expect(container.querySelector('.object-map__status')?.textContent).toContain(
+      '2 objects / 0 relationships'
+    );
+
+    cleanup();
+  });
+
+  it('searches and focuses matching objects', async () => {
+    const { container, cleanup } = await renderObjectMap();
+    const search = container.querySelector<HTMLInputElement>('[aria-label="Search map objects"]');
+    const podNode = container.querySelector<HTMLElement>('[data-testid="mock-node-pod"]');
+
+    expect(search).toBeTruthy();
+    expect(podNode?.dataset.active).toBe('false');
+
+    await act(async () => {
+      const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+      valueSetter!.call(search, 'web-abc');
+      search!.dispatchEvent(new InputEvent('input', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      search!.form!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+    });
+
+    expect(podNode?.dataset.active).toBe('true');
+    expect(container.querySelector('.object-map__search-count')?.textContent).toBe('1/1');
+
+    cleanup();
+  });
+
   it('passes full object references for modifier-click actions', async () => {
     const onOpenPanel = vi.fn();
     const onNavigateView = vi.fn();
@@ -572,6 +624,9 @@ describe('ObjectMap', () => {
     );
     expect(warned.container.querySelector('.object-map__warnings')?.textContent).toContain(
       'permission denied for secrets'
+    );
+    expect(warned.container.querySelector('.object-map__status')?.textContent).toContain(
+      '2 objects / 1 relationships / truncated'
     );
 
     warned.cleanup();
