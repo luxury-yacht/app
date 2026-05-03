@@ -1,4 +1,4 @@
-import { Graph, CanvasEvent, EdgeEvent, GraphEvent, NodeEvent } from '@antv/g6';
+import { Graph, CanvasEvent, CommonEvent, EdgeEvent, GraphEvent, NodeEvent } from '@antv/g6';
 import type { EdgeData, GraphData, NodeData } from '@antv/g6';
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ObjectMapReference } from '@core/refresh/types';
@@ -89,32 +89,73 @@ type G6ElementPointerEvent = {
   originalTarget?: G6DisplayObjectTarget | null;
   pointerId?: number;
   button?: number;
-  clientX: number;
-  clientY: number;
+  client?: { x: number; y: number };
+  canvas?: { x: number; y: number };
+  nativeEvent?: {
+    pointerId?: number;
+    button?: number;
+    clientX?: number;
+    clientY?: number;
+  };
+  clientX?: number;
+  clientY?: number;
   metaKey?: boolean;
   ctrlKey?: boolean;
   altKey?: boolean;
 };
 
-const toObjectMapPointer = (event: G6ElementPointerEvent, graph?: Graph) => {
-  if (!graph || graph.destroyed) {
-    return {
-      pointerId: event.pointerId ?? 1,
-      button: event.button ?? 0,
-      clientX: event.clientX,
-      clientY: event.clientY,
-    };
-  }
-  const [layoutX, layoutY] = graph.getCanvasByClient([event.clientX, event.clientY]);
+type ObjectMapPointerInput = {
+  pointerId?: number;
+  button?: number;
+  client?: { x: number; y: number };
+  canvas?: { x: number; y: number };
+  nativeEvent?: {
+    pointerId?: number;
+    button?: number;
+    clientX?: number;
+    clientY?: number;
+  };
+  clientX?: number;
+  clientY?: number;
+};
+
+const eventPointerId = (event: ObjectMapPointerInput): number =>
+  event.pointerId ?? event.nativeEvent?.pointerId ?? 1;
+
+const eventButton = (event: ObjectMapPointerInput): number =>
+  event.button ?? event.nativeEvent?.button ?? 0;
+
+const eventClientPoint = (event: ObjectMapPointerInput): { x: number; y: number } => ({
+  x: event.clientX ?? event.client?.x ?? event.nativeEvent?.clientX ?? 0,
+  y: event.clientY ?? event.client?.y ?? event.nativeEvent?.clientY ?? 0,
+});
+
+const layoutPoint = (
+  point: Float32Array | number[] | { x: number; y: number } | null
+): { x?: number; y?: number } => {
+  if (!point) return {};
+  if ('x' in point) return { x: point.x, y: point.y };
+  return { x: point[0], y: point[1] };
+};
+
+const toObjectMapPointerInput = (event: ObjectMapPointerInput, graph?: Graph) => {
+  const client = eventClientPoint(event);
+  const layout = layoutPoint(
+    event.canvas ??
+      (!graph || graph.destroyed ? null : graph.getCanvasByClient([client.x, client.y]))
+  );
   return {
-    pointerId: event.pointerId ?? 1,
-    button: event.button ?? 0,
-    clientX: event.clientX,
-    clientY: event.clientY,
-    layoutX,
-    layoutY,
+    pointerId: eventPointerId(event),
+    button: eventButton(event),
+    clientX: client.x,
+    clientY: client.y,
+    layoutX: layout.x,
+    layoutY: layout.y,
   };
 };
+
+const toObjectMapPointer = (event: G6ElementPointerEvent, graph?: Graph) =>
+  toObjectMapPointerInput(event, graph);
 
 const isBadgeEvent = (event: G6ElementPointerEvent): boolean => {
   let target = event.originalTarget;
@@ -294,6 +335,7 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
   const graphRef = useRef<Graph | null>(null);
   const hoverEdgeRef = useRef(hoverEdge);
   const ignoreNextCanvasClickRef = useRef(false);
+  const manualDragPointerIdRef = useRef<number | null>(null);
   const selectionApplyRef = useRef<{
     version: number;
     applying: boolean;
@@ -489,6 +531,19 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
     });
     graphRef.current = graph;
 
+    const moveManualNodeDrag = (event: ObjectMapPointerInput) => {
+      const pointerId = eventPointerId(event);
+      if (manualDragPointerIdRef.current !== pointerId) return;
+      handlersRef.current.onNodeDragMove(toObjectMapPointerInput(event, graph));
+    };
+
+    const endManualNodeDrag = (event: ObjectMapPointerInput) => {
+      const pointerId = eventPointerId(event);
+      if (manualDragPointerIdRef.current !== pointerId) return;
+      handlersRef.current.onNodeDragEnd(toObjectMapPointerInput(event, graph));
+      manualDragPointerIdRef.current = null;
+    };
+
     graph.on(NodeEvent.CLICK, (rawEvent) => {
       const event = rawEvent as G6ElementPointerEvent;
       const id = event.target.id;
@@ -516,21 +571,21 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
       onSelectNode(id);
     });
 
-    graph.on(NodeEvent.DRAG_START, (rawEvent) => {
+    graph.on(NodeEvent.POINTER_DOWN, (rawEvent) => {
       const event = rawEvent as G6ElementPointerEvent;
+      if (eventButton(event) !== 0 || isBadgeEvent(event)) return;
       const node = findNode(layoutRef.current, event.target.id);
       if (!node) return;
+      manualDragPointerIdRef.current = eventPointerId(event);
       handlersRef.current.onNodeDragStart(node, toObjectMapPointer(event, graph));
     });
 
-    graph.on(NodeEvent.DRAG, (rawEvent) => {
-      const event = rawEvent as G6ElementPointerEvent;
-      handlersRef.current.onNodeDragMove(toObjectMapPointer(event, graph));
+    graph.on(CommonEvent.DRAG, (rawEvent) => {
+      moveManualNodeDrag(rawEvent as G6ElementPointerEvent);
     });
 
-    graph.on(NodeEvent.DRAG_END, (rawEvent) => {
-      const event = rawEvent as G6ElementPointerEvent;
-      handlersRef.current.onNodeDragEnd(toObjectMapPointer(event, graph));
+    graph.on(CommonEvent.DRAG_END, (rawEvent) => {
+      endManualNodeDrag(rawEvent as G6ElementPointerEvent);
     });
 
     graph.on(EdgeEvent.POINTER_ENTER, (rawEvent) => {
@@ -567,6 +622,7 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
     return () => {
       graph.destroy();
       graphRef.current = null;
+      manualDragPointerIdRef.current = null;
       renderedDataRef.current = null;
       selectionApply.latest = null;
       selectionApply.applying = false;
