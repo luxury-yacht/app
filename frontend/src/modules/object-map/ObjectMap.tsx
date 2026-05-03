@@ -25,7 +25,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './ObjectMap.css';
-import type { ObjectMapSnapshotPayload } from '@core/refresh/types';
+import type { ObjectMapReference, ObjectMapSnapshotPayload } from '@core/refresh/types';
 import {
   computeCollapseInfo,
   filterByCollapseInfo,
@@ -62,6 +62,11 @@ export interface ObjectMapProps {
   onRefresh?: () => void;
   // Disables the refresh button while a fetch is in flight.
   isRefreshing?: boolean;
+  // Modifier-click handlers. Cmd-click (mac) / Ctrl-click (other) on
+  // a node fires `onOpenPanel`; Alt-click fires `onNavigateView`. Both
+  // are optional — when omitted the modifier click silently no-ops.
+  onOpenPanel?: (ref: ObjectMapReference) => void;
+  onNavigateView?: (ref: ObjectMapReference) => void;
 }
 
 interface HoverEdge {
@@ -174,15 +179,40 @@ const ObjectMapNodeCard: React.FC<{
   onDragStart: (node: PositionedNode, event: React.PointerEvent<SVGGElement>) => void;
   onDragMove: (event: React.PointerEvent<SVGGElement>) => void;
   onDragEnd: (event: React.PointerEvent<SVGGElement>) => void;
-}> = ({ node, className, badge, onSelect, onToggleGroup, onDragStart, onDragMove, onDragEnd }) => {
+  onOpenPanel?: (ref: ObjectMapReference) => void;
+  onNavigateView?: (ref: ObjectMapReference) => void;
+}> = ({
+  node,
+  className,
+  badge,
+  onSelect,
+  onToggleGroup,
+  onDragStart,
+  onDragMove,
+  onDragEnd,
+  onOpenPanel,
+  onNavigateView,
+}) => {
   const handleClick = useCallback(
     (event: React.MouseEvent<SVGGElement>) => {
       // Stop the SVG-level "background click clears selection" handler
       // from firing for clicks that landed on a node.
       event.stopPropagation();
+      // Cmd-click (mac) / Ctrl-click (other) opens the object's panel;
+      // Alt-click navigates to the related view (mirrors the alt-click
+      // convention on object-panel links elsewhere in the app). Plain
+      // click toggles the highlight selection.
+      if (event.metaKey || event.ctrlKey) {
+        if (onOpenPanel) onOpenPanel(node.ref);
+        return;
+      }
+      if (event.altKey) {
+        if (onNavigateView) onNavigateView(node.ref);
+        return;
+      }
       onSelect(node.id);
     },
-    [node.id, onSelect]
+    [node, onSelect, onOpenPanel, onNavigateView]
   );
 
   const handleKeyDown = useCallback(
@@ -314,6 +344,8 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
   resetToken = 0,
   onRefresh,
   isRefreshing = false,
+  onOpenPanel,
+  onNavigateView,
 }) => {
   const seedId = useMemo(() => {
     const ref = payload.seed;
@@ -685,6 +717,8 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
                   onDragStart={handleNodeDragStart}
                   onDragMove={handleNodeDragMove}
                   onDragEnd={handleNodeDragEnd}
+                  onOpenPanel={onOpenPanel}
+                  onNavigateView={onNavigateView}
                 />
               ))}
             </g>
@@ -756,6 +790,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
           >
             <ZoomInIcon />
           </button>
+          <span className="object-map__toolbar-separator" aria-hidden="true" />
           <button
             type="button"
             className="object-map__toolbar-button"
@@ -769,16 +804,6 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
             disabled={autoFit}
           >
             <FitToViewIcon />
-          </button>
-          <button
-            type="button"
-            className="object-map__toolbar-button"
-            onClick={handleResetLayout}
-            title="Reset layout"
-            aria-label="Reset layout"
-            disabled={nodePositionOverrides.size === 0}
-          >
-            <ResetFiltersIcon />
           </button>
           <button
             type="button"
@@ -798,16 +823,15 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
           </button>
           <button
             type="button"
-            className={`object-map__toolbar-button ${
-              showLegend ? 'object-map__toolbar-button--active' : ''
-            }`}
-            onClick={() => setShowLegend((prev) => !prev)}
-            title={showLegend ? 'Hide legend' : 'Show legend'}
-            aria-label="Toggle legend"
-            aria-pressed={showLegend}
+            className="object-map__toolbar-button"
+            onClick={handleResetLayout}
+            title="Reset layout"
+            aria-label="Reset layout"
+            disabled={nodePositionOverrides.size === 0}
           >
-            <LegendIcon />
+            <ResetFiltersIcon />
           </button>
+          <span className="object-map__toolbar-separator" aria-hidden="true" />
           {onRefresh && (
             <button
               type="button"
@@ -820,6 +844,18 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
               <RefreshIcon />
             </button>
           )}
+          <button
+            type="button"
+            className={`object-map__toolbar-button ${
+              showLegend ? 'object-map__toolbar-button--active' : ''
+            }`}
+            onClick={() => setShowLegend((prev) => !prev)}
+            title={showLegend ? 'Hide legend' : 'Show legend'}
+            aria-label="Toggle legend"
+            aria-pressed={showLegend}
+          >
+            <LegendIcon />
+          </button>
         </div>
         {showLegend && legendEntries.length > 0 && (
           <div className="object-map__legend" role="region" aria-label="Edge color legend">

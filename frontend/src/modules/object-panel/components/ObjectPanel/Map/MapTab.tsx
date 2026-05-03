@@ -18,10 +18,37 @@ import { errorHandler } from '@/utils/errorHandler';
 import { requestRefreshDomain } from '@/core/data-access';
 import { refreshOrchestrator } from '@/core/refresh';
 import { useRefreshScopedDomain } from '@/core/refresh/store';
-import type { ObjectMapSnapshotPayload } from '@/core/refresh/types';
+import type { ObjectMapReference, ObjectMapSnapshotPayload } from '@/core/refresh/types';
 import ObjectMap from '@modules/object-map/ObjectMap';
+import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
+import { useNavigateToView } from '@shared/hooks/useNavigateToView';
+import {
+  buildRequiredObjectReference,
+  type ResolvedObjectReference,
+} from '@shared/utils/objectIdentity';
 import { INACTIVE_SCOPE } from '../constants';
 import type { PanelObjectData } from '../types';
+
+const buildResolvedFromMapRef = (ref: ObjectMapReference): ResolvedObjectReference | null => {
+  try {
+    return buildRequiredObjectReference({
+      kind: ref.kind,
+      name: ref.name,
+      namespace: ref.namespace ?? undefined,
+      clusterId: ref.clusterId,
+      clusterName: ref.clusterName ?? undefined,
+      group: ref.group,
+      version: ref.version,
+      resource: ref.resource ?? undefined,
+      uid: ref.uid ?? undefined,
+    });
+  } catch (error) {
+    errorHandler.handle(error instanceof Error ? error : new Error(String(error)), {
+      source: 'object-map-build-ref',
+    });
+    return null;
+  }
+};
 
 interface MapTabProps {
   objectData: PanelObjectData | null;
@@ -36,6 +63,8 @@ const isLoadingState = (status: string): boolean =>
   status === 'loading' || status === 'initialising';
 
 const MapTab: React.FC<MapTabProps> = ({ objectData, isActive, mapScope }) => {
+  const { openWithObject } = useObjectPanel();
+  const { navigateToView } = useNavigateToView();
   const snapshot = useRefreshScopedDomain('object-map', mapScope ?? INACTIVE_SCOPE);
 
   // Enable the scoped domain while the tab is active. preserveState on
@@ -86,6 +115,22 @@ const MapTab: React.FC<MapTabProps> = ({ objectData, isActive, mapScope }) => {
   // have a scope to fetch against.
   const onRefresh = mapScope ? handleRefresh : undefined;
 
+  const handleOpenPanel = useCallback(
+    (ref: ObjectMapReference) => {
+      const resolved = buildResolvedFromMapRef(ref);
+      if (resolved) openWithObject(resolved);
+    },
+    [openWithObject]
+  );
+
+  const handleNavigateView = useCallback(
+    (ref: ObjectMapReference) => {
+      const resolved = buildResolvedFromMapRef(ref);
+      if (resolved) navigateToView(resolved);
+    },
+    [navigateToView]
+  );
+
   return (
     <div className="object-panel-tab-content map-tab" data-testid="map-tab">
       <div className="map-tab__body">
@@ -98,6 +143,8 @@ const MapTab: React.FC<MapTabProps> = ({ objectData, isActive, mapScope }) => {
             payload={payload}
             onRefresh={onRefresh}
             isRefreshing={isLoadingState(snapshot.status)}
+            onOpenPanel={handleOpenPanel}
+            onNavigateView={handleNavigateView}
           />
         )}
         {!loading && !payload && !snapshot.error && (

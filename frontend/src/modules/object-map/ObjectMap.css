@@ -64,6 +64,14 @@
   outline-offset: 1px;
 }
 
+.object-map__toolbar-separator {
+  display: inline-block;
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background: var(--color-border);
+}
+
 .object-map__canvas {
   flex: 1;
   position: relative;
