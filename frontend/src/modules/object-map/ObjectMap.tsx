@@ -9,6 +9,7 @@
 import React, { Suspense, useMemo, useState } from 'react';
 import './ObjectMap.css';
 import type { ObjectMapReference, ObjectMapSnapshotPayload } from '@core/refresh/types';
+import { isMacPlatform } from '@/utils/platform';
 import { objectMapEdgeClass, OBJECT_MAP_EDGE_KINDS } from './objectMapEdgeStyle';
 import type { ObjectMapViewportControls } from './objectMapRendererTypes';
 import { useObjectMapModel } from './useObjectMapModel';
@@ -52,6 +53,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
   const [g6ViewportControls, setG6ViewportControls] = useState<ObjectMapViewportControls | null>(
     null
   );
+  const primaryModifierLabel = useMemo(() => (isMacPlatform() ? 'cmd' : 'ctrl'), []);
 
   const visibleEdgeTypes = useMemo(() => {
     const types = new Set<string>();
@@ -188,8 +190,8 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
             <LegendIcon />
           </button>
         </div>
-        {showLegend && legendEntries.length > 0 && (
-          <div className="object-map__legend" role="region" aria-label="Edge color legend">
+        {showLegend && (
+          <div className="object-map__legend" role="region" aria-label="Object map legend">
             {legendEntries.map((entry) => (
               <div key={entry.type} className="object-map__legend-row">
                 <svg className="object-map__legend-swatch" width={26} height={6} aria-hidden="true">
@@ -198,6 +200,17 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
                 <span className="object-map__legend-label">{entry.label}</span>
               </div>
             ))}
+            {legendEntries.length > 0 && (
+              <div className="object-map__legend-separator" aria-hidden="true" />
+            )}
+            <div className="object-map__legend-shortcut">
+              <span className="object-map__legend-key">{primaryModifierLabel}+click</span>
+              <span className="object-map__legend-action">Open View</span>
+            </div>
+            <div className="object-map__legend-shortcut">
+              <span className="object-map__legend-key">alt+click</span>
+              <span className="object-map__legend-action">Open Object</span>
+            </div>
           </div>
         )}
       </div>

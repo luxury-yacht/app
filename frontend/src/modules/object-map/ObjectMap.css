@@ -293,6 +293,30 @@
   color: var(--color-text);
 }
 
+.object-map__legend-separator {
+  height: var(--border-width);
+  margin: var(--spacing-xs) 0;
+  background: var(--color-border);
+}
+
+.object-map__legend-shortcut {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  column-gap: var(--spacing-md);
+}
+
+.object-map__legend-key {
+  color: var(--color-text-secondary);
+  min-width: 8ch;
+  white-space: nowrap;
+}
+
+.object-map__legend-action {
+  color: var(--color-text);
+  white-space: nowrap;
+}
+
 .object-map__toolbar-button--active {
   background: var(--color-accent-bg);
   border-color: var(--color-accent);
