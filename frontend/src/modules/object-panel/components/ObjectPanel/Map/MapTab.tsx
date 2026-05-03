@@ -141,6 +141,7 @@ const MapTab: React.FC<MapTabProps> = ({ objectData, isActive, mapScope }) => {
         {payload && (
           <ObjectMap
             payload={payload}
+            rendererKind="g6"
             onRefresh={onRefresh}
             isRefreshing={isLoadingState(snapshot.status)}
             onOpenPanel={handleOpenPanel}

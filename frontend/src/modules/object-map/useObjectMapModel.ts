@@ -29,6 +29,8 @@ interface NodeDragState {
   nodeId: string;
   originClientX: number;
   originClientY: number;
+  originLayoutX?: number;
+  originLayoutY?: number;
   startX: number;
   startY: number;
   didDrag: boolean;
@@ -188,6 +190,8 @@ export const useObjectMapModel = (
       nodeId: node.id,
       originClientX: pointer.clientX,
       originClientY: pointer.clientY,
+      originLayoutX: pointer.layoutX,
+      originLayoutY: pointer.layoutY,
       startX: node.x,
       startY: node.y,
       didDrag: false,
@@ -205,8 +209,19 @@ export const useObjectMapModel = (
         setAutoFit(false);
       }
       if (!drag.didDrag) return;
-      const nextX = drag.startX + dxScreen / panZoom.viewport.scale;
-      const nextY = drag.startY + dyScreen / panZoom.viewport.scale;
+      const hasLayoutCoordinates =
+        drag.originLayoutX !== undefined &&
+        drag.originLayoutY !== undefined &&
+        pointer.layoutX !== undefined &&
+        pointer.layoutY !== undefined;
+      const dxLayout = hasLayoutCoordinates
+        ? pointer.layoutX! - drag.originLayoutX!
+        : dxScreen / panZoom.viewport.scale;
+      const dyLayout = hasLayoutCoordinates
+        ? pointer.layoutY! - drag.originLayoutY!
+        : dyScreen / panZoom.viewport.scale;
+      const nextX = drag.startX + dxLayout;
+      const nextY = drag.startY + dyLayout;
       setNodePositionOverrides((prev) => {
         const current = prev.get(drag.nodeId);
         if (current && current.x === nextX && current.y === nextY) {

@@ -5,9 +5,10 @@ import {
   objectMapG6EdgeState,
   objectMapG6EdgeStroke,
   objectMapG6NodeState,
+  parseObjectMapG6Path,
   toObjectMapG6Data,
 } from './objectMapG6Data';
-import { OBJECT_MAP_G6_CARD_NODE } from './objectMapG6Constants';
+import { OBJECT_MAP_G6_CARD_NODE, OBJECT_MAP_G6_PATH_EDGE } from './objectMapG6Constants';
 import type { ObjectMapSelectionState } from './objectMapRendererTypes';
 
 const ref = (kind: string, name: string, namespace?: string): ObjectMapReference => ({
@@ -88,6 +89,13 @@ describe('objectMapG6Data', () => {
     expect(objectMapG6EdgeState(layout.edges[1], selectionState(null))).toEqual([]);
   });
 
+  it('parses routed SVG edge paths for the canvas renderer', () => {
+    expect(parseObjectMapG6Path('M 10 20 C 30 20, 40 50, 60 50')).toEqual([
+      ['M', 10, 20],
+      ['C', 30, 20, 40, 50, 60, 50],
+    ]);
+  });
+
   it('builds preset-positioned graph data with node metadata, badges, and edge metadata', () => {
     const graphData = toObjectMapG6Data(layout, selectionState('deploy'), (nodeId) =>
       nodeId === 'deploy' ? { deploymentId: 'deploy', hiddenCount: 2, expanded: false } : null
@@ -131,6 +139,7 @@ describe('objectMapG6Data', () => {
     );
 
     const uses = graphData.edges?.find((entry) => entry.id === 'edge-uses');
+    expect(uses?.type).toBe(OBJECT_MAP_G6_PATH_EDGE);
     expect(uses?.data).toEqual(
       expect.objectContaining({
         label: 'uses edge',
@@ -138,8 +147,17 @@ describe('objectMapG6Data', () => {
         tracedBy: 'trace detail',
         midX: 160,
         midY: 40,
+        path: 'M 0 0 C 1 1, 2 2, 3 3',
       })
     );
-    expect(uses?.style).toEqual(expect.objectContaining({ lineDash: [4, 3] }));
+    expect(uses?.style).toEqual(
+      expect.objectContaining({
+        lineDash: [4, 3],
+        objectMapPath: [
+          ['M', 0, 0],
+          ['C', 1, 1, 2, 2, 3, 3],
+        ],
+      })
+    );
   });
 });

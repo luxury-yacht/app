@@ -1,10 +1,18 @@
 import { Graph, CanvasEvent, EdgeEvent, GraphEvent, NodeEvent } from '@antv/g6';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { EdgeData, GraphData, NodeData } from '@antv/g6';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ObjectMapReference } from '@core/refresh/types';
 import type { ObjectMapLayout, PositionedEdge, PositionedNode } from './objectMapLayout';
 import { ensureObjectMapG6CardNodeRegistered } from './objectMapG6CardNode';
+import { ensureObjectMapG6PathEdgeRegistered } from './objectMapG6PathEdge';
 import { OBJECT_MAP_G6_CARD_NODE } from './objectMapG6Constants';
-import { toObjectMapG6Data } from './objectMapG6Data';
+import {
+  DEFAULT_OBJECT_MAP_G6_PALETTE,
+  objectMapG6EdgeState,
+  objectMapG6NodeState,
+  toObjectMapG6Data,
+} from './objectMapG6Data';
+import type { ObjectMapG6Palette } from './objectMapG6Data';
 import type {
   ObjectMapHoverEdge,
   ObjectMapNodeBadgeLookup,
@@ -28,8 +36,57 @@ const findNode = (layout: ObjectMapLayout, id: string): PositionedNode | null =>
 const findEdge = (layout: ObjectMapLayout, id: string): PositionedEdge | null =>
   layout.edges.find((edge) => edge.id === id) ?? null;
 
+const cssVar = (styles: CSSStyleDeclaration, name: string, fallback: string): string =>
+  styles.getPropertyValue(name).trim() || fallback;
+
+const readPalette = (element: HTMLElement): ObjectMapG6Palette => {
+  const styles = window.getComputedStyle(element);
+  return {
+    accent: cssVar(styles, '--color-accent', DEFAULT_OBJECT_MAP_G6_PALETTE.accent),
+    accentBg: cssVar(styles, '--color-accent-bg', DEFAULT_OBJECT_MAP_G6_PALETTE.accentBg),
+    background: cssVar(styles, '--color-bg', DEFAULT_OBJECT_MAP_G6_PALETTE.background),
+    backgroundSecondary: cssVar(
+      styles,
+      '--color-bg-secondary',
+      DEFAULT_OBJECT_MAP_G6_PALETTE.backgroundSecondary
+    ),
+    border: cssVar(styles, '--color-border', DEFAULT_OBJECT_MAP_G6_PALETTE.border),
+    text: cssVar(styles, '--color-text', DEFAULT_OBJECT_MAP_G6_PALETTE.text),
+    textSecondary: cssVar(
+      styles,
+      '--color-text-secondary',
+      DEFAULT_OBJECT_MAP_G6_PALETTE.textSecondary
+    ),
+    textTertiary: cssVar(
+      styles,
+      '--color-text-tertiary',
+      DEFAULT_OBJECT_MAP_G6_PALETTE.textTertiary
+    ),
+    textInverse: cssVar(styles, '--color-text-inverse', DEFAULT_OBJECT_MAP_G6_PALETTE.textInverse),
+    edgeRoutes: DEFAULT_OBJECT_MAP_G6_PALETTE.edgeRoutes,
+    edgeEndpoint: DEFAULT_OBJECT_MAP_G6_PALETTE.edgeEndpoint,
+    edgeStorage: DEFAULT_OBJECT_MAP_G6_PALETTE.edgeStorage,
+    edgeMounts: DEFAULT_OBJECT_MAP_G6_PALETTE.edgeMounts,
+    edgeSchedules: cssVar(
+      styles,
+      '--badge-green-text',
+      DEFAULT_OBJECT_MAP_G6_PALETTE.edgeSchedules
+    ),
+    edgeScales: DEFAULT_OBJECT_MAP_G6_PALETTE.edgeScales,
+    edgeUses: cssVar(styles, '--color-text-secondary', DEFAULT_OBJECT_MAP_G6_PALETTE.edgeUses),
+    fontFamily: styles.fontFamily || DEFAULT_OBJECT_MAP_G6_PALETTE.fontFamily,
+  };
+};
+
+type G6DisplayObjectTarget = {
+  className?: string;
+  parentNode?: G6DisplayObjectTarget | null;
+};
+
 type G6ElementPointerEvent = {
   target: { id: string };
+  targetType?: string;
+  originalTarget?: G6DisplayObjectTarget | null;
   pointerId?: number;
   button?: number;
   clientX: number;
@@ -39,16 +96,161 @@ type G6ElementPointerEvent = {
   altKey?: boolean;
 };
 
-const toObjectMapPointer = (event: G6ElementPointerEvent) => ({
-  pointerId: event.pointerId ?? 1,
-  button: event.button,
-  clientX: event.clientX,
-  clientY: event.clientY,
-});
+const toObjectMapPointer = (event: G6ElementPointerEvent, graph?: Graph) => {
+  if (!graph || graph.destroyed) {
+    return {
+      pointerId: event.pointerId ?? 1,
+      button: event.button ?? 0,
+      clientX: event.clientX,
+      clientY: event.clientY,
+    };
+  }
+  const [layoutX, layoutY] = graph.getCanvasByClient([event.clientX, event.clientY]);
+  return {
+    pointerId: event.pointerId ?? 1,
+    button: event.button ?? 0,
+    clientX: event.clientX,
+    clientY: event.clientY,
+    layoutX,
+    layoutY,
+  };
+};
+
+const isBadgeEvent = (event: G6ElementPointerEvent): boolean => {
+  let target = event.originalTarget;
+  for (let depth = 0; target && depth < 8; depth += 1) {
+    if (target.className?.startsWith('badge-')) {
+      return true;
+    }
+    target = target.parentNode ?? null;
+  }
+  return false;
+};
 
 const truncate = (text: string, maxChars: number): string => {
   if (text.length <= maxChars) return text;
   return `${text.slice(0, maxChars - 1)}\u2026`;
+};
+
+const EMPTY_SELECTION_STATE: ObjectMapSelectionState = {
+  activeId: null,
+  connectedIds: new Set(),
+  connectedEdgeIds: new Set(),
+};
+
+const graphNodes = (data: GraphData): NodeData[] => data.nodes ?? [];
+const graphEdges = (data: GraphData): EdgeData[] => data.edges ?? [];
+
+const sameIds = <T extends { id?: string }>(previous: T[], next: T[]): boolean => {
+  if (previous.length !== next.length) return false;
+  const previousIds = new Set(previous.map((entry) => entry.id));
+  return next.every((entry) => entry.id && previousIds.has(entry.id));
+};
+
+const lineDashChanged = (previous?: unknown, next?: unknown): boolean => {
+  if (previous === next) return false;
+  if (!Array.isArray(previous) || !Array.isArray(next)) return true;
+  return previous.length !== next.length || previous.some((value, index) => value !== next[index]);
+};
+
+const badgeText = (node: NodeData): string | undefined => {
+  const badges = node.style?.badges;
+  if (!Array.isArray(badges)) return undefined;
+  return badges.map((badge) => badge?.text).join('|');
+};
+
+const nodeChanged = (previous: NodeData, next: NodeData): boolean => {
+  const previousStyle = previous.style ?? {};
+  const nextStyle = next.style ?? {};
+  const previousSize = previousStyle.size;
+  const nextSize = nextStyle.size;
+  const sizeChanged =
+    Array.isArray(previousSize) &&
+    Array.isArray(nextSize) &&
+    (previousSize[0] !== nextSize[0] || previousSize[1] !== nextSize[1]);
+  return (
+    previous.type !== next.type ||
+    previousStyle.x !== nextStyle.x ||
+    previousStyle.y !== nextStyle.y ||
+    sizeChanged ||
+    previousStyle.fill !== nextStyle.fill ||
+    previousStyle.stroke !== nextStyle.stroke ||
+    previousStyle.lineWidth !== nextStyle.lineWidth ||
+    previousStyle.opacity !== nextStyle.opacity ||
+    previousStyle.cardKindText !== nextStyle.cardKindText ||
+    previousStyle.cardNameText !== nextStyle.cardNameText ||
+    previousStyle.cardNamespaceText !== nextStyle.cardNamespaceText ||
+    badgeText(previous) !== badgeText(next)
+  );
+};
+
+const edgeChanged = (previous: EdgeData, next: EdgeData): boolean => {
+  const previousStyle = previous.style ?? {};
+  const nextStyle = next.style ?? {};
+  return (
+    previous.source !== next.source ||
+    previous.target !== next.target ||
+    previousStyle.stroke !== nextStyle.stroke ||
+    previousStyle.lineWidth !== nextStyle.lineWidth ||
+    previousStyle.opacity !== nextStyle.opacity ||
+    lineDashChanged(previousStyle.lineDash, nextStyle.lineDash) ||
+    previous.data?.label !== next.data?.label ||
+    previous.data?.type !== next.data?.type ||
+    previous.data?.tracedBy !== next.data?.tracedBy ||
+    previous.data?.midX !== next.data?.midX ||
+    previous.data?.midY !== next.data?.midY ||
+    previous.data?.path !== next.data?.path
+  );
+};
+
+const applyGraphData = async (
+  graph: Graph,
+  previousData: GraphData,
+  nextData: GraphData
+): Promise<void> => {
+  const previousNodes = graphNodes(previousData);
+  const nextNodes = graphNodes(nextData);
+  const previousEdges = graphEdges(previousData);
+  const nextEdges = graphEdges(nextData);
+
+  if (!sameIds(previousNodes, nextNodes) || !sameIds(previousEdges, nextEdges)) {
+    graph.setData(nextData);
+    await graph.draw();
+    return;
+  }
+
+  const previousNodeById = new Map(previousNodes.map((node) => [node.id, node]));
+  const previousEdgeById = new Map(previousEdges.map((edge) => [edge.id, edge]));
+  const nodeUpdates = nextNodes.filter((node) => {
+    const previous = node.id ? previousNodeById.get(node.id) : undefined;
+    return !previous || nodeChanged(previous, node);
+  });
+  const edgeUpdates = nextEdges.filter((edge) => {
+    const previous = edge.id ? previousEdgeById.get(edge.id) : undefined;
+    return !previous || edgeChanged(previous, edge);
+  });
+
+  if (nodeUpdates.length === 0 && edgeUpdates.length === 0) return;
+  const patch: { nodes?: NodeData[]; edges?: EdgeData[] } = {};
+  if (nodeUpdates.length > 0) patch.nodes = nodeUpdates;
+  if (edgeUpdates.length > 0) patch.edges = edgeUpdates;
+  graph.updateData(patch);
+  await graph.draw();
+};
+
+const applySelectionState = async (
+  graph: Graph,
+  layout: ObjectMapLayout,
+  selectionState: ObjectMapSelectionState
+): Promise<void> => {
+  const states: Record<string, string[]> = {};
+  layout.nodes.forEach((node) => {
+    states[node.id] = objectMapG6NodeState(node, selectionState);
+  });
+  layout.edges.forEach((edge) => {
+    states[edge.id] = objectMapG6EdgeState(edge, selectionState);
+  });
+  await graph.setElementState(states, false);
 };
 
 export interface ObjectMapG6RendererProps {
@@ -78,6 +280,7 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
   onClearHoverEdge,
   badgeForNode,
   onSelectNode,
+  onToggleGroup,
   onNodeDragStart,
   onNodeDragMove,
   onNodeDragEnd,
@@ -90,6 +293,26 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const graphRef = useRef<Graph | null>(null);
   const hoverEdgeRef = useRef(hoverEdge);
+  const ignoreNextCanvasClickRef = useRef(false);
+  const selectionApplyRef = useRef<{
+    version: number;
+    applying: boolean;
+    latest: { layout: ObjectMapLayout; selectionState: ObjectMapSelectionState } | null;
+  }>({
+    version: 0,
+    applying: false,
+    latest: null,
+  });
+  const dataApplyRef = useRef<{
+    version: number;
+    applying: boolean;
+    latest: GraphData | null;
+  }>({
+    version: 0,
+    applying: false,
+    latest: null,
+  });
+  const [palette, setPalette] = useState<ObjectMapG6Palette>(DEFAULT_OBJECT_MAP_G6_PALETTE);
   const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null);
   const handlersRef = useRef({
     onHoverEdge,
@@ -101,6 +324,8 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
     onNodeDragStart,
     onNodeDragMove,
     onNodeDragEnd,
+    onToggleGroup,
+    badgeForNode,
   });
   handlersRef.current = {
     onHoverEdge,
@@ -112,16 +337,27 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
     onNodeDragStart,
     onNodeDragMove,
     onNodeDragEnd,
+    onToggleGroup,
+    badgeForNode,
   };
   const data = useMemo(
-    () => toObjectMapG6Data(layout, selectionState, badgeForNode),
-    [layout, selectionState, badgeForNode]
+    () => toObjectMapG6Data(layout, EMPTY_SELECTION_STATE, badgeForNode, palette),
+    [layout, badgeForNode, palette]
   );
   const dataRef = useRef(data);
   dataRef.current = data;
+  const renderedDataRef = useRef<GraphData | null>(null);
   const layoutRef = useRef(layout);
   layoutRef.current = layout;
+  const selectionStateRef = useRef(selectionState);
+  selectionStateRef.current = selectionState;
   hoverEdgeRef.current = hoverEdge;
+
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    setPalette(readPalette(container));
+  }, []);
 
   const updateTooltipPosition = useCallback(() => {
     const graph = graphRef.current;
@@ -134,34 +370,119 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
     setTooltipPosition({ x, y });
   }, []);
 
+  const resizeGraphToContainer = useCallback(() => {
+    const graph = graphRef.current;
+    const container = containerRef.current;
+    if (!graph || graph.destroyed || !container) return;
+    const width = container.clientWidth;
+    const height = container.clientHeight;
+    if (width <= 0 || height <= 0) return;
+    const [currentWidth, currentHeight] = graph.getSize();
+    if (currentWidth !== width || currentHeight !== height) {
+      graph.setSize(width, height);
+    }
+    if (autoFit) {
+      void graph.fitView({ when: 'always', direction: 'both' }, false);
+    }
+    updateTooltipPosition();
+  }, [autoFit, updateTooltipPosition]);
+
+  const scheduleSelectionState = useCallback(
+    (nextLayout: ObjectMapLayout, nextSelectionState: ObjectMapSelectionState) => {
+      const graph = graphRef.current;
+      if (!graph || graph.destroyed) return;
+      const ref = selectionApplyRef.current;
+      ref.version += 1;
+      ref.latest = { layout: nextLayout, selectionState: nextSelectionState };
+      if (ref.applying) return;
+      ref.applying = true;
+      const run = async () => {
+        try {
+          while (ref.latest && !graph.destroyed) {
+            const requestedVersion = ref.version;
+            const latest = ref.latest;
+            ref.latest = null;
+            await applySelectionState(graph, latest.layout, latest.selectionState);
+            if (ref.version === requestedVersion) {
+              break;
+            }
+          }
+        } finally {
+          ref.applying = false;
+          if (ref.latest && !graph.destroyed) {
+            scheduleSelectionState(ref.latest.layout, ref.latest.selectionState);
+          }
+        }
+      };
+      void run();
+    },
+    []
+  );
+
+  const scheduleGraphData = useCallback(
+    (nextData: GraphData) => {
+      const graph = graphRef.current;
+      if (!graph || graph.destroyed) return;
+      const ref = dataApplyRef.current;
+      ref.version += 1;
+      ref.latest = nextData;
+      if (ref.applying) return;
+      ref.applying = true;
+      const run = async () => {
+        try {
+          while (ref.latest && !graph.destroyed) {
+            const requestedVersion = ref.version;
+            const latest = ref.latest;
+            ref.latest = null;
+            const previousData = renderedDataRef.current;
+            if (previousData) {
+              await applyGraphData(graph, previousData, latest);
+            } else {
+              graph.setData(latest);
+              await graph.draw();
+            }
+            renderedDataRef.current = latest;
+            scheduleSelectionState(layoutRef.current, selectionStateRef.current);
+            if (ref.version === requestedVersion) {
+              break;
+            }
+          }
+        } finally {
+          ref.applying = false;
+          if (ref.latest && !graph.destroyed) {
+            scheduleGraphData(ref.latest);
+          }
+        }
+      };
+      void run();
+    },
+    [scheduleSelectionState]
+  );
+
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
     ensureObjectMapG6CardNodeRegistered();
+    ensureObjectMapG6PathEdgeRegistered();
     const graph = new Graph({
       container,
       autoResize: true,
       animation: false,
       layout: { type: 'preset' },
       data: dataRef.current,
-      behaviors: [
-        'drag-canvas',
-        'zoom-canvas',
-        { type: 'drag-element', animation: false, hideEdge: 'none' },
-      ],
+      behaviors: ['drag-canvas', 'zoom-canvas'],
       node: {
         type: OBJECT_MAP_G6_CARD_NODE,
         state: {
-          selected: { stroke: '#2563eb', lineWidth: 2.5 },
-          connected: { stroke: '#2563eb', lineWidth: 1.5 },
+          selected: { stroke: palette.accent, lineWidth: 2.5, opacity: 1 },
+          connected: { stroke: palette.accent, lineWidth: 1.5, opacity: 1 },
           dimmed: { opacity: 0.25 },
-          seed: { stroke: '#2563eb', lineWidth: 2 },
+          seed: { stroke: palette.accent, lineWidth: 2, opacity: 1 },
         },
       },
       edge: {
-        type: 'line',
         state: {
-          highlighted: { lineWidth: 2.5 },
+          highlighted: { lineWidth: 2.5, opacity: 1 },
           dimmed: { opacity: 0.15 },
         },
       },
@@ -173,7 +494,17 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
       const id = event.target.id;
       const node = findNode(layoutRef.current, id);
       if (!node) return;
-      const { onOpenPanel, onNavigateView, onSelectNode } = handlersRef.current;
+      ignoreNextCanvasClickRef.current = true;
+      requestAnimationFrame(() => {
+        ignoreNextCanvasClickRef.current = false;
+      });
+      const { badgeForNode, onOpenPanel, onNavigateView, onSelectNode, onToggleGroup } =
+        handlersRef.current;
+      if (isBadgeEvent(event)) {
+        const badge = badgeForNode(id);
+        if (badge) onToggleGroup(badge.deploymentId);
+        return;
+      }
       if (event.metaKey || event.ctrlKey) {
         if (onOpenPanel) onOpenPanel(node.ref as ObjectMapReference);
         return;
@@ -189,17 +520,17 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
       const event = rawEvent as G6ElementPointerEvent;
       const node = findNode(layoutRef.current, event.target.id);
       if (!node) return;
-      handlersRef.current.onNodeDragStart(node, toObjectMapPointer(event));
+      handlersRef.current.onNodeDragStart(node, toObjectMapPointer(event, graph));
     });
 
     graph.on(NodeEvent.DRAG, (rawEvent) => {
       const event = rawEvent as G6ElementPointerEvent;
-      handlersRef.current.onNodeDragMove(toObjectMapPointer(event));
+      handlersRef.current.onNodeDragMove(toObjectMapPointer(event, graph));
     });
 
     graph.on(NodeEvent.DRAG_END, (rawEvent) => {
       const event = rawEvent as G6ElementPointerEvent;
-      handlersRef.current.onNodeDragEnd(toObjectMapPointer(event));
+      handlersRef.current.onNodeDragEnd(toObjectMapPointer(event, graph));
     });
 
     graph.on(EdgeEvent.POINTER_ENTER, (rawEvent) => {
@@ -215,23 +546,62 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
       });
     });
     graph.on(EdgeEvent.POINTER_LEAVE, () => handlersRef.current.onClearHoverEdge());
-    graph.on(CanvasEvent.CLICK, () => handlersRef.current.onClearSelection());
+    graph.on(CanvasEvent.CLICK, (rawEvent) => {
+      const event = rawEvent as G6ElementPointerEvent;
+      if (event.targetType && event.targetType !== 'canvas') {
+        return;
+      }
+      if (ignoreNextCanvasClickRef.current) {
+        ignoreNextCanvasClickRef.current = false;
+        return;
+      }
+      handlersRef.current.onClearSelection();
+    });
     graph.on(GraphEvent.AFTER_TRANSFORM, updateTooltipPosition);
     graph.on(GraphEvent.AFTER_SIZE_CHANGE, updateTooltipPosition);
 
     void graph.render();
+    renderedDataRef.current = dataRef.current;
+    const selectionApply = selectionApplyRef.current;
+    const dataApply = dataApplyRef.current;
     return () => {
       graph.destroy();
       graphRef.current = null;
+      renderedDataRef.current = null;
+      selectionApply.latest = null;
+      selectionApply.applying = false;
+      dataApply.latest = null;
+      dataApply.applying = false;
     };
-  }, [updateTooltipPosition]);
+  }, [palette, updateTooltipPosition]);
 
   useEffect(() => {
     const graph = graphRef.current;
     if (!graph || graph.destroyed) return;
-    graph.setData(data);
-    void graph.draw();
-  }, [data]);
+    scheduleGraphData(data);
+  }, [data, scheduleGraphData]);
+
+  useEffect(() => {
+    const graph = graphRef.current;
+    if (!graph || graph.destroyed) return;
+    scheduleSelectionState(layout, selectionState);
+  }, [layout, scheduleSelectionState, selectionState]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    let frame = 0;
+    const observer = new ResizeObserver(() => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(resizeGraphToContainer);
+    });
+    observer.observe(container);
+    frame = requestAnimationFrame(resizeGraphToContainer);
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, [resizeGraphToContainer]);
 
   useEffect(() => {
     if (!onViewportControlsChange) return;

@@ -179,6 +179,18 @@ Expected result: developers can switch between SVG and canvas renderers while co
 - [x] Add Storybook stories for manual SVG/G6 large-map comparison.
 - [ ] Run the measurements in the desktop/Wails environment, not only the browser.
 
+Dependency review:
+
+- `@antv/g6@5.1.0` is MIT licensed.
+- Runtime dependency surface includes the AntV canvas/rendering/layout packages used by G6:
+  `@antv/g`, `@antv/g-canvas`, `@antv/layout`, `@antv/graphlib`, and related AntV utilities.
+- Local installed package sizes are approximately 13 MB for `@antv/g6`, 3.2 MB for `@antv/g`,
+  14 MB for `@antv/layout`, and 408 KB for `@antv/graphlib`. The package's own published
+  `limit-size` metadata targets a 400 KB gzipped / 1.5 MB minified UMD bundle.
+- `npm run build` keeps the G6 renderer lazy-loaded in a separate
+  `ObjectMapG6Renderer-*.js` chunk. Current output is approximately 1.41 MB minified / 406 KB gzip
+  for that chunk.
+
 Acceptance targets:
 
 - 500 nodes / 1,000 edges: pan, zoom, selection, and node drag should feel smooth.
@@ -208,7 +220,7 @@ This should be a separate feature. It is not required for first renderer parity.
 - [ ] SVG and canvas renderers have behavior parity for the preserved feature list.
 - [ ] Performance fixtures show a significant improvement over the SVG renderer.
 - [ ] Wails/WebKit testing shows no ghosting or stale-frame artifacts.
-- [ ] New dependency review is complete, if a dependency is added.
-- [ ] `npm test` passes for object-map and object-panel map tests.
-- [ ] `npm run typecheck` passes.
-- [ ] `mage qc:prerelease` passes before presenting implementation work as complete.
+- [x] New dependency review is complete, if a dependency is added.
+- [x] `npm test` passes for object-map and object-panel map tests.
+- [x] `npm run typecheck` passes.
+- [x] `mage qc:prerelease` passes before presenting implementation work as complete.

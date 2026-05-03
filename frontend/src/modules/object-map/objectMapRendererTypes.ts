@@ -29,6 +29,10 @@ export interface ObjectMapPointer {
   button?: number;
   clientX: number;
   clientY: number;
+  /** Renderer-local layout coordinate. SVG derives this from screen delta / scale. */
+  layoutX?: number;
+  /** Renderer-local layout coordinate. SVG derives this from screen delta / scale. */
+  layoutY?: number;
 }
 
 export type ObjectMapNodeBadgeLookup = (nodeId: string) => ObjectMapNodeBadge | null;

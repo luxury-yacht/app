@@ -14,6 +14,7 @@ interface ObjectMapG6CardNodeStyleProps extends BaseNodeStyleProps {
   cardKindText?: string;
   cardNameText?: string;
   cardNamespaceText?: string;
+  cardFontFamily?: string;
   cardKindFill?: string;
   cardNameFill?: string;
   cardNamespaceFill?: string;
@@ -48,7 +49,8 @@ class ObjectMapG6CardNode extends BaseNode<ObjectMapG6CardNodeStyleProps> {
     text: string,
     baselineY: number,
     fill: string,
-    fontWeight: TextStyleProps['fontWeight']
+    fontWeight: TextStyleProps['fontWeight'],
+    letterSpacing = 0
   ): TextStyleProps {
     const [width, height] = this.getSize(attributes);
     return {
@@ -58,7 +60,8 @@ class ObjectMapG6CardNode extends BaseNode<ObjectMapG6CardNodeStyleProps> {
       fill,
       fontSize: 11,
       fontWeight,
-      fontFamily: 'inherit',
+      fontFamily: attributes.cardFontFamily,
+      letterSpacing,
       textBaseline: 'alphabetic',
       maxLines: 1,
       wordWrap: false,
@@ -78,7 +81,8 @@ class ObjectMapG6CardNode extends BaseNode<ObjectMapG6CardNodeStyleProps> {
         attributes.cardKindText,
         NODE_KIND_BASELINE_Y,
         attributes.cardKindFill,
-        600
+        600,
+        0.5
       ),
       container
     );

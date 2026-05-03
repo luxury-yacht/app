@@ -1,11 +1,53 @@
 import type { EdgeData, GraphData, NodeData } from '@antv/g6';
+import type { PathArray } from '@antv/g6';
 import type { ObjectMapLayout, PositionedEdge, PositionedNode } from './objectMapLayout';
-import { OBJECT_MAP_G6_CARD_NODE } from './objectMapG6Constants';
+import { OBJECT_MAP_G6_CARD_NODE, OBJECT_MAP_G6_PATH_EDGE } from './objectMapG6Constants';
 import type { ObjectMapNodeBadgeLookup, ObjectMapSelectionState } from './objectMapRendererTypes';
 
 const NODE_KIND_MAX_CHARS = 26;
 const NODE_NAME_MAX_CHARS = 32;
 const NODE_NAMESPACE_MAX_CHARS = 28;
+
+export interface ObjectMapG6Palette {
+  accent: string;
+  accentBg: string;
+  background: string;
+  backgroundSecondary: string;
+  border: string;
+  text: string;
+  textSecondary: string;
+  textTertiary: string;
+  textInverse: string;
+  edgeRoutes: string;
+  edgeEndpoint: string;
+  edgeStorage: string;
+  edgeMounts: string;
+  edgeSchedules: string;
+  edgeScales: string;
+  edgeUses: string;
+  fontFamily: string;
+}
+
+export const DEFAULT_OBJECT_MAP_G6_PALETTE: ObjectMapG6Palette = {
+  accent: '#2563eb',
+  accentBg: '#dbeafe',
+  background: '#ffffff',
+  backgroundSecondary: '#f8fafc',
+  border: '#cbd5e1',
+  text: '#0f172a',
+  textSecondary: '#64748b',
+  textTertiary: '#9ca3af',
+  textInverse: '#ffffff',
+  edgeRoutes: '#1d4ed8',
+  edgeEndpoint: '#60a5fa',
+  edgeStorage: '#7e22ce',
+  edgeMounts: '#c084fc',
+  edgeSchedules: '#16a34a',
+  edgeScales: '#eab308',
+  edgeUses: '#6b7280',
+  fontFamily:
+    '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, "Helvetica Neue", Arial, sans-serif',
+};
 
 const truncate = (text: string, maxChars: number): string => {
   if (text.length <= maxChars) return text;
@@ -16,28 +58,70 @@ const formatNamespace = (node: PositionedNode): string =>
   node.ref.namespace?.trim() ? node.ref.namespace : 'cluster-scoped';
 
 export const objectMapG6EdgeStroke = (type: string): string => {
+  return objectMapG6EdgeStrokeForPalette(type, DEFAULT_OBJECT_MAP_G6_PALETTE);
+};
+
+export const objectMapG6EdgeStrokeForPalette = (
+  type: string,
+  palette: ObjectMapG6Palette
+): string => {
   switch (type.trim().toLowerCase()) {
     case 'owner':
-      return '#2563eb';
+      return palette.accent;
     case 'routes':
-      return '#1d4ed8';
+      return palette.edgeRoutes;
     case 'selector':
-      return '#2563eb';
+      return palette.accent;
     case 'endpoint':
-      return '#60a5fa';
+      return palette.edgeEndpoint;
     case 'storage':
-      return '#7e22ce';
+      return palette.edgeStorage;
     case 'mounts':
-      return '#c084fc';
+      return palette.edgeMounts;
     case 'schedules':
-      return '#16a34a';
+      return palette.edgeSchedules;
     case 'scales':
-      return '#eab308';
+      return palette.edgeScales;
     case 'uses':
-      return '#6b7280';
+      return palette.edgeUses;
     default:
-      return '#9ca3af';
+      return palette.textTertiary;
   }
+};
+
+export const parseObjectMapG6Path = (path: string): PathArray => {
+  const tokens = path.match(/[MCL]|-?\d+(?:\.\d+)?/g) ?? [];
+  let result: PathArray = [['M', 0, 0]];
+  let hasSegment = false;
+  const append = (segment: PathArray[number]) => {
+    if (!hasSegment && segment[0] === 'M') {
+      result = [segment];
+    } else if (!hasSegment) {
+      result = [['M', 0, 0], segment];
+    } else {
+      result.push(segment);
+    }
+    hasSegment = true;
+  };
+  for (let index = 0; index < tokens.length; index += 1) {
+    const command = tokens[index];
+    if (command === 'M' || command === 'L') {
+      append([command, Number(tokens[index + 1]), Number(tokens[index + 2])]);
+      index += 2;
+    } else if (command === 'C') {
+      append([
+        'C',
+        Number(tokens[index + 1]),
+        Number(tokens[index + 2]),
+        Number(tokens[index + 3]),
+        Number(tokens[index + 4]),
+        Number(tokens[index + 5]),
+        Number(tokens[index + 6]),
+      ]);
+      index += 6;
+    }
+  }
+  return result;
 };
 
 export const objectMapG6NodeState = (
@@ -65,7 +149,8 @@ export const objectMapG6EdgeState = (
 export const toObjectMapG6Data = (
   layout: ObjectMapLayout,
   selectionState: ObjectMapSelectionState,
-  badgeForNode: ObjectMapNodeBadgeLookup
+  badgeForNode: ObjectMapNodeBadgeLookup,
+  palette: ObjectMapG6Palette = DEFAULT_OBJECT_MAP_G6_PALETTE
 ): GraphData => ({
   nodes: layout.nodes.map<NodeData>((node) => {
     const badge = badgeForNode(node.id);
@@ -89,27 +174,29 @@ export const toObjectMapG6Data = (
         y: node.y + node.height / 2,
         size: [node.width, node.height],
         radius: 6,
-        fill: '#f8fafc',
-        stroke: node.isSeed ? '#2563eb' : '#cbd5e1',
+        fill: palette.backgroundSecondary,
+        stroke: node.isSeed ? palette.accent : palette.border,
         lineWidth: node.isSeed ? 2 : 1,
+        opacity: 1,
         label: false,
         cardKindText: kindLabel.toUpperCase(),
         cardNameText: nameLabel,
         cardNamespaceText: namespaceLabel,
-        cardKindFill: '#2563eb',
-        cardNameFill: '#0f172a',
-        cardNamespaceFill: '#64748b',
+        cardFontFamily: palette.fontFamily,
+        cardKindFill: palette.accent,
+        cardNameFill: palette.text,
+        cardNamespaceFill: palette.textSecondary,
         badges: badge
           ? [
               {
                 text: badge.expanded ? '\u2212' : `+${badge.hiddenCount}`,
                 placement: 'right-top',
-                fill: '#2563eb',
+                fill: palette.accent,
                 fontWeight: 700,
                 backgroundWidth: 28,
                 backgroundHeight: 16,
-                backgroundFill: '#dbeafe',
-                backgroundStroke: '#2563eb',
+                backgroundFill: palette.accentBg,
+                backgroundStroke: palette.accent,
                 backgroundRadius: 3,
               },
             ]
@@ -121,17 +208,21 @@ export const toObjectMapG6Data = (
     id: edge.id,
     source: edge.sourceId,
     target: edge.targetId,
+    type: OBJECT_MAP_G6_PATH_EDGE,
     data: {
       label: edge.label,
       type: edge.type,
       tracedBy: edge.tracedBy,
       midX: edge.midX,
       midY: edge.midY,
+      path: edge.d,
     },
     states: objectMapG6EdgeState(edge, selectionState),
     style: {
-      stroke: objectMapG6EdgeStroke(edge.type),
+      objectMapPath: parseObjectMapG6Path(edge.d),
+      stroke: objectMapG6EdgeStrokeForPalette(edge.type, palette),
       lineWidth: selectionState.connectedEdgeIds.has(edge.id) ? 2.5 : 1.5,
+      opacity: 1,
       lineDash: edge.type.trim().toLowerCase() === 'uses' ? [4, 3] : undefined,
     },
   })),
