@@ -29,7 +29,8 @@
   --object-map-node-dimmed-opacity: 0.25;
   --object-map-tooltip-width: 220;
   --object-map-tooltip-height: 64;
-  --object-map-tooltip-offset-y: 4;
+  --object-map-tooltip-arrow-width: 12;
+  --object-map-tooltip-arrow-height: 6;
   --object-map-tooltip-radius: 4;
   --object-map-tooltip-source-y: -46;
   --object-map-tooltip-relationship-y: -31;
@@ -219,6 +220,12 @@
 }
 
 .object-map__edge-tooltip-bg {
+  fill: var(--color-bg-tertiary);
+  stroke: var(--color-border);
+  stroke-width: 1;
+}
+
+.object-map__edge-tooltip-arrow {
   fill: var(--color-bg-tertiary);
   stroke: var(--color-border);
   stroke-width: 1;

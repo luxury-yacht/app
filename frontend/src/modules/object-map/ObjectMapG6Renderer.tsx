@@ -84,7 +84,8 @@ const readPalette = (element: HTMLElement): ObjectMapG6Palette => {
     nodeDimmedOpacity: cssNumber(styles, '--object-map-node-dimmed-opacity'),
     tooltipWidth: cssNumber(styles, '--object-map-tooltip-width'),
     tooltipHeight: cssNumber(styles, '--object-map-tooltip-height'),
-    tooltipOffsetY: cssNumber(styles, '--object-map-tooltip-offset-y'),
+    tooltipArrowWidth: cssNumber(styles, '--object-map-tooltip-arrow-width'),
+    tooltipArrowHeight: cssNumber(styles, '--object-map-tooltip-arrow-height'),
     tooltipRadius: cssNumber(styles, '--object-map-tooltip-radius'),
     tooltipSourceY: cssNumber(styles, '--object-map-tooltip-source-y'),
     tooltipRelationshipY: cssNumber(styles, '--object-map-tooltip-relationship-y'),
@@ -1050,10 +1051,16 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
             className="object-map__edge-tooltip"
             transform={`translate(${tooltipPosition.x} ${tooltipPosition.y})`}
           >
+            <polygon
+              className="object-map__edge-tooltip-arrow"
+              points={`${-palette.tooltipArrowWidth / 2},${-palette.tooltipArrowHeight} 0,0 ${
+                palette.tooltipArrowWidth / 2
+              },${-palette.tooltipArrowHeight}`}
+            />
             <rect
               className="object-map__edge-tooltip-bg"
               x={-palette.tooltipWidth / 2}
-              y={-palette.tooltipHeight - palette.tooltipOffsetY}
+              y={-palette.tooltipHeight - palette.tooltipArrowHeight}
               width={palette.tooltipWidth}
               height={palette.tooltipHeight}
               rx={palette.tooltipRadius}
