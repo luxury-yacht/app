@@ -14,6 +14,8 @@ import { ActionsMenu } from './ActionsMenu';
 import { eventBus } from '@/core/events';
 import type { ObjectActionData } from '@shared/hooks/useObjectActions';
 
+const openWithObjectMock = vi.hoisted(() => vi.fn());
+
 // Spy-backed permission mock so tests can assert that getPermissionKey is
 // called with the full GVK (regression: PR #139 made the backend reject
 // queries without apiVersion, and CRD lookups in the shared action path
@@ -39,6 +41,12 @@ vi.mock('@/core/capabilities', () => ({
   },
   getPermissionKey: (...args: Parameters<typeof getPermissionKeySpy>) =>
     getPermissionKeySpy(...args),
+}));
+
+vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
+  useObjectPanel: () => ({
+    openWithObject: openWithObjectMock,
+  }),
 }));
 
 // Mock keyboard shortcuts for ConfirmationModal
@@ -91,6 +99,7 @@ describe('ActionsMenu', () => {
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
     getPermissionKeySpy.mockClear();
+    openWithObjectMock.mockClear();
   });
 
   afterEach(() => {
@@ -314,6 +323,37 @@ describe('ActionsMenu', () => {
         name: 'test-resource',
       },
     });
+  });
+
+  it('shows Object Map for supported objects and opens the map tab', async () => {
+    await renderMenu({
+      object: makeObject('ConfigMap', {
+        group: '',
+        version: 'v1',
+      }),
+    });
+
+    openMenu(container);
+    const items = Array.from(container.querySelectorAll<HTMLElement>('.context-menu-item'));
+    const objectMapItem = items.find((item) => item.textContent?.includes('Object Map'));
+    expect(objectMapItem).toBeTruthy();
+
+    act(() => {
+      objectMapItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(openWithObjectMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'ConfigMap',
+        name: 'test-resource',
+        namespace: 'default',
+        clusterId: 'cluster-1',
+        group: '',
+        version: 'v1',
+      }),
+      { initialTab: 'map' }
+    );
+    expect(container.querySelector('.actions-menu-dropdown')).toBeNull();
   });
 
   describe('CronJob actions', () => {

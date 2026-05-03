@@ -216,6 +216,32 @@ describe('useObjectPanelTabs', () => {
     expect(availableTabs.map((tab) => tab.label)).toContain('Map');
   });
 
+  it('keeps the Map tab for ConfigMaps and Secrets', async () => {
+    const configMap = await renderHook({
+      objectData: {
+        kind: 'ConfigMap',
+        name: 'app-config',
+        namespace: 'team-a',
+        clusterId: 'cluster-a',
+        group: '',
+        version: 'v1',
+      },
+    });
+    expect(configMap.availableTabs.map((tab) => tab.label)).toContain('Map');
+
+    const secret = await renderHook({
+      objectData: {
+        kind: 'Secret',
+        name: 'app-secret',
+        namespace: 'team-a',
+        clusterId: 'cluster-a',
+        group: '',
+        version: 'v1',
+      },
+    });
+    expect(secret.availableTabs.map((tab) => tab.label)).toContain('Map');
+  });
+
   it('hides the Map tab for supported kinds when the object reference is incomplete', async () => {
     const { availableTabs } = await renderHook({
       objectData: { kind: 'Deployment', name: 'api', namespace: 'team-a' },

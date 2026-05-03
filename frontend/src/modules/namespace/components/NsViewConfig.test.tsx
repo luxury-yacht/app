@@ -158,6 +158,7 @@ vi.mock('@/core/capabilities', () => ({
 vi.mock('@shared/components/icons/MenuIcons', () => ({
   DiffIcon: () => <span>diff</span>,
   OpenIcon: () => <span>open</span>,
+  ObjectMapIcon: () => <span>map</span>,
   DeleteIcon: () => <span>delete</span>,
 }));
 
@@ -257,6 +258,7 @@ describe('NsViewConfig ConfigViewGrid', () => {
     });
 
     const menuItems = getCustomContextMenuItems(resource, 'name');
+    expect(menuItems.map((item: any) => item.label)).toContain('Object Map');
     expect(menuItems.map((item: any) => item.label)).toContain('Delete');
     act(() => {
       menuItems[0].onClick();
@@ -268,6 +270,20 @@ describe('NsViewConfig ConfigViewGrid', () => {
         namespace: resource.namespace,
         clusterId: 'alpha:ctx',
       })
+    );
+
+    const objectMapAction = menuItems.find((item: any) => item.label === 'Object Map');
+    act(() => {
+      objectMapAction.onClick();
+    });
+    expect(objectPanelMock.openWithObject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: resource.kind,
+        name: resource.name,
+        namespace: resource.namespace,
+        clusterId: 'alpha:ctx',
+      }),
+      { initialTab: 'map' }
     );
 
     const deleteAction = menuItems.find((item: any) => item.label === 'Delete');
