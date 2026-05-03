@@ -55,6 +55,7 @@
   --object-map-tooltip-trace-y: -12;
   --object-map-tooltip-label-max-chars: 30;
   --object-map-tooltip-trace-max-chars: 36;
+  --object-map-fit-view-padding: 16;
   --object-map-full-opacity: 1;
 }
 

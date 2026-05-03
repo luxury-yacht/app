@@ -110,6 +110,7 @@ const readPalette = (element: HTMLElement): ObjectMapG6Palette => {
     tooltipTraceY: cssNumber(styles, '--object-map-tooltip-trace-y'),
     tooltipLabelMaxChars: cssNumber(styles, '--object-map-tooltip-label-max-chars'),
     tooltipTraceMaxChars: cssNumber(styles, '--object-map-tooltip-trace-max-chars'),
+    fitViewPadding: cssNumber(styles, '--object-map-fit-view-padding'),
     fullOpacity: cssNumber(styles, '--object-map-full-opacity'),
     fontFamily: styles.fontFamily,
   };
@@ -164,6 +165,20 @@ const objectMapG6EdgeOptions = (palette: ObjectMapG6Palette) => ({
     dimmed: { opacity: palette.edgeDimmedOpacity },
   },
 });
+
+const fitGraphToView = async (graph: Graph, padding: number): Promise<void> => {
+  if (graph.destroyed) return;
+  await graph.fitView({ when: 'always', direction: 'both' }, false);
+  if (graph.destroyed || padding <= 0) return;
+  const [width, height] = graph.getSize();
+  if (width <= 0 || height <= 0) return;
+  const widthRatio = Math.max(0.01, (width - padding * 2) / width);
+  const heightRatio = Math.max(0.01, (height - padding * 2) / height);
+  const zoomRatio = Math.min(widthRatio, heightRatio);
+  if (zoomRatio < 1) {
+    await graph.zoomBy(zoomRatio, false);
+  }
+};
 
 const isMacPlatform = (): boolean =>
   typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.platform);
@@ -589,6 +604,19 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
     setTooltipPosition({ x, y });
   }, []);
 
+  const scheduleFitGraphToView = useCallback(() => {
+    const graph = graphRef.current;
+    const currentPalette = paletteRef.current;
+    if (!graph || graph.destroyed || !currentPalette) return;
+    void fitGraphToView(graph, currentPalette.fitViewPadding)
+      .then(updateTooltipPosition)
+      .catch((error: unknown) => {
+        if (graphRef.current === graph && !graph.destroyed) {
+          console.error('[ObjectMapG6Renderer] Failed to fit graph to view:', error);
+        }
+      });
+  }, [updateTooltipPosition]);
+
   const resizeGraphToContainer = useCallback(() => {
     const graph = graphRef.current;
     const container = containerRef.current;
@@ -601,10 +629,10 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
       graph.setSize(width, height);
     }
     if (autoFit) {
-      void graph.fitView({ when: 'always', direction: 'both' }, false);
+      scheduleFitGraphToView();
     }
     updateTooltipPosition();
-  }, [autoFit, updateTooltipPosition]);
+  }, [autoFit, scheduleFitGraphToView, updateTooltipPosition]);
 
   const scheduleSelectionState = useCallback(
     (nextLayout: ObjectMapLayout, nextSelectionState: ObjectMapSelectionState) => {
@@ -961,21 +989,17 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
         void graph.zoomBy(0.8, false);
       },
       fitToView: () => {
-        const graph = graphRef.current;
-        if (!graph || graph.destroyed) return;
-        void graph.fitView({ when: 'always', direction: 'both' }, false);
+        scheduleFitGraphToView();
       },
     };
     onViewportControlsChange(controls);
     return () => onViewportControlsChange(null);
-  }, [onViewportControlsChange]);
+  }, [onViewportControlsChange, scheduleFitGraphToView]);
 
   useEffect(() => {
     if (!autoFit) return;
-    const graph = graphRef.current;
-    if (!graph || graph.destroyed) return;
-    void graph.fitView({ when: 'always', direction: 'both' }, false);
-  }, [autoFit, data]);
+    scheduleFitGraphToView();
+  }, [autoFit, data, palette, scheduleFitGraphToView]);
 
   useEffect(() => {
     updateTooltipPosition();

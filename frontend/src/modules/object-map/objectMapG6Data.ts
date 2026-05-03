@@ -63,6 +63,7 @@ export interface ObjectMapG6Palette {
   tooltipTraceY: number;
   tooltipLabelMaxChars: number;
   tooltipTraceMaxChars: number;
+  fitViewPadding: number;
   fullOpacity: number;
   fontFamily: string;
 }

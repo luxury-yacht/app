@@ -70,6 +70,7 @@ const PALETTE: ObjectMapG6Palette = {
   tooltipTraceY: -12,
   tooltipLabelMaxChars: 30,
   tooltipTraceMaxChars: 36,
+  fitViewPadding: 16,
   fullOpacity: 1,
   fontFamily:
     '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, "Helvetica Neue", Arial, sans-serif',
