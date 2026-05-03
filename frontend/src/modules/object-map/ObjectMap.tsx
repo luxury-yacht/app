@@ -32,6 +32,7 @@ import {
   type DeploymentGroup,
 } from './objectMapCollapse';
 import { dedupeServiceEdges } from './objectMapDedupe';
+import { filterByDirectionalReachability } from './objectMapDirectionalFilter';
 import {
   computeObjectMapBounds,
   computeObjectMapLayout,
@@ -392,14 +393,37 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
     [payload.nodes, payload.edges]
   );
 
+  // Restrict the rendered set to nodes/edges directionally reachable
+  // from the seed: forward chain or backward chain only, no mixed
+  // walks. Without this step a hub-kind seed (Node, PV,
+  // ServiceAccount, etc.) drags in every consumer's forward
+  // dependencies and the map grows unwieldy. The same algorithm
+  // powers the click-to-highlight selection trace; here we apply it
+  // at render time with the seed as anchor.
+  const directionallyReachable = useMemo(
+    () => filterByDirectionalReachability(payload.nodes, dedupedEdges, seedId),
+    [payload.nodes, dedupedEdges, seedId]
+  );
+
   const collapseInfo = useMemo(
-    () => computeCollapseInfo(payload.nodes, dedupedEdges, seedId, expandedDeployments),
-    [payload.nodes, dedupedEdges, seedId, expandedDeployments]
+    () =>
+      computeCollapseInfo(
+        directionallyReachable.nodes,
+        directionallyReachable.edges,
+        seedId,
+        expandedDeployments
+      ),
+    [directionallyReachable.nodes, directionallyReachable.edges, seedId, expandedDeployments]
   );
 
   const filtered = useMemo(
-    () => filterByCollapseInfo(payload.nodes, dedupedEdges, collapseInfo.visibleNodeIds),
-    [payload.nodes, dedupedEdges, collapseInfo.visibleNodeIds]
+    () =>
+      filterByCollapseInfo(
+        directionallyReachable.nodes,
+        directionallyReachable.edges,
+        collapseInfo.visibleNodeIds
+      ),
+    [directionallyReachable.nodes, directionallyReachable.edges, collapseInfo.visibleNodeIds]
   );
 
   const baseLayout = useMemo(
