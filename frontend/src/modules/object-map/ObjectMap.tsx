@@ -398,48 +398,80 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
     }
   }, [layout.nodes, activeNodeId]);
 
-  // Pre-index edges for O(1) lookup of "what's connected to node X" so
-  // the per-node className computation in render stays cheap even on
-  // graphs near the 1000-node backend cap.
+  // Pre-index edges by direction for the selection-trace BFS. Each
+  // node has separate lists of outgoing and incoming edges so the
+  // forward and backward chains can each walk in their own direction
+  // only.
   const adjacency = useMemo(() => {
-    const nodesByNeighbor = new Map<string, Set<string>>();
-    const edgesByNode = new Map<string, Set<string>>();
+    const outgoing = new Map<string, Array<{ edgeId: string; neighbor: string }>>();
+    const incoming = new Map<string, Array<{ edgeId: string; neighbor: string }>>();
     layout.edges.forEach((edge) => {
-      let aNeighbors = nodesByNeighbor.get(edge.sourceId);
-      if (!aNeighbors) {
-        aNeighbors = new Set();
-        nodesByNeighbor.set(edge.sourceId, aNeighbors);
+      let outs = outgoing.get(edge.sourceId);
+      if (!outs) {
+        outs = [];
+        outgoing.set(edge.sourceId, outs);
       }
-      aNeighbors.add(edge.targetId);
-      let bNeighbors = nodesByNeighbor.get(edge.targetId);
-      if (!bNeighbors) {
-        bNeighbors = new Set();
-        nodesByNeighbor.set(edge.targetId, bNeighbors);
+      outs.push({ edgeId: edge.id, neighbor: edge.targetId });
+      let ins = incoming.get(edge.targetId);
+      if (!ins) {
+        ins = [];
+        incoming.set(edge.targetId, ins);
       }
-      bNeighbors.add(edge.sourceId);
-      let aEdges = edgesByNode.get(edge.sourceId);
-      if (!aEdges) {
-        aEdges = new Set();
-        edgesByNode.set(edge.sourceId, aEdges);
-      }
-      aEdges.add(edge.id);
-      let bEdges = edgesByNode.get(edge.targetId);
-      if (!bEdges) {
-        bEdges = new Set();
-        edgesByNode.set(edge.targetId, bEdges);
-      }
-      bEdges.add(edge.id);
+      ins.push({ edgeId: edge.id, neighbor: edge.sourceId });
     });
-    return { nodesByNeighbor, edgesByNode };
+    return { outgoing, incoming };
   }, [layout.edges]);
 
+  // Selection trace: from the active node, walk the forward chain via
+  // outgoing edges only, AND the backward chain via incoming edges
+  // only. Each chain is a separate BFS — once a node enters the
+  // forward chain, we keep walking forward from it (its outgoing); a
+  // node in the backward chain only walks backward (its incoming).
+  // Result: clicking a Pod highlights its ancestors (RS, Deployment,
+  // HPA), the things routing to it (Service, Ingress), AND its
+  // dependencies (CMs, PVC → PV, Node) — but NOT sibling Pods of the
+  // same RS, since reaching them would require going forward from RS
+  // (which is in the backward chain).
   const selectionState: SelectionState = useMemo(() => {
     if (activeNodeId === null) return EMPTY_SELECTION;
-    return {
-      activeId: activeNodeId,
-      connectedIds: adjacency.nodesByNeighbor.get(activeNodeId) ?? new Set(),
-      connectedEdgeIds: adjacency.edgesByNode.get(activeNodeId) ?? new Set(),
-    };
+    const connectedIds = new Set<string>();
+    const connectedEdgeIds = new Set<string>();
+
+    // Forward chain — walks only outgoing edges.
+    const forwardVisited = new Set<string>([activeNodeId]);
+    const forwardQueue: string[] = [activeNodeId];
+    while (forwardQueue.length > 0) {
+      const u = forwardQueue.shift()!;
+      const outs = adjacency.outgoing.get(u);
+      if (!outs) continue;
+      for (const { edgeId, neighbor } of outs) {
+        connectedEdgeIds.add(edgeId);
+        if (forwardVisited.has(neighbor)) continue;
+        forwardVisited.add(neighbor);
+        connectedIds.add(neighbor);
+        forwardQueue.push(neighbor);
+      }
+    }
+
+    // Backward chain — walks only incoming edges. Independent of the
+    // forward chain; a node reachable via both gets added to both
+    // visited sets, which is fine — we only union into connectedIds.
+    const backwardVisited = new Set<string>([activeNodeId]);
+    const backwardQueue: string[] = [activeNodeId];
+    while (backwardQueue.length > 0) {
+      const u = backwardQueue.shift()!;
+      const ins = adjacency.incoming.get(u);
+      if (!ins) continue;
+      for (const { edgeId, neighbor } of ins) {
+        connectedEdgeIds.add(edgeId);
+        if (backwardVisited.has(neighbor)) continue;
+        backwardVisited.add(neighbor);
+        connectedIds.add(neighbor);
+        backwardQueue.push(neighbor);
+      }
+    }
+
+    return { activeId: activeNodeId, connectedIds, connectedEdgeIds };
   }, [activeNodeId, adjacency]);
 
   const handleNodeClick = useCallback((id: string) => {
