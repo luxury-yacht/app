@@ -258,7 +258,7 @@ describe('NsViewConfig ConfigViewGrid', () => {
     });
 
     const menuItems = getCustomContextMenuItems(resource, 'name');
-    expect(menuItems.map((item: any) => item.label)).toContain('Object Map');
+    expect(menuItems.map((item: any) => item.label)).toContain('Map');
     expect(menuItems.map((item: any) => item.label)).toContain('Delete');
     act(() => {
       menuItems[0].onClick();
@@ -272,7 +272,7 @@ describe('NsViewConfig ConfigViewGrid', () => {
       })
     );
 
-    const objectMapAction = menuItems.find((item: any) => item.label === 'Object Map');
+    const objectMapAction = menuItems.find((item: any) => item.label === 'Map');
     act(() => {
       objectMapAction.onClick();
     });

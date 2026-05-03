@@ -17,7 +17,7 @@ import type { ViewType } from '@modules/object-panel/components/ObjectPanel/type
 export interface OpenWithObjectOptions {
   /**
    * Sub-tab to activate after the panel opens. Used by callers like
-   * the workloads "Object Map" right-click action that want to land on
+   * the workloads "Map" right-click action that want to land on
    * a specific tab instead of Details.
    */
   initialTab?: ViewType;
@@ -123,7 +123,7 @@ export function useObjectPanel() {
       // mounts on the right tab instead of flashing Details first. The
       // active-tab map is per-panel sticky state, so calling this for
       // a re-opened panel will also override the user's last selection
-      // — which is what we want for "right-click → Object Map".
+      // — which is what we want for "right-click → Map".
       if (options?.initialTab) {
         setObjectPanelActiveTab(panelId, options.initialTab);
       }

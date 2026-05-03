@@ -226,7 +226,7 @@ describe('ClusterViewNodes', () => {
     );
   });
 
-  it('opens the Object Map from the node context menu', async () => {
+  it('opens the Map from the node context menu', async () => {
     await act(async () => {
       root.render(<ClusterViewNodes data={[baseNode as any]} loaded={true} />);
       await Promise.resolve();
@@ -235,7 +235,7 @@ describe('ClusterViewNodes', () => {
     const props = gridTablePropsRef.current;
     const objectMapItem = props
       .getCustomContextMenuItems(baseNode, 'name')
-      .find((item: any) => item.label === 'Object Map');
+      .find((item: any) => item.label === 'Map');
     expect(objectMapItem).toBeTruthy();
 
     act(() => {

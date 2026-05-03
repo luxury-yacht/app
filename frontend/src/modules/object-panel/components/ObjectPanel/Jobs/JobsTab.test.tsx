@@ -190,7 +190,7 @@ describe('JobsTab', () => {
     );
   });
 
-  it('opens the Object Map from the job context menu', () => {
+  it('opens the Map from the job context menu', () => {
     const job = makeJob({ name: 'nightly', namespace: 'ops' });
 
     act(() => {
@@ -202,7 +202,7 @@ describe('JobsTab', () => {
     const row = gridTablePropsRef.current.data[0];
     const objectMapItem = gridTablePropsRef.current
       .getCustomContextMenuItems(row)
-      .find((item: any) => item.label === 'Object Map');
+      .find((item: any) => item.label === 'Map');
     expect(objectMapItem).toBeTruthy();
 
     act(() => {

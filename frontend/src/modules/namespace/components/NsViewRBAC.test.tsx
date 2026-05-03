@@ -245,12 +245,12 @@ describe('NsViewRBAC', () => {
     );
   });
 
-  it('opens the Object Map for ServiceAccount rows', async () => {
+  it('opens the Map for ServiceAccount rows', async () => {
     const entry = baseRBAC({ kind: 'ServiceAccount', name: 'builder' });
     const props = await renderRBACView([entry]);
     const objectMapItem = props
       .getCustomContextMenuItems(entry, 'name')
-      .find((item: any) => item.label === 'Object Map');
+      .find((item: any) => item.label === 'Map');
     expect(objectMapItem).toBeTruthy();
 
     act(() => {

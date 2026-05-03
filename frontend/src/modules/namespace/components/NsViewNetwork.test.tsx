@@ -263,7 +263,7 @@ describe('NsViewNetwork', () => {
     ['Ingress', 'networking.k8s.io', 'v1'],
     ['Service', '', 'v1'],
     ['EndpointSlice', 'discovery.k8s.io', 'v1'],
-  ])('opens the Object Map from %s context menu', async (kind, group, version) => {
+  ])('opens the Map from %s context menu', async (kind, group, version) => {
     const entry = baseNetwork({
       kind,
       kindAlias: kind,
@@ -272,7 +272,7 @@ describe('NsViewNetwork', () => {
     const props = await renderNetworkView([entry]);
 
     const menu = props.getCustomContextMenuItems(entry, 'name');
-    const objectMapItem = menu.find((item: any) => item.label === 'Object Map');
+    const objectMapItem = menu.find((item: any) => item.label === 'Map');
     expect(objectMapItem).toBeTruthy();
 
     act(() => {

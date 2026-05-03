@@ -211,12 +211,12 @@ export function buildObjectActionItems({
     });
   }
 
-  // Object Map - sits with the navigation block so it picks up the
+  // Map - sits with the navigation block so it picks up the
   // shared section divider (see useGridTableContextMenuItems). The
   // handler is opt-in per call site; when omitted, no item is added.
   if (handlers.onObjectMap) {
     menuItems.push({
-      label: 'Object Map',
+      label: 'Map',
       icon: <ObjectMapIcon />,
       onClick: handlers.onObjectMap,
     });

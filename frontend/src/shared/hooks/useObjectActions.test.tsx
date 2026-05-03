@@ -8,7 +8,7 @@ describe('buildObjectActionItems', () => {
     eventBus.clear();
   });
 
-  it('omits the Object Map item when no handler is provided (default for non-workloads views)', () => {
+  it('omits the Map item when no handler is provided (default for non-workloads views)', () => {
     const items = buildObjectActionItems({
       object: {
         kind: 'Deployment',
@@ -22,11 +22,11 @@ describe('buildObjectActionItems', () => {
       },
       permissions: {},
     });
-    const item = items.find((i) => 'label' in i && i.label === 'Object Map');
+    const item = items.find((i) => 'label' in i && i.label === 'Map');
     expect(item).toBeUndefined();
   });
 
-  it('adds the Object Map item when a handler is provided and invokes it on click', () => {
+  it('adds the Map item when a handler is provided and invokes it on click', () => {
     let invoked = false;
     const items = buildObjectActionItems({
       object: {
@@ -44,10 +44,10 @@ describe('buildObjectActionItems', () => {
       },
       permissions: {},
     });
-    const item = items.find((i) => 'label' in i && i.label === 'Object Map');
+    const item = items.find((i) => 'label' in i && i.label === 'Map');
     expect(item).toBeTruthy();
     if (!item || !('onClick' in item)) {
-      throw new Error('Object Map item missing onClick');
+      throw new Error('Map item missing onClick');
     }
     item.onClick?.();
     expect(invoked).toBe(true);

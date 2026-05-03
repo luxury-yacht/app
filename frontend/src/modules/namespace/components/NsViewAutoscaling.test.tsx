@@ -158,7 +158,7 @@ describe('NsViewAutoscaling', () => {
     ...overrides,
   });
 
-  it('opens the Object Map for HorizontalPodAutoscaler rows', async () => {
+  it('opens the Map for HorizontalPodAutoscaler rows', async () => {
     const entry = baseHpa();
 
     await act(async () => {
@@ -176,7 +176,7 @@ describe('NsViewAutoscaling', () => {
 
     const objectMapItem = gridTablePropsRef.current
       .getCustomContextMenuItems(entry, 'name')
-      .find((item: any) => item.label === 'Object Map');
+      .find((item: any) => item.label === 'Map');
     expect(objectMapItem).toBeTruthy();
 
     act(() => {

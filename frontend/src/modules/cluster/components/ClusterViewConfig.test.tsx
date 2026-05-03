@@ -162,7 +162,7 @@ describe('ClusterViewConfig', () => {
     expect(props).toBeTruthy();
     const contextItems = props.getCustomContextMenuItems(baseConfig, 'kind');
     const mapItem = contextItems.find(
-      (item: { label?: string; onClick?: () => void }) => item.label === 'Object Map'
+      (item: { label?: string; onClick?: () => void }) => item.label === 'Map'
     );
 
     expect(mapItem).toBeTruthy();
@@ -192,7 +192,7 @@ describe('ClusterViewConfig', () => {
     expect(props).toBeTruthy();
     const contextItems = props.getCustomContextMenuItems(ingressClass, 'kind');
     const mapItem = contextItems.find(
-      (item: { label?: string; onClick?: () => void }) => item.label === 'Object Map'
+      (item: { label?: string; onClick?: () => void }) => item.label === 'Map'
     );
 
     expect(mapItem).toBeTruthy();
@@ -228,8 +228,6 @@ describe('ClusterViewConfig', () => {
       'kind'
     );
 
-    expect(contextItems.some((item: { label?: string }) => item.label === 'Object Map')).toBe(
-      false
-    );
+    expect(contextItems.some((item: { label?: string }) => item.label === 'Map')).toBe(false);
   });
 });

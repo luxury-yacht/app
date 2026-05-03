@@ -325,7 +325,7 @@ describe('ActionsMenu', () => {
     });
   });
 
-  it('shows Object Map for supported objects and opens the map tab', async () => {
+  it('shows Map for supported objects and opens the map tab', async () => {
     await renderMenu({
       object: makeObject('ConfigMap', {
         group: '',
@@ -335,7 +335,7 @@ describe('ActionsMenu', () => {
 
     openMenu(container);
     const items = Array.from(container.querySelectorAll<HTMLElement>('.context-menu-item'));
-    const objectMapItem = items.find((item) => item.textContent?.includes('Object Map'));
+    const objectMapItem = items.find((item) => item.textContent?.includes('Map'));
     expect(objectMapItem).toBeTruthy();
 
     act(() => {

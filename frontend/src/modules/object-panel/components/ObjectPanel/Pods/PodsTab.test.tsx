@@ -159,7 +159,7 @@ describe('PodsTab', () => {
     expect(gridTablePropsRef.current.keyExtractor(pod)).toBe('panel-cluster-A|/v1/Pod/team-a/api');
   });
 
-  it('opens the Object Map from the pod context menu', () => {
+  it('opens the Map from the pod context menu', () => {
     const pod = {
       name: 'api',
       namespace: 'team-a',
@@ -182,7 +182,7 @@ describe('PodsTab', () => {
 
     const objectMapItem = gridTablePropsRef.current
       .getCustomContextMenuItems(pod)
-      .find((item: any) => item.label === 'Object Map');
+      .find((item: any) => item.label === 'Map');
     expect(objectMapItem).toBeTruthy();
 
     act(() => {

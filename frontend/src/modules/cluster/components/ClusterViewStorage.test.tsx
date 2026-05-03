@@ -176,7 +176,7 @@ describe('ClusterViewStorage', () => {
     expect(props.filters?.options?.kinds).toEqual(['PersistentVolume']);
   });
 
-  it('opens the Object Map for PersistentVolume rows', async () => {
+  it('opens the Map for PersistentVolume rows', async () => {
     await act(async () => {
       root.render(<ClusterViewStorage data={[basePV]} loaded={true} />);
       await Promise.resolve();
@@ -185,7 +185,7 @@ describe('ClusterViewStorage', () => {
     const props = gridTablePropsRef.current;
     const objectMapItem = props
       .getCustomContextMenuItems(basePV, 'name')
-      .find((item: any) => item.label === 'Object Map');
+      .find((item: any) => item.label === 'Map');
     expect(objectMapItem).toBeTruthy();
 
     act(() => {

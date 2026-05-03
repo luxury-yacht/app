@@ -156,7 +156,7 @@ describe('ClusterViewRBAC', () => {
   it.each([
     ['ClusterRole', 'admin'],
     ['ClusterRoleBinding', 'admin-binding'],
-  ])('opens the Object Map for %s rows', async (kind, name) => {
+  ])('opens the Map for %s rows', async (kind, name) => {
     const row = { ...baseRBAC, kind, name };
 
     await act(async () => {
@@ -166,7 +166,7 @@ describe('ClusterViewRBAC', () => {
 
     const objectMapItem = gridTablePropsRef.current
       .getCustomContextMenuItems(row, 'name')
-      .find((item: any) => item.label === 'Object Map');
+      .find((item: any) => item.label === 'Map');
     expect(objectMapItem).toBeTruthy();
 
     act(() => {

@@ -253,7 +253,7 @@ describe('NsViewStorage', () => {
       })
     );
 
-    const objectMapItem = menu.find((item: any) => item.label === 'Object Map');
+    const objectMapItem = menu.find((item: any) => item.label === 'Map');
     expect(objectMapItem).toBeTruthy();
 
     act(() => {

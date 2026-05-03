@@ -591,14 +591,14 @@ describe('ObjectMap', () => {
 
     const menu = container.querySelector<HTMLElement>('[data-testid="mock-context-menu"]');
     expect(menu?.textContent).toContain('Open');
-    expect(menu?.textContent).toContain('Object Map');
+    expect(menu?.textContent).toContain('Map');
     expect(menu?.textContent).toContain('Diff');
 
     const openItem = Array.from(menu!.querySelectorAll('button')).find(
       (button) => button.textContent === 'Open'
     );
     const mapItem = Array.from(menu!.querySelectorAll('button')).find(
-      (button) => button.textContent === 'Object Map'
+      (button) => button.textContent === 'Map'
     );
 
     await act(async () => {
@@ -625,7 +625,7 @@ describe('ObjectMap', () => {
 
     const nextMenu = container.querySelector<HTMLElement>('[data-testid="mock-context-menu"]');
     const nextMapItem = Array.from(nextMenu!.querySelectorAll('button')).find(
-      (button) => button.textContent === 'Object Map'
+      (button) => button.textContent === 'Map'
     );
     expect(mapItem).toBeTruthy();
 
