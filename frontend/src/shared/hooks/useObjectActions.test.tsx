@@ -192,6 +192,56 @@ describe('buildObjectActionItems', () => {
     expect(items[3]).toMatchObject({ label: 'Restart' });
   });
 
+  it('uses one divider between navigation actions and Delete when no custom actions render', () => {
+    const items = buildObjectActionItems({
+      object: {
+        kind: 'ConfigMap',
+        name: 'app-config',
+        namespace: 'apps',
+        clusterId: 'cluster-a',
+      },
+      context: 'gridtable',
+      handlers: {
+        onOpen: () => undefined,
+        onDelete: () => undefined,
+      },
+      permissions: {
+        delete: { allowed: true, pending: false },
+      },
+    });
+
+    expect(items.map((item) => ('divider' in item ? 'divider' : item.label))).toEqual([
+      'Open',
+      'Diff',
+      'divider',
+      'Delete',
+    ]);
+  });
+
+  it('does not leave a trailing divider when Delete is unavailable', () => {
+    const items = buildObjectActionItems({
+      object: {
+        kind: 'Secret',
+        name: 'app-secret',
+        namespace: 'apps',
+        clusterId: 'cluster-a',
+      },
+      context: 'gridtable',
+      handlers: {
+        onOpen: () => undefined,
+        onDelete: () => undefined,
+      },
+      permissions: {
+        delete: { allowed: false, pending: false },
+      },
+    });
+
+    expect(items.map((item) => ('divider' in item ? 'divider' : item.label))).toEqual([
+      'Open',
+      'Diff',
+    ]);
+  });
+
   it('adds a disabled port-forward action when the target is missing cluster scope', () => {
     const items = buildObjectActionItems({
       object: {

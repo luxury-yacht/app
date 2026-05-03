@@ -256,17 +256,16 @@ export function buildObjectActionItems({
     deleteStatus?.pending ||
     portForwardStatus?.pending;
 
-  const hasFollowUpSection =
+  const hasActionSection =
     anyPending ||
     normalizedKind === 'CronJob' ||
     (RESTARTABLE_KINDS.includes(normalizedKind) && Boolean(handlers.onRestart)) ||
     (ROLLBACKABLE_KINDS.includes(normalizedKind) && Boolean(handlers.onRollback)) ||
     (SCALABLE_KINDS.includes(normalizedKind) &&
       (Boolean(object.hpaManaged) || Boolean(handlers.onScale))) ||
-    portForwardAvailability.show ||
-    Boolean(handlers.onDelete);
+    portForwardAvailability.show;
 
-  if (menuItems.length > 0 && hasFollowUpSection) {
+  if (menuItems.length > 0 && hasActionSection) {
     menuItems.push({ divider: true });
   }
 
@@ -370,7 +369,8 @@ export function buildObjectActionItems({
   if (deleteStatus?.allowed && !deleteStatus.pending && handlers.onDelete) {
     // Add divider before Delete if there are other action items
     const hasOtherActions = menuItems.some((item) => !('header' in item) && !('divider' in item));
-    if (hasOtherActions) {
+    const lastItem = menuItems[menuItems.length - 1];
+    if (hasOtherActions && !(lastItem && 'divider' in lastItem && lastItem.divider)) {
       menuItems.push({ divider: true });
     }
 
