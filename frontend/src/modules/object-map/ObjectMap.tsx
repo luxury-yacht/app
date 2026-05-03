@@ -179,6 +179,11 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
     g6ViewportControls?.focusNode(node.id);
   }, [g6ViewportControls, model, searchIndex, searchMatches]);
 
+  const resetMapLayout = useCallback(() => {
+    model.resetLayout();
+    setFocusMode(false);
+  }, [model]);
+
   const viewportControlsReady = Boolean(g6ViewportControls);
   const contextMenuObject = contextMenu?.ref ?? null;
   const objectActions = useObjectActionController({
@@ -283,7 +288,6 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
           >
             <ZoomInIcon />
           </button>
-          <span className="object-map__toolbar-separator" aria-hidden="true" />
           <button
             type="button"
             className="object-map__toolbar-button"
@@ -310,16 +314,6 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
           >
             <AutoFitIcon />
           </button>
-          <button
-            type="button"
-            className="object-map__toolbar-button"
-            onClick={model.resetLayout}
-            title="Reset layout"
-            aria-label="Reset layout"
-            disabled={!model.hasNodePositionOverrides}
-          >
-            <ResetFiltersIcon />
-          </button>
           <span className="object-map__toolbar-separator" aria-hidden="true" />
           <button
             type="button"
@@ -333,6 +327,17 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
           >
             <FocusModeIcon />
           </button>
+          <button
+            type="button"
+            className="object-map__toolbar-button"
+            onClick={resetMapLayout}
+            title="Reset layout"
+            aria-label="Reset layout"
+            disabled={!model.hasNodePositionOverrides && !focusMode}
+          >
+            <ResetFiltersIcon />
+          </button>
+          <span className="object-map__toolbar-separator" aria-hidden="true" />
           {onRefresh && (
             <button
               type="button"

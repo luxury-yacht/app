@@ -433,10 +433,13 @@ describe('ObjectMap', () => {
     const focusToggle = container.querySelector<HTMLButtonElement>(
       '[aria-label="Toggle focus mode"]'
     );
+    const resetButton = container.querySelector<HTMLButtonElement>('[aria-label="Reset layout"]');
     const podA = container.querySelector<HTMLButtonElement>('[aria-label="Pod: web-a"]');
     const podANode = container.querySelector<HTMLElement>('[data-testid="mock-node-pod-a"]');
 
     expect(focusToggle).toBeTruthy();
+    expect(resetButton).toBeTruthy();
+    expect(resetButton?.disabled).toBe(true);
     expect(podA).toBeTruthy();
     expect(podANode).toBeTruthy();
     const initialPodAX = podANode!.dataset.x;
@@ -460,6 +463,7 @@ describe('ObjectMap', () => {
     });
 
     expect(focusToggle?.getAttribute('aria-pressed')).toBe('true');
+    expect(resetButton?.disabled).toBe(false);
     expect(container.querySelector('[aria-label="Deployment: web"]')).toBeTruthy();
     expect(container.querySelector('[aria-label="Pod: web-a"]')).toBeTruthy();
     expect(
@@ -477,14 +481,17 @@ describe('ObjectMap', () => {
     );
 
     await act(async () => {
-      container
-        .querySelector<HTMLButtonElement>('[aria-label="Pod: web-a"]')!
-        .dispatchEvent(mouseEvent('click'));
+      resetButton!.click();
       await Promise.resolve();
     });
 
+    expect(focusToggle?.getAttribute('aria-pressed')).toBe('false');
     expect(container.querySelector('[aria-label="Pod: web-b"]')).toBeTruthy();
     expect(container.querySelector('[data-testid="mock-edge-edge-b"]')).toBeTruthy();
+    expect(container.querySelector('.object-map__status')?.textContent).toContain(
+      '5 objects / 4 relationships'
+    );
+    expect(resetButton?.disabled).toBe(true);
 
     cleanup();
   });
