@@ -104,14 +104,12 @@
   stroke-width: 3;
 }
 
-/* Hue assignments are intentionally spread across the wheel so the 9
- * edge categories stay distinguishable even when several converge on
- * a single node. Two collisions were fixed in this pass:
- *   - schedules moved off badge-teal (too close to the accent used by
- *     owner) onto lime;
- *   - scales moved off color-warning (too close to mounts orange)
- *     onto color-error red. Red doesn't carry destructive meaning
- *     here — edges are passive lines, not actions. */
+/* Hue assignments are spread across the wheel so the 9 edge
+ * categories stay distinguishable. `mounts` and `storage` use raw
+ * hex colours rather than badge tokens because the palette doesn't
+ * have suitably-distinct cyan/yellow shades — and the prior choices
+ * (orange, pink) collided with the theme-dependent accent (orange in
+ * dark theme) and with purple respectively. */
 .object-map-edge--owner {
   stroke: var(--color-accent);
 }
@@ -128,10 +126,10 @@
   stroke: var(--color-error);
 }
 .object-map-edge--mounts {
-  stroke: var(--badge-orange-text);
+  stroke: #06b6d4;
 }
 .object-map-edge--storage {
-  stroke: var(--badge-pink-text);
+  stroke: #eab308;
 }
 .object-map-edge--schedules {
   stroke: var(--badge-lime-text);
@@ -318,6 +316,15 @@
   flex-shrink: 0;
   /* The edge-style classes set stroke colours via fill:none + stroke;
    * SVG <line> inside this swatch picks them up automatically. */
+}
+
+/* Match the legend swatch's stroke weight to the highlighted edge
+ * weight so the colours read at full intensity. The actual edge paths
+ * pick up 1.5px from `.object-map__edges path` above, but lines in
+ * the legend swatch aren't descendants of that group and would
+ * otherwise fall back to SVG's 1px default and look muted. */
+.object-map__legend-swatch line {
+  stroke-width: 2.5;
 }
 
 .object-map__legend-label {
