@@ -44,7 +44,7 @@ const (
 // Snapshot and response cache settings.
 const (
 	// SnapshotCacheTTL controls how long snapshot builds are cached to avoid redundant work.
-	SnapshotCacheTTL = 5 * time.Second
+	SnapshotCacheTTL = 2 * time.Second
 
 	// ResponseCacheTTL controls how long non-informer resource GETs are cached.
 	// Keep this short to reduce staleness while still cutting repeated requests.

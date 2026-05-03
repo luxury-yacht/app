@@ -215,6 +215,37 @@ const collapsePayload: ObjectMapSnapshotPayload = {
   ],
 };
 
+const rolloutReplicaSetPayload: ObjectMapSnapshotPayload = {
+  ...payload,
+  nodes: [
+    { id: 'deploy', depth: 0, ref: ref('deploy', 'Deployment', 'web', 'apps') },
+    { id: 'rs-current', depth: 1, ref: ref('rs-current', 'ReplicaSet', 'web-zzz', 'apps') },
+    { id: 'rs-old', depth: 1, ref: ref('rs-old', 'ReplicaSet', 'web-aaa', 'apps') },
+    { id: 'pod-current', depth: 2, ref: ref('pod-current', 'Pod', 'web-zzz-abc', '') },
+    { id: 'pod-old', depth: 2, ref: ref('pod-old', 'Pod', 'web-aaa-def', '') },
+    { id: 'node-old', depth: 3, ref: ref('node-old', 'Node', 'worker-a', '') },
+  ],
+  edges: [
+    { id: 'edge-current-rs', source: 'deploy', target: 'rs-current', type: 'owner', label: 'owns' },
+    { id: 'edge-old-rs', source: 'deploy', target: 'rs-old', type: 'owner', label: 'owns' },
+    {
+      id: 'edge-current-pod',
+      source: 'rs-current',
+      target: 'pod-current',
+      type: 'owner',
+      label: 'owns',
+    },
+    { id: 'edge-old-pod', source: 'rs-old', target: 'pod-old', type: 'owner', label: 'owns' },
+    {
+      id: 'edge-old-node',
+      source: 'pod-old',
+      target: 'node-old',
+      type: 'schedules',
+      label: 'schedules',
+    },
+  ],
+};
+
 const renderObjectMap = async ({
   testPayload = payload,
   onOpenPanel,
@@ -388,6 +419,20 @@ describe('ObjectMap', () => {
     });
 
     expect(container.querySelector('[aria-label="ReplicaSet: web-old"]')).toBeTruthy();
+
+    cleanup();
+  });
+
+  it('keeps ReplicaSets and dependencies visible while they still own Pods', async () => {
+    const { container, cleanup } = await renderObjectMap({
+      testPayload: rolloutReplicaSetPayload,
+    });
+
+    expect(container.querySelector('[aria-label="ReplicaSet: web-zzz"]')).toBeTruthy();
+    expect(container.querySelector('[aria-label="Pod: web-zzz-abc"]')).toBeTruthy();
+    expect(container.querySelector('[aria-label="ReplicaSet: web-aaa"]')).toBeTruthy();
+    expect(container.querySelector('[aria-label="Pod: web-aaa-def"]')).toBeTruthy();
+    expect(container.querySelector('[aria-label="Node: worker-a"]')).toBeTruthy();
 
     cleanup();
   });

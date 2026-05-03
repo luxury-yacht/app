@@ -405,7 +405,7 @@ const edgeChanged = (previous: EdgeData, next: EdgeData): boolean => {
   );
 };
 
-const applyGraphData = async (
+export const applyGraphData = async (
   graph: Graph,
   previousData: GraphData,
   nextData: GraphData
@@ -417,7 +417,7 @@ const applyGraphData = async (
 
   if (!sameIds(previousNodes, nextNodes) || !sameIds(previousEdges, nextEdges)) {
     graph.setData(nextData);
-    await graph.draw();
+    await graph.render();
     return;
   }
 
@@ -723,7 +723,7 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
               await applyGraphData(graph, previousData, latest);
             } else {
               graph.setData(latest);
-              await graph.draw();
+              await graph.render();
             }
             if (graph.destroyed) return;
             renderedDataRef.current = latest;

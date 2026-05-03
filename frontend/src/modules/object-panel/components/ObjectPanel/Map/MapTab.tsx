@@ -7,10 +7,8 @@
  * ObjectPanelContent when the whole panel closes — see evictPanelScopes
  * in ObjectPanelStateContext for the symmetric reset).
  *
- * Auto-refresh is intentionally NOT wired here. The timing entry exists
- * in refresherConfig so adding a per-kind refresher later mirrors the
- * EventsTab pattern (refreshManager.register + useRefreshWatcher) and
- * is purely additive.
+ * The object-map scoped domain stays enabled while the tab is active,
+ * so the shared refresh manager polls it on the configured cadence.
  */
 import React, { useCallback, useEffect } from 'react';
 import './MapTab.css';
@@ -100,8 +98,8 @@ const MapTab: React.FC<MapTabProps> = ({ objectData, isActive, mapScope }) => {
     [mapScope]
   );
 
-  // Fetch-on-activation. Map snapshots are heavier than events so we
-  // intentionally don't auto-tick; users get a Refresh button below.
+  // Fetch immediately on activation; the enabled scoped domain handles
+  // subsequent polling, and the toolbar exposes an explicit refresh.
   useEffect(() => {
     if (isActive && objectData && mapScope) {
       fetchMap('startup');

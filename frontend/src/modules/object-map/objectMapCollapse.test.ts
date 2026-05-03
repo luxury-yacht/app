@@ -17,10 +17,10 @@ const ownerEdge = (id: string, source: string, target: string): ObjectMapEdge =>
 });
 
 describe('computeCollapseInfo', () => {
-  it('hides non-current ReplicaSets and their Pods when collapsed', () => {
-    // Deployment with a current RS owning two Pods, plus an old RS
-    // owning a stuck Pod. By default the old RS and its Pod should be
-    // hidden, with a +1 collapsible count on the current RS.
+  it('shows all ReplicaSets that still own Pods', () => {
+    // During a rollout, both the old and new RS can own Pods. Both
+    // must stay visible so newly-created Pods appear before they are
+    // Ready/Available.
     const nodes: ObjectMapNode[] = [
       node('dep', 'Deployment', 'web'),
       node('rs-current', 'ReplicaSet', 'web-aaa'),
@@ -38,10 +38,32 @@ describe('computeCollapseInfo', () => {
     ];
     const info = computeCollapseInfo(nodes, edges, 'dep', new Set());
     expect(info.visibleNodeIds.has('rs-current')).toBe(true);
+    expect(info.visibleNodeIds.has('rs-old')).toBe(true);
+    expect(info.visibleNodeIds.has('pod-1')).toBe(true);
+    expect(info.visibleNodeIds.has('pod-2')).toBe(true);
+    expect(info.visibleNodeIds.has('pod-stuck')).toBe(true);
+    expect(info.groupsByCurrentRs.size).toBe(0);
+  });
+
+  it('hides zero-Pod ReplicaSets when collapsed', () => {
+    const nodes: ObjectMapNode[] = [
+      node('dep', 'Deployment', 'web'),
+      node('rs-current', 'ReplicaSet', 'web-aaa'),
+      node('rs-old', 'ReplicaSet', 'web-bbb'),
+      node('pod-1', 'Pod', 'web-aaa-1'),
+      node('pod-2', 'Pod', 'web-aaa-2'),
+    ];
+    const edges: ObjectMapEdge[] = [
+      ownerEdge('e1', 'dep', 'rs-current'),
+      ownerEdge('e2', 'dep', 'rs-old'),
+      ownerEdge('e3', 'rs-current', 'pod-1'),
+      ownerEdge('e4', 'rs-current', 'pod-2'),
+    ];
+    const info = computeCollapseInfo(nodes, edges, 'dep', new Set());
+    expect(info.visibleNodeIds.has('rs-current')).toBe(true);
     expect(info.visibleNodeIds.has('rs-old')).toBe(false);
     expect(info.visibleNodeIds.has('pod-1')).toBe(true);
     expect(info.visibleNodeIds.has('pod-2')).toBe(true);
-    expect(info.visibleNodeIds.has('pod-stuck')).toBe(false);
 
     const group = info.groupsByCurrentRs.get('rs-current')!;
     expect(group.deploymentId).toBe('dep');
@@ -67,11 +89,12 @@ describe('computeCollapseInfo', () => {
     expect(info.groupsByCurrentRs.get('rs-current')!.collapsibleRsIds).toEqual(['rs-old']);
   });
 
-  it('chooses the RS with more owned Pods as current', () => {
+  it('anchors the collapse badge on the RS with more owned Pods', () => {
     const nodes: ObjectMapNode[] = [
       node('dep', 'Deployment', 'web'),
       node('rs-a', 'ReplicaSet', 'web-aaa'),
       node('rs-b', 'ReplicaSet', 'web-bbb'),
+      node('rs-zero', 'ReplicaSet', 'web-000'),
       node('pod-a1', 'Pod', 'web-aaa-1'),
       node('pod-b1', 'Pod', 'web-bbb-1'),
       node('pod-b2', 'Pod', 'web-bbb-2'),
@@ -79,13 +102,15 @@ describe('computeCollapseInfo', () => {
     const edges: ObjectMapEdge[] = [
       ownerEdge('e1', 'dep', 'rs-a'),
       ownerEdge('e2', 'dep', 'rs-b'),
-      ownerEdge('e3', 'rs-a', 'pod-a1'),
-      ownerEdge('e4', 'rs-b', 'pod-b1'),
-      ownerEdge('e5', 'rs-b', 'pod-b2'),
+      ownerEdge('e3', 'dep', 'rs-zero'),
+      ownerEdge('e4', 'rs-a', 'pod-a1'),
+      ownerEdge('e5', 'rs-b', 'pod-b1'),
+      ownerEdge('e6', 'rs-b', 'pod-b2'),
     ];
     const info = computeCollapseInfo(nodes, edges, 'dep', new Set());
     expect(info.groupsByCurrentRs.has('rs-b')).toBe(true);
-    expect(info.visibleNodeIds.has('rs-a')).toBe(false);
+    expect(info.visibleNodeIds.has('rs-a')).toBe(true);
+    expect(info.visibleNodeIds.has('rs-zero')).toBe(false);
   });
 
   it('falls back to lexicographically larger name when pod counts tie', () => {

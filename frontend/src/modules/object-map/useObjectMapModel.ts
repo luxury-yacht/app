@@ -92,7 +92,7 @@ export const useObjectMapModel = (payload: ObjectMapSnapshotPayload) => {
     [directionallyReachable.nodes, directionallyReachable.edges, seedId, expandedDeployments]
   );
 
-  const filtered = useMemo(
+  const collapsed = useMemo(
     () =>
       filterByCollapseInfo(
         directionallyReachable.nodes,
@@ -100,6 +100,14 @@ export const useObjectMapModel = (payload: ObjectMapSnapshotPayload) => {
         collapseInfo.visibleNodeIds
       ),
     [directionallyReachable.nodes, directionallyReachable.edges, collapseInfo.visibleNodeIds]
+  );
+
+  const filtered = useMemo(
+    // Collapse can remove the only edge connecting a Pod dependency
+    // (for example its scheduled Node). Prune again so hidden ReplicaSet
+    // branches do not leave disconnected remnants in the rendered graph.
+    () => filterByDirectionalReachability(collapsed.nodes, collapsed.edges, seedId),
+    [collapsed.nodes, collapsed.edges, seedId]
   );
 
   const baseLayout = useMemo(

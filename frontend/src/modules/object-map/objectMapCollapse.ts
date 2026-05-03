@@ -1,16 +1,14 @@
 /**
  * frontend/src/modules/object-map/objectMapCollapse.ts
  *
- * Collapses old ReplicaSets in the object-map payload. Default: only
- * the "current" RS per Deployment is rendered, with a +N badge on its
- * card indicating the number of hidden siblings. The user can expand
- * a Deployment's group via the badge to see all its RSs.
+ * Collapses inactive ReplicaSets in the object-map payload. Default:
+ * every RS that still owns Pods is rendered, while zero-Pod siblings
+ * are hidden behind a +N badge. The user can expand a Deployment's
+ * group via the badge to see all its RSs.
  *
- * "Current" = the RS owning the most Pods (lexicographic name as
- * tiebreaker). Steady-state: one RS holds every Pod, the rest are
- * scaled to zero. During a rollout: both old and new RSs can hold
- * Pods, in which case the one with more wins; lex tiebreak keeps the
- * choice deterministic when counts match.
+ * The badge is attached to the RS owning the most Pods (lexicographic
+ * name as tiebreaker). During rollouts this still shows every active
+ * RS, so newly-created Pods are visible before they become Ready.
  *
  * Seed protection: any RS in the owner chain reachable from the seed
  * stays visible regardless of its "current" status, so opening an
@@ -90,6 +88,20 @@ const findSeedAncestorReplicaSets = (
   return lineageRs;
 };
 
+const podChildCount = (
+  rsId: string,
+  childrenOf: Map<string, Set<string>>,
+  nodesById: Map<string, ObjectMapNode>
+): number => {
+  let count = 0;
+  childrenOf.get(rsId)?.forEach((childId) => {
+    if (nodesById.get(childId)?.ref.kind === 'Pod') {
+      count += 1;
+    }
+  });
+  return count;
+};
+
 /**
  * Choose the current RS from a group. Heuristic: most owned Pods,
  * lexicographically larger name as a deterministic tiebreaker.
@@ -103,7 +115,7 @@ const chooseCurrentRs = (
   let bestCount = -1;
   let bestName = '';
   for (const rsId of rsIds) {
-    const podCount = childrenOf.get(rsId)?.size ?? 0;
+    const podCount = podChildCount(rsId, childrenOf, nodesById);
     const name = nodesById.get(rsId)?.ref.name ?? '';
     if (podCount > bestCount || (podCount === bestCount && name > bestName)) {
       bestCount = podCount;
@@ -156,13 +168,14 @@ export const computeCollapseInfo = (
     const currentRsId = chooseCurrentRs(rsIds, childrenOf, nodesById);
     if (!currentRsId) return;
 
-    // Anything not the current RS and not in the seed's lineage is
-    // collapsible. The current RS is always shown; lineage RSs are
-    // always shown to keep the seed's chain intact.
+    // Anything with owned Pods remains visible so rollout activity is
+    // visible immediately. Zero-Pod siblings are collapsible unless
+    // they are the current badge anchor or part of the seed lineage.
     const collapsibleRsIds: string[] = [];
     for (const rsId of rsIds) {
       if (rsId === currentRsId) continue;
       if (seedLineageRs.has(rsId)) continue;
+      if (podChildCount(rsId, childrenOf, nodesById) > 0) continue;
       collapsibleRsIds.push(rsId);
     }
 
