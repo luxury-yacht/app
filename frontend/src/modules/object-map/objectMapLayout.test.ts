@@ -3,6 +3,7 @@ import type { ObjectMapEdge, ObjectMapNode } from '@core/refresh/types';
 import {
   computeObjectMapLayout,
   OBJECT_MAP_COLUMN_GAP,
+  OBJECT_MAP_KIND_GROUP_GAP,
   OBJECT_MAP_NODE_HEIGHT,
   OBJECT_MAP_NODE_WIDTH,
   OBJECT_MAP_ROW_GAP,
@@ -205,6 +206,37 @@ describe('computeObjectMapLayout', () => {
       expect(e.d).toContain(`M ${right} `);
       expect(e.midX).toBeGreaterThan(right);
     });
+  });
+
+  it('groups same-kind nodes together within a column with extra padding between kinds', () => {
+    // Seed Deployment owns one RS, one Service, and one ConfigMap
+    // (synthetic — Deployment doesn't directly own a CM in real K8s,
+    // but it lets the test exercise three kinds in a single column
+    // without depending on more complex graph shapes). All three sit
+    // at column +1.
+    const nodes: ObjectMapNode[] = [
+      node('seed', 0, 'Deployment', 'web'),
+      node('rs', 1, 'ReplicaSet', 'web-1'),
+      node('cm', 1, 'ConfigMap', 'web-cm'),
+      node('svc', 1, 'Service', 'web'),
+    ];
+    const edges: ObjectMapEdge[] = [
+      edge('e1', 'seed', 'rs', 'owner'),
+      edge('e2', 'seed', 'cm', 'uses'),
+      edge('e3', 'seed', 'svc', 'uses'),
+    ];
+    const layout = computeObjectMapLayout(nodes, edges, 'seed');
+    const cm = layout.nodes.find((n) => n.id === 'cm')!;
+    const rs = layout.nodes.find((n) => n.id === 'rs')!;
+    const svc = layout.nodes.find((n) => n.id === 'svc')!;
+    // Kind ordering is alphabetic: ConfigMap, ReplicaSet, Service.
+    expect(cm.y).toBeLessThan(rs.y);
+    expect(rs.y).toBeLessThan(svc.y);
+    // Each transition is between different kinds, so each gap should
+    // be ROW_GAP + KIND_GROUP_GAP (not just ROW_GAP).
+    const expectedKindGap = OBJECT_MAP_NODE_HEIGHT + OBJECT_MAP_ROW_GAP + OBJECT_MAP_KIND_GROUP_GAP;
+    expect(rs.y - cm.y).toBe(expectedKindGap);
+    expect(svc.y - rs.y).toBe(expectedKindGap);
   });
 
   it('drops edges that reference unknown nodes', () => {

@@ -90,7 +90,7 @@ const NODE_CORNER_RADIUS = 6;
 // approaches the limit (longest built-in is "ENDPOINTSLICE" at 13
 // chars), the name line is the one that truncates often.
 const KIND_MAX_CHARS = 26;
-const NAME_MAX_CHARS = 22;
+const NAME_MAX_CHARS = 32;
 const NAMESPACE_MAX_CHARS = 28;
 
 // Edge tooltip dimensions, sized so the rectangular background fits a

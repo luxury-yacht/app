@@ -41,9 +41,13 @@ export const OBJECT_MAP_NODE_WIDTH = 220;
 export const OBJECT_MAP_NODE_HEIGHT = 64;
 export const OBJECT_MAP_COLUMN_GAP = 100;
 export const OBJECT_MAP_ROW_GAP = 24;
+// Extra vertical space inserted when two consecutive nodes in a
+// column have different kinds. Visually groups same-kind objects so
+// "all the Pods" or "all the ConfigMaps" read as a band rather than
+// scattered through the column.
+export const OBJECT_MAP_KIND_GROUP_GAP = 24;
 
 const COLUMN_STRIDE = OBJECT_MAP_NODE_WIDTH + OBJECT_MAP_COLUMN_GAP;
-const ROW_STRIDE = OBJECT_MAP_NODE_HEIGHT + OBJECT_MAP_ROW_GAP;
 
 // Number of alternating left↔right sweeps for barycenter ordering.
 // Sugiyama's original suggestion is ~24, but for the small graphs we
@@ -312,6 +316,14 @@ const orderColumnsByBarycenter = (
         const col = columns.get(sortedColumns[i])!;
         const neighborColumn = sortedColumns[i - 1];
         col.sort((a, b) => {
+          // Kind is the outermost sort key so same-kind nodes cluster
+          // into a contiguous band; the position pass below adds an
+          // extra gap when consecutive nodes' kinds differ. Within a
+          // kind group, barycenter (then namespace/name) drives order
+          // for cross-column alignment.
+          if (a.ref.kind !== b.ref.kind) {
+            return a.ref.kind.localeCompare(b.ref.kind);
+          }
           const ba = barycenter(a, neighborColumn);
           const bb = barycenter(b, neighborColumn);
           if (ba === Infinity && bb === Infinity) return compareForColumn(a, b);
@@ -329,6 +341,14 @@ const orderColumnsByBarycenter = (
         const col = columns.get(sortedColumns[i])!;
         const neighborColumn = sortedColumns[i + 1];
         col.sort((a, b) => {
+          // Kind is the outermost sort key so same-kind nodes cluster
+          // into a contiguous band; the position pass below adds an
+          // extra gap when consecutive nodes' kinds differ. Within a
+          // kind group, barycenter (then namespace/name) drives order
+          // for cross-column alignment.
+          if (a.ref.kind !== b.ref.kind) {
+            return a.ref.kind.localeCompare(b.ref.kind);
+          }
           const ba = barycenter(a, neighborColumn);
           const bb = barycenter(b, neighborColumn);
           if (ba === Infinity && bb === Infinity) return compareForColumn(a, b);
@@ -373,10 +393,30 @@ export const computeObjectMapLayout = (
     .sort(([a], [b]) => a - b)
     .forEach(([column, columnNodes]) => {
       const columnX = column * COLUMN_STRIDE;
-      const totalHeight = columnNodes.length * ROW_STRIDE - OBJECT_MAP_ROW_GAP;
-      const startY = -totalHeight / 2;
+
+      // Pre-walk to compute the total column height with extra gaps
+      // inserted between kind transitions, so we can centre the column
+      // around y=0 after accounting for the larger inter-group spacing.
+      let totalHeight = 0;
       columnNodes.forEach((node, index) => {
-        const y = startY + index * ROW_STRIDE;
+        if (index > 0) {
+          const sameKind = columnNodes[index - 1].ref.kind === node.ref.kind;
+          totalHeight += sameKind
+            ? OBJECT_MAP_ROW_GAP
+            : OBJECT_MAP_ROW_GAP + OBJECT_MAP_KIND_GROUP_GAP;
+        }
+        totalHeight += OBJECT_MAP_NODE_HEIGHT;
+      });
+
+      let y = -totalHeight / 2;
+      columnNodes.forEach((node, index) => {
+        if (index > 0) {
+          const sameKind = columnNodes[index - 1].ref.kind === node.ref.kind;
+          const gap = sameKind
+            ? OBJECT_MAP_ROW_GAP
+            : OBJECT_MAP_ROW_GAP + OBJECT_MAP_KIND_GROUP_GAP;
+          y += OBJECT_MAP_NODE_HEIGHT + gap;
+        }
         positioned.set(node.id, {
           id: node.id,
           x: columnX,
