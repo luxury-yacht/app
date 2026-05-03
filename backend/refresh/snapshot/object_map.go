@@ -120,6 +120,13 @@ type objectMapTraversalEdge struct {
 	reverse bool
 }
 
+type objectMapTraversalDirection int
+
+const (
+	objectMapTraversalForward objectMapTraversalDirection = iota
+	objectMapTraversalBackward
+)
+
 // RegisterObjectMapDomain wires the backend relationship graph domain into the registry.
 func RegisterObjectMapDomain(
 	reg *domain.Registry,
@@ -670,6 +677,18 @@ func (idx *objectMapIndex) findIdentity(namespace string, gvk schema.GroupVersio
 
 func (idx *objectMapIndex) buildGraph(seed *objectMapRecord, maxDepth, maxNodes int) objectMapGraph {
 	allEdges := idx.buildAllEdges()
+	sort.Slice(allEdges, func(i, j int) bool {
+		if allEdges[i].Type != allEdges[j].Type {
+			return allEdges[i].Type < allEdges[j].Type
+		}
+		if allEdges[i].Source != allEdges[j].Source {
+			return allEdges[i].Source < allEdges[j].Source
+		}
+		if allEdges[i].Target != allEdges[j].Target {
+			return allEdges[i].Target < allEdges[j].Target
+		}
+		return allEdges[i].ID < allEdges[j].ID
+	})
 	graph := objectMapGraph{
 		nodes:     make(map[string]ObjectMapNode),
 		edges:     make(map[string]ObjectMapEdge),
@@ -686,11 +705,50 @@ func (idx *objectMapIndex) buildGraph(seed *objectMapRecord, maxDepth, maxNodes 
 
 	seedID := objectMapNodeID(seed.ref)
 	graph.nodes[seedID] = ObjectMapNode{ID: seedID, Depth: 0, Ref: seed.ref}
-	queue := []string{seedID}
 
-	for len(queue) > 0 {
-		currentID := queue[0]
-		queue = queue[1:]
+	if !usesDirectionalObjectMapTraversal(seed.ref) {
+		idx.traverseObjectMapMixed(&graph, seedID, maxDepth, maxNodes)
+		includedEdges := make(map[string]ObjectMapEdge)
+		for _, edge := range graph.edges {
+			if _, ok := graph.nodes[edge.Source]; !ok {
+				continue
+			}
+			if _, ok := graph.nodes[edge.Target]; !ok {
+				continue
+			}
+			includedEdges[edge.ID] = edge
+		}
+		graph.edges = includedEdges
+		return graph
+	}
+
+	includedEdges := make(map[string]ObjectMapEdge)
+	idx.traverseObjectMapDirection(&graph, seedID, maxDepth, maxNodes, objectMapTraversalForward, includedEdges)
+	idx.traverseObjectMapDirection(&graph, seedID, maxDepth, maxNodes, objectMapTraversalBackward, includedEdges)
+
+	finalEdges := make(map[string]ObjectMapEdge)
+	for _, edge := range includedEdges {
+		if _, ok := graph.nodes[edge.Source]; !ok {
+			continue
+		}
+		if _, ok := graph.nodes[edge.Target]; !ok {
+			continue
+		}
+		finalEdges[edge.ID] = edge
+	}
+	graph.edges = finalEdges
+	return graph
+}
+
+func (idx *objectMapIndex) traverseObjectMapMixed(
+	graph *objectMapGraph,
+	seedID string,
+	maxDepth int,
+	maxNodes int,
+) {
+	queue := []string{seedID}
+	for head := 0; head < len(queue); head++ {
+		currentID := queue[head]
 		currentDepth := graph.nodes[currentID].Depth
 		if currentDepth >= maxDepth {
 			continue
@@ -719,19 +777,73 @@ func (idx *objectMapIndex) buildGraph(seed *objectMapRecord, maxDepth, maxNodes 
 			queue = append(queue, neighborID)
 		}
 	}
+}
 
-	includedEdges := make(map[string]ObjectMapEdge)
-	for _, edge := range graph.edges {
-		if _, ok := graph.nodes[edge.Source]; !ok {
-			continue
-		}
-		if _, ok := graph.nodes[edge.Target]; !ok {
-			continue
-		}
-		includedEdges[edge.ID] = edge
+func (idx *objectMapIndex) traverseObjectMapDirection(
+	graph *objectMapGraph,
+	seedID string,
+	maxDepth int,
+	maxNodes int,
+	direction objectMapTraversalDirection,
+	includedEdges map[string]ObjectMapEdge,
+) {
+	type queueItem struct {
+		id    string
+		depth int
 	}
-	graph.edges = includedEdges
-	return graph
+	queue := []queueItem{{id: seedID, depth: 0}}
+	visited := map[string]struct{}{seedID: {}}
+	for head := 0; head < len(queue); head++ {
+		currentID := queue[head].id
+		currentDepth := queue[head].depth
+		if currentDepth >= maxDepth {
+			continue
+		}
+		for _, traversal := range graph.adjacency[currentID] {
+			if direction == objectMapTraversalForward && traversal.reverse {
+				continue
+			}
+			if direction == objectMapTraversalBackward && !traversal.reverse {
+				continue
+			}
+			edge := graph.edges[traversal.edgeID]
+			if traversal.reverse && !canTraverseObjectMapReverse(edge.Type, currentDepth) {
+				continue
+			}
+			neighborID := edge.Target
+			if traversal.reverse {
+				neighborID = edge.Source
+			}
+			neighborDepth := currentDepth + 1
+			if _, exists := graph.nodes[neighborID]; exists {
+				includedEdges[edge.ID] = edge
+				if existing := graph.nodes[neighborID]; existing.Depth > neighborDepth {
+					existing.Depth = neighborDepth
+					graph.nodes[neighborID] = existing
+				}
+				if _, seen := visited[neighborID]; !seen {
+					visited[neighborID] = struct{}{}
+					queue = append(queue, queueItem{id: neighborID, depth: neighborDepth})
+				}
+				continue
+			}
+			if len(graph.nodes) >= maxNodes {
+				graph.truncated = true
+				continue
+			}
+			record, ok := idx.records[neighborID]
+			if !ok {
+				continue
+			}
+			graph.nodes[neighborID] = ObjectMapNode{ID: neighborID, Depth: neighborDepth, Ref: record.ref}
+			includedEdges[edge.ID] = edge
+			if _, seen := visited[neighborID]; seen {
+				continue
+			}
+			visited[neighborID] = struct{}{}
+			queue = append(queue, queueItem{id: neighborID, depth: neighborDepth})
+		}
+	}
 }
 
 func (idx *objectMapIndex) canUseObjectMapEdgeForSeed(seed *objectMapRecord, edge ObjectMapEdge) bool {
@@ -749,6 +861,25 @@ func canTraverseObjectMapReverse(edgeType string, currentDepth int) bool {
 		return true
 	case "uses", "mounts", "storage", "schedules":
 		return currentDepth == 0
+	default:
+		return false
+	}
+}
+
+func usesDirectionalObjectMapTraversal(ref ObjectMapReference) bool {
+	switch ref.Kind {
+	case "Pod",
+		"Service",
+		"EndpointSlice",
+		"PersistentVolumeClaim",
+		"PersistentVolume",
+		"StorageClass",
+		"ConfigMap",
+		"Secret",
+		"ServiceAccount",
+		"Node",
+		"IngressClass":
+		return true
 	default:
 		return false
 	}

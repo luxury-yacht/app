@@ -51,6 +51,9 @@ describe('useObjectPanelTabs', () => {
     kind: 'Deployment',
     name: 'api',
     namespace: 'team-a',
+    clusterId: 'cluster-a',
+    group: 'apps',
+    version: 'v1',
   };
 
   const renderHook = async (
@@ -111,7 +114,14 @@ describe('useObjectPanelTabs', () => {
 
   it('omits the Shell tab when capability is disabled', async () => {
     const { availableTabs } = await renderHook({
-      objectData: { kind: 'Pod', name: 'api-123', namespace: 'team-a' },
+      objectData: {
+        kind: 'Pod',
+        name: 'api-123',
+        namespace: 'team-a',
+        clusterId: 'cluster-a',
+        group: '',
+        version: 'v1',
+      },
     });
     expect(availableTabs.map((tab) => tab.label)).toEqual([
       'Details',
@@ -124,7 +134,14 @@ describe('useObjectPanelTabs', () => {
 
   it('includes the Shell tab for pods when capability is available', async () => {
     const { availableTabs } = await renderHook({
-      objectData: { kind: 'Pod', name: 'api-123', namespace: 'team-a' },
+      objectData: {
+        kind: 'Pod',
+        name: 'api-123',
+        namespace: 'team-a',
+        clusterId: 'cluster-a',
+        group: '',
+        version: 'v1',
+      },
       capabilities: { ...baseCapabilities, hasShell: true },
     });
     expect(availableTabs.map((tab) => tab.label)).toEqual([
@@ -187,15 +204,41 @@ describe('useObjectPanelTabs', () => {
 
   it('keeps the Map tab for backend-supported object-map types', async () => {
     const { availableTabs } = await renderHook({
-      objectData: { kind: 'IngressClass', name: 'public' },
+      objectData: {
+        kind: 'IngressClass',
+        name: 'public',
+        clusterId: 'cluster-a',
+        group: 'networking.k8s.io',
+        version: 'v1',
+      },
     });
 
     expect(availableTabs.map((tab) => tab.label)).toContain('Map');
   });
 
+  it('hides the Map tab for supported kinds when the object reference is incomplete', async () => {
+    const { availableTabs } = await renderHook({
+      objectData: { kind: 'Deployment', name: 'api', namespace: 'team-a' },
+    });
+
+    expect(availableTabs.map((tab) => tab.label)).toEqual([
+      'Details',
+      'Pods',
+      'Logs',
+      'Events',
+      'YAML',
+    ]);
+  });
+
   it('adds the Maintenance tab for node objects', async () => {
     const { availableTabs } = await renderHook({
-      objectData: { kind: 'Node', name: 'node-1' },
+      objectData: {
+        kind: 'Node',
+        name: 'node-1',
+        clusterId: 'cluster-a',
+        group: '',
+        version: 'v1',
+      },
       capabilities: { ...baseCapabilities, hasObjPanelLogs: false },
     });
     expect(availableTabs.map((tab) => tab.label)).toEqual([
@@ -210,7 +253,13 @@ describe('useObjectPanelTabs', () => {
 
   it('uses the Logs tab for node objects rather than a separate node logs tab', async () => {
     const { availableTabs } = await renderHook({
-      objectData: { kind: 'Node', name: 'node-1' },
+      objectData: {
+        kind: 'Node',
+        name: 'node-1',
+        clusterId: 'cluster-a',
+        group: '',
+        version: 'v1',
+      },
       capabilities: { ...baseCapabilities, hasObjPanelLogs: true, hasNodeLogs: false },
     });
     expect(availableTabs.map((tab) => tab.label)).toEqual([

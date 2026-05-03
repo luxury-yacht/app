@@ -9,6 +9,7 @@ import { useEffect, useMemo } from 'react';
 import { useShortcuts } from '@ui/shortcuts';
 
 import { TABS } from '@modules/object-panel/components/ObjectPanel/constants';
+import { hasCompleteObjectMapReference } from '@modules/object-panel/components/ObjectPanel/objectMapSupport';
 import type {
   ComputedCapabilities,
   PanelAction,
@@ -37,28 +38,6 @@ interface UseObjectPanelTabsArgs {
 interface ObjectPanelTabsResult {
   availableTabs: Array<{ id: string; label: string }>;
 }
-
-const MAP_SUPPORTED_KINDS = new Set([
-  'pod',
-  'service',
-  'endpointslice',
-  'persistentvolumeclaim',
-  'persistentvolume',
-  'storageclass',
-  'configmap',
-  'secret',
-  'serviceaccount',
-  'node',
-  'deployment',
-  'replicaset',
-  'statefulset',
-  'daemonset',
-  'job',
-  'cronjob',
-  'horizontalpodautoscaler',
-  'ingress',
-  'ingressclass',
-]);
 
 export const useObjectPanelTabs = ({
   capabilities,
@@ -107,7 +86,7 @@ export const useObjectPanelTabs = ({
       }
 
       if (tab.id === 'map') {
-        return Boolean(objectKind && MAP_SUPPORTED_KINDS.has(objectKind));
+        return hasCompleteObjectMapReference(objectData);
       }
 
       if ('onlyForKinds' in tab && Array.isArray(tab.onlyForKinds) && tab.onlyForKinds.length > 0) {
@@ -126,7 +105,7 @@ export const useObjectPanelTabs = ({
 
       return true;
     });
-  }, [capabilities, isEvent, isHelmRelease, objectKind]);
+  }, [capabilities, isEvent, isHelmRelease, objectData, objectKind]);
 
   useEffect(() => {
     if (!objectData) {

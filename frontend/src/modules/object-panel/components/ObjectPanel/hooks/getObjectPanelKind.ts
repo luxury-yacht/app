@@ -7,6 +7,7 @@
  */
 import type { PanelObjectData } from '../types';
 import { buildClusterScope, buildObjectScope } from '@/core/refresh/clusterScope';
+import { hasCompleteObjectMapReference } from '../objectMapSupport';
 
 export interface UseObjectPanelKindOptions {
   clusterScope?: string;
@@ -110,19 +111,18 @@ export const getObjectPanelKind = (
   // mapScope mirrors eventsScope (case-preserving Kind) — the backend
   // object-map provider uses the same parseObjectScope path that
   // object-events uses, which matches Kind verbatim against the catalog.
-  const mapScope =
-    !objectData?.name || !objectData?.kind
-      ? null
-      : buildClusterScope(
-          clusterId,
-          buildObjectScope({
-            namespace: scopeNamespace,
-            group: objectData?.group,
-            version: objectData?.version,
-            kind: objectData.kind,
-            name: objectData.name,
-          })
-        );
+  const mapScope = !hasCompleteObjectMapReference(objectData)
+    ? null
+    : buildClusterScope(
+        clusterId,
+        buildObjectScope({
+          namespace: scopeNamespace,
+          group: objectData?.group,
+          version: objectData?.version,
+          kind: objectData.kind,
+          name: objectData.name,
+        })
+      );
 
   const helmScope =
     objectKind !== 'helmrelease' || !objectData?.name

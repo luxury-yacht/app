@@ -198,5 +198,32 @@ describe('getObjectPanelKind', () => {
     expect(getObjectPanelKind(null).mapScope).toBeNull();
     expect(getObjectPanelKind({ kind: 'Pod' }).mapScope).toBeNull();
     expect(getObjectPanelKind({ name: 'api' }).mapScope).toBeNull();
+    expect(
+      getObjectPanelKind({
+        kind: 'Pod',
+        name: 'api',
+        namespace: 'team-a',
+        group: '',
+        version: 'v1',
+      }).mapScope
+    ).toBeNull();
+    expect(
+      getObjectPanelKind({
+        kind: 'Pod',
+        name: 'api',
+        namespace: 'team-a',
+        clusterId: 'cluster-1',
+        version: 'v1',
+      }).mapScope
+    ).toBeNull();
+    expect(
+      getObjectPanelKind({
+        kind: 'Pod',
+        name: 'api',
+        namespace: 'team-a',
+        clusterId: 'cluster-1',
+        group: '',
+      }).mapScope
+    ).toBeNull();
   });
 });

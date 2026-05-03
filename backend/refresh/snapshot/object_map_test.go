@@ -146,6 +146,36 @@ func TestObjectMapReverseTraversesHubEdgesFromSeed(t *testing.T) {
 	assertNode(t, serviceAccountPayload, "Pod", "api-pod")
 }
 
+func TestObjectMapNodeSeedDoesNotTraversePodForwardDependencies(t *testing.T) {
+	client := fake.NewSimpleClientset(objectMapHubFixtureObjects()...)
+	builder := &objectMapBuilder{client: client}
+	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a"})
+
+	snap, err := builder.Build(ctx, "__cluster__:/v1:Node:node-1?maxDepth=3&maxNodes=7")
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+	payload := snap.Payload.(ObjectMapSnapshotPayload)
+
+	assertNode(t, payload, "Node", "node-1")
+	assertNode(t, payload, "Pod", "web-pod")
+	assertNode(t, payload, "Pod", "api-pod")
+	assertNode(t, payload, "ReplicaSet", "web-rs")
+	assertNode(t, payload, "ReplicaSet", "api-rs")
+	assertNode(t, payload, "Deployment", "web")
+	assertNode(t, payload, "Deployment", "api")
+	assertEdge(t, payload, "Pod", "web-pod", "Node", "node-1", "schedules")
+	assertEdge(t, payload, "Pod", "api-pod", "Node", "node-1", "schedules")
+	assertEdge(t, payload, "ReplicaSet", "web-rs", "Pod", "web-pod", "owner")
+	assertEdge(t, payload, "ReplicaSet", "api-rs", "Pod", "api-pod", "owner")
+	assertMissingNode(t, payload, "ServiceAccount", "shared")
+	assertMissingNode(t, payload, "ConfigMap", "shared-config")
+	assertMissingNode(t, payload, "PersistentVolumeClaim", "data")
+	if payload.Truncated {
+		t.Fatalf("node map should not truncate on skipped pod dependencies: %#v", payload)
+	}
+}
+
 func TestObjectMapBuildsFromStorageClass(t *testing.T) {
 	client := fake.NewSimpleClientset(objectMapStorageFixtureObjects()...)
 	builder := &objectMapBuilder{client: client}
