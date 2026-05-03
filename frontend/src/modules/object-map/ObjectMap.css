@@ -15,26 +15,35 @@
   color: var(--color-text-secondary);
 }
 
+/* Floating icon-bar overlay in the canvas top-right. Mirrors the
+ * legend's overlay positioning on the opposite corner. */
 .object-map__toolbar {
+  position: absolute;
+  top: var(--spacing-md);
+  right: var(--spacing-md);
   display: flex;
   align-items: center;
-  gap: var(--spacing-xs);
-  padding: var(--spacing-sm) var(--spacing-md);
-  border-bottom: var(--border-width) solid var(--color-border);
-  background: var(--color-bg-secondary);
+  gap: 2px;
+  padding: 4px;
+  background: var(--color-bg);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  z-index: 1;
 }
 
 .object-map__toolbar-button {
   height: 28px;
-  min-width: 28px;
-  padding: 0 var(--spacing-sm);
-  border: var(--border-width) solid var(--color-border);
-  background: var(--color-bg);
+  width: 28px;
+  padding: 0;
+  border: none;
+  background: transparent;
   color: var(--color-text);
   border-radius: var(--border-radius-sm);
   cursor: pointer;
-  font: inherit;
-  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .object-map__toolbar-button:hover:not(:disabled) {
@@ -43,13 +52,16 @@
 
 .object-map__toolbar-button:disabled {
   cursor: not-allowed;
-  opacity: 0.5;
+  opacity: 0.4;
 }
 
-.object-map__toolbar-meta {
-  margin-left: auto;
-  color: var(--color-text-secondary);
-  font-size: 0.85rem;
+.object-map__toolbar-button:focus {
+  outline: none;
+}
+
+.object-map__toolbar-button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
 }
 
 .object-map__canvas {

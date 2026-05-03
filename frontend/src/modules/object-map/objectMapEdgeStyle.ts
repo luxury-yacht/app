@@ -17,13 +17,13 @@ interface EdgeKindMeta {
 // appear before dependency relationships, roughly mirroring how a user
 // reads a map left-to-right.
 export const OBJECT_MAP_EDGE_KINDS: readonly EdgeKindMeta[] = [
-  { type: 'owner', label: 'Owner' },
+  { type: 'owner', label: 'Ownership' },
   { type: 'selector', label: 'Selector' },
   { type: 'endpoint', label: 'Endpoint' },
-  { type: 'routes', label: 'Routes' },
-  { type: 'scales', label: 'Scales' },
-  { type: 'schedules', label: 'Scheduled on' },
-  { type: 'uses', label: 'Uses' },
+  { type: 'routes', label: 'Ingress Route' },
+  { type: 'scales', label: 'Scaling' },
+  { type: 'schedules', label: 'Scheduled On' },
+  { type: 'uses', label: 'Used By' },
   { type: 'mounts', label: 'Mounts' },
   { type: 'storage', label: 'Storage' },
 ];

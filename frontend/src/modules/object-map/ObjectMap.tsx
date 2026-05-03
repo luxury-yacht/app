@@ -39,6 +39,14 @@ import {
 } from './objectMapLayout';
 import { objectMapEdgeClass, OBJECT_MAP_EDGE_KINDS } from './objectMapEdgeStyle';
 import { usePanZoom } from './usePanZoom';
+import {
+  AutoFitIcon,
+  FitToViewIcon,
+  LegendIcon,
+  RefreshIcon,
+  ZoomInIcon,
+  ZoomOutIcon,
+} from '@shared/components/icons/MenuIcons';
 
 export interface ObjectMapProps {
   payload: ObjectMapSnapshotPayload;
@@ -508,74 +516,6 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
 
   return (
     <div className="object-map" data-testid="object-map">
-      <div className="object-map__toolbar">
-        <button
-          type="button"
-          className="object-map__toolbar-button"
-          onClick={zoomOut}
-          title="Zoom out"
-        >
-          −
-        </button>
-        <button
-          type="button"
-          className="object-map__toolbar-button"
-          onClick={zoomIn}
-          title="Zoom in"
-        >
-          +
-        </button>
-        <button
-          type="button"
-          className="object-map__toolbar-button"
-          onClick={resetView}
-          title={
-            autoFit
-              ? 'Fit to view (auto-fit is on; turn it off to use this manually)'
-              : 'Fit to view'
-          }
-          disabled={autoFit}
-        >
-          Fit
-        </button>
-        <button
-          type="button"
-          className={`object-map__toolbar-button ${
-            autoFit ? 'object-map__toolbar-button--active' : ''
-          }`}
-          onClick={() => setAutoFit((prev) => !prev)}
-          title={
-            autoFit
-              ? 'Auto-fit on (viewport recenters when the graph changes)'
-              : 'Auto-fit off (your pan/zoom is preserved across changes)'
-          }
-          aria-pressed={autoFit}
-        >
-          Auto-fit
-        </button>
-        <button
-          type="button"
-          className={`object-map__toolbar-button ${
-            showLegend ? 'object-map__toolbar-button--active' : ''
-          }`}
-          onClick={() => setShowLegend((prev) => !prev)}
-          title={showLegend ? 'Hide legend' : 'Show legend'}
-          aria-pressed={showLegend}
-        >
-          Legend
-        </button>
-        {onRefresh && (
-          <button
-            type="button"
-            className="object-map__toolbar-button"
-            onClick={onRefresh}
-            title="Refresh"
-            disabled={isRefreshing}
-          >
-            Refresh
-          </button>
-        )}
-      </div>
       <div
         ref={containerRef}
         className={`object-map__canvas ${isPanning ? 'object-map__canvas--panning' : ''}`}
@@ -658,6 +598,93 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
             )}
           </g>
         </svg>
+        <div
+          className="object-map__toolbar"
+          role="toolbar"
+          aria-label="Object map controls"
+          // The canvas div behind us captures pointer events to start
+          // a pan, which steals the gesture before the button can
+          // process it. Stop pointer events here so the toolbar's
+          // own buttons get their click handlers cleanly. Click is
+          // also stopped so the canvas's "click background to clear
+          // selection" handler doesn't fire for toolbar interactions.
+          onPointerDown={(e) => e.stopPropagation()}
+          onPointerUp={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            className="object-map__toolbar-button"
+            onClick={zoomOut}
+            title="Zoom out"
+            aria-label="Zoom out"
+          >
+            <ZoomOutIcon />
+          </button>
+          <button
+            type="button"
+            className="object-map__toolbar-button"
+            onClick={zoomIn}
+            title="Zoom in"
+            aria-label="Zoom in"
+          >
+            <ZoomInIcon />
+          </button>
+          <button
+            type="button"
+            className="object-map__toolbar-button"
+            onClick={resetView}
+            title={
+              autoFit
+                ? 'Fit to view (auto-fit is on; turn it off to use this manually)'
+                : 'Fit to view'
+            }
+            aria-label="Fit to view"
+            disabled={autoFit}
+          >
+            <FitToViewIcon />
+          </button>
+          <button
+            type="button"
+            className={`object-map__toolbar-button ${
+              autoFit ? 'object-map__toolbar-button--active' : ''
+            }`}
+            onClick={() => setAutoFit((prev) => !prev)}
+            title={
+              autoFit
+                ? 'Auto-fit on (viewport recenters when the graph changes)'
+                : 'Auto-fit off (your pan/zoom is preserved across changes)'
+            }
+            aria-label="Toggle auto-fit"
+            aria-pressed={autoFit}
+          >
+            <AutoFitIcon />
+          </button>
+          <button
+            type="button"
+            className={`object-map__toolbar-button ${
+              showLegend ? 'object-map__toolbar-button--active' : ''
+            }`}
+            onClick={() => setShowLegend((prev) => !prev)}
+            title={showLegend ? 'Hide legend' : 'Show legend'}
+            aria-label="Toggle legend"
+            aria-pressed={showLegend}
+          >
+            <LegendIcon />
+          </button>
+          {onRefresh && (
+            <button
+              type="button"
+              className="object-map__toolbar-button"
+              onClick={onRefresh}
+              title="Refresh"
+              aria-label="Refresh"
+              disabled={isRefreshing}
+            >
+              <RefreshIcon />
+            </button>
+          )}
+        </div>
         {showLegend && legendEntries.length > 0 && (
           <div className="object-map__legend" role="region" aria-label="Edge color legend">
             {legendEntries.map((entry) => (

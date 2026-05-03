@@ -707,3 +707,103 @@ export const ObjectMapIcon: React.FC<IconProps> = ({ width = 16, height = 16 }) 
     <path d="M7 12h4m0 0 6-6m-6 6 6 6" />
   </svg>
 );
+
+// Placeholder zoom/legend/fit icons for the object-map toolbar.
+// Replace with project-standard SVGs when available.
+
+export const ZoomInIcon: React.FC<IconProps> = ({ width = 16, height = 16 }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    strokeWidth={2}
+    width={width}
+    height={height}
+  >
+    <circle cx="11" cy="11" r="7" />
+    <line x1="21" y1="21" x2="16.5" y2="16.5" />
+    <line x1="11" y1="8" x2="11" y2="14" />
+    <line x1="8" y1="11" x2="14" y2="11" />
+  </svg>
+);
+
+export const ZoomOutIcon: React.FC<IconProps> = ({ width = 16, height = 16 }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    strokeWidth={2}
+    width={width}
+    height={height}
+  >
+    <circle cx="11" cy="11" r="7" />
+    <line x1="21" y1="21" x2="16.5" y2="16.5" />
+    <line x1="8" y1="11" x2="14" y2="11" />
+  </svg>
+);
+
+export const FitToViewIcon: React.FC<IconProps> = ({ width = 16, height = 16 }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    strokeWidth={2}
+    width={width}
+    height={height}
+  >
+    <path d="M9 4H4v5" />
+    <path d="M15 4h5v5" />
+    <path d="M20 15v5h-5" />
+    <path d="M4 15v5h5" />
+  </svg>
+);
+
+export const AutoFitIcon: React.FC<IconProps> = ({ width = 16, height = 16 }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    strokeWidth={2}
+    width={width}
+    height={height}
+  >
+    <path d="M9 4H4v5" />
+    <path d="M15 4h5v5" />
+    <path d="M20 15v5h-5" />
+    <path d="M4 15v5h5" />
+    <circle cx="12" cy="12" r="2.5" />
+  </svg>
+);
+
+export const LegendIcon: React.FC<IconProps> = ({ width = 16, height = 16 }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    strokeWidth={2}
+    width={width}
+    height={height}
+  >
+    <line x1="4" y1="6" x2="9" y2="6" />
+    <line x1="4" y1="12" x2="9" y2="12" />
+    <line x1="4" y1="18" x2="9" y2="18" />
+    <line x1="13" y1="6" x2="20" y2="6" />
+    <line x1="13" y1="12" x2="20" y2="12" />
+    <line x1="13" y1="18" x2="20" y2="18" />
+  </svg>
+);
