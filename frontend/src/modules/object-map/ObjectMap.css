@@ -104,6 +104,14 @@
   stroke-width: 3;
 }
 
+/* Hue assignments are intentionally spread across the wheel so the 9
+ * edge categories stay distinguishable even when several converge on
+ * a single node. Two collisions were fixed in this pass:
+ *   - schedules moved off badge-teal (too close to the accent used by
+ *     owner) onto lime;
+ *   - scales moved off color-warning (too close to mounts orange)
+ *     onto color-error red. Red doesn't carry destructive meaning
+ *     here — edges are passive lines, not actions. */
 .object-map-edge--owner {
   stroke: var(--color-accent);
 }
@@ -113,12 +121,11 @@
 .object-map-edge--endpoint {
   stroke: var(--badge-purple-text);
 }
-.object-map-edge--schedules {
-  stroke: var(--badge-teal-text);
+.object-map-edge--routes {
+  stroke: var(--badge-green-text);
 }
-.object-map-edge--uses {
-  stroke: var(--color-text-secondary);
-  stroke-dasharray: 4 3;
+.object-map-edge--scales {
+  stroke: var(--color-error);
 }
 .object-map-edge--mounts {
   stroke: var(--badge-orange-text);
@@ -126,11 +133,12 @@
 .object-map-edge--storage {
   stroke: var(--badge-pink-text);
 }
-.object-map-edge--routes {
-  stroke: var(--badge-green-text);
+.object-map-edge--schedules {
+  stroke: var(--badge-lime-text);
 }
-.object-map-edge--scales {
-  stroke: var(--color-warning);
+.object-map-edge--uses {
+  stroke: var(--color-text-secondary);
+  stroke-dasharray: 4 3;
 }
 .object-map-edge--default {
   stroke: var(--color-text-tertiary);
