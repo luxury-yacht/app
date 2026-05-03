@@ -15,9 +15,11 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes"
 )
@@ -84,20 +86,22 @@ type objectMapOptions struct {
 }
 
 type objectMapRecord struct {
-	ref        ObjectMapReference
-	owners     []metav1.OwnerReference
-	labels     map[string]string
-	pod        *corev1.Pod
-	service    *corev1.Service
-	slice      *discoveryv1.EndpointSlice
-	pvc        *corev1.PersistentVolumeClaim
-	pv         *corev1.PersistentVolume
-	storage    *storagev1.StorageClass
-	ingress    *networkingv1.Ingress
-	ingClass   *networkingv1.IngressClass
-	hpa        *autoscalingv2.HorizontalPodAutoscaler
-	template   *corev1.PodTemplateSpec
-	cronJobTpl *corev1.PodTemplateSpec
+	ref                ObjectMapReference
+	owners             []metav1.OwnerReference
+	labels             map[string]string
+	pod                *corev1.Pod
+	service            *corev1.Service
+	slice              *discoveryv1.EndpointSlice
+	pvc                *corev1.PersistentVolumeClaim
+	pv                 *corev1.PersistentVolume
+	storage            *storagev1.StorageClass
+	ingress            *networkingv1.Ingress
+	ingClass           *networkingv1.IngressClass
+	hpa                *autoscalingv2.HorizontalPodAutoscaler
+	clusterRole        *rbacv1.ClusterRole
+	clusterRoleBinding *rbacv1.ClusterRoleBinding
+	template           *corev1.PodTemplateSpec
+	cronJobTpl         *corev1.PodTemplateSpec
 }
 
 type objectMapIndex struct {
@@ -281,6 +285,8 @@ func (idx *objectMapIndex) collectTyped(ctx context.Context, client kubernetes.I
 	idx.collectHPAs(ctx, client)
 	idx.collectIngresses(ctx, client)
 	idx.collectIngressClasses(ctx, client)
+	idx.collectClusterRoles(ctx, client)
+	idx.collectClusterRoleBindings(ctx, client)
 }
 
 func (idx *objectMapIndex) collectPods(ctx context.Context, client kubernetes.Interface) {
@@ -583,6 +589,38 @@ func (idx *objectMapIndex) collectIngressClasses(ctx context.Context, client kub
 	}
 }
 
+func (idx *objectMapIndex) collectClusterRoles(ctx context.Context, client kubernetes.Interface) {
+	list, err := client.RbacV1().ClusterRoles().List(ctx, metav1.ListOptions{})
+	if idx.skipListError("clusterroles", err) {
+		return
+	}
+	for i := range list.Items {
+		role := list.Items[i]
+		idx.addRecord(&objectMapRecord{
+			ref:         refFromObject(&role.ObjectMeta, "rbac.authorization.k8s.io", "v1", "ClusterRole", "clusterroles", ""),
+			owners:      role.OwnerReferences,
+			labels:      cloneStringMap(role.Labels),
+			clusterRole: &role,
+		})
+	}
+}
+
+func (idx *objectMapIndex) collectClusterRoleBindings(ctx context.Context, client kubernetes.Interface) {
+	list, err := client.RbacV1().ClusterRoleBindings().List(ctx, metav1.ListOptions{})
+	if idx.skipListError("clusterrolebindings", err) {
+		return
+	}
+	for i := range list.Items {
+		binding := list.Items[i]
+		idx.addRecord(&objectMapRecord{
+			ref:                refFromObject(&binding.ObjectMeta, "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding", "clusterrolebindings", ""),
+			owners:             binding.OwnerReferences,
+			labels:             cloneStringMap(binding.Labels),
+			clusterRoleBinding: &binding,
+		})
+	}
+}
+
 func (idx *objectMapIndex) skipListError(resource string, err error) bool {
 	if err == nil {
 		return false
@@ -658,6 +696,12 @@ func (idx *objectMapIndex) mergeRecord(dst, src *objectMapRecord) {
 	}
 	if src.hpa != nil {
 		dst.hpa = src.hpa
+	}
+	if src.clusterRole != nil {
+		dst.clusterRole = src.clusterRole
+	}
+	if src.clusterRoleBinding != nil {
+		dst.clusterRoleBinding = src.clusterRoleBinding
 	}
 	if src.template != nil {
 		dst.template = src.template
@@ -857,7 +901,7 @@ func (idx *objectMapIndex) canUseObjectMapEdgeForSeed(seed *objectMapRecord, edg
 
 func canTraverseObjectMapReverse(edgeType string, currentDepth int) bool {
 	switch edgeType {
-	case "owner", "selector", "endpoint", "routes", "scales":
+	case "owner", "selector", "endpoint", "routes", "scales", "roleRef", "subject", "aggregates":
 		return true
 	case "uses", "mounts", "storage", "schedules":
 		return currentDepth == 0
@@ -964,6 +1008,21 @@ func (idx *objectMapIndex) buildAllEdges() []ObjectMapEdge {
 			}
 			target := idx.byIdent[objectMapIdentityKey(record.ref.Namespace, gv.Group, gv.Version, record.hpa.Spec.ScaleTargetRef.Kind, record.hpa.Spec.ScaleTargetRef.Name)]
 			add(record, target, "scales", "scales", "spec.scaleTargetRef")
+		}
+		if record.clusterRole != nil && record.clusterRole.AggregationRule != nil {
+			for _, selector := range record.clusterRole.AggregationRule.ClusterRoleSelectors {
+				for _, target := range idx.clusterRolesMatchingSelector(selector) {
+					add(record, target, "aggregates", "aggregates", "aggregationRule.clusterRoleSelectors")
+				}
+			}
+		}
+		if record.clusterRoleBinding != nil {
+			target := idx.clusterRoleBindingRoleRef(record.clusterRoleBinding.RoleRef)
+			add(record, target, "roleRef", "grants", "roleRef")
+			for _, subject := range record.clusterRoleBinding.Subjects {
+				target := idx.clusterRoleBindingSubject(subject)
+				add(record, target, "subject", "binds", "subjects")
+			}
 		}
 		if record.template != nil {
 			idx.addPodTemplateEdges(record, record.template, add)
@@ -1097,6 +1156,41 @@ func (idx *objectMapIndex) findStorageClass(name string) *objectMapRecord {
 
 func (idx *objectMapIndex) findIngressClass(name string) *objectMapRecord {
 	return idx.byIdent[objectMapIdentityKey("", "networking.k8s.io", "v1", "IngressClass", name)]
+}
+
+func (idx *objectMapIndex) findClusterRole(name string) *objectMapRecord {
+	return idx.byIdent[objectMapIdentityKey("", "rbac.authorization.k8s.io", "v1", "ClusterRole", name)]
+}
+
+func (idx *objectMapIndex) clusterRoleBindingRoleRef(ref rbacv1.RoleRef) *objectMapRecord {
+	if ref.Kind != "ClusterRole" || ref.Name == "" {
+		return nil
+	}
+	return idx.findClusterRole(ref.Name)
+}
+
+func (idx *objectMapIndex) clusterRoleBindingSubject(subject rbacv1.Subject) *objectMapRecord {
+	if subject.Kind != "ServiceAccount" || subject.Name == "" || subject.Namespace == "" {
+		return nil
+	}
+	return idx.findCore(subject.Namespace, "v1", "ServiceAccount", subject.Name)
+}
+
+func (idx *objectMapIndex) clusterRolesMatchingSelector(selector metav1.LabelSelector) []*objectMapRecord {
+	parsed, err := metav1.LabelSelectorAsSelector(&selector)
+	if err != nil || parsed.Empty() {
+		return nil
+	}
+	result := []*objectMapRecord{}
+	for _, record := range idx.records {
+		if record.clusterRole == nil {
+			continue
+		}
+		if parsed.Matches(labels.Set(record.labels)) {
+			result = append(result, record)
+		}
+	}
+	return result
 }
 
 func (idx *objectMapIndex) matchingPods(namespace string, selector map[string]string) []*objectMapRecord {

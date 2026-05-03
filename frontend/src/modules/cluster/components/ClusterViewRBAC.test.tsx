@@ -34,6 +34,7 @@ vi.mock('@ui/favorites/FavToggle', () => ({
 }));
 
 const gridTablePropsRef: { current: any } = { current: null };
+const openWithObjectMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@shared/components/tables/GridTable', async () => {
   const actual = await vi.importActual<typeof import('@shared/components/tables/GridTable')>(
@@ -49,7 +50,7 @@ vi.mock('@shared/components/tables/GridTable', async () => {
 });
 
 vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
-  useObjectPanel: () => ({ openWithObject: vi.fn() }),
+  useObjectPanel: () => ({ openWithObject: openWithObjectMock }),
 }));
 
 vi.mock('@shared/hooks/useNavigateToView', () => ({
@@ -123,6 +124,7 @@ describe('ClusterViewRBAC', () => {
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
     gridTablePropsRef.current = null;
+    openWithObjectMock.mockClear();
   });
 
   afterEach(() => {
@@ -149,5 +151,37 @@ describe('ClusterViewRBAC', () => {
     });
     expect(props.columnVisibility).toBe(null);
     expect(props.columnWidths).toBe(null);
+  });
+
+  it.each([
+    ['ClusterRole', 'admin'],
+    ['ClusterRoleBinding', 'admin-binding'],
+  ])('opens the Object Map for %s rows', async (kind, name) => {
+    const row = { ...baseRBAC, kind, name };
+
+    await act(async () => {
+      root.render(<ClusterViewRBAC data={[row]} loaded={true} />);
+      await Promise.resolve();
+    });
+
+    const objectMapItem = gridTablePropsRef.current
+      .getCustomContextMenuItems(row, 'name')
+      .find((item: any) => item.label === 'Object Map');
+    expect(objectMapItem).toBeTruthy();
+
+    act(() => {
+      objectMapItem?.onClick?.();
+    });
+
+    expect(openWithObjectMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind,
+        name,
+        clusterId: 'cluster-a',
+        group: 'rbac.authorization.k8s.io',
+        version: 'v1',
+      }),
+      { initialTab: 'map' }
+    );
   });
 });

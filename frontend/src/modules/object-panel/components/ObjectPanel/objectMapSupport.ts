@@ -11,6 +11,8 @@ const MAP_SUPPORTED_KINDS = new Set([
   'secret',
   'serviceaccount',
   'node',
+  'clusterrole',
+  'clusterrolebinding',
   'deployment',
   'replicaset',
   'statefulset',

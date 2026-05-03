@@ -203,17 +203,32 @@ describe('useObjectPanelTabs', () => {
   });
 
   it('keeps the Map tab for backend-supported object-map types', async () => {
-    const { availableTabs } = await renderHook({
-      objectData: {
+    for (const objectData of [
+      {
         kind: 'IngressClass',
         name: 'public',
         clusterId: 'cluster-a',
         group: 'networking.k8s.io',
         version: 'v1',
       },
-    });
-
-    expect(availableTabs.map((tab) => tab.label)).toContain('Map');
+      {
+        kind: 'ClusterRole',
+        name: 'admin',
+        clusterId: 'cluster-a',
+        group: 'rbac.authorization.k8s.io',
+        version: 'v1',
+      },
+      {
+        kind: 'ClusterRoleBinding',
+        name: 'admin-binding',
+        clusterId: 'cluster-a',
+        group: 'rbac.authorization.k8s.io',
+        version: 'v1',
+      },
+    ]) {
+      const { availableTabs } = await renderHook({ objectData });
+      expect(availableTabs.map((tab) => tab.label)).toContain('Map');
+    }
   });
 
   it('keeps the Map tab for ConfigMaps and Secrets', async () => {

@@ -10,6 +10,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -261,6 +262,50 @@ func TestObjectMapDoesNotFanOutThroughSharedIngressClass(t *testing.T) {
 	assertMissingNode(t, payload, "Ingress", "api")
 }
 
+func TestObjectMapBuildsFromClusterRole(t *testing.T) {
+	client := fake.NewSimpleClientset(objectMapClusterRBACFixtureObjects()...)
+	builder := &objectMapBuilder{client: client}
+	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"})
+
+	snap, err := builder.Build(ctx, "__cluster__:rbac.authorization.k8s.io/v1:ClusterRole:admin?maxDepth=3&maxNodes=100")
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+	payload := snap.Payload.(ObjectMapSnapshotPayload)
+
+	if payload.Seed.ClusterID != "cluster-a" || payload.Seed.Group != "rbac.authorization.k8s.io" || payload.Seed.Version != "v1" || payload.Seed.Kind != "ClusterRole" {
+		t.Fatalf("seed identity is incomplete: %#v", payload.Seed)
+	}
+	assertNode(t, payload, "ClusterRole", "admin")
+	assertNode(t, payload, "ClusterRole", "view")
+	assertNode(t, payload, "ClusterRoleBinding", "admin-binding")
+	assertNode(t, payload, "ServiceAccount", "builder")
+	assertEdge(t, payload, "ClusterRoleBinding", "admin-binding", "ClusterRole", "admin", "roleRef")
+	assertEdge(t, payload, "ClusterRoleBinding", "admin-binding", "ServiceAccount", "builder", "subject")
+	assertEdge(t, payload, "ClusterRole", "admin", "ClusterRole", "view", "aggregates")
+}
+
+func TestObjectMapBuildsFromClusterRoleBinding(t *testing.T) {
+	client := fake.NewSimpleClientset(objectMapClusterRBACFixtureObjects()...)
+	builder := &objectMapBuilder{client: client}
+	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"})
+
+	snap, err := builder.Build(ctx, "__cluster__:rbac.authorization.k8s.io/v1:ClusterRoleBinding:admin-binding?maxDepth=2&maxNodes=100")
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+	payload := snap.Payload.(ObjectMapSnapshotPayload)
+
+	if payload.Seed.ClusterID != "cluster-a" || payload.Seed.Group != "rbac.authorization.k8s.io" || payload.Seed.Version != "v1" || payload.Seed.Kind != "ClusterRoleBinding" {
+		t.Fatalf("seed identity is incomplete: %#v", payload.Seed)
+	}
+	assertNode(t, payload, "ClusterRoleBinding", "admin-binding")
+	assertNode(t, payload, "ClusterRole", "admin")
+	assertNode(t, payload, "ServiceAccount", "builder")
+	assertEdge(t, payload, "ClusterRoleBinding", "admin-binding", "ClusterRole", "admin", "roleRef")
+	assertEdge(t, payload, "ClusterRoleBinding", "admin-binding", "ServiceAccount", "builder", "subject")
+}
+
 func objectMapFixtureObjects() []runtime.Object {
 	deploy := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -423,6 +468,44 @@ func objectMapIngressClassFixtureObjects() []runtime.Object {
 				Annotations: map[string]string{"kubernetes.io/ingress.class": "public"},
 			},
 		},
+	}
+}
+
+func objectMapClusterRBACFixtureObjects() []runtime.Object {
+	return []runtime.Object{
+		&rbacv1.ClusterRole{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   "admin",
+				UID:    types.UID("cluster-role-admin-uid"),
+				Labels: map[string]string{"rbac.example.com/aggregate-to-admin": "true"},
+			},
+			AggregationRule: &rbacv1.AggregationRule{
+				ClusterRoleSelectors: []metav1.LabelSelector{{
+					MatchLabels: map[string]string{"rbac.example.com/aggregate-to-admin": "true"},
+				}},
+			},
+		},
+		&rbacv1.ClusterRole{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   "view",
+				UID:    types.UID("cluster-role-view-uid"),
+				Labels: map[string]string{"rbac.example.com/aggregate-to-admin": "true"},
+			},
+		},
+		&rbacv1.ClusterRoleBinding{
+			ObjectMeta: metav1.ObjectMeta{Name: "admin-binding", UID: types.UID("cluster-role-binding-admin-uid")},
+			RoleRef: rbacv1.RoleRef{
+				APIGroup: "rbac.authorization.k8s.io",
+				Kind:     "ClusterRole",
+				Name:     "admin",
+			},
+			Subjects: []rbacv1.Subject{{
+				Kind:      "ServiceAccount",
+				Name:      "builder",
+				Namespace: "default",
+			}},
+		},
+		&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "builder", Namespace: "default", UID: types.UID("sa-builder-uid")}},
 	}
 }
 

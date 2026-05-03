@@ -148,6 +148,7 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
     const objectActions = useObjectActionController({
       context: 'gridtable',
       onOpen: (object) => openWithObject(object),
+      onOpenObjectMap: (object) => openWithObject(object, { initialTab: 'map' }),
     });
 
     // Get context menu items
