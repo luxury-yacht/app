@@ -178,8 +178,8 @@ const computeNodeColumns = (
       queue.push(id);
     }
   });
-  while (queue.length > 0) {
-    const u = queue.shift()!;
+  for (let head = 0; head < queue.length; head += 1) {
+    const u = queue[head];
     const cu = column.get(u)!;
     const outs = out.get(u);
     if (!outs) continue;

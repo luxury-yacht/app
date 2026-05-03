@@ -71,8 +71,8 @@ export const filterByDirectionalReachability = (
   {
     const visited = new Set<string>([seedId]);
     const queue: string[] = [seedId];
-    while (queue.length > 0) {
-      const u = queue.shift()!;
+    for (let head = 0; head < queue.length; head += 1) {
+      const u = queue[head];
       const outs = outgoing.get(u);
       if (!outs) continue;
       for (const { edgeId, neighbor } of outs) {
@@ -91,8 +91,8 @@ export const filterByDirectionalReachability = (
   {
     const visited = new Set<string>([seedId]);
     const queue: string[] = [seedId];
-    while (queue.length > 0) {
-      const u = queue.shift()!;
+    for (let head = 0; head < queue.length; head += 1) {
+      const u = queue[head];
       const ins = incoming.get(u);
       if (!ins) continue;
       for (const { edgeId, neighbor } of ins) {

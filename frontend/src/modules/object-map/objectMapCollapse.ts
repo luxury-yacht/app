@@ -190,8 +190,8 @@ export const computeCollapseInfo = (
   const hiddenDescendantIds = new Set<string>();
   hiddenRsIds.forEach((rsId) => {
     const queue: string[] = [rsId];
-    while (queue.length > 0) {
-      const u = queue.shift()!;
+    for (let head = 0; head < queue.length; head += 1) {
+      const u = queue[head];
       const children = childrenOf.get(u);
       if (!children) continue;
       children.forEach((c) => {

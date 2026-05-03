@@ -15,6 +15,12 @@
   color: var(--color-text-secondary);
 }
 
+.object-map-story-shell {
+  width: 100vw;
+  height: 100vh;
+  background: var(--color-bg);
+}
+
 /* Floating icon-bar overlay in the canvas top-right. Mirrors the
  * legend's overlay positioning on the opposite corner. */
 .object-map__toolbar {
@@ -92,6 +98,38 @@
    * fall back to a generic serif which doesn't match the surrounding
    * UI. */
   font-family: inherit;
+}
+
+.object-map__g6-stack {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.object-map__g6 {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  font-family: inherit;
+}
+
+.object-map__g6-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  font-family: inherit;
+  pointer-events: none;
+}
+
+.object-map__message {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
 }
 
 .object-map__viewport {
