@@ -37,6 +37,11 @@ export interface ObjectMapPointer {
   layoutY?: number;
 }
 
+export interface ObjectMapContextMenuRequest {
+  ref: ObjectMapReference;
+  position: { x: number; y: number };
+}
+
 export type ObjectMapNodeBadgeLookup = (nodeId: string) => ObjectMapNodeBadge | null;
 
 export type ObjectMapNodeDragStart = (node: PositionedNode, pointer: ObjectMapPointer) => void;
@@ -44,6 +49,8 @@ export type ObjectMapNodeDragMove = (pointer: ObjectMapPointer) => void;
 export type ObjectMapNodeDragEnd = (pointer: ObjectMapPointer) => void;
 
 export type ObjectMapObjectAction = (ref: ObjectMapReference) => void;
+
+export type ObjectMapContextMenuAction = (request: ObjectMapContextMenuRequest) => void;
 
 export interface ObjectMapViewportControls {
   zoomIn: () => void;

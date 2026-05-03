@@ -24,7 +24,7 @@ const MAP_SUPPORTED_KINDS = new Set([
 
 const hasText = (value: string | null | undefined): boolean => Boolean(value?.trim());
 
-const isObjectMapSupportedKind = (kind: string | null | undefined): boolean =>
+export const isObjectMapSupportedKind = (kind: string | null | undefined): boolean =>
   Boolean(kind && MAP_SUPPORTED_KINDS.has(kind.trim().toLowerCase()));
 
 export const hasCompleteObjectMapReference = (

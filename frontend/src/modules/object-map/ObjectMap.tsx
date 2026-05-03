@@ -6,11 +6,15 @@
  * G6 renderer so the heavy graph dependency stays out of the initial bundle.
  */
 
-import React, { Suspense, useMemo, useState } from 'react';
+import React, { Suspense, useCallback, useMemo, useState } from 'react';
 import './ObjectMap.css';
 import type { ObjectMapReference, ObjectMapSnapshotPayload } from '@core/refresh/types';
 import { isMacPlatform } from '@/utils/platform';
+import ContextMenu from '@shared/components/ContextMenu';
+import { useObjectActions } from '@shared/hooks/useObjectActions';
+import { isObjectMapSupportedKind } from '@modules/object-panel/components/ObjectPanel/objectMapSupport';
 import { objectMapEdgeClass, OBJECT_MAP_EDGE_KINDS } from './objectMapEdgeStyle';
+import type { ObjectMapContextMenuRequest } from './objectMapRendererTypes';
 import type { ObjectMapViewportControls } from './objectMapRendererTypes';
 import { useObjectMapModel } from './useObjectMapModel';
 import {
@@ -39,6 +43,7 @@ export interface ObjectMapProps {
   // are optional — when omitted the modifier click silently no-ops.
   onOpenPanel?: (ref: ObjectMapReference) => void;
   onNavigateView?: (ref: ObjectMapReference) => void;
+  onOpenObjectMap?: (ref: ObjectMapReference) => void;
 }
 
 const ObjectMap: React.FC<ObjectMapProps> = ({
@@ -47,9 +52,11 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
   isRefreshing = false,
   onOpenPanel,
   onNavigateView,
+  onOpenObjectMap,
 }) => {
   const model = useObjectMapModel(payload);
   const [showLegend, setShowLegend] = useState(true);
+  const [contextMenu, setContextMenu] = useState<ObjectMapContextMenuRequest | null>(null);
   const [g6ViewportControls, setG6ViewportControls] = useState<ObjectMapViewportControls | null>(
     null
   );
@@ -67,6 +74,28 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
   );
 
   const viewportControlsReady = Boolean(g6ViewportControls);
+  const contextMenuObject = contextMenu?.ref ?? null;
+  const contextMenuHandlers = useMemo(
+    () => ({
+      onOpen: contextMenuObject && onOpenPanel ? () => onOpenPanel(contextMenuObject) : undefined,
+      onObjectMap:
+        contextMenuObject && onOpenObjectMap && isObjectMapSupportedKind(contextMenuObject.kind)
+          ? () => onOpenObjectMap(contextMenuObject)
+          : undefined,
+    }),
+    [contextMenuObject, onOpenObjectMap, onOpenPanel]
+  );
+  const contextMenuItems = useObjectActions({
+    object: contextMenuObject,
+    context: 'gridtable',
+    handlers: contextMenuHandlers,
+  });
+  const handleNodeContextMenu = useCallback((request: ObjectMapContextMenuRequest) => {
+    setContextMenu(request);
+  }, []);
+  const closeContextMenu = useCallback(() => {
+    setContextMenu(null);
+  }, []);
 
   if (model.layout.nodes.length === 0) {
     return (
@@ -95,6 +124,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
             onClearSelection={model.clearSelection}
             onOpenPanel={onOpenPanel}
             onNavigateView={onNavigateView}
+            onNodeContextMenu={handleNodeContextMenu}
             autoFit={model.autoFit}
             onViewportControlsChange={setG6ViewportControls}
           />
@@ -214,6 +244,13 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
           </div>
         )}
       </div>
+      {contextMenu && contextMenuItems.length > 0 && (
+        <ContextMenu
+          items={contextMenuItems}
+          position={contextMenu.position}
+          onClose={closeContextMenu}
+        />
+      )}
       {payload.truncated && (
         <div className="object-map__banner object-map__banner--truncated">
           Showing {model.layout.nodes.length} of many. Increase the depth/node limits to see more.

@@ -129,6 +129,14 @@ const MapTab: React.FC<MapTabProps> = ({ objectData, isActive, mapScope }) => {
     [navigateToView]
   );
 
+  const handleOpenObjectMap = useCallback(
+    (ref: ObjectMapReference) => {
+      const resolved = buildResolvedFromMapRef(ref);
+      if (resolved) openWithObject(resolved, { initialTab: 'map' });
+    },
+    [openWithObject]
+  );
+
   return (
     <div className="object-panel-tab-content map-tab" data-testid="map-tab">
       <div className="map-tab__body">
@@ -143,6 +151,7 @@ const MapTab: React.FC<MapTabProps> = ({ objectData, isActive, mapScope }) => {
             isRefreshing={isLoadingState(snapshot.status)}
             onOpenPanel={handleOpenPanel}
             onNavigateView={handleNavigateView}
+            onOpenObjectMap={handleOpenObjectMap}
           />
         )}
         {!loading && !payload && !snapshot.error && (

@@ -4,6 +4,24 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ObjectMapReference, ObjectMapSnapshotPayload } from '@core/refresh/types';
 import ObjectMap from './ObjectMap';
 
+vi.mock('@shared/components/ContextMenu', () => ({
+  default: ({
+    items,
+  }: {
+    items: Array<{ label?: string; onClick?: () => void; divider?: boolean; header?: boolean }>;
+  }) => (
+    <div data-testid="mock-context-menu">
+      {items.map((item, index) =>
+        item.divider || item.header ? null : (
+          <button key={index} type="button" onClick={item.onClick}>
+            {item.label}
+          </button>
+        )
+      )}
+    </div>
+  ),
+}));
+
 vi.mock('./ObjectMapG6Renderer', () => {
   const MockObjectMapG6Renderer = (props: {
     layout: {
@@ -59,6 +77,11 @@ vi.mock('./ObjectMapG6Renderer', () => {
     onClearSelection: () => void;
     onOpenPanel?: (ref: ObjectMapReference) => void;
     onNavigateView?: (ref: ObjectMapReference) => void;
+    onOpenObjectMap?: (ref: ObjectMapReference) => void;
+    onNodeContextMenu?: (request: {
+      ref: ObjectMapReference;
+      position: { x: number; y: number };
+    }) => void;
   }) => {
     const firstNode = props.layout.nodes[0];
 
@@ -116,6 +139,13 @@ vi.mock('./ObjectMapG6Renderer', () => {
                 <button
                   type="button"
                   aria-label={`${node.ref.kind}: ${node.ref.name}`}
+                  onContextMenu={(event) => {
+                    event.preventDefault();
+                    props.onNodeContextMenu?.({
+                      ref: node.ref,
+                      position: { x: event.clientX, y: event.clientY },
+                    });
+                  }}
                   onClick={(event) => {
                     if (event.metaKey || event.ctrlKey) {
                       props.onOpenPanel?.(node.ref);
@@ -250,10 +280,12 @@ const renderObjectMap = async ({
   testPayload = payload,
   onOpenPanel,
   onNavigateView,
+  onOpenObjectMap,
 }: {
   testPayload?: ObjectMapSnapshotPayload;
   onOpenPanel?: (ref: ObjectMapReference) => void;
   onNavigateView?: (ref: ObjectMapReference) => void;
+  onOpenObjectMap?: (ref: ObjectMapReference) => void;
 } = {}) => {
   const container = document.createElement('div');
   document.body.appendChild(container);
@@ -261,7 +293,12 @@ const renderObjectMap = async ({
 
   await act(async () => {
     root.render(
-      <ObjectMap payload={testPayload} onOpenPanel={onOpenPanel} onNavigateView={onNavigateView} />
+      <ObjectMap
+        payload={testPayload}
+        onOpenPanel={onOpenPanel}
+        onNavigateView={onNavigateView}
+        onOpenObjectMap={onOpenObjectMap}
+      />
     );
     await Promise.resolve();
   });
@@ -388,6 +425,79 @@ describe('ObjectMap', () => {
 
     expect(onNavigateView).toHaveBeenCalledTimes(1);
     expect(onNavigateView).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clusterId: 'cluster-a',
+        group: '',
+        version: 'v1',
+        kind: 'Pod',
+        namespace: 'default',
+        name: 'web-abc',
+        uid: 'pod-uid',
+      })
+    );
+
+    cleanup();
+  });
+
+  it('opens the shared object context menu for mapped objects', async () => {
+    const onOpenPanel = vi.fn();
+    const onOpenObjectMap = vi.fn();
+    const { container, cleanup } = await renderObjectMap({ onOpenPanel, onOpenObjectMap });
+    const pod = container.querySelector<HTMLButtonElement>('[aria-label="Pod: web-abc"]');
+
+    expect(pod).toBeTruthy();
+
+    await act(async () => {
+      pod!.dispatchEvent(mouseEvent('contextmenu', { clientX: 100, clientY: 120 }));
+      await Promise.resolve();
+    });
+
+    const menu = container.querySelector<HTMLElement>('[data-testid="mock-context-menu"]');
+    expect(menu?.textContent).toContain('Open');
+    expect(menu?.textContent).toContain('Object Map');
+    expect(menu?.textContent).toContain('Diff');
+
+    const openItem = Array.from(menu!.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Open'
+    );
+    const mapItem = Array.from(menu!.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Object Map'
+    );
+
+    await act(async () => {
+      openItem!.click();
+      await Promise.resolve();
+    });
+
+    expect(onOpenPanel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clusterId: 'cluster-a',
+        group: '',
+        version: 'v1',
+        kind: 'Pod',
+        namespace: 'default',
+        name: 'web-abc',
+        uid: 'pod-uid',
+      })
+    );
+
+    await act(async () => {
+      pod!.dispatchEvent(mouseEvent('contextmenu', { clientX: 100, clientY: 120 }));
+      await Promise.resolve();
+    });
+
+    const nextMenu = container.querySelector<HTMLElement>('[data-testid="mock-context-menu"]');
+    const nextMapItem = Array.from(nextMenu!.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Object Map'
+    );
+    expect(mapItem).toBeTruthy();
+
+    await act(async () => {
+      nextMapItem!.click();
+      await Promise.resolve();
+    });
+
+    expect(onOpenObjectMap).toHaveBeenCalledWith(
       expect.objectContaining({
         clusterId: 'cluster-a',
         group: '',

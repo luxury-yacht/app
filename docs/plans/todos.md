@@ -4,12 +4,6 @@
   - Object relationships map
   - Traffic flow map
 
-- zoom increments
-- route tooltips
-  - highlight route
-  - fix reference
-- 
-
 - In daemonset details, show a "NOT RUNNING ON" label that lists the nodes where the ds is missing
 
 - Cluster overview, show resource usage by workload type

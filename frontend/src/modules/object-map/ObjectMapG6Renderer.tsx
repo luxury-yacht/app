@@ -10,6 +10,7 @@ import { objectMapG6EdgeState, objectMapG6NodeState, toObjectMapG6Data } from '.
 import type { ObjectMapG6Palette } from './objectMapG6Data';
 import type {
   ObjectMapHoverEdge,
+  ObjectMapContextMenuAction,
   ObjectMapNodeBadgeLookup,
   ObjectMapNodeDragEnd,
   ObjectMapNodeDragMove,
@@ -207,12 +208,14 @@ type G6ElementPointerEvent = {
     button?: number;
     clientX?: number;
     clientY?: number;
+    preventDefault?: () => void;
   };
   clientX?: number;
   clientY?: number;
   metaKey?: boolean;
   ctrlKey?: boolean;
   altKey?: boolean;
+  preventDefault?: () => void;
 };
 
 type ObjectMapPointerInput = {
@@ -477,6 +480,7 @@ export interface ObjectMapG6RendererProps {
   onClearSelection: () => void;
   onOpenPanel?: ObjectMapObjectAction;
   onNavigateView?: ObjectMapObjectAction;
+  onNodeContextMenu?: ObjectMapContextMenuAction;
   autoFit: boolean;
   onViewportControlsChange?: (controls: ObjectMapViewportControls | null) => void;
 }
@@ -496,6 +500,7 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
   onClearSelection,
   onOpenPanel,
   onNavigateView,
+  onNodeContextMenu,
   autoFit,
   onViewportControlsChange,
 }) => {
@@ -536,6 +541,7 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
     onClearSelection,
     onOpenPanel,
     onNavigateView,
+    onNodeContextMenu,
     onNodeDragStart,
     onNodeDragMove,
     onNodeDragEnd,
@@ -549,6 +555,7 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
     onClearSelection,
     onOpenPanel,
     onNavigateView,
+    onNodeContextMenu,
     onNodeDragStart,
     onNodeDragMove,
     onNodeDragEnd,
@@ -847,6 +854,19 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
         return;
       }
       onSelectNode(id);
+    });
+
+    graph.on(NodeEvent.CONTEXT_MENU, (rawEvent) => {
+      const event = rawEvent as G6ElementPointerEvent;
+      event.preventDefault?.();
+      event.nativeEvent?.preventDefault?.();
+      const node = findNode(layoutRef.current, event.target.id);
+      if (!node) return;
+      const point = eventClientPoint(event);
+      handlersRef.current.onNodeContextMenu?.({
+        ref: node.ref as ObjectMapReference,
+        position: point,
+      });
     });
 
     graph.on(NodeEvent.POINTER_DOWN, (rawEvent) => {
