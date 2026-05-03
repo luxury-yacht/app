@@ -29,6 +29,8 @@ const TOOLTIP_HEIGHT_SINGLE = 28;
 const TOOLTIP_HEIGHT_DOUBLE = 44;
 const TOOLTIP_LABEL_MAX_CHARS = 30;
 const TOOLTIP_TRACE_MAX_CHARS = 36;
+const WHEEL_ZOOM_DELTA_LIMIT = 50;
+const WHEEL_ZOOM_SENSITIVITY = 1;
 
 const findNode = (layout: ObjectMapLayout, id: string): PositionedNode | null =>
   layout.nodes.find((node) => node.id === id) ?? null;
@@ -76,6 +78,26 @@ const readPalette = (element: HTMLElement): ObjectMapG6Palette => {
     edgeUses: cssVar(styles, '--color-text-secondary', DEFAULT_OBJECT_MAP_G6_PALETTE.edgeUses),
     fontFamily: styles.fontFamily || DEFAULT_OBJECT_MAP_G6_PALETTE.fontFamily,
   };
+};
+
+const isMacPlatform = (): boolean =>
+  typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.platform);
+
+const isZoomWheelEvent = (event: WheelEvent): boolean => {
+  if (isMacPlatform()) {
+    return event.metaKey || event.ctrlKey;
+  }
+  return event.ctrlKey;
+};
+
+const wheelZoomRatio = (event: WheelEvent): number => {
+  const dominantDelta =
+    Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
+  const clampedDelta = Math.max(
+    -WHEEL_ZOOM_DELTA_LIMIT,
+    Math.min(WHEEL_ZOOM_DELTA_LIMIT, -dominantDelta)
+  );
+  return 1 + (clampedDelta * WHEEL_ZOOM_SENSITIVITY) / 100;
 };
 
 type G6DisplayObjectTarget = {
@@ -533,7 +555,14 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
       autoResize: true,
       animation: false,
       data: initialData,
-      behaviors: ['drag-canvas', 'zoom-canvas'],
+      behaviors: [
+        'drag-canvas',
+        {
+          type: 'scroll-canvas',
+          enable: (event: WheelEvent) => !isZoomWheelEvent(event),
+          range: Infinity,
+        },
+      ],
       node: {
         type: OBJECT_MAP_G6_CARD_NODE,
         state: {
@@ -636,6 +665,19 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
     graph.on(GraphEvent.AFTER_TRANSFORM, updateTooltipPosition);
     graph.on(GraphEvent.AFTER_SIZE_CHANGE, updateTooltipPosition);
 
+    const handleWheelZoom = (event: WheelEvent) => {
+      if (!isZoomWheelEvent(event) || graph.destroyed) return;
+      event.preventDefault();
+      const rect = container.getBoundingClientRect();
+      const origin: [number, number] = [event.clientX - rect.left, event.clientY - rect.top];
+      void graph.zoomBy(wheelZoomRatio(event), false, origin).catch((error: unknown) => {
+        if (graphRef.current === graph && !graph.destroyed) {
+          console.error('[ObjectMapG6Renderer] Failed to zoom graph:', error);
+        }
+      });
+    };
+    container.addEventListener('wheel', handleWheelZoom, { passive: false });
+
     let disposed = false;
     let initialRenderSettled = false;
     const destroyGraph = () => {
@@ -681,6 +723,7 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
       selectionApply.applying = false;
       dataApply.latest = null;
       dataApply.applying = false;
+      container.removeEventListener('wheel', handleWheelZoom);
       if (initialRenderSettled) {
         destroyGraph();
       }
