@@ -137,6 +137,7 @@ vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
 vi.mock('@shared/components/icons/MenuIcons', () => ({
   DiffIcon: () => <span>diff</span>,
   OpenIcon: () => <span>open</span>,
+  ObjectMapIcon: () => <span>map</span>,
   DeleteIcon: () => <span>delete</span>,
 }));
 
@@ -255,6 +256,39 @@ describe('NsViewNetwork', () => {
         namespace: 'team-a',
         clusterId: 'alpha:ctx',
       })
+    );
+  });
+
+  it.each([
+    ['Ingress', 'networking.k8s.io', 'v1'],
+    ['Service', '', 'v1'],
+    ['EndpointSlice', 'discovery.k8s.io', 'v1'],
+  ])('opens the Object Map from %s context menu', async (kind, group, version) => {
+    const entry = baseNetwork({
+      kind,
+      kindAlias: kind,
+      name: `${kind.toLowerCase()}-object`,
+    });
+    const props = await renderNetworkView([entry]);
+
+    const menu = props.getCustomContextMenuItems(entry, 'name');
+    const objectMapItem = menu.find((item: any) => item.label === 'Object Map');
+    expect(objectMapItem).toBeTruthy();
+
+    act(() => {
+      objectMapItem?.onClick?.();
+    });
+
+    expect(openWithObjectMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind,
+        name: `${kind.toLowerCase()}-object`,
+        namespace: 'team-a',
+        clusterId: 'alpha:ctx',
+        group,
+        version,
+      }),
+      { initialTab: 'map' }
     );
   });
 
