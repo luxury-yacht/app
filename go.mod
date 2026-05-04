@@ -4,7 +4,7 @@ go 1.26.0
 
 require (
 	github.com/evanphx/json-patch/v5 v5.9.11
-	github.com/fsnotify/fsnotify v1.10.0
+	github.com/fsnotify/fsnotify v1.10.1
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674
 	github.com/magefile/mage v1.17.2
