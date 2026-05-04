@@ -1,20 +1,3 @@
-/* NsHelmView specific styles */
-
-.ns-helm-table .release-name {
-}
-
-.ns-helm-table .chart-info {
-}
-
-.ns-helm-table .chart-name {
-}
-
-.ns-helm-table .chart-version {
-}
-
-.ns-helm-table .app-version {
-}
-
 .ns-helm-table .helm-status {
   text-transform: capitalize;
 }
@@ -31,22 +14,4 @@
 
 .ns-helm-table .helm-status.status-failed {
   color: var(--color-error);
-}
-
-.ns-helm-table .helm-status.status-uninstalled {
-}
-
-.ns-helm-table .helm-status.status-superseded {
-}
-
-.ns-helm-table .helm-status.status-unknown {
-}
-
-.ns-helm-table .revision-number {
-}
-
-.ns-helm-table .last-updated {
-}
-
-.ns-helm-table .helm-description {
 }
