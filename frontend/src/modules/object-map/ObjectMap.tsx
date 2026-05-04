@@ -200,30 +200,36 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
     const items: ContextMenuItem[] = [
       {
         label: 'Zoom out',
+        icon: <ZoomOutIcon />,
         onClick: g6ViewportControls?.zoomOut,
         disabled: !viewportControlsReady,
       },
       {
         label: 'Zoom in',
+        icon: <ZoomInIcon />,
         onClick: g6ViewportControls?.zoomIn,
         disabled: !viewportControlsReady,
       },
       {
         label: 'Fit',
+        icon: <FitToViewIcon />,
         onClick: g6ViewportControls?.fitToView,
         disabled: !viewportControlsReady,
       },
       {
         label: model.autoFit ? 'Auto-fit off' : 'Auto-fit on',
+        icon: <AutoFitIcon />,
         onClick: () => model.setAutoFit((prev) => !prev),
       },
       { divider: true },
       {
-        label: focusMode ? 'Focus off' : 'Focus',
+        label: focusMode ? 'Focus off' : 'Focus on',
+        icon: <FocusModeIcon />,
         onClick: () => setFocusMode((prev) => !prev),
       },
       {
         label: 'Reset layout',
+        icon: <ResetFiltersIcon />,
         onClick: resetMapLayout,
         disabled: !model.hasNodePositionOverrides && !focusMode,
       },
@@ -232,6 +238,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
     if (onRefresh) {
       items.push({
         label: 'Refresh',
+        icon: <RefreshIcon />,
         onClick: onRefresh,
         disabled: isRefreshing,
       });
@@ -239,6 +246,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
     }
     items.push({
       label: showLegend ? 'Hide legend' : 'Show legend',
+      icon: <LegendIcon />,
       onClick: () => setShowLegend((prev) => !prev),
     });
     return items;

@@ -21,12 +21,19 @@ vi.mock('@shared/components/ContextMenu', () => ({
   default: ({
     items,
   }: {
-    items: Array<{ label?: string; onClick?: () => void; divider?: boolean; header?: boolean }>;
+    items: Array<{
+      label?: string;
+      onClick?: () => void;
+      icon?: React.ReactNode;
+      divider?: boolean;
+      header?: boolean;
+    }>;
   }) => (
     <div data-testid="mock-context-menu">
       {items.map((item, index) =>
         item.divider || item.header ? null : (
           <button key={index} type="button" onClick={item.onClick}>
+            {item.icon && <span data-testid="mock-context-menu-icon">{item.icon}</span>}
             {item.label}
           </button>
         )
@@ -1012,10 +1019,11 @@ describe('ObjectMap', () => {
     expect(menu?.textContent).toContain('Zoom in');
     expect(menu?.textContent).toContain('Fit');
     expect(menu?.textContent).toContain('Auto-fit off');
-    expect(menu?.textContent).toContain('Focus');
+    expect(menu?.textContent).toContain('Focus on');
     expect(menu?.textContent).toContain('Reset layout');
     expect(menu?.textContent).toContain('Refresh');
     expect(menu?.textContent).toContain('Hide legend');
+    expect(container.querySelectorAll('[data-testid="mock-context-menu-icon"]')).toHaveLength(8);
 
     const autoFitItem = Array.from(menu!.querySelectorAll('button')).find(
       (button) => button.textContent === 'Auto-fit off'
