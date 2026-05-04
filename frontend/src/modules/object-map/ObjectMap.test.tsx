@@ -1097,7 +1097,7 @@ describe('ObjectMap', () => {
     cleanup();
   });
 
-  it('allows selecting the dragged node after the drag click suppression expires', async () => {
+  it('allows selecting the dragged node after dragging when the renderer sends a real click', async () => {
     const { container, cleanup } = await renderObjectMap();
     const dragButton = container.querySelector<HTMLButtonElement>(
       '[data-testid="mock-drag-first-node"]'
@@ -1111,14 +1111,6 @@ describe('ObjectMap', () => {
 
     await act(async () => {
       dragButton!.click();
-      deploy!.dispatchEvent(mouseEvent('click'));
-      await Promise.resolve();
-    });
-
-    expect(deployNode?.dataset.active).toBe('false');
-
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 0));
       deploy!.dispatchEvent(mouseEvent('click'));
       await Promise.resolve();
     });

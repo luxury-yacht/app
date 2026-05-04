@@ -1,5 +1,14 @@
 # TODO
 
+## Object Map Tech Debt
+
+1. ObjectMap.tsx is doing too much - It owns toolbar state, legend drag state, kind filtering, focus projection, search, context menus, and renderer wiring. The difficult-but-correct shape would split that into smaller hooks/pure helpers, especially for visible graph derivation.
+2. Graph derivation is split between useObjectMapModel and ObjectMap.tsx - The model computes the base graph/layout, then ObjectMap.tsx applies kind filters, transitive edge contraction, focus mode, search visibility, and sometimes recomputes layout. That works, but the correct long-term shape is one pure “derive visible map state” pipeline with tests.
+3. G6 renderer is still a large imperative integration surface - It owns G6 lifecycle, async render queues, palette refresh, tooltip positioning, viewport controls, drag/click events, hover state, and data patching. Some of that is unavoidable, but it is still a high-risk file.
+4. Real G6 interaction behavior is under-tested - The new gesture helper is tested, and ObjectMap behavior is tested with a mocked renderer, but we still do not have a real G6/browser-level test that proves the exact drag-then-click sequence. That is probably the biggest remaining confidence gap.
+5. Legend drag is implemented directly in ObjectMap.tsx - It is not dead code, but it is another custom pointer state machine in the main component. The correct cleanup would extract and test it similarly to node gesture handling.
+6. Tooltip rendering is custom and tightly coupled to renderer internals - It has to be canvas/G6-aware, but the sizing, badges, truncation, and positioning rules are still more fragile than a normal shared React tooltip.
+
 ## Feature Ideas
 
 - In daemonset details, show a "NOT RUNNING ON" label that lists the nodes where the ds is missing

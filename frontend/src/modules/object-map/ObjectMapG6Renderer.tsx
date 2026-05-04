@@ -11,6 +11,14 @@ import { ensureObjectMapG6PathEdgeRegistered } from './objectMapG6PathEdge';
 import { OBJECT_MAP_G6_CARD_NODE } from './objectMapG6Constants';
 import { objectMapG6EdgeState, objectMapG6NodeState, toObjectMapG6Data } from './objectMapG6Data';
 import type { ObjectMapG6Palette } from './objectMapG6Data';
+import {
+  beginObjectMapNodeGesture,
+  clearObjectMapNodeGesture,
+  consumeObjectMapSuppressedClick,
+  createObjectMapNodeGestureState,
+  endObjectMapNodeGesture,
+  updateObjectMapNodeGesture,
+} from './objectMapNodeGesture';
 import type {
   ObjectMapHoverEdge,
   ObjectMapContextMenuAction,
@@ -595,7 +603,7 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
   const hoverEdgeRef = useRef(hoverEdge);
   const hoveredEdgeIdRef = useRef<string | null>(null);
   const ignoreNextCanvasClickRef = useRef(false);
-  const manualDragPointerIdRef = useRef<number | null>(null);
+  const nodeGestureRef = useRef(createObjectMapNodeGestureState());
   const selectionApplyRef = useRef<{
     version: number;
     applying: boolean;
@@ -887,19 +895,7 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
       edge: objectMapG6EdgeOptions(initialPalette),
     });
     graphRef.current = graph;
-
-    const moveManualNodeDrag = (event: ObjectMapPointerInput) => {
-      const pointerId = eventPointerId(event);
-      if (manualDragPointerIdRef.current !== pointerId) return;
-      handlersRef.current.onNodeDragMove(toObjectMapPointerInput(event, graph));
-    };
-
-    const endManualNodeDrag = (event: ObjectMapPointerInput) => {
-      const pointerId = eventPointerId(event);
-      if (manualDragPointerIdRef.current !== pointerId) return;
-      handlersRef.current.onNodeDragEnd(toObjectMapPointerInput(event, graph));
-      manualDragPointerIdRef.current = null;
-    };
+    const nodeGestureState = nodeGestureRef.current;
 
     const setConnectionHoverState = (edge: PositionedEdge, hovered: boolean) => {
       if (graph.destroyed) return;
@@ -956,6 +952,9 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
         if (badge) onToggleGroup(badge.deploymentId);
         return;
       }
+      if (consumeObjectMapSuppressedClick(nodeGestureState, id)) {
+        return;
+      }
       if (event.metaKey || event.ctrlKey) {
         if (onOpenPanel) onOpenPanel(node.ref as ObjectMapReference);
         return;
@@ -985,21 +984,38 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
       if (eventButton(event) !== 0 || isBadgeEvent(event)) return;
       const node = findNode(layoutRef.current, event.target.id);
       if (!node) return;
-      manualDragPointerIdRef.current = eventPointerId(event);
-      handlersRef.current.onNodeDragStart(node, toObjectMapPointer(event, graph));
+      const pointer = toObjectMapPointer(event, graph);
+      beginObjectMapNodeGesture(nodeGestureState, {
+        pointerId: pointer.pointerId,
+        nodeId: node.id,
+        clientX: pointer.clientX,
+        clientY: pointer.clientY,
+      });
+      handlersRef.current.onNodeDragStart(node, pointer);
     });
 
     graph.on(CommonEvent.DRAG, (rawEvent) => {
       const event = rawEvent as G6ElementPointerEvent;
-      if (manualDragPointerIdRef.current === eventPointerId(event)) {
-        moveManualNodeDrag(event);
+      const pointer = toObjectMapPointerInput(event, graph);
+      if (
+        updateObjectMapNodeGesture(nodeGestureState, {
+          pointerId: pointer.pointerId,
+          clientX: pointer.clientX,
+          clientY: pointer.clientY,
+        })
+      ) {
+        handlersRef.current.onNodeDragMove(pointer);
       } else {
         onUserViewportChangeRef.current?.();
       }
     });
 
     graph.on(CommonEvent.DRAG_END, (rawEvent) => {
-      endManualNodeDrag(rawEvent as G6ElementPointerEvent);
+      const event = rawEvent as G6ElementPointerEvent;
+      const pointer = toObjectMapPointerInput(event, graph);
+      if (endObjectMapNodeGesture(nodeGestureState, pointer.pointerId)) {
+        handlersRef.current.onNodeDragEnd(pointer);
+      }
     });
 
     graph.on(EdgeEvent.POINTER_ENTER, (rawEvent) => {
@@ -1101,7 +1117,7 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
       graphRef.current = null;
       graphReadyRef.current = false;
       hoveredEdgeIdRef.current = null;
-      manualDragPointerIdRef.current = null;
+      clearObjectMapNodeGesture(nodeGestureState);
       renderedDataRef.current = null;
       selectionApply.latest = null;
       selectionApply.applying = false;

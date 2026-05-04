@@ -20,6 +20,7 @@ import type {
   ObjectMapNodeBadge,
   ObjectMapPointer,
 } from './objectMapRendererTypes';
+import { OBJECT_MAP_NODE_DRAG_THRESHOLD_PX } from './objectMapNodeGesture';
 
 type NodePositionOverrides = Map<string, { x: number; y: number }>;
 
@@ -34,14 +35,6 @@ interface NodeDragState {
   startY: number;
   didDrag: boolean;
 }
-
-const NODE_DRAG_THRESHOLD_PX = 3;
-
-const clearTimeoutIfSet = (timeoutId: ReturnType<typeof setTimeout> | null) => {
-  if (timeoutId !== null) {
-    clearTimeout(timeoutId);
-  }
-};
 
 export const useObjectMapModel = (payload: ObjectMapSnapshotPayload) => {
   const seedId = useMemo(() => {
@@ -125,23 +118,11 @@ export const useObjectMapModel = (payload: ObjectMapSnapshotPayload) => {
     () => new Map()
   );
   const nodeDragRef = useRef<NodeDragState | null>(null);
-  const suppressNextNodeClickRef = useRef<string | null>(null);
-  const suppressNextNodeClickTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     setNodePositionOverrides(new Map());
     nodeDragRef.current = null;
-    suppressNextNodeClickRef.current = null;
-    clearTimeoutIfSet(suppressNextNodeClickTimeoutRef.current);
-    suppressNextNodeClickTimeoutRef.current = null;
   }, [filtered.nodes, filtered.edges]);
-
-  useEffect(
-    () => () => {
-      clearTimeoutIfSet(suppressNextNodeClickTimeoutRef.current);
-    },
-    []
-  );
 
   const layout: ObjectMapLayout = useMemo(() => {
     if (nodePositionOverrides.size === 0) {
@@ -190,15 +171,6 @@ export const useObjectMapModel = (payload: ObjectMapSnapshotPayload) => {
   );
 
   const selectNode = useCallback((id: string) => {
-    if (suppressNextNodeClickRef.current === id) {
-      suppressNextNodeClickRef.current = null;
-      clearTimeoutIfSet(suppressNextNodeClickTimeoutRef.current);
-      suppressNextNodeClickTimeoutRef.current = null;
-      return;
-    }
-    suppressNextNodeClickRef.current = null;
-    clearTimeoutIfSet(suppressNextNodeClickTimeoutRef.current);
-    suppressNextNodeClickTimeoutRef.current = null;
     setActiveNodeId((prev) => (prev === id ? null : id));
   }, []);
 
@@ -230,7 +202,7 @@ export const useObjectMapModel = (payload: ObjectMapSnapshotPayload) => {
     if (!drag || drag.pointerId !== pointer.pointerId) return;
     const dxScreen = pointer.clientX - drag.originClientX;
     const dyScreen = pointer.clientY - drag.originClientY;
-    if (!drag.didDrag && Math.hypot(dxScreen, dyScreen) >= NODE_DRAG_THRESHOLD_PX) {
+    if (!drag.didDrag && Math.hypot(dxScreen, dyScreen) >= OBJECT_MAP_NODE_DRAG_THRESHOLD_PX) {
       drag.didDrag = true;
       setAutoFit(false);
     }
@@ -258,25 +230,12 @@ export const useObjectMapModel = (payload: ObjectMapSnapshotPayload) => {
   const endNodeDrag = useCallback((pointer: ObjectMapPointer) => {
     const drag = nodeDragRef.current;
     if (!drag || drag.pointerId !== pointer.pointerId) return;
-    if (drag.didDrag) {
-      suppressNextNodeClickRef.current = drag.nodeId;
-      clearTimeoutIfSet(suppressNextNodeClickTimeoutRef.current);
-      suppressNextNodeClickTimeoutRef.current = setTimeout(() => {
-        if (suppressNextNodeClickRef.current === drag.nodeId) {
-          suppressNextNodeClickRef.current = null;
-        }
-        suppressNextNodeClickTimeoutRef.current = null;
-      }, 0);
-    }
     nodeDragRef.current = null;
   }, []);
 
   const resetLayout = useCallback(() => {
     setNodePositionOverrides(new Map());
     nodeDragRef.current = null;
-    suppressNextNodeClickRef.current = null;
-    clearTimeoutIfSet(suppressNextNodeClickTimeoutRef.current);
-    suppressNextNodeClickTimeoutRef.current = null;
   }, []);
 
   const clearHoverEdge = useCallback(() => {
