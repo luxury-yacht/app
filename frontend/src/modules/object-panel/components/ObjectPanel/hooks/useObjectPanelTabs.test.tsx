@@ -51,6 +51,9 @@ describe('useObjectPanelTabs', () => {
     kind: 'Deployment',
     name: 'api',
     namespace: 'team-a',
+    clusterId: 'cluster-a',
+    group: 'apps',
+    version: 'v1',
   };
 
   const renderHook = async (
@@ -106,23 +109,44 @@ describe('useObjectPanelTabs', () => {
   it('returns workload tabs excluding manifest/values for non-Helm resources', async () => {
     const { availableTabs } = await renderHook();
     const labels = availableTabs.map((tab) => tab.label);
-    expect(labels).toEqual(['Details', 'Pods', 'Logs', 'Events', 'YAML']);
+    expect(labels).toEqual(['Details', 'Map', 'Pods', 'Logs', 'Events', 'YAML']);
   });
 
   it('omits the Shell tab when capability is disabled', async () => {
     const { availableTabs } = await renderHook({
-      objectData: { kind: 'Pod', name: 'api-123', namespace: 'team-a' },
+      objectData: {
+        kind: 'Pod',
+        name: 'api-123',
+        namespace: 'team-a',
+        clusterId: 'cluster-a',
+        group: '',
+        version: 'v1',
+      },
     });
-    expect(availableTabs.map((tab) => tab.label)).toEqual(['Details', 'Logs', 'Events', 'YAML']);
+    expect(availableTabs.map((tab) => tab.label)).toEqual([
+      'Details',
+      'Map',
+      'Logs',
+      'Events',
+      'YAML',
+    ]);
   });
 
   it('includes the Shell tab for pods when capability is available', async () => {
     const { availableTabs } = await renderHook({
-      objectData: { kind: 'Pod', name: 'api-123', namespace: 'team-a' },
+      objectData: {
+        kind: 'Pod',
+        name: 'api-123',
+        namespace: 'team-a',
+        clusterId: 'cluster-a',
+        group: '',
+        version: 'v1',
+      },
       capabilities: { ...baseCapabilities, hasShell: true },
     });
     expect(availableTabs.map((tab) => tab.label)).toEqual([
       'Details',
+      'Map',
       'Logs',
       'Events',
       'YAML',
@@ -148,13 +172,119 @@ describe('useObjectPanelTabs', () => {
     expect(labels).toEqual(['Details', 'Logs']);
   });
 
+  it('hides the Map tab for cluster webhook config objects', async () => {
+    const validating = await renderHook({
+      objectData: { kind: 'ValidatingWebhookConfiguration', name: 'admission-webhooks' },
+    });
+    expect(validating.availableTabs.map((tab) => tab.label)).toEqual([
+      'Details',
+      'Logs',
+      'Events',
+      'YAML',
+    ]);
+
+    const mutating = await renderHook({
+      objectData: { kind: 'MutatingWebhookConfiguration', name: 'mutation-webhooks' },
+    });
+    expect(mutating.availableTabs.map((tab) => tab.label)).toEqual([
+      'Details',
+      'Logs',
+      'Events',
+      'YAML',
+    ]);
+  });
+
+  it('hides the Map tab by default for unsupported object types', async () => {
+    const { availableTabs } = await renderHook({
+      objectData: { kind: 'GatewayClass', name: 'public-gateway' },
+    });
+
+    expect(availableTabs.map((tab) => tab.label)).toEqual(['Details', 'Logs', 'Events', 'YAML']);
+  });
+
+  it('keeps the Map tab for backend-supported object-map types', async () => {
+    for (const objectData of [
+      {
+        kind: 'IngressClass',
+        name: 'public',
+        clusterId: 'cluster-a',
+        group: 'networking.k8s.io',
+        version: 'v1',
+      },
+      {
+        kind: 'ClusterRole',
+        name: 'admin',
+        clusterId: 'cluster-a',
+        group: 'rbac.authorization.k8s.io',
+        version: 'v1',
+      },
+      {
+        kind: 'ClusterRoleBinding',
+        name: 'admin-binding',
+        clusterId: 'cluster-a',
+        group: 'rbac.authorization.k8s.io',
+        version: 'v1',
+      },
+    ]) {
+      const { availableTabs } = await renderHook({ objectData });
+      expect(availableTabs.map((tab) => tab.label)).toContain('Map');
+    }
+  });
+
+  it('keeps the Map tab for ConfigMaps and Secrets', async () => {
+    const configMap = await renderHook({
+      objectData: {
+        kind: 'ConfigMap',
+        name: 'app-config',
+        namespace: 'team-a',
+        clusterId: 'cluster-a',
+        group: '',
+        version: 'v1',
+      },
+    });
+    expect(configMap.availableTabs.map((tab) => tab.label)).toContain('Map');
+
+    const secret = await renderHook({
+      objectData: {
+        kind: 'Secret',
+        name: 'app-secret',
+        namespace: 'team-a',
+        clusterId: 'cluster-a',
+        group: '',
+        version: 'v1',
+      },
+    });
+    expect(secret.availableTabs.map((tab) => tab.label)).toContain('Map');
+  });
+
+  it('hides the Map tab for supported kinds when the object reference is incomplete', async () => {
+    const { availableTabs } = await renderHook({
+      objectData: { kind: 'Deployment', name: 'api', namespace: 'team-a' },
+    });
+
+    expect(availableTabs.map((tab) => tab.label)).toEqual([
+      'Details',
+      'Pods',
+      'Logs',
+      'Events',
+      'YAML',
+    ]);
+  });
+
   it('adds the Maintenance tab for node objects', async () => {
     const { availableTabs } = await renderHook({
-      objectData: { kind: 'Node', name: 'node-1' },
+      objectData: {
+        kind: 'Node',
+        name: 'node-1',
+        clusterId: 'cluster-a',
+        group: '',
+        version: 'v1',
+      },
       capabilities: { ...baseCapabilities, hasObjPanelLogs: false },
     });
     expect(availableTabs.map((tab) => tab.label)).toEqual([
       'Details',
+      'Map',
       'Pods',
       'Events',
       'YAML',
@@ -164,11 +294,18 @@ describe('useObjectPanelTabs', () => {
 
   it('uses the Logs tab for node objects rather than a separate node logs tab', async () => {
     const { availableTabs } = await renderHook({
-      objectData: { kind: 'Node', name: 'node-1' },
+      objectData: {
+        kind: 'Node',
+        name: 'node-1',
+        clusterId: 'cluster-a',
+        group: '',
+        version: 'v1',
+      },
       capabilities: { ...baseCapabilities, hasObjPanelLogs: true, hasNodeLogs: false },
     });
     expect(availableTabs.map((tab) => tab.label)).toEqual([
       'Details',
+      'Map',
       'Pods',
       'Logs',
       'Events',
@@ -192,13 +329,14 @@ describe('useObjectPanelTabs', () => {
     expect(hoistedShortcuts.useShortcut).not.toHaveBeenCalled();
 
     // Tab shortcuts registered via useShortcuts (plural), keyed by position.
-    // Deployment tabs: Details, Pods, Logs, Events, YAML → keys 1–5.
+    // Deployment tabs: Details, Map, Pods, Logs, Events, YAML → keys 1–6.
     const tabShortcuts = hoistedShortcuts.useShortcuts.mock.calls[0]?.[0] as
       | Array<{ key: string; description: string }>
       | undefined;
-    expect(tabShortcuts?.map((s) => s.key)).toEqual(['1', '2', '3', '4', '5']);
+    expect(tabShortcuts?.map((s) => s.key)).toEqual(['1', '2', '3', '4', '5', '6']);
     expect(tabShortcuts?.map((s) => s.description)).toEqual([
       'Switch to Details tab',
+      'Switch to Map tab',
       'Switch to Pods tab',
       'Switch to Logs tab',
       'Switch to Events tab',
@@ -226,19 +364,25 @@ describe('useObjectPanelTabs', () => {
   });
 
   it('omits shortcuts for hidden tabs instead of disabling them', async () => {
-    // Without logs capability: Details, Pods, Events, YAML → 4 shortcuts, no gap.
+    // Without logs capability: Details, Map, Pods, Events, YAML → 5 shortcuts, no gap.
     const { availableTabs } = await renderHook({
       capabilities: { ...baseCapabilities, hasObjPanelLogs: false },
     });
 
-    expect(availableTabs.map((tab) => tab.label)).toEqual(['Details', 'Pods', 'Events', 'YAML']);
+    expect(availableTabs.map((tab) => tab.label)).toEqual([
+      'Details',
+      'Map',
+      'Pods',
+      'Events',
+      'YAML',
+    ]);
 
     const tabShortcuts = hoistedShortcuts.useShortcuts.mock.calls[0]?.[0] as
       | Array<{ key: string; description: string }>
       | undefined;
-    expect(tabShortcuts).toHaveLength(4);
-    // Key '2' now maps to Pods (second visible tab), not to a disabled Logs shortcut.
-    expect(tabShortcuts?.[1]?.description).toBe('Switch to Pods tab');
+    expect(tabShortcuts).toHaveLength(5);
+    // Key '2' now maps to Map (second visible tab), not to a disabled Logs shortcut.
+    expect(tabShortcuts?.[1]?.description).toBe('Switch to Map tab');
   });
 
   it('ignores tab shortcuts when the panel is closed', async () => {
@@ -263,12 +407,12 @@ describe('useObjectPanelTabs', () => {
     expect(tabShortcuts?.[0]?.handler()).toBe(true);
     expect(setActiveTabMock).toHaveBeenCalledWith('details');
 
-    // Key '3' → Logs (third visible tab for Deployment: Details, Pods, Logs).
-    expect(tabShortcuts?.[2]?.handler()).toBe(true);
+    // Key '4' → Logs (fourth visible tab for Deployment: Details, Map, Pods, Logs).
+    expect(tabShortcuts?.[3]?.handler()).toBe(true);
     expect(setActiveTabMock).toHaveBeenCalledWith('logs');
 
-    // Key '4' → Events (fourth visible tab).
-    expect(tabShortcuts?.[3]?.handler()).toBe(true);
+    // Key '5' → Events (fifth visible tab).
+    expect(tabShortcuts?.[4]?.handler()).toBe(true);
     expect(setActiveTabMock).toHaveBeenCalledWith('events');
   });
 });

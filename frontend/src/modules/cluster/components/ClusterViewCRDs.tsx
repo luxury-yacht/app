@@ -5,23 +5,18 @@
  * Handles rendering and interactions for the cluster feature.
  */
 
-import { DeleteResourceByGVK } from '@wailsjs/go/backend/App';
-import { errorHandler } from '@utils/errorHandler';
 import { getDisplayKind } from '@/utils/kindAliasMap';
-import { getPermissionKey, useUserPermissions } from '@/core/capabilities';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useShortNames } from '@/hooks/useShortNames';
 import * as cf from '@shared/components/tables/columnFactories';
-import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useMemo, useCallback } from 'react';
 import ResourceGridTableView from '@shared/components/tables/ResourceGridTableView';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
-import { formatBuiltinApiVersion } from '@shared/constants/builtinGroupVersions';
-import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
+import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useClusterResourceGridTable } from '@shared/hooks/useResourceGridTable';
 import {
   buildRequiredCanonicalObjectRowKey,
@@ -82,11 +77,6 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
     const useShortResourceNames = useShortNames();
-    const permissionMap = useUserPermissions();
-    const [deleteConfirm, setDeleteConfirm] = useState<{
-      show: boolean;
-      resource: CRDsData | null;
-    }>({ show: false, resource: null });
 
     const handleResourceClick = useCallback(
       (crd: CRDsData) => {
@@ -200,55 +190,16 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
       filterOptions: { isNamespaceScoped: false },
     });
 
-    // Handle delete confirmation
-    const handleDeleteConfirm = useCallback(async () => {
-      if (!deleteConfirm.resource) return;
-
-      try {
-        // Multi-cluster rule (AGENTS.md): every backend command must
-        // carry a resolved clusterId.
-        const clusterId = deleteConfirm.resource.clusterId ?? selectedClusterId ?? null;
-        if (!clusterId) {
-          throw new Error(
-            `Cannot delete CustomResourceDefinition/${deleteConfirm.resource.name}: clusterId is missing`
-          );
-        }
-        // CRD itself is a built-in (apiextensions.k8s.io/v1) and always
-        // resolves via the lookup table.
-        const apiVersion = formatBuiltinApiVersion('CustomResourceDefinition');
-        if (!apiVersion) {
-          throw new Error(
-            `Cannot delete CustomResourceDefinition/${deleteConfirm.resource.name}: lookup table missing entry`
-          );
-        }
-        await DeleteResourceByGVK(
-          clusterId,
-          apiVersion,
-          'CustomResourceDefinition',
-          '',
-          deleteConfirm.resource.name
-        );
-      } catch (error) {
-        errorHandler.handle(error, {
-          action: 'delete',
-          kind: 'CustomResourceDefinition',
-          name: deleteConfirm.resource.name,
-        });
-      } finally {
-        setDeleteConfirm({ show: false, resource: null });
-      }
-    }, [deleteConfirm.resource, selectedClusterId]);
+    const objectActions = useObjectActionController({
+      context: 'gridtable',
+      onOpen: (object) => openWithObject(object),
+    });
 
     // Get context menu items
     const getContextMenuItems = useCallback(
       (crd: CRDsData): ContextMenuItem[] => {
-        const deleteStatus =
-          permissionMap.get(
-            getPermissionKey('CustomResourceDefinition', 'delete', null, null, crd.clusterId)
-          ) ?? null;
-
-        return buildObjectActionItems({
-          object: buildRequiredObjectReference(
+        return objectActions.getMenuItems(
+          buildRequiredObjectReference(
             {
               kind: 'CustomResourceDefinition',
               name: crd.name,
@@ -256,18 +207,10 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
               clusterName: crd.clusterName,
             },
             { fallbackClusterId: selectedClusterId }
-          ),
-          context: 'gridtable',
-          handlers: {
-            onOpen: () => handleResourceClick(crd),
-            onDelete: () => setDeleteConfirm({ show: true, resource: crd }),
-          },
-          permissions: {
-            delete: deleteStatus,
-          },
-        });
+          )
+        );
       },
-      [handleResourceClick, permissionMap, selectedClusterId]
+      [objectActions, selectedClusterId]
     );
 
     // Resolve empty state message
@@ -293,16 +236,7 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
           emptyMessage={emptyMessage}
         />
 
-        <ConfirmationModal
-          isOpen={deleteConfirm.show}
-          title="Delete CustomResourceDefinition"
-          message={`Are you sure you want to delete CustomResourceDefinition "${deleteConfirm.resource?.name}"?\n\nThis action cannot be undone.`}
-          confirmText="Delete"
-          cancelText="Cancel"
-          confirmButtonClass="danger"
-          onConfirm={handleDeleteConfirm}
-          onCancel={() => setDeleteConfirm({ show: false, resource: null })}
-        />
+        {objectActions.modals}
       </>
     );
   }

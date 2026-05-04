@@ -5,10 +5,8 @@
  * Handles rendering and interactions for the namespace feature.
  */
 
-import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
 import { getPodStatusSeverity } from '@/utils/podStatusSeverity';
-import { getPermissionKey, useUserPermissions } from '@/core/capabilities';
 import { eventBus } from '@/core/events';
 import { useClusterMetricsAvailability } from '@/core/refresh/hooks/useMetricsAvailability';
 import type { IconBarItem } from '@shared/components/IconBar/IconBar';
@@ -16,7 +14,6 @@ import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import * as cf from '@shared/components/tables/columnFactories';
 import { getMetricsBannerInfo } from '@shared/utils/metricsAvailability';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import ResourceGridTableView from '@shared/components/tables/ResourceGridTableView';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
@@ -24,10 +21,7 @@ import type { PodSnapshotEntry, PodMetricsInfo } from '@/core/refresh/types';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { getPodsUnhealthyStorageKey } from '@modules/namespace/components/podsFilterSignals';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import { DeletePod } from '@wailsjs/go/backend/App';
-import { errorHandler } from '@utils/errorHandler';
-import { PortForwardModal, PortForwardTarget } from '@modules/port-forward';
-import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
+import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
 import { useNamespaceResourceGridTable } from '@shared/hooks/useResourceGridTable';
@@ -131,15 +125,9 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
     const namespaceColumnLink = useNamespaceColumnLink<PodSnapshotEntry>('pods');
     const clusterMetrics = useClusterMetricsAvailability();
     const effectiveMetrics = metrics ?? clusterMetrics ?? null;
-    const permissionMap = useUserPermissions();
     const { selectedClusterId } = useKubeconfig();
 
     const [showUnhealthyOnly, setShowUnhealthyOnly] = useState(false);
-    const [deleteConfirm, setDeleteConfirm] = useState<{
-      show: boolean;
-      pod: PodSnapshotEntry | null;
-    }>({ show: false, pod: null });
-    const [portForwardTarget, setPortForwardTarget] = useState<PortForwardTarget | null>(null);
 
     // Include cluster metadata so object details stay scoped to the active tab.
     const handlePodOpen = useCallback(
@@ -159,6 +147,47 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       },
       [openWithObject, selectedClusterId]
     );
+
+    const objectActions = useObjectActionController({
+      context: 'gridtable',
+      onOpen: (object) => {
+        openWithObject(
+          buildRequiredObjectReference(
+            {
+              kind: object.kind,
+              name: object.name,
+              namespace: object.namespace,
+              clusterId: object.clusterId,
+              clusterName: object.clusterName,
+              group: object.group,
+              version: object.version,
+              resource: object.resource,
+              uid: object.uid,
+            },
+            { fallbackClusterId: selectedClusterId }
+          )
+        );
+      },
+      onOpenObjectMap: (object) => {
+        openWithObject(
+          buildRequiredObjectReference(
+            {
+              kind: object.kind,
+              name: object.name,
+              namespace: object.namespace,
+              clusterId: object.clusterId,
+              clusterName: object.clusterName,
+              group: object.group,
+              version: object.version,
+              resource: object.resource,
+              uid: object.uid,
+            },
+            { fallbackClusterId: selectedClusterId }
+          ),
+          { initialTab: 'map' }
+        );
+      },
+    });
 
     const handleOwnerOpen = useCallback(
       (pod: PodSnapshotEntry) => {
@@ -492,31 +521,6 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
     });
     const displayedPods = gridTableProps.data;
 
-    const handleDeleteConfirm = useCallback(async () => {
-      if (!deleteConfirm.pod) {
-        return;
-      }
-      const pod = deleteConfirm.pod;
-
-      try {
-        // Multi-cluster rule (AGENTS.md): every backend command must
-        // carry a resolved clusterId.
-        const clusterId = pod.clusterId ?? selectedClusterId ?? null;
-        if (!clusterId) {
-          throw new Error(`Cannot delete Pod/${pod.name}: clusterId is missing`);
-        }
-        await DeletePod(clusterId, pod.namespace, pod.name);
-        setDeleteConfirm({ show: false, pod: null });
-      } catch (err) {
-        errorHandler.handle(err, {
-          action: 'delete',
-          kind: 'Pod',
-          name: pod.name,
-        });
-        setDeleteConfirm({ show: false, pod: null });
-      }
-    }, [deleteConfirm.pod, selectedClusterId]);
-
     useEffect(() => {
       if (typeof window === 'undefined' || !selectedClusterId) {
         return;
@@ -563,17 +567,8 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
 
     const getContextMenuItems = useCallback(
       (pod: PodSnapshotEntry): ContextMenuItem[] => {
-        const deleteStatus =
-          permissionMap.get(
-            getPermissionKey('Pod', 'delete', pod.namespace, null, pod.clusterId)
-          ) ?? null;
-        const portForwardStatus =
-          permissionMap.get(
-            getPermissionKey('Pod', 'create', pod.namespace, 'portforward', pod.clusterId)
-          ) ?? null;
-
-        return buildObjectActionItems({
-          object: buildRequiredObjectReference(
+        return objectActions.getMenuItems(
+          buildRequiredObjectReference(
             {
               kind: 'Pod',
               name: pod.name,
@@ -585,42 +580,10 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
             {
               portForwardAvailable: pod.portForwardAvailable,
             }
-          ),
-          context: 'gridtable',
-          handlers: {
-            onOpen: () => handlePodOpen(pod),
-            onPortForward: () => {
-              // Multi-cluster rule (AGENTS.md): port-forward is a backend
-              // command and must carry a resolved clusterId.
-              const clusterId = pod.clusterId ?? selectedClusterId ?? null;
-              if (!clusterId) {
-                errorHandler.handle(
-                  new Error(`Cannot open port-forward for Pod/${pod.name}: clusterId is missing`),
-                  { action: 'portForward', kind: 'Pod', name: pod.name }
-                );
-                return;
-              }
-              const targetGVK = resolveBuiltinGroupVersion('Pod');
-              setPortForwardTarget({
-                kind: 'Pod',
-                group: targetGVK.group ?? '',
-                version: targetGVK.version ?? 'v1',
-                name: pod.name,
-                namespace: pod.namespace,
-                clusterId,
-                clusterName: pod.clusterName ?? '',
-                ports: [],
-              });
-            },
-            onDelete: () => setDeleteConfirm({ show: true, pod }),
-          },
-          permissions: {
-            delete: deleteStatus,
-            portForward: portForwardStatus,
-          },
-        });
+          )
+        );
       },
-      [handlePodOpen, permissionMap, selectedClusterId]
+      [objectActions, selectedClusterId]
     );
 
     const emptyMessage = useMemo(
@@ -665,18 +628,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
           }}
         />
 
-        <ConfirmationModal
-          isOpen={deleteConfirm.show}
-          title="Delete Pod"
-          message={`Are you sure you want to delete pod "${deleteConfirm.pod?.name}"?\n\nThis action cannot be undone.`}
-          confirmText="Delete"
-          cancelText="Cancel"
-          confirmButtonClass="danger"
-          onConfirm={handleDeleteConfirm}
-          onCancel={() => setDeleteConfirm({ show: false, pod: null })}
-        />
-
-        <PortForwardModal target={portForwardTarget} onClose={() => setPortForwardTarget(null)} />
+        {objectActions.modals}
       </>
     );
   }

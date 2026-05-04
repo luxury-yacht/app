@@ -34,6 +34,7 @@ vi.mock('@ui/favorites/FavToggle', () => ({
 }));
 
 const gridTablePropsRef: { current: any } = { current: null };
+const openWithObjectMock = vi.fn();
 
 vi.mock('@shared/components/tables/GridTable', async () => {
   const actual = await vi.importActual<typeof import('@shared/components/tables/GridTable')>(
@@ -49,7 +50,7 @@ vi.mock('@shared/components/tables/GridTable', async () => {
 });
 
 vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
-  useObjectPanel: () => ({ openWithObject: vi.fn() }),
+  useObjectPanel: () => ({ openWithObject: openWithObjectMock }),
 }));
 
 vi.mock('@shared/hooks/useNavigateToView', () => ({
@@ -57,7 +58,7 @@ vi.mock('@shared/hooks/useNavigateToView', () => ({
 }));
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => ({ selectedKubeconfig: 'path:context' }),
+  useKubeconfig: () => ({ selectedKubeconfig: 'path:context', selectedClusterId: 'cluster-a' }),
 }));
 
 vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
@@ -122,6 +123,7 @@ describe('ClusterViewConfig', () => {
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
     gridTablePropsRef.current = null;
+    openWithObjectMock.mockReset();
   });
 
   afterEach(() => {
@@ -148,5 +150,84 @@ describe('ClusterViewConfig', () => {
     });
     expect(props.columnVisibility).toBe(null);
     expect(props.columnWidths).toBe(null);
+  });
+
+  it('opens a StorageClass directly to the map tab from the context menu', async () => {
+    await act(async () => {
+      root.render(<ClusterViewConfig data={[baseConfig]} loaded={true} />);
+      await Promise.resolve();
+    });
+
+    const props = gridTablePropsRef.current;
+    expect(props).toBeTruthy();
+    const contextItems = props.getCustomContextMenuItems(baseConfig, 'kind');
+    const mapItem = contextItems.find(
+      (item: { label?: string; onClick?: () => void }) => item.label === 'Map'
+    );
+
+    expect(mapItem).toBeTruthy();
+    mapItem?.onClick?.();
+
+    expect(openWithObjectMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'StorageClass',
+        name: 'standard',
+        group: 'storage.k8s.io',
+        version: 'v1',
+        clusterId: 'cluster-a',
+      }),
+      { initialTab: 'map' }
+    );
+  });
+
+  it('opens an IngressClass directly to the map tab from the context menu', async () => {
+    const ingressClass = { ...baseConfig, kind: 'IngressClass', name: 'public' };
+
+    await act(async () => {
+      root.render(<ClusterViewConfig data={[ingressClass]} loaded={true} />);
+      await Promise.resolve();
+    });
+
+    const props = gridTablePropsRef.current;
+    expect(props).toBeTruthy();
+    const contextItems = props.getCustomContextMenuItems(ingressClass, 'kind');
+    const mapItem = contextItems.find(
+      (item: { label?: string; onClick?: () => void }) => item.label === 'Map'
+    );
+
+    expect(mapItem).toBeTruthy();
+    mapItem?.onClick?.();
+
+    expect(openWithObjectMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'IngressClass',
+        name: 'public',
+        group: 'networking.k8s.io',
+        version: 'v1',
+        clusterId: 'cluster-a',
+      }),
+      { initialTab: 'map' }
+    );
+  });
+
+  it('does not offer object map for unsupported cluster config rows', async () => {
+    await act(async () => {
+      root.render(
+        <ClusterViewConfig
+          data={[{ ...baseConfig, kind: 'ValidatingWebhookConfiguration' }]}
+          loaded={true}
+        />
+      );
+      await Promise.resolve();
+    });
+
+    const props = gridTablePropsRef.current;
+    expect(props).toBeTruthy();
+    const contextItems = props.getCustomContextMenuItems(
+      { ...baseConfig, kind: 'ValidatingWebhookConfiguration' },
+      'kind'
+    );
+
+    expect(contextItems.some((item: { label?: string }) => item.label === 'Map')).toBe(false);
   });
 });

@@ -23,7 +23,7 @@ import type { PodSnapshotEntry, PodMetricsInfo } from '@/core/refresh/types';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import '../shared.css';
-import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
+import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { useObjectPanelResourceGridTable } from '@shared/hooks/useResourceGridTable';
 import {
   buildRequiredCanonicalObjectRowKey,
@@ -291,6 +291,13 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
     },
   });
 
+  const objectActions = useObjectActionController({
+    context: 'gridtable',
+    useDefaultHandlers: false,
+    onOpen: (object) => openWithObject(object),
+    onOpenObjectMap: (object) => openWithObject(object, { initialTab: 'map' }),
+  });
+
   return (
     <div className="object-panel-pods">
       {error && <div className="namespace-error-message">{error}</div>}
@@ -316,8 +323,8 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
             onRowClick={handlePodOpen}
             enableContextMenu
             getCustomContextMenuItems={(pod) =>
-              buildObjectActionItems({
-                object: buildRequiredObjectReference(
+              objectActions.getMenuItems(
+                buildRequiredObjectReference(
                   {
                     kind: 'Pod',
                     name: pod.name,
@@ -326,13 +333,8 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
                     clusterName: pod.clusterName ?? undefined,
                   },
                   { fallbackClusterId: objectData?.clusterId }
-                ),
-                context: 'gridtable',
-                handlers: {
-                  onOpen: () => handlePodOpen(pod),
-                },
-                permissions: {},
-              })
+                )
+              )
             }
             tableClassName="gridtable-pods gridtable-pods--namespaced"
             loading={loading && gridTableProps.data.length === 0}
@@ -344,6 +346,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
           />
         </ResourceLoadingBoundary>
       </div>
+      {objectActions.modals}
     </div>
   );
 };

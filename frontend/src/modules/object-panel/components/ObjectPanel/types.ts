@@ -142,6 +142,7 @@ export type ViewType =
   | 'jobs'
   | 'events'
   | 'yaml'
+  | 'map'
   | 'manifest'
   | 'values'
   | 'maintenance';

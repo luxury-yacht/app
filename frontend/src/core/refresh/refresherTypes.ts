@@ -41,6 +41,7 @@ const SYSTEM_REFRESHERS = {
   objectYaml: 'object-yaml',
   objectHelmManifest: 'object-helm-manifest',
   objectHelmValues: 'object-helm-values',
+  objectMap: 'object-map',
   containerLogs: 'container-logs',
   objectMaintenance: 'object-maintenance',
 } as const;
@@ -78,6 +79,7 @@ export type RefresherName = StaticRefresherName | ObjectRefresherName;
 
 export const namespaceViewToRefresher: Record<NamespaceViewType, NamespaceRefresherName | null> = {
   browse: null,
+  map: null,
   pods: null,
   workloads: NAMESPACE_REFRESHERS.workloads,
   config: NAMESPACE_REFRESHERS.config,

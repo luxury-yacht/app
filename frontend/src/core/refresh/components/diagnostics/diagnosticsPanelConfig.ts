@@ -32,6 +32,7 @@ const CLUSTER_FEATURE_MAP: Record<ClusterViewType, readonly string[]> = {
 
 const NAMESPACE_FEATURE_MAP: Record<NamespaceViewType, readonly string[]> = {
   browse: [], // Empty = show all namespace-scoped permissions (browse spans all resource types).
+  map: ['Object map resources'],
   pods: ['Namespace pods'],
   workloads: ['Namespace workloads'],
   config: ['Namespace config'],
@@ -87,6 +88,7 @@ export const DOMAIN_REFRESHER_MAP: Partial<Record<RefreshDomain, RefresherName>>
   'namespace-rbac': NAMESPACE_REFRESHERS.rbac,
   'namespace-storage': NAMESPACE_REFRESHERS.storage,
   'container-logs': SYSTEM_REFRESHERS.containerLogs,
+  'object-map': SYSTEM_REFRESHERS.objectMap,
 };
 
 // Stream telemetry names for diagnostics (only set for stream-backed domains).

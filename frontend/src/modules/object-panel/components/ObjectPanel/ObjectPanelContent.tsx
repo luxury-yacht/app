@@ -10,6 +10,7 @@ import DetailsTab from '@modules/object-panel/components/ObjectPanel/Details/Det
 import type { DetailsTabProps } from '@modules/object-panel/components/ObjectPanel/Details/DetailsTab';
 import LogViewer from '@modules/object-panel/components/ObjectPanel/Logs/LogViewer';
 import EventsTab from '@modules/object-panel/components/ObjectPanel/Events/EventsTab';
+import MapTab from '@modules/object-panel/components/ObjectPanel/Map/MapTab';
 import YamlTab from '@modules/object-panel/components/ObjectPanel/Yaml/YamlTab';
 import ManifestTab from '@modules/object-panel/components/ObjectPanel/Helm/ManifestTab';
 import ValuesTab from '@modules/object-panel/components/ObjectPanel/Helm/ValuesTab';
@@ -61,6 +62,10 @@ interface ObjectPanelContentProps {
   // and LogViewer (actual streaming). They used to duplicate the
   // string builder and could drift apart on kind casing.
   containerLogsScope: string | null;
+  // mapScope mirrors eventsScope/containerLogsScope: computed once in
+  // getObjectPanelKind and threaded into both this component (cleanup)
+  // and MapTab (fetch + per-tab enable/disable) so they cannot drift.
+  mapScope: string | null;
   helmScope: string | null;
   objectData: PanelObjectData | null;
   objectKind: string | null;
@@ -89,6 +94,7 @@ export function ObjectPanelContent({
   detailScope,
   eventsScope,
   containerLogsScope,
+  mapScope,
   helmScope,
   objectData,
   objectKind,
@@ -106,6 +112,7 @@ export function ObjectPanelContent({
   const showJobs = activeTab === 'jobs';
   const showEvents = activeTab === 'events';
   const showYaml = activeTab === 'yaml';
+  const showMap = activeTab === 'map';
   const showManifest = activeTab === 'manifest';
   const showValues = activeTab === 'values';
   const showMaintenance = activeTab === 'maintenance' && objectKind === 'node';
@@ -185,6 +192,21 @@ export function ObjectPanelContent({
       });
     };
   }, [containerLogsScope, isPanelOpen]);
+
+  // object-map — MapTab handles per-tab enable/disable; this guard mirrors
+  // the events/yaml pattern so closing the whole panel disables the
+  // domain (the eventual reset happens in evictPanelScopes when the
+  // panel ref is removed from openPanels).
+  useEffect(() => {
+    if (!mapScope || !isPanelOpen) {
+      return;
+    }
+    return () => {
+      refreshOrchestrator.setScopedDomainEnabled('object-map', mapScope, false, {
+        preserveState: true,
+      });
+    };
+  }, [mapScope, isPanelOpen]);
 
   // Derive activePodNames from the nested pod arrays directly, not from
   // `detailTabProps` itself. `detailTabProps` is a fresh object literal
@@ -380,6 +402,20 @@ export function ObjectPanelContent({
             canEdit={capabilities.canEditYaml}
             editDisabledReason={capabilityReasons.editYaml}
             clusterId={objectData?.clusterId ?? null}
+          />
+        </ErrorBoundary>
+      )}
+
+      {showMap && (
+        <ErrorBoundary
+          scope="panel-map"
+          resetKeys={mapScope ? [mapScope] : undefined}
+          fallback={(_, reset) => <TabErrorFallback tabName="Map" reset={reset} />}
+        >
+          <MapTab
+            objectData={objectData}
+            isActive={isPanelOpen && activeTab === 'map'}
+            mapScope={mapScope}
           />
         </ErrorBoundary>
       )}

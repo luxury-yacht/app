@@ -1,0 +1,428 @@
+.object-map {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  background: var(--color-bg);
+  color: var(--color-text);
+  position: relative;
+  overflow: hidden;
+  --object-map-edge-owner: var(--color-accent);
+  --object-map-edge-routes: #1d4ed8;
+  --object-map-edge-selector: var(--badge-blue-text);
+  --object-map-edge-endpoint: #60a5fa;
+  --object-map-edge-volume-binding: #7e22ce;
+  --object-map-edge-storage-class: var(--badge-lime-text);
+  --object-map-edge-mounts: #c084fc;
+  --object-map-edge-schedules: var(--badge-green-text);
+  --object-map-edge-scales: #eab308;
+  --object-map-edge-grants: var(--badge-orange-text);
+  --object-map-edge-binds: var(--badge-purple-text);
+  --object-map-edge-aggregates: var(--badge-pink-text);
+  --object-map-edge-uses: var(--color-text-secondary);
+  --object-map-edge-default: var(--color-text-tertiary);
+  --object-map-edge-dash-length: 4;
+  --object-map-edge-dash-gap: 3;
+  --object-map-edge-line-width: 1.5;
+  --object-map-edge-highlighted-line-width: 2.5;
+  --object-map-edge-hovered-line-width: 4;
+  --object-map-edge-dimmed-opacity: 0.4;
+  --object-map-node-connected-line-width: 1.5;
+  --object-map-node-selected-line-width: 2.5;
+  --object-map-node-edge-hovered-line-width: 2.5;
+  --object-map-node-dimmed-opacity: 0.25;
+  --object-map-tooltip-width: 220;
+  --object-map-tooltip-height: 64;
+  --object-map-tooltip-offset-y: 6;
+  --object-map-tooltip-arrow-width: 12;
+  --object-map-tooltip-arrow-height: 6;
+  --object-map-tooltip-radius: 4;
+  --object-map-tooltip-source-y: -56;
+  --object-map-tooltip-relationship-y: -40;
+  --object-map-tooltip-target-y: -24;
+  --object-map-tooltip-label-max-chars: 38;
+  --object-map-tooltip-horizontal-padding: 12;
+  --object-map-tooltip-name-font-size: 11;
+  --object-map-tooltip-name-font-weight: 600;
+  --object-map-tooltip-relationship-font-size: 11;
+  --object-map-tooltip-relationship-font-weight: 400;
+  --object-map-fit-view-padding: 16;
+  --object-map-full-opacity: 1;
+}
+
+.object-map--empty {
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-secondary);
+}
+
+.object-map-story-shell {
+  width: 100vw;
+  height: 100vh;
+  background: var(--color-bg);
+}
+
+/* Floating icon-bar overlay in the canvas top-right. Mirrors the
+ * legend's overlay positioning on the opposite corner. */
+.object-map__toolbar {
+  position: absolute;
+  top: var(--spacing-md);
+  right: var(--spacing-md);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  background: var(--color-bg);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  z-index: 1;
+}
+
+.object-map__toolbar-button {
+  height: 28px;
+  width: 28px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--color-text);
+  border-radius: var(--border-radius-sm);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.object-map__toolbar-button:hover:not(:disabled) {
+  background: var(--button-generic-hover);
+}
+
+.object-map__toolbar-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.object-map__toolbar-button:focus {
+  outline: none;
+}
+
+.object-map__toolbar-button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.object-map__toolbar-separator {
+  display: inline-block;
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background: var(--color-border);
+}
+
+.object-map__search {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  height: 28px;
+  margin-right: var(--spacing-xs);
+}
+
+.object-map__kind-filter {
+  display: inline-flex;
+  align-items: center;
+}
+
+.object-map__kind-filter .dropdown-trigger {
+  height: 26px;
+  min-width: 130px;
+  padding-top: 0;
+  padding-bottom: 0;
+  font-size: 0.75rem;
+  background: var(--color-bg-secondary);
+}
+
+.object-map__search-input {
+  width: 150px;
+  height: 26px;
+  padding: 0 var(--spacing-sm);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  background: var(--color-bg-secondary);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.75rem;
+}
+
+.object-map__search-input:focus {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.object-map__search-count {
+  min-width: 3.5ch;
+  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+  text-align: right;
+}
+
+.object-map__canvas {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+}
+
+.object-map__g6-stack {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.object-map__g6 {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  font-family: inherit;
+}
+
+.object-map__g6-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  font-family: inherit;
+  pointer-events: none;
+}
+
+.object-map__message {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+}
+
+/* Edge colours grouped by relationship family. These classes are used
+ * by the HTML legend swatches; the G6 renderer reads the same palette
+ * mapping in TypeScript for canvas edges.
+ *   - Blue family   = network (routes, selector, endpoint)
+ *   - Purple/lime family = storage (mounts, volume binding, storage class)
+ *   - Green         = scheduling (schedules)
+ *   - Yellow        = scaling (scales)
+ *   - Orange/purple/pink = RBAC (grants, binds, aggregates)
+ * Plus structural (owner = accent) and reference (uses = gray dashed).
+ *
+ * Within a family, darker shade = outer/structural, lighter shade =
+ * inner/specific. So the network family reads dark → light as
+ * external traffic moves into the cluster: routes (Ingress) →
+ * selector (Service→Pod) → endpoint (specific targets). Same for
+ * storage: volume binding (PVC→PV, deeper) → mounts (Pod-side
+ * reference, shallower), with storage class as the provisioner link.
+ *
+ * CSS custom properties above are the source of truth for the HTML
+ * legend and the G6 canvas renderer. */
+.object-map-edge--owner {
+  stroke: var(--object-map-edge-owner);
+}
+
+/* Network family — blue shades. */
+.object-map-edge--routes {
+  stroke: var(--object-map-edge-routes);
+}
+.object-map-edge--selector {
+  stroke: var(--object-map-edge-selector);
+}
+.object-map-edge--endpoint {
+  stroke: var(--object-map-edge-endpoint);
+}
+
+/* Storage family — purple shades. */
+.object-map-edge--volume-binding {
+  stroke: var(--object-map-edge-volume-binding);
+}
+.object-map-edge--storage-class {
+  stroke: var(--object-map-edge-storage-class);
+}
+.object-map-edge--mounts {
+  stroke: var(--object-map-edge-mounts);
+}
+
+/* Scheduling — green. */
+.object-map-edge--schedules {
+  stroke: var(--object-map-edge-schedules);
+}
+
+/* Scaling — yellow. */
+.object-map-edge--scales {
+  stroke: var(--object-map-edge-scales);
+}
+
+/* RBAC — warm shades. */
+.object-map-edge--grants {
+  stroke: var(--object-map-edge-grants);
+}
+.object-map-edge--binds {
+  stroke: var(--object-map-edge-binds);
+}
+.object-map-edge--aggregates {
+  stroke: var(--object-map-edge-aggregates);
+}
+
+.object-map-edge--uses {
+  stroke: var(--object-map-edge-uses);
+  stroke-dasharray: var(--object-map-edge-dash-length) var(--object-map-edge-dash-gap);
+}
+.object-map-edge--default {
+  stroke: var(--object-map-edge-default);
+}
+
+/* --- Edge tooltip overlay ------------------------------------------ */
+
+.object-map__edge-tooltip {
+  pointer-events: none;
+}
+
+.object-map__edge-tooltip-bg {
+  fill: var(--color-bg-tertiary);
+  stroke: var(--color-border);
+  stroke-width: 1;
+}
+
+.object-map__edge-tooltip-arrow {
+  fill: var(--color-bg-tertiary);
+  stroke: var(--color-border);
+  stroke-width: 1;
+}
+
+.object-map__edge-tooltip-source,
+.object-map__edge-tooltip-target {
+  font-size: calc(var(--object-map-tooltip-name-font-size) * 1px);
+  font-weight: var(--object-map-tooltip-name-font-weight);
+  fill: var(--color-text);
+}
+
+.object-map__edge-tooltip-relationship {
+  font-size: calc(var(--object-map-tooltip-relationship-font-size) * 1px);
+  font-weight: var(--object-map-tooltip-relationship-font-weight);
+  fill: var(--color-text-secondary);
+}
+
+/* --- Legend overlay (HTML, positioned absolutely over the canvas) -- */
+
+.object-map__legend {
+  position: absolute;
+  top: var(--spacing-md);
+  left: var(--spacing-md);
+  background: var(--color-bg);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  padding: var(--spacing-sm) var(--spacing-md);
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  pointer-events: auto;
+  /* Keep the legend above map content but below modals/dropdowns
+   * elsewhere in the app. */
+  z-index: 1;
+}
+
+.object-map__legend-row {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.object-map__legend-row:hover {
+  color: var(--color-text);
+}
+
+.object-map__legend-row--disabled {
+  opacity: 0.4;
+}
+
+.object-map__legend-swatch {
+  flex-shrink: 0;
+  /* The edge-style classes set stroke colours via fill:none + stroke;
+   * SVG <line> inside this swatch picks them up automatically. */
+}
+
+/* Use the highlighted edge weight so legend colours read at full
+ * intensity instead of SVG's muted 1px default. */
+.object-map__legend-swatch line {
+  stroke-width: var(--object-map-edge-highlighted-line-width);
+}
+
+.object-map__legend-label {
+  white-space: nowrap;
+  color: var(--color-text);
+}
+
+.object-map__legend-separator {
+  height: var(--border-width);
+  margin: var(--spacing-xs) 0;
+  background: var(--color-border);
+}
+
+.object-map__legend-shortcut {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  column-gap: var(--spacing-md);
+}
+
+.object-map__legend-key {
+  color: var(--color-text-secondary);
+  min-width: 8ch;
+  white-space: nowrap;
+}
+
+.object-map__legend-action {
+  color: var(--color-text);
+  white-space: nowrap;
+}
+
+.object-map__toolbar-button--active {
+  background: var(--color-accent-bg);
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+/* --- Banners and warnings ------------------------------------------- */
+
+.object-map__banner {
+  padding: var(--spacing-sm) var(--spacing-md);
+  font-size: 0.85rem;
+  border-top: var(--border-width) solid var(--color-border);
+}
+
+.object-map__banner--truncated {
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+}
+
+.object-map__warnings {
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-top: var(--border-width) solid var(--color-border);
+  background: var(--color-bg-secondary);
+  font-size: 0.85rem;
+}
+
+.object-map__warnings ul {
+  margin: var(--spacing-xs) 0 0;
+  padding-left: var(--spacing-lg);
+  color: var(--color-text-secondary);
+}

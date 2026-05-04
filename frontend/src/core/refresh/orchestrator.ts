@@ -2113,6 +2113,11 @@ refreshOrchestrator.registerDomain({
   category: 'system',
 });
 refreshOrchestrator.registerDomain({
+  domain: 'object-map',
+  refresherName: SYSTEM_REFRESHERS.objectMap,
+  category: 'system',
+});
+refreshOrchestrator.registerDomain({
   domain: 'object-yaml',
   refresherName: SYSTEM_REFRESHERS.objectYaml,
   category: 'system',

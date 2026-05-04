@@ -10,6 +10,7 @@
  */
 export type NamespaceViewType =
   | 'browse'
+  | 'map'
   | 'workloads'
   | 'pods'
   | 'config'

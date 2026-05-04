@@ -256,5 +256,27 @@ func defaultPermissionChecks() map[string]permissionCheck {
 		objectEventsDomain: requireAll(
 			listPermission("", "events"),
 		),
+		objectMapDomain: requireAny(
+			"object map resources",
+			listPermission("", "pods"),
+			listPermission("", "services"),
+			listPermission("discovery.k8s.io", "endpointslices"),
+			listPermission("", "persistentvolumeclaims"),
+			listPermission("", "persistentvolumes"),
+			listPermission("storage.k8s.io", "storageclasses"),
+			listPermission("", "configmaps"),
+			listPermission("", "secrets"),
+			listPermission("", "serviceaccounts"),
+			listPermission("", "nodes"),
+			listPermission("apps", "deployments"),
+			listPermission("apps", "replicasets"),
+			listPermission("apps", "statefulsets"),
+			listPermission("apps", "daemonsets"),
+			listPermission("batch", "jobs"),
+			listPermission("batch", "cronjobs"),
+			listPermission("autoscaling", "horizontalpodautoscalers"),
+			listPermission("networking.k8s.io", "ingresses"),
+			listPermission("networking.k8s.io", "ingressclasses"),
+		),
 	}
 }

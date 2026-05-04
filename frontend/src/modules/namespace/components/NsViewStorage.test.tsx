@@ -150,6 +150,7 @@ vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
 vi.mock('@shared/components/icons/MenuIcons', () => ({
   DiffIcon: () => <span>diff</span>,
   OpenIcon: () => <span>open</span>,
+  ObjectMapIcon: () => <span>map</span>,
   DeleteIcon: () => <span>delete</span>,
 }));
 
@@ -250,6 +251,24 @@ describe('NsViewStorage', () => {
         group: '',
         version: 'v1',
       })
+    );
+
+    const objectMapItem = menu.find((item: any) => item.label === 'Map');
+    expect(objectMapItem).toBeTruthy();
+
+    act(() => {
+      objectMapItem?.onClick?.();
+    });
+    expect(openWithObjectMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'PersistentVolumeClaim',
+        name: 'pvc-data',
+        namespace: 'team-a',
+        clusterId: 'alpha:ctx',
+        group: '',
+        version: 'v1',
+      }),
+      { initialTab: 'map' }
     );
   });
 
