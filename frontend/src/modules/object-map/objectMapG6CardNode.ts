@@ -113,6 +113,7 @@ class ObjectMapG6CardNode extends BaseNode<ObjectMapG6CardNodeStyleProps> {
       OBJECT_MAP_CARD_STYLE.kindBadgeMaxWidth,
       cardWidth - OBJECT_MAP_CARD_STYLE.paddingX * 2
     );
+    const maxTextWidth = Math.max(1, maxWidth - paddingX * 2 - borderWidth * 2);
     const width = Math.max(
       OBJECT_MAP_CARD_STYLE.kindBadgeMinWidth,
       Math.min(maxWidth, Math.ceil(textWidth + paddingX * 2 + borderWidth * 2))
@@ -125,7 +126,7 @@ class ObjectMapG6CardNode extends BaseNode<ObjectMapG6CardNodeStyleProps> {
       height,
       textX: -cardWidth / 2 + OBJECT_MAP_CARD_STYLE.paddingX + paddingX + borderWidth,
       textY: -cardHeight / 2 + OBJECT_MAP_CARD_STYLE.kindBadgeTopY + height / 2,
-      textWidth: Math.max(1, width - paddingX * 2 - borderWidth * 2),
+      textWidth: maxTextWidth,
     };
   }
 

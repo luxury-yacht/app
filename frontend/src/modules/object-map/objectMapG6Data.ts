@@ -7,8 +7,6 @@ import { OBJECT_MAP_CARD_STYLE } from './objectMapCardStyle';
 import { OBJECT_MAP_G6_CARD_NODE, OBJECT_MAP_G6_PATH_EDGE } from './objectMapG6Constants';
 import type { ObjectMapNodeBadgeLookup, ObjectMapSelectionState } from './objectMapRendererTypes';
 
-const NODE_KIND_MAX_CHARS = 22;
-const NODE_NAME_MAX_CHARS = 32;
 const NODE_NAMESPACE_MAX_CHARS = 28;
 const NODE_CARD_RADIUS = OBJECT_MAP_CARD_STYLE.borderRadius;
 const NODE_LINE_WIDTH = 1;
@@ -178,8 +176,6 @@ export const toObjectMapG6Data = (
 ): GraphData => ({
   nodes: layout.nodes.map<NodeData>((node) => {
     const badge = badgeForNode(node.id);
-    const kindLabel = truncate(node.ref.kind, NODE_KIND_MAX_CHARS);
-    const nameLabel = truncate(node.ref.name, NODE_NAME_MAX_CHARS);
     const namespaceLabel = truncate(formatNamespace(node), NODE_NAMESPACE_MAX_CHARS);
     const kindBadgeStyle = kindBadgeStyleForKind(node.ref.kind);
 
@@ -189,8 +185,8 @@ export const toObjectMapG6Data = (
       data: {
         ref: node.ref,
         badge,
-        kindLabel,
-        nameLabel,
+        kindLabel: node.ref.kind,
+        nameLabel: node.ref.name,
         namespaceLabel,
       },
       states: objectMapG6NodeState(node, selectionState),
@@ -204,7 +200,7 @@ export const toObjectMapG6Data = (
         lineWidth: node.isSeed ? NODE_SEED_LINE_WIDTH : NODE_LINE_WIDTH,
         opacity: palette.fullOpacity,
         label: false,
-        cardKindBadgeText: kindLabel.toUpperCase(),
+        cardKindBadgeText: node.ref.kind.toUpperCase(),
         cardKindBadgeFill: kindBadgeStyle.backgroundColor,
         cardKindBadgeTextFill: kindBadgeStyle.color,
         cardKindBadgeStroke: kindBadgeStyle.borderColor,
@@ -215,7 +211,7 @@ export const toObjectMapG6Data = (
         cardKindBadgeLetterSpacing: kindBadgeStyle.letterSpacing,
         cardKindBadgePaddingX: kindBadgeStyle.paddingX,
         cardKindBadgePaddingY: kindBadgeStyle.paddingY,
-        cardNameText: nameLabel,
+        cardNameText: node.ref.name,
         cardNamespaceText: namespaceLabel,
         cardFontFamily: palette.fontFamily,
         cardNameFill: palette.text,
