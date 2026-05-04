@@ -457,11 +457,41 @@ describe('ObjectMap', () => {
     const ownerToggle = Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(
       (button) => button.textContent === 'Ownership'
     );
+    const showAll = Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(
+      (button) => button.textContent === 'Show all'
+    );
+    const hideAll = Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(
+      (button) => button.textContent === 'Hide all'
+    );
 
     expect(ownerToggle).toBeTruthy();
+    expect(showAll).toBeTruthy();
+    expect(hideAll).toBeTruthy();
+    expect(showAll?.disabled).toBe(true);
+    expect(hideAll?.disabled).toBe(false);
     expect(container.querySelector('[data-testid="mock-edge-edge-1"]')).toBeTruthy();
     expect(container.querySelector('[aria-label="Deployment: web"]')).toBeTruthy();
     expect(container.querySelector('[aria-label="Pod: web-abc"]')).toBeTruthy();
+
+    await act(async () => {
+      hideAll!.click();
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('[data-testid="mock-edge-edge-1"]')).toBeNull();
+    expect(container.querySelector('[aria-label="Deployment: web"]')).toBeTruthy();
+    expect(container.querySelector('[aria-label="Pod: web-abc"]')).toBeTruthy();
+    expect(showAll?.disabled).toBe(false);
+    expect(hideAll?.disabled).toBe(true);
+
+    await act(async () => {
+      showAll!.click();
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('[data-testid="mock-edge-edge-1"]')).toBeTruthy();
+    expect(showAll?.disabled).toBe(true);
+    expect(hideAll?.disabled).toBe(false);
 
     await act(async () => {
       ownerToggle!.click();
@@ -469,8 +499,6 @@ describe('ObjectMap', () => {
     });
 
     expect(container.querySelector('[data-testid="mock-edge-edge-1"]')).toBeNull();
-    expect(container.querySelector('[aria-label="Deployment: web"]')).toBeTruthy();
-    expect(container.querySelector('[aria-label="Pod: web-abc"]')).toBeTruthy();
 
     cleanup();
   });

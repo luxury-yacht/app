@@ -230,6 +230,15 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
     },
     [visibleEdgeTypes]
   );
+  const showAllEdgeTypes = useCallback(() => {
+    setEnabledEdgeTypes(null);
+  }, []);
+  const hideAllEdgeTypes = useCallback(() => {
+    setEnabledEdgeTypes(new Set());
+  }, []);
+  const enabledLegendEntryCount = legendEntries.filter((entry) =>
+    isEdgeTypeEnabled(entry.type)
+  ).length;
 
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
   const searchMatches = useMemo(() => {
@@ -506,7 +515,27 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
               </button>
             ))}
             {legendEntries.length > 0 && (
-              <div className="object-map__legend-separator" aria-hidden="true" />
+              <>
+                <div className="object-map__legend-actions">
+                  <button
+                    type="button"
+                    className="object-map__legend-action-button"
+                    onClick={showAllEdgeTypes}
+                    disabled={enabledLegendEntryCount === legendEntries.length}
+                  >
+                    Show all
+                  </button>
+                  <button
+                    type="button"
+                    className="object-map__legend-action-button"
+                    onClick={hideAllEdgeTypes}
+                    disabled={enabledLegendEntryCount === 0}
+                  >
+                    Hide all
+                  </button>
+                </div>
+                <div className="object-map__legend-separator" aria-hidden="true" />
+              </>
             )}
             <div className="object-map__legend-shortcut">
               <span className="object-map__legend-key">{primaryModifierLabel}+click</span>

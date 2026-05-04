@@ -67,12 +67,12 @@
   background: var(--color-bg);
 }
 
-/* Floating icon-bar overlay in the canvas top-right. Mirrors the
+/* Floating icon-bar overlay in the canvas top-left. Mirrors the
  * legend's overlay positioning on the opposite corner. */
 .object-map__toolbar {
   position: absolute;
   top: var(--spacing-md);
-  right: var(--spacing-md);
+  left: var(--spacing-md);
   display: flex;
   align-items: center;
   gap: 2px;
@@ -324,7 +324,7 @@
 .object-map__legend {
   position: absolute;
   top: var(--spacing-md);
-  left: var(--spacing-md);
+  right: var(--spacing-md);
   background: var(--color-bg);
   border: var(--border-width) solid var(--color-border);
   border-radius: var(--border-radius-md);
@@ -378,6 +378,32 @@
 .object-map__legend-label {
   white-space: nowrap;
   color: var(--color-text);
+}
+
+.object-map__legend-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  margin-top: var(--spacing-xs);
+}
+
+.object-map__legend-action-button {
+  padding: 1px var(--spacing-xs);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  background: var(--color-bg);
+  color: var(--color-text);
+  cursor: pointer;
+  font: inherit;
+}
+
+.object-map__legend-action-button:hover:not(:disabled) {
+  background: var(--button-generic-hover);
+}
+
+.object-map__legend-action-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .object-map__legend-separator {
