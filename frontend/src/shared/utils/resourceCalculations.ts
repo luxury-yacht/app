@@ -61,6 +61,8 @@ const parseMemoryValue = (value: string | undefined): number => {
       return num; // Already in Mi
     } else if (value.endsWith('Gi')) {
       return num * 1024; // Convert Gi to Mi
+    } else if (value.endsWith('Ti')) {
+      return num * 1024 * 1024; // Convert Ti to Mi
     } else if (value.endsWith('GB')) {
       return num * 1024; // Convert GB to Mi
     } else if (value.endsWith('MB')) {
@@ -91,7 +93,9 @@ export const formatCpuValue = (millicores: number): string => {
 // Format memory values for display
 export const formatMemoryValue = (mb: number): string => {
   if (mb === 0) return '0';
-  if (mb >= 1024) {
+  if (mb >= 1024 * 1024) {
+    return `${(mb / (1024 * 1024)).toFixed(1)}Ti`;
+  } else if (mb >= 1024) {
     return `${(mb / 1024).toFixed(1)}Gi`;
   } else {
     return `${Math.round(mb)}Mi`;
@@ -113,12 +117,11 @@ export const calculateResourceMetrics = (
   // Determine scale based on context
   const scale = allocatable > 0 ? allocatable : limit > 0 ? limit : Math.max(usage, request * 1.2);
 
-  // Calculate percentages
-  const usagePercent = scale > 0 ? Math.min(100, Math.max(0, (usage / scale) * 100)) : 0;
-  const requestPercent =
-    scale > 0 && request > 0 ? Math.min(100, Math.max(0, (request / scale) * 100)) : 0;
-  const limitPercent =
-    scale > 0 && limit > 0 ? Math.min(100, Math.max(0, (limit / scale) * 100)) : 0;
+  // Calculate true percentages. Rendering code clamps these only when using
+  // them as CSS widths or marker positions.
+  const usagePercent = scale > 0 ? Math.max(0, (usage / scale) * 100) : 0;
+  const requestPercent = scale > 0 && request > 0 ? Math.max(0, (request / scale) * 100) : 0;
+  const limitPercent = scale > 0 && limit > 0 ? Math.max(0, (limit / scale) * 100) : 0;
 
   // Calculate consumption (usage vs request)
   const consumption = request > 0 ? Math.round((usage / request) * 100) : null;

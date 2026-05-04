@@ -9,6 +9,7 @@ export type ViewType = 'namespace' | 'cluster' | 'overview' | 'settings' | 'abou
 
 export type NamespaceViewType =
   | 'browse'
+  | 'map'
   | 'workloads'
   | 'pods'
   | 'config'

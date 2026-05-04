@@ -53,6 +53,10 @@ const STATIC_REFRESHER_CONFIG: Record<StaticRefresherName, RefresherTiming> = {
   [SYSTEM_REFRESHERS.objectHelmValues]: { interval: 5000, cooldown: 1000, timeout: 10 },
   [SYSTEM_REFRESHERS.containerLogs]: { interval: 5000, cooldown: 1000, timeout: 10 },
   [SYSTEM_REFRESHERS.objectMaintenance]: { interval: 5000, cooldown: 1000, timeout: 10 },
+  // Object map polling is enabled only while a map tab is active. Keep the
+  // scoped interval responsive for rollout changes; the backend snapshot cache
+  // remains global and intentionally longer-lived.
+  [SYSTEM_REFRESHERS.objectMap]: { interval: 2000, cooldown: 1000, timeout: 10 },
 
   // Placeholder value. Changing these intervals has no effect.
   // Actual timings are in frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelRefresh.ts

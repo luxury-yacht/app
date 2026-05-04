@@ -7,6 +7,7 @@
  */
 import type { PanelObjectData } from '../types';
 import { buildClusterScope, buildObjectScope } from '@/core/refresh/clusterScope';
+import { hasCompleteObjectMapReference } from '../objectMapSupport';
 
 export interface UseObjectPanelKindOptions {
   clusterScope?: string;
@@ -29,6 +30,12 @@ export interface ObjectPanelKindResult {
   // eventsScope: keep computation in one place. The log producer uses
   // the lowercased kind by historical convention.
   containerLogsScope: string | null;
+  // Scope string for the object-map refresh domain. Backend
+  // ParseObjectScope is case-sensitive on Kind, so we keep the original
+  // case here (same convention as eventsScope, different from
+  // detailScope/containerLogsScope which lowercase by historical
+  // producer choice).
+  mapScope: string | null;
   helmScope: string | null;
   isHelmRelease: boolean;
   isEvent: boolean;
@@ -101,6 +108,22 @@ export const getObjectPanelKind = (
           })
         );
 
+  // mapScope mirrors eventsScope (case-preserving Kind) — the backend
+  // object-map provider uses the same parseObjectScope path that
+  // object-events uses, which matches Kind verbatim against the catalog.
+  const mapScope = !hasCompleteObjectMapReference(objectData)
+    ? null
+    : buildClusterScope(
+        clusterId,
+        buildObjectScope({
+          namespace: scopeNamespace,
+          group: objectData?.group,
+          version: objectData?.version,
+          kind: objectData.kind,
+          name: objectData.name,
+        })
+      );
+
   const helmScope =
     objectKind !== 'helmrelease' || !objectData?.name
       ? null
@@ -115,6 +138,7 @@ export const getObjectPanelKind = (
     detailScope,
     eventsScope,
     containerLogsScope,
+    mapScope,
     helmScope,
     isHelmRelease,
     isEvent,

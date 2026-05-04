@@ -77,8 +77,8 @@ const Overview: React.FC<OverviewProps> = (props) => {
 
   // Build object data for ActionsMenu. Group/version come from the panel's
   // objectData (the source of truth) so CRD permission lookups in
-  // useObjectActions key off the same GVK as the spec-emit side; without
-  // them the Delete action silently disappears for CRDs.
+  // the shared action controller key off the same GVK as the spec-emit side;
+  // without them the Delete action silently disappears for CRDs.
   const objectGroup = objectData?.group ?? undefined;
   const objectVersion = objectData?.version ?? undefined;
   const actionObject: ObjectActionData | null = useMemo(

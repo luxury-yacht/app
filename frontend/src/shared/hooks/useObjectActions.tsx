@@ -1,16 +1,15 @@
 /**
  * frontend/src/shared/hooks/useObjectActions.tsx
  *
- * Shared hook and utility for building context menu / actions menu items for Kubernetes objects.
- * Used by both GridTable context menus and Object Panel actions menus.
+ * Shared utility for building context menu / actions menu items for Kubernetes objects.
+ * Production callers should use useObjectActionController instead of calling this directly.
  */
 
-import { useMemo } from 'react';
-import { getPermissionKey, useUserPermissions } from '@/core/capabilities';
 import { eventBus } from '@/core/events';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import {
   DiffIcon,
+  ObjectMapIcon,
   OpenIcon,
   RestartIcon,
   RollbackIcon,
@@ -59,6 +58,8 @@ export interface ObjectActionData {
   version?: string;
   resource?: string;
   uid?: string;
+  requiresExplicitVersion?: boolean;
+  explicitVersionProvided?: boolean;
   // For workload-specific actions
   status?: string;
   ready?: string;
@@ -83,6 +84,10 @@ export interface ObjectActionHandlers {
   onSuspendToggle?: () => void;
   // Event actions - view the involved object
   onViewInvolvedObject?: () => void;
+  // Object map - kind-agnostic so any view can opt in. v1 only wires
+  // this from NsViewWorkloads; the menu item is hidden when no handler
+  // is provided so other views are unaffected until they pass it.
+  onObjectMap?: () => void;
 }
 
 // Permission status type (matches what useUserPermissions returns)
@@ -173,7 +178,8 @@ function getPortForwardAvailability(
 }
 
 /**
- * Build menu items for an object. Can be used directly or via the useObjectActions hook.
+ * Build menu items for an object. Production callers should go through
+ * useObjectActionController so permission lookup and action execution stay centralized.
  */
 export function buildObjectActionItems({
   object,
@@ -202,6 +208,17 @@ export function buildObjectActionItems({
       label: 'Open',
       icon: <OpenIcon />,
       onClick: handlers.onOpen,
+    });
+  }
+
+  // Map - sits with the navigation block so it picks up the
+  // shared section divider (see useGridTableContextMenuItems). The
+  // handler is opt-in per call site; when omitted, no item is added.
+  if (handlers.onObjectMap) {
+    menuItems.push({
+      label: 'Map',
+      icon: <ObjectMapIcon />,
+      onClick: handlers.onObjectMap,
     });
   }
 
@@ -239,17 +256,16 @@ export function buildObjectActionItems({
     deleteStatus?.pending ||
     portForwardStatus?.pending;
 
-  const hasFollowUpSection =
+  const hasActionSection =
     anyPending ||
     normalizedKind === 'CronJob' ||
     (RESTARTABLE_KINDS.includes(normalizedKind) && Boolean(handlers.onRestart)) ||
     (ROLLBACKABLE_KINDS.includes(normalizedKind) && Boolean(handlers.onRollback)) ||
     (SCALABLE_KINDS.includes(normalizedKind) &&
       (Boolean(object.hpaManaged) || Boolean(handlers.onScale))) ||
-    portForwardAvailability.show ||
-    Boolean(handlers.onDelete);
+    portForwardAvailability.show;
 
-  if (menuItems.length > 0 && hasFollowUpSection) {
+  if (menuItems.length > 0 && hasActionSection) {
     menuItems.push({ divider: true });
   }
 
@@ -353,7 +369,8 @@ export function buildObjectActionItems({
   if (deleteStatus?.allowed && !deleteStatus.pending && handlers.onDelete) {
     // Add divider before Delete if there are other action items
     const hasOtherActions = menuItems.some((item) => !('header' in item) && !('divider' in item));
-    if (hasOtherActions) {
+    const lastItem = menuItems[menuItems.length - 1];
+    if (hasOtherActions && !(lastItem && 'divider' in lastItem && lastItem.divider)) {
       menuItems.push({ divider: true });
     }
 
@@ -367,102 +384,4 @@ export function buildObjectActionItems({
   }
 
   return menuItems;
-}
-
-// Hook options
-export interface UseObjectActionsOptions {
-  object: ObjectActionData | null;
-  context: 'gridtable' | 'object-panel';
-  handlers: ObjectActionHandlers;
-  actionLoading?: boolean;
-}
-
-/**
- * Hook for building object action menu items. Uses useUserPermissions internally.
- * For use in React components. For callbacks, use buildObjectActionItems directly.
- */
-export function useObjectActions({
-  object,
-  context,
-  handlers,
-  actionLoading = false,
-}: UseObjectActionsOptions): ContextMenuItem[] {
-  const permissionMap = useUserPermissions();
-
-  const items = useMemo(() => {
-    if (!object) return [];
-
-    const normalizedKind = normalizeKind(object.kind);
-    const namespace = object.namespace || '';
-
-    // Get permissions from the map. Group/version are threaded through so
-    // CRD lookups produce the same key as the spec-emit side
-    // (queryKindPermissions). Built-in kinds work either way because
-    // getPermissionKey auto-resolves built-in GVK; CRDs do not, so the
-    // hook must forward what the caller supplied.
-    const clusterId = object.clusterId ?? undefined;
-    const objectGroup = object.group ?? undefined;
-    const objectVersion = object.version ?? undefined;
-    const restartStatus =
-      permissionMap.get(
-        getPermissionKey(
-          normalizedKind,
-          'patch',
-          namespace,
-          null,
-          clusterId,
-          objectGroup,
-          objectVersion
-        )
-      ) ?? null;
-    // Rollback uses the same patch permission as restart
-    const rollbackStatus = restartStatus;
-    const scaleStatus =
-      permissionMap.get(
-        getPermissionKey(
-          normalizedKind,
-          'update',
-          namespace,
-          'scale',
-          clusterId,
-          objectGroup,
-          objectVersion
-        )
-      ) ?? null;
-    const deleteStatus =
-      permissionMap.get(
-        getPermissionKey(
-          object.kind,
-          'delete',
-          namespace,
-          null,
-          clusterId,
-          objectGroup,
-          objectVersion
-        )
-      ) ?? null;
-    // Port forward requires create permission on pods/portforward subresource.
-    // Always targets core/v1 Pod regardless of the object's own kind, so the
-    // GVK is hardcoded rather than threaded from `object`.
-    const portForwardStatus =
-      permissionMap.get(
-        getPermissionKey('Pod', 'create', namespace, 'portforward', clusterId, '', 'v1')
-      ) ?? null;
-
-    return buildObjectActionItems({
-      object,
-      context,
-      handlers,
-      permissions: {
-        restart: restartStatus,
-        rollback: rollbackStatus,
-        scale: scaleStatus,
-        delete: deleteStatus,
-        portForward: portForwardStatus,
-      },
-      actionLoading,
-    });
-  }, [object, context, handlers, actionLoading, permissionMap]);
-
-  return items;
 }

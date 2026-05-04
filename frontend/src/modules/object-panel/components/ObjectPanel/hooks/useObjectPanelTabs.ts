@@ -9,6 +9,7 @@ import { useEffect, useMemo } from 'react';
 import { useShortcuts } from '@ui/shortcuts';
 
 import { TABS } from '@modules/object-panel/components/ObjectPanel/constants';
+import { hasCompleteObjectMapReference } from '@modules/object-panel/components/ObjectPanel/objectMapSupport';
 import type {
   ComputedCapabilities,
   PanelAction,
@@ -53,6 +54,7 @@ export const useObjectPanelTabs = ({
   const availableTabs = useMemo(() => {
     const orderedTabs = [
       TABS.DETAILS,
+      TABS.MAP,
       TABS.PODS,
       TABS.JOBS,
       TABS.LOGS,
@@ -66,15 +68,25 @@ export const useObjectPanelTabs = ({
 
     return orderedTabs.filter((tab) => {
       if (isHelmRelease) {
-        if (tab.id === 'events' || tab.id === 'yaml' || tab.id === 'pods' || tab.id === 'jobs') {
+        if (
+          tab.id === 'events' ||
+          tab.id === 'yaml' ||
+          tab.id === 'pods' ||
+          tab.id === 'jobs' ||
+          tab.id === 'map'
+        ) {
           return false;
         }
       } else if (tab.id === 'manifest' || tab.id === 'values') {
         return false;
       }
 
-      if (isEvent && (tab.id === 'events' || tab.id === 'yaml')) {
+      if (isEvent && (tab.id === 'events' || tab.id === 'yaml' || tab.id === 'map')) {
         return false;
+      }
+
+      if (tab.id === 'map') {
+        return hasCompleteObjectMapReference(objectData);
       }
 
       if ('onlyForKinds' in tab && Array.isArray(tab.onlyForKinds) && tab.onlyForKinds.length > 0) {
@@ -93,7 +105,7 @@ export const useObjectPanelTabs = ({
 
       return true;
     });
-  }, [capabilities, isEvent, isHelmRelease, objectKind]);
+  }, [capabilities, isEvent, isHelmRelease, objectData, objectKind]);
 
   useEffect(() => {
     if (!objectData) {

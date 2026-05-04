@@ -119,6 +119,24 @@ describe('ResourceBar', () => {
     cleanup();
   });
 
+  it('scales memory limit markers when cluster values are in tebibytes', async () => {
+    const { container, cleanup } = await renderBar({
+      type: 'memory',
+      usage: '512.0 Gi',
+      request: '1.0 Ti',
+      limit: '1.5 Ti',
+      allocatable: '2.0 Ti',
+      showTooltip: false,
+    });
+
+    const markers = container.querySelectorAll<HTMLElement>('.resource-bar-marker');
+    expect(markers).toHaveLength(2);
+    expect(markers[0].style.left).toBe('50%');
+    expect(markers[1].style.left).toBe('75%');
+
+    cleanup();
+  });
+
   it('toggles tooltip in compact mode and handles overcommit tracking', async () => {
     vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
       cb(0);

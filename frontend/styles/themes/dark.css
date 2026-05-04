@@ -436,6 +436,7 @@
   --workload-deployment: #3b82f6;
   --workload-statefulset: #bf06d4;
   --workload-daemonset: #6c2eff;
+  --workload-job: #14b8a6;
   --workload-cronjob: #03ffbc;
 
   /* Metrics availability banner */

@@ -27,6 +27,7 @@ describe('resourceCalculations utilities', () => {
     expect(parseMemToMB('256Ki')).toBeCloseTo(0.25, 2);
     expect(parseMemToMB('128Mi')).toBe(128);
     expect(parseMemToMB('2Gi')).toBe(2048);
+    expect(parseMemToMB('1.5Ti')).toBe(1.5 * 1024 * 1024);
     expect(parseMemToMB('3GB')).toBe(3072);
     expect(parseMemToMB('1048576')).toBeCloseTo(1); // bytes fallback
   });

@@ -5,7 +5,7 @@
  * Covers key behaviors and edge cases for ClusterOverview.
  */
 
-import { act } from 'react';
+import { act, type ReactNode } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -98,6 +98,24 @@ vi.mock('@shared/components/ResourceBar', () => ({
     <div data-testid={`resource-bar-${type}`}>
       {(usage as string | undefined) ?? '-'}|{(request as string | undefined) ?? '-'}|
       {(limit as string | undefined) ?? '-'}
+    </div>
+  ),
+}));
+
+vi.mock('@shared/components/Tooltip', () => ({
+  __esModule: true,
+  default: ({
+    content,
+    children,
+    disabled,
+  }: {
+    content: ReactNode;
+    children: ReactNode;
+    disabled?: boolean;
+  }) => (
+    <div data-testid="tooltip-wrapper">
+      {children}
+      {!disabled && <div data-testid="tooltip-content">{content}</div>}
     </div>
   ),
 }));
@@ -305,6 +323,7 @@ describe('ClusterOverview', () => {
 
     domainStateRef.current = createDomainState('ready', {
       overview: {
+        ...EMPTY_OVERVIEW_DATA,
         clusterType: 'EKS',
         clusterVersion: '1.26.3',
         cpuUsage: '400m',
@@ -352,6 +371,54 @@ describe('ClusterOverview', () => {
     expect(container.textContent).not.toContain('Loading cluster overview...');
     expect(container.textContent).toContain('Status');
     expect(container.textContent).toContain('Ready');
+    expect(container.textContent).toContain('400m of 2 cores');
+    expect(container.textContent).toContain('20.0%');
+    expect(container.textContent).toContain('2.0Gi of 16.0Gi');
+    expect(container.textContent).toContain('12.5%');
+    expect(
+      container.querySelector('[data-testid="resource-utilization-tooltip-cpu"]')?.textContent
+    ).toBe('Utilization0.420.0%Requests0.525.0%Limits150.0%');
+    expect(
+      container.querySelector('[data-testid="resource-utilization-tooltip-memory"]')?.textContent
+    ).toBe('Utilization2.0Gi12.5%Requests3.0Gi18.8%Limits8.0Gi50.0%');
+    expect(
+      Array.from(container.querySelectorAll('.pod-status-card')).map(
+        (element) => element.textContent
+      )
+    ).toEqual(['40healthy', '1pending', '1failing', '7restarted']);
+    expect(container.querySelector('.pod-status-card--healthy')).not.toBeNull();
+    expect(container.querySelector('.pod-status-card--pending')).not.toBeNull();
+    expect(container.querySelector('.pod-status-card--failing')).not.toBeNull();
+    expect(container.querySelector('.pod-status-card--restarted')).not.toBeNull();
+  });
+
+  it('uses warning color classes for resource percentages over 100 percent', async () => {
+    const { container, rerender, cleanup } = renderClusterOverview();
+    cleanupRoot = cleanup;
+
+    domainStateRef.current = createDomainState('ready', {
+      overview: {
+        ...EMPTY_OVERVIEW_DATA,
+        cpuUsage: '2500m',
+        cpuRequests: '3000m',
+        cpuLimits: '4000m',
+        cpuAllocatable: '2000m',
+        memoryUsage: '1Gi',
+        memoryRequests: '1Gi',
+        memoryLimits: '1Gi',
+        memoryAllocatable: '2Gi',
+      },
+    });
+
+    rerender();
+    await flushEffects();
+
+    expect(container.querySelector('.metric-header__percent--warning')?.textContent).toBe('125.0%');
+    expect(
+      Array.from(container.querySelectorAll('.resource-utilization-tooltip__percent--warning')).map(
+        (element) => element.textContent
+      )
+    ).toEqual(['125.0%', '150.0%', '200.0%']);
   });
 
   it('shows loading namespaces detail until namespaces are ready', async () => {
@@ -538,6 +605,60 @@ describe('ClusterOverview', () => {
     expect(statValueFor(container, 'fargate')).toBe('');
     expect(statValueFor(container, 'vm')).toBe('');
     expect(statValueFor(container, 'virtual')).toBe('');
+  });
+
+  it('renders CPU and memory usage by workload type', async () => {
+    domainStateRef.current = createDomainState('ready', {
+      overview: {
+        ...EMPTY_OVERVIEW_DATA,
+        workloadResourceUsage: {
+          deployments: { cpuUsage: '250m', memoryUsage: '300.0 Mi' },
+          daemonSets: { cpuUsage: '50m', memoryUsage: '100.0 Mi' },
+          statefulSets: { cpuUsage: '75m', memoryUsage: '120.0 Mi' },
+          jobs: { cpuUsage: '125m', memoryUsage: '256.0 Mi' },
+        },
+      },
+    });
+
+    const { container, cleanup } = renderClusterOverview();
+    cleanupRoot = cleanup;
+    await flushEffects();
+
+    expect(
+      Array.from(container.querySelectorAll('.resource-usage h3')).map((heading) =>
+        heading.textContent?.trim()
+      )
+    ).toEqual(['CPU', 'Memory']);
+    expect(container.querySelectorAll('.stacked-bar--workload-usage')).toHaveLength(2);
+    expect(
+      Array.from(container.querySelectorAll('[data-testid^="cluster-workload-usage-cpu-"]')).map(
+        (item) => item.getAttribute('data-testid')
+      )
+    ).toEqual([
+      'cluster-workload-usage-cpu-deployment',
+      'cluster-workload-usage-cpu-statefulset',
+      'cluster-workload-usage-cpu-daemonset',
+      'cluster-workload-usage-cpu-job',
+    ]);
+    expect(
+      container.querySelector('[data-testid="cluster-workload-usage-cpu-deployment"]')?.textContent
+    ).toContain('250m');
+    expect(
+      container.querySelector('[data-testid="cluster-workload-usage-cpu-daemonset"]')?.textContent
+    ).toContain('50m');
+    expect(
+      container.querySelector('[data-testid="cluster-workload-usage-cpu-statefulset"]')?.textContent
+    ).toContain('75m');
+    expect(
+      container.querySelector('[data-testid="cluster-workload-usage-cpu-job"]')?.textContent
+    ).toContain('125m');
+    expect(
+      container.querySelector('[data-testid="cluster-workload-usage-memory-deployment"]')
+        ?.textContent
+    ).toContain('300.0 Mi');
+    expect(
+      container.querySelector('[data-testid="cluster-workload-usage-memory-job"]')?.textContent
+    ).toContain('256.0 Mi');
   });
 
   it('renders an update banner when a newer release is available', async () => {
@@ -760,6 +881,12 @@ const EMPTY_OVERVIEW_DATA: ClusterOverviewPayload = {
   totalStatefulSets: 0,
   totalDaemonSets: 0,
   totalCronJobs: 0,
+  workloadResourceUsage: {
+    deployments: { cpuUsage: '0', memoryUsage: '0' },
+    daemonSets: { cpuUsage: '0', memoryUsage: '0' },
+    statefulSets: { cpuUsage: '0', memoryUsage: '0' },
+    jobs: { cpuUsage: '0', memoryUsage: '0' },
+  },
   readyNodes: 0,
   notReadyNodes: 0,
   cordonedNodes: 0,

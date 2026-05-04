@@ -240,6 +240,7 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
     detailScope,
     eventsScope,
     containerLogsScope,
+    mapScope,
     helmScope,
     isHelmRelease,
     isEvent,
@@ -349,12 +350,16 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
     dispatch,
     currentTab: activeTab,
   });
+  const visibleActiveTab: ViewType = useMemo(
+    () => (availableTabs.some((tab) => tab.id === activeTab) ? activeTab : 'details'),
+    [activeTab, availableTabs]
+  );
 
   const podsState = useObjectPanelPods({
     objectData,
     objectKind,
     isOpen,
-    activeTab,
+    activeTab: visibleActiveTab,
   });
 
   const {
@@ -623,7 +628,7 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
     ? {
         ...detailsProps,
         objectData,
-        isActive: isOpen && activeTab === 'details',
+        isActive: isOpen && visibleActiveTab === 'details',
         detailsLoading,
         detailsError,
         resourceDeleted: state.resourceDeleted,
@@ -701,10 +706,14 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
           />
         </div>
 
-        <ObjectPanelTabs tabs={availableTabs} activeTab={activeTab} onSelect={handleTabSelect} />
+        <ObjectPanelTabs
+          tabs={availableTabs}
+          activeTab={visibleActiveTab}
+          onSelect={handleTabSelect}
+        />
 
         <ObjectPanelContent
-          activeTab={activeTab}
+          activeTab={visibleActiveTab}
           detailTabProps={detailTabProps}
           isPanelOpen={isOpen && isActiveTab}
           capabilities={capabilities}
@@ -714,6 +723,7 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
           detailScope={detailScope}
           eventsScope={eventsScope}
           containerLogsScope={containerLogsScope}
+          mapScope={mapScope}
           helmScope={helmScope}
           objectData={objectData}
           objectKind={objectKind}

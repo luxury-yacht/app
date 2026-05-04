@@ -547,6 +547,62 @@ describe('Sidebar', () => {
     expect(viewStateMock.onNamespaceSelect).not.toHaveBeenCalled();
   });
 
+  it('hides the map view for All Namespaces only', () => {
+    namespaceState.namespaces = [
+      {
+        name: 'All Namespaces',
+        scope: ALL_NAMESPACES_SCOPE,
+        resourceVersion: 'synthetic',
+        hasWorkloads: true,
+        workloadsUnknown: false,
+        details: '',
+      },
+      {
+        name: 'default',
+        scope: 'default',
+        resourceVersion: '1',
+        hasWorkloads: true,
+        workloadsUnknown: false,
+        details: '',
+      },
+    ];
+    renderSidebar();
+
+    const allNamespacesToggle = container!.querySelector<HTMLDivElement>(
+      `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(
+        ALL_NAMESPACES_SCOPE
+      )}"]`
+    );
+    expect(allNamespacesToggle).not.toBeNull();
+    act(() => {
+      allNamespacesToggle!.click();
+    });
+    expect(
+      container!.querySelector(
+        `[data-sidebar-target-kind="namespace-view"][data-sidebar-target-namespace="${namespaceKey(
+          ALL_NAMESPACES_SCOPE
+        )}"][data-sidebar-target-view="map"]`
+      )
+    ).toBeNull();
+
+    const defaultToggle = container!.querySelector<HTMLDivElement>(
+      `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(
+        'default'
+      )}"]`
+    );
+    expect(defaultToggle).not.toBeNull();
+    act(() => {
+      defaultToggle!.click();
+    });
+    expect(
+      container!.querySelector(
+        `[data-sidebar-target-kind="namespace-view"][data-sidebar-target-namespace="${namespaceKey(
+          'default'
+        )}"][data-sidebar-target-view="map"]`
+      )
+    ).not.toBeNull();
+  });
+
   it('updates view state when selecting a namespace that is already focused', async () => {
     namespaceState.selectedNamespace = 'default';
     namespaceState.selectedNamespaceClusterId = testClusterId;

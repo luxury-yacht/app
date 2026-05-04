@@ -2,11 +2,13 @@
  * frontend/src/shared/components/kubernetes/ActionsMenu.tsx
  *
  * Actions menu for the Object Panel. Renders a dropdown menu with available
- * actions for the current object. Uses the shared useObjectActions hook.
+ * actions for the current object through the shared object action controller.
  */
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { useObjectActions, type ObjectActionData } from '@shared/hooks/useObjectActions';
+import { type ObjectActionData } from '@shared/hooks/useObjectActions';
+import { useObjectActionController } from '@shared/hooks/useObjectActionController';
+import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { PortForwardModal, type PortForwardTarget } from '@modules/port-forward';
 import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
 import ScaleModal from '@shared/components/modals/ScaleModal';
@@ -41,6 +43,7 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
     onTrigger,
     onSuspendToggle,
   }) => {
+    const { openWithObject } = useObjectPanel();
     const [isOpen, setIsOpen] = useState(false);
     const [showScaleModal, setShowScaleModal] = useState(false);
     const [showTriggerConfirm, setShowTriggerConfirm] = useState(false);
@@ -103,13 +106,22 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
       [object, hpaManaged]
     );
 
-    // Get menu items from shared hook
-    const menuItems = useObjectActions({
-      object: actionObject,
+    const objectActions = useObjectActionController({
       context: 'object-panel',
-      handlers,
       actionLoading,
+      useDefaultHandlers: false,
+      handlerOverrides: handlers,
+      onOpenObjectMap: (target) => {
+        setIsOpen(false);
+        openWithObject(target, { initialTab: 'map' });
+      },
     });
+
+    // Get menu items from the centralized action controller.
+    const menuItems = useMemo(
+      () => objectActions.getMenuItems(actionObject),
+      [actionObject, objectActions]
+    );
 
     // Close menu when clicking outside
     useEffect(() => {

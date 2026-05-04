@@ -8,6 +8,51 @@ describe('buildObjectActionItems', () => {
     eventBus.clear();
   });
 
+  it('omits the Map item when no handler is provided (default for non-workloads views)', () => {
+    const items = buildObjectActionItems({
+      object: {
+        kind: 'Deployment',
+        name: 'api',
+        namespace: 'apps',
+        clusterId: 'cluster-a',
+      },
+      context: 'gridtable',
+      handlers: {
+        onOpen: () => undefined,
+      },
+      permissions: {},
+    });
+    const item = items.find((i) => 'label' in i && i.label === 'Map');
+    expect(item).toBeUndefined();
+  });
+
+  it('adds the Map item when a handler is provided and invokes it on click', () => {
+    let invoked = false;
+    const items = buildObjectActionItems({
+      object: {
+        kind: 'Deployment',
+        name: 'api',
+        namespace: 'apps',
+        clusterId: 'cluster-a',
+      },
+      context: 'gridtable',
+      handlers: {
+        onOpen: () => undefined,
+        onObjectMap: () => {
+          invoked = true;
+        },
+      },
+      permissions: {},
+    });
+    const item = items.find((i) => 'label' in i && i.label === 'Map');
+    expect(item).toBeTruthy();
+    if (!item || !('onClick' in item)) {
+      throw new Error('Map item missing onClick');
+    }
+    item.onClick?.();
+    expect(invoked).toBe(true);
+  });
+
   it('adds a Diff action for gridtable objects with a resolvable identity', () => {
     const items = buildObjectActionItems({
       object: {
@@ -145,6 +190,56 @@ describe('buildObjectActionItems', () => {
     expect(items[1]).toMatchObject({ label: 'Diff' });
     expect(items[2]).toMatchObject({ divider: true });
     expect(items[3]).toMatchObject({ label: 'Restart' });
+  });
+
+  it('uses one divider between navigation actions and Delete when no custom actions render', () => {
+    const items = buildObjectActionItems({
+      object: {
+        kind: 'ConfigMap',
+        name: 'app-config',
+        namespace: 'apps',
+        clusterId: 'cluster-a',
+      },
+      context: 'gridtable',
+      handlers: {
+        onOpen: () => undefined,
+        onDelete: () => undefined,
+      },
+      permissions: {
+        delete: { allowed: true, pending: false },
+      },
+    });
+
+    expect(items.map((item) => ('divider' in item ? 'divider' : item.label))).toEqual([
+      'Open',
+      'Diff',
+      'divider',
+      'Delete',
+    ]);
+  });
+
+  it('does not leave a trailing divider when Delete is unavailable', () => {
+    const items = buildObjectActionItems({
+      object: {
+        kind: 'Secret',
+        name: 'app-secret',
+        namespace: 'apps',
+        clusterId: 'cluster-a',
+      },
+      context: 'gridtable',
+      handlers: {
+        onOpen: () => undefined,
+        onDelete: () => undefined,
+      },
+      permissions: {
+        delete: { allowed: false, pending: false },
+      },
+    });
+
+    expect(items.map((item) => ('divider' in item ? 'divider' : item.label))).toEqual([
+      'Open',
+      'Diff',
+    ]);
   });
 
   it('adds a disabled port-forward action when the target is missing cluster scope', () => {

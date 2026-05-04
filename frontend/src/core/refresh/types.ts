@@ -163,6 +163,18 @@ export interface ClusterOverviewMetrics {
   failureCount: number;
 }
 
+export interface WorkloadTypeResourceUsage {
+  cpuUsage: string;
+  memoryUsage: string;
+}
+
+export interface WorkloadResourceUsage {
+  deployments: WorkloadTypeResourceUsage;
+  daemonSets: WorkloadTypeResourceUsage;
+  statefulSets: WorkloadTypeResourceUsage;
+  jobs: WorkloadTypeResourceUsage;
+}
+
 export interface ClusterOverviewPayload {
   clusterType: string;
   clusterVersion: string;
@@ -193,6 +205,7 @@ export interface ClusterOverviewPayload {
   totalStatefulSets: number;
   totalDaemonSets: number;
   totalCronJobs: number;
+  workloadResourceUsage: WorkloadResourceUsage;
   readyNodes: number;
   notReadyNodes: number;
   cordonedNodes: number;
@@ -480,6 +493,50 @@ export interface ObjectEventsSnapshotPayload extends ClusterMeta {
   events: ObjectEventSummary[];
 }
 
+// Mirrors backend snapshot.ObjectMapReference — see backend/refresh/snapshot/object_map.go.
+// All identity fields included so the frontend can re-seed the map or open
+// any node in the ObjectPanel without a separate lookup.
+export interface ObjectMapReference {
+  clusterId: string;
+  clusterName?: string;
+  group: string;
+  version: string;
+  kind: string;
+  resource?: string;
+  namespace?: string;
+  name: string;
+  uid?: string;
+}
+
+export interface ObjectMapNode {
+  id: string;
+  depth: number;
+  ref: ObjectMapReference;
+}
+
+// Edge `type` is one of the backend tracer categories: owner, selector,
+// endpoint, schedules, uses, mounts, storage, routes, scales. The frontend
+// keeps it as a string to stay forward-compatible when the backend adds new
+// tracers without a frontend release.
+export interface ObjectMapEdge {
+  id: string;
+  source: string;
+  target: string;
+  type: string;
+  label: string;
+  tracedBy?: string;
+}
+
+export interface ObjectMapSnapshotPayload extends ClusterMeta {
+  seed: ObjectMapReference;
+  nodes: ObjectMapNode[];
+  edges: ObjectMapEdge[];
+  maxDepth: number;
+  maxNodes: number;
+  truncated: boolean;
+  warnings?: string[];
+}
+
 export interface ObjectYAMLSnapshotPayload extends ClusterMeta {
   yaml: string;
 }
@@ -709,6 +766,7 @@ export type RefreshDomain =
   | 'pods'
   | 'object-details'
   | 'object-events'
+  | 'object-map'
   | 'object-yaml'
   | 'object-helm-manifest'
   | 'object-helm-values'
@@ -740,6 +798,7 @@ export interface DomainPayloadMap {
   pods: PodSnapshotPayload;
   'object-details': ObjectDetailsSnapshotPayload;
   'object-events': ObjectEventsSnapshotPayload;
+  'object-map': ObjectMapSnapshotPayload;
   'object-yaml': ObjectYAMLSnapshotPayload;
   'object-helm-manifest': ObjectHelmManifestSnapshotPayload;
   'object-helm-values': ObjectHelmValuesSnapshotPayload;

@@ -6,10 +6,7 @@
  */
 
 import './ClusterViewCustom.css';
-import { DeleteResourceByGVK } from '@wailsjs/go/backend/App';
-import { errorHandler } from '@utils/errorHandler';
-import { getPermissionKey, queryKindPermissions, useUserPermissions } from '@/core/capabilities';
-import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
+import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
@@ -17,8 +14,7 @@ import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useShortNames } from '@/hooks/useShortNames';
 import * as cf from '@shared/components/tables/columnFactories';
-import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useMemo, useCallback } from 'react';
 import ResourceGridTableView from '@shared/components/tables/ResourceGridTableView';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
@@ -71,11 +67,6 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
     const useShortResourceNames = useShortNames();
-    const permissionMap = useUserPermissions();
-    const [deleteConfirm, setDeleteConfirm] = useState<{
-      show: boolean;
-      resource: ClusterCustomData | null;
-    }>({ show: false, resource: null });
 
     const handleResourceClick = useCallback(
       (resource: ClusterCustomData) => {
@@ -122,7 +113,14 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
               clusterId: resource.clusterId,
               clusterName: resource.clusterName ?? undefined,
             },
-            { fallbackClusterId: selectedClusterId }
+            { fallbackClusterId: selectedClusterId },
+            {
+              age: resource.age,
+              labels: resource.labels,
+              annotations: resource.annotations,
+              requiresExplicitVersion: true,
+              explicitVersionProvided: Boolean(resource.apiVersion),
+            }
           )
         );
       },
@@ -259,71 +257,17 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
       filterOptions: { isNamespaceScoped: false },
     });
 
-    // Handle delete confirmation
-    const handleDeleteConfirm = useCallback(async () => {
-      if (!deleteConfirm.resource) return;
-      const resource = deleteConfirm.resource;
-
-      try {
-        // Multi-cluster rule (AGENTS.md): every backend command must
-        // carry a resolved clusterId.
-        const clusterId = resource.clusterId ?? selectedClusterId ?? null;
-        if (!clusterId) {
-          throw new Error(`Cannot delete ${resource.kind}/${resource.name}: clusterId is missing`);
-        }
-        // ClusterCustomData always carries apiGroup/apiVersion from the
-        // catalog. A missing apiVersion here means the upstream data source
-        // dropped it — fail loud rather than fall back to the retired
-        // kind-only resolver.
-        if (!resource.apiVersion) {
-          throw new Error(
-            `Cannot delete ${resource.kind}/${resource.name}: apiVersion missing on custom resource row`
-          );
-        }
-        const apiVersion = resource.apiGroup
-          ? `${resource.apiGroup}/${resource.apiVersion}`
-          : resource.apiVersion;
-        await DeleteResourceByGVK(clusterId, apiVersion, resource.kind, '', resource.name);
-      } catch (err) {
-        errorHandler.handle(err, {
-          action: 'delete',
-          kind: resource.kind,
-          name: resource.name,
-        });
-      } finally {
-        setDeleteConfirm({ show: false, resource: null });
-      }
-    }, [deleteConfirm.resource, selectedClusterId]);
+    const objectActions = useObjectActionController({
+      context: 'gridtable',
+      queryMissingPermissions: true,
+      onOpen: (object) => openWithObject(object),
+    });
 
     // Get context menu items
     const getContextMenuItems = useCallback(
       (resource: ClusterCustomData): ContextMenuItem[] => {
-        const group = resource.apiGroup ?? null;
-        const version = resource.apiVersion ?? null;
-        // Permission lookup carries group/version so two cluster-scoped
-        // CRDs sharing a Kind don't share a cache slot. ClusterCustomData
-        // provides both fields from the catalog. Mirrors the namespaced
-        // fix in NsViewCustom.
-        const deleteStatus =
-          permissionMap.get(
-            getPermissionKey(
-              resource.kind,
-              'delete',
-              null,
-              null,
-              resource.clusterId,
-              group,
-              version
-            )
-          ) ?? null;
-
-        // Lazy-load permissions for CRD kinds not in the static spec lists.
-        if (!deleteStatus) {
-          queryKindPermissions(resource.kind, null, resource.clusterId ?? null, group, version);
-        }
-
-        return buildObjectActionItems({
-          object: buildRequiredObjectReference(
+        return objectActions.getMenuItems(
+          buildRequiredObjectReference(
             {
               kind: resource.kind,
               name: resource.name,
@@ -332,19 +276,18 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
               group: resource.apiGroup ?? undefined,
               version: resource.apiVersion ?? undefined,
             },
-            { fallbackClusterId: selectedClusterId }
-          ),
-          context: 'gridtable',
-          handlers: {
-            onOpen: () => handleResourceClick(resource),
-            onDelete: () => setDeleteConfirm({ show: true, resource }),
-          },
-          permissions: {
-            delete: deleteStatus,
-          },
-        });
+            { fallbackClusterId: selectedClusterId },
+            {
+              age: resource.age,
+              labels: resource.labels,
+              annotations: resource.annotations,
+              requiresExplicitVersion: true,
+              explicitVersionProvided: Boolean(resource.apiVersion),
+            }
+          )
+        );
       },
-      [handleResourceClick, permissionMap, selectedClusterId]
+      [objectActions, selectedClusterId]
     );
 
     // Resolve empty state message
@@ -373,16 +316,7 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
           emptyMessage={emptyMessage}
         />
 
-        <ConfirmationModal
-          isOpen={deleteConfirm.show}
-          title={`Delete ${deleteConfirm.resource?.kind || 'Resource'}`}
-          message={`Are you sure you want to delete ${deleteConfirm.resource?.kind} "${deleteConfirm.resource?.name}"?\n\nThis action cannot be undone.`}
-          confirmText="Delete"
-          cancelText="Cancel"
-          confirmButtonClass="danger"
-          onConfirm={handleDeleteConfirm}
-          onCancel={() => setDeleteConfirm({ show: false, resource: null })}
-        />
+        {objectActions.modals}
       </>
     );
   }

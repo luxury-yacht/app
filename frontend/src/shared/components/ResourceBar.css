@@ -341,7 +341,7 @@
 }
 
 .resource-group {
-  margin-bottom: 1.5rem;
+  margin-bottom: 0.6rem;
 }
 
 .resource-group:last-child {
@@ -353,7 +353,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.25rem;
 }
 
 .metric-header h3 {
@@ -363,6 +363,7 @@
   text-transform: uppercase;
   letter-spacing: 0.5px;
   color: var(--color-text-secondary);
+  margin-bottom: 0.25rem !important;
 }
 
 .metric-legend {
@@ -439,6 +440,10 @@
 
 .metric-legend__dot--daemonset {
   background: var(--workload-daemonset);
+}
+
+.metric-legend__dot--job {
+  background: var(--workload-job);
 }
 
 .metric-legend__dot--cronjob {

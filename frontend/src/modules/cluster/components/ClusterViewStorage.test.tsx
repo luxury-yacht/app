@@ -34,6 +34,7 @@ vi.mock('@ui/favorites/FavToggle', () => ({
 }));
 
 const gridTablePropsRef: { current: any } = { current: null };
+const openWithObjectMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@shared/components/tables/GridTable', async () => {
   const actual = await vi.importActual<typeof import('@shared/components/tables/GridTable')>(
@@ -49,7 +50,7 @@ vi.mock('@shared/components/tables/GridTable', async () => {
 });
 
 vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
-  useObjectPanel: () => ({ openWithObject: vi.fn() }),
+  useObjectPanel: () => ({ openWithObject: openWithObjectMock }),
 }));
 
 vi.mock('@shared/hooks/useNavigateToView', () => ({
@@ -122,6 +123,7 @@ describe('ClusterViewStorage', () => {
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
     gridTablePropsRef.current = null;
+    openWithObjectMock.mockClear();
   });
 
   afterEach(() => {
@@ -172,5 +174,33 @@ describe('ClusterViewStorage', () => {
 
     const props = gridTablePropsRef.current;
     expect(props.filters?.options?.kinds).toEqual(['PersistentVolume']);
+  });
+
+  it('opens the Map for PersistentVolume rows', async () => {
+    await act(async () => {
+      root.render(<ClusterViewStorage data={[basePV]} loaded={true} />);
+      await Promise.resolve();
+    });
+
+    const props = gridTablePropsRef.current;
+    const objectMapItem = props
+      .getCustomContextMenuItems(basePV, 'name')
+      .find((item: any) => item.label === 'Map');
+    expect(objectMapItem).toBeTruthy();
+
+    act(() => {
+      objectMapItem?.onClick?.();
+    });
+
+    expect(openWithObjectMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'PersistentVolume',
+        name: 'pv-1',
+        clusterId: 'cluster-a',
+        group: '',
+        version: 'v1',
+      }),
+      { initialTab: 'map' }
+    );
   });
 });

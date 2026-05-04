@@ -226,6 +226,35 @@ describe('ClusterViewNodes', () => {
     );
   });
 
+  it('opens the Map from the node context menu', async () => {
+    await act(async () => {
+      root.render(<ClusterViewNodes data={[baseNode as any]} loaded={true} />);
+      await Promise.resolve();
+    });
+
+    const props = gridTablePropsRef.current;
+    const objectMapItem = props
+      .getCustomContextMenuItems(baseNode, 'name')
+      .find((item: any) => item.label === 'Map');
+    expect(objectMapItem).toBeTruthy();
+
+    act(() => {
+      objectMapItem?.onClick?.();
+    });
+
+    expect(openWithObjectMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'Node',
+        name: 'node-1',
+        clusterId: 'alpha:ctx',
+        clusterName: 'alpha',
+        group: '',
+        version: 'v1',
+      }),
+      { initialTab: 'map' }
+    );
+  });
+
   it('resolves node metrics from the active cluster scope only', async () => {
     await act(async () => {
       root.render(<ClusterViewNodes data={[baseNode as any]} loaded={true} />);

@@ -81,10 +81,6 @@ vi.mock('@shared/components/tables/GridTable', () => ({
   GRIDTABLE_VIRTUALIZATION_DEFAULT: {},
 }));
 
-vi.mock('@shared/hooks/useObjectActions', () => ({
-  buildObjectActionItems: () => [],
-}));
-
 vi.mock('@shared/hooks/useNavigateToView', () => ({
   useNavigateToView: () => ({ navigateToView: vi.fn() }),
 }));
@@ -191,6 +187,38 @@ describe('JobsTab', () => {
 
     expect(gridTablePropsRef.current.keyExtractor({ ...job, clusterId: PANEL_CLUSTER_ID })).toBe(
       'panel-cluster-A|batch/v1/Job/ops/nightly'
+    );
+  });
+
+  it('opens the Map from the job context menu', () => {
+    const job = makeJob({ name: 'nightly', namespace: 'ops' });
+
+    act(() => {
+      root.render(
+        <JobsTab jobs={[job]} loading={false} isActive={true} clusterId={PANEL_CLUSTER_ID} />
+      );
+    });
+
+    const row = gridTablePropsRef.current.data[0];
+    const objectMapItem = gridTablePropsRef.current
+      .getCustomContextMenuItems(row)
+      .find((item: any) => item.label === 'Map');
+    expect(objectMapItem).toBeTruthy();
+
+    act(() => {
+      objectMapItem?.onClick?.();
+    });
+
+    expect(mockOpenWithObject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'Job',
+        name: 'nightly',
+        namespace: 'ops',
+        clusterId: PANEL_CLUSTER_ID,
+        group: 'batch',
+        version: 'v1',
+      }),
+      { initialTab: 'map' }
     );
   });
 

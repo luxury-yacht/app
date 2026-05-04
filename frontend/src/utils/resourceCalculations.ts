@@ -23,6 +23,7 @@ export const parseMemToMB = (val: string | undefined): number => {
   if (val.endsWith('Ki')) return num / 1024; // Convert Ki to Mi
   if (val.endsWith('Mi')) return num;
   if (val.endsWith('Gi')) return num * 1024; // Convert Gi to Mi
+  if (val.endsWith('Ti')) return num * 1024 * 1024; // Convert Ti to Mi
   if (val.endsWith('GB')) return num * 1024;
   if (val.endsWith('MB')) return num;
   return num / (1024 * 1024); // Assume bytes

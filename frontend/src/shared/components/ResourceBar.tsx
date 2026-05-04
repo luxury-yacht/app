@@ -103,6 +103,8 @@ const ResourceBar: React.FC<ResourceBarProps> = ({
           return num; // Already in Mi
         } else if (value.endsWith('Gi')) {
           return num * 1024; // Convert Gi to Mi
+        } else if (value.endsWith('Ti')) {
+          return num * 1024 * 1024; // Convert Ti to Mi
         } else if (value.endsWith('GB')) {
           return num * 1024; // Convert GB to Mi
         } else if (value.endsWith('MB')) {
@@ -236,7 +238,9 @@ const ResourceBar: React.FC<ResourceBarProps> = ({
     } else {
       // For memory, 0 likely means parsing failed
       if (parsedValue === 0) return '-';
-      if (parsedValue >= 1024) {
+      if (parsedValue >= 1024 * 1024) {
+        return `${(parsedValue / (1024 * 1024)).toFixed(1)}Ti`;
+      } else if (parsedValue >= 1024) {
         return `${(parsedValue / 1024).toFixed(1)}Gi`;
       } else {
         return `${Math.round(parsedValue)}Mi`;

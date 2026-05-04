@@ -15,7 +15,7 @@ import * as cf from '@shared/components/tables/columnFactories';
 import React, { useMemo, useCallback } from 'react';
 import ResourceGridTableView from '@shared/components/tables/ResourceGridTableView';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
-import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
+import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
@@ -71,6 +71,11 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
     const { navigateToView } = useNavigateToView();
     const useShortResourceNames = useShortNames();
     const namespaceColumnLink = useNamespaceColumnLink<HelmData>('helm');
+    const objectActions = useObjectActionController({
+      context: 'gridtable',
+      useDefaultHandlers: false,
+      onOpen: (object) => openWithObject(object),
+    });
     const handleResourceClick = useCallback(
       (resource: HelmData) => {
         openWithObject(
@@ -295,8 +300,8 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
       (resource: HelmData): ContextMenuItem[] => {
         const status = resource.status || resource.info?.status;
 
-        return buildObjectActionItems({
-          object: buildSyntheticObjectReference(
+        return objectActions.getMenuItems(
+          buildSyntheticObjectReference(
             {
               kind: 'HelmRelease',
               name: resource.name,
@@ -305,15 +310,10 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
               clusterName: resource.clusterName,
             },
             { status }
-          ),
-          context: 'gridtable',
-          handlers: {
-            onOpen: () => handleResourceClick(resource),
-          },
-          permissions: {},
-        });
+          )
+        );
       },
-      [handleResourceClick]
+      [objectActions]
     );
 
     const emptyMessage = useMemo(
@@ -346,6 +346,7 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
           useShortNames={useShortResourceNames}
           emptyMessage={emptyMessage}
         />
+        {objectActions.modals}
       </>
     );
   }

@@ -2,12 +2,10 @@
 
 .cluster-overview {
   padding: 1.5rem;
-  padding-right: calc(1.5rem + var(--dock-right-offset, 0px));
-  padding-bottom: calc(1.5rem + var(--dock-bottom-offset, 0px));
   min-height: 100%;
   width: 100%;
-  min-width: calc(800px + 3rem + var(--dock-right-offset, 0px));
-  max-width: calc(1400px + 3rem + var(--dock-right-offset, 0px));
+  min-width: calc(800px + 3rem);
+  max-width: calc(1400px + 3rem);
   margin-inline: auto;
   box-sizing: border-box;
 }
@@ -377,6 +375,71 @@
   background: var(--pod-phase-failing);
 }
 
+.pod-status-cards {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1.5rem;
+}
+
+.pod-status-card {
+  --pod-status-card-color: var(--color-text);
+
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  min-height: 60px;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  background: var(--color-bg-secondary);
+  color: var(--color-text-secondary);
+}
+
+.pod-status-card--healthy {
+  --pod-status-card-color: var(--pod-phase-healthy);
+}
+
+.pod-status-card--pending {
+  --pod-status-card-color: var(--pod-phase-pending);
+}
+
+.pod-status-card--failing {
+  --pod-status-card-color: var(--pod-phase-failing);
+}
+
+.pod-status-card--restarted {
+  --pod-status-card-color: var(--pod-phase-restarted);
+}
+
+.pod-status-card--clickable {
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.pod-status-card--clickable:hover,
+.pod-status-card--clickable:focus-visible {
+  border-color: var(--pod-status-card-color);
+  box-shadow: 0 0 0 1px var(--pod-status-card-color);
+  outline: none;
+}
+
+.pod-status-card__count {
+  color: var(--pod-status-card-color);
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+
+.pod-status-card__label {
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
 .stacked-bar__segment--deployment {
   background: var(--workload-deployment);
 }
@@ -389,8 +452,22 @@
   background: var(--workload-daemonset);
 }
 
+.stacked-bar__segment--job {
+  background: var(--workload-job);
+}
+
 .stacked-bar__segment--cronjob {
   background: var(--workload-cronjob);
+}
+
+.stacked-bar--workload-usage {
+  height: 4px;
+}
+
+.resource-utilization-divider {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--color-border);
 }
 
 .metric-stats {
@@ -416,6 +493,60 @@
 
 .metric-stat__label {
   color: var(--color-text-tertiary);
+}
+
+.metric-header--usage h3 {
+  color: var(--color-text-secondary);
+  margin-bottom: 0.2rem !important;
+}
+
+.metric-header__title-group {
+  display: flex;
+  align-items: baseline;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.metric-header__usage {
+  color: var(--color-text-tertiary);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.metric-header__percent {
+  color: var(--color-text);
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.metric-header__percent--warning {
+  color: var(--color-warning);
+}
+
+.resource-utilization-tooltip {
+  display: grid;
+  grid-template-columns: minmax(5.5rem, 1fr) auto auto;
+  column-gap: 1rem;
+  row-gap: 0.35rem;
+  align-items: baseline;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.resource-utilization-tooltip__label {
+  color: var(--color-text-secondary);
+}
+
+.resource-utilization-tooltip__value,
+.resource-utilization-tooltip__percent {
+  color: var(--color-text);
+  font-weight: 600;
+  text-align: right;
+}
+
+.resource-utilization-tooltip__percent--warning {
+  color: var(--color-warning);
 }
 
 .overview-loading-banner {

@@ -7,6 +7,12 @@
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import ResourceBar from '@shared/components/ResourceBar';
+import Tooltip from '@shared/components/Tooltip';
+import {
+  calculateResourceMetrics,
+  formatCpuValue,
+  formatMemoryValue,
+} from '@shared/utils/resourceCalculations';
 import { readAppInfo, requestAppState } from '@/core/app-state-access';
 import { requestRefreshDomain } from '@/core/data-access';
 import { refreshOrchestrator, useRefreshScopedDomain } from '@/core/refresh';
@@ -76,6 +82,12 @@ const EMPTY_OVERVIEW: ClusterOverviewPayload = {
   totalStatefulSets: 0,
   totalDaemonSets: 0,
   totalCronJobs: 0,
+  workloadResourceUsage: {
+    deployments: { cpuUsage: '0', memoryUsage: '0' },
+    daemonSets: { cpuUsage: '0', memoryUsage: '0' },
+    statefulSets: { cpuUsage: '0', memoryUsage: '0' },
+    jobs: { cpuUsage: '0', memoryUsage: '0' },
+  },
   readyNodes: 0,
   notReadyNodes: 0,
   cordonedNodes: 0,
@@ -404,14 +416,14 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
     variant: 'restarted',
   };
 
-  const renderPodPhaseLegendItem = (item: {
+  const renderPodStatusCard = (item: {
     key: string;
     label: string;
     value: number;
     variant: string;
   }) => {
     const clickable = item.value > 0;
-    const itemClass = `metric-legend__item${clickable ? ' metric-legend__item--clickable' : ''}`;
+    const itemClass = `pod-status-card pod-status-card--${item.variant}${clickable ? ' pod-status-card--clickable' : ''}`;
     return (
       <div
         key={item.key}
@@ -425,25 +437,11 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
         aria-disabled={!clickable}
         data-testid={`cluster-pod-status-${item.key}`}
       >
-        <span
-          className={`metric-legend__dot metric-legend__dot--${item.variant}`}
-          aria-hidden="true"
-        />
-        <span className="metric-legend__count">{showSkeleton ? DASH : item.value}</span>
-        <span className="metric-legend__label">{item.label}</span>
+        <span className="pod-status-card__count">{showSkeleton ? DASH : item.value}</span>
+        <span className="pod-status-card__label">{item.label}</span>
       </div>
     );
   };
-
-  // Phase-only total for bar segment widths (restarted overlaps with running,
-  // so including it would double-count).
-  const phaseTotal = healthyPods + displayOverview.pendingPods + displayOverview.failedPods;
-  const phasePct = (value: number) => (phaseTotal > 0 ? (value / phaseTotal) * 100 : 0);
-  const phaseSegments = [
-    { key: 'healthy', value: healthyPods },
-    { key: 'pending', value: displayOverview.pendingPods },
-    { key: 'failing', value: displayOverview.failedPods },
-  ];
 
   const workloadItems = [
     {
@@ -473,6 +471,181 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
   ];
   const workloadTotal = workloadItems.reduce((sum, item) => sum + item.value, 0);
   const workloadPct = (value: number) => (workloadTotal > 0 ? (value / workloadTotal) * 100 : 0);
+  const workloadResourceUsage =
+    displayOverview.workloadResourceUsage ?? EMPTY_OVERVIEW.workloadResourceUsage;
+  const workloadUsageSources = [
+    {
+      key: 'deployment',
+      label: 'deployments',
+      variant: 'deployment',
+      cpuUsage: workloadResourceUsage.deployments?.cpuUsage ?? '0',
+      memoryUsage: workloadResourceUsage.deployments?.memoryUsage ?? '0',
+    },
+    {
+      key: 'statefulset',
+      label: 'statefulsets',
+      variant: 'statefulset',
+      cpuUsage: workloadResourceUsage.statefulSets?.cpuUsage ?? '0',
+      memoryUsage: workloadResourceUsage.statefulSets?.memoryUsage ?? '0',
+    },
+    {
+      key: 'daemonset',
+      label: 'daemonsets',
+      variant: 'daemonset',
+      cpuUsage: workloadResourceUsage.daemonSets?.cpuUsage ?? '0',
+      memoryUsage: workloadResourceUsage.daemonSets?.memoryUsage ?? '0',
+    },
+    {
+      key: 'job',
+      label: 'jobs',
+      variant: 'job',
+      cpuUsage: workloadResourceUsage.jobs?.cpuUsage ?? '0',
+      memoryUsage: workloadResourceUsage.jobs?.memoryUsage ?? '0',
+    },
+  ];
+  const cpuWorkloadUsageItems = workloadUsageSources.map((item) => ({
+    ...item,
+    usage: item.cpuUsage,
+    value: calculateResourceMetrics({ usage: item.cpuUsage }, 'cpu').usage,
+  }));
+  const memoryWorkloadUsageItems = workloadUsageSources.map((item) => ({
+    ...item,
+    usage: item.memoryUsage,
+    value: calculateResourceMetrics({ usage: item.memoryUsage }, 'memory').usage,
+  }));
+  const cpuWorkloadUsageTotal = cpuWorkloadUsageItems.reduce((sum, item) => sum + item.value, 0);
+  const memoryWorkloadUsageTotal = memoryWorkloadUsageItems.reduce(
+    (sum, item) => sum + item.value,
+    0
+  );
+  const memoryResourceMetrics = calculateResourceMetrics(
+    {
+      usage: displayOverview.memoryUsage,
+      request: displayOverview.memoryRequests,
+      limit: displayOverview.memoryLimits,
+      allocatable: displayOverview.memoryAllocatable,
+    },
+    'memory'
+  );
+  const cpuResourceMetrics = calculateResourceMetrics(
+    {
+      usage: displayOverview.cpuUsage,
+      request: displayOverview.cpuRequests,
+      limit: displayOverview.cpuLimits,
+      allocatable: displayOverview.cpuAllocatable,
+    },
+    'cpu'
+  );
+  const formatPercent = (value: number) => `${value.toFixed(1)}%`;
+  const percentClassName = (baseClass: string, value: number) =>
+    value > 100 ? `${baseClass} ${baseClass}--warning` : baseClass;
+  const formatCpuTooltipValue = (millicores: number) => {
+    const cores = millicores / 1000;
+    if (cores === 0) {
+      return '0';
+    }
+    return cores.toFixed(2).replace(/\.?0+$/, '');
+  };
+  const formatResourceTooltipValue = (value: number, type: 'cpu' | 'memory') =>
+    type === 'cpu' ? formatCpuTooltipValue(value) : formatMemoryValue(value);
+  const cpuUsageSummary = `${formatCpuValue(cpuResourceMetrics.usage)} of ${formatCpuValue(
+    cpuResourceMetrics.allocatable
+  )} cores`;
+  const memoryUsageSummary = `${formatMemoryValue(memoryResourceMetrics.usage)} of ${formatMemoryValue(
+    memoryResourceMetrics.allocatable
+  )}`;
+
+  const renderResourceUtilizationTooltip = (
+    type: 'cpu' | 'memory',
+    metrics: ReturnType<typeof calculateResourceMetrics>
+  ) => (
+    <div
+      className="resource-utilization-tooltip"
+      data-testid={`resource-utilization-tooltip-${type}`}
+    >
+      {[
+        {
+          label: 'Utilization',
+          value: metrics.usage,
+          percent: metrics.usagePercent,
+        },
+        {
+          label: 'Requests',
+          value: metrics.request,
+          percent: metrics.requestPercent,
+        },
+        {
+          label: 'Limits',
+          value: metrics.limit,
+          percent: metrics.limitPercent,
+        },
+      ].map((row) => (
+        <React.Fragment key={row.label}>
+          <span className="resource-utilization-tooltip__label">{row.label}</span>
+          <span className="resource-utilization-tooltip__value">
+            {formatResourceTooltipValue(row.value, type)}
+          </span>
+          <span className={percentClassName('resource-utilization-tooltip__percent', row.percent)}>
+            {formatPercent(row.percent)}
+          </span>
+        </React.Fragment>
+      ))}
+    </div>
+  );
+
+  const renderWorkloadUsageBreakdown = (
+    testKey: string,
+    total: number,
+    items: Array<{
+      key: string;
+      label: string;
+      variant: string;
+      usage: string;
+      value: number;
+    }>
+  ) => (
+    <div className="resource-group workload-usage-breakdown">
+      <div
+        className="stacked-bar stacked-bar--workload-usage"
+        role="presentation"
+        aria-hidden="true"
+      >
+        {!showSkeleton &&
+          items.map((item) => {
+            const width = total > 0 ? (item.value / total) * 100 : 0;
+            if (width <= 0) {
+              return null;
+            }
+            return (
+              <div
+                key={item.key}
+                className={`stacked-bar__segment stacked-bar__segment--${item.variant}`}
+                style={{ width: `${width}%` }}
+              />
+            );
+          })}
+      </div>
+      <div className="metric-legend">
+        <div className="metric-legend__items">
+          {items.map((item) => (
+            <div
+              key={item.key}
+              className="metric-legend__item"
+              aria-disabled={item.value === 0}
+              data-testid={`cluster-workload-usage-${testKey}-${item.key}`}
+            >
+              <span
+                className={`metric-legend__dot metric-legend__dot--${item.variant}`}
+                aria-hidden="true"
+              />
+              <span className="metric-legend__count">{showSkeleton ? DASH : item.usage}</span>
+              <span className="metric-legend__label">{item.label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 
   const nodeHealthPhaseItems = [
     {
@@ -639,90 +812,88 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
           )}
 
           <div className="resource-group">
-            <div className="metric-header">
-              <h3>CPU</h3>
-              <div className="metric-legend__total">
-                <span className="metric-legend__total-value">
-                  {showSkeleton ? DASH : `${displayOverview.cpuAllocatable || '0'} cores`}
+            <div className="metric-header metric-header--usage">
+              <div className="metric-header__title-group">
+                <h3>CPU</h3>
+                <span className="metric-header__usage">
+                  {showSkeleton ? DASH : cpuUsageSummary}
                 </span>
-                <span className="metric-legend__total-label"> total</span>
+              </div>
+              <div
+                className={percentClassName(
+                  'metric-header__percent',
+                  cpuResourceMetrics.usagePercent
+                )}
+              >
+                {showSkeleton ? DASH : formatPercent(cpuResourceMetrics.usagePercent)}
               </div>
             </div>
-            <div className="resource-bar-placeholder">
-              <ResourceBar
-                usage={displayOverview.cpuUsage}
-                request={displayOverview.cpuRequests}
-                limit={displayOverview.cpuAllocatable}
-                type="cpu"
-                variant="default"
-              />
-            </div>
-            <div className="metric-legend">
-              <div className="metric-legend__items">
-                <div className="metric-legend__item">
-                  <span className="metric-legend__count">
-                    {showSkeleton ? DASH : displayOverview.cpuUsage || '0'}
-                  </span>
-                  <span className="metric-legend__label">used</span>
-                </div>
-                <div className="metric-legend__item">
-                  <span className="metric-legend__count">
-                    {showSkeleton ? DASH : displayOverview.cpuRequests || '0'}
-                  </span>
-                  <span className="metric-legend__label">requests</span>
-                </div>
-                <div className="metric-legend__item">
-                  <span className="metric-legend__count">
-                    {showSkeleton ? DASH : displayOverview.cpuLimits || '0'}
-                  </span>
-                  <span className="metric-legend__label">limits</span>
-                </div>
+            <Tooltip
+              content={renderResourceUtilizationTooltip('cpu', cpuResourceMetrics)}
+              placement="top"
+              minWidth={220}
+              inline={false}
+              disabled={showSkeleton}
+            >
+              <div className="resource-bar-placeholder">
+                <ResourceBar
+                  usage={displayOverview.cpuUsage}
+                  request={displayOverview.cpuRequests}
+                  limit={displayOverview.cpuLimits}
+                  allocatable={displayOverview.cpuAllocatable}
+                  type="cpu"
+                  variant="default"
+                />
               </div>
-            </div>
+            </Tooltip>
           </div>
 
+          {renderWorkloadUsageBreakdown('cpu', cpuWorkloadUsageTotal, cpuWorkloadUsageItems)}
+
+          <div className="resource-utilization-divider" />
+
           <div className="resource-group">
-            <div className="metric-header">
-              <h3>Memory</h3>
-              <div className="metric-legend__total">
-                <span className="metric-legend__total-value">
-                  {showSkeleton ? DASH : displayOverview.memoryAllocatable || '0'}
+            <div className="metric-header metric-header--usage">
+              <div className="metric-header__title-group">
+                <h3>Memory</h3>
+                <span className="metric-header__usage">
+                  {showSkeleton ? DASH : memoryUsageSummary}
                 </span>
-                <span className="metric-legend__total-label"> total</span>
+              </div>
+              <div
+                className={percentClassName(
+                  'metric-header__percent',
+                  memoryResourceMetrics.usagePercent
+                )}
+              >
+                {showSkeleton ? DASH : formatPercent(memoryResourceMetrics.usagePercent)}
               </div>
             </div>
-            <div className="resource-bar-placeholder">
-              <ResourceBar
-                usage={displayOverview.memoryUsage}
-                request={displayOverview.memoryRequests}
-                limit={displayOverview.memoryAllocatable}
-                type="memory"
-                variant="default"
-              />
-            </div>
-            <div className="metric-legend">
-              <div className="metric-legend__items">
-                <div className="metric-legend__item">
-                  <span className="metric-legend__count">
-                    {showSkeleton ? DASH : displayOverview.memoryUsage || '0'}
-                  </span>
-                  <span className="metric-legend__label">used</span>
-                </div>
-                <div className="metric-legend__item">
-                  <span className="metric-legend__count">
-                    {showSkeleton ? DASH : displayOverview.memoryRequests || '0'}
-                  </span>
-                  <span className="metric-legend__label">requests</span>
-                </div>
-                <div className="metric-legend__item">
-                  <span className="metric-legend__count">
-                    {showSkeleton ? DASH : displayOverview.memoryLimits || '0'}
-                  </span>
-                  <span className="metric-legend__label">limits</span>
-                </div>
+            <Tooltip
+              content={renderResourceUtilizationTooltip('memory', memoryResourceMetrics)}
+              placement="top"
+              minWidth={220}
+              inline={false}
+              disabled={showSkeleton}
+            >
+              <div className="resource-bar-placeholder">
+                <ResourceBar
+                  usage={displayOverview.memoryUsage}
+                  request={displayOverview.memoryRequests}
+                  limit={displayOverview.memoryLimits}
+                  allocatable={displayOverview.memoryAllocatable}
+                  type="memory"
+                  variant="default"
+                />
               </div>
-            </div>
+            </Tooltip>
           </div>
+
+          {renderWorkloadUsageBreakdown(
+            'memory',
+            memoryWorkloadUsageTotal,
+            memoryWorkloadUsageItems
+          )}
         </div>
 
         <div className="overview-section nodes-summary">
@@ -885,29 +1056,9 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
                 <span className="metric-legend__total-label"> total</span>
               </div>
             </div>
-            <div className="stacked-bar" role="presentation" aria-hidden="true">
-              {!showSkeleton &&
-                phaseSegments.map((segment) => {
-                  const width = phasePct(segment.value);
-                  if (width <= 0) {
-                    return null;
-                  }
-                  return (
-                    <div
-                      key={segment.key}
-                      className={`stacked-bar__segment stacked-bar__segment--${segment.key}`}
-                      style={{ width: `${width}%` }}
-                    />
-                  );
-                })}
-            </div>
-            <div className="metric-legend">
-              <div className="metric-legend__items">
-                {podPhaseItems.map((item) => renderPodPhaseLegendItem(item))}
-              </div>
-              <div className="metric-legend__items metric-legend__items--restarted">
-                {renderPodPhaseLegendItem(podRestartedItem)}
-              </div>
+            <div className="pod-status-cards">
+              {podPhaseItems.map((item) => renderPodStatusCard(item))}
+              {renderPodStatusCard(podRestartedItem)}
             </div>
           </div>
         </div>

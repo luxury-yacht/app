@@ -17,7 +17,7 @@ import * as cf from '@shared/components/tables/columnFactories';
 import React, { useMemo, useCallback } from 'react';
 import ResourceGridTableView from '@shared/components/tables/ResourceGridTableView';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
-import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
+import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import { useClusterResourceGridTable } from '@shared/hooks/useResourceGridTable';
@@ -216,6 +216,23 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
       filterOptions: { isNamespaceScoped: false },
     });
 
+    const objectActions = useObjectActionController({
+      context: 'gridtable',
+      useDefaultHandlers: false,
+      onViewInvolvedObject: (object) => {
+        const event = data.find(
+          (candidate) =>
+            candidate.clusterId === object.clusterId &&
+            candidate.namespace === object.namespace &&
+            candidate.name === object.name &&
+            candidate.object === object.involvedObject
+        );
+        if (event) {
+          void handleEventClick(event);
+        }
+      },
+    });
+
     // Get context menu items
     const getContextMenuItems = useCallback(
       (event: EventData): ContextMenuItem[] => {
@@ -224,8 +241,8 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
           return [];
         }
 
-        return buildObjectActionItems({
-          object: buildRequiredObjectReference(
+        return objectActions.getMenuItems(
+          buildRequiredObjectReference(
             {
               kind: 'Event',
               name: event.name,
@@ -235,17 +252,10 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
             },
             { fallbackClusterId: selectedClusterId },
             { involvedObject: event.object }
-          ),
-          context: 'gridtable',
-          handlers: {
-            onViewInvolvedObject: () => {
-              void handleEventClick(event);
-            },
-          },
-          permissions: {},
-        });
+          )
+        );
       },
-      [canOpenEventObject, handleEventClick, selectedClusterId]
+      [canOpenEventObject, objectActions, selectedClusterId]
     );
 
     // Resolve empty state message
@@ -274,6 +284,7 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
           useShortNames={useShortResourceNames}
           emptyMessage={emptyMessage}
         />
+        {objectActions.modals}
       </>
     );
   }
