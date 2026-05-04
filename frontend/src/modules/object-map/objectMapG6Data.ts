@@ -39,6 +39,7 @@ export interface ObjectMapG6Palette {
   edgeGrants: string;
   edgeBinds: string;
   edgeAggregates: string;
+  edgeFilteredPath: string;
   edgeUses: string;
   edgeDefault: string;
   edgeLineWidth: number;
@@ -108,6 +109,8 @@ export const objectMapG6EdgeStroke = (type: string, palette: ObjectMapG6Palette)
       return palette.edgeBinds;
     case 'aggregates':
       return palette.edgeAggregates;
+    case 'filtered-path':
+      return palette.edgeFilteredPath;
     case 'uses':
       return palette.edgeUses;
     default:
@@ -252,6 +255,7 @@ export const toObjectMapG6Data = (
       label: edge.label,
       type: edge.type,
       tracedBy: edge.tracedBy,
+      filteredPath: edge.filteredPath,
       midX: edge.midX,
       midY: edge.midY,
       path: edge.d,
@@ -264,7 +268,11 @@ export const toObjectMapG6Data = (
         ? palette.edgeHighlightedLineWidth
         : palette.edgeLineWidth,
       opacity: palette.fullOpacity,
-      lineDash: edge.type.trim().toLowerCase() === 'uses' ? palette.edgeDash : undefined,
+      lineDash:
+        edge.type.trim().toLowerCase() === 'uses' ||
+        edge.type.trim().toLowerCase() === 'filtered-path'
+          ? palette.edgeDash
+          : undefined,
     },
   })),
 });

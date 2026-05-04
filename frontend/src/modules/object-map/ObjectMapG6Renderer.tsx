@@ -25,6 +25,7 @@ import type {
 
 const WHEEL_ZOOM_DELTA_LIMIT = 50;
 const WHEEL_ZOOM_SENSITIVITY = 1;
+const MAX_FILTERED_TOOLTIP_OBJECTS = 5;
 
 const findNode = (layout: ObjectMapLayout, id: string): PositionedNode | null =>
   layout.nodes.find((node) => node.id === id) ?? null;
@@ -76,6 +77,7 @@ const readPalette = (element: HTMLElement): ObjectMapG6Palette => {
     edgeGrants: cssColorVar(element, styles, '--object-map-edge-grants'),
     edgeBinds: cssColorVar(element, styles, '--object-map-edge-binds'),
     edgeAggregates: cssColorVar(element, styles, '--object-map-edge-aggregates'),
+    edgeFilteredPath: cssColorVar(element, styles, '--object-map-edge-filtered-path'),
     edgeUses: cssColorVar(element, styles, '--object-map-edge-uses'),
     edgeDefault: cssColorVar(element, styles, '--object-map-edge-default'),
     edgeLineWidth: cssNumber(styles, '--object-map-edge-line-width'),
@@ -293,11 +295,6 @@ const isBadgeEvent = (event: G6ElementPointerEvent): boolean => {
   return false;
 };
 
-const truncate = (text: string, maxChars: number): string => {
-  if (text.length <= maxChars) return text;
-  return `${text.slice(0, maxChars - 1)}\u2026`;
-};
-
 const measuredTextCanvas =
   typeof document === 'undefined' ? null : document.createElement('canvas');
 
@@ -459,6 +456,7 @@ const edgeChanged = (previous: EdgeData, next: EdgeData): boolean => {
     previous.data?.label !== next.data?.label ||
     previous.data?.type !== next.data?.type ||
     previous.data?.tracedBy !== next.data?.tracedBy ||
+    JSON.stringify(previous.data?.filteredPath) !== JSON.stringify(next.data?.filteredPath) ||
     previous.data?.midX !== next.data?.midX ||
     previous.data?.midY !== next.data?.midY ||
     previous.data?.path !== next.data?.path
@@ -929,6 +927,7 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
         targetKind: edgeEndpointKind(targetNode),
         type: edge.type,
         tracedBy: edge.tracedBy,
+        filteredPath: edge.filteredPath,
       });
     };
 
@@ -1227,20 +1226,77 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
         text,
       };
     };
-    const relationship = truncateToWidth(hoverEdge.label, maxContentWidth, relationshipFont);
-    const relationshipWidth = textWidth(relationship, relationshipFont);
-    const source = endpoint(hoverEdge.sourceLabel, hoverEdge.sourceKind);
-    const target = endpoint(hoverEdge.targetLabel, hoverEdge.targetKind);
-    const width =
-      Math.ceil(Math.max(source.groupWidth, relationshipWidth, target.groupWidth)) +
-      palette.tooltipHorizontalPadding * 2;
+
+    const endpointFromRef = (ref: ObjectMapReference, filtered: boolean) =>
+      endpoint(filtered ? `${ref.name} (filtered)` : ref.name, ref.kind);
+    const relationshipRow = (text: string) =>
+      truncateToWidth(text, maxContentWidth, relationshipFont);
+    const defaultTop = -palette.tooltipOffsetY - palette.tooltipHeight - palette.tooltipArrowHeight;
+    const firstRowOffset = palette.tooltipSourceY - defaultTop;
+    const rowGap = Math.max(1, palette.tooltipRelationshipY - palette.tooltipSourceY);
+    const defaultBottomPadding = Math.max(0, palette.tooltipHeight - (firstRowOffset + rowGap * 2));
+
+    const rows: Array<
+      | { type: 'object'; endpoint: ReturnType<typeof endpoint> }
+      | { type: 'relationship'; text: string }
+    > = [];
+    const filteredPath = hoverEdge.filteredPath;
+    if (filteredPath) {
+      const pathNodes = filteredPath.nodes.slice(0, MAX_FILTERED_TOOLTIP_OBJECTS);
+      pathNodes.forEach((node, index) => {
+        rows.push({ type: 'object', endpoint: endpointFromRef(node.ref, node.filtered) });
+        if (index < pathNodes.length - 1) {
+          rows.push({
+            type: 'relationship',
+            text: relationshipRow(filteredPath.relationships[index]?.label ?? ''),
+          });
+        }
+      });
+      const hiddenStepCount = Math.max(0, filteredPath.nodes.length - pathNodes.length);
+      if (hiddenStepCount > 0) {
+        rows.push({
+          type: 'relationship',
+          text: relationshipRow(
+            `+${hiddenStepCount} hidden step${hiddenStepCount === 1 ? '' : 's'}`
+          ),
+        });
+      }
+      if (filteredPath.additionalPathCount > 0) {
+        const count = filteredPath.additionalPathCount;
+        rows.push({
+          type: 'relationship',
+          text: relationshipRow(`+${count} more hidden path${count === 1 ? '' : 's'}`),
+        });
+      }
+    } else {
+      rows.push({
+        type: 'object',
+        endpoint: endpoint(hoverEdge.sourceLabel, hoverEdge.sourceKind),
+      });
+      rows.push({ type: 'relationship', text: relationshipRow(hoverEdge.label) });
+      rows.push({
+        type: 'object',
+        endpoint: endpoint(hoverEdge.targetLabel, hoverEdge.targetKind),
+      });
+    }
+
+    const widestRow = rows.reduce((max, row) => {
+      if (row.type === 'object') return Math.max(max, row.endpoint.groupWidth);
+      return Math.max(max, textWidth(row.text, relationshipFont));
+    }, 0);
+    const width = Math.ceil(widestRow) + palette.tooltipHorizontalPadding * 2;
+    const height = Math.max(
+      palette.tooltipHeight,
+      firstRowOffset + rowGap * Math.max(0, rows.length - 1) + defaultBottomPadding
+    );
     return {
+      firstRowOffset,
+      height,
+      rowGap,
+      rows,
       width,
-      source,
-      relationship,
-      target,
     };
-  }, [hoverEdge, palette, styleVersion, useShortResourceNames]);
+  }, [hoverEdge, palette, useShortResourceNames]);
 
   const renderTooltipEndpoint = (
     endpoint: {
@@ -1302,41 +1358,56 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
             className="object-map__edge-tooltip"
             transform={`translate(${tooltipPosition.x} ${tooltipPosition.y})`}
           >
-            <polygon
-              className="object-map__edge-tooltip-arrow"
-              points={`${-palette.tooltipArrowWidth / 2},${
-                -palette.tooltipOffsetY - palette.tooltipArrowHeight
-              } 0,${-palette.tooltipOffsetY} ${palette.tooltipArrowWidth / 2},${
-                -palette.tooltipOffsetY - palette.tooltipArrowHeight
-              }`}
-            />
-            <rect
-              className="object-map__edge-tooltip-bg"
-              x={-tooltipText.width / 2}
-              y={-palette.tooltipOffsetY - palette.tooltipHeight - palette.tooltipArrowHeight}
-              width={tooltipText.width}
-              height={palette.tooltipHeight}
-              rx={palette.tooltipRadius}
-              ry={palette.tooltipRadius}
-            />
-            {renderTooltipEndpoint(
-              tooltipText.source,
-              palette.tooltipSourceY,
-              'object-map__edge-tooltip-source'
-            )}
-            <text
-              className="object-map__edge-tooltip-relationship"
-              x={0}
-              y={palette.tooltipRelationshipY}
-              textAnchor="middle"
-            >
-              {tooltipText.relationship}
-            </text>
-            {renderTooltipEndpoint(
-              tooltipText.target,
-              palette.tooltipTargetY,
-              'object-map__edge-tooltip-target'
-            )}
+            {(() => {
+              const tooltipTop =
+                -palette.tooltipOffsetY - tooltipText.height - palette.tooltipArrowHeight;
+              return (
+                <>
+                  <polygon
+                    className="object-map__edge-tooltip-arrow"
+                    points={`${-palette.tooltipArrowWidth / 2},${
+                      -palette.tooltipOffsetY - palette.tooltipArrowHeight
+                    } 0,${-palette.tooltipOffsetY} ${palette.tooltipArrowWidth / 2},${
+                      -palette.tooltipOffsetY - palette.tooltipArrowHeight
+                    }`}
+                  />
+                  <rect
+                    className="object-map__edge-tooltip-bg"
+                    x={-tooltipText.width / 2}
+                    y={tooltipTop}
+                    width={tooltipText.width}
+                    height={tooltipText.height}
+                    rx={palette.tooltipRadius}
+                    ry={palette.tooltipRadius}
+                  />
+                  {tooltipText.rows.map((row, index) => {
+                    const y = tooltipTop + tooltipText.firstRowOffset + tooltipText.rowGap * index;
+                    if (row.type === 'object') {
+                      return (
+                        <React.Fragment key={`object-${index}`}>
+                          {renderTooltipEndpoint(
+                            row.endpoint,
+                            y,
+                            `object-map__edge-tooltip-object-${index}`
+                          )}
+                        </React.Fragment>
+                      );
+                    }
+                    return (
+                      <text
+                        key={`relationship-${index}`}
+                        className="object-map__edge-tooltip-relationship"
+                        x={0}
+                        y={y}
+                        textAnchor="middle"
+                      >
+                        {row.text}
+                      </text>
+                    );
+                  })}
+                </>
+              );
+            })()}
           </g>
         )}
       </svg>

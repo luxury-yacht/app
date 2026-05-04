@@ -1,4 +1,5 @@
 import type { ObjectMapReference } from '@core/refresh/types';
+import type { ObjectMapFilteredPath } from './objectMapKindFilter';
 import type { PositionedNode } from './objectMapLayout';
 
 export interface ObjectMapHoverEdge {
@@ -11,6 +12,7 @@ export interface ObjectMapHoverEdge {
   targetKind: string;
   type: string;
   tracedBy?: string;
+  filteredPath?: ObjectMapFilteredPath;
 }
 
 export interface ObjectMapSelectionState {

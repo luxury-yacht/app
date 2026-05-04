@@ -16,6 +16,7 @@ describe('objectMapEdgeClass', () => {
     ['grants', 'object-map-edge--grants'],
     ['binds', 'object-map-edge--binds'],
     ['aggregates', 'object-map-edge--aggregates'],
+    ['filtered-path', 'object-map-edge--filtered-path'],
   ])('maps %s to its variant class', (type, variant) => {
     expect(objectMapEdgeClass(type)).toBe(`object-map-edge ${variant}`);
   });

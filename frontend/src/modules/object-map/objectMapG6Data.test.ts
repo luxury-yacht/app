@@ -88,6 +88,7 @@ const palette: ObjectMapG6Palette = {
   edgeGrants: '#ea580c',
   edgeBinds: '#9333ea',
   edgeAggregates: '#db2777',
+  edgeFilteredPath: '#ef4444',
   edgeUses: '#6b7280',
   edgeDefault: '#9ca3af',
   edgeLineWidth: 1.5,
@@ -133,6 +134,7 @@ describe('objectMapG6Data', () => {
     expect(objectMapG6EdgeStroke('grants', palette)).toBe('#ea580c');
     expect(objectMapG6EdgeStroke('binds', palette)).toBe('#9333ea');
     expect(objectMapG6EdgeStroke('aggregates', palette)).toBe('#db2777');
+    expect(objectMapG6EdgeStroke('filtered-path', palette)).toBe('#ef4444');
     expect(objectMapG6EdgeStroke('uses', palette)).toBe('#6b7280');
     expect(objectMapG6EdgeStroke('unknown', palette)).toBe('#9ca3af');
   });

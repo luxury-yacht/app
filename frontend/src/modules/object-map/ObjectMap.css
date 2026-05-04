@@ -19,6 +19,7 @@
   --object-map-edge-grants: var(--badge-orange-text);
   --object-map-edge-binds: var(--badge-purple-text);
   --object-map-edge-aggregates: var(--badge-pink-text);
+  --object-map-edge-filtered-path: var(--color-danger, #ef4444);
   --object-map-edge-uses: var(--color-text-secondary);
   --object-map-edge-default: var(--color-text-tertiary);
   --object-map-edge-dash-length: 4;
@@ -217,7 +218,8 @@
  *   - Green         = scheduling (schedules)
  *   - Yellow        = scaling (scales)
  *   - Orange/purple/pink = RBAC (grants, binds, aggregates)
- * Plus structural (owner = accent) and reference (uses = gray dashed).
+ * Plus structural (owner = accent), reference (uses = gray dashed), and
+ * filtered paths (red dashed).
  *
  * Within a family, darker shade = outer/structural, lighter shade =
  * inner/specific. So the network family reads dark → light as
@@ -273,6 +275,10 @@
 }
 .object-map-edge--aggregates {
   stroke: var(--object-map-edge-aggregates);
+}
+.object-map-edge--filtered-path {
+  stroke: var(--object-map-edge-filtered-path);
+  stroke-dasharray: var(--object-map-edge-dash-length) var(--object-map-edge-dash-gap);
 }
 
 .object-map-edge--uses {

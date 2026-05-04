@@ -2,8 +2,9 @@
  * frontend/src/modules/object-map/objectMapEdgeStyle.ts
  *
  * Frontend relationship registry for backend object-map edge `type`
- * values. Keep this list in sync with the relationship registry in
- * backend/refresh/snapshot/object_map.go.
+ * values plus frontend-only presentation edges such as filtered-path.
+ * Keep backend relationship entries in sync with the relationship
+ * registry in backend/refresh/snapshot/object_map.go.
  */
 
 export interface EdgeKindMeta {
@@ -12,7 +13,7 @@ export interface EdgeKindMeta {
   /** Human-readable label shown in the legend. */
   label: string;
   /** Broad relationship family, used to keep legend ordering stable. */
-  family: 'structural' | 'network' | 'workload' | 'rbac' | 'dependency' | 'storage';
+  family: 'structural' | 'network' | 'workload' | 'rbac' | 'dependency' | 'storage' | 'filter';
 }
 
 // Order chosen so structural relationships (ownership, traffic flow)
@@ -32,6 +33,7 @@ export const OBJECT_MAP_EDGE_KINDS: readonly EdgeKindMeta[] = [
   { type: 'mounts', label: 'Mounts', family: 'storage' },
   { type: 'volume-binding', label: 'Volume Binding', family: 'storage' },
   { type: 'storage-class', label: 'Storage Class', family: 'storage' },
+  { type: 'filtered-path', label: 'Filtered path', family: 'filter' },
 ];
 
 const KNOWN_EDGE_TYPES = new Set(OBJECT_MAP_EDGE_KINDS.map((entry) => entry.type));

@@ -35,6 +35,7 @@ const PALETTE: ObjectMapG6Palette = {
   edgeGrants: '#ea580c',
   edgeBinds: '#9333ea',
   edgeAggregates: '#db2777',
+  edgeFilteredPath: '#ef4444',
   edgeUses: '#6b7280',
   edgeDefault: '#9ca3af',
   edgeLineWidth: 1.5,

@@ -18,6 +18,7 @@ import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { computeObjectMapLayout } from './objectMapLayout';
 import { objectMapEdgeClass, OBJECT_MAP_EDGE_KINDS } from './objectMapEdgeStyle';
+import { contractObjectMapKindFilter, FILTERED_PATH_EDGE_TYPE } from './objectMapKindFilter';
 import { computeObjectMapSelectionState } from './objectMapSelection';
 import type { ObjectMapContextMenuRequest } from './objectMapRendererTypes';
 import type { ObjectMapViewportControls } from './objectMapRendererTypes';
@@ -74,11 +75,21 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
   );
   const primaryModifierLabel = useMemo(() => (isMacPlatform() ? 'cmd' : 'ctrl'), []);
 
-  const visibleEdgeTypes = useMemo(() => {
+  const hasSelectedKinds = selectedKinds.length > 0;
+
+  const realEdgeTypes = useMemo(() => {
     const types = new Set<string>();
     model.layout.edges.forEach((edge) => types.add(edge.type.trim().toLowerCase()));
     return types;
   }, [model.layout.edges]);
+
+  const visibleEdgeTypes = useMemo(() => {
+    const types = new Set(realEdgeTypes);
+    if (hasSelectedKinds) {
+      types.add(FILTERED_PATH_EDGE_TYPE);
+    }
+    return types;
+  }, [hasSelectedKinds, realEdgeTypes]);
 
   const legendEntries = useMemo(
     () => OBJECT_MAP_EDGE_KINDS.filter((entry) => visibleEdgeTypes.has(entry.type)),
@@ -130,29 +141,33 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
   const kindFilteredLayout = useMemo(() => {
     if (selectedKindSet.size === 0) return edgeFilteredLayout;
 
-    const nodes = edgeFilteredLayout.nodes.filter((node) => selectedKindSet.has(node.ref.kind));
-    const nodeIds = new Set(nodes.map((node) => node.id));
-    const edges = edgeFilteredLayout.edges.filter(
-      (edge) => nodeIds.has(edge.sourceId) && nodeIds.has(edge.targetId)
+    const sourceNodes = edgeFilteredLayout.nodes.map((node) => ({
+      id: node.id,
+      depth: Math.abs(node.column),
+      ref: node.ref,
+    }));
+    const sourceEdges = edgeFilteredLayout.edges.map((edge) => ({
+      id: edge.id,
+      source: edge.sourceId,
+      target: edge.targetId,
+      type: edge.type,
+      label: edge.label,
+      tracedBy: edge.tracedBy,
+      filteredPath: edge.filteredPath,
+    }));
+    const contracted = contractObjectMapKindFilter(sourceNodes, sourceEdges, selectedKindSet);
+    const edges = contracted.edges.filter(
+      (edge) => edge.type !== FILTERED_PATH_EDGE_TYPE || isEdgeTypeEnabled(FILTERED_PATH_EDGE_TYPE)
     );
 
     return computeObjectMapLayout(
-      nodes.map((node) => ({
-        id: node.id,
-        depth: Math.abs(node.column),
-        ref: node.ref,
-      })),
-      edges.map((edge) => ({
-        id: edge.id,
-        source: edge.sourceId,
-        target: edge.targetId,
-        type: edge.type,
-        label: edge.label,
-        tracedBy: edge.tracedBy,
-      })),
-      model.activeNodeId ?? nodes[0]?.id ?? ''
+      contracted.nodes,
+      edges,
+      contracted.nodes.some((node) => node.id === model.activeNodeId)
+        ? model.activeNodeId!
+        : (contracted.nodes[0]?.id ?? '')
     );
-  }, [edgeFilteredLayout, model.activeNodeId, selectedKindSet]);
+  }, [edgeFilteredLayout, isEdgeTypeEnabled, model.activeNodeId, selectedKindSet]);
 
   const visibleLayout = useMemo(() => {
     if (
@@ -190,6 +205,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
         type: edge.type,
         label: edge.label,
         tracedBy: edge.tracedBy,
+        filteredPath: edge.filteredPath,
       })),
       model.activeNodeId
     );

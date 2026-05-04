@@ -249,6 +249,36 @@ const shortNamesPayload: ObjectMapSnapshotPayload = {
   ],
 };
 
+const transitiveKindFilterPayload: ObjectMapSnapshotPayload = {
+  ...payload,
+  seed: ref('service', 'Service', 'frontend', ''),
+  nodes: [
+    { id: 'service', depth: 0, ref: ref('service', 'Service', 'frontend', '') },
+    {
+      id: 'endpoint-slice',
+      depth: 1,
+      ref: ref('endpoint-slice', 'EndpointSlice', 'frontend-a', 'discovery.k8s.io'),
+    },
+    { id: 'pod', depth: 2, ref: ref('pod', 'Pod', 'frontend-abc', '') },
+  ],
+  edges: [
+    {
+      id: 'edge-service-endpoints',
+      source: 'service',
+      target: 'endpoint-slice',
+      type: 'endpoint',
+      label: 'has endpoints',
+    },
+    {
+      id: 'edge-endpoints-pod',
+      source: 'endpoint-slice',
+      target: 'pod',
+      type: 'routes',
+      label: 'routes to',
+    },
+  ],
+};
+
 const collapsePayload: ObjectMapSnapshotPayload = {
   ...payload,
   nodes: [
@@ -560,6 +590,58 @@ describe('ObjectMap', () => {
     expect(container.querySelector('[data-testid="mock-node-pod"]')).toBeTruthy();
     expect(container.querySelector('[data-testid="mock-edge-edge-1"]')).toBeNull();
     expect(kindTrigger?.textContent).toContain('Kinds (1)');
+
+    cleanup();
+  });
+
+  it('preserves directed transitive relationships through kinds hidden by the filter', async () => {
+    const { container, cleanup } = await renderObjectMap({
+      testPayload: transitiveKindFilterPayload,
+    });
+    const kindTrigger = container.querySelector<HTMLElement>('[aria-label="Filter map kinds"]');
+
+    expect(kindTrigger).toBeTruthy();
+    expect(container.querySelector('[data-testid="mock-node-service"]')).toBeTruthy();
+    expect(container.querySelector('[data-testid="mock-node-endpoint-slice"]')).toBeTruthy();
+    expect(container.querySelector('[data-testid="mock-node-pod"]')).toBeTruthy();
+
+    await act(async () => {
+      kindTrigger!.dispatchEvent(mouseEvent('click'));
+      await Promise.resolve();
+    });
+
+    const optionByText = (text: string) =>
+      Array.from(container.querySelectorAll<HTMLElement>('.dropdown-option')).find((option) =>
+        option.textContent?.includes(text)
+      );
+    const podOption = optionByText('Pod');
+    const serviceOption = optionByText('Service');
+
+    expect(podOption).toBeTruthy();
+    expect(serviceOption).toBeTruthy();
+
+    await act(async () => {
+      serviceOption!.dispatchEvent(mouseEvent('click'));
+      await Promise.resolve();
+    });
+
+    const nextPodOption = optionByText('Pod');
+    expect(nextPodOption).toBeTruthy();
+
+    await act(async () => {
+      nextPodOption!.dispatchEvent(mouseEvent('click'));
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('[data-testid="mock-node-service"]')).toBeTruthy();
+    expect(container.querySelector('[data-testid="mock-node-pod"]')).toBeTruthy();
+    expect(container.querySelector('[data-testid="mock-node-endpoint-slice"]')).toBeNull();
+    expect(container.querySelector('[data-testid="mock-edge-edge-service-endpoints"]')).toBeNull();
+    expect(container.querySelector('[data-testid="mock-edge-edge-endpoints-pod"]')).toBeNull();
+    expect(
+      container.querySelector('[data-testid="mock-edge-filtered-path:service:pod"]')
+    ).toBeTruthy();
+    expect(container.querySelector('.object-map__legend')?.textContent).toContain('Filtered path');
 
     cleanup();
   });
