@@ -119,12 +119,12 @@ export const useObjectMapModel = (payload: ObjectMapSnapshotPayload) => {
     () => new Map()
   );
   const nodeDragRef = useRef<NodeDragState | null>(null);
-  const suppressNextNodeClickRef = useRef(false);
+  const suppressNextNodeClickRef = useRef<string | null>(null);
 
   useEffect(() => {
     setNodePositionOverrides(new Map());
     nodeDragRef.current = null;
-    suppressNextNodeClickRef.current = false;
+    suppressNextNodeClickRef.current = null;
   }, [filtered.nodes, filtered.edges]);
 
   const layout: ObjectMapLayout = useMemo(() => {
@@ -174,10 +174,11 @@ export const useObjectMapModel = (payload: ObjectMapSnapshotPayload) => {
   );
 
   const selectNode = useCallback((id: string) => {
-    if (suppressNextNodeClickRef.current) {
-      suppressNextNodeClickRef.current = false;
+    if (suppressNextNodeClickRef.current === id) {
+      suppressNextNodeClickRef.current = null;
       return;
     }
+    suppressNextNodeClickRef.current = null;
     setActiveNodeId((prev) => (prev === id ? null : id));
   }, []);
 
@@ -238,7 +239,7 @@ export const useObjectMapModel = (payload: ObjectMapSnapshotPayload) => {
     const drag = nodeDragRef.current;
     if (!drag || drag.pointerId !== pointer.pointerId) return;
     if (drag.didDrag) {
-      suppressNextNodeClickRef.current = true;
+      suppressNextNodeClickRef.current = drag.nodeId;
     }
     nodeDragRef.current = null;
   }, []);
@@ -246,7 +247,7 @@ export const useObjectMapModel = (payload: ObjectMapSnapshotPayload) => {
   const resetLayout = useCallback(() => {
     setNodePositionOverrides(new Map());
     nodeDragRef.current = null;
-    suppressNextNodeClickRef.current = false;
+    suppressNextNodeClickRef.current = null;
   }, []);
 
   const clearHoverEdge = useCallback(() => {

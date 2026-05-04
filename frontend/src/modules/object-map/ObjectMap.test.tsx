@@ -1056,4 +1056,44 @@ describe('ObjectMap', () => {
 
     cleanup();
   });
+
+  it('allows selecting a different node immediately after dragging', async () => {
+    const { container, cleanup } = await renderObjectMap();
+    const dragButton = container.querySelector<HTMLButtonElement>(
+      '[data-testid="mock-drag-first-node"]'
+    );
+    const deploy = container.querySelector<HTMLButtonElement>('[aria-label="Deployment: web"]');
+    const pod = container.querySelector<HTMLButtonElement>('[aria-label="Pod: web-abc"]');
+    const deployNode = container.querySelector<HTMLElement>('[data-testid="mock-node-deploy"]');
+    const podNode = container.querySelector<HTMLElement>('[data-testid="mock-node-pod"]');
+
+    expect(dragButton).toBeTruthy();
+    expect(deploy).toBeTruthy();
+    expect(pod).toBeTruthy();
+    expect(deployNode).toBeTruthy();
+    expect(podNode).toBeTruthy();
+
+    await act(async () => {
+      dragButton!.click();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      pod!.dispatchEvent(mouseEvent('click'));
+      await Promise.resolve();
+    });
+
+    expect(podNode?.dataset.active).toBe('true');
+    expect(deployNode?.dataset.active).toBe('false');
+
+    await act(async () => {
+      deploy!.dispatchEvent(mouseEvent('click'));
+      await Promise.resolve();
+    });
+
+    expect(deployNode?.dataset.active).toBe('true');
+    expect(podNode?.dataset.active).toBe('false');
+
+    cleanup();
+  });
 });
