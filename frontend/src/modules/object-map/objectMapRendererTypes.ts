@@ -62,3 +62,5 @@ export interface ObjectMapViewportControls {
   fitToView: () => void;
   focusNode: (nodeId: string) => void;
 }
+
+export type ObjectMapViewportChangeAction = () => void;

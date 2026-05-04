@@ -20,6 +20,7 @@ import type {
   ObjectMapNodeDragStart,
   ObjectMapObjectAction,
   ObjectMapSelectionState,
+  ObjectMapViewportChangeAction,
   ObjectMapViewportControls,
 } from './objectMapRendererTypes';
 
@@ -563,6 +564,7 @@ export interface ObjectMapG6RendererProps {
   onNodeContextMenu?: ObjectMapContextMenuAction;
   autoFit: boolean;
   preserveViewportNodeId?: string | null;
+  onUserViewportChange?: ObjectMapViewportChangeAction;
   onViewportControlsChange?: (controls: ObjectMapViewportControls | null) => void;
 }
 
@@ -585,6 +587,7 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
   onNodeContextMenu,
   autoFit,
   preserveViewportNodeId = null,
+  onUserViewportChange,
   onViewportControlsChange,
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -616,6 +619,8 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
   const paletteReady = palette !== null;
   const paletteRef = useRef<ObjectMapG6Palette | null>(null);
   paletteRef.current = palette;
+  const onUserViewportChangeRef = useRef(onUserViewportChange);
+  onUserViewportChangeRef.current = onUserViewportChange;
   const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null);
   const graphReadyRef = useRef(false);
   const handlersRef = useRef({
@@ -985,7 +990,12 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
     });
 
     graph.on(CommonEvent.DRAG, (rawEvent) => {
-      moveManualNodeDrag(rawEvent as G6ElementPointerEvent);
+      const event = rawEvent as G6ElementPointerEvent;
+      if (manualDragPointerIdRef.current === eventPointerId(event)) {
+        moveManualNodeDrag(event);
+      } else {
+        onUserViewportChangeRef.current?.();
+      }
     });
 
     graph.on(CommonEvent.DRAG_END, (rawEvent) => {
@@ -1037,7 +1047,9 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
     graph.on(GraphEvent.AFTER_SIZE_CHANGE, updateTooltipPosition);
 
     const handleWheelZoom = (event: WheelEvent) => {
-      if (!isZoomWheelEvent(event) || graph.destroyed) return;
+      if (graph.destroyed) return;
+      onUserViewportChangeRef.current?.();
+      if (!isZoomWheelEvent(event)) return;
       event.preventDefault();
       const rect = container.getBoundingClientRect();
       const origin: [number, number] = [event.clientX - rect.left, event.clientY - rect.top];
@@ -1143,11 +1155,13 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
       zoomIn: () => {
         const graph = graphRef.current;
         if (!graph || graph.destroyed) return;
+        onUserViewportChangeRef.current?.();
         void graph.zoomBy(1.2, false);
       },
       zoomOut: () => {
         const graph = graphRef.current;
         if (!graph || graph.destroyed) return;
+        onUserViewportChangeRef.current?.();
         void graph.zoomBy(0.8, false);
       },
       fitToView: () => {

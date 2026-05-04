@@ -306,6 +306,10 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
     return count > 0 ? `Kinds (${count})` : 'Kinds';
   }, []);
 
+  const disableAutoFitForManualViewport = useCallback(() => {
+    model.setAutoFit(false);
+  }, [model]);
+
   const resetMapLayout = useCallback(() => {
     model.resetLayout();
     setFocusMode(false);
@@ -438,6 +442,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
             onNodeContextMenu={handleNodeContextMenu}
             autoFit={model.autoFit}
             preserveViewportNodeId={!model.autoFit && focusMode ? model.activeNodeId : null}
+            onUserViewportChange={disableAutoFitForManualViewport}
             onViewportControlsChange={setG6ViewportControls}
           />
         </Suspense>
@@ -516,8 +521,8 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
             type="button"
             className="object-map__toolbar-button"
             onClick={g6ViewportControls?.fitToView}
-            title="Fit to view"
-            aria-label="Fit to view"
+            title="Fit visible objects to the view"
+            aria-label="Fit visible objects to the view"
             disabled={!viewportControlsReady}
           >
             <FitToViewIcon />

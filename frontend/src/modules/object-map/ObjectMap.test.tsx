@@ -84,6 +84,8 @@ vi.mock('./ObjectMapG6Renderer', () => {
     onOpenPanel?: (ref: ObjectMapReference) => void;
     onNavigateView?: (ref: ObjectMapReference) => void;
     onOpenObjectMap?: (ref: ObjectMapReference) => void;
+    autoFit?: boolean;
+    onUserViewportChange?: () => void;
     onNodeContextMenu?: (request: {
       ref: ObjectMapReference;
       position: { x: number; y: number };
@@ -93,9 +95,20 @@ vi.mock('./ObjectMapG6Renderer', () => {
     const firstNode = props.layout.nodes[0];
 
     return (
-      <div data-testid="object-map-g6-mock" data-short-names={String(props.useShortResourceNames)}>
+      <div
+        data-testid="object-map-g6-mock"
+        data-auto-fit={String(props.autoFit)}
+        data-short-names={String(props.useShortResourceNames)}
+      >
         <button type="button" data-testid="mock-clear-selection" onClick={props.onClearSelection}>
           clear
+        </button>
+        <button
+          type="button"
+          data-testid="mock-user-viewport-change"
+          onClick={props.onUserViewportChange}
+        >
+          viewport
         </button>
         {firstNode && (
           <button
@@ -566,6 +579,35 @@ describe('ObjectMap', () => {
 
     expect(container.querySelector('[data-testid="mock-edge-edge-1"]')).toBeNull();
     expect(legend!.style.left).toBe('300px');
+
+    cleanup();
+  });
+
+  it('turns off auto-fit after a manual viewport change', async () => {
+    const { container, cleanup } = await renderObjectMap();
+    const renderer = container.querySelector<HTMLElement>('[data-testid="object-map-g6-mock"]');
+    const autoFitToggle = container.querySelector<HTMLButtonElement>(
+      '[aria-label="Toggle auto-fit"]'
+    );
+    const manualViewportChange = container.querySelector<HTMLButtonElement>(
+      '[data-testid="mock-user-viewport-change"]'
+    );
+
+    expect(renderer).toBeTruthy();
+    expect(autoFitToggle).toBeTruthy();
+    expect(manualViewportChange).toBeTruthy();
+    expect(renderer?.dataset.autoFit).toBe('true');
+    expect(autoFitToggle?.getAttribute('aria-pressed')).toBe('true');
+
+    await act(async () => {
+      manualViewportChange!.click();
+      await Promise.resolve();
+    });
+
+    expect(
+      container.querySelector<HTMLElement>('[data-testid="object-map-g6-mock"]')?.dataset.autoFit
+    ).toBe('false');
+    expect(autoFitToggle?.getAttribute('aria-pressed')).toBe('false');
 
     cleanup();
   });
