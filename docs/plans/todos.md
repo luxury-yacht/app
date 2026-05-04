@@ -7,9 +7,12 @@
 3. G6 renderer is still a large imperative integration surface - It owns G6 lifecycle, async render queues, palette refresh, tooltip positioning, viewport controls, drag/click events, hover state, and data patching. Some of that is unavoidable, but it is still a high-risk file.
    - ✅ Extracted the graph data/selection application queue into a tested helper.
    - ✅ Extracted tooltip layout/content calculation into a tested helper.
+   - ✅ Extracted node interaction event translation into a tested helper.
 4. Real G6 interaction behavior is under-tested - The new gesture helper is tested, and ObjectMap behavior is tested with a mocked renderer, but we still do not have a real G6/browser-level test that proves the exact drag-then-click sequence. That is probably the biggest remaining confidence gap.
-5. Legend drag is implemented directly in ObjectMap.tsx - It is not dead code, but it is another custom pointer state machine in the main component. The correct cleanup would extract and test it similarly to node gesture handling.
-6. Tooltip rendering is custom and tightly coupled to renderer internals - It has to be canvas/G6-aware, but the sizing, badges, truncation, and positioning rules are still more fragile than a normal shared React tooltip.
+   - ✅ Added adapter-level coverage for the G6 node drag → synthetic click → real click sequence.
+5. ✅ Legend drag is implemented directly in ObjectMap.tsx - It is not dead code, but it is another custom pointer state machine in the main component. The correct cleanup would extract and test it similarly to node gesture handling.
+6. ✅ Tooltip rendering is custom and tightly coupled to renderer internals - It has to be canvas/G6-aware, but the sizing, badges, truncation, and positioning rules are still more fragile than a normal shared React tooltip.
+   - ✅ Split tooltip SVG rendering into a pure tested overlay component.
 
 ## Feature Ideas
 

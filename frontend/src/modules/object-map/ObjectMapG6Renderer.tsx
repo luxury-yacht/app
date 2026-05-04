@@ -1,7 +1,6 @@
 import { Graph, CanvasEvent, CommonEvent, EdgeEvent, GraphEvent, NodeEvent } from '@antv/g6';
 import type { GraphData } from '@antv/g6';
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { ObjectMapReference } from '@core/refresh/types';
 import { resolveKindBadgeVisualStyle } from '@shared/utils/kindBadgeColors';
 import type { ObjectMapLayout, PositionedEdge, PositionedNode } from './objectMapLayout';
 import { ensureObjectMapG6CardNodeRegistered } from './objectMapG6CardNode';
@@ -10,15 +9,18 @@ import { createObjectMapG6ApplyQueue, type ObjectMapG6ApplyQueue } from './objec
 import { OBJECT_MAP_G6_CARD_NODE } from './objectMapG6Constants';
 import { objectMapG6EdgeState, objectMapG6NodeState, toObjectMapG6Data } from './objectMapG6Data';
 import type { ObjectMapG6Palette } from './objectMapG6Data';
-import { computeObjectMapTooltipLayout, type ObjectMapTooltipEndpoint } from './objectMapG6Tooltip';
+import { ObjectMapG6TooltipOverlay } from './ObjectMapG6TooltipOverlay';
 import {
-  beginObjectMapNodeGesture,
-  clearObjectMapNodeGesture,
-  consumeObjectMapSuppressedClick,
-  createObjectMapNodeGestureState,
-  endObjectMapNodeGesture,
-  updateObjectMapNodeGesture,
-} from './objectMapNodeGesture';
+  handleObjectMapG6Drag,
+  handleObjectMapG6DragEnd,
+  handleObjectMapG6NodeClick,
+  handleObjectMapG6NodeContextMenu,
+  handleObjectMapG6NodePointerDown,
+  objectMapG6TooltipPoint,
+  type ObjectMapG6ElementPointerEvent as G6ElementPointerEvent,
+} from './objectMapG6Interactions';
+import { computeObjectMapTooltipLayout } from './objectMapG6Tooltip';
+import { clearObjectMapNodeGesture, createObjectMapNodeGestureState } from './objectMapNodeGesture';
 import type {
   ObjectMapHoverEdge,
   ObjectMapContextMenuAction,
@@ -211,115 +213,10 @@ const wheelZoomRatio = (event: WheelEvent): number => {
   return 1 + (clampedDelta * WHEEL_ZOOM_SENSITIVITY) / 100;
 };
 
-type G6DisplayObjectTarget = {
-  className?: string;
-  parentNode?: G6DisplayObjectTarget | null;
-};
-
-type G6ElementPointerEvent = {
-  target: { id: string };
-  targetType?: string;
-  originalTarget?: G6DisplayObjectTarget | null;
-  pointerId?: number;
-  button?: number;
-  client?: { x: number; y: number };
-  canvas?: { x: number; y: number };
-  nativeEvent?: {
-    pointerId?: number;
-    button?: number;
-    clientX?: number;
-    clientY?: number;
-    preventDefault?: () => void;
-  };
-  clientX?: number;
-  clientY?: number;
-  metaKey?: boolean;
-  ctrlKey?: boolean;
-  altKey?: boolean;
-  preventDefault?: () => void;
-};
-
-type ObjectMapPointerInput = {
-  pointerId?: number;
-  button?: number;
-  client?: { x: number; y: number };
-  canvas?: { x: number; y: number };
-  nativeEvent?: {
-    pointerId?: number;
-    button?: number;
-    clientX?: number;
-    clientY?: number;
-  };
-  clientX?: number;
-  clientY?: number;
-};
-
-const eventPointerId = (event: ObjectMapPointerInput): number =>
-  event.pointerId ?? event.nativeEvent?.pointerId ?? 1;
-
-const eventButton = (event: ObjectMapPointerInput): number =>
-  event.button ?? event.nativeEvent?.button ?? 0;
-
-const eventClientPoint = (event: ObjectMapPointerInput): { x: number; y: number } => ({
-  x: event.clientX ?? event.client?.x ?? event.nativeEvent?.clientX ?? 0,
-  y: event.clientY ?? event.client?.y ?? event.nativeEvent?.clientY ?? 0,
-});
-
-const layoutPoint = (
-  point: Float32Array | number[] | { x: number; y: number } | null
-): { x?: number; y?: number } => {
-  if (!point) return {};
-  if ('x' in point) return { x: point.x, y: point.y };
-  return { x: point[0], y: point[1] };
-};
-
-const toObjectMapPointerInput = (event: ObjectMapPointerInput, graph?: Graph) => {
-  const client = eventClientPoint(event);
-  const layout = layoutPoint(
-    event.canvas ??
-      (!graph || graph.destroyed ? null : graph.getCanvasByClient([client.x, client.y]))
-  );
-  return {
-    pointerId: eventPointerId(event),
-    button: eventButton(event),
-    clientX: client.x,
-    clientY: client.y,
-    layoutX: layout.x,
-    layoutY: layout.y,
-  };
-};
-
-const toObjectMapPointer = (event: G6ElementPointerEvent, graph?: Graph) =>
-  toObjectMapPointerInput(event, graph);
-
-const isBadgeEvent = (event: G6ElementPointerEvent): boolean => {
-  let target = event.originalTarget;
-  for (let depth = 0; target && depth < 8; depth += 1) {
-    if (target.className?.startsWith('badge-')) {
-      return true;
-    }
-    target = target.parentNode ?? null;
-  }
-  return false;
-};
-
 const edgeEndpointLabel = (node: PositionedNode | null): string =>
   node ? node.ref.name : 'Unknown';
 
 const edgeEndpointKind = (node: PositionedNode | null): string => node?.ref.kind ?? 'Object';
-
-const eventTooltipPoint = (
-  event: ObjectMapPointerInput,
-  container: HTMLElement,
-  yOffset: number
-): { x: number; y: number } => {
-  const client = eventClientPoint(event);
-  const rect = container.getBoundingClientRect();
-  return {
-    x: client.x - rect.left,
-    y: client.y - rect.top + yOffset,
-  };
-};
 
 const EMPTY_SELECTION_STATE: ObjectMapSelectionState = {
   activeId: null,
@@ -608,7 +505,7 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
 
     const emitConnectionHover = (edge: PositionedEdge, event: G6ElementPointerEvent) => {
       const currentPalette = paletteRef.current;
-      const point = eventTooltipPoint(event, container, currentPalette?.tooltipOffsetY ?? 0);
+      const point = objectMapG6TooltipPoint(event, container, currentPalette?.tooltipOffsetY ?? 0);
       const sourceNode = findNode(layoutRef.current, edge.sourceId);
       const targetNode = findNode(layoutRef.current, edge.targetId);
       handlersRef.current.onHoverEdge({
@@ -625,86 +522,42 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
       });
     };
 
+    const nodeInteractionContext = () => ({
+      getLayout: () => layoutRef.current,
+      gestureState: nodeGestureState,
+      graph,
+      handlers: handlersRef.current,
+      markNodeClickHandled: () => {
+        ignoreNextCanvasClickRef.current = true;
+        requestAnimationFrame(() => {
+          ignoreNextCanvasClickRef.current = false;
+        });
+      },
+    });
+
     graph.on(NodeEvent.CLICK, (rawEvent) => {
       const event = rawEvent as G6ElementPointerEvent;
-      const id = event.target.id;
-      const node = findNode(layoutRef.current, id);
-      if (!node) return;
-      ignoreNextCanvasClickRef.current = true;
-      requestAnimationFrame(() => {
-        ignoreNextCanvasClickRef.current = false;
-      });
-      const { badgeForNode, onOpenPanel, onNavigateView, onSelectNode, onToggleGroup } =
-        handlersRef.current;
-      if (isBadgeEvent(event)) {
-        const badge = badgeForNode(id);
-        if (badge) onToggleGroup(badge.deploymentId);
-        return;
-      }
-      if (consumeObjectMapSuppressedClick(nodeGestureState, id)) {
-        return;
-      }
-      if (event.metaKey || event.ctrlKey) {
-        if (onOpenPanel) onOpenPanel(node.ref as ObjectMapReference);
-        return;
-      }
-      if (event.altKey) {
-        if (onNavigateView) onNavigateView(node.ref as ObjectMapReference);
-        return;
-      }
-      onSelectNode(id);
+      handleObjectMapG6NodeClick(nodeInteractionContext(), event);
     });
 
     graph.on(NodeEvent.CONTEXT_MENU, (rawEvent) => {
       const event = rawEvent as G6ElementPointerEvent;
-      event.preventDefault?.();
-      event.nativeEvent?.preventDefault?.();
-      const node = findNode(layoutRef.current, event.target.id);
-      if (!node) return;
-      const point = eventClientPoint(event);
-      handlersRef.current.onNodeContextMenu?.({
-        ref: node.ref as ObjectMapReference,
-        position: point,
-      });
+      handleObjectMapG6NodeContextMenu(nodeInteractionContext(), event);
     });
 
     graph.on(NodeEvent.POINTER_DOWN, (rawEvent) => {
       const event = rawEvent as G6ElementPointerEvent;
-      if (eventButton(event) !== 0 || isBadgeEvent(event)) return;
-      const node = findNode(layoutRef.current, event.target.id);
-      if (!node) return;
-      const pointer = toObjectMapPointer(event, graph);
-      beginObjectMapNodeGesture(nodeGestureState, {
-        pointerId: pointer.pointerId,
-        nodeId: node.id,
-        clientX: pointer.clientX,
-        clientY: pointer.clientY,
-      });
-      handlersRef.current.onNodeDragStart(node, pointer);
+      handleObjectMapG6NodePointerDown(nodeInteractionContext(), event);
     });
 
     graph.on(CommonEvent.DRAG, (rawEvent) => {
       const event = rawEvent as G6ElementPointerEvent;
-      const pointer = toObjectMapPointerInput(event, graph);
-      if (
-        updateObjectMapNodeGesture(nodeGestureState, {
-          pointerId: pointer.pointerId,
-          clientX: pointer.clientX,
-          clientY: pointer.clientY,
-        })
-      ) {
-        handlersRef.current.onNodeDragMove(pointer);
-      } else {
-        onUserViewportChangeRef.current?.();
-      }
+      handleObjectMapG6Drag(nodeInteractionContext(), event);
     });
 
     graph.on(CommonEvent.DRAG_END, (rawEvent) => {
       const event = rawEvent as G6ElementPointerEvent;
-      const pointer = toObjectMapPointerInput(event, graph);
-      if (endObjectMapNodeGesture(nodeGestureState, pointer.pointerId)) {
-        handlersRef.current.onNodeDragEnd(pointer);
-      }
+      handleObjectMapG6DragEnd(nodeInteractionContext(), event);
     });
 
     graph.on(EdgeEvent.POINTER_ENTER, (rawEvent) => {
@@ -894,115 +747,16 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
     });
   }, [hoverEdge, palette, useShortResourceNames]);
 
-  const renderTooltipEndpoint = (
-    endpoint: ObjectMapTooltipEndpoint,
-    y: number,
-    className: string
-  ) => {
-    if (!palette) return null;
-    const badgeX = -endpoint.groupWidth / 2;
-    const nameX = badgeX + endpoint.badgeWidth + palette.tooltipBadgeGap;
-    const rowCenterY = y - palette.tooltipNameFontSize / 2 + 1;
-    const badgeY = rowCenterY - endpoint.badgeHeight / 2;
-    return (
-      <g className={className}>
-        <rect
-          x={badgeX}
-          y={badgeY}
-          width={endpoint.badgeWidth}
-          height={endpoint.badgeHeight}
-          rx={endpoint.badgeStyle.borderRadius}
-          ry={endpoint.badgeStyle.borderRadius}
-          fill={endpoint.badgeStyle.backgroundColor}
-          stroke={endpoint.badgeStyle.borderColor}
-          strokeWidth={endpoint.badgeStyle.borderWidth}
-        />
-        <text
-          x={badgeX + endpoint.badgeWidth / 2}
-          y={rowCenterY}
-          textAnchor="middle"
-          dominantBaseline="central"
-          fill={endpoint.badgeStyle.color}
-          fontFamily={palette.fontFamily}
-          fontSize={endpoint.badgeFontSize}
-          fontWeight={endpoint.badgeStyle.fontWeight}
-          letterSpacing={endpoint.badgeStyle.letterSpacing}
-        >
-          {endpoint.badgeText}
-        </text>
-        <text
-          className="object-map__edge-tooltip-name"
-          x={nameX}
-          y={y}
-          textAnchor="start"
-          fontStyle={endpoint.filtered ? 'italic' : undefined}
-        >
-          {endpoint.text}
-        </text>
-      </g>
-    );
-  };
-
   return (
     <div className="object-map__g6-stack">
       <div ref={containerRef} className="object-map__g6" data-testid="object-map-g6" />
       <svg className="object-map__g6-overlay" width="100%" height="100%" aria-hidden="true">
         {palette && tooltipText && tooltipPosition && (
-          <g
-            className="object-map__edge-tooltip"
-            transform={`translate(${tooltipPosition.x} ${tooltipPosition.y})`}
-          >
-            {(() => {
-              const tooltipTop =
-                -palette.tooltipOffsetY - tooltipText.height - palette.tooltipArrowHeight;
-              return (
-                <>
-                  <polygon
-                    className="object-map__edge-tooltip-arrow"
-                    points={`${-palette.tooltipArrowWidth / 2},${
-                      -palette.tooltipOffsetY - palette.tooltipArrowHeight
-                    } 0,${-palette.tooltipOffsetY} ${palette.tooltipArrowWidth / 2},${
-                      -palette.tooltipOffsetY - palette.tooltipArrowHeight
-                    }`}
-                  />
-                  <rect
-                    className="object-map__edge-tooltip-bg"
-                    x={-tooltipText.width / 2}
-                    y={tooltipTop}
-                    width={tooltipText.width}
-                    height={tooltipText.height}
-                    rx={palette.tooltipRadius}
-                    ry={palette.tooltipRadius}
-                  />
-                  {tooltipText.rows.map((row, index) => {
-                    const y = tooltipTop + tooltipText.firstRowOffset + tooltipText.rowGap * index;
-                    if (row.type === 'object') {
-                      return (
-                        <React.Fragment key={`object-${index}`}>
-                          {renderTooltipEndpoint(
-                            row.endpoint,
-                            y,
-                            `object-map__edge-tooltip-object-${index}`
-                          )}
-                        </React.Fragment>
-                      );
-                    }
-                    return (
-                      <text
-                        key={`relationship-${index}`}
-                        className="object-map__edge-tooltip-relationship"
-                        x={0}
-                        y={y}
-                        textAnchor="middle"
-                      >
-                        {row.text}
-                      </text>
-                    );
-                  })}
-                </>
-              );
-            })()}
-          </g>
+          <ObjectMapG6TooltipOverlay
+            palette={palette}
+            tooltipLayout={tooltipText}
+            tooltipPosition={tooltipPosition}
+          />
         )}
       </svg>
     </div>
