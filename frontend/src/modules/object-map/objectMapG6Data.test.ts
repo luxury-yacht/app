@@ -84,7 +84,9 @@ const palette: ObjectMapG6Palette = {
   textSecondary: '#64748b',
   textTertiary: '#9ca3af',
   textInverse: '#ffffff',
+  edgeOwner: '#0f766e',
   edgeRoutes: '#1d4ed8',
+  edgeSelector: '#4f46e5',
   edgeEndpoint: '#60a5fa',
   edgeVolumeBinding: '#7e22ce',
   edgeStorageClass: '#65a30d',
@@ -134,8 +136,9 @@ const palette: ObjectMapG6Palette = {
 
 describe('objectMapG6Data', () => {
   it('maps edge types to stable canvas strokes', () => {
-    expect(objectMapG6EdgeStroke('owner', palette)).toBe('#2563eb');
+    expect(objectMapG6EdgeStroke('owner', palette)).toBe('#0f766e');
     expect(objectMapG6EdgeStroke(' routes ', palette)).toBe('#1d4ed8');
+    expect(objectMapG6EdgeStroke('selector', palette)).toBe('#4f46e5');
     expect(objectMapG6EdgeStroke('volume-binding', palette)).toBe('#7e22ce');
     expect(objectMapG6EdgeStroke('storage-class', palette)).toBe('#65a30d');
     expect(objectMapG6EdgeStroke('grants', palette)).toBe('#ea580c');

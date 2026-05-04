@@ -23,7 +23,9 @@ const colorVars = [
   '--color-text-secondary',
   '--color-text-tertiary',
   '--color-text-inverse',
+  '--object-map-edge-owner',
   '--object-map-edge-routes',
+  '--object-map-edge-selector',
   '--object-map-edge-endpoint',
   '--object-map-edge-volume-binding',
   '--object-map-edge-storage-class',
@@ -92,7 +94,9 @@ describe('objectMapG6Palette', () => {
     const palette = readObjectMapG6Palette(element);
 
     expect(palette.accent).toBe('#000001');
-    expect(palette.edgeDefault).toBe('#000022');
+    expect(palette.edgeOwner).toBe('#000010');
+    expect(palette.edgeSelector).toBe('#000012');
+    expect(palette.edgeDefault).toBe('#000024');
     expect(palette.edgeLineWidth).toBe(1);
     expect(palette.edgeDash).toEqual([5, 6]);
     expect(palette.nodeDimmedBackgroundOpacity).toBe(10);

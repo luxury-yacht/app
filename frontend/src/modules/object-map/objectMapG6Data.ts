@@ -29,7 +29,9 @@ export interface ObjectMapG6Palette {
   textSecondary: string;
   textTertiary: string;
   textInverse: string;
+  edgeOwner: string;
   edgeRoutes: string;
+  edgeSelector: string;
   edgeEndpoint: string;
   edgeVolumeBinding: string;
   edgeStorageClass: string;
@@ -87,11 +89,11 @@ const formatNamespace = (node: PositionedNode): string =>
 export const objectMapG6EdgeStroke = (type: string, palette: ObjectMapG6Palette): string => {
   switch (type.trim().toLowerCase()) {
     case 'owner':
-      return palette.accent;
+      return palette.edgeOwner;
     case 'routes':
       return palette.edgeRoutes;
     case 'selector':
-      return palette.accent;
+      return palette.edgeSelector;
     case 'endpoint':
       return palette.edgeEndpoint;
     case 'volume-binding':
