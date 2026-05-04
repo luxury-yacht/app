@@ -334,8 +334,12 @@ const truncateToWidth = (
   return `${text.slice(0, low)}${ellipsis}`;
 };
 
-const tooltipFont = (weight: number | string, size: number, family: string): string =>
-  `${weight} ${size}px ${family}`;
+const tooltipFont = (
+  weight: number | string,
+  size: number,
+  family: string,
+  style = 'normal'
+): string => `${style} ${weight} ${size}px ${family}`;
 
 const edgeEndpointLabel = (node: PositionedNode | null): string =>
   node ? node.ref.name : 'Unknown';
@@ -1188,11 +1192,19 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
       palette.tooltipRelationshipFontSize,
       palette.fontFamily
     );
-    const endpoint = (name: string, kind: string) => {
+    const endpoint = (name: string, kind: string, filtered = false) => {
       const badgeStyle = resolveKindBadgeVisualStyle(kind, containerRef.current);
       const rawBadgeText = getDisplayKind(kind, useShortResourceNames).toUpperCase();
       const badgeFontSize = Math.min(badgeStyle.fontSize, palette.tooltipBadgeMaxFontSize);
       const badgeFont = tooltipFont(badgeStyle.fontWeight, badgeFontSize, palette.fontFamily);
+      const endpointNameFont = filtered
+        ? tooltipFont(
+            palette.tooltipNameFontWeight,
+            palette.tooltipNameFontSize,
+            palette.fontFamily,
+            'italic'
+          )
+        : nameFont;
       const maxBadgeWidth = Math.min(maxContentWidth, palette.tooltipBadgeMaxWidth);
       const maxBadgeTextWidth = Math.max(
         1,
@@ -1213,8 +1225,8 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
         badgeFontSize + palette.tooltipBadgePaddingY * 2 + badgeStyle.borderWidth * 2
       );
       const maxNameWidth = Math.max(1, maxContentWidth - badgeWidth - palette.tooltipBadgeGap);
-      const text = truncateToWidth(name, maxNameWidth, nameFont);
-      const textWidthValue = textWidth(text, nameFont);
+      const text = truncateToWidth(name, maxNameWidth, endpointNameFont);
+      const textWidthValue = textWidth(text, endpointNameFont);
       const groupWidth = badgeWidth + palette.tooltipBadgeGap + textWidthValue;
       return {
         badgeHeight,
@@ -1222,13 +1234,14 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
         badgeText,
         badgeWidth,
         badgeFontSize,
+        filtered,
         groupWidth,
         text,
       };
     };
 
     const endpointFromRef = (ref: ObjectMapReference, filtered: boolean) =>
-      endpoint(filtered ? `${ref.name} (filtered)` : ref.name, ref.kind);
+      endpoint(ref.name, ref.kind, filtered);
     const relationshipRow = (text: string) =>
       truncateToWidth(text, maxContentWidth, relationshipFont);
     const defaultTop = -palette.tooltipOffsetY - palette.tooltipHeight - palette.tooltipArrowHeight;
@@ -1305,6 +1318,7 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
       badgeFontSize: number;
       badgeText: string;
       badgeWidth: number;
+      filtered: boolean;
       groupWidth: number;
       text: string;
     },
@@ -1342,7 +1356,13 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
         >
           {endpoint.badgeText}
         </text>
-        <text className="object-map__edge-tooltip-name" x={nameX} y={y} textAnchor="start">
+        <text
+          className="object-map__edge-tooltip-name"
+          x={nameX}
+          y={y}
+          textAnchor="start"
+          fontStyle={endpoint.filtered ? 'italic' : undefined}
+        >
           {endpoint.text}
         </text>
       </g>
