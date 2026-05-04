@@ -109,7 +109,7 @@ describe('useObjectPanelTabs', () => {
   it('returns workload tabs excluding manifest/values for non-Helm resources', async () => {
     const { availableTabs } = await renderHook();
     const labels = availableTabs.map((tab) => tab.label);
-    expect(labels).toEqual(['Details', 'Pods', 'Logs', 'Events', 'YAML', 'Map']);
+    expect(labels).toEqual(['Details', 'Map', 'Pods', 'Logs', 'Events', 'YAML']);
   });
 
   it('omits the Shell tab when capability is disabled', async () => {
@@ -125,10 +125,10 @@ describe('useObjectPanelTabs', () => {
     });
     expect(availableTabs.map((tab) => tab.label)).toEqual([
       'Details',
+      'Map',
       'Logs',
       'Events',
       'YAML',
-      'Map',
     ]);
   });
 
@@ -146,10 +146,10 @@ describe('useObjectPanelTabs', () => {
     });
     expect(availableTabs.map((tab) => tab.label)).toEqual([
       'Details',
+      'Map',
       'Logs',
       'Events',
       'YAML',
-      'Map',
       'Shell',
     ]);
   });
@@ -284,10 +284,10 @@ describe('useObjectPanelTabs', () => {
     });
     expect(availableTabs.map((tab) => tab.label)).toEqual([
       'Details',
+      'Map',
       'Pods',
       'Events',
       'YAML',
-      'Map',
       'Maintenance',
     ]);
   });
@@ -305,11 +305,11 @@ describe('useObjectPanelTabs', () => {
     });
     expect(availableTabs.map((tab) => tab.label)).toEqual([
       'Details',
+      'Map',
       'Pods',
       'Logs',
       'Events',
       'YAML',
-      'Map',
       'Maintenance',
     ]);
   });
@@ -329,18 +329,18 @@ describe('useObjectPanelTabs', () => {
     expect(hoistedShortcuts.useShortcut).not.toHaveBeenCalled();
 
     // Tab shortcuts registered via useShortcuts (plural), keyed by position.
-    // Deployment tabs: Details, Pods, Logs, Events, YAML, Map → keys 1–6.
+    // Deployment tabs: Details, Map, Pods, Logs, Events, YAML → keys 1–6.
     const tabShortcuts = hoistedShortcuts.useShortcuts.mock.calls[0]?.[0] as
       | Array<{ key: string; description: string }>
       | undefined;
     expect(tabShortcuts?.map((s) => s.key)).toEqual(['1', '2', '3', '4', '5', '6']);
     expect(tabShortcuts?.map((s) => s.description)).toEqual([
       'Switch to Details tab',
+      'Switch to Map tab',
       'Switch to Pods tab',
       'Switch to Logs tab',
       'Switch to Events tab',
       'Switch to YAML tab',
-      'Switch to Map tab',
     ]);
   });
 
@@ -364,25 +364,25 @@ describe('useObjectPanelTabs', () => {
   });
 
   it('omits shortcuts for hidden tabs instead of disabling them', async () => {
-    // Without logs capability: Details, Pods, Events, YAML, Map → 5 shortcuts, no gap.
+    // Without logs capability: Details, Map, Pods, Events, YAML → 5 shortcuts, no gap.
     const { availableTabs } = await renderHook({
       capabilities: { ...baseCapabilities, hasObjPanelLogs: false },
     });
 
     expect(availableTabs.map((tab) => tab.label)).toEqual([
       'Details',
+      'Map',
       'Pods',
       'Events',
       'YAML',
-      'Map',
     ]);
 
     const tabShortcuts = hoistedShortcuts.useShortcuts.mock.calls[0]?.[0] as
       | Array<{ key: string; description: string }>
       | undefined;
     expect(tabShortcuts).toHaveLength(5);
-    // Key '2' now maps to Pods (second visible tab), not to a disabled Logs shortcut.
-    expect(tabShortcuts?.[1]?.description).toBe('Switch to Pods tab');
+    // Key '2' now maps to Map (second visible tab), not to a disabled Logs shortcut.
+    expect(tabShortcuts?.[1]?.description).toBe('Switch to Map tab');
   });
 
   it('ignores tab shortcuts when the panel is closed', async () => {
@@ -407,12 +407,12 @@ describe('useObjectPanelTabs', () => {
     expect(tabShortcuts?.[0]?.handler()).toBe(true);
     expect(setActiveTabMock).toHaveBeenCalledWith('details');
 
-    // Key '3' → Logs (third visible tab for Deployment: Details, Pods, Logs).
-    expect(tabShortcuts?.[2]?.handler()).toBe(true);
+    // Key '4' → Logs (fourth visible tab for Deployment: Details, Map, Pods, Logs).
+    expect(tabShortcuts?.[3]?.handler()).toBe(true);
     expect(setActiveTabMock).toHaveBeenCalledWith('logs');
 
-    // Key '4' → Events (fourth visible tab).
-    expect(tabShortcuts?.[3]?.handler()).toBe(true);
+    // Key '5' → Events (fifth visible tab).
+    expect(tabShortcuts?.[4]?.handler()).toBe(true);
     expect(setActiveTabMock).toHaveBeenCalledWith('events');
   });
 });

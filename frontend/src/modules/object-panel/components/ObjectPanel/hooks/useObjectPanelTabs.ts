@@ -54,12 +54,12 @@ export const useObjectPanelTabs = ({
   const availableTabs = useMemo(() => {
     const orderedTabs = [
       TABS.DETAILS,
+      TABS.MAP,
       TABS.PODS,
       TABS.JOBS,
       TABS.LOGS,
       TABS.EVENTS,
       TABS.YAML,
-      TABS.MAP,
       TABS.SHELL,
       TABS.MANIFEST,
       TABS.VALUES,
