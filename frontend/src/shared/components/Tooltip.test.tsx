@@ -51,6 +51,29 @@ const renderTooltip = async (props: React.ComponentProps<typeof Tooltip>) => {
   };
 };
 
+const renderTooltipInside = async (
+  wrapper: React.ReactElement,
+  props: React.ComponentProps<typeof Tooltip>
+) => {
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = ReactDOMClient.createRoot(container);
+
+  await act(async () => {
+    root.render(React.cloneElement(wrapper, undefined, <Tooltip {...props} />));
+    await Promise.resolve();
+  });
+
+  return {
+    container,
+    root,
+    cleanup: () => {
+      act(() => root.unmount());
+      container.remove();
+    },
+  };
+};
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -146,6 +169,50 @@ describe('Tooltip', () => {
     // Mouse out — tooltip should hide
     await act(async () => {
       trigger.dispatchEvent(new MouseEvent('mouseout', { bubbles: true }));
+    });
+    expect(container.querySelector('.tooltip')).toBeFalsy();
+
+    cleanup();
+    vi.useRealTimers();
+  });
+
+  it('hides a hover tooltip when the trigger is clicked', async () => {
+    vi.useFakeTimers();
+
+    const { container, cleanup } = await renderTooltip({ content: 'Tip' });
+
+    const trigger = container.querySelector('.tooltip-trigger') as HTMLElement;
+
+    await act(async () => {
+      trigger.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+      vi.advanceTimersByTime(250);
+    });
+    expect(container.querySelector('.tooltip')).toBeTruthy();
+
+    await act(async () => {
+      trigger.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    });
+    expect(container.querySelector('.tooltip')).toBeFalsy();
+
+    cleanup();
+    vi.useRealTimers();
+  });
+
+  it('hides a hover tooltip on scroll', async () => {
+    vi.useFakeTimers();
+
+    const { container, cleanup } = await renderTooltip({ content: 'Tip' });
+
+    const trigger = container.querySelector('.tooltip-trigger') as HTMLElement;
+
+    await act(async () => {
+      trigger.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+      vi.advanceTimersByTime(250);
+    });
+    expect(container.querySelector('.tooltip')).toBeTruthy();
+
+    await act(async () => {
+      document.dispatchEvent(new Event('scroll', { bubbles: true }));
     });
     expect(container.querySelector('.tooltip')).toBeFalsy();
 
@@ -357,6 +424,50 @@ describe('Tooltip', () => {
     const tooltip = container.querySelector('.tooltip');
     expect(tooltip?.querySelector('[data-testid="rich"]')).toBeTruthy();
     expect(tooltip?.querySelector('strong')?.textContent).toBe('Bold');
+
+    cleanup();
+    vi.useRealTimers();
+  });
+
+  it('keeps page-level hover tooltips below dockable panels', async () => {
+    vi.useFakeTimers();
+
+    const { container, cleanup } = await renderTooltip({ content: 'Page tip' });
+
+    const trigger = container.querySelector('.tooltip-trigger') as HTMLElement;
+
+    await act(async () => {
+      trigger.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+      vi.advanceTimersByTime(250);
+    });
+
+    const tooltip = container.querySelector('.tooltip') as HTMLElement;
+    expect(tooltip.style.zIndex).toBe('calc(var(--z-index-panel, 500) - 1)');
+
+    cleanup();
+    vi.useRealTimers();
+  });
+
+  it('layers tooltips opened inside dockable panels above their panel', async () => {
+    vi.useFakeTimers();
+
+    const { container, cleanup } = await renderTooltipInside(
+      <div className="dockable-panel" style={{ zIndex: 1234 }} />,
+      {
+        content: 'Panel tip',
+        children: <button type="button">Inside panel</button>,
+      }
+    );
+
+    const trigger = container.querySelector('.tooltip-trigger') as HTMLElement;
+
+    await act(async () => {
+      trigger.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+      vi.advanceTimersByTime(250);
+    });
+
+    const tooltip = container.querySelector('.tooltip') as HTMLElement;
+    expect(tooltip.style.zIndex).toBe('1235');
 
     cleanup();
     vi.useRealTimers();

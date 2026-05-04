@@ -53,6 +53,16 @@ export interface TooltipProps {
 
 /** Minimum viewport space (px) before the tooltip flips to the other side */
 const FLIP_THRESHOLD = 200;
+const PAGE_TOOLTIP_Z_INDEX = 'calc(var(--z-index-panel, 500) - 1)';
+const DEFAULT_TOOLTIP_Z_INDEX = 'var(--z-index-tooltip, 2000)';
+
+const parseZIndex = (element: HTMLElement | null): number | null => {
+  if (!element || typeof window === 'undefined') {
+    return null;
+  }
+  const parsed = Number.parseInt(window.getComputedStyle(element).zIndex, 10);
+  return Number.isFinite(parsed) ? parsed : null;
+};
 
 const Tooltip: React.FC<TooltipProps> = ({
   content,
@@ -137,12 +147,22 @@ const Tooltip: React.FC<TooltipProps> = ({
   // ------------------------------------------------------------------
   // Cleanup timer on unmount
   // ------------------------------------------------------------------
+  const clearTimers = useCallback(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    if (hideTimerRef.current) {
+      clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = null;
+    }
+  }, []);
+
   useEffect(() => {
     return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+      clearTimers();
     };
-  }, []);
+  }, [clearTimers]);
 
   // ------------------------------------------------------------------
   // Outside-click handler for click-trigger mode
@@ -183,6 +203,66 @@ const Tooltip: React.FC<TooltipProps> = ({
     }
     return Boolean(triggerRef.current?.contains(node) || tooltipRef.current?.contains(node));
   }, []);
+
+  const resolveTooltipZIndex = useCallback((): React.CSSProperties['zIndex'] => {
+    const triggerElement = triggerRef.current;
+    if (!triggerElement) {
+      return DEFAULT_TOOLTIP_Z_INDEX;
+    }
+
+    const owningSurface = triggerElement.closest<HTMLElement>(
+      '.dockable-panel, .object-panel, [data-modal-surface="true"], .modal-overlay, .context-menu'
+    );
+    if (!owningSurface) {
+      return PAGE_TOOLTIP_Z_INDEX;
+    }
+
+    const owningSurfaceZIndex = parseZIndex(owningSurface);
+    if (owningSurfaceZIndex !== null) {
+      return owningSurfaceZIndex + 1;
+    }
+
+    return DEFAULT_TOOLTIP_Z_INDEX;
+  }, []);
+
+  // ------------------------------------------------------------------
+  // Global dismissal for hover tooltips
+  // ------------------------------------------------------------------
+  useEffect(() => {
+    if (trigger !== 'hover' || !visible) return;
+
+    const hide = () => {
+      clearTimers();
+      setVisible(false);
+    };
+    const handlePointerDown = (event: MouseEvent | TouchEvent) => {
+      if (interactive && isWithinInteractiveRegion(event.target)) {
+        return;
+      }
+      hide();
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        hide();
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown, true);
+    document.addEventListener('touchstart', handlePointerDown, true);
+    document.addEventListener('scroll', hide, true);
+    document.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('resize', hide);
+    window.addEventListener('blur', hide);
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown, true);
+      document.removeEventListener('touchstart', handlePointerDown, true);
+      document.removeEventListener('scroll', hide, true);
+      document.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('resize', hide);
+      window.removeEventListener('blur', hide);
+    };
+  }, [clearTimers, interactive, isWithinInteractiveRegion, trigger, visible]);
 
   /** Schedule a hide after the grace period (interactive mode)
    *  or hide immediately (non-interactive). */
@@ -256,6 +336,7 @@ const Tooltip: React.FC<TooltipProps> = ({
     .join(' ');
 
   const inlineStyle: React.CSSProperties = { ...style };
+  inlineStyle.zIndex = resolveTooltipZIndex();
   if (maxWidth !== undefined) inlineStyle.maxWidth = maxWidth;
   if (minWidth !== undefined) inlineStyle.minWidth = minWidth;
 
