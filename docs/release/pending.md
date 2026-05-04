@@ -10,3 +10,4 @@
   - Added show/hide all connections buttons to the Legend
   - Legend can now be dragged from its original position
   - Manual move/resize automatically disables auto-fit
+  - Modified selected/dimmed styles to make selected objects/paths clearer
