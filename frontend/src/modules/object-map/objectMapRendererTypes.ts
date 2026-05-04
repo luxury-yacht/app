@@ -1,3 +1,9 @@
+/**
+ * frontend/src/modules/object-map/objectMapRendererTypes.ts
+ *
+ * Shared object-map renderer contracts used by the map shell and G6 renderer.
+ */
+
 import type { ObjectMapReference } from '@core/refresh/types';
 import type { ObjectMapFilteredPath } from './objectMapKindFilter';
 import type { PositionedNode } from './objectMapLayout';

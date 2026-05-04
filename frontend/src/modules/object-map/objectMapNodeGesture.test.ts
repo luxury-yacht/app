@@ -1,3 +1,9 @@
+/**
+ * frontend/src/modules/object-map/objectMapNodeGesture.test.ts
+ *
+ * Tests node drag gesture state and synthetic click suppression.
+ */
+
 import { describe, expect, it } from 'vitest';
 import {
   OBJECT_MAP_NODE_DRAG_THRESHOLD_PX,

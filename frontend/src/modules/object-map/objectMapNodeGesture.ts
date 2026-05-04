@@ -1,3 +1,10 @@
+/**
+ * frontend/src/modules/object-map/objectMapNodeGesture.ts
+ *
+ * Tracks node drag gestures and suppresses only the synthetic click emitted
+ * after a completed drag.
+ */
+
 export const OBJECT_MAP_NODE_DRAG_THRESHOLD_PX = 3;
 
 export interface ObjectMapNodeGestureState {

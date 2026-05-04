@@ -1,3 +1,9 @@
+/**
+ * frontend/src/modules/object-map/ObjectMapG6TooltipOverlay.test.tsx
+ *
+ * Tests SVG rendering for object-map connection tooltip overlays.
+ */
+
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { KindBadgeVisualStyle } from '@shared/utils/kindBadgeColors';

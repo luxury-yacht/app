@@ -1,3 +1,9 @@
+/**
+ * frontend/src/modules/object-map/objectMapG6Tooltip.test.ts
+ *
+ * Tests object-map connection tooltip layout, truncation, and badge rows.
+ */
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { KindBadgeVisualStyle } from '@shared/utils/kindBadgeColors';
 import type { ObjectMapG6Palette } from './objectMapG6Data';

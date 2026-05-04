@@ -1,3 +1,10 @@
+/**
+ * frontend/src/modules/object-map/objectMapG6CardNode.ts
+ *
+ * Custom G6 node implementation for object-map cards, including kind badges,
+ * object names, namespaces, and collapse/expand badges.
+ */
+
 import { Rect as GRect, Text as GText } from '@antv/g';
 import type { DisplayObjectConfig, Group, RectStyleProps, TextStyleProps } from '@antv/g';
 import { BaseNode, ExtensionCategory, register } from '@antv/g6';

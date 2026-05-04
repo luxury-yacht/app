@@ -1,3 +1,10 @@
+/**
+ * frontend/src/modules/object-map/useObjectMapModel.ts
+ *
+ * State model for object-map layout, selection, hover, collapse groups,
+ * manual positioning, and auto-fit.
+ */
+
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ObjectMapSnapshotPayload } from '@core/refresh/types';
 import {

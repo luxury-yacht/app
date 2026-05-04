@@ -1,3 +1,9 @@
+/**
+ * frontend/src/modules/object-map/useObjectMapLegendDrag.test.ts
+ *
+ * Tests legend drag clamping and pointer state helpers.
+ */
+
 import { describe, expect, it } from 'vitest';
 import {
   beginObjectMapLegendDrag,

@@ -1,3 +1,10 @@
+/**
+ * frontend/src/modules/object-map/objectMapG6Viewport.ts
+ *
+ * Viewport helpers for G6 map zooming, fit-to-view padding, and wheel modifier
+ * behavior.
+ */
+
 export const OBJECT_MAP_WHEEL_ZOOM_DELTA_LIMIT = 50;
 export const OBJECT_MAP_WHEEL_ZOOM_SENSITIVITY = 1;
 

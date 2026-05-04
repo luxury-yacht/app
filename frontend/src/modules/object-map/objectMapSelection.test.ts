@@ -1,3 +1,9 @@
+/**
+ * frontend/src/modules/object-map/objectMapSelection.test.ts
+ *
+ * Tests selected and connected object-map edge state derivation.
+ */
+
 import { describe, expect, it } from 'vitest';
 import { computeObjectMapSelectionState } from './objectMapSelection';
 import type { PositionedEdge } from './objectMapLayout';

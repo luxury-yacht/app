@@ -1,3 +1,9 @@
+/**
+ * frontend/src/modules/object-map/objectMapKindFilter.test.ts
+ *
+ * Tests kind filtering and transitive filtered-path reconstruction.
+ */
+
 import { describe, expect, it } from 'vitest';
 import type { ObjectMapNode, ObjectMapReference } from '@core/refresh/types';
 import { contractObjectMapKindFilter, FILTERED_PATH_EDGE_TYPE } from './objectMapKindFilter';

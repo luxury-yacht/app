@@ -1,3 +1,10 @@
+/**
+ * frontend/src/modules/object-map/objectMapG6Tooltip.ts
+ *
+ * Computes object-map connection tooltip rows, badge sizing, truncation, and
+ * dimensions before the SVG overlay renders them.
+ */
+
 import type { ObjectMapReference } from '@core/refresh/types';
 import type { KindBadgeVisualStyle } from '@shared/utils/kindBadgeColors';
 import { resolveKindBadgeVisualStyle } from '@shared/utils/kindBadgeColors';

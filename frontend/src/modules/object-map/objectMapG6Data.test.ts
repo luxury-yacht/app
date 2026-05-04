@@ -1,3 +1,9 @@
+/**
+ * frontend/src/modules/object-map/objectMapG6Data.test.ts
+ *
+ * Tests conversion from object-map layout data into G6 graph data.
+ */
+
 import { describe, expect, it } from 'vitest';
 import type { ObjectMapReference } from '@core/refresh/types';
 import type { ObjectMapLayout, PositionedEdge, PositionedNode } from './objectMapLayout';

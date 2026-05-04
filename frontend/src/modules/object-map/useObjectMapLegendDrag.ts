@@ -1,3 +1,9 @@
+/**
+ * frontend/src/modules/object-map/useObjectMapLegendDrag.ts
+ *
+ * Pointer-state helper for dragging the object-map legend within the canvas.
+ */
+
 import { useCallback, useRef, useState } from 'react';
 import type { PointerEvent, RefObject } from 'react';
 

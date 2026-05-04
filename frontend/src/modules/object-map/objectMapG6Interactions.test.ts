@@ -1,3 +1,9 @@
+/**
+ * frontend/src/modules/object-map/objectMapG6Interactions.test.ts
+ *
+ * Tests G6 node event translation for object-map interactions.
+ */
+
 import { describe, expect, it, vi } from 'vitest';
 import type { ObjectMapReference } from '@core/refresh/types';
 import type { ObjectMapLayout, PositionedNode } from './objectMapLayout';

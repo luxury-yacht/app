@@ -1,3 +1,10 @@
+/**
+ * frontend/src/modules/object-map/objectMapKindFilter.ts
+ *
+ * Applies kind filters to object-map layouts while preserving transitive
+ * relationships through filtered objects.
+ */
+
 import type { ObjectMapEdge, ObjectMapNode } from '@core/refresh/types';
 
 export const FILTERED_PATH_EDGE_TYPE = 'filtered-path';

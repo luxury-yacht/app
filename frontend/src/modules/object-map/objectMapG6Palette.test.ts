@@ -1,3 +1,9 @@
+/**
+ * frontend/src/modules/object-map/objectMapG6Palette.test.ts
+ *
+ * Tests CSS variable palette reading for the G6 object-map renderer.
+ */
+
 import { describe, expect, it } from 'vitest';
 import type { ObjectMapG6Palette } from './objectMapG6Data';
 import {

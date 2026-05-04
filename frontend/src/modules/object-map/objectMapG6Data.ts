@@ -1,3 +1,9 @@
+/**
+ * frontend/src/modules/object-map/objectMapG6Data.ts
+ *
+ * Converts object-map layout data into G6 nodes, edges, and element states.
+ */
+
 import type { EdgeData, GraphData, NodeData } from '@antv/g6';
 import type { PathArray } from '@antv/g6';
 import type { KindBadgeVisualStyle } from '@shared/utils/kindBadgeColors';

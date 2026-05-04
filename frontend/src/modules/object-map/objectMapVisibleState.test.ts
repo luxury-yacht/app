@@ -1,3 +1,9 @@
+/**
+ * frontend/src/modules/object-map/objectMapVisibleState.test.ts
+ *
+ * Tests visible object-map state derivation for filters, focus, search, and legend.
+ */
+
 import { describe, expect, it } from 'vitest';
 import type { ObjectMapEdge, ObjectMapNode, ObjectMapReference } from '@core/refresh/types';
 import { computeObjectMapLayout } from './objectMapLayout';

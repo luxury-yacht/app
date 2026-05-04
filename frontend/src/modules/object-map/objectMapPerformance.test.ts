@@ -1,3 +1,9 @@
+/**
+ * frontend/src/modules/object-map/objectMapPerformance.test.ts
+ *
+ * Performance tests for large object-map layout and G6 data conversion paths.
+ */
+
 import { describe, expect, it } from 'vitest';
 import { computeCollapseInfo, filterByCollapseInfo } from './objectMapCollapse';
 import { dedupeServiceEdges } from './objectMapDedupe';

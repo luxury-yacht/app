@@ -1,3 +1,9 @@
+/**
+ * frontend/src/modules/object-map/ObjectMapG6TooltipOverlay.tsx
+ *
+ * SVG overlay renderer for object-map connection tooltips.
+ */
+
 import React from 'react';
 import type { ObjectMapG6Palette } from './objectMapG6Data';
 import type { ObjectMapTooltipEndpoint, ObjectMapTooltipLayout } from './objectMapG6Tooltip';

@@ -1,3 +1,9 @@
+/**
+ * frontend/src/modules/object-map/objectMapCollapse.test.ts
+ *
+ * Tests ReplicaSet collapse grouping and expansion behavior for object maps.
+ */
+
 import { describe, expect, it } from 'vitest';
 import type { ObjectMapEdge, ObjectMapNode } from '@core/refresh/types';
 import { computeCollapseInfo, filterByCollapseInfo } from './objectMapCollapse';

@@ -1,3 +1,11 @@
+/**
+ * frontend/src/modules/object-map/ObjectMapG6Renderer.tsx
+ *
+ * G6-backed object-map renderer. Owns graph lifecycle and delegates data
+ * patching, event translation, palette reading, viewport helpers, and tooltip
+ * rendering to focused helpers.
+ */
+
 import { Graph, CanvasEvent, CommonEvent, EdgeEvent, GraphEvent, NodeEvent } from '@antv/g6';
 import type { GraphData } from '@antv/g6';
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';

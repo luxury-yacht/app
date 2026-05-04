@@ -1,3 +1,9 @@
+/**
+ * frontend/src/modules/object-map/objectMapEdgeStyle.test.ts
+ *
+ * Tests object-map edge style metadata and CSS class resolution.
+ */
+
 import { describe, expect, it } from 'vitest';
 import { objectMapEdgeClass } from './objectMapEdgeStyle';
 

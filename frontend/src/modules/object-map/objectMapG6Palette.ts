@@ -1,3 +1,10 @@
+/**
+ * frontend/src/modules/object-map/objectMapG6Palette.ts
+ *
+ * Reads object-map CSS variables into the G6 palette consumed by custom
+ * nodes, edges, tooltip layout, and viewport behavior.
+ */
+
 import type { ObjectMapG6Palette } from './objectMapG6Data';
 
 export const objectMapCssVar = (styles: CSSStyleDeclaration, name: string): string =>

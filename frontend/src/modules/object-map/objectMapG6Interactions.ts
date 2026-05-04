@@ -1,3 +1,10 @@
+/**
+ * frontend/src/modules/object-map/objectMapG6Interactions.ts
+ *
+ * Translates G6 pointer and node events into object-map interaction callbacks,
+ * keeping drag/click suppression and modifier actions out of the renderer.
+ */
+
 import type { ObjectMapReference } from '@core/refresh/types';
 import type { ObjectMapLayout, PositionedNode } from './objectMapLayout';
 import {

@@ -1,3 +1,9 @@
+/**
+ * frontend/src/modules/object-map/objectMapG6PathEdge.ts
+ *
+ * Custom G6 edge implementation that draws precomputed object-map paths.
+ */
+
 import { BaseEdge, ExtensionCategory, register } from '@antv/g6';
 import type { DisplayObjectConfig } from '@antv/g';
 import type { BaseEdgeStyleProps, PathArray } from '@antv/g6';

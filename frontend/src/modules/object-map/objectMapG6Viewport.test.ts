@@ -1,3 +1,9 @@
+/**
+ * frontend/src/modules/object-map/objectMapG6Viewport.test.ts
+ *
+ * Tests G6 viewport fit and wheel zoom helper behavior.
+ */
+
 import { describe, expect, it, vi } from 'vitest';
 import {
   fitObjectMapG6GraphToView,

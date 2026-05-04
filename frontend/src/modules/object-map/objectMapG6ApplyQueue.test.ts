@@ -1,3 +1,9 @@
+/**
+ * frontend/src/modules/object-map/objectMapG6ApplyQueue.test.ts
+ *
+ * Tests serialized G6 data and selection application behavior.
+ */
+
 import type { GraphData } from '@antv/g6';
 import { describe, expect, it, vi } from 'vitest';
 import type { ObjectMapLayout } from './objectMapLayout';

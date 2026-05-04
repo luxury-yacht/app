@@ -1,3 +1,10 @@
+/**
+ * frontend/src/modules/object-map/objectMapG6ApplyQueue.ts
+ *
+ * Serializes async G6 data and selection updates so rapid map changes apply
+ * in order without racing stale graph renders or viewport-preservation work.
+ */
+
 import type { EdgeData, Graph, GraphData, NodeData } from '@antv/g6';
 import { objectMapG6EdgeState, objectMapG6NodeState } from './objectMapG6Data';
 import type { ObjectMapLayout } from './objectMapLayout';

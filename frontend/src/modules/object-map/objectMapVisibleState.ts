@@ -1,3 +1,10 @@
+/**
+ * frontend/src/modules/object-map/objectMapVisibleState.ts
+ *
+ * Derives the visible object-map layout after kind filtering, relationship
+ * filtering, focus mode, and search are applied.
+ */
+
 import type { ObjectMapEdge, ObjectMapNode } from '@core/refresh/types';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import { getDisplayKind } from '@/utils/kindAliasMap';

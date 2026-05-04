@@ -1,3 +1,9 @@
+/**
+ * frontend/src/modules/object-map/ObjectMap.test.tsx
+ *
+ * Integration-style tests for the object-map shell with a mocked renderer.
+ */
+
 import ReactDOMClient from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';

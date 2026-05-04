@@ -1,3 +1,11 @@
+/**
+ * frontend/src/modules/object-map/objectMapCardStyle.ts
+ *
+ * Shared card dimensions and text limits for object-map node rendering.
+ * Keep these values centralized so layout, G6 node drawing, and truncation
+ * rules do not drift apart.
+ */
+
 export const OBJECT_MAP_CARD_STYLE = {
   width: 220,
   height: 64,
