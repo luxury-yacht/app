@@ -46,6 +46,8 @@ interface ObjectMapG6CardNodeStyleProps extends BaseNodeStyleProps {
   cardKindBadgeLetterSpacing?: number;
   cardKindBadgePaddingX?: number;
   cardKindBadgePaddingY?: number;
+  cardBackgroundOpacity?: number;
+  cardForegroundOpacity?: number;
   cardCollapseBadgeText?: string;
   cardCollapseBadgeFill?: string;
   cardCollapseBadgeTextFill?: string;
@@ -62,6 +64,14 @@ class ObjectMapG6CardNode extends BaseNode<ObjectMapG6CardNodeStyleProps> {
     super(options);
   }
 
+  private getBackgroundOpacity(attributes: Required<ObjectMapG6CardNodeStyleProps>): number {
+    return attributes.cardBackgroundOpacity ?? 1;
+  }
+
+  private getForegroundOpacity(attributes: Required<ObjectMapG6CardNodeStyleProps>): number {
+    return attributes.cardForegroundOpacity ?? 1;
+  }
+
   protected getKeyStyle(attributes: Required<ObjectMapG6CardNodeStyleProps>): RectStyleProps {
     const [width, height] = this.getSize(attributes);
     return {
@@ -71,6 +81,8 @@ class ObjectMapG6CardNode extends BaseNode<ObjectMapG6CardNodeStyleProps> {
       x: -width / 2,
       y: -height / 2,
       radius: OBJECT_MAP_CARD_STYLE.borderRadius,
+      fillOpacity: this.getBackgroundOpacity(attributes),
+      strokeOpacity: this.getForegroundOpacity(attributes),
     };
   }
 
@@ -104,6 +116,7 @@ class ObjectMapG6CardNode extends BaseNode<ObjectMapG6CardNodeStyleProps> {
       wordWrap: true,
       wordWrapWidth: width - OBJECT_MAP_CARD_STYLE.paddingX * 2,
       textOverflow: '...',
+      opacity: this.getForegroundOpacity(attributes),
     };
   }
 
@@ -157,6 +170,8 @@ class ObjectMapG6CardNode extends BaseNode<ObjectMapG6CardNodeStyleProps> {
     container: Group
   ): void {
     const metrics = this.getBadgeMetrics(attributes);
+    const backgroundOpacity = this.getBackgroundOpacity(attributes);
+    const foregroundOpacity = this.getForegroundOpacity(attributes);
     this.upsert(
       'card-kind-badge-bg',
       GRect,
@@ -169,6 +184,8 @@ class ObjectMapG6CardNode extends BaseNode<ObjectMapG6CardNodeStyleProps> {
         fill: attributes.cardKindBadgeFill,
         stroke: attributes.cardKindBadgeStroke,
         lineWidth: attributes.cardKindBadgeBorderWidth,
+        fillOpacity: backgroundOpacity,
+        strokeOpacity: foregroundOpacity,
       },
       container
     );
@@ -189,6 +206,7 @@ class ObjectMapG6CardNode extends BaseNode<ObjectMapG6CardNodeStyleProps> {
         wordWrap: true,
         wordWrapWidth: metrics.textWidth,
         textOverflow: '...',
+        opacity: foregroundOpacity,
       },
       container
     );
@@ -221,6 +239,8 @@ class ObjectMapG6CardNode extends BaseNode<ObjectMapG6CardNodeStyleProps> {
     }
 
     const metrics = this.getCollapseBadgeMetrics(attributes);
+    const backgroundOpacity = this.getBackgroundOpacity(attributes);
+    const foregroundOpacity = this.getForegroundOpacity(attributes);
     this.upsert(
       'badge-expand-bg',
       GRect,
@@ -232,6 +252,8 @@ class ObjectMapG6CardNode extends BaseNode<ObjectMapG6CardNodeStyleProps> {
         radius: OBJECT_MAP_CARD_STYLE.collapseBadgeRadius,
         fill: attributes.cardCollapseBadgeFill,
         stroke: attributes.cardCollapseBadgeStroke,
+        fillOpacity: backgroundOpacity,
+        strokeOpacity: foregroundOpacity,
       },
       container
     );
@@ -249,6 +271,7 @@ class ObjectMapG6CardNode extends BaseNode<ObjectMapG6CardNodeStyleProps> {
         textAlign: 'center',
         textBaseline: 'middle',
         maxLines: 1,
+        opacity: foregroundOpacity,
       },
       container
     );

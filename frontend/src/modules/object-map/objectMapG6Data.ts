@@ -50,7 +50,8 @@ export interface ObjectMapG6Palette {
   nodeConnectedLineWidth: number;
   nodeSelectedLineWidth: number;
   nodeEdgeHoveredLineWidth: number;
-  nodeDimmedOpacity: number;
+  nodeDimmedBackgroundOpacity: number;
+  nodeDimmedForegroundOpacity: number;
   tooltipMaxWidth: number;
   tooltipHeight: number;
   tooltipOffsetY: number;
@@ -188,6 +189,8 @@ export const toObjectMapG6Data = (
     const kindLabel = getDisplayKind(node.ref.kind, useShortResourceNames);
     const namespaceLabel = truncate(formatNamespace(node), NODE_NAMESPACE_MAX_CHARS);
     const kindBadgeStyle = kindBadgeStyleForKind(node.ref.kind);
+    const states = objectMapG6NodeState(node, selectionState);
+    const isDimmed = states.includes('dimmed');
 
     return {
       id: node.id,
@@ -199,7 +202,7 @@ export const toObjectMapG6Data = (
         nameLabel: node.ref.name,
         namespaceLabel,
       },
-      states: objectMapG6NodeState(node, selectionState),
+      states,
       style: {
         x: node.x + node.width / 2,
         y: node.y + node.height / 2,
@@ -210,6 +213,8 @@ export const toObjectMapG6Data = (
         lineWidth: node.isSeed ? NODE_SEED_LINE_WIDTH : NODE_LINE_WIDTH,
         opacity: palette.fullOpacity,
         label: false,
+        cardBackgroundOpacity: isDimmed ? palette.nodeDimmedBackgroundOpacity : palette.fullOpacity,
+        cardForegroundOpacity: isDimmed ? palette.nodeDimmedForegroundOpacity : palette.fullOpacity,
         cardKindBadgeText: kindLabel.toUpperCase(),
         cardKindBadgeFill: kindBadgeStyle.backgroundColor,
         cardKindBadgeTextFill: kindBadgeStyle.color,

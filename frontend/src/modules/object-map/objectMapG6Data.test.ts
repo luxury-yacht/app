@@ -105,7 +105,8 @@ const palette: ObjectMapG6Palette = {
   nodeConnectedLineWidth: 1,
   nodeSelectedLineWidth: 1,
   nodeEdgeHoveredLineWidth: 2.5,
-  nodeDimmedOpacity: 0.25,
+  nodeDimmedBackgroundOpacity: 0.25,
+  nodeDimmedForegroundOpacity: 0.45,
   tooltipMaxWidth: 220,
   tooltipHeight: 64,
   tooltipOffsetY: 6,
@@ -201,10 +202,12 @@ describe('objectMapG6Data', () => {
         y: 52,
         size: [220, 64],
         label: false,
+        cardBackgroundOpacity: 1,
+        cardForegroundOpacity: 1,
         cardKindBadgeText: 'DEPLOYMENT',
         cardKindBadgeFill: 'rgba(100, 116, 139, 0.15)',
-        cardCollapseBadgeFill: '#ffffff',
-        cardCollapseBadgeStroke: '#cbd5e1',
+        cardCollapseBadgeFill: '#f8fafc',
+        cardCollapseBadgeStroke: '#9ca3af',
         cardCollapseBadgeText: '+2',
         cardCollapseBadgeTextFill: '#64748b',
         cardNameText: 'web',
@@ -216,6 +219,12 @@ describe('objectMapG6Data', () => {
     const clusterScoped = graphData.nodes?.find((entry) => entry.id === 'node');
     expect(clusterScoped?.data).toEqual(
       expect.objectContaining({ namespaceLabel: 'cluster-scoped' })
+    );
+    expect(clusterScoped?.style).toEqual(
+      expect.objectContaining({
+        cardBackgroundOpacity: 0.25,
+        cardForegroundOpacity: 0.45,
+      })
     );
 
     const uses = graphData.edges?.find((entry) => entry.id === 'edge-uses');

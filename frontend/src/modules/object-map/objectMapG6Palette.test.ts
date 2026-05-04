@@ -48,7 +48,8 @@ const numberVars = [
   '--object-map-node-connected-line-width',
   '--object-map-node-selected-line-width',
   '--object-map-node-edge-hovered-line-width',
-  '--object-map-node-dimmed-opacity',
+  '--object-map-node-dimmed-background-opacity',
+  '--object-map-node-dimmed-foreground-opacity',
   '--object-map-tooltip-max-width',
   '--object-map-tooltip-height',
   '--object-map-tooltip-offset-y',
@@ -94,10 +95,12 @@ describe('objectMapG6Palette', () => {
     expect(palette.edgeDefault).toBe('#000022');
     expect(palette.edgeLineWidth).toBe(1);
     expect(palette.edgeDash).toEqual([5, 6]);
-    expect(palette.tooltipMaxWidth).toBe(11);
-    expect(palette.tooltipRelationshipFontWeight).toBe(29);
-    expect(palette.fitViewPadding).toBe(30);
-    expect(palette.fullOpacity).toBe(31);
+    expect(palette.nodeDimmedBackgroundOpacity).toBe(10);
+    expect(palette.nodeDimmedForegroundOpacity).toBe(11);
+    expect(palette.tooltipMaxWidth).toBe(12);
+    expect(palette.tooltipRelationshipFontWeight).toBe(30);
+    expect(palette.fitViewPadding).toBe(31);
+    expect(palette.fullOpacity).toBe(32);
     expect(palette.fontFamily).toContain('Inter');
 
     element.remove();

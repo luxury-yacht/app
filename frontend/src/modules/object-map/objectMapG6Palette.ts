@@ -75,7 +75,14 @@ export const readObjectMapG6Palette = (element: HTMLElement): ObjectMapG6Palette
       styles,
       '--object-map-node-edge-hovered-line-width'
     ),
-    nodeDimmedOpacity: objectMapCssNumber(styles, '--object-map-node-dimmed-opacity'),
+    nodeDimmedBackgroundOpacity: objectMapCssNumber(
+      styles,
+      '--object-map-node-dimmed-background-opacity'
+    ),
+    nodeDimmedForegroundOpacity: objectMapCssNumber(
+      styles,
+      '--object-map-node-dimmed-foreground-opacity'
+    ),
     tooltipMaxWidth: objectMapCssNumber(styles, '--object-map-tooltip-max-width'),
     tooltipHeight: objectMapCssNumber(styles, '--object-map-tooltip-height'),
     tooltipOffsetY: objectMapCssNumber(styles, '--object-map-tooltip-offset-y'),

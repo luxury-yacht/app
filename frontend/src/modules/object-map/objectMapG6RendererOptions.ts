@@ -33,7 +33,10 @@ export const objectMapG6NodeOptions = (palette: ObjectMapG6Palette) => ({
       lineWidth: palette.nodeEdgeHoveredLineWidth,
       opacity: palette.fullOpacity,
     },
-    dimmed: { opacity: palette.nodeDimmedOpacity },
+    dimmed: {
+      cardBackgroundOpacity: palette.nodeDimmedBackgroundOpacity,
+      cardForegroundOpacity: palette.nodeDimmedForegroundOpacity,
+    },
     seed: {
       stroke: palette.accent,
       opacity: palette.fullOpacity,

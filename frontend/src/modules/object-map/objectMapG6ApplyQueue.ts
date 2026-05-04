@@ -80,6 +80,8 @@ const nodeChanged = (previous: NodeData, next: NodeData): boolean => {
     previousStyle.cardKindBadgeLetterSpacing !== nextStyle.cardKindBadgeLetterSpacing ||
     previousStyle.cardKindBadgePaddingX !== nextStyle.cardKindBadgePaddingX ||
     previousStyle.cardKindBadgePaddingY !== nextStyle.cardKindBadgePaddingY ||
+    previousStyle.cardBackgroundOpacity !== nextStyle.cardBackgroundOpacity ||
+    previousStyle.cardForegroundOpacity !== nextStyle.cardForegroundOpacity ||
     previousStyle.cardCollapseBadgeText !== nextStyle.cardCollapseBadgeText ||
     previousStyle.cardCollapseBadgeFill !== nextStyle.cardCollapseBadgeFill ||
     previousStyle.cardCollapseBadgeTextFill !== nextStyle.cardCollapseBadgeTextFill ||

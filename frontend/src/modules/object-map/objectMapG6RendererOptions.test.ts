@@ -23,7 +23,8 @@ const palette = {
   edgeDimmedOpacity: 0.2,
   fullOpacity: 1,
   nodeConnectedLineWidth: 1,
-  nodeDimmedOpacity: 0.25,
+  nodeDimmedBackgroundOpacity: 0.25,
+  nodeDimmedForegroundOpacity: 0.45,
   nodeEdgeHoveredLineWidth: 3,
   nodeSelectedLineWidth: 1,
 } as ObjectMapG6Palette;
@@ -81,8 +82,12 @@ describe('objectMapG6RendererOptions', () => {
   it('builds node and edge states from palette values', () => {
     expect(objectMapG6NodeOptions(palette).state.selected).toEqual({
       stroke: '#2563eb',
-      lineWidth: 3,
+      lineWidth: 1,
       opacity: 1,
+    });
+    expect(objectMapG6NodeOptions(palette).state.dimmed).toEqual({
+      cardBackgroundOpacity: 0.25,
+      cardForegroundOpacity: 0.45,
     });
     expect(objectMapG6EdgeOptions(palette).state.dimmed).toEqual({ opacity: 0.2 });
   });
