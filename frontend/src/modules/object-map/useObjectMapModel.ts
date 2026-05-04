@@ -37,6 +37,12 @@ interface NodeDragState {
 
 const NODE_DRAG_THRESHOLD_PX = 3;
 
+const clearTimeoutIfSet = (timeoutId: ReturnType<typeof setTimeout> | null) => {
+  if (timeoutId !== null) {
+    clearTimeout(timeoutId);
+  }
+};
+
 export const useObjectMapModel = (payload: ObjectMapSnapshotPayload) => {
   const seedId = useMemo(() => {
     const ref = payload.seed;
@@ -120,12 +126,22 @@ export const useObjectMapModel = (payload: ObjectMapSnapshotPayload) => {
   );
   const nodeDragRef = useRef<NodeDragState | null>(null);
   const suppressNextNodeClickRef = useRef<string | null>(null);
+  const suppressNextNodeClickTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     setNodePositionOverrides(new Map());
     nodeDragRef.current = null;
     suppressNextNodeClickRef.current = null;
+    clearTimeoutIfSet(suppressNextNodeClickTimeoutRef.current);
+    suppressNextNodeClickTimeoutRef.current = null;
   }, [filtered.nodes, filtered.edges]);
+
+  useEffect(
+    () => () => {
+      clearTimeoutIfSet(suppressNextNodeClickTimeoutRef.current);
+    },
+    []
+  );
 
   const layout: ObjectMapLayout = useMemo(() => {
     if (nodePositionOverrides.size === 0) {
@@ -176,9 +192,13 @@ export const useObjectMapModel = (payload: ObjectMapSnapshotPayload) => {
   const selectNode = useCallback((id: string) => {
     if (suppressNextNodeClickRef.current === id) {
       suppressNextNodeClickRef.current = null;
+      clearTimeoutIfSet(suppressNextNodeClickTimeoutRef.current);
+      suppressNextNodeClickTimeoutRef.current = null;
       return;
     }
     suppressNextNodeClickRef.current = null;
+    clearTimeoutIfSet(suppressNextNodeClickTimeoutRef.current);
+    suppressNextNodeClickTimeoutRef.current = null;
     setActiveNodeId((prev) => (prev === id ? null : id));
   }, []);
 
@@ -240,6 +260,13 @@ export const useObjectMapModel = (payload: ObjectMapSnapshotPayload) => {
     if (!drag || drag.pointerId !== pointer.pointerId) return;
     if (drag.didDrag) {
       suppressNextNodeClickRef.current = drag.nodeId;
+      clearTimeoutIfSet(suppressNextNodeClickTimeoutRef.current);
+      suppressNextNodeClickTimeoutRef.current = setTimeout(() => {
+        if (suppressNextNodeClickRef.current === drag.nodeId) {
+          suppressNextNodeClickRef.current = null;
+        }
+        suppressNextNodeClickTimeoutRef.current = null;
+      }, 0);
     }
     nodeDragRef.current = null;
   }, []);
@@ -248,6 +275,8 @@ export const useObjectMapModel = (payload: ObjectMapSnapshotPayload) => {
     setNodePositionOverrides(new Map());
     nodeDragRef.current = null;
     suppressNextNodeClickRef.current = null;
+    clearTimeoutIfSet(suppressNextNodeClickTimeoutRef.current);
+    suppressNextNodeClickTimeoutRef.current = null;
   }, []);
 
   const clearHoverEdge = useCallback(() => {

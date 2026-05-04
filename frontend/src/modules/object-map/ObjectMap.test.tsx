@@ -1096,4 +1096,35 @@ describe('ObjectMap', () => {
 
     cleanup();
   });
+
+  it('allows selecting the dragged node after the drag click suppression expires', async () => {
+    const { container, cleanup } = await renderObjectMap();
+    const dragButton = container.querySelector<HTMLButtonElement>(
+      '[data-testid="mock-drag-first-node"]'
+    );
+    const deploy = container.querySelector<HTMLButtonElement>('[aria-label="Deployment: web"]');
+    const deployNode = container.querySelector<HTMLElement>('[data-testid="mock-node-deploy"]');
+
+    expect(dragButton).toBeTruthy();
+    expect(deploy).toBeTruthy();
+    expect(deployNode).toBeTruthy();
+
+    await act(async () => {
+      dragButton!.click();
+      deploy!.dispatchEvent(mouseEvent('click'));
+      await Promise.resolve();
+    });
+
+    expect(deployNode?.dataset.active).toBe('false');
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      deploy!.dispatchEvent(mouseEvent('click'));
+      await Promise.resolve();
+    });
+
+    expect(deployNode?.dataset.active).toBe('true');
+
+    cleanup();
+  });
 });
