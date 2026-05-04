@@ -402,10 +402,6 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
             </div>
           </div>
         )}
-        <div className="object-map__status" aria-live="polite">
-          {visibleLayout.nodes.length} objects / {visibleLayout.edges.length} relationships
-          {payload.truncated ? ' / truncated' : ''}
-        </div>
       </div>
       {contextMenu && contextMenuItems.length > 0 && (
         <ContextMenu

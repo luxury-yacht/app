@@ -421,9 +421,6 @@ describe('ObjectMap', () => {
     expect(container.querySelector('[data-testid="mock-edge-edge-1"]')).toBeNull();
     expect(container.querySelector('[aria-label="Deployment: web"]')).toBeTruthy();
     expect(container.querySelector('[aria-label="Pod: web-abc"]')).toBeTruthy();
-    expect(container.querySelector('.object-map__status')?.textContent).toContain(
-      '2 objects / 0 relationships'
-    );
 
     cleanup();
   });
@@ -476,9 +473,6 @@ describe('ObjectMap', () => {
     expect(container.querySelector('[data-testid="mock-edge-edge-config"]')).toBeTruthy();
     expect(container.querySelector('[data-testid="mock-edge-edge-secret"]')).toBeTruthy();
     expect(container.querySelector('[data-testid="mock-edge-edge-b"]')).toBeNull();
-    expect(container.querySelector('.object-map__status')?.textContent).toContain(
-      '4 objects / 3 relationships'
-    );
 
     await act(async () => {
       resetButton!.click();
@@ -488,9 +482,6 @@ describe('ObjectMap', () => {
     expect(focusToggle?.getAttribute('aria-pressed')).toBe('false');
     expect(container.querySelector('[aria-label="Pod: web-b"]')).toBeTruthy();
     expect(container.querySelector('[data-testid="mock-edge-edge-b"]')).toBeTruthy();
-    expect(container.querySelector('.object-map__status')?.textContent).toContain(
-      '5 objects / 4 relationships'
-    );
     expect(resetButton?.disabled).toBe(true);
 
     cleanup();
@@ -710,9 +701,7 @@ describe('ObjectMap', () => {
     expect(warned.container.querySelector('.object-map__warnings')?.textContent).toContain(
       'permission denied for secrets'
     );
-    expect(warned.container.querySelector('.object-map__status')?.textContent).toContain(
-      '2 objects / 1 relationships / truncated'
-    );
+    expect(warned.container.querySelector('.object-map__status')).toBeNull();
 
     warned.cleanup();
   });

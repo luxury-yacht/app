@@ -387,21 +387,6 @@
   color: var(--color-accent);
 }
 
-.object-map__status {
-  position: absolute;
-  right: var(--spacing-md);
-  bottom: var(--spacing-md);
-  padding: var(--spacing-xs) var(--spacing-sm);
-  border: var(--border-width) solid var(--color-border);
-  border-radius: var(--border-radius-md);
-  background: var(--color-bg);
-  color: var(--color-text-secondary);
-  font-size: 0.75rem;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
-  z-index: 1;
-  pointer-events: none;
-}
-
 /* --- Banners and warnings ------------------------------------------- */
 
 .object-map__banner {
