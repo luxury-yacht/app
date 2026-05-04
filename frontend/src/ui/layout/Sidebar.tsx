@@ -293,9 +293,6 @@ function Sidebar() {
   // Cluster view items (always visible)
   const resourceViews = RESOURCE_VIEWS;
 
-  // Namespace view items (shown when namespace is expanded)
-  const namespaceViews = NAMESPACE_VIEWS;
-
   // Scroll selected namespace into view when it changes
   useEffect(() => {
     if (selectedNamespaceRef.current && selectedNamespaceKey) {
@@ -517,6 +514,10 @@ function Sidebar() {
                           const scope = namespace.scope ?? namespace.name;
                           const namespaceKey = toNamespaceKey(group.clusterId, scope);
                           const isExpanded = expandedNamespaceKey === namespaceKey;
+                          const namespaceViews =
+                            scope === ALL_NAMESPACES_SCOPE
+                              ? NAMESPACE_VIEWS.filter((view) => view.id !== 'map')
+                              : NAMESPACE_VIEWS;
 
                           return (
                             <div key={namespaceKey}>
