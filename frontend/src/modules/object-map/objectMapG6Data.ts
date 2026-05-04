@@ -2,6 +2,7 @@ import type { EdgeData, GraphData, NodeData } from '@antv/g6';
 import type { PathArray } from '@antv/g6';
 import type { KindBadgeVisualStyle } from '@shared/utils/kindBadgeColors';
 import { fallbackKindBadgeVisualStyle } from '@shared/utils/kindBadgeColors';
+import { getDisplayKind } from '@/utils/kindAliasMap';
 import type { ObjectMapLayout, PositionedEdge, PositionedNode } from './objectMapLayout';
 import { OBJECT_MAP_CARD_STYLE } from './objectMapCardStyle';
 import { OBJECT_MAP_G6_CARD_NODE, OBJECT_MAP_G6_PATH_EDGE } from './objectMapG6Constants';
@@ -172,10 +173,12 @@ export const toObjectMapG6Data = (
   selectionState: ObjectMapSelectionState,
   badgeForNode: ObjectMapNodeBadgeLookup,
   palette: ObjectMapG6Palette,
-  kindBadgeStyleForKind: (kind: string) => KindBadgeVisualStyle = fallbackKindBadgeVisualStyle
+  kindBadgeStyleForKind: (kind: string) => KindBadgeVisualStyle = fallbackKindBadgeVisualStyle,
+  useShortResourceNames = false
 ): GraphData => ({
   nodes: layout.nodes.map<NodeData>((node) => {
     const badge = badgeForNode(node.id);
+    const kindLabel = getDisplayKind(node.ref.kind, useShortResourceNames);
     const namespaceLabel = truncate(formatNamespace(node), NODE_NAMESPACE_MAX_CHARS);
     const kindBadgeStyle = kindBadgeStyleForKind(node.ref.kind);
 
@@ -185,7 +188,7 @@ export const toObjectMapG6Data = (
       data: {
         ref: node.ref,
         badge,
-        kindLabel: node.ref.kind,
+        kindLabel,
         nameLabel: node.ref.name,
         namespaceLabel,
       },
@@ -200,7 +203,7 @@ export const toObjectMapG6Data = (
         lineWidth: node.isSeed ? NODE_SEED_LINE_WIDTH : NODE_LINE_WIDTH,
         opacity: palette.fullOpacity,
         label: false,
-        cardKindBadgeText: node.ref.kind.toUpperCase(),
+        cardKindBadgeText: kindLabel.toUpperCase(),
         cardKindBadgeFill: kindBadgeStyle.backgroundColor,
         cardKindBadgeTextFill: kindBadgeStyle.color,
         cardKindBadgeStroke: kindBadgeStyle.borderColor,

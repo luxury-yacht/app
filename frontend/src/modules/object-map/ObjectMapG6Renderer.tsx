@@ -524,6 +524,7 @@ const applySelectionState = async (
 export interface ObjectMapG6RendererProps {
   layout: ObjectMapLayout;
   selectionState: ObjectMapSelectionState;
+  useShortResourceNames?: boolean;
   hoverEdge: ObjectMapHoverEdge | null;
   onHoverEdge: (edge: ObjectMapHoverEdge) => void;
   onClearHoverEdge: () => void;
@@ -545,6 +546,7 @@ export interface ObjectMapG6RendererProps {
 const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
   layout,
   selectionState,
+  useShortResourceNames = false,
   hoverEdge,
   onHoverEdge,
   onClearHoverEdge,
@@ -627,16 +629,23 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
         return { nodes: [], edges: [] };
       }
       const badgeStyleCache = new Map<string, ReturnType<typeof resolveKindBadgeVisualStyle>>();
-      return toObjectMapG6Data(layout, EMPTY_SELECTION_STATE, badgeForNode, palette, (kind) => {
-        const key = kind.trim();
-        const cached = badgeStyleCache.get(key);
-        if (cached) return cached;
-        const resolved = resolveKindBadgeVisualStyle(kind, containerRef.current);
-        badgeStyleCache.set(key, resolved);
-        return resolved;
-      });
+      return toObjectMapG6Data(
+        layout,
+        EMPTY_SELECTION_STATE,
+        badgeForNode,
+        palette,
+        (kind) => {
+          const key = kind.trim();
+          const cached = badgeStyleCache.get(key);
+          if (cached) return cached;
+          const resolved = resolveKindBadgeVisualStyle(kind, containerRef.current);
+          badgeStyleCache.set(key, resolved);
+          return resolved;
+        },
+        useShortResourceNames
+      );
     },
-    [layout, badgeForNode, palette, styleVersion]
+    [layout, badgeForNode, palette, styleVersion, useShortResourceNames]
   );
   const dataRef = useRef(data);
   dataRef.current = data;

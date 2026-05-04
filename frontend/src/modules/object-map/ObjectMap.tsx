@@ -9,6 +9,8 @@
 import React, { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import './ObjectMap.css';
 import type { ObjectMapReference, ObjectMapSnapshotPayload } from '@core/refresh/types';
+import { useShortNames } from '@/hooks/useShortNames';
+import { getDisplayKind } from '@/utils/kindAliasMap';
 import { isMacPlatform } from '@/utils/platform';
 import ContextMenu from '@shared/components/ContextMenu';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
@@ -59,6 +61,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
   onOpenObjectMap,
 }) => {
   const model = useObjectMapModel(payload);
+  const useShortResourceNames = useShortNames();
   const [showLegend, setShowLegend] = useState(true);
   const [focusMode, setFocusMode] = useState(false);
   const [enabledEdgeTypes, setEnabledEdgeTypes] = useState<Set<string> | null>(null);
@@ -107,8 +110,11 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
     const kinds = Array.from(new Set(model.layout.nodes.map((node) => node.ref.kind))).sort(
       (a, b) => a.localeCompare(b)
     );
-    return kinds.map((kind) => ({ value: kind, label: kind }));
-  }, [model.layout.nodes]);
+    return kinds.map((kind) => ({
+      value: kind,
+      label: getDisplayKind(kind, useShortResourceNames),
+    }));
+  }, [model.layout.nodes, useShortResourceNames]);
 
   useEffect(() => {
     setSelectedKinds((previous) => {
@@ -214,11 +220,12 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
     if (!normalizedSearchQuery) return [];
     return visibleLayout.nodes.filter((node) => {
       const namespace = node.ref.namespace ?? '';
-      return `${node.ref.kind} ${namespace} ${node.ref.name}`
+      const displayKind = getDisplayKind(node.ref.kind, useShortResourceNames);
+      return `${node.ref.kind} ${displayKind} ${namespace} ${node.ref.name}`
         .toLowerCase()
         .includes(normalizedSearchQuery);
     });
-  }, [normalizedSearchQuery, visibleLayout.nodes]);
+  }, [normalizedSearchQuery, useShortResourceNames, visibleLayout.nodes]);
 
   useEffect(() => {
     setSearchIndex(0);
@@ -292,6 +299,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
           <ObjectMapG6Renderer
             layout={visibleLayout}
             selectionState={visibleSelectionState}
+            useShortResourceNames={useShortResourceNames}
             hoverEdge={model.hoverEdge}
             onHoverEdge={model.setHoverEdge}
             onClearHoverEdge={model.clearHoverEdge}
