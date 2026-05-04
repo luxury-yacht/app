@@ -220,6 +220,29 @@ describe('computeObjectMapTooltipLayout', () => {
     expect(layout.width).toBeLessThanOrEqual(narrowPalette.tooltipMaxWidth);
   });
 
+  it('does not truncate long kind badges when they fit the badge max width', () => {
+    const widePalette = {
+      ...palette,
+      tooltipMaxWidth: 800,
+      tooltipBadgeMaxWidth: 190,
+    };
+    const layout = computeObjectMapTooltipLayout({
+      hoverEdge: hoverEdge({
+        sourceKind: 'ClusterRoleBinding',
+        sourceLabel: 'system:controller:service-account-token-controller',
+      }),
+      palette: widePalette,
+      useShortResourceNames: false,
+      resolveKindBadgeStyle: () => badgeStyle,
+    });
+    const first = layout.rows[0];
+
+    expect(first.type).toBe('object');
+    if (first.type !== 'object') return;
+    expect(first.endpoint.badgeText).toBe('CLUSTERROLEBINDING');
+    expect(first.endpoint.badgeWidth).toBeLessThanOrEqual(widePalette.tooltipBadgeMaxWidth);
+  });
+
   it('uses the provided badge style resolver for each object row', () => {
     const resolveKindBadgeStyle = vi.fn(() => badgeStyle);
 

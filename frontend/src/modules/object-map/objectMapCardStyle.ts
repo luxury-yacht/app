@@ -22,4 +22,9 @@ export const OBJECT_MAP_CARD_STYLE = {
   textFontSize: 11,
   nameFontWeight: 500,
   namespaceFontWeight: 400,
+  collapseBadgeWidth: 28,
+  collapseBadgeHeight: 14,
+  collapseBadgeRadius: 3,
+  collapseBadgeRightInset: 16,
+  collapseBadgeTopInset: 8,
 } as const;

@@ -19,11 +19,11 @@ const NODE_CARD_RADIUS = OBJECT_MAP_CARD_STYLE.borderRadius;
 const NODE_LINE_WIDTH = 1;
 const NODE_SEED_LINE_WIDTH = 2;
 const BADGE_FONT_WEIGHT = 700;
-const BADGE_WIDTH = 28;
-const BADGE_HEIGHT = 14;
-const BADGE_RADIUS = 3;
-const BADGE_OFFSET_X = -24;
-const BADGE_OFFSET_Y = BADGE_HEIGHT - 8;
+const BADGE_WIDTH = OBJECT_MAP_CARD_STYLE.collapseBadgeWidth;
+const BADGE_HEIGHT = OBJECT_MAP_CARD_STYLE.collapseBadgeHeight;
+const BADGE_RADIUS = OBJECT_MAP_CARD_STYLE.collapseBadgeRadius;
+const BADGE_OFFSET_X = -(OBJECT_MAP_CARD_STYLE.collapseBadgeRightInset + BADGE_WIDTH / 2);
+const BADGE_OFFSET_Y = OBJECT_MAP_CARD_STYLE.collapseBadgeTopInset;
 
 export interface ObjectMapG6Palette {
   accent: string;

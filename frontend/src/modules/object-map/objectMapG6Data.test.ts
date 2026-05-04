@@ -14,6 +14,7 @@ import {
   parseObjectMapG6Path,
   toObjectMapG6Data,
 } from './objectMapG6Data';
+import { OBJECT_MAP_CARD_STYLE } from './objectMapCardStyle';
 import { OBJECT_MAP_G6_CARD_NODE, OBJECT_MAP_G6_PATH_EDGE } from './objectMapG6Constants';
 import type { ObjectMapG6Palette } from './objectMapG6Data';
 import type { ObjectMapSelectionState } from './objectMapRendererTypes';
@@ -207,6 +208,20 @@ describe('objectMapG6Data', () => {
         cardNamespaceText: 'default',
       })
     );
+    expect(deploy?.style?.badges).toEqual([
+      expect.objectContaining({
+        backgroundHeight: OBJECT_MAP_CARD_STYLE.collapseBadgeHeight,
+        backgroundRadius: OBJECT_MAP_CARD_STYLE.collapseBadgeRadius,
+        backgroundWidth: OBJECT_MAP_CARD_STYLE.collapseBadgeWidth,
+        offsetX: -(
+          OBJECT_MAP_CARD_STYLE.collapseBadgeRightInset +
+          OBJECT_MAP_CARD_STYLE.collapseBadgeWidth / 2
+        ),
+        offsetY: OBJECT_MAP_CARD_STYLE.collapseBadgeTopInset,
+        placement: 'right-top',
+        text: '+2',
+      }),
+    ]);
 
     const clusterScoped = graphData.nodes?.find((entry) => entry.id === 'node');
     expect(clusterScoped?.data).toEqual(
