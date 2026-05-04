@@ -251,3 +251,13 @@ export const handleObjectMapG6DragEnd = (
     context.handlers.onNodeDragEnd(pointer);
   }
 };
+
+export const handleObjectMapG6PointerUp = (
+  context: ObjectMapG6NodeInteractionContext,
+  event: ObjectMapG6ElementPointerEvent
+): void => {
+  const pointer = toObjectMapG6Pointer(event, context.graph);
+  if (endObjectMapNodeGesture(context.gestureState, pointer.pointerId)) {
+    context.handlers.onNodeDragEnd(pointer);
+  }
+};

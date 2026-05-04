@@ -13,6 +13,7 @@ import {
   handleObjectMapG6NodeClick,
   handleObjectMapG6NodeContextMenu,
   handleObjectMapG6NodePointerDown,
+  handleObjectMapG6PointerUp,
   isObjectMapG6BadgeEvent,
   objectMapG6TooltipPoint,
   toObjectMapG6Pointer,
@@ -160,6 +161,35 @@ describe('object map G6 interactions', () => {
 
     handleObjectMapG6NodeClick(context, { target: { id: 'deploy' } });
     expect(handlers.onSelectNode).toHaveBeenCalledWith('deploy');
+  });
+
+  it('clears a click-only node gesture before the next canvas drag', () => {
+    const { context, handlers } = createContext();
+
+    handleObjectMapG6NodePointerDown(context, {
+      target: { id: 'deploy' },
+      pointerId: 1,
+      clientX: 10,
+      clientY: 10,
+    });
+    handleObjectMapG6PointerUp(context, {
+      target: { id: 'deploy' },
+      pointerId: 1,
+      clientX: 10,
+      clientY: 10,
+    });
+    handleObjectMapG6NodeClick(context, { target: { id: 'deploy' } });
+    handleObjectMapG6Drag(context, {
+      target: { id: 'canvas' },
+      targetType: 'canvas',
+      pointerId: 1,
+      clientX: 140,
+      clientY: 150,
+    });
+
+    expect(handlers.onSelectNode).toHaveBeenCalledWith('deploy');
+    expect(handlers.onNodeDragMove).not.toHaveBeenCalled();
+    expect(handlers.onUserViewportChange).toHaveBeenCalledTimes(1);
   });
 
   it('allows selecting a different node immediately after a drag', () => {

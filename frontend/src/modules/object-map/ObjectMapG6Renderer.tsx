@@ -14,6 +14,7 @@ import type { ObjectMapLayout, PositionedEdge, PositionedNode } from './objectMa
 import { ensureObjectMapG6CardNodeRegistered } from './objectMapG6CardNode';
 import { ensureObjectMapG6PathEdgeRegistered } from './objectMapG6PathEdge';
 import { createObjectMapG6ApplyQueue, type ObjectMapG6ApplyQueue } from './objectMapG6ApplyQueue';
+import { objectMapG6Behaviors } from './objectMapG6Behaviors';
 import { OBJECT_MAP_G6_CARD_NODE } from './objectMapG6Constants';
 import { objectMapG6EdgeState, objectMapG6NodeState, toObjectMapG6Data } from './objectMapG6Data';
 import type { ObjectMapG6Palette } from './objectMapG6Data';
@@ -24,6 +25,7 @@ import {
   handleObjectMapG6NodeClick,
   handleObjectMapG6NodeContextMenu,
   handleObjectMapG6NodePointerDown,
+  handleObjectMapG6PointerUp,
   objectMapG6TooltipPoint,
   type ObjectMapG6ElementPointerEvent as G6ElementPointerEvent,
 } from './objectMapG6Interactions';
@@ -344,14 +346,7 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
       autoResize: true,
       animation: false,
       data: initialData,
-      behaviors: [
-        'drag-canvas',
-        {
-          type: 'scroll-canvas',
-          enable: (event: WheelEvent) => !isObjectMapZoomWheelEvent(event),
-          range: Infinity,
-        },
-      ],
+      behaviors: objectMapG6Behaviors(() => onUserViewportChangeRef.current?.()),
       node: objectMapG6NodeOptions(initialPalette),
       edge: objectMapG6EdgeOptions(initialPalette),
     });
@@ -433,6 +428,11 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
     graph.on(CommonEvent.DRAG_END, (rawEvent) => {
       const event = rawEvent as G6ElementPointerEvent;
       handleObjectMapG6DragEnd(nodeInteractionContext(), event);
+    });
+
+    graph.on(CommonEvent.POINTER_UP, (rawEvent) => {
+      const event = rawEvent as G6ElementPointerEvent;
+      handleObjectMapG6PointerUp(nodeInteractionContext(), event);
     });
 
     graph.on(EdgeEvent.POINTER_ENTER, (rawEvent) => {
