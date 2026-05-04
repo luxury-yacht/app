@@ -1,0 +1,22 @@
+.namespace-map {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+}
+
+.namespace-map__body {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+}
+
+.namespace-map__message {
+  margin: auto;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.namespace-map__message--error {
+  color: var(--color-error-text, var(--color-error));
+}

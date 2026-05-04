@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { buildObjectMapScope, OBJECT_MAP_MAX_DEPTH, OBJECT_MAP_MAX_NODES } from './objectMapScope';
+import {
+  buildNamespaceObjectMapScope,
+  buildObjectMapScope,
+  OBJECT_MAP_MAX_DEPTH,
+  OBJECT_MAP_MAX_NODES,
+} from './objectMapScope';
 
 describe('buildObjectMapScope', () => {
   it('encodes a namespaced object with default depth/nodes (no query string)', () => {
@@ -78,5 +83,16 @@ describe('buildObjectMapScope', () => {
     expect(
       buildObjectMapScope({ clusterId: 'c', version: 'v1', kind: 'Pod', name: '' })
     ).toBeNull();
+  });
+
+  it('encodes a namespace map scope', () => {
+    expect(buildNamespaceObjectMapScope('cluster-a', 'default', { maxNodes: 1000 })).toBe(
+      'cluster-a|namespace:default?maxNodes=1000'
+    );
+  });
+
+  it('returns null for namespace map scopes without cluster or namespace', () => {
+    expect(buildNamespaceObjectMapScope('', 'default')).toBeNull();
+    expect(buildNamespaceObjectMapScope('cluster-a', '')).toBeNull();
   });
 });

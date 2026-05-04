@@ -188,10 +188,19 @@ type objectMapBuilder struct {
 	catalogService func() *objectcatalog.Service
 }
 
+type objectMapScopeKind int
+
+const (
+	objectMapScopeObject objectMapScopeKind = iota
+	objectMapScopeNamespace
+)
+
 type objectMapOptions struct {
-	identity scopeObjectIdentity
-	maxDepth int
-	maxNodes int
+	scopeKind objectMapScopeKind
+	identity  scopeObjectIdentity
+	namespace string
+	maxDepth  int
+	maxNodes  int
 }
 
 type objectMapRecord struct {
@@ -261,6 +270,9 @@ func (b *objectMapBuilder) Build(ctx context.Context, scope string) (*refresh.Sn
 	if err != nil {
 		return nil, err
 	}
+	if opts.scopeKind == objectMapScopeNamespace {
+		return b.buildNamespace(ctx, scope, opts)
+	}
 	if opts.identity.GVK.Group == "" && opts.identity.GVK.Version == "" {
 		return nil, fmt.Errorf("object-map scope for %s/%s is missing group/version", opts.identity.GVK.Kind, opts.identity.Name)
 	}
@@ -306,6 +318,52 @@ func (b *objectMapBuilder) Build(ctx context.Context, scope string) (*refresh.Sn
 	}, nil
 }
 
+func (b *objectMapBuilder) buildNamespace(ctx context.Context, scope string, opts objectMapOptions) (*refresh.Snapshot, error) {
+	meta := ClusterMetaFromContext(ctx)
+	index := newObjectMapIndex(meta)
+	index.addCatalog(b.catalog())
+	index.collectTyped(ctx, b.client)
+
+	graph := index.buildNamespaceGraph(opts.namespace, opts.maxNodes)
+	nodes := sortedObjectMapNodes(graph.nodes)
+	edges := sortedObjectMapEdges(graph.edges)
+	seed := ObjectMapReference{
+		ClusterID:   meta.ClusterID,
+		ClusterName: meta.ClusterName,
+		Group:       "",
+		Version:     "v1",
+		Kind:        "Namespace",
+		Resource:    "namespaces",
+		Name:        opts.namespace,
+	}
+	payload := ObjectMapSnapshotPayload{
+		ClusterMeta: meta,
+		Seed:        seed,
+		Nodes:       nodes,
+		Edges:       edges,
+		MaxDepth:    opts.maxDepth,
+		MaxNodes:    opts.maxNodes,
+		Truncated:   graph.truncated,
+		Warnings:    index.warnings,
+	}
+
+	return &refresh.Snapshot{
+		Domain:  objectMapDomain,
+		Scope:   scope,
+		Version: 0,
+		Payload: payload,
+		Stats: refresh.SnapshotStats{
+			ItemCount:    len(nodes),
+			TotalItems:   len(nodes),
+			Truncated:    graph.truncated,
+			Warnings:     index.warnings,
+			IsFinalBatch: true,
+			BatchSize:    len(nodes),
+			TotalBatches: 1,
+		},
+	}, nil
+}
+
 func (b *objectMapBuilder) catalog() *objectcatalog.Service {
 	if b == nil || b.catalogService == nil {
 		return nil
@@ -315,14 +373,21 @@ func (b *objectMapBuilder) catalog() *objectcatalog.Service {
 
 func parseObjectMapScope(scope string) (objectMapOptions, error) {
 	objectScope, rawQuery, hasQuery := strings.Cut(scope, "?")
-	identity, err := parseObjectScope(objectScope)
-	if err != nil {
-		return objectMapOptions{}, err
-	}
 	opts := objectMapOptions{
-		identity: identity,
-		maxDepth: defaultObjectMapDepth,
-		maxNodes: defaultObjectMapNodes,
+		scopeKind: objectMapScopeObject,
+		maxDepth:  defaultObjectMapDepth,
+		maxNodes:  defaultObjectMapNodes,
+	}
+	_, trimmedScope := refresh.SplitClusterScope(objectScope)
+	if namespace, ok := parseObjectMapNamespaceScope(trimmedScope); ok {
+		opts.scopeKind = objectMapScopeNamespace
+		opts.namespace = namespace
+	} else {
+		identity, err := parseObjectScope(objectScope)
+		if err != nil {
+			return objectMapOptions{}, err
+		}
+		opts.identity = identity
 	}
 	if !hasQuery {
 		return opts, nil
@@ -334,6 +399,19 @@ func parseObjectMapScope(scope string) (objectMapOptions, error) {
 	opts.maxDepth = parseBoundedInt(values.Get("maxDepth"), defaultObjectMapDepth, 0, maxObjectMapDepth)
 	opts.maxNodes = parseBoundedInt(values.Get("maxNodes"), defaultObjectMapNodes, 1, maxObjectMapNodes)
 	return opts, nil
+}
+
+func parseObjectMapNamespaceScope(scope string) (string, bool) {
+	trimmed := strings.TrimSpace(scope)
+	prefix := "namespace:"
+	if !strings.HasPrefix(strings.ToLower(trimmed), prefix) {
+		return "", false
+	}
+	namespace := strings.TrimSpace(trimmed[len(prefix):])
+	if namespace == "" {
+		return "", false
+	}
+	return namespace, true
 }
 
 func parseBoundedInt(raw string, fallback, minValue, maxValue int) int {
@@ -893,6 +971,91 @@ func (idx *objectMapIndex) buildGraph(seed *objectMapRecord, maxDepth, maxNodes 
 	return graph
 }
 
+func (idx *objectMapIndex) buildNamespaceGraph(namespace string, maxNodes int) objectMapGraph {
+	allEdges := idx.buildAllEdges()
+	sort.Slice(allEdges, func(i, j int) bool {
+		if allEdges[i].Type != allEdges[j].Type {
+			return allEdges[i].Type < allEdges[j].Type
+		}
+		if allEdges[i].Source != allEdges[j].Source {
+			return allEdges[i].Source < allEdges[j].Source
+		}
+		if allEdges[i].Target != allEdges[j].Target {
+			return allEdges[i].Target < allEdges[j].Target
+		}
+		return allEdges[i].ID < allEdges[j].ID
+	})
+
+	graph := objectMapGraph{
+		nodes: make(map[string]ObjectMapNode),
+		edges: make(map[string]ObjectMapEdge),
+	}
+
+	addRecord := func(record *objectMapRecord, depth int) bool {
+		if record == nil || !isNamespaceMapSupportedRecord(record) {
+			return false
+		}
+		id := objectMapNodeID(record.ref)
+		if id == "" {
+			return false
+		}
+		if _, exists := graph.nodes[id]; exists {
+			return false
+		}
+		if len(graph.nodes) >= maxNodes {
+			graph.truncated = true
+			return false
+		}
+		graph.nodes[id] = ObjectMapNode{ID: id, Depth: depth, Ref: record.ref}
+		return true
+	}
+
+	initialRecords := make([]*objectMapRecord, 0)
+	for _, record := range idx.records {
+		if record.ref.Namespace == namespace {
+			initialRecords = append(initialRecords, record)
+		}
+	}
+	sort.Slice(initialRecords, func(i, j int) bool {
+		return compareObjectMapRefs(initialRecords[i].ref, initialRecords[j].ref) < 0
+	})
+	for _, record := range initialRecords {
+		addRecord(record, 0)
+	}
+
+	changed := true
+	for changed && !graph.truncated {
+		changed = false
+		for _, edge := range allEdges {
+			sourceRecord := idx.records[edge.Source]
+			targetRecord := idx.records[edge.Target]
+			_, sourceIncluded := graph.nodes[edge.Source]
+			_, targetIncluded := graph.nodes[edge.Target]
+			if sourceIncluded && targetRecord != nil && targetRecord.ref.Namespace == "" {
+				if addRecord(targetRecord, 1) {
+					changed = true
+				}
+			}
+			if targetIncluded && targetRecord != nil && !stopsNamespaceMapReverseExpansion(targetRecord.ref) && sourceRecord != nil && sourceRecord.ref.Namespace == "" {
+				if addRecord(sourceRecord, 1) {
+					changed = true
+				}
+			}
+		}
+	}
+
+	for _, edge := range allEdges {
+		if _, ok := graph.nodes[edge.Source]; !ok {
+			continue
+		}
+		if _, ok := graph.nodes[edge.Target]; !ok {
+			continue
+		}
+		graph.edges[edge.ID] = edge
+	}
+	return graph
+}
+
 func (idx *objectMapIndex) traverseObjectMapMixed(
 	graph *objectMapGraph,
 	seedID string,
@@ -1042,6 +1205,54 @@ func usesDirectionalObjectMapTraversal(ref ObjectMapReference) bool {
 	default:
 		return false
 	}
+}
+
+func isNamespaceMapSupportedRecord(record *objectMapRecord) bool {
+	if record == nil {
+		return false
+	}
+	return record.pod != nil ||
+		record.service != nil ||
+		record.slice != nil ||
+		record.pvc != nil ||
+		record.pv != nil ||
+		record.storage != nil ||
+		record.ingress != nil ||
+		record.ingClass != nil ||
+		record.hpa != nil ||
+		record.clusterRole != nil ||
+		record.clusterRoleBinding != nil ||
+		record.template != nil ||
+		record.cronJobTpl != nil ||
+		record.ref.Kind == "ConfigMap" ||
+		record.ref.Kind == "Secret" ||
+		record.ref.Kind == "ServiceAccount" ||
+		record.ref.Kind == "Node"
+}
+
+func stopsNamespaceMapReverseExpansion(ref ObjectMapReference) bool {
+	switch ref.Kind {
+	case "StorageClass", "IngressClass":
+		return true
+	default:
+		return false
+	}
+}
+
+func compareObjectMapRefs(a, b ObjectMapReference) int {
+	if a.Kind != b.Kind {
+		return strings.Compare(a.Kind, b.Kind)
+	}
+	if a.Namespace != b.Namespace {
+		return strings.Compare(a.Namespace, b.Namespace)
+	}
+	if a.Group != b.Group {
+		return strings.Compare(a.Group, b.Group)
+	}
+	if a.Version != b.Version {
+		return strings.Compare(a.Version, b.Version)
+	}
+	return strings.Compare(a.Name, b.Name)
 }
 
 func (idx *objectMapIndex) buildAllEdges() []ObjectMapEdge {

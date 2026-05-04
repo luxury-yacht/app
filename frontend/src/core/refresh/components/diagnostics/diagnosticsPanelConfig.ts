@@ -32,6 +32,7 @@ const CLUSTER_FEATURE_MAP: Record<ClusterViewType, readonly string[]> = {
 
 const NAMESPACE_FEATURE_MAP: Record<NamespaceViewType, readonly string[]> = {
   browse: [], // Empty = show all namespace-scoped permissions (browse spans all resource types).
+  map: ['Object map resources'],
   pods: ['Namespace pods'],
   workloads: ['Namespace workloads'],
   config: ['Namespace config'],

@@ -50,6 +50,7 @@ const RESOURCE_VIEWS: Array<{ id: ClusterViewType; label: string }> = [
 // Static namespace view list to avoid re-creating the array each render.
 const NAMESPACE_VIEWS: Array<{ id: NamespaceViewType; label: string }> = [
   { id: 'browse', label: 'Browse' },
+  { id: 'map', label: 'Map' },
   { id: 'workloads', label: 'Workloads' },
   { id: 'pods', label: 'Pods' },
   { id: 'autoscaling', label: 'Autoscaling' },

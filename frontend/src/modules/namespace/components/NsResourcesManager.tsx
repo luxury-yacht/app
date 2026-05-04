@@ -17,7 +17,7 @@ import { NamespaceViewType } from '@/types/navigation/views';
 // The browse tab is catalog-driven, not a namespace resource loader.
 const isLoadableNamespaceTab = (
   tab: NamespaceViewType
-): tab is Exclude<NamespaceViewType, 'browse'> => tab !== 'browse';
+): tab is Exclude<NamespaceViewType, 'browse' | 'map'> => tab !== 'browse' && tab !== 'map';
 
 interface NamespaceResourcesManagerProps {
   namespace: string;

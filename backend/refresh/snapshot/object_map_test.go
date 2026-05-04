@@ -92,6 +92,61 @@ func TestObjectMapAppliesNodeCap(t *testing.T) {
 	}
 }
 
+func TestObjectMapBuildsNamespaceGraph(t *testing.T) {
+	objects := append(objectMapFixtureObjects(), podFixture("other", "other-pod", "other-pod-uid", "", map[string]string{"app": "other"}))
+	client := fake.NewSimpleClientset(objects...)
+	builder := &objectMapBuilder{client: client}
+	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"})
+
+	snap, err := builder.Build(ctx, "cluster-a|namespace:default?maxNodes=100")
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+	payload := snap.Payload.(ObjectMapSnapshotPayload)
+
+	if payload.Seed.Kind != "Namespace" || payload.Seed.Name != "default" || payload.Seed.ClusterID != "cluster-a" {
+		t.Fatalf("unexpected namespace seed: %#v", payload.Seed)
+	}
+	assertNode(t, payload, "Deployment", "web")
+	assertNode(t, payload, "ReplicaSet", "web-rs")
+	assertNode(t, payload, "Pod", "web-pod")
+	assertNode(t, payload, "Service", "web")
+	assertNode(t, payload, "EndpointSlice", "web-slice")
+	assertNode(t, payload, "PersistentVolumeClaim", "data")
+	assertNode(t, payload, "PersistentVolume", "pv-data")
+	assertNode(t, payload, "Node", "node-1")
+	assertNode(t, payload, "Job", "unused-job")
+	assertMissingNode(t, payload, "Pod", "other-pod")
+	assertMissingNode(t, payload, "Namespace", "default")
+	assertEdge(t, payload, "Deployment", "web", "ReplicaSet", "web-rs", "owner")
+	assertEdge(t, payload, "ReplicaSet", "web-rs", "Pod", "web-pod", "owner")
+	assertEdge(t, payload, "Pod", "web-pod", "Node", "node-1", "schedules")
+	assertEdge(t, payload, "PersistentVolumeClaim", "data", "PersistentVolume", "pv-data", "volume-binding")
+}
+
+func TestObjectMapNamespaceGraphDoesNotReverseExpandFromStorageClass(t *testing.T) {
+	objects := append(objectMapStorageFixtureObjects(),
+		&corev1.PersistentVolume{
+			ObjectMeta: metav1.ObjectMeta{Name: "pv-other", UID: types.UID("pv-other-uid")},
+			Spec:       corev1.PersistentVolumeSpec{StorageClassName: "fast"},
+		},
+	)
+	client := fake.NewSimpleClientset(objects...)
+	builder := &objectMapBuilder{client: client}
+	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a"})
+
+	snap, err := builder.Build(ctx, "cluster-a|namespace:default?maxNodes=100")
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+	payload := snap.Payload.(ObjectMapSnapshotPayload)
+
+	assertNode(t, payload, "StorageClass", "fast")
+	assertNode(t, payload, "PersistentVolume", "pv-data")
+	assertNode(t, payload, "PersistentVolume", "pv-logs")
+	assertMissingNode(t, payload, "PersistentVolume", "pv-other")
+}
+
 func TestObjectMapDoesNotFanOutThroughSharedHubResources(t *testing.T) {
 	client := fake.NewSimpleClientset(objectMapHubFixtureObjects()...)
 	builder := &objectMapBuilder{client: client}

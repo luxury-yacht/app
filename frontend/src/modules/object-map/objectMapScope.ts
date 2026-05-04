@@ -78,3 +78,16 @@ export const buildObjectMapScope = (
   });
   return buildClusterScope(clusterId, `${objectScope}${formatQueryString(options)}`);
 };
+
+export const buildNamespaceObjectMapScope = (
+  clusterId: string | null | undefined,
+  namespace: string | null | undefined,
+  options: ObjectMapScopeOptions = {}
+): string | null => {
+  const id = clusterId?.trim();
+  const name = namespace?.trim();
+  if (!id || !name) {
+    return null;
+  }
+  return buildClusterScope(id, `namespace:${name}${formatQueryString(options)}`);
+};

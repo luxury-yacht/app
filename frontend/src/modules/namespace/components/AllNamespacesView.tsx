@@ -287,6 +287,12 @@ const AllNamespacesView: React.FC<AllNamespacesViewProps> = ({ activeTab }) => {
         return <AllNamespacesCustomView />;
       case 'browse':
         return <BrowseView namespace={ALL_NAMESPACES_SCOPE} />;
+      case 'map':
+        return (
+          <div className="namespace-placeholder">
+            <p>Map is available for individual namespaces.</p>
+          </div>
+        );
       default:
         return (
           <div className="namespace-placeholder">

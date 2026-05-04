@@ -878,6 +878,9 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
             case 'browse':
               // Catalog-backed browse view manages its own refresh cadence.
               break;
+            case 'map':
+              // Object-map view owns its scoped snapshot lifecycle.
+              break;
             case 'pods':
               res.pods.load(false);
               break;
@@ -954,7 +957,7 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
       return;
     }
 
-    if (activeKey === 'browse') {
+    if (activeKey === 'browse' || activeKey === 'map') {
       return;
     }
 
@@ -1033,6 +1036,9 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     const activeKey = activeResourceType ?? DEFAULT_NAMESPACE_VIEW;
     const specLists = PERMISSIONS_BY_RESOURCE[activeKey] ?? [];
     if (specLists.length === 0) {
+      return;
+    }
+    if (activeKey === 'map') {
       return;
     }
 

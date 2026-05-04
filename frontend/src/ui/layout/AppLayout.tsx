@@ -151,6 +151,7 @@ export const AppLayout: React.FC = () => {
       if (viewState.viewType === 'namespace' && viewState.activeNamespaceTab) {
         const tabTitlesNamespace: Record<string, string> = {
           objects: 'All Objects',
+          map: 'Map',
           workloads: 'Workloads',
           pods: 'Pods',
           autoscaling: 'Autoscaling',

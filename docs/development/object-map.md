@@ -1,13 +1,13 @@
 # Object Map
 
-The object map shows the relationship graph around a Kubernetes object. It is
-opened from the object panel map tab or from object/action menus that expose the
-`Map` action.
+The object map shows Kubernetes relationship graphs. It is opened from the
+object panel map tab, from object/action menus that expose the `Map` action, and
+from the namespace `Map` view.
 
 The feature is intentionally split into a backend graph builder and a frontend
 renderer:
 
-- Backend: builds a cluster-scoped object relationship snapshot.
+- Backend: builds cluster-scoped object or namespace relationship snapshots.
 - Frontend: requests the snapshot, computes the visual layout, and renders the
   interactive map with G6.
 
@@ -19,15 +19,17 @@ included for namespaced objects.
 
 1. The object panel decides whether the selected object supports maps using
    `frontend/src/modules/object-panel/components/ObjectPanel/objectMapSupport.ts`.
-2. `MapTab` builds a scoped object-map request using
+2. Object-panel `MapTab` builds a scoped object-map request using
    `frontend/src/modules/object-map/objectMapScope.ts`.
-3. The frontend refresh orchestrator enables the scoped `object-map` domain only
-   while the map tab is active.
-4. The backend `object-map` snapshot domain builds a graph in
+3. Namespace `Map` builds a namespace-scoped object-map request using the same
+   scope helpers.
+4. The frontend refresh orchestrator enables the scoped `object-map` domain only
+   while the map view is active.
+5. The backend `object-map` snapshot domain builds a graph in
    `backend/refresh/snapshot/object_map.go`.
-5. The frontend object-map model filters, collapses, lays out, and annotates the
+6. The frontend object-map model filters, collapses, lays out, and annotates the
    returned graph.
-6. `ObjectMapG6Renderer` renders the graph, handles pan/zoom, drag, hit testing,
+7. `ObjectMapG6Renderer` renders the graph, handles pan/zoom, drag, hit testing,
    connection hover, node selection, and context menu events.
 
 The map uses snapshots, not the resource stream. The snapshot response is still
@@ -61,6 +63,22 @@ Default backend limits:
 
 The frontend scope builder can request `maxDepth` and `maxNodes`, but both are
 clamped to the same backend caps.
+
+## Scope Modes
+
+Object maps support two scope shapes:
+
+- Object scope: `clusterId|<namespace>:<group>/<version>:<Kind>:<name>`
+- Namespace scope: `clusterId|namespace:<name>`
+
+Object scope returns the recursive graph around one seed object. Namespace scope
+returns supported namespace-scoped objects in that namespace plus directly
+related cluster-scoped objects, such as Nodes, PersistentVolumes, StorageClasses,
+IngressClasses, ClusterRoleBindings, and ClusterRoles.
+
+Namespace maps do not add a synthetic Namespace card to the graph. The namespace
+is carried as the payload seed so the payload remains compatible with the shared
+object-map renderer, but the visible nodes are the related objects themselves.
 
 ## Backend Sources
 

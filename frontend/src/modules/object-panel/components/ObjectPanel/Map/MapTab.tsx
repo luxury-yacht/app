@@ -18,35 +18,11 @@ import { refreshOrchestrator } from '@/core/refresh';
 import { useRefreshScopedDomain } from '@/core/refresh/store';
 import type { ObjectMapReference, ObjectMapSnapshotPayload } from '@/core/refresh/types';
 import ObjectMap from '@modules/object-map/ObjectMap';
+import { buildResolvedFromMapRef } from '@modules/object-map/objectMapNavigation';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
-import {
-  buildRequiredObjectReference,
-  type ResolvedObjectReference,
-} from '@shared/utils/objectIdentity';
 import { INACTIVE_SCOPE } from '../constants';
 import type { PanelObjectData } from '../types';
-
-const buildResolvedFromMapRef = (ref: ObjectMapReference): ResolvedObjectReference | null => {
-  try {
-    return buildRequiredObjectReference({
-      kind: ref.kind,
-      name: ref.name,
-      namespace: ref.namespace ?? undefined,
-      clusterId: ref.clusterId,
-      clusterName: ref.clusterName ?? undefined,
-      group: ref.group,
-      version: ref.version,
-      resource: ref.resource ?? undefined,
-      uid: ref.uid ?? undefined,
-    });
-  } catch (error) {
-    errorHandler.handle(error instanceof Error ? error : new Error(String(error)), {
-      source: 'object-map-build-ref',
-    });
-    return null;
-  }
-};
 
 interface MapTabProps {
   objectData: PanelObjectData | null;
