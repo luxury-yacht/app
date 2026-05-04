@@ -4,6 +4,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ObjectMapReference, ObjectMapSnapshotPayload } from '@core/refresh/types';
 import ObjectMap from './ObjectMap';
 
+const useShortNamesMock = vi.hoisted(() => vi.fn(() => false));
+
+vi.mock('@/hooks/useShortNames', () => ({
+  useShortNames: () => useShortNamesMock(),
+}));
+
 vi.mock('@shared/components/ContextMenu', () => ({
   default: ({
     items,
@@ -82,11 +88,12 @@ vi.mock('./ObjectMapG6Renderer', () => {
       ref: ObjectMapReference;
       position: { x: number; y: number };
     }) => void;
+    useShortResourceNames?: boolean;
   }) => {
     const firstNode = props.layout.nodes[0];
 
     return (
-      <div data-testid="object-map-g6-mock">
+      <div data-testid="object-map-g6-mock" data-short-names={String(props.useShortResourceNames)}>
         <button type="button" data-testid="mock-clear-selection" onClick={props.onClearSelection}>
           clear
         </button>
@@ -230,6 +237,18 @@ const payload: ObjectMapSnapshotPayload = {
   truncated: false,
 };
 
+const shortNamesPayload: ObjectMapSnapshotPayload = {
+  ...payload,
+  seed: ref('service', 'Service', 'frontend', ''),
+  nodes: [
+    { id: 'service', depth: 0, ref: ref('service', 'Service', 'frontend', '') },
+    { id: 'pod', depth: 1, ref: ref('pod', 'Pod', 'frontend-abc', '') },
+  ],
+  edges: [
+    { id: 'edge-service', source: 'service', target: 'pod', type: 'selector', label: 'selects' },
+  ],
+};
+
 const collapsePayload: ObjectMapSnapshotPayload = {
   ...payload,
   nodes: [
@@ -345,6 +364,7 @@ const mouseEvent = (type: string, init: MouseEventInit = {}): MouseEvent =>
   new MouseEvent(type, { bubbles: true, cancelable: true, ...init });
 
 afterEach(() => {
+  useShortNamesMock.mockReturnValue(false);
   document.body.innerHTML = '';
 });
 
@@ -540,6 +560,46 @@ describe('ObjectMap', () => {
     expect(container.querySelector('[data-testid="mock-node-pod"]')).toBeTruthy();
     expect(container.querySelector('[data-testid="mock-edge-edge-1"]')).toBeNull();
     expect(kindTrigger?.textContent).toContain('Kinds (1)');
+
+    cleanup();
+  });
+
+  it('uses short resource names in map controls when the setting is enabled', async () => {
+    useShortNamesMock.mockReturnValue(true);
+    const { container, cleanup } = await renderObjectMap({ testPayload: shortNamesPayload });
+    const renderer = container.querySelector<HTMLElement>('[data-testid="object-map-g6-mock"]');
+    const kindTrigger = container.querySelector<HTMLElement>('[aria-label="Filter map kinds"]');
+    const search = container.querySelector<HTMLInputElement>('[aria-label="Search map objects"]');
+
+    expect(renderer?.dataset.shortNames).toBe('true');
+    expect(kindTrigger).toBeTruthy();
+    expect(search).toBeTruthy();
+
+    await act(async () => {
+      kindTrigger!.dispatchEvent(mouseEvent('click'));
+      await Promise.resolve();
+    });
+
+    const serviceOption = Array.from(
+      container.querySelectorAll<HTMLElement>('.dropdown-option')
+    ).find((option) => option.textContent?.includes('svc'));
+    expect(serviceOption).toBeTruthy();
+
+    await act(async () => {
+      const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+      valueSetter!.call(search, 'svc');
+      search!.dispatchEvent(new InputEvent('input', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      search!.form!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+    });
+
+    expect(
+      container.querySelector<HTMLElement>('[data-testid="mock-node-service"]')?.dataset.active
+    ).toBe('true');
 
     cleanup();
   });

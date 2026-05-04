@@ -261,4 +261,58 @@ describe('objectMapG6Data', () => {
       })
     );
   });
+
+  it('uses short resource names for card kind labels when enabled', () => {
+    const graphData = toObjectMapG6Data(
+      layout,
+      selectionState(null),
+      () => null,
+      palette,
+      undefined,
+      true
+    );
+
+    const deploy = graphData.nodes?.find((entry) => entry.id === 'deploy');
+    expect(deploy?.data).toEqual(
+      expect.objectContaining({
+        kindLabel: 'deploy',
+        nameLabel: 'web',
+      })
+    );
+    expect(deploy?.style).toEqual(
+      expect.objectContaining({
+        cardKindBadgeText: 'DEPLOY',
+        cardNameText: 'web',
+      })
+    );
+  });
+
+  it('leaves long kind and object names intact before renderer width-based truncation', () => {
+    const longKind = 'VeryLongCustomResourceKindName';
+    const longName = 'object-name-that-is-longer-than-the-old-fixed-character-limit';
+    const graphData = toObjectMapG6Data(
+      {
+        ...layout,
+        nodes: [node('custom', longKind, longName, 0, true)],
+        edges: [],
+      },
+      selectionState(null),
+      () => null,
+      palette
+    );
+
+    const custom = graphData.nodes?.find((entry) => entry.id === 'custom');
+    expect(custom?.data).toEqual(
+      expect.objectContaining({
+        kindLabel: longKind,
+        nameLabel: longName,
+      })
+    );
+    expect(custom?.style).toEqual(
+      expect.objectContaining({
+        cardKindBadgeText: longKind.toUpperCase(),
+        cardNameText: longName,
+      })
+    );
+  });
 });

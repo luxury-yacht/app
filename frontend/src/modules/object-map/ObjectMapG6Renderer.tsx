@@ -623,30 +623,27 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
     onToggleGroup,
     badgeForNode,
   };
-  const data = useMemo<GraphData>(
-    () => {
-      if (!palette) {
-        return { nodes: [], edges: [] };
-      }
-      const badgeStyleCache = new Map<string, ReturnType<typeof resolveKindBadgeVisualStyle>>();
-      return toObjectMapG6Data(
-        layout,
-        EMPTY_SELECTION_STATE,
-        badgeForNode,
-        palette,
-        (kind) => {
-          const key = kind.trim();
-          const cached = badgeStyleCache.get(key);
-          if (cached) return cached;
-          const resolved = resolveKindBadgeVisualStyle(kind, containerRef.current);
-          badgeStyleCache.set(key, resolved);
-          return resolved;
-        },
-        useShortResourceNames
-      );
-    },
-    [layout, badgeForNode, palette, styleVersion, useShortResourceNames]
-  );
+  const data = useMemo<GraphData>(() => {
+    if (!palette) {
+      return { nodes: [], edges: [] };
+    }
+    const badgeStyleCache = new Map<string, ReturnType<typeof resolveKindBadgeVisualStyle>>();
+    return toObjectMapG6Data(
+      layout,
+      EMPTY_SELECTION_STATE,
+      badgeForNode,
+      palette,
+      (kind) => {
+        const key = `${styleVersion}:${kind.trim()}`;
+        const cached = badgeStyleCache.get(key);
+        if (cached) return cached;
+        const resolved = resolveKindBadgeVisualStyle(kind, containerRef.current);
+        badgeStyleCache.set(key, resolved);
+        return resolved;
+      },
+      useShortResourceNames
+    );
+  }, [layout, badgeForNode, palette, styleVersion, useShortResourceNames]);
   const dataRef = useRef(data);
   dataRef.current = data;
   const renderedDataRef = useRef<GraphData | null>(null);
