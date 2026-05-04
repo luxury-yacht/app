@@ -189,7 +189,8 @@ describe('objectMapG6Data', () => {
         y: 52,
         size: [220, 64],
         label: false,
-        cardKindText: 'DEPLOYMENT',
+        cardKindBadgeText: 'DEPLOYMENT',
+        cardKindBadgeFill: 'rgba(100, 116, 139, 0.15)',
         cardNameText: 'web',
         cardNamespaceText: 'default',
       })
@@ -219,6 +220,44 @@ describe('objectMapG6Data', () => {
           ['M', 0, 0],
           ['C', 1, 1, 2, 2, 3, 3],
         ],
+      })
+    );
+  });
+
+  it('uses the centralized kind badge style resolver for card kind badges', () => {
+    const graphData = toObjectMapG6Data(
+      layout,
+      selectionState(null),
+      () => null,
+      palette,
+      (kind) => ({
+        className: `kind-badge ${kind}`,
+        backgroundColor: '#123456',
+        color: '#abcdef',
+        borderColor: '#fedcba',
+        borderWidth: 2,
+        borderRadius: 5,
+        fontSize: 10,
+        fontWeight: '700',
+        letterSpacing: 1,
+        paddingX: 6,
+        paddingY: 3,
+      })
+    );
+
+    const deploy = graphData.nodes?.find((entry) => entry.id === 'deploy');
+    expect(deploy?.style).toEqual(
+      expect.objectContaining({
+        cardKindBadgeFill: '#123456',
+        cardKindBadgeTextFill: '#abcdef',
+        cardKindBadgeStroke: '#fedcba',
+        cardKindBadgeBorderWidth: 2,
+        cardKindBadgeRadius: 5,
+        cardKindBadgeFontSize: 10,
+        cardKindBadgeFontWeight: '700',
+        cardKindBadgeLetterSpacing: 1,
+        cardKindBadgePaddingX: 6,
+        cardKindBadgePaddingY: 3,
       })
     );
   });

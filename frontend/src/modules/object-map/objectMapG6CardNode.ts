@@ -2,20 +2,46 @@ import { Rect as GRect, Text as GText } from '@antv/g';
 import type { DisplayObjectConfig, Group, RectStyleProps, TextStyleProps } from '@antv/g';
 import { BaseNode, ExtensionCategory, register } from '@antv/g6';
 import type { BaseNodeStyleProps } from '@antv/g6';
+import { OBJECT_MAP_CARD_STYLE } from './objectMapCardStyle';
 import { OBJECT_MAP_G6_CARD_NODE } from './objectMapG6Constants';
 
-const NODE_PADDING_X = 10;
-const NODE_KIND_BASELINE_Y = 18;
-const NODE_NAME_BASELINE_Y = 38;
-const NODE_NAMESPACE_BASELINE_Y = 56;
-const NODE_CORNER_RADIUS = 6;
+let measureContext: CanvasRenderingContext2D | null = null;
+
+const measureTextWidth = (
+  text: string,
+  fontFamily: string,
+  fontSize: number,
+  fontWeight: TextStyleProps['fontWeight'],
+  letterSpacing: number
+): number => {
+  if (typeof document === 'undefined') {
+    return text.length * fontSize * 0.62 + Math.max(0, text.length - 1) * letterSpacing;
+  }
+  if (!measureContext) {
+    measureContext = document.createElement('canvas').getContext('2d');
+  }
+  if (!measureContext) {
+    return text.length * fontSize * 0.62 + Math.max(0, text.length - 1) * letterSpacing;
+  }
+  measureContext.font = `${fontWeight} ${fontSize}px ${fontFamily}`;
+  return measureContext.measureText(text).width + Math.max(0, text.length - 1) * letterSpacing;
+};
 
 interface ObjectMapG6CardNodeStyleProps extends BaseNodeStyleProps {
-  cardKindText?: string;
+  cardKindBadgeText?: string;
+  cardKindBadgeFill?: string;
+  cardKindBadgeTextFill?: string;
+  cardKindBadgeStroke?: string;
+  cardKindBadgeBorderWidth?: number;
+  cardKindBadgeRadius?: number;
+  cardKindBadgeFontSize?: number;
+  cardKindBadgeFontWeight?: TextStyleProps['fontWeight'];
+  cardKindBadgeLetterSpacing?: number;
+  cardKindBadgePaddingX?: number;
+  cardKindBadgePaddingY?: number;
   cardNameText?: string;
   cardNamespaceText?: string;
   cardFontFamily?: string;
-  cardKindFill?: string;
   cardNameFill?: string;
   cardNamespaceFill?: string;
 }
@@ -33,7 +59,7 @@ class ObjectMapG6CardNode extends BaseNode<ObjectMapG6CardNodeStyleProps> {
       height,
       x: -width / 2,
       y: -height / 2,
-      radius: NODE_CORNER_RADIUS,
+      radius: OBJECT_MAP_CARD_STYLE.borderRadius,
     };
   }
 
@@ -54,48 +80,123 @@ class ObjectMapG6CardNode extends BaseNode<ObjectMapG6CardNodeStyleProps> {
   ): TextStyleProps {
     const [width, height] = this.getSize(attributes);
     return {
-      x: -width / 2 + NODE_PADDING_X,
+      x: -width / 2 + OBJECT_MAP_CARD_STYLE.paddingX,
       y: -height / 2 + baselineY,
       text,
       fill,
-      fontSize: 11,
+      fontSize: OBJECT_MAP_CARD_STYLE.textFontSize,
       fontWeight,
       fontFamily: attributes.cardFontFamily,
       letterSpacing,
       textBaseline: 'alphabetic',
       maxLines: 1,
       wordWrap: true,
-      wordWrapWidth: width - NODE_PADDING_X * 2,
+      wordWrapWidth: width - OBJECT_MAP_CARD_STYLE.paddingX * 2,
       textOverflow: '...',
     };
+  }
+
+  private getBadgeMetrics(attributes: Required<ObjectMapG6CardNodeStyleProps>) {
+    const [cardWidth, cardHeight] = this.getSize(attributes);
+    const borderWidth = attributes.cardKindBadgeBorderWidth;
+    const paddingX = OBJECT_MAP_CARD_STYLE.kindBadgePaddingHoriz;
+    const paddingY = OBJECT_MAP_CARD_STYLE.kindBadgePaddingVert;
+    const fontSize = OBJECT_MAP_CARD_STYLE.badgeFontSize;
+    const textWidth = measureTextWidth(
+      attributes.cardKindBadgeText,
+      attributes.cardFontFamily,
+      fontSize,
+      attributes.cardKindBadgeFontWeight,
+      attributes.cardKindBadgeLetterSpacing
+    );
+    const maxWidth = Math.min(
+      OBJECT_MAP_CARD_STYLE.kindBadgeMaxWidth,
+      cardWidth - OBJECT_MAP_CARD_STYLE.paddingX * 2
+    );
+    const width = Math.max(
+      OBJECT_MAP_CARD_STYLE.kindBadgeMinWidth,
+      Math.min(maxWidth, Math.ceil(textWidth + paddingX * 2 + borderWidth * 2))
+    );
+    const height = Math.ceil(fontSize + paddingY * 2 + borderWidth * 2);
+    return {
+      x: -cardWidth / 2 + OBJECT_MAP_CARD_STYLE.paddingX,
+      y: -cardHeight / 2 + OBJECT_MAP_CARD_STYLE.kindBadgeTopY,
+      width,
+      height,
+      textX: -cardWidth / 2 + OBJECT_MAP_CARD_STYLE.paddingX + paddingX + borderWidth,
+      textY: -cardHeight / 2 + OBJECT_MAP_CARD_STYLE.kindBadgeTopY + height / 2,
+      textWidth: Math.max(1, width - paddingX * 2 - borderWidth * 2),
+    };
+  }
+
+  private getCardTextBaselines(attributes: Required<ObjectMapG6CardNodeStyleProps>) {
+    const [, cardHeight] = this.getSize(attributes);
+    const badge = this.getBadgeMetrics(attributes);
+    const nameBaselineY =
+      badge.y + badge.height + OBJECT_MAP_CARD_STYLE.badgeNameGap - -cardHeight / 2;
+    return {
+      nameBaselineY,
+      namespaceBaselineY: nameBaselineY + OBJECT_MAP_CARD_STYLE.nameNamespaceGap,
+    };
+  }
+
+  private drawKindBadge(
+    attributes: Required<ObjectMapG6CardNodeStyleProps>,
+    container: Group
+  ): void {
+    const metrics = this.getBadgeMetrics(attributes);
+    this.upsert(
+      'card-kind-badge-bg',
+      GRect,
+      {
+        x: metrics.x,
+        y: metrics.y,
+        width: metrics.width,
+        height: metrics.height,
+        radius: attributes.cardKindBadgeRadius,
+        fill: attributes.cardKindBadgeFill,
+        stroke: attributes.cardKindBadgeStroke,
+        lineWidth: attributes.cardKindBadgeBorderWidth,
+      },
+      container
+    );
+    this.upsert(
+      'card-kind-badge-text',
+      GText,
+      {
+        x: metrics.textX,
+        y: metrics.textY,
+        text: attributes.cardKindBadgeText,
+        fill: attributes.cardKindBadgeTextFill,
+        fontSize: OBJECT_MAP_CARD_STYLE.badgeFontSize,
+        fontWeight: attributes.cardKindBadgeFontWeight,
+        fontFamily: attributes.cardFontFamily,
+        letterSpacing: attributes.cardKindBadgeLetterSpacing,
+        textBaseline: 'middle',
+        maxLines: 1,
+        wordWrap: true,
+        wordWrapWidth: metrics.textWidth,
+        textOverflow: '...',
+      },
+      container
+    );
   }
 
   private drawCardText(
     attributes: Required<ObjectMapG6CardNodeStyleProps>,
     container: Group
   ): void {
-    this.upsert(
-      'card-kind',
-      GText,
-      this.getTextStyle(
-        attributes,
-        attributes.cardKindText,
-        NODE_KIND_BASELINE_Y,
-        attributes.cardKindFill,
-        600,
-        0.5
-      ),
-      container
-    );
+    const baselines = this.getCardTextBaselines(attributes);
+    this.drawKindBadge(attributes, container);
     this.upsert(
       'card-name',
       GText,
       this.getTextStyle(
         attributes,
         attributes.cardNameText,
-        NODE_NAME_BASELINE_Y,
+        baselines.nameBaselineY,
         attributes.cardNameFill,
-        600
+        OBJECT_MAP_CARD_STYLE.nameFontWeight
       ),
       container
     );
@@ -105,9 +206,9 @@ class ObjectMapG6CardNode extends BaseNode<ObjectMapG6CardNodeStyleProps> {
       this.getTextStyle(
         attributes,
         attributes.cardNamespaceText,
-        NODE_NAMESPACE_BASELINE_Y,
+        baselines.namespaceBaselineY,
         attributes.cardNamespaceFill,
-        400
+        OBJECT_MAP_CARD_STYLE.namespaceFontWeight
       ),
       container
     );

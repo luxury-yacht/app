@@ -5,7 +5,7 @@
  * Navigation arrows have been removed — tabs replace the navigation UX.
  */
 
-import { getKindColorClass } from '@shared/utils/kindBadgeColors';
+import { getKindBadgeClassName } from '@shared/utils/kindBadgeColors';
 
 interface ObjectPanelHeaderProps {
   kind: string | null;
@@ -14,15 +14,13 @@ interface ObjectPanelHeaderProps {
 }
 
 export function ObjectPanelHeader({ kind, kindAlias, name }: ObjectPanelHeaderProps) {
-  const colorClass = getKindColorClass(kind);
-
   const displayKind = kindAlias || kind || 'Object';
   const kindTitle = kindAlias && kind && kindAlias !== kind ? kind : undefined;
 
   return (
     <div className="object-panel-header">
       <div className="object-panel-info">
-        <span className={`kind-badge ${colorClass}`.trim()} title={kindTitle}>
+        <span className={getKindBadgeClassName(kind)} title={kindTitle}>
           {displayKind}
         </span>
         <span className="object-name">{name}</span>

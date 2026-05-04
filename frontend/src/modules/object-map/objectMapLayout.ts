@@ -40,9 +40,10 @@
  */
 
 import type { ObjectMapEdge, ObjectMapNode } from '@core/refresh/types';
+import { OBJECT_MAP_CARD_STYLE } from './objectMapCardStyle';
 
-export const OBJECT_MAP_NODE_WIDTH = 220;
-export const OBJECT_MAP_NODE_HEIGHT = 64;
+export const OBJECT_MAP_NODE_WIDTH = OBJECT_MAP_CARD_STYLE.width;
+export const OBJECT_MAP_NODE_HEIGHT = OBJECT_MAP_CARD_STYLE.height;
 export const OBJECT_MAP_COLUMN_GAP = 100;
 export const OBJECT_MAP_ROW_GAP = 24;
 export const OBJECT_MAP_MAX_NODES_PER_LANE = 24;

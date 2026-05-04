@@ -2,6 +2,7 @@ import { Graph, CanvasEvent, CommonEvent, EdgeEvent, GraphEvent, NodeEvent } fro
 import type { EdgeData, GraphData, NodeData } from '@antv/g6';
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ObjectMapReference } from '@core/refresh/types';
+import { resolveKindBadgeVisualStyle } from '@shared/utils/kindBadgeColors';
 import type { ObjectMapLayout, PositionedEdge, PositionedNode } from './objectMapLayout';
 import { ensureObjectMapG6CardNodeRegistered } from './objectMapG6CardNode';
 import { ensureObjectMapG6PathEdgeRegistered } from './objectMapG6PathEdge';
@@ -404,11 +405,20 @@ const nodeChanged = (previous: NodeData, next: NodeData): boolean => {
     previousStyle.lineWidth !== nextStyle.lineWidth ||
     previousStyle.radius !== nextStyle.radius ||
     previousStyle.opacity !== nextStyle.opacity ||
-    previousStyle.cardKindText !== nextStyle.cardKindText ||
+    previousStyle.cardKindBadgeText !== nextStyle.cardKindBadgeText ||
+    previousStyle.cardKindBadgeFill !== nextStyle.cardKindBadgeFill ||
+    previousStyle.cardKindBadgeTextFill !== nextStyle.cardKindBadgeTextFill ||
+    previousStyle.cardKindBadgeStroke !== nextStyle.cardKindBadgeStroke ||
+    previousStyle.cardKindBadgeBorderWidth !== nextStyle.cardKindBadgeBorderWidth ||
+    previousStyle.cardKindBadgeRadius !== nextStyle.cardKindBadgeRadius ||
+    previousStyle.cardKindBadgeFontSize !== nextStyle.cardKindBadgeFontSize ||
+    previousStyle.cardKindBadgeFontWeight !== nextStyle.cardKindBadgeFontWeight ||
+    previousStyle.cardKindBadgeLetterSpacing !== nextStyle.cardKindBadgeLetterSpacing ||
+    previousStyle.cardKindBadgePaddingX !== nextStyle.cardKindBadgePaddingX ||
+    previousStyle.cardKindBadgePaddingY !== nextStyle.cardKindBadgePaddingY ||
     previousStyle.cardNameText !== nextStyle.cardNameText ||
     previousStyle.cardNamespaceText !== nextStyle.cardNamespaceText ||
     previousStyle.cardFontFamily !== nextStyle.cardFontFamily ||
-    previousStyle.cardKindFill !== nextStyle.cardKindFill ||
     previousStyle.cardNameFill !== nextStyle.cardNameFill ||
     previousStyle.cardNamespaceFill !== nextStyle.cardNamespaceFill ||
     badgeSignature(previous) !== badgeSignature(next)
@@ -577,6 +587,7 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
     latest: null,
   });
   const [palette, setPalette] = useState<ObjectMapG6Palette | null>(null);
+  const [styleVersion, setStyleVersion] = useState(0);
   const paletteReady = palette !== null;
   const paletteRef = useRef<ObjectMapG6Palette | null>(null);
   paletteRef.current = palette;
@@ -611,11 +622,21 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
     badgeForNode,
   };
   const data = useMemo<GraphData>(
-    () =>
-      palette
-        ? toObjectMapG6Data(layout, EMPTY_SELECTION_STATE, badgeForNode, palette)
-        : { nodes: [], edges: [] },
-    [layout, badgeForNode, palette]
+    () => {
+      if (!palette) {
+        return { nodes: [], edges: [] };
+      }
+      const badgeStyleCache = new Map<string, ReturnType<typeof resolveKindBadgeVisualStyle>>();
+      return toObjectMapG6Data(layout, EMPTY_SELECTION_STATE, badgeForNode, palette, (kind) => {
+        const key = kind.trim();
+        const cached = badgeStyleCache.get(key);
+        if (cached) return cached;
+        const resolved = resolveKindBadgeVisualStyle(kind, containerRef.current);
+        badgeStyleCache.set(key, resolved);
+        return resolved;
+      });
+    },
+    [layout, badgeForNode, palette, styleVersion]
   );
   const dataRef = useRef(data);
   dataRef.current = data;
@@ -635,6 +656,7 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
     setPalette((previousPalette) =>
       samePalette(previousPalette, nextPalette) ? previousPalette : nextPalette
     );
+    setStyleVersion((previous) => previous + 1);
   }, []);
 
   useLayoutEffect(() => {

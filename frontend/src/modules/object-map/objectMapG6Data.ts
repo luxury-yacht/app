@@ -1,13 +1,16 @@
 import type { EdgeData, GraphData, NodeData } from '@antv/g6';
 import type { PathArray } from '@antv/g6';
+import type { KindBadgeVisualStyle } from '@shared/utils/kindBadgeColors';
+import { fallbackKindBadgeVisualStyle } from '@shared/utils/kindBadgeColors';
 import type { ObjectMapLayout, PositionedEdge, PositionedNode } from './objectMapLayout';
+import { OBJECT_MAP_CARD_STYLE } from './objectMapCardStyle';
 import { OBJECT_MAP_G6_CARD_NODE, OBJECT_MAP_G6_PATH_EDGE } from './objectMapG6Constants';
 import type { ObjectMapNodeBadgeLookup, ObjectMapSelectionState } from './objectMapRendererTypes';
 
-const NODE_KIND_MAX_CHARS = 26;
+const NODE_KIND_MAX_CHARS = 22;
 const NODE_NAME_MAX_CHARS = 32;
 const NODE_NAMESPACE_MAX_CHARS = 28;
-const NODE_CARD_RADIUS = 6;
+const NODE_CARD_RADIUS = OBJECT_MAP_CARD_STYLE.borderRadius;
 const NODE_LINE_WIDTH = 1;
 const NODE_SEED_LINE_WIDTH = 2;
 const BADGE_FONT_WEIGHT = 700;
@@ -170,13 +173,15 @@ export const toObjectMapG6Data = (
   layout: ObjectMapLayout,
   selectionState: ObjectMapSelectionState,
   badgeForNode: ObjectMapNodeBadgeLookup,
-  palette: ObjectMapG6Palette
+  palette: ObjectMapG6Palette,
+  kindBadgeStyleForKind: (kind: string) => KindBadgeVisualStyle = fallbackKindBadgeVisualStyle
 ): GraphData => ({
   nodes: layout.nodes.map<NodeData>((node) => {
     const badge = badgeForNode(node.id);
     const kindLabel = truncate(node.ref.kind, NODE_KIND_MAX_CHARS);
     const nameLabel = truncate(node.ref.name, NODE_NAME_MAX_CHARS);
     const namespaceLabel = truncate(formatNamespace(node), NODE_NAMESPACE_MAX_CHARS);
+    const kindBadgeStyle = kindBadgeStyleForKind(node.ref.kind);
 
     return {
       id: node.id,
@@ -199,11 +204,20 @@ export const toObjectMapG6Data = (
         lineWidth: node.isSeed ? NODE_SEED_LINE_WIDTH : NODE_LINE_WIDTH,
         opacity: palette.fullOpacity,
         label: false,
-        cardKindText: kindLabel.toUpperCase(),
+        cardKindBadgeText: kindLabel.toUpperCase(),
+        cardKindBadgeFill: kindBadgeStyle.backgroundColor,
+        cardKindBadgeTextFill: kindBadgeStyle.color,
+        cardKindBadgeStroke: kindBadgeStyle.borderColor,
+        cardKindBadgeBorderWidth: kindBadgeStyle.borderWidth,
+        cardKindBadgeRadius: kindBadgeStyle.borderRadius,
+        cardKindBadgeFontSize: kindBadgeStyle.fontSize,
+        cardKindBadgeFontWeight: kindBadgeStyle.fontWeight,
+        cardKindBadgeLetterSpacing: kindBadgeStyle.letterSpacing,
+        cardKindBadgePaddingX: kindBadgeStyle.paddingX,
+        cardKindBadgePaddingY: kindBadgeStyle.paddingY,
         cardNameText: nameLabel,
         cardNamespaceText: namespaceLabel,
         cardFontFamily: palette.fontFamily,
-        cardKindFill: palette.accent,
         cardNameFill: palette.text,
         cardNamespaceFill: palette.textSecondary,
         badges: badge

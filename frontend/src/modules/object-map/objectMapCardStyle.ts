@@ -1,0 +1,17 @@
+export const OBJECT_MAP_CARD_STYLE = {
+  width: 220,
+  height: 64,
+  borderRadius: 6,
+  paddingX: 7,
+  kindBadgeTopY: 7,
+  kindBadgeMaxWidth: 200,
+  kindBadgeMinWidth: 28,
+  badgeFontSize: 10,
+  kindBadgePaddingVert: 3,
+  kindBadgePaddingHoriz: 4,
+  badgeNameGap: 19,
+  nameNamespaceGap: 16,
+  textFontSize: 11,
+  nameFontWeight: 500,
+  namespaceFontWeight: 400,
+} as const;
