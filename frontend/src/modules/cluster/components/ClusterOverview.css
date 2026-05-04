@@ -395,6 +395,10 @@
   background: var(--workload-cronjob);
 }
 
+.stacked-bar--workload-usage {
+  height: 4px;
+}
+
 .resource-utilization-divider {
   margin-top: 1.5rem;
   padding-top: 1.5rem;
@@ -424,6 +428,31 @@
 
 .metric-stat__label {
   color: var(--color-text-tertiary);
+}
+
+.metric-header--usage h3 {
+  color: var(--color-text-secondary);
+  margin-bottom: 0.2 !important;
+}
+
+.metric-header__title-group {
+  display: flex;
+  align-items: baseline;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.metric-header__usage {
+  color: var(--color-text-tertiary);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.metric-header__percent {
+  color: var(--color-text);
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 .overview-loading-banner {
@@ -470,17 +499,17 @@
   }
 
   .recent-events {
-    grid-column: 2;
-    grid-row: 1;
+    grid-column: 1;
+    grid-row: 2;
   }
 
   .nodes-summary {
     grid-column: 2;
-    grid-row: 2;
+    grid-row: 1;
   }
 
   .workloads-summary {
-    grid-column: 1;
+    grid-column: 2;
     grid-row: 2;
   }
 }

@@ -353,6 +353,10 @@ describe('ClusterOverview', () => {
     expect(container.textContent).not.toContain('Loading cluster overview...');
     expect(container.textContent).toContain('Status');
     expect(container.textContent).toContain('Ready');
+    expect(container.textContent).toContain('400m of 2 cores');
+    expect(container.textContent).toContain('20.0%');
+    expect(container.textContent).toContain('2.0Gi of 16.0Gi');
+    expect(container.textContent).toContain('12.5%');
   });
 
   it('shows loading namespaces detail until namespaces are ready', async () => {
@@ -558,13 +562,12 @@ describe('ClusterOverview', () => {
     cleanupRoot = cleanup;
     await flushEffects();
 
-    expect(container.textContent).toContain('By Workload');
-    expect(container.textContent).toContain('By Workload');
     expect(
       Array.from(container.querySelectorAll('.resource-usage h3')).map((heading) =>
         heading.textContent?.trim()
       )
-    ).toEqual(['CPU', 'By Workload', 'Memory', 'By Workload']);
+    ).toEqual(['CPU', 'Memory']);
+    expect(container.querySelectorAll('.stacked-bar--workload-usage')).toHaveLength(2);
     expect(
       Array.from(container.querySelectorAll('[data-testid^="cluster-workload-usage-cpu-"]')).map(
         (item) => item.getAttribute('data-testid')

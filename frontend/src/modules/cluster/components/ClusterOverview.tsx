@@ -531,12 +531,31 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
     (sum, item) => sum + item.value,
     0
   );
+  const cpuResourceMetrics = calculateResourceMetrics(
+    {
+      usage: displayOverview.cpuUsage,
+      allocatable: displayOverview.cpuAllocatable,
+    },
+    'cpu'
+  );
+  const memoryResourceMetrics = calculateResourceMetrics(
+    {
+      usage: displayOverview.memoryUsage,
+      allocatable: displayOverview.memoryAllocatable,
+    },
+    'memory'
+  );
+  const formatPercent = (value: number) => `${value.toFixed(1)}%`;
+  const cpuUsageSummary = `${formatCpuValue(cpuResourceMetrics.usage)} of ${formatCpuValue(
+    cpuResourceMetrics.allocatable
+  )} cores`;
+  const memoryUsageSummary = `${formatMemoryValue(memoryResourceMetrics.usage)} of ${formatMemoryValue(
+    memoryResourceMetrics.allocatable
+  )}`;
 
   const renderWorkloadUsageBreakdown = (
-    title: string,
     testKey: string,
     total: number,
-    totalLabel: string,
     items: Array<{
       key: string;
       label: string;
@@ -546,14 +565,11 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
     }>
   ) => (
     <div className="resource-group workload-usage-breakdown">
-      <div className="metric-header">
-        <h3>{title}</h3>
-        <div className="metric-legend__total">
-          <span className="metric-legend__total-value">{showSkeleton ? DASH : totalLabel}</span>
-          <span className="metric-legend__total-label"> total used</span>
-        </div>
-      </div>
-      <div className="stacked-bar" role="presentation" aria-hidden="true">
+      <div
+        className="stacked-bar stacked-bar--workload-usage"
+        role="presentation"
+        aria-hidden="true"
+      >
         {!showSkeleton &&
           items.map((item) => {
             const width = total > 0 ? (item.value / total) * 100 : 0;
@@ -756,106 +772,60 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
           )}
 
           <div className="resource-group">
-            <div className="metric-header">
-              <h3>CPU</h3>
-              <div className="metric-legend__total">
-                <span className="metric-legend__total-value">
-                  {showSkeleton ? DASH : `${displayOverview.cpuAllocatable || '0'} cores`}
+            <div className="metric-header metric-header--usage">
+              <div className="metric-header__title-group">
+                <h3>CPU</h3>
+                <span className="metric-header__usage">
+                  {showSkeleton ? DASH : cpuUsageSummary}
                 </span>
-                <span className="metric-legend__total-label"> total</span>
+              </div>
+              <div className="metric-header__percent">
+                {showSkeleton ? DASH : formatPercent(cpuResourceMetrics.usagePercent)}
               </div>
             </div>
             <div className="resource-bar-placeholder">
               <ResourceBar
                 usage={displayOverview.cpuUsage}
                 request={displayOverview.cpuRequests}
-                limit={displayOverview.cpuAllocatable}
+                limit={displayOverview.cpuLimits}
+                allocatable={displayOverview.cpuAllocatable}
                 type="cpu"
                 variant="default"
               />
             </div>
-            <div className="metric-legend">
-              <div className="metric-legend__items">
-                <div className="metric-legend__item">
-                  <span className="metric-legend__count">
-                    {showSkeleton ? DASH : displayOverview.cpuUsage || '0'}
-                  </span>
-                  <span className="metric-legend__label">used</span>
-                </div>
-                <div className="metric-legend__item">
-                  <span className="metric-legend__count">
-                    {showSkeleton ? DASH : displayOverview.cpuRequests || '0'}
-                  </span>
-                  <span className="metric-legend__label">requests</span>
-                </div>
-                <div className="metric-legend__item">
-                  <span className="metric-legend__count">
-                    {showSkeleton ? DASH : displayOverview.cpuLimits || '0'}
-                  </span>
-                  <span className="metric-legend__label">limits</span>
-                </div>
-              </div>
-            </div>
           </div>
 
-          {renderWorkloadUsageBreakdown(
-            'By Workload',
-            'cpu',
-            cpuWorkloadUsageTotal,
-            formatCpuValue(cpuWorkloadUsageTotal),
-            cpuWorkloadUsageItems
-          )}
+          {renderWorkloadUsageBreakdown('cpu', cpuWorkloadUsageTotal, cpuWorkloadUsageItems)}
 
           <div className="resource-utilization-divider" />
 
           <div className="resource-group">
-            <div className="metric-header">
-              <h3>Memory</h3>
-              <div className="metric-legend__total">
-                <span className="metric-legend__total-value">
-                  {showSkeleton ? DASH : displayOverview.memoryAllocatable || '0'}
+            <div className="metric-header metric-header--usage">
+              <div className="metric-header__title-group">
+                <h3>Memory</h3>
+                <span className="metric-header__usage">
+                  {showSkeleton ? DASH : memoryUsageSummary}
                 </span>
-                <span className="metric-legend__total-label"> total</span>
+              </div>
+              <div className="metric-header__percent">
+                {showSkeleton ? DASH : formatPercent(memoryResourceMetrics.usagePercent)}
               </div>
             </div>
             <div className="resource-bar-placeholder">
               <ResourceBar
                 usage={displayOverview.memoryUsage}
                 request={displayOverview.memoryRequests}
-                limit={displayOverview.memoryAllocatable}
+                limit={displayOverview.memoryLimits}
+                allocatable={displayOverview.memoryAllocatable}
                 type="memory"
                 variant="default"
               />
             </div>
-            <div className="metric-legend">
-              <div className="metric-legend__items">
-                <div className="metric-legend__item">
-                  <span className="metric-legend__count">
-                    {showSkeleton ? DASH : displayOverview.memoryUsage || '0'}
-                  </span>
-                  <span className="metric-legend__label">used</span>
-                </div>
-                <div className="metric-legend__item">
-                  <span className="metric-legend__count">
-                    {showSkeleton ? DASH : displayOverview.memoryRequests || '0'}
-                  </span>
-                  <span className="metric-legend__label">requests</span>
-                </div>
-                <div className="metric-legend__item">
-                  <span className="metric-legend__count">
-                    {showSkeleton ? DASH : displayOverview.memoryLimits || '0'}
-                  </span>
-                  <span className="metric-legend__label">limits</span>
-                </div>
-              </div>
-            </div>
           </div>
 
           {renderWorkloadUsageBreakdown(
-            'By Workload',
             'memory',
             memoryWorkloadUsageTotal,
-            formatMemoryValue(memoryWorkloadUsageTotal),
             memoryWorkloadUsageItems
           )}
         </div>
