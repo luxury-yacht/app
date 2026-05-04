@@ -10,6 +10,7 @@ import type { ObjectMapLayout, PositionedNode } from './objectMapLayout';
 import {
   handleObjectMapG6Drag,
   handleObjectMapG6DragEnd,
+  handleObjectMapG6CanvasContextMenu,
   handleObjectMapG6NodeClick,
   handleObjectMapG6NodeContextMenu,
   handleObjectMapG6NodePointerDown,
@@ -52,6 +53,7 @@ const createContext = () => {
   const handlers = {
     badgeForNode: vi.fn(() => null),
     onNavigateView: vi.fn(),
+    onCanvasContextMenu: vi.fn(),
     onNodeContextMenu: vi.fn(),
     onNodeDragEnd: vi.fn(),
     onNodeDragMove: vi.fn(),
@@ -249,6 +251,34 @@ describe('object map G6 interactions', () => {
     expect(handlers.onNodeContextMenu).toHaveBeenCalledWith({
       ref: layout.nodes[1].ref,
       position: { x: 40, y: 50 },
+    });
+  });
+
+  it('emits canvas context menu requests only for canvas targets', () => {
+    const { context, handlers } = createContext();
+    const preventDefault = vi.fn();
+    const nativePreventDefault = vi.fn();
+
+    handleObjectMapG6CanvasContextMenu(context, {
+      target: { id: 'canvas' },
+      targetType: 'canvas',
+      clientX: 70,
+      clientY: 80,
+      preventDefault,
+      nativeEvent: { preventDefault: nativePreventDefault },
+    });
+    handleObjectMapG6CanvasContextMenu(context, {
+      target: { id: 'pod' },
+      targetType: 'node',
+      clientX: 10,
+      clientY: 20,
+    });
+
+    expect(preventDefault).toHaveBeenCalledTimes(1);
+    expect(nativePreventDefault).toHaveBeenCalledTimes(1);
+    expect(handlers.onCanvasContextMenu).toHaveBeenCalledTimes(1);
+    expect(handlers.onCanvasContextMenu).toHaveBeenCalledWith({
+      position: { x: 70, y: 80 },
     });
   });
 });

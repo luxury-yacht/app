@@ -22,6 +22,7 @@ import { ObjectMapG6TooltipOverlay } from './ObjectMapG6TooltipOverlay';
 import {
   handleObjectMapG6Drag,
   handleObjectMapG6DragEnd,
+  handleObjectMapG6CanvasContextMenu,
   handleObjectMapG6NodeClick,
   handleObjectMapG6NodeContextMenu,
   handleObjectMapG6NodePointerDown,
@@ -40,6 +41,7 @@ import { clearObjectMapNodeGesture, createObjectMapNodeGestureState } from './ob
 import type {
   ObjectMapHoverEdge,
   ObjectMapContextMenuAction,
+  ObjectMapCanvasContextMenuAction,
   ObjectMapNodeBadgeLookup,
   ObjectMapNodeDragEnd,
   ObjectMapNodeDragMove,
@@ -118,6 +120,7 @@ export interface ObjectMapG6RendererProps {
   onOpenPanel?: ObjectMapObjectAction;
   onNavigateView?: ObjectMapObjectAction;
   onNodeContextMenu?: ObjectMapContextMenuAction;
+  onCanvasContextMenu?: ObjectMapCanvasContextMenuAction;
   autoFit: boolean;
   preserveViewportNodeId?: string | null;
   onUserViewportChange?: ObjectMapViewportChangeAction;
@@ -141,6 +144,7 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
   onOpenPanel,
   onNavigateView,
   onNodeContextMenu,
+  onCanvasContextMenu,
   autoFit,
   preserveViewportNodeId = null,
   onUserViewportChange,
@@ -169,6 +173,7 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
     onOpenPanel,
     onNavigateView,
     onNodeContextMenu,
+    onCanvasContextMenu,
     onNodeDragStart,
     onNodeDragMove,
     onNodeDragEnd,
@@ -183,6 +188,7 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
     onOpenPanel,
     onNavigateView,
     onNodeContextMenu,
+    onCanvasContextMenu,
     onNodeDragStart,
     onNodeDragMove,
     onNodeDragEnd,
@@ -413,6 +419,11 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
     graph.on(NodeEvent.CONTEXT_MENU, (rawEvent) => {
       const event = rawEvent as G6ElementPointerEvent;
       handleObjectMapG6NodeContextMenu(nodeInteractionContext(), event);
+    });
+
+    graph.on(CanvasEvent.CONTEXT_MENU, (rawEvent) => {
+      const event = rawEvent as G6ElementPointerEvent;
+      handleObjectMapG6CanvasContextMenu(nodeInteractionContext(), event);
     });
 
     graph.on(NodeEvent.POINTER_DOWN, (rawEvent) => {

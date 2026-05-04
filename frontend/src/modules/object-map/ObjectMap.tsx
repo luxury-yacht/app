@@ -11,7 +11,7 @@ import './ObjectMap.css';
 import type { ObjectMapReference, ObjectMapSnapshotPayload } from '@core/refresh/types';
 import { useShortNames } from '@/hooks/useShortNames';
 import { isMacPlatform } from '@/utils/platform';
-import ContextMenu from '@shared/components/ContextMenu';
+import ContextMenu, { type ContextMenuItem } from '@shared/components/ContextMenu';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
@@ -37,6 +37,10 @@ import {
 } from '@shared/components/icons/MenuIcons';
 
 const ObjectMapG6Renderer = React.lazy(() => import('./ObjectMapG6Renderer'));
+
+type ObjectMapMenuState =
+  | { type: 'object'; request: ObjectMapContextMenuRequest }
+  | { type: 'canvas'; position: { x: number; y: number } };
 
 export interface ObjectMapProps {
   payload: ObjectMapSnapshotPayload;
@@ -71,7 +75,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
   const [selectedKinds, setSelectedKinds] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchIndex, setSearchIndex] = useState(0);
-  const [contextMenu, setContextMenu] = useState<ObjectMapContextMenuRequest | null>(null);
+  const [contextMenu, setContextMenu] = useState<ObjectMapMenuState | null>(null);
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const { legendPosition, legendPointerHandlers } = useObjectMapLegendDrag(canvasRef);
   const [g6ViewportControls, setG6ViewportControls] = useState<ObjectMapViewportControls | null>(
@@ -184,7 +188,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
   }, [model]);
 
   const viewportControlsReady = Boolean(g6ViewportControls);
-  const contextMenuObject = contextMenu?.ref ?? null;
+  const contextMenuObject = contextMenu?.type === 'object' ? contextMenu.request.ref : null;
   const objectActions = useObjectActionController({
     context: 'gridtable',
     onOpen: onOpenPanel ? (object) => onOpenPanel(object as ObjectMapReference) : undefined,
@@ -192,12 +196,75 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
       ? (object) => onOpenObjectMap(object as ObjectMapReference)
       : undefined,
   });
-  const contextMenuItems = useMemo(
-    () => objectActions.getMenuItems(contextMenuObject),
-    [contextMenuObject, objectActions]
-  );
+  const canvasContextMenuItems = useMemo<ContextMenuItem[]>(() => {
+    const items: ContextMenuItem[] = [
+      {
+        label: 'Zoom out',
+        onClick: g6ViewportControls?.zoomOut,
+        disabled: !viewportControlsReady,
+      },
+      {
+        label: 'Zoom in',
+        onClick: g6ViewportControls?.zoomIn,
+        disabled: !viewportControlsReady,
+      },
+      {
+        label: 'Fit',
+        onClick: g6ViewportControls?.fitToView,
+        disabled: !viewportControlsReady,
+      },
+      {
+        label: model.autoFit ? 'Auto-fit off' : 'Auto-fit on',
+        onClick: () => model.setAutoFit((prev) => !prev),
+      },
+      { divider: true },
+      {
+        label: focusMode ? 'Focus off' : 'Focus',
+        onClick: () => setFocusMode((prev) => !prev),
+      },
+      {
+        label: 'Reset layout',
+        onClick: resetMapLayout,
+        disabled: !model.hasNodePositionOverrides && !focusMode,
+      },
+      { divider: true },
+    ];
+    if (onRefresh) {
+      items.push({
+        label: 'Refresh',
+        onClick: onRefresh,
+        disabled: isRefreshing,
+      });
+      items.push({ divider: true });
+    }
+    items.push({
+      label: showLegend ? 'Hide legend' : 'Show legend',
+      onClick: () => setShowLegend((prev) => !prev),
+    });
+    return items;
+  }, [
+    focusMode,
+    g6ViewportControls,
+    isRefreshing,
+    model,
+    onRefresh,
+    resetMapLayout,
+    showLegend,
+    viewportControlsReady,
+  ]);
+  const contextMenuItems = useMemo(() => {
+    if (!contextMenu) return [];
+    return contextMenu.type === 'object'
+      ? objectActions.getMenuItems(contextMenuObject)
+      : canvasContextMenuItems;
+  }, [canvasContextMenuItems, contextMenu, contextMenuObject, objectActions]);
+  const contextMenuPosition =
+    contextMenu?.type === 'object' ? contextMenu.request.position : contextMenu?.position;
   const handleNodeContextMenu = useCallback((request: ObjectMapContextMenuRequest) => {
-    setContextMenu(request);
+    setContextMenu({ type: 'object', request });
+  }, []);
+  const handleCanvasContextMenu = useCallback((request: { position: { x: number; y: number } }) => {
+    setContextMenu({ type: 'canvas', position: request.position });
   }, []);
   const closeContextMenu = useCallback(() => {
     setContextMenu(null);
@@ -384,6 +451,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
             onOpenPanel={onOpenPanel}
             onNavigateView={onNavigateView}
             onNodeContextMenu={handleNodeContextMenu}
+            onCanvasContextMenu={handleCanvasContextMenu}
             autoFit={model.autoFit}
             preserveViewportNodeId={!model.autoFit && focusMode ? model.activeNodeId : null}
             onUserViewportChange={disableAutoFitForManualViewport}
@@ -453,10 +521,10 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
           </div>
         )}
       </div>
-      {contextMenu && contextMenuItems.length > 0 && (
+      {contextMenu && contextMenuPosition && contextMenuItems.length > 0 && (
         <ContextMenu
           items={contextMenuItems}
-          position={contextMenu.position}
+          position={contextMenuPosition}
           onClose={closeContextMenu}
         />
       )}

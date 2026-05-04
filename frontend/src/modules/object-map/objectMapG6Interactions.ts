@@ -16,6 +16,7 @@ import {
 } from './objectMapNodeGesture';
 import type {
   ObjectMapContextMenuAction,
+  ObjectMapCanvasContextMenuAction,
   ObjectMapNodeBadgeLookup,
   ObjectMapNodeDragEnd,
   ObjectMapNodeDragMove,
@@ -77,6 +78,7 @@ export type ObjectMapG6PointerGraph = {
 export interface ObjectMapG6NodeInteractionHandlers {
   badgeForNode: ObjectMapNodeBadgeLookup;
   onNavigateView?: ObjectMapObjectAction;
+  onCanvasContextMenu?: ObjectMapCanvasContextMenuAction;
   onNodeContextMenu?: ObjectMapContextMenuAction;
   onNodeDragEnd: ObjectMapNodeDragEnd;
   onNodeDragMove: ObjectMapNodeDragMove;
@@ -203,6 +205,18 @@ export const handleObjectMapG6NodeContextMenu = (
   if (!node) return;
   context.handlers.onNodeContextMenu?.({
     ref: node.ref as ObjectMapReference,
+    position: objectMapG6EventClientPoint(event),
+  });
+};
+
+export const handleObjectMapG6CanvasContextMenu = (
+  context: ObjectMapG6NodeInteractionContext,
+  event: ObjectMapG6ElementPointerEvent
+): void => {
+  if (event.targetType && event.targetType !== 'canvas') return;
+  event.preventDefault?.();
+  event.nativeEvent?.preventDefault?.();
+  context.handlers.onCanvasContextMenu?.({
     position: objectMapG6EventClientPoint(event),
   });
 };

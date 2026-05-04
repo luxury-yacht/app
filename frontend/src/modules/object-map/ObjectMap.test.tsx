@@ -9,6 +9,7 @@ import { act } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ObjectMapReference, ObjectMapSnapshotPayload } from '@core/refresh/types';
 import ObjectMap from './ObjectMap';
+import type { ObjectMapViewportControls } from './objectMapRendererTypes';
 
 const useShortNamesMock = vi.hoisted(() => vi.fn(() => false));
 
@@ -96,6 +97,8 @@ vi.mock('./ObjectMapG6Renderer', () => {
       ref: ObjectMapReference;
       position: { x: number; y: number };
     }) => void;
+    onCanvasContextMenu?: (request: { position: { x: number; y: number } }) => void;
+    onViewportControlsChange?: (controls: ObjectMapViewportControls | null) => void;
     useShortResourceNames?: boolean;
   }) => {
     const firstNode = props.layout.nodes[0];
@@ -115,6 +118,32 @@ vi.mock('./ObjectMapG6Renderer', () => {
           onClick={props.onUserViewportChange}
         >
           viewport
+        </button>
+        <button
+          type="button"
+          data-testid="mock-register-viewport-controls"
+          onClick={() =>
+            props.onViewportControlsChange?.({
+              zoomOut: vi.fn(),
+              zoomIn: vi.fn(),
+              fitToView: vi.fn(),
+              focusNode: vi.fn(),
+            })
+          }
+        >
+          controls
+        </button>
+        <button
+          type="button"
+          data-testid="mock-canvas-context-menu"
+          onContextMenu={(event) => {
+            event.preventDefault();
+            props.onCanvasContextMenu?.({
+              position: { x: event.clientX, y: event.clientY },
+            });
+          }}
+        >
+          canvas menu
         </button>
         {firstNode && (
           <button
@@ -366,11 +395,13 @@ const renderObjectMap = async ({
   onOpenPanel,
   onNavigateView,
   onOpenObjectMap,
+  onRefresh,
 }: {
   testPayload?: ObjectMapSnapshotPayload;
   onOpenPanel?: (ref: ObjectMapReference) => void;
   onNavigateView?: (ref: ObjectMapReference) => void;
   onOpenObjectMap?: (ref: ObjectMapReference) => void;
+  onRefresh?: () => void;
 } = {}) => {
   const container = document.createElement('div');
   document.body.appendChild(container);
@@ -383,6 +414,7 @@ const renderObjectMap = async ({
         onOpenPanel={onOpenPanel}
         onNavigateView={onNavigateView}
         onOpenObjectMap={onOpenObjectMap}
+        onRefresh={onRefresh}
       />
     );
     await Promise.resolve();
@@ -952,6 +984,76 @@ describe('ObjectMap', () => {
         uid: 'pod-uid',
       })
     );
+
+    cleanup();
+  });
+
+  it('opens a canvas context menu with map controls', async () => {
+    const onRefresh = vi.fn();
+    const { container, cleanup } = await renderObjectMap({ onRefresh });
+    const controls = container.querySelector<HTMLButtonElement>(
+      '[data-testid="mock-register-viewport-controls"]'
+    );
+    const canvasMenu = container.querySelector<HTMLButtonElement>(
+      '[data-testid="mock-canvas-context-menu"]'
+    );
+
+    expect(controls).toBeTruthy();
+    expect(canvasMenu).toBeTruthy();
+
+    await act(async () => {
+      controls!.click();
+      canvasMenu!.dispatchEvent(mouseEvent('contextmenu', { clientX: 140, clientY: 160 }));
+      await Promise.resolve();
+    });
+
+    const menu = container.querySelector<HTMLElement>('[data-testid="mock-context-menu"]');
+    expect(menu?.textContent).toContain('Zoom out');
+    expect(menu?.textContent).toContain('Zoom in');
+    expect(menu?.textContent).toContain('Fit');
+    expect(menu?.textContent).toContain('Auto-fit off');
+    expect(menu?.textContent).toContain('Focus');
+    expect(menu?.textContent).toContain('Reset layout');
+    expect(menu?.textContent).toContain('Refresh');
+    expect(menu?.textContent).toContain('Hide legend');
+
+    const autoFitItem = Array.from(menu!.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Auto-fit off'
+    );
+    const refreshItem = Array.from(menu!.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Refresh'
+    );
+    const legendItem = Array.from(menu!.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Hide legend'
+    );
+
+    await act(async () => {
+      autoFitItem!.click();
+      await Promise.resolve();
+    });
+    expect(
+      container.querySelector<HTMLElement>('[data-testid="object-map-g6-mock"]')?.dataset.autoFit
+    ).toBe('false');
+
+    await act(async () => {
+      canvasMenu!.dispatchEvent(mouseEvent('contextmenu', { clientX: 140, clientY: 160 }));
+      await Promise.resolve();
+    });
+    expect(container.querySelector('[data-testid="mock-context-menu"]')?.textContent).toContain(
+      'Auto-fit on'
+    );
+
+    await act(async () => {
+      refreshItem!.click();
+      await Promise.resolve();
+    });
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      legendItem!.click();
+      await Promise.resolve();
+    });
+    expect(container.querySelector('.object-map__legend')).toBeNull();
 
     cleanup();
   });
