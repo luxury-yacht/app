@@ -25,6 +25,6 @@ export const OBJECT_MAP_CARD_STYLE = {
   collapseBadgeWidth: 28,
   collapseBadgeHeight: 14,
   collapseBadgeRadius: 3,
-  collapseBadgeRightInset: 16,
+  collapseBadgeRightInset: 8,
   collapseBadgeTopInset: 8,
 } as const;

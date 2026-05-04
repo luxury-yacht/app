@@ -240,6 +240,26 @@ describe('applyGraphData', () => {
     expect(g.setData).not.toHaveBeenCalled();
   });
 
+  it('patches and redraws when a custom collapse badge changes', async () => {
+    const previous: GraphData = {
+      nodes: [{ id: 'deploy', style: { cardCollapseBadgeText: '+2' } }],
+      edges: [],
+    };
+    const next: GraphData = {
+      nodes: [{ id: 'deploy', style: { cardCollapseBadgeText: '\u2212' } }],
+      edges: [],
+    };
+    const g = graph();
+
+    await applyGraphData(g, previous, next);
+
+    expect(g.updateData).toHaveBeenCalledWith({
+      nodes: [next.nodes![0]],
+    });
+    expect(g.draw).toHaveBeenCalledTimes(1);
+    expect(g.render).not.toHaveBeenCalled();
+  });
+
   it('preserves a focused node screen position after a full redraw', async () => {
     const previous: GraphData = {
       nodes: [{ id: 'pod', style: { x: 320, y: 40 } }, { id: 'sibling' }],

@@ -18,12 +18,6 @@ const NODE_NAMESPACE_MAX_CHARS = 28;
 const NODE_CARD_RADIUS = OBJECT_MAP_CARD_STYLE.borderRadius;
 const NODE_LINE_WIDTH = 1;
 const NODE_SEED_LINE_WIDTH = 2;
-const BADGE_FONT_WEIGHT = 700;
-const BADGE_WIDTH = OBJECT_MAP_CARD_STYLE.collapseBadgeWidth;
-const BADGE_HEIGHT = OBJECT_MAP_CARD_STYLE.collapseBadgeHeight;
-const BADGE_RADIUS = OBJECT_MAP_CARD_STYLE.collapseBadgeRadius;
-const BADGE_OFFSET_X = -(OBJECT_MAP_CARD_STYLE.collapseBadgeRightInset + BADGE_WIDTH / 2);
-const BADGE_OFFSET_Y = OBJECT_MAP_CARD_STYLE.collapseBadgeTopInset;
 
 export interface ObjectMapG6Palette {
   accent: string;
@@ -227,28 +221,19 @@ export const toObjectMapG6Data = (
         cardKindBadgeLetterSpacing: kindBadgeStyle.letterSpacing,
         cardKindBadgePaddingX: kindBadgeStyle.paddingX,
         cardKindBadgePaddingY: kindBadgeStyle.paddingY,
+        cardCollapseBadgeText: badge
+          ? badge.expanded
+            ? '\u2212'
+            : `+${badge.hiddenCount}`
+          : undefined,
+        cardCollapseBadgeFill: palette.accentBg,
+        cardCollapseBadgeTextFill: palette.accent,
+        cardCollapseBadgeStroke: palette.accent,
         cardNameText: node.ref.name,
         cardNamespaceText: namespaceLabel,
         cardFontFamily: palette.fontFamily,
         cardNameFill: palette.text,
         cardNamespaceFill: palette.textSecondary,
-        badges: badge
-          ? [
-              {
-                text: badge.expanded ? '\u2212' : `+${badge.hiddenCount}`,
-                placement: 'right-top',
-                offsetX: BADGE_OFFSET_X,
-                offsetY: BADGE_OFFSET_Y,
-                fill: palette.accent,
-                fontWeight: BADGE_FONT_WEIGHT,
-                backgroundWidth: BADGE_WIDTH,
-                backgroundHeight: BADGE_HEIGHT,
-                backgroundFill: palette.accentBg,
-                backgroundStroke: palette.accent,
-                backgroundRadius: BADGE_RADIUS,
-              },
-            ]
-          : undefined,
       },
     };
   }),

@@ -50,12 +50,6 @@ const lineDashChanged = (previous?: unknown, next?: unknown): boolean => {
   return previous.length !== next.length || previous.some((value, index) => value !== next[index]);
 };
 
-const badgeSignature = (node: NodeData): string | undefined => {
-  const badges = node.style?.badges;
-  if (!Array.isArray(badges)) return undefined;
-  return JSON.stringify(badges);
-};
-
 const nodeChanged = (previous: NodeData, next: NodeData): boolean => {
   const previousStyle = previous.style ?? {};
   const nextStyle = next.style ?? {};
@@ -86,12 +80,15 @@ const nodeChanged = (previous: NodeData, next: NodeData): boolean => {
     previousStyle.cardKindBadgeLetterSpacing !== nextStyle.cardKindBadgeLetterSpacing ||
     previousStyle.cardKindBadgePaddingX !== nextStyle.cardKindBadgePaddingX ||
     previousStyle.cardKindBadgePaddingY !== nextStyle.cardKindBadgePaddingY ||
+    previousStyle.cardCollapseBadgeText !== nextStyle.cardCollapseBadgeText ||
+    previousStyle.cardCollapseBadgeFill !== nextStyle.cardCollapseBadgeFill ||
+    previousStyle.cardCollapseBadgeTextFill !== nextStyle.cardCollapseBadgeTextFill ||
+    previousStyle.cardCollapseBadgeStroke !== nextStyle.cardCollapseBadgeStroke ||
     previousStyle.cardNameText !== nextStyle.cardNameText ||
     previousStyle.cardNamespaceText !== nextStyle.cardNamespaceText ||
     previousStyle.cardFontFamily !== nextStyle.cardFontFamily ||
     previousStyle.cardNameFill !== nextStyle.cardNameFill ||
-    previousStyle.cardNamespaceFill !== nextStyle.cardNamespaceFill ||
-    badgeSignature(previous) !== badgeSignature(next)
+    previousStyle.cardNamespaceFill !== nextStyle.cardNamespaceFill
   );
 };
 

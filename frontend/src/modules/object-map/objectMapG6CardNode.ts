@@ -46,6 +46,10 @@ interface ObjectMapG6CardNodeStyleProps extends BaseNodeStyleProps {
   cardKindBadgeLetterSpacing?: number;
   cardKindBadgePaddingX?: number;
   cardKindBadgePaddingY?: number;
+  cardCollapseBadgeText?: string;
+  cardCollapseBadgeFill?: string;
+  cardCollapseBadgeTextFill?: string;
+  cardCollapseBadgeStroke?: string;
   cardNameText?: string;
   cardNamespaceText?: string;
   cardFontFamily?: string;
@@ -190,12 +194,73 @@ class ObjectMapG6CardNode extends BaseNode<ObjectMapG6CardNodeStyleProps> {
     );
   }
 
+  private getCollapseBadgeMetrics(attributes: Required<ObjectMapG6CardNodeStyleProps>) {
+    const [cardWidth, cardHeight] = this.getSize(attributes);
+    const width = OBJECT_MAP_CARD_STYLE.collapseBadgeWidth;
+    const height = OBJECT_MAP_CARD_STYLE.collapseBadgeHeight;
+    const x = cardWidth / 2 - OBJECT_MAP_CARD_STYLE.collapseBadgeRightInset - width;
+    const y = -cardHeight / 2 + OBJECT_MAP_CARD_STYLE.collapseBadgeTopInset;
+    return {
+      x,
+      y,
+      width,
+      height,
+      textX: x + width / 2,
+      textY: y + height / 2,
+    };
+  }
+
+  private drawCollapseBadge(
+    attributes: Required<ObjectMapG6CardNodeStyleProps>,
+    container: Group
+  ): void {
+    if (!attributes.cardCollapseBadgeText) {
+      this.upsert('badge-expand-bg', GRect, false, container);
+      this.upsert('badge-expand-label', GText, false, container);
+      return;
+    }
+
+    const metrics = this.getCollapseBadgeMetrics(attributes);
+    this.upsert(
+      'badge-expand-bg',
+      GRect,
+      {
+        x: metrics.x,
+        y: metrics.y,
+        width: metrics.width,
+        height: metrics.height,
+        radius: OBJECT_MAP_CARD_STYLE.collapseBadgeRadius,
+        fill: attributes.cardCollapseBadgeFill,
+        stroke: attributes.cardCollapseBadgeStroke,
+      },
+      container
+    );
+    this.upsert(
+      'badge-expand-label',
+      GText,
+      {
+        x: metrics.textX,
+        y: metrics.textY,
+        text: attributes.cardCollapseBadgeText,
+        fill: attributes.cardCollapseBadgeTextFill,
+        fontSize: OBJECT_MAP_CARD_STYLE.textFontSize,
+        fontWeight: 700,
+        fontFamily: attributes.cardFontFamily,
+        textAlign: 'center',
+        textBaseline: 'middle',
+        maxLines: 1,
+      },
+      container
+    );
+  }
+
   private drawCardText(
     attributes: Required<ObjectMapG6CardNodeStyleProps>,
     container: Group
   ): void {
     const baselines = this.getCardTextBaselines(attributes);
     this.drawKindBadge(attributes, container);
+    this.drawCollapseBadge(attributes, container);
     this.upsert(
       'card-name',
       GText,
