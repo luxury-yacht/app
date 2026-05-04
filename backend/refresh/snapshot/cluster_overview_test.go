@@ -201,6 +201,122 @@ func TestClusterOverviewBuilder(t *testing.T) {
 	require.Equal(t, overview.TotalNodes, snapshot.Stats.ItemCount)
 }
 
+func TestClusterOverviewBuilderAggregatesWorkloadResourceUsage(t *testing.T) {
+	now := time.Now()
+	controller := true
+
+	replicaSet := &appsv1.ReplicaSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "api-7c8d9",
+			Namespace: "default",
+			OwnerReferences: []metav1.OwnerReference{{
+				Kind:       "Deployment",
+				Name:       "api",
+				Controller: &controller,
+			}},
+		},
+	}
+	pods := []*corev1.Pod{
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "api-7c8d9-a",
+				Namespace: "default",
+				OwnerReferences: []metav1.OwnerReference{{
+					Kind:       "ReplicaSet",
+					Name:       "api-7c8d9",
+					Controller: &controller,
+				}},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "agent-a",
+				Namespace: "kube-system",
+				OwnerReferences: []metav1.OwnerReference{{
+					Kind:       "DaemonSet",
+					Name:       "agent",
+					Controller: &controller,
+				}},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "db-0",
+				Namespace: "default",
+				OwnerReferences: []metav1.OwnerReference{{
+					Kind:       "StatefulSet",
+					Name:       "db",
+					Controller: &controller,
+				}},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "batch-a",
+				Namespace: "default",
+				OwnerReferences: []metav1.OwnerReference{{
+					Kind:       "Job",
+					Name:       "batch",
+					Controller: &controller,
+				}},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "standalone",
+				Namespace: "default",
+			},
+		},
+	}
+
+	builder := &ClusterOverviewBuilder{
+		nodeLister:       testsupport.NewNodeLister(t),
+		podLister:        testsupport.NewPodLister(t, pods...),
+		namespaceLister:  testsupport.NewNamespaceLister(t),
+		replicaSetLister: testsupport.NewReplicaSetLister(t, replicaSet),
+		cachedVersion:    "v1.30.0",
+		versionFetched:   now,
+		replicaSetHasSynced: func() bool {
+			return true
+		},
+		metrics: fakeClusterMetrics{
+			pods: map[string]metrics.PodUsage{
+				"default/api-7c8d9-a": {
+					CPUUsageMilli:    250,
+					MemoryUsageBytes: 300 * 1024 * 1024,
+				},
+				"kube-system/agent-a": {
+					CPUUsageMilli:    50,
+					MemoryUsageBytes: 100 * 1024 * 1024,
+				},
+				"default/db-0": {
+					CPUUsageMilli:    75,
+					MemoryUsageBytes: 120 * 1024 * 1024,
+				},
+				"default/batch-a": {
+					CPUUsageMilli:    125,
+					MemoryUsageBytes: 256 * 1024 * 1024,
+				},
+				"default/standalone": {
+					CPUUsageMilli:    900,
+					MemoryUsageBytes: 900 * 1024 * 1024,
+				},
+			},
+		},
+	}
+
+	snapshot, err := builder.Build(context.Background(), "")
+	require.NoError(t, err)
+	payload, ok := snapshot.Payload.(ClusterOverviewSnapshot)
+	require.True(t, ok)
+
+	usage := payload.Overview.WorkloadResourceUsage
+	require.Equal(t, WorkloadTypeResourceUsage{CPUUsage: "250m", MemoryUsage: "300.0 Mi"}, usage.Deployments)
+	require.Equal(t, WorkloadTypeResourceUsage{CPUUsage: "50m", MemoryUsage: "100.0 Mi"}, usage.DaemonSets)
+	require.Equal(t, WorkloadTypeResourceUsage{CPUUsage: "75m", MemoryUsage: "120.0 Mi"}, usage.StatefulSets)
+	require.Equal(t, WorkloadTypeResourceUsage{CPUUsage: "125m", MemoryUsage: "256.0 Mi"}, usage.Jobs)
+}
+
 func TestClusterOverviewBuilderUsesCatalog(t *testing.T) {
 	now := time.Now()
 
@@ -402,6 +518,7 @@ func TestClusterOverviewListBuilderIgnoresForbiddenOptionalResources(t *testing.
 		resource string
 	}{
 		{group: "apps", resource: "deployments"},
+		{group: "apps", resource: "replicasets"},
 		{group: "apps", resource: "statefulsets"},
 		{group: "apps", resource: "daemonsets"},
 		{group: "batch", resource: "cronjobs"},

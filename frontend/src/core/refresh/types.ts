@@ -163,6 +163,18 @@ export interface ClusterOverviewMetrics {
   failureCount: number;
 }
 
+export interface WorkloadTypeResourceUsage {
+  cpuUsage: string;
+  memoryUsage: string;
+}
+
+export interface WorkloadResourceUsage {
+  deployments: WorkloadTypeResourceUsage;
+  daemonSets: WorkloadTypeResourceUsage;
+  statefulSets: WorkloadTypeResourceUsage;
+  jobs: WorkloadTypeResourceUsage;
+}
+
 export interface ClusterOverviewPayload {
   clusterType: string;
   clusterVersion: string;
@@ -193,6 +205,7 @@ export interface ClusterOverviewPayload {
   totalStatefulSets: number;
   totalDaemonSets: number;
   totalCronJobs: number;
+  workloadResourceUsage: WorkloadResourceUsage;
   readyNodes: number;
   notReadyNodes: number;
   cordonedNodes: number;

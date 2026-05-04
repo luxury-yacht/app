@@ -387,8 +387,18 @@
   background: var(--workload-daemonset);
 }
 
+.stacked-bar__segment--job {
+  background: var(--workload-job);
+}
+
 .stacked-bar__segment--cronjob {
   background: var(--workload-cronjob);
+}
+
+.workload-usage-breakdowns {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--color-border);
 }
 
 .metric-stats {

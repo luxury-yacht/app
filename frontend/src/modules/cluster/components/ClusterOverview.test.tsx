@@ -305,6 +305,7 @@ describe('ClusterOverview', () => {
 
     domainStateRef.current = createDomainState('ready', {
       overview: {
+        ...EMPTY_OVERVIEW_DATA,
         clusterType: 'EKS',
         clusterVersion: '1.26.3',
         cpuUsage: '400m',
@@ -540,6 +541,46 @@ describe('ClusterOverview', () => {
     expect(statValueFor(container, 'virtual')).toBe('');
   });
 
+  it('renders CPU and memory usage by workload type', async () => {
+    domainStateRef.current = createDomainState('ready', {
+      overview: {
+        ...EMPTY_OVERVIEW_DATA,
+        workloadResourceUsage: {
+          deployments: { cpuUsage: '250m', memoryUsage: '300.0 Mi' },
+          daemonSets: { cpuUsage: '50m', memoryUsage: '100.0 Mi' },
+          statefulSets: { cpuUsage: '75m', memoryUsage: '120.0 Mi' },
+          jobs: { cpuUsage: '125m', memoryUsage: '256.0 Mi' },
+        },
+      },
+    });
+
+    const { container, cleanup } = renderClusterOverview();
+    cleanupRoot = cleanup;
+    await flushEffects();
+
+    expect(container.textContent).toContain('CPU by Workload Type');
+    expect(container.textContent).toContain('Memory by Workload Type');
+    expect(
+      container.querySelector('[data-testid="cluster-workload-usage-cpu-deployment"]')?.textContent
+    ).toContain('250m');
+    expect(
+      container.querySelector('[data-testid="cluster-workload-usage-cpu-daemonset"]')?.textContent
+    ).toContain('50m');
+    expect(
+      container.querySelector('[data-testid="cluster-workload-usage-cpu-statefulset"]')?.textContent
+    ).toContain('75m');
+    expect(
+      container.querySelector('[data-testid="cluster-workload-usage-cpu-job"]')?.textContent
+    ).toContain('125m');
+    expect(
+      container.querySelector('[data-testid="cluster-workload-usage-memory-deployment"]')
+        ?.textContent
+    ).toContain('300.0 Mi');
+    expect(
+      container.querySelector('[data-testid="cluster-workload-usage-memory-job"]')?.textContent
+    ).toContain('256.0 Mi');
+  });
+
   it('renders an update banner when a newer release is available', async () => {
     getAppInfoMock.mockResolvedValue({
       version: '1.0.0',
@@ -760,6 +801,12 @@ const EMPTY_OVERVIEW_DATA: ClusterOverviewPayload = {
   totalStatefulSets: 0,
   totalDaemonSets: 0,
   totalCronJobs: 0,
+  workloadResourceUsage: {
+    deployments: { cpuUsage: '0', memoryUsage: '0' },
+    daemonSets: { cpuUsage: '0', memoryUsage: '0' },
+    statefulSets: { cpuUsage: '0', memoryUsage: '0' },
+    jobs: { cpuUsage: '0', memoryUsage: '0' },
+  },
   readyNodes: 0,
   notReadyNodes: 0,
   cordonedNodes: 0,

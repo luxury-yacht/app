@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -41,6 +42,7 @@ type ClusterOverviewBuilder struct {
 	namespaceLister   corelisters.NamespaceLister
 	eventLister       corelisters.EventLister
 	deploymentLister  appslisters.DeploymentLister
+	replicaSetLister  appslisters.ReplicaSetLister
 	statefulSetLister appslisters.StatefulSetLister
 	daemonSetLister   appslisters.DaemonSetLister
 	cronJobLister     batchlisters.CronJobLister
@@ -54,6 +56,7 @@ type ClusterOverviewBuilder struct {
 	hasSyncedFns         []cache.InformerSynced
 	eventHasSynced       cache.InformerSynced
 	deploymentHasSynced  cache.InformerSynced
+	replicaSetHasSynced  cache.InformerSynced
 	statefulSetHasSynced cache.InformerSynced
 	daemonSetHasSynced   cache.InformerSynced
 	cronJobHasSynced     cache.InformerSynced
@@ -121,7 +124,21 @@ type ClusterOverviewPayload struct {
 	TotalDaemonSets   int `json:"totalDaemonSets"`
 	TotalCronJobs     int `json:"totalCronJobs"`
 
+	WorkloadResourceUsage WorkloadResourceUsage `json:"workloadResourceUsage"`
+
 	RecentEvents []RecentEvent `json:"recentEvents"`
+}
+
+type WorkloadResourceUsage struct {
+	Deployments  WorkloadTypeResourceUsage `json:"deployments"`
+	DaemonSets   WorkloadTypeResourceUsage `json:"daemonSets"`
+	StatefulSets WorkloadTypeResourceUsage `json:"statefulSets"`
+	Jobs         WorkloadTypeResourceUsage `json:"jobs"`
+}
+
+type WorkloadTypeResourceUsage struct {
+	CPUUsage    string `json:"cpuUsage"`
+	MemoryUsage string `json:"memoryUsage"`
 }
 
 // RecentEvent is a single warning event shown on the cluster overview.
@@ -164,6 +181,7 @@ func RegisterClusterOverviewDomain(
 	namespaceInformer := factory.Core().V1().Namespaces()
 	eventInformer := factory.Core().V1().Events()
 	deploymentInformer := factory.Apps().V1().Deployments()
+	replicaSetInformer := factory.Apps().V1().ReplicaSets()
 	statefulSetInformer := factory.Apps().V1().StatefulSets()
 	daemonSetInformer := factory.Apps().V1().DaemonSets()
 	cronJobInformer := factory.Batch().V1().CronJobs()
@@ -175,6 +193,7 @@ func RegisterClusterOverviewDomain(
 		namespaceLister:   namespaceInformer.Lister(),
 		eventLister:       eventInformer.Lister(),
 		deploymentLister:  deploymentInformer.Lister(),
+		replicaSetLister:  replicaSetInformer.Lister(),
 		statefulSetLister: statefulSetInformer.Lister(),
 		daemonSetLister:   daemonSetInformer.Lister(),
 		cronJobLister:     cronJobInformer.Lister(),
@@ -187,6 +206,7 @@ func RegisterClusterOverviewDomain(
 		},
 		eventHasSynced:       eventInformer.Informer().HasSynced,
 		deploymentHasSynced:  deploymentInformer.Informer().HasSynced,
+		replicaSetHasSynced:  replicaSetInformer.Informer().HasSynced,
 		statefulSetHasSynced: statefulSetInformer.Informer().HasSynced,
 		daemonSetHasSynced:   daemonSetInformer.Informer().HasSynced,
 		cronJobHasSynced:     cronJobInformer.Informer().HasSynced,
@@ -233,6 +253,7 @@ func (b *ClusterOverviewListBuilder) Build(ctx context.Context, scope string) (*
 		nodes            []*corev1.Node
 		pods             []*corev1.Pod
 		namespaces       []*corev1.Namespace
+		replicaSets      []*appsv1.ReplicaSet
 		recentEvents     []RecentEvent
 		deploymentCount  int
 		statefulSetCount int
@@ -300,6 +321,21 @@ func (b *ClusterOverviewListBuilder) Build(ctx context.Context, scope string) (*
 				return nil
 			case apierrors.IsForbidden(err):
 				klog.V(2).Info("cluster-overview fallback: deployment list forbidden; proceeding without deployment count")
+				return nil
+			default:
+				return err
+			}
+		},
+		func(ctx context.Context) error {
+			resp, err := b.client.AppsV1().ReplicaSets("").List(ctx, metav1.ListOptions{})
+			switch {
+			case err == nil:
+				mu.Lock()
+				replicaSets = parallel.CopyToPointers(resp.Items)
+				mu.Unlock()
+				return nil
+			case apierrors.IsForbidden(err):
+				klog.V(2).Info("cluster-overview fallback: replicaset list forbidden; deployment usage may be incomplete")
 				return nil
 			default:
 				return err
@@ -383,7 +419,7 @@ func (b *ClusterOverviewListBuilder) Build(ctx context.Context, scope string) (*
 		versionFn = func(context.Context) string { return defaultClusterVersion("") }
 	}
 
-	snapshot, err := buildClusterOverviewSnapshot(ctx, nodes, pods, namespaces, b.metrics, versionFn, b.serverHost)
+	snapshot, err := buildClusterOverviewSnapshot(ctx, nodes, pods, namespaces, replicaSets, b.metrics, versionFn, b.serverHost)
 	if err != nil {
 		return nil, err
 	}
@@ -407,6 +443,7 @@ func buildClusterOverviewSnapshot(
 	nodes []*corev1.Node,
 	pods []*corev1.Pod,
 	namespaces []*corev1.Namespace,
+	replicaSets []*appsv1.ReplicaSet,
 	provider metrics.Provider,
 	versionFn func(context.Context) string,
 	serverHost string,
@@ -424,6 +461,7 @@ func buildClusterOverviewSnapshot(
 	var memRequestsBytes int64
 	var memLimitsBytes int64
 	var memUsageBytes int64
+	podUsage := map[string]metrics.PodUsage{}
 
 	nonFargateNodes := 0
 	virtualKubeletNodes := 0
@@ -479,6 +517,7 @@ func buildClusterOverviewSnapshot(
 			cpuUsageMilli += entry.CPUUsageMilli
 			memUsageBytes += entry.MemoryUsageBytes
 		}
+		podUsage = usage
 		meta := provider.Metadata()
 		lastError := meta.LastError
 
@@ -501,6 +540,7 @@ func buildClusterOverviewSnapshot(
 			FailureCount:        meta.FailureCount,
 		}
 	}
+	overview.WorkloadResourceUsage = buildWorkloadResourceUsage(pods, podUsage, replicaSets)
 
 	for _, pod := range pods {
 		if pod == nil {
@@ -771,6 +811,99 @@ func formatMemoryValue(bytes int64) string {
 	return fmt.Sprintf("%.1f Ti", float64(bytes)/float64(ti))
 }
 
+type workloadUsageTotals struct {
+	cpuMilli int64
+	memBytes int64
+}
+
+func buildWorkloadResourceUsage(pods []*corev1.Pod, podUsage map[string]metrics.PodUsage, replicaSets []*appsv1.ReplicaSet) WorkloadResourceUsage {
+	replicaSetDeployments := buildClusterOverviewReplicaSetDeploymentMap(replicaSets)
+	totals := map[string]workloadUsageTotals{
+		"Deployment":  {},
+		"DaemonSet":   {},
+		"StatefulSet": {},
+		"Job":         {},
+	}
+
+	for _, pod := range pods {
+		if pod == nil {
+			continue
+		}
+		usage, ok := podUsage[podMetricKey(pod.Namespace, pod.Name)]
+		if !ok {
+			continue
+		}
+		kind := clusterOverviewWorkloadKind(pod, replicaSetDeployments)
+		current, ok := totals[kind]
+		if !ok {
+			continue
+		}
+		current.cpuMilli += usage.CPUUsageMilli
+		current.memBytes += usage.MemoryUsageBytes
+		totals[kind] = current
+	}
+
+	return WorkloadResourceUsage{
+		Deployments:  formatWorkloadTypeResourceUsage(totals["Deployment"]),
+		DaemonSets:   formatWorkloadTypeResourceUsage(totals["DaemonSet"]),
+		StatefulSets: formatWorkloadTypeResourceUsage(totals["StatefulSet"]),
+		Jobs:         formatWorkloadTypeResourceUsage(totals["Job"]),
+	}
+}
+
+func buildClusterOverviewReplicaSetDeploymentMap(replicaSets []*appsv1.ReplicaSet) map[string]string {
+	out := make(map[string]string, len(replicaSets))
+	for _, replicaSet := range replicaSets {
+		if replicaSet == nil {
+			continue
+		}
+		for _, owner := range replicaSet.OwnerReferences {
+			if owner.Controller == nil || !*owner.Controller || owner.Kind != "Deployment" || owner.Name == "" {
+				continue
+			}
+			out[namespaceNameKey(replicaSet.Namespace, replicaSet.Name)] = owner.Name
+			break
+		}
+	}
+	return out
+}
+
+func clusterOverviewWorkloadKind(pod *corev1.Pod, replicaSetDeployments map[string]string) string {
+	if pod == nil {
+		return ""
+	}
+	for _, owner := range pod.OwnerReferences {
+		if owner.Controller == nil || !*owner.Controller {
+			continue
+		}
+		switch owner.Kind {
+		case "Deployment", "DaemonSet", "StatefulSet", "Job":
+			return owner.Kind
+		case "ReplicaSet":
+			if _, ok := replicaSetDeployments[namespaceNameKey(pod.Namespace, owner.Name)]; ok {
+				return "Deployment"
+			}
+		}
+		return ""
+	}
+	return ""
+}
+
+func formatWorkloadTypeResourceUsage(totals workloadUsageTotals) WorkloadTypeResourceUsage {
+	return WorkloadTypeResourceUsage{
+		CPUUsage:    formatCPUValue(totals.cpuMilli),
+		MemoryUsage: formatMemoryValue(totals.memBytes),
+	}
+}
+
+func podMetricKey(namespace, name string) string {
+	return namespace + "/" + name
+}
+
+func namespaceNameKey(namespace, name string) string {
+	return namespace + "/" + name
+}
+
 type clusterOverviewExtras struct {
 	totalDeployments  int
 	totalStatefulSets int
@@ -810,9 +943,10 @@ func (b *ClusterOverviewBuilder) buildFromListers(ctx context.Context) (*refresh
 	}
 
 	var (
-		nodeRes      listResult[corev1.Node]
-		podRes       listResult[corev1.Pod]
-		namespaceRes listResult[corev1.Namespace]
+		nodeRes       listResult[corev1.Node]
+		podRes        listResult[corev1.Pod]
+		namespaceRes  listResult[corev1.Namespace]
+		replicaSetRes listResult[appsv1.ReplicaSet]
 	)
 	var deploymentCount, statefulSetCount, daemonSetCount, cronJobCount int
 	var recentEvents []RecentEvent
@@ -844,6 +978,15 @@ func (b *ClusterOverviewBuilder) buildFromListers(ctx context.Context) (*refresh
 			if err == nil {
 				deploymentCount = len(list)
 			}
+			return err
+		},
+		func(context.Context) error {
+			if b.replicaSetLister == nil || !informerSynced(b.replicaSetHasSynced) {
+				return nil
+			}
+			list, err := b.replicaSetLister.List(labels.Everything())
+			replicaSetRes.items = list
+			replicaSetRes.err = err
 			return err
 		},
 		func(context.Context) error {
@@ -901,8 +1044,11 @@ func (b *ClusterOverviewBuilder) buildFromListers(ctx context.Context) (*refresh
 	if namespaceRes.err != nil {
 		return nil, namespaceRes.err
 	}
+	if replicaSetRes.err != nil {
+		return nil, replicaSetRes.err
+	}
 
-	snapshot, err := buildClusterOverviewSnapshot(ctx, nodeRes.items, podRes.items, namespaceRes.items, b.metrics, b.serverVersion, b.serverHost)
+	snapshot, err := buildClusterOverviewSnapshot(ctx, nodeRes.items, podRes.items, namespaceRes.items, replicaSetRes.items, b.metrics, b.serverVersion, b.serverHost)
 	if err != nil {
 		return nil, err
 	}

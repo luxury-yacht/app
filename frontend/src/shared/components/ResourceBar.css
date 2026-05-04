@@ -442,6 +442,10 @@
   background: var(--workload-daemonset);
 }
 
+.metric-legend__dot--job {
+  background: var(--workload-job);
+}
+
 .metric-legend__dot--cronjob {
   background: var(--workload-cronjob);
 }

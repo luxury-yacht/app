@@ -18,6 +18,10 @@ func TestMergeClusterOverviewPreservesSnapshotWarningsAndTruncation(t *testing.T
 				ClusterMeta: ClusterMeta{ClusterID: "cluster-a", ClusterName: "alpha"},
 				Overview: ClusterOverviewPayload{
 					TotalNodes: 3,
+					WorkloadResourceUsage: WorkloadResourceUsage{
+						Deployments: WorkloadTypeResourceUsage{CPUUsage: "250m", MemoryUsage: "300.0 Mi"},
+						Jobs:        WorkloadTypeResourceUsage{CPUUsage: "1", MemoryUsage: "1.0 Gi"},
+					},
 				},
 				OverviewByCluster: map[string]ClusterOverviewPayload{
 					"cluster-a": {TotalNodes: 3},
@@ -40,6 +44,10 @@ func TestMergeClusterOverviewPreservesSnapshotWarningsAndTruncation(t *testing.T
 				ClusterMeta: ClusterMeta{ClusterID: "cluster-b", ClusterName: "beta"},
 				Overview: ClusterOverviewPayload{
 					TotalNodes: 4,
+					WorkloadResourceUsage: WorkloadResourceUsage{
+						Deployments: WorkloadTypeResourceUsage{CPUUsage: "750m", MemoryUsage: "724.0 Mi"},
+						Jobs:        WorkloadTypeResourceUsage{CPUUsage: "500m", MemoryUsage: "512.0 Mi"},
+					},
 				},
 				OverviewByCluster: map[string]ClusterOverviewPayload{
 					"cluster-b": {TotalNodes: 4},
@@ -69,6 +77,17 @@ func TestMergeClusterOverviewPreservesSnapshotWarningsAndTruncation(t *testing.T
 	}
 	if len(merged.Stats.Warnings) != 2 {
 		t.Fatalf("expected merged warnings to include both source warnings, got %v", merged.Stats.Warnings)
+	}
+	payload, ok := merged.Payload.(ClusterOverviewSnapshot)
+	if !ok {
+		t.Fatalf("expected cluster overview snapshot payload, got %T", merged.Payload)
+	}
+	usage := payload.Overview.WorkloadResourceUsage
+	if usage.Deployments.CPUUsage != "1" || usage.Deployments.MemoryUsage != "1.0 Gi" {
+		t.Fatalf("expected deployment usage to be merged, got %+v", usage.Deployments)
+	}
+	if usage.Jobs.CPUUsage != "1.50" || usage.Jobs.MemoryUsage != "1.5 Gi" {
+		t.Fatalf("expected job usage to be merged, got %+v", usage.Jobs)
 	}
 }
 

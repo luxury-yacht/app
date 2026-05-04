@@ -7,6 +7,11 @@
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import ResourceBar from '@shared/components/ResourceBar';
+import {
+  calculateResourceMetrics,
+  formatCpuValue,
+  formatMemoryValue,
+} from '@shared/utils/resourceCalculations';
 import { readAppInfo, requestAppState } from '@/core/app-state-access';
 import { requestRefreshDomain } from '@/core/data-access';
 import { refreshOrchestrator, useRefreshScopedDomain } from '@/core/refresh';
@@ -76,6 +81,12 @@ const EMPTY_OVERVIEW: ClusterOverviewPayload = {
   totalStatefulSets: 0,
   totalDaemonSets: 0,
   totalCronJobs: 0,
+  workloadResourceUsage: {
+    deployments: { cpuUsage: '0', memoryUsage: '0' },
+    daemonSets: { cpuUsage: '0', memoryUsage: '0' },
+    statefulSets: { cpuUsage: '0', memoryUsage: '0' },
+    jobs: { cpuUsage: '0', memoryUsage: '0' },
+  },
   readyNodes: 0,
   notReadyNodes: 0,
   cordonedNodes: 0,
@@ -473,6 +484,112 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
   ];
   const workloadTotal = workloadItems.reduce((sum, item) => sum + item.value, 0);
   const workloadPct = (value: number) => (workloadTotal > 0 ? (value / workloadTotal) * 100 : 0);
+  const workloadResourceUsage =
+    displayOverview.workloadResourceUsage ?? EMPTY_OVERVIEW.workloadResourceUsage;
+  const workloadUsageSources = [
+    {
+      key: 'deployment',
+      label: 'deployments',
+      variant: 'deployment',
+      cpuUsage: workloadResourceUsage.deployments?.cpuUsage ?? '0',
+      memoryUsage: workloadResourceUsage.deployments?.memoryUsage ?? '0',
+    },
+    {
+      key: 'daemonset',
+      label: 'daemonsets',
+      variant: 'daemonset',
+      cpuUsage: workloadResourceUsage.daemonSets?.cpuUsage ?? '0',
+      memoryUsage: workloadResourceUsage.daemonSets?.memoryUsage ?? '0',
+    },
+    {
+      key: 'statefulset',
+      label: 'statefulsets',
+      variant: 'statefulset',
+      cpuUsage: workloadResourceUsage.statefulSets?.cpuUsage ?? '0',
+      memoryUsage: workloadResourceUsage.statefulSets?.memoryUsage ?? '0',
+    },
+    {
+      key: 'job',
+      label: 'jobs',
+      variant: 'job',
+      cpuUsage: workloadResourceUsage.jobs?.cpuUsage ?? '0',
+      memoryUsage: workloadResourceUsage.jobs?.memoryUsage ?? '0',
+    },
+  ];
+  const cpuWorkloadUsageItems = workloadUsageSources.map((item) => ({
+    ...item,
+    usage: item.cpuUsage,
+    value: calculateResourceMetrics({ usage: item.cpuUsage }, 'cpu').usage,
+  }));
+  const memoryWorkloadUsageItems = workloadUsageSources.map((item) => ({
+    ...item,
+    usage: item.memoryUsage,
+    value: calculateResourceMetrics({ usage: item.memoryUsage }, 'memory').usage,
+  }));
+  const cpuWorkloadUsageTotal = cpuWorkloadUsageItems.reduce((sum, item) => sum + item.value, 0);
+  const memoryWorkloadUsageTotal = memoryWorkloadUsageItems.reduce(
+    (sum, item) => sum + item.value,
+    0
+  );
+
+  const renderWorkloadUsageBreakdown = (
+    title: string,
+    testKey: string,
+    total: number,
+    totalLabel: string,
+    items: Array<{
+      key: string;
+      label: string;
+      variant: string;
+      usage: string;
+      value: number;
+    }>
+  ) => (
+    <div className="resource-group workload-usage-breakdown">
+      <div className="metric-header">
+        <h3>{title}</h3>
+        <div className="metric-legend__total">
+          <span className="metric-legend__total-value">{showSkeleton ? DASH : totalLabel}</span>
+          <span className="metric-legend__total-label"> total used</span>
+        </div>
+      </div>
+      <div className="stacked-bar" role="presentation" aria-hidden="true">
+        {!showSkeleton &&
+          items.map((item) => {
+            const width = total > 0 ? (item.value / total) * 100 : 0;
+            if (width <= 0) {
+              return null;
+            }
+            return (
+              <div
+                key={item.key}
+                className={`stacked-bar__segment stacked-bar__segment--${item.variant}`}
+                style={{ width: `${width}%` }}
+              />
+            );
+          })}
+      </div>
+      <div className="metric-legend">
+        <div className="metric-legend__items">
+          {items.map((item) => (
+            <div
+              key={item.key}
+              className="metric-legend__item"
+              aria-disabled={item.value === 0}
+              data-testid={`cluster-workload-usage-${testKey}-${item.key}`}
+            >
+              <span
+                className={`metric-legend__dot metric-legend__dot--${item.variant}`}
+                aria-hidden="true"
+              />
+              <span className="metric-legend__count">{showSkeleton ? DASH : item.usage}</span>
+              <span className="metric-legend__label">{item.label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 
   const nodeHealthPhaseItems = [
     {
@@ -722,6 +839,23 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
                 </div>
               </div>
             </div>
+          </div>
+
+          <div className="workload-usage-breakdowns">
+            {renderWorkloadUsageBreakdown(
+              'CPU by Workload Type',
+              'cpu',
+              cpuWorkloadUsageTotal,
+              formatCpuValue(cpuWorkloadUsageTotal),
+              cpuWorkloadUsageItems
+            )}
+            {renderWorkloadUsageBreakdown(
+              'Memory by Workload Type',
+              'memory',
+              memoryWorkloadUsageTotal,
+              formatMemoryValue(memoryWorkloadUsageTotal),
+              memoryWorkloadUsageItems
+            )}
           </div>
         </div>
 

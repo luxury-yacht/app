@@ -709,6 +709,7 @@ func mergeClusterOverviewPayload(payloads []ClusterOverviewSnapshot) ClusterOver
 		out.TotalStatefulSets += overview.TotalStatefulSets
 		out.TotalDaemonSets += overview.TotalDaemonSets
 		out.TotalCronJobs += overview.TotalCronJobs
+		out.WorkloadResourceUsage = mergeWorkloadResourceUsage(out.WorkloadResourceUsage, overview.WorkloadResourceUsage)
 		out.RecentEvents = append(out.RecentEvents, overview.RecentEvents...)
 
 		cpuUsageMilli += parseCPUValue(overview.CPUUsage)
@@ -752,6 +753,22 @@ func mergeClusterOverviewPayload(payloads []ClusterOverviewSnapshot) ClusterOver
 	return out
 }
 
+func mergeWorkloadResourceUsage(left, right WorkloadResourceUsage) WorkloadResourceUsage {
+	return WorkloadResourceUsage{
+		Deployments:  mergeWorkloadTypeResourceUsage(left.Deployments, right.Deployments),
+		DaemonSets:   mergeWorkloadTypeResourceUsage(left.DaemonSets, right.DaemonSets),
+		StatefulSets: mergeWorkloadTypeResourceUsage(left.StatefulSets, right.StatefulSets),
+		Jobs:         mergeWorkloadTypeResourceUsage(left.Jobs, right.Jobs),
+	}
+}
+
+func mergeWorkloadTypeResourceUsage(left, right WorkloadTypeResourceUsage) WorkloadTypeResourceUsage {
+	return WorkloadTypeResourceUsage{
+		CPUUsage:    formatCPUValue(parseCPUValue(left.CPUUsage) + parseCPUValue(right.CPUUsage)),
+		MemoryUsage: formatMemoryValue(parseMemoryValue(left.MemoryUsage) + parseMemoryValue(right.MemoryUsage)),
+	}
+}
+
 // mergeLabel returns the single label value or a mixed sentinel if multiple values exist.
 func mergeLabel(values map[string]struct{}, mixed string) string {
 	if len(values) == 0 {
@@ -784,7 +801,7 @@ func parseMemoryValue(value string) int64 {
 	if trimmed == "" {
 		return 0
 	}
-	qty, err := resource.ParseQuantity(trimmed)
+	qty, err := resource.ParseQuantity(strings.ReplaceAll(trimmed, " ", ""))
 	if err != nil {
 		return 0
 	}
