@@ -470,17 +470,17 @@
   }
 
   .recent-events {
-    grid-column: 1;
-    grid-row: 2;
-  }
-
-  .nodes-summary {
     grid-column: 2;
     grid-row: 1;
   }
 
-  .workloads-summary {
+  .nodes-summary {
     grid-column: 2;
+    grid-row: 2;
+  }
+
+  .workloads-summary {
+    grid-column: 1;
     grid-row: 2;
   }
 }

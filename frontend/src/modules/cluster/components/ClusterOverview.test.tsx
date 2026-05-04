@@ -566,6 +566,16 @@ describe('ClusterOverview', () => {
       )
     ).toEqual(['CPU', 'By Workload', 'Memory', 'By Workload']);
     expect(
+      Array.from(container.querySelectorAll('[data-testid^="cluster-workload-usage-cpu-"]')).map(
+        (item) => item.getAttribute('data-testid')
+      )
+    ).toEqual([
+      'cluster-workload-usage-cpu-deployment',
+      'cluster-workload-usage-cpu-statefulset',
+      'cluster-workload-usage-cpu-daemonset',
+      'cluster-workload-usage-cpu-job',
+    ]);
+    expect(
       container.querySelector('[data-testid="cluster-workload-usage-cpu-deployment"]')?.textContent
     ).toContain('250m');
     expect(

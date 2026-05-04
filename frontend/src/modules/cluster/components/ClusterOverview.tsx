@@ -495,18 +495,18 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
       memoryUsage: workloadResourceUsage.deployments?.memoryUsage ?? '0',
     },
     {
-      key: 'daemonset',
-      label: 'daemonsets',
-      variant: 'daemonset',
-      cpuUsage: workloadResourceUsage.daemonSets?.cpuUsage ?? '0',
-      memoryUsage: workloadResourceUsage.daemonSets?.memoryUsage ?? '0',
-    },
-    {
       key: 'statefulset',
       label: 'statefulsets',
       variant: 'statefulset',
       cpuUsage: workloadResourceUsage.statefulSets?.cpuUsage ?? '0',
       memoryUsage: workloadResourceUsage.statefulSets?.memoryUsage ?? '0',
+    },
+    {
+      key: 'daemonset',
+      label: 'daemonsets',
+      variant: 'daemonset',
+      cpuUsage: workloadResourceUsage.daemonSets?.cpuUsage ?? '0',
+      memoryUsage: workloadResourceUsage.daemonSets?.memoryUsage ?? '0',
     },
     {
       key: 'job',

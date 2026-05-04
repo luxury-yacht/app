@@ -1,10 +1,8 @@
 # TODO
 
-- In daemonset details, show a "NOT RUNNING ON" label that lists the nodes where the ds is missing
-
-- Cluster overview, show resource usage by workload type
-
 ## Feature Ideas
+
+- In daemonset details, show a "NOT RUNNING ON" label that lists the nodes where the ds is missing
 
 - Configurable backend thresholds
   - QPS (500) and Burst (1000)
