@@ -1,9 +1,5 @@
 # TODO
 
-- Show pods as cards instead of an embedded gridtable in node pods view
-  - Object relationships map
-  - Traffic flow map
-
 - In daemonset details, show a "NOT RUNNING ON" label that lists the nodes where the ds is missing
 
 - Cluster overview, show resource usage by workload type
