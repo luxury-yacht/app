@@ -7,6 +7,7 @@
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import ResourceBar from '@shared/components/ResourceBar';
+import Tooltip from '@shared/components/Tooltip';
 import {
   calculateResourceMetrics,
   formatCpuValue,
@@ -531,27 +532,78 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
     (sum, item) => sum + item.value,
     0
   );
-  const cpuResourceMetrics = calculateResourceMetrics(
-    {
-      usage: displayOverview.cpuUsage,
-      allocatable: displayOverview.cpuAllocatable,
-    },
-    'cpu'
-  );
   const memoryResourceMetrics = calculateResourceMetrics(
     {
       usage: displayOverview.memoryUsage,
+      request: displayOverview.memoryRequests,
+      limit: displayOverview.memoryLimits,
       allocatable: displayOverview.memoryAllocatable,
     },
     'memory'
   );
+  const cpuResourceMetrics = calculateResourceMetrics(
+    {
+      usage: displayOverview.cpuUsage,
+      request: displayOverview.cpuRequests,
+      limit: displayOverview.cpuLimits,
+      allocatable: displayOverview.cpuAllocatable,
+    },
+    'cpu'
+  );
   const formatPercent = (value: number) => `${value.toFixed(1)}%`;
+  const formatCpuTooltipValue = (millicores: number) => {
+    const cores = millicores / 1000;
+    if (cores === 0) {
+      return '0';
+    }
+    return cores.toFixed(2).replace(/\.?0+$/, '');
+  };
+  const formatResourceTooltipValue = (value: number, type: 'cpu' | 'memory') =>
+    type === 'cpu' ? formatCpuTooltipValue(value) : formatMemoryValue(value);
   const cpuUsageSummary = `${formatCpuValue(cpuResourceMetrics.usage)} of ${formatCpuValue(
     cpuResourceMetrics.allocatable
   )} cores`;
   const memoryUsageSummary = `${formatMemoryValue(memoryResourceMetrics.usage)} of ${formatMemoryValue(
     memoryResourceMetrics.allocatable
   )}`;
+
+  const renderResourceUtilizationTooltip = (
+    type: 'cpu' | 'memory',
+    metrics: ReturnType<typeof calculateResourceMetrics>
+  ) => (
+    <div
+      className="resource-utilization-tooltip"
+      data-testid={`resource-utilization-tooltip-${type}`}
+    >
+      {[
+        {
+          label: 'Utilization',
+          value: metrics.usage,
+          percent: metrics.usagePercent,
+        },
+        {
+          label: 'Requests',
+          value: metrics.request,
+          percent: metrics.requestPercent,
+        },
+        {
+          label: 'Limits',
+          value: metrics.limit,
+          percent: metrics.limitPercent,
+        },
+      ].map((row) => (
+        <React.Fragment key={row.label}>
+          <span className="resource-utilization-tooltip__label">{row.label}</span>
+          <span className="resource-utilization-tooltip__value">
+            {formatResourceTooltipValue(row.value, type)}
+          </span>
+          <span className="resource-utilization-tooltip__percent">
+            {formatPercent(row.percent)}
+          </span>
+        </React.Fragment>
+      ))}
+    </div>
+  );
 
   const renderWorkloadUsageBreakdown = (
     testKey: string,
@@ -783,16 +835,24 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
                 {showSkeleton ? DASH : formatPercent(cpuResourceMetrics.usagePercent)}
               </div>
             </div>
-            <div className="resource-bar-placeholder">
-              <ResourceBar
-                usage={displayOverview.cpuUsage}
-                request={displayOverview.cpuRequests}
-                limit={displayOverview.cpuLimits}
-                allocatable={displayOverview.cpuAllocatable}
-                type="cpu"
-                variant="default"
-              />
-            </div>
+            <Tooltip
+              content={renderResourceUtilizationTooltip('cpu', cpuResourceMetrics)}
+              placement="top"
+              minWidth={220}
+              inline={false}
+              disabled={showSkeleton}
+            >
+              <div className="resource-bar-placeholder">
+                <ResourceBar
+                  usage={displayOverview.cpuUsage}
+                  request={displayOverview.cpuRequests}
+                  limit={displayOverview.cpuLimits}
+                  allocatable={displayOverview.cpuAllocatable}
+                  type="cpu"
+                  variant="default"
+                />
+              </div>
+            </Tooltip>
           </div>
 
           {renderWorkloadUsageBreakdown('cpu', cpuWorkloadUsageTotal, cpuWorkloadUsageItems)}
@@ -811,16 +871,24 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
                 {showSkeleton ? DASH : formatPercent(memoryResourceMetrics.usagePercent)}
               </div>
             </div>
-            <div className="resource-bar-placeholder">
-              <ResourceBar
-                usage={displayOverview.memoryUsage}
-                request={displayOverview.memoryRequests}
-                limit={displayOverview.memoryLimits}
-                allocatable={displayOverview.memoryAllocatable}
-                type="memory"
-                variant="default"
-              />
-            </div>
+            <Tooltip
+              content={renderResourceUtilizationTooltip('memory', memoryResourceMetrics)}
+              placement="top"
+              minWidth={220}
+              inline={false}
+              disabled={showSkeleton}
+            >
+              <div className="resource-bar-placeholder">
+                <ResourceBar
+                  usage={displayOverview.memoryUsage}
+                  request={displayOverview.memoryRequests}
+                  limit={displayOverview.memoryLimits}
+                  allocatable={displayOverview.memoryAllocatable}
+                  type="memory"
+                  variant="default"
+                />
+              </div>
+            </Tooltip>
           </div>
 
           {renderWorkloadUsageBreakdown(

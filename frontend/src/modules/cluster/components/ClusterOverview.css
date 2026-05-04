@@ -432,7 +432,7 @@
 
 .metric-header--usage h3 {
   color: var(--color-text-secondary);
-  margin-bottom: 0.2 !important;
+  margin-bottom: 0.2rem !important;
 }
 
 .metric-header__title-group {
@@ -450,9 +450,30 @@
 
 .metric-header__percent {
   color: var(--color-text);
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
+}
+
+.resource-utilization-tooltip {
+  display: grid;
+  grid-template-columns: minmax(5.5rem, 1fr) auto auto;
+  column-gap: 1rem;
+  row-gap: 0.35rem;
+  align-items: baseline;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.resource-utilization-tooltip__label {
+  color: var(--color-text-secondary);
+}
+
+.resource-utilization-tooltip__value,
+.resource-utilization-tooltip__percent {
+  color: var(--color-text);
+  font-weight: 600;
+  text-align: right;
 }
 
 .overview-loading-banner {

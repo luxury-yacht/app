@@ -5,7 +5,7 @@
  * Covers key behaviors and edge cases for ClusterOverview.
  */
 
-import { act } from 'react';
+import { act, type ReactNode } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -98,6 +98,24 @@ vi.mock('@shared/components/ResourceBar', () => ({
     <div data-testid={`resource-bar-${type}`}>
       {(usage as string | undefined) ?? '-'}|{(request as string | undefined) ?? '-'}|
       {(limit as string | undefined) ?? '-'}
+    </div>
+  ),
+}));
+
+vi.mock('@shared/components/Tooltip', () => ({
+  __esModule: true,
+  default: ({
+    content,
+    children,
+    disabled,
+  }: {
+    content: ReactNode;
+    children: ReactNode;
+    disabled?: boolean;
+  }) => (
+    <div data-testid="tooltip-wrapper">
+      {children}
+      {!disabled && <div data-testid="tooltip-content">{content}</div>}
     </div>
   ),
 }));
@@ -357,6 +375,12 @@ describe('ClusterOverview', () => {
     expect(container.textContent).toContain('20.0%');
     expect(container.textContent).toContain('2.0Gi of 16.0Gi');
     expect(container.textContent).toContain('12.5%');
+    expect(
+      container.querySelector('[data-testid="resource-utilization-tooltip-cpu"]')?.textContent
+    ).toBe('Utilization0.420.0%Requests0.525.0%Limits150.0%');
+    expect(
+      container.querySelector('[data-testid="resource-utilization-tooltip-memory"]')?.textContent
+    ).toBe('Utilization2.0Gi12.5%Requests3.0Gi18.8%Limits8.0Gi50.0%');
   });
 
   it('shows loading namespaces detail until namespaces are ready', async () => {
