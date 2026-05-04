@@ -19,6 +19,12 @@ import {
   objectMapG6TooltipPoint,
   type ObjectMapG6ElementPointerEvent as G6ElementPointerEvent,
 } from './objectMapG6Interactions';
+import { readObjectMapG6Palette, sameObjectMapG6Palette } from './objectMapG6Palette';
+import {
+  fitObjectMapG6GraphToView,
+  isObjectMapZoomWheelEvent,
+  objectMapWheelZoomRatio,
+} from './objectMapG6Viewport';
 import { computeObjectMapTooltipLayout } from './objectMapG6Tooltip';
 import { clearObjectMapNodeGesture, createObjectMapNodeGestureState } from './objectMapNodeGesture';
 import type {
@@ -34,116 +40,11 @@ import type {
   ObjectMapViewportControls,
 } from './objectMapRendererTypes';
 
-const WHEEL_ZOOM_DELTA_LIMIT = 50;
-const WHEEL_ZOOM_SENSITIVITY = 1;
-
 const findNode = (layout: ObjectMapLayout, id: string): PositionedNode | null =>
   layout.nodes.find((node) => node.id === id) ?? null;
 
 const findEdge = (layout: ObjectMapLayout, id: string): PositionedEdge | null =>
   layout.edges.find((edge) => edge.id === id) ?? null;
-
-const cssVar = (styles: CSSStyleDeclaration, name: string): string =>
-  styles.getPropertyValue(name).trim();
-
-const cssColorVar = (element: HTMLElement, styles: CSSStyleDeclaration, name: string): string => {
-  const raw = cssVar(styles, name);
-  if (!raw.includes('var(')) return raw;
-  const probe = document.createElement('span');
-  probe.style.position = 'absolute';
-  probe.style.visibility = 'hidden';
-  probe.style.color = `var(${name})`;
-  const probeRoot = element.parentElement ?? element;
-  probeRoot.appendChild(probe);
-  const resolved = window.getComputedStyle(probe).color.trim();
-  probe.remove();
-  return resolved || raw;
-};
-
-const cssNumber = (styles: CSSStyleDeclaration, name: string): number => {
-  const value = Number.parseFloat(cssVar(styles, name));
-  return Number.isFinite(value) ? value : 0;
-};
-
-const readPalette = (element: HTMLElement): ObjectMapG6Palette => {
-  const styles = window.getComputedStyle(element);
-  return {
-    accent: cssColorVar(element, styles, '--color-accent'),
-    accentBg: cssColorVar(element, styles, '--color-accent-bg'),
-    background: cssColorVar(element, styles, '--color-bg'),
-    backgroundSecondary: cssColorVar(element, styles, '--color-bg-secondary'),
-    border: cssColorVar(element, styles, '--color-border'),
-    text: cssColorVar(element, styles, '--color-text'),
-    textSecondary: cssColorVar(element, styles, '--color-text-secondary'),
-    textTertiary: cssColorVar(element, styles, '--color-text-tertiary'),
-    textInverse: cssColorVar(element, styles, '--color-text-inverse'),
-    edgeRoutes: cssColorVar(element, styles, '--object-map-edge-routes'),
-    edgeEndpoint: cssColorVar(element, styles, '--object-map-edge-endpoint'),
-    edgeVolumeBinding: cssColorVar(element, styles, '--object-map-edge-volume-binding'),
-    edgeStorageClass: cssColorVar(element, styles, '--object-map-edge-storage-class'),
-    edgeMounts: cssColorVar(element, styles, '--object-map-edge-mounts'),
-    edgeSchedules: cssColorVar(element, styles, '--object-map-edge-schedules'),
-    edgeScales: cssColorVar(element, styles, '--object-map-edge-scales'),
-    edgeGrants: cssColorVar(element, styles, '--object-map-edge-grants'),
-    edgeBinds: cssColorVar(element, styles, '--object-map-edge-binds'),
-    edgeAggregates: cssColorVar(element, styles, '--object-map-edge-aggregates'),
-    edgeFilteredPath: cssColorVar(element, styles, '--object-map-edge-filtered-path'),
-    edgeUses: cssColorVar(element, styles, '--object-map-edge-uses'),
-    edgeDefault: cssColorVar(element, styles, '--object-map-edge-default'),
-    edgeLineWidth: cssNumber(styles, '--object-map-edge-line-width'),
-    edgeHighlightedLineWidth: cssNumber(styles, '--object-map-edge-highlighted-line-width'),
-    edgeHoveredLineWidth: cssNumber(styles, '--object-map-edge-hovered-line-width'),
-    edgeDimmedOpacity: cssNumber(styles, '--object-map-edge-dimmed-opacity'),
-    edgeDash: [
-      cssNumber(styles, '--object-map-edge-dash-length'),
-      cssNumber(styles, '--object-map-edge-dash-gap'),
-    ],
-    nodeConnectedLineWidth: cssNumber(styles, '--object-map-node-connected-line-width'),
-    nodeSelectedLineWidth: cssNumber(styles, '--object-map-node-selected-line-width'),
-    nodeEdgeHoveredLineWidth: cssNumber(styles, '--object-map-node-edge-hovered-line-width'),
-    nodeDimmedOpacity: cssNumber(styles, '--object-map-node-dimmed-opacity'),
-    tooltipMaxWidth: cssNumber(styles, '--object-map-tooltip-max-width'),
-    tooltipHeight: cssNumber(styles, '--object-map-tooltip-height'),
-    tooltipOffsetY: cssNumber(styles, '--object-map-tooltip-offset-y'),
-    tooltipArrowWidth: cssNumber(styles, '--object-map-tooltip-arrow-width'),
-    tooltipArrowHeight: cssNumber(styles, '--object-map-tooltip-arrow-height'),
-    tooltipRadius: cssNumber(styles, '--object-map-tooltip-radius'),
-    tooltipSourceY: cssNumber(styles, '--object-map-tooltip-source-y'),
-    tooltipRelationshipY: cssNumber(styles, '--object-map-tooltip-relationship-y'),
-    tooltipTargetY: cssNumber(styles, '--object-map-tooltip-target-y'),
-    tooltipHorizontalPadding: cssNumber(styles, '--object-map-tooltip-horizontal-padding'),
-    tooltipBadgeGap: cssNumber(styles, '--object-map-tooltip-badge-gap'),
-    tooltipBadgeMaxWidth: cssNumber(styles, '--object-map-tooltip-badge-max-width'),
-    tooltipBadgeMaxFontSize: cssNumber(styles, '--object-map-tooltip-badge-max-font-size'),
-    tooltipBadgePaddingX: cssNumber(styles, '--object-map-tooltip-badge-padding-x'),
-    tooltipBadgePaddingY: cssNumber(styles, '--object-map-tooltip-badge-padding-y'),
-    tooltipNameFontSize: cssNumber(styles, '--object-map-tooltip-name-font-size'),
-    tooltipNameFontWeight: cssNumber(styles, '--object-map-tooltip-name-font-weight'),
-    tooltipRelationshipFontSize: cssNumber(styles, '--object-map-tooltip-relationship-font-size'),
-    tooltipRelationshipFontWeight: cssNumber(
-      styles,
-      '--object-map-tooltip-relationship-font-weight'
-    ),
-    fitViewPadding: cssNumber(styles, '--object-map-fit-view-padding'),
-    fullOpacity: cssNumber(styles, '--object-map-full-opacity'),
-    fontFamily: styles.fontFamily,
-  };
-};
-
-const samePalette = (previous: ObjectMapG6Palette | null, next: ObjectMapG6Palette): boolean => {
-  if (!previous) return false;
-  return (Object.keys(next) as Array<keyof ObjectMapG6Palette>).every((key) => {
-    const previousValue = previous[key];
-    const nextValue = next[key];
-    if (Array.isArray(previousValue) && Array.isArray(nextValue)) {
-      return (
-        previousValue.length === nextValue.length &&
-        previousValue.every((value, index) => value === nextValue[index])
-      );
-    }
-    return previousValue === nextValue;
-  });
-};
 
 const objectMapG6NodeOptions = (palette: ObjectMapG6Palette) => ({
   type: OBJECT_MAP_G6_CARD_NODE,
@@ -178,40 +79,6 @@ const objectMapG6EdgeOptions = (palette: ObjectMapG6Palette) => ({
     dimmed: { opacity: palette.edgeDimmedOpacity },
   },
 });
-
-const fitGraphToView = async (graph: Graph, padding: number): Promise<void> => {
-  if (graph.destroyed) return;
-  await graph.fitView({ when: 'always', direction: 'both' }, false);
-  if (graph.destroyed || padding <= 0) return;
-  const [width, height] = graph.getSize();
-  if (width <= 0 || height <= 0) return;
-  const widthRatio = Math.max(0.01, (width - padding * 2) / width);
-  const heightRatio = Math.max(0.01, (height - padding * 2) / height);
-  const zoomRatio = Math.min(widthRatio, heightRatio);
-  if (zoomRatio < 1) {
-    await graph.zoomBy(zoomRatio, false);
-  }
-};
-
-const isMacPlatform = (): boolean =>
-  typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.platform);
-
-const isZoomWheelEvent = (event: WheelEvent): boolean => {
-  if (isMacPlatform()) {
-    return event.metaKey || event.ctrlKey;
-  }
-  return event.ctrlKey;
-};
-
-const wheelZoomRatio = (event: WheelEvent): number => {
-  const dominantDelta =
-    Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
-  const clampedDelta = Math.max(
-    -WHEEL_ZOOM_DELTA_LIMIT,
-    Math.min(WHEEL_ZOOM_DELTA_LIMIT, -dominantDelta)
-  );
-  return 1 + (clampedDelta * WHEEL_ZOOM_SENSITIVITY) / 100;
-};
 
 const edgeEndpointLabel = (node: PositionedNode | null): string =>
   node ? node.ref.name : 'Unknown';
@@ -362,9 +229,9 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
   const refreshPalette = useCallback(() => {
     const container = containerRef.current;
     if (!container) return;
-    const nextPalette = readPalette(container);
+    const nextPalette = readObjectMapG6Palette(container);
     setPalette((previousPalette) =>
-      samePalette(previousPalette, nextPalette) ? previousPalette : nextPalette
+      sameObjectMapG6Palette(previousPalette, nextPalette) ? previousPalette : nextPalette
     );
     setStyleVersion((previous) => previous + 1);
   }, []);
@@ -417,7 +284,7 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
     const graph = graphRef.current;
     const currentPalette = paletteRef.current;
     if (!graph || graph.destroyed || !currentPalette) return;
-    void fitGraphToView(graph, currentPalette.fitViewPadding)
+    void fitObjectMapG6GraphToView(graph, currentPalette.fitViewPadding)
       .then(updateTooltipPosition)
       .catch((error: unknown) => {
         if (graphRef.current === graph && !graph.destroyed) {
@@ -473,7 +340,7 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
         'drag-canvas',
         {
           type: 'scroll-canvas',
-          enable: (event: WheelEvent) => !isZoomWheelEvent(event),
+          enable: (event: WheelEvent) => !isObjectMapZoomWheelEvent(event),
           range: Infinity,
         },
       ],
@@ -607,11 +474,11 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
     const handleWheelZoom = (event: WheelEvent) => {
       if (graph.destroyed) return;
       onUserViewportChangeRef.current?.();
-      if (!isZoomWheelEvent(event)) return;
+      if (!isObjectMapZoomWheelEvent(event)) return;
       event.preventDefault();
       const rect = container.getBoundingClientRect();
       const origin: [number, number] = [event.clientX - rect.left, event.clientY - rect.top];
-      void graph.zoomBy(wheelZoomRatio(event), false, origin).catch((error: unknown) => {
+      void graph.zoomBy(objectMapWheelZoomRatio(event), false, origin).catch((error: unknown) => {
         if (graphRef.current === graph && !graph.destroyed) {
           console.error('[ObjectMapG6Renderer] Failed to zoom graph:', error);
         }

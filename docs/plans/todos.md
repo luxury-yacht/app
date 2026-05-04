@@ -8,6 +8,8 @@
    - ✅ Extracted the graph data/selection application queue into a tested helper.
    - ✅ Extracted tooltip layout/content calculation into a tested helper.
    - ✅ Extracted node interaction event translation into a tested helper.
+   - ✅ Extracted CSS palette reading/comparison into a tested helper.
+   - ✅ Extracted viewport fit and wheel zoom behavior into a tested helper.
 4. Real G6 interaction behavior is under-tested - The new gesture helper is tested, and ObjectMap behavior is tested with a mocked renderer, but we still do not have a real G6/browser-level test that proves the exact drag-then-click sequence. That is probably the biggest remaining confidence gap.
    - ✅ Added adapter-level coverage for the G6 node drag → synthetic click → real click sequence.
 5. ✅ Legend drag is implemented directly in ObjectMap.tsx - It is not dead code, but it is another custom pointer state machine in the main component. The correct cleanup would extract and test it similarly to node gesture handling.
