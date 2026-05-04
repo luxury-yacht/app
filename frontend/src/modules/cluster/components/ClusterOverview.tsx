@@ -551,6 +551,8 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
     'cpu'
   );
   const formatPercent = (value: number) => `${value.toFixed(1)}%`;
+  const percentClassName = (baseClass: string, value: number) =>
+    value > 100 ? `${baseClass} ${baseClass}--warning` : baseClass;
   const formatCpuTooltipValue = (millicores: number) => {
     const cores = millicores / 1000;
     if (cores === 0) {
@@ -597,7 +599,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
           <span className="resource-utilization-tooltip__value">
             {formatResourceTooltipValue(row.value, type)}
           </span>
-          <span className="resource-utilization-tooltip__percent">
+          <span className={percentClassName('resource-utilization-tooltip__percent', row.percent)}>
             {formatPercent(row.percent)}
           </span>
         </React.Fragment>
@@ -831,7 +833,12 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
                   {showSkeleton ? DASH : cpuUsageSummary}
                 </span>
               </div>
-              <div className="metric-header__percent">
+              <div
+                className={percentClassName(
+                  'metric-header__percent',
+                  cpuResourceMetrics.usagePercent
+                )}
+              >
                 {showSkeleton ? DASH : formatPercent(cpuResourceMetrics.usagePercent)}
               </div>
             </div>
@@ -867,7 +874,12 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
                   {showSkeleton ? DASH : memoryUsageSummary}
                 </span>
               </div>
-              <div className="metric-header__percent">
+              <div
+                className={percentClassName(
+                  'metric-header__percent',
+                  memoryResourceMetrics.usagePercent
+                )}
+              >
                 {showSkeleton ? DASH : formatPercent(memoryResourceMetrics.usagePercent)}
               </div>
             </div>

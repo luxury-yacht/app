@@ -383,6 +383,35 @@ describe('ClusterOverview', () => {
     ).toBe('Utilization2.0Gi12.5%Requests3.0Gi18.8%Limits8.0Gi50.0%');
   });
 
+  it('uses warning color classes for resource percentages over 100 percent', async () => {
+    const { container, rerender, cleanup } = renderClusterOverview();
+    cleanupRoot = cleanup;
+
+    domainStateRef.current = createDomainState('ready', {
+      overview: {
+        ...EMPTY_OVERVIEW_DATA,
+        cpuUsage: '2500m',
+        cpuRequests: '3000m',
+        cpuLimits: '4000m',
+        cpuAllocatable: '2000m',
+        memoryUsage: '1Gi',
+        memoryRequests: '1Gi',
+        memoryLimits: '1Gi',
+        memoryAllocatable: '2Gi',
+      },
+    });
+
+    rerender();
+    await flushEffects();
+
+    expect(container.querySelector('.metric-header__percent--warning')?.textContent).toBe('125.0%');
+    expect(
+      Array.from(container.querySelectorAll('.resource-utilization-tooltip__percent--warning')).map(
+        (element) => element.textContent
+      )
+    ).toEqual(['125.0%', '150.0%', '200.0%']);
+  });
+
   it('shows loading namespaces detail until namespaces are ready', async () => {
     mockNamespaceReady = false;
 

@@ -455,6 +455,10 @@
   font-variant-numeric: tabular-nums;
 }
 
+.metric-header__percent--warning {
+  color: var(--color-warning);
+}
+
 .resource-utilization-tooltip {
   display: grid;
   grid-template-columns: minmax(5.5rem, 1fr) auto auto;
@@ -474,6 +478,10 @@
   color: var(--color-text);
   font-weight: 600;
   text-align: right;
+}
+
+.resource-utilization-tooltip__percent--warning {
+  color: var(--color-warning);
 }
 
 .overview-loading-banner {
