@@ -393,6 +393,15 @@ const renderObjectMap = async ({
 const mouseEvent = (type: string, init: MouseEventInit = {}): MouseEvent =>
   new MouseEvent(type, { bubbles: true, cancelable: true, ...init });
 
+const pointerEvent = (
+  type: string,
+  init: MouseEventInit & { pointerId?: number } = {}
+): MouseEvent => {
+  const event = mouseEvent(type, init);
+  Object.defineProperty(event, 'pointerId', { value: init.pointerId ?? 1 });
+  return event;
+};
+
 afterEach(() => {
   useShortNamesMock.mockReturnValue(false);
   document.body.innerHTML = '';
@@ -499,6 +508,64 @@ describe('ObjectMap', () => {
     });
 
     expect(container.querySelector('[data-testid="mock-edge-edge-1"]')).toBeNull();
+
+    cleanup();
+  });
+
+  it('drags the legend without interfering with legend buttons', async () => {
+    const { container, cleanup } = await renderObjectMap();
+    const canvas = container.querySelector<HTMLElement>('.object-map__canvas');
+    const legend = container.querySelector<HTMLElement>('.object-map__legend');
+    const hideAll = Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(
+      (button) => button.textContent === 'Hide all'
+    );
+
+    expect(canvas).toBeTruthy();
+    expect(legend).toBeTruthy();
+    expect(hideAll).toBeTruthy();
+
+    canvas!.getBoundingClientRect = vi.fn(
+      () =>
+        ({
+          left: 0,
+          top: 0,
+          width: 500,
+          height: 400,
+          right: 500,
+          bottom: 400,
+        }) as DOMRect
+    );
+    legend!.getBoundingClientRect = vi.fn(
+      () =>
+        ({
+          left: 380,
+          top: 16,
+          width: 100,
+          height: 120,
+          right: 480,
+          bottom: 136,
+        }) as DOMRect
+    );
+
+    await act(async () => {
+      legend!.dispatchEvent(pointerEvent('pointerdown', { clientX: 400, clientY: 40 }));
+      legend!.dispatchEvent(pointerEvent('pointermove', { clientX: 320, clientY: 70 }));
+      legend!.dispatchEvent(pointerEvent('pointerup', { clientX: 320, clientY: 70 }));
+      await Promise.resolve();
+    });
+
+    expect(legend!.style.left).toBe('300px');
+    expect(legend!.style.top).toBe('46px');
+    expect(legend!.style.right).toBe('auto');
+    expect(container.querySelector('[data-testid="mock-edge-edge-1"]')).toBeTruthy();
+
+    await act(async () => {
+      hideAll!.click();
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('[data-testid="mock-edge-edge-1"]')).toBeNull();
+    expect(legend!.style.left).toBe('300px');
 
     cleanup();
   });

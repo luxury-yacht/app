@@ -336,6 +336,9 @@
   flex-direction: column;
   gap: 4px;
   pointer-events: auto;
+  cursor: move;
+  touch-action: none;
+  user-select: none;
   /* Keep the legend above map content but below modals/dropdowns
    * elsewhere in the app. */
   z-index: 1;

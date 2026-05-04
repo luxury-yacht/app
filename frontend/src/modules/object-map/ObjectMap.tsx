@@ -6,7 +6,7 @@
  * G6 renderer so the heavy graph dependency stays out of the initial bundle.
  */
 
-import React, { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './ObjectMap.css';
 import type { ObjectMapReference, ObjectMapSnapshotPayload } from '@core/refresh/types';
 import { useShortNames } from '@/hooks/useShortNames';
@@ -35,6 +35,25 @@ import {
 } from '@shared/components/icons/MenuIcons';
 
 const ObjectMapG6Renderer = React.lazy(() => import('./ObjectMapG6Renderer'));
+
+type LegendPosition = {
+  left: number;
+  top: number;
+};
+
+type LegendDragState = {
+  pointerId: number;
+  originClientX: number;
+  originClientY: number;
+  originLeft: number;
+  originTop: number;
+};
+
+const LEGEND_CANVAS_PADDING_PX = 8;
+
+const isInteractiveLegendTarget = (target: EventTarget | null): boolean =>
+  target instanceof Element &&
+  Boolean(target.closest('button, input, select, textarea, a, [role="button"]'));
 
 export interface ObjectMapProps {
   payload: ObjectMapSnapshotPayload;
@@ -70,6 +89,9 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [searchIndex, setSearchIndex] = useState(0);
   const [contextMenu, setContextMenu] = useState<ObjectMapContextMenuRequest | null>(null);
+  const [legendPosition, setLegendPosition] = useState<LegendPosition | null>(null);
+  const canvasRef = useRef<HTMLDivElement | null>(null);
+  const legendDragRef = useRef<LegendDragState | null>(null);
   const [g6ViewportControls, setG6ViewportControls] = useState<ObjectMapViewportControls | null>(
     null
   );
@@ -308,6 +330,82 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
   const closeContextMenu = useCallback(() => {
     setContextMenu(null);
   }, []);
+  const clampLegendPosition = useCallback((left: number, top: number, legend: HTMLElement) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return { left, top };
+
+    const canvasRect = canvas.getBoundingClientRect();
+    const legendRect = legend.getBoundingClientRect();
+    const maxLeft = Math.max(
+      LEGEND_CANVAS_PADDING_PX,
+      canvasRect.width - legendRect.width - LEGEND_CANVAS_PADDING_PX
+    );
+    const maxTop = Math.max(
+      LEGEND_CANVAS_PADDING_PX,
+      canvasRect.height - legendRect.height - LEGEND_CANVAS_PADDING_PX
+    );
+
+    return {
+      left: Math.min(Math.max(LEGEND_CANVAS_PADDING_PX, left), maxLeft),
+      top: Math.min(Math.max(LEGEND_CANVAS_PADDING_PX, top), maxTop),
+    };
+  }, []);
+  const handleLegendPointerDown = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      event.stopPropagation();
+      if (event.button !== 0 || isInteractiveLegendTarget(event.target)) return;
+
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+
+      const legend = event.currentTarget;
+      const canvasRect = canvas.getBoundingClientRect();
+      const legendRect = legend.getBoundingClientRect();
+      const start = clampLegendPosition(
+        legendRect.left - canvasRect.left,
+        legendRect.top - canvasRect.top,
+        legend
+      );
+
+      legendDragRef.current = {
+        pointerId: event.pointerId,
+        originClientX: event.clientX,
+        originClientY: event.clientY,
+        originLeft: start.left,
+        originTop: start.top,
+      };
+      setLegendPosition(start);
+      if (typeof legend.setPointerCapture === 'function') {
+        legend.setPointerCapture(event.pointerId);
+      }
+    },
+    [clampLegendPosition]
+  );
+  const handleLegendPointerMove = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      const drag = legendDragRef.current;
+      if (!drag || drag.pointerId !== event.pointerId) return;
+
+      event.stopPropagation();
+      const next = clampLegendPosition(
+        drag.originLeft + event.clientX - drag.originClientX,
+        drag.originTop + event.clientY - drag.originClientY,
+        event.currentTarget
+      );
+      setLegendPosition(next);
+    },
+    [clampLegendPosition]
+  );
+  const handleLegendPointerEnd = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = legendDragRef.current;
+    event.stopPropagation();
+    if (!drag || drag.pointerId !== event.pointerId) return;
+
+    legendDragRef.current = null;
+    if (typeof event.currentTarget.releasePointerCapture === 'function') {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  }, []);
 
   if (model.layout.nodes.length === 0) {
     return (
@@ -319,7 +417,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
 
   return (
     <div className="object-map" data-testid="object-map">
-      <div className="object-map__canvas">
+      <div ref={canvasRef} className="object-map__canvas">
         <Suspense fallback={<div className="object-map__message">Loading map renderer…</div>}>
           <ObjectMapG6Renderer
             layout={visibleLayout}
@@ -494,8 +592,15 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
             className="object-map__legend"
             role="region"
             aria-label="Object map legend"
-            onPointerDown={(e) => e.stopPropagation()}
-            onPointerUp={(e) => e.stopPropagation()}
+            style={
+              legendPosition
+                ? { left: legendPosition.left, right: 'auto', top: legendPosition.top }
+                : undefined
+            }
+            onPointerDown={handleLegendPointerDown}
+            onPointerMove={handleLegendPointerMove}
+            onPointerUp={handleLegendPointerEnd}
+            onPointerCancel={handleLegendPointerEnd}
             onClick={(e) => e.stopPropagation()}
           >
             {legendEntries.map((entry) => (
