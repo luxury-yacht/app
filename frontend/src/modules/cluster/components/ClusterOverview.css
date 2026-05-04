@@ -2,12 +2,10 @@
 
 .cluster-overview {
   padding: 1.5rem;
-  padding-right: calc(1.5rem + var(--dock-right-offset, 0px));
-  padding-bottom: calc(1.5rem + var(--dock-bottom-offset, 0px));
   min-height: 100%;
   width: 100%;
-  min-width: calc(800px + 3rem + var(--dock-right-offset, 0px));
-  max-width: calc(1400px + 3rem + var(--dock-right-offset, 0px));
+  min-width: calc(800px + 3rem);
+  max-width: calc(1400px + 3rem);
   margin-inline: auto;
   box-sizing: border-box;
 }
