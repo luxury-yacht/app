@@ -3,6 +3,8 @@ import type { EdgeData, GraphData, NodeData } from '@antv/g6';
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ObjectMapReference } from '@core/refresh/types';
 import { resolveKindBadgeVisualStyle } from '@shared/utils/kindBadgeColors';
+import type { KindBadgeVisualStyle } from '@shared/utils/kindBadgeColors';
+import { getDisplayKind } from '@/utils/kindAliasMap';
 import type { ObjectMapLayout, PositionedEdge, PositionedNode } from './objectMapLayout';
 import { ensureObjectMapG6CardNodeRegistered } from './objectMapG6CardNode';
 import { ensureObjectMapG6PathEdgeRegistered } from './objectMapG6PathEdge';
@@ -99,6 +101,11 @@ const readPalette = (element: HTMLElement): ObjectMapG6Palette => {
     tooltipTargetY: cssNumber(styles, '--object-map-tooltip-target-y'),
     tooltipLabelMaxChars: cssNumber(styles, '--object-map-tooltip-label-max-chars'),
     tooltipHorizontalPadding: cssNumber(styles, '--object-map-tooltip-horizontal-padding'),
+    tooltipBadgeGap: cssNumber(styles, '--object-map-tooltip-badge-gap'),
+    tooltipBadgeMaxWidth: cssNumber(styles, '--object-map-tooltip-badge-max-width'),
+    tooltipBadgeMaxFontSize: cssNumber(styles, '--object-map-tooltip-badge-max-font-size'),
+    tooltipBadgePaddingX: cssNumber(styles, '--object-map-tooltip-badge-padding-x'),
+    tooltipBadgePaddingY: cssNumber(styles, '--object-map-tooltip-badge-padding-y'),
     tooltipNameFontSize: cssNumber(styles, '--object-map-tooltip-name-font-size'),
     tooltipNameFontWeight: cssNumber(styles, '--object-map-tooltip-name-font-weight'),
     tooltipRelationshipFontSize: cssNumber(styles, '--object-map-tooltip-relationship-font-size'),
@@ -302,14 +309,27 @@ const textWidth = (text: string, font: string): number => {
   return context.measureText(text).width;
 };
 
-const truncateToWidth = (text: string, maxWidth: number, font: string): string => {
-  if (maxWidth <= 0 || textWidth(text, font) <= maxWidth) return text;
+const textWidthWithLetterSpacing = (text: string, font: string, letterSpacing: number): number =>
+  textWidth(text, font) + Math.max(0, text.length - 1) * letterSpacing;
+
+const truncateToWidth = (
+  text: string,
+  maxWidth: number,
+  font: string,
+  letterSpacing = 0
+): string => {
+  if (maxWidth <= 0 || textWidthWithLetterSpacing(text, font, letterSpacing) <= maxWidth) {
+    return text;
+  }
   const ellipsis = '\u2026';
   let low = 0;
   let high = text.length;
   while (low < high) {
     const mid = Math.ceil((low + high) / 2);
-    if (textWidth(`${text.slice(0, mid)}${ellipsis}`, font) <= maxWidth) {
+    if (
+      textWidthWithLetterSpacing(`${text.slice(0, mid)}${ellipsis}`, font, letterSpacing) <=
+      maxWidth
+    ) {
       low = mid;
     } else {
       high = mid - 1;
@@ -318,11 +338,13 @@ const truncateToWidth = (text: string, maxWidth: number, font: string): string =
   return `${text.slice(0, low)}${ellipsis}`;
 };
 
-const tooltipFont = (weight: number, size: number, family: string): string =>
+const tooltipFont = (weight: number | string, size: number, family: string): string =>
   `${weight} ${size}px ${family}`;
 
 const edgeEndpointLabel = (node: PositionedNode | null): string =>
   node ? node.ref.name : 'Unknown';
+
+const edgeEndpointKind = (node: PositionedNode | null): string => node?.ref.kind ?? 'Object';
 
 const eventTooltipPoint = (
   event: ObjectMapPointerInput,
@@ -902,8 +924,10 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
         tooltipX: point.x,
         tooltipY: point.y,
         sourceLabel: edgeEndpointLabel(sourceNode),
+        sourceKind: edgeEndpointKind(sourceNode),
         label: edge.label,
         targetLabel: edgeEndpointLabel(targetNode),
+        targetKind: edgeEndpointKind(targetNode),
         type: edge.type,
         tracedBy: edge.tracedBy,
       });
@@ -1164,16 +1188,105 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
       palette.tooltipRelationshipFontSize,
       palette.fontFamily
     );
+    const endpoint = (name: string, kind: string) => {
+      const badgeStyle = resolveKindBadgeVisualStyle(kind, containerRef.current);
+      const rawBadgeText = getDisplayKind(kind, useShortResourceNames).toUpperCase();
+      const badgeFontSize = Math.min(badgeStyle.fontSize, palette.tooltipBadgeMaxFontSize);
+      const badgeFont = tooltipFont(badgeStyle.fontWeight, badgeFontSize, palette.fontFamily);
+      const maxBadgeWidth = Math.min(maxTextWidth, palette.tooltipBadgeMaxWidth);
+      const maxBadgeTextWidth = Math.max(
+        1,
+        maxBadgeWidth - palette.tooltipBadgePaddingX * 2 - badgeStyle.borderWidth * 2
+      );
+      const badgeText = truncateToWidth(
+        rawBadgeText,
+        maxBadgeTextWidth,
+        badgeFont,
+        badgeStyle.letterSpacing
+      );
+      const badgeWidth = Math.ceil(
+        textWidthWithLetterSpacing(badgeText, badgeFont, badgeStyle.letterSpacing) +
+          palette.tooltipBadgePaddingX * 2 +
+          badgeStyle.borderWidth * 2
+      );
+      const badgeHeight = Math.ceil(
+        badgeFontSize + palette.tooltipBadgePaddingY * 2 + badgeStyle.borderWidth * 2
+      );
+      const maxNameWidth = Math.max(1, maxTextWidth - badgeWidth - palette.tooltipBadgeGap);
+      const text = truncateToWidth(truncate(name, maxChars), maxNameWidth, nameFont);
+      const textWidthValue = textWidth(text, nameFont);
+      const groupWidth = badgeWidth + palette.tooltipBadgeGap + textWidthValue;
+      return {
+        badgeHeight,
+        badgeStyle,
+        badgeText,
+        badgeWidth,
+        badgeFontSize,
+        groupWidth,
+        text,
+      };
+    };
     return {
-      source: truncateToWidth(truncate(hoverEdge.sourceLabel, maxChars), maxTextWidth, nameFont),
+      source: endpoint(hoverEdge.sourceLabel, hoverEdge.sourceKind),
       relationship: truncateToWidth(
         truncate(hoverEdge.label, maxChars),
         maxTextWidth,
         relationshipFont
       ),
-      target: truncateToWidth(truncate(hoverEdge.targetLabel, maxChars), maxTextWidth, nameFont),
+      target: endpoint(hoverEdge.targetLabel, hoverEdge.targetKind),
     };
-  }, [hoverEdge, palette]);
+  }, [hoverEdge, palette, styleVersion, useShortResourceNames]);
+
+  const renderTooltipEndpoint = (
+    endpoint: {
+      badgeHeight: number;
+      badgeStyle: KindBadgeVisualStyle;
+      badgeFontSize: number;
+      badgeText: string;
+      badgeWidth: number;
+      groupWidth: number;
+      text: string;
+    },
+    y: number,
+    className: string
+  ) => {
+    if (!palette) return null;
+    const badgeX = -endpoint.groupWidth / 2;
+    const nameX = badgeX + endpoint.badgeWidth + palette.tooltipBadgeGap;
+    const rowCenterY = y - palette.tooltipNameFontSize / 2 + 1;
+    const badgeY = rowCenterY - endpoint.badgeHeight / 2;
+    return (
+      <g className={className}>
+        <rect
+          x={badgeX}
+          y={badgeY}
+          width={endpoint.badgeWidth}
+          height={endpoint.badgeHeight}
+          rx={endpoint.badgeStyle.borderRadius}
+          ry={endpoint.badgeStyle.borderRadius}
+          fill={endpoint.badgeStyle.backgroundColor}
+          stroke={endpoint.badgeStyle.borderColor}
+          strokeWidth={endpoint.badgeStyle.borderWidth}
+        />
+        <text
+          x={badgeX + endpoint.badgeWidth / 2}
+          y={rowCenterY}
+          textAnchor="middle"
+          dominantBaseline="central"
+          fill={endpoint.badgeStyle.color}
+          fontFamily={palette.fontFamily}
+          fontSize={endpoint.badgeFontSize}
+          fontWeight={endpoint.badgeStyle.fontWeight}
+          letterSpacing={endpoint.badgeStyle.letterSpacing}
+        >
+          {endpoint.badgeText}
+        </text>
+        <text className="object-map__edge-tooltip-name" x={nameX} y={y} textAnchor="start">
+          {endpoint.text}
+        </text>
+      </g>
+    );
+  };
 
   return (
     <div className="object-map__g6-stack">
@@ -1201,14 +1314,11 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
               rx={palette.tooltipRadius}
               ry={palette.tooltipRadius}
             />
-            <text
-              className="object-map__edge-tooltip-source"
-              x={0}
-              y={palette.tooltipSourceY}
-              textAnchor="middle"
-            >
-              {tooltipText.source}
-            </text>
+            {renderTooltipEndpoint(
+              tooltipText.source,
+              palette.tooltipSourceY,
+              'object-map__edge-tooltip-source'
+            )}
             <text
               className="object-map__edge-tooltip-relationship"
               x={0}
@@ -1217,14 +1327,11 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
             >
               {tooltipText.relationship}
             </text>
-            <text
-              className="object-map__edge-tooltip-target"
-              x={0}
-              y={palette.tooltipTargetY}
-              textAnchor="middle"
-            >
-              {tooltipText.target}
-            </text>
+            {renderTooltipEndpoint(
+              tooltipText.target,
+              palette.tooltipTargetY,
+              'object-map__edge-tooltip-target'
+            )}
           </g>
         )}
       </svg>

@@ -42,6 +42,11 @@
   --object-map-tooltip-target-y: -24;
   --object-map-tooltip-label-max-chars: 38;
   --object-map-tooltip-horizontal-padding: 12;
+  --object-map-tooltip-badge-gap: 6;
+  --object-map-tooltip-badge-max-width: 118;
+  --object-map-tooltip-badge-max-font-size: 10;
+  --object-map-tooltip-badge-padding-x: 5;
+  --object-map-tooltip-badge-padding-y: 2;
   --object-map-tooltip-name-font-size: 11;
   --object-map-tooltip-name-font-weight: 600;
   --object-map-tooltip-relationship-font-size: 11;
@@ -297,8 +302,7 @@
   stroke-width: 1;
 }
 
-.object-map__edge-tooltip-source,
-.object-map__edge-tooltip-target {
+.object-map__edge-tooltip-name {
   font-size: calc(var(--object-map-tooltip-name-font-size) * 1px);
   font-weight: var(--object-map-tooltip-name-font-weight);
   fill: var(--color-text);
