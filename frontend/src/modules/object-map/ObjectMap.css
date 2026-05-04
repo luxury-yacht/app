@@ -127,6 +127,20 @@
   margin-right: var(--spacing-xs);
 }
 
+.object-map__kind-filter {
+  display: inline-flex;
+  align-items: center;
+}
+
+.object-map__kind-filter .dropdown-trigger {
+  height: 26px;
+  min-width: 130px;
+  padding-top: 0;
+  padding-bottom: 0;
+  font-size: 0.75rem;
+  background: var(--color-bg-secondary);
+}
+
 .object-map__search-input {
   width: 150px;
   height: 26px;

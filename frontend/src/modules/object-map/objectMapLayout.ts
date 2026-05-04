@@ -1,7 +1,7 @@
 /**
  * frontend/src/modules/object-map/objectMapLayout.ts
  *
- * Seed-anchored compact min-length layered layout. Four passes:
+ * Seed-anchored compact min-length layered layout. Five passes:
  *
  *   (1) Longest-path layering. Sugiyama-style: every node's column =
  *       max(predecessor column + 1) along directed edges. This
@@ -28,6 +28,10 @@
  *       connected siblings line up across columns, dropping the
  *       overall edge-crossing count sharply.
  *
+ *   (5) Overloaded logical columns are split into horizontal lanes.
+ *       The logical column value is preserved, but neighboring columns
+ *       are shifted so lanes do not overlap.
+ *
  * Edges are routed as cubic beziers between source-right and target-
  * left anchors. The same-column rightward-arc fallback is retained for
  * the rare cycle case where the topological pass can't drain all
@@ -41,6 +45,7 @@ export const OBJECT_MAP_NODE_WIDTH = 220;
 export const OBJECT_MAP_NODE_HEIGHT = 64;
 export const OBJECT_MAP_COLUMN_GAP = 100;
 export const OBJECT_MAP_ROW_GAP = 24;
+export const OBJECT_MAP_MAX_NODES_PER_LANE = 24;
 // Extra vertical space inserted when two consecutive nodes in a
 // column have different kinds. Visually groups same-kind objects so
 // "all the Pods" or "all the ConfigMaps" read as a band rather than
@@ -380,6 +385,44 @@ const orderColumnsByBarycenter = (
   }
 };
 
+const laneCountForColumn = (nodeCount: number): number =>
+  Math.max(1, Math.ceil(nodeCount / OBJECT_MAP_MAX_NODES_PER_LANE));
+
+const computeColumnStartX = (
+  sortedColumns: number[],
+  laneCounts: Map<number, number>,
+  seedColumn: number
+): Map<number, number> => {
+  const columnStartX = new Map<number, number>();
+  columnStartX.set(seedColumn, 0);
+
+  let rightX = (laneCounts.get(seedColumn) ?? 1) * COLUMN_STRIDE;
+  for (const column of sortedColumns.filter((col) => col > seedColumn)) {
+    columnStartX.set(column, rightX);
+    rightX += (laneCounts.get(column) ?? 1) * COLUMN_STRIDE;
+  }
+
+  let leftX = 0;
+  for (const column of sortedColumns.filter((col) => col < seedColumn).reverse()) {
+    leftX -= (laneCounts.get(column) ?? 1) * COLUMN_STRIDE;
+    columnStartX.set(column, leftX);
+  }
+
+  return columnStartX;
+};
+
+const computeLaneHeight = (laneNodes: ObjectMapNode[]): number => {
+  let totalHeight = 0;
+  laneNodes.forEach((node, index) => {
+    if (index > 0) {
+      const sameKind = laneNodes[index - 1].ref.kind === node.ref.kind;
+      totalHeight += sameKind ? OBJECT_MAP_ROW_GAP : OBJECT_MAP_ROW_GAP + OBJECT_MAP_KIND_GROUP_GAP;
+    }
+    totalHeight += OBJECT_MAP_NODE_HEIGHT;
+  });
+  return totalHeight;
+};
+
 export const computeObjectMapLayout = (
   nodes: ObjectMapNode[],
   edges: ObjectMapEdge[],
@@ -408,29 +451,28 @@ export const computeObjectMapLayout = (
   let maxX = -Infinity;
   let maxY = -Infinity;
 
-  Array.from(columns.entries())
-    .sort(([a], [b]) => a - b)
-    .forEach(([column, columnNodes]) => {
-      const columnX = column * COLUMN_STRIDE;
+  const sortedColumns = Array.from(columns.keys()).sort((a, b) => a - b);
+  const laneCounts = new Map<number, number>();
+  sortedColumns.forEach((column) => {
+    laneCounts.set(column, laneCountForColumn(columns.get(column)!.length));
+  });
+  const columnStartX = computeColumnStartX(sortedColumns, laneCounts, seedColumn);
 
-      // Pre-walk to compute the total column height with extra gaps
-      // inserted between kind transitions, so we can centre the column
-      // around y=0 after accounting for the larger inter-group spacing.
-      let totalHeight = 0;
-      columnNodes.forEach((node, index) => {
-        if (index > 0) {
-          const sameKind = columnNodes[index - 1].ref.kind === node.ref.kind;
-          totalHeight += sameKind
-            ? OBJECT_MAP_ROW_GAP
-            : OBJECT_MAP_ROW_GAP + OBJECT_MAP_KIND_GROUP_GAP;
-        }
-        totalHeight += OBJECT_MAP_NODE_HEIGHT;
-      });
+  sortedColumns.forEach((column) => {
+    const columnNodes = columns.get(column)!;
+    const laneCount = laneCounts.get(column) ?? 1;
+    const laneSize = Math.ceil(columnNodes.length / laneCount);
+    const columnX = columnStartX.get(column) ?? column * COLUMN_STRIDE;
 
+    for (let laneIndex = 0; laneIndex < laneCount; laneIndex += 1) {
+      const laneNodes = columnNodes.slice(laneIndex * laneSize, (laneIndex + 1) * laneSize);
+      const laneX = columnX + laneIndex * COLUMN_STRIDE;
+      const totalHeight = computeLaneHeight(laneNodes);
       let y = -totalHeight / 2;
-      columnNodes.forEach((node, index) => {
+
+      laneNodes.forEach((node, index) => {
         if (index > 0) {
-          const sameKind = columnNodes[index - 1].ref.kind === node.ref.kind;
+          const sameKind = laneNodes[index - 1].ref.kind === node.ref.kind;
           const gap = sameKind
             ? OBJECT_MAP_ROW_GAP
             : OBJECT_MAP_ROW_GAP + OBJECT_MAP_KIND_GROUP_GAP;
@@ -438,7 +480,7 @@ export const computeObjectMapLayout = (
         }
         positioned.set(node.id, {
           id: node.id,
-          x: columnX,
+          x: laneX,
           y,
           width: OBJECT_MAP_NODE_WIDTH,
           height: OBJECT_MAP_NODE_HEIGHT,
@@ -446,12 +488,13 @@ export const computeObjectMapLayout = (
           isSeed: node.id === seedId,
           ref: node.ref,
         });
-        minX = Math.min(minX, columnX);
+        minX = Math.min(minX, laneX);
         minY = Math.min(minY, y);
-        maxX = Math.max(maxX, columnX + OBJECT_MAP_NODE_WIDTH);
+        maxX = Math.max(maxX, laneX + OBJECT_MAP_NODE_WIDTH);
         maxY = Math.max(maxY, y + OBJECT_MAP_NODE_HEIGHT);
       });
-    });
+    }
+  });
 
   return {
     nodes: Array.from(positioned.values()),

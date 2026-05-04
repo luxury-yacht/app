@@ -513,6 +513,37 @@ describe('ObjectMap', () => {
     cleanup();
   });
 
+  it('filters visible objects by kind', async () => {
+    const { container, cleanup } = await renderObjectMap();
+    const kindTrigger = container.querySelector<HTMLElement>('[aria-label="Filter map kinds"]');
+
+    expect(kindTrigger).toBeTruthy();
+    expect(container.querySelector('[data-testid="mock-node-deploy"]')).toBeTruthy();
+    expect(container.querySelector('[data-testid="mock-node-pod"]')).toBeTruthy();
+
+    await act(async () => {
+      kindTrigger!.dispatchEvent(mouseEvent('click'));
+      await Promise.resolve();
+    });
+
+    const podOption = Array.from(container.querySelectorAll<HTMLElement>('.dropdown-option')).find(
+      (option) => option.textContent?.includes('Pod')
+    );
+    expect(podOption).toBeTruthy();
+
+    await act(async () => {
+      podOption!.dispatchEvent(mouseEvent('click'));
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('[data-testid="mock-node-deploy"]')).toBeNull();
+    expect(container.querySelector('[data-testid="mock-node-pod"]')).toBeTruthy();
+    expect(container.querySelector('[data-testid="mock-edge-edge-1"]')).toBeNull();
+    expect(kindTrigger?.textContent).toContain('Kinds (1)');
+
+    cleanup();
+  });
+
   it('passes full object references for modifier-click actions', async () => {
     const onOpenPanel = vi.fn();
     const onNavigateView = vi.fn();

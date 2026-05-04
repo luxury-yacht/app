@@ -11,6 +11,8 @@ import './ObjectMap.css';
 import type { ObjectMapReference, ObjectMapSnapshotPayload } from '@core/refresh/types';
 import { isMacPlatform } from '@/utils/platform';
 import ContextMenu from '@shared/components/ContextMenu';
+import { Dropdown } from '@shared/components/dropdowns/Dropdown';
+import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { computeObjectMapLayout } from './objectMapLayout';
 import { objectMapEdgeClass, OBJECT_MAP_EDGE_KINDS } from './objectMapEdgeStyle';
@@ -60,6 +62,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
   const [showLegend, setShowLegend] = useState(true);
   const [focusMode, setFocusMode] = useState(false);
   const [enabledEdgeTypes, setEnabledEdgeTypes] = useState<Set<string> | null>(null);
+  const [selectedKinds, setSelectedKinds] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchIndex, setSearchIndex] = useState(0);
   const [contextMenu, setContextMenu] = useState<ObjectMapContextMenuRequest | null>(null);
@@ -100,11 +103,62 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
     };
   }, [enabledEdgeTypes, model.layout]);
 
+  const kindOptions = useMemo<DropdownOption[]>(() => {
+    const kinds = Array.from(new Set(model.layout.nodes.map((node) => node.ref.kind))).sort(
+      (a, b) => a.localeCompare(b)
+    );
+    return kinds.map((kind) => ({ value: kind, label: kind }));
+  }, [model.layout.nodes]);
+
+  useEffect(() => {
+    setSelectedKinds((previous) => {
+      if (previous.length === 0) return previous;
+      const available = new Set(kindOptions.map((option) => option.value));
+      const next = previous.filter((kind) => available.has(kind));
+      return next.length === previous.length ? previous : next;
+    });
+  }, [kindOptions]);
+
+  const selectedKindSet = useMemo(() => new Set(selectedKinds), [selectedKinds]);
+
+  const kindFilteredLayout = useMemo(() => {
+    if (selectedKindSet.size === 0) return edgeFilteredLayout;
+
+    const nodes = edgeFilteredLayout.nodes.filter((node) => selectedKindSet.has(node.ref.kind));
+    const nodeIds = new Set(nodes.map((node) => node.id));
+    const edges = edgeFilteredLayout.edges.filter(
+      (edge) => nodeIds.has(edge.sourceId) && nodeIds.has(edge.targetId)
+    );
+
+    return computeObjectMapLayout(
+      nodes.map((node) => ({
+        id: node.id,
+        depth: Math.abs(node.column),
+        ref: node.ref,
+      })),
+      edges.map((edge) => ({
+        id: edge.id,
+        source: edge.sourceId,
+        target: edge.targetId,
+        type: edge.type,
+        label: edge.label,
+        tracedBy: edge.tracedBy,
+      })),
+      model.activeNodeId ?? nodes[0]?.id ?? ''
+    );
+  }, [edgeFilteredLayout, model.activeNodeId, selectedKindSet]);
+
   const visibleLayout = useMemo(() => {
-    if (!focusMode || !model.activeNodeId) return edgeFilteredLayout;
+    if (
+      !focusMode ||
+      !model.activeNodeId ||
+      !kindFilteredLayout.nodes.some((node) => node.id === model.activeNodeId)
+    ) {
+      return kindFilteredLayout;
+    }
 
     const focusSelectionState = computeObjectMapSelectionState(
-      edgeFilteredLayout.edges,
+      kindFilteredLayout.edges,
       model.activeNodeId
     );
     const visibleNodeIds = new Set<string>([
@@ -112,8 +166,8 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
       ...focusSelectionState.connectedIds,
     ]);
 
-    const focusedNodes = edgeFilteredLayout.nodes.filter((node) => visibleNodeIds.has(node.id));
-    const focusedEdges = edgeFilteredLayout.edges.filter((edge) =>
+    const focusedNodes = kindFilteredLayout.nodes.filter((node) => visibleNodeIds.has(node.id));
+    const focusedEdges = kindFilteredLayout.edges.filter((edge) =>
       focusSelectionState.connectedEdgeIds.has(edge.id)
     );
 
@@ -133,7 +187,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
       })),
       model.activeNodeId
     );
-  }, [edgeFilteredLayout, focusMode, model.activeNodeId]);
+  }, [focusMode, kindFilteredLayout, model.activeNodeId]);
 
   const visibleSelectionState = useMemo(
     () => computeObjectMapSelectionState(visibleLayout.edges, model.activeNodeId),
@@ -178,6 +232,25 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
     model.focusNode(node.id);
     g6ViewportControls?.focusNode(node.id);
   }, [g6ViewportControls, model, searchIndex, searchMatches]);
+
+  const handleKindsChange = useCallback((value: string | string[]) => {
+    setSelectedKinds(Array.isArray(value) ? value : value ? [value] : []);
+  }, []);
+
+  const renderFilterOption = useCallback(
+    (option: DropdownOption, isSelected: boolean) => (
+      <span className="dropdown-filter-option">
+        <span className="dropdown-filter-check">{isSelected ? '✓' : ''}</span>
+        <span className="dropdown-filter-label">{option.label}</span>
+      </span>
+    ),
+    []
+  );
+
+  const renderKindsValue = useCallback((value: string | string[], _options: DropdownOption[]) => {
+    const count = Array.isArray(value) ? value.length : value ? 1 : 0;
+    return count > 0 ? `Kinds (${count})` : 'Kinds';
+  }, []);
 
   const resetMapLayout = useCallback(() => {
     model.resetLayout();
@@ -253,6 +326,25 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
               focusSearchMatch();
             }}
           >
+            <div className="object-map__kind-filter" data-gridtable-filter-role="kind">
+              <Dropdown
+                id="object-map-kind-filter"
+                name="object-map-kind-filter"
+                multiple
+                size="compact"
+                searchable
+                showBulkActions
+                placeholder="All kinds"
+                value={selectedKinds}
+                options={kindOptions}
+                disabled={kindOptions.length === 0}
+                onChange={handleKindsChange}
+                dropdownClassName="dropdown-filter-menu"
+                ariaLabel="Filter map kinds"
+                renderOption={renderFilterOption}
+                renderValue={renderKindsValue}
+              />
+            </div>
             <input
               type="search"
               className="object-map__search-input"

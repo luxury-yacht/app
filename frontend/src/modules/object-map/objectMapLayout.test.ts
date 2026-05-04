@@ -4,6 +4,7 @@ import {
   computeObjectMapLayout,
   OBJECT_MAP_COLUMN_GAP,
   OBJECT_MAP_KIND_GROUP_GAP,
+  OBJECT_MAP_MAX_NODES_PER_LANE,
   OBJECT_MAP_NODE_HEIGHT,
   OBJECT_MAP_NODE_WIDTH,
   OBJECT_MAP_ROW_GAP,
@@ -237,6 +238,48 @@ describe('computeObjectMapLayout', () => {
     const expectedKindGap = OBJECT_MAP_NODE_HEIGHT + OBJECT_MAP_ROW_GAP + OBJECT_MAP_KIND_GROUP_GAP;
     expect(rs.y - cm.y).toBe(expectedKindGap);
     expect(svc.y - rs.y).toBe(expectedKindGap);
+  });
+
+  it('splits overloaded columns into horizontal lanes', () => {
+    const manyPods = Array.from({ length: OBJECT_MAP_MAX_NODES_PER_LANE + 1 }, (_, index) =>
+      node(`pod-${index}`, 1, 'Pod', `pod-${String(index).padStart(2, '0')}`)
+    );
+    const nodes: ObjectMapNode[] = [node('seed', 0, 'Deployment', 'web'), ...manyPods];
+    const edges: ObjectMapEdge[] = manyPods.map((pod) =>
+      edge(`e-${pod.id}`, 'seed', pod.id, 'owner')
+    );
+
+    const layout = computeObjectMapLayout(nodes, edges, 'seed');
+    const podRows = layout.nodes.filter((row) => row.ref.kind === 'Pod');
+    const laneXs = Array.from(new Set(podRows.map((row) => row.x))).sort((a, b) => a - b);
+
+    expect(laneXs).toEqual([COLUMN_STRIDE, COLUMN_STRIDE * 2]);
+    laneXs.forEach((x) => {
+      const laneSize = podRows.filter((row) => row.x === x).length;
+      expect(laneSize).toBeLessThanOrEqual(OBJECT_MAP_MAX_NODES_PER_LANE);
+    });
+    podRows.forEach((row) => expect(row.column).toBe(1));
+  });
+
+  it('shifts later logical columns after split lanes so they do not overlap', () => {
+    const manyPods = Array.from({ length: OBJECT_MAP_MAX_NODES_PER_LANE + 1 }, (_, index) =>
+      node(`pod-${index}`, 1, 'Pod', `pod-${String(index).padStart(2, '0')}`)
+    );
+    const nodes: ObjectMapNode[] = [
+      node('seed', 0, 'Deployment', 'web'),
+      ...manyPods,
+      node('cm', 2, 'ConfigMap', 'settings'),
+    ];
+    const edges: ObjectMapEdge[] = [
+      ...manyPods.map((pod) => edge(`e-${pod.id}`, 'seed', pod.id, 'owner')),
+      edge('e-cm', 'pod-0', 'cm', 'uses'),
+    ];
+
+    const layout = computeObjectMapLayout(nodes, edges, 'seed');
+    const cm = layout.nodes.find((row) => row.id === 'cm')!;
+
+    expect(cm.column).toBe(2);
+    expect(cm.x).toBe(COLUMN_STRIDE * 3);
   });
 
   it('drops edges that reference unknown nodes', () => {
