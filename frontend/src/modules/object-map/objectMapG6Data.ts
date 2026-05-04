@@ -50,7 +50,7 @@ export interface ObjectMapG6Palette {
   nodeSelectedLineWidth: number;
   nodeEdgeHoveredLineWidth: number;
   nodeDimmedOpacity: number;
-  tooltipWidth: number;
+  tooltipMaxWidth: number;
   tooltipHeight: number;
   tooltipOffsetY: number;
   tooltipArrowWidth: number;
@@ -59,7 +59,6 @@ export interface ObjectMapG6Palette {
   tooltipSourceY: number;
   tooltipRelationshipY: number;
   tooltipTargetY: number;
-  tooltipLabelMaxChars: number;
   tooltipHorizontalPadding: number;
   tooltipBadgeGap: number;
   tooltipBadgeMaxWidth: number;
