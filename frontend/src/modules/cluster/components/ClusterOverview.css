@@ -375,6 +375,71 @@
   background: var(--pod-phase-failing);
 }
 
+.pod-status-cards {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1.5rem;
+}
+
+.pod-status-card {
+  --pod-status-card-color: var(--color-text);
+
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  min-height: 60px;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  background: var(--color-bg-secondary);
+  color: var(--color-text-secondary);
+}
+
+.pod-status-card--healthy {
+  --pod-status-card-color: var(--pod-phase-healthy);
+}
+
+.pod-status-card--pending {
+  --pod-status-card-color: var(--pod-phase-pending);
+}
+
+.pod-status-card--failing {
+  --pod-status-card-color: var(--pod-phase-failing);
+}
+
+.pod-status-card--restarted {
+  --pod-status-card-color: var(--pod-phase-restarted);
+}
+
+.pod-status-card--clickable {
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.pod-status-card--clickable:hover,
+.pod-status-card--clickable:focus-visible {
+  border-color: var(--pod-status-card-color);
+  box-shadow: 0 0 0 1px var(--pod-status-card-color);
+  outline: none;
+}
+
+.pod-status-card__count {
+  color: var(--pod-status-card-color);
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+
+.pod-status-card__label {
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
 .stacked-bar__segment--deployment {
   background: var(--workload-deployment);
 }

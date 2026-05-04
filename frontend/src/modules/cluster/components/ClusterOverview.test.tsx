@@ -381,6 +381,15 @@ describe('ClusterOverview', () => {
     expect(
       container.querySelector('[data-testid="resource-utilization-tooltip-memory"]')?.textContent
     ).toBe('Utilization2.0Gi12.5%Requests3.0Gi18.8%Limits8.0Gi50.0%');
+    expect(
+      Array.from(container.querySelectorAll('.pod-status-card')).map(
+        (element) => element.textContent
+      )
+    ).toEqual(['40healthy', '1pending', '1failing', '7restarted']);
+    expect(container.querySelector('.pod-status-card--healthy')).not.toBeNull();
+    expect(container.querySelector('.pod-status-card--pending')).not.toBeNull();
+    expect(container.querySelector('.pod-status-card--failing')).not.toBeNull();
+    expect(container.querySelector('.pod-status-card--restarted')).not.toBeNull();
   });
 
   it('uses warning color classes for resource percentages over 100 percent', async () => {

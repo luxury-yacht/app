@@ -416,14 +416,14 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
     variant: 'restarted',
   };
 
-  const renderPodPhaseLegendItem = (item: {
+  const renderPodStatusCard = (item: {
     key: string;
     label: string;
     value: number;
     variant: string;
   }) => {
     const clickable = item.value > 0;
-    const itemClass = `metric-legend__item${clickable ? ' metric-legend__item--clickable' : ''}`;
+    const itemClass = `pod-status-card pod-status-card--${item.variant}${clickable ? ' pod-status-card--clickable' : ''}`;
     return (
       <div
         key={item.key}
@@ -437,25 +437,11 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
         aria-disabled={!clickable}
         data-testid={`cluster-pod-status-${item.key}`}
       >
-        <span
-          className={`metric-legend__dot metric-legend__dot--${item.variant}`}
-          aria-hidden="true"
-        />
-        <span className="metric-legend__count">{showSkeleton ? DASH : item.value}</span>
-        <span className="metric-legend__label">{item.label}</span>
+        <span className="pod-status-card__count">{showSkeleton ? DASH : item.value}</span>
+        <span className="pod-status-card__label">{item.label}</span>
       </div>
     );
   };
-
-  // Phase-only total for bar segment widths (restarted overlaps with running,
-  // so including it would double-count).
-  const phaseTotal = healthyPods + displayOverview.pendingPods + displayOverview.failedPods;
-  const phasePct = (value: number) => (phaseTotal > 0 ? (value / phaseTotal) * 100 : 0);
-  const phaseSegments = [
-    { key: 'healthy', value: healthyPods },
-    { key: 'pending', value: displayOverview.pendingPods },
-    { key: 'failing', value: displayOverview.failedPods },
-  ];
 
   const workloadItems = [
     {
@@ -1070,29 +1056,9 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
                 <span className="metric-legend__total-label"> total</span>
               </div>
             </div>
-            <div className="stacked-bar" role="presentation" aria-hidden="true">
-              {!showSkeleton &&
-                phaseSegments.map((segment) => {
-                  const width = phasePct(segment.value);
-                  if (width <= 0) {
-                    return null;
-                  }
-                  return (
-                    <div
-                      key={segment.key}
-                      className={`stacked-bar__segment stacked-bar__segment--${segment.key}`}
-                      style={{ width: `${width}%` }}
-                    />
-                  );
-                })}
-            </div>
-            <div className="metric-legend">
-              <div className="metric-legend__items">
-                {podPhaseItems.map((item) => renderPodPhaseLegendItem(item))}
-              </div>
-              <div className="metric-legend__items metric-legend__items--restarted">
-                {renderPodPhaseLegendItem(podRestartedItem)}
-              </div>
+            <div className="pod-status-cards">
+              {podPhaseItems.map((item) => renderPodStatusCard(item))}
+              {renderPodStatusCard(podRestartedItem)}
             </div>
           </div>
         </div>
