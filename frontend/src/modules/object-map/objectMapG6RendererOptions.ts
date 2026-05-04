@@ -20,11 +20,11 @@ export const objectMapG6NodeOptions = (palette: ObjectMapG6Palette) => ({
   state: {
     selected: {
       stroke: palette.accent,
-      lineWidth: palette.nodeSelectedLineWidth + 1,
+      lineWidth: palette.nodeSelectedLineWidth,
       opacity: palette.fullOpacity,
     },
     connected: {
-      stroke: palette.accent,
+      stroke: palette.textSecondary,
       lineWidth: palette.nodeConnectedLineWidth,
       opacity: palette.fullOpacity,
     },

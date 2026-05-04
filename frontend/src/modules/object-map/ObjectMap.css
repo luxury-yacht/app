@@ -28,8 +28,8 @@
   --object-map-edge-highlighted-line-width: 2.5;
   --object-map-edge-hovered-line-width: 4;
   --object-map-edge-dimmed-opacity: 0.4;
-  --object-map-node-connected-line-width: 1.5;
-  --object-map-node-selected-line-width: 2.5;
+  --object-map-node-connected-line-width: 1;
+  --object-map-node-selected-line-width: 1;
   --object-map-node-edge-hovered-line-width: 2.5;
   --object-map-node-dimmed-opacity: 0.25;
   --object-map-tooltip-max-width: 800;

@@ -22,10 +22,10 @@ const palette = {
   edgeHighlightedLineWidth: 3,
   edgeDimmedOpacity: 0.2,
   fullOpacity: 1,
-  nodeConnectedLineWidth: 2,
+  nodeConnectedLineWidth: 1,
   nodeDimmedOpacity: 0.25,
   nodeEdgeHoveredLineWidth: 3,
-  nodeSelectedLineWidth: 2,
+  nodeSelectedLineWidth: 1,
 } as ObjectMapG6Palette;
 
 const layout: ObjectMapLayout = {

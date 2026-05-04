@@ -226,9 +226,9 @@ export const toObjectMapG6Data = (
             ? '\u2212'
             : `+${badge.hiddenCount}`
           : undefined,
-        cardCollapseBadgeFill: palette.accentBg,
-        cardCollapseBadgeTextFill: palette.accent,
-        cardCollapseBadgeStroke: palette.accent,
+        cardCollapseBadgeFill: palette.backgroundSecondary,
+        cardCollapseBadgeTextFill: palette.textSecondary,
+        cardCollapseBadgeStroke: palette.textTertiary,
         cardNameText: node.ref.name,
         cardNamespaceText: namespaceLabel,
         cardFontFamily: palette.fontFamily,
