@@ -5,8 +5,8 @@
  * behavior.
  */
 
-export const OBJECT_MAP_WHEEL_ZOOM_DELTA_LIMIT = 50;
-export const OBJECT_MAP_WHEEL_ZOOM_SENSITIVITY = 1;
+const OBJECT_MAP_WHEEL_ZOOM_DELTA_LIMIT = 50;
+const OBJECT_MAP_WHEEL_ZOOM_SENSITIVITY = 1;
 
 export interface ObjectMapG6ViewportGraph {
   destroyed: boolean;

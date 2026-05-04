@@ -27,7 +27,7 @@ export interface ObjectMapLegendRect {
   width: number;
 }
 
-export const OBJECT_MAP_LEGEND_CANVAS_PADDING_PX = 8;
+const OBJECT_MAP_LEGEND_CANVAS_PADDING_PX = 8;
 
 export const isObjectMapInteractiveLegendTarget = (target: EventTarget | null): boolean =>
   target instanceof Element &&

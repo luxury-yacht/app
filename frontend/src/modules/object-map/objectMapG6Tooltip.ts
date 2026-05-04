@@ -17,14 +17,14 @@ export const MAX_FILTERED_TOOLTIP_OBJECTS = 5;
 const measuredTextCanvas =
   typeof document === 'undefined' ? null : document.createElement('canvas');
 
-export const objectMapTooltipFont = (
+const objectMapTooltipFont = (
   weight: number | string,
   size: number,
   family: string,
   style = 'normal'
 ): string => `${style} ${weight} ${size}px ${family}`;
 
-export const objectMapTooltipTextWidth = (text: string, font: string): number => {
+const objectMapTooltipTextWidth = (text: string, font: string): number => {
   let context: CanvasRenderingContext2D | null = null;
   try {
     context = measuredTextCanvas?.getContext('2d') ?? null;
@@ -36,13 +36,13 @@ export const objectMapTooltipTextWidth = (text: string, font: string): number =>
   return context.measureText(text).width;
 };
 
-export const objectMapTooltipTextWidthWithLetterSpacing = (
+const objectMapTooltipTextWidthWithLetterSpacing = (
   text: string,
   font: string,
   letterSpacing: number
 ): number => objectMapTooltipTextWidth(text, font) + Math.max(0, text.length - 1) * letterSpacing;
 
-export const truncateObjectMapTooltipText = (
+const truncateObjectMapTooltipText = (
   text: string,
   maxWidth: number,
   font: string,

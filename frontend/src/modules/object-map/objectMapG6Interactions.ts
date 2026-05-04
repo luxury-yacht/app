@@ -95,18 +95,16 @@ export interface ObjectMapG6NodeInteractionContext {
   markNodeClickHandled: () => void;
 }
 
-export const findObjectMapG6Node = (layout: ObjectMapLayout, id: string): PositionedNode | null =>
+const findObjectMapG6Node = (layout: ObjectMapLayout, id: string): PositionedNode | null =>
   layout.nodes.find((node) => node.id === id) ?? null;
 
-export const objectMapG6EventPointerId = (event: ObjectMapG6PointerInput): number =>
+const objectMapG6EventPointerId = (event: ObjectMapG6PointerInput): number =>
   event.pointerId ?? event.nativeEvent?.pointerId ?? 1;
 
-export const objectMapG6EventButton = (event: ObjectMapG6PointerInput): number =>
+const objectMapG6EventButton = (event: ObjectMapG6PointerInput): number =>
   event.button ?? event.nativeEvent?.button ?? 0;
 
-export const objectMapG6EventClientPoint = (
-  event: ObjectMapG6PointerInput
-): { x: number; y: number } => ({
+const objectMapG6EventClientPoint = (event: ObjectMapG6PointerInput): { x: number; y: number } => ({
   x: event.clientX ?? event.client?.x ?? event.nativeEvent?.clientX ?? 0,
   y: event.clientY ?? event.client?.y ?? event.nativeEvent?.clientY ?? 0,
 });

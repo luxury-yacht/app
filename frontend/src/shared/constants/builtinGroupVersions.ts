@@ -146,25 +146,9 @@ export function resolveBuiltinGroupVersion(
 }
 
 /**
- * Format a built-in kind's GroupVersion as the standard Kubernetes
- * "group/version" apiVersion string (or just "version" for core resources
- * with an empty group). Returns `null` when the kind is not a known
- * built-in — call sites should fall back to the legacy kind-only path
- * in that case.
- */
-export function formatBuiltinApiVersion(kind: string | null | undefined): string | null {
-  const gv = resolveBuiltinGroupVersion(kind);
-  if (!gv.version) {
-    return null;
-  }
-  return gv.group ? `${gv.group}/${gv.version}` : gv.version;
-}
-
-/**
- * Inverse of `formatBuiltinApiVersion`: parse a Kubernetes apiVersion
- * string into its `{group, version}` parts. Core resources use the
- * version-only form ("v1"), grouped resources use "group/version"
- * (e.g. "apps/v1", "documentdb.services.k8s.aws/v1alpha1").
+ * Parse a Kubernetes apiVersion string into its `{group, version}` parts.
+ * Core resources use the version-only form ("v1"), grouped resources use
+ * "group/version" (e.g. "apps/v1", "documentdb.services.k8s.aws/v1alpha1").
  *
  * Returns `{}` for null/empty input. Use this when threading an
  * apiVersion field from the backend (e.g. an Event's
