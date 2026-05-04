@@ -411,6 +411,155 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
     }
   }, []);
 
+  const toolbar = (
+    <div
+      className="object-map__toolbar"
+      role="toolbar"
+      aria-label="Object map controls"
+      onPointerDown={(e) => e.stopPropagation()}
+      onPointerUp={(e) => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <form
+        className="object-map__search"
+        role="search"
+        onSubmit={(event) => {
+          event.preventDefault();
+          focusSearchMatch();
+        }}
+      >
+        <div className="object-map__kind-filter" data-gridtable-filter-role="kind">
+          <Dropdown
+            id="object-map-kind-filter"
+            name="object-map-kind-filter"
+            multiple
+            size="compact"
+            searchable
+            showBulkActions
+            placeholder="All kinds"
+            value={selectedKinds}
+            options={kindOptions}
+            disabled={kindOptions.length === 0}
+            onChange={handleKindsChange}
+            dropdownClassName="dropdown-filter-menu"
+            ariaLabel="Filter map kinds"
+            renderOption={renderFilterOption}
+            renderValue={renderKindsValue}
+          />
+        </div>
+        <input
+          type="search"
+          className="object-map__search-input"
+          aria-label="Search map objects"
+          placeholder="Search objects"
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.target.value)}
+        />
+        {normalizedSearchQuery && (
+          <span className="object-map__search-count">
+            {searchMatches.length === 0
+              ? '0/0'
+              : `${Math.min(searchIndex + 1, searchMatches.length)}/${searchMatches.length}`}
+          </span>
+        )}
+      </form>
+      <button
+        type="button"
+        className="object-map__toolbar-button"
+        onClick={g6ViewportControls?.zoomOut}
+        title="Zoom out"
+        aria-label="Zoom out"
+        disabled={!viewportControlsReady}
+      >
+        <ZoomOutIcon />
+      </button>
+      <button
+        type="button"
+        className="object-map__toolbar-button"
+        onClick={g6ViewportControls?.zoomIn}
+        title="Zoom in"
+        aria-label="Zoom in"
+        disabled={!viewportControlsReady}
+      >
+        <ZoomInIcon />
+      </button>
+      <button
+        type="button"
+        className="object-map__toolbar-button"
+        onClick={g6ViewportControls?.fitToView}
+        title="Fit visible objects into the viewport"
+        aria-label="Fit"
+        disabled={!viewportControlsReady}
+      >
+        <FitToViewIcon />
+      </button>
+      <button
+        type="button"
+        className={`object-map__toolbar-button ${
+          model.autoFit ? 'object-map__toolbar-button--active' : ''
+        }`}
+        onClick={() => model.setAutoFit((prev) => !prev)}
+        title={
+          model.autoFit
+            ? 'Auto-fit on - automatically fits visible objects into the viewport'
+            : 'Auto-fit off - pan and zoom changes are retained'
+        }
+        aria-label="Toggle auto-fit"
+        aria-pressed={model.autoFit}
+      >
+        <AutoFitIcon />
+      </button>
+      <span className="object-map__toolbar-separator" aria-hidden="true" />
+      <button
+        type="button"
+        className={`object-map__toolbar-button ${
+          focusMode ? 'object-map__toolbar-button--active' : ''
+        }`}
+        onClick={() => setFocusMode((prev) => !prev)}
+        title={focusMode ? 'Focus mode on' : 'Focus mode off'}
+        aria-label="Toggle focus mode"
+        aria-pressed={focusMode}
+      >
+        <FocusModeIcon />
+      </button>
+      <button
+        type="button"
+        className="object-map__toolbar-button"
+        onClick={resetMapLayout}
+        title="Reset layout"
+        aria-label="Reset layout"
+        disabled={!model.hasNodePositionOverrides && !focusMode}
+      >
+        <ResetFiltersIcon />
+      </button>
+      <span className="object-map__toolbar-separator" aria-hidden="true" />
+      {onRefresh && (
+        <button
+          type="button"
+          className="object-map__toolbar-button"
+          onClick={onRefresh}
+          title="Refresh"
+          aria-label="Refresh"
+          disabled={isRefreshing}
+        >
+          <RefreshIcon />
+        </button>
+      )}
+      <button
+        type="button"
+        className={`object-map__toolbar-button ${
+          showLegend ? 'object-map__toolbar-button--active' : ''
+        }`}
+        onClick={() => setShowLegend((prev) => !prev)}
+        title={showLegend ? 'Hide legend' : 'Show legend'}
+        aria-label="Toggle legend"
+        aria-pressed={showLegend}
+      >
+        <LegendIcon />
+      </button>
+    </div>
+  );
+
   if (model.layout.nodes.length === 0) {
     return (
       <div className="object-map object-map--empty" data-testid="object-map-empty">
@@ -421,6 +570,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
 
   return (
     <div className="object-map" data-testid="object-map">
+      <div className="object-map__header">{toolbar}</div>
       <div ref={canvasRef} className="object-map__canvas">
         <Suspense fallback={<div className="object-map__message">Loading map renderer…</div>}>
           <ObjectMapG6Renderer
@@ -446,152 +596,6 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
             onViewportControlsChange={setG6ViewportControls}
           />
         </Suspense>
-        <div
-          className="object-map__toolbar"
-          role="toolbar"
-          aria-label="Object map controls"
-          onPointerDown={(e) => e.stopPropagation()}
-          onPointerUp={(e) => e.stopPropagation()}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <form
-            className="object-map__search"
-            role="search"
-            onSubmit={(event) => {
-              event.preventDefault();
-              focusSearchMatch();
-            }}
-          >
-            <div className="object-map__kind-filter" data-gridtable-filter-role="kind">
-              <Dropdown
-                id="object-map-kind-filter"
-                name="object-map-kind-filter"
-                multiple
-                size="compact"
-                searchable
-                showBulkActions
-                placeholder="All kinds"
-                value={selectedKinds}
-                options={kindOptions}
-                disabled={kindOptions.length === 0}
-                onChange={handleKindsChange}
-                dropdownClassName="dropdown-filter-menu"
-                ariaLabel="Filter map kinds"
-                renderOption={renderFilterOption}
-                renderValue={renderKindsValue}
-              />
-            </div>
-            <input
-              type="search"
-              className="object-map__search-input"
-              aria-label="Search map objects"
-              placeholder="Search objects"
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-            />
-            {normalizedSearchQuery && (
-              <span className="object-map__search-count">
-                {searchMatches.length === 0
-                  ? '0/0'
-                  : `${Math.min(searchIndex + 1, searchMatches.length)}/${searchMatches.length}`}
-              </span>
-            )}
-          </form>
-          <button
-            type="button"
-            className="object-map__toolbar-button"
-            onClick={g6ViewportControls?.zoomOut}
-            title="Zoom out"
-            aria-label="Zoom out"
-            disabled={!viewportControlsReady}
-          >
-            <ZoomOutIcon />
-          </button>
-          <button
-            type="button"
-            className="object-map__toolbar-button"
-            onClick={g6ViewportControls?.zoomIn}
-            title="Zoom in"
-            aria-label="Zoom in"
-            disabled={!viewportControlsReady}
-          >
-            <ZoomInIcon />
-          </button>
-          <button
-            type="button"
-            className="object-map__toolbar-button"
-            onClick={g6ViewportControls?.fitToView}
-            title="Fit visible objects to the view"
-            aria-label="Fit visible objects to the view"
-            disabled={!viewportControlsReady}
-          >
-            <FitToViewIcon />
-          </button>
-          <button
-            type="button"
-            className={`object-map__toolbar-button ${
-              model.autoFit ? 'object-map__toolbar-button--active' : ''
-            }`}
-            onClick={() => model.setAutoFit((prev) => !prev)}
-            title={
-              model.autoFit
-                ? 'Auto-fit on (viewport recenters when the graph changes)'
-                : 'Auto-fit off (your pan/zoom is preserved across changes)'
-            }
-            aria-label="Toggle auto-fit"
-            aria-pressed={model.autoFit}
-          >
-            <AutoFitIcon />
-          </button>
-          <span className="object-map__toolbar-separator" aria-hidden="true" />
-          <button
-            type="button"
-            className={`object-map__toolbar-button ${
-              focusMode ? 'object-map__toolbar-button--active' : ''
-            }`}
-            onClick={() => setFocusMode((prev) => !prev)}
-            title={focusMode ? 'Focus mode on' : 'Focus mode off'}
-            aria-label="Toggle focus mode"
-            aria-pressed={focusMode}
-          >
-            <FocusModeIcon />
-          </button>
-          <button
-            type="button"
-            className="object-map__toolbar-button"
-            onClick={resetMapLayout}
-            title="Reset layout"
-            aria-label="Reset layout"
-            disabled={!model.hasNodePositionOverrides && !focusMode}
-          >
-            <ResetFiltersIcon />
-          </button>
-          <span className="object-map__toolbar-separator" aria-hidden="true" />
-          {onRefresh && (
-            <button
-              type="button"
-              className="object-map__toolbar-button"
-              onClick={onRefresh}
-              title="Refresh"
-              aria-label="Refresh"
-              disabled={isRefreshing}
-            >
-              <RefreshIcon />
-            </button>
-          )}
-          <button
-            type="button"
-            className={`object-map__toolbar-button ${
-              showLegend ? 'object-map__toolbar-button--active' : ''
-            }`}
-            onClick={() => setShowLegend((prev) => !prev)}
-            title={showLegend ? 'Hide legend' : 'Show legend'}
-            aria-label="Toggle legend"
-            aria-pressed={showLegend}
-          >
-            <LegendIcon />
-          </button>
-        </div>
         {showLegend && (
           <div
             className="object-map__legend"
