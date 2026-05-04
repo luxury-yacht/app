@@ -10,19 +10,20 @@ import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } fr
 import './ObjectMap.css';
 import type { ObjectMapReference, ObjectMapSnapshotPayload } from '@core/refresh/types';
 import { useShortNames } from '@/hooks/useShortNames';
-import { getDisplayKind } from '@/utils/kindAliasMap';
 import { isMacPlatform } from '@/utils/platform';
 import ContextMenu from '@shared/components/ContextMenu';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
-import { computeObjectMapLayout } from './objectMapLayout';
-import { objectMapEdgeClass, OBJECT_MAP_EDGE_KINDS } from './objectMapEdgeStyle';
-import { contractObjectMapKindFilter, FILTERED_PATH_EDGE_TYPE } from './objectMapKindFilter';
-import { computeObjectMapSelectionState } from './objectMapSelection';
+import { objectMapEdgeClass } from './objectMapEdgeStyle';
 import type { ObjectMapContextMenuRequest } from './objectMapRendererTypes';
 import type { ObjectMapViewportControls } from './objectMapRendererTypes';
 import { useObjectMapModel } from './useObjectMapModel';
+import {
+  deriveObjectMapVisibleState,
+  pruneObjectMapEnabledEdgeTypes,
+  pruneObjectMapSelectedKinds,
+} from './objectMapVisibleState';
 import {
   AutoFitIcon,
   FitToViewIcon,
@@ -97,160 +98,58 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
   );
   const primaryModifierLabel = useMemo(() => (isMacPlatform() ? 'cmd' : 'ctrl'), []);
 
-  const hasSelectedKinds = selectedKinds.length > 0;
-
-  const realEdgeTypes = useMemo(() => {
-    const types = new Set<string>();
-    model.layout.edges.forEach((edge) => types.add(edge.type.trim().toLowerCase()));
-    return types;
-  }, [model.layout.edges]);
-
-  const visibleEdgeTypes = useMemo(() => {
-    const types = new Set(realEdgeTypes);
-    if (hasSelectedKinds) {
-      types.add(FILTERED_PATH_EDGE_TYPE);
-    }
-    return types;
-  }, [hasSelectedKinds, realEdgeTypes]);
-
-  const legendEntries = useMemo(
-    () => OBJECT_MAP_EDGE_KINDS.filter((entry) => visibleEdgeTypes.has(entry.type)),
-    [visibleEdgeTypes]
+  const visibleState = useMemo(
+    () =>
+      deriveObjectMapVisibleState({
+        layout: model.layout,
+        activeNodeId: model.activeNodeId,
+        focusMode,
+        selectedKinds,
+        enabledEdgeTypes,
+        searchQuery,
+        useShortResourceNames,
+      }),
+    [
+      enabledEdgeTypes,
+      focusMode,
+      model.activeNodeId,
+      model.layout,
+      searchQuery,
+      selectedKinds,
+      useShortResourceNames,
+    ]
   );
 
   useEffect(() => {
     setEnabledEdgeTypes((previous) => {
-      if (!previous) return previous;
-      const next = new Set(Array.from(previous).filter((type) => visibleEdgeTypes.has(type)));
-      return next.size === previous.size ? previous : next;
+      return pruneObjectMapEnabledEdgeTypes(previous, visibleState.visibleEdgeTypes);
     });
-  }, [visibleEdgeTypes]);
+  }, [visibleState.visibleEdgeTypes]);
 
   const isEdgeTypeEnabled = useCallback(
     (type: string) => !enabledEdgeTypes || enabledEdgeTypes.has(type),
     [enabledEdgeTypes]
   );
 
-  const edgeFilteredLayout = useMemo(() => {
-    if (!enabledEdgeTypes) return model.layout;
-    return {
-      ...model.layout,
-      edges: model.layout.edges.filter((edge) => enabledEdgeTypes.has(edge.type)),
-    };
-  }, [enabledEdgeTypes, model.layout]);
-
-  const kindOptions = useMemo<DropdownOption[]>(() => {
-    const kinds = Array.from(new Set(model.layout.nodes.map((node) => node.ref.kind))).sort(
-      (a, b) => a.localeCompare(b)
-    );
-    return kinds.map((kind) => ({
-      value: kind,
-      label: getDisplayKind(kind, useShortResourceNames),
-    }));
-  }, [model.layout.nodes, useShortResourceNames]);
-
   useEffect(() => {
     setSelectedKinds((previous) => {
-      if (previous.length === 0) return previous;
-      const available = new Set(kindOptions.map((option) => option.value));
-      const next = previous.filter((kind) => available.has(kind));
-      return next.length === previous.length ? previous : next;
+      return pruneObjectMapSelectedKinds(previous, visibleState.kindOptions);
     });
-  }, [kindOptions]);
-
-  const selectedKindSet = useMemo(() => new Set(selectedKinds), [selectedKinds]);
-
-  const kindFilteredLayout = useMemo(() => {
-    if (selectedKindSet.size === 0) return edgeFilteredLayout;
-
-    const sourceNodes = edgeFilteredLayout.nodes.map((node) => ({
-      id: node.id,
-      depth: Math.abs(node.column),
-      ref: node.ref,
-    }));
-    const sourceEdges = edgeFilteredLayout.edges.map((edge) => ({
-      id: edge.id,
-      source: edge.sourceId,
-      target: edge.targetId,
-      type: edge.type,
-      label: edge.label,
-      tracedBy: edge.tracedBy,
-      filteredPath: edge.filteredPath,
-    }));
-    const contracted = contractObjectMapKindFilter(sourceNodes, sourceEdges, selectedKindSet);
-    const edges = contracted.edges.filter(
-      (edge) => edge.type !== FILTERED_PATH_EDGE_TYPE || isEdgeTypeEnabled(FILTERED_PATH_EDGE_TYPE)
-    );
-
-    return computeObjectMapLayout(
-      contracted.nodes,
-      edges,
-      contracted.nodes.some((node) => node.id === model.activeNodeId)
-        ? model.activeNodeId!
-        : (contracted.nodes[0]?.id ?? '')
-    );
-  }, [edgeFilteredLayout, isEdgeTypeEnabled, model.activeNodeId, selectedKindSet]);
-
-  const visibleLayout = useMemo(() => {
-    if (
-      !focusMode ||
-      !model.activeNodeId ||
-      !kindFilteredLayout.nodes.some((node) => node.id === model.activeNodeId)
-    ) {
-      return kindFilteredLayout;
-    }
-
-    const focusSelectionState = computeObjectMapSelectionState(
-      kindFilteredLayout.edges,
-      model.activeNodeId
-    );
-    const visibleNodeIds = new Set<string>([
-      model.activeNodeId,
-      ...focusSelectionState.connectedIds,
-    ]);
-
-    const focusedNodes = kindFilteredLayout.nodes.filter((node) => visibleNodeIds.has(node.id));
-    const focusedEdges = kindFilteredLayout.edges.filter((edge) =>
-      focusSelectionState.connectedEdgeIds.has(edge.id)
-    );
-
-    return computeObjectMapLayout(
-      focusedNodes.map((node) => ({
-        id: node.id,
-        depth: Math.abs(node.column),
-        ref: node.ref,
-      })),
-      focusedEdges.map((edge) => ({
-        id: edge.id,
-        source: edge.sourceId,
-        target: edge.targetId,
-        type: edge.type,
-        label: edge.label,
-        tracedBy: edge.tracedBy,
-        filteredPath: edge.filteredPath,
-      })),
-      model.activeNodeId
-    );
-  }, [focusMode, kindFilteredLayout, model.activeNodeId]);
-
-  const visibleSelectionState = useMemo(
-    () => computeObjectMapSelectionState(visibleLayout.edges, model.activeNodeId),
-    [model.activeNodeId, visibleLayout.edges]
-  );
+  }, [visibleState.kindOptions]);
 
   const toggleEdgeType = useCallback(
     (type: string) => {
       setEnabledEdgeTypes((previous) => {
-        const next = new Set(previous ?? Array.from(visibleEdgeTypes));
+        const next = new Set(previous ?? Array.from(visibleState.visibleEdgeTypes));
         if (next.has(type)) {
           next.delete(type);
         } else {
           next.add(type);
         }
-        return next.size === visibleEdgeTypes.size ? null : next;
+        return next.size === visibleState.visibleEdgeTypes.size ? null : next;
       });
     },
-    [visibleEdgeTypes]
+    [visibleState.visibleEdgeTypes]
   );
   const showAllEdgeTypes = useCallback(() => {
     setEnabledEdgeTypes(null);
@@ -258,34 +157,22 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
   const hideAllEdgeTypes = useCallback(() => {
     setEnabledEdgeTypes(new Set());
   }, []);
-  const enabledLegendEntryCount = legendEntries.filter((entry) =>
+  const enabledLegendEntryCount = visibleState.legendEntries.filter((entry) =>
     isEdgeTypeEnabled(entry.type)
   ).length;
 
-  const normalizedSearchQuery = searchQuery.trim().toLowerCase();
-  const searchMatches = useMemo(() => {
-    if (!normalizedSearchQuery) return [];
-    return visibleLayout.nodes.filter((node) => {
-      const namespace = node.ref.namespace ?? '';
-      const displayKind = getDisplayKind(node.ref.kind, useShortResourceNames);
-      return `${node.ref.kind} ${displayKind} ${namespace} ${node.ref.name}`
-        .toLowerCase()
-        .includes(normalizedSearchQuery);
-    });
-  }, [normalizedSearchQuery, useShortResourceNames, visibleLayout.nodes]);
-
   useEffect(() => {
     setSearchIndex(0);
-  }, [normalizedSearchQuery]);
+  }, [visibleState.normalizedSearchQuery]);
 
   const focusSearchMatch = useCallback(() => {
-    if (searchMatches.length === 0) return;
-    const nextIndex = Math.min(searchIndex, searchMatches.length - 1);
-    const node = searchMatches[nextIndex];
-    setSearchIndex((prev) => (prev + 1) % searchMatches.length);
+    if (visibleState.searchMatches.length === 0) return;
+    const nextIndex = Math.min(searchIndex, visibleState.searchMatches.length - 1);
+    const node = visibleState.searchMatches[nextIndex];
+    setSearchIndex((prev) => (prev + 1) % visibleState.searchMatches.length);
     model.focusNode(node.id);
     g6ViewportControls?.focusNode(node.id);
-  }, [g6ViewportControls, model, searchIndex, searchMatches]);
+  }, [g6ViewportControls, model, searchIndex, visibleState.searchMatches]);
 
   const handleKindsChange = useCallback((value: string | string[]) => {
     setSelectedKinds(Array.isArray(value) ? value : value ? [value] : []);
@@ -438,8 +325,8 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
             showBulkActions
             placeholder="All kinds"
             value={selectedKinds}
-            options={kindOptions}
-            disabled={kindOptions.length === 0}
+            options={visibleState.kindOptions}
+            disabled={visibleState.kindOptions.length === 0}
             onChange={handleKindsChange}
             dropdownClassName="dropdown-filter-menu"
             ariaLabel="Filter map kinds"
@@ -455,11 +342,13 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
           value={searchQuery}
           onChange={(event) => setSearchQuery(event.target.value)}
         />
-        {normalizedSearchQuery && (
+        {visibleState.normalizedSearchQuery && (
           <span className="object-map__search-count">
-            {searchMatches.length === 0
+            {visibleState.searchMatches.length === 0
               ? '0/0'
-              : `${Math.min(searchIndex + 1, searchMatches.length)}/${searchMatches.length}`}
+              : `${Math.min(searchIndex + 1, visibleState.searchMatches.length)}/${
+                  visibleState.searchMatches.length
+                }`}
           </span>
         )}
       </form>
@@ -574,8 +463,8 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
       <div ref={canvasRef} className="object-map__canvas">
         <Suspense fallback={<div className="object-map__message">Loading map renderer…</div>}>
           <ObjectMapG6Renderer
-            layout={visibleLayout}
-            selectionState={visibleSelectionState}
+            layout={visibleState.visibleLayout}
+            selectionState={visibleState.visibleSelectionState}
             useShortResourceNames={useShortResourceNames}
             hoverEdge={model.hoverEdge}
             onHoverEdge={model.setHoverEdge}
@@ -612,7 +501,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
             onPointerCancel={handleLegendPointerEnd}
             onClick={(e) => e.stopPropagation()}
           >
-            {legendEntries.map((entry) => (
+            {visibleState.legendEntries.map((entry) => (
               <button
                 key={entry.type}
                 type="button"
@@ -628,14 +517,14 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
                 <span className="object-map__legend-label">{entry.label}</span>
               </button>
             ))}
-            {legendEntries.length > 0 && (
+            {visibleState.legendEntries.length > 0 && (
               <>
                 <div className="object-map__legend-actions">
                   <button
                     type="button"
                     className="object-map__legend-action-button"
                     onClick={showAllEdgeTypes}
-                    disabled={enabledLegendEntryCount === legendEntries.length}
+                    disabled={enabledLegendEntryCount === visibleState.legendEntries.length}
                   >
                     Show all
                   </button>
