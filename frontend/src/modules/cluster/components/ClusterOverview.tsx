@@ -798,6 +798,16 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
             </div>
           </div>
 
+          {renderWorkloadUsageBreakdown(
+            'By Workload',
+            'cpu',
+            cpuWorkloadUsageTotal,
+            formatCpuValue(cpuWorkloadUsageTotal),
+            cpuWorkloadUsageItems
+          )}
+
+          <div className="resource-utilization-divider" />
+
           <div className="resource-group">
             <div className="metric-header">
               <h3>Memory</h3>
@@ -841,22 +851,13 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
             </div>
           </div>
 
-          <div className="workload-usage-breakdowns">
-            {renderWorkloadUsageBreakdown(
-              'CPU by Workload Type',
-              'cpu',
-              cpuWorkloadUsageTotal,
-              formatCpuValue(cpuWorkloadUsageTotal),
-              cpuWorkloadUsageItems
-            )}
-            {renderWorkloadUsageBreakdown(
-              'Memory by Workload Type',
-              'memory',
-              memoryWorkloadUsageTotal,
-              formatMemoryValue(memoryWorkloadUsageTotal),
-              memoryWorkloadUsageItems
-            )}
-          </div>
+          {renderWorkloadUsageBreakdown(
+            'By Workload',
+            'memory',
+            memoryWorkloadUsageTotal,
+            formatMemoryValue(memoryWorkloadUsageTotal),
+            memoryWorkloadUsageItems
+          )}
         </div>
 
         <div className="overview-section nodes-summary">

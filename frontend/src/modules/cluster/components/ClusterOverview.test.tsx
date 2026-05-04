@@ -558,8 +558,13 @@ describe('ClusterOverview', () => {
     cleanupRoot = cleanup;
     await flushEffects();
 
-    expect(container.textContent).toContain('CPU by Workload Type');
-    expect(container.textContent).toContain('Memory by Workload Type');
+    expect(container.textContent).toContain('By Workload');
+    expect(container.textContent).toContain('By Workload');
+    expect(
+      Array.from(container.querySelectorAll('.resource-usage h3')).map((heading) =>
+        heading.textContent?.trim()
+      )
+    ).toEqual(['CPU', 'By Workload', 'Memory', 'By Workload']);
     expect(
       container.querySelector('[data-testid="cluster-workload-usage-cpu-deployment"]')?.textContent
     ).toContain('250m');
