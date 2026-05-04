@@ -1,16 +1,16 @@
 import { Graph, CanvasEvent, CommonEvent, EdgeEvent, GraphEvent, NodeEvent } from '@antv/g6';
-import type { EdgeData, GraphData, NodeData } from '@antv/g6';
+import type { GraphData } from '@antv/g6';
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ObjectMapReference } from '@core/refresh/types';
 import { resolveKindBadgeVisualStyle } from '@shared/utils/kindBadgeColors';
-import type { KindBadgeVisualStyle } from '@shared/utils/kindBadgeColors';
-import { getDisplayKind } from '@/utils/kindAliasMap';
 import type { ObjectMapLayout, PositionedEdge, PositionedNode } from './objectMapLayout';
 import { ensureObjectMapG6CardNodeRegistered } from './objectMapG6CardNode';
 import { ensureObjectMapG6PathEdgeRegistered } from './objectMapG6PathEdge';
+import { createObjectMapG6ApplyQueue, type ObjectMapG6ApplyQueue } from './objectMapG6ApplyQueue';
 import { OBJECT_MAP_G6_CARD_NODE } from './objectMapG6Constants';
 import { objectMapG6EdgeState, objectMapG6NodeState, toObjectMapG6Data } from './objectMapG6Data';
 import type { ObjectMapG6Palette } from './objectMapG6Data';
+import { computeObjectMapTooltipLayout, type ObjectMapTooltipEndpoint } from './objectMapG6Tooltip';
 import {
   beginObjectMapNodeGesture,
   clearObjectMapNodeGesture,
@@ -34,7 +34,6 @@ import type {
 
 const WHEEL_ZOOM_DELTA_LIMIT = 50;
 const WHEEL_ZOOM_SENSITIVITY = 1;
-const MAX_FILTERED_TOOLTIP_OBJECTS = 5;
 
 const findNode = (layout: ObjectMapLayout, id: string): PositionedNode | null =>
   layout.nodes.find((node) => node.id === id) ?? null;
@@ -304,52 +303,6 @@ const isBadgeEvent = (event: G6ElementPointerEvent): boolean => {
   return false;
 };
 
-const measuredTextCanvas =
-  typeof document === 'undefined' ? null : document.createElement('canvas');
-
-const textWidth = (text: string, font: string): number => {
-  const context = measuredTextCanvas?.getContext('2d');
-  if (!context) return text.length;
-  context.font = font;
-  return context.measureText(text).width;
-};
-
-const textWidthWithLetterSpacing = (text: string, font: string, letterSpacing: number): number =>
-  textWidth(text, font) + Math.max(0, text.length - 1) * letterSpacing;
-
-const truncateToWidth = (
-  text: string,
-  maxWidth: number,
-  font: string,
-  letterSpacing = 0
-): string => {
-  if (maxWidth <= 0 || textWidthWithLetterSpacing(text, font, letterSpacing) <= maxWidth) {
-    return text;
-  }
-  const ellipsis = '\u2026';
-  let low = 0;
-  let high = text.length;
-  while (low < high) {
-    const mid = Math.ceil((low + high) / 2);
-    if (
-      textWidthWithLetterSpacing(`${text.slice(0, mid)}${ellipsis}`, font, letterSpacing) <=
-      maxWidth
-    ) {
-      low = mid;
-    } else {
-      high = mid - 1;
-    }
-  }
-  return `${text.slice(0, low)}${ellipsis}`;
-};
-
-const tooltipFont = (
-  weight: number | string,
-  size: number,
-  family: string,
-  style = 'normal'
-): string => `${style} ${weight} ${size}px ${family}`;
-
 const edgeEndpointLabel = (node: PositionedNode | null): string =>
   node ? node.ref.name : 'Unknown';
 
@@ -372,185 +325,6 @@ const EMPTY_SELECTION_STATE: ObjectMapSelectionState = {
   activeId: null,
   connectedIds: new Set(),
   connectedEdgeIds: new Set(),
-};
-
-const graphNodes = (data: GraphData): NodeData[] => data.nodes ?? [];
-const graphEdges = (data: GraphData): EdgeData[] => data.edges ?? [];
-
-const nodeCenter = (
-  data: GraphData,
-  id: string | null | undefined
-): { x: number; y: number } | null => {
-  if (!id) return null;
-  const node = graphNodes(data).find((entry) => entry.id === id);
-  const x = Number(node?.style?.x);
-  const y = Number(node?.style?.y);
-  return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
-};
-
-const nodeViewportPoint = (
-  graph: Graph,
-  data: GraphData,
-  id: string | null | undefined
-): { x: number; y: number } | null => {
-  const center = nodeCenter(data, id);
-  if (!center) return null;
-  const [x, y] = graph.getViewportByCanvas([center.x, center.y]);
-  return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
-};
-
-const sameIds = <T extends { id?: string }>(previous: T[], next: T[]): boolean => {
-  if (previous.length !== next.length) return false;
-  const previousIds = new Set(previous.map((entry) => entry.id));
-  return next.every((entry) => entry.id && previousIds.has(entry.id));
-};
-
-const lineDashChanged = (previous?: unknown, next?: unknown): boolean => {
-  if (previous === next) return false;
-  if (!Array.isArray(previous) || !Array.isArray(next)) return true;
-  return previous.length !== next.length || previous.some((value, index) => value !== next[index]);
-};
-
-const badgeSignature = (node: NodeData): string | undefined => {
-  const badges = node.style?.badges;
-  if (!Array.isArray(badges)) return undefined;
-  return JSON.stringify(badges);
-};
-
-const nodeChanged = (previous: NodeData, next: NodeData): boolean => {
-  const previousStyle = previous.style ?? {};
-  const nextStyle = next.style ?? {};
-  const previousSize = previousStyle.size;
-  const nextSize = nextStyle.size;
-  const sizeChanged =
-    Array.isArray(previousSize) &&
-    Array.isArray(nextSize) &&
-    (previousSize[0] !== nextSize[0] || previousSize[1] !== nextSize[1]);
-  return (
-    previous.type !== next.type ||
-    previousStyle.x !== nextStyle.x ||
-    previousStyle.y !== nextStyle.y ||
-    sizeChanged ||
-    previousStyle.fill !== nextStyle.fill ||
-    previousStyle.stroke !== nextStyle.stroke ||
-    previousStyle.lineWidth !== nextStyle.lineWidth ||
-    previousStyle.radius !== nextStyle.radius ||
-    previousStyle.opacity !== nextStyle.opacity ||
-    previousStyle.cardKindBadgeText !== nextStyle.cardKindBadgeText ||
-    previousStyle.cardKindBadgeFill !== nextStyle.cardKindBadgeFill ||
-    previousStyle.cardKindBadgeTextFill !== nextStyle.cardKindBadgeTextFill ||
-    previousStyle.cardKindBadgeStroke !== nextStyle.cardKindBadgeStroke ||
-    previousStyle.cardKindBadgeBorderWidth !== nextStyle.cardKindBadgeBorderWidth ||
-    previousStyle.cardKindBadgeRadius !== nextStyle.cardKindBadgeRadius ||
-    previousStyle.cardKindBadgeFontSize !== nextStyle.cardKindBadgeFontSize ||
-    previousStyle.cardKindBadgeFontWeight !== nextStyle.cardKindBadgeFontWeight ||
-    previousStyle.cardKindBadgeLetterSpacing !== nextStyle.cardKindBadgeLetterSpacing ||
-    previousStyle.cardKindBadgePaddingX !== nextStyle.cardKindBadgePaddingX ||
-    previousStyle.cardKindBadgePaddingY !== nextStyle.cardKindBadgePaddingY ||
-    previousStyle.cardNameText !== nextStyle.cardNameText ||
-    previousStyle.cardNamespaceText !== nextStyle.cardNamespaceText ||
-    previousStyle.cardFontFamily !== nextStyle.cardFontFamily ||
-    previousStyle.cardNameFill !== nextStyle.cardNameFill ||
-    previousStyle.cardNamespaceFill !== nextStyle.cardNamespaceFill ||
-    badgeSignature(previous) !== badgeSignature(next)
-  );
-};
-
-const edgeChanged = (previous: EdgeData, next: EdgeData): boolean => {
-  const previousStyle = previous.style ?? {};
-  const nextStyle = next.style ?? {};
-  return (
-    previous.source !== next.source ||
-    previous.target !== next.target ||
-    previousStyle.stroke !== nextStyle.stroke ||
-    previousStyle.lineWidth !== nextStyle.lineWidth ||
-    previousStyle.opacity !== nextStyle.opacity ||
-    lineDashChanged(previousStyle.lineDash, nextStyle.lineDash) ||
-    previous.data?.label !== next.data?.label ||
-    previous.data?.type !== next.data?.type ||
-    previous.data?.tracedBy !== next.data?.tracedBy ||
-    JSON.stringify(previous.data?.filteredPath) !== JSON.stringify(next.data?.filteredPath) ||
-    previous.data?.midX !== next.data?.midX ||
-    previous.data?.midY !== next.data?.midY ||
-    previous.data?.path !== next.data?.path
-  );
-};
-
-export const applyGraphData = async (
-  graph: Graph,
-  previousData: GraphData,
-  nextData: GraphData,
-  options: { preserveViewportNodeId?: string | null } = {}
-): Promise<void> => {
-  const previousNodes = graphNodes(previousData);
-  const nextNodes = graphNodes(nextData);
-  const previousEdges = graphEdges(previousData);
-  const nextEdges = graphEdges(nextData);
-  const previousViewportPoint = nodeViewportPoint(
-    graph,
-    previousData,
-    options.preserveViewportNodeId
-  );
-  const preserveViewportForNode = async () => {
-    if (!previousViewportPoint) return;
-    const nextViewportPoint = nodeViewportPoint(graph, nextData, options.preserveViewportNodeId);
-    if (!nextViewportPoint) return;
-    await graph.translateBy(
-      [
-        previousViewportPoint.x - nextViewportPoint.x,
-        previousViewportPoint.y - nextViewportPoint.y,
-      ],
-      false
-    );
-  };
-
-  if (!sameIds(previousNodes, nextNodes) || !sameIds(previousEdges, nextEdges)) {
-    graph.setData(nextData);
-    await graph.render();
-    await preserveViewportForNode();
-    return;
-  }
-
-  const previousNodeById = new Map(previousNodes.map((node) => [node.id, node]));
-  const previousEdgeById = new Map(previousEdges.map((edge) => [edge.id, edge]));
-  const nodeUpdates = nextNodes.filter((node) => {
-    const previous = node.id ? previousNodeById.get(node.id) : undefined;
-    return !previous || nodeChanged(previous, node);
-  });
-  const edgeUpdates = nextEdges.filter((edge) => {
-    const previous = edge.id ? previousEdgeById.get(edge.id) : undefined;
-    return !previous || edgeChanged(previous, edge);
-  });
-
-  if (nodeUpdates.length === 0 && edgeUpdates.length === 0) return;
-  const patch: { nodes?: NodeData[]; edges?: EdgeData[] } = {};
-  if (nodeUpdates.length > 0) patch.nodes = nodeUpdates;
-  if (edgeUpdates.length > 0) patch.edges = edgeUpdates;
-  graph.updateData(patch);
-  await graph.draw();
-  await preserveViewportForNode();
-};
-
-const applySelectionState = async (
-  graph: Graph,
-  layout: ObjectMapLayout,
-  selectionState: ObjectMapSelectionState,
-  hoveredEdgeId: string | null = null
-): Promise<void> => {
-  if (graph.destroyed) return;
-  const states: Record<string, string[]> = {};
-  const hoveredEdge = hoveredEdgeId ? findEdge(layout, hoveredEdgeId) : null;
-  const hoveredNodeIds = new Set(hoveredEdge ? [hoveredEdge.sourceId, hoveredEdge.targetId] : []);
-  layout.nodes.forEach((node) => {
-    const nodeStates = objectMapG6NodeState(node, selectionState);
-    states[node.id] = hoveredNodeIds.has(node.id) ? [...nodeStates, 'edgeHovered'] : nodeStates;
-  });
-  layout.edges.forEach((edge) => {
-    const edgeStates = objectMapG6EdgeState(edge, selectionState);
-    states[edge.id] = edge.id === hoveredEdgeId ? [...edgeStates, 'hovered'] : edgeStates;
-  });
-  if (graph.destroyed) return;
-  await graph.setElementState(states, false);
 };
 
 export interface ObjectMapG6RendererProps {
@@ -604,24 +378,7 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
   const hoveredEdgeIdRef = useRef<string | null>(null);
   const ignoreNextCanvasClickRef = useRef(false);
   const nodeGestureRef = useRef(createObjectMapNodeGestureState());
-  const selectionApplyRef = useRef<{
-    version: number;
-    applying: boolean;
-    latest: { layout: ObjectMapLayout; selectionState: ObjectMapSelectionState } | null;
-  }>({
-    version: 0,
-    applying: false,
-    latest: null,
-  });
-  const dataApplyRef = useRef<{
-    version: number;
-    applying: boolean;
-    latest: GraphData | null;
-  }>({
-    version: 0,
-    applying: false,
-    latest: null,
-  });
+  const applyQueueRef = useRef<ObjectMapG6ApplyQueue | null>(null);
   const [palette, setPalette] = useState<ObjectMapG6Palette | null>(null);
   const [styleVersion, setStyleVersion] = useState(0);
   const paletteReady = palette !== null;
@@ -630,7 +387,6 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
   const onUserViewportChangeRef = useRef(onUserViewportChange);
   onUserViewportChangeRef.current = onUserViewportChange;
   const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null);
-  const graphReadyRef = useRef(false);
   const handlersRef = useRef({
     onHoverEdge,
     onClearHoverEdge,
@@ -682,7 +438,6 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
   }, [layout, badgeForNode, palette, styleVersion, useShortResourceNames]);
   const dataRef = useRef(data);
   dataRef.current = data;
-  const renderedDataRef = useRef<GraphData | null>(null);
   const layoutRef = useRef(layout);
   layoutRef.current = layout;
   const selectionStateRef = useRef(selectionState);
@@ -690,6 +445,22 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
   const preserveViewportNodeIdRef = useRef(preserveViewportNodeId);
   preserveViewportNodeIdRef.current = preserveViewportNodeId;
   hoverEdgeRef.current = hoverEdge;
+  if (!applyQueueRef.current) {
+    applyQueueRef.current = createObjectMapG6ApplyQueue({
+      getGraph: () => graphRef.current,
+      getCurrentLayout: () => layoutRef.current,
+      getCurrentSelectionState: () => selectionStateRef.current,
+      getHoveredEdgeId: () => hoveredEdgeIdRef.current,
+      getPreserveViewportNodeId: () => preserveViewportNodeIdRef.current,
+      onGraphDataError: (error) => {
+        console.error('[ObjectMapG6Renderer] Failed to apply graph data:', error);
+      },
+      onSelectionStateError: (error) => {
+        console.error('[ObjectMapG6Renderer] Failed to apply selection state:', error);
+      },
+    });
+  }
+  const applyQueue = applyQueueRef.current;
 
   const refreshPalette = useCallback(() => {
     const container = containerRef.current;
@@ -777,98 +548,16 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
 
   const scheduleSelectionState = useCallback(
     (nextLayout: ObjectMapLayout, nextSelectionState: ObjectMapSelectionState) => {
-      const graph = graphRef.current;
-      if (!graph || graph.destroyed) return;
-      if (!graphReadyRef.current) {
-        selectionApplyRef.current.latest = {
-          layout: nextLayout,
-          selectionState: nextSelectionState,
-        };
-        return;
-      }
-      const ref = selectionApplyRef.current;
-      ref.version += 1;
-      ref.latest = { layout: nextLayout, selectionState: nextSelectionState };
-      if (ref.applying) return;
-      ref.applying = true;
-      const run = async () => {
-        try {
-          while (ref.latest && !graph.destroyed) {
-            const requestedVersion = ref.version;
-            const latest = ref.latest;
-            ref.latest = null;
-            await applySelectionState(
-              graph,
-              latest.layout,
-              latest.selectionState,
-              hoveredEdgeIdRef.current
-            );
-            if (ref.version === requestedVersion) {
-              break;
-            }
-          }
-        } catch (error) {
-          if (graphRef.current === graph && !graph.destroyed) {
-            console.error('[ObjectMapG6Renderer] Failed to apply selection state:', error);
-          }
-        } finally {
-          ref.applying = false;
-          if (ref.latest && graphReadyRef.current && !graph.destroyed) {
-            scheduleSelectionState(ref.latest.layout, ref.latest.selectionState);
-          }
-        }
-      };
-      void run();
+      applyQueue.scheduleSelectionState(nextLayout, nextSelectionState);
     },
-    []
+    [applyQueue]
   );
 
   const scheduleGraphData = useCallback(
     (nextData: GraphData) => {
-      const graph = graphRef.current;
-      if (!graph || graph.destroyed) return;
-      const ref = dataApplyRef.current;
-      ref.version += 1;
-      ref.latest = nextData;
-      if (!graphReadyRef.current) return;
-      if (ref.applying) return;
-      ref.applying = true;
-      const run = async () => {
-        try {
-          while (ref.latest && !graph.destroyed) {
-            const requestedVersion = ref.version;
-            const latest = ref.latest;
-            ref.latest = null;
-            const previousData = renderedDataRef.current;
-            if (previousData) {
-              await applyGraphData(graph, previousData, latest, {
-                preserveViewportNodeId: preserveViewportNodeIdRef.current,
-              });
-            } else {
-              graph.setData(latest);
-              await graph.render();
-            }
-            if (graph.destroyed) return;
-            renderedDataRef.current = latest;
-            scheduleSelectionState(layoutRef.current, selectionStateRef.current);
-            if (ref.version === requestedVersion) {
-              break;
-            }
-          }
-        } catch (error) {
-          if (graphRef.current === graph && !graph.destroyed) {
-            console.error('[ObjectMapG6Renderer] Failed to apply graph data:', error);
-          }
-        } finally {
-          ref.applying = false;
-          if (ref.latest && graphReadyRef.current && !graph.destroyed) {
-            scheduleGraphData(ref.latest);
-          }
-        }
-      };
-      void run();
+      applyQueue.scheduleGraphData(nextData);
     },
-    [scheduleSelectionState]
+    [applyQueue]
   );
 
   useEffect(() => {
@@ -1091,13 +780,9 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
         if (disposed || graph.destroyed || graphRef.current !== graph) {
           return;
         }
-        renderedDataRef.current = initialData;
-        graphReadyRef.current = true;
+        applyQueue.setRenderedData(initialData);
+        applyQueue.setReady(true);
         scheduleSelectionState(layoutRef.current, selectionStateRef.current);
-        const pendingData = dataApplyRef.current.latest;
-        if (pendingData) {
-          scheduleGraphData(pendingData);
-        }
       } catch (error) {
         initialRenderSettled = true;
         if (!disposed && graphRef.current === graph && !graph.destroyed) {
@@ -1110,32 +795,25 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
       }
     };
     void renderInitialGraph();
-    const selectionApply = selectionApplyRef.current;
-    const dataApply = dataApplyRef.current;
     return () => {
       disposed = true;
       graphRef.current = null;
-      graphReadyRef.current = false;
       hoveredEdgeIdRef.current = null;
       clearObjectMapNodeGesture(nodeGestureState);
-      renderedDataRef.current = null;
-      selectionApply.latest = null;
-      selectionApply.applying = false;
-      dataApply.latest = null;
-      dataApply.applying = false;
+      applyQueue.clear();
       container.removeEventListener('wheel', handleWheelZoom);
       if (initialRenderSettled) {
         destroyGraph();
       }
     };
-  }, [paletteReady, scheduleGraphData, scheduleSelectionState, updateTooltipPosition]);
+  }, [applyQueue, paletteReady, scheduleGraphData, scheduleSelectionState, updateTooltipPosition]);
 
   useEffect(() => {
     const graph = graphRef.current;
-    if (!graph || graph.destroyed || !palette || !graphReadyRef.current) return;
+    if (!graph || graph.destroyed || !palette || !applyQueue.isReady()) return;
     graph.setNode(objectMapG6NodeOptions(palette));
     graph.setEdge(objectMapG6EdgeOptions(palette));
-  }, [palette]);
+  }, [applyQueue, palette]);
 
   useEffect(() => {
     const graph = graphRef.current;
@@ -1208,150 +886,16 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
 
   const tooltipText = useMemo(() => {
     if (!palette || !hoverEdge) return null;
-    const maxContentWidth = Math.max(
-      1,
-      palette.tooltipMaxWidth - palette.tooltipHorizontalPadding * 2
-    );
-    const nameFont = tooltipFont(
-      palette.tooltipNameFontWeight,
-      palette.tooltipNameFontSize,
-      palette.fontFamily
-    );
-    const relationshipFont = tooltipFont(
-      palette.tooltipRelationshipFontWeight,
-      palette.tooltipRelationshipFontSize,
-      palette.fontFamily
-    );
-    const endpoint = (name: string, kind: string, filtered = false) => {
-      const badgeStyle = resolveKindBadgeVisualStyle(kind, containerRef.current);
-      const rawBadgeText = getDisplayKind(kind, useShortResourceNames).toUpperCase();
-      const badgeFontSize = Math.min(badgeStyle.fontSize, palette.tooltipBadgeMaxFontSize);
-      const badgeFont = tooltipFont(badgeStyle.fontWeight, badgeFontSize, palette.fontFamily);
-      const endpointNameFont = filtered
-        ? tooltipFont(
-            palette.tooltipNameFontWeight,
-            palette.tooltipNameFontSize,
-            palette.fontFamily,
-            'italic'
-          )
-        : nameFont;
-      const maxBadgeWidth = Math.min(maxContentWidth, palette.tooltipBadgeMaxWidth);
-      const maxBadgeTextWidth = Math.max(
-        1,
-        maxBadgeWidth - palette.tooltipBadgePaddingX * 2 - badgeStyle.borderWidth * 2
-      );
-      const badgeText = truncateToWidth(
-        rawBadgeText,
-        maxBadgeTextWidth,
-        badgeFont,
-        badgeStyle.letterSpacing
-      );
-      const badgeWidth = Math.ceil(
-        textWidthWithLetterSpacing(badgeText, badgeFont, badgeStyle.letterSpacing) +
-          palette.tooltipBadgePaddingX * 2 +
-          badgeStyle.borderWidth * 2
-      );
-      const badgeHeight = Math.ceil(
-        badgeFontSize + palette.tooltipBadgePaddingY * 2 + badgeStyle.borderWidth * 2
-      );
-      const maxNameWidth = Math.max(1, maxContentWidth - badgeWidth - palette.tooltipBadgeGap);
-      const text = truncateToWidth(name, maxNameWidth, endpointNameFont);
-      const textWidthValue = textWidth(text, endpointNameFont);
-      const groupWidth = badgeWidth + palette.tooltipBadgeGap + textWidthValue;
-      return {
-        badgeHeight,
-        badgeStyle,
-        badgeText,
-        badgeWidth,
-        badgeFontSize,
-        filtered,
-        groupWidth,
-        text,
-      };
-    };
-
-    const endpointFromRef = (ref: ObjectMapReference, filtered: boolean) =>
-      endpoint(ref.name, ref.kind, filtered);
-    const relationshipRow = (text: string) =>
-      truncateToWidth(text, maxContentWidth, relationshipFont);
-    const defaultTop = -palette.tooltipOffsetY - palette.tooltipHeight - palette.tooltipArrowHeight;
-    const firstRowOffset = palette.tooltipSourceY - defaultTop;
-    const rowGap = Math.max(1, palette.tooltipRelationshipY - palette.tooltipSourceY);
-    const defaultBottomPadding = Math.max(0, palette.tooltipHeight - (firstRowOffset + rowGap * 2));
-
-    const rows: Array<
-      | { type: 'object'; endpoint: ReturnType<typeof endpoint> }
-      | { type: 'relationship'; text: string }
-    > = [];
-    const filteredPath = hoverEdge.filteredPath;
-    if (filteredPath) {
-      const pathNodes = filteredPath.nodes.slice(0, MAX_FILTERED_TOOLTIP_OBJECTS);
-      pathNodes.forEach((node, index) => {
-        rows.push({ type: 'object', endpoint: endpointFromRef(node.ref, node.filtered) });
-        if (index < pathNodes.length - 1) {
-          rows.push({
-            type: 'relationship',
-            text: relationshipRow(filteredPath.relationships[index]?.label ?? ''),
-          });
-        }
-      });
-      const hiddenStepCount = Math.max(0, filteredPath.nodes.length - pathNodes.length);
-      if (hiddenStepCount > 0) {
-        rows.push({
-          type: 'relationship',
-          text: relationshipRow(
-            `+${hiddenStepCount} hidden step${hiddenStepCount === 1 ? '' : 's'}`
-          ),
-        });
-      }
-      if (filteredPath.additionalPathCount > 0) {
-        const count = filteredPath.additionalPathCount;
-        rows.push({
-          type: 'relationship',
-          text: relationshipRow(`+${count} more hidden path${count === 1 ? '' : 's'}`),
-        });
-      }
-    } else {
-      rows.push({
-        type: 'object',
-        endpoint: endpoint(hoverEdge.sourceLabel, hoverEdge.sourceKind),
-      });
-      rows.push({ type: 'relationship', text: relationshipRow(hoverEdge.label) });
-      rows.push({
-        type: 'object',
-        endpoint: endpoint(hoverEdge.targetLabel, hoverEdge.targetKind),
-      });
-    }
-
-    const widestRow = rows.reduce((max, row) => {
-      if (row.type === 'object') return Math.max(max, row.endpoint.groupWidth);
-      return Math.max(max, textWidth(row.text, relationshipFont));
-    }, 0);
-    const width = Math.ceil(widestRow) + palette.tooltipHorizontalPadding * 2;
-    const height = Math.max(
-      palette.tooltipHeight,
-      firstRowOffset + rowGap * Math.max(0, rows.length - 1) + defaultBottomPadding
-    );
-    return {
-      firstRowOffset,
-      height,
-      rowGap,
-      rows,
-      width,
-    };
+    return computeObjectMapTooltipLayout({
+      hoverEdge,
+      palette,
+      useShortResourceNames,
+      container: containerRef.current,
+    });
   }, [hoverEdge, palette, useShortResourceNames]);
 
   const renderTooltipEndpoint = (
-    endpoint: {
-      badgeHeight: number;
-      badgeStyle: KindBadgeVisualStyle;
-      badgeFontSize: number;
-      badgeText: string;
-      badgeWidth: number;
-      filtered: boolean;
-      groupWidth: number;
-      text: string;
-    },
+    endpoint: ObjectMapTooltipEndpoint,
     y: number,
     className: string
   ) => {
