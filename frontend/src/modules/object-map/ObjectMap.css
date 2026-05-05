@@ -317,7 +317,7 @@
   border: var(--border-width) solid var(--color-border);
   border-radius: var(--border-radius-md);
   padding: var(--spacing-sm) var(--spacing-md);
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   color: var(--color-text-secondary);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
   display: flex;
@@ -359,7 +359,7 @@
 .object-map__legend-category {
   margin: 2px 0;
   color: var(--color-text-secondary);
-  font-size: 0.68rem;
+  font-size: 0.65rem;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
