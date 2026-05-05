@@ -79,6 +79,10 @@ IngressClasses, ClusterRoleBindings, and ClusterRoles.
 Namespace maps do not add a synthetic Namespace card to the graph. The namespace
 is carried as the payload seed so the payload remains compatible with the shared
 object-map renderer, but the visible nodes are the related objects themselves.
+Because the namespace seed is not rendered as a node, namespace maps commonly
+show `seed node: none` in debug output. That is expected and means viewport
+preservation must fall back to visible object anchors rather than a rendered
+seed card.
 
 ## Backend Sources
 
@@ -207,14 +211,45 @@ Important frontend files:
   overrides, and reset behavior.
 - `frontend/src/modules/object-map/objectMapLayout.ts`: seed-anchored layered
   layout and edge routing.
+- `frontend/src/modules/object-map/objectMapVisibleState.ts`: visible layout
+  derivation for relationship filters, kind filters, focus mode, and search.
 - `frontend/src/modules/object-map/ObjectMapG6Renderer.tsx`: G6 integration,
-  viewport controls, event handling, tooltips, and CSS variable palette loading.
+  viewport controls, event handling, tooltips, debug grid, and CSS variable
+  palette loading.
+- `frontend/src/modules/object-map/objectMapDebugStore.ts`: debug snapshots and
+  map-debug overlay visibility shared between `AppLayout` and mounted maps.
 - `frontend/src/modules/object-map/ObjectMap.css`: visual styling and CSS
   variables consumed by the renderer.
 
 Layout ownership is frontend-side. The backend returns nodes, edges, and graph
 depths; the frontend decides visual columns, card positions, edge routes, focus
 filtering, and viewport behavior.
+
+The layout coordinate origin is an internal graph coordinate, not a viewport
+landmark. `0,0` is not the top-left of the viewport, the center of the viewport,
+or necessarily the center of the rendered objects. In the layered layout, x
+coordinates are anchored around the seed column when a rendered seed exists; y
+coordinates are the layout baseline for stacked columns. Namespace maps have no
+rendered namespace seed, so `0,0` is useful for debugging coordinate shifts but
+is not a user-meaningful map center.
+
+Focus mode deliberately redraws a smaller graph around the selected object, but
+it must not change the global layout coordinate frame. When focus mode computes
+the focused sub-layout, it translates that result so the active object keeps the
+same x/y coordinate it had in the full visible layout. While focus mode is
+active, `ObjectMap.tsx` also passes no `preserveViewportNodeId` to the renderer;
+otherwise selecting object B while object A is already focused can make G6 pan
+to preserve B's previous screen position from A's focused layout. That was the
+cause of the focus-mode "map jumps across the viewport" bug. If it comes back,
+check these invariants first:
+
+- The active object has the same x/y in focused layout that it had in the
+  pre-focus visible layout.
+- Focus mode does not pass a selected-node viewport preservation anchor.
+- The debug grid's `0,0` stays fixed when changing selection in focus mode.
+- Viewport `position`, `zoom`, and `size` are not enough to diagnose this class
+  of bug; the layout coordinate frame can move while the viewport transform
+  stays unchanged.
 
 ## User Interaction
 
@@ -225,16 +260,63 @@ The current map supports:
   relationship graph.
 - Dragging nodes with non-persistent layout overrides.
 - Reset layout, which clears drag overrides and focus state.
-- Fit and auto-fit viewport controls.
+- Zoom in, zoom out, reset zoom, fit, and auto-fit viewport controls.
 - Mouse wheel panning by default, with modifier-wheel zoom.
 - Search by kind, namespace, or name.
 - Connection hover highlighting and tooltips.
 - Node context menus through the centralized object action controller.
-- Cmd-click on macOS, or Ctrl-click elsewhere, to open the object panel.
-- Alt-click to open the object's primary view.
+- Cmd-click on macOS, or Ctrl-click elsewhere, to open object details.
+- Shift-click to open a new map for the object.
+- Alt-click to open the object's primary table view.
 
 Drag positions are intentionally not persisted. Reset returns the graph to the
 computed default layout.
+
+Object context menus should stay consistent across map and table surfaces. The
+default object menu is:
+
+| Action | Shortcut | Notes |
+| --- | --- | --- |
+| View Details | Cmd-click on macOS, Ctrl-click elsewhere | Opens the object panel. |
+| View Map | Shift-click | Opens a map for the object. |
+| Go to Table | Alt-click | Omitted when the object already lives in a table view. |
+
+Do not put shortcut help in the map legend. The legend explains relationship
+types and object/link counts only.
+
+## Debugging
+
+Press `Ctrl+Alt+M` to open the map debug overlay. The overlay uses
+`frontend/src/ui/layout/DebugOverlay.tsx` and the object-map debug store in
+`frontend/src/modules/object-map/objectMapDebugStore.ts`.
+
+The debug overlay reports:
+
+- Map id, cluster, seed reference, and resolved seed node id.
+- Focus mode, auto-fit, active node, and viewport preservation anchor.
+- Payload, layout, visible layout, and rendered object/link counts.
+- Renderer readiness, zoom, viewport position, and viewport size.
+- Kind filters, relationship filters, search state, layout bounds, and backend
+  snapshot limits.
+
+When the map debug overlay is open, the renderer also draws an x/y grid over the
+map. The grid is computed with G6's own `getCanvasByViewport` and
+`getViewportByCanvas` conversions, so the orange axes mark the current graph
+coordinate origin in viewport space. Use this grid to diagnose whether a
+problem is a viewport transform, a layout-coordinate shift, or both.
+
+Important debug distinctions:
+
+- `payload` counts are the raw backend snapshot counts.
+- `layout` counts are after frontend dedupe, directional filtering, collapse,
+  and layout preparation.
+- `visible` counts are after relationship filters, kind filters, and focus mode.
+- `rendered` counts are what G6 currently received.
+
+Those counts are allowed to differ. For example, namespace payloads can include
+objects that frontend directional filtering or collapse removes before
+rendering, and kind filtering can replace hidden paths with a synthetic
+`filtered-path` edge.
 
 ## Refresh Behavior
 
@@ -289,5 +371,6 @@ panel map/action tests. These tests cover layout, collapse behavior, edge
 dedupe, directional filtering, selection, toolbar behavior, context menus, and
 renderer data conversion.
 
-Run `mage qc:prerelease` before presenting code changes as complete.
-Documentation-only changes can skip prerelease under the repository rules.
+Run `mage qc:prerelease` and `mage qc:knip` before presenting code changes as
+complete. Documentation-only changes can skip those checks under the repository
+rules.
