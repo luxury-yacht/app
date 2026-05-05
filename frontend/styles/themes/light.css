@@ -228,6 +228,10 @@
   --log-tooltip-border: var(--tooltip-border);
   --log-tooltip-shadow: var(--tooltip-shadow);
   --log-fallback-retry-hover-bg: rgba(245, 158, 11, 0.15);
+  --log-level-debug: #7c3aed;
+  --log-level-info: var(--color-text-secondary);
+  --log-level-warn: var(--color-warning);
+  --log-level-error: var(--color-error);
 
   /* Log pod colors - Darker variants for light backgrounds */
   /* Hash-based color palette — slots map to the same hue families as the

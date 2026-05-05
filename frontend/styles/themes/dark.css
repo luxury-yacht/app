@@ -234,6 +234,10 @@
   --log-tooltip-border: var(--tooltip-border);
   --log-tooltip-shadow: var(--tooltip-shadow);
   --log-fallback-retry-hover-bg: rgba(245, 158, 11, 0.2);
+  --log-level-debug: #a34dff;
+  --log-level-info: var(--color-text-secondary);
+  --log-level-warn: #ffb84d;
+  --log-level-error: #ff5555;
 
   /* Hash-based color palette — used by both pod-log row colors and kind
      badges. A deterministic hash of the source string (pod name / kind name)

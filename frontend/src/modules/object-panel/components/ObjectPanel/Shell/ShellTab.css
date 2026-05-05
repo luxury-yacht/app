@@ -158,7 +158,6 @@
 .shell-tab__terminal .xterm-viewport {
   background-color: transparent;
   scrollbar-width: none;
-  -ms-overflow-style: none;
 }
 
 .shell-tab__terminal .xterm-viewport::-webkit-scrollbar {

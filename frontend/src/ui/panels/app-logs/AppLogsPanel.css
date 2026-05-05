@@ -152,19 +152,19 @@
 }
 
 .log-level.DEBUG {
-  color: #a34dff;
+  color: var(--log-level-debug);
 }
 
 .log-level.INFO {
-  color: #888;
+  color: var(--log-level-info);
 }
 
 .log-level.WARN {
-  color: #ffb84d;
+  color: var(--log-level-warn);
 }
 
 .log-level.ERROR {
-  color: #ff5555;
+  color: var(--log-level-error);
 }
 
 .log-source {
