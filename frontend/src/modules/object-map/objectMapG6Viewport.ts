@@ -13,6 +13,7 @@ export interface ObjectMapG6ViewportGraph {
   fitView: (options: { when: 'always'; direction: 'both' }, animation: boolean) => Promise<void>;
   getSize: () => [number, number];
   zoomBy: (ratio: number, animation: boolean, origin?: [number, number]) => Promise<void>;
+  zoomTo: (zoom: number, animation: boolean, origin?: [number, number]) => Promise<void>;
 }
 
 export const isObjectMapMacPlatform = (platform?: string): boolean => {
@@ -55,4 +56,10 @@ export const fitObjectMapG6GraphToView = async (
   if (zoomRatio < 1) {
     await graph.zoomBy(zoomRatio, false);
   }
+};
+
+export const resetObjectMapG6GraphZoom = async (graph: ObjectMapG6ViewportGraph): Promise<void> => {
+  if (graph.destroyed) return;
+  const [width, height] = graph.getSize();
+  await graph.zoomTo(1, false, [width / 2, height / 2]);
 };

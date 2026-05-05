@@ -21,6 +21,7 @@ import type { ObjectMapSelectionState } from './objectMapRendererTypes';
 
 export interface ObjectMapVisibleStateInput {
   layout: ObjectMapLayout;
+  seedNodeId: string;
   activeNodeId: string | null;
   focusMode: boolean;
   selectedKinds: string[];
@@ -106,12 +107,12 @@ const applyKindFilter = ({
   layout,
   selectedKindSet,
   enabledEdgeTypes,
-  activeNodeId,
+  seedNodeId,
 }: {
   layout: ObjectMapLayout;
   selectedKindSet: Set<string>;
   enabledEdgeTypes: Set<string> | null;
-  activeNodeId: string | null;
+  seedNodeId: string;
 }): ObjectMapLayout => {
   if (selectedKindSet.size === 0) return layout;
 
@@ -130,8 +131,8 @@ const applyKindFilter = ({
   return computeObjectMapLayout(
     contracted.nodes,
     edges,
-    contracted.nodes.some((node) => node.id === activeNodeId)
-      ? activeNodeId!
+    contracted.nodes.some((node) => node.id === seedNodeId)
+      ? seedNodeId
       : (contracted.nodes[0]?.id ?? '')
   );
 };
@@ -176,6 +177,7 @@ const computeSearchMatches = (
 
 export const deriveObjectMapVisibleState = ({
   layout,
+  seedNodeId,
   activeNodeId,
   focusMode,
   selectedKinds,
@@ -194,7 +196,7 @@ export const deriveObjectMapVisibleState = ({
     layout: edgeFilteredLayout,
     selectedKindSet,
     enabledEdgeTypes,
-    activeNodeId,
+    seedNodeId,
   });
   const visibleLayout = applyFocusMode(kindFilteredLayout, focusMode, activeNodeId);
   const visibleSelectionState = computeObjectMapSelectionState(visibleLayout.edges, activeNodeId);

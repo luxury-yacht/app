@@ -122,6 +122,7 @@ vi.mock('./ObjectMapG6Renderer', () => {
     }) => void;
     onCanvasContextMenu?: (request: { position: { x: number; y: number } }) => void;
     onViewportControlsChange?: (controls: ObjectMapViewportControls | null) => void;
+    preserveViewportNodeId?: string | null;
     useShortResourceNames?: boolean;
   }) => {
     const firstNode = props.layout.nodes[0];
@@ -130,6 +131,7 @@ vi.mock('./ObjectMapG6Renderer', () => {
       <div
         data-testid="object-map-g6-mock"
         data-auto-fit={String(props.autoFit)}
+        data-preserve-viewport-node-id={props.preserveViewportNodeId ?? ''}
         data-short-names={String(props.useShortResourceNames)}
       >
         <button type="button" data-testid="mock-clear-selection" onClick={props.onClearSelection}>
@@ -149,6 +151,7 @@ vi.mock('./ObjectMapG6Renderer', () => {
             props.onViewportControlsChange?.({
               zoomOut: vi.fn(),
               zoomIn: vi.fn(),
+              resetZoom: vi.fn(),
               fitToView: vi.fn(),
               focusNode: vi.fn(),
             })
@@ -731,6 +734,10 @@ describe('ObjectMap', () => {
     expect(
       container.querySelector<HTMLElement>('[data-testid="object-map-g6-mock"]')?.dataset.autoFit
     ).toBe('false');
+    expect(
+      container.querySelector<HTMLElement>('[data-testid="object-map-g6-mock"]')?.dataset
+        .preserveViewportNodeId
+    ).toBe('deploy');
     expect(autoFitToggle?.getAttribute('aria-pressed')).toBe('false');
 
     cleanup();
@@ -1123,13 +1130,14 @@ describe('ObjectMap', () => {
     const menu = container.querySelector<HTMLElement>('[data-testid="mock-context-menu"]');
     expect(menu?.textContent).toContain('Zoom out');
     expect(menu?.textContent).toContain('Zoom in');
+    expect(menu?.textContent).toContain('Reset zoom');
     expect(menu?.textContent).toContain('Fit');
     expect(menu?.textContent).toContain('Auto-fit off');
     expect(menu?.textContent).toContain('Focus on');
     expect(menu?.textContent).toContain('Reset layout');
     expect(menu?.textContent).toContain('Refresh');
     expect(menu?.textContent).toContain('Hide legend');
-    expect(container.querySelectorAll('[data-testid="mock-context-menu-icon"]')).toHaveLength(8);
+    expect(container.querySelectorAll('[data-testid="mock-context-menu-icon"]')).toHaveLength(9);
 
     const autoFitItem = Array.from(menu!.querySelectorAll('button')).find(
       (button) => button.textContent === 'Auto-fit off'

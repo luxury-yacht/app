@@ -34,6 +34,7 @@ import {
   LegendIcon,
   RefreshIcon,
   ResetFiltersIcon,
+  ResetZoomIcon,
   ZoomInIcon,
   ZoomOutIcon,
 } from '@shared/components/icons/MenuIcons';
@@ -94,6 +95,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
     () =>
       deriveObjectMapVisibleState({
         layout: model.layout,
+        seedNodeId: model.seedId,
         activeNodeId: model.activeNodeId,
         focusMode,
         selectedKinds,
@@ -106,6 +108,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
       focusMode,
       model.activeNodeId,
       model.layout,
+      model.seedId,
       searchQuery,
       selectedKinds,
       useShortResourceNames,
@@ -211,6 +214,17 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
   const refreshLabel = isRefreshing ? 'Refreshing' : 'Refresh';
 
   const viewportControlsReady = Boolean(g6ViewportControls);
+  const visibleNodeIds = useMemo(
+    () => new Set(visibleState.visibleLayout.nodes.map((node) => node.id)),
+    [visibleState.visibleLayout.nodes]
+  );
+  const selectedViewportNodeId =
+    model.activeNodeId && visibleNodeIds.has(model.activeNodeId) ? model.activeNodeId : null;
+  const seedViewportNodeId = visibleNodeIds.has(model.seedId) ? model.seedId : null;
+  const fallbackViewportNodeId = visibleState.visibleLayout.nodes[0]?.id ?? null;
+  const preserveViewportNodeId = model.autoFit
+    ? null
+    : (selectedViewportNodeId ?? seedViewportNodeId ?? fallbackViewportNodeId);
   const contextMenuObject = contextMenu?.type === 'object' ? contextMenu.request.ref : null;
   const objectActions = useObjectActionController({
     context: 'object-map',
@@ -236,6 +250,13 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
         onClick: g6ViewportControls?.zoomIn,
         disabled: !viewportControlsReady,
       },
+      {
+        label: 'Reset zoom',
+        icon: <ResetZoomIcon />,
+        onClick: g6ViewportControls?.resetZoom,
+        disabled: !viewportControlsReady,
+      },
+      { divider: true },
       {
         label: 'Fit',
         icon: <FitToViewIcon />,
@@ -382,6 +403,17 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
       <button
         type="button"
         className="object-map__toolbar-button"
+        onClick={g6ViewportControls?.resetZoom}
+        title="Reset zoom to 100%"
+        aria-label="Reset zoom"
+        disabled={!viewportControlsReady}
+      >
+        <ResetZoomIcon />
+      </button>
+      <span className="object-map__toolbar-separator" aria-hidden="true" />
+      <button
+        type="button"
+        className="object-map__toolbar-button"
         onClick={g6ViewportControls?.fitToView}
         title="Fit visible objects into the viewport"
         aria-label="Fit"
@@ -492,7 +524,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
             onNodeContextMenu={handleNodeContextMenu}
             onCanvasContextMenu={handleCanvasContextMenu}
             autoFit={model.autoFit}
-            preserveViewportNodeId={!model.autoFit && focusMode ? model.activeNodeId : null}
+            preserveViewportNodeId={preserveViewportNodeId}
             onUserViewportChange={disableAutoFitForManualViewport}
             onViewportControlsChange={setG6ViewportControls}
           />

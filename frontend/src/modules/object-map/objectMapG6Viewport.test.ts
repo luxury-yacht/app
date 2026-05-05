@@ -10,6 +10,7 @@ import {
   isObjectMapMacPlatform,
   isObjectMapZoomWheelEvent,
   objectMapWheelZoomRatio,
+  resetObjectMapG6GraphZoom,
   type ObjectMapG6ViewportGraph,
 } from './objectMapG6Viewport';
 
@@ -18,6 +19,7 @@ const graph = (overrides: Partial<ObjectMapG6ViewportGraph> = {}): ObjectMapG6Vi
   fitView: vi.fn(async () => undefined),
   getSize: vi.fn((): [number, number] => [100, 80]),
   zoomBy: vi.fn(async () => undefined),
+  zoomTo: vi.fn(async () => undefined),
   ...overrides,
 });
 
@@ -65,5 +67,13 @@ describe('objectMapG6Viewport', () => {
     await fitObjectMapG6GraphToView(target, 10);
 
     expect(target.fitView).not.toHaveBeenCalled();
+  });
+
+  it('resets zoom around the visible canvas center', async () => {
+    const target = graph({ getSize: vi.fn((): [number, number] => [320, 180]) });
+
+    await resetObjectMapG6GraphZoom(target);
+
+    expect(target.zoomTo).toHaveBeenCalledWith(1, false, [160, 90]);
   });
 });

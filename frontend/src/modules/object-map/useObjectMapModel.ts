@@ -255,6 +255,7 @@ export const useObjectMapModel = (payload: ObjectMapSnapshotPayload) => {
 
   return {
     layout,
+    seedId,
     badgeForNode,
     autoFit,
     setAutoFit,

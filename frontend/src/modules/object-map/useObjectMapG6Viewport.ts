@@ -9,7 +9,7 @@ import type { Graph, GraphData } from '@antv/g6';
 import { useCallback, useEffect } from 'react';
 import type { MutableRefObject, RefObject } from 'react';
 import type { ObjectMapG6Palette } from './objectMapG6Data';
-import { fitObjectMapG6GraphToView } from './objectMapG6Viewport';
+import { fitObjectMapG6GraphToView, resetObjectMapG6GraphZoom } from './objectMapG6Viewport';
 import type {
   ObjectMapViewportChangeAction,
   ObjectMapViewportControls,
@@ -106,6 +106,18 @@ export const useObjectMapG6Viewport = ({
         onUserViewportChangeRef.current?.();
         void graph.zoomBy(0.8, false);
       },
+      resetZoom: () => {
+        const graph = graphRef.current;
+        if (!graph || graph.destroyed) return;
+        onUserViewportChangeRef.current?.();
+        void resetObjectMapG6GraphZoom(graph)
+          .then(updateTooltipPosition)
+          .catch((error: unknown) => {
+            if (graphRef.current === graph && !graph.destroyed) {
+              console.error('[ObjectMapG6Renderer] Failed to reset zoom:', error);
+            }
+          });
+      },
       fitToView: () => {
         scheduleFitGraphToView();
       },
@@ -127,6 +139,7 @@ export const useObjectMapG6Viewport = ({
     onUserViewportChangeRef,
     onViewportControlsChange,
     scheduleFitGraphToView,
+    updateTooltipPosition,
   ]);
 
   useEffect(() => {

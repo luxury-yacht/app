@@ -71,6 +71,7 @@ export type ObjectMapCanvasContextMenuAction = (request: ObjectMapCanvasContextM
 export interface ObjectMapViewportControls {
   zoomIn: () => void;
   zoomOut: () => void;
+  resetZoom: () => void;
   fitToView: () => void;
   focusNode: (nodeId: string) => void;
 }

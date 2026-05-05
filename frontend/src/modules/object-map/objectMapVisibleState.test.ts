@@ -70,6 +70,7 @@ const derive = ({
 }) =>
   deriveObjectMapVisibleState({
     layout: computeObjectMapLayout(nodes, edges, seedId),
+    seedNodeId: seedId,
     activeNodeId,
     focusMode,
     selectedKinds,
@@ -117,6 +118,38 @@ describe('deriveObjectMapVisibleState', () => {
       'slice',
       'pod',
     ]);
+  });
+
+  it('keeps kind-filtered layout anchored to the map seed instead of selection', () => {
+    const nodes = [
+      node('service', 'Service', 'frontend', 0),
+      node('slice', 'EndpointSlice', 'frontend-a', 1),
+      node('pod-a', 'Pod', 'frontend-a', 2),
+      node('pod-b', 'Pod', 'frontend-b', 2),
+    ];
+    const edges = [
+      edge('service-slice', 'service', 'slice', 'endpoint'),
+      edge('slice-pod-a', 'slice', 'pod-a', 'routes'),
+      edge('slice-pod-b', 'slice', 'pod-b', 'routes'),
+    ];
+    const unselected = derive({
+      nodes,
+      edges,
+      seedId: 'service',
+      selectedKinds: ['Service', 'Pod'],
+    });
+    const selected = derive({
+      nodes,
+      edges,
+      seedId: 'service',
+      activeNodeId: 'pod-b',
+      selectedKinds: ['Service', 'Pod'],
+    });
+
+    expect(selected.visibleLayout.nodes.map((node) => [node.id, node.x, node.y])).toEqual(
+      unselected.visibleLayout.nodes.map((node) => [node.id, node.x, node.y])
+    );
+    expect(selected.visibleSelectionState.activeId).toBe('pod-b');
   });
 
   it('focuses recursively related visible objects', () => {
