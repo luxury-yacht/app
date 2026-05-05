@@ -151,6 +151,8 @@ export const isObjectMapG6BadgeEvent = (event: ObjectMapG6ElementPointerEvent): 
   return false;
 };
 
+const OBJECT_MAP_TOOLTIP_LIFT_Y = 10;
+
 export const objectMapG6TooltipPoint = (
   event: ObjectMapG6PointerInput,
   container: HTMLElement,
@@ -160,7 +162,7 @@ export const objectMapG6TooltipPoint = (
   const rect = container.getBoundingClientRect();
   return {
     x: client.x - rect.left,
-    y: client.y - rect.top + yOffset,
+    y: client.y - rect.top + yOffset - OBJECT_MAP_TOOLTIP_LIFT_Y,
   };
 };
 

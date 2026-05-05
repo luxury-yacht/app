@@ -125,7 +125,7 @@ describe('object map G6 interactions', () => {
 
     expect(objectMapG6TooltipPoint({ clientX: 80, clientY: 120 }, container, 6)).toEqual({
       x: 50,
-      y: 76,
+      y: 66,
     });
   });
 

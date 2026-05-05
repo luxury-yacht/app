@@ -153,7 +153,7 @@ describe('object map G6 event bindings', () => {
         targetLabel: 'web-abc',
         targetKind: 'Pod',
         tooltipX: 70,
-        tooltipY: 106,
+        tooltipY: 96,
       })
     );
     expect(graph.setElementState).toHaveBeenCalledWith(
