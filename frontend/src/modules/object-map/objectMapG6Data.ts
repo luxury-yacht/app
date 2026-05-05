@@ -63,6 +63,7 @@ export interface ObjectMapG6Palette {
   tooltipSourceY: number;
   tooltipRelationshipY: number;
   tooltipTargetY: number;
+  tooltipRelationshipBottomPadding: number;
   tooltipHorizontalPadding: number;
   tooltipBadgeGap: number;
   tooltipBadgeMaxWidth: number;

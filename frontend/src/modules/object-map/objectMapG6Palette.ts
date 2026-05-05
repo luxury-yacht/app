@@ -94,6 +94,10 @@ export const readObjectMapG6Palette = (element: HTMLElement): ObjectMapG6Palette
     tooltipSourceY: objectMapCssNumber(styles, '--object-map-tooltip-source-y'),
     tooltipRelationshipY: objectMapCssNumber(styles, '--object-map-tooltip-relationship-y'),
     tooltipTargetY: objectMapCssNumber(styles, '--object-map-tooltip-target-y'),
+    tooltipRelationshipBottomPadding: objectMapCssNumber(
+      styles,
+      '--object-map-tooltip-relationship-bottom-padding'
+    ),
     tooltipHorizontalPadding: objectMapCssNumber(styles, '--object-map-tooltip-horizontal-padding'),
     tooltipBadgeGap: objectMapCssNumber(styles, '--object-map-tooltip-badge-gap'),
     tooltipBadgeMaxWidth: objectMapCssNumber(styles, '--object-map-tooltip-badge-max-width'),

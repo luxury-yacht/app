@@ -93,6 +93,7 @@ export interface ObjectMapTooltipLayout {
   firstRowOffset: number;
   height: number;
   rowGap: number;
+  rowOffsets: number[];
   rows: ObjectMapTooltipRow[];
   width: number;
 }
@@ -237,16 +238,26 @@ export const computeObjectMapTooltipLayout = ({
     if (row.type === 'object') return Math.max(max, row.endpoint.groupWidth);
     return Math.max(max, objectMapTooltipTextWidth(row.text, relationshipFont));
   }, 0);
+  const rowOffsets = rows.reduce<number[]>((offsets, _row, index) => {
+    const previousOffset = offsets[index - 1] ?? firstRowOffset;
+    const offset =
+      index === 0
+        ? firstRowOffset
+        : previousOffset +
+          rowGap +
+          (rows[index - 1]?.type === 'relationship' ? palette.tooltipRelationshipBottomPadding : 0);
+    offsets.push(offset);
+    return offsets;
+  }, []);
+  const lastRowOffset = rowOffsets[rowOffsets.length - 1] ?? firstRowOffset;
   const width = Math.ceil(widestRow) + palette.tooltipHorizontalPadding * 2;
-  const height = Math.max(
-    palette.tooltipHeight,
-    firstRowOffset + rowGap * Math.max(0, rows.length - 1) + defaultBottomPadding
-  );
+  const height = Math.max(palette.tooltipHeight, lastRowOffset + defaultBottomPadding);
 
   return {
     firstRowOffset,
     height,
     rowGap,
+    rowOffsets,
     rows,
     width,
   };

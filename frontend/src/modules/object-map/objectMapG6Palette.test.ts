@@ -61,6 +61,7 @@ const numberVars = [
   '--object-map-tooltip-source-y',
   '--object-map-tooltip-relationship-y',
   '--object-map-tooltip-target-y',
+  '--object-map-tooltip-relationship-bottom-padding',
   '--object-map-tooltip-horizontal-padding',
   '--object-map-tooltip-badge-gap',
   '--object-map-tooltip-badge-max-width',
@@ -102,9 +103,10 @@ describe('objectMapG6Palette', () => {
     expect(palette.nodeDimmedBackgroundOpacity).toBe(10);
     expect(palette.nodeDimmedForegroundOpacity).toBe(11);
     expect(palette.tooltipMaxWidth).toBe(12);
-    expect(palette.tooltipRelationshipFontWeight).toBe(30);
-    expect(palette.fitViewPadding).toBe(31);
-    expect(palette.fullOpacity).toBe(32);
+    expect(palette.tooltipRelationshipBottomPadding).toBe(21);
+    expect(palette.tooltipRelationshipFontWeight).toBe(31);
+    expect(palette.fitViewPadding).toBe(32);
+    expect(palette.fullOpacity).toBe(33);
     expect(palette.fontFamily).toContain('Inter');
 
     element.remove();

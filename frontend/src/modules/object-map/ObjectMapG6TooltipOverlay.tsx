@@ -93,7 +93,10 @@ export const ObjectMapG6TooltipOverlay: React.FC<ObjectMapG6TooltipOverlayProps>
         ry={palette.tooltipRadius}
       />
       {tooltipLayout.rows.map((row, index) => {
-        const y = tooltipTop + tooltipLayout.firstRowOffset + tooltipLayout.rowGap * index;
+        const y =
+          tooltipTop +
+          (tooltipLayout.rowOffsets?.[index] ??
+            tooltipLayout.firstRowOffset + tooltipLayout.rowGap * index);
         if (row.type === 'object') {
           return (
             <React.Fragment key={`object-${index}`}>

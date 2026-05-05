@@ -27,6 +27,7 @@
   --object-map-tooltip-source-y: -56;
   --object-map-tooltip-relationship-y: -40;
   --object-map-tooltip-target-y: -24;
+  --object-map-tooltip-relationship-bottom-padding: 2;
   --object-map-tooltip-horizontal-padding: 12;
   --object-map-tooltip-badge-gap: 6;
   --object-map-tooltip-badge-max-width: 190;

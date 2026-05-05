@@ -118,6 +118,7 @@ const palette: ObjectMapG6Palette = {
   tooltipSourceY: -56,
   tooltipRelationshipY: -40,
   tooltipTargetY: -24,
+  tooltipRelationshipBottomPadding: 2,
   tooltipHorizontalPadding: 12,
   tooltipBadgeGap: 6,
   tooltipBadgeMaxWidth: 118,

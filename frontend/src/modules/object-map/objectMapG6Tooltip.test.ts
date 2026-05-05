@@ -54,6 +54,7 @@ const palette: ObjectMapG6Palette = {
   tooltipSourceY: 10,
   tooltipRelationshipY: 28,
   tooltipTargetY: 46,
+  tooltipRelationshipBottomPadding: 2,
   tooltipHorizontalPadding: 10,
   tooltipBadgeGap: 6,
   tooltipBadgeMaxWidth: 86,
@@ -140,6 +141,9 @@ describe('computeObjectMapTooltipLayout', () => {
       type: 'object',
       endpoint: { badgeText: 'POD', text: 'frontend-a', filtered: false },
     });
+    expect(layout.rowOffsets[2] - layout.rowOffsets[1]).toBe(
+      layout.rowGap + palette.tooltipRelationshipBottomPadding
+    );
   });
 
   it('marks filtered path object names as filtered without changing badge text', () => {
