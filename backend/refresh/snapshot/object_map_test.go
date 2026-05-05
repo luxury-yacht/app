@@ -42,6 +42,9 @@ func TestObjectMapBuildsRecursiveCoreRelationships(t *testing.T) {
 	if got := nodeByKindName(t, payload, "Deployment", "web").CreationTimestamp; got != "2024-01-02T03:04:05Z" {
 		t.Fatalf("unexpected creation timestamp for deployment node: %q", got)
 	}
+	if status := nodeByKindName(t, payload, "Deployment", "web").Status; status == nil || status.State != "healthy" || status.Label != "2/2 ready" {
+		t.Fatalf("unexpected deployment status: %#v", status)
+	}
 
 	assertEdge(t, payload, "Deployment", "web", "ReplicaSet", "web-rs", "owner")
 	assertEdge(t, payload, "ReplicaSet", "web-rs", "Pod", "web-pod", "owner")
@@ -417,6 +420,7 @@ func objectMapFixtureObjects() []runtime.Object {
 			)),
 		},
 		Spec: appsv1.DeploymentSpec{
+			Replicas: int32Ptr(2),
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					ServiceAccountName: "builder",
@@ -426,6 +430,9 @@ func objectMapFixtureObjects() []runtime.Object {
 					},
 				},
 			},
+		},
+		Status: appsv1.DeploymentStatus{
+			ReadyReplicas: 2,
 		},
 	}
 	rs := &appsv1.ReplicaSet{

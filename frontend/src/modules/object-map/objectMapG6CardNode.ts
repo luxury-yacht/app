@@ -5,8 +5,14 @@
  * object names, namespaces, and collapse/expand badges.
  */
 
-import { Rect as GRect, Text as GText } from '@antv/g';
-import type { DisplayObjectConfig, Group, RectStyleProps, TextStyleProps } from '@antv/g';
+import { Circle as GCircle, Rect as GRect, Text as GText } from '@antv/g';
+import type {
+  CircleStyleProps,
+  DisplayObjectConfig,
+  Group,
+  RectStyleProps,
+  TextStyleProps,
+} from '@antv/g';
 import { BaseNode, ExtensionCategory, register } from '@antv/g6';
 import type { BaseNodeStyleProps } from '@antv/g6';
 import { OBJECT_MAP_CARD_STYLE } from './objectMapCardStyle';
@@ -55,6 +61,10 @@ interface ObjectMapG6CardNodeStyleProps extends BaseNodeStyleProps {
   cardNameText?: string;
   cardNamespaceText?: string;
   cardAgeText?: string;
+  cardStatusText?: string;
+  cardStatusReason?: string;
+  cardStatusFill?: string;
+  cardStatusStroke?: string;
   cardFontFamily?: string;
   cardNameFill?: string;
   cardNamespaceFill?: string;
@@ -265,6 +275,33 @@ class ObjectMapG6CardNode extends BaseNode<ObjectMapG6CardNodeStyleProps> {
     };
   }
 
+  private getStatusDotStyle(
+    attributes: Required<ObjectMapG6CardNodeStyleProps>
+  ): CircleStyleProps | false {
+    if (!attributes.cardStatusFill) return false;
+    const [cardWidth, cardHeight] = this.getSize(attributes);
+    const radius = OBJECT_MAP_CARD_STYLE.statusDotSize / 2;
+    const x = cardWidth / 2 - OBJECT_MAP_CARD_STYLE.statusDotRightInset - radius;
+    const y = -cardHeight / 2 + OBJECT_MAP_CARD_STYLE.statusDotCenterY;
+    return {
+      cx: x,
+      cy: y,
+      r: radius,
+      fill: attributes.cardStatusFill,
+      stroke: attributes.cardStatusStroke,
+      lineWidth: 1.5,
+      fillOpacity: this.getForegroundOpacity(attributes),
+      strokeOpacity: this.getBackgroundOpacity(attributes),
+    };
+  }
+
+  private drawStatusDot(
+    attributes: Required<ObjectMapG6CardNodeStyleProps>,
+    container: Group
+  ): void {
+    this.upsert('card-status-dot', GCircle, this.getStatusDotStyle(attributes), container);
+  }
+
   private drawCollapseBadge(
     attributes: Required<ObjectMapG6CardNodeStyleProps>,
     container: Group
@@ -321,6 +358,7 @@ class ObjectMapG6CardNode extends BaseNode<ObjectMapG6CardNodeStyleProps> {
     const baselines = this.getCardTextBaselines(attributes);
     this.drawKindBadge(attributes, container);
     this.drawCollapseBadge(attributes, container);
+    this.drawStatusDot(attributes, container);
     this.upsert(
       'card-name',
       GText,

@@ -77,6 +77,8 @@ const layout: ObjectMapLayout = {
   bounds: { minX: -320, minY: 20, maxX: 540, maxY: 84 },
 };
 
+layout.nodes[0].status = { state: 'healthy', label: '2/2 ready' };
+
 const palette: ObjectMapG6Palette = {
   accent: '#2563eb',
   accentBg: '#dbeafe',
@@ -87,6 +89,11 @@ const palette: ObjectMapG6Palette = {
   textSecondary: '#64748b',
   textTertiary: '#9ca3af',
   textInverse: '#ffffff',
+  statusHealthy: '#22c55e',
+  statusRefreshing: '#16a34a',
+  statusDegraded: '#f59e0b',
+  statusUnhealthy: '#ef4444',
+  statusInactive: '#94a3b8',
   edgeOwner: '#0f766e',
   edgeRoutes: '#1d4ed8',
   edgeSelector: '#4f46e5',
@@ -202,6 +209,7 @@ describe('objectMapG6Data', () => {
         nameLabel: 'web',
         namespaceLabel: 'default',
         ageLabel: formatAge('2024-01-01T00:00:00Z'),
+        status: { state: 'healthy', label: '2/2 ready' },
       })
     );
     expect(deploy?.style).toEqual(
@@ -222,6 +230,9 @@ describe('objectMapG6Data', () => {
         cardNamespaceText: 'default',
         cardAgeText: formatAge('2024-01-01T00:00:00Z'),
         cardAgeFill: '#64748b',
+        cardStatusText: '2/2 ready',
+        cardStatusFill: '#22c55e',
+        cardStatusStroke: '#f8fafc',
       })
     );
     expect(deploy?.style?.badges).toBeUndefined();

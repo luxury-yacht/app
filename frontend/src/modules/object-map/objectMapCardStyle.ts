@@ -28,4 +28,7 @@ export const OBJECT_MAP_CARD_STYLE = {
   collapseBadgeRadius: 3,
   collapseBadgeRightInset: 8,
   collapseBadgeTopInset: 8,
+  statusDotSize: 8.5,
+  statusDotRightInset: 6,
+  statusDotCenterY: 10,
 } as const;

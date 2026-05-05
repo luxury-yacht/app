@@ -46,6 +46,7 @@ const toLayoutNodeInput = (node: PositionedNode): ObjectMapNode => ({
   depth: Math.abs(node.column),
   ref: node.ref,
   creationTimestamp: node.creationTimestamp,
+  status: node.status,
 });
 
 const toLayoutEdgeInput = (
