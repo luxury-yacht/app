@@ -239,11 +239,12 @@ type objectMapRecord struct {
 }
 
 type objectMapIndex struct {
-	meta     ClusterMeta
-	records  map[string]*objectMapRecord
-	byUID    map[string]*objectMapRecord
-	byIdent  map[string]*objectMapRecord
-	warnings []string
+	meta       ClusterMeta
+	records    map[string]*objectMapRecord
+	byUID      map[string]*objectMapRecord
+	byIdent    map[string]*objectMapRecord
+	warnings   []string
+	listErrors []string
 }
 
 type objectMapGraph struct {
@@ -297,6 +298,9 @@ func (b *objectMapBuilder) Build(ctx context.Context, scope string) (*refresh.Sn
 	index := newObjectMapIndex(meta)
 	index.addCatalog(b.catalog())
 	index.collectTyped(ctx, b.client)
+	if err := index.listError(); err != nil {
+		return nil, err
+	}
 
 	seed, ok := index.findIdentity(opts.identity.Namespace, opts.identity.GVK, opts.identity.Name)
 	if !ok {
@@ -339,6 +343,9 @@ func (b *objectMapBuilder) buildNamespace(ctx context.Context, scope string, opt
 	index := newObjectMapIndex(meta)
 	index.addCatalog(b.catalog())
 	index.collectTyped(ctx, b.client)
+	if err := index.listError(); err != nil {
+		return nil, err
+	}
 
 	graph := index.buildNamespaceGraph(opts.namespace, opts.maxNodes)
 	nodes := sortedObjectMapNodes(graph.nodes)
@@ -472,27 +479,35 @@ func (idx *objectMapIndex) collectTyped(ctx context.Context, client kubernetes.I
 	if idx == nil || client == nil {
 		return
 	}
-	idx.collectPods(ctx, client)
-	idx.collectServices(ctx, client)
-	idx.collectEndpointSlices(ctx, client)
-	idx.collectPVCs(ctx, client)
-	idx.collectPVs(ctx, client)
-	idx.collectStorageClasses(ctx, client)
-	idx.collectConfigMaps(ctx, client)
-	idx.collectSecrets(ctx, client)
-	idx.collectServiceAccounts(ctx, client)
-	idx.collectNodes(ctx, client)
-	idx.collectDeployments(ctx, client)
-	idx.collectReplicaSets(ctx, client)
-	idx.collectStatefulSets(ctx, client)
-	idx.collectDaemonSets(ctx, client)
-	idx.collectJobs(ctx, client)
-	idx.collectCronJobs(ctx, client)
-	idx.collectHPAs(ctx, client)
-	idx.collectIngresses(ctx, client)
-	idx.collectIngressClasses(ctx, client)
-	idx.collectClusterRoles(ctx, client)
-	idx.collectClusterRoleBindings(ctx, client)
+	collectors := []func(context.Context, kubernetes.Interface){
+		idx.collectPods,
+		idx.collectServices,
+		idx.collectEndpointSlices,
+		idx.collectPVCs,
+		idx.collectPVs,
+		idx.collectStorageClasses,
+		idx.collectConfigMaps,
+		idx.collectSecrets,
+		idx.collectServiceAccounts,
+		idx.collectNodes,
+		idx.collectDeployments,
+		idx.collectReplicaSets,
+		idx.collectStatefulSets,
+		idx.collectDaemonSets,
+		idx.collectJobs,
+		idx.collectCronJobs,
+		idx.collectHPAs,
+		idx.collectIngresses,
+		idx.collectIngressClasses,
+		idx.collectClusterRoles,
+		idx.collectClusterRoleBindings,
+	}
+	for _, collect := range collectors {
+		collect(ctx, client)
+		if idx.hasListError() {
+			return
+		}
+	}
 }
 
 func (idx *objectMapIndex) collectPods(ctx context.Context, client kubernetes.Interface) {
@@ -868,8 +883,19 @@ func (idx *objectMapIndex) skipListError(resource string, err error) bool {
 		idx.warnings = append(idx.warnings, fmt.Sprintf("skipped %s: %v", resource, err))
 		return true
 	}
-	idx.warnings = append(idx.warnings, fmt.Sprintf("skipped %s: %v", resource, err))
+	idx.listErrors = append(idx.listErrors, fmt.Sprintf("%s: %v", resource, err))
 	return true
+}
+
+func (idx *objectMapIndex) hasListError() bool {
+	return idx != nil && len(idx.listErrors) > 0
+}
+
+func (idx *objectMapIndex) listError() error {
+	if idx == nil || len(idx.listErrors) == 0 {
+		return nil
+	}
+	return fmt.Errorf("object-map typed resource list failed: %s", strings.Join(idx.listErrors, "; "))
 }
 
 func (idx *objectMapIndex) addRecord(record *objectMapRecord) {

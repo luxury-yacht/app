@@ -2,6 +2,8 @@ package snapshot
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,11 +15,14 @@ import (
 	networkingv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/fake"
+	k8stesting "k8s.io/client-go/testing"
 )
 
 func TestObjectMapBuildsRecursiveCoreRelationships(t *testing.T) {
@@ -237,6 +242,41 @@ func TestObjectMapEnforcesVersionedSeedScope(t *testing.T) {
 	if _, err := builder.Build(ctx, "default:Deployment:web"); err == nil {
 		t.Fatal("expected legacy kind-only scope to fail")
 	}
+}
+
+func TestObjectMapFailsOnTransientListError(t *testing.T) {
+	client := fake.NewSimpleClientset(objectMapFixtureObjects()...)
+	client.Fake.PrependReactor("list", "pods", func(k8stesting.Action) (bool, runtime.Object, error) {
+		return true, nil, apierrors.NewInternalError(fmt.Errorf("temporary pods failure"))
+	})
+	builder := &objectMapBuilder{client: client}
+	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a"})
+
+	if _, err := builder.Build(ctx, "default:apps/v1:Deployment:web"); err == nil {
+		t.Fatal("expected transient list error to fail snapshot")
+	} else if !strings.Contains(err.Error(), "pods") {
+		t.Fatalf("expected error to identify failed resource, got %v", err)
+	}
+}
+
+func TestObjectMapSkipsForbiddenListError(t *testing.T) {
+	client := fake.NewSimpleClientset(objectMapFixtureObjects()...)
+	client.Fake.PrependReactor("list", "secrets", func(k8stesting.Action) (bool, runtime.Object, error) {
+		return true, nil, apierrors.NewForbidden(schema.GroupResource{Resource: "secrets"}, "", fmt.Errorf("denied"))
+	})
+	builder := &objectMapBuilder{client: client}
+	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a"})
+
+	snap, err := builder.Build(ctx, "default:apps/v1:Deployment:web?maxDepth=5&maxNodes=100")
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+	payload := snap.Payload.(ObjectMapSnapshotPayload)
+	if len(payload.Warnings) == 0 || !strings.Contains(payload.Warnings[0], "secrets") {
+		t.Fatalf("expected warning for skipped secrets, got %#v", payload.Warnings)
+	}
+	assertNode(t, payload, "Deployment", "web")
+	assertMissingNode(t, payload, "Secret", "app-secret")
 }
 
 func TestObjectMapAppliesNodeCap(t *testing.T) {
