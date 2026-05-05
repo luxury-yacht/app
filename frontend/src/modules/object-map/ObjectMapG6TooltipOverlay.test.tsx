@@ -105,7 +105,7 @@ const tooltipLayout: ObjectMapTooltipLayout = {
         text: 'frontend',
       },
     },
-    { type: 'relationship', text: 'has endpoints' },
+    { type: 'relationship', edgeType: 'endpoint', text: 'has endpoints' },
     {
       type: 'object',
       endpoint: {
@@ -140,6 +140,7 @@ describe('ObjectMapG6TooltipOverlay', () => {
     expect(html).toContain('class="object-map__edge-tooltip-bg"');
     expect(html).toContain('SERVICE');
     expect(html).toContain('has endpoints');
+    expect(html).toContain('fill="#34d399"');
     expect(html).toContain('frontend-a');
     expect(html).toContain('font-style="italic"');
   });

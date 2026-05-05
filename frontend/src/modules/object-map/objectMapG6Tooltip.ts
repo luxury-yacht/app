@@ -87,7 +87,7 @@ export interface ObjectMapTooltipEndpoint {
 
 export type ObjectMapTooltipRow =
   | { type: 'object'; endpoint: ObjectMapTooltipEndpoint }
-  | { type: 'relationship'; text: string };
+  | { type: 'relationship'; edgeType: string; text: string };
 
 export interface ObjectMapTooltipLayout {
   firstRowOffset: number;
@@ -188,8 +188,11 @@ export const computeObjectMapTooltipLayout = ({
     };
   };
 
-  const relationshipRow = (text: string) =>
-    truncateObjectMapTooltipText(text, maxContentWidth, relationshipFont);
+  const relationshipRow = (text: string, edgeType: string): ObjectMapTooltipRow => ({
+    type: 'relationship',
+    edgeType,
+    text: truncateObjectMapTooltipText(text, maxContentWidth, relationshipFont),
+  });
   const defaultTop = -palette.tooltipOffsetY - palette.tooltipHeight - palette.tooltipArrowHeight;
   const firstRowOffset = palette.tooltipSourceY - defaultTop;
   const rowGap = Math.max(1, palette.tooltipRelationshipY - palette.tooltipSourceY);
@@ -202,32 +205,31 @@ export const computeObjectMapTooltipLayout = ({
     pathNodes.forEach((node, index) => {
       rows.push({ type: 'object', endpoint: endpointFromRef(node.ref, node.filtered, endpoint) });
       if (index < pathNodes.length - 1) {
-        rows.push({
-          type: 'relationship',
-          text: relationshipRow(filteredPath.relationships[index]?.label ?? ''),
-        });
+        const relationship = filteredPath.relationships[index];
+        rows.push(relationshipRow(relationship?.label ?? '', relationship?.type ?? hoverEdge.type));
       }
     });
     const hiddenStepCount = Math.max(0, filteredPath.nodes.length - pathNodes.length);
     if (hiddenStepCount > 0) {
-      rows.push({
-        type: 'relationship',
-        text: relationshipRow(`+${hiddenStepCount} hidden step${hiddenStepCount === 1 ? '' : 's'}`),
-      });
+      rows.push(
+        relationshipRow(
+          `+${hiddenStepCount} hidden step${hiddenStepCount === 1 ? '' : 's'}`,
+          hoverEdge.type
+        )
+      );
     }
     if (filteredPath.additionalPathCount > 0) {
       const count = filteredPath.additionalPathCount;
-      rows.push({
-        type: 'relationship',
-        text: relationshipRow(`+${count} more hidden path${count === 1 ? '' : 's'}`),
-      });
+      rows.push(
+        relationshipRow(`+${count} more hidden path${count === 1 ? '' : 's'}`, hoverEdge.type)
+      );
     }
   } else {
     rows.push({
       type: 'object',
       endpoint: endpoint(hoverEdge.sourceLabel, hoverEdge.sourceKind),
     });
-    rows.push({ type: 'relationship', text: relationshipRow(hoverEdge.label) });
+    rows.push(relationshipRow(hoverEdge.label, hoverEdge.type));
     rows.push({
       type: 'object',
       endpoint: endpoint(hoverEdge.targetLabel, hoverEdge.targetKind),

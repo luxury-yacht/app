@@ -5,7 +5,7 @@
  */
 
 import React from 'react';
-import type { ObjectMapG6Palette } from './objectMapG6Data';
+import { objectMapG6EdgeStroke, type ObjectMapG6Palette } from './objectMapG6Data';
 import type { ObjectMapTooltipEndpoint, ObjectMapTooltipLayout } from './objectMapG6Tooltip';
 
 export interface ObjectMapG6TooltipOverlayProps {
@@ -116,6 +116,7 @@ export const ObjectMapG6TooltipOverlay: React.FC<ObjectMapG6TooltipOverlayProps>
             x={0}
             y={y}
             textAnchor="middle"
+            fill={objectMapG6EdgeStroke(row.edgeType, palette)}
           >
             {row.text}
           </text>

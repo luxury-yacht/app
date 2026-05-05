@@ -136,7 +136,11 @@ describe('computeObjectMapTooltipLayout', () => {
       type: 'object',
       endpoint: { badgeText: 'SERVICE', text: 'frontend', filtered: false },
     });
-    expect(layout.rows[1]).toEqual({ type: 'relationship', text: 'has endpoints' });
+    expect(layout.rows[1]).toEqual({
+      type: 'relationship',
+      edgeType: 'endpoint',
+      text: 'has endpoints',
+    });
     expect(layout.rows[2]).toMatchObject({
       type: 'object',
       endpoint: { badgeText: 'POD', text: 'frontend-a', filtered: false },
@@ -199,8 +203,16 @@ describe('computeObjectMapTooltipLayout', () => {
       resolveKindBadgeStyle: () => badgeStyle,
     });
 
-    expect(layout.rows).toContainEqual({ type: 'relationship', text: '+2 hidden steps' });
-    expect(layout.rows).toContainEqual({ type: 'relationship', text: '+2 more hidden paths' });
+    expect(layout.rows).toContainEqual({
+      type: 'relationship',
+      edgeType: 'endpoint',
+      text: '+2 hidden steps',
+    });
+    expect(layout.rows).toContainEqual({
+      type: 'relationship',
+      edgeType: 'endpoint',
+      text: '+2 more hidden paths',
+    });
   });
 
   it('truncates endpoint names and badges by max width only', () => {
