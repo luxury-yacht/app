@@ -239,7 +239,6 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
                         </p>
                       </>
                     }
-                    variant="dark"
                   />
                 )}
               </span>

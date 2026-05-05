@@ -1475,10 +1475,7 @@ function Settings({ onClose }: SettingsProps) {
                 onChange={(e) => handleShortNamesToggle(e.target.checked)}
               />
               Short resource names{' '}
-              <Tooltip
-                content='Display short resource names (e.g., "sts" instead of "StatefulSets").'
-                variant="dark"
-              />
+              <Tooltip content='Display short resource names (e.g., "sts" instead of "StatefulSets").' />
             </label>
           </div>
         </div>
@@ -1613,10 +1610,7 @@ function Settings({ onClose }: SettingsProps) {
                   onChange={(e) => handleRefreshToggle(e.target.checked)}
                 />
                 Enable auto-refresh{' '}
-                <Tooltip
-                  content="Automatically refresh resource data at regular intervals to keep views up to date."
-                  variant="dark"
-                />
+                <Tooltip content="Automatically refresh resource data at regular intervals to keep views up to date." />
               </label>
             </div>
             <div className="setting-item">
@@ -1628,10 +1622,7 @@ function Settings({ onClose }: SettingsProps) {
                   onChange={(e) => setBackgroundRefresh(e.target.checked)}
                 />
                 Include background clusters in auto-refresh{' '}
-                <Tooltip
-                  content="When enabled, clusters that are not actively selected will also be refreshed in the background so their data stays current when you switch to them."
-                  variant="dark"
-                />
+                <Tooltip content="When enabled, clusters that are not actively selected will also be refreshed in the background so their data stays current when you switch to them." />
               </label>
             </div>
           </div>
@@ -1657,10 +1648,7 @@ function Settings({ onClose }: SettingsProps) {
                   }
                 }}
               />
-              <Tooltip
-                content="Max number of rows in a data table. Larger values will show more data, but app performance may be impacted."
-                variant="dark"
-              />
+              <Tooltip content="Max number of rows in a data table. Larger values will show more data, but app performance may be impacted." />
             </div>
           </div>
         </div>
@@ -1676,10 +1664,7 @@ function Settings({ onClose }: SettingsProps) {
                   onChange={(e) => handlePersistenceModeToggle(e.target.checked)}
                 />
                 Enable per-namespace view settings{' '}
-                <Tooltip
-                  content="Save separate column, sorting, and filter settings for each namespace instead of sharing a single view across all namespaces."
-                  variant="dark"
-                />
+                <Tooltip content="Save separate column, sorting, and filter settings for each namespace instead of sharing a single view across all namespaces." />
               </label>
             </div>
             <div className="setting-item setting-actions">

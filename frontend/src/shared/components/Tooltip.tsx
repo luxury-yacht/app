@@ -31,7 +31,7 @@ export interface TooltipProps {
   /** Delay in ms before the tooltip appears on hover */
   hoverDelay?: number;
   /** Visual variant — maps to modifier class on .tooltip */
-  variant?: 'default' | 'dark' | 'light' | 'accent' | 'error' | 'warning';
+  variant?: 'default' | 'accent' | 'error' | 'warning';
   /** Show the directional arrow indicator */
   showArrow?: boolean;
   /** Override the tooltip max-width (px) */

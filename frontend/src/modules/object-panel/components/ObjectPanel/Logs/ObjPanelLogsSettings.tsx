@@ -155,7 +155,6 @@ function ObjPanelLogsSettings() {
                   </p>
                 </>
               }
-              variant="dark"
             />
           </div>
           <div className="setting-item obj-panel-logs-settings-target-limits">
@@ -201,7 +200,6 @@ function ObjPanelLogsSettings() {
                       </p>
                     </>
                   }
-                  variant="dark"
                 />
               </div>
               <label
@@ -241,7 +239,6 @@ function ObjPanelLogsSettings() {
                       </p>
                     </>
                   }
-                  variant="dark"
                 />
               </div>
             </div>
@@ -271,10 +268,7 @@ function ObjPanelLogsSettings() {
                   />
                   Use local time zone
                 </label>
-                <Tooltip
-                  content="Formats Kubernetes API timestamps using this machine's local timezone instead of UTC."
-                  variant="dark"
-                />
+                <Tooltip content="Formats Kubernetes API timestamps using this machine's local timezone instead of UTC." />
               </div>
               <label
                 htmlFor="log-api-timestamp-format"
