@@ -15,7 +15,11 @@ import {
   parseObjectMapG6Path,
   toObjectMapG6Data,
 } from './objectMapG6Data';
-import { OBJECT_MAP_G6_CARD_NODE, OBJECT_MAP_G6_PATH_EDGE } from './objectMapG6Constants';
+import {
+  OBJECT_MAP_G6_CARD_NODE,
+  OBJECT_MAP_G6_PATH_EDGE,
+  objectMapG6CardDetailLevelForZoom,
+} from './objectMapG6Constants';
 import type { ObjectMapG6Palette } from './objectMapG6Data';
 import type { ObjectMapSelectionState } from './objectMapRendererTypes';
 
@@ -220,6 +224,7 @@ describe('objectMapG6Data', () => {
         label: false,
         cardBackgroundOpacity: 1,
         cardForegroundOpacity: 1,
+        cardDetailLevel: 'full',
         cardKindBadgeText: 'DEPLOYMENT',
         cardKindBadgeFill: 'rgba(100, 116, 139, 0.15)',
         cardCollapseBadgeFill: '#f8fafc',
@@ -330,6 +335,56 @@ describe('objectMapG6Data', () => {
       expect.objectContaining({
         cardKindBadgeText: 'DEPLOY',
         cardNameText: 'web',
+      })
+    );
+  });
+
+  it('maps zoom levels to card detail levels', () => {
+    expect(objectMapG6CardDetailLevelForZoom(1)).toBe('full');
+    expect(objectMapG6CardDetailLevelForZoom(0.75)).toBe('full');
+    expect(objectMapG6CardDetailLevelForZoom(0.63)).toBe('compact');
+    expect(objectMapG6CardDetailLevelForZoom(0.45)).toBe('compact');
+    expect(objectMapG6CardDetailLevelForZoom(0.3)).toBe('minimal');
+    expect(objectMapG6CardDetailLevelForZoom(0.19)).toBe('dot');
+  });
+
+  it('passes the requested card detail level to G6 nodes', () => {
+    const graphData = toObjectMapG6Data(
+      layout,
+      selectionState(null),
+      () => null,
+      palette,
+      undefined,
+      false,
+      'compact'
+    );
+
+    expect(graphData.nodes?.[0].style).toEqual(
+      expect.objectContaining({ cardDetailLevel: 'compact' })
+    );
+  });
+
+  it('uses simple straight link paths without dashes when requested', () => {
+    const graphData = toObjectMapG6Data(
+      layout,
+      selectionState(null),
+      () => null,
+      palette,
+      undefined,
+      false,
+      'full',
+      'simple'
+    );
+
+    const uses = graphData.edges?.find((entry) => entry.id === 'edge-uses');
+    expect(uses?.style).toEqual(
+      expect.objectContaining({
+        objectMapEdgeDetailLevel: 'simple',
+        lineDash: undefined,
+        objectMapPath: [
+          ['M', 430, 52],
+          ['L', -210, 52],
+        ],
       })
     );
   });

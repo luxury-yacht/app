@@ -260,6 +260,104 @@ describe('applyGraphData', () => {
     expect(g.render).not.toHaveBeenCalled();
   });
 
+  it('patches and redraws when card detail level changes', async () => {
+    const previous: GraphData = {
+      nodes: [{ id: 'deploy', style: { cardDetailLevel: 'full' } }],
+      edges: [],
+    };
+    const next: GraphData = {
+      nodes: [{ id: 'deploy', style: { cardDetailLevel: 'compact' } }],
+      edges: [],
+    };
+    const g = graph();
+
+    await applyGraphData(g, previous, next);
+
+    expect(g.updateData).toHaveBeenCalledWith({
+      nodes: [next.nodes![0]],
+    });
+    expect(g.draw).toHaveBeenCalledTimes(1);
+    expect(g.render).not.toHaveBeenCalled();
+  });
+
+  it('patches and redraws when link detail level changes', async () => {
+    const previous: GraphData = {
+      nodes: [],
+      edges: [
+        {
+          id: 'edge',
+          source: 'source',
+          target: 'target',
+          style: { objectMapEdgeDetailLevel: 'routed' },
+        },
+      ],
+    };
+    const next: GraphData = {
+      nodes: [],
+      edges: [
+        {
+          id: 'edge',
+          source: 'source',
+          target: 'target',
+          style: { objectMapEdgeDetailLevel: 'simple' },
+        },
+      ],
+    };
+    const g = graph();
+
+    await applyGraphData(g, previous, next);
+
+    expect(g.updateData).toHaveBeenCalledWith({
+      edges: [next.edges![0]],
+    });
+    expect(g.draw).toHaveBeenCalledTimes(1);
+    expect(g.render).not.toHaveBeenCalled();
+  });
+
+  it('patches and redraws when a custom link path changes', async () => {
+    const previous: GraphData = {
+      nodes: [],
+      edges: [
+        {
+          id: 'edge',
+          source: 'source',
+          target: 'target',
+          style: {
+            objectMapPath: [
+              ['M', 0, 0],
+              ['L', 10, 10],
+            ],
+          },
+        },
+      ],
+    };
+    const next: GraphData = {
+      nodes: [],
+      edges: [
+        {
+          id: 'edge',
+          source: 'source',
+          target: 'target',
+          style: {
+            objectMapPath: [
+              ['M', 20, 0],
+              ['L', 30, 10],
+            ],
+          },
+        },
+      ],
+    };
+    const g = graph();
+
+    await applyGraphData(g, previous, next);
+
+    expect(g.updateData).toHaveBeenCalledWith({
+      edges: [next.edges![0]],
+    });
+    expect(g.draw).toHaveBeenCalledTimes(1);
+    expect(g.render).not.toHaveBeenCalled();
+  });
+
   it('preserves a focused node screen position after a full redraw', async () => {
     const previous: GraphData = {
       nodes: [{ id: 'pod', style: { x: 320, y: 40 } }, { id: 'sibling' }],

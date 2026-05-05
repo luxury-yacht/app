@@ -47,6 +47,9 @@ import {
 
 const ObjectMapG6Renderer = React.lazy(() => import('./ObjectMapG6Renderer'));
 
+const objectMapTimingNow = (): number =>
+  typeof performance === 'undefined' ? Date.now() : performance.now();
+
 type ObjectMapMenuState =
   | { type: 'object'; request: ObjectMapContextMenuRequest }
   | { type: 'canvas'; position: { x: number; y: number } };
@@ -82,7 +85,9 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
   onNavigateView,
   onOpenObjectMap,
 }) => {
+  const modelTimingStartedAt = objectMapTimingNow();
   const model = useObjectMapModel(payload);
+  const modelTimingMs = objectMapTimingNow() - modelTimingStartedAt;
   const useShortResourceNames = useShortNames();
   const [showLegend, setShowLegend] = useState(true);
   const [focusMode, setFocusMode] = useState(false);
@@ -99,29 +104,30 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
     null
   );
 
-  const visibleState = useMemo(
-    () =>
-      deriveObjectMapVisibleState({
-        layout: model.layout,
-        seedNodeId: model.seedId,
-        activeNodeId: model.activeNodeId,
-        focusMode,
-        selectedKinds,
-        enabledEdgeTypes,
-        searchQuery,
-        useShortResourceNames,
-      }),
-    [
-      enabledEdgeTypes,
+  const visibleStateResult = useMemo(() => {
+    const startedAt = objectMapTimingNow();
+    const state = deriveObjectMapVisibleState({
+      layout: model.layout,
+      seedNodeId: model.seedId,
+      activeNodeId: model.activeNodeId,
       focusMode,
-      model.activeNodeId,
-      model.layout,
-      model.seedId,
-      searchQuery,
       selectedKinds,
+      enabledEdgeTypes,
+      searchQuery,
       useShortResourceNames,
-    ]
-  );
+    });
+    return { state, durationMs: objectMapTimingNow() - startedAt };
+  }, [
+    enabledEdgeTypes,
+    focusMode,
+    model.activeNodeId,
+    model.layout,
+    model.seedId,
+    searchQuery,
+    selectedKinds,
+    useShortResourceNames,
+  ]);
+  const visibleState = visibleStateResult.state;
 
   useEffect(() => {
     setEnabledEdgeTypes((previous) => {
@@ -276,6 +282,10 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
         query: searchQuery,
         matches: visibleState.searchMatches.length,
       },
+      timings: {
+        modelMs: modelTimingMs,
+        visibleStateMs: visibleStateResult.durationMs,
+      },
       renderer: null,
       updatedAt: Date.now(),
     });
@@ -288,10 +298,12 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
     model.layout.edges.length,
     model.layout.nodes.length,
     model.seedId,
+    modelTimingMs,
     payload,
     preserveViewportNodeId,
     searchQuery,
     selectedKinds,
+    visibleStateResult.durationMs,
     visibleState.searchMatches.length,
     visibleState.visibleLayout.bounds,
     visibleState.visibleLayout.edges.length,

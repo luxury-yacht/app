@@ -827,6 +827,9 @@ const formatObjectMapDebugBounds = (bounds: ObjectMapDebugSnapshot['layout']['bo
 const formatObjectMapDebugVector = (value: [number, number]): string =>
   `${value[0].toFixed(1)}, ${value[1].toFixed(1)}`;
 
+const formatObjectMapDebugMs = (value: number | null): string =>
+  value === null ? 'unknown' : `${value.toFixed(value < 10 ? 2 : 1)} ms`;
+
 const MapDebugOverlay: React.FC<OverlayCloseProps> = ({ onClose }) => {
   const maps = useObjectMapDebugSnapshots();
 
@@ -898,10 +901,36 @@ const MapDebugOverlay: React.FC<OverlayCloseProps> = ({ onClose }) => {
                   <dd>{formatObjectMapDebugVector(map.renderer.viewport.position)}</dd>
                   <dt>size</dt>
                   <dd>{formatObjectMapDebugVector(map.renderer.viewport.size)}</dd>
+                  <dt>cards</dt>
+                  <dd>{map.renderer.cardDetailLevel}</dd>
+                  <dt>links</dt>
+                  <dd>{map.renderer.edgeDetailLevel}</dd>
                 </dl>
               ) : (
                 <div className="debug-overlay__meta">No renderer viewport snapshot.</div>
               )}
+            </div>
+            <div className="debug-overlay__section">
+              <div className="debug-overlay__label">Timings</div>
+              <dl className="map-debug-grid">
+                <dt>model</dt>
+                <dd>{formatObjectMapDebugMs(map.timings.modelMs)}</dd>
+                <dt>visible</dt>
+                <dd>{formatObjectMapDebugMs(map.timings.visibleStateMs)}</dd>
+                <dt>g6 data</dt>
+                <dd>{formatObjectMapDebugMs(map.renderer?.timings.g6DataMs ?? null)}</dd>
+                <dt>g6 apply</dt>
+                <dd>
+                  {formatObjectMapDebugMs(map.renderer?.timings.graphDataApplyMs ?? null)}
+                  {map.renderer?.timings.graphDataApplyMode
+                    ? ` (${map.renderer.timings.graphDataApplyMode})`
+                    : ''}
+                </dd>
+                <dt>selection</dt>
+                <dd>
+                  {formatObjectMapDebugMs(map.renderer?.timings.selectionStateApplyMs ?? null)}
+                </dd>
+              </dl>
             </div>
             <div className="debug-overlay__section">
               <div className="debug-overlay__label">Filters</div>

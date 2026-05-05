@@ -13,7 +13,10 @@ import { resolveKindBadgeVisualStyle } from '@shared/utils/kindBadgeColors';
 import type { ObjectMapLayout } from './objectMapLayout';
 import { createObjectMapG6ApplyQueue, type ObjectMapG6ApplyQueue } from './objectMapG6ApplyQueue';
 import { toObjectMapG6Data } from './objectMapG6Data';
-import { publishObjectMapRendererDebugSnapshot } from './objectMapDebugStore';
+import {
+  publishObjectMapRendererDebugSnapshot,
+  type ObjectMapRendererDebugSnapshot,
+} from './objectMapDebugStore';
 import { ObjectMapG6TooltipOverlay } from './ObjectMapG6TooltipOverlay';
 import type { ObjectMapG6EventHandlers } from './objectMapG6EventBindings';
 import { objectMapG6EdgeOptions, objectMapG6NodeOptions } from './objectMapG6RendererOptions';
@@ -22,6 +25,11 @@ import { createObjectMapNodeGestureState } from './objectMapNodeGesture';
 import { useObjectMapG6GraphLifecycle } from './useObjectMapG6GraphLifecycle';
 import { useObjectMapG6Palette } from './useObjectMapG6Palette';
 import { useObjectMapG6Viewport } from './useObjectMapG6Viewport';
+import {
+  objectMapG6CardDetailLevelForZoom,
+  type ObjectMapG6CardDetailLevel,
+  type ObjectMapG6EdgeDetailLevel,
+} from './objectMapG6Constants';
 import type {
   ObjectMapHoverEdge,
   ObjectMapContextMenuAction,
@@ -45,6 +53,11 @@ const EMPTY_SELECTION_STATE: ObjectMapSelectionState = {
 const OBJECT_MAP_DEBUG_GRID_MIN_SCREEN_SPACING = 48;
 const OBJECT_MAP_DEBUG_GRID_MAX_SCREEN_SPACING = 160;
 const OBJECT_MAP_DEBUG_GRID_MAX_LINES = 120;
+const OBJECT_MAP_SIMPLE_EDGE_NODE_THRESHOLD = 300;
+const OBJECT_MAP_SIMPLE_EDGE_EDGE_THRESHOLD = 600;
+
+const objectMapRendererTimingNow = (): number =>
+  typeof performance === 'undefined' ? Date.now() : performance.now();
 
 interface ObjectMapDebugGridLine {
   value: number;
@@ -288,6 +301,14 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
   const [graphReady, setGraphReady] = useState(false);
   const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null);
   const [debugGrid, setDebugGrid] = useState<ObjectMapDebugGridState | null>(null);
+  const [cardDetailLevel, setCardDetailLevel] = useState<ObjectMapG6CardDetailLevel>('full');
+  const rendererTimingsRef = useRef<ObjectMapRendererDebugSnapshot['timings']>({
+    g6DataMs: null,
+    graphDataApplyMs: null,
+    graphDataApplyMode: null,
+    selectionStateApplyMs: null,
+  });
+  const publishRendererDebugSnapshotRef = useRef<() => void>(() => undefined);
   const handlersRef = useRef<ObjectMapG6EventHandlers>({
     onHoverEdge,
     onClearHoverEdge,
@@ -320,12 +341,24 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
     onToggleGroup,
     badgeForNode,
   };
-  const data = useMemo<GraphData>(() => {
+  const edgeDetailLevel = useMemo<ObjectMapG6EdgeDetailLevel>(
+    () =>
+      layout.nodes.length >= OBJECT_MAP_SIMPLE_EDGE_NODE_THRESHOLD ||
+      layout.edges.length >= OBJECT_MAP_SIMPLE_EDGE_EDGE_THRESHOLD
+        ? 'simple'
+        : 'routed',
+    [layout.edges.length, layout.nodes.length]
+  );
+  const dataResult = useMemo<{ data: GraphData; durationMs: number }>(() => {
+    const startedAt = objectMapRendererTimingNow();
     if (!palette) {
-      return { nodes: [], edges: [] };
+      return {
+        data: { nodes: [], edges: [] },
+        durationMs: objectMapRendererTimingNow() - startedAt,
+      };
     }
     const badgeStyleCache = new Map<string, ReturnType<typeof resolveKindBadgeVisualStyle>>();
-    return toObjectMapG6Data(
+    const nextData = toObjectMapG6Data(
       layout,
       EMPTY_SELECTION_STATE,
       badgeForNode,
@@ -338,9 +371,21 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
         badgeStyleCache.set(key, resolved);
         return resolved;
       },
-      useShortResourceNames
+      useShortResourceNames,
+      cardDetailLevel,
+      edgeDetailLevel
     );
-  }, [layout, badgeForNode, palette, styleVersion, useShortResourceNames]);
+    return { data: nextData, durationMs: objectMapRendererTimingNow() - startedAt };
+  }, [
+    cardDetailLevel,
+    edgeDetailLevel,
+    layout,
+    badgeForNode,
+    palette,
+    styleVersion,
+    useShortResourceNames,
+  ]);
+  const data = dataResult.data;
   const dataRef = useRef(data);
   dataRef.current = data;
   const layoutRef = useRef(layout);
@@ -362,6 +407,21 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
       },
       onSelectionStateError: (error) => {
         console.error('[ObjectMapG6Renderer] Failed to apply selection state:', error);
+      },
+      onGraphDataTiming: (timing) => {
+        rendererTimingsRef.current = {
+          ...rendererTimingsRef.current,
+          graphDataApplyMs: timing.durationMs,
+          graphDataApplyMode: timing.mode,
+        };
+        publishRendererDebugSnapshotRef.current();
+      },
+      onSelectionStateTiming: (timing) => {
+        rendererTimingsRef.current = {
+          ...rendererTimingsRef.current,
+          selectionStateApplyMs: timing.durationMs,
+        };
+        publishRendererDebugSnapshotRef.current();
       },
     });
   }
@@ -405,10 +465,25 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
       graphReady,
       renderedNodeCount: data.nodes?.length ?? 0,
       renderedEdgeCount: data.edges?.length ?? 0,
+      cardDetailLevel,
+      edgeDetailLevel,
       viewport,
+      timings: {
+        ...rendererTimingsRef.current,
+        g6DataMs: dataResult.durationMs,
+      },
       updatedAt: Date.now(),
     });
-  }, [data.edges?.length, data.nodes?.length, debugMapId, graphReady]);
+  }, [
+    cardDetailLevel,
+    data.edges?.length,
+    data.nodes?.length,
+    dataResult.durationMs,
+    debugMapId,
+    edgeDetailLevel,
+    graphReady,
+  ]);
+  publishRendererDebugSnapshotRef.current = publishRendererDebugSnapshot;
 
   const updateDebugGrid = useCallback(() => {
     if (!showDebugGrid || !graphReady) {
@@ -426,6 +501,18 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
       setDebugGrid(null);
     }
   }, [graphReady, graphRef, showDebugGrid]);
+
+  const updateCardDetailLevel = useCallback(() => {
+    if (!graphReady) return;
+    const graph = graphRef.current;
+    if (!graph || graph.destroyed) return;
+    try {
+      const nextLevel = objectMapG6CardDetailLevelForZoom(graph.getZoom());
+      setCardDetailLevel((previous) => (previous === nextLevel ? previous : nextLevel));
+    } catch {
+      setCardDetailLevel('full');
+    }
+  }, [graphReady, graphRef]);
 
   const scheduleSelectionState = useCallback(
     (nextLayout: ObjectMapLayout, nextSelectionState: ObjectMapSelectionState) => {
@@ -490,6 +577,22 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
       }
     };
   }, [debugMapId, graphReady, publishRendererDebugSnapshot]);
+
+  useEffect(() => {
+    updateCardDetailLevel();
+  }, [updateCardDetailLevel]);
+
+  useEffect(() => {
+    if (!graphReady) return;
+    const graph = graphRef.current;
+    if (!graph || graph.destroyed) return;
+    graph.on(GraphEvent.AFTER_TRANSFORM, updateCardDetailLevel);
+    return () => {
+      if (!graph.destroyed) {
+        graph.off(GraphEvent.AFTER_TRANSFORM, updateCardDetailLevel);
+      }
+    };
+  }, [graphReady, graphRef, updateCardDetailLevel]);
 
   useEffect(() => {
     updateDebugGrid();

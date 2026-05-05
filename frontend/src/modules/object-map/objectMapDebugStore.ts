@@ -7,16 +7,28 @@
 import { useSyncExternalStore } from 'react';
 import type { ObjectMapReference } from '@core/refresh/types';
 import type { ObjectMapLayout } from './objectMapLayout';
+import type {
+  ObjectMapG6CardDetailLevel,
+  ObjectMapG6EdgeDetailLevel,
+} from './objectMapG6Constants';
 
 export interface ObjectMapRendererDebugSnapshot {
   graphReady: boolean;
   renderedNodeCount: number;
   renderedEdgeCount: number;
+  cardDetailLevel: ObjectMapG6CardDetailLevel;
+  edgeDetailLevel: ObjectMapG6EdgeDetailLevel;
   viewport: {
     zoom: number;
     position: [number, number];
     size: [number, number];
   } | null;
+  timings: {
+    g6DataMs: number | null;
+    graphDataApplyMs: number | null;
+    graphDataApplyMode: 'initial-render' | 'update' | null;
+    selectionStateApplyMs: number | null;
+  };
   updatedAt: number;
 }
 
@@ -51,6 +63,10 @@ export interface ObjectMapDebugSnapshot {
   search: {
     query: string;
     matches: number;
+  };
+  timings: {
+    modelMs: number;
+    visibleStateMs: number;
   };
   renderer: ObjectMapRendererDebugSnapshot | null;
   updatedAt: number;

@@ -251,6 +251,26 @@ check these invariants first:
   of bug; the layout coordinate frame can move while the viewport transform
   stays unchanged.
 
+Card rendering uses zoom-based detail levels to keep larger maps responsive.
+The thresholds are:
+
+| Zoom | Card detail |
+| ---: | --- |
+| `>= 0.75` | Full: kind badge, name, namespace, age, status, collapse badge. |
+| `>= 0.45` | Compact: kind badge, name, status, collapse badge. |
+| `>= 0.20` | Minimal: card outline, kind color strip, status, collapse badge. |
+| `< 0.20` | Dot: kind-colored dot only. |
+
+The renderer only changes detail level when crossing a threshold. Plain panning
+at the same zoom must not reapply graph data.
+
+Link rendering has a separate large-map detail mode. Maps with at least `300`
+visible objects or `600` visible links use `simple` links: one straight segment
+from object center to object center, with dashed styling disabled. Smaller maps
+use the fully routed `routed` paths. This is intentionally based on visible map
+size instead of zoom, because dense maps can be slow at every zoom level when
+the renderer has to redraw many cubic paths.
+
 ## User Interaction
 
 The current map supports:
@@ -296,6 +316,9 @@ The debug overlay reports:
 - Focus mode, auto-fit, active node, and viewport preservation anchor.
 - Payload, layout, visible layout, and rendered object/link counts.
 - Renderer readiness, zoom, viewport position, and viewport size.
+- Active card and link detail levels.
+- Timing samples for model derivation, visible-state derivation, G6 data
+  conversion, G6 graph-data apply, and G6 selection-state apply.
 - Kind filters, relationship filters, search state, layout bounds, and backend
   snapshot limits.
 
@@ -317,6 +340,12 @@ Those counts are allowed to differ. For example, namespace payloads can include
 objects that frontend directional filtering or collapse removes before
 rendering, and kind filtering can replace hidden paths with a synthetic
 `filtered-path` edge.
+
+Timing samples are last-observed durations from the mounted map, not rolling
+averages. `model` and `visible` measure frontend derivation during React render;
+`g6 data` measures conversion to G6 node/edge data; `g6 apply` measures the last
+G6 data render/update; `selection` measures the last `setElementState` pass.
+Use them to locate the slow stage before optimizing.
 
 ## Refresh Behavior
 

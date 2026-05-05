@@ -16,7 +16,7 @@ import type {
 import { BaseNode, ExtensionCategory, register } from '@antv/g6';
 import type { BaseNodeStyleProps } from '@antv/g6';
 import { OBJECT_MAP_CARD_STYLE } from './objectMapCardStyle';
-import { OBJECT_MAP_G6_CARD_NODE } from './objectMapG6Constants';
+import { OBJECT_MAP_G6_CARD_NODE, type ObjectMapG6CardDetailLevel } from './objectMapG6Constants';
 
 let measureContext: CanvasRenderingContext2D | null = null;
 
@@ -41,6 +41,7 @@ const measureTextWidth = (
 };
 
 interface ObjectMapG6CardNodeStyleProps extends BaseNodeStyleProps {
+  cardDetailLevel?: ObjectMapG6CardDetailLevel;
   cardKindBadgeText?: string;
   cardKindBadgeFill?: string;
   cardKindBadgeTextFill?: string;
@@ -86,14 +87,19 @@ class ObjectMapG6CardNode extends BaseNode<ObjectMapG6CardNodeStyleProps> {
 
   protected getKeyStyle(attributes: Required<ObjectMapG6CardNodeStyleProps>): RectStyleProps {
     const [width, height] = this.getSize(attributes);
+    const isDot = attributes.cardDetailLevel === 'dot';
+    const dotSize = OBJECT_MAP_CARD_STYLE.statusDotSize * 1.5;
     return {
       ...super.getKeyStyle(attributes),
-      width,
-      height,
-      x: -width / 2,
-      y: -height / 2,
-      radius: OBJECT_MAP_CARD_STYLE.borderRadius,
-      fillOpacity: this.getBackgroundOpacity(attributes),
+      width: isDot ? dotSize : width,
+      height: isDot ? dotSize : height,
+      x: isDot ? -dotSize / 2 : -width / 2,
+      y: isDot ? -dotSize / 2 : -height / 2,
+      radius: isDot ? dotSize / 2 : OBJECT_MAP_CARD_STYLE.borderRadius,
+      fill: isDot ? attributes.cardKindBadgeFill : attributes.fill,
+      fillOpacity: isDot
+        ? this.getForegroundOpacity(attributes)
+        : this.getBackgroundOpacity(attributes),
       strokeOpacity: this.getForegroundOpacity(attributes),
     };
   }
@@ -355,44 +361,88 @@ class ObjectMapG6CardNode extends BaseNode<ObjectMapG6CardNodeStyleProps> {
     attributes: Required<ObjectMapG6CardNodeStyleProps>,
     container: Group
   ): void {
+    const detailLevel = attributes.cardDetailLevel;
+    if (detailLevel === 'dot') {
+      this.upsert('card-kind-badge-bg', GRect, false, container);
+      this.upsert('card-kind-badge-text', GText, false, container);
+      this.upsert('badge-expand-bg', GRect, false, container);
+      this.upsert('badge-expand-label', GText, false, container);
+      this.upsert('card-status-dot', GCircle, false, container);
+      this.upsert('card-name', GText, false, container);
+      this.upsert('card-namespace', GText, false, container);
+      this.upsert('card-age', GText, false, container);
+      return;
+    }
+
     const baselines = this.getCardTextBaselines(attributes);
-    this.drawKindBadge(attributes, container);
+    if (detailLevel === 'minimal') {
+      const [cardWidth, cardHeight] = this.getSize(attributes);
+      this.upsert(
+        'card-kind-badge-bg',
+        GRect,
+        {
+          x: -cardWidth / 2 + OBJECT_MAP_CARD_STYLE.paddingX,
+          y: -cardHeight / 2 + OBJECT_MAP_CARD_STYLE.kindBadgeTopY,
+          width: cardWidth - OBJECT_MAP_CARD_STYLE.paddingX * 2,
+          height: OBJECT_MAP_CARD_STYLE.badgeFontSize,
+          radius: attributes.cardKindBadgeRadius,
+          fill: attributes.cardKindBadgeFill,
+          stroke: attributes.cardKindBadgeStroke,
+          lineWidth: attributes.cardKindBadgeBorderWidth,
+          fillOpacity: this.getBackgroundOpacity(attributes),
+          strokeOpacity: this.getForegroundOpacity(attributes),
+        },
+        container
+      );
+      this.upsert('card-kind-badge-text', GText, false, container);
+    } else {
+      this.drawKindBadge(attributes, container);
+    }
     this.drawCollapseBadge(attributes, container);
     this.drawStatusDot(attributes, container);
-    this.upsert(
-      'card-name',
-      GText,
-      this.getTextStyle(
-        attributes,
-        attributes.cardNameText,
-        baselines.nameBaselineY,
-        attributes.cardNameFill,
-        OBJECT_MAP_CARD_STYLE.nameFontWeight
-      ),
-      container
-    );
-    this.upsert(
-      'card-namespace',
-      GText,
-      this.getTextStyle(
-        attributes,
-        attributes.cardNamespaceText,
-        baselines.namespaceBaselineY,
-        attributes.cardNamespaceFill,
-        OBJECT_MAP_CARD_STYLE.namespaceFontWeight,
-        0,
-        this.getNamespaceTextWidth(attributes)
-      ),
-      container
-    );
-    if (attributes.cardAgeText) {
+    if (detailLevel !== 'minimal') {
       this.upsert(
-        'card-age',
+        'card-name',
         GText,
-        this.getAgeTextStyle(attributes, baselines.namespaceBaselineY),
+        this.getTextStyle(
+          attributes,
+          attributes.cardNameText,
+          baselines.nameBaselineY,
+          attributes.cardNameFill,
+          OBJECT_MAP_CARD_STYLE.nameFontWeight
+        ),
         container
       );
     } else {
+      this.upsert('card-name', GText, false, container);
+    }
+    if (detailLevel === 'full') {
+      this.upsert(
+        'card-namespace',
+        GText,
+        this.getTextStyle(
+          attributes,
+          attributes.cardNamespaceText,
+          baselines.namespaceBaselineY,
+          attributes.cardNamespaceFill,
+          OBJECT_MAP_CARD_STYLE.namespaceFontWeight,
+          0,
+          this.getNamespaceTextWidth(attributes)
+        ),
+        container
+      );
+      if (attributes.cardAgeText) {
+        this.upsert(
+          'card-age',
+          GText,
+          this.getAgeTextStyle(attributes, baselines.namespaceBaselineY),
+          container
+        );
+      } else {
+        this.upsert('card-age', GText, false, container);
+      }
+    } else {
+      this.upsert('card-namespace', GText, false, container);
       this.upsert('card-age', GText, false, container);
     }
   }

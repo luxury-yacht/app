@@ -50,6 +50,20 @@ const lineDashChanged = (previous?: unknown, next?: unknown): boolean => {
   return previous.length !== next.length || previous.some((value, index) => value !== next[index]);
 };
 
+const objectMapPathChanged = (previous?: unknown, next?: unknown): boolean => {
+  if (previous === next) return false;
+  if (!Array.isArray(previous) || !Array.isArray(next)) return true;
+  if (previous.length !== next.length) return true;
+  return previous.some((previousSegment, segmentIndex) => {
+    const nextSegment = next[segmentIndex];
+    if (!Array.isArray(previousSegment) || !Array.isArray(nextSegment)) return true;
+    return (
+      previousSegment.length !== nextSegment.length ||
+      previousSegment.some((value, valueIndex) => value !== nextSegment[valueIndex])
+    );
+  });
+};
+
 const nodeChanged = (previous: NodeData, next: NodeData): boolean => {
   const previousStyle = previous.style ?? {};
   const nextStyle = next.style ?? {};
@@ -69,6 +83,7 @@ const nodeChanged = (previous: NodeData, next: NodeData): boolean => {
     previousStyle.lineWidth !== nextStyle.lineWidth ||
     previousStyle.radius !== nextStyle.radius ||
     previousStyle.opacity !== nextStyle.opacity ||
+    previousStyle.cardDetailLevel !== nextStyle.cardDetailLevel ||
     previousStyle.cardKindBadgeText !== nextStyle.cardKindBadgeText ||
     previousStyle.cardKindBadgeFill !== nextStyle.cardKindBadgeFill ||
     previousStyle.cardKindBadgeTextFill !== nextStyle.cardKindBadgeTextFill ||
@@ -109,6 +124,8 @@ const edgeChanged = (previous: EdgeData, next: EdgeData): boolean => {
     previousStyle.stroke !== nextStyle.stroke ||
     previousStyle.lineWidth !== nextStyle.lineWidth ||
     previousStyle.opacity !== nextStyle.opacity ||
+    previousStyle.objectMapEdgeDetailLevel !== nextStyle.objectMapEdgeDetailLevel ||
+    objectMapPathChanged(previousStyle.objectMapPath, nextStyle.objectMapPath) ||
     lineDashChanged(previousStyle.lineDash, nextStyle.lineDash) ||
     previous.data?.label !== next.data?.label ||
     previous.data?.type !== next.data?.type ||
@@ -203,6 +220,22 @@ interface ApplySlot<T> {
   latest: T | null;
 }
 
+const objectMapApplyTimingNow = (): number =>
+  typeof performance === 'undefined' ? Date.now() : performance.now();
+
+export interface ObjectMapG6GraphDataTiming {
+  durationMs: number;
+  mode: 'initial-render' | 'update';
+  nodes: number;
+  edges: number;
+}
+
+export interface ObjectMapG6SelectionStateTiming {
+  durationMs: number;
+  nodes: number;
+  edges: number;
+}
+
 export interface ObjectMapG6ApplyQueueOptions {
   getGraph: () => Graph | null;
   getCurrentLayout: () => ObjectMapLayout;
@@ -211,6 +244,8 @@ export interface ObjectMapG6ApplyQueueOptions {
   getPreserveViewportNodeId: () => string | null;
   onGraphDataError?: (error: unknown) => void;
   onSelectionStateError?: (error: unknown) => void;
+  onGraphDataTiming?: (timing: ObjectMapG6GraphDataTiming) => void;
+  onSelectionStateTiming?: (timing: ObjectMapG6SelectionStateTiming) => void;
   applyGraphDataFn?: typeof applyGraphData;
   applySelectionStateFn?: typeof applySelectionState;
 }
@@ -236,6 +271,8 @@ export const createObjectMapG6ApplyQueue = ({
   getPreserveViewportNodeId,
   onGraphDataError,
   onSelectionStateError,
+  onGraphDataTiming,
+  onSelectionStateTiming,
   applyGraphDataFn = applyGraphData,
   applySelectionStateFn = applySelectionState,
 }: ObjectMapG6ApplyQueueOptions): ObjectMapG6ApplyQueue => {
@@ -280,12 +317,18 @@ export const createObjectMapG6ApplyQueue = ({
           const requestedVersion = selectionApply.version;
           const latest = selectionApply.latest;
           selectionApply.latest = null;
+          const startedAt = objectMapApplyTimingNow();
           await applySelectionStateFn(
             graph,
             latest.layout,
             latest.selectionState,
             getHoveredEdgeId()
           );
+          onSelectionStateTiming?.({
+            durationMs: objectMapApplyTimingNow() - startedAt,
+            nodes: latest.layout.nodes.length,
+            edges: latest.layout.edges.length,
+          });
           if (selectionApply.version === requestedVersion) {
             break;
           }
@@ -322,14 +365,23 @@ export const createObjectMapG6ApplyQueue = ({
           const requestedVersion = dataApply.version;
           const latest = dataApply.latest;
           dataApply.latest = null;
+          const startedAt = objectMapApplyTimingNow();
+          let mode: ObjectMapG6GraphDataTiming['mode'] = 'update';
           if (renderedData) {
             await applyGraphDataFn(graph, renderedData, latest, {
               preserveViewportNodeId: getPreserveViewportNodeId(),
             });
           } else {
+            mode = 'initial-render';
             graph.setData(latest);
             await graph.render();
           }
+          onGraphDataTiming?.({
+            durationMs: objectMapApplyTimingNow() - startedAt,
+            mode,
+            nodes: latest.nodes?.length ?? 0,
+            edges: latest.edges?.length ?? 0,
+          });
           if (graph.destroyed) return;
           renderedData = latest;
           scheduleSelectionState(getCurrentLayout(), getCurrentSelectionState());
