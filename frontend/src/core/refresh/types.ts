@@ -512,6 +512,7 @@ export interface ObjectMapNode {
   id: string;
   depth: number;
   ref: ObjectMapReference;
+  creationTimestamp?: string;
 }
 
 // Edge `type` is one of the backend tracer categories: owner, selector,

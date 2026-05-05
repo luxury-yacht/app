@@ -74,6 +74,7 @@ export interface PositionedNode {
   column: number;
   isSeed: boolean;
   ref: ObjectMapNode['ref'];
+  creationTimestamp?: string;
 }
 
 export interface PositionedEdge {
@@ -490,6 +491,7 @@ export const computeObjectMapLayout = (
           column,
           isSeed: node.id === seedId,
           ref: node.ref,
+          creationTimestamp: node.creationTimestamp,
         });
         minX = Math.min(minX, laneX);
         minY = Math.min(minY, y);

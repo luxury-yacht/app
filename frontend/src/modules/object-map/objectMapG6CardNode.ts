@@ -54,9 +54,11 @@ interface ObjectMapG6CardNodeStyleProps extends BaseNodeStyleProps {
   cardCollapseBadgeStroke?: string;
   cardNameText?: string;
   cardNamespaceText?: string;
+  cardAgeText?: string;
   cardFontFamily?: string;
   cardNameFill?: string;
   cardNamespaceFill?: string;
+  cardAgeFill?: string;
 }
 
 class ObjectMapG6CardNode extends BaseNode<ObjectMapG6CardNodeStyleProps> {
@@ -99,7 +101,8 @@ class ObjectMapG6CardNode extends BaseNode<ObjectMapG6CardNodeStyleProps> {
     baselineY: number,
     fill: string,
     fontWeight: TextStyleProps['fontWeight'],
-    letterSpacing = 0
+    letterSpacing = 0,
+    wordWrapWidth?: number
   ): TextStyleProps {
     const [width, height] = this.getSize(attributes);
     return {
@@ -114,10 +117,44 @@ class ObjectMapG6CardNode extends BaseNode<ObjectMapG6CardNodeStyleProps> {
       textBaseline: 'alphabetic',
       maxLines: 1,
       wordWrap: true,
-      wordWrapWidth: width - OBJECT_MAP_CARD_STYLE.paddingX * 2,
+      wordWrapWidth: wordWrapWidth ?? width - OBJECT_MAP_CARD_STYLE.paddingX * 2,
       textOverflow: '...',
       opacity: this.getForegroundOpacity(attributes),
     };
+  }
+
+  private getAgeTextStyle(
+    attributes: Required<ObjectMapG6CardNodeStyleProps>,
+    baselineY: number
+  ): TextStyleProps {
+    const [width, height] = this.getSize(attributes);
+    return {
+      x: width / 2 - OBJECT_MAP_CARD_STYLE.paddingX,
+      y: -height / 2 + baselineY,
+      text: attributes.cardAgeText,
+      fill: attributes.cardAgeFill,
+      fontSize: OBJECT_MAP_CARD_STYLE.textFontSize,
+      fontWeight: OBJECT_MAP_CARD_STYLE.namespaceFontWeight,
+      fontFamily: attributes.cardFontFamily,
+      textAlign: 'right',
+      textBaseline: 'alphabetic',
+      maxLines: 1,
+      opacity: this.getForegroundOpacity(attributes),
+    };
+  }
+
+  private getNamespaceTextWidth(attributes: Required<ObjectMapG6CardNodeStyleProps>): number {
+    const [width] = this.getSize(attributes);
+    const fullWidth = width - OBJECT_MAP_CARD_STYLE.paddingX * 2;
+    if (!attributes.cardAgeText) return fullWidth;
+    const ageWidth = measureTextWidth(
+      attributes.cardAgeText,
+      attributes.cardFontFamily,
+      OBJECT_MAP_CARD_STYLE.textFontSize,
+      OBJECT_MAP_CARD_STYLE.namespaceFontWeight,
+      0
+    );
+    return Math.max(1, fullWidth - ageWidth - OBJECT_MAP_CARD_STYLE.metadataColumnGap);
   }
 
   private getBadgeMetrics(attributes: Required<ObjectMapG6CardNodeStyleProps>) {
@@ -304,10 +341,22 @@ class ObjectMapG6CardNode extends BaseNode<ObjectMapG6CardNodeStyleProps> {
         attributes.cardNamespaceText,
         baselines.namespaceBaselineY,
         attributes.cardNamespaceFill,
-        OBJECT_MAP_CARD_STYLE.namespaceFontWeight
+        OBJECT_MAP_CARD_STYLE.namespaceFontWeight,
+        0,
+        this.getNamespaceTextWidth(attributes)
       ),
       container
     );
+    if (attributes.cardAgeText) {
+      this.upsert(
+        'card-age',
+        GText,
+        this.getAgeTextStyle(attributes, baselines.namespaceBaselineY),
+        container
+      );
+    } else {
+      this.upsert('card-age', GText, false, container);
+    }
   }
 
   render(attributes = this.parsedAttributes, container = this): void {

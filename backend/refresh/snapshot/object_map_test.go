@@ -3,6 +3,7 @@ package snapshot
 import (
 	"context"
 	"testing"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
@@ -37,6 +38,9 @@ func TestObjectMapBuildsRecursiveCoreRelationships(t *testing.T) {
 		if node.Ref.ClusterID == "" || node.Ref.Version == "" || node.Ref.Kind == "" || node.Ref.Name == "" {
 			t.Fatalf("node identity is incomplete: %#v", node)
 		}
+	}
+	if got := nodeByKindName(t, payload, "Deployment", "web").CreationTimestamp; got != "2024-01-02T03:04:05Z" {
+		t.Fatalf("unexpected creation timestamp for deployment node: %q", got)
 	}
 
 	assertEdge(t, payload, "Deployment", "web", "ReplicaSet", "web-rs", "owner")
@@ -401,6 +405,16 @@ func objectMapFixtureObjects() []runtime.Object {
 			Namespace: "default",
 			UID:       types.UID("deploy-uid"),
 			Labels:    map[string]string{"app": "web"},
+			CreationTimestamp: metav1.NewTime(time.Date(
+				2024,
+				time.January,
+				2,
+				3,
+				4,
+				5,
+				0,
+				time.UTC,
+			)),
 		},
 		Spec: appsv1.DeploymentSpec{
 			Template: corev1.PodTemplateSpec{
@@ -722,13 +736,18 @@ func assertMissingEdge(t *testing.T, payload ObjectMapSnapshotPayload, sourceKin
 
 func nodeIDByKindName(t *testing.T, payload ObjectMapSnapshotPayload, kind, name string) string {
 	t.Helper()
+	return nodeByKindName(t, payload, kind, name).ID
+}
+
+func nodeByKindName(t *testing.T, payload ObjectMapSnapshotPayload, kind, name string) ObjectMapNode {
+	t.Helper()
 	for _, node := range payload.Nodes {
 		if node.Ref.Kind == kind && node.Ref.Name == name {
-			return node.ID
+			return node
 		}
 	}
 	t.Fatalf("missing node %s/%s; nodes=%#v", kind, name, payload.Nodes)
-	return ""
+	return ObjectMapNode{}
 }
 
 func assertNode(t *testing.T, payload ObjectMapSnapshotPayload, kind, name string) {

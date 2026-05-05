@@ -8,6 +8,7 @@ import type { EdgeData, GraphData, NodeData } from '@antv/g6';
 import type { PathArray } from '@antv/g6';
 import type { KindBadgeVisualStyle } from '@shared/utils/kindBadgeColors';
 import { fallbackKindBadgeVisualStyle } from '@shared/utils/kindBadgeColors';
+import { formatAge } from '@/utils/ageFormatter';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 import type { ObjectMapLayout, PositionedEdge, PositionedNode } from './objectMapLayout';
 import { OBJECT_MAP_CARD_STYLE } from './objectMapCardStyle';
@@ -86,6 +87,12 @@ const truncate = (text: string, maxChars: number): string => {
 
 const formatNamespace = (node: PositionedNode): string =>
   node.ref.namespace?.trim() ? node.ref.namespace : 'cluster-scoped';
+
+const formatNodeAge = (creationTimestamp?: string): string => {
+  if (!creationTimestamp) return '';
+  const age = formatAge(creationTimestamp);
+  return age === '-' ? '' : age;
+};
 
 export const objectMapG6EdgeStroke = (type: string, palette: ObjectMapG6Palette): string => {
   switch (type.trim().toLowerCase()) {
@@ -191,6 +198,7 @@ export const toObjectMapG6Data = (
     const badge = badgeForNode(node.id);
     const kindLabel = getDisplayKind(node.ref.kind, useShortResourceNames);
     const namespaceLabel = truncate(formatNamespace(node), NODE_NAMESPACE_MAX_CHARS);
+    const ageLabel = formatNodeAge(node.creationTimestamp);
     const kindBadgeStyle = kindBadgeStyleForKind(node.ref.kind);
     const states = objectMapG6NodeState(node, selectionState);
     const isDimmed = states.includes('dimmed');
@@ -204,6 +212,7 @@ export const toObjectMapG6Data = (
         kindLabel,
         nameLabel: node.ref.name,
         namespaceLabel,
+        ageLabel,
       },
       states,
       style: {
@@ -239,9 +248,11 @@ export const toObjectMapG6Data = (
         cardCollapseBadgeStroke: palette.textTertiary,
         cardNameText: node.ref.name,
         cardNamespaceText: namespaceLabel,
+        cardAgeText: ageLabel,
         cardFontFamily: palette.fontFamily,
         cardNameFill: palette.text,
         cardNamespaceFill: palette.textSecondary,
+        cardAgeFill: palette.textSecondary,
       },
     };
   }),

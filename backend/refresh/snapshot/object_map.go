@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
@@ -156,9 +157,10 @@ type ObjectMapReference struct {
 
 // ObjectMapNode is one Kubernetes object in the relationship graph.
 type ObjectMapNode struct {
-	ID    string             `json:"id"`
-	Depth int                `json:"depth"`
-	Ref   ObjectMapReference `json:"ref"`
+	ID                string             `json:"id"`
+	Depth             int                `json:"depth"`
+	Ref               ObjectMapReference `json:"ref"`
+	CreationTimestamp string             `json:"creationTimestamp,omitempty"`
 }
 
 // ObjectMapEdge captures a directed relationship between two graph nodes.
@@ -205,6 +207,7 @@ type objectMapOptions struct {
 
 type objectMapRecord struct {
 	ref                ObjectMapReference
+	creationTimestamp  string
 	owners             []metav1.OwnerReference
 	labels             map[string]string
 	pod                *corev1.Pod
@@ -445,7 +448,10 @@ func (idx *objectMapIndex) addCatalog(svc *objectcatalog.Service) {
 		return
 	}
 	for _, item := range svc.Snapshot() {
-		idx.addRecord(&objectMapRecord{ref: refFromCatalog(item)})
+		idx.addRecord(&objectMapRecord{
+			ref:               refFromCatalog(item),
+			creationTimestamp: item.CreationTimestamp,
+		})
 	}
 }
 
@@ -484,10 +490,11 @@ func (idx *objectMapIndex) collectPods(ctx context.Context, client kubernetes.In
 	for i := range list.Items {
 		pod := list.Items[i]
 		idx.addRecord(&objectMapRecord{
-			ref:    refFromObject(&pod.ObjectMeta, "", "v1", "Pod", "pods", pod.Namespace),
-			owners: pod.OwnerReferences,
-			labels: cloneStringMap(pod.Labels),
-			pod:    &pod,
+			ref:               refFromObject(&pod.ObjectMeta, "", "v1", "Pod", "pods", pod.Namespace),
+			creationTimestamp: objectCreationTimestamp(&pod.ObjectMeta),
+			owners:            pod.OwnerReferences,
+			labels:            cloneStringMap(pod.Labels),
+			pod:               &pod,
 		})
 	}
 }
@@ -500,10 +507,11 @@ func (idx *objectMapIndex) collectServices(ctx context.Context, client kubernete
 	for i := range list.Items {
 		svc := list.Items[i]
 		idx.addRecord(&objectMapRecord{
-			ref:     refFromObject(&svc.ObjectMeta, "", "v1", "Service", "services", svc.Namespace),
-			owners:  svc.OwnerReferences,
-			labels:  cloneStringMap(svc.Labels),
-			service: &svc,
+			ref:               refFromObject(&svc.ObjectMeta, "", "v1", "Service", "services", svc.Namespace),
+			creationTimestamp: objectCreationTimestamp(&svc.ObjectMeta),
+			owners:            svc.OwnerReferences,
+			labels:            cloneStringMap(svc.Labels),
+			service:           &svc,
 		})
 	}
 }
@@ -516,10 +524,11 @@ func (idx *objectMapIndex) collectEndpointSlices(ctx context.Context, client kub
 	for i := range list.Items {
 		slice := list.Items[i]
 		idx.addRecord(&objectMapRecord{
-			ref:    refFromObject(&slice.ObjectMeta, "discovery.k8s.io", "v1", "EndpointSlice", "endpointslices", slice.Namespace),
-			owners: slice.OwnerReferences,
-			labels: cloneStringMap(slice.Labels),
-			slice:  &slice,
+			ref:               refFromObject(&slice.ObjectMeta, "discovery.k8s.io", "v1", "EndpointSlice", "endpointslices", slice.Namespace),
+			creationTimestamp: objectCreationTimestamp(&slice.ObjectMeta),
+			owners:            slice.OwnerReferences,
+			labels:            cloneStringMap(slice.Labels),
+			slice:             &slice,
 		})
 	}
 }
@@ -532,10 +541,11 @@ func (idx *objectMapIndex) collectPVCs(ctx context.Context, client kubernetes.In
 	for i := range list.Items {
 		pvc := list.Items[i]
 		idx.addRecord(&objectMapRecord{
-			ref:    refFromObject(&pvc.ObjectMeta, "", "v1", "PersistentVolumeClaim", "persistentvolumeclaims", pvc.Namespace),
-			owners: pvc.OwnerReferences,
-			labels: cloneStringMap(pvc.Labels),
-			pvc:    &pvc,
+			ref:               refFromObject(&pvc.ObjectMeta, "", "v1", "PersistentVolumeClaim", "persistentvolumeclaims", pvc.Namespace),
+			creationTimestamp: objectCreationTimestamp(&pvc.ObjectMeta),
+			owners:            pvc.OwnerReferences,
+			labels:            cloneStringMap(pvc.Labels),
+			pvc:               &pvc,
 		})
 	}
 }
@@ -548,10 +558,11 @@ func (idx *objectMapIndex) collectPVs(ctx context.Context, client kubernetes.Int
 	for i := range list.Items {
 		pv := list.Items[i]
 		idx.addRecord(&objectMapRecord{
-			ref:    refFromObject(&pv.ObjectMeta, "", "v1", "PersistentVolume", "persistentvolumes", ""),
-			owners: pv.OwnerReferences,
-			labels: cloneStringMap(pv.Labels),
-			pv:     &pv,
+			ref:               refFromObject(&pv.ObjectMeta, "", "v1", "PersistentVolume", "persistentvolumes", ""),
+			creationTimestamp: objectCreationTimestamp(&pv.ObjectMeta),
+			owners:            pv.OwnerReferences,
+			labels:            cloneStringMap(pv.Labels),
+			pv:                &pv,
 		})
 	}
 }
@@ -564,10 +575,11 @@ func (idx *objectMapIndex) collectStorageClasses(ctx context.Context, client kub
 	for i := range list.Items {
 		sc := list.Items[i]
 		idx.addRecord(&objectMapRecord{
-			ref:     refFromObject(&sc.ObjectMeta, "storage.k8s.io", "v1", "StorageClass", "storageclasses", ""),
-			owners:  sc.OwnerReferences,
-			labels:  cloneStringMap(sc.Labels),
-			storage: &sc,
+			ref:               refFromObject(&sc.ObjectMeta, "storage.k8s.io", "v1", "StorageClass", "storageclasses", ""),
+			creationTimestamp: objectCreationTimestamp(&sc.ObjectMeta),
+			owners:            sc.OwnerReferences,
+			labels:            cloneStringMap(sc.Labels),
+			storage:           &sc,
 		})
 	}
 }
@@ -580,9 +592,10 @@ func (idx *objectMapIndex) collectConfigMaps(ctx context.Context, client kuberne
 	for i := range list.Items {
 		cm := list.Items[i]
 		idx.addRecord(&objectMapRecord{
-			ref:    refFromObject(&cm.ObjectMeta, "", "v1", "ConfigMap", "configmaps", cm.Namespace),
-			owners: cm.OwnerReferences,
-			labels: cloneStringMap(cm.Labels),
+			ref:               refFromObject(&cm.ObjectMeta, "", "v1", "ConfigMap", "configmaps", cm.Namespace),
+			creationTimestamp: objectCreationTimestamp(&cm.ObjectMeta),
+			owners:            cm.OwnerReferences,
+			labels:            cloneStringMap(cm.Labels),
 		})
 	}
 }
@@ -595,9 +608,10 @@ func (idx *objectMapIndex) collectSecrets(ctx context.Context, client kubernetes
 	for i := range list.Items {
 		secret := list.Items[i]
 		idx.addRecord(&objectMapRecord{
-			ref:    refFromObject(&secret.ObjectMeta, "", "v1", "Secret", "secrets", secret.Namespace),
-			owners: secret.OwnerReferences,
-			labels: cloneStringMap(secret.Labels),
+			ref:               refFromObject(&secret.ObjectMeta, "", "v1", "Secret", "secrets", secret.Namespace),
+			creationTimestamp: objectCreationTimestamp(&secret.ObjectMeta),
+			owners:            secret.OwnerReferences,
+			labels:            cloneStringMap(secret.Labels),
 		})
 	}
 }
@@ -610,9 +624,10 @@ func (idx *objectMapIndex) collectServiceAccounts(ctx context.Context, client ku
 	for i := range list.Items {
 		sa := list.Items[i]
 		idx.addRecord(&objectMapRecord{
-			ref:    refFromObject(&sa.ObjectMeta, "", "v1", "ServiceAccount", "serviceaccounts", sa.Namespace),
-			owners: sa.OwnerReferences,
-			labels: cloneStringMap(sa.Labels),
+			ref:               refFromObject(&sa.ObjectMeta, "", "v1", "ServiceAccount", "serviceaccounts", sa.Namespace),
+			creationTimestamp: objectCreationTimestamp(&sa.ObjectMeta),
+			owners:            sa.OwnerReferences,
+			labels:            cloneStringMap(sa.Labels),
 		})
 	}
 }
@@ -625,9 +640,10 @@ func (idx *objectMapIndex) collectNodes(ctx context.Context, client kubernetes.I
 	for i := range list.Items {
 		node := list.Items[i]
 		idx.addRecord(&objectMapRecord{
-			ref:    refFromObject(&node.ObjectMeta, "", "v1", "Node", "nodes", ""),
-			owners: node.OwnerReferences,
-			labels: cloneStringMap(node.Labels),
+			ref:               refFromObject(&node.ObjectMeta, "", "v1", "Node", "nodes", ""),
+			creationTimestamp: objectCreationTimestamp(&node.ObjectMeta),
+			owners:            node.OwnerReferences,
+			labels:            cloneStringMap(node.Labels),
 		})
 	}
 }
@@ -640,10 +656,11 @@ func (idx *objectMapIndex) collectDeployments(ctx context.Context, client kubern
 	for i := range list.Items {
 		deploy := list.Items[i]
 		idx.addRecord(&objectMapRecord{
-			ref:      refFromObject(&deploy.ObjectMeta, "apps", "v1", "Deployment", "deployments", deploy.Namespace),
-			owners:   deploy.OwnerReferences,
-			labels:   cloneStringMap(deploy.Labels),
-			template: &deploy.Spec.Template,
+			ref:               refFromObject(&deploy.ObjectMeta, "apps", "v1", "Deployment", "deployments", deploy.Namespace),
+			creationTimestamp: objectCreationTimestamp(&deploy.ObjectMeta),
+			owners:            deploy.OwnerReferences,
+			labels:            cloneStringMap(deploy.Labels),
+			template:          &deploy.Spec.Template,
 		})
 	}
 }
@@ -656,10 +673,11 @@ func (idx *objectMapIndex) collectReplicaSets(ctx context.Context, client kubern
 	for i := range list.Items {
 		rs := list.Items[i]
 		idx.addRecord(&objectMapRecord{
-			ref:      refFromObject(&rs.ObjectMeta, "apps", "v1", "ReplicaSet", "replicasets", rs.Namespace),
-			owners:   rs.OwnerReferences,
-			labels:   cloneStringMap(rs.Labels),
-			template: &rs.Spec.Template,
+			ref:               refFromObject(&rs.ObjectMeta, "apps", "v1", "ReplicaSet", "replicasets", rs.Namespace),
+			creationTimestamp: objectCreationTimestamp(&rs.ObjectMeta),
+			owners:            rs.OwnerReferences,
+			labels:            cloneStringMap(rs.Labels),
+			template:          &rs.Spec.Template,
 		})
 	}
 }
@@ -672,10 +690,11 @@ func (idx *objectMapIndex) collectStatefulSets(ctx context.Context, client kuber
 	for i := range list.Items {
 		sts := list.Items[i]
 		idx.addRecord(&objectMapRecord{
-			ref:      refFromObject(&sts.ObjectMeta, "apps", "v1", "StatefulSet", "statefulsets", sts.Namespace),
-			owners:   sts.OwnerReferences,
-			labels:   cloneStringMap(sts.Labels),
-			template: &sts.Spec.Template,
+			ref:               refFromObject(&sts.ObjectMeta, "apps", "v1", "StatefulSet", "statefulsets", sts.Namespace),
+			creationTimestamp: objectCreationTimestamp(&sts.ObjectMeta),
+			owners:            sts.OwnerReferences,
+			labels:            cloneStringMap(sts.Labels),
+			template:          &sts.Spec.Template,
 		})
 	}
 }
@@ -688,10 +707,11 @@ func (idx *objectMapIndex) collectDaemonSets(ctx context.Context, client kuberne
 	for i := range list.Items {
 		ds := list.Items[i]
 		idx.addRecord(&objectMapRecord{
-			ref:      refFromObject(&ds.ObjectMeta, "apps", "v1", "DaemonSet", "daemonsets", ds.Namespace),
-			owners:   ds.OwnerReferences,
-			labels:   cloneStringMap(ds.Labels),
-			template: &ds.Spec.Template,
+			ref:               refFromObject(&ds.ObjectMeta, "apps", "v1", "DaemonSet", "daemonsets", ds.Namespace),
+			creationTimestamp: objectCreationTimestamp(&ds.ObjectMeta),
+			owners:            ds.OwnerReferences,
+			labels:            cloneStringMap(ds.Labels),
+			template:          &ds.Spec.Template,
 		})
 	}
 }
@@ -704,10 +724,11 @@ func (idx *objectMapIndex) collectJobs(ctx context.Context, client kubernetes.In
 	for i := range list.Items {
 		job := list.Items[i]
 		idx.addRecord(&objectMapRecord{
-			ref:      refFromObject(&job.ObjectMeta, "batch", "v1", "Job", "jobs", job.Namespace),
-			owners:   job.OwnerReferences,
-			labels:   cloneStringMap(job.Labels),
-			template: job.Spec.Template.DeepCopy(),
+			ref:               refFromObject(&job.ObjectMeta, "batch", "v1", "Job", "jobs", job.Namespace),
+			creationTimestamp: objectCreationTimestamp(&job.ObjectMeta),
+			owners:            job.OwnerReferences,
+			labels:            cloneStringMap(job.Labels),
+			template:          job.Spec.Template.DeepCopy(),
 		})
 	}
 }
@@ -720,10 +741,11 @@ func (idx *objectMapIndex) collectCronJobs(ctx context.Context, client kubernete
 	for i := range list.Items {
 		cron := list.Items[i]
 		idx.addRecord(&objectMapRecord{
-			ref:        refFromObject(&cron.ObjectMeta, "batch", "v1", "CronJob", "cronjobs", cron.Namespace),
-			owners:     cron.OwnerReferences,
-			labels:     cloneStringMap(cron.Labels),
-			cronJobTpl: cron.Spec.JobTemplate.Spec.Template.DeepCopy(),
+			ref:               refFromObject(&cron.ObjectMeta, "batch", "v1", "CronJob", "cronjobs", cron.Namespace),
+			creationTimestamp: objectCreationTimestamp(&cron.ObjectMeta),
+			owners:            cron.OwnerReferences,
+			labels:            cloneStringMap(cron.Labels),
+			cronJobTpl:        cron.Spec.JobTemplate.Spec.Template.DeepCopy(),
 		})
 	}
 }
@@ -736,10 +758,11 @@ func (idx *objectMapIndex) collectHPAs(ctx context.Context, client kubernetes.In
 	for i := range list.Items {
 		hpa := list.Items[i]
 		idx.addRecord(&objectMapRecord{
-			ref:    refFromObject(&hpa.ObjectMeta, "autoscaling", "v2", "HorizontalPodAutoscaler", "horizontalpodautoscalers", hpa.Namespace),
-			owners: hpa.OwnerReferences,
-			labels: cloneStringMap(hpa.Labels),
-			hpa:    &hpa,
+			ref:               refFromObject(&hpa.ObjectMeta, "autoscaling", "v2", "HorizontalPodAutoscaler", "horizontalpodautoscalers", hpa.Namespace),
+			creationTimestamp: objectCreationTimestamp(&hpa.ObjectMeta),
+			owners:            hpa.OwnerReferences,
+			labels:            cloneStringMap(hpa.Labels),
+			hpa:               &hpa,
 		})
 	}
 }
@@ -752,10 +775,11 @@ func (idx *objectMapIndex) collectIngresses(ctx context.Context, client kubernet
 	for i := range list.Items {
 		ing := list.Items[i]
 		idx.addRecord(&objectMapRecord{
-			ref:     refFromObject(&ing.ObjectMeta, "networking.k8s.io", "v1", "Ingress", "ingresses", ing.Namespace),
-			owners:  ing.OwnerReferences,
-			labels:  cloneStringMap(ing.Labels),
-			ingress: &ing,
+			ref:               refFromObject(&ing.ObjectMeta, "networking.k8s.io", "v1", "Ingress", "ingresses", ing.Namespace),
+			creationTimestamp: objectCreationTimestamp(&ing.ObjectMeta),
+			owners:            ing.OwnerReferences,
+			labels:            cloneStringMap(ing.Labels),
+			ingress:           &ing,
 		})
 	}
 }
@@ -768,10 +792,11 @@ func (idx *objectMapIndex) collectIngressClasses(ctx context.Context, client kub
 	for i := range list.Items {
 		ingClass := list.Items[i]
 		idx.addRecord(&objectMapRecord{
-			ref:      refFromObject(&ingClass.ObjectMeta, "networking.k8s.io", "v1", "IngressClass", "ingressclasses", ""),
-			owners:   ingClass.OwnerReferences,
-			labels:   cloneStringMap(ingClass.Labels),
-			ingClass: &ingClass,
+			ref:               refFromObject(&ingClass.ObjectMeta, "networking.k8s.io", "v1", "IngressClass", "ingressclasses", ""),
+			creationTimestamp: objectCreationTimestamp(&ingClass.ObjectMeta),
+			owners:            ingClass.OwnerReferences,
+			labels:            cloneStringMap(ingClass.Labels),
+			ingClass:          &ingClass,
 		})
 	}
 }
@@ -784,10 +809,11 @@ func (idx *objectMapIndex) collectClusterRoles(ctx context.Context, client kuber
 	for i := range list.Items {
 		role := list.Items[i]
 		idx.addRecord(&objectMapRecord{
-			ref:         refFromObject(&role.ObjectMeta, "rbac.authorization.k8s.io", "v1", "ClusterRole", "clusterroles", ""),
-			owners:      role.OwnerReferences,
-			labels:      cloneStringMap(role.Labels),
-			clusterRole: &role,
+			ref:               refFromObject(&role.ObjectMeta, "rbac.authorization.k8s.io", "v1", "ClusterRole", "clusterroles", ""),
+			creationTimestamp: objectCreationTimestamp(&role.ObjectMeta),
+			owners:            role.OwnerReferences,
+			labels:            cloneStringMap(role.Labels),
+			clusterRole:       &role,
 		})
 	}
 }
@@ -801,6 +827,7 @@ func (idx *objectMapIndex) collectClusterRoleBindings(ctx context.Context, clien
 		binding := list.Items[i]
 		idx.addRecord(&objectMapRecord{
 			ref:                refFromObject(&binding.ObjectMeta, "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding", "clusterrolebindings", ""),
+			creationTimestamp:  objectCreationTimestamp(&binding.ObjectMeta),
 			owners:             binding.OwnerReferences,
 			labels:             cloneStringMap(binding.Labels),
 			clusterRoleBinding: &binding,
@@ -851,6 +878,9 @@ func (idx *objectMapIndex) mergeRecord(dst, src *objectMapRecord) {
 	if dst.ref.UID == "" {
 		dst.ref.UID = src.ref.UID
 	}
+	if dst.creationTimestamp == "" {
+		dst.creationTimestamp = src.creationTimestamp
+	}
 	if len(dst.owners) == 0 {
 		dst.owners = src.owners
 	}
@@ -898,6 +928,18 @@ func (idx *objectMapIndex) mergeRecord(dst, src *objectMapRecord) {
 	}
 }
 
+func objectMapNodeFromRecord(id string, depth int, record *objectMapRecord) ObjectMapNode {
+	if record == nil {
+		return ObjectMapNode{ID: id, Depth: depth}
+	}
+	return ObjectMapNode{
+		ID:                id,
+		Depth:             depth,
+		Ref:               record.ref,
+		CreationTimestamp: record.creationTimestamp,
+	}
+}
+
 func (idx *objectMapIndex) findIdentity(namespace string, gvk schema.GroupVersionKind, name string) (*objectMapRecord, bool) {
 	if idx == nil {
 		return nil, false
@@ -935,7 +977,7 @@ func (idx *objectMapIndex) buildGraph(seed *objectMapRecord, maxDepth, maxNodes 
 	}
 
 	seedID := objectMapNodeID(seed.ref)
-	graph.nodes[seedID] = ObjectMapNode{ID: seedID, Depth: 0, Ref: seed.ref}
+	graph.nodes[seedID] = objectMapNodeFromRecord(seedID, 0, seed)
 
 	if !usesDirectionalObjectMapTraversal(seed.ref) {
 		idx.traverseObjectMapMixed(&graph, seedID, maxDepth, maxNodes)
@@ -1006,7 +1048,7 @@ func (idx *objectMapIndex) buildNamespaceGraph(namespace string, maxNodes int) o
 			graph.truncated = true
 			return false
 		}
-		graph.nodes[id] = ObjectMapNode{ID: id, Depth: depth, Ref: record.ref}
+		graph.nodes[id] = objectMapNodeFromRecord(id, depth, record)
 		return true
 	}
 
@@ -1089,7 +1131,7 @@ func (idx *objectMapIndex) traverseObjectMapMixed(
 			if !ok {
 				continue
 			}
-			graph.nodes[neighborID] = ObjectMapNode{ID: neighborID, Depth: currentDepth + 1, Ref: record.ref}
+			graph.nodes[neighborID] = objectMapNodeFromRecord(neighborID, currentDepth+1, record)
 			queue = append(queue, neighborID)
 		}
 	}
@@ -1151,7 +1193,7 @@ func (idx *objectMapIndex) traverseObjectMapDirection(
 			if !ok {
 				continue
 			}
-			graph.nodes[neighborID] = ObjectMapNode{ID: neighborID, Depth: neighborDepth, Ref: record.ref}
+			graph.nodes[neighborID] = objectMapNodeFromRecord(neighborID, neighborDepth, record)
 			includedEdges[edge.ID] = edge
 			if _, seen := visited[neighborID]; seen {
 				continue
@@ -1660,6 +1702,13 @@ func refFromObject(meta *metav1.ObjectMeta, group, version, kind, resource, name
 		}
 	}
 	return ref
+}
+
+func objectCreationTimestamp(meta *metav1.ObjectMeta) string {
+	if meta == nil || meta.CreationTimestamp.IsZero() {
+		return ""
+	}
+	return meta.CreationTimestamp.UTC().Format(time.RFC3339)
 }
 
 func objectMapNodeID(ref ObjectMapReference) string {

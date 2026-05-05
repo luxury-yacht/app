@@ -6,6 +6,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { ObjectMapReference } from '@core/refresh/types';
+import { formatAge } from '@/utils/ageFormatter';
 import type { ObjectMapLayout, PositionedEdge, PositionedNode } from './objectMapLayout';
 import {
   objectMapG6EdgeState,
@@ -33,7 +34,8 @@ const node = (
   kind: string,
   name: string,
   x: number,
-  isSeed = false
+  isSeed = false,
+  creationTimestamp?: string
 ): PositionedNode => ({
   id,
   x,
@@ -43,6 +45,7 @@ const node = (
   column: x / 320,
   isSeed,
   ref: ref(kind, name, kind === 'Node' ? undefined : 'default'),
+  creationTimestamp,
 });
 
 const edge = (id: string, sourceId: string, targetId: string, type: string): PositionedEdge => ({
@@ -66,7 +69,7 @@ const selectionState = (activeId: string | null): ObjectMapSelectionState => ({
 
 const layout: ObjectMapLayout = {
   nodes: [
-    node('deploy', 'Deployment', 'web', 0, true),
+    node('deploy', 'Deployment', 'web', 0, true, '2024-01-01T00:00:00Z'),
     node('pod', 'Pod', 'web-abc', 320),
     node('node', 'Node', 'ip-10-0-0-1.ec2.internal', -320),
   ],
@@ -198,6 +201,7 @@ describe('objectMapG6Data', () => {
         kindLabel: 'Deployment',
         nameLabel: 'web',
         namespaceLabel: 'default',
+        ageLabel: formatAge('2024-01-01T00:00:00Z'),
       })
     );
     expect(deploy?.style).toEqual(
@@ -216,6 +220,8 @@ describe('objectMapG6Data', () => {
         cardCollapseBadgeTextFill: '#64748b',
         cardNameText: 'web',
         cardNamespaceText: 'default',
+        cardAgeText: formatAge('2024-01-01T00:00:00Z'),
+        cardAgeFill: '#64748b',
       })
     );
     expect(deploy?.style?.badges).toBeUndefined();
