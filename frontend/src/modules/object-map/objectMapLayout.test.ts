@@ -267,6 +267,33 @@ describe('computeObjectMapLayout', () => {
     podRows.forEach((row) => expect(row.column).toBe(1));
   });
 
+  it('keeps same-kind groups together when overloaded columns split into lanes', () => {
+    const configMaps = Array.from({ length: 10 }, (_, index) =>
+      node(`cm-${index}`, 1, 'ConfigMap', `cm-${String(index).padStart(2, '0')}`)
+    );
+    const pods = Array.from({ length: 10 }, (_, index) =>
+      node(`pod-${index}`, 1, 'Pod', `pod-${String(index).padStart(2, '0')}`)
+    );
+    const services = Array.from({ length: 10 }, (_, index) =>
+      node(`svc-${index}`, 1, 'Service', `svc-${String(index).padStart(2, '0')}`)
+    );
+    const relatedNodes = [...configMaps, ...pods, ...services];
+    const nodes: ObjectMapNode[] = [node('seed', 0, 'Deployment', 'web'), ...relatedNodes];
+    const edges: ObjectMapEdge[] = relatedNodes.map((relatedNode) =>
+      edge(`e-${relatedNode.id}`, 'seed', relatedNode.id, 'uses')
+    );
+
+    const layout = computeObjectMapLayout(nodes, edges, 'seed');
+    const podRows = layout.nodes.filter((row) => row.ref.kind === 'Pod');
+    const podLaneXs = new Set(podRows.map((row) => row.x));
+    const laneXs = Array.from(
+      new Set(layout.nodes.filter((row) => row.column === 1).map((row) => row.x))
+    ).sort((a, b) => a - b);
+
+    expect(podLaneXs.size).toBe(1);
+    expect(laneXs).toEqual([COLUMN_STRIDE, COLUMN_STRIDE * 2]);
+  });
+
   it('shifts later logical columns after split lanes so they do not overlap', () => {
     const manyPods = Array.from({ length: OBJECT_MAP_MAX_NODES_PER_LANE + 1 }, (_, index) =>
       node(`pod-${index}`, 1, 'Pod', `pod-${String(index).padStart(2, '0')}`)
