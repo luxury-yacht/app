@@ -184,6 +184,35 @@ describe('deriveObjectMapVisibleState', () => {
     ]);
   });
 
+  it('keeps the active object at the same map coordinate in focus mode', () => {
+    const nodes = [
+      node('deploy', 'Deployment', 'web', 0),
+      node('pod-a', 'Pod', 'web-a', 1),
+      node('pod-b', 'Pod', 'web-b', 1),
+      node('config', 'ConfigMap', 'web-config', 2),
+      node('secret', 'Secret', 'web-secret', 3),
+    ];
+    const edges = [
+      edge('deploy-pod-a', 'deploy', 'pod-a', 'owner'),
+      edge('deploy-pod-b', 'deploy', 'pod-b', 'owner'),
+      edge('pod-config', 'pod-a', 'config', 'uses'),
+      edge('config-secret', 'config', 'secret', 'uses'),
+    ];
+    const unselected = derive({ nodes, edges });
+    const focused = derive({
+      nodes,
+      edges,
+      activeNodeId: 'pod-a',
+      focusMode: true,
+    });
+    const unselectedActiveNode = unselected.visibleLayout.nodes.find((n) => n.id === 'pod-a');
+    const focusedActiveNode = focused.visibleLayout.nodes.find((n) => n.id === 'pod-a');
+
+    expect(focusedActiveNode).toBeTruthy();
+    expect(focusedActiveNode?.x).toBe(unselectedActiveNode?.x);
+    expect(focusedActiveNode?.y).toBe(unselectedActiveNode?.y);
+  });
+
   it('searches only visible nodes', () => {
     const result = derive({
       nodes: [

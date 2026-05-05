@@ -21,6 +21,12 @@ import type { ObjectMapContextMenuRequest } from './objectMapRendererTypes';
 import type { ObjectMapViewportControls } from './objectMapRendererTypes';
 import { useObjectMapModel } from './useObjectMapModel';
 import {
+  createObjectMapDebugId,
+  publishObjectMapDebugSnapshot,
+  removeObjectMapDebugSnapshot,
+  useObjectMapDebugOverlayVisible,
+} from './objectMapDebugStore';
+import {
   deriveObjectMapVisibleState,
   pruneObjectMapEnabledEdgeTypes,
   pruneObjectMapSelectedKinds,
@@ -86,6 +92,8 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
   const [searchIndex, setSearchIndex] = useState(0);
   const [contextMenu, setContextMenu] = useState<ObjectMapMenuState | null>(null);
   const canvasRef = useRef<HTMLDivElement | null>(null);
+  const debugMapIdRef = useRef(createObjectMapDebugId());
+  const isMapDebugOverlayVisible = useObjectMapDebugOverlayVisible();
   const { legendPosition, legendPointerHandlers } = useObjectMapLegendDrag(canvasRef);
   const [g6ViewportControls, setG6ViewportControls] = useState<ObjectMapViewportControls | null>(
     null
@@ -222,9 +230,74 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
     model.activeNodeId && visibleNodeIds.has(model.activeNodeId) ? model.activeNodeId : null;
   const seedViewportNodeId = visibleNodeIds.has(model.seedId) ? model.seedId : null;
   const fallbackViewportNodeId = visibleState.visibleLayout.nodes[0]?.id ?? null;
-  const preserveViewportNodeId = model.autoFit
-    ? null
-    : (selectedViewportNodeId ?? seedViewportNodeId ?? fallbackViewportNodeId);
+  const preserveViewportNodeId =
+    model.autoFit || focusMode
+      ? null
+      : (selectedViewportNodeId ?? seedViewportNodeId ?? fallbackViewportNodeId);
+
+  useEffect(() => {
+    const debugId = debugMapIdRef.current;
+    return () => removeObjectMapDebugSnapshot(debugId);
+  }, []);
+
+  useEffect(() => {
+    const debugId = debugMapIdRef.current;
+    publishObjectMapDebugSnapshot({
+      id: debugId,
+      clusterId: payload.clusterId,
+      clusterName: payload.clusterName,
+      seedRef: payload.seed,
+      seedNodeId: model.seedId,
+      activeNodeId: model.activeNodeId,
+      focusMode,
+      autoFit: model.autoFit,
+      selectedKinds,
+      enabledEdgeTypes: enabledEdgeTypes ? Array.from(enabledEdgeTypes).sort() : null,
+      preserveViewportNodeId,
+      payload: {
+        nodes: payload.nodes.length,
+        edges: payload.edges.length,
+        maxDepth: payload.maxDepth,
+        maxNodes: payload.maxNodes,
+        truncated: payload.truncated,
+        warnings: payload.warnings?.length ?? 0,
+      },
+      layout: {
+        nodes: model.layout.nodes.length,
+        edges: model.layout.edges.length,
+        bounds: model.layout.bounds,
+      },
+      visibleLayout: {
+        nodes: visibleState.visibleLayout.nodes.length,
+        edges: visibleState.visibleLayout.edges.length,
+        bounds: visibleState.visibleLayout.bounds,
+      },
+      search: {
+        query: searchQuery,
+        matches: visibleState.searchMatches.length,
+      },
+      renderer: null,
+      updatedAt: Date.now(),
+    });
+  }, [
+    enabledEdgeTypes,
+    focusMode,
+    model.activeNodeId,
+    model.autoFit,
+    model.layout.bounds,
+    model.layout.edges.length,
+    model.layout.nodes.length,
+    model.seedId,
+    payload,
+    preserveViewportNodeId,
+    searchQuery,
+    selectedKinds,
+    visibleState.searchMatches.length,
+    visibleState.visibleLayout.bounds,
+    visibleState.visibleLayout.edges.length,
+    visibleState.visibleLayout.nodes.length,
+  ]);
+
   const contextMenuObject = contextMenu?.type === 'object' ? contextMenu.request.ref : null;
   const objectActions = useObjectActionController({
     context: 'object-map',
@@ -525,6 +598,8 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
             onCanvasContextMenu={handleCanvasContextMenu}
             autoFit={model.autoFit}
             preserveViewportNodeId={preserveViewportNodeId}
+            debugMapId={debugMapIdRef.current}
+            showDebugGrid={isMapDebugOverlayVisible}
             onUserViewportChange={disableAutoFitForManualViewport}
             onViewportControlsChange={setG6ViewportControls}
           />

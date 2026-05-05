@@ -218,6 +218,38 @@
   color: var(--color-text-secondary);
 }
 
+.map-debug-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding-bottom: 0.7rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.map-debug-entry:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.map-debug-grid {
+  display: grid;
+  grid-template-columns: minmax(5.5rem, max-content) minmax(0, 1fr);
+  gap: 0.18rem 0.5rem;
+  margin: 0;
+  font-family: var(--font-family-mono, monospace);
+}
+
+.map-debug-grid dt {
+  color: var(--color-text-tertiary);
+}
+
+.map-debug-grid dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+
 .panel-debug-tree__tabs {
   list-style: none;
   margin: 0;

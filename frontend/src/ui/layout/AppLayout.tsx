@@ -48,6 +48,11 @@ import {
   useContentRegionShiftTabHandoff,
   useTopLevelAppRegionTracking,
 } from '@ui/layout/appFocusRegions';
+import {
+  setObjectMapDebugOverlayVisible,
+  useObjectMapDebugSnapshots,
+  type ObjectMapDebugSnapshot,
+} from '@modules/object-map/objectMapDebugStore';
 
 const Sidebar = withLazyBoundary(() => import('@ui/layout/Sidebar'), 'Loading sidebar...');
 
@@ -82,6 +87,7 @@ export const AppLayout: React.FC = () => {
   const [isFocusOverlayVisible, setIsFocusOverlayVisible] = useState(false);
   const [isErrorOverlayVisible, setIsErrorOverlayVisible] = useState(false);
   const [isPanelDebugOverlayVisible, setIsPanelDebugOverlayVisible] = useState(false);
+  const [isMapDebugOverlayVisible, setIsMapDebugOverlayVisible] = useState(false);
   const hasActiveClusters = kubeconfig.selectedClusterIds.length > 0;
   // Empty-space drop target for dockable tabs: dropping a tab in empty
   // content area spawns a new floating group at the cursor. The ref is
@@ -98,6 +104,7 @@ export const AppLayout: React.FC = () => {
     onTogglePanelDebug: () => setIsPanelDebugOverlayVisible((prev) => !prev),
     onToggleFocusDebug: () => setIsFocusOverlayVisible((prev) => !prev),
     onToggleErrorDebug: () => setIsErrorOverlayVisible((prev) => !prev),
+    onToggleMapDebug: () => setIsMapDebugOverlayVisible((prev) => !prev),
   });
   useContentRegionShiftTabHandoff(contentBodyRef, hasActiveClusters);
   useTopLevelAppRegionTracking(hasActiveClusters);
@@ -106,6 +113,11 @@ export const AppLayout: React.FC = () => {
     focusPanel,
     setLastFocusedGroupKey,
   });
+
+  useEffect(() => {
+    setObjectMapDebugOverlayVisible(isMapDebugOverlayVisible);
+    return () => setObjectMapDebugOverlayVisible(false);
+  }, [isMapDebugOverlayVisible]);
 
   useEffect(() => {
     return eventBus.on('view:toggle-diagnostics', () => {
@@ -341,6 +353,9 @@ export const AppLayout: React.FC = () => {
       )}
       {isErrorOverlayVisible && (
         <ErrorBoundaryDebugOverlay onClose={() => setIsErrorOverlayVisible(false)} />
+      )}
+      {isMapDebugOverlayVisible && (
+        <MapDebugOverlay onClose={() => setIsMapDebugOverlayVisible(false)} />
       )}
     </div>
   );
@@ -796,6 +811,136 @@ const PanelDebugOverlay: React.FC<OverlayCloseProps> = ({ onClose }) => {
           </ul>
         ) : null}
       </div>
+    </DebugOverlay>
+  );
+};
+
+const formatObjectMapDebugRef = (ref: ObjectMapDebugSnapshot['seedRef']): string => {
+  const namespace = ref.namespace ? `${ref.namespace}/` : '';
+  const api = `${ref.group || 'core'}/${ref.version}`;
+  return `${ref.clusterId} ${api} ${ref.kind} ${namespace}${ref.name}`;
+};
+
+const formatObjectMapDebugBounds = (bounds: ObjectMapDebugSnapshot['layout']['bounds']): string =>
+  `x ${Math.round(bounds.minX)}..${Math.round(bounds.maxX)}, y ${Math.round(bounds.minY)}..${Math.round(bounds.maxY)}`;
+
+const formatObjectMapDebugVector = (value: [number, number]): string =>
+  `${value[0].toFixed(1)}, ${value[1].toFixed(1)}`;
+
+const MapDebugOverlay: React.FC<OverlayCloseProps> = ({ onClose }) => {
+  const maps = useObjectMapDebugSnapshots();
+
+  return (
+    <DebugOverlay title="Map Debug (Ctrl+Alt+M)" testId="map-debug-overlay" onClose={onClose}>
+      {maps.length === 0 ? (
+        <div className="debug-overlay__meta">No object maps are mounted.</div>
+      ) : (
+        maps.map((map) => (
+          <div key={map.id} className="map-debug-entry">
+            <div className="debug-overlay__section">
+              <div className="debug-overlay__label">Map</div>
+              <div className="debug-overlay__value">{map.id}</div>
+              <div className="debug-overlay__meta">
+                {map.clusterName ?? map.clusterId} - updated{' '}
+                {new Date(map.updatedAt).toLocaleTimeString()}
+              </div>
+            </div>
+            <div className="debug-overlay__section">
+              <div className="debug-overlay__label">Seed</div>
+              <div className="debug-overlay__value">{formatObjectMapDebugRef(map.seedRef)}</div>
+              <div className="debug-overlay__meta">seed node: {map.seedNodeId || 'none'}</div>
+            </div>
+            <div className="debug-overlay__section">
+              <div className="debug-overlay__label">State</div>
+              <dl className="map-debug-grid">
+                <dt>auto-fit</dt>
+                <dd>{map.autoFit ? 'on' : 'off'}</dd>
+                <dt>focus</dt>
+                <dd>{map.focusMode ? 'on' : 'off'}</dd>
+                <dt>active</dt>
+                <dd>{map.activeNodeId ?? 'none'}</dd>
+                <dt>preserve</dt>
+                <dd>{map.preserveViewportNodeId ?? 'none'}</dd>
+              </dl>
+            </div>
+            <div className="debug-overlay__section">
+              <div className="debug-overlay__label">Counts</div>
+              <dl className="map-debug-grid">
+                <dt>payload</dt>
+                <dd>
+                  {map.payload.nodes} objects / {map.payload.edges} links
+                </dd>
+                <dt>layout</dt>
+                <dd>
+                  {map.layout.nodes} objects / {map.layout.edges} links
+                </dd>
+                <dt>visible</dt>
+                <dd>
+                  {map.visibleLayout.nodes} objects / {map.visibleLayout.edges} links
+                </dd>
+                <dt>rendered</dt>
+                <dd>
+                  {map.renderer
+                    ? `${map.renderer.renderedNodeCount} objects / ${map.renderer.renderedEdgeCount} links`
+                    : 'unknown'}
+                </dd>
+              </dl>
+            </div>
+            <div className="debug-overlay__section">
+              <div className="debug-overlay__label">Viewport</div>
+              {map.renderer?.viewport ? (
+                <dl className="map-debug-grid">
+                  <dt>ready</dt>
+                  <dd>{map.renderer.graphReady ? 'true' : 'false'}</dd>
+                  <dt>zoom</dt>
+                  <dd>{map.renderer.viewport.zoom.toFixed(3)}</dd>
+                  <dt>position</dt>
+                  <dd>{formatObjectMapDebugVector(map.renderer.viewport.position)}</dd>
+                  <dt>size</dt>
+                  <dd>{formatObjectMapDebugVector(map.renderer.viewport.size)}</dd>
+                </dl>
+              ) : (
+                <div className="debug-overlay__meta">No renderer viewport snapshot.</div>
+              )}
+            </div>
+            <div className="debug-overlay__section">
+              <div className="debug-overlay__label">Filters</div>
+              <dl className="map-debug-grid">
+                <dt>kinds</dt>
+                <dd>{map.selectedKinds.length ? map.selectedKinds.join(', ') : 'all'}</dd>
+                <dt>links</dt>
+                <dd>{map.enabledEdgeTypes ? map.enabledEdgeTypes.join(', ') || 'none' : 'all'}</dd>
+                <dt>search</dt>
+                <dd>
+                  {map.search.query ? `"${map.search.query}" (${map.search.matches})` : 'none'}
+                </dd>
+              </dl>
+            </div>
+            <div className="debug-overlay__section">
+              <div className="debug-overlay__label">Bounds</div>
+              <dl className="map-debug-grid">
+                <dt>layout</dt>
+                <dd>{formatObjectMapDebugBounds(map.layout.bounds)}</dd>
+                <dt>visible</dt>
+                <dd>{formatObjectMapDebugBounds(map.visibleLayout.bounds)}</dd>
+              </dl>
+            </div>
+            <div className="debug-overlay__section">
+              <div className="debug-overlay__label">Limits</div>
+              <dl className="map-debug-grid">
+                <dt>max depth</dt>
+                <dd>{map.payload.maxDepth}</dd>
+                <dt>max objects</dt>
+                <dd>{map.payload.maxNodes}</dd>
+                <dt>truncated</dt>
+                <dd>{map.payload.truncated ? 'true' : 'false'}</dd>
+                <dt>warnings</dt>
+                <dd>{map.payload.warnings}</dd>
+              </dl>
+            </div>
+          </div>
+        ))
+      )}
     </DebugOverlay>
   );
 };

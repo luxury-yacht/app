@@ -57,6 +57,7 @@ const getDefaultLayout = (testId?: string): OverlayLayout => {
     'panel-debug-overlay': { x: 40, y: 90 },
     'keyboard-focus-overlay': { x: 440, y: 90 },
     'error-debug-overlay': { x: 840, y: 90 },
+    'map-debug-overlay': { x: 120, y: 120 },
   };
 
   const fallback = { x: 80, y: 80 };

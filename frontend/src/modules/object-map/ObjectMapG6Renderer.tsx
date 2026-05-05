@@ -6,12 +6,14 @@
  * rendering to focused helpers.
  */
 
+import { GraphEvent } from '@antv/g6';
 import type { Graph, GraphData } from '@antv/g6';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { resolveKindBadgeVisualStyle } from '@shared/utils/kindBadgeColors';
 import type { ObjectMapLayout } from './objectMapLayout';
 import { createObjectMapG6ApplyQueue, type ObjectMapG6ApplyQueue } from './objectMapG6ApplyQueue';
 import { toObjectMapG6Data } from './objectMapG6Data';
+import { publishObjectMapRendererDebugSnapshot } from './objectMapDebugStore';
 import { ObjectMapG6TooltipOverlay } from './ObjectMapG6TooltipOverlay';
 import type { ObjectMapG6EventHandlers } from './objectMapG6EventBindings';
 import { objectMapG6EdgeOptions, objectMapG6NodeOptions } from './objectMapG6RendererOptions';
@@ -40,6 +42,186 @@ const EMPTY_SELECTION_STATE: ObjectMapSelectionState = {
   connectedEdgeIds: new Set(),
 };
 
+const OBJECT_MAP_DEBUG_GRID_MIN_SCREEN_SPACING = 48;
+const OBJECT_MAP_DEBUG_GRID_MAX_SCREEN_SPACING = 160;
+const OBJECT_MAP_DEBUG_GRID_MAX_LINES = 120;
+
+interface ObjectMapDebugGridLine {
+  value: number;
+  screen: number;
+  major: boolean;
+  origin: boolean;
+}
+
+interface ObjectMapDebugGridState {
+  size: [number, number];
+  zoom: number;
+  origin: [number, number];
+  verticalLines: ObjectMapDebugGridLine[];
+  horizontalLines: ObjectMapDebugGridLine[];
+}
+
+const objectMapDebugGridSpacing = (zoom: number): number => {
+  let spacing = 100;
+  const safeZoom = Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
+  while (spacing * safeZoom < OBJECT_MAP_DEBUG_GRID_MIN_SCREEN_SPACING) {
+    spacing *= 2;
+  }
+  while (spacing * safeZoom > OBJECT_MAP_DEBUG_GRID_MAX_SCREEN_SPACING && spacing > 25) {
+    spacing /= 2;
+  }
+  return spacing;
+};
+
+const isObjectMapDebugGridMajorLine = (value: number, spacing: number): boolean => {
+  if (value === 0) return true;
+  return Math.abs(Math.round(value / spacing)) % 5 === 0;
+};
+
+const computeObjectMapDebugGridState = (graph: Graph): ObjectMapDebugGridState | null => {
+  if (graph.destroyed) return null;
+  const [width, height] = graph.getSize();
+  if (width <= 0 || height <= 0) return null;
+  const zoom = graph.getZoom();
+  const spacing = objectMapDebugGridSpacing(zoom);
+  const topLeft = graph.getCanvasByViewport([0, 0]);
+  const bottomRight = graph.getCanvasByViewport([width, height]);
+  const minCanvasX = Math.floor(Math.min(topLeft[0], bottomRight[0]) / spacing) * spacing;
+  const maxCanvasX = Math.ceil(Math.max(topLeft[0], bottomRight[0]) / spacing) * spacing;
+  const minCanvasY = Math.floor(Math.min(topLeft[1], bottomRight[1]) / spacing) * spacing;
+  const maxCanvasY = Math.ceil(Math.max(topLeft[1], bottomRight[1]) / spacing) * spacing;
+  const origin = graph.getViewportByCanvas([0, 0]);
+  const verticalLines: ObjectMapDebugGridLine[] = [];
+  const horizontalLines: ObjectMapDebugGridLine[] = [];
+
+  for (
+    let x = minCanvasX;
+    x <= maxCanvasX && verticalLines.length < OBJECT_MAP_DEBUG_GRID_MAX_LINES;
+    x += spacing
+  ) {
+    const viewportPoint = graph.getViewportByCanvas([x, 0]);
+    if (Number.isFinite(viewportPoint[0])) {
+      verticalLines.push({
+        value: x,
+        screen: viewportPoint[0],
+        major: isObjectMapDebugGridMajorLine(x, spacing),
+        origin: x === 0,
+      });
+    }
+  }
+
+  for (
+    let y = minCanvasY;
+    y <= maxCanvasY && horizontalLines.length < OBJECT_MAP_DEBUG_GRID_MAX_LINES;
+    y += spacing
+  ) {
+    const viewportPoint = graph.getViewportByCanvas([0, y]);
+    if (Number.isFinite(viewportPoint[1])) {
+      horizontalLines.push({
+        value: y,
+        screen: viewportPoint[1],
+        major: isObjectMapDebugGridMajorLine(y, spacing),
+        origin: y === 0,
+      });
+    }
+  }
+
+  return {
+    size: [width, height],
+    zoom,
+    origin: [origin[0], origin[1]],
+    verticalLines,
+    horizontalLines,
+  };
+};
+
+const ObjectMapDebugGridOverlay: React.FC<{ grid: ObjectMapDebugGridState }> = ({ grid }) => {
+  const [width, height] = grid.size;
+  const originVisible =
+    grid.origin[0] >= 0 &&
+    grid.origin[0] <= width &&
+    grid.origin[1] >= 0 &&
+    grid.origin[1] <= height;
+
+  return (
+    <svg
+      className="object-map__debug-grid"
+      viewBox={`0 0 ${width} ${height}`}
+      width="100%"
+      height="100%"
+      aria-hidden="true"
+    >
+      {grid.verticalLines.map((line) => (
+        <line
+          key={`x-${line.value}`}
+          className={
+            line.origin
+              ? 'object-map__debug-grid-axis'
+              : line.major
+                ? 'object-map__debug-grid-line object-map__debug-grid-line--major'
+                : 'object-map__debug-grid-line'
+          }
+          x1={line.screen}
+          y1={0}
+          x2={line.screen}
+          y2={height}
+        />
+      ))}
+      {grid.horizontalLines.map((line) => (
+        <line
+          key={`y-${line.value}`}
+          className={
+            line.origin
+              ? 'object-map__debug-grid-axis'
+              : line.major
+                ? 'object-map__debug-grid-line object-map__debug-grid-line--major'
+                : 'object-map__debug-grid-line'
+          }
+          x1={0}
+          y1={line.screen}
+          x2={width}
+          y2={line.screen}
+        />
+      ))}
+      {grid.verticalLines
+        .filter((line) => line.major && line.screen >= 0 && line.screen <= width)
+        .map((line) => (
+          <text
+            key={`x-label-${line.value}`}
+            className="object-map__debug-grid-label"
+            x={line.screen + 3}
+            y={12}
+          >
+            x {Math.round(line.value)}
+          </text>
+        ))}
+      {grid.horizontalLines
+        .filter((line) => line.major && line.screen >= 0 && line.screen <= height)
+        .map((line) => (
+          <text
+            key={`y-label-${line.value}`}
+            className="object-map__debug-grid-label"
+            x={4}
+            y={line.screen - 3}
+          >
+            y {Math.round(line.value)}
+          </text>
+        ))}
+      {originVisible && (
+        <g transform={`translate(${grid.origin[0]} ${grid.origin[1]})`}>
+          <circle className="object-map__debug-grid-origin" r={4} />
+          <text className="object-map__debug-grid-origin-label" x={7} y={-7}>
+            0,0
+          </text>
+        </g>
+      )}
+      <text className="object-map__debug-grid-zoom" x={8} y={height - 8}>
+        zoom {grid.zoom.toFixed(3)}
+      </text>
+    </svg>
+  );
+};
+
 export interface ObjectMapG6RendererProps {
   layout: ObjectMapLayout;
   selectionState: ObjectMapSelectionState;
@@ -61,6 +243,8 @@ export interface ObjectMapG6RendererProps {
   onCanvasContextMenu?: ObjectMapCanvasContextMenuAction;
   autoFit: boolean;
   preserveViewportNodeId?: string | null;
+  debugMapId?: string;
+  showDebugGrid?: boolean;
   onUserViewportChange?: ObjectMapViewportChangeAction;
   onViewportControlsChange?: (controls: ObjectMapViewportControls | null) => void;
 }
@@ -86,6 +270,8 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
   onCanvasContextMenu,
   autoFit,
   preserveViewportNodeId = null,
+  debugMapId,
+  showDebugGrid = false,
   onUserViewportChange,
   onViewportControlsChange,
 }) => {
@@ -101,6 +287,7 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
   onUserViewportChangeRef.current = onUserViewportChange;
   const [graphReady, setGraphReady] = useState(false);
   const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null);
+  const [debugGrid, setDebugGrid] = useState<ObjectMapDebugGridState | null>(null);
   const handlersRef = useRef<ObjectMapG6EventHandlers>({
     onHoverEdge,
     onClearHoverEdge,
@@ -189,6 +376,57 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
     setTooltipPosition({ x: edge.tooltipX, y: edge.tooltipY });
   }, []);
 
+  const publishRendererDebugSnapshot = useCallback(() => {
+    if (!debugMapId) return;
+    const graph = graphRef.current;
+    let viewport = null;
+    if (graphReady && graph && !graph.destroyed) {
+      try {
+        const zoom = graph.getZoom();
+        const position = graph.getPosition();
+        const size = graph.getSize();
+        viewport =
+          Number.isFinite(zoom) &&
+          Number.isFinite(position[0]) &&
+          Number.isFinite(position[1]) &&
+          Number.isFinite(size[0]) &&
+          Number.isFinite(size[1])
+            ? {
+                zoom,
+                position: [position[0], position[1]] as [number, number],
+                size,
+              }
+            : null;
+      } catch {
+        viewport = null;
+      }
+    }
+    publishObjectMapRendererDebugSnapshot(debugMapId, {
+      graphReady,
+      renderedNodeCount: data.nodes?.length ?? 0,
+      renderedEdgeCount: data.edges?.length ?? 0,
+      viewport,
+      updatedAt: Date.now(),
+    });
+  }, [data.edges?.length, data.nodes?.length, debugMapId, graphReady]);
+
+  const updateDebugGrid = useCallback(() => {
+    if (!showDebugGrid || !graphReady) {
+      setDebugGrid(null);
+      return;
+    }
+    const graph = graphRef.current;
+    if (!graph || graph.destroyed) {
+      setDebugGrid(null);
+      return;
+    }
+    try {
+      setDebugGrid(computeObjectMapDebugGridState(graph));
+    } catch {
+      setDebugGrid(null);
+    }
+  }, [graphReady, graphRef, showDebugGrid]);
+
   const scheduleSelectionState = useCallback(
     (nextLayout: ObjectMapLayout, nextSelectionState: ObjectMapSelectionState) => {
       applyQueue.scheduleSelectionState(nextLayout, nextSelectionState);
@@ -236,6 +474,48 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
   }, [data, palette, scheduleGraphData]);
 
   useEffect(() => {
+    publishRendererDebugSnapshot();
+  }, [publishRendererDebugSnapshot]);
+
+  useEffect(() => {
+    if (!debugMapId || !graphReady) return;
+    const graph = graphRef.current;
+    if (!graph || graph.destroyed) return;
+    graph.on(GraphEvent.AFTER_TRANSFORM, publishRendererDebugSnapshot);
+    graph.on(GraphEvent.AFTER_SIZE_CHANGE, publishRendererDebugSnapshot);
+    return () => {
+      if (!graph.destroyed) {
+        graph.off(GraphEvent.AFTER_TRANSFORM, publishRendererDebugSnapshot);
+        graph.off(GraphEvent.AFTER_SIZE_CHANGE, publishRendererDebugSnapshot);
+      }
+    };
+  }, [debugMapId, graphReady, publishRendererDebugSnapshot]);
+
+  useEffect(() => {
+    updateDebugGrid();
+  }, [updateDebugGrid]);
+
+  useEffect(() => {
+    if (!showDebugGrid || !graphReady) return;
+    const graph = graphRef.current;
+    if (!graph || graph.destroyed) return;
+    graph.on(GraphEvent.AFTER_TRANSFORM, updateDebugGrid);
+    graph.on(GraphEvent.AFTER_SIZE_CHANGE, updateDebugGrid);
+    return () => {
+      if (!graph.destroyed) {
+        graph.off(GraphEvent.AFTER_TRANSFORM, updateDebugGrid);
+        graph.off(GraphEvent.AFTER_SIZE_CHANGE, updateDebugGrid);
+      }
+    };
+  }, [graphReady, graphRef, showDebugGrid, updateDebugGrid]);
+
+  useEffect(() => {
+    if (!showDebugGrid) return;
+    const frame = requestAnimationFrame(updateDebugGrid);
+    return () => cancelAnimationFrame(frame);
+  }, [data, showDebugGrid, updateDebugGrid]);
+
+  useEffect(() => {
     const graph = graphRef.current;
     if (!graph || graph.destroyed) return;
     scheduleSelectionState(layout, selectionState);
@@ -271,6 +551,7 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
   return (
     <div className="object-map__g6-stack">
       <div ref={containerRef} className="object-map__g6" data-testid="object-map-g6" />
+      {showDebugGrid && debugGrid && <ObjectMapDebugGridOverlay grid={debugGrid} />}
       <svg className="object-map__g6-overlay" width="100%" height="100%" aria-hidden="true">
         {palette && tooltipText && tooltipPosition && (
           <ObjectMapG6TooltipOverlay

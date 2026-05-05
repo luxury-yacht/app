@@ -122,6 +122,7 @@ vi.mock('./ObjectMapG6Renderer', () => {
     }) => void;
     onCanvasContextMenu?: (request: { position: { x: number; y: number } }) => void;
     onViewportControlsChange?: (controls: ObjectMapViewportControls | null) => void;
+    debugMapId?: string;
     preserveViewportNodeId?: string | null;
     useShortResourceNames?: boolean;
   }) => {
@@ -131,6 +132,7 @@ vi.mock('./ObjectMapG6Renderer', () => {
       <div
         data-testid="object-map-g6-mock"
         data-auto-fit={String(props.autoFit)}
+        data-debug-map-id={props.debugMapId ?? ''}
         data-preserve-viewport-node-id={props.preserveViewportNodeId ?? ''}
         data-short-names={String(props.useShortResourceNames)}
       >
@@ -781,9 +783,9 @@ describe('ObjectMap', () => {
     expect(resetButton?.disabled).toBe(false);
     expect(container.querySelector('[aria-label="Deployment: web"]')).toBeTruthy();
     expect(container.querySelector('[aria-label="Pod: web-a"]')).toBeTruthy();
-    expect(
-      container.querySelector<HTMLElement>('[data-testid="mock-node-pod-a"]')?.dataset.x
-    ).not.toBe(initialPodAX);
+    expect(container.querySelector<HTMLElement>('[data-testid="mock-node-pod-a"]')?.dataset.x).toBe(
+      initialPodAX
+    );
     expect(container.querySelector('[aria-label="ConfigMap: web-a-config"]')).toBeTruthy();
     expect(container.querySelector('[aria-label="Secret: web-a-secret"]')).toBeTruthy();
     expect(container.querySelector('[aria-label="Pod: web-b"]')).toBeNull();
@@ -801,6 +803,35 @@ describe('ObjectMap', () => {
     expect(container.querySelector('[aria-label="Pod: web-b"]')).toBeTruthy();
     expect(container.querySelector('[data-testid="mock-edge-edge-b"]')).toBeTruthy();
     expect(resetButton?.disabled).toBe(true);
+
+    cleanup();
+  });
+
+  it('does not preserve a selected node viewport anchor while focus mode is active', async () => {
+    const { container, cleanup } = await renderObjectMap({ testPayload: focusModePayload });
+    const focusToggle = container.querySelector<HTMLButtonElement>(
+      '[aria-label="Toggle focus mode"]'
+    );
+    const manualViewportChange = container.querySelector<HTMLButtonElement>(
+      '[data-testid="mock-user-viewport-change"]'
+    );
+    const podA = container.querySelector<HTMLButtonElement>('[aria-label="Pod: web-a"]');
+
+    expect(focusToggle).toBeTruthy();
+    expect(manualViewportChange).toBeTruthy();
+    expect(podA).toBeTruthy();
+
+    await act(async () => {
+      manualViewportChange!.click();
+      podA!.dispatchEvent(mouseEvent('click'));
+      focusToggle!.click();
+      await Promise.resolve();
+    });
+
+    expect(
+      container.querySelector<HTMLElement>('[data-testid="object-map-g6-mock"]')?.dataset
+        .preserveViewportNodeId
+    ).toBe('');
 
     cleanup();
   });
