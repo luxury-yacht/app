@@ -1005,11 +1005,20 @@ func objectMapReplicasStatus(ready, desired int32) *ObjectMapStatus {
 func objectMapPodStatus(pod corev1.Pod) *ObjectMapStatus {
 	label := objectMapPodStatusLabel(pod)
 	switch {
-	case label == "Running" || label == "Succeeded":
+	case label == "Running":
+		ready, total := objectMapPodReadyContainers(pod)
+		if total > 0 && ready == total {
+			return objectMapStatus("healthy", label)
+		}
+		if total > 0 {
+			return objectMapStatus("degraded", fmt.Sprintf("%d/%d ready", ready, total))
+		}
+		return objectMapStatus("degraded", label)
+	case label == "Succeeded":
 		return objectMapStatus("healthy", label)
 	case label == "Unknown":
 		return objectMapStatus("inactive", label)
-	case label == "Pending" || label == "Terminating" || strings.HasPrefix(label, "Init:"):
+	case objectMapPodDegradedStatusLabel(label):
 		return objectMapStatus("degraded", label)
 	default:
 		return objectMapStatus("unhealthy", label)
@@ -1048,15 +1057,46 @@ func objectMapPodStatusLabel(pod corev1.Pod) string {
 	return "Unknown"
 }
 
+func objectMapPodReadyContainers(pod corev1.Pod) (int, int) {
+	statusByName := make(map[string]corev1.ContainerStatus, len(pod.Status.ContainerStatuses))
+	for _, status := range pod.Status.ContainerStatuses {
+		statusByName[status.Name] = status
+	}
+
+	if len(pod.Spec.Containers) == 0 {
+		ready := 0
+		for _, status := range pod.Status.ContainerStatuses {
+			if status.Ready {
+				ready++
+			}
+		}
+		return ready, len(pod.Status.ContainerStatuses)
+	}
+
+	ready := 0
+	for _, container := range pod.Spec.Containers {
+		if status, ok := statusByName[container.Name]; ok && status.Ready {
+			ready++
+		}
+	}
+	return ready, len(pod.Spec.Containers)
+}
+
+func objectMapPodDegradedStatusLabel(label string) bool {
+	switch label {
+	case "Pending", "Terminating", "ContainerCreating", "PodInitializing":
+		return true
+	default:
+		return strings.HasPrefix(label, "Init:")
+	}
+}
+
 func objectMapServiceStatus(service corev1.Service) *ObjectMapStatus {
 	if service.Spec.Type == corev1.ServiceTypeLoadBalancer {
 		if len(service.Status.LoadBalancer.Ingress) > 0 {
 			return objectMapStatus("healthy", "LoadBalancer active")
 		}
 		return objectMapStatus("degraded", "LoadBalancer pending")
-	}
-	if service.Spec.Type == corev1.ServiceTypeExternalName {
-		return objectMapStatus("healthy", "ExternalName")
 	}
 	return nil
 }
