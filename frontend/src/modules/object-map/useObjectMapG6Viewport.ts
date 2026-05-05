@@ -19,6 +19,7 @@ export interface UseObjectMapG6ViewportOptions {
   autoFit: boolean;
   containerRef: RefObject<HTMLElement | null>;
   data: GraphData;
+  graphReady: boolean;
   graphRef: MutableRefObject<Graph | null>;
   onUserViewportChangeRef: MutableRefObject<ObjectMapViewportChangeAction | undefined>;
   onViewportControlsChange?: (controls: ObjectMapViewportControls | null) => void;
@@ -31,6 +32,7 @@ export const useObjectMapG6Viewport = ({
   autoFit,
   containerRef,
   data,
+  graphReady,
   graphRef,
   onUserViewportChangeRef,
   onViewportControlsChange,
@@ -39,6 +41,7 @@ export const useObjectMapG6Viewport = ({
   updateTooltipPosition,
 }: UseObjectMapG6ViewportOptions) => {
   const scheduleFitGraphToView = useCallback(() => {
+    if (!graphReady) return;
     const graph = graphRef.current;
     const currentPalette = paletteRef.current;
     if (!graph || graph.destroyed || !currentPalette) return;
@@ -49,7 +52,7 @@ export const useObjectMapG6Viewport = ({
           console.error('[ObjectMapG6Renderer] Failed to fit graph to view:', error);
         }
       });
-  }, [graphRef, paletteRef, updateTooltipPosition]);
+  }, [graphReady, graphRef, paletteRef, updateTooltipPosition]);
 
   const resizeGraphToContainer = useCallback(() => {
     const graph = graphRef.current;
@@ -62,11 +65,11 @@ export const useObjectMapG6Viewport = ({
     if (currentWidth !== width || currentHeight !== height) {
       graph.setSize(width, height);
     }
-    if (autoFit) {
+    if (autoFit && graphReady) {
       scheduleFitGraphToView();
     }
     updateTooltipPosition();
-  }, [autoFit, containerRef, graphRef, scheduleFitGraphToView, updateTooltipPosition]);
+  }, [autoFit, containerRef, graphReady, graphRef, scheduleFitGraphToView, updateTooltipPosition]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -86,6 +89,10 @@ export const useObjectMapG6Viewport = ({
 
   useEffect(() => {
     if (!onViewportControlsChange) return;
+    if (!graphReady) {
+      onViewportControlsChange(null);
+      return;
+    }
     const controls: ObjectMapViewportControls = {
       zoomIn: () => {
         const graph = graphRef.current;
@@ -114,10 +121,16 @@ export const useObjectMapG6Viewport = ({
     };
     onViewportControlsChange(controls);
     return () => onViewportControlsChange(null);
-  }, [graphRef, onUserViewportChangeRef, onViewportControlsChange, scheduleFitGraphToView]);
+  }, [
+    graphReady,
+    graphRef,
+    onUserViewportChangeRef,
+    onViewportControlsChange,
+    scheduleFitGraphToView,
+  ]);
 
   useEffect(() => {
-    if (!autoFit) return;
+    if (!autoFit || !graphReady) return;
     scheduleFitGraphToView();
-  }, [autoFit, data, palette, scheduleFitGraphToView]);
+  }, [autoFit, data, graphReady, palette, scheduleFitGraphToView]);
 };

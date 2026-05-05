@@ -34,6 +34,7 @@ export interface UseObjectMapG6GraphLifecycleOptions {
   ignoreNextCanvasClickRef: MutableRefObject<boolean>;
   layoutRef: MutableRefObject<ObjectMapLayout>;
   nodeGestureState: ObjectMapNodeGestureState;
+  onGraphReadyChange?: (ready: boolean) => void;
   onUserViewportChangeRef: MutableRefObject<ObjectMapViewportChangeAction | undefined>;
   paletteReady: boolean;
   paletteRef: MutableRefObject<ObjectMapG6Palette | null>;
@@ -55,6 +56,7 @@ export const useObjectMapG6GraphLifecycle = ({
   ignoreNextCanvasClickRef,
   layoutRef,
   nodeGestureState,
+  onGraphReadyChange,
   onUserViewportChangeRef,
   paletteReady,
   paletteRef,
@@ -63,6 +65,7 @@ export const useObjectMapG6GraphLifecycle = ({
   updateTooltipPosition,
 }: UseObjectMapG6GraphLifecycleOptions) => {
   useEffect(() => {
+    onGraphReadyChange?.(false);
     const container = containerRef.current;
     const initialPalette = paletteRef.current;
     if (!container || !paletteReady || !initialPalette) return;
@@ -109,6 +112,7 @@ export const useObjectMapG6GraphLifecycle = ({
         }
         applyQueue.setRenderedData(initialData);
         applyQueue.setReady(true);
+        onGraphReadyChange?.(true);
         scheduleSelectionState(layoutRef.current, selectionStateRef.current);
       } catch (error) {
         initialRenderSettled = true;
@@ -124,6 +128,7 @@ export const useObjectMapG6GraphLifecycle = ({
     void renderInitialGraph();
     return () => {
       disposed = true;
+      onGraphReadyChange?.(false);
       graphRef.current = null;
       hoveredEdgeIdRef.current = null;
       clearObjectMapNodeGesture(nodeGestureState);
@@ -143,6 +148,7 @@ export const useObjectMapG6GraphLifecycle = ({
     ignoreNextCanvasClickRef,
     layoutRef,
     nodeGestureState,
+    onGraphReadyChange,
     onUserViewportChangeRef,
     paletteReady,
     paletteRef,

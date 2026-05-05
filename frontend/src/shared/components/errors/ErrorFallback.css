@@ -111,26 +111,6 @@
 
 /* Specialized error fallbacks */
 
-.table-error-fallback {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 200px;
-  padding: 2rem;
-  background: rgba(255, 0, 0, 0.05);
-  border: 1px dashed rgba(255, 0, 0, 0.2);
-  border-radius: 4px;
-}
-
-.table-error-fallback .error-message {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  color: #ff6b6b;
-  margin-bottom: 1rem;
-}
-
 .panel-error-fallback {
   padding: 2rem;
   text-align: center;
@@ -183,37 +163,4 @@
 .route-error-actions a:hover {
   background: #2a2a2a;
   border-color: #4a4a4a;
-}
-
-.async-error-fallback {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 200px;
-  padding: 2rem;
-}
-
-.degraded-table,
-.degraded-panel {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 150px;
-  padding: 1.5rem;
-  background: rgba(255, 165, 0, 0.05);
-  border: 1px dashed rgba(255, 165, 0, 0.3);
-  border-radius: 4px;
-}
-
-.degraded-message {
-  text-align: center;
-  color: #ffa500;
-}
-
-.degraded-hint {
-  font-size: 0.85rem;
-  color: #808080;
-  margin-top: 0.5rem;
 }

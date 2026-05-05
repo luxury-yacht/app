@@ -99,6 +99,7 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
   const { palette, paletteReady, paletteRef, styleVersion } = useObjectMapG6Palette(containerRef);
   const onUserViewportChangeRef = useRef(onUserViewportChange);
   onUserViewportChangeRef.current = onUserViewportChange;
+  const [graphReady, setGraphReady] = useState(false);
   const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null);
   const handlersRef = useRef<ObjectMapG6EventHandlers>({
     onHoverEdge,
@@ -212,6 +213,7 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
     ignoreNextCanvasClickRef,
     layoutRef,
     nodeGestureState: nodeGestureRef.current,
+    onGraphReadyChange: setGraphReady,
     onUserViewportChangeRef,
     paletteReady,
     paletteRef,
@@ -243,6 +245,7 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
     autoFit,
     containerRef,
     data,
+    graphReady,
     graphRef,
     onUserViewportChangeRef,
     onViewportControlsChange,
