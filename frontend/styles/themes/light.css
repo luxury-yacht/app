@@ -100,18 +100,18 @@
   --status-warning-text: #d97706;
 
   /* Object map relationship colors */
-  --object-map-edge-owner: #0f766e;
+  --object-map-edge-owner: #7c3aed;
   --object-map-edge-routes: #2563eb;
-  --object-map-edge-selector: #4f46e5;
-  --object-map-edge-endpoint: #0891b2;
-  --object-map-edge-volume-binding: #7c3aed;
-  --object-map-edge-storage-class: #65a30d;
-  --object-map-edge-mounts: #a21caf;
+  --object-map-edge-selector: #1d4ed8;
+  --object-map-edge-endpoint: #3b82f6;
+  --object-map-edge-volume-binding: #65a30d;
+  --object-map-edge-storage-class: #4d7c0f;
+  --object-map-edge-mounts: #84cc16;
   --object-map-edge-schedules: #16a34a;
-  --object-map-edge-scales: #ca8a04;
-  --object-map-edge-grants: #ea580c;
-  --object-map-edge-binds: #be185d;
-  --object-map-edge-aggregates: #e11d48;
+  --object-map-edge-scales: #65a30d;
+  --object-map-edge-grants: #c2410c;
+  --object-map-edge-binds: #ea580c;
+  --object-map-edge-aggregates: #f97316;
   --object-map-edge-filtered-path: #dc2626;
   --object-map-edge-uses: #475569;
   --object-map-edge-default: #94a3b8;

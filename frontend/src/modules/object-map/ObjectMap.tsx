@@ -15,7 +15,8 @@ import ContextMenu, { type ContextMenuItem } from '@shared/components/ContextMen
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
-import { objectMapEdgeClass } from './objectMapEdgeStyle';
+import { OBJECT_MAP_EDGE_FAMILY_LABELS, objectMapEdgeClass } from './objectMapEdgeStyle';
+import type { EdgeKindMeta } from './objectMapEdgeStyle';
 import type { ObjectMapContextMenuRequest } from './objectMapRendererTypes';
 import type { ObjectMapViewportControls } from './objectMapRendererTypes';
 import { useObjectMapModel } from './useObjectMapModel';
@@ -41,6 +42,12 @@ const ObjectMapG6Renderer = React.lazy(() => import('./ObjectMapG6Renderer'));
 type ObjectMapMenuState =
   | { type: 'object'; request: ObjectMapContextMenuRequest }
   | { type: 'canvas'; position: { x: number; y: number } };
+
+type ObjectMapLegendGroup = {
+  family: EdgeKindMeta['family'];
+  label: string;
+  entries: EdgeKindMeta[];
+};
 
 export interface ObjectMapProps {
   payload: ObjectMapSnapshotPayload;
@@ -145,6 +152,21 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
   const enabledLegendEntryCount = visibleState.legendEntries.filter((entry) =>
     isEdgeTypeEnabled(entry.type)
   ).length;
+  const legendGroups = useMemo<ObjectMapLegendGroup[]>(() => {
+    const groups = new Map<EdgeKindMeta['family'], ObjectMapLegendGroup>();
+    visibleState.legendEntries.forEach((entry) => {
+      const group =
+        groups.get(entry.family) ??
+        ({
+          family: entry.family,
+          label: OBJECT_MAP_EDGE_FAMILY_LABELS[entry.family],
+          entries: [],
+        } satisfies ObjectMapLegendGroup);
+      group.entries.push(entry);
+      groups.set(entry.family, group);
+    });
+    return Array.from(groups.values());
+  }, [visibleState.legendEntries]);
 
   useEffect(() => {
     setSearchIndex(0);
@@ -479,21 +501,37 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
             {...legendPointerHandlers}
             onClick={(e) => e.stopPropagation()}
           >
-            {visibleState.legendEntries.map((entry) => (
-              <button
-                key={entry.type}
-                type="button"
-                className={`object-map__legend-row ${
-                  isEdgeTypeEnabled(entry.type) ? '' : 'object-map__legend-row--disabled'
-                }`}
-                onClick={() => toggleEdgeType(entry.type)}
-                aria-pressed={isEdgeTypeEnabled(entry.type)}
-              >
-                <svg className="object-map__legend-swatch" width={26} height={6} aria-hidden="true">
-                  <line x1={0} y1={3} x2={26} y2={3} className={objectMapEdgeClass(entry.type)} />
-                </svg>
-                <span className="object-map__legend-label">{entry.label}</span>
-              </button>
+            {legendGroups.map((group) => (
+              <div key={group.family} className="object-map__legend-group">
+                <div className="object-map__legend-category">{group.label}</div>
+                {group.entries.map((entry) => (
+                  <button
+                    key={entry.type}
+                    type="button"
+                    className={`object-map__legend-row ${
+                      isEdgeTypeEnabled(entry.type) ? '' : 'object-map__legend-row--disabled'
+                    }`}
+                    onClick={() => toggleEdgeType(entry.type)}
+                    aria-pressed={isEdgeTypeEnabled(entry.type)}
+                  >
+                    <svg
+                      className="object-map__legend-swatch"
+                      width={26}
+                      height={6}
+                      aria-hidden="true"
+                    >
+                      <line
+                        x1={0}
+                        y1={3}
+                        x2={26}
+                        y2={3}
+                        className={objectMapEdgeClass(entry.type)}
+                      />
+                    </svg>
+                    <span className="object-map__legend-label">{entry.label}</span>
+                  </button>
+                ))}
+              </div>
             ))}
             {visibleState.legendEntries.length > 0 && (
               <>

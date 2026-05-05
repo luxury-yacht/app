@@ -346,6 +346,26 @@
   text-align: left;
 }
 
+.object-map__legend-group {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.object-map__legend-group + .object-map__legend-group {
+  margin-top: var(--spacing-xs);
+}
+
+.object-map__legend-category {
+  margin: 2px 0;
+  color: var(--color-text-secondary);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
 .object-map__legend-row:hover {
   color: var(--color-text);
 }

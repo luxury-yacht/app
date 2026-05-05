@@ -16,6 +16,16 @@ export interface EdgeKindMeta {
   family: 'structural' | 'network' | 'workload' | 'rbac' | 'dependency' | 'storage' | 'filter';
 }
 
+export const OBJECT_MAP_EDGE_FAMILY_LABELS: Record<EdgeKindMeta['family'], string> = {
+  structural: 'Structure',
+  network: 'Network',
+  workload: 'Workload',
+  rbac: 'RBAC',
+  dependency: 'Dependency',
+  storage: 'Storage',
+  filter: 'Filter',
+};
+
 // Order chosen so structural relationships (ownership, traffic flow)
 // appear before dependency relationships, roughly mirroring how a user
 // reads a map left-to-right.
