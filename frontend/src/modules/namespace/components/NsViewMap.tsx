@@ -27,7 +27,7 @@ interface NsViewMapProps {
 }
 
 const isLoadingState = (status: string): boolean =>
-  status === 'loading' || status === 'initialising';
+  status === 'loading' || status === 'initialising' || status === 'updating';
 
 const NsViewMap: React.FC<NsViewMapProps> = ({ namespace }) => {
   const { selectedClusterId } = useKubeconfig();
@@ -104,6 +104,7 @@ const NsViewMap: React.FC<NsViewMapProps> = ({ namespace }) => {
 
   const payload = snapshot.data as ObjectMapSnapshotPayload | null;
   const loading = isLoadingState(snapshot.status) && !payload;
+  const refreshing = isLoadingState(snapshot.status) && snapshot.isManual === true;
 
   if (namespace === ALL_NAMESPACES_SCOPE) {
     return (
@@ -126,7 +127,7 @@ const NsViewMap: React.FC<NsViewMapProps> = ({ namespace }) => {
           <ObjectMap
             payload={payload}
             onRefresh={() => fetchMap('user')}
-            isRefreshing={isLoadingState(snapshot.status)}
+            isRefreshing={refreshing}
             onOpenPanel={handleOpenPanel}
             onNavigateView={handleNavigateView}
             onOpenObjectMap={handleOpenObjectMap}

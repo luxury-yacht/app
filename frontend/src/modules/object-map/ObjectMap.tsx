@@ -208,6 +208,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
     model.resetLayout();
     setFocusMode(false);
   }, [model]);
+  const refreshLabel = isRefreshing ? 'Refreshing' : 'Refresh';
 
   const viewportControlsReady = Boolean(g6ViewportControls);
   const contextMenuObject = contextMenu?.type === 'object' ? contextMenu.request.ref : null;
@@ -262,7 +263,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
     ];
     if (onRefresh) {
       items.push({
-        label: 'Refresh',
+        label: refreshLabel,
         icon: <RefreshIcon />,
         onClick: onRefresh,
         disabled: isRefreshing,
@@ -281,6 +282,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
     isRefreshing,
     model,
     onRefresh,
+    refreshLabel,
     resetMapLayout,
     showLegend,
     viewportControlsReady,
@@ -430,10 +432,13 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
       {onRefresh && (
         <button
           type="button"
-          className="object-map__toolbar-button"
+          className={`object-map__toolbar-button ${
+            isRefreshing ? 'object-map__toolbar-button--refreshing' : ''
+          }`}
           onClick={onRefresh}
-          title="Refresh"
-          aria-label="Refresh"
+          title={refreshLabel}
+          aria-label={refreshLabel}
+          aria-busy={isRefreshing}
           disabled={isRefreshing}
         >
           <RefreshIcon />

@@ -51,12 +51,19 @@ vi.mock('@/utils/errorHandler', () => ({
   errorHandler: errorHandlerMocks,
 }));
 
+vi.mock('@modules/object-map/ObjectMap', () => ({
+  default: ({ isRefreshing }: { isRefreshing?: boolean }) => (
+    <div data-testid="object-map" data-refreshing={String(isRefreshing)} />
+  ),
+}));
+
 type SnapshotStatus = 'idle' | 'loading' | 'ready' | 'updating' | 'initialising' | 'error';
 
 type Snapshot = {
   status: SnapshotStatus;
   data?: unknown;
   error?: string | null;
+  isManual?: boolean;
 };
 
 const snapshotState: { current: Snapshot } = {
@@ -78,6 +85,23 @@ const objectData: PanelObjectData = {
   resource: 'deployments',
   namespace: 'default',
   name: 'web',
+};
+
+const mapPayload = {
+  clusterId: 'cluster-a',
+  seed: {
+    clusterId: 'cluster-a',
+    group: 'apps',
+    version: 'v1',
+    kind: 'Deployment',
+    namespace: 'default',
+    name: 'web',
+  },
+  nodes: [],
+  edges: [],
+  maxDepth: 4,
+  maxNodes: 250,
+  truncated: false,
 };
 
 const waitForEffects = async () => {
@@ -175,6 +199,40 @@ describe('MapTab', () => {
     const { container, unmount } = await renderMapTab();
 
     expect(container.textContent).toContain('No data yet.');
+
+    await unmount();
+  });
+
+  it('treats manual updating snapshots as an active refresh when cached map data exists', async () => {
+    snapshotState.current = {
+      status: 'updating',
+      data: mapPayload,
+      error: null,
+      isManual: true,
+    };
+
+    const { container, unmount } = await renderMapTab();
+
+    expect(
+      container.querySelector('[data-testid="object-map"]')?.getAttribute('data-refreshing')
+    ).toBe('true');
+
+    await unmount();
+  });
+
+  it('does not show map refresh activity for automatic background updates', async () => {
+    snapshotState.current = {
+      status: 'updating',
+      data: mapPayload,
+      error: null,
+      isManual: false,
+    };
+
+    const { container, unmount } = await renderMapTab();
+
+    expect(
+      container.querySelector('[data-testid="object-map"]')?.getAttribute('data-refreshing')
+    ).toBe('false');
 
     await unmount();
   });

@@ -423,12 +423,14 @@ const renderObjectMap = async ({
   onNavigateView,
   onOpenObjectMap,
   onRefresh,
+  isRefreshing = false,
 }: {
   testPayload?: ObjectMapSnapshotPayload;
   onOpenPanel?: (ref: ObjectMapReference) => void;
   onNavigateView?: (ref: ObjectMapReference) => void;
   onOpenObjectMap?: (ref: ObjectMapReference) => void;
   onRefresh?: () => void;
+  isRefreshing?: boolean;
 } = {}) => {
   const container = document.createElement('div');
   document.body.appendChild(container);
@@ -442,6 +444,7 @@ const renderObjectMap = async ({
         onNavigateView={onNavigateView}
         onOpenObjectMap={onOpenObjectMap}
         onRefresh={onRefresh}
+        isRefreshing={isRefreshing}
       />
     );
     await Promise.resolve();
@@ -1165,6 +1168,19 @@ describe('ObjectMap', () => {
       await Promise.resolve();
     });
     expect(container.querySelector('.object-map__legend')).toBeNull();
+
+    cleanup();
+  });
+
+  it('marks the refresh control as busy while a refresh is running', async () => {
+    const onRefresh = vi.fn();
+    const { container, cleanup } = await renderObjectMap({ onRefresh, isRefreshing: true });
+    const refreshButton = container.querySelector<HTMLButtonElement>('[aria-label="Refreshing"]');
+
+    expect(refreshButton).toBeTruthy();
+    expect(refreshButton?.disabled).toBe(true);
+    expect(refreshButton?.getAttribute('aria-busy')).toBe('true');
+    expect(refreshButton?.classList.contains('object-map__toolbar-button--refreshing')).toBe(true);
 
     cleanup();
   });
