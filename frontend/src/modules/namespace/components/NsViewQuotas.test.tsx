@@ -229,7 +229,7 @@ describe('NsViewQuotas', () => {
     const props = await renderQuotaView([entry]);
 
     const items = props.getCustomContextMenuItems(entry, 'name');
-    const openItem = items.find((item: any) => item.label === 'Open');
+    const openItem = items.find((item: any) => item.label === 'View Details');
     expect(openItem).toBeTruthy();
 
     act(() => {

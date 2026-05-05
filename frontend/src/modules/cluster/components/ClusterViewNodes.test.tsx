@@ -235,7 +235,7 @@ describe('ClusterViewNodes', () => {
     const props = gridTablePropsRef.current;
     const objectMapItem = props
       .getCustomContextMenuItems(baseNode, 'name')
-      .find((item: any) => item.label === 'Map');
+      .find((item: any) => item.label === 'View Map');
     expect(objectMapItem).toBeTruthy();
 
     act(() => {

@@ -236,7 +236,7 @@ describe('NsViewStorage', () => {
     const props = await renderStorageView([entry]);
 
     const menu = props.getCustomContextMenuItems(entry, 'name');
-    const openItem = menu.find((item: any) => item.label === 'Open');
+    const openItem = menu.find((item: any) => item.label === 'View Details');
     expect(openItem).toBeTruthy();
 
     act(() => {
@@ -253,7 +253,7 @@ describe('NsViewStorage', () => {
       })
     );
 
-    const objectMapItem = menu.find((item: any) => item.label === 'Map');
+    const objectMapItem = menu.find((item: any) => item.label === 'View Map');
     expect(objectMapItem).toBeTruthy();
 
     act(() => {

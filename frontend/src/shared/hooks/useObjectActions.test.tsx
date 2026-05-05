@@ -8,7 +8,7 @@ describe('buildObjectActionItems', () => {
     eventBus.clear();
   });
 
-  it('omits the Map item when no handler is provided (default for non-workloads views)', () => {
+  it('omits the View Map item when no handler is provided (default for unsupported views)', () => {
     const items = buildObjectActionItems({
       object: {
         kind: 'Deployment',
@@ -22,11 +22,11 @@ describe('buildObjectActionItems', () => {
       },
       permissions: {},
     });
-    const item = items.find((i) => 'label' in i && i.label === 'Map');
+    const item = items.find((i) => 'label' in i && i.label === 'View Map');
     expect(item).toBeUndefined();
   });
 
-  it('adds the Map item when a handler is provided and invokes it on click', () => {
+  it('adds the View Map item when a handler is provided and invokes it on click', () => {
     let invoked = false;
     const items = buildObjectActionItems({
       object: {
@@ -44,13 +44,58 @@ describe('buildObjectActionItems', () => {
       },
       permissions: {},
     });
-    const item = items.find((i) => 'label' in i && i.label === 'Map');
+    const item = items.find((i) => 'label' in i && i.label === 'View Map');
     expect(item).toBeTruthy();
     if (!item || !('onClick' in item)) {
-      throw new Error('Map item missing onClick');
+      throw new Error('View Map item missing onClick');
     }
     item.onClick?.();
     expect(invoked).toBe(true);
+  });
+
+  it('adds shared object navigation labels without shortcut hints', () => {
+    const items = buildObjectActionItems({
+      object: {
+        kind: 'Deployment',
+        name: 'api',
+        namespace: 'apps',
+        clusterId: 'cluster-a',
+      },
+      context: 'object-map',
+      handlers: {
+        onOpen: () => undefined,
+        onObjectMap: () => undefined,
+        onNavigateView: () => undefined,
+      },
+      permissions: {},
+    });
+
+    expect(items.slice(0, 3)).toMatchObject([
+      { label: 'View Details' },
+      { label: 'View Map' },
+      { label: 'Go to Table' },
+    ]);
+    expect(items.slice(0, 3).some((item) => 'shortcut' in item)).toBe(false);
+  });
+
+  it('omits table navigation when already in a grid table', () => {
+    const items = buildObjectActionItems({
+      object: {
+        kind: 'Deployment',
+        name: 'api',
+        namespace: 'apps',
+        clusterId: 'cluster-a',
+      },
+      context: 'gridtable',
+      handlers: {
+        onOpen: () => undefined,
+        onObjectMap: () => undefined,
+        onNavigateView: () => undefined,
+      },
+      permissions: {},
+    });
+
+    expect(items.some((item) => 'label' in item && item.label === 'Go to Table')).toBe(false);
   });
 
   it('adds a Diff action for gridtable objects with a resolvable identity', () => {
@@ -168,7 +213,7 @@ describe('buildObjectActionItems', () => {
     });
   });
 
-  it('places the divider below the ungated Open/Diff section', () => {
+  it('places the divider below the ungated navigation and Diff section', () => {
     const items = buildObjectActionItems({
       object: {
         kind: 'Deployment',
@@ -186,7 +231,7 @@ describe('buildObjectActionItems', () => {
       },
     });
 
-    expect(items[0]).toMatchObject({ label: 'Open' });
+    expect(items[0]).toMatchObject({ label: 'View Details' });
     expect(items[1]).toMatchObject({ label: 'Diff' });
     expect(items[2]).toMatchObject({ divider: true });
     expect(items[3]).toMatchObject({ label: 'Restart' });
@@ -211,7 +256,7 @@ describe('buildObjectActionItems', () => {
     });
 
     expect(items.map((item) => ('divider' in item ? 'divider' : item.label))).toEqual([
-      'Open',
+      'View Details',
       'Diff',
       'divider',
       'Delete',
@@ -237,7 +282,7 @@ describe('buildObjectActionItems', () => {
     });
 
     expect(items.map((item) => ('divider' in item ? 'divider' : item.label))).toEqual([
-      'Open',
+      'View Details',
       'Diff',
     ]);
   });

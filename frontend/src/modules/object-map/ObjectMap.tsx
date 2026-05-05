@@ -10,8 +10,8 @@ import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } fr
 import './ObjectMap.css';
 import type { ObjectMapReference, ObjectMapSnapshotPayload } from '@core/refresh/types';
 import { useShortNames } from '@/hooks/useShortNames';
-import { isMacPlatform } from '@/utils/platform';
 import ContextMenu, { type ContextMenuItem } from '@shared/components/ContextMenu';
+import Tooltip from '@shared/components/Tooltip';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
@@ -28,6 +28,7 @@ import {
 import { useObjectMapLegendDrag } from './useObjectMapLegendDrag';
 import {
   AutoFitIcon,
+  CloseIcon,
   FitToViewIcon,
   FocusModeIcon,
   LegendIcon,
@@ -58,9 +59,9 @@ export interface ObjectMapProps {
   onRefresh?: () => void;
   // Disables the refresh button while a fetch is in flight.
   isRefreshing?: boolean;
-  // Modifier-click handlers. Cmd-click (mac) / Ctrl-click (other) on
-  // a node fires `onOpenPanel`; Alt-click fires `onNavigateView`. Both
-  // are optional — when omitted the modifier click silently no-ops.
+  // Modifier-click handlers. Cmd-click (mac) / Ctrl-click (other) opens
+  // details, Shift-click opens the map, and Alt-click navigates to the table.
+  // Handlers are optional — when omitted the modifier click silently no-ops.
   onOpenPanel?: (ref: ObjectMapReference) => void;
   onNavigateView?: (ref: ObjectMapReference) => void;
   onOpenObjectMap?: (ref: ObjectMapReference) => void;
@@ -88,7 +89,6 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
   const [g6ViewportControls, setG6ViewportControls] = useState<ObjectMapViewportControls | null>(
     null
   );
-  const primaryModifierLabel = useMemo(() => (isMacPlatform() ? 'cmd' : 'ctrl'), []);
 
   const visibleState = useMemo(
     () =>
@@ -212,10 +212,13 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
   const viewportControlsReady = Boolean(g6ViewportControls);
   const contextMenuObject = contextMenu?.type === 'object' ? contextMenu.request.ref : null;
   const objectActions = useObjectActionController({
-    context: 'gridtable',
+    context: 'object-map',
     onOpen: onOpenPanel ? (object) => onOpenPanel(object as ObjectMapReference) : undefined,
     onOpenObjectMap: onOpenObjectMap
       ? (object) => onOpenObjectMap(object as ObjectMapReference)
+      : undefined,
+    onNavigateView: onNavigateView
+      ? (object) => onNavigateView(object as ObjectMapReference)
       : undefined,
   });
   const canvasContextMenuItems = useMemo<ContextMenuItem[]>(() => {
@@ -479,6 +482,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
             onNodeDragEnd={model.endNodeDrag}
             onClearSelection={model.clearSelection}
             onOpenPanel={onOpenPanel}
+            onOpenObjectMap={onOpenObjectMap}
             onNavigateView={onNavigateView}
             onNodeContextMenu={handleNodeContextMenu}
             onCanvasContextMenu={handleCanvasContextMenu}
@@ -501,6 +505,25 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
             {...legendPointerHandlers}
             onClick={(e) => e.stopPropagation()}
           >
+            <Tooltip
+              content="Close the legend. You can open it again with the Legend button on the toolbar."
+              placement="bottom"
+              hoverDelay={500}
+              showArrow={false}
+            >
+              <button
+                type="button"
+                className="object-map__legend-close"
+                aria-label="Close legend"
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setShowLegend(false);
+                }}
+              >
+                <CloseIcon width={10} height={10} />
+              </button>
+            </Tooltip>
             {legendGroups.map((group) => (
               <div key={group.family} className="object-map__legend-group">
                 <div className="object-map__legend-category">{group.label}</div>
@@ -534,35 +557,39 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
               </div>
             ))}
             {visibleState.legendEntries.length > 0 && (
-              <>
-                <div className="object-map__legend-actions">
-                  <button
-                    type="button"
-                    className="object-map__legend-action-button"
-                    onClick={showAllEdgeTypes}
-                    disabled={enabledLegendEntryCount === visibleState.legendEntries.length}
-                  >
-                    Show all
-                  </button>
-                  <button
-                    type="button"
-                    className="object-map__legend-action-button"
-                    onClick={hideAllEdgeTypes}
-                    disabled={enabledLegendEntryCount === 0}
-                  >
-                    Hide all
-                  </button>
-                </div>
-                <div className="object-map__legend-separator" aria-hidden="true" />
-              </>
+              <div className="object-map__legend-actions">
+                <button
+                  type="button"
+                  className="object-map__legend-action-button"
+                  onClick={showAllEdgeTypes}
+                  disabled={enabledLegendEntryCount === visibleState.legendEntries.length}
+                >
+                  Show all
+                </button>
+                <button
+                  type="button"
+                  className="object-map__legend-action-button"
+                  onClick={hideAllEdgeTypes}
+                  disabled={enabledLegendEntryCount === 0}
+                >
+                  Hide all
+                </button>
+              </div>
             )}
-            <div className="object-map__legend-shortcut">
-              <span className="object-map__legend-key">{primaryModifierLabel}+click</span>
-              <span className="object-map__legend-action">Open View</span>
-            </div>
-            <div className="object-map__legend-shortcut">
-              <span className="object-map__legend-key">alt+click</span>
-              <span className="object-map__legend-action">Open Object</span>
+            <div className="object-map__legend-separator" aria-hidden="true" />
+            <div className="object-map__legend-counts" aria-label="Visible map totals">
+              <span className="object-map__legend-count">
+                <span className="object-map__legend-count-value">
+                  {visibleState.visibleLayout.nodes.length}
+                </span>
+                <span className="object-map__legend-count-label">Objects</span>
+              </span>
+              <span className="object-map__legend-count">
+                <span className="object-map__legend-count-value">
+                  {visibleState.visibleLayout.edges.length}
+                </span>
+                <span className="object-map__legend-count-label">Links</span>
+              </span>
             </div>
           </div>
         )}

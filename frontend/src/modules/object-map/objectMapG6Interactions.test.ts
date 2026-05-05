@@ -58,6 +58,7 @@ const createContext = () => {
     onNodeDragEnd: vi.fn(),
     onNodeDragMove: vi.fn(),
     onNodeDragStart: vi.fn(),
+    onOpenObjectMap: vi.fn(),
     onOpenPanel: vi.fn(),
     onSelectNode: vi.fn(),
     onToggleGroup: vi.fn(),
@@ -222,13 +223,15 @@ describe('object map G6 interactions', () => {
     expect(handlers.onSelectNode).toHaveBeenCalledWith('pod');
   });
 
-  it('opens panel or view for modifier clicks using the full object reference', () => {
+  it('opens panel, map, or view for modifier clicks using the full object reference', () => {
     const { context, handlers } = createContext();
 
     handleObjectMapG6NodeClick(context, { target: { id: 'pod' }, metaKey: true });
+    handleObjectMapG6NodeClick(context, { target: { id: 'pod' }, shiftKey: true });
     handleObjectMapG6NodeClick(context, { target: { id: 'pod' }, altKey: true });
 
     expect(handlers.onOpenPanel).toHaveBeenCalledWith(layout.nodes[1].ref);
+    expect(handlers.onOpenObjectMap).toHaveBeenCalledWith(layout.nodes[1].ref);
     expect(handlers.onNavigateView).toHaveBeenCalledWith(layout.nodes[1].ref);
     expect(handlers.onSelectNode).not.toHaveBeenCalled();
   });

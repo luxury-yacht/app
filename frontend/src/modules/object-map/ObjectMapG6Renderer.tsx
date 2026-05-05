@@ -55,6 +55,7 @@ export interface ObjectMapG6RendererProps {
   onNodeDragEnd: ObjectMapNodeDragEnd;
   onClearSelection: () => void;
   onOpenPanel?: ObjectMapObjectAction;
+  onOpenObjectMap?: ObjectMapObjectAction;
   onNavigateView?: ObjectMapObjectAction;
   onNodeContextMenu?: ObjectMapContextMenuAction;
   onCanvasContextMenu?: ObjectMapCanvasContextMenuAction;
@@ -79,6 +80,7 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
   onNodeDragEnd,
   onClearSelection,
   onOpenPanel,
+  onOpenObjectMap,
   onNavigateView,
   onNodeContextMenu,
   onCanvasContextMenu,
@@ -104,6 +106,7 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
     onSelectNode,
     onClearSelection,
     onOpenPanel,
+    onOpenObjectMap,
     onNavigateView,
     onNodeContextMenu,
     onCanvasContextMenu,
@@ -119,6 +122,7 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
     onSelectNode,
     onClearSelection,
     onOpenPanel,
+    onOpenObjectMap,
     onNavigateView,
     onNodeContextMenu,
     onCanvasContextMenu,

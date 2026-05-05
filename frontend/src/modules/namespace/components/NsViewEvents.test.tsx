@@ -201,11 +201,12 @@ describe('NsViewEvents', () => {
     const props = await renderEventsView([event]);
 
     const menu = props.getCustomContextMenuItems(event, 'objectName');
-    expect(menu).toHaveLength(1);
-    expect(menu[0].label).toBe('View Pod');
+    const labels = menu.map((item: any) => item.label);
+    expect(labels).not.toContain('Go to Table');
+    expect(labels).toContain('View Pod');
 
     await act(async () => {
-      menu[0].onClick?.();
+      menu.find((item: any) => item.label === 'View Pod')?.onClick?.();
       await Promise.resolve();
     });
 
@@ -325,7 +326,7 @@ describe('NsViewEvents', () => {
     const props = await renderEventsView([noNamespaceEvent]);
     const menu = props.getCustomContextMenuItems(noNamespaceEvent, 'objectName');
     await act(async () => {
-      menu[0].onClick?.();
+      menu.find((item: any) => item.label === 'View Pod')?.onClick?.();
       await Promise.resolve();
     });
     expect(openWithObjectMock).toHaveBeenCalledWith(

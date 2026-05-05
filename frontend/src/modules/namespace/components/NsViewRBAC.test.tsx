@@ -201,7 +201,7 @@ describe('NsViewRBAC', () => {
     const props = await renderRBACView([entry]);
     const openItem = props
       .getCustomContextMenuItems(entry, 'name')
-      .find((item: any) => item.label === 'Open');
+      .find((item: any) => item.label === 'View Details');
     expect(openItem).toBeTruthy();
 
     act(() => {
@@ -250,7 +250,7 @@ describe('NsViewRBAC', () => {
     const props = await renderRBACView([entry]);
     const objectMapItem = props
       .getCustomContextMenuItems(entry, 'name')
-      .find((item: any) => item.label === 'Map');
+      .find((item: any) => item.label === 'View Map');
     expect(objectMapItem).toBeTruthy();
 
     act(() => {

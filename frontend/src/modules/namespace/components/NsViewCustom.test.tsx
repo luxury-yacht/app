@@ -217,7 +217,7 @@ describe('NsViewCustom', () => {
     expect(sortHandlerMock).toHaveBeenCalledWith('name');
 
     const contextItems = gridProps.getCustomContextMenuItems(baseResource, 'kind');
-    expect(contextItems[0].label).toBe('Open');
+    expect(contextItems[0].label).toBe('View Details');
     contextItems[0].onClick();
     expect(openWithObjectMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -336,7 +336,7 @@ describe('NsViewCustom', () => {
 
     const gridProps = gridTableMock.mock.calls[0][0];
     const contextItems = gridProps.getCustomContextMenuItems(dbInstance, 'kind');
-    expect(contextItems[0].label).toBe('Open');
+    expect(contextItems[0].label).toBe('View Details');
     contextItems[0].onClick();
 
     expect(openWithObjectMock).toHaveBeenCalledWith(

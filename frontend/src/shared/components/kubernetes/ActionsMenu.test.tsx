@@ -49,6 +49,10 @@ vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
   }),
 }));
 
+vi.mock('@shared/hooks/useNavigateToView', () => ({
+  useNavigateToView: () => ({ navigateToView: vi.fn() }),
+}));
+
 // Mock keyboard shortcuts for ConfirmationModal
 vi.mock('@ui/shortcuts', () => ({
   useShortcut: vi.fn(),
@@ -325,7 +329,7 @@ describe('ActionsMenu', () => {
     });
   });
 
-  it('shows Map for supported objects and opens the map tab', async () => {
+  it('shows View Map for supported objects and opens the map tab', async () => {
     await renderMenu({
       object: makeObject('ConfigMap', {
         group: '',
@@ -335,7 +339,7 @@ describe('ActionsMenu', () => {
 
     openMenu(container);
     const items = Array.from(container.querySelectorAll<HTMLElement>('.context-menu-item'));
-    const objectMapItem = items.find((item) => item.textContent?.includes('Map'));
+    const objectMapItem = items.find((item) => item.textContent?.includes('View Map'));
     expect(objectMapItem).toBeTruthy();
 
     act(() => {

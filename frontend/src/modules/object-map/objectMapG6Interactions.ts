@@ -50,6 +50,7 @@ export type ObjectMapG6ElementPointerEvent = {
   metaKey?: boolean;
   ctrlKey?: boolean;
   altKey?: boolean;
+  shiftKey?: boolean;
   preventDefault?: () => void;
 };
 
@@ -78,6 +79,7 @@ export type ObjectMapG6PointerGraph = {
 export interface ObjectMapG6NodeInteractionHandlers {
   badgeForNode: ObjectMapNodeBadgeLookup;
   onNavigateView?: ObjectMapObjectAction;
+  onOpenObjectMap?: ObjectMapObjectAction;
   onCanvasContextMenu?: ObjectMapCanvasContextMenuAction;
   onNodeContextMenu?: ObjectMapContextMenuAction;
   onNodeDragEnd: ObjectMapNodeDragEnd;
@@ -175,8 +177,14 @@ export const handleObjectMapG6NodeClick = (
   if (!node) return;
 
   context.markNodeClickHandled();
-  const { badgeForNode, onOpenPanel, onNavigateView, onSelectNode, onToggleGroup } =
-    context.handlers;
+  const {
+    badgeForNode,
+    onOpenObjectMap,
+    onOpenPanel,
+    onNavigateView,
+    onSelectNode,
+    onToggleGroup,
+  } = context.handlers;
 
   if (isObjectMapG6BadgeEvent(event)) {
     const badge = badgeForNode(id);
@@ -188,6 +196,10 @@ export const handleObjectMapG6NodeClick = (
   }
   if (event.metaKey || event.ctrlKey) {
     onOpenPanel?.(node.ref as ObjectMapReference);
+    return;
+  }
+  if (event.shiftKey) {
+    onOpenObjectMap?.(node.ref as ObjectMapReference);
     return;
   }
   if (event.altKey) {

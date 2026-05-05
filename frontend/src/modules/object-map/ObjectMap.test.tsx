@@ -17,6 +17,22 @@ vi.mock('@/hooks/useShortNames', () => ({
   useShortNames: () => useShortNamesMock(),
 }));
 
+vi.mock('@/utils/platform', () => ({
+  isMacPlatform: () => true,
+}));
+
+vi.mock('@core/contexts/ZoomContext', () => ({
+  useZoom: () => ({ zoomLevel: 100 }),
+}));
+
+vi.mock('@shared/hooks/useNavigateToView', () => ({
+  useNavigateToView: () => ({ navigateToView: vi.fn() }),
+}));
+
+vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
+  useObjectPanel: () => ({ openWithObject: vi.fn() }),
+}));
+
 vi.mock('@shared/components/ContextMenu', () => ({
   default: ({
     items,
@@ -211,6 +227,10 @@ vi.mock('./ObjectMapG6Renderer', () => {
                   onClick={(event) => {
                     if (event.metaKey || event.ctrlKey) {
                       props.onOpenPanel?.(node.ref);
+                      return;
+                    }
+                    if (event.shiftKey) {
+                      props.onOpenObjectMap?.(node.ref);
                       return;
                     }
                     if (event.altKey) {
@@ -463,6 +483,7 @@ const pointerEvent = (
 afterEach(() => {
   useShortNamesMock.mockReturnValue(false);
   document.body.innerHTML = '';
+  vi.useRealTimers();
 });
 
 describe('ObjectMap', () => {
@@ -536,6 +557,15 @@ describe('ObjectMap', () => {
     expect(hideAll).toBeTruthy();
     expect(showAll?.disabled).toBe(true);
     expect(hideAll?.disabled).toBe(false);
+    const legend = container.querySelector<HTMLElement>('.object-map__legend');
+    const legendText = legend?.textContent ?? '';
+    expect(legendText).not.toContain('cmd+click');
+    expect(legendText).not.toContain('alt+click');
+    expect(container.querySelectorAll('.object-map__legend-separator').length).toBeGreaterThan(0);
+    expect(container.querySelector('.object-map__legend-counts')?.textContent).toContain(
+      '2Objects'
+    );
+    expect(container.querySelector('.object-map__legend-counts')?.textContent).toContain('1Links');
     expect(container.querySelector('[data-testid="mock-edge-edge-1"]')).toBeTruthy();
     expect(container.querySelector('[aria-label="Deployment: web"]')).toBeTruthy();
     expect(container.querySelector('[aria-label="Pod: web-abc"]')).toBeTruthy();
@@ -548,6 +578,10 @@ describe('ObjectMap', () => {
     expect(container.querySelector('[data-testid="mock-edge-edge-1"]')).toBeNull();
     expect(container.querySelector('[aria-label="Deployment: web"]')).toBeTruthy();
     expect(container.querySelector('[aria-label="Pod: web-abc"]')).toBeTruthy();
+    expect(container.querySelector('.object-map__legend-counts')?.textContent).toContain(
+      '2Objects'
+    );
+    expect(container.querySelector('.object-map__legend-counts')?.textContent).toContain('0Links');
     expect(showAll?.disabled).toBe(false);
     expect(hideAll?.disabled).toBe(true);
 
@@ -624,6 +658,48 @@ describe('ObjectMap', () => {
 
     expect(container.querySelector('[data-testid="mock-edge-edge-1"]')).toBeNull();
     expect(legend!.style.left).toBe('300px');
+
+    cleanup();
+  });
+
+  it('closes the legend from the legend close button and explains how to reopen it', async () => {
+    vi.useFakeTimers();
+    const { container, cleanup } = await renderObjectMap();
+    const legend = container.querySelector<HTMLElement>('.object-map__legend');
+    const closeButton = container.querySelector<HTMLButtonElement>('[aria-label="Close legend"]');
+
+    expect(legend).toBeTruthy();
+    expect(closeButton).toBeTruthy();
+
+    await act(async () => {
+      closeButton!.dispatchEvent(mouseEvent('mouseover'));
+      vi.advanceTimersByTime(499);
+    });
+
+    expect(document.body.textContent).not.toContain(
+      'Close the legend. You can open it again with the Legend button on the toolbar.'
+    );
+
+    await act(async () => {
+      vi.advanceTimersByTime(1);
+    });
+
+    expect(document.body.textContent).toContain(
+      'Close the legend. You can open it again with the Legend button on the toolbar.'
+    );
+    expect(document.body.querySelector('.tooltip')?.getAttribute('data-placement')).toBeNull();
+
+    await act(async () => {
+      closeButton!.click();
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('.object-map__legend')).toBeNull();
+    expect(
+      container
+        .querySelector<HTMLButtonElement>('[aria-label="Toggle legend"]')
+        ?.getAttribute('aria-pressed')
+    ).toBe('false');
 
     cleanup();
   });
@@ -871,7 +947,12 @@ describe('ObjectMap', () => {
   it('passes full object references for modifier-click actions', async () => {
     const onOpenPanel = vi.fn();
     const onNavigateView = vi.fn();
-    const { container, cleanup } = await renderObjectMap({ onOpenPanel, onNavigateView });
+    const onOpenObjectMap = vi.fn();
+    const { container, cleanup } = await renderObjectMap({
+      onOpenPanel,
+      onNavigateView,
+      onOpenObjectMap,
+    });
     const pod = container.querySelector<HTMLButtonElement>('[aria-label="Pod: web-abc"]');
 
     expect(pod).toBeTruthy();
@@ -900,6 +981,24 @@ describe('ObjectMap', () => {
     });
 
     expect(onOpenPanel).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      pod!.dispatchEvent(mouseEvent('click', { shiftKey: true }));
+      await Promise.resolve();
+    });
+
+    expect(onOpenObjectMap).toHaveBeenCalledTimes(1);
+    expect(onOpenObjectMap).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clusterId: 'cluster-a',
+        group: '',
+        version: 'v1',
+        kind: 'Pod',
+        namespace: 'default',
+        name: 'web-abc',
+        uid: 'pod-uid',
+      })
+    );
 
     await act(async () => {
       pod!.dispatchEvent(mouseEvent('click', { altKey: true }));
@@ -936,15 +1035,19 @@ describe('ObjectMap', () => {
     });
 
     const menu = container.querySelector<HTMLElement>('[data-testid="mock-context-menu"]');
-    expect(menu?.textContent).toContain('Open');
-    expect(menu?.textContent).toContain('Map');
+    expect(menu?.textContent).toContain('View Details');
+    expect(menu?.textContent).toContain('View Map');
+    expect(menu?.textContent).toContain('Go to Table');
     expect(menu?.textContent).toContain('Diff');
+    expect(menu?.textContent).not.toContain('cmd');
+    expect(menu?.textContent).not.toContain('shift');
+    expect(menu?.textContent).not.toContain('alt');
 
-    const openItem = Array.from(menu!.querySelectorAll('button')).find(
-      (button) => button.textContent === 'Open'
+    const openItem = Array.from(menu!.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('View Details')
     );
-    const mapItem = Array.from(menu!.querySelectorAll('button')).find(
-      (button) => button.textContent === 'Map'
+    const mapItem = Array.from(menu!.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('View Map')
     );
 
     await act(async () => {
@@ -970,8 +1073,8 @@ describe('ObjectMap', () => {
     });
 
     const nextMenu = container.querySelector<HTMLElement>('[data-testid="mock-context-menu"]');
-    const nextMapItem = Array.from(nextMenu!.querySelectorAll('button')).find(
-      (button) => button.textContent === 'Map'
+    const nextMapItem = Array.from(nextMenu!.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('View Map')
     );
     expect(mapItem).toBeTruthy();
 

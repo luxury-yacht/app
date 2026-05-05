@@ -96,15 +96,6 @@
   flex: 1;
 }
 
-/* Keyboard shortcut hint */
-.context-menu-shortcut {
-  margin-left: 1rem;
-  font-size: 0.7rem;
-  font-family: var(--font-family-mono, monospace);
-  color: var(--color-text-tertiary);
-  opacity: 0.8;
-}
-
 .context-menu-reason {
   display: block;
   margin-left: 26px;

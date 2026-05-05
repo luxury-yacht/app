@@ -258,7 +258,7 @@ describe('NsViewConfig ConfigViewGrid', () => {
     });
 
     const menuItems = getCustomContextMenuItems(resource, 'name');
-    expect(menuItems.map((item: any) => item.label)).toContain('Map');
+    expect(menuItems.map((item: any) => item.label)).toContain('View Map');
     expect(menuItems.map((item: any) => item.label)).toContain('Delete');
     act(() => {
       menuItems[0].onClick();
@@ -272,7 +272,7 @@ describe('NsViewConfig ConfigViewGrid', () => {
       })
     );
 
-    const objectMapAction = menuItems.find((item: any) => item.label === 'Map');
+    const objectMapAction = menuItems.find((item: any) => item.label === 'View Map');
     act(() => {
       objectMapAction.onClick();
     });
@@ -358,7 +358,7 @@ describe('NsViewConfig ConfigViewGrid', () => {
     expect(keyExtractor(defensiveResource)).toBe('cluster-a|/v1/ConfigMap/default/app-config');
 
     const menuItems = getCustomContextMenuItems(defensiveResource, 'name');
-    const openAction = menuItems.find((item: any) => item.label === 'Open');
+    const openAction = menuItems.find((item: any) => item.label === 'View Details');
     act(() => {
       openAction.onClick();
     });

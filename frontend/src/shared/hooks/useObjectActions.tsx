@@ -74,6 +74,7 @@ export interface ObjectActionData {
 // Action handlers
 export interface ObjectActionHandlers {
   onOpen?: () => void;
+  onNavigateView?: () => void;
   onRestart?: () => void;
   onRollback?: () => void;
   onScale?: () => void;
@@ -119,7 +120,7 @@ const PORT_FORWARDABLE_TARGETS: Record<string, { group: string; version: string 
 // Options for building action items
 export interface BuildObjectActionsOptions {
   object: ObjectActionData;
-  context: 'gridtable' | 'object-panel';
+  context: 'gridtable' | 'object-map' | 'object-panel';
   handlers: ObjectActionHandlers;
   permissions: {
     restart?: PermissionStatus | null;
@@ -202,10 +203,10 @@ export function buildObjectActionItems({
     portForward: portForwardStatus,
   } = permissions;
 
-  // Open - only for gridtable context
-  if (context === 'gridtable' && handlers.onOpen) {
+  // Open - only for surfaces that are not already the object panel.
+  if ((context === 'gridtable' || context === 'object-map') && handlers.onOpen) {
     menuItems.push({
-      label: 'Open',
+      label: 'View Details',
       icon: <OpenIcon />,
       onClick: handlers.onOpen,
     });
@@ -216,9 +217,17 @@ export function buildObjectActionItems({
   // handler is opt-in per call site; when omitted, no item is added.
   if (handlers.onObjectMap) {
     menuItems.push({
-      label: 'Map',
+      label: 'View Map',
       icon: <ObjectMapIcon />,
       onClick: handlers.onObjectMap,
+    });
+  }
+
+  if (context !== 'gridtable' && handlers.onNavigateView) {
+    menuItems.push({
+      label: 'Go to Table',
+      icon: <OpenIcon />,
+      onClick: handlers.onNavigateView,
     });
   }
 

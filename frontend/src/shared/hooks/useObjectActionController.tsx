@@ -14,6 +14,8 @@ import RollbackModal from '@shared/components/modals/RollbackModal';
 import ScaleModal from '@shared/components/modals/ScaleModal';
 import { PortForwardModal, type PortForwardTarget } from '@modules/port-forward';
 import { isObjectMapSupportedKind } from '@modules/object-panel/components/ObjectPanel/objectMapSupport';
+import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
+import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import {
   buildObjectActionItems,
   normalizeKind,
@@ -23,7 +25,7 @@ import {
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import type { KubernetesObjectReference } from '@/types/view-state';
 
-type ObjectActionContext = 'gridtable' | 'object-panel';
+type ObjectActionContext = 'gridtable' | 'object-map' | 'object-panel';
 type ObjectActionReference = ObjectActionData & KubernetesObjectReference;
 
 interface ObjectActionControllerOptions {
@@ -33,6 +35,7 @@ interface ObjectActionControllerOptions {
   useDefaultHandlers?: boolean;
   onOpen?: (object: ObjectActionReference) => void;
   onOpenObjectMap?: (object: ObjectActionReference) => void;
+  onNavigateView?: (object: ObjectActionReference) => void;
   onViewInvolvedObject?: (object: ObjectActionReference) => void;
   handlerOverrides?: ObjectActionHandlers;
   onAfterAction?: (object: ObjectActionData, action: string) => void;
@@ -96,12 +99,15 @@ export const useObjectActionController = ({
   useDefaultHandlers = true,
   onOpen,
   onOpenObjectMap,
+  onNavigateView,
   onViewInvolvedObject,
   handlerOverrides,
   onAfterAction,
   onAfterDelete,
 }: ObjectActionControllerOptions) => {
   const permissionMap = useUserPermissions();
+  const { openWithObject } = useObjectPanel();
+  const { navigateToView } = useNavigateToView();
   const [restartTarget, setRestartTarget] = useState<ObjectActionData | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ObjectActionData | null>(null);
   const [triggerTarget, setTriggerTarget] = useState<ObjectActionData | null>(null);
@@ -154,10 +160,22 @@ export const useObjectActionController = ({
         context,
         handlers: {
           onOpen: onOpen ? () => onOpen(actionObject) : undefined,
-          onObjectMap:
-            onOpenObjectMap && isObjectMapSupportedKind(object.kind)
-              ? () => onOpenObjectMap(actionObject)
-              : undefined,
+          onNavigateView: () => {
+            if (onNavigateView) {
+              onNavigateView(actionObject);
+              return;
+            }
+            navigateToView(actionObject);
+          },
+          onObjectMap: isObjectMapSupportedKind(object.kind)
+            ? () => {
+                if (onOpenObjectMap) {
+                  onOpenObjectMap(actionObject);
+                  return;
+                }
+                openWithObject(actionObject, { initialTab: 'map' });
+              }
+            : undefined,
           onViewInvolvedObject: onViewInvolvedObject
             ? () => onViewInvolvedObject(actionObject)
             : undefined,
@@ -239,9 +257,12 @@ export const useObjectActionController = ({
       onAfterAction,
       onOpen,
       onOpenObjectMap,
+      onNavigateView,
       onViewInvolvedObject,
+      openWithObject,
       permissionMap,
       queryMissingPermissions,
+      navigateToView,
       useDefaultHandlers,
     ]
   );

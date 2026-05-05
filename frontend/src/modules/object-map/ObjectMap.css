@@ -316,7 +316,7 @@
   background: var(--color-bg);
   border: var(--border-width) solid var(--color-border);
   border-radius: var(--border-radius-md);
-  padding: var(--spacing-sm) var(--spacing-md);
+  padding: var(--spacing-sm) calc(var(--spacing-md) + 20px) var(--spacing-sm) var(--spacing-md);
   font-size: 0.7rem;
   color: var(--color-text-secondary);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
@@ -330,6 +330,44 @@
   /* Keep the legend above map content but below modals/dropdowns
    * elsewhere in the app. */
   z-index: 1;
+}
+
+.object-map__legend-close {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  line-height: 0;
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+.object-map__legend-close:hover {
+  background: rgb(239 68 68 / 10%);
+  color: rgb(239 68 68);
+  transform: scale(1.05);
+}
+
+.object-map__legend-close:active {
+  transform: scale(0.95);
+}
+
+.object-map__legend-close:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
 }
 
 .object-map__legend-row {
@@ -417,28 +455,41 @@
   opacity: 0.45;
 }
 
+.object-map__legend-counts {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  margin-top: var(--spacing-xs);
+  color: var(--color-text-secondary);
+}
+
+.object-map__legend-count {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.object-map__legend-count + .object-map__legend-count::before {
+  content: "·";
+  margin-right: var(--spacing-xs);
+  color: var(--color-text-secondary);
+}
+
+.object-map__legend-count-label {
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.object-map__legend-count-value {
+  color: var(--color-text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
 .object-map__legend-separator {
   height: var(--border-width);
   margin: var(--spacing-xs) 0;
   background: var(--color-border);
-}
-
-.object-map__legend-shortcut {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  align-items: center;
-  column-gap: var(--spacing-md);
-}
-
-.object-map__legend-key {
-  color: var(--color-text-secondary);
-  min-width: 8ch;
-  white-space: nowrap;
-}
-
-.object-map__legend-action {
-  color: var(--color-text);
-  white-space: nowrap;
 }
 
 .object-map__toolbar-button--active {

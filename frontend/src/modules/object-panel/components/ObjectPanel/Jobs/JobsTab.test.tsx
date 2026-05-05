@@ -202,7 +202,7 @@ describe('JobsTab', () => {
     const row = gridTablePropsRef.current.data[0];
     const objectMapItem = gridTablePropsRef.current
       .getCustomContextMenuItems(row)
-      .find((item: any) => item.label === 'Map');
+      .find((item: any) => item.label === 'View Map');
     expect(objectMapItem).toBeTruthy();
 
     act(() => {

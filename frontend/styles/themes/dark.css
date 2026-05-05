@@ -337,9 +337,9 @@
   --modal-scroll-thumb-hover: var(--color-base-500);
 
   /* Tooltips */
-  --tooltip-bg: var(--color-base-800);
-  --tooltip-text: var(--color-base-100);
-  --tooltip-border: var(--color-base-700);
+  --tooltip-bg: var(--color-bg-tertiary);
+  --tooltip-text: var(--color-text);
+  --tooltip-border: var(--color-border);
   --tooltip-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
 
   /* Editor content shared tokens */
@@ -414,8 +414,8 @@
   );
   --resourcebar-marker-request: rgba(255, 255, 255, 0.8);
   --resourcebar-marker-request-shadow: 0 0 3px rgba(255, 255, 255, 0.4);
-  --resourcebar-marker-limit: var(--color-accent-dark-400);
-  --resourcebar-marker-limit-shadow: 0 0 3px rgba(251, 191, 36, 0.5);
+  --resourcebar-marker-limit: #dc2626;
+  --resourcebar-marker-limit-shadow: 0 0 3px rgba(220, 38, 38, 0.4);
   --resourcebar-empty-bg: rgba(255, 255, 255, 0.04);
   --resourcebar-status-stale: var(--color-accent-dark-400);
   --resourcebar-status-error: #f87171;
