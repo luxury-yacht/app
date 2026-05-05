@@ -12,12 +12,12 @@
   --object-map-edge-line-width: 1.5;
   --object-map-edge-highlighted-line-width: 2.5;
   --object-map-edge-hovered-line-width: 4;
-  --object-map-edge-dimmed-opacity: 0.4;
+  --object-map-edge-dimmed-opacity: 0.2;
   --object-map-node-connected-line-width: 1;
   --object-map-node-selected-line-width: 1;
   --object-map-node-edge-hovered-line-width: 2.5;
-  --object-map-node-dimmed-background-opacity: 0.25;
-  --object-map-node-dimmed-foreground-opacity: 0.45;
+  --object-map-node-dimmed-background-opacity: 0.2;
+  --object-map-node-dimmed-foreground-opacity: 0.2;
   --object-map-tooltip-max-width: 800;
   --object-map-tooltip-height: 64;
   --object-map-tooltip-offset-y: 6;
