@@ -12,6 +12,7 @@ import { useZoom } from '@core/contexts/ZoomContext';
 import './ContextMenu.css';
 
 export interface ContextMenuItem {
+  actionId?: string;
   label?: string;
   onClick?: () => void;
   icon?: string | React.ReactNode;
@@ -201,6 +202,7 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose }) =
             } ${isFocused ? 'is-focused' : ''}`}
             role="menuitem"
             aria-disabled={item.disabled ? 'true' : 'false'}
+            data-context-action-id={item.actionId}
             data-context-index={index}
             onClick={() => {
               if (!item.disabled && item.onClick) {

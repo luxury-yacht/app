@@ -297,9 +297,9 @@ default object menu is:
 
 | Action | Shortcut | Notes |
 | --- | --- | --- |
-| View Details | Cmd-click on macOS, Ctrl-click elsewhere | Opens the object panel. |
-| View Map | Shift-click | Opens a map for the object. |
-| Go to Table | Alt-click | Omitted when the object already lives in a table view. |
+| Open Details | Cmd-click on macOS, Ctrl-click elsewhere | Opens the object panel. |
+| Open Map | Shift-click | Opens a map for the object. |
+| Go to Table View | Alt-click | Omitted when the object already lives in a table view. |
 
 Do not put shortcut help in the map legend. The legend explains relationship
 types and object/link counts only.

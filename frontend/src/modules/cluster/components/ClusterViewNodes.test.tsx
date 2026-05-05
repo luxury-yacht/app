@@ -9,6 +9,7 @@ import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import ClusterViewNodes from '@modules/cluster/components/ClusterViewNodes';
+import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionDescriptors';
 
 const { useTableSortMock } = vi.hoisted(() => ({
   useTableSortMock: vi.fn(
@@ -235,7 +236,7 @@ describe('ClusterViewNodes', () => {
     const props = gridTablePropsRef.current;
     const objectMapItem = props
       .getCustomContextMenuItems(baseNode, 'name')
-      .find((item: any) => item.label === 'View Map');
+      .find((item: any) => item.actionId === OBJECT_ACTION_IDS.viewMap);
     expect(objectMapItem).toBeTruthy();
 
     act(() => {

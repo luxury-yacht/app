@@ -223,6 +223,7 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
                 }
 
                 const menuItem = item as {
+                  actionId?: string;
                   label: string;
                   icon?: React.ReactNode;
                   onClick?: () => void;
@@ -236,6 +237,7 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
                     className={`context-menu-item${menuItem.disabled ? ' disabled' : ''}${menuItem.danger ? ' danger' : ''}`}
                     role="menuitem"
                     aria-disabled={menuItem.disabled ? 'true' : 'false'}
+                    data-context-action-id={menuItem.actionId}
                     onClick={() => {
                       if (!menuItem.disabled && menuItem.onClick) {
                         menuItem.onClick();

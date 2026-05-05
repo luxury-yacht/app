@@ -9,6 +9,7 @@ import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import ClusterViewConfig from '@modules/cluster/components/ClusterViewConfig';
+import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionDescriptors';
 
 vi.mock('@core/contexts/FavoritesContext', () => ({
   useFavorites: () => ({
@@ -162,7 +163,8 @@ describe('ClusterViewConfig', () => {
     expect(props).toBeTruthy();
     const contextItems = props.getCustomContextMenuItems(baseConfig, 'kind');
     const mapItem = contextItems.find(
-      (item: { label?: string; onClick?: () => void }) => item.label === 'View Map'
+      (item: { actionId?: string; onClick?: () => void }) =>
+        item.actionId === OBJECT_ACTION_IDS.viewMap
     );
 
     expect(mapItem).toBeTruthy();
@@ -192,7 +194,8 @@ describe('ClusterViewConfig', () => {
     expect(props).toBeTruthy();
     const contextItems = props.getCustomContextMenuItems(ingressClass, 'kind');
     const mapItem = contextItems.find(
-      (item: { label?: string; onClick?: () => void }) => item.label === 'View Map'
+      (item: { actionId?: string; onClick?: () => void }) =>
+        item.actionId === OBJECT_ACTION_IDS.viewMap
     );
 
     expect(mapItem).toBeTruthy();
@@ -228,6 +231,10 @@ describe('ClusterViewConfig', () => {
       'kind'
     );
 
-    expect(contextItems.some((item: { label?: string }) => item.label === 'View Map')).toBe(false);
+    expect(
+      contextItems.some(
+        (item: { actionId?: string }) => item.actionId === OBJECT_ACTION_IDS.viewMap
+      )
+    ).toBe(false);
   });
 });

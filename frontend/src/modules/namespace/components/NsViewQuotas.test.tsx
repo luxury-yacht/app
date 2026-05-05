@@ -8,6 +8,7 @@
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionDescriptors';
 
 vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
   useNamespaceColumnLink: () => ({
@@ -229,7 +230,7 @@ describe('NsViewQuotas', () => {
     const props = await renderQuotaView([entry]);
 
     const items = props.getCustomContextMenuItems(entry, 'name');
-    const openItem = items.find((item: any) => item.label === 'View Details');
+    const openItem = items.find((item: any) => item.actionId === OBJECT_ACTION_IDS.viewDetails);
     expect(openItem).toBeTruthy();
 
     act(() => {

@@ -9,6 +9,7 @@ import ReactDOM from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionDescriptors';
 
 vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
   useNamespaceColumnLink: () => ({
@@ -243,7 +244,7 @@ describe('NsViewNetwork', () => {
 
     expect(props.data).toHaveLength(1);
     const menu = props.getCustomContextMenuItems(entry, 'name');
-    const openItem = menu.find((item: any) => item.label === 'View Details');
+    const openItem = menu.find((item: any) => item.actionId === OBJECT_ACTION_IDS.viewDetails);
     expect(openItem).toBeTruthy();
 
     act(() => {
@@ -272,7 +273,7 @@ describe('NsViewNetwork', () => {
     const props = await renderNetworkView([entry]);
 
     const menu = props.getCustomContextMenuItems(entry, 'name');
-    const objectMapItem = menu.find((item: any) => item.label === 'View Map');
+    const objectMapItem = menu.find((item: any) => item.actionId === OBJECT_ACTION_IDS.viewMap);
     expect(objectMapItem).toBeTruthy();
 
     act(() => {

@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ObjectMapReference, ObjectMapSnapshotPayload } from '@core/refresh/types';
 import ObjectMap from './ObjectMap';
 import type { ObjectMapViewportControls } from './objectMapRendererTypes';
+import { OBJECT_ACTION_IDS, objectActionLabel } from '@shared/actions/objectActionDescriptors';
 
 const useShortNamesMock = vi.hoisted(() => vi.fn(() => false));
 
@@ -38,6 +39,7 @@ vi.mock('@shared/components/ContextMenu', () => ({
     items,
   }: {
     items: Array<{
+      actionId?: string;
       label?: string;
       onClick?: () => void;
       icon?: React.ReactNode;
@@ -48,7 +50,12 @@ vi.mock('@shared/components/ContextMenu', () => ({
     <div data-testid="mock-context-menu">
       {items.map((item, index) =>
         item.divider || item.header ? null : (
-          <button key={index} type="button" onClick={item.onClick}>
+          <button
+            key={index}
+            type="button"
+            data-context-action-id={item.actionId}
+            onClick={item.onClick}
+          >
             {item.icon && <span data-testid="mock-context-menu-icon">{item.icon}</span>}
             {item.label}
           </button>
@@ -1076,19 +1083,19 @@ describe('ObjectMap', () => {
     });
 
     const menu = container.querySelector<HTMLElement>('[data-testid="mock-context-menu"]');
-    expect(menu?.textContent).toContain('View Details');
-    expect(menu?.textContent).toContain('View Map');
-    expect(menu?.textContent).toContain('Go to Table');
+    expect(menu?.textContent).toContain(objectActionLabel(OBJECT_ACTION_IDS.viewDetails));
+    expect(menu?.textContent).toContain(objectActionLabel(OBJECT_ACTION_IDS.viewMap));
+    expect(menu?.textContent).toContain(objectActionLabel(OBJECT_ACTION_IDS.goToTable));
     expect(menu?.textContent).toContain('Diff');
     expect(menu?.textContent).not.toContain('cmd');
     expect(menu?.textContent).not.toContain('shift');
     expect(menu?.textContent).not.toContain('alt');
 
-    const openItem = Array.from(menu!.querySelectorAll('button')).find((button) =>
-      button.textContent?.includes('View Details')
+    const openItem = menu!.querySelector<HTMLButtonElement>(
+      `[data-context-action-id="${OBJECT_ACTION_IDS.viewDetails}"]`
     );
-    const mapItem = Array.from(menu!.querySelectorAll('button')).find((button) =>
-      button.textContent?.includes('View Map')
+    const mapItem = menu!.querySelector<HTMLButtonElement>(
+      `[data-context-action-id="${OBJECT_ACTION_IDS.viewMap}"]`
     );
 
     await act(async () => {
@@ -1114,8 +1121,8 @@ describe('ObjectMap', () => {
     });
 
     const nextMenu = container.querySelector<HTMLElement>('[data-testid="mock-context-menu"]');
-    const nextMapItem = Array.from(nextMenu!.querySelectorAll('button')).find((button) =>
-      button.textContent?.includes('View Map')
+    const nextMapItem = nextMenu!.querySelector<HTMLButtonElement>(
+      `[data-context-action-id="${OBJECT_ACTION_IDS.viewMap}"]`
     );
     expect(mapItem).toBeTruthy();
 

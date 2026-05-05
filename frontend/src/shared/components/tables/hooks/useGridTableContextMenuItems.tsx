@@ -9,6 +9,7 @@ import { useCallback } from 'react';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { SortAscIcon, SortDescIcon } from '@shared/components/icons/MenuIcons';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
+import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionDescriptors';
 
 // Builds context menu item lists for GridTable cells/headers/empty areas,
 // combining custom items with sort actions while avoiding duplicates.
@@ -43,11 +44,18 @@ export function useGridTableContextMenuItems<T>({
           // below "Diff" when present; otherwise fall back to placing it
           // below "Open".
           const sectionBreakIndex = (() => {
-            const diffIndex = customItems.findIndex((ci) => 'label' in ci && ci.label === 'Diff');
+            const diffIndex = customItems.findIndex(
+              (ci) =>
+                ci.actionId === OBJECT_ACTION_IDS.diff || ('label' in ci && ci.label === 'Diff')
+            );
             if (diffIndex !== -1) {
               return diffIndex;
             }
-            return customItems.findIndex((ci) => 'label' in ci && ci.label === 'Open');
+            return customItems.findIndex(
+              (ci) =>
+                ci.actionId === OBJECT_ACTION_IDS.viewDetails ||
+                ('label' in ci && ci.label === 'Open')
+            );
           })();
           if (sectionBreakIndex !== -1 && customItems.length > sectionBreakIndex + 1) {
             const nextItem = customItems[sectionBreakIndex + 1];

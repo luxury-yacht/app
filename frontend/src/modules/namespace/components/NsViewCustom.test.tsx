@@ -10,6 +10,7 @@ import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
+import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionDescriptors';
 
 vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
   useNamespaceColumnLink: () => ({
@@ -217,7 +218,7 @@ describe('NsViewCustom', () => {
     expect(sortHandlerMock).toHaveBeenCalledWith('name');
 
     const contextItems = gridProps.getCustomContextMenuItems(baseResource, 'kind');
-    expect(contextItems[0].label).toBe('View Details');
+    expect(contextItems[0].actionId).toBe(OBJECT_ACTION_IDS.viewDetails);
     contextItems[0].onClick();
     expect(openWithObjectMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -336,7 +337,7 @@ describe('NsViewCustom', () => {
 
     const gridProps = gridTableMock.mock.calls[0][0];
     const contextItems = gridProps.getCustomContextMenuItems(dbInstance, 'kind');
-    expect(contextItems[0].label).toBe('View Details');
+    expect(contextItems[0].actionId).toBe(OBJECT_ACTION_IDS.viewDetails);
     contextItems[0].onClick();
 
     expect(openWithObjectMock).toHaveBeenCalledWith(

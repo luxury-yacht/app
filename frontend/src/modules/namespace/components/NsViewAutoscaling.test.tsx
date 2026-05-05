@@ -10,6 +10,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import NsViewAutoscaling, {
   type AutoscalingData,
 } from '@modules/namespace/components/NsViewAutoscaling';
+import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionDescriptors';
 
 vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
   useNamespaceColumnLink: () => ({
@@ -176,7 +177,7 @@ describe('NsViewAutoscaling', () => {
 
     const objectMapItem = gridTablePropsRef.current
       .getCustomContextMenuItems(entry, 'name')
-      .find((item: any) => item.label === 'View Map');
+      .find((item: any) => item.actionId === OBJECT_ACTION_IDS.viewMap);
     expect(objectMapItem).toBeTruthy();
 
     act(() => {

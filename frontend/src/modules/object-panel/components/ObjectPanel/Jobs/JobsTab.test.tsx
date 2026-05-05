@@ -10,6 +10,7 @@ import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { JobsTab } from './JobsTab';
 import { types } from '@wailsjs/go/models';
+import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionDescriptors';
 
 // Track calls to useGridTablePersistence so we can inspect clusterIdentity.
 const gridTablePropsRef: { current: any } = { current: null };
@@ -202,7 +203,7 @@ describe('JobsTab', () => {
     const row = gridTablePropsRef.current.data[0];
     const objectMapItem = gridTablePropsRef.current
       .getCustomContextMenuItems(row)
-      .find((item: any) => item.label === 'View Map');
+      .find((item: any) => item.actionId === OBJECT_ACTION_IDS.viewMap);
     expect(objectMapItem).toBeTruthy();
 
     act(() => {

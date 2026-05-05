@@ -9,6 +9,7 @@ import React, { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
+import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionDescriptors';
 
 vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
   useNamespaceColumnLink: () => ({
@@ -258,7 +259,7 @@ describe('NsViewConfig ConfigViewGrid', () => {
     });
 
     const menuItems = getCustomContextMenuItems(resource, 'name');
-    expect(menuItems.map((item: any) => item.label)).toContain('View Map');
+    expect(menuItems.map((item: any) => item.actionId)).toContain(OBJECT_ACTION_IDS.viewMap);
     expect(menuItems.map((item: any) => item.label)).toContain('Delete');
     act(() => {
       menuItems[0].onClick();
@@ -272,7 +273,9 @@ describe('NsViewConfig ConfigViewGrid', () => {
       })
     );
 
-    const objectMapAction = menuItems.find((item: any) => item.label === 'View Map');
+    const objectMapAction = menuItems.find(
+      (item: any) => item.actionId === OBJECT_ACTION_IDS.viewMap
+    );
     act(() => {
       objectMapAction.onClick();
     });
@@ -358,7 +361,9 @@ describe('NsViewConfig ConfigViewGrid', () => {
     expect(keyExtractor(defensiveResource)).toBe('cluster-a|/v1/ConfigMap/default/app-config');
 
     const menuItems = getCustomContextMenuItems(defensiveResource, 'name');
-    const openAction = menuItems.find((item: any) => item.label === 'View Details');
+    const openAction = menuItems.find(
+      (item: any) => item.actionId === OBJECT_ACTION_IDS.viewDetails
+    );
     act(() => {
       openAction.onClick();
     });
