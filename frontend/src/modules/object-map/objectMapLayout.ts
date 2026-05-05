@@ -40,9 +40,11 @@
  */
 
 import type { ObjectMapEdge, ObjectMapNode } from '@core/refresh/types';
+import { OBJECT_MAP_CARD_STYLE } from './objectMapCardStyle';
+import type { ObjectMapFilteredPath, ObjectMapLayoutEdge } from './objectMapKindFilter';
 
-export const OBJECT_MAP_NODE_WIDTH = 220;
-export const OBJECT_MAP_NODE_HEIGHT = 64;
+export const OBJECT_MAP_NODE_WIDTH = OBJECT_MAP_CARD_STYLE.width;
+export const OBJECT_MAP_NODE_HEIGHT = OBJECT_MAP_CARD_STYLE.height;
 export const OBJECT_MAP_COLUMN_GAP = 100;
 export const OBJECT_MAP_ROW_GAP = 24;
 export const OBJECT_MAP_MAX_NODES_PER_LANE = 24;
@@ -81,6 +83,7 @@ export interface PositionedEdge {
   type: string;
   label: string;
   tracedBy?: string;
+  filteredPath?: ObjectMapFilteredPath;
   // Cubic bezier path string. Cross-column edges run from source-right
   // to target-left through the gutter; same-column edges arc rightward
   // (defensive fallback for the rare cycle case).
@@ -425,7 +428,7 @@ const computeLaneHeight = (laneNodes: ObjectMapNode[]): number => {
 
 export const computeObjectMapLayout = (
   nodes: ObjectMapNode[],
-  edges: ObjectMapEdge[],
+  edges: ObjectMapLayoutEdge[],
   seedId: string
 ): ObjectMapLayout => {
   if (nodes.length === 0) {
@@ -505,7 +508,7 @@ export const computeObjectMapLayout = (
 
 export const routeObjectMapEdges = (
   nodes: PositionedNode[],
-  edges: ObjectMapEdge[]
+  edges: ObjectMapLayoutEdge[]
 ): PositionedEdge[] => {
   const positioned = new Map(nodes.map((node) => [node.id, node]));
   const positionedEdges: PositionedEdge[] = [];
@@ -530,6 +533,7 @@ export const routeObjectMapEdges = (
         type: edge.type,
         label: edge.label,
         tracedBy: edge.tracedBy,
+        filteredPath: edge.filteredPath,
         d: buildSameColumnPath(anchorX, sourceY, targetY, arcStretch),
         midX,
         midY,
@@ -549,6 +553,7 @@ export const routeObjectMapEdges = (
       type: edge.type,
       label: edge.label,
       tracedBy: edge.tracedBy,
+      filteredPath: edge.filteredPath,
       d: buildCrossColumnPath(sourceX, sourceY, targetX, targetY),
       midX: (sourceX + targetX) / 2,
       midY: (sourceY + targetY) / 2,

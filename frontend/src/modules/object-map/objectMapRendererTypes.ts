@@ -1,14 +1,24 @@
+/**
+ * frontend/src/modules/object-map/objectMapRendererTypes.ts
+ *
+ * Shared object-map renderer contracts used by the map shell and G6 renderer.
+ */
+
 import type { ObjectMapReference } from '@core/refresh/types';
+import type { ObjectMapFilteredPath } from './objectMapKindFilter';
 import type { PositionedNode } from './objectMapLayout';
 
 export interface ObjectMapHoverEdge {
   tooltipX: number;
   tooltipY: number;
   sourceLabel: string;
+  sourceKind: string;
   label: string;
   targetLabel: string;
+  targetKind: string;
   type: string;
   tracedBy?: string;
+  filteredPath?: ObjectMapFilteredPath;
 }
 
 export interface ObjectMapSelectionState {
@@ -42,6 +52,10 @@ export interface ObjectMapContextMenuRequest {
   position: { x: number; y: number };
 }
 
+export interface ObjectMapCanvasContextMenuRequest {
+  position: { x: number; y: number };
+}
+
 export type ObjectMapNodeBadgeLookup = (nodeId: string) => ObjectMapNodeBadge | null;
 
 export type ObjectMapNodeDragStart = (node: PositionedNode, pointer: ObjectMapPointer) => void;
@@ -52,9 +66,13 @@ export type ObjectMapObjectAction = (ref: ObjectMapReference) => void;
 
 export type ObjectMapContextMenuAction = (request: ObjectMapContextMenuRequest) => void;
 
+export type ObjectMapCanvasContextMenuAction = (request: ObjectMapCanvasContextMenuRequest) => void;
+
 export interface ObjectMapViewportControls {
   zoomIn: () => void;
   zoomOut: () => void;
   fitToView: () => void;
   focusNode: (nodeId: string) => void;
 }
+
+export type ObjectMapViewportChangeAction = () => void;

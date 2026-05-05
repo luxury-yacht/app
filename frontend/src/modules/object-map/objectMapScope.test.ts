@@ -1,3 +1,9 @@
+/**
+ * frontend/src/modules/object-map/objectMapScope.test.ts
+ *
+ * Tests scope filtering for namespace and object-level maps.
+ */
+
 import { describe, expect, it } from 'vitest';
 import {
   buildNamespaceObjectMapScope,

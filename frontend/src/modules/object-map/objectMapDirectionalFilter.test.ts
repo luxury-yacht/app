@@ -1,3 +1,9 @@
+/**
+ * frontend/src/modules/object-map/objectMapDirectionalFilter.test.ts
+ *
+ * Tests object-map directional traversal filtering rules.
+ */
+
 import { describe, expect, it } from 'vitest';
 import type { ObjectMapEdge, ObjectMapNode } from '@core/refresh/types';
 import { filterByDirectionalReachability } from './objectMapDirectionalFilter';

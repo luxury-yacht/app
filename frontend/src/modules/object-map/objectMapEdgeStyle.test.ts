@@ -1,3 +1,9 @@
+/**
+ * frontend/src/modules/object-map/objectMapEdgeStyle.test.ts
+ *
+ * Tests object-map edge style metadata and CSS class resolution.
+ */
+
 import { describe, expect, it } from 'vitest';
 import { objectMapEdgeClass } from './objectMapEdgeStyle';
 
@@ -16,6 +22,7 @@ describe('objectMapEdgeClass', () => {
     ['grants', 'object-map-edge--grants'],
     ['binds', 'object-map-edge--binds'],
     ['aggregates', 'object-map-edge--aggregates'],
+    ['filtered-path', 'object-map-edge--filtered-path'],
   ])('maps %s to its variant class', (type, variant) => {
     expect(objectMapEdgeClass(type)).toBe(`object-map-edge ${variant}`);
   });

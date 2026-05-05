@@ -1,3 +1,10 @@
+/**
+ * frontend/src/modules/object-map/useObjectMapModel.ts
+ *
+ * State model for object-map layout, selection, hover, collapse groups,
+ * manual positioning, and auto-fit.
+ */
+
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ObjectMapSnapshotPayload } from '@core/refresh/types';
 import {
@@ -20,6 +27,7 @@ import type {
   ObjectMapNodeBadge,
   ObjectMapPointer,
 } from './objectMapRendererTypes';
+import { OBJECT_MAP_NODE_DRAG_THRESHOLD_PX } from './objectMapNodeGesture';
 
 type NodePositionOverrides = Map<string, { x: number; y: number }>;
 
@@ -34,8 +42,6 @@ interface NodeDragState {
   startY: number;
   didDrag: boolean;
 }
-
-const NODE_DRAG_THRESHOLD_PX = 3;
 
 export const useObjectMapModel = (payload: ObjectMapSnapshotPayload) => {
   const seedId = useMemo(() => {
@@ -119,12 +125,10 @@ export const useObjectMapModel = (payload: ObjectMapSnapshotPayload) => {
     () => new Map()
   );
   const nodeDragRef = useRef<NodeDragState | null>(null);
-  const suppressNextNodeClickRef = useRef(false);
 
   useEffect(() => {
     setNodePositionOverrides(new Map());
     nodeDragRef.current = null;
-    suppressNextNodeClickRef.current = false;
   }, [filtered.nodes, filtered.edges]);
 
   const layout: ObjectMapLayout = useMemo(() => {
@@ -174,10 +178,6 @@ export const useObjectMapModel = (payload: ObjectMapSnapshotPayload) => {
   );
 
   const selectNode = useCallback((id: string) => {
-    if (suppressNextNodeClickRef.current) {
-      suppressNextNodeClickRef.current = false;
-      return;
-    }
     setActiveNodeId((prev) => (prev === id ? null : id));
   }, []);
 
@@ -209,7 +209,7 @@ export const useObjectMapModel = (payload: ObjectMapSnapshotPayload) => {
     if (!drag || drag.pointerId !== pointer.pointerId) return;
     const dxScreen = pointer.clientX - drag.originClientX;
     const dyScreen = pointer.clientY - drag.originClientY;
-    if (!drag.didDrag && Math.hypot(dxScreen, dyScreen) >= NODE_DRAG_THRESHOLD_PX) {
+    if (!drag.didDrag && Math.hypot(dxScreen, dyScreen) >= OBJECT_MAP_NODE_DRAG_THRESHOLD_PX) {
       drag.didDrag = true;
       setAutoFit(false);
     }
@@ -237,16 +237,12 @@ export const useObjectMapModel = (payload: ObjectMapSnapshotPayload) => {
   const endNodeDrag = useCallback((pointer: ObjectMapPointer) => {
     const drag = nodeDragRef.current;
     if (!drag || drag.pointerId !== pointer.pointerId) return;
-    if (drag.didDrag) {
-      suppressNextNodeClickRef.current = true;
-    }
     nodeDragRef.current = null;
   }, []);
 
   const resetLayout = useCallback(() => {
     setNodePositionOverrides(new Map());
     nodeDragRef.current = null;
-    suppressNextNodeClickRef.current = false;
   }, []);
 
   const clearHoverEdge = useCallback(() => {

@@ -7,31 +7,18 @@
   color: var(--color-text);
   position: relative;
   overflow: hidden;
-  --object-map-edge-owner: var(--color-accent);
-  --object-map-edge-routes: #1d4ed8;
-  --object-map-edge-selector: var(--badge-blue-text);
-  --object-map-edge-endpoint: #60a5fa;
-  --object-map-edge-volume-binding: #7e22ce;
-  --object-map-edge-storage-class: var(--badge-lime-text);
-  --object-map-edge-mounts: #c084fc;
-  --object-map-edge-schedules: var(--badge-green-text);
-  --object-map-edge-scales: #eab308;
-  --object-map-edge-grants: var(--badge-orange-text);
-  --object-map-edge-binds: var(--badge-purple-text);
-  --object-map-edge-aggregates: var(--badge-pink-text);
-  --object-map-edge-uses: var(--color-text-secondary);
-  --object-map-edge-default: var(--color-text-tertiary);
   --object-map-edge-dash-length: 4;
   --object-map-edge-dash-gap: 3;
   --object-map-edge-line-width: 1.5;
   --object-map-edge-highlighted-line-width: 2.5;
   --object-map-edge-hovered-line-width: 4;
   --object-map-edge-dimmed-opacity: 0.4;
-  --object-map-node-connected-line-width: 1.5;
-  --object-map-node-selected-line-width: 2.5;
+  --object-map-node-connected-line-width: 1;
+  --object-map-node-selected-line-width: 1;
   --object-map-node-edge-hovered-line-width: 2.5;
-  --object-map-node-dimmed-opacity: 0.25;
-  --object-map-tooltip-width: 220;
+  --object-map-node-dimmed-background-opacity: 0.25;
+  --object-map-node-dimmed-foreground-opacity: 0.45;
+  --object-map-tooltip-max-width: 800;
   --object-map-tooltip-height: 64;
   --object-map-tooltip-offset-y: 6;
   --object-map-tooltip-arrow-width: 12;
@@ -40,8 +27,13 @@
   --object-map-tooltip-source-y: -56;
   --object-map-tooltip-relationship-y: -40;
   --object-map-tooltip-target-y: -24;
-  --object-map-tooltip-label-max-chars: 38;
+  --object-map-tooltip-relationship-bottom-padding: 2;
   --object-map-tooltip-horizontal-padding: 12;
+  --object-map-tooltip-badge-gap: 6;
+  --object-map-tooltip-badge-max-width: 190;
+  --object-map-tooltip-badge-max-font-size: 10;
+  --object-map-tooltip-badge-padding-x: 5;
+  --object-map-tooltip-badge-padding-y: 2;
   --object-map-tooltip-name-font-size: 11;
   --object-map-tooltip-name-font-weight: 600;
   --object-map-tooltip-relationship-font-size: 11;
@@ -62,21 +54,22 @@
   background: var(--color-bg);
 }
 
-/* Floating icon-bar overlay in the canvas top-right. Mirrors the
- * legend's overlay positioning on the opposite corner. */
+.object-map__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  flex-shrink: 0;
+  padding: 0.75rem;
+  background-color: var(--color-bg-secondary);
+}
+
 .object-map__toolbar {
-  position: absolute;
-  top: var(--spacing-md);
-  right: var(--spacing-md);
   display: flex;
   align-items: center;
   gap: 2px;
-  padding: 4px;
-  background: var(--color-bg);
-  border: var(--border-width) solid var(--color-border);
-  border-radius: var(--border-radius-md);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
-  z-index: 1;
+  flex-wrap: wrap;
+  width: 100%;
 }
 
 .object-map__toolbar-button {
@@ -138,7 +131,7 @@
   padding-top: 0;
   padding-bottom: 0;
   font-size: 0.75rem;
-  background: var(--color-bg-secondary);
+  background: var(--color-bg);
 }
 
 .object-map__search-input {
@@ -147,7 +140,7 @@
   padding: 0 var(--spacing-sm);
   border: var(--border-width) solid var(--color-border);
   border-radius: var(--border-radius-sm);
-  background: var(--color-bg-secondary);
+  background: var(--color-bg);
   color: var(--color-text);
   font: inherit;
   font-size: 0.75rem;
@@ -167,6 +160,7 @@
 
 .object-map__canvas {
   flex: 1;
+  min-height: 0;
   position: relative;
   overflow: hidden;
   cursor: grab;
@@ -213,7 +207,8 @@
  *   - Green         = scheduling (schedules)
  *   - Yellow        = scaling (scales)
  *   - Orange/purple/pink = RBAC (grants, binds, aggregates)
- * Plus structural (owner = accent) and reference (uses = gray dashed).
+ * Plus structural (owner = accent), reference (uses = gray dashed), and
+ * filtered paths (red dashed).
  *
  * Within a family, darker shade = outer/structural, lighter shade =
  * inner/specific. So the network family reads dark → light as
@@ -270,6 +265,10 @@
 .object-map-edge--aggregates {
   stroke: var(--object-map-edge-aggregates);
 }
+.object-map-edge--filtered-path {
+  stroke: var(--object-map-edge-filtered-path);
+  stroke-dasharray: var(--object-map-edge-dash-length) var(--object-map-edge-dash-gap);
+}
 
 .object-map-edge--uses {
   stroke: var(--object-map-edge-uses);
@@ -297,8 +296,7 @@
   stroke-width: 1;
 }
 
-.object-map__edge-tooltip-source,
-.object-map__edge-tooltip-target {
+.object-map__edge-tooltip-name {
   font-size: calc(var(--object-map-tooltip-name-font-size) * 1px);
   font-weight: var(--object-map-tooltip-name-font-weight);
   fill: var(--color-text);
@@ -307,7 +305,6 @@
 .object-map__edge-tooltip-relationship {
   font-size: calc(var(--object-map-tooltip-relationship-font-size) * 1px);
   font-weight: var(--object-map-tooltip-relationship-font-weight);
-  fill: var(--color-text-secondary);
 }
 
 /* --- Legend overlay (HTML, positioned absolutely over the canvas) -- */
@@ -315,18 +312,21 @@
 .object-map__legend {
   position: absolute;
   top: var(--spacing-md);
-  left: var(--spacing-md);
+  right: var(--spacing-md);
   background: var(--color-bg);
   border: var(--border-width) solid var(--color-border);
   border-radius: var(--border-radius-md);
   padding: var(--spacing-sm) var(--spacing-md);
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   color: var(--color-text-secondary);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
   display: flex;
   flex-direction: column;
   gap: 4px;
   pointer-events: auto;
+  cursor: move;
+  touch-action: none;
+  user-select: none;
   /* Keep the legend above map content but below modals/dropdowns
    * elsewhere in the app. */
   z-index: 1;
@@ -344,6 +344,26 @@
   cursor: pointer;
   font: inherit;
   text-align: left;
+}
+
+.object-map__legend-group {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.object-map__legend-group + .object-map__legend-group {
+  margin-top: var(--spacing-xs);
+}
+
+.object-map__legend-category {
+  margin: 2px 0;
+  color: var(--color-text-secondary);
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .object-map__legend-row:hover {
@@ -369,6 +389,32 @@
 .object-map__legend-label {
   white-space: nowrap;
   color: var(--color-text);
+}
+
+.object-map__legend-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  margin-top: var(--spacing-xs);
+}
+
+.object-map__legend-action-button {
+  padding: 1px var(--spacing-xs);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  background: var(--color-bg);
+  color: var(--color-text);
+  cursor: pointer;
+  font: inherit;
+}
+
+.object-map__legend-action-button:hover:not(:disabled) {
+  background: var(--button-generic-hover);
+}
+
+.object-map__legend-action-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .object-map__legend-separator {

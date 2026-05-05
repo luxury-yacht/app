@@ -1,3 +1,9 @@
+/**
+ * frontend/src/modules/object-map/objectMapDedupe.test.ts
+ *
+ * Tests duplicate relationship pruning for object-map graph inputs.
+ */
+
 import { describe, expect, it } from 'vitest';
 import type { ObjectMapEdge, ObjectMapNode } from '@core/refresh/types';
 import { dedupeServiceEdges } from './objectMapDedupe';

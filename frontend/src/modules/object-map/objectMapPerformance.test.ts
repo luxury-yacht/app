@@ -1,3 +1,9 @@
+/**
+ * frontend/src/modules/object-map/objectMapPerformance.test.ts
+ *
+ * Performance tests for large object-map layout and G6 data conversion paths.
+ */
+
 import { describe, expect, it } from 'vitest';
 import { computeCollapseInfo, filterByCollapseInfo } from './objectMapCollapse';
 import { dedupeServiceEdges } from './objectMapDedupe';
@@ -25,7 +31,9 @@ const PALETTE: ObjectMapG6Palette = {
   textSecondary: '#64748b',
   textTertiary: '#9ca3af',
   textInverse: '#ffffff',
+  edgeOwner: '#0f766e',
   edgeRoutes: '#1d4ed8',
+  edgeSelector: '#4f46e5',
   edgeEndpoint: '#60a5fa',
   edgeVolumeBinding: '#7e22ce',
   edgeStorageClass: '#65a30d',
@@ -35,6 +43,7 @@ const PALETTE: ObjectMapG6Palette = {
   edgeGrants: '#ea580c',
   edgeBinds: '#9333ea',
   edgeAggregates: '#db2777',
+  edgeFilteredPath: '#ef4444',
   edgeUses: '#6b7280',
   edgeDefault: '#9ca3af',
   edgeLineWidth: 1.5,
@@ -42,11 +51,12 @@ const PALETTE: ObjectMapG6Palette = {
   edgeHoveredLineWidth: 4,
   edgeDimmedOpacity: 0.15,
   edgeDash: [4, 3],
-  nodeConnectedLineWidth: 1.5,
-  nodeSelectedLineWidth: 2.5,
+  nodeConnectedLineWidth: 1,
+  nodeSelectedLineWidth: 1,
   nodeEdgeHoveredLineWidth: 2.5,
-  nodeDimmedOpacity: 0.25,
-  tooltipWidth: 220,
+  nodeDimmedBackgroundOpacity: 0.25,
+  nodeDimmedForegroundOpacity: 0.45,
+  tooltipMaxWidth: 220,
   tooltipHeight: 64,
   tooltipOffsetY: 6,
   tooltipArrowWidth: 12,
@@ -55,8 +65,13 @@ const PALETTE: ObjectMapG6Palette = {
   tooltipSourceY: -56,
   tooltipRelationshipY: -40,
   tooltipTargetY: -24,
-  tooltipLabelMaxChars: 38,
+  tooltipRelationshipBottomPadding: 2,
   tooltipHorizontalPadding: 12,
+  tooltipBadgeGap: 6,
+  tooltipBadgeMaxWidth: 118,
+  tooltipBadgeMaxFontSize: 10,
+  tooltipBadgePaddingX: 5,
+  tooltipBadgePaddingY: 2,
   tooltipNameFontSize: 11,
   tooltipNameFontWeight: 600,
   tooltipRelationshipFontSize: 10,

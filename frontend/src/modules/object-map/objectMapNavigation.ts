@@ -1,3 +1,9 @@
+/**
+ * frontend/src/modules/object-map/objectMapNavigation.ts
+ *
+ * Converts object-map references into view navigation targets.
+ */
+
 import { errorHandler } from '@/utils/errorHandler';
 import type { ObjectMapReference } from '@/core/refresh/types';
 import {

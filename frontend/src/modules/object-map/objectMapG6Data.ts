@@ -1,21 +1,23 @@
+/**
+ * frontend/src/modules/object-map/objectMapG6Data.ts
+ *
+ * Converts object-map layout data into G6 nodes, edges, and element states.
+ */
+
 import type { EdgeData, GraphData, NodeData } from '@antv/g6';
 import type { PathArray } from '@antv/g6';
+import type { KindBadgeVisualStyle } from '@shared/utils/kindBadgeColors';
+import { fallbackKindBadgeVisualStyle } from '@shared/utils/kindBadgeColors';
+import { getDisplayKind } from '@/utils/kindAliasMap';
 import type { ObjectMapLayout, PositionedEdge, PositionedNode } from './objectMapLayout';
+import { OBJECT_MAP_CARD_STYLE } from './objectMapCardStyle';
 import { OBJECT_MAP_G6_CARD_NODE, OBJECT_MAP_G6_PATH_EDGE } from './objectMapG6Constants';
 import type { ObjectMapNodeBadgeLookup, ObjectMapSelectionState } from './objectMapRendererTypes';
 
-const NODE_KIND_MAX_CHARS = 26;
-const NODE_NAME_MAX_CHARS = 32;
 const NODE_NAMESPACE_MAX_CHARS = 28;
-const NODE_CARD_RADIUS = 6;
+const NODE_CARD_RADIUS = OBJECT_MAP_CARD_STYLE.borderRadius;
 const NODE_LINE_WIDTH = 1;
 const NODE_SEED_LINE_WIDTH = 2;
-const BADGE_FONT_WEIGHT = 700;
-const BADGE_WIDTH = 28;
-const BADGE_HEIGHT = 14;
-const BADGE_RADIUS = 3;
-const BADGE_OFFSET_X = -24;
-const BADGE_OFFSET_Y = BADGE_HEIGHT - 8;
 
 export interface ObjectMapG6Palette {
   accent: string;
@@ -27,7 +29,9 @@ export interface ObjectMapG6Palette {
   textSecondary: string;
   textTertiary: string;
   textInverse: string;
+  edgeOwner: string;
   edgeRoutes: string;
+  edgeSelector: string;
   edgeEndpoint: string;
   edgeVolumeBinding: string;
   edgeStorageClass: string;
@@ -37,6 +41,7 @@ export interface ObjectMapG6Palette {
   edgeGrants: string;
   edgeBinds: string;
   edgeAggregates: string;
+  edgeFilteredPath: string;
   edgeUses: string;
   edgeDefault: string;
   edgeLineWidth: number;
@@ -47,8 +52,9 @@ export interface ObjectMapG6Palette {
   nodeConnectedLineWidth: number;
   nodeSelectedLineWidth: number;
   nodeEdgeHoveredLineWidth: number;
-  nodeDimmedOpacity: number;
-  tooltipWidth: number;
+  nodeDimmedBackgroundOpacity: number;
+  nodeDimmedForegroundOpacity: number;
+  tooltipMaxWidth: number;
   tooltipHeight: number;
   tooltipOffsetY: number;
   tooltipArrowWidth: number;
@@ -57,8 +63,13 @@ export interface ObjectMapG6Palette {
   tooltipSourceY: number;
   tooltipRelationshipY: number;
   tooltipTargetY: number;
-  tooltipLabelMaxChars: number;
+  tooltipRelationshipBottomPadding: number;
   tooltipHorizontalPadding: number;
+  tooltipBadgeGap: number;
+  tooltipBadgeMaxWidth: number;
+  tooltipBadgeMaxFontSize: number;
+  tooltipBadgePaddingX: number;
+  tooltipBadgePaddingY: number;
   tooltipNameFontSize: number;
   tooltipNameFontWeight: number;
   tooltipRelationshipFontSize: number;
@@ -79,11 +90,11 @@ const formatNamespace = (node: PositionedNode): string =>
 export const objectMapG6EdgeStroke = (type: string, palette: ObjectMapG6Palette): string => {
   switch (type.trim().toLowerCase()) {
     case 'owner':
-      return palette.accent;
+      return palette.edgeOwner;
     case 'routes':
       return palette.edgeRoutes;
     case 'selector':
-      return palette.accent;
+      return palette.edgeSelector;
     case 'endpoint':
       return palette.edgeEndpoint;
     case 'volume-binding':
@@ -102,6 +113,8 @@ export const objectMapG6EdgeStroke = (type: string, palette: ObjectMapG6Palette)
       return palette.edgeBinds;
     case 'aggregates':
       return palette.edgeAggregates;
+    case 'filtered-path':
+      return palette.edgeFilteredPath;
     case 'uses':
       return palette.edgeUses;
     default:
@@ -170,13 +183,17 @@ export const toObjectMapG6Data = (
   layout: ObjectMapLayout,
   selectionState: ObjectMapSelectionState,
   badgeForNode: ObjectMapNodeBadgeLookup,
-  palette: ObjectMapG6Palette
+  palette: ObjectMapG6Palette,
+  kindBadgeStyleForKind: (kind: string) => KindBadgeVisualStyle = fallbackKindBadgeVisualStyle,
+  useShortResourceNames = false
 ): GraphData => ({
   nodes: layout.nodes.map<NodeData>((node) => {
     const badge = badgeForNode(node.id);
-    const kindLabel = truncate(node.ref.kind, NODE_KIND_MAX_CHARS);
-    const nameLabel = truncate(node.ref.name, NODE_NAME_MAX_CHARS);
+    const kindLabel = getDisplayKind(node.ref.kind, useShortResourceNames);
     const namespaceLabel = truncate(formatNamespace(node), NODE_NAMESPACE_MAX_CHARS);
+    const kindBadgeStyle = kindBadgeStyleForKind(node.ref.kind);
+    const states = objectMapG6NodeState(node, selectionState);
+    const isDimmed = states.includes('dimmed');
 
     return {
       id: node.id,
@@ -185,10 +202,10 @@ export const toObjectMapG6Data = (
         ref: node.ref,
         badge,
         kindLabel,
-        nameLabel,
+        nameLabel: node.ref.name,
         namespaceLabel,
       },
-      states: objectMapG6NodeState(node, selectionState),
+      states,
       style: {
         x: node.x + node.width / 2,
         y: node.y + node.height / 2,
@@ -199,30 +216,32 @@ export const toObjectMapG6Data = (
         lineWidth: node.isSeed ? NODE_SEED_LINE_WIDTH : NODE_LINE_WIDTH,
         opacity: palette.fullOpacity,
         label: false,
-        cardKindText: kindLabel.toUpperCase(),
-        cardNameText: nameLabel,
+        cardBackgroundOpacity: isDimmed ? palette.nodeDimmedBackgroundOpacity : palette.fullOpacity,
+        cardForegroundOpacity: isDimmed ? palette.nodeDimmedForegroundOpacity : palette.fullOpacity,
+        cardKindBadgeText: kindLabel.toUpperCase(),
+        cardKindBadgeFill: kindBadgeStyle.backgroundColor,
+        cardKindBadgeTextFill: kindBadgeStyle.color,
+        cardKindBadgeStroke: kindBadgeStyle.borderColor,
+        cardKindBadgeBorderWidth: kindBadgeStyle.borderWidth,
+        cardKindBadgeRadius: kindBadgeStyle.borderRadius,
+        cardKindBadgeFontSize: kindBadgeStyle.fontSize,
+        cardKindBadgeFontWeight: kindBadgeStyle.fontWeight,
+        cardKindBadgeLetterSpacing: kindBadgeStyle.letterSpacing,
+        cardKindBadgePaddingX: kindBadgeStyle.paddingX,
+        cardKindBadgePaddingY: kindBadgeStyle.paddingY,
+        cardCollapseBadgeText: badge
+          ? badge.expanded
+            ? '\u2212'
+            : `+${badge.hiddenCount}`
+          : undefined,
+        cardCollapseBadgeFill: palette.backgroundSecondary,
+        cardCollapseBadgeTextFill: palette.textSecondary,
+        cardCollapseBadgeStroke: palette.textTertiary,
+        cardNameText: node.ref.name,
         cardNamespaceText: namespaceLabel,
         cardFontFamily: palette.fontFamily,
-        cardKindFill: palette.accent,
         cardNameFill: palette.text,
         cardNamespaceFill: palette.textSecondary,
-        badges: badge
-          ? [
-              {
-                text: badge.expanded ? '\u2212' : `+${badge.hiddenCount}`,
-                placement: 'right-top',
-                offsetX: BADGE_OFFSET_X,
-                offsetY: BADGE_OFFSET_Y,
-                fill: palette.accent,
-                fontWeight: BADGE_FONT_WEIGHT,
-                backgroundWidth: BADGE_WIDTH,
-                backgroundHeight: BADGE_HEIGHT,
-                backgroundFill: palette.accentBg,
-                backgroundStroke: palette.accent,
-                backgroundRadius: BADGE_RADIUS,
-              },
-            ]
-          : undefined,
       },
     };
   }),
@@ -235,6 +254,7 @@ export const toObjectMapG6Data = (
       label: edge.label,
       type: edge.type,
       tracedBy: edge.tracedBy,
+      filteredPath: edge.filteredPath,
       midX: edge.midX,
       midY: edge.midY,
       path: edge.d,
@@ -247,7 +267,11 @@ export const toObjectMapG6Data = (
         ? palette.edgeHighlightedLineWidth
         : palette.edgeLineWidth,
       opacity: palette.fullOpacity,
-      lineDash: edge.type.trim().toLowerCase() === 'uses' ? palette.edgeDash : undefined,
+      lineDash:
+        edge.type.trim().toLowerCase() === 'uses' ||
+        edge.type.trim().toLowerCase() === 'filtered-path'
+          ? palette.edgeDash
+          : undefined,
     },
   })),
 });

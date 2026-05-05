@@ -1,44 +1,71 @@
 # AGENTS.md
 
-You are a developer working on Luxury Yacht, a multi-platform Wails v2 desktop app
-(Go backend, React frontend) for viewing and managing Kubernetes cluster resources.
-Area-specific rules: `backend/AGENTS.md`, `frontend/AGENTS.md`.
+You are a developer working on Luxury Yacht, a multi-platform Wails v2 desktop
+app for viewing and managing Kubernetes cluster resources.
+
+The backend is Go. The frontend is React and TypeScript. Area-specific rules
+live in `backend/AGENTS.md` and `frontend/AGENTS.md`; follow those in addition
+to this file when working in those directories.
 
 ## Rules
 
 ### Critical Rules
 
-You MUST follow these at all times, no exceptions!
+You MUST follow these at all times.
 
-- **EVERY PART OF THE APP MUST BE MULTI-CLUSTER AWARE.** All data access and commands
-  must include `clusterId`. Fix any code that doesn't do this.
-- **ALL OBJECT REFERENCES MUST INCLUDE CLUSTERID, GROUP, KIND, AND VERSION.** This is
-  critical to avoid ambiguous object references that may use the same Kind. Fix any
-  code you find that doesn't do this.
-- **ALWAYS CHOOSE THE SIMPLEST SOLUTION THAT IS COMPLETE AND CORRECT.** Code that is
-  over-complicated or "clever" is never the right choice.
-- **PREFER THE DIFFICULT-BUT-CORRECT FIX OVER THE SIMPLE-BUT-INCOMPLETE FIX.** This
-  may seem contradictory to the previous statement, but this is to do with HOW you
-  work, not WHAT you produce.
-- **NEVER RUN STATE-MODIFYING GIT COMMANDS OR CREATE PRS UNLESS EXPLICITLY DIRECTED.**
-  Read-only git commands are fine.
+- **EVERY PART OF THE APP MUST BE MULTI-CLUSTER AWARE.** Data access, refresh
+  domains, caches, commands, persistence keys, navigation, events, and object
+  actions must carry `clusterId` when operating on cluster data. Fix touched
+  code that drops, guesses, or ignores `clusterId`.
+- **ALL OBJECT REFERENCES MUST INCLUDE `clusterId`, `group`, `version`, AND
+  `kind`.** Include `namespace` and `name` whenever the reference points to a
+  specific Kubernetes object. Do not pass kind-only or name-only references
+  across module, API, cache, event, action, or navigation boundaries. Fix
+  touched code that violates this before building on top of it.
+- **ALWAYS CHOOSE THE SIMPLEST SOLUTION THAT IS COMPLETE AND CORRECT.** Simple
+  means clear, direct, and maintainable. It does not mean partial, fragile, or
+  narrowly patched around the real problem.
+- **PREFER THE DIFFICULT-BUT-CORRECT FIX OVER THE SIMPLE-BUT-INCOMPLETE FIX.**
+  If the correct fix requires tracing shared behavior, centralizing duplicated
+  logic, or adjusting tests, do that work instead of adding another local
+  workaround.
+- **DON'T LEAVE TECH DEBT IN THE CODE YOU TOUCH.** When changing a file, leave
+  the affected code path complete, understandable, tested at the appropriate
+  level, and free of dead code or temporary compatibility paths. Do not expand
+  scope into unrelated cleanup unless it is required for a correct fix. If the
+  correct fix is materially larger than requested, explain the tradeoff and ask.
+- **NEVER RUN STATE-MODIFYING GIT COMMANDS OR CREATE PRS UNLESS EXPLICITLY
+  DIRECTED.** Read-only git commands are fine.
 
 ### Important Rules
 
-If you break these rules I will be sad. Please don't make me sad.
-
-- Don't change code, appearance, or dependencies beyond what was explicitly requested.
+- Keep changes as small as possible while still being complete and correct.
+  Small means narrow in scope, not shallow in quality.
+- Do not change behavior, appearance, dependencies, or unrelated files unless
+  the requested work cannot be completed correctly without doing so.
+- Avoid broad rewrites for small requests, but do not preserve a bad structure
+  when that structure is the source of the bug or repeated failures.
 - When adding dependencies, use the latest stable version.
-- Make the minimal change requested. Don't rewrite or restructure components for small
-  changes.
-- Match existing patterns by reusing selectors/classes, not creating new ones.
-- Ask clarifying questions when the problem is unclear; ask for help when stuck.
-- Add comments where the logic isn't self-evident, using plain language.
-- Treat the object catalog as the source of truth for namespace/cluster listings
-  (see `backend/AGENTS.md#Object-Catalog`).
-- Run `mage qc:prerelease` before presenting work as complete.
-  - You can skip this check if the only changes are to documentation.
-- Aim for ≥80% test coverage; note gaps and ask for guidance if not feasible.
+- Match existing patterns by reusing selectors/classes, helpers, hooks, and
+  service boundaries instead of creating parallel implementations.
+- Ask clarifying questions when the problem is unclear; ask for help when
+  stuck.
+- When blocked, first inspect the relevant code and tests, then explain the
+  concrete blocker. Do not invent fallback behavior, skip required identity
+  fields, or leave TODO-only implementations to keep moving.
+- Add comments where the logic is not self-evident, using plain language.
+- Treat the object catalog as the source of truth for namespace and cluster
+  listings. See `backend/AGENTS.md#Object-Catalog`.
+- Before presenting non-documentation work as complete, run:
+  - `mage qc:prerelease`
+  - `mage qc:knip`
+- You do not need to rerun these checks after every edit during a task, but the
+  final reported state must be based on the latest code in the worktree.
+- If a check cannot be run, or fails because of pre-existing unrelated changes,
+  state that clearly and include the command and failure.
+- Skip these checks only when the change is documentation-only.
+- Aim for at least 80% test coverage. Note gaps and ask for guidance if that is
+  not feasible.
 
 ## Claude Code Setup
 

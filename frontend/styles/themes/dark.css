@@ -105,6 +105,23 @@
   --status-warning-text: var(--color-accent-dark-400);
   --status-warning-bg: rgba(245, 158, 11, 0.25);
 
+  /* Object map relationship colors */
+  --object-map-edge-owner: #c084fc;
+  --object-map-edge-routes: #60a5fa;
+  --object-map-edge-selector: #93c5fd;
+  --object-map-edge-endpoint: #bfdbfe;
+  --object-map-edge-volume-binding: #f472b6;
+  --object-map-edge-storage-class: #f9a8d4;
+  --object-map-edge-mounts: #fbcfe8;
+  --object-map-edge-schedules: #86efac;
+  --object-map-edge-scales: #bef264;
+  --object-map-edge-grants: #fb923c;
+  --object-map-edge-binds: #fdba74;
+  --object-map-edge-aggregates: #fed7aa;
+  --object-map-edge-filtered-path: #f87171;
+  --object-map-edge-uses: #94a3b8;
+  --object-map-edge-default: #64748b;
+
   /* Code editor colors */
   --code-surface: var(--color-base-800);
   --code-background: var(--color-base-900);

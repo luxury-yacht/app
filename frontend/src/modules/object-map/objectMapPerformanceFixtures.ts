@@ -1,3 +1,9 @@
+/**
+ * frontend/src/modules/object-map/objectMapPerformanceFixtures.ts
+ *
+ * Generates large deterministic object-map layouts for performance tests.
+ */
+
 import type {
   ObjectMapEdge,
   ObjectMapNode,

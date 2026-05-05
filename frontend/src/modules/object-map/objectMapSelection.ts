@@ -1,3 +1,9 @@
+/**
+ * frontend/src/modules/object-map/objectMapSelection.ts
+ *
+ * Computes selected and connected object-map node/edge state.
+ */
+
 import type { PositionedEdge } from './objectMapLayout';
 import type { ObjectMapSelectionState } from './objectMapRendererTypes';
 
