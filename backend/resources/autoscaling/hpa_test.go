@@ -9,7 +9,6 @@ package autoscaling
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
@@ -19,9 +18,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
-	cgotesting "k8s.io/client-go/testing"
 )
 
 func TestServiceHorizontalPodAutoscalerDetails(t *testing.T) {
@@ -95,20 +92,6 @@ func TestHPAServiceRequiresClient(t *testing.T) {
 	svc := NewService(testsupport.NewResourceDependencies())
 
 	_, err := svc.HorizontalPodAutoscaler("default", "missing")
-	require.Error(t, err)
-
-	_, err = svc.HorizontalPodAutoscalers("default")
-	require.Error(t, err)
-}
-
-func TestHPAServiceListError(t *testing.T) {
-	client := fake.NewClientset()
-	client.PrependReactor("list", "horizontalpodautoscalers", func(_ cgotesting.Action) (bool, runtime.Object, error) {
-		return true, nil, fmt.Errorf("hpa list boom")
-	})
-
-	svc := newHPAService(t, client)
-	_, err := svc.HorizontalPodAutoscalers("default")
 	require.Error(t, err)
 }
 

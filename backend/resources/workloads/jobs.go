@@ -51,35 +51,6 @@ func (s *JobService) Job(namespace, name string) (*restypes.JobDetails, error) {
 	return buildJobDetails(job, podsForJob, metrics), nil
 }
 
-func (s *JobService) Jobs(namespace string) ([]*restypes.JobDetails, error) {
-	client := s.deps.KubernetesClient
-	if client == nil {
-		return nil, fmt.Errorf("kubernetes client not initialized")
-	}
-
-	jobs, err := client.BatchV1().Jobs(namespace).List(s.deps.Context, metav1.ListOptions{})
-	if err != nil {
-		s.deps.Logger.Error(fmt.Sprintf("Failed to list Jobs in namespace %s: %v", namespace, err), logsources.ResourceLoader)
-		return nil, fmt.Errorf("failed to list jobs: %v", err)
-	}
-
-	podList, err := client.CoreV1().Pods(namespace).List(s.deps.Context, metav1.ListOptions{})
-	if err != nil {
-		s.deps.Logger.Warn(fmt.Sprintf("Failed to list pods in namespace %s: %v", namespace, err), logsources.ResourceLoader)
-	}
-
-	podService := pods.NewService(s.deps)
-	var results []*restypes.JobDetails
-	for i := range jobs.Items {
-		job := &jobs.Items[i]
-		filtered := filterPodsForJob(job, podList)
-		metrics := podService.GetPodMetricsForPods(namespace, filtered)
-		results = append(results, buildJobDetails(job, filtered, metrics))
-	}
-
-	return results, nil
-}
-
 func buildJobDetails(job *batchv1.Job, podsList []corev1.Pod, podMetrics map[string]*metricsv1beta1.PodMetrics) *restypes.JobDetails {
 	podSummary, _ := summarizePodMetrics(podsList, podMetrics)
 	details := &restypes.JobDetails{

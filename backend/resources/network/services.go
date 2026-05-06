@@ -2,7 +2,7 @@
  * backend/resources/network/services.go
  *
  * Service resource handlers.
- * - Builds detail and list views for the frontend.
+ * - Builds service details for the frontend.
  */
 
 package network
@@ -36,30 +36,6 @@ func (s *Service) GetService(namespace, name string) (*types.ServiceDetails, err
 	}
 
 	return s.buildServiceDetails(svc, slices), nil
-}
-
-func (s *Service) Services(namespace string) ([]*types.ServiceDetails, error) {
-	services, err := s.deps.KubernetesClient.CoreV1().Services(namespace).List(s.deps.Context, metav1.ListOptions{})
-	if err != nil {
-		s.deps.Logger.Error(fmt.Sprintf("Failed to list services in namespace %s: %v", namespace, err), logsources.ResourceLoader)
-		return nil, fmt.Errorf("failed to list services: %v", err)
-	}
-
-	ctx, cancel := s.ctx()
-	defer cancel()
-	slices, err := s.listEndpointSlices(ctx, namespace, "")
-	if err != nil {
-		s.deps.Logger.Warn(fmt.Sprintf("Failed to list endpoint slices in namespace %s: %v", namespace, err), logsources.ResourceLoader)
-	}
-	slicesByService := groupEndpointSlicesByService(slices)
-
-	var results []*types.ServiceDetails
-	for i := range services.Items {
-		svc := services.Items[i]
-		results = append(results, s.buildServiceDetails(&svc, slicesByService[svc.Name]))
-	}
-
-	return results, nil
 }
 
 func (s *Service) ctx() (context.Context, context.CancelFunc) {

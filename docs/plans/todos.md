@@ -9,7 +9,7 @@
 3. ✅ [STABILITY] Kind-only workload helpers — backend/workload_rollback.go:49, backend/resources_autoscaling.go:32, frontend/src/core/data-access/readers.ts:47
     rollback history and HPA-managed checks still pass workload identity as kind/name, not group/version/kind.
     Impact: this repeats the kind-only object reference pattern we’ve been removing.
-4. [SIMPLICITY] Dead list-shaped resource services — backend/resources/workloads/deployments.go:56, backend/resources/network/services.go:41, backend/resources/autoscaling/
+4. ✅ [SIMPLICITY] Dead list-shaped resource services — backend/resources/workloads/deployments.go:56, backend/resources/network/services.go:41, backend/resources/autoscaling/
     hpa.go:36
     Many exported plural methods in backend/resources are now test-only after the refresh-domain migration.
     Impact: they preserve the old list/table architecture and make it easier to accidentally reintroduce parallel list paths.

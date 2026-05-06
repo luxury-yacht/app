@@ -2,7 +2,7 @@
  * backend/resources/network/endpoint_slices.go
  *
  * EndpointSlice resource handlers.
- * - Aggregates slice details by service.
+ * - Builds EndpointSlice details.
  */
 
 package network
@@ -201,21 +201,6 @@ func rollupServiceEndpoints(slices []*discoveryv1.EndpointSlice) (ready []string
 		}
 	}
 	return ready, notReady
-}
-
-func groupEndpointSlicesByService(slices []*discoveryv1.EndpointSlice) map[string][]*discoveryv1.EndpointSlice {
-	result := make(map[string][]*discoveryv1.EndpointSlice)
-	for _, slice := range slices {
-		if slice == nil {
-			continue
-		}
-		serviceName := slice.Labels[discoveryv1.LabelServiceName]
-		if serviceName == "" {
-			continue
-		}
-		result[serviceName] = append(result[serviceName], slice)
-	}
-	return result
 }
 
 func portNumber(port discoveryv1.EndpointPort) int32 {

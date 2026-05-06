@@ -52,32 +52,6 @@ func (s *CronJobService) CronJob(namespace, name string) (*restypes.CronJobDetai
 	return buildCronJobDetails(cronJob, jobs, podInfos, podSummary, jobInfos), nil
 }
 
-func (s *CronJobService) CronJobs(namespace string) ([]*restypes.CronJobDetails, error) {
-	client := s.deps.KubernetesClient
-	if client == nil {
-		return nil, fmt.Errorf("kubernetes client not initialized")
-	}
-
-	cronJobs, err := client.BatchV1().CronJobs(namespace).List(s.deps.Context, metav1.ListOptions{})
-	if err != nil {
-		s.deps.Logger.Error(fmt.Sprintf("Failed to list CronJobs in namespace %s: %v", namespace, err), logsources.ResourceLoader)
-		return nil, fmt.Errorf("failed to list cronjobs: %v", err)
-	}
-
-	jobs, err := client.BatchV1().Jobs(namespace).List(s.deps.Context, metav1.ListOptions{})
-	if err != nil {
-		jobs = nil
-	}
-
-	var results []*restypes.CronJobDetails
-	for i := range cronJobs.Items {
-		cj := &cronJobs.Items[i]
-		results = append(results, buildCronJobDetails(cj, jobs, nil, nil, nil))
-	}
-
-	return results, nil
-}
-
 func buildCronJobDetails(cronJob *batchv1.CronJob, jobs *batchv1.JobList, podInfos []restypes.PodSimpleInfo, podSummary *restypes.PodMetricsSummary, jobInfos []restypes.JobSimpleInfo) *restypes.CronJobDetails {
 	details := &restypes.CronJobDetails{
 		Kind:                    "CronJob",

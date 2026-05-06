@@ -52,46 +52,6 @@ func (s *DeploymentService) Deployment(namespace, name string) (*restypes.Deploy
 	return s.buildDeploymentDetails(deployment, deploymentPods, podMetrics, replicaSets), nil
 }
 
-// Deployments returns detailed views for all deployments in the namespace.
-func (s *DeploymentService) Deployments(namespace string) ([]*restypes.DeploymentDetails, error) {
-	client := s.deps.KubernetesClient
-	if client == nil {
-		return nil, fmt.Errorf("kubernetes client not initialized")
-	}
-
-	deployments, err := client.AppsV1().Deployments(namespace).List(s.deps.Context, metav1.ListOptions{})
-	if err != nil {
-		s.deps.Logger.Error(fmt.Sprintf("Failed to list deployments in namespace %s: %v", namespace, err), logsources.ResourceLoader)
-		return nil, fmt.Errorf("failed to list deployments: %v", err)
-	}
-
-	podList, err := client.CoreV1().Pods(namespace).List(s.deps.Context, metav1.ListOptions{})
-	if err != nil {
-		s.deps.Logger.Warn(fmt.Sprintf("Failed to list pods in namespace %s: %v", namespace, err), logsources.ResourceLoader)
-	}
-
-	replicaSetList, err := client.AppsV1().ReplicaSets(namespace).List(s.deps.Context, metav1.ListOptions{})
-	if err != nil {
-		replicaSetList = nil
-	}
-
-	podService := pods.NewService(s.deps)
-	var metricsByPod map[string]*metricsv1beta1.PodMetrics
-	if podList != nil {
-		metricsByPod = podService.GetPodMetricsForPods(namespace, podList.Items)
-	}
-
-	var results []*restypes.DeploymentDetails
-	for i := range deployments.Items {
-		deployment := &deployments.Items[i]
-		filteredPods := filterPodsForDeployment(deployment, podList, replicaSetList)
-		details := s.buildDeploymentDetails(deployment, filteredPods, metricsByPod, replicaSetList)
-		results = append(results, details)
-	}
-
-	return results, nil
-}
-
 func (s *DeploymentService) buildDeploymentDetails(
 	deployment *appsv1.Deployment,
 	podsList []corev1.Pod,

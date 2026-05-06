@@ -49,40 +49,6 @@ func (s *DaemonSetService) DaemonSet(namespace, name string) (*restypes.DaemonSe
 	return s.buildDaemonSetDetails(ds, podsForSet, podMetrics), nil
 }
 
-func (s *DaemonSetService) DaemonSets(namespace string) ([]*restypes.DaemonSetDetails, error) {
-	client := s.deps.KubernetesClient
-	if client == nil {
-		return nil, fmt.Errorf("kubernetes client not initialized")
-	}
-
-	daemonSets, err := client.AppsV1().DaemonSets(namespace).List(s.deps.Context, metav1.ListOptions{})
-	if err != nil {
-		s.deps.Logger.Error(fmt.Sprintf("Failed to list DaemonSets in namespace %s: %v", namespace, err), logsources.ResourceLoader)
-		return nil, fmt.Errorf("failed to list daemonsets: %v", err)
-	}
-
-	podList, err := client.CoreV1().Pods(namespace).List(s.deps.Context, metav1.ListOptions{})
-	if err != nil {
-		s.deps.Logger.Warn(fmt.Sprintf("Failed to list pods in namespace %s: %v", namespace, err), logsources.ResourceLoader)
-	}
-
-	podService := pods.NewService(s.deps)
-	var metricsByPod map[string]*metricsv1beta1.PodMetrics
-	if podList != nil {
-		metricsByPod = podService.GetPodMetricsForPods(namespace, podList.Items)
-	}
-
-	var results []*restypes.DaemonSetDetails
-	for i := range daemonSets.Items {
-		ds := &daemonSets.Items[i]
-		filteredPods := filterPodsForDaemonSet(ds, podList)
-		details := s.buildDaemonSetDetails(ds, filteredPods, metricsByPod)
-		results = append(results, details)
-	}
-
-	return results, nil
-}
-
 func (s *DaemonSetService) buildDaemonSetDetails(
 	daemonSet *appsv1.DaemonSet,
 	podsList []corev1.Pod,

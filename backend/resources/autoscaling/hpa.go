@@ -33,27 +33,6 @@ func (s *Service) HorizontalPodAutoscaler(namespace, name string) (*types.Horizo
 	return s.buildHorizontalPodAutoscalerDetails(hpa), nil
 }
 
-// HorizontalPodAutoscalers returns detailed views for all HPAs in the namespace.
-func (s *Service) HorizontalPodAutoscalers(namespace string) ([]*types.HorizontalPodAutoscalerDetails, error) {
-	client := s.deps.KubernetesClient
-	if client == nil {
-		return nil, fmt.Errorf("kubernetes client not initialized")
-	}
-
-	hpas, err := client.AutoscalingV2().HorizontalPodAutoscalers(namespace).List(s.deps.Context, metav1.ListOptions{})
-	if err != nil {
-		s.logError(fmt.Sprintf("Failed to list HPAs in namespace %s: %v", namespace, err))
-		return nil, fmt.Errorf("failed to list HPAs: %v", err)
-	}
-
-	result := make([]*types.HorizontalPodAutoscalerDetails, 0, len(hpas.Items))
-	for i := range hpas.Items {
-		result = append(result, s.buildHorizontalPodAutoscalerDetails(&hpas.Items[i]))
-	}
-
-	return result, nil
-}
-
 func (s *Service) buildHorizontalPodAutoscalerDetails(hpa *autoscalingv2.HorizontalPodAutoscaler) *types.HorizontalPodAutoscalerDetails {
 	details := &types.HorizontalPodAutoscalerDetails{
 		Kind:            "HorizontalPodAutoscaler",

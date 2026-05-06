@@ -193,11 +193,10 @@ func TestManagerServicesHandlesEndpointListError(t *testing.T) {
 
 	manager := newManager(t, client)
 
-	services, err := manager.Services("default")
+	detail, err := manager.GetService("default", "web")
 	require.NoError(t, err)
-	require.Len(t, services, 1)
-	require.Equal(t, "Unknown", services[0].HealthStatus)
-	require.Contains(t, services[0].Details, "ClusterIP")
+	require.Equal(t, "Unknown", detail.HealthStatus)
+	require.Contains(t, detail.Details, "ClusterIP")
 }
 
 func TestManagerServicesReflectsPendingLoadBalancer(t *testing.T) {
@@ -301,40 +300,4 @@ func TestManagerServiceErrors(t *testing.T) {
 
 	_, err := manager.GetService("default", "web")
 	require.Error(t, err)
-}
-
-func TestManagerServicesListError(t *testing.T) {
-	client := fake.NewClientset()
-	client.PrependReactor("list", "services", func(k8stesting.Action) (bool, runtime.Object, error) {
-		return true, nil, fmt.Errorf("list failed")
-	})
-
-	manager := NewService(common.Dependencies{
-		KubernetesClient: client,
-		Logger:           testsupport.NoopLogger{},
-	})
-
-	_, err := manager.Services("default")
-	require.Error(t, err)
-}
-
-func TestManagerServicesBuildsFromEndpointSlices(t *testing.T) {
-	svc := &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "default"},
-		Spec: corev1.ServiceSpec{
-			Type:      corev1.ServiceTypeClusterIP,
-			ClusterIP: "10.0.0.5",
-			Ports:     []corev1.ServicePort{{Port: 80}},
-		},
-	}
-	client := fake.NewClientset(svc)
-	manager := NewService(common.Dependencies{
-		KubernetesClient: client,
-		Logger:           testsupport.NoopLogger{},
-	})
-
-	details, err := manager.Services("default")
-	require.NoError(t, err)
-	require.Len(t, details, 1)
-	require.Equal(t, "Unknown", details[0].HealthStatus) // no endpoint slices provided
 }

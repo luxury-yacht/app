@@ -49,40 +49,6 @@ func (s *StatefulSetService) StatefulSet(namespace, name string) (*restypes.Stat
 	return s.buildStatefulSetDetails(ss, podsForSet, podMetrics), nil
 }
 
-func (s *StatefulSetService) StatefulSets(namespace string) ([]*restypes.StatefulSetDetails, error) {
-	client := s.deps.KubernetesClient
-	if client == nil {
-		return nil, fmt.Errorf("kubernetes client not initialized")
-	}
-
-	statefulSets, err := client.AppsV1().StatefulSets(namespace).List(s.deps.Context, metav1.ListOptions{})
-	if err != nil {
-		s.deps.Logger.Error(fmt.Sprintf("Failed to list StatefulSets in namespace %s: %v", namespace, err), logsources.ResourceLoader)
-		return nil, fmt.Errorf("failed to list statefulsets: %v", err)
-	}
-
-	podList, err := client.CoreV1().Pods(namespace).List(s.deps.Context, metav1.ListOptions{})
-	if err != nil {
-		s.deps.Logger.Warn(fmt.Sprintf("Failed to list pods in namespace %s: %v", namespace, err), logsources.ResourceLoader)
-	}
-
-	podService := pods.NewService(s.deps)
-	var metricsByPod map[string]*metricsv1beta1.PodMetrics
-	if podList != nil {
-		metricsByPod = podService.GetPodMetricsForPods(namespace, podList.Items)
-	}
-
-	var results []*restypes.StatefulSetDetails
-	for i := range statefulSets.Items {
-		ss := &statefulSets.Items[i]
-		filteredPods := filterPodsForStatefulSet(ss, podList)
-		details := s.buildStatefulSetDetails(ss, filteredPods, metricsByPod)
-		results = append(results, details)
-	}
-
-	return results, nil
-}
-
 func (s *StatefulSetService) buildStatefulSetDetails(
 	statefulSet *appsv1.StatefulSet,
 	podsList []corev1.Pod,
