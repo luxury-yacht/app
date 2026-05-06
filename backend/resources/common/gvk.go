@@ -31,6 +31,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
@@ -39,6 +40,26 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/rest"
+)
+
+const gvrCacheTTL = 5 * time.Minute
+
+type gvrCacheKey struct {
+	clusterID string
+	group     string
+	version   string
+	kind      string
+}
+
+type gvrCacheEntry struct {
+	gvr        schema.GroupVersionResource
+	namespaced bool
+	expiresAt  time.Time
+}
+
+var (
+	gvrCacheMu sync.Mutex
+	gvrCache   = make(map[gvrCacheKey]gvrCacheEntry)
 )
 
 // ResolveGVRForGVK turns a fully-qualified GroupVersionKind into the
@@ -62,6 +83,13 @@ func ResolveGVRForGVK(ctx context.Context, deps Dependencies, gvk schema.GroupVe
 		ctx = deps.Context
 		if ctx == nil {
 			ctx = context.Background()
+		}
+	}
+
+	cacheKey, cacheable := resolveGVRCacheKey(deps.ClusterID, gvk)
+	if cacheable {
+		if gvr, namespaced, ok := getCachedGVR(cacheKey, time.Now()); ok {
+			return gvr, namespaced, nil
 		}
 	}
 
@@ -114,11 +142,13 @@ func ResolveGVRForGVK(ctx context.Context, deps Dependencies, gvk schema.GroupVe
 				continue
 			}
 			if strings.EqualFold(apiResource.Kind, gvk.Kind) || strings.EqualFold(apiResource.SingularName, gvk.Kind) {
-				return schema.GroupVersionResource{
+				gvr := schema.GroupVersionResource{
 					Group:    gv.Group,
 					Version:  gv.Version,
 					Resource: apiResource.Name,
-				}, apiResource.Namespaced, nil
+				}
+				cacheResolvedGVR(cacheKey, cacheable, gvr, apiResource.Namespaced)
+				return gvr, apiResource.Namespaced, nil
 			}
 		}
 	}
@@ -145,13 +175,14 @@ func ResolveGVRForGVK(ctx context.Context, deps Dependencies, gvk schema.GroupVe
 					continue
 				}
 
-				return schema.GroupVersionResource{
-						Group:    crd.Spec.Group,
-						Version:  versionMatch.Name,
-						Resource: crd.Spec.Names.Plural,
-					},
-					crd.Spec.Scope == apiextensionsv1.NamespaceScoped,
-					nil
+				gvr := schema.GroupVersionResource{
+					Group:    crd.Spec.Group,
+					Version:  versionMatch.Name,
+					Resource: crd.Spec.Names.Plural,
+				}
+				namespaced := crd.Spec.Scope == apiextensionsv1.NamespaceScoped
+				cacheResolvedGVR(cacheKey, cacheable, gvr, namespaced)
+				return gvr, namespaced, nil
 			}
 		} else if deps.Logger != nil {
 			deps.Logger.Debug(fmt.Sprintf("CRD discovery failed during ResolveGVRForGVK: %v", listErr), "ResolveGVRForGVK")
@@ -159,4 +190,56 @@ func ResolveGVRForGVK(ctx context.Context, deps Dependencies, gvk schema.GroupVe
 	}
 
 	return schema.GroupVersionResource{}, false, fmt.Errorf("unable to resolve resource for %s", gvk.String())
+}
+
+func resolveGVRCacheKey(clusterID string, gvk schema.GroupVersionKind) (gvrCacheKey, bool) {
+	key := gvrCacheKey{
+		clusterID: strings.TrimSpace(clusterID),
+		group:     strings.TrimSpace(gvk.Group),
+		version:   strings.TrimSpace(gvk.Version),
+		kind:      strings.ToLower(strings.TrimSpace(gvk.Kind)),
+	}
+	return key, key.clusterID != "" && key.version != "" && key.kind != ""
+}
+
+func getCachedGVR(key gvrCacheKey, now time.Time) (schema.GroupVersionResource, bool, bool) {
+	gvrCacheMu.Lock()
+	defer gvrCacheMu.Unlock()
+	entry, ok := gvrCache[key]
+	if !ok {
+		return schema.GroupVersionResource{}, false, false
+	}
+	if !now.Before(entry.expiresAt) {
+		delete(gvrCache, key)
+		return schema.GroupVersionResource{}, false, false
+	}
+	return entry.gvr, entry.namespaced, true
+}
+
+func cacheResolvedGVR(key gvrCacheKey, cacheable bool, gvr schema.GroupVersionResource, namespaced bool) {
+	if !cacheable {
+		return
+	}
+	gvrCacheMu.Lock()
+	defer gvrCacheMu.Unlock()
+	gvrCache[key] = gvrCacheEntry{
+		gvr:        gvr,
+		namespaced: namespaced,
+		expiresAt:  time.Now().Add(gvrCacheTTL),
+	}
+}
+
+// ClearGVRCacheForCluster invalidates strict GVK resolution results for one cluster.
+func ClearGVRCacheForCluster(clusterID string) {
+	trimmed := strings.TrimSpace(clusterID)
+	if trimmed == "" {
+		return
+	}
+	gvrCacheMu.Lock()
+	defer gvrCacheMu.Unlock()
+	for key := range gvrCache {
+		if key.clusterID == trimmed {
+			delete(gvrCache, key)
+		}
+	}
 }

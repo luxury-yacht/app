@@ -17,6 +17,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"github.com/luxury-yacht/app/backend/refresh/system"
+	resourcecommon "github.com/luxury-yacht/app/backend/resources/common"
 )
 
 const (
@@ -250,11 +251,6 @@ func (a *App) registerAPIExtensionsInvalidation(shared apiextensionsinformers.Sh
 	}
 	informer := shared.Apiextensions().V1().CustomResourceDefinitions().Informer()
 	a.addResponseCacheInvalidationHandler(informer, selectionKey, "CustomResourceDefinition", guard)
-	// The backend no longer caches GVR discovery lookups — the strict GVK
-	// resolver (common.ResolveGVRForGVK) hits discovery on every call,
-	// and discovery clients cache their own results against the API
-	// server. Nothing to invalidate here on CRD changes.
-
 }
 
 // addResponseCacheInvalidationHandler evicts cached responses when an informer update arrives.
@@ -311,6 +307,9 @@ func (a *App) invalidateResponseCacheForObjectEvent(
 	}
 	if shouldSkipWarmupInvalidation(guard, eventType, metaObj) {
 		return
+	}
+	if strings.EqualFold(kind, "CustomResourceDefinition") {
+		resourcecommon.ClearGVRCacheForCluster(selectionKey)
 	}
 	name := strings.TrimSpace(metaObj.GetName())
 	if name == "" {

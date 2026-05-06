@@ -242,6 +242,35 @@ func TestFetchLogsRejectsCompressedSources(t *testing.T) {
 	require.Contains(t, resp.Error, "compressed or binary")
 }
 
+func TestFetchLogsRejectsUnsafeSourcePaths(t *testing.T) {
+	client := fake.NewClientset()
+	service := NewService(testsupport.NewResourceDependencies(
+		testsupport.WithDepsContext(context.Background()),
+		testsupport.WithDepsKubeClient(client),
+	))
+
+	originalFetch := nodeLogFetchRawFunc
+	t.Cleanup(func() {
+		nodeLogFetchRawFunc = originalFetch
+	})
+	nodeLogFetchRawFunc = func(_ context.Context, _ rest.Interface, _ string) ([]byte, error) {
+		t.Fatalf("unsafe source path should be rejected before fetch")
+		return nil, nil
+	}
+
+	for _, sourcePath := range []string{
+		"journal/../kubelet",
+		"journal/%2e%2e/kubelet",
+		"journal/kubelet?tailLines=100000",
+		"journal\\kubelet",
+		"/api/v1/nodes/node-a/proxy/logs/journal/kubelet",
+		"service:kubelet/../../pods",
+	} {
+		resp := service.FetchLogs("node-a", restypes.NodeLogFetchRequest{SourcePath: sourcePath})
+		require.Contains(t, resp.Error, "invalid node log source path", sourcePath)
+	}
+}
+
 func TestFetchLogsSupportsWellKnownServiceQueries(t *testing.T) {
 	client := fake.NewClientset()
 	service := NewService(testsupport.NewResourceDependencies(

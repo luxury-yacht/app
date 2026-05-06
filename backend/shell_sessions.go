@@ -27,6 +27,7 @@ const (
 
 	// shellOutputBacklogMaxBytes bounds replay memory used per shell session.
 	shellOutputBacklogMaxBytes = 256 * 1024
+	maxTerminalDimension       = 65535
 )
 
 var (
@@ -226,6 +227,25 @@ func (a *App) StartShellSession(clusterID string, req ShellSessionRequest) (*She
 		return nil, fmt.Errorf("container %q not found in pod %s", container, req.PodName)
 	}
 
+	if err := a.requireAnyResourcePermission(deps.Context, deps,
+		resourcePermissionCheck{
+			Kind:        "Pod",
+			Namespace:   req.Namespace,
+			Name:        req.PodName,
+			Verb:        "get",
+			Subresource: "exec",
+		},
+		resourcePermissionCheck{
+			Kind:        "Pod",
+			Namespace:   req.Namespace,
+			Name:        req.PodName,
+			Verb:        "create",
+			Subresource: "exec",
+		},
+	); err != nil {
+		return nil, err
+	}
+
 	command := req.Command
 	if len(command) == 0 {
 		command = []string{"/bin/sh"}
@@ -361,6 +381,9 @@ func (a *App) SendShellInput(sessionID string, data string) error {
 func (a *App) ResizeShellSession(sessionID string, columns, rows int) error {
 	if columns <= 0 || rows <= 0 {
 		return fmt.Errorf("columns and rows must be positive")
+	}
+	if columns > maxTerminalDimension || rows > maxTerminalDimension {
+		return fmt.Errorf("columns and rows must be less than or equal to %d", maxTerminalDimension)
 	}
 	sess := a.getShellSession(sessionID)
 	if sess == nil {

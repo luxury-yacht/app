@@ -157,6 +157,13 @@ func (s *Service) FetchLogs(nodeName string, req restypes.NodeLogFetchRequest) r
 			Error:      "selected source is already available in the pod/workload logs views",
 		}
 	}
+	if err := validateNodeLogSourcePath(sourcePath); err != nil {
+		return restypes.NodeLogFetchResponse{
+			Source:     source,
+			SourcePath: sourcePath,
+			Error:      err.Error(),
+		}
+	}
 
 	if err := s.ensureClient("Nodes"); err != nil {
 		return restypes.NodeLogFetchResponse{Source: source, SourcePath: sourcePath, Error: err.Error()}
@@ -355,6 +362,9 @@ func (s *Service) fetchNodeLogPath(nodeName, sourcePath, sinceTime string) ([]by
 }
 
 func (s *Service) fetchNodeLogProbePath(nodeName, sourcePath string) ([]byte, error) {
+	if err := validateNodeLogSourcePath(sourcePath); err != nil {
+		return nil, err
+	}
 	restClient := s.deps.KubernetesClient.Discovery().RESTClient()
 	ctx := s.deps.Context
 	if ctx == nil {
@@ -371,6 +381,9 @@ func (s *Service) fetchNodeLogDiscoveryPath(nodeName, sourcePath string) ([]byte
 }
 
 func (s *Service) fetchNodeLogPathWithOptions(nodeName, sourcePath, sinceTime string, tailLines int) ([]byte, error) {
+	if err := validateNodeLogSourcePath(sourcePath); err != nil {
+		return nil, err
+	}
 	restClient := s.deps.KubernetesClient.Discovery().RESTClient()
 	ctx := s.deps.Context
 	if ctx == nil {
@@ -431,6 +444,42 @@ func parseNodeLogServiceSource(sourcePath string) (string, bool) {
 		return "", false
 	}
 	return serviceName, true
+}
+
+func validateNodeLogSourcePath(sourcePath string) error {
+	trimmed := strings.TrimSpace(sourcePath)
+	if trimmed == "" {
+		return nil
+	}
+
+	if serviceName, ok := parseNodeLogServiceSource(trimmed); ok {
+		if strings.ContainsAny(serviceName, `/\?#`) || strings.Contains(serviceName, "..") {
+			return fmt.Errorf("invalid node log source path")
+		}
+		return nil
+	}
+
+	decoded, err := url.PathUnescape(trimmed)
+	if err != nil {
+		return fmt.Errorf("invalid node log source path")
+	}
+	for _, candidate := range []string{trimmed, decoded} {
+		if strings.Contains(candidate, `\`) ||
+			strings.Contains(candidate, "://") ||
+			strings.ContainsAny(candidate, "?#") {
+			return fmt.Errorf("invalid node log source path")
+		}
+		clean := strings.Trim(candidate, "/")
+		if strings.HasPrefix(clean, "api/") {
+			return fmt.Errorf("invalid node log source path")
+		}
+		for _, segment := range strings.Split(clean, "/") {
+			if segment == "." || segment == ".." {
+				return fmt.Errorf("invalid node log source path")
+			}
+		}
+	}
+	return nil
 }
 
 func classifyNodeLogError(err error) string {

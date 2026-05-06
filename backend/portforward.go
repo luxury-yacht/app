@@ -57,6 +57,16 @@ func (a *App) StartPortForward(clusterID string, req PortForwardRequest) (string
 		return "", fmt.Errorf("failed to resolve pod: %w", err)
 	}
 
+	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
+		Kind:        "Pod",
+		Namespace:   target.Namespace,
+		Name:        resolved.PodName,
+		Verb:        "create",
+		Subresource: "portforward",
+	}); err != nil {
+		return "", err
+	}
+
 	// Create session.
 	sessionID := uuid.NewString()
 	sessionCtx, sessionCancel := context.WithCancel(context.Background())

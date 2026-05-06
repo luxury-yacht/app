@@ -129,6 +129,23 @@ func TestShellSessionMissingGuards(t *testing.T) {
 	}
 }
 
+func TestResizeShellSessionRejectsOverflowDimensions(t *testing.T) {
+	app := newTestAppWithDefaults(t)
+	app.shellSessions = map[string]*shellSession{
+		"sess": {
+			id:        "sess",
+			sizeQueue: newTerminalSizeQueue(),
+		},
+	}
+
+	if err := app.ResizeShellSession("sess", maxTerminalDimension+1, 24); err == nil {
+		t.Fatalf("expected oversized columns to be rejected")
+	}
+	if err := app.ResizeShellSession("sess", 80, maxTerminalDimension+1); err == nil {
+		t.Fatalf("expected oversized rows to be rejected")
+	}
+}
+
 func TestListShellSessionsAndClusterCount(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	now := time.Now()
@@ -399,5 +416,41 @@ func TestStartShellSessionPodValidation(t *testing.T) {
 
 	if _, err := app.StartShellSession(shellClusterID, ShellSessionRequest{Namespace: "default", PodName: "pod-1", Container: "missing"}); err == nil {
 		t.Fatal("expected error for missing container")
+	}
+}
+
+func TestStartShellSessionRequiresExecPermission(t *testing.T) {
+	app := newTestAppWithDefaults(t)
+	app.Ctx = context.Background()
+
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "pod-1"},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{Name: "main"}},
+		},
+	}
+	fakeClient := fake.NewClientset(pod)
+	denySelfSubjectAccessReviews(fakeClient, "exec denied")
+
+	app.clusterClients = map[string]*clusterClients{
+		shellClusterID: {
+			meta:              ClusterMeta{ID: shellClusterID, Name: "ctx"},
+			kubeconfigPath:    "/path",
+			kubeconfigContext: "ctx",
+			client:            fakeClient,
+			restConfig:        &rest.Config{},
+		},
+	}
+
+	_, err := app.StartShellSession(shellClusterID, ShellSessionRequest{
+		Namespace: "default",
+		PodName:   "pod-1",
+		Container: "main",
+	})
+	if err == nil || !strings.Contains(err.Error(), "exec denied") {
+		t.Fatalf("expected exec permission denial, got %v", err)
+	}
+	if len(app.ListShellSessions()) != 0 {
+		t.Fatalf("expected denied shell session not to be registered")
 	}
 }

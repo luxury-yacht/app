@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/rest"
 )
@@ -140,6 +142,52 @@ func TestStartPortForward_ValidationErrors(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected error for invalid container port")
+	}
+}
+
+func TestStartPortForwardRequiresPortForwardPermission(t *testing.T) {
+	app := newTestAppWithDefaults(t)
+	app.Ctx = context.Background()
+	app.portForwardSessions = make(map[string]*portForwardSessionInternal)
+
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "pod-1"},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{Name: "main"}},
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			Conditions: []corev1.PodCondition{{
+				Type:   corev1.PodReady,
+				Status: corev1.ConditionTrue,
+			}},
+		},
+	}
+	fakeClient := fake.NewClientset(pod)
+	denySelfSubjectAccessReviews(fakeClient, "portforward denied")
+	app.clusterClients = map[string]*clusterClients{
+		portForwardClusterID: {
+			meta:              ClusterMeta{ID: portForwardClusterID, Name: "ctx"},
+			kubeconfigPath:    "/path",
+			kubeconfigContext: "ctx",
+			client:            fakeClient,
+			restConfig:        &rest.Config{},
+		},
+	}
+
+	_, err := app.StartPortForward(portForwardClusterID, PortForwardRequest{
+		Namespace:     "default",
+		TargetKind:    "Pod",
+		TargetGroup:   "",
+		TargetVersion: "v1",
+		TargetName:    "pod-1",
+		ContainerPort: 8080,
+	})
+	if err == nil || !strings.Contains(err.Error(), "portforward denied") {
+		t.Fatalf("expected port-forward permission denial, got %v", err)
+	}
+	if len(app.ListPortForwards()) != 0 {
+		t.Fatalf("expected denied port forward not to be registered")
 	}
 }
 
