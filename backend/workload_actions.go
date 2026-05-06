@@ -50,6 +50,14 @@ func (a *App) RestartWorkload(clusterID, namespace, name, workloadKind string) e
 
 	switch workloadKind {
 	case "Deployment":
+		if err := a.requireResourcePermission(ctx, deps, resourcePermissionCheck{
+			Kind:      workloadKind,
+			Namespace: namespace,
+			Name:      name,
+			Verb:      "patch",
+		}); err != nil {
+			return err
+		}
 		_, err = deps.KubernetesClient.AppsV1().Deployments(namespace).Patch(
 			ctx,
 			name,
@@ -58,6 +66,14 @@ func (a *App) RestartWorkload(clusterID, namespace, name, workloadKind string) e
 			metav1.PatchOptions{},
 		)
 	case "StatefulSet":
+		if err := a.requireResourcePermission(ctx, deps, resourcePermissionCheck{
+			Kind:      workloadKind,
+			Namespace: namespace,
+			Name:      name,
+			Verb:      "patch",
+		}); err != nil {
+			return err
+		}
 		_, err = deps.KubernetesClient.AppsV1().StatefulSets(namespace).Patch(
 			ctx,
 			name,
@@ -66,6 +82,14 @@ func (a *App) RestartWorkload(clusterID, namespace, name, workloadKind string) e
 			metav1.PatchOptions{},
 		)
 	case "DaemonSet":
+		if err := a.requireResourcePermission(ctx, deps, resourcePermissionCheck{
+			Kind:      workloadKind,
+			Namespace: namespace,
+			Name:      name,
+			Verb:      "patch",
+		}); err != nil {
+			return err
+		}
 		_, err = deps.KubernetesClient.AppsV1().DaemonSets(namespace).Patch(
 			ctx,
 			name,
@@ -117,6 +141,15 @@ func (a *App) ScaleWorkload(clusterID, namespace, name, workloadKind string, rep
 
 	switch workloadKind {
 	case "Deployment":
+		if err := a.requireResourcePermission(ctx, deps, resourcePermissionCheck{
+			Kind:        workloadKind,
+			Namespace:   namespace,
+			Name:        name,
+			Verb:        "update",
+			Subresource: "scale",
+		}); err != nil {
+			return err
+		}
 		_, err := deps.KubernetesClient.AppsV1().Deployments(namespace).UpdateScale(
 			ctx,
 			name,
@@ -127,6 +160,15 @@ func (a *App) ScaleWorkload(clusterID, namespace, name, workloadKind string, rep
 			return fmt.Errorf("failed to scale deployment %s/%s: %w", namespace, name, err)
 		}
 	case "StatefulSet":
+		if err := a.requireResourcePermission(ctx, deps, resourcePermissionCheck{
+			Kind:        workloadKind,
+			Namespace:   namespace,
+			Name:        name,
+			Verb:        "update",
+			Subresource: "scale",
+		}); err != nil {
+			return err
+		}
 		_, err := deps.KubernetesClient.AppsV1().StatefulSets(namespace).UpdateScale(
 			ctx,
 			name,
@@ -137,6 +179,15 @@ func (a *App) ScaleWorkload(clusterID, namespace, name, workloadKind string, rep
 			return fmt.Errorf("failed to scale statefulset %s/%s: %w", namespace, name, err)
 		}
 	case "ReplicaSet":
+		if err := a.requireResourcePermission(ctx, deps, resourcePermissionCheck{
+			Kind:        workloadKind,
+			Namespace:   namespace,
+			Name:        name,
+			Verb:        "update",
+			Subresource: "scale",
+		}); err != nil {
+			return err
+		}
 		_, err := deps.KubernetesClient.AppsV1().ReplicaSets(namespace).UpdateScale(
 			ctx,
 			name,
@@ -179,6 +230,13 @@ func (a *App) TriggerCronJob(clusterID, namespace, name string) (string, error) 
 	cronJob, err := deps.KubernetesClient.BatchV1().CronJobs(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		return "", fmt.Errorf("failed to get cronjob %s/%s: %w", namespace, name, err)
+	}
+	if err := a.requireResourcePermission(ctx, deps, resourcePermissionCheck{
+		Kind:      "Job",
+		Namespace: namespace,
+		Verb:      "create",
+	}); err != nil {
+		return "", err
 	}
 
 	// Generate a unique job name with timestamp
@@ -237,6 +295,15 @@ func (a *App) SuspendCronJob(clusterID, namespace, name string, suspend bool) er
 	}
 	if deps.KubernetesClient == nil {
 		return fmt.Errorf("kubernetes client is not initialized")
+	}
+
+	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
+		Kind:      "CronJob",
+		Namespace: namespace,
+		Name:      name,
+		Verb:      "patch",
+	}); err != nil {
+		return err
 	}
 
 	ctx := deps.Context

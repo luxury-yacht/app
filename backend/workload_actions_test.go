@@ -120,6 +120,7 @@ func TestRestartWorkloadAddsRestartAnnotation(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+			allowSelfSubjectAccessReviews(tc.object)
 
 			// Per-cluster clients are stored in clusterClients, not in global fields.
 			app := &App{
@@ -155,6 +156,7 @@ func TestRestartWorkloadErrors(t *testing.T) {
 
 	// Per-cluster clients are stored in clusterClients, not in global fields.
 	fakeClient := cgofake.NewClientset()
+	allowSelfSubjectAccessReviews(fakeClient)
 	app := &App{
 		logger: NewLogger(10),
 	}
@@ -207,6 +209,7 @@ func TestScaleWorkloadUpdatesScaleSubresource(t *testing.T) {
 			t.Parallel()
 
 			client := cgofake.NewClientset()
+			allowSelfSubjectAccessReviews(client)
 			var observed capture
 			client.Fake.PrependReactor("update", tc.resource, func(action cgotesting.Action) (handled bool, ret runtime.Object, err error) {
 				updateAction, ok := action.(cgotesting.UpdateAction)
@@ -254,6 +257,7 @@ func TestScaleWorkloadErrors(t *testing.T) {
 
 	// Per-cluster clients are stored in clusterClients, not in global fields.
 	client := cgofake.NewClientset()
+	allowSelfSubjectAccessReviews(client)
 	app := &App{
 		logger: NewLogger(10),
 	}
@@ -314,6 +318,7 @@ func TestTriggerCronJobCreatesJob(t *testing.T) {
 	}
 
 	client := cgofake.NewClientset(cronJob)
+	allowSelfSubjectAccessReviews(client)
 	app := &App{
 		logger: NewLogger(100),
 	}
@@ -353,6 +358,7 @@ func TestTriggerCronJobErrors(t *testing.T) {
 
 	// Test with non-existent cronjob
 	client := cgofake.NewClientset()
+	allowSelfSubjectAccessReviews(client)
 	app := &App{
 		logger: NewLogger(10),
 	}
@@ -421,6 +427,7 @@ func TestSuspendCronJobTogglesSuspendField(t *testing.T) {
 			}
 
 			client := cgofake.NewClientset(cronJob)
+			allowSelfSubjectAccessReviews(client)
 			app := &App{
 				logger: NewLogger(100),
 			}
@@ -450,6 +457,7 @@ func TestSuspendCronJobErrors(t *testing.T) {
 
 	// Test with non-existent cronjob
 	client := cgofake.NewClientset()
+	allowSelfSubjectAccessReviews(client)
 	app := &App{
 		logger: NewLogger(10),
 	}

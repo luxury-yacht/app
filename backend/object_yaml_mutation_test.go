@@ -63,6 +63,7 @@ func setupYAMLTestApp(t *testing.T) (*App, *dynamicfake.FakeDynamicClient, strin
 	}
 
 	client := clientfake.NewClientset(initialDeployment.DeepCopy())
+	allowSelfSubjectAccessReviews(client)
 	discovery := client.Discovery().(*fakediscovery.FakeDiscovery)
 	discovery.Resources = []*metav1.APIResourceList{
 		{

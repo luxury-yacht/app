@@ -24,6 +24,13 @@ func (a *App) CordonNode(clusterID, nodeName string) error {
 	if err != nil {
 		return err
 	}
+	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
+		Kind: "Node",
+		Name: nodeName,
+		Verb: "patch",
+	}); err != nil {
+		return err
+	}
 	if err := nodes.NewService(deps).Cordon(nodeName); err != nil {
 		return err
 	}
@@ -34,6 +41,13 @@ func (a *App) CordonNode(clusterID, nodeName string) error {
 func (a *App) UncordonNode(clusterID, nodeName string) error {
 	deps, _, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
+		return err
+	}
+	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
+		Kind: "Node",
+		Name: nodeName,
+		Verb: "patch",
+	}); err != nil {
 		return err
 	}
 	if err := nodes.NewService(deps).Uncordon(nodeName); err != nil {
@@ -48,6 +62,27 @@ func (a *App) DrainNode(clusterID, nodeName string, options DrainNodeOptions) er
 	if err != nil {
 		return err
 	}
+	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
+		Kind: "Node",
+		Name: nodeName,
+		Verb: "patch",
+	}); err != nil {
+		return err
+	}
+	podCheck := resourcePermissionCheck{
+		Kind:        "Pod",
+		Verb:        "create",
+		Subresource: "eviction",
+	}
+	if options.DisableEviction {
+		podCheck = resourcePermissionCheck{
+			Kind: "Pod",
+			Verb: "delete",
+		}
+	}
+	if err := a.requireResourcePermission(deps.Context, deps, podCheck); err != nil {
+		return err
+	}
 	if err := nodes.NewService(deps).Drain(nodeName, options); err != nil {
 		return err
 	}
@@ -60,6 +95,13 @@ func (a *App) DeleteNode(clusterID, nodeName string) error {
 	if err != nil {
 		return err
 	}
+	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
+		Kind: "Node",
+		Name: nodeName,
+		Verb: "delete",
+	}); err != nil {
+		return err
+	}
 	if err := nodes.NewService(deps).Delete(nodeName, false); err != nil {
 		return err
 	}
@@ -70,6 +112,13 @@ func (a *App) DeleteNode(clusterID, nodeName string) error {
 func (a *App) ForceDeleteNode(clusterID, nodeName string) error {
 	deps, _, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
+		return err
+	}
+	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
+		Kind: "Node",
+		Name: nodeName,
+		Verb: "delete",
+	}); err != nil {
 		return err
 	}
 	if err := nodes.NewService(deps).Delete(nodeName, true); err != nil {

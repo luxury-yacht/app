@@ -132,6 +132,7 @@ func newCollidingDBInstanceCluster(t *testing.T, clusterID string) *App {
 	app.Ctx = context.Background()
 
 	kubeClient := kubernetesfake.NewClientset()
+	allowSelfSubjectAccessReviews(kubeClient)
 	discoveryClient := kubeClient.Discovery().(*fakediscovery.FakeDiscovery)
 	discoveryClient.Resources = collidingDBInstanceDiscoveryLists()
 

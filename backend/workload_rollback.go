@@ -307,6 +307,14 @@ func (a *App) RollbackWorkload(clusterID, namespace, name, workloadKind string, 
 	if targetEntry == nil {
 		return fmt.Errorf("revision %d not found for %s %s/%s", toRevision, workloadKind, namespace, name)
 	}
+	if err := a.requireResourcePermission(ctx, deps, resourcePermissionCheck{
+		Kind:      workloadKind,
+		Namespace: namespace,
+		Name:      name,
+		Verb:      "update",
+	}); err != nil {
+		return err
+	}
 
 	// Unmarshal the stored YAML pod template back into a typed PodTemplateSpec.
 	var podTemplate corev1.PodTemplateSpec

@@ -15,6 +15,7 @@ import (
 
 // buildRevisionHistoryApp creates an App with a fake Kubernetes client pre-populated with the given objects.
 func buildRevisionHistoryApp(client *cgofake.Clientset) *App {
+	allowSelfSubjectAccessReviews(client)
 	app := &App{logger: NewLogger(100)}
 	app.clusterClients = map[string]*clusterClients{
 		"config:ctx": {

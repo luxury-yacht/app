@@ -34,6 +34,16 @@ func (a *App) DeleteResourceByGVK(clusterID, apiVersion, kind, namespace, name s
 	if err != nil {
 		return err
 	}
+	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
+		Group:     gvk.Group,
+		Version:   gvk.Version,
+		Kind:      gvk.Kind,
+		Namespace: namespace,
+		Name:      name,
+		Verb:      "delete",
+	}); err != nil {
+		return err
+	}
 	service := generic.NewService(deps)
 	return service.DeleteByGVK(gvk, namespace, name)
 }

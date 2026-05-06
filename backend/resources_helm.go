@@ -47,6 +47,20 @@ func (a *App) DeleteHelmRelease(clusterID, namespace, name string) error {
 	if err != nil {
 		return err
 	}
+	if err := a.requireAnyResourcePermission(deps.Context, deps,
+		resourcePermissionCheck{
+			Kind:      "Secret",
+			Namespace: namespace,
+			Verb:      "delete",
+		},
+		resourcePermissionCheck{
+			Kind:      "ConfigMap",
+			Namespace: namespace,
+			Verb:      "delete",
+		},
+	); err != nil {
+		return err
+	}
 	_, err = FetchResourceWithSelection(a, selectionKey, "", "HelmDelete", namespace+"/"+name, func() (struct{}, error) {
 		service := helm.NewService(helm.Dependencies{Common: deps})
 		return struct{}{}, service.DeleteRelease(namespace, name)

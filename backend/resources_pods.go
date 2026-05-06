@@ -23,6 +23,14 @@ func (a *App) DeletePod(clusterID, namespace, name string) error {
 	if err != nil {
 		return err
 	}
+	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
+		Kind:      "Pod",
+		Namespace: namespace,
+		Name:      name,
+		Verb:      "delete",
+	}); err != nil {
+		return err
+	}
 	return pods.DeletePod(deps, namespace, name)
 }
 
@@ -57,6 +65,15 @@ func (a *App) GetContainerLogsScopeContainers(clusterID, scope string) ([]string
 func (a *App) CreateDebugContainer(clusterID string, req DebugContainerRequest) (*DebugContainerResponse, error) {
 	deps, _, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
+		return nil, err
+	}
+	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
+		Kind:        "Pod",
+		Namespace:   req.Namespace,
+		Name:        req.PodName,
+		Verb:        "update",
+		Subresource: "ephemeralcontainers",
+	}); err != nil {
 		return nil, err
 	}
 	service := pods.NewService(deps)
