@@ -329,6 +329,20 @@ func (a *App) invalidateResponseCacheForResource(selectionKey, kind, namespace, 
 	a.invalidateResponseCache(selectionKey, kind, namespace, name)
 }
 
+// invalidateResponseCacheForGVK drops the exact cached detail entry for a
+// fully-qualified resource. Built-ins also retain their legacy kind-only detail
+// key, so evict both forms for those resources.
+func (a *App) invalidateResponseCacheForGVK(selectionKey string, gvk schema.GroupVersionKind, namespace, name string) {
+	if strings.TrimSpace(gvk.Kind) == "" || strings.TrimSpace(name) == "" {
+		return
+	}
+	if info, ok := lookupBuiltinResourceByGVK(gvk.Group, gvk.Version, gvk.Kind); ok {
+		a.invalidateResponseCache(selectionKey, info.Kind, namespace, name)
+		return
+	}
+	a.responseCacheDelete(selectionKey, objectDetailCacheKeyForGVK(gvk, namespace, name))
+}
+
 // invalidateResponseCache drops the cached detail entry for the resource.
 // (The legacy YAML response-cache entry was retired with App.GetObjectYAML —
 // the GVK-aware fetch path doesn't write to the response cache.)

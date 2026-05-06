@@ -3,6 +3,7 @@ package backend
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
@@ -524,9 +525,14 @@ func TestRollbackWorkloadDeployment(t *testing.T) {
 
 	client := cgofake.NewClientset(deploy, rs1, rs2)
 	app := buildRevisionHistoryApp(client)
+	app.responseCache = newResponseCache(time.Minute, 10)
+	detailKey := objectDetailCacheKey("Deployment", "default", "webapp")
+	app.responseCacheStore("config:ctx", detailKey, "stale")
 
 	err := app.RollbackWorkload("config:ctx", "default", "apps", "v1", "Deployment", "webapp", 1)
 	require.NoError(t, err)
+	_, cached := app.responseCacheLookup("config:ctx", detailKey)
+	require.False(t, cached, "expected workload detail cache to be evicted after rollback")
 
 	// Read the deployment back from the fake client and verify the container image was rolled back.
 	updated, err := client.AppsV1().Deployments("default").Get(t.Context(), "webapp", metav1.GetOptions{})
@@ -701,4 +707,17 @@ func TestRollbackWorkloadUnsupportedKind(t *testing.T) {
 	err := app.RollbackWorkload("config:ctx", "default", "apps", "v1", "ReplicaSet", "myset", 1)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "ReplicaSet")
+}
+
+func TestRollbackWorkloadRequiresNamespacedObjectIdentity(t *testing.T) {
+	app := NewApp()
+
+	require.EqualError(t,
+		app.RollbackWorkload("config:ctx", "", "apps", "v1", "Deployment", "webapp", 1),
+		"namespace is required",
+	)
+	require.EqualError(t,
+		app.RollbackWorkload("config:ctx", "default", "apps", "v1", "Deployment", "", 1),
+		"name is required",
+	)
 }

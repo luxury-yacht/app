@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/evanphx/json-patch/v5"
 	appsv1 "k8s.io/api/apps/v1"
@@ -248,6 +249,7 @@ spec:
 
 func TestApplyObjectYamlSuccess(t *testing.T) {
 	app, _, clusterID := setupYAMLTestApp(t)
+	app.responseCache = newResponseCache(time.Minute, 10)
 
 	request := ObjectYAMLMutationRequest{
 		BaseYAML: baseYAML(),
@@ -279,6 +281,11 @@ spec:
 		UID:             "demo-uid",
 		ResourceVersion: "42",
 	}
+	gvk := schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"}
+	gvkKey := objectDetailCacheKeyForGVK(gvk, "default", "demo")
+	kindKey := objectDetailCacheKey("Deployment", "default", "demo")
+	app.responseCacheStore(clusterID, gvkKey, "stale-gvk")
+	app.responseCacheStore(clusterID, kindKey, "stale-kind")
 
 	response, err := app.ApplyObjectYaml(clusterID, request)
 	if err != nil {
@@ -286,6 +293,12 @@ spec:
 	}
 	if response.ResourceVersion != "43" {
 		t.Fatalf("expected new resourceVersion 43 in apply response, got %q", response.ResourceVersion)
+	}
+	if _, ok := app.responseCacheLookup(clusterID, gvkKey); ok {
+		t.Fatalf("expected GVK detail cache to be evicted after apply")
+	}
+	if _, ok := app.responseCacheLookup(clusterID, kindKey); ok {
+		t.Fatalf("expected kind detail cache to be evicted after apply")
 	}
 }
 

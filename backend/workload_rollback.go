@@ -313,12 +313,15 @@ func marshalPodTemplate(template *corev1.PodTemplateSpec) (string, error) {
 // Multi-cluster safety: all Kubernetes requests are scoped to the cluster identified
 // by clusterID, preventing cross-cluster data leakage or modification.
 func (a *App) RollbackWorkload(clusterID, namespace, group, version, workloadKind, name string, toRevision int64) error {
+	if err := requireNamespacedObject(namespace, name); err != nil {
+		return err
+	}
 	workloadKind, err := normalizeAppsV1WorkloadKind(group, version, workloadKind, revisionHistoryWorkloadKinds)
 	if err != nil {
 		return fmt.Errorf("rollback not supported: %w", err)
 	}
 
-	deps, _, err := a.resolveClusterDependencies(clusterID)
+	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return err
 	}
@@ -405,5 +408,6 @@ func (a *App) RollbackWorkload(clusterID, namespace, group, version, workloadKin
 			"RollbackWorkload",
 		)
 	}
+	a.invalidateResponseCache(selectionKey, workloadKind, namespace, name)
 	return nil
 }

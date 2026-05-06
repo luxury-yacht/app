@@ -194,8 +194,53 @@ func TestResourceWrappersRequireClient(t *testing.T) {
 		}
 	}
 
-	// Directly cover no-op cache clearer.
-	app.clearNodeCaches("node")
+	// Directly cover cache clearer when the response cache is unset.
+	app.clearNodeCaches(clusterID, "node")
+}
+
+func TestDeletePodEvictsDetailCache(t *testing.T) {
+	app := wrapperTestApp(t)
+	app.responseCache = newResponseCache(time.Minute, 10)
+	clusterID := "config:ctx"
+	client := cgofake.NewClientset(&corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "pod",
+			Namespace: "ns",
+		},
+	})
+	allowSelfSubjectAccessReviews(client)
+	app.clusterClients = map[string]*clusterClients{
+		clusterID: {
+			meta:              ClusterMeta{ID: clusterID, Name: "ctx"},
+			kubeconfigPath:    "/path",
+			kubeconfigContext: "ctx",
+			client:            client,
+		},
+	}
+
+	detailKey := objectDetailCacheKey("Pod", "ns", "pod")
+	app.responseCacheStore(clusterID, detailKey, "stale")
+
+	if err := app.DeletePod(clusterID, "ns", "pod"); err != nil {
+		t.Fatalf("DeletePod returned error: %v", err)
+	}
+	if _, ok := app.responseCacheLookup(clusterID, detailKey); ok {
+		t.Fatalf("expected pod detail cache to be evicted")
+	}
+}
+
+func TestClearNodeCachesEvictsDetailCache(t *testing.T) {
+	app := wrapperTestApp(t)
+	app.responseCache = newResponseCache(time.Minute, 10)
+	clusterID := "config:ctx"
+	detailKey := objectDetailCacheKey("Node", "", "node")
+	app.responseCacheStore(clusterID, detailKey, "stale")
+
+	app.clearNodeCaches(clusterID, "node")
+
+	if _, ok := app.responseCacheLookup(clusterID, detailKey); ok {
+		t.Fatalf("expected node detail cache to be evicted")
+	}
 }
 
 func TestWrapperHappyPathsWithFakeClients(t *testing.T) {

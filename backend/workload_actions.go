@@ -54,7 +54,7 @@ func (a *App) RestartWorkload(clusterID, namespace, group, version, workloadKind
 		return err
 	}
 
-	deps, _, err := a.resolveClusterDependencies(clusterID)
+	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return err
 	}
@@ -151,6 +151,7 @@ func (a *App) RestartWorkload(clusterID, namespace, group, version, workloadKind
 	if deps.Logger != nil {
 		deps.Logger.Info(fmt.Sprintf("Restarted %s %s/%s", workloadKind, namespace, name), "RestartWorkload")
 	}
+	a.invalidateResponseCache(selectionKey, workloadKind, namespace, name)
 	return nil
 }
 
@@ -168,7 +169,7 @@ func (a *App) ScaleWorkload(clusterID, namespace, group, version, workloadKind, 
 		return err
 	}
 
-	deps, _, err := a.resolveClusterDependencies(clusterID)
+	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return err
 	}
@@ -263,6 +264,7 @@ func (a *App) ScaleWorkload(clusterID, namespace, group, version, workloadKind, 
 			"ScaleWorkload",
 		)
 	}
+	a.invalidateResponseCache(selectionKey, workloadKind, namespace, name)
 	return nil
 }
 
@@ -272,7 +274,7 @@ func (a *App) TriggerCronJob(clusterID, namespace, name string) (string, error) 
 	if err := requireNamespacedObject(namespace, name); err != nil {
 		return "", err
 	}
-	deps, _, err := a.resolveClusterDependencies(clusterID)
+	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return "", err
 	}
@@ -342,6 +344,7 @@ func (a *App) TriggerCronJob(clusterID, namespace, name string) (string, error) 
 	if deps.Logger != nil {
 		deps.Logger.Info(fmt.Sprintf("Triggered CronJob %s/%s, created Job %s", namespace, name, createdJob.Name), "TriggerCronJob")
 	}
+	a.invalidateResponseCache(selectionKey, "CronJob", namespace, name)
 	return createdJob.Name, nil
 }
 
@@ -351,7 +354,7 @@ func (a *App) SuspendCronJob(clusterID, namespace, name string, suspend bool) er
 	if err := requireNamespacedObject(namespace, name); err != nil {
 		return err
 	}
-	deps, _, err := a.resolveClusterDependencies(clusterID)
+	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return err
 	}
@@ -402,6 +405,7 @@ func (a *App) SuspendCronJob(clusterID, namespace, name string, suspend bool) er
 	if deps.Logger != nil {
 		deps.Logger.Info(fmt.Sprintf("%s CronJob %s/%s", action, namespace, name), "SuspendCronJob")
 	}
+	a.invalidateResponseCache(selectionKey, "CronJob", namespace, name)
 	return nil
 }
 

@@ -124,7 +124,8 @@ func TestRestartWorkloadAddsRestartAnnotation(t *testing.T) {
 
 			// Per-cluster clients are stored in clusterClients, not in global fields.
 			app := &App{
-				logger: NewLogger(100),
+				logger:        NewLogger(100),
+				responseCache: newResponseCache(time.Minute, 10),
 			}
 			app.clusterClients = map[string]*clusterClients{
 				workloadClusterID: {
@@ -134,9 +135,13 @@ func TestRestartWorkloadAddsRestartAnnotation(t *testing.T) {
 					client:            tc.object,
 				},
 			}
+			detailKey := objectDetailCacheKey(tc.kind, "default", "demo")
+			app.responseCacheStore(workloadClusterID, detailKey, "stale")
 
 			err := app.RestartWorkload(workloadClusterID, "default", "apps", "v1", tc.kind, "demo")
 			require.NoError(t, err)
+			_, cached := app.responseCacheLookup(workloadClusterID, detailKey)
+			require.False(t, cached, "expected workload detail cache to be evicted after restart")
 
 			annotations, err := tc.get(context.Background(), tc.object)
 			require.NoError(t, err)
@@ -261,7 +266,8 @@ func TestScaleWorkloadUpdatesScaleSubresource(t *testing.T) {
 
 			// Per-cluster clients are stored in clusterClients, not in global fields.
 			app := &App{
-				logger: NewLogger(100),
+				logger:        NewLogger(100),
+				responseCache: newResponseCache(time.Minute, 10),
 			}
 			app.clusterClients = map[string]*clusterClients{
 				workloadClusterID: {
@@ -271,9 +277,13 @@ func TestScaleWorkloadUpdatesScaleSubresource(t *testing.T) {
 					client:            client,
 				},
 			}
+			detailKey := objectDetailCacheKey(tc.kind, "default", "demo")
+			app.responseCacheStore(workloadClusterID, detailKey, "stale")
 
 			err := app.ScaleWorkload(workloadClusterID, "default", "apps", "v1", tc.kind, "demo", 3)
 			require.NoError(t, err)
+			_, cached := app.responseCacheLookup(workloadClusterID, detailKey)
+			require.False(t, cached, "expected workload detail cache to be evicted after scale")
 
 			require.Equal(t, int32(3), observed.replicas, "expected replicas to be updated")
 			require.Equal(t, "demo", observed.name)
@@ -349,7 +359,8 @@ func TestTriggerCronJobCreatesJob(t *testing.T) {
 	client := cgofake.NewClientset(cronJob)
 	allowSelfSubjectAccessReviews(client)
 	app := &App{
-		logger: NewLogger(100),
+		logger:        NewLogger(100),
+		responseCache: newResponseCache(time.Minute, 10),
 	}
 	app.clusterClients = map[string]*clusterClients{
 		workloadClusterID: {
@@ -359,9 +370,13 @@ func TestTriggerCronJobCreatesJob(t *testing.T) {
 			client:            client,
 		},
 	}
+	detailKey := objectDetailCacheKey("CronJob", "default", "backup")
+	app.responseCacheStore(workloadClusterID, detailKey, "stale")
 
 	jobName, err := app.TriggerCronJob(workloadClusterID, "default", "backup")
 	require.NoError(t, err)
+	_, cached := app.responseCacheLookup(workloadClusterID, detailKey)
+	require.False(t, cached, "expected cronjob detail cache to be evicted after manual trigger")
 	require.True(t, strings.HasPrefix(jobName, "backup-manual-"), "job name should have manual prefix")
 
 	// Verify the job was created
@@ -458,7 +473,8 @@ func TestSuspendCronJobTogglesSuspendField(t *testing.T) {
 			client := cgofake.NewClientset(cronJob)
 			allowSelfSubjectAccessReviews(client)
 			app := &App{
-				logger: NewLogger(100),
+				logger:        NewLogger(100),
+				responseCache: newResponseCache(time.Minute, 10),
 			}
 			app.clusterClients = map[string]*clusterClients{
 				workloadClusterID: {
@@ -468,9 +484,13 @@ func TestSuspendCronJobTogglesSuspendField(t *testing.T) {
 					client:            client,
 				},
 			}
+			detailKey := objectDetailCacheKey("CronJob", "default", "backup")
+			app.responseCacheStore(workloadClusterID, detailKey, "stale")
 
 			err := app.SuspendCronJob(workloadClusterID, "default", "backup", tc.setSuspend)
 			require.NoError(t, err)
+			_, cached := app.responseCacheLookup(workloadClusterID, detailKey)
+			require.False(t, cached, "expected cronjob detail cache to be evicted after suspend update")
 
 			// Verify the cronjob was updated
 			updated, err := client.BatchV1().CronJobs("default").Get(context.Background(), "backup", metav1.GetOptions{})

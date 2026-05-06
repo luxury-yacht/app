@@ -6,6 +6,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 func TestInvalidateResponseCacheForObjectEvictsDetailAndYAML(t *testing.T) {
@@ -127,5 +128,55 @@ func TestInvalidateResponseCacheSkipsKindsOnUpdate(t *testing.T) {
 
 	if _, ok := app.responseCacheLookup(selectionKey, detailKey); !ok {
 		t.Fatalf("expected detail cache entry to remain for skipped kinds")
+	}
+}
+
+func TestInvalidateResponseCacheForGVKEvictsExactCustomResource(t *testing.T) {
+	app := NewApp()
+	app.responseCache = newResponseCache(time.Minute, 10)
+	selectionKey := "cluster-a"
+
+	customGVK := schema.GroupVersionKind{Group: "example.com", Version: "v1", Kind: "ConfigMap"}
+	coreGVK := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"}
+	customKey := objectDetailCacheKeyForGVK(customGVK, "default", "demo")
+	coreGVKKey := objectDetailCacheKeyForGVK(coreGVK, "default", "demo")
+	coreKindKey := objectDetailCacheKey("ConfigMap", "default", "demo")
+
+	app.responseCacheStore(selectionKey, customKey, "custom")
+	app.responseCacheStore(selectionKey, coreGVKKey, "core-gvk")
+	app.responseCacheStore(selectionKey, coreKindKey, "core-kind")
+
+	app.invalidateResponseCacheForGVK(selectionKey, customGVK, "default", "demo")
+
+	if _, ok := app.responseCacheLookup(selectionKey, customKey); ok {
+		t.Fatalf("expected exact custom GVK cache entry to be evicted")
+	}
+	if _, ok := app.responseCacheLookup(selectionKey, coreGVKKey); !ok {
+		t.Fatalf("expected built-in GVK cache entry with colliding kind to remain")
+	}
+	if _, ok := app.responseCacheLookup(selectionKey, coreKindKey); !ok {
+		t.Fatalf("expected built-in kind cache entry with colliding kind to remain")
+	}
+}
+
+func TestInvalidateResponseCacheForGVKEvictsBuiltinLegacyAndGVKKeys(t *testing.T) {
+	app := NewApp()
+	app.responseCache = newResponseCache(time.Minute, 10)
+	selectionKey := "cluster-a"
+
+	gvk := schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"}
+	gvkKey := objectDetailCacheKeyForGVK(gvk, "default", "demo")
+	kindKey := objectDetailCacheKey("Deployment", "default", "demo")
+
+	app.responseCacheStore(selectionKey, gvkKey, "gvk")
+	app.responseCacheStore(selectionKey, kindKey, "kind")
+
+	app.invalidateResponseCacheForGVK(selectionKey, gvk, "default", "demo")
+
+	if _, ok := app.responseCacheLookup(selectionKey, gvkKey); ok {
+		t.Fatalf("expected built-in GVK cache entry to be evicted")
+	}
+	if _, ok := app.responseCacheLookup(selectionKey, kindKey); ok {
+		t.Fatalf("expected built-in legacy kind cache entry to be evicted")
 	}
 }

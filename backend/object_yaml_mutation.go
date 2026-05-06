@@ -164,6 +164,8 @@ func (a *App) ApplyObjectYaml(clusterID string, req ObjectYAMLMutationRequest) (
 		return nil, wrapKubernetesError(err, "apply failed")
 	}
 
+	a.invalidateResponseCacheForGVK(selectionKey, schema.FromAPIVersionAndKind(req.APIVersion, req.Kind), req.Namespace, req.Name)
+
 	return &ObjectYAMLMutationResponse{
 		ResourceVersion: result.GetResourceVersion(),
 	}, nil

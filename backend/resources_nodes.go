@@ -23,7 +23,7 @@ func (a *App) CordonNode(clusterID, nodeName string) error {
 	if err := requireObjectName(nodeName); err != nil {
 		return err
 	}
-	deps, _, err := a.resolveClusterDependencies(clusterID)
+	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return err
 	}
@@ -37,7 +37,7 @@ func (a *App) CordonNode(clusterID, nodeName string) error {
 	if err := nodes.NewService(deps).Cordon(nodeName); err != nil {
 		return err
 	}
-	a.clearNodeCaches(nodeName)
+	a.clearNodeCaches(selectionKey, nodeName)
 	return nil
 }
 
@@ -45,7 +45,7 @@ func (a *App) UncordonNode(clusterID, nodeName string) error {
 	if err := requireObjectName(nodeName); err != nil {
 		return err
 	}
-	deps, _, err := a.resolveClusterDependencies(clusterID)
+	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return err
 	}
@@ -59,7 +59,7 @@ func (a *App) UncordonNode(clusterID, nodeName string) error {
 	if err := nodes.NewService(deps).Uncordon(nodeName); err != nil {
 		return err
 	}
-	a.clearNodeCaches(nodeName)
+	a.clearNodeCaches(selectionKey, nodeName)
 	return nil
 }
 
@@ -67,7 +67,7 @@ func (a *App) DrainNode(clusterID, nodeName string, options DrainNodeOptions) er
 	if err := requireObjectName(nodeName); err != nil {
 		return err
 	}
-	deps, _, err := a.resolveClusterDependencies(clusterID)
+	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return err
 	}
@@ -95,7 +95,7 @@ func (a *App) DrainNode(clusterID, nodeName string, options DrainNodeOptions) er
 	if err := nodes.NewService(deps).Drain(nodeName, options); err != nil {
 		return err
 	}
-	a.clearNodeCaches(nodeName)
+	a.clearNodeCaches(selectionKey, nodeName)
 	return nil
 }
 
@@ -103,7 +103,7 @@ func (a *App) DeleteNode(clusterID, nodeName string) error {
 	if err := requireObjectName(nodeName); err != nil {
 		return err
 	}
-	deps, _, err := a.resolveClusterDependencies(clusterID)
+	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return err
 	}
@@ -117,7 +117,7 @@ func (a *App) DeleteNode(clusterID, nodeName string) error {
 	if err := nodes.NewService(deps).Delete(nodeName, false); err != nil {
 		return err
 	}
-	a.clearNodeCaches(nodeName)
+	a.clearNodeCaches(selectionKey, nodeName)
 	return nil
 }
 
@@ -125,7 +125,7 @@ func (a *App) ForceDeleteNode(clusterID, nodeName string) error {
 	if err := requireObjectName(nodeName); err != nil {
 		return err
 	}
-	deps, _, err := a.resolveClusterDependencies(clusterID)
+	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return err
 	}
@@ -139,12 +139,12 @@ func (a *App) ForceDeleteNode(clusterID, nodeName string) error {
 	if err := nodes.NewService(deps).Delete(nodeName, true); err != nil {
 		return err
 	}
-	a.clearNodeCaches(nodeName)
+	a.clearNodeCaches(selectionKey, nodeName)
 	return nil
 }
 
-func (a *App) clearNodeCaches(nodeName string) {
-	_ = nodeName
+func (a *App) clearNodeCaches(selectionKey, nodeName string) {
+	a.invalidateResponseCache(selectionKey, "Node", "", nodeName)
 }
 
 func (a *App) DiscoverNodeLogs(clusterID, nodeName string) NodeLogDiscoveryResponse {

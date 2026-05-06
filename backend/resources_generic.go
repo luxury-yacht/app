@@ -33,7 +33,7 @@ func (a *App) DeleteResourceByGVK(clusterID, apiVersion, kind, namespace, name s
 	if err := requireObjectName(name); err != nil {
 		return err
 	}
-	deps, _, err := a.resolveClusterDependencies(clusterID)
+	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return err
 	}
@@ -48,5 +48,9 @@ func (a *App) DeleteResourceByGVK(clusterID, apiVersion, kind, namespace, name s
 		return err
 	}
 	service := generic.NewService(deps)
-	return service.DeleteByGVK(gvk, namespace, name)
+	if err := service.DeleteByGVK(gvk, namespace, name); err != nil {
+		return err
+	}
+	a.invalidateResponseCacheForGVK(selectionKey, gvk, namespace, name)
+	return nil
 }

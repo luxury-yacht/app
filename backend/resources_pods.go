@@ -25,7 +25,7 @@ func (a *App) DeletePod(clusterID, namespace, name string) error {
 	if err := requirePodObject(namespace, name); err != nil {
 		return err
 	}
-	deps, _, err := a.resolveClusterDependencies(clusterID)
+	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return err
 	}
@@ -37,7 +37,11 @@ func (a *App) DeletePod(clusterID, namespace, name string) error {
 	}); err != nil {
 		return err
 	}
-	return pods.DeletePod(deps, namespace, name)
+	if err := pods.DeletePod(deps, namespace, name); err != nil {
+		return err
+	}
+	a.invalidateResponseCache(selectionKey, "Pod", namespace, name)
+	return nil
 }
 
 func (a *App) FetchContainerLogs(clusterID string, req ContainerLogsFetchRequest) ContainerLogsFetchResponse {
@@ -75,7 +79,7 @@ func (a *App) CreateDebugContainer(clusterID string, req DebugContainerRequest) 
 	if err := requirePodObject(req.Namespace, req.PodName); err != nil {
 		return nil, err
 	}
-	deps, _, err := a.resolveClusterDependencies(clusterID)
+	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
 	}
@@ -89,5 +93,10 @@ func (a *App) CreateDebugContainer(clusterID string, req DebugContainerRequest) 
 		return nil, err
 	}
 	service := pods.NewService(deps)
-	return service.CreateDebugContainer(req.Namespace, req.PodName, req.Image, req.TargetContainer)
+	response, err := service.CreateDebugContainer(req.Namespace, req.PodName, req.Image, req.TargetContainer)
+	if err != nil {
+		return nil, err
+	}
+	a.invalidateResponseCache(selectionKey, "Pod", req.Namespace, req.PodName)
+	return response, nil
 }

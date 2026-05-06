@@ -68,5 +68,9 @@ func (a *App) DeleteHelmRelease(clusterID, namespace, name string) error {
 		service := helm.NewService(helm.Dependencies{Common: deps})
 		return struct{}{}, service.DeleteRelease(namespace, name)
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	a.invalidateHelmCache(selectionKey, namespace, name)
+	return nil
 }
