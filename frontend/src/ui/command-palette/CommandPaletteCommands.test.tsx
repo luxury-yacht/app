@@ -18,8 +18,10 @@ const { mocks } = vi.hoisted(() => ({
       kubeconfigs: [] as types.KubeconfigInfo[],
       selectedKubeconfigs: [] as string[],
       selectedKubeconfig: '',
+      selectedClusterId: '',
       setSelectedKubeconfigs: vi.fn(),
       setActiveKubeconfig: vi.fn(),
+      getClusterMeta: vi.fn(() => ({ id: '', name: '' })),
     },
     viewState: {
       setIsAboutOpen: vi.fn(),
@@ -63,6 +65,7 @@ vi.mock('@core/contexts/FavoritesContext', () => ({
     deleteFavorite: vi.fn(),
     reorderFavorites: vi.fn(),
     updateFavorite: vi.fn(),
+    setPendingFavorite: vi.fn(),
   }),
 }));
 

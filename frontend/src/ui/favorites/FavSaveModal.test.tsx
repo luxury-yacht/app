@@ -50,7 +50,11 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
     setSelectedKubeconfigs: vi.fn().mockResolvedValue(undefined),
     setActiveKubeconfig: vi.fn(),
     setSelectedKubeconfig: vi.fn().mockResolvedValue(undefined),
-    getClusterMeta: vi.fn(() => ({ id: '', name: '' })),
+    getClusterMeta: vi.fn((selection: string) =>
+      selection === '/home/user/.kube/config:prod-cluster'
+        ? { id: 'config:prod-cluster', name: 'prod-cluster' }
+        : { id: '', name: '' }
+    ),
     kubeconfigs: [
       {
         name: 'config',
@@ -301,6 +305,9 @@ describe('FavSaveModal', () => {
     expect(savedFav.viewType).toBe('namespace');
     expect(savedFav.view).toBe('pods');
     expect(savedFav.namespace).toBe('default');
+    expect(savedFav.clusterSelection).toBe('/home/user/.kube/config:prod-cluster');
+    expect(savedFav.clusterId).toBe('config:prod-cluster');
+    expect(savedFav.clusterName).toBe('prod-cluster');
     expect(savedFav.id).toBe(''); // New favorite has empty id.
     expect(onClose).toHaveBeenCalledTimes(1);
   });

@@ -95,7 +95,7 @@ export function useFavToggle(state: FavToggleState): {
     pendingFavorite,
     setPendingFavorite,
   } = useFavorites();
-  const { selectedKubeconfig, selectedClusterName } = useKubeconfig();
+  const { selectedKubeconfig, selectedClusterId, selectedClusterName } = useKubeconfig();
   const { viewType, activeNamespaceTab, activeClusterTab } = useViewState();
   const { selectedNamespace } = useNamespace();
 
@@ -108,7 +108,10 @@ export function useFavToggle(state: FavToggleState): {
   const currentFavoriteMatch = useMemo<Favorite | null>(() => {
     for (const fav of favorites) {
       const clusterMatches =
-        fav.clusterSelection === '' || selectedKubeconfig === fav.clusterSelection;
+        fav.clusterSelection === '' ||
+        (fav.clusterId
+          ? selectedClusterId === fav.clusterId
+          : selectedKubeconfig === fav.clusterSelection);
       if (!clusterMatches) continue;
       if (viewType !== fav.viewType) continue;
       if (activeViewTab !== fav.view) continue;
@@ -139,6 +142,7 @@ export function useFavToggle(state: FavToggleState): {
   }, [
     favorites,
     selectedKubeconfig,
+    selectedClusterId,
     viewType,
     activeViewTab,
     selectedNamespace,

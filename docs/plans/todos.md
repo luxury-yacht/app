@@ -1,8 +1,8 @@
 # TODO
 
 1. ✅ Object panel/frontend detail flow: verify the frontend consistently sends full clusterId/group/version/kind identity into detail, YAML, actions, map, and navigation.
-2. Refresh/resource stream stability: look for duplicated row-building logic, stale invalidation behavior, or places where streaming updates diverge from snapshot shape.
-3. Object catalog/resource identity: audit whether catalog, browse, favorites, and navigation all preserve full object identity across clusters.
+2. ✅ Refresh/resource stream stability: look for duplicated row-building logic, stale invalidation behavior, or places where streaming updates diverge from snapshot shape.
+3. ✅ Object catalog/resource identity: audit whether catalog, browse, favorites, and navigation all preserve full object identity across clusters.
 
 ## Feature Ideas
 

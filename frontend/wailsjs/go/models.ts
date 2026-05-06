@@ -242,6 +242,8 @@ export namespace backend {
 	    id: string;
 	    name: string;
 	    clusterSelection: string;
+	    clusterId?: string;
+	    clusterName?: string;
 	    viewType: string;
 	    view: string;
 	    namespace: string;
@@ -258,6 +260,8 @@ export namespace backend {
 	        this.id = source["id"];
 	        this.name = source["name"];
 	        this.clusterSelection = source["clusterSelection"];
+	        this.clusterId = source["clusterId"];
+	        this.clusterName = source["clusterName"];
 	        this.viewType = source["viewType"];
 	        this.view = source["view"];
 	        this.namespace = source["namespace"];

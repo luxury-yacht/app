@@ -1779,9 +1779,6 @@ func (m *Manager) handleWorkloadFromPod(pod *corev1.Pod, updateType MessageType,
 	if pod == nil {
 		return
 	}
-	if pod.Status.Phase == corev1.PodSucceeded || pod.Status.Phase == corev1.PodFailed {
-		return
-	}
 
 	// Refresh workload rows when a pod change affects derived readiness or restart counts.
 	ownerKey := snapshot.WorkloadOwnerKeyForPod(pod)
@@ -1840,7 +1837,7 @@ func (m *Manager) handleStandalonePodWorkload(pod *corev1.Pod, updateType Messag
 		return
 	}
 	if pod.Status.Phase == corev1.PodSucceeded || pod.Status.Phase == corev1.PodFailed {
-		return
+		updateType = MessageTypeDeleted
 	}
 
 	summary := snapshot.BuildStandalonePodWorkloadSummary(m.clusterMeta, pod, usage)

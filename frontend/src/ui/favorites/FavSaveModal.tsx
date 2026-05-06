@@ -172,7 +172,7 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
   onDelete,
 }) => {
   const isEditing = existingFavorite != null;
-  const { kubeconfigs } = useKubeconfig();
+  const { kubeconfigs, getClusterMeta } = useKubeconfig();
   const { namespaces } = useNamespace();
   const modalRef = useRef<HTMLDivElement>(null);
 
@@ -328,10 +328,13 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
   // ----- Handlers -----
 
   const handleSave = () => {
+    const selectedClusterMeta = clusterSpecific ? getClusterMeta(clusterSelection) : null;
     const fav: Favorite = {
       id: existingFavorite?.id ?? '',
       name: name.trim() || defaultName,
       clusterSelection: clusterSpecific ? clusterSelection : '',
+      clusterId: clusterSpecific ? (selectedClusterMeta?.id ?? '') : '',
+      clusterName: clusterSpecific ? (selectedClusterMeta?.name ?? '') : '',
       viewType: scope,
       view: activeView,
       namespace: scope === 'namespace' ? selectedNamespace : '',

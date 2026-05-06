@@ -28,6 +28,8 @@ export interface Favorite {
   id: string;
   name: string;
   clusterSelection: string;
+  clusterId?: string;
+  clusterName?: string;
   viewType: string;
   view: string;
   namespace: string;

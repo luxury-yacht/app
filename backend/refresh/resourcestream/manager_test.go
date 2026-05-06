@@ -814,6 +814,92 @@ func TestManagerWorkloadUpdateFromPod(t *testing.T) {
 	}
 }
 
+func TestManagerWorkloadUpdateFromCompletedOwnedPod(t *testing.T) {
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "pod-1",
+			Namespace:       "default",
+			UID:             "pod-uid",
+			ResourceVersion: "6",
+			OwnerReferences: []metav1.OwnerReference{{
+				Kind:       "ReplicaSet",
+				Name:       "web-12345",
+				Controller: ptrBool(true),
+			}},
+		},
+		Status: corev1.PodStatus{Phase: corev1.PodSucceeded},
+	}
+
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "web",
+			Namespace:       "default",
+			UID:             "deploy-uid",
+			ResourceVersion: "9",
+		},
+	}
+
+	manager := &Manager{
+		clusterMeta:      snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
+		logger:           noopLogger{},
+		podLister:        podListerWith(pod),
+		deploymentLister: deploymentListerWith(deployment),
+		subscribers:      make(map[string]map[string]map[uint64]*subscription),
+	}
+
+	sub, err := manager.Subscribe(domainWorkloads, "namespace:default")
+	require.NoError(t, err)
+
+	manager.handlePod(pod, MessageTypeModified)
+
+	select {
+	case update := <-sub.Updates:
+		require.Equal(t, MessageTypeModified, update.Type)
+		require.Equal(t, domainWorkloads, update.Domain)
+		require.Equal(t, "namespace:default", update.Scope)
+		require.Equal(t, "web", update.Name)
+		require.Equal(t, "Deployment", update.Kind)
+		require.NotNil(t, update.Row)
+	default:
+		t.Fatal("expected completed owned pod to refresh workload row")
+	}
+}
+
+func TestManagerDeletesStandaloneWorkloadRowWhenPodCompletes(t *testing.T) {
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "pod-1",
+			Namespace:       "default",
+			UID:             "pod-uid",
+			ResourceVersion: "7",
+		},
+		Status: corev1.PodStatus{Phase: corev1.PodFailed},
+	}
+
+	manager := &Manager{
+		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
+		logger:      noopLogger{},
+		subscribers: make(map[string]map[string]map[uint64]*subscription),
+	}
+
+	sub, err := manager.Subscribe(domainWorkloads, "namespace:default")
+	require.NoError(t, err)
+
+	manager.handlePod(pod, MessageTypeModified)
+
+	select {
+	case update := <-sub.Updates:
+		require.Equal(t, MessageTypeDeleted, update.Type)
+		require.Equal(t, domainWorkloads, update.Domain)
+		require.Equal(t, "namespace:default", update.Scope)
+		require.Equal(t, "pod-1", update.Name)
+		require.Equal(t, "Pod", update.Kind)
+		require.Nil(t, update.Row)
+	default:
+		t.Fatal("expected completed standalone pod to delete workload row")
+	}
+}
+
 func TestManagerNodeUpdateFromPod(t *testing.T) {
 	manager := &Manager{
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},

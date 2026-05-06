@@ -16,6 +16,8 @@ type Favorite struct {
 	ID               string              `json:"id"`
 	Name             string              `json:"name"`
 	ClusterSelection string              `json:"clusterSelection"`
+	ClusterID        string              `json:"clusterId,omitempty"`
+	ClusterName      string              `json:"clusterName,omitempty"`
 	ViewType         string              `json:"viewType"`
 	View             string              `json:"view"`
 	Namespace        string              `json:"namespace"`

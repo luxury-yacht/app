@@ -33,6 +33,7 @@ vi.mock('@/core/persistence/favorites', () => ({
 
 // Mutable mock values for the context hooks so tests can adjust them per-case.
 let mockSelectedKubeconfig = '/path/to/kubeconfig:my-context';
+let mockSelectedClusterId = 'cluster-1';
 let mockViewType = 'namespace';
 let mockActiveNamespaceTab = 'workloads';
 let mockActiveClusterTab: string | null = null;
@@ -48,7 +49,7 @@ const mockSetSelectedNamespace = vi.fn();
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: () => ({
     selectedKubeconfig: mockSelectedKubeconfig,
-    selectedClusterId: 'cluster-1',
+    selectedClusterId: mockSelectedClusterId,
   }),
 }));
 
@@ -126,6 +127,7 @@ describe('FavoritesContext', () => {
 
     // Reset mutable mock values to defaults
     mockSelectedKubeconfig = '/path/to/kubeconfig:my-context';
+    mockSelectedClusterId = 'cluster-1';
     mockViewType = 'namespace';
     mockActiveNamespaceTab = 'workloads';
     mockActiveClusterTab = null;
@@ -244,6 +246,39 @@ describe('FavoritesContext', () => {
       type: 'cluster',
       value: 'cluster',
     });
+  });
+
+  it('waits for the favorite clusterId before applying cluster-specific navigation', async () => {
+    mockSelectedKubeconfig = '/path/to/kubeconfig:other-context';
+    mockSelectedClusterId = 'cluster-other';
+    await renderProvider();
+
+    act(() => {
+      stateRef.current?.setPendingFavorite(
+        makeFavorite({
+          clusterSelection: '/path/to/kubeconfig:my-context',
+          clusterId: 'cluster-1',
+          viewType: 'cluster',
+          view: 'nodes',
+          namespace: '',
+        })
+      );
+    });
+
+    expect(mockSetViewType).not.toHaveBeenCalled();
+
+    mockSelectedClusterId = 'cluster-1';
+    await act(async () => {
+      root.render(
+        <FavoritesProvider>
+          <Harness />
+        </FavoritesProvider>
+      );
+      await Promise.resolve();
+    });
+
+    expect(mockSetViewType).toHaveBeenCalledWith('cluster');
+    expect(mockSetActiveClusterView).toHaveBeenCalledWith('nodes');
   });
 
   // Note: currentFavoriteMatch was moved from FavoritesContext to useFavToggle

@@ -12,8 +12,10 @@ import type { Favorite } from '@/core/persistence/favorites';
 
 export interface NavigationContexts {
   selectedKubeconfigs: string[];
+  selectedClusterId?: string;
   setSelectedKubeconfigs: (configs: string[]) => Promise<void>;
   setActiveKubeconfig: (config: string) => void;
+  getClusterMeta?: (config: string) => { id: string; name: string };
   /** Set the pending favorite so FavoritesContext can restore navigation + filter state. */
   setPendingFavorite: (fav: Favorite | null) => void;
 }
@@ -32,22 +34,41 @@ export function navigateToFavorite(
   contexts: NavigationContexts,
   onComplete?: () => void
 ): void {
-  const { selectedKubeconfigs, setSelectedKubeconfigs, setActiveKubeconfig, setPendingFavorite } =
-    contexts;
+  const {
+    selectedKubeconfigs,
+    selectedClusterId,
+    setSelectedKubeconfigs,
+    setActiveKubeconfig,
+    getClusterMeta,
+    setPendingFavorite,
+  } = contexts;
 
   setPendingFavorite(favorite);
 
-  const isClusterSpecific = favorite.clusterSelection !== '';
+  const favoriteClusterId = favorite.clusterId?.trim() ?? '';
+  const isClusterSpecific = favorite.clusterSelection !== '' || favoriteClusterId !== '';
 
   if (isClusterSpecific) {
-    const alreadyOpen = selectedKubeconfigs.includes(favorite.clusterSelection);
+    const clusterSelection =
+      favorite.clusterSelection ||
+      selectedKubeconfigs.find(
+        (selection) => getClusterMeta?.(selection).id === favoriteClusterId
+      ) ||
+      '';
+    if (!clusterSelection) {
+      onComplete?.();
+      return;
+    }
+    const alreadyActive =
+      favoriteClusterId && selectedClusterId ? selectedClusterId === favoriteClusterId : false;
+    const alreadyOpen = selectedKubeconfigs.includes(clusterSelection);
     if (!alreadyOpen) {
-      const updated = [...selectedKubeconfigs, favorite.clusterSelection];
+      const updated = [...selectedKubeconfigs, clusterSelection];
       void setSelectedKubeconfigs(updated).then(() => {
-        setActiveKubeconfig(favorite.clusterSelection);
+        setActiveKubeconfig(clusterSelection);
       });
-    } else {
-      setActiveKubeconfig(favorite.clusterSelection);
+    } else if (!alreadyActive) {
+      setActiveKubeconfig(clusterSelection);
     }
   }
 

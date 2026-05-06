@@ -108,10 +108,17 @@ export const FavoritesProvider: React.FC<FavoritesProviderProps> = ({ children }
     if (navigationAppliedRef.current) return;
 
     // For cluster-specific favorites, wait for the correct cluster to be active AND ready.
-    const isClusterSpecific = pendingFavorite.clusterSelection !== '';
+    // New favorites carry clusterId; older persisted favorites only have the kubeconfig
+    // selection string, so keep that fallback for compatibility.
+    const favoriteClusterId = pendingFavorite.clusterId?.trim() ?? '';
+    const isClusterSpecific = pendingFavorite.clusterSelection !== '' || favoriteClusterId !== '';
     if (isClusterSpecific) {
-      if (selectedKubeconfig !== pendingFavorite.clusterSelection) return;
-      if (!isClusterReady(selectedClusterId)) return;
+      if (favoriteClusterId) {
+        if (selectedClusterId !== favoriteClusterId) return;
+      } else if (selectedKubeconfig !== pendingFavorite.clusterSelection) {
+        return;
+      }
+      if (!isClusterReady(favoriteClusterId || selectedClusterId)) return;
     } else {
       // Generic favorite: wait for the active cluster to be ready.
       if (selectedClusterId && !isClusterReady(selectedClusterId)) return;

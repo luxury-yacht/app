@@ -279,6 +279,21 @@ describe('useFavToggle', () => {
     expect(btn!.title).toBe('Edit favorite');
   });
 
+  it('matches cluster-specific favorites by clusterId when present', async () => {
+    mockFavorites = [
+      makeFavorite({
+        clusterSelection: '/different/path:production',
+        clusterId: '/home/user/.kube/config:production',
+      }),
+    ];
+
+    await renderHook();
+
+    const btn = container.querySelector<HTMLButtonElement>('[data-testid="fav-toggle-button"]');
+    expect(btn).toBeTruthy();
+    expect(btn!.getAttribute('data-active')).toBe('true');
+  });
+
   // -------------------------------------------------------------------------
   // 3. Click opens modal
   // -------------------------------------------------------------------------

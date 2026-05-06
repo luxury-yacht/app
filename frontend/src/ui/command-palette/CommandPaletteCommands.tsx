@@ -56,10 +56,12 @@ export function useCommandPaletteCommands() {
   // Destructure kubeconfig fields so hook deps stay explicit.
   const {
     selectedKubeconfig,
+    selectedClusterId,
     selectedKubeconfigs,
     setSelectedKubeconfigs,
     kubeconfigs,
     setActiveKubeconfig,
+    getClusterMeta,
   } = useKubeconfig();
   const { favorites, setPendingFavorite } = useFavorites();
   const { theme } = useTheme();
@@ -608,8 +610,10 @@ export function useCommandPaletteCommands() {
         action: () => {
           navigateToFavorite(fav, {
             selectedKubeconfigs,
+            selectedClusterId,
             setSelectedKubeconfigs,
             setActiveKubeconfig,
+            getClusterMeta,
             setPendingFavorite,
           });
         },
@@ -618,8 +622,10 @@ export function useCommandPaletteCommands() {
     [
       favorites,
       selectedKubeconfigs,
+      selectedClusterId,
       setSelectedKubeconfigs,
       setActiveKubeconfig,
+      getClusterMeta,
       setPendingFavorite,
     ]
   );
