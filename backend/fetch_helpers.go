@@ -136,6 +136,9 @@ func FetchNamespacedResource[T any](
 	fetchFunc func() (T, error),
 ) (T, error) {
 	var zero T
+	if err := requireNamespacedObject(namespace, name); err != nil {
+		return zero, err
+	}
 	if err := ensureDependenciesInitialized(a, deps, resourceKind); err != nil {
 		return zero, err
 	}
@@ -155,6 +158,9 @@ func FetchClusterResource[T any](
 	fetchFunc func() (T, error),
 ) (T, error) {
 	var zero T
+	if err := requireObjectName(name); err != nil {
+		return zero, err
+	}
 	if err := ensureDependenciesInitialized(a, deps, resourceKind); err != nil {
 		return zero, err
 	}

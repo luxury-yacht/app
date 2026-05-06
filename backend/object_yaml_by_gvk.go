@@ -47,6 +47,9 @@ func (a *App) GetObjectYAMLByGVK(clusterID, apiVersion, kind, namespace, name st
 	if gvk.Version == "" {
 		return "", fmt.Errorf("apiVersion is required")
 	}
+	if err := requireObjectName(name); err != nil {
+		return "", err
+	}
 
 	deps, _, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {

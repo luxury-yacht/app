@@ -46,16 +46,20 @@ func validateAppsV1WorkloadAction(action, group, version, kind string, supported
 // RestartWorkload performs a rollout restart by patching the pod template metadata on the target workload.
 // Supported workload kinds: Deployment, StatefulSet, DaemonSet.
 func (a *App) RestartWorkload(clusterID, namespace, group, version, workloadKind, name string) error {
+	if err := requireNamespacedObject(namespace, name); err != nil {
+		return err
+	}
+	workloadKind, err := validateAppsV1WorkloadAction("restart", group, version, workloadKind, actionRestartableWorkloadKinds)
+	if err != nil {
+		return err
+	}
+
 	deps, _, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return err
 	}
 	if deps.KubernetesClient == nil {
 		return fmt.Errorf("kubernetes client is not initialized")
-	}
-	workloadKind, err = validateAppsV1WorkloadAction("restart", group, version, workloadKind, actionRestartableWorkloadKinds)
-	if err != nil {
-		return err
 	}
 
 	annotationValue := time.Now().UTC().Format(time.RFC3339)
@@ -153,20 +157,23 @@ func (a *App) RestartWorkload(clusterID, namespace, group, version, workloadKind
 // ScaleWorkload updates the replica count on a scalable workload.
 // Supported workload kinds: Deployment, StatefulSet, ReplicaSet.
 func (a *App) ScaleWorkload(clusterID, namespace, group, version, workloadKind, name string, replicas int) error {
+	if err := requireNamespacedObject(namespace, name); err != nil {
+		return err
+	}
+	if replicas < 0 {
+		return fmt.Errorf("replicas must be non-negative")
+	}
+	workloadKind, err := validateAppsV1WorkloadAction("scaling", group, version, workloadKind, actionScalableWorkloadKinds)
+	if err != nil {
+		return err
+	}
+
 	deps, _, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return err
 	}
 	if deps.KubernetesClient == nil {
 		return fmt.Errorf("kubernetes client is not initialized")
-	}
-
-	if replicas < 0 {
-		return fmt.Errorf("replicas must be non-negative")
-	}
-	workloadKind, err = validateAppsV1WorkloadAction("scaling", group, version, workloadKind, actionScalableWorkloadKinds)
-	if err != nil {
-		return err
 	}
 
 	scale := &autoscalingv1.Scale{
@@ -262,6 +269,9 @@ func (a *App) ScaleWorkload(clusterID, namespace, group, version, workloadKind, 
 // TriggerCronJob creates a Job immediately from a CronJob's jobTemplate spec.
 // Returns the name of the created Job on success.
 func (a *App) TriggerCronJob(clusterID, namespace, name string) (string, error) {
+	if err := requireNamespacedObject(namespace, name); err != nil {
+		return "", err
+	}
 	deps, _, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return "", err
@@ -338,6 +348,9 @@ func (a *App) TriggerCronJob(clusterID, namespace, name string) (string, error) 
 // SuspendCronJob sets the suspend field on a CronJob.
 // When suspended, the CronJob will not create new Jobs on schedule.
 func (a *App) SuspendCronJob(clusterID, namespace, name string, suspend bool) error {
+	if err := requireNamespacedObject(namespace, name); err != nil {
+		return err
+	}
 	deps, _, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return err

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/resources/common"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
@@ -116,6 +117,52 @@ func TestFetchResourceListErrorEmits(t *testing.T) {
 	require.Equal(t, "test-cluster", emitted["clusterId"])
 	require.Equal(t, "Widget", emitted["resourceKind"])
 	require.Contains(t, emitted["scope"], "namespace default")
+}
+
+func TestFetchNamespacedResourceRequiresObjectIdentity(t *testing.T) {
+	app := newTestAppWithDefaults(t)
+
+	tests := []struct {
+		name      string
+		namespace string
+		object    string
+		wantErr   string
+	}{
+		{name: "missing namespace", namespace: "", object: "demo", wantErr: "namespace is required"},
+		{name: "blank namespace", namespace: "  ", object: "demo", wantErr: "namespace is required"},
+		{name: "missing name", namespace: "default", object: "", wantErr: "name is required"},
+		{name: "blank name", namespace: "default", object: "  ", wantErr: "name is required"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			called := false
+			_, err := FetchNamespacedResource(app, common.Dependencies{}, "cluster-1", "Widget", tt.namespace, tt.object, func() (string, error) {
+				called = true
+				return "unexpected", nil
+			})
+
+			require.ErrorContains(t, err, tt.wantErr)
+			require.False(t, called)
+		})
+	}
+}
+
+func TestFetchClusterResourceRequiresObjectName(t *testing.T) {
+	app := newTestAppWithDefaults(t)
+
+	for _, name := range []string{"", "  "} {
+		t.Run("name="+name, func(t *testing.T) {
+			called := false
+			_, err := FetchClusterResource(app, common.Dependencies{}, "cluster-1", "Widget", name, func() (string, error) {
+				called = true
+				return "unexpected", nil
+			})
+
+			require.ErrorContains(t, err, "name is required")
+			require.False(t, called)
+		})
+	}
 }
 
 func TestFetchResourceRetriesOnTransientError(t *testing.T) {

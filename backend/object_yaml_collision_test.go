@@ -285,6 +285,16 @@ func TestGetObjectYAMLByGVKDisambiguatesCollidingDBInstances(t *testing.T) {
 			t.Fatalf("kinda.rocks lookup returned ack-rds object by mistake:\n%s", yamlStr)
 		}
 	})
+
+	t.Run("missing name returns boundary error", func(t *testing.T) {
+		_, err := app.GetObjectYAMLByGVK(clusterID, "kinda.rocks/v1beta1", "DbInstance", "default", "")
+		if err == nil {
+			t.Fatal("expected error when name is empty")
+		}
+		if !strings.Contains(err.Error(), "name is required") {
+			t.Errorf("expected error to mention missing name, got %v", err)
+		}
+	})
 }
 
 // TestQueryPermissionsDisambiguatesCollidingDBInstances is the step-4
@@ -485,6 +495,19 @@ func TestDeleteResourceByGVKDisambiguatesCollidingDBInstances(t *testing.T) {
 		}
 		if !strings.Contains(err.Error(), "apiVersion") {
 			t.Errorf("expected error to mention apiVersion, got %v", err)
+		}
+	})
+
+	t.Run("missing name returns boundary error", func(t *testing.T) {
+		const clusterID = "collision-delete-missing-name"
+		app := newCollidingDBInstanceCluster(t, clusterID)
+
+		err := app.DeleteResourceByGVK(clusterID, "kinda.rocks/v1beta1", "DbInstance", "default", "")
+		if err == nil {
+			t.Fatal("expected error when name is empty")
+		}
+		if !strings.Contains(err.Error(), "name is required") {
+			t.Errorf("expected error to mention missing name, got %v", err)
 		}
 	})
 }

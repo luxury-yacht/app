@@ -15,6 +15,7 @@ package generic
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -32,6 +33,9 @@ func (s *Service) DeleteByGVK(gvk schema.GroupVersionKind, namespace, name strin
 	}
 	if gvk.Version == "" {
 		return fmt.Errorf("version is required")
+	}
+	if strings.TrimSpace(name) == "" {
+		return fmt.Errorf("name is required")
 	}
 
 	gvr, isNamespaced, err := common.ResolveGVRForGVK(s.context(), s.deps, gvk)

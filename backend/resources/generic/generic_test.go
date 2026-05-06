@@ -57,6 +57,23 @@ func TestServiceDeleteByGVKCoreResource(t *testing.T) {
 	}
 }
 
+func TestServiceDeleteByGVKRequiresName(t *testing.T) {
+	service := NewService(testsupport.NewResourceDependencies())
+	gvk := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}
+
+	for _, name := range []string{"", "  "} {
+		t.Run("name="+name, func(t *testing.T) {
+			err := service.DeleteByGVK(gvk, "default", name)
+			if err == nil {
+				t.Fatal("expected error when name is empty")
+			}
+			if err.Error() != "name is required" {
+				t.Fatalf("expected name error, got %v", err)
+			}
+		})
+	}
+}
+
 func TestServiceDeleteByGVKCustomResource(t *testing.T) {
 	kubeClient := fake.NewClientset()
 	testsupport.SeedAPIResources(t, kubeClient, testsupport.NewAPIResourceList("example.com/v1", metav1.APIResource{

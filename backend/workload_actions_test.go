@@ -184,6 +184,35 @@ func TestRestartWorkloadErrors(t *testing.T) {
 	require.EqualError(t, err, "kubernetes client is not initialized")
 }
 
+func TestWorkloadActionsRequireNamespacedObjectIdentity(t *testing.T) {
+	app := NewApp()
+
+	require.EqualError(t,
+		app.RestartWorkload("", "", "apps", "v1", "Deployment", "demo"),
+		"namespace is required",
+	)
+	require.EqualError(t,
+		app.RestartWorkload("", "default", "apps", "v1", "Deployment", ""),
+		"name is required",
+	)
+	require.EqualError(t,
+		app.ScaleWorkload("", "", "apps", "v1", "Deployment", "demo", 1),
+		"namespace is required",
+	)
+	require.EqualError(t,
+		app.ScaleWorkload("", "default", "apps", "v1", "Deployment", "", 1),
+		"name is required",
+	)
+
+	_, err := app.TriggerCronJob("", "", "backup")
+	require.EqualError(t, err, "namespace is required")
+	_, err = app.TriggerCronJob("", "default", "")
+	require.EqualError(t, err, "name is required")
+
+	require.EqualError(t, app.SuspendCronJob("", "", "backup", true), "namespace is required")
+	require.EqualError(t, app.SuspendCronJob("", "default", "", true), "name is required")
+}
+
 func TestScaleWorkloadUpdatesScaleSubresource(t *testing.T) {
 	t.Helper()
 

@@ -75,3 +75,17 @@ func TestIsWorkloadHPAManagedRejectsUnsupportedGVK(t *testing.T) {
 		t.Fatalf("expected unsupported GVK error")
 	}
 }
+
+func TestIsWorkloadHPAManagedRequiresNamespacedObjectIdentity(t *testing.T) {
+	app := NewApp()
+
+	_, err := app.IsWorkloadHPAManaged("cluster-a", "", "apps", "v1", "Deployment", "web")
+	if err == nil || err.Error() != "namespace is required" {
+		t.Fatalf("expected namespace error, got %v", err)
+	}
+
+	_, err = app.IsWorkloadHPAManaged("cluster-a", "default", "apps", "v1", "Deployment", "")
+	if err == nil || err.Error() != "name is required" {
+		t.Fatalf("expected name error, got %v", err)
+	}
+}

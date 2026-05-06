@@ -32,6 +32,9 @@ func (a *App) GetHorizontalPodAutoscaler(clusterID, namespace, name string) (*Ho
 // namespace targets the specified workload GVK + name. Used by the object panel
 // to determine if the Scale action should be disabled.
 func (a *App) IsWorkloadHPAManaged(clusterID, namespace, group, version, kind, name string) (bool, error) {
+	if err := requireNamespacedObject(namespace, name); err != nil {
+		return false, err
+	}
 	kind, err := normalizeAppsV1WorkloadKind(group, version, kind, scalableWorkloadKinds)
 	if err != nil {
 		return false, fmt.Errorf("HPA-managed check not supported: %w", err)
