@@ -10,6 +10,7 @@ package pods
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/types"
@@ -34,6 +35,12 @@ func (s *Service) GetPod(namespace string, name string, detailed bool) (*types.P
 	if s.deps.KubernetesClient == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
+	if strings.TrimSpace(namespace) == "" {
+		return nil, fmt.Errorf("namespace is required")
+	}
+	if strings.TrimSpace(name) == "" {
+		return nil, fmt.Errorf("pod name is required")
+	}
 	details, err := s.fetchSinglePodFull(namespace, name)
 	if err != nil {
 		return nil, err
@@ -50,6 +57,12 @@ func DeletePod(deps common.Dependencies, namespace, name string) error {
 func (s *Service) DeletePod(namespace, name string) error {
 	if s.deps.KubernetesClient == nil || s.deps.Context == nil {
 		return fmt.Errorf("kubernetes client not initialized")
+	}
+	if strings.TrimSpace(namespace) == "" {
+		return fmt.Errorf("namespace is required")
+	}
+	if strings.TrimSpace(name) == "" {
+		return fmt.Errorf("pod name is required")
 	}
 
 	ctx, cancel := context.WithCancel(s.deps.Context)

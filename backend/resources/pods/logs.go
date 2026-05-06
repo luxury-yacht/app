@@ -119,6 +119,12 @@ func (s *Service) PodContainers(namespace, podName string) ([]string, error) {
 	if s.deps.KubernetesClient == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
+	if strings.TrimSpace(namespace) == "" {
+		return nil, fmt.Errorf("namespace is required")
+	}
+	if strings.TrimSpace(podName) == "" {
+		return nil, fmt.Errorf("pod name is required")
+	}
 
 	pod, err := s.deps.KubernetesClient.CoreV1().Pods(namespace).Get(s.ctx(), podName, metav1.GetOptions{})
 	if err != nil {

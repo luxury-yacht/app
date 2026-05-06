@@ -141,6 +141,20 @@ func TestGetPodReturnsDetailedInfo(t *testing.T) {
 	}
 }
 
+func TestGetPodRequiresTargetIdentity(t *testing.T) {
+	service := NewService(common.Dependencies{
+		Context:          context.Background(),
+		Logger:           testsupport.NoopLogger{},
+		KubernetesClient: fake.NewClientset(),
+	})
+
+	_, err := service.GetPod("", "demo-pod", false)
+	require.EqualError(t, err, "namespace is required")
+
+	_, err = service.GetPod("team-a", "", false)
+	require.EqualError(t, err, "pod name is required")
+}
+
 func TestGetPodPropagatesError(t *testing.T) {
 	client := fake.NewClientset()
 	client.PrependReactor("get", "pods", func(action cgotesting.Action) (bool, runtime.Object, error) {
@@ -187,6 +201,20 @@ func TestDeletePodSucceeds(t *testing.T) {
 	if !deleteFound {
 		t.Fatalf("expected delete action to be issued")
 	}
+}
+
+func TestDeletePodRequiresTargetIdentity(t *testing.T) {
+	service := NewService(common.Dependencies{
+		Context:          context.Background(),
+		Logger:           testsupport.NoopLogger{},
+		KubernetesClient: fake.NewClientset(),
+	})
+
+	err := service.DeletePod("", "delete-me")
+	require.EqualError(t, err, "namespace is required")
+
+	err = service.DeletePod("team-a", "")
+	require.EqualError(t, err, "pod name is required")
 }
 
 func TestDeletePodReturnsErrorWhenAPIFails(t *testing.T) {

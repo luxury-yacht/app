@@ -23,7 +23,7 @@ func TestStartShellSessionRequiresClient(t *testing.T) {
 		},
 	}
 
-	_, err := app.StartShellSession(shellClusterID, ShellSessionRequest{})
+	_, err := app.StartShellSession(shellClusterID, ShellSessionRequest{Namespace: "default", PodName: "demo"})
 	if err == nil {
 		t.Fatalf("expected error when client not initialized")
 	}

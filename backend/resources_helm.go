@@ -43,6 +43,9 @@ func (a *App) GetHelmValues(clusterID, namespace, name string) (map[string]inter
 }
 
 func (a *App) DeleteHelmRelease(clusterID, namespace, name string) error {
+	if err := requireNamespacedObject(namespace, name); err != nil {
+		return err
+	}
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return err

@@ -46,7 +46,14 @@ func TestStartPortForward_MissingClient(t *testing.T) {
 		},
 	}
 
-	_, err := app.StartPortForward(portForwardClusterID, PortForwardRequest{})
+	_, err := app.StartPortForward(portForwardClusterID, PortForwardRequest{
+		Namespace:     "default",
+		TargetKind:    "Pod",
+		TargetGroup:   "",
+		TargetVersion: "v1",
+		TargetName:    "test-pod",
+		ContainerPort: 8080,
+	})
 	if err == nil {
 		t.Fatal("expected error when client is nil")
 	}

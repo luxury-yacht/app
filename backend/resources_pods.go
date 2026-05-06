@@ -11,6 +11,9 @@ package backend
 import "github.com/luxury-yacht/app/backend/resources/pods"
 
 func (a *App) GetPod(clusterID, namespace, name string, detailed bool) (*PodDetailInfo, error) {
+	if err := requirePodObject(namespace, name); err != nil {
+		return nil, err
+	}
 	deps, _, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
@@ -19,6 +22,9 @@ func (a *App) GetPod(clusterID, namespace, name string, detailed bool) (*PodDeta
 }
 
 func (a *App) DeletePod(clusterID, namespace, name string) error {
+	if err := requirePodObject(namespace, name); err != nil {
+		return err
+	}
 	deps, _, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return err
@@ -44,6 +50,9 @@ func (a *App) FetchContainerLogs(clusterID string, req ContainerLogsFetchRequest
 }
 
 func (a *App) GetPodContainers(clusterID, namespace, podName string) ([]string, error) {
+	if err := requirePodObject(namespace, podName); err != nil {
+		return nil, err
+	}
 	deps, _, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
@@ -63,6 +72,9 @@ func (a *App) GetContainerLogsScopeContainers(clusterID, scope string) ([]string
 
 // CreateDebugContainer adds an ephemeral debug container to a running pod.
 func (a *App) CreateDebugContainer(clusterID string, req DebugContainerRequest) (*DebugContainerResponse, error) {
+	if err := requirePodObject(req.Namespace, req.PodName); err != nil {
+		return nil, err
+	}
 	deps, _, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err

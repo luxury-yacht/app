@@ -20,6 +20,9 @@ func (a *App) GetNode(clusterID, name string) (*NodeDetails, error) {
 }
 
 func (a *App) CordonNode(clusterID, nodeName string) error {
+	if err := requireObjectName(nodeName); err != nil {
+		return err
+	}
 	deps, _, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return err
@@ -39,6 +42,9 @@ func (a *App) CordonNode(clusterID, nodeName string) error {
 }
 
 func (a *App) UncordonNode(clusterID, nodeName string) error {
+	if err := requireObjectName(nodeName); err != nil {
+		return err
+	}
 	deps, _, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return err
@@ -58,6 +64,9 @@ func (a *App) UncordonNode(clusterID, nodeName string) error {
 }
 
 func (a *App) DrainNode(clusterID, nodeName string, options DrainNodeOptions) error {
+	if err := requireObjectName(nodeName); err != nil {
+		return err
+	}
 	deps, _, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return err
@@ -91,6 +100,9 @@ func (a *App) DrainNode(clusterID, nodeName string, options DrainNodeOptions) er
 }
 
 func (a *App) DeleteNode(clusterID, nodeName string) error {
+	if err := requireObjectName(nodeName); err != nil {
+		return err
+	}
 	deps, _, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return err
@@ -110,6 +122,9 @@ func (a *App) DeleteNode(clusterID, nodeName string) error {
 }
 
 func (a *App) ForceDeleteNode(clusterID, nodeName string) error {
+	if err := requireObjectName(nodeName); err != nil {
+		return err
+	}
 	deps, _, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return err
@@ -133,6 +148,9 @@ func (a *App) clearNodeCaches(nodeName string) {
 }
 
 func (a *App) DiscoverNodeLogs(clusterID, nodeName string) NodeLogDiscoveryResponse {
+	if err := requireObjectName(nodeName); err != nil {
+		return NodeLogDiscoveryResponse{Reason: err.Error()}
+	}
 	deps, _, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return NodeLogDiscoveryResponse{Reason: err.Error()}
@@ -141,6 +159,9 @@ func (a *App) DiscoverNodeLogs(clusterID, nodeName string) NodeLogDiscoveryRespo
 }
 
 func (a *App) FetchNodeLogs(clusterID, nodeName string, req NodeLogFetchRequest) NodeLogFetchResponse {
+	if err := requireObjectName(nodeName); err != nil {
+		return NodeLogFetchResponse{Error: err.Error(), SourcePath: req.SourcePath}
+	}
 	deps, _, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return NodeLogFetchResponse{Error: err.Error(), SourcePath: req.SourcePath}

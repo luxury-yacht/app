@@ -184,6 +184,10 @@ func (w *shellEventWriter) Write(p []byte) (int, error) {
 
 // StartShellSession launches a kubectl exec session and begins streaming data back to the frontend.
 func (a *App) StartShellSession(clusterID string, req ShellSessionRequest) (*ShellSession, error) {
+	if err := requirePodObject(req.Namespace, req.PodName); err != nil {
+		return nil, err
+	}
+
 	deps, _, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
@@ -193,12 +197,6 @@ func (a *App) StartShellSession(clusterID string, req ShellSessionRequest) (*She
 	}
 	if deps.RestConfig == nil {
 		return nil, fmt.Errorf("kubernetes rest config not initialized")
-	}
-	if req.Namespace == "" {
-		return nil, fmt.Errorf("namespace is required")
-	}
-	if req.PodName == "" {
-		return nil, fmt.Errorf("pod name is required")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), config.ShellSessionShutdownTimeout)

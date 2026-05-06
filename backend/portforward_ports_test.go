@@ -149,3 +149,59 @@ func TestGetTargetPorts_ServiceUsesServicePortsAndFiltersNonTCP(t *testing.T) {
 		t.Fatalf("unexpected service ports: %+v", ports)
 	}
 }
+
+func TestGetTargetPortsValidatesTargetBeforeClusterClients(t *testing.T) {
+	app := newTestAppWithDefaults(t)
+
+	tests := []struct {
+		name    string
+		args    []string
+		wantErr string
+	}{
+		{
+			name:    "namespace",
+			args:    []string{"", "Service", "", "v1", "api"},
+			wantErr: "namespace is required",
+		},
+		{
+			name:    "kind",
+			args:    []string{"default", "", "", "v1", "api"},
+			wantErr: "target kind is required",
+		},
+		{
+			name:    "name",
+			args:    []string{"default", "Service", "", "v1", ""},
+			wantErr: "target name is required",
+		},
+		{
+			name:    "version",
+			args:    []string{"default", "Service", "", "", "api"},
+			wantErr: "target version is required",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := app.GetTargetPorts("missing-cluster", tc.args[0], tc.args[1], tc.args[2], tc.args[3], tc.args[4])
+			if err == nil || err.Error() != tc.wantErr {
+				t.Fatalf("expected %q, got %v", tc.wantErr, err)
+			}
+		})
+	}
+}
+
+func TestGetTargetPortsRequiresKubernetesClient(t *testing.T) {
+	app := newTestAppWithDefaults(t)
+	app.clusterClients = map[string]*clusterClients{
+		portForwardClusterID: {
+			meta:              ClusterMeta{ID: portForwardClusterID, Name: "ctx"},
+			kubeconfigPath:    "/path",
+			kubeconfigContext: "ctx",
+		},
+	}
+
+	_, err := app.GetTargetPorts(portForwardClusterID, "default", "Service", "", "v1", "api")
+	if err == nil || err.Error() != "kubernetes client not initialized" {
+		t.Fatalf("expected client error, got %v", err)
+	}
+}

@@ -190,6 +190,20 @@ func TestPodContainersSuccess(t *testing.T) {
 	require.Equal(t, []string{"init (init)", "app"}, containers)
 }
 
+func TestPodContainersRequiresTargetIdentity(t *testing.T) {
+	service := NewService(common.Dependencies{
+		Context:          context.Background(),
+		Logger:           testsupport.NoopLogger{},
+		KubernetesClient: fake.NewClientset(),
+	})
+
+	_, err := service.PodContainers("", "demo-pod")
+	require.EqualError(t, err, "namespace is required")
+
+	_, err = service.PodContainers("default", "")
+	require.EqualError(t, err, "pod name is required")
+}
+
 func TestPodContainersIncludesEphemeral(t *testing.T) {
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "default"},

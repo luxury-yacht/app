@@ -12,6 +12,7 @@ package backend
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	corev1 "k8s.io/api/core/v1"
@@ -27,27 +28,24 @@ type ContainerPortInfo struct {
 
 // GetTargetPorts returns the TCP ports a target can be forwarded on.
 func (a *App) GetTargetPorts(clusterID, namespace, targetKind, targetGroup, targetVersion, targetName string) ([]ContainerPortInfo, error) {
+	target, err := portForwardTargetFromParts(namespace, targetKind, targetGroup, targetVersion, targetName)
+	if err != nil {
+		return nil, err
+	}
+
 	deps, _, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve cluster: %w", err)
+	}
+	if deps.KubernetesClient == nil {
+		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), config.PortForwardTargetPortsTimeout)
 	defer cancel()
 
-	target := portForwardTargetRef{
-		Namespace: namespace,
-		Kind:      targetKind,
-		Group:     targetGroup,
-		Version:   targetVersion,
-		Name:      targetName,
-	}
-	if err := validatePortForwardTargetGVK(target); err != nil {
-		return nil, err
-	}
-
 	if target.Kind == "Service" {
-		service, err := deps.KubernetesClient.CoreV1().Services(namespace).Get(ctx, targetName, metav1.GetOptions{})
+		service, err := deps.KubernetesClient.CoreV1().Services(target.Namespace).Get(ctx, target.Name, metav1.GetOptions{})
 		if err != nil {
 			return nil, fmt.Errorf("failed to get service: %w", err)
 		}
@@ -59,12 +57,39 @@ func (a *App) GetTargetPorts(clusterID, namespace, targetKind, targetGroup, targ
 		return nil, err
 	}
 
-	pod, err := deps.KubernetesClient.CoreV1().Pods(namespace).Get(ctx, podName, metav1.GetOptions{})
+	pod, err := deps.KubernetesClient.CoreV1().Pods(target.Namespace).Get(ctx, podName, metav1.GetOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get pod: %w", err)
 	}
 
 	return collectPodPorts(pod), nil
+}
+
+func portForwardTargetFromRequest(req PortForwardRequest) (portForwardTargetRef, error) {
+	return portForwardTargetFromParts(req.Namespace, req.TargetKind, req.TargetGroup, req.TargetVersion, req.TargetName)
+}
+
+func portForwardTargetFromParts(namespace, kind, group, version, name string) (portForwardTargetRef, error) {
+	target := portForwardTargetRef{
+		Namespace: strings.TrimSpace(namespace),
+		Kind:      strings.TrimSpace(kind),
+		Group:     strings.TrimSpace(group),
+		Version:   strings.TrimSpace(version),
+		Name:      strings.TrimSpace(name),
+	}
+	if target.Namespace == "" {
+		return portForwardTargetRef{}, fmt.Errorf("namespace is required")
+	}
+	if target.Kind == "" {
+		return portForwardTargetRef{}, fmt.Errorf("target kind is required")
+	}
+	if target.Name == "" {
+		return portForwardTargetRef{}, fmt.Errorf("target name is required")
+	}
+	if err := validatePortForwardTargetGVK(target); err != nil {
+		return portForwardTargetRef{}, err
+	}
+	return target, nil
 }
 
 func collectPodPorts(pod *corev1.Pod) []ContainerPortInfo {
