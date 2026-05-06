@@ -154,7 +154,19 @@ export const useObjectPanelActions = ({
                   `Unsupported workload kind for restart: ${objectKind ?? 'unknown'}`
                 );
               }
-              await app.RestartWorkload(clusterId, namespace, name, workloadKind);
+              if (!objectData.version) {
+                throw new Error(
+                  `Cannot restart ${workloadKind}/${name}: apiVersion missing on PanelObjectData`
+                );
+              }
+              await app.RestartWorkload(
+                clusterId,
+                namespace,
+                objectData.group ?? '',
+                objectData.version,
+                workloadKind,
+                name
+              );
             }
             break;
           }
@@ -193,7 +205,20 @@ export const useObjectPanelActions = ({
               if (!workloadKind) {
                 throw new Error(`Unsupported workload kind for scale: ${objectKind ?? 'unknown'}`);
               }
-              await app.ScaleWorkload(clusterId, namespace, name, workloadKind, replicas);
+              if (!objectData.version) {
+                throw new Error(
+                  `Cannot scale ${workloadKind}/${name}: apiVersion missing on PanelObjectData`
+                );
+              }
+              await app.ScaleWorkload(
+                clusterId,
+                namespace,
+                objectData.group ?? '',
+                objectData.version,
+                workloadKind,
+                name,
+                replicas
+              );
             }
             hideScaleInput();
             await fetchResourceDetails('user');

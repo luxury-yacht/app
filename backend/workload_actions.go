@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
@@ -14,15 +15,47 @@ import (
 
 const rolloutAnnotation = "kubectl.kubernetes.io/restartedAt"
 
+var (
+	actionRestartableWorkloadKinds = map[string]struct{}{
+		"Deployment":  {},
+		"StatefulSet": {},
+		"DaemonSet":   {},
+	}
+	actionScalableWorkloadKinds = map[string]struct{}{
+		"Deployment":  {},
+		"StatefulSet": {},
+		"ReplicaSet":  {},
+	}
+)
+
+func validateAppsV1WorkloadAction(action, group, version, kind string, supported map[string]struct{}) (string, error) {
+	normalizedKind := strings.TrimSpace(kind)
+	if _, ok := supported[normalizedKind]; !ok {
+		return "", fmt.Errorf("%s not supported for workload kind %q", action, normalizedKind)
+	}
+	if strings.TrimSpace(group) != "apps" || strings.TrimSpace(version) != "v1" {
+		apiVersion := strings.Trim(strings.TrimSpace(group)+"/"+strings.TrimSpace(version), "/")
+		if apiVersion == "" {
+			return "", fmt.Errorf("%s requires apiVersion for workload kind %q", action, normalizedKind)
+		}
+		return "", fmt.Errorf("%s not supported for %s %q", action, apiVersion, normalizedKind)
+	}
+	return normalizedKind, nil
+}
+
 // RestartWorkload performs a rollout restart by patching the pod template metadata on the target workload.
 // Supported workload kinds: Deployment, StatefulSet, DaemonSet.
-func (a *App) RestartWorkload(clusterID, namespace, name, workloadKind string) error {
+func (a *App) RestartWorkload(clusterID, namespace, group, version, workloadKind, name string) error {
 	deps, _, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return err
 	}
 	if deps.KubernetesClient == nil {
 		return fmt.Errorf("kubernetes client is not initialized")
+	}
+	workloadKind, err = validateAppsV1WorkloadAction("restart", group, version, workloadKind, actionRestartableWorkloadKinds)
+	if err != nil {
+		return err
 	}
 
 	annotationValue := time.Now().UTC().Format(time.RFC3339)
@@ -51,6 +84,8 @@ func (a *App) RestartWorkload(clusterID, namespace, name, workloadKind string) e
 	switch workloadKind {
 	case "Deployment":
 		if err := a.requireResourcePermission(ctx, deps, resourcePermissionCheck{
+			Group:     group,
+			Version:   version,
 			Kind:      workloadKind,
 			Namespace: namespace,
 			Name:      name,
@@ -67,6 +102,8 @@ func (a *App) RestartWorkload(clusterID, namespace, name, workloadKind string) e
 		)
 	case "StatefulSet":
 		if err := a.requireResourcePermission(ctx, deps, resourcePermissionCheck{
+			Group:     group,
+			Version:   version,
 			Kind:      workloadKind,
 			Namespace: namespace,
 			Name:      name,
@@ -83,6 +120,8 @@ func (a *App) RestartWorkload(clusterID, namespace, name, workloadKind string) e
 		)
 	case "DaemonSet":
 		if err := a.requireResourcePermission(ctx, deps, resourcePermissionCheck{
+			Group:     group,
+			Version:   version,
 			Kind:      workloadKind,
 			Namespace: namespace,
 			Name:      name,
@@ -113,7 +152,7 @@ func (a *App) RestartWorkload(clusterID, namespace, name, workloadKind string) e
 
 // ScaleWorkload updates the replica count on a scalable workload.
 // Supported workload kinds: Deployment, StatefulSet, ReplicaSet.
-func (a *App) ScaleWorkload(clusterID, namespace, name, workloadKind string, replicas int) error {
+func (a *App) ScaleWorkload(clusterID, namespace, group, version, workloadKind, name string, replicas int) error {
 	deps, _, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return err
@@ -124,6 +163,10 @@ func (a *App) ScaleWorkload(clusterID, namespace, name, workloadKind string, rep
 
 	if replicas < 0 {
 		return fmt.Errorf("replicas must be non-negative")
+	}
+	workloadKind, err = validateAppsV1WorkloadAction("scaling", group, version, workloadKind, actionScalableWorkloadKinds)
+	if err != nil {
+		return err
 	}
 
 	scale := &autoscalingv1.Scale{
@@ -142,6 +185,8 @@ func (a *App) ScaleWorkload(clusterID, namespace, name, workloadKind string, rep
 	switch workloadKind {
 	case "Deployment":
 		if err := a.requireResourcePermission(ctx, deps, resourcePermissionCheck{
+			Group:       group,
+			Version:     version,
 			Kind:        workloadKind,
 			Namespace:   namespace,
 			Name:        name,
@@ -161,6 +206,8 @@ func (a *App) ScaleWorkload(clusterID, namespace, name, workloadKind string, rep
 		}
 	case "StatefulSet":
 		if err := a.requireResourcePermission(ctx, deps, resourcePermissionCheck{
+			Group:       group,
+			Version:     version,
 			Kind:        workloadKind,
 			Namespace:   namespace,
 			Name:        name,
@@ -180,6 +227,8 @@ func (a *App) ScaleWorkload(clusterID, namespace, name, workloadKind string, rep
 		}
 	case "ReplicaSet":
 		if err := a.requireResourcePermission(ctx, deps, resourcePermissionCheck{
+			Group:       group,
+			Version:     version,
 			Kind:        workloadKind,
 			Namespace:   namespace,
 			Name:        name,

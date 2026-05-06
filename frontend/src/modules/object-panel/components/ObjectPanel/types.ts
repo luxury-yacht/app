@@ -10,14 +10,13 @@ export type PanelObjectData = {
   kindAlias?: string | null;
   /**
    * API group for the object's kind (e.g. "apps", "rds.services.k8s.aws").
-   * Empty string for core/v1 kinds. Optional because legacy code paths and
-   * some fixtures don't yet thread GVK through; when absent, scope and
-   * capability resolution falls back to kind-only behavior
+   * Empty string for core/v1 kinds. Real Kubernetes objects must carry
+   * group/version before entering the panel; synthetic objects such as
+   * HelmRelease intentionally omit them.
    */
   group?: string | null;
   /**
-   * API version for the object's kind (e.g. "v1", "v1alpha1"). Optional
-   * for the same reason as `group`.
+   * API version for the object's kind (e.g. "v1", "v1alpha1").
    */
   version?: string | null;
   /**

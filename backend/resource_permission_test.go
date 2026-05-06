@@ -33,7 +33,7 @@ func TestRestartWorkloadRequiresPatchPermission(t *testing.T) {
 		client:            client,
 	})
 
-	err := app.RestartWorkload("cluster-a", "default", "demo", "Deployment")
+	err := app.RestartWorkload("cluster-a", "default", "apps", "v1", "Deployment", "demo")
 	if err == nil || !strings.Contains(err.Error(), "permission denied") {
 		t.Fatalf("expected permission denial, got %v", err)
 	}

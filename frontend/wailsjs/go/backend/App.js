@@ -446,8 +446,8 @@ export function ResizeShellSession(arg1, arg2, arg3) {
   return window['go']['backend']['App']['ResizeShellSession'](arg1, arg2, arg3);
 }
 
-export function RestartWorkload(arg1, arg2, arg3, arg4) {
-  return window['go']['backend']['App']['RestartWorkload'](arg1, arg2, arg3, arg4);
+export function RestartWorkload(arg1, arg2, arg3, arg4, arg5, arg6) {
+  return window['go']['backend']['App']['RestartWorkload'](arg1, arg2, arg3, arg4, arg5, arg6);
 }
 
 export function RetryAuth() {
@@ -470,8 +470,8 @@ export function SaveWindowSettings() {
   return window['go']['backend']['App']['SaveWindowSettings']();
 }
 
-export function ScaleWorkload(arg1, arg2, arg3, arg4, arg5) {
-  return window['go']['backend']['App']['ScaleWorkload'](arg1, arg2, arg3, arg4, arg5);
+export function ScaleWorkload(arg1, arg2, arg3, arg4, arg5, arg6, arg7) {
+  return window['go']['backend']['App']['ScaleWorkload'](arg1, arg2, arg3, arg4, arg5, arg6, arg7);
 }
 
 export function SendShellInput(arg1, arg2) {

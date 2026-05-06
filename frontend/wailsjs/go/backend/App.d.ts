@@ -229,7 +229,7 @@ export function ReorderThemes(arg1:Array<string>):Promise<void>;
 
 export function ResizeShellSession(arg1:string,arg2:number,arg3:number):Promise<void>;
 
-export function RestartWorkload(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
+export function RestartWorkload(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string):Promise<void>;
 
 export function RetryAuth():Promise<void>;
 
@@ -241,7 +241,7 @@ export function SaveTheme(arg1:types.Theme):Promise<void>;
 
 export function SaveWindowSettings():Promise<void>;
 
-export function ScaleWorkload(arg1:string,arg2:string,arg3:string,arg4:string,arg5:number):Promise<void>;
+export function ScaleWorkload(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string,arg7:number):Promise<void>;
 
 export function SendShellInput(arg1:string,arg2:string):Promise<void>;
 

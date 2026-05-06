@@ -73,6 +73,20 @@ const apiVersionFor = (object: ObjectActionData): string => {
   return group ? `${group}/${version}` : version;
 };
 
+const groupVersionFor = (
+  object: ObjectActionData,
+  action: string
+): { group: string; version: string } => {
+  const version = object.version?.trim();
+  if (!version) {
+    throw new Error(`Cannot ${action} ${object.kind}/${object.name}: apiVersion is missing`);
+  }
+  return {
+    group: object.group?.trim() ?? '',
+    version,
+  };
+};
+
 const requireClusterId = (object: ObjectActionData, action: string): string => {
   const clusterId = object.clusterId?.trim();
   if (!clusterId) {
@@ -271,11 +285,14 @@ export const useObjectActionController = ({
     const object = restartTarget;
     if (!object) return;
     try {
+      const { group, version } = groupVersionFor(object, 'restart');
       await RestartWorkload(
         requireClusterId(object, 'restart'),
         object.namespace ?? '',
-        object.name,
-        object.kind
+        group,
+        version,
+        object.kind,
+        object.name
       );
       onAfterAction?.(object, 'restart');
     } catch (error) {
@@ -332,11 +349,14 @@ export const useObjectActionController = ({
     if (!object) return;
     setScaleState((previous) => ({ ...previous, loading: true, error: null }));
     try {
+      const { group, version } = groupVersionFor(object, 'scale');
       await ScaleWorkload(
         requireClusterId(object, 'scale'),
         object.namespace ?? '',
-        object.name,
+        group,
+        version,
         object.kind,
+        object.name,
         scaleState.value
       );
       onAfterAction?.(object, 'scale');

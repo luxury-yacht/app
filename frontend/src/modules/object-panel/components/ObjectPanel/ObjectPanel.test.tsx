@@ -478,6 +478,8 @@ describe('ObjectPanel tab availability', () => {
       kind: 'Deployment',
       name: 'api',
       namespace: 'team-a',
+      group: 'apps',
+      version: 'v1',
       scopedDomain: { data: { details: {} }, status: 'idle', error: null },
     });
 
@@ -491,13 +493,15 @@ describe('ObjectPanel tab availability', () => {
     expect(mockApp.ScaleWorkload).toHaveBeenCalledWith(
       'alpha:ctx',
       'team-a',
-      'api',
+      'apps',
+      'v1',
       'Deployment',
+      'api',
       5
     );
     expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
       'object-details',
-      buildClusterScope(defaultClusterId, 'team-a:deployment:api'),
+      buildClusterScope(defaultClusterId, 'team-a:apps/v1:deployment:api'),
       expect.objectContaining({ isManual: true })
     );
   });
@@ -507,6 +511,8 @@ describe('ObjectPanel tab availability', () => {
       kind: 'Deployment',
       name: 'api',
       namespace: 'team-a',
+      group: 'apps',
+      version: 'v1',
       scopedDomain: { data: { details: {} }, status: 'idle', error: null },
     });
 
@@ -527,8 +533,10 @@ describe('ObjectPanel tab availability', () => {
     expect(mockApp.RestartWorkload).toHaveBeenCalledWith(
       'alpha:ctx',
       'team-a',
-      'api',
-      'Deployment'
+      'apps',
+      'v1',
+      'Deployment',
+      'api'
     );
   });
 
@@ -564,6 +572,8 @@ describe('ObjectPanel tab availability', () => {
       kind: 'Deployment',
       name: 'api',
       namespace: 'team-a',
+      group: 'apps',
+      version: 'v1',
       scopedDomain: { data: { details: {} }, status: 'idle', error: null },
     });
 
@@ -632,6 +642,8 @@ describe('ObjectPanel tab availability', () => {
       kind: 'Deployment',
       name: 'api',
       namespace: 'team-a',
+      group: 'apps',
+      version: 'v1',
       scopedDomain: { data: { details: {} }, status: 'idle', error: null },
     });
 

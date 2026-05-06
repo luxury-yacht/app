@@ -135,7 +135,7 @@ func TestRestartWorkloadAddsRestartAnnotation(t *testing.T) {
 				},
 			}
 
-			err := app.RestartWorkload(workloadClusterID, "default", "demo", tc.kind)
+			err := app.RestartWorkload(workloadClusterID, "default", "apps", "v1", tc.kind, "demo")
 			require.NoError(t, err)
 
 			annotations, err := tc.get(context.Background(), tc.object)
@@ -169,7 +169,7 @@ func TestRestartWorkloadErrors(t *testing.T) {
 		},
 	}
 
-	err := app.RestartWorkload(workloadClusterID, "default", "demo", "Job")
+	err := app.RestartWorkload(workloadClusterID, "default", "batch", "v1", "Job", "demo")
 	require.EqualError(t, err, `restart not supported for workload kind "Job"`)
 
 	appNilClient := &App{}
@@ -180,7 +180,7 @@ func TestRestartWorkloadErrors(t *testing.T) {
 			kubeconfigContext: "ctx",
 		},
 	}
-	err = appNilClient.RestartWorkload(workloadClusterID, "default", "demo", "Deployment")
+	err = appNilClient.RestartWorkload(workloadClusterID, "default", "apps", "v1", "Deployment", "demo")
 	require.EqualError(t, err, "kubernetes client is not initialized")
 }
 
@@ -243,7 +243,7 @@ func TestScaleWorkloadUpdatesScaleSubresource(t *testing.T) {
 				},
 			}
 
-			err := app.ScaleWorkload(workloadClusterID, "default", "demo", tc.kind, 3)
+			err := app.ScaleWorkload(workloadClusterID, "default", "apps", "v1", tc.kind, "demo", 3)
 			require.NoError(t, err)
 
 			require.Equal(t, int32(3), observed.replicas, "expected replicas to be updated")
@@ -270,10 +270,10 @@ func TestScaleWorkloadErrors(t *testing.T) {
 		},
 	}
 
-	err := app.ScaleWorkload(workloadClusterID, "default", "demo", "Deployment", -1)
+	err := app.ScaleWorkload(workloadClusterID, "default", "apps", "v1", "Deployment", "demo", -1)
 	require.EqualError(t, err, "replicas must be non-negative")
 
-	err = app.ScaleWorkload(workloadClusterID, "default", "demo", "CronJob", 1)
+	err = app.ScaleWorkload(workloadClusterID, "default", "batch", "v1", "CronJob", "demo", 1)
 	require.EqualError(t, err, `scaling not supported for workload kind "CronJob"`)
 
 	appNilClient := &App{}
@@ -284,7 +284,7 @@ func TestScaleWorkloadErrors(t *testing.T) {
 			kubeconfigContext: "ctx",
 		},
 	}
-	err = appNilClient.ScaleWorkload(workloadClusterID, "default", "demo", "Deployment", 1)
+	err = appNilClient.ScaleWorkload(workloadClusterID, "default", "apps", "v1", "Deployment", "demo", 1)
 	require.EqualError(t, err, "kubernetes client is not initialized")
 }
 
