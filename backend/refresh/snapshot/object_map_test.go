@@ -179,6 +179,80 @@ func TestObjectMapPodStatusRequiresAllContainersReady(t *testing.T) {
 	}
 }
 
+func TestObjectMapNodeStatusMarksReadyCordonedNodesDegraded(t *testing.T) {
+	readyCondition := corev1.NodeCondition{
+		Type:   corev1.NodeReady,
+		Status: corev1.ConditionTrue,
+		Reason: "KubeletReady",
+	}
+	notReadyCondition := corev1.NodeCondition{
+		Type:   corev1.NodeReady,
+		Status: corev1.ConditionFalse,
+		Reason: "KubeletNotReady",
+	}
+
+	tests := []struct {
+		name      string
+		node      corev1.Node
+		wantState string
+		wantLabel string
+	}{
+		{
+			name: "ready schedulable",
+			node: corev1.Node{Status: corev1.NodeStatus{
+				Conditions: []corev1.NodeCondition{readyCondition},
+			}},
+			wantState: "healthy",
+			wantLabel: "Ready",
+		},
+		{
+			name: "ready unschedulable",
+			node: corev1.Node{
+				Spec: corev1.NodeSpec{Unschedulable: true},
+				Status: corev1.NodeStatus{
+					Conditions: []corev1.NodeCondition{readyCondition},
+				},
+			},
+			wantState: "degraded",
+			wantLabel: "Ready (Cordoned)",
+		},
+		{
+			name: "ready with unschedulable taint",
+			node: corev1.Node{
+				Spec: corev1.NodeSpec{Taints: []corev1.Taint{{
+					Key:    corev1.TaintNodeUnschedulable,
+					Effect: corev1.TaintEffectNoSchedule,
+				}}},
+				Status: corev1.NodeStatus{
+					Conditions: []corev1.NodeCondition{readyCondition},
+				},
+			},
+			wantState: "degraded",
+			wantLabel: "Ready (Cordoned)",
+		},
+		{
+			name: "cordoned not ready remains unhealthy",
+			node: corev1.Node{
+				Spec: corev1.NodeSpec{Unschedulable: true},
+				Status: corev1.NodeStatus{
+					Conditions: []corev1.NodeCondition{notReadyCondition},
+				},
+			},
+			wantState: "unhealthy",
+			wantLabel: "NotReady",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			status := objectMapNodeStatus(tt.node)
+			if status == nil || status.State != tt.wantState || status.Label != tt.wantLabel {
+				t.Fatalf("unexpected node status: got %#v, want state=%q label=%q", status, tt.wantState, tt.wantLabel)
+			}
+		})
+	}
+}
+
 func TestObjectMapServiceStatusOnlyReportsLoadBalancer(t *testing.T) {
 	tests := []struct {
 		name      string

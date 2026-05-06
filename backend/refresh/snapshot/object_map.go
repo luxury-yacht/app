@@ -1167,6 +1167,9 @@ func objectMapNodeStatus(node corev1.Node) *ObjectMapStatus {
 			continue
 		}
 		if condition.Status == corev1.ConditionTrue {
+			if objectMapNodeCordoned(node) {
+				return objectMapStatus("degraded", "Ready (Cordoned)", condition.Reason)
+			}
 			return objectMapStatus("healthy", "Ready", condition.Reason)
 		}
 		if condition.Status == corev1.ConditionUnknown {
@@ -1175,6 +1178,18 @@ func objectMapNodeStatus(node corev1.Node) *ObjectMapStatus {
 		return objectMapStatus("unhealthy", "NotReady", condition.Reason)
 	}
 	return objectMapStatus("inactive", "Unknown")
+}
+
+func objectMapNodeCordoned(node corev1.Node) bool {
+	if node.Spec.Unschedulable {
+		return true
+	}
+	for _, taint := range node.Spec.Taints {
+		if taint.Key == corev1.TaintNodeUnschedulable {
+			return true
+		}
+	}
+	return false
 }
 
 func objectMapDeploymentStatus(deploy appsv1.Deployment) *ObjectMapStatus {
