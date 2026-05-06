@@ -558,8 +558,6 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 		directRegistration("object-details", func() error {
 			return snapshot.RegisterObjectDetailsDomain(
 				deps.registry,
-				deps.cfg.KubernetesClient,
-				deps.cfg.APIExtensionsClient,
 				deps.cfg.ObjectDetailsProvider,
 			)
 		}),
