@@ -12,6 +12,7 @@ package backend
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -616,5 +617,30 @@ func TestActionWrappersRequireTargetIdentity(t *testing.T) {
 	}
 	if resp := app.FetchNodeLogs("cluster-a", "", NodeLogFetchRequest{SourcePath: "/var/log"}); resp.Error != "name is required" {
 		t.Fatalf("expected FetchNodeLogs name error, got %+v", resp)
+	}
+}
+
+func TestNodeLogsRequireNodeProxyPermission(t *testing.T) {
+	app := wrapperTestApp(t)
+	clusterID := "config:ctx"
+	client := cgofake.NewClientset()
+	denySelfSubjectAccessReviews(client, "node proxy denied")
+	app.clusterClients = map[string]*clusterClients{
+		clusterID: {
+			meta:              ClusterMeta{ID: clusterID, Name: "ctx"},
+			kubeconfigPath:    "/path",
+			kubeconfigContext: "ctx",
+			client:            client,
+		},
+	}
+
+	discovery := app.DiscoverNodeLogs(clusterID, "node-a")
+	if !strings.Contains(discovery.Reason, "node proxy denied") {
+		t.Fatalf("expected node proxy denial, got %+v", discovery)
+	}
+
+	fetch := app.FetchNodeLogs(clusterID, "node-a", NodeLogFetchRequest{SourcePath: "journal/kubelet"})
+	if !strings.Contains(fetch.Error, "node proxy denied") {
+		t.Fatalf("expected node proxy denial, got %+v", fetch)
 	}
 }

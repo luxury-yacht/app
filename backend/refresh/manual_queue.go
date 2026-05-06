@@ -39,7 +39,7 @@ func (q *InMemoryQueue) Enqueue(ctx context.Context, domain, scope, reason strin
 	}
 
 	q.mu.Lock()
-	q.jobs[job.ID] = job
+	q.jobs[job.ID] = cloneManualRefreshJob(job)
 	q.mu.Unlock()
 
 	select {
@@ -48,7 +48,7 @@ func (q *InMemoryQueue) Enqueue(ctx context.Context, domain, scope, reason strin
 	case q.pending <- job.ID:
 	}
 
-	return job, nil
+	return cloneManualRefreshJob(job), nil
 }
 
 // Status returns the job by identifier if it exists.
@@ -56,7 +56,10 @@ func (q *InMemoryQueue) Status(jobID string) (*ManualRefreshJob, bool) {
 	q.mu.RLock()
 	defer q.mu.RUnlock()
 	job, ok := q.jobs[jobID]
-	return job, ok
+	if !ok {
+		return nil, false
+	}
+	return cloneManualRefreshJob(job), true
 }
 
 func generateJobID() string {
@@ -69,7 +72,7 @@ func (q *InMemoryQueue) Update(job *ManualRefreshJob) {
 		return
 	}
 	q.mu.Lock()
-	q.jobs[job.ID] = job
+	q.jobs[job.ID] = cloneManualRefreshJob(job)
 	q.mu.Unlock()
 }
 
@@ -86,7 +89,15 @@ func (q *InMemoryQueue) Next(ctx context.Context) (*ManualRefreshJob, error) {
 			if job == nil {
 				continue
 			}
-			return job, nil
+			return cloneManualRefreshJob(job), nil
 		}
 	}
+}
+
+func cloneManualRefreshJob(job *ManualRefreshJob) *ManualRefreshJob {
+	if job == nil {
+		return nil
+	}
+	clone := *job
+	return &clone
 }

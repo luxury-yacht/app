@@ -2,6 +2,7 @@ package backend
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -311,6 +312,11 @@ func TestScaleWorkloadErrors(t *testing.T) {
 
 	err := app.ScaleWorkload(workloadClusterID, "default", "apps", "v1", "Deployment", "demo", -1)
 	require.EqualError(t, err, "replicas must be non-negative")
+
+	if strconv.IntSize > 32 {
+		err = app.ScaleWorkload(workloadClusterID, "default", "apps", "v1", "Deployment", "demo", maxScaleReplicas+1)
+		require.EqualError(t, err, "replicas must be less than or equal to 2147483647")
+	}
 
 	err = app.ScaleWorkload(workloadClusterID, "default", "batch", "v1", "CronJob", "demo", 1)
 	require.EqualError(t, err, `scaling not supported for workload kind "CronJob"`)

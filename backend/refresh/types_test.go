@@ -101,6 +101,56 @@ func TestManagerProcessesManualRefreshJob(t *testing.T) {
 	}
 }
 
+func TestInMemoryQueueReturnsJobCopies(t *testing.T) {
+	queue := refresh.NewInMemoryQueue()
+
+	enqueued, err := queue.Enqueue(context.Background(), "nodes", "default", "test")
+	if err != nil {
+		t.Fatalf("enqueue job: %v", err)
+	}
+	enqueued.State = refresh.JobStateFailed
+
+	status, ok := queue.Status(enqueued.ID)
+	if !ok {
+		t.Fatalf("expected queued job status")
+	}
+	if status.State != refresh.JobStateQueued {
+		t.Fatalf("expected stored job to remain queued, got %s", status.State)
+	}
+
+	status.State = refresh.JobStateFailed
+	statusAgain, ok := queue.Status(enqueued.ID)
+	if !ok {
+		t.Fatalf("expected queued job status after mutation")
+	}
+	if statusAgain.State != refresh.JobStateQueued {
+		t.Fatalf("expected status mutation not to affect queue, got %s", statusAgain.State)
+	}
+
+	next, err := queue.Next(context.Background())
+	if err != nil {
+		t.Fatalf("next job: %v", err)
+	}
+	next.State = refresh.JobStateRunning
+
+	statusAfterNext, ok := queue.Status(enqueued.ID)
+	if !ok {
+		t.Fatalf("expected queued job status after next")
+	}
+	if statusAfterNext.State != refresh.JobStateQueued {
+		t.Fatalf("expected next mutation not to affect queue before Update, got %s", statusAfterNext.State)
+	}
+
+	queue.Update(next)
+	updated, ok := queue.Status(enqueued.ID)
+	if !ok {
+		t.Fatalf("expected updated job status")
+	}
+	if updated.State != refresh.JobStateRunning {
+		t.Fatalf("expected update to store running state, got %s", updated.State)
+	}
+}
+
 type mockRegistry struct{}
 
 func (m *mockRegistry) Register(refresh.DomainConfig) error     { return nil }

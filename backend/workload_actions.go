@@ -14,6 +14,7 @@ import (
 )
 
 const rolloutAnnotation = "kubectl.kubernetes.io/restartedAt"
+const maxScaleReplicas = 1<<31 - 1
 
 var (
 	actionRestartableWorkloadKinds = map[string]struct{}{
@@ -163,6 +164,9 @@ func (a *App) ScaleWorkload(clusterID, namespace, group, version, workloadKind, 
 	}
 	if replicas < 0 {
 		return fmt.Errorf("replicas must be non-negative")
+	}
+	if replicas > maxScaleReplicas {
+		return fmt.Errorf("replicas must be less than or equal to %d", maxScaleReplicas)
 	}
 	workloadKind, err := validateAppsV1WorkloadAction("scaling", group, version, workloadKind, actionScalableWorkloadKinds)
 	if err != nil {

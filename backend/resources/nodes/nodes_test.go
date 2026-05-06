@@ -122,6 +122,16 @@ func TestServiceDrainDeletesPods(t *testing.T) {
 	}
 }
 
+func TestServiceDrainValidatesGracePeriod(t *testing.T) {
+	service, _, node := newNodeService(t)
+
+	err := service.Drain(node.Name, types.DrainNodeOptions{GracePeriodSeconds: -1})
+	require.EqualError(t, err, "gracePeriodSeconds must be non-negative")
+
+	err = service.Drain(node.Name, types.DrainNodeOptions{GracePeriodSeconds: 901})
+	require.EqualError(t, err, "gracePeriodSeconds must be less than or equal to 900")
+}
+
 func newNodeService(t *testing.T) (*nodes.Service, *fake.Clientset, *corev1.Node) {
 	t.Helper()
 	ctx := context.Background()

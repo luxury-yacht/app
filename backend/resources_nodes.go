@@ -67,6 +67,9 @@ func (a *App) DrainNode(clusterID, nodeName string, options DrainNodeOptions) er
 	if err := requireObjectName(nodeName); err != nil {
 		return err
 	}
+	if err := nodes.ValidateDrainOptions(options); err != nil {
+		return err
+	}
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return err
@@ -155,6 +158,14 @@ func (a *App) DiscoverNodeLogs(clusterID, nodeName string) NodeLogDiscoveryRespo
 	if err != nil {
 		return NodeLogDiscoveryResponse{Reason: err.Error()}
 	}
+	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
+		Kind:        "Node",
+		Name:        nodeName,
+		Verb:        "get",
+		Subresource: "proxy",
+	}); err != nil {
+		return NodeLogDiscoveryResponse{Reason: err.Error()}
+	}
 	return nodes.NewService(deps).DiscoverLogs(nodeName)
 }
 
@@ -164,6 +175,14 @@ func (a *App) FetchNodeLogs(clusterID, nodeName string, req NodeLogFetchRequest)
 	}
 	deps, _, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
+		return NodeLogFetchResponse{Error: err.Error(), SourcePath: req.SourcePath}
+	}
+	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
+		Kind:        "Node",
+		Name:        nodeName,
+		Verb:        "get",
+		Subresource: "proxy",
+	}); err != nil {
 		return NodeLogFetchResponse{Error: err.Error(), SourcePath: req.SourcePath}
 	}
 	return nodes.NewService(deps).FetchLogs(nodeName, req)

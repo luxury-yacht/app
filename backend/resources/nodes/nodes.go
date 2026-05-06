@@ -31,6 +31,8 @@ type Service struct {
 	deps common.Dependencies
 }
 
+const maxNodeDrainGracePeriodSeconds = 900
+
 func NewService(deps common.Dependencies) *Service {
 	return &Service{deps: deps}
 }
@@ -126,13 +128,11 @@ func (s *Service) patchUnschedulable(nodeName string, unschedulable bool) error 
 
 // Drain evicts or deletes pods on the node according to the provided options.
 func (s *Service) Drain(nodeName string, options restypes.DrainNodeOptions) (err error) {
-	store := nodemaintenance.GlobalStore()
-	job := store.StartDrain(nodeName, options)
-	// Associate this drain job with its cluster context for isolation purposes.
-	// This ensures drain jobs from different clusters don't interfere.
-	if s.deps.ClusterID != "" {
-		store.SetJobCluster(job.ID, s.deps.ClusterID, s.deps.ClusterName)
+	if err := ValidateDrainOptions(options); err != nil {
+		return err
 	}
+	store := nodemaintenance.GlobalStore()
+	job := store.StartDrainForCluster(nodeName, options, s.deps.ClusterID, s.deps.ClusterName)
 	cordoned := false
 
 	defer func() {
@@ -261,6 +261,17 @@ func (s *Service) drainPod(pod corev1.Pod, options restypes.DrainNodeOptions, jo
 
 	if success {
 		job.AddPodEvent("evicted", pod.Namespace, pod.Name, "Pod evicted", false)
+	}
+	return nil
+}
+
+// ValidateDrainOptions rejects invalid drain options before starting node mutations.
+func ValidateDrainOptions(options restypes.DrainNodeOptions) error {
+	if options.GracePeriodSeconds < 0 {
+		return fmt.Errorf("gracePeriodSeconds must be non-negative")
+	}
+	if options.GracePeriodSeconds > maxNodeDrainGracePeriodSeconds {
+		return fmt.Errorf("gracePeriodSeconds must be less than or equal to %d", maxNodeDrainGracePeriodSeconds)
 	}
 	return nil
 }

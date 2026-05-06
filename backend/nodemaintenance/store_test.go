@@ -86,6 +86,47 @@ func TestHistoryBounded(t *testing.T) {
 	}
 }
 
+func TestHistoryBoundedPerClusterAndNode(t *testing.T) {
+	store := NewStore(1)
+	firstA := store.StartDrainForCluster("worker-1", restypes.DrainNodeOptions{}, "cluster-a", "Cluster A")
+	time.Sleep(1 * time.Millisecond)
+	secondA := store.StartDrainForCluster("worker-1", restypes.DrainNodeOptions{}, "cluster-a", "Cluster A")
+	jobB := store.StartDrainForCluster("worker-1", restypes.DrainNodeOptions{}, "cluster-b", "Cluster B")
+
+	jobsA := store.GetJobsForCluster("cluster-a")
+	if len(jobsA) != 1 || jobsA[0].ID != secondA.ID {
+		t.Fatalf("expected only newest cluster-a job, got %+v", jobsA)
+	}
+	jobsB := store.GetJobsForCluster("cluster-b")
+	if len(jobsB) != 1 || jobsB[0].ID != jobB.ID {
+		t.Fatalf("expected cluster-b job to be retained independently, got %+v", jobsB)
+	}
+	if _, ok := store.jobs[firstA.ID]; ok {
+		t.Fatalf("expected oldest cluster-a job to be evicted")
+	}
+
+	snap, _ := store.Snapshot("worker-1")
+	if len(snap.Drains) != 2 {
+		t.Fatalf("expected one drain per cluster for worker-1, got %+v", snap.Drains)
+	}
+}
+
+func TestSetJobClusterReindexesHistory(t *testing.T) {
+	store := NewStore(1)
+	jobA := store.StartDrain("worker-1", restypes.DrainNodeOptions{})
+	store.SetJobCluster(jobA.ID, "cluster-a", "Cluster A")
+	jobB := store.StartDrainForCluster("worker-1", restypes.DrainNodeOptions{}, "cluster-b", "Cluster B")
+
+	jobsA := store.GetJobsForCluster("cluster-a")
+	jobsB := store.GetJobsForCluster("cluster-b")
+	if len(jobsA) != 1 || jobsA[0].ID != jobA.ID {
+		t.Fatalf("expected reindexed cluster-a job, got %+v", jobsA)
+	}
+	if len(jobsB) != 1 || jobsB[0].ID != jobB.ID {
+		t.Fatalf("expected cluster-b job, got %+v", jobsB)
+	}
+}
+
 func TestParseScope(t *testing.T) {
 	tests := []struct {
 		scope string

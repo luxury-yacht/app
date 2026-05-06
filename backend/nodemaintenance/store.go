@@ -58,19 +58,24 @@ type DrainJob struct {
 type Snapshot struct {
 	ClusterID   string     `json:"clusterId,omitempty"`
 	ClusterName string     `json:"clusterName,omitempty"`
-	Drains []DrainJob `json:"drains"`
+	Drains      []DrainJob `json:"drains"`
 }
 
 // Store tracks drain jobs per node with bounded history.
 type Store struct {
 	mu         sync.RWMutex
 	jobs       map[string]*DrainJob
-	byNode     map[string][]*DrainJob
+	byNode     map[drainHistoryKey][]*DrainJob
 	version    uint64
 	maxHistory int
 }
 
 var defaultStore = NewStore(5)
+
+type drainHistoryKey struct {
+	clusterID string
+	nodeName  string
+}
 
 // GlobalStore exposes the process-wide drain store.
 func GlobalStore() *Store {
@@ -84,25 +89,32 @@ func NewStore(maxHistory int) *Store {
 	}
 	return &Store{
 		jobs:       make(map[string]*DrainJob),
-		byNode:     make(map[string][]*DrainJob),
+		byNode:     make(map[drainHistoryKey][]*DrainJob),
 		maxHistory: maxHistory,
 	}
 }
 
 // StartDrain records the beginning of a drain job.
 func (s *Store) StartDrain(nodeName string, opts restypes.DrainNodeOptions) *DrainJob {
+	return s.StartDrainForCluster(nodeName, opts, "", "")
+}
+
+// StartDrainForCluster records the beginning of a drain job scoped to a cluster.
+func (s *Store) StartDrainForCluster(nodeName string, opts restypes.DrainNodeOptions, clusterID, clusterName string) *DrainJob {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	id := uuid.NewString()
 	normalizedNode := normalizeNodeName(nodeName)
 	job := &DrainJob{
-		store:     s,
-		ID:        id,
-		NodeName:  normalizedNode,
-		Status:    DrainStatusRunning,
-		StartedAt: time.Now().UnixMilli(),
-		Options:   opts,
+		store:       s,
+		ID:          id,
+		ClusterID:   strings.TrimSpace(clusterID),
+		ClusterName: strings.TrimSpace(clusterName),
+		NodeName:    normalizedNode,
+		Status:      DrainStatusRunning,
+		StartedAt:   time.Now().UnixMilli(),
+		Options:     opts,
 		Events: []DrainEvent{{
 			ID:        uuid.NewString(),
 			Timestamp: time.Now().UnixMilli(),
@@ -113,15 +125,7 @@ func (s *Store) StartDrain(nodeName string, opts restypes.DrainNodeOptions) *Dra
 	}
 
 	s.jobs[id] = job
-	existing := s.byNode[normalizedNode]
-	s.byNode[normalizedNode] = append([]*DrainJob{job}, existing...)
-	if len(s.byNode[normalizedNode]) > s.maxHistory {
-		toRemove := s.byNode[normalizedNode][s.maxHistory:]
-		s.byNode[normalizedNode] = s.byNode[normalizedNode][:s.maxHistory]
-		for _, old := range toRemove {
-			delete(s.jobs, old.ID)
-		}
-	}
+	s.addJobToHistoryLocked(job)
 	s.version++
 	return job
 }
@@ -205,7 +209,15 @@ func (s *Store) Snapshot(nodeName string) (Snapshot, uint64) {
 			return jobs[i].StartedAt > jobs[j2].StartedAt
 		})
 	} else {
-		jobs = append(jobs, s.byNode[normalizeNodeName(nodeName)]...)
+		normalizedNode := normalizeNodeName(nodeName)
+		for key, entries := range s.byNode {
+			if key.nodeName == normalizedNode {
+				jobs = append(jobs, entries...)
+			}
+		}
+		sort.Slice(jobs, func(i, j2 int) bool {
+			return jobs[i].StartedAt > jobs[j2].StartedAt
+		})
 	}
 
 	result := Snapshot{
@@ -235,6 +247,58 @@ func normalizeNodeName(name string) string {
 	return strings.TrimSpace(strings.ToLower(name))
 }
 
+func jobHistoryKey(job *DrainJob) drainHistoryKey {
+	if job == nil {
+		return drainHistoryKey{}
+	}
+	return drainHistoryKey{
+		clusterID: strings.TrimSpace(job.ClusterID),
+		nodeName:  normalizeNodeName(job.NodeName),
+	}
+}
+
+func (s *Store) addJobToHistoryLocked(job *DrainJob) {
+	key := jobHistoryKey(job)
+	existing := s.byNode[key]
+	s.byNode[key] = append([]*DrainJob{job}, existing...)
+	s.enforceHistoryLimitLocked(key)
+}
+
+func (s *Store) removeJobFromAllHistoryLocked(jobID string) {
+	for key := range s.byNode {
+		s.removeJobFromHistoryKeyLocked(key, jobID)
+	}
+}
+
+func (s *Store) removeJobFromHistoryKeyLocked(key drainHistoryKey, jobID string) {
+	entries := s.byNode[key]
+	for i, candidate := range entries {
+		if candidate != nil && candidate.ID == jobID {
+			entries = append(entries[:i], entries[i+1:]...)
+			break
+		}
+	}
+	if len(entries) == 0 {
+		delete(s.byNode, key)
+		return
+	}
+	s.byNode[key] = entries
+}
+
+func (s *Store) enforceHistoryLimitLocked(key drainHistoryKey) {
+	entries := s.byNode[key]
+	if len(entries) <= s.maxHistory {
+		return
+	}
+	toRemove := entries[s.maxHistory:]
+	s.byNode[key] = entries[:s.maxHistory]
+	for _, old := range toRemove {
+		if old != nil {
+			delete(s.jobs, old.ID)
+		}
+	}
+}
+
 // ParseScope extracts the node name from a scope string.
 func ParseScope(scope string) string {
 	if scope == "" {
@@ -260,8 +324,10 @@ func (s *Store) SetJobCluster(jobID, clusterID, clusterName string) {
 	if job == nil {
 		return
 	}
-	job.ClusterID = clusterID
-	job.ClusterName = clusterName
+	s.removeJobFromAllHistoryLocked(job.ID)
+	job.ClusterID = strings.TrimSpace(clusterID)
+	job.ClusterName = strings.TrimSpace(clusterName)
+	s.addJobToHistoryLocked(job)
 	s.version++
 }
 
