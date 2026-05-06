@@ -9,6 +9,7 @@ import (
 	apiextensionsinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/tools/cache"
 	gatewayinformers "sigs.k8s.io/gateway-api/pkg/client/informers/externalversions"
@@ -333,6 +334,13 @@ func (a *App) invalidateResponseCacheForResource(selectionKey, kind, namespace, 
 // the GVK-aware fetch path doesn't write to the response cache.)
 func (a *App) invalidateResponseCache(selectionKey, kind, namespace, name string) {
 	a.responseCacheDelete(selectionKey, objectDetailCacheKey(kind, namespace, name))
+	if info, ok := lookupBuiltinResourceByKind(kind); ok {
+		a.responseCacheDelete(selectionKey, objectDetailCacheKeyForGVK(schema.GroupVersionKind{
+			Group:   info.Group,
+			Version: info.Version,
+			Kind:    info.Kind,
+		}, namespace, name))
+	}
 }
 
 // invalidateHelmCacheIfNeeded evicts Helm release cache entries when a release secret/configmap changes.

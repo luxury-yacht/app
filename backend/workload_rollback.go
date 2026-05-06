@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	sigsyaml "sigs.k8s.io/yaml"
 
@@ -25,6 +27,35 @@ const (
 	// description of what caused a rollout revision.
 	changeCauseAnnotation = "kubernetes.io/change-cause"
 )
+
+var (
+	revisionHistoryWorkloadKinds = map[string]string{
+		"deployment":  "Deployment",
+		"statefulset": "StatefulSet",
+		"daemonset":   "DaemonSet",
+	}
+	scalableWorkloadKinds = map[string]string{
+		"deployment":  "Deployment",
+		"statefulset": "StatefulSet",
+		"replicaset":  "ReplicaSet",
+	}
+)
+
+func normalizeAppsV1WorkloadKind(group, version, kind string, supported map[string]string) (string, error) {
+	gvk := schema.GroupVersionKind{
+		Group:   strings.TrimSpace(group),
+		Version: strings.TrimSpace(version),
+		Kind:    strings.TrimSpace(kind),
+	}
+	if gvk.Group != "apps" || gvk.Version != "v1" || gvk.Kind == "" {
+		return "", fmt.Errorf("unsupported workload GVK %s", gvk.String())
+	}
+	canonical, ok := supported[strings.ToLower(gvk.Kind)]
+	if !ok {
+		return "", fmt.Errorf("unsupported workload GVK %s", gvk.String())
+	}
+	return canonical, nil
+}
 
 // RevisionEntry describes a single historical revision of a workload rollout.
 type RevisionEntry struct {
@@ -46,7 +77,12 @@ type RevisionEntry struct {
 //
 // Multi-cluster safety: all Kubernetes requests are scoped to the cluster
 // identified by clusterID, preventing cross-cluster data leakage.
-func (a *App) GetRevisionHistory(clusterID, namespace, name, workloadKind string) ([]RevisionEntry, error) {
+func (a *App) GetRevisionHistory(clusterID, namespace, group, version, workloadKind, name string) ([]RevisionEntry, error) {
+	workloadKind, err := normalizeAppsV1WorkloadKind(group, version, workloadKind, revisionHistoryWorkloadKinds)
+	if err != nil {
+		return nil, fmt.Errorf("revision history not supported: %w", err)
+	}
+
 	deps, _, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
@@ -276,7 +312,12 @@ func marshalPodTemplate(template *corev1.PodTemplateSpec) (string, error) {
 //
 // Multi-cluster safety: all Kubernetes requests are scoped to the cluster identified
 // by clusterID, preventing cross-cluster data leakage or modification.
-func (a *App) RollbackWorkload(clusterID, namespace, name, workloadKind string, toRevision int64) error {
+func (a *App) RollbackWorkload(clusterID, namespace, group, version, workloadKind, name string, toRevision int64) error {
+	workloadKind, err := normalizeAppsV1WorkloadKind(group, version, workloadKind, revisionHistoryWorkloadKinds)
+	if err != nil {
+		return fmt.Errorf("rollback not supported: %w", err)
+	}
+
 	deps, _, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return err
@@ -291,7 +332,7 @@ func (a *App) RollbackWorkload(clusterID, namespace, name, workloadKind string, 
 	}
 
 	// Fetch the full revision history to locate the target revision's pod template.
-	entries, err := a.GetRevisionHistory(clusterID, namespace, name, workloadKind)
+	entries, err := a.GetRevisionHistory(clusterID, namespace, group, version, workloadKind, name)
 	if err != nil {
 		return fmt.Errorf("failed to get revision history for %s %s/%s: %w", workloadKind, namespace, name, err)
 	}

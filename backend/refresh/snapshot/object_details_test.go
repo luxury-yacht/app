@@ -7,6 +7,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes/fake"
 
 	"github.com/luxury-yacht/app/backend/refresh/domain"
@@ -17,10 +18,12 @@ type stubDetailProvider struct {
 	version string
 	err     error
 	calls   int
+	gvk     schema.GroupVersionKind
 }
 
-func (s *stubDetailProvider) FetchObjectDetails(_ context.Context, _ string, _ string, _ string) (interface{}, string, error) {
+func (s *stubDetailProvider) FetchObjectDetails(_ context.Context, gvk schema.GroupVersionKind, _ string, _ string) (interface{}, string, error) {
 	s.calls++
+	s.gvk = gvk
 	return s.details, s.version, s.err
 }
 
@@ -35,13 +38,16 @@ func TestObjectDetailsBuilderUsesProviderWhenAvailable(t *testing.T) {
 		provider: provider,
 	}
 
-	snapshot, err := builder.Build(context.Background(), "default:Pod:demo")
+	snapshot, err := builder.Build(context.Background(), "default:/v1:Pod:demo")
 	if err != nil {
 		t.Fatalf("Build failed: %v", err)
 	}
 
 	if provider.calls != 1 {
 		t.Fatalf("expected provider to be called once, got %d", provider.calls)
+	}
+	if provider.gvk.Group != "" || provider.gvk.Version != "v1" || provider.gvk.Kind != "Pod" {
+		t.Fatalf("expected provider to receive full core Pod GVK, got %v", provider.gvk)
 	}
 
 	payload, ok := snapshot.Payload.(ObjectDetailsSnapshotPayload)
@@ -74,7 +80,7 @@ func TestObjectDetailsBuilderFallsBackToClientFetcher(t *testing.T) {
 		provider: provider,
 	}
 
-	snapshot, err := builder.Build(context.Background(), "default:ConfigMap:demo")
+	snapshot, err := builder.Build(context.Background(), "default:/v1:configmap:demo")
 	if err != nil {
 		t.Fatalf("Build failed: %v", err)
 	}
@@ -99,6 +105,40 @@ func TestObjectDetailsBuilderFallsBackToClientFetcher(t *testing.T) {
 
 	if cm.Name != "demo" {
 		t.Fatalf("expected ConfigMap name demo, got %s", cm.Name)
+	}
+}
+
+func TestObjectDetailsBuilderDoesNotUseKindFetcherForMismatchedGVK(t *testing.T) {
+	cfg := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "demo",
+			Namespace:       "default",
+			ResourceVersion: "101",
+		},
+	}
+	builder := &ObjectDetailsBuilder{
+		client:   fake.NewClientset(cfg),
+		provider: &stubDetailProvider{err: ErrObjectDetailNotImplemented},
+	}
+
+	snapshot, err := builder.Build(context.Background(), "default:example.com/v1:ConfigMap:demo")
+	if err != nil {
+		t.Fatalf("Build failed: %v", err)
+	}
+	if snapshot.Version != 0 {
+		t.Fatalf("expected generic fallback version 0, got %d", snapshot.Version)
+	}
+
+	payload, ok := snapshot.Payload.(ObjectDetailsSnapshotPayload)
+	if !ok {
+		t.Fatalf("unexpected payload type: %T", snapshot.Payload)
+	}
+	details, ok := payload.Details.(map[string]string)
+	if !ok {
+		t.Fatalf("expected generic details map, got %T", payload.Details)
+	}
+	if details["kind"] != "ConfigMap" || details["name"] != "demo" {
+		t.Fatalf("unexpected generic details: %#v", details)
 	}
 }
 

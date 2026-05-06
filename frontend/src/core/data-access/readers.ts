@@ -47,16 +47,20 @@ export const readCatalogObjectByUID = (clusterId: string, uid: string) =>
 export const readRevisionHistory = (
   clusterId: string,
   namespace: string,
-  name: string,
-  kind: string
-) => GetRevisionHistory(clusterId, namespace, name, kind);
+  group: string,
+  version: string,
+  kind: string,
+  name: string
+) => GetRevisionHistory(clusterId, namespace, group, version, kind, name);
 
 export const readWorkloadHPAManaged = (
   clusterId: string,
   namespace: string,
+  group: string,
+  version: string,
   kind: string,
   name: string
-) => IsWorkloadHPAManaged(clusterId, namespace, kind, name);
+) => IsWorkloadHPAManaged(clusterId, namespace, group, version, kind, name);
 
 export const readQueryPermissions = async <T>(queries: unknown[]): Promise<T> => {
   const runtimeApp = (window as any)?.go?.backend?.App;

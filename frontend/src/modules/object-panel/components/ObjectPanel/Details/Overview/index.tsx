@@ -40,12 +40,14 @@ const Overview: React.FC<OverviewProps> = (props) => {
   // Get cluster info from objectData (the source of truth for the current object)
   const clusterId = objectData?.clusterId || '';
   const clusterName = objectData?.clusterName || '';
+  const objectGroup = objectData?.group ?? '';
+  const objectVersion = objectData?.version ?? '';
 
   // Check whether a HPA manages this workload (only for scalable kinds).
   const [hpaManaged, setHpaManaged] = useState(false);
   const isScalable = SCALABLE_KINDS.includes(normalizeKind(props.kind));
   useEffect(() => {
-    if (!isScalable || !clusterId || !props.namespace || !props.name) {
+    if (!isScalable || !clusterId || !props.namespace || !props.name || !objectVersion) {
       setHpaManaged(false);
       return;
     }
@@ -53,7 +55,15 @@ const Overview: React.FC<OverviewProps> = (props) => {
     requestData({
       resource: 'workload-hpa-managed',
       reason: 'startup',
-      read: () => readWorkloadHPAManaged(clusterId, props.namespace!, props.kind, props.name),
+      read: () =>
+        readWorkloadHPAManaged(
+          clusterId,
+          props.namespace!,
+          objectGroup,
+          objectVersion,
+          props.kind,
+          props.name
+        ),
     })
       .then((result) => {
         if (!cancelled) {
@@ -66,7 +76,7 @@ const Overview: React.FC<OverviewProps> = (props) => {
     return () => {
       cancelled = true;
     };
-  }, [clusterId, props.namespace, props.kind, props.name, isScalable]);
+  }, [clusterId, props.namespace, props.kind, props.name, objectGroup, objectVersion, isScalable]);
 
   // Use the factory pattern to render the appropriate component.
   // Thread `hpaManaged` through so workload overviews can surface that
@@ -79,8 +89,6 @@ const Overview: React.FC<OverviewProps> = (props) => {
   // objectData (the source of truth) so CRD permission lookups in
   // the shared action controller key off the same GVK as the spec-emit side;
   // without them the Delete action silently disappears for CRDs.
-  const objectGroup = objectData?.group ?? undefined;
-  const objectVersion = objectData?.version ?? undefined;
   const actionObject: ObjectActionData | null = useMemo(
     () => ({
       kind: props.kind,
@@ -88,8 +96,8 @@ const Overview: React.FC<OverviewProps> = (props) => {
       namespace: props.namespace,
       clusterId,
       clusterName,
-      group: objectGroup ?? undefined,
-      version: objectVersion ?? undefined,
+      group: objectGroup || undefined,
+      version: objectVersion || undefined,
       status: props.suspend ? 'Suspended' : props.status,
       portForwardAvailable: props.portForwardAvailable,
     }),

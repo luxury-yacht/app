@@ -48,6 +48,8 @@ describe('RollbackModal', () => {
     onClose: vi.fn(),
     clusterId: 'cluster-1',
     namespace: 'default',
+    group: 'apps',
+    version: 'v1',
     name: 'my-deploy',
     kind: 'Deployment',
   };
@@ -244,8 +246,10 @@ describe('RollbackModal', () => {
     expect(backendMocks.GetRevisionHistory).toHaveBeenCalledWith(
       'prod-cluster',
       'default',
-      'my-deploy',
-      'Deployment'
+      'apps',
+      'v1',
+      'Deployment',
+      'my-deploy'
     );
   });
 

@@ -3,10 +3,10 @@
 1. ✅ [SECURITY] RBAC enforcement — backend/workload_actions.go:19, backend/resources_generic.go:25, backend/resources_nodes.go:22
     Mutating Wails methods perform Kubernetes writes without backend permission checks.
     Impact: frontend gating is not an enforcement boundary; this violates the backend rule that every K8s write must check permissions first.
-2. [STABILITY] Object identity — backend/refresh/snapshot/object_details.go:80, backend/object_detail_provider.go:315
+2. ✅ [STABILITY] Object identity — backend/refresh/snapshot/object_details.go:80, backend/object_detail_provider.go:315
     object-details parses full GVK from scope, then passes only kind into the provider and cache key.
     Impact: same namespace/name/kind across different groups or versions can collide or fetch the wrong detail path.
-3. [STABILITY] Kind-only workload helpers — backend/workload_rollback.go:49, backend/resources_autoscaling.go:32, frontend/src/core/data-access/readers.ts:47
+3. ✅ [STABILITY] Kind-only workload helpers — backend/workload_rollback.go:49, backend/resources_autoscaling.go:32, frontend/src/core/data-access/readers.ts:47
     rollback history and HPA-managed checks still pass workload identity as kind/name, not group/version/kind.
     Impact: this repeats the kind-only object reference pattern we’ve been removing.
 4. [SIMPLICITY] Dead list-shaped resource services — backend/resources/workloads/deployments.go:56, backend/resources/network/services.go:41, backend/resources/autoscaling/

@@ -29,6 +29,8 @@ interface RollbackModalProps {
   onClose: () => void;
   clusterId: string;
   namespace: string;
+  group: string;
+  version: string;
   name: string;
   kind: string; // "Deployment" | "StatefulSet" | "DaemonSet"
 }
@@ -66,6 +68,8 @@ const RollbackModal = ({
   onClose,
   clusterId,
   namespace,
+  group,
+  version,
   name,
   kind,
 }: RollbackModalProps) => {
@@ -102,7 +106,7 @@ const RollbackModal = ({
     requestData({
       resource: 'revision-history',
       reason: 'user',
-      read: () => readRevisionHistory(clusterId, namespace, name, kind),
+      read: () => readRevisionHistory(clusterId, namespace, group, version, kind, name),
     })
       .then((result) => {
         const entries = result.status === 'executed' ? (result.data ?? []) : [];
@@ -122,7 +126,7 @@ const RollbackModal = ({
       .finally(() => {
         setLoading(false);
       });
-  }, [isOpen, clusterId, namespace, name, kind]);
+  }, [isOpen, clusterId, namespace, group, version, name, kind]);
 
   useModalFocusTrap({
     ref: modalRef,
@@ -209,7 +213,7 @@ const RollbackModal = ({
     setRollbackLoading(true);
     setRollbackError(null);
 
-    RollbackWorkload(clusterId, namespace, name, kind, selectedRevision)
+    RollbackWorkload(clusterId, namespace, group, version, kind, name, selectedRevision)
       .then(() => {
         setConfirmOpen(false);
         onClose();
@@ -221,7 +225,7 @@ const RollbackModal = ({
       .finally(() => {
         setRollbackLoading(false);
       });
-  }, [clusterId, namespace, name, kind, selectedRevision, onClose]);
+  }, [clusterId, namespace, group, version, name, kind, selectedRevision, onClose]);
 
   // Return null when the modal is not open.
   if (!isOpen) {

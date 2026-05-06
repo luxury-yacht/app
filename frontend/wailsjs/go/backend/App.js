@@ -322,8 +322,8 @@ export function GetResourceQuota(arg1, arg2, arg3) {
   return window['go']['backend']['App']['GetResourceQuota'](arg1, arg2, arg3);
 }
 
-export function GetRevisionHistory(arg1, arg2, arg3, arg4) {
-  return window['go']['backend']['App']['GetRevisionHistory'](arg1, arg2, arg3, arg4);
+export function GetRevisionHistory(arg1, arg2, arg3, arg4, arg5, arg6) {
+  return window['go']['backend']['App']['GetRevisionHistory'](arg1, arg2, arg3, arg4, arg5, arg6);
 }
 
 export function GetRole(arg1, arg2, arg3) {
@@ -402,8 +402,8 @@ export function IsSidebarVisible() {
   return window['go']['backend']['App']['IsSidebarVisible']();
 }
 
-export function IsWorkloadHPAManaged(arg1, arg2, arg3, arg4) {
-  return window['go']['backend']['App']['IsWorkloadHPAManaged'](arg1, arg2, arg3, arg4);
+export function IsWorkloadHPAManaged(arg1, arg2, arg3, arg4, arg5, arg6) {
+  return window['go']['backend']['App']['IsWorkloadHPAManaged'](arg1, arg2, arg3, arg4, arg5, arg6);
 }
 
 export function ListPortForwards() {
@@ -458,8 +458,8 @@ export function RetryClusterAuth(arg1) {
   return window['go']['backend']['App']['RetryClusterAuth'](arg1);
 }
 
-export function RollbackWorkload(arg1, arg2, arg3, arg4, arg5) {
-  return window['go']['backend']['App']['RollbackWorkload'](arg1, arg2, arg3, arg4, arg5);
+export function RollbackWorkload(arg1, arg2, arg3, arg4, arg5, arg6, arg7) {
+  return window['go']['backend']['App']['RollbackWorkload'](arg1, arg2, arg3, arg4, arg5, arg6, arg7);
 }
 
 export function SaveTheme(arg1) {

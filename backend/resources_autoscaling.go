@@ -10,8 +10,10 @@ package backend
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/luxury-yacht/app/backend/resources/autoscaling"
 )
@@ -27,9 +29,15 @@ func (a *App) GetHorizontalPodAutoscaler(clusterID, namespace, name string) (*Ho
 }
 
 // IsWorkloadHPAManaged checks whether any HorizontalPodAutoscaler in the given
-// namespace targets the specified workload (kind + name). Used by the object panel
+// namespace targets the specified workload GVK + name. Used by the object panel
 // to determine if the Scale action should be disabled.
-func (a *App) IsWorkloadHPAManaged(clusterID, namespace, kind, name string) (bool, error) {
+func (a *App) IsWorkloadHPAManaged(clusterID, namespace, group, version, kind, name string) (bool, error) {
+	kind, err := normalizeAppsV1WorkloadKind(group, version, kind, scalableWorkloadKinds)
+	if err != nil {
+		return false, fmt.Errorf("HPA-managed check not supported: %w", err)
+	}
+	targetGVK := schema.GroupVersionKind{Group: strings.TrimSpace(group), Version: strings.TrimSpace(version), Kind: kind}
+
 	deps, _, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return false, err
@@ -50,7 +58,8 @@ func (a *App) IsWorkloadHPAManaged(clusterID, namespace, kind, name string) (boo
 
 	for _, hpa := range hpas.Items {
 		ref := hpa.Spec.ScaleTargetRef
-		if ref.Kind == kind && ref.Name == name {
+		refGVK := schema.FromAPIVersionAndKind(ref.APIVersion, ref.Kind)
+		if ref.Name == name && refGVK == targetGVK {
 			return true, nil
 		}
 	}

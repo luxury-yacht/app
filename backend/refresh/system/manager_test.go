@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	apiextensionsfake "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	kubernetesfake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/rest"
@@ -135,7 +136,7 @@ type noopObjectDetailProvider struct {
 	err error
 }
 
-func (p noopObjectDetailProvider) FetchObjectDetails(context.Context, string, string, string) (interface{}, string, error) {
+func (p noopObjectDetailProvider) FetchObjectDetails(context.Context, schema.GroupVersionKind, string, string) (interface{}, string, error) {
 	return nil, "", p.err
 }
 

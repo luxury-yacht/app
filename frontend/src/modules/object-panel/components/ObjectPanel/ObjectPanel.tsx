@@ -766,6 +766,7 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
       {state.showRollbackModal &&
         objectData?.clusterId &&
         objectData.kind &&
+        objectData.version &&
         objectData.name &&
         objectData.namespace && (
           <RollbackModal
@@ -773,6 +774,8 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
             onClose={closeRollbackModal}
             clusterId={objectData.clusterId}
             namespace={objectData.namespace}
+            group={objectData.group ?? ''}
+            version={objectData.version}
             name={objectData.name}
             kind={objectData.kind}
           />

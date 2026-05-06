@@ -12,6 +12,7 @@ import (
 
 	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/luxury-yacht/app/backend/refresh"
@@ -31,7 +32,7 @@ type objectDetailFetcher func(ctx context.Context, builder *ObjectDetailsBuilder
 
 // ObjectDetailProvider resolves rich object payloads for the object panel.
 type ObjectDetailProvider interface {
-	FetchObjectDetails(ctx context.Context, kind, namespace, name string) (interface{}, string, error)
+	FetchObjectDetails(ctx context.Context, gvk schema.GroupVersionKind, namespace, name string) (interface{}, string, error)
 }
 
 // ObjectDetailsBuilder resolves Kubernetes objects for the object panel.
@@ -74,18 +75,19 @@ func (b *ObjectDetailsBuilder) Build(ctx context.Context, scope string) (*refres
 		return nil, err
 	}
 	namespace := identity.Namespace
-	kind := identity.GVK.Kind
+	gvk := identity.GVK
+	kind := gvk.Kind
 	name := identity.Name
 
 	if b.provider != nil {
-		if details, resourceVersion, err := b.provider.FetchObjectDetails(ctx, kind, namespace, name); err == nil {
+		if details, resourceVersion, err := b.provider.FetchObjectDetails(ctx, gvk, namespace, name); err == nil {
 			return b.buildSnapshot(ctx, scope, details, resourceVersion), nil
 		} else if !errors.Is(err, ErrObjectDetailNotImplemented) {
 			return nil, err
 		}
 	}
 
-	fetcher, ok := objectDetailFetchers[strings.ToLower(kind)]
+	fetcher, ok := lookupSnapshotObjectDetailFetcher(gvk)
 	if !ok {
 		// Provide a minimal details payload rather than surfacing an error so the
 		// frontend can render generic metadata for custom resources.
@@ -352,6 +354,62 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 		}
 		return wrapKubernetesObject(vwc)
 	},
+}
+
+type snapshotObjectDetailGVKKey struct {
+	group   string
+	version string
+	kind    string
+}
+
+var snapshotObjectDetailFetcherGVKs = map[snapshotObjectDetailGVKKey]struct{}{
+	{version: "v1", kind: "pod"}:                                                                   {},
+	{version: "v1", kind: "service"}:                                                               {},
+	{version: "v1", kind: "configmap"}:                                                             {},
+	{version: "v1", kind: "secret"}:                                                                {},
+	{version: "v1", kind: "persistentvolumeclaim"}:                                                 {},
+	{version: "v1", kind: "persistentvolume"}:                                                      {},
+	{version: "v1", kind: "serviceaccount"}:                                                        {},
+	{version: "v1", kind: "resourcequota"}:                                                         {},
+	{version: "v1", kind: "limitrange"}:                                                            {},
+	{version: "v1", kind: "namespace"}:                                                             {},
+	{version: "v1", kind: "node"}:                                                                  {},
+	{group: "apps", version: "v1", kind: "deployment"}:                                             {},
+	{group: "apps", version: "v1", kind: "daemonset"}:                                              {},
+	{group: "apps", version: "v1", kind: "statefulset"}:                                            {},
+	{group: "batch", version: "v1", kind: "job"}:                                                   {},
+	{group: "batch", version: "v1", kind: "cronjob"}:                                               {},
+	{group: "networking.k8s.io", version: "v1", kind: "ingress"}:                                   {},
+	{group: "networking.k8s.io", version: "v1", kind: "networkpolicy"}:                             {},
+	{group: "networking.k8s.io", version: "v1", kind: "ingressclass"}:                              {},
+	{group: "discovery.k8s.io", version: "v1", kind: "endpointslice"}:                              {},
+	{group: "rbac.authorization.k8s.io", version: "v1", kind: "role"}:                              {},
+	{group: "rbac.authorization.k8s.io", version: "v1", kind: "rolebinding"}:                       {},
+	{group: "rbac.authorization.k8s.io", version: "v1", kind: "clusterrole"}:                       {},
+	{group: "rbac.authorization.k8s.io", version: "v1", kind: "clusterrolebinding"}:                {},
+	{group: "autoscaling", version: "v1", kind: "horizontalpodautoscaler"}:                         {},
+	{group: "autoscaling", version: "v2", kind: "horizontalpodautoscaler"}:                         {},
+	{group: "policy", version: "v1", kind: "poddisruptionbudget"}:                                  {},
+	{group: "storage.k8s.io", version: "v1", kind: "storageclass"}:                                 {},
+	{group: "apiextensions.k8s.io", version: "v1", kind: "customresourcedefinition"}:               {},
+	{group: "admissionregistration.k8s.io", version: "v1", kind: "mutatingwebhookconfiguration"}:   {},
+	{group: "admissionregistration.k8s.io", version: "v1", kind: "validatingwebhookconfiguration"}: {},
+}
+
+func lookupSnapshotObjectDetailFetcher(gvk schema.GroupVersionKind) (objectDetailFetcher, bool) {
+	fetcher, ok := objectDetailFetchers[strings.ToLower(strings.TrimSpace(gvk.Kind))]
+	if !ok {
+		return nil, false
+	}
+	if strings.TrimSpace(gvk.Version) == "" {
+		return fetcher, true
+	}
+	_, ok = snapshotObjectDetailFetcherGVKs[snapshotObjectDetailGVKKey{
+		group:   strings.TrimSpace(gvk.Group),
+		version: strings.TrimSpace(gvk.Version),
+		kind:    strings.ToLower(strings.TrimSpace(gvk.Kind)),
+	}]
+	return fetcher, ok
 }
 
 func wrapKubernetesObject(obj metav1.Object) (interface{}, string, error) {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
@@ -68,7 +69,7 @@ func TestObjectDetailProviderFetchesKnownKinds(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		detail, _, err := provider.FetchObjectDetails(ctx, tt.kind, tt.namespace, tt.name)
+		detail, _, err := provider.FetchObjectDetails(ctx, schema.GroupVersionKind{Kind: tt.kind}, tt.namespace, tt.name)
 		if err != nil {
 			t.Fatalf("FetchObjectDetails(%s) returned error: %v", tt.kind, err)
 		}
@@ -82,12 +83,67 @@ func TestObjectDetailProviderUnknownKind(t *testing.T) {
 	app := NewApp()
 	provider := app.objectDetailProvider()
 
-	_, _, err := provider.FetchObjectDetails(context.Background(), "unknown-kind", "ns", "name")
+	_, _, err := provider.FetchObjectDetails(context.Background(), schema.GroupVersionKind{Kind: "unknown-kind"}, "ns", "name")
 	if err == nil {
 		t.Fatalf("expected error for unknown kind")
 	}
 	if err != snapshot.ErrObjectDetailNotImplemented {
 		t.Fatalf("expected ErrObjectDetailNotImplemented, got %v", err)
+	}
+}
+
+func TestObjectDetailProviderRejectsKnownKindWithWrongGVK(t *testing.T) {
+	app := NewApp()
+	app.Ctx = context.Background()
+	clusterID := "config:ctx"
+	app.clusterClients = map[string]*clusterClients{
+		clusterID: {
+			meta:              ClusterMeta{ID: clusterID, Name: "ctx"},
+			kubeconfigPath:    "/path",
+			kubeconfigContext: "ctx",
+			client: fake.NewClientset(&corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "default"},
+			}),
+		},
+	}
+
+	provider := app.objectDetailProvider()
+	ctx := snapshot.WithClusterMeta(context.Background(), snapshot.ClusterMeta{
+		ClusterID:   clusterID,
+		ClusterName: "ctx",
+	})
+
+	_, _, err := provider.FetchObjectDetails(ctx, schema.GroupVersionKind{
+		Group: "example.com", Version: "v1", Kind: "ConfigMap",
+	}, "default", "demo")
+	if err != snapshot.ErrObjectDetailNotImplemented {
+		t.Fatalf("expected mismatched GVK to be rejected as not implemented, got %v", err)
+	}
+}
+
+func TestObjectDetailProviderCacheKeyIncludesGVK(t *testing.T) {
+	coreConfigMap := schema.GroupVersionKind{Version: "v1", Kind: "ConfigMap"}
+	otherConfigMap := schema.GroupVersionKind{Group: "example.com", Version: "v1", Kind: "ConfigMap"}
+
+	coreKey := objectDetailCacheKeyForGVK(coreConfigMap, "default", "demo")
+	otherKey := objectDetailCacheKeyForGVK(otherConfigMap, "default", "demo")
+	if coreKey == otherKey {
+		t.Fatalf("expected distinct cache keys for colliding GVKs, got %q", coreKey)
+	}
+
+	app := NewApp()
+	app.responseCache = newResponseCache(time.Minute, 10)
+	selectionKey := "cluster-a"
+	app.responseCacheStore(selectionKey, coreKey, "core")
+	app.responseCacheStore(selectionKey, otherKey, "other")
+
+	app.invalidateResponseCache(selectionKey, "ConfigMap", "default", "demo")
+
+	if _, ok := app.responseCacheLookup(selectionKey, coreKey); ok {
+		t.Fatalf("expected built-in GVK cache key to be invalidated")
+	}
+	if got, ok := app.responseCacheLookup(selectionKey, otherKey); !ok || got != "other" {
+		t.Fatalf("expected unrelated colliding GVK cache entry to remain, got %#v ok=%v", got, ok)
 	}
 }
 
@@ -119,7 +175,7 @@ func TestObjectDetailProviderUsesClusterContext(t *testing.T) {
 		ClusterName: "ctx-b",
 	})
 
-	detail, _, err := provider.FetchObjectDetails(ctx, "Node", "", "node-b")
+	detail, _, err := provider.FetchObjectDetails(ctx, schema.GroupVersionKind{Kind: "Node"}, "", "node-b")
 	if err != nil {
 		t.Fatalf("FetchObjectDetails returned error: %v", err)
 	}
@@ -127,7 +183,7 @@ func TestObjectDetailProviderUsesClusterContext(t *testing.T) {
 		t.Fatal("FetchObjectDetails returned nil detail")
 	}
 
-	if _, _, err := provider.FetchObjectDetails(ctx, "Node", "", "node-a"); err == nil {
+	if _, _, err := provider.FetchObjectDetails(ctx, schema.GroupVersionKind{Kind: "Node"}, "", "node-a"); err == nil {
 		t.Fatal("expected error when fetching node from another cluster")
 	}
 }
@@ -258,7 +314,7 @@ func TestObjectDetailProviderCoversAdditionalKinds(t *testing.T) {
 	}
 
 	for _, tt := range kinds {
-		_, _, err := provider.FetchObjectDetails(ctx, tt.kind, tt.ns, tt.name)
+		_, _, err := provider.FetchObjectDetails(ctx, schema.GroupVersionKind{Kind: tt.kind}, tt.ns, tt.name)
 		if err != nil {
 			t.Fatalf("FetchObjectDetails(%s) returned error: %v", tt.kind, err)
 		}

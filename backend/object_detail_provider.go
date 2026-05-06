@@ -294,17 +294,28 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 	},
 }
 
-// lookupObjectDetailFetcher normalizes the kind and returns the configured fetcher.
-func lookupObjectDetailFetcher(kind string) (objectDetailFetcher, bool) {
-	normalized := strings.ToLower(strings.TrimSpace(kind))
+// lookupObjectDetailFetcher returns the configured fetcher for the supplied
+// GVK. Legacy kind-only calls are still accepted, but GVK-aware callers must
+// match the concrete built-in resource the fetcher knows how to retrieve.
+func lookupObjectDetailFetcher(gvk schema.GroupVersionKind) (objectDetailFetcher, bool) {
+	normalized := strings.ToLower(strings.TrimSpace(gvk.Kind))
 	fetcher, ok := objectDetailFetchers[normalized]
-	return fetcher, ok
+	if !ok {
+		return objectDetailFetcher{}, false
+	}
+	if strings.TrimSpace(gvk.Version) == "" {
+		return fetcher, true
+	}
+	if _, ok := lookupBuiltinResourceByGVK(gvk.Group, gvk.Version, gvk.Kind); !ok {
+		return objectDetailFetcher{}, false
+	}
+	return fetcher, true
 }
 
 // FetchObjectDetails retrieves the details of a Kubernetes object.
-func (p *objectDetailProvider) FetchObjectDetails(ctx context.Context, kind, namespace, name string) (interface{}, string, error) {
+func (p *objectDetailProvider) FetchObjectDetails(ctx context.Context, gvk schema.GroupVersionKind, namespace, name string) (interface{}, string, error) {
 	resolved := p.resolveDetailContext(ctx)
-	fetcher, ok := lookupObjectDetailFetcher(kind)
+	fetcher, ok := lookupObjectDetailFetcher(gvk)
 	if !ok {
 		return nil, "", snapshot.ErrObjectDetailNotImplemented
 	}
@@ -312,11 +323,11 @@ func (p *objectDetailProvider) FetchObjectDetails(ctx context.Context, kind, nam
 		return nil, "", fmt.Errorf("cluster scope is required")
 	}
 
-	cacheKey := objectDetailCacheKey(kind, namespace, name)
+	cacheKey := objectDetailCacheKeyForGVK(gvk, namespace, name)
 	if p != nil && p.app != nil {
 		if cached, ok := p.app.responseCacheLookup(resolved.selectionKey, cacheKey); ok {
 			// Avoid serving cached details when permission checks deny access.
-			if p.app.canServeCachedResponse(ctx, resolved.deps, resolved.selectionKey, kind, namespace, name) {
+			if p.app.canServeCachedResponse(ctx, resolved.deps, resolved.selectionKey, gvk.Kind, namespace, name) {
 				return cached, "", nil
 			}
 			p.app.responseCacheDelete(resolved.selectionKey, cacheKey)
@@ -332,6 +343,16 @@ func (p *objectDetailProvider) FetchObjectDetails(ctx context.Context, kind, nam
 // objectDetailCacheKey matches FetchNamespacedResource cache keys for detail payloads.
 func objectDetailCacheKey(kind, namespace, name string) string {
 	return cachekeys.Build(strings.ToLower(strings.TrimSpace(kind))+"-detailed", namespace, name)
+}
+
+func objectDetailCacheKeyForGVK(gvk schema.GroupVersionKind, namespace, name string) string {
+	group := strings.TrimSpace(gvk.Group)
+	version := strings.TrimSpace(gvk.Version)
+	kind := strings.TrimSpace(gvk.Kind)
+	if version == "" {
+		return objectDetailCacheKey(kind, namespace, name)
+	}
+	return cachekeys.Build(strings.ToLower(group+"/"+version+"/"+kind)+"-detailed", namespace, name)
 }
 
 // resolveDetailContext ensures object detail fetches use the cluster scoped to the snapshot request.
