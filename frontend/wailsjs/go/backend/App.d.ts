@@ -199,8 +199,6 @@ export function GetThemes():Promise<Array<types.Theme>>;
 
 export function GetValidatingWebhookConfiguration(arg1:string,arg2:string):Promise<types.ValidatingWebhookConfigurationDetails>;
 
-export function GetWorkloads(arg1:string,arg2:string,arg3:string):Promise<backend.VersionedResponse>;
-
 export function GetZoomLevel():Promise<number>;
 
 export function IsAppLogsPanelVisible():Promise<boolean>;

@@ -132,6 +132,10 @@ These fetch data outside the refresh domain system.
 | `frontend/src/core/contexts/ZoomContext.tsx`                                          | `GetZoomLevel`                                                    | Saved zoom level                                             | Direct Wails read on provider mount                          |
 | `frontend/src/core/refresh/client.ts`                                                 | `GetRefreshBaseURL`, `GetSelectionDiagnostics`                    | Base URL for refresh HTTP API; selection diagnostics payload | Direct Wails reads used by refresh client/diagnostics        |
 
+Older list-style Wails methods such as `GetWorkloads` have been retired.
+Frontend table data should use refresh domains instead; for workloads the
+canonical path is the `namespace-workloads` domain.
+
 ## Planned Ownership Decisions
 
 These decisions align the inventory with the two-path migration plan.

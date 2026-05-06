@@ -5,6 +5,13 @@ Applies to Go code under `backend/`.
 ## Development Guidelines
 
 - `backend/` hosts Kubernetes integrations.
+  - `backend/refresh/snapshot` is the canonical source for refresh-domain
+    list/table payloads. Add table/list data there, not in `backend/resources`.
+  - `backend/resources` is the detail/action service layer for rich object
+    details, logs/debug helpers, and imperative operations. Keep services
+    request-shaped and pass cluster-scoped dependencies in from callers.
+  - `backend/objectcatalog` is the discovery/catalog source of truth; use it for
+    resource identity and browse/catalog listings.
   - Resource handlers follow `resource_<Kind>.go` with adjacent `_test.go` suites (for example `kubeconfigs_test.go`).
 - Manual refreshes and streaming domains belong to the backend refresh registry + ManualQueue; avoid bespoke refresh/streaming code.
 

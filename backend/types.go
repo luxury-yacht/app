@@ -32,7 +32,6 @@ type (
 	ClsAdmissionControlInfo               = types.ClsAdmissionControlInfo
 	ClsStorageClassInfo                   = types.ClsStorageClassInfo
 	ClsIngressClassInfo                   = types.ClsIngressClassInfo
-	NsWorkloadInfo                        = types.NsWorkloadInfo
 	PodSimpleInfo                         = types.PodSimpleInfo
 	NsRBACInfo                            = types.NsRBACInfo
 	NsStorageInfo                         = types.NsStorageInfo

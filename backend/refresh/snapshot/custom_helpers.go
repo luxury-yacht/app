@@ -16,8 +16,10 @@ func preferredCRDVersion(crd *apiextensionsv1.CustomResourceDefinition) string {
 			return version.Name
 		}
 	}
-	if len(crd.Spec.Versions) > 0 {
-		return crd.Spec.Versions[0].Name
+	for _, version := range crd.Spec.Versions {
+		if version.Served {
+			return version.Name
+		}
 	}
 	return ""
 }

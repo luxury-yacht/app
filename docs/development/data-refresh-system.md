@@ -14,6 +14,13 @@ Multi-cluster support uses a single refresh orchestrator in the frontend and a b
 
 The refresh subsystem builds point-in-time "snapshots" for UI views and serves them over HTTP; streaming endpoints push incremental updates for long-lived views. The object catalog is the source of truth for namespaces/cluster listings. See backend/app_refresh_setup.go, backend/refresh/system/manager.go, backend/objectcatalog/service.go.
 
+Backend resource responsibilities are intentionally split:
+
+- `backend/refresh/snapshot` is the canonical source for UI list/table refresh-domain payloads and snapshot baselines.
+- `backend/refresh/resourcestream` owns live row updates for streaming list/table domains and must emit the same row shape as the snapshot path.
+- `backend/resources` owns rich object detail payloads, logs/debug helpers, and imperative operations. It is reached from Wails wrappers and from refresh object-detail providers; it should not grow new table/list data paths.
+- `backend/objectcatalog` owns discovery and browse/catalog identity. Use it for resource discovery and catalog rows, not rich object detail payloads.
+
 ### Informers (watch + cache)
 
 Informers are long-lived Kubernetes watchers that maintain an in-memory cache of resources. They continuously receive watch events from the API server and keep the cache current. Multiple consumers share the same informer instance, avoiding redundant API calls.
@@ -369,6 +376,8 @@ The convergence pattern (snapshot builder delegates to streaming helper) makes t
 ### Response cache
 
 The response cache (`backend/response_cache.go`) is a separate in-memory cache for object detail panel data: object details, YAML content, and Helm manifest/values. It has a configurable TTL (`ResponseCacheTTL = 10s`) and a max-entries cap.
+
+The response cache belongs to the detail/action side of the backend boundary. It does not replace refresh-domain snapshot caching (`SnapshotCacheTTL`) and should not be used for list/table refresh payloads.
 
 Cache invalidation (`backend/response_cache_invalidation.go`) registers `AddEventHandler` callbacks on every shared informer. When a resource changes, the corresponding object detail and YAML cache entries are cleared. Pods are excluded from invalidation to avoid high-churn cache thrashing. A warm-up guard skips ADD events for old objects during the informer's initial list phase to prevent the cache from being thrashed at startup.
 

@@ -7,13 +7,19 @@ description: Add support for a new Kubernetes resource type across all layers (b
 
 Add full support for a new Kubernetes resource type. This spans the backend service, type definitions, detail routing, frontend overview panel, and tests.
 
+This skill covers rich object detail/action support. If the resource also needs
+to appear in a table or refresh-driven view, add a refresh-domain payload under
+`backend/refresh/snapshot` and wire the matching frontend refresh domain. Do not
+add new list/table payloads to `backend/resources`; that package is the
+detail/action service layer.
+
 ## Arguments
 
 `/add-resource <Kind>` — e.g., `/add-resource CronJob`, `/add-resource Ingress`
 
 ## Before Starting
 
-1. **Identify the resource's API group and package.** Look at existing resources in `backend/resources/` to find the right category directory (workloads, network, storage, config, policy, etc.). If none fits, create a new one.
+1. **Identify the resource's API group and package.** For rich object details/actions, look at existing resources in `backend/resources/` to find the right category directory (workloads, network, storage, config, policy, etc.). If none fits, create a new one. For table/list data, use `backend/refresh/snapshot` instead.
 2. **Read the existing pattern.** Read at least one complete example in the same category — e.g., `backend/resources/workloads/deployments.go` for workloads, `backend/resources/network/` for networking resources.
 3. **Identify related resources.** Deployments relate to ReplicaSets and Pods. What does the new resource relate to? This determines what data the detail view should aggregate.
 

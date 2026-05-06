@@ -332,23 +332,6 @@ type ClsIngressClassInfo struct {
 // Order matches tab layout: Workloads, RBAC, Storage, Config, Network, Autoscaling, Quotas, Custom, Helm, Events
 //
 
-// NsWorkloadInfo represents basic workload information
-type NsWorkloadInfo struct {
-	Kind      string `json:"kind"` // deployment, replicaset, statefulset, daemonset, job, cronjob
-	Name      string `json:"name"`
-	Namespace string `json:"namespace"`
-	Ready     string `json:"ready"`
-	Age       string `json:"age"`
-
-	// Resource utilization (aggregated for all pods)
-	CPURequest string `json:"cpuRequest,omitempty"`
-	CPULimit   string `json:"cpuLimit,omitempty"`
-	CPUUsage   string `json:"cpuUsage,omitempty"`
-	MemRequest string `json:"memRequest,omitempty"`
-	MemLimit   string `json:"memLimit,omitempty"`
-	MemUsage   string `json:"memUsage,omitempty"`
-}
-
 // PodSimpleInfo represents basic pod information for list views
 type PodSimpleInfo struct {
 	Kind       string `json:"kind"` // pod

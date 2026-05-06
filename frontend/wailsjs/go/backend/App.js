@@ -386,10 +386,6 @@ export function GetValidatingWebhookConfiguration(arg1, arg2) {
   return window['go']['backend']['App']['GetValidatingWebhookConfiguration'](arg1, arg2);
 }
 
-export function GetWorkloads(arg1, arg2, arg3) {
-  return window['go']['backend']['App']['GetWorkloads'](arg1, arg2, arg3);
-}
-
 export function GetZoomLevel() {
   return window['go']['backend']['App']['GetZoomLevel']();
 }

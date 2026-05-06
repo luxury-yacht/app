@@ -2,7 +2,7 @@
  * backend/resources_workloads.go
  *
  * App-level workload resource wrappers.
- * - Exposes workload detail handlers and aggregated listings.
+ * - Exposes workload detail handlers.
  */
 
 package backend
@@ -15,8 +15,6 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/workloads"
 	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
 )
-
-type WorkloadInfo = workloads.WorkloadInfo
 
 func (a *App) GetDeployment(clusterID, namespace, name string) (*DeploymentDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
@@ -77,27 +75,6 @@ func (a *App) GetCronJob(clusterID, namespace, name string) (*CronJobDetails, er
 	return FetchNamespacedResource(a, deps, selectionKey, "CronJob", namespace, name, func() (*CronJobDetails, error) {
 		return workloads.NewCronJobService(deps).CronJob(namespace, name)
 	})
-}
-
-func (a *App) GetWorkloads(clusterID, namespace string, clientVersion string) (*VersionedResponse, error) {
-	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
-	if err != nil {
-		return nil, err
-	}
-	workloadsData, err := workloads.GetWorkloads(deps, namespace)
-	if err != nil {
-		return nil, err
-	}
-
-	cacheKey := "workloads:" + selectionKey + ":" + namespace
-	version, notModified, err := a.versionCache.CheckAndUpdate(cacheKey, workloadsData, clientVersion)
-	if err != nil {
-		return nil, err
-	}
-	if notModified {
-		return &VersionedResponse{Version: version, NotModified: true}, nil
-	}
-	return &VersionedResponse{Data: workloadsData, Version: version}, nil
 }
 
 // resourceDependenciesForSelection returns dependencies scoped to a specific cluster selection.
