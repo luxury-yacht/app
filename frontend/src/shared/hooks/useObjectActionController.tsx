@@ -416,9 +416,14 @@ export const useObjectActionController = ({
       };
     }
     if (deleteTarget) {
+      const isUndrainedNode =
+        normalizeKind(deleteTarget.kind) === 'Node' && !deleteTarget.unschedulable;
       return {
         title: `Delete ${deleteTarget.kind || 'Resource'}`,
         message: `Are you sure you want to delete ${deleteTarget.kind.toLowerCase()} "${deleteTarget.name}"?\n\nThis action cannot be undone.`,
+        warning: isUndrainedNode
+          ? 'This node has not been drained. Pods running on it will be terminated abruptly when the node is removed.'
+          : undefined,
         confirmText: 'Delete',
         confirmButtonClass: 'danger',
         onConfirm: confirmDelete,
@@ -445,6 +450,7 @@ export const useObjectActionController = ({
           isOpen={Boolean(confirmation)}
           title={confirmation?.title ?? ''}
           message={confirmation?.message ?? ''}
+          warning={confirmation?.warning}
           confirmText={confirmation?.confirmText ?? 'Confirm'}
           cancelText="Cancel"
           confirmButtonClass={confirmation?.confirmButtonClass}
