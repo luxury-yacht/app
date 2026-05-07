@@ -93,7 +93,7 @@ export interface NodeMaintenanceDrainEvent {
 export interface NodeMaintenanceDrainJob extends ClusterMeta {
   id: string;
   nodeName: string;
-  status: 'running' | 'succeeded' | 'failed';
+  status: 'running' | 'canceling' | 'cancelled' | 'succeeded' | 'failed';
   startedAt: number;
   completedAt?: number;
   message?: string;

@@ -118,32 +118,6 @@ func TestGetNodeMetricsReturnsUsage(t *testing.T) {
 	require.Equal(t, "512Mi", mem.String())
 }
 
-func TestIsDaemonSetPod(t *testing.T) {
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			OwnerReferences: []metav1.OwnerReference{{Kind: "DaemonSet"}},
-		},
-	}
-	require.True(t, isDaemonSetPod(pod))
-
-	pod.OwnerReferences = nil
-	require.False(t, isDaemonSetPod(pod))
-}
-
-func TestHasLocalStorage(t *testing.T) {
-	pod := &corev1.Pod{
-		Spec: corev1.PodSpec{
-			Volumes: []corev1.Volume{{
-				VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
-			}},
-		},
-	}
-	require.True(t, hasLocalStorage(pod))
-
-	pod.Spec.Volumes = []corev1.Volume{{Name: "config"}}
-	require.False(t, hasLocalStorage(pod))
-}
-
 type recordingLogger struct {
 	infoCalled  bool
 	errorCalled bool

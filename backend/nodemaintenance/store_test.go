@@ -1,6 +1,7 @@
 package nodemaintenance
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -124,6 +125,48 @@ func TestSetJobClusterReindexesHistory(t *testing.T) {
 	}
 	if len(jobsB) != 1 || jobsB[0].ID != jobB.ID {
 		t.Fatalf("expected cluster-b job, got %+v", jobsB)
+	}
+}
+
+func TestStartDrainForClusterIfIdleRejectsActiveJob(t *testing.T) {
+	store := NewStore(5)
+	first, err := store.StartDrainForClusterIfIdle("worker-1", restypes.DrainNodeOptions{}, "cluster-a", "Cluster A")
+	if err != nil {
+		t.Fatalf("expected first job to start: %v", err)
+	}
+
+	if _, err := store.StartDrainForClusterIfIdle("worker-1", restypes.DrainNodeOptions{}, "cluster-a", "Cluster A"); err == nil {
+		t.Fatalf("expected duplicate active drain to be rejected")
+	}
+
+	first.Complete(DrainStatusSucceeded, "done")
+	if _, err := store.StartDrainForClusterIfIdle("worker-1", restypes.DrainNodeOptions{}, "cluster-a", "Cluster A"); err != nil {
+		t.Fatalf("expected new job after completion: %v", err)
+	}
+}
+
+func TestCancelDrainForClusterMarksJobAndCallsCancel(t *testing.T) {
+	store := NewStore(5)
+	job, err := store.StartDrainForClusterIfIdle("worker-1", restypes.DrainNodeOptions{}, "cluster-a", "Cluster A")
+	if err != nil {
+		t.Fatalf("expected job: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	store.RegisterCancel(job.ID, cancel)
+
+	if err := store.CancelDrainForCluster(job.ID, "cluster-a"); err != nil {
+		t.Fatalf("expected cancel to succeed: %v", err)
+	}
+	if ctx.Err() == nil {
+		t.Fatalf("expected cancel function to be invoked")
+	}
+
+	snap, _ := store.Snapshot("worker-1")
+	if len(snap.Drains) != 1 {
+		t.Fatalf("expected one drain, got %d", len(snap.Drains))
+	}
+	if snap.Drains[0].Status != DrainStatusCanceling {
+		t.Fatalf("expected canceling status, got %s", snap.Drains[0].Status)
 	}
 }
 

@@ -14,7 +14,8 @@ const mockUseCapabilities = vi.hoisted(() => vi.fn());
 const mockUseRefreshScopedDomain = vi.hoisted(() => vi.fn());
 const mockCordonNode = vi.hoisted(() => vi.fn());
 const mockUncordonNode = vi.hoisted(() => vi.fn());
-const mockDrainNode = vi.hoisted(() => vi.fn());
+const mockStartDrainNode = vi.hoisted(() => vi.fn());
+const mockCancelDrainNodeJob = vi.hoisted(() => vi.fn());
 const mockDeleteNode = vi.hoisted(() => vi.fn());
 const mockRefreshOrchestrator = vi.hoisted(() => ({
   setScopedDomainEnabled: vi.fn(),
@@ -27,9 +28,10 @@ vi.mock('@/core/capabilities', () => ({
 }));
 
 vi.mock('@wailsjs/go/backend/App', () => ({
+  CancelDrainNodeJob: (...args: unknown[]) => mockCancelDrainNodeJob(...args),
   CordonNode: (...args: unknown[]) => mockCordonNode(...args),
   UncordonNode: (...args: unknown[]) => mockUncordonNode(...args),
-  DrainNode: (...args: unknown[]) => mockDrainNode(...args),
+  StartDrainNode: (...args: unknown[]) => mockStartDrainNode(...args),
   DeleteNode: (...args: unknown[]) => mockDeleteNode(...args),
 }));
 
@@ -69,7 +71,8 @@ describe('NodeMaintenanceTab', () => {
     mockUseRefreshScopedDomain.mockReturnValue(createDomainState());
     mockCordonNode.mockResolvedValue(undefined);
     mockUncordonNode.mockResolvedValue(undefined);
-    mockDrainNode.mockResolvedValue(undefined);
+    mockStartDrainNode.mockResolvedValue('job-started');
+    mockCancelDrainNodeJob.mockResolvedValue(undefined);
     mockDeleteNode.mockResolvedValue(undefined);
   });
 
@@ -82,7 +85,8 @@ describe('NodeMaintenanceTab', () => {
     mockUseRefreshScopedDomain.mockReset();
     mockCordonNode.mockReset();
     mockUncordonNode.mockReset();
-    mockDrainNode.mockReset();
+    mockStartDrainNode.mockReset();
+    mockCancelDrainNodeJob.mockReset();
     mockDeleteNode.mockReset();
     mockRefreshOrchestrator.setScopedDomainEnabled.mockReset();
     mockRefreshOrchestrator.resetScopedDomain.mockReset();
@@ -109,7 +113,7 @@ describe('NodeMaintenanceTab', () => {
     });
   };
 
-  const queryActionButton = (action: 'cordon' | 'drain' | 'delete') =>
+  const queryActionButton = (action: 'cordon' | 'drain' | 'cancel-drain' | 'delete') =>
     container.querySelector<HTMLButtonElement>(`[data-maintenance-action="${action}"]`);
 
   const confirmModal = async () => {
@@ -184,12 +188,12 @@ describe('NodeMaintenanceTab', () => {
     });
     await confirmModal();
 
-    expect(mockDrainNode).toHaveBeenCalledWith(
+    expect(mockStartDrainNode).toHaveBeenCalledWith(
       'alpha:ctx',
       'node-1',
       expect.not.objectContaining({ gracePeriodSeconds: expect.anything() })
     );
-    expect(mockDrainNode).toHaveBeenCalledWith(
+    expect(mockStartDrainNode).toHaveBeenCalledWith(
       'alpha:ctx',
       'node-1',
       expect.objectContaining({ force: true })
@@ -215,7 +219,7 @@ describe('NodeMaintenanceTab', () => {
     });
     await confirmModal();
 
-    expect(mockDrainNode).toHaveBeenCalledWith(
+    expect(mockStartDrainNode).toHaveBeenCalledWith(
       'alpha:ctx',
       'node-1',
       expect.objectContaining({ gracePeriodSeconds: 30 })
@@ -249,7 +253,7 @@ describe('NodeMaintenanceTab', () => {
     });
     await confirmModal();
 
-    expect(mockDrainNode).toHaveBeenCalledWith(
+    expect(mockStartDrainNode).toHaveBeenCalledWith(
       'alpha:ctx',
       'node-1',
       expect.objectContaining({ gracePeriodSeconds: 900 })
@@ -306,7 +310,7 @@ describe('NodeMaintenanceTab', () => {
     });
 
     await confirmModal();
-    expect(mockDrainNode).not.toHaveBeenCalled();
+    expect(mockStartDrainNode).not.toHaveBeenCalled();
     expect(mockCordonNode).toHaveBeenCalledTimes(0);
     expect(mockUncordonNode).toHaveBeenCalledTimes(0);
     expect(mockDeleteNode).toHaveBeenCalledWith('alpha:ctx', 'node-1');
@@ -430,6 +434,44 @@ describe('NodeMaintenanceTab', () => {
       expect.objectContaining({ enabled: false })
     );
     expect(mockRefreshOrchestrator.setScopedDomainEnabled).not.toHaveBeenCalled();
+  });
+
+  it('disables new drain starts and exposes cancellation while a drain job is active', async () => {
+    mockUseRefreshScopedDomain.mockReturnValue(
+      createDomainState({
+        clusterId: 'test-cluster',
+        drains: [
+          {
+            clusterId: 'test-cluster',
+            id: 'job-active',
+            nodeName: 'node-1',
+            status: 'running',
+            startedAt: Date.now() - 1_000,
+            message: 'Drain running',
+            options: {
+              ignoreDaemonSets: true,
+              deleteEmptyDirData: true,
+              force: false,
+              disableEviction: false,
+              skipWaitForPodsToTerminate: false,
+            },
+            events: [],
+          },
+        ],
+      })
+    );
+
+    render();
+
+    expect(queryActionButton('drain')?.disabled).toBe(true);
+    expect(queryActionButton('cancel-drain')).toBeTruthy();
+
+    await act(async () => {
+      queryActionButton('cancel-drain')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(mockCancelDrainNodeJob).toHaveBeenCalledWith('alpha:ctx', 'job-active');
+    expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalled();
   });
 
   it('renders drain history entries from the refresh domain', () => {

@@ -4,7 +4,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
-import { CordonNode, DrainNode, DeleteNode, UncordonNode } from '@wailsjs/go/backend/App';
+import {
+  CancelDrainNodeJob,
+  CordonNode,
+  DeleteNode,
+  StartDrainNode,
+  UncordonNode,
+} from '@wailsjs/go/backend/App';
 import { types } from '@wailsjs/go/models';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import { requestRefreshDomain } from '@/core/data-access';
@@ -165,6 +171,8 @@ export function NodeMaintenanceTab({
   const [customGraceSeconds, setCustomGraceSeconds] = useState(30);
   const [drainPending, setDrainPending] = useState(false);
   const [drainError, setDrainError] = useState<string | null>(null);
+  const [cancelDrainPending, setCancelDrainPending] = useState(false);
+  const [drainStartStatus, setDrainStartStatus] = useState<string | null>(null);
   const [deletePending, setDeletePending] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteStatus, setDeleteStatus] = useState<string | null>(null);
@@ -191,6 +199,10 @@ export function NodeMaintenanceTab({
   const drains = useMemo(
     () => (maintenanceScope ? (maintenanceSnapshot.data?.drains ?? []) : []),
     [maintenanceScope, maintenanceSnapshot.data]
+  );
+  const activeDrainJob = useMemo(
+    () => drains.find((job) => job.status === 'running' || job.status === 'canceling') ?? null,
+    [drains]
   );
   const drainsLoadingState = applyPassiveLoadingPolicy({
     loading: maintenanceScope
@@ -313,6 +325,7 @@ export function NodeMaintenanceTab({
     <K extends keyof DrainOptionsState>(field: K, value: DrainOptionsState[K]) => {
       setDrainOptions((previous) => ({ ...previous, [field]: value }));
       setDrainError(null);
+      setDrainStartStatus(null);
     },
     []
   );
@@ -369,7 +382,7 @@ export function NodeMaintenanceTab({
       drainOptions.disableEviction ? 'Delete pods directly' : 'Use eviction API',
       drainOptions.ignoreDaemonSets ? 'Ignore DaemonSets' : 'Respect DaemonSets',
       drainOptions.deleteEmptyDirData ? 'Delete emptyDir data' : 'Preserve emptyDir data',
-      drainOptions.force ? 'Force continue on failures' : 'Stop on first error',
+      drainOptions.force ? 'Allow unmanaged pods' : 'Refuse unmanaged pods',
     ];
     return `Drain node "${nodeName}" with the following options:\n• ${lines.join('\n• ')}`;
   }, [
@@ -387,6 +400,7 @@ export function NodeMaintenanceTab({
       return;
     }
     setDrainError(null);
+    setDrainStartStatus(null);
     setDrainPending(true);
     try {
       const payload: types.DrainNodeOptions = {
@@ -399,7 +413,8 @@ export function NodeMaintenanceTab({
       if (drainOptions.gracePeriodSeconds != null) {
         payload.gracePeriodSeconds = normalizeGraceSeconds(drainOptions.gracePeriodSeconds);
       }
-      await DrainNode(resolvedClusterId, nodeName, payload);
+      const jobId = await StartDrainNode(resolvedClusterId, nodeName, payload);
+      setDrainStartStatus(`Drain job ${jobId} started.`);
       onRefresh?.();
       await refreshMaintenance();
     } catch (error) {
@@ -418,6 +433,36 @@ export function NodeMaintenanceTab({
       setDrainPending(false);
     }
   }, [nodeName, drainPending, drainOptions, onRefresh, refreshMaintenance, resolvedClusterId]);
+
+  const cancelActiveDrain = useCallback(async () => {
+    if (!resolvedClusterId || !activeDrainJob || cancelDrainPending) {
+      return;
+    }
+    setDrainError(null);
+    setCancelDrainPending(true);
+    try {
+      await CancelDrainNodeJob(resolvedClusterId, activeDrainJob.id);
+      setDrainStartStatus('Drain cancellation requested.');
+      await refreshMaintenance();
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : typeof error === 'string'
+            ? error
+            : 'Unknown error';
+      setDrainError(message);
+      errorHandler.handle(
+        error instanceof Error ? error : new Error(message || 'Cancel drain failed'),
+        {
+          source: 'object-maintenance',
+          context: { action: 'cancel-drain', nodeName, jobId: activeDrainJob.id },
+        }
+      );
+    } finally {
+      setCancelDrainPending(false);
+    }
+  }, [activeDrainJob, cancelDrainPending, nodeName, refreshMaintenance, resolvedClusterId]);
 
   const handleDeleteNode = useCallback(async () => {
     if (!nodeName || !resolvedClusterId || deletePending) {
@@ -483,7 +528,8 @@ export function NodeMaintenanceTab({
   const drainCapabilityReady = drainCapability ? !drainCapability.pending : false;
   const drainPodCapabilityReady = drainPodCapability ? !drainPodCapability.pending : false;
   const canDrain = Boolean(drainCapability?.allowed && drainPodCapability?.allowed);
-  const drainActionDisabled = !drainCapabilityReady || !canDrain || drainPending;
+  const drainActionDisabled =
+    !drainCapabilityReady || !canDrain || drainPending || Boolean(activeDrainJob);
   const drainDisabled = drainActionDisabled || !drainPodCapabilityReady;
   const deleteCapabilityReady = deleteCapability ? !deleteCapability.pending : false;
   const canDeleteNode = Boolean(deleteCapability?.allowed);
@@ -602,7 +648,7 @@ export function NodeMaintenanceTab({
               checked={Boolean(drainOptions.force)}
               onChange={(event) => updateDrainOption('force', event.target.checked)}
             />
-            <span>Force continue on failures (--force)</span>
+            <span>Allow deleting unmanaged pods (--force)</span>
           </label>
         </div>
         <div className="node-maintenance-actions">
@@ -614,13 +660,30 @@ export function NodeMaintenanceTab({
             type="button"
             data-maintenance-action="drain"
           >
-            {drainPending ? 'Draining…' : 'Drain Node'}
+            {activeDrainJob ? 'Drain Running' : drainPending ? 'Starting…' : 'Drain Node'}
           </button>
+          {activeDrainJob && (
+            <button
+              className="button warning"
+              onClick={() => void cancelActiveDrain()}
+              disabled={cancelDrainPending || activeDrainJob.status === 'canceling'}
+              type="button"
+              data-maintenance-action="cancel-drain"
+            >
+              {activeDrainJob.status === 'canceling' || cancelDrainPending
+                ? 'Canceling…'
+                : 'Cancel Drain'}
+            </button>
+          )}
         </div>
         {drainDisabledReason && !drainCapability?.pending && !drainPodCapability?.pending && (
           <p className="node-maintenance-helper">{drainDisabledReason}</p>
         )}
+        {activeDrainJob && (
+          <p className="node-maintenance-helper">Drain job {activeDrainJob.id} is active.</p>
+        )}
         {drainError && <div className="node-maintenance-error">{drainError}</div>}
+        {drainStartStatus && <div className="node-maintenance-status">{drainStartStatus}</div>}
         <div className="node-maintenance-history">
           {drainsLoading && <div className="node-maintenance-helper">Loading drain history…</div>}
           {showPausedDrainHistoryState && (
@@ -635,9 +698,13 @@ export function NodeMaintenanceTab({
                 <span className={`status-badge ${getStatusClass(job.status)}`}>
                   {job.status === 'running'
                     ? 'Running'
-                    : job.status === 'failed'
-                      ? 'Failed'
-                      : 'Completed'}
+                    : job.status === 'canceling'
+                      ? 'Canceling'
+                      : job.status === 'cancelled'
+                        ? 'Cancelled'
+                        : job.status === 'failed'
+                          ? 'Failed'
+                          : 'Completed'}
                 </span>
                 <div className="node-maintenance-job-meta">
                   <span>Started {formatTimestamp(job.startedAt)}</span>
@@ -751,6 +818,9 @@ export function NodeMaintenanceTab({
 function getStatusClass(status: string): string {
   if (status === 'running') {
     return 'info';
+  }
+  if (status === 'canceling' || status === 'cancelled') {
+    return 'warning';
   }
   if (status === 'failed') {
     return 'error';

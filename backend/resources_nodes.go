@@ -7,7 +7,15 @@
 
 package backend
 
-import "github.com/luxury-yacht/app/backend/resources/nodes"
+import (
+	"fmt"
+	"strings"
+
+	"github.com/luxury-yacht/app/backend/nodemaintenance"
+	"github.com/luxury-yacht/app/backend/resources/common"
+	"github.com/luxury-yacht/app/backend/resources/nodes"
+	kubectldrain "k8s.io/kubectl/pkg/drain"
+)
 
 func (a *App) GetNode(clusterID, name string) (*NodeDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
@@ -81,18 +89,7 @@ func (a *App) DrainNode(clusterID, nodeName string, options DrainNodeOptions) er
 	}); err != nil {
 		return err
 	}
-	podCheck := resourcePermissionCheck{
-		Kind:        "Pod",
-		Verb:        "create",
-		Subresource: "eviction",
-	}
-	if options.DisableEviction {
-		podCheck = resourcePermissionCheck{
-			Kind: "Pod",
-			Verb: "delete",
-		}
-	}
-	if err := a.requireResourcePermission(deps.Context, deps, podCheck); err != nil {
+	if err := a.requireDrainPodPermission(deps, options); err != nil {
 		return err
 	}
 	if err := nodes.NewService(deps).Drain(nodeName, options); err != nil {
@@ -100,6 +97,69 @@ func (a *App) DrainNode(clusterID, nodeName string, options DrainNodeOptions) er
 	}
 	a.clearNodeCaches(selectionKey, nodeName)
 	return nil
+}
+
+func (a *App) StartDrainNode(clusterID, nodeName string, options DrainNodeOptions) (string, error) {
+	if err := requireObjectName(nodeName); err != nil {
+		return "", err
+	}
+	if err := nodes.ValidateDrainOptions(options); err != nil {
+		return "", err
+	}
+	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
+	if err != nil {
+		return "", err
+	}
+	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
+		Kind: "Node",
+		Name: nodeName,
+		Verb: "patch",
+	}); err != nil {
+		return "", err
+	}
+	if err := a.requireDrainPodPermission(deps, options); err != nil {
+		return "", err
+	}
+	job, err := nodes.NewService(deps).StartDrainWithCompletion(nodeName, options, func() {
+		a.clearNodeCaches(selectionKey, nodeName)
+	})
+	if err != nil {
+		return "", err
+	}
+	a.clearNodeCaches(selectionKey, nodeName)
+	return job.ID, nil
+}
+
+func (a *App) requireDrainPodPermission(deps common.Dependencies, options DrainNodeOptions) error {
+	podCheck := resourcePermissionCheck{
+		Kind:        "Pod",
+		Verb:        "create",
+		Subresource: "eviction",
+	}
+	if options.DisableEviction {
+		podCheck = resourcePermissionCheck{Kind: "Pod", Verb: "delete"}
+	} else {
+		evictionGroupVersion, err := kubectldrain.CheckEvictionSupport(deps.KubernetesClient)
+		if err != nil {
+			return fmt.Errorf("failed to check eviction support: %w", err)
+		}
+		if evictionGroupVersion.Empty() {
+			podCheck = resourcePermissionCheck{Kind: "Pod", Verb: "delete"}
+		}
+	}
+	return a.requireResourcePermission(deps.Context, deps, podCheck)
+}
+
+func (a *App) CancelDrainNodeJob(clusterID, jobID string) error {
+	trimmedJobID := strings.TrimSpace(jobID)
+	if trimmedJobID == "" {
+		return fmt.Errorf("job ID is required")
+	}
+	deps, _, err := a.resolveClusterDependencies(clusterID)
+	if err != nil {
+		return err
+	}
+	return nodemaintenance.GlobalStore().CancelDrainForCluster(trimmedJobID, deps.ClusterID)
 }
 
 func (a *App) DeleteNode(clusterID, nodeName string) error {
