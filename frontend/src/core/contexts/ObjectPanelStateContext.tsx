@@ -218,10 +218,13 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
 
   const hydrateClusterMeta = useCallback(
     (data: KubernetesObjectReference): KubernetesObjectReference => {
-      const clusterId = data.clusterId?.trim() || selectedClusterId?.trim() || undefined;
-      const clusterName = data.clusterName?.trim() || selectedClusterName?.trim() || undefined;
-      // Fill in missing cluster metadata so detail scopes stay aligned to the active tab.
-      if (!clusterId && !clusterName) {
+      const clusterId = data.clusterId?.trim() || undefined;
+      const clusterName =
+        data.clusterName?.trim() ||
+        (clusterId && clusterId === selectedClusterId?.trim()
+          ? selectedClusterName?.trim() || undefined
+          : undefined);
+      if (clusterId === data.clusterId && clusterName === data.clusterName) {
         return data;
       }
       return {
@@ -236,6 +239,9 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
   const onRowClick = useCallback(
     (data: KubernetesObjectReference): string => {
       const enriched = hydrateClusterMeta(data);
+      if (!enriched.clusterId) {
+        throw new Error('Object panel reference is missing clusterId');
+      }
       const panelId = objectPanelId(enriched);
 
       updateActiveState((prev) => {

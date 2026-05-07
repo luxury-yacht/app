@@ -717,6 +717,53 @@ describe('EventStreamManager', () => {
     expect(ensureRefreshBaseURLMock).toHaveBeenCalledTimes(4);
   });
 
+  test('closes failed event streams before scheduling one reconnect', async () => {
+    vi.useFakeTimers();
+    Object.assign(window, {
+      setTimeout: globalThis.setTimeout,
+      clearTimeout: globalThis.clearTimeout,
+    });
+
+    class MockEventSource {
+      static instances: MockEventSource[] = [];
+      listeners: Record<string, (evt?: any) => void> = {};
+      closed = false;
+      constructor(_url: string) {
+        MockEventSource.instances.push(this);
+      }
+      addEventListener(type: string, handler: (evt?: any) => void) {
+        this.listeners[type] = handler;
+      }
+      removeEventListener(type: string): void {
+        delete this.listeners[type];
+      }
+      close(): void {
+        this.closed = true;
+      }
+      emit(type: string, evt?: any) {
+        this.listeners[type]?.(evt);
+      }
+    }
+
+    (globalThis as any).EventSource = MockEventSource as any;
+
+    const { EventStreamManager } = await import('./eventStreamManager');
+    const manager = new EventStreamManager();
+
+    await manager.startCluster();
+    expect(MockEventSource.instances).toHaveLength(1);
+
+    const firstStream = MockEventSource.instances[0]!;
+    firstStream.emit('error');
+    firstStream.emit('error');
+
+    expect(firstStream.closed).toBe(true);
+    expect(firstStream.listeners).toEqual({});
+
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(MockEventSource.instances).toHaveLength(2);
+  });
+
   test('namespace stream retries and clears errors after reconnection', async () => {
     vi.useFakeTimers();
     Object.assign(window, {

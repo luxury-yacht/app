@@ -44,6 +44,18 @@ interface WailsRuntimeEventHandlers {
   onToggleObjectDiff: () => void;
 }
 
+const subscribeRuntimeEvent = (
+  runtime: WailsRuntime,
+  event: string,
+  handler: (...args: unknown[]) => void
+): (() => void) => {
+  const dispose = runtime.EventsOn?.(event, handler);
+  if (typeof dispose === 'function') {
+    return dispose;
+  }
+  return () => runtime.EventsOff?.(event, handler);
+};
+
 /**
  * Subscribes to Wails runtime events for UI actions (menu items, etc.)
  */
@@ -72,10 +84,12 @@ export function useWailsRuntimeEvents(handlers: WailsRuntimeEventHandlers): void
       ['toggle-object-diff', onToggleObjectDiff],
     ];
 
-    eventHandlers.forEach(([event, handler]) => runtime.EventsOn?.(event, handler));
+    const disposers = eventHandlers.map(([event, handler]) =>
+      subscribeRuntimeEvent(runtime, event, handler)
+    );
 
     return () => {
-      eventHandlers.forEach(([event]) => runtime.EventsOff?.(event));
+      disposers.forEach((dispose) => dispose());
     };
   }, [
     onOpenSettings,
@@ -104,10 +118,10 @@ export function useConnectionStatusListener(): void {
       updateFromEvent(payload);
     };
 
-    runtime.EventsOn('connection-status', handleConnectionStatus);
+    const dispose = subscribeRuntimeEvent(runtime, 'connection-status', handleConnectionStatus);
 
     return () => {
-      runtime.EventsOff?.('connection-status');
+      dispose();
     };
   }, [updateFromEvent]);
 }
@@ -137,7 +151,7 @@ export function useClusterHealthListener(
     const handleHealthy = (...args: unknown[]) => {
       const payload = args[0] as ClusterHealthEventPayload | undefined;
       if (!payload?.clusterId) {
-        console.warn('[ClusterHealthListener] Received health:healthy without clusterId', args);
+        console.warn('[ClusterHealthListener] Received health:healthy without clusterId');
         return;
       }
 
@@ -152,7 +166,7 @@ export function useClusterHealthListener(
     const handleDegraded = (...args: unknown[]) => {
       const payload = args[0] as ClusterHealthEventPayload | undefined;
       if (!payload?.clusterId) {
-        console.warn('[ClusterHealthListener] Received health:degraded without clusterId', args);
+        console.warn('[ClusterHealthListener] Received health:degraded without clusterId');
         return;
       }
 
@@ -164,12 +178,16 @@ export function useClusterHealthListener(
     };
 
     // Subscribe to cluster health events.
-    runtime.EventsOn('cluster:health:healthy', handleHealthy);
-    runtime.EventsOn('cluster:health:degraded', handleDegraded);
+    const disposeHealthy = subscribeRuntimeEvent(runtime, 'cluster:health:healthy', handleHealthy);
+    const disposeDegraded = subscribeRuntimeEvent(
+      runtime,
+      'cluster:health:degraded',
+      handleDegraded
+    );
 
     return () => {
-      runtime.EventsOff?.('cluster:health:healthy');
-      runtime.EventsOff?.('cluster:health:degraded');
+      disposeHealthy();
+      disposeDegraded();
     };
   }, []);
 

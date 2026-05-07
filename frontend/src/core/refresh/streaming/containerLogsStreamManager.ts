@@ -124,15 +124,20 @@ class ContainerLogsStreamConnection {
       window.clearTimeout(this.retryTimer);
       this.retryTimer = null;
     }
-    if (this.eventSource) {
-      this.eventSource.removeEventListener('log', this.handleLogEvent as EventListener);
-      this.eventSource.removeEventListener('error', this.handleError as EventListener);
-      this.eventSource.close();
-      this.eventSource = null;
-    }
+    this.closeEventSource();
     if (intentional) {
       this.manager.markIdle(this.scope);
     }
+  }
+
+  private closeEventSource(): void {
+    if (!this.eventSource) {
+      return;
+    }
+    this.eventSource.removeEventListener('log', this.handleLogEvent as EventListener);
+    this.eventSource.removeEventListener('error', this.handleError as EventListener);
+    this.eventSource.close();
+    this.eventSource = null;
   }
 
   private async openStream(): Promise<void> {
@@ -170,9 +175,10 @@ class ContainerLogsStreamConnection {
   }
 
   private scheduleReconnect(): void {
-    if (this.closed || this.mode === 'manual') {
+    if (this.closed || this.mode === 'manual' || this.retryTimer !== null) {
       return;
     }
+    this.closeEventSource();
     const delay = Math.min(30_000, 1000 * Math.pow(2, this.attempt));
     this.attempt += 1;
     this.manager.handleStreamError(

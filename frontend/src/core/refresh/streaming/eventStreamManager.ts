@@ -134,16 +134,21 @@ class EventStreamConnection {
       window.clearTimeout(this.retryTimer);
       this.retryTimer = null;
     }
-    if (this.eventSource) {
-      this.eventSource.removeEventListener('event', this.handleEvent as EventListener);
-      this.eventSource.removeEventListener('error', this.handleError as EventListener);
-      this.eventSource.close();
-      this.eventSource = null;
-    }
+    this.closeEventSource();
     if (reset) {
       this.lastEventId = null;
     }
     this.manager.markIdle(this.domain, this.scope, reset);
+  }
+
+  private closeEventSource(): void {
+    if (!this.eventSource) {
+      return;
+    }
+    this.eventSource.removeEventListener('event', this.handleEvent as EventListener);
+    this.eventSource.removeEventListener('error', this.handleError as EventListener);
+    this.eventSource.close();
+    this.eventSource = null;
   }
 
   private async openStream(): Promise<void> {
@@ -173,9 +178,10 @@ class EventStreamConnection {
   }
 
   private scheduleReconnect(): void {
-    if (this.closed) {
+    if (this.closed || this.retryTimer !== null) {
       return;
     }
+    this.closeEventSource();
     const delay = Math.min(30_000, 1_000 * Math.pow(2, this.attempt));
     this.attempt += 1;
     this.manager.handleStreamError(

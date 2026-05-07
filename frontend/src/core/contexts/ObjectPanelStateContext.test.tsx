@@ -88,7 +88,12 @@ describe('ObjectPanelStateContext', () => {
 
     // Open a panel in cluster-a.
     act(() => {
-      stateRef.current?.onRowClick({ kind: 'Pod', name: 'api', namespace: 'default' });
+      stateRef.current?.onRowClick({
+        kind: 'Pod',
+        name: 'api',
+        namespace: 'default',
+        clusterId: 'cluster-a',
+      });
     });
     expect(stateRef.current?.showObjectPanel).toBe(true);
     expect(stateRef.current?.openPanels.size).toBeGreaterThan(0);
@@ -106,7 +111,12 @@ describe('ObjectPanelStateContext', () => {
 
     // Open a different panel in cluster-b.
     act(() => {
-      stateRef.current?.onRowClick({ kind: 'Deployment', name: 'web', namespace: 'default' });
+      stateRef.current?.onRowClick({
+        kind: 'Deployment',
+        name: 'web',
+        namespace: 'default',
+        clusterId: 'cluster-b',
+      });
     });
     expect(stateRef.current?.openPanels.size).toBeGreaterThan(0);
     const clusterBEntries = Array.from(stateRef.current?.openPanels.values() ?? []);
@@ -128,7 +138,12 @@ describe('ObjectPanelStateContext', () => {
     let panelId = '';
     act(() => {
       panelId =
-        stateRef.current?.onRowClick({ kind: 'Pod', name: 'api', namespace: 'default' }) ?? '';
+        stateRef.current?.onRowClick({
+          kind: 'Pod',
+          name: 'api',
+          namespace: 'default',
+          clusterId: 'cluster-a',
+        }) ?? '';
     });
     act(() => {
       stateRef.current?.setObjectPanelActiveTab(panelId, 'logs');
@@ -168,7 +183,12 @@ describe('ObjectPanelStateContext', () => {
     let panelId = '';
     act(() => {
       panelId =
-        stateRef.current?.onRowClick({ kind: 'Pod', name: 'api', namespace: 'default' }) ?? '';
+        stateRef.current?.onRowClick({
+          kind: 'Pod',
+          name: 'api',
+          namespace: 'default',
+          clusterId: 'cluster-a',
+        }) ?? '';
     });
     act(() => {
       stateRef.current?.setObjectPanelActiveTab(panelId, 'events');
@@ -191,7 +211,12 @@ describe('ObjectPanelStateContext', () => {
     await renderProvider();
 
     act(() => {
-      stateRef.current?.onRowClick({ kind: 'Pod', name: 'job', namespace: 'default' });
+      stateRef.current?.onRowClick({
+        kind: 'Pod',
+        name: 'job',
+        namespace: 'default',
+        clusterId: 'cluster-b',
+      });
     });
     expect(stateRef.current?.showObjectPanel).toBe(true);
 
@@ -208,6 +233,15 @@ describe('ObjectPanelStateContext', () => {
     await renderProvider();
 
     expect(stateRef.current?.showObjectPanel).toBe(false);
+    expect(stateRef.current?.openPanels.size).toBe(0);
+  });
+
+  it('rejects object panel references without clusterId', async () => {
+    await renderProvider();
+
+    expect(() =>
+      stateRef.current?.onRowClick({ kind: 'Pod', name: 'api', namespace: 'default' })
+    ).toThrow('Object panel reference is missing clusterId');
     expect(stateRef.current?.openPanels.size).toBe(0);
   });
 
