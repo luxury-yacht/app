@@ -37,9 +37,11 @@ interface NodeMaintenanceTabProps {
 const CAPABILITY_PREFIX = 'object-maintenance';
 const NODE_SCOPE_PREFIX = 'node:';
 const MAX_NODE_DRAIN_GRACE_SECONDS = 900;
+const DEFAULT_NODE_DRAIN_TIMEOUT_SECONDS = 300;
 
-type DrainOptionsState = Omit<types.DrainNodeOptions, 'gracePeriodSeconds'> & {
+type DrainOptionsState = Omit<types.DrainNodeOptions, 'gracePeriodSeconds' | 'timeoutSeconds'> & {
   gracePeriodSeconds?: number;
+  timeoutSeconds?: number;
 };
 
 const formatTimestamp = (value?: number | null): string => {
@@ -81,6 +83,13 @@ const normalizeGraceSeconds = (value: number): number => {
     return 30;
   }
   return Math.min(MAX_NODE_DRAIN_GRACE_SECONDS, Math.max(1, Math.floor(value)));
+};
+
+const normalizeTimeoutSeconds = (value: number): number => {
+  if (!Number.isFinite(value)) {
+    return DEFAULT_NODE_DRAIN_TIMEOUT_SECONDS;
+  }
+  return Math.max(1, Math.floor(value));
 };
 
 const useNodeMaintenanceDomain = (
@@ -169,6 +178,9 @@ export function NodeMaintenanceTab({
     skipWaitForPodsToTerminate: false,
   });
   const [customGraceSeconds, setCustomGraceSeconds] = useState(30);
+  const [customTimeoutSeconds, setCustomTimeoutSeconds] = useState(
+    DEFAULT_NODE_DRAIN_TIMEOUT_SECONDS
+  );
   const [drainPending, setDrainPending] = useState(false);
   const [drainError, setDrainError] = useState<string | null>(null);
   const [cancelDrainPending, setCancelDrainPending] = useState(false);
@@ -225,6 +237,15 @@ export function NodeMaintenanceTab({
     // kind-only resolution in the backend permission resolver.
     return [
       {
+        id: `${CAPABILITY_PREFIX}:node-get:${nodeName}`,
+        clusterId: resolvedClusterId,
+        verb: 'get',
+        group: '',
+        version: 'v1',
+        resourceKind: 'Node',
+        name: nodeName,
+      },
+      {
         id: `${CAPABILITY_PREFIX}:cordon:${nodeName}`,
         clusterId: resolvedClusterId,
         verb: 'patch',
@@ -275,6 +296,13 @@ export function NodeMaintenanceTab({
     return getCapabilityState(`${CAPABILITY_PREFIX}:cordon:${nodeName}`);
   }, [getCapabilityState, nodeName]);
 
+  const nodeActionGetCapability = useMemo(() => {
+    if (!nodeName) {
+      return null;
+    }
+    return getCapabilityState(`${CAPABILITY_PREFIX}:node-get:${nodeName}`);
+  }, [getCapabilityState, nodeName]);
+
   const drainCapability = useMemo(() => {
     if (!nodeName) {
       return null;
@@ -299,19 +327,23 @@ export function NodeMaintenanceTab({
   }, [getCapabilityState, nodeName]);
 
   const cordonDisabledReason =
-    cordonCapability && !cordonCapability.allowed && !cordonCapability.pending
-      ? cordonCapability.reason || 'You do not have permission to modify nodes.'
-      : null;
+    nodeActionGetCapability && !nodeActionGetCapability.allowed && !nodeActionGetCapability.pending
+      ? nodeActionGetCapability.reason || 'You do not have permission to read nodes.'
+      : cordonCapability && !cordonCapability.allowed && !cordonCapability.pending
+        ? cordonCapability.reason || 'You do not have permission to modify nodes.'
+        : null;
 
   const drainDisabledReason =
-    drainCapability && !drainCapability.allowed && !drainCapability.pending
-      ? drainCapability.reason || 'You do not have permission to patch nodes.'
-      : drainPodCapability && !drainPodCapability.allowed && !drainPodCapability.pending
-        ? drainPodCapability.reason ||
-          (drainOptions.disableEviction
-            ? 'You do not have permission to delete pods.'
-            : 'You do not have permission to evict pods.')
-        : null;
+    nodeActionGetCapability && !nodeActionGetCapability.allowed && !nodeActionGetCapability.pending
+      ? nodeActionGetCapability.reason || 'You do not have permission to read nodes.'
+      : drainCapability && !drainCapability.allowed && !drainCapability.pending
+        ? drainCapability.reason || 'You do not have permission to patch nodes.'
+        : drainPodCapability && !drainPodCapability.allowed && !drainPodCapability.pending
+          ? drainPodCapability.reason ||
+            (drainOptions.disableEviction
+              ? 'You do not have permission to delete pods.'
+              : 'You do not have permission to evict pods.')
+          : null;
 
   const deleteDisabledReason =
     deleteCapability && !deleteCapability.allowed && !deleteCapability.pending
@@ -375,10 +407,20 @@ export function NodeMaintenanceTab({
     return raw > 0;
   }, [drainOptions.gracePeriodSeconds]);
 
+  const hasCustomTimeout = useMemo(() => {
+    const raw = drainOptions.timeoutSeconds;
+    if (raw == null) {
+      return false;
+    }
+    return raw > 0;
+  }, [drainOptions.timeoutSeconds]);
+
   const drainConfirmationMessage = useMemo(() => {
     const graceText = hasCustomGrace ? `${drainOptions.gracePeriodSeconds ?? 0}s` : 'Pod defaults';
+    const timeoutText = hasCustomTimeout ? `${drainOptions.timeoutSeconds ?? 0}s` : 'No timeout';
     const lines = [
       `Grace period: ${graceText}`,
+      `Drain timeout: ${timeoutText}`,
       drainOptions.disableEviction ? 'Delete pods directly' : 'Use eviction API',
       drainOptions.ignoreDaemonSets ? 'Ignore DaemonSets' : 'Respect DaemonSets',
       drainOptions.deleteEmptyDirData ? 'Delete emptyDir data' : 'Preserve emptyDir data',
@@ -391,7 +433,9 @@ export function NodeMaintenanceTab({
     drainOptions.force,
     drainOptions.gracePeriodSeconds,
     drainOptions.ignoreDaemonSets,
+    drainOptions.timeoutSeconds,
     hasCustomGrace,
+    hasCustomTimeout,
     nodeName,
   ]);
 
@@ -412,6 +456,9 @@ export function NodeMaintenanceTab({
       };
       if (drainOptions.gracePeriodSeconds != null) {
         payload.gracePeriodSeconds = normalizeGraceSeconds(drainOptions.gracePeriodSeconds);
+      }
+      if (drainOptions.timeoutSeconds != null && drainOptions.timeoutSeconds > 0) {
+        payload.timeoutSeconds = normalizeTimeoutSeconds(drainOptions.timeoutSeconds);
       }
       const jobId = await StartDrainNode(resolvedClusterId, nodeName, payload);
       setDrainStartStatus(`Drain job ${jobId} started.`);
@@ -521,15 +568,26 @@ export function NodeMaintenanceTab({
   }
 
   const isActionPending = pendingAction === actionForState;
+  const nodeActionGetCapabilityReady = nodeActionGetCapability
+    ? !nodeActionGetCapability.pending
+    : false;
   const cordonCapabilityReady = cordonCapability ? !cordonCapability.pending : false;
-  const canMutate = Boolean(cordonCapability?.allowed);
-  const cordonDisabled = !cordonCapabilityReady || !canMutate || isActionPending;
+  const canReadNodeForAction = Boolean(nodeActionGetCapability?.allowed);
+  const canMutate = Boolean(cordonCapability?.allowed && canReadNodeForAction);
+  const cordonDisabled =
+    !nodeActionGetCapabilityReady || !cordonCapabilityReady || !canMutate || isActionPending;
 
   const drainCapabilityReady = drainCapability ? !drainCapability.pending : false;
   const drainPodCapabilityReady = drainPodCapability ? !drainPodCapability.pending : false;
-  const canDrain = Boolean(drainCapability?.allowed && drainPodCapability?.allowed);
+  const canDrain = Boolean(
+    nodeActionGetCapability?.allowed && drainCapability?.allowed && drainPodCapability?.allowed
+  );
   const drainActionDisabled =
-    !drainCapabilityReady || !canDrain || drainPending || Boolean(activeDrainJob);
+    !nodeActionGetCapabilityReady ||
+    !drainCapabilityReady ||
+    !canDrain ||
+    drainPending ||
+    Boolean(activeDrainJob);
   const drainDisabled = drainActionDisabled || !drainPodCapabilityReady;
   const deleteCapabilityReady = deleteCapability ? !deleteCapability.pending : false;
   const canDeleteNode = Boolean(deleteCapability?.allowed);
@@ -567,9 +625,11 @@ export function NodeMaintenanceTab({
             {getActionLabel(actionForState, isActionPending)}
           </button>
         </div>
-        {cordonDisabledReason && !cordonCapability?.pending && (
-          <p className="node-maintenance-helper">{cordonDisabledReason}</p>
-        )}
+        {cordonDisabledReason &&
+          !nodeActionGetCapability?.pending &&
+          !cordonCapability?.pending && (
+            <p className="node-maintenance-helper">{cordonDisabledReason}</p>
+          )}
         {cordonError && <div className="node-maintenance-error">{cordonError}</div>}
       </section>
 
@@ -641,6 +701,39 @@ export function NodeMaintenanceTab({
               <span className="node-maintenance-grace-unit">seconds</span>
             </div>
           </label>
+          <label className="node-maintenance-checkbox node-maintenance-grace-option">
+            <input
+              data-test="node-maintenance-timeout-toggle"
+              type="checkbox"
+              checked={hasCustomTimeout}
+              onChange={(event) => {
+                if (!event.target.checked) {
+                  updateDrainOption('timeoutSeconds', undefined);
+                } else {
+                  updateDrainOption('timeoutSeconds', customTimeoutSeconds);
+                }
+              }}
+            />
+            <div className="node-maintenance-grace-inline">
+              <span>Drain timeout (--timeout)</span>
+              <input
+                data-test="node-maintenance-timeout-input"
+                type="number"
+                min={1}
+                value={customTimeoutSeconds}
+                disabled={!hasCustomTimeout}
+                onChange={(event) => {
+                  const next = Number(event.target.value);
+                  const normalized = normalizeTimeoutSeconds(next);
+                  setCustomTimeoutSeconds(normalized);
+                  if (hasCustomTimeout) {
+                    updateDrainOption('timeoutSeconds', normalized);
+                  }
+                }}
+              />
+              <span className="node-maintenance-grace-unit">seconds</span>
+            </div>
+          </label>
           <label className="node-maintenance-checkbox">
             <input
               data-test="node-maintenance-force"
@@ -676,9 +769,12 @@ export function NodeMaintenanceTab({
             </button>
           )}
         </div>
-        {drainDisabledReason && !drainCapability?.pending && !drainPodCapability?.pending && (
-          <p className="node-maintenance-helper">{drainDisabledReason}</p>
-        )}
+        {drainDisabledReason &&
+          !nodeActionGetCapability?.pending &&
+          !drainCapability?.pending &&
+          !drainPodCapability?.pending && (
+            <p className="node-maintenance-helper">{drainDisabledReason}</p>
+          )}
         {activeDrainJob && (
           <p className="node-maintenance-helper">Drain job {activeDrainJob.id} is active.</p>
         )}

@@ -43,6 +43,7 @@ export const CLUSTER_CAPABILITIES: CapabilityDefinition[] = [
   clusterCapability('cluster:nodes:list', 'Node', 'list', 'Nodes table'),
   clusterCapability('cluster:nodes:get', 'Node', 'get', 'Nodes table'),
   clusterCapability('cluster:nodes:update', 'Node', 'update', 'Node actions'),
+  clusterCapability('cluster:nodes:action-get', 'Node', 'get', 'Node actions'),
   clusterCapability('cluster:nodes:patch', 'Node', 'patch', 'Node actions (cordon/drain)'),
   clusterCapability('cluster:nodes:delete', 'Node', 'delete', 'Node actions'),
   clusterCapability('cluster:pods:eviction:create', 'Pod', 'create', 'Node actions', 'eviction'),

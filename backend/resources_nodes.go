@@ -38,6 +38,13 @@ func (a *App) CordonNode(clusterID, nodeName string) error {
 	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
 		Kind: "Node",
 		Name: nodeName,
+		Verb: "get",
+	}); err != nil {
+		return err
+	}
+	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
+		Kind: "Node",
+		Name: nodeName,
 		Verb: "patch",
 	}); err != nil {
 		return err
@@ -55,6 +62,13 @@ func (a *App) UncordonNode(clusterID, nodeName string) error {
 	}
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
+		return err
+	}
+	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
+		Kind: "Node",
+		Name: nodeName,
+		Verb: "get",
+	}); err != nil {
 		return err
 	}
 	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
@@ -85,6 +99,13 @@ func (a *App) DrainNode(clusterID, nodeName string, options DrainNodeOptions) er
 	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
 		Kind: "Node",
 		Name: nodeName,
+		Verb: "get",
+	}); err != nil {
+		return err
+	}
+	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
+		Kind: "Node",
+		Name: nodeName,
 		Verb: "patch",
 	}); err != nil {
 		return err
@@ -108,6 +129,13 @@ func (a *App) StartDrainNode(clusterID, nodeName string, options DrainNodeOption
 	}
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
+		return "", err
+	}
+	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
+		Kind: "Node",
+		Name: nodeName,
+		Verb: "get",
+	}); err != nil {
 		return "", err
 	}
 	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{

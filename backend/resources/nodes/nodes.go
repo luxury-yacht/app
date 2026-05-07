@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/parallel"
@@ -231,14 +232,16 @@ func (s *Service) cordonForDrain(job *nodemaintenance.DrainJob, nodeName string)
 // ValidateDrainOptions rejects invalid drain options before starting node mutations.
 func ValidateDrainOptions(options restypes.DrainNodeOptions) error {
 	grace := options.GracePeriodSeconds
-	if grace == nil {
-		return nil
+	if grace != nil {
+		if *grace < 0 {
+			return fmt.Errorf("gracePeriodSeconds must be non-negative")
+		}
+		if *grace > maxNodeDrainGracePeriodSeconds {
+			return fmt.Errorf("gracePeriodSeconds must be less than or equal to %d", maxNodeDrainGracePeriodSeconds)
+		}
 	}
-	if *grace < 0 {
-		return fmt.Errorf("gracePeriodSeconds must be non-negative")
-	}
-	if *grace > maxNodeDrainGracePeriodSeconds {
-		return fmt.Errorf("gracePeriodSeconds must be less than or equal to %d", maxNodeDrainGracePeriodSeconds)
+	if timeout := options.TimeoutSeconds; timeout != nil && *timeout < 0 {
+		return fmt.Errorf("timeoutSeconds must be non-negative")
 	}
 	return nil
 }
@@ -248,6 +251,13 @@ func drainHelperGracePeriod(options restypes.DrainNodeOptions) int {
 		return -1
 	}
 	return *options.GracePeriodSeconds
+}
+
+func drainHelperTimeout(options restypes.DrainNodeOptions) time.Duration {
+	if options.TimeoutSeconds == nil || *options.TimeoutSeconds == 0 {
+		return 0
+	}
+	return time.Duration(*options.TimeoutSeconds) * time.Second
 }
 
 func (s *Service) runKubectlDrain(nodeName string, options restypes.DrainNodeOptions, job *nodemaintenance.DrainJob) error {
@@ -271,6 +281,9 @@ func (s *Service) runKubectlDrain(nodeName string, options restypes.DrainNodeOpt
 
 	job.AddInfo("wait", "Waiting for pods to terminate")
 	if err := drainer.DeleteOrEvictPods(pods); err != nil {
+		if isDrainTimeoutError(err, drainer.Timeout) {
+			err = fmt.Errorf("drain timed out after %s while waiting for pods to terminate: %w", drainer.Timeout, err)
+		}
 		job.AddInfo("error", err.Error())
 		return err
 	}
@@ -285,7 +298,7 @@ func (s *Service) newDrainHelper(options restypes.DrainNodeOptions, job *nodemai
 		Force:                options.Force,
 		GracePeriodSeconds:   drainHelperGracePeriod(options),
 		IgnoreAllDaemonSets:  options.IgnoreDaemonSets,
-		Timeout:              config.NodeDrainTimeout,
+		Timeout:              drainHelperTimeout(options),
 		DeleteEmptyDirData:   options.DeleteEmptyDirData,
 		DisableEviction:      options.DisableEviction,
 		EvictErrorRetryDelay: config.NodeDrainRetryDelay,
@@ -350,6 +363,18 @@ func (s *Service) deleteOrEvictPodsWithoutWait(drainer *kubectldrain.Helper, pod
 		}
 	}
 	return nil
+}
+
+func isDrainTimeoutError(err error, timeout time.Duration) bool {
+	if timeout <= 0 || err == nil {
+		return false
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	message := err.Error()
+	return strings.Contains(message, "global timeout reached") ||
+		strings.Contains(message, "context deadline exceeded")
 }
 
 func drainOperationLabel(options restypes.DrainNodeOptions) string {

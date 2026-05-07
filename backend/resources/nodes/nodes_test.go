@@ -194,6 +194,17 @@ func TestServiceDrainValidatesGracePeriod(t *testing.T) {
 	require.EqualError(t, err, "gracePeriodSeconds must be less than or equal to 900")
 }
 
+func TestServiceDrainValidatesTimeout(t *testing.T) {
+	service, _, node := newNodeService(t)
+
+	negativeTimeout := -1
+	err := service.Drain(node.Name, types.DrainNodeOptions{TimeoutSeconds: &negativeTimeout})
+	require.EqualError(t, err, "timeoutSeconds must be non-negative")
+
+	zeroTimeout := 0
+	require.NoError(t, nodes.ValidateDrainOptions(types.DrainNodeOptions{TimeoutSeconds: &zeroTimeout}))
+}
+
 func TestServiceDrainLeavesNodeCordonedAfterFailure(t *testing.T) {
 	service, client, node := newNodeService(t)
 	addNodePatchReactor(t, client)

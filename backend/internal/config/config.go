@@ -274,17 +274,8 @@ const (
 
 // Node maintenance settings.
 const (
-	// NodeDrainTimeout is the maximum time to wait for pods to terminate during node drain.
-	NodeDrainTimeout = 30 * time.Second
-
 	// NodeDrainRetryDelay is the sleep interval between checks while draining a node.
 	NodeDrainRetryDelay = 2 * time.Second
-
-	// NodeDrainPodOperationTimeout bounds each pod eviction/delete call.
-	NodeDrainPodOperationTimeout = 30 * time.Second
-
-	// NodeDrainPollTimeout bounds each poll while waiting for pods to terminate.
-	NodeDrainPollTimeout = 10 * time.Second
 )
 
 // Namespace operation settings.

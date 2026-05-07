@@ -10,6 +10,7 @@ package nodes
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -23,8 +24,19 @@ import (
 	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
 	metricsfake "k8s.io/metrics/pkg/client/clientset/versioned/fake"
 
+	restypes "github.com/luxury-yacht/app/backend/resources/types"
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
+
+func TestDrainHelperTimeoutMatchesKubectlDefault(t *testing.T) {
+	require.Zero(t, drainHelperTimeout(restypes.DrainNodeOptions{}))
+
+	zero := 0
+	require.Zero(t, drainHelperTimeout(restypes.DrainNodeOptions{TimeoutSeconds: &zero}))
+
+	custom := 300
+	require.Equal(t, 5*time.Minute, drainHelperTimeout(restypes.DrainNodeOptions{TimeoutSeconds: &custom}))
+}
 
 func TestEnsureMetricsClientInitializesClient(t *testing.T) {
 	setterCalled := false

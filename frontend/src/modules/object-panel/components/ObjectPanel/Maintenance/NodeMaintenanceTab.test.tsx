@@ -191,7 +191,10 @@ describe('NodeMaintenanceTab', () => {
     expect(mockStartDrainNode).toHaveBeenCalledWith(
       'alpha:ctx',
       'node-1',
-      expect.not.objectContaining({ gracePeriodSeconds: expect.anything() })
+      expect.not.objectContaining({
+        gracePeriodSeconds: expect.anything(),
+        timeoutSeconds: expect.anything(),
+      })
     );
     expect(mockStartDrainNode).toHaveBeenCalledWith(
       'alpha:ctx',
@@ -223,6 +226,40 @@ describe('NodeMaintenanceTab', () => {
       'alpha:ctx',
       'node-1',
       expect.objectContaining({ gracePeriodSeconds: 30 })
+    );
+  });
+
+  it('sends an explicit drain timeout only when the timeout override is enabled', async () => {
+    render();
+
+    const timeoutToggle = container.querySelector<HTMLInputElement>(
+      '[data-test="node-maintenance-timeout-toggle"]'
+    );
+    expect(timeoutToggle).toBeTruthy();
+
+    await act(async () => {
+      timeoutToggle?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    const timeoutInput = container.querySelector<HTMLInputElement>(
+      '[data-test="node-maintenance-timeout-input"]'
+    );
+    expect(timeoutInput).toBeTruthy();
+    if (!timeoutInput) {
+      throw new Error('expected timeout input to render');
+    }
+    await setInputValue(timeoutInput, '600');
+
+    const button = queryActionButton('drain');
+    await act(async () => {
+      button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await confirmModal();
+
+    expect(mockStartDrainNode).toHaveBeenCalledWith(
+      'alpha:ctx',
+      'node-1',
+      expect.objectContaining({ timeoutSeconds: 600 })
     );
   });
 
@@ -347,7 +384,7 @@ describe('NodeMaintenanceTab', () => {
       verb: string;
       subresource?: string;
     }>;
-    expect(descriptors.length).toBe(4);
+    expect(descriptors.length).toBe(5);
     for (const d of descriptors) {
       expect(d.group).toBe('');
       expect(d.version).toBe('v1');
@@ -355,6 +392,7 @@ describe('NodeMaintenanceTab', () => {
     expect(descriptors).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ resourceKind: 'Node', verb: 'patch' }),
+        expect.objectContaining({ resourceKind: 'Node', verb: 'get' }),
         expect.objectContaining({ resourceKind: 'Node', verb: 'delete' }),
         expect.objectContaining({
           resourceKind: 'Pod',
@@ -368,6 +406,7 @@ describe('NodeMaintenanceTab', () => {
       expect.arrayContaining([
         expect.stringContaining(':cordon:'),
         expect.stringContaining(':drain:'),
+        expect.stringContaining(':node-get:'),
         expect.stringContaining(':delete:'),
       ])
     );
@@ -422,6 +461,7 @@ describe('NodeMaintenanceTab', () => {
 
     const modalBody = document.querySelector('.confirmation-modal-body');
     expect(modalBody?.textContent).toContain('Delete pods directly');
+    expect(modalBody?.textContent).toContain('Drain timeout: No timeout');
   });
 
   it('does not enable node maintenance without a cluster identity', () => {

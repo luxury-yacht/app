@@ -2073,6 +2073,7 @@ export namespace types {
 	
 	export class DrainNodeOptions {
 	    gracePeriodSeconds?: number;
+	    timeoutSeconds?: number;
 	    ignoreDaemonSets: boolean;
 	    deleteEmptyDirData: boolean;
 	    force: boolean;
@@ -2086,6 +2087,7 @@ export namespace types {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.gracePeriodSeconds = source["gracePeriodSeconds"];
+	        this.timeoutSeconds = source["timeoutSeconds"];
 	        this.ignoreDaemonSets = source["ignoreDaemonSets"];
 	        this.deleteEmptyDirData = source["deleteEmptyDirData"];
 	        this.force = source["force"];
