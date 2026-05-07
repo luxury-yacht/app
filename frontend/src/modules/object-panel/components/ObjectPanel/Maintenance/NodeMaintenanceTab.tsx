@@ -41,6 +41,23 @@ const NODE_SCOPE_PREFIX = 'node:';
 const MAX_NODE_DRAIN_GRACE_SECONDS = 900;
 const DEFAULT_NODE_DRAIN_TIMEOUT_SECONDS = 300;
 
+const DRAIN_OPTION_TOOLTIPS = {
+  ignoreDaemonSets:
+    'DaemonSet pods are expected to run on every matching node. Leave this on for normal drains so those pods do not block the operation.',
+  deleteEmptyDirData:
+    'Allows draining pods that use emptyDir volumes. Data in those volumes is node-local and is lost when the pod is removed.',
+  disableEviction:
+    'Deletes pods directly instead of using the eviction API. This bypasses PodDisruptionBudget protection and should only be used when eviction cannot make progress.',
+  skipWait:
+    'Submits the pod evictions or deletions and completes the job without waiting for the pods to terminate.',
+  gracePeriod:
+    'Overrides each pod termination grace period. Leave disabled to use the grace period defined by each pod.',
+  timeout:
+    'Sets how long the drain waits for pod termination before failing. Leave disabled for no drain timeout.',
+  force:
+    'Allows deletion of pods that are not managed by a controller. Without this, unmanaged pods block the drain to avoid accidental workload loss.',
+} as const;
+
 type DrainOptionsState = Omit<types.DrainNodeOptions, 'gracePeriodSeconds' | 'timeoutSeconds'> & {
   gracePeriodSeconds?: number;
   timeoutSeconds?: number;
@@ -423,6 +440,9 @@ export function NodeMaintenanceTab({
       drainOptions.disableEviction ? 'Delete pods directly' : 'Use eviction API',
       drainOptions.ignoreDaemonSets ? 'Ignore DaemonSets' : 'Respect DaemonSets',
       drainOptions.deleteEmptyDirData ? 'Delete emptyDir data' : 'Preserve emptyDir data',
+      drainOptions.skipWaitForPodsToTerminate
+        ? 'Skip pod termination wait'
+        : 'Wait for pod termination',
       drainOptions.force ? 'Allow unmanaged pods' : 'Refuse unmanaged pods',
     ];
     return `Drain node "${nodeName}" with the following options:\n• ${lines.join('\n• ')}`;
@@ -432,6 +452,7 @@ export function NodeMaintenanceTab({
     drainOptions.force,
     drainOptions.gracePeriodSeconds,
     drainOptions.ignoreDaemonSets,
+    drainOptions.skipWaitForPodsToTerminate,
     drainOptions.timeoutSeconds,
     hasCustomGrace,
     hasCustomTimeout,
@@ -696,108 +717,142 @@ export function NodeMaintenanceTab({
             )}
           </summary>
           <div className="node-maintenance-drain-options">
-            <label className="node-maintenance-checkbox">
-              <input
-                data-test="node-maintenance-ignore-daemonsets"
-                type="checkbox"
-                checked={Boolean(drainOptions.ignoreDaemonSets)}
-                onChange={(event) => updateDrainOption('ignoreDaemonSets', event.target.checked)}
-              />
-              <span>Ignore DaemonSet pods (--ignore-daemonsets)</span>
-            </label>
-            <label className="node-maintenance-checkbox">
-              <input
-                data-test="node-maintenance-delete-emptydir"
-                type="checkbox"
-                checked={Boolean(drainOptions.deleteEmptyDirData)}
-                onChange={(event) => updateDrainOption('deleteEmptyDirData', event.target.checked)}
-              />
-              <span>Remove pods with emptyDir volumes (--delete-emptydir-data)</span>
-            </label>
-            <label className="node-maintenance-checkbox">
-              <input
-                data-test="node-maintenance-disable-eviction"
-                type="checkbox"
-                checked={Boolean(drainOptions.disableEviction)}
-                onChange={(event) => updateDrainOption('disableEviction', event.target.checked)}
-              />
-              <span>Delete instead of Evict (--disable-eviction)</span>
-            </label>
-            <label className="node-maintenance-checkbox node-maintenance-grace-option">
-              <input
-                data-test="node-maintenance-grace-toggle"
-                type="checkbox"
-                checked={hasCustomGrace}
-                onChange={(event) => {
-                  if (!event.target.checked) {
-                    updateDrainOption('gracePeriodSeconds', undefined);
-                  } else {
-                    updateDrainOption('gracePeriodSeconds', customGraceSeconds);
-                  }
-                }}
-              />
-              <div className="node-maintenance-grace-inline">
-                <span>Override pod grace period (--grace-period)</span>
+            <div className="node-maintenance-option-row">
+              <label className="node-maintenance-checkbox">
                 <input
-                  type="number"
-                  min={1}
-                  max={900}
-                  value={customGraceSeconds}
-                  disabled={!hasCustomGrace}
+                  data-test="node-maintenance-ignore-daemonsets"
+                  type="checkbox"
+                  checked={Boolean(drainOptions.ignoreDaemonSets)}
+                  onChange={(event) => updateDrainOption('ignoreDaemonSets', event.target.checked)}
+                />
+                <span>Ignore DaemonSet pods</span>
+              </label>
+              <Tooltip content={DRAIN_OPTION_TOOLTIPS.ignoreDaemonSets} maxWidth={340} />
+            </div>
+            <div className="node-maintenance-option-row">
+              <label className="node-maintenance-checkbox">
+                <input
+                  data-test="node-maintenance-delete-emptydir"
+                  type="checkbox"
+                  checked={Boolean(drainOptions.deleteEmptyDirData)}
+                  onChange={(event) =>
+                    updateDrainOption('deleteEmptyDirData', event.target.checked)
+                  }
+                />
+                <span>Remove pods with emptyDir volumes</span>
+              </label>
+              <Tooltip content={DRAIN_OPTION_TOOLTIPS.deleteEmptyDirData} maxWidth={340} />
+            </div>
+            <div className="node-maintenance-option-row">
+              <label className="node-maintenance-checkbox">
+                <input
+                  data-test="node-maintenance-disable-eviction"
+                  type="checkbox"
+                  checked={Boolean(drainOptions.disableEviction)}
+                  onChange={(event) => updateDrainOption('disableEviction', event.target.checked)}
+                />
+                <span>Delete instead of Evict</span>
+              </label>
+              <Tooltip content={DRAIN_OPTION_TOOLTIPS.disableEviction} maxWidth={360} />
+            </div>
+            <div className="node-maintenance-option-row">
+              <label className="node-maintenance-checkbox">
+                <input
+                  data-test="node-maintenance-skip-wait"
+                  type="checkbox"
+                  checked={Boolean(drainOptions.skipWaitForPodsToTerminate)}
+                  onChange={(event) =>
+                    updateDrainOption('skipWaitForPodsToTerminate', event.target.checked)
+                  }
+                />
+                <span>Skip waiting for pod termination</span>
+              </label>
+              <Tooltip content={DRAIN_OPTION_TOOLTIPS.skipWait} maxWidth={340} />
+            </div>
+            <div className="node-maintenance-option-row">
+              <label className="node-maintenance-checkbox node-maintenance-grace-option">
+                <input
+                  data-test="node-maintenance-grace-toggle"
+                  type="checkbox"
+                  checked={hasCustomGrace}
                   onChange={(event) => {
-                    const next = Number(event.target.value);
-                    const normalized = normalizeGraceSeconds(next);
-                    setCustomGraceSeconds(normalized);
-                    if (hasCustomGrace) {
-                      updateDrainOption('gracePeriodSeconds', normalized);
+                    if (!event.target.checked) {
+                      updateDrainOption('gracePeriodSeconds', undefined);
+                    } else {
+                      updateDrainOption('gracePeriodSeconds', customGraceSeconds);
                     }
                   }}
                 />
-                <span className="node-maintenance-grace-unit">seconds</span>
-              </div>
-            </label>
-            <label className="node-maintenance-checkbox node-maintenance-grace-option">
-              <input
-                data-test="node-maintenance-timeout-toggle"
-                type="checkbox"
-                checked={hasCustomTimeout}
-                onChange={(event) => {
-                  if (!event.target.checked) {
-                    updateDrainOption('timeoutSeconds', undefined);
-                  } else {
-                    updateDrainOption('timeoutSeconds', customTimeoutSeconds);
-                  }
-                }}
-              />
-              <div className="node-maintenance-grace-inline">
-                <span>Drain timeout (--timeout)</span>
+                <div className="node-maintenance-grace-inline">
+                  <span>Override pod grace period</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={900}
+                    value={customGraceSeconds}
+                    disabled={!hasCustomGrace}
+                    onChange={(event) => {
+                      const next = Number(event.target.value);
+                      const normalized = normalizeGraceSeconds(next);
+                      setCustomGraceSeconds(normalized);
+                      if (hasCustomGrace) {
+                        updateDrainOption('gracePeriodSeconds', normalized);
+                      }
+                    }}
+                  />
+                  <span className="node-maintenance-grace-unit">seconds</span>
+                </div>
+              </label>
+              <Tooltip content={DRAIN_OPTION_TOOLTIPS.gracePeriod} maxWidth={340} />
+            </div>
+            <div className="node-maintenance-option-row">
+              <label className="node-maintenance-checkbox node-maintenance-grace-option">
                 <input
-                  data-test="node-maintenance-timeout-input"
-                  type="number"
-                  min={1}
-                  value={customTimeoutSeconds}
-                  disabled={!hasCustomTimeout}
+                  data-test="node-maintenance-timeout-toggle"
+                  type="checkbox"
+                  checked={hasCustomTimeout}
                   onChange={(event) => {
-                    const next = Number(event.target.value);
-                    const normalized = normalizeTimeoutSeconds(next);
-                    setCustomTimeoutSeconds(normalized);
-                    if (hasCustomTimeout) {
-                      updateDrainOption('timeoutSeconds', normalized);
+                    if (!event.target.checked) {
+                      updateDrainOption('timeoutSeconds', undefined);
+                    } else {
+                      updateDrainOption('timeoutSeconds', customTimeoutSeconds);
                     }
                   }}
                 />
-                <span className="node-maintenance-grace-unit">seconds</span>
-              </div>
-            </label>
-            <label className="node-maintenance-checkbox">
-              <input
-                data-test="node-maintenance-force"
-                type="checkbox"
-                checked={Boolean(drainOptions.force)}
-                onChange={(event) => updateDrainOption('force', event.target.checked)}
-              />
-              <span>Allow deleting unmanaged pods (--force)</span>
-            </label>
+                <div className="node-maintenance-grace-inline">
+                  <span>Drain timeout</span>
+                  <input
+                    data-test="node-maintenance-timeout-input"
+                    type="number"
+                    min={1}
+                    value={customTimeoutSeconds}
+                    disabled={!hasCustomTimeout}
+                    onChange={(event) => {
+                      const next = Number(event.target.value);
+                      const normalized = normalizeTimeoutSeconds(next);
+                      setCustomTimeoutSeconds(normalized);
+                      if (hasCustomTimeout) {
+                        updateDrainOption('timeoutSeconds', normalized);
+                      }
+                    }}
+                  />
+                  <span className="node-maintenance-grace-unit">seconds</span>
+                </div>
+              </label>
+              <Tooltip content={DRAIN_OPTION_TOOLTIPS.timeout} maxWidth={340} />
+            </div>
+            <div className="node-maintenance-option-row">
+              <label className="node-maintenance-checkbox">
+                <input
+                  data-test="node-maintenance-force"
+                  type="checkbox"
+                  checked={Boolean(drainOptions.force)}
+                  onChange={(event) => updateDrainOption('force', event.target.checked)}
+                />
+                <span>Allow deleting unmanaged pods</span>
+              </label>
+              <Tooltip content={DRAIN_OPTION_TOOLTIPS.force} maxWidth={360} />
+            </div>
           </div>
         </details>
         {drainError && (

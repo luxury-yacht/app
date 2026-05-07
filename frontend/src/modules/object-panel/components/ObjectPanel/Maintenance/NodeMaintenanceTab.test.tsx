@@ -41,7 +41,12 @@ vi.mock('@/core/refresh', () => ({
 }));
 
 vi.mock('@shared/components/Tooltip', () => ({
-  default: ({ children }: { children: React.ReactNode }) => children,
+  default: ({ children, content }: { children: React.ReactNode; content: React.ReactNode }) => (
+    <>
+      {children}
+      <span data-test="tooltip-content">{content}</span>
+    </>
+  ),
 }));
 
 vi.mock('@/core/settings/appPreferences', () => ({
@@ -208,6 +213,20 @@ describe('NodeMaintenanceTab', () => {
     expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalled();
   });
 
+  it('renders drain option labels without flag hints and includes option tooltips', () => {
+    render();
+
+    const options = container.querySelector('.node-maintenance-drain-options');
+    expect(options).toBeTruthy();
+    expect(options?.textContent).not.toContain('--');
+    expect(options?.querySelectorAll('[data-test="tooltip-content"]').length).toBe(7);
+    expect(options?.textContent).toContain(
+      'DaemonSet pods are expected to run on every matching node'
+    );
+    expect(options?.textContent).toContain('PodDisruptionBudget protection');
+    expect(options?.textContent).toContain('Leave disabled for no drain timeout');
+  });
+
   it('sends an explicit grace period only when the override is enabled', async () => {
     render();
 
@@ -264,6 +283,35 @@ describe('NodeMaintenanceTab', () => {
       'alpha:ctx',
       'node-1',
       expect.objectContaining({ timeoutSeconds: 600 })
+    );
+  });
+
+  it('exposes skip-wait and sends it with the drain payload', async () => {
+    render();
+
+    const skipWait = container.querySelector<HTMLInputElement>(
+      '[data-test="node-maintenance-skip-wait"]'
+    );
+    expect(skipWait).toBeTruthy();
+
+    await act(async () => {
+      skipWait?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    const button = queryActionButton('drain');
+    await act(async () => {
+      button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    const modalBody = document.querySelector('.confirmation-modal-body');
+    expect(modalBody?.textContent).toContain('Skip pod termination wait');
+
+    await confirmModal();
+
+    expect(mockStartDrainNode).toHaveBeenCalledWith(
+      'alpha:ctx',
+      'node-1',
+      expect.objectContaining({ skipWaitForPodsToTerminate: true })
     );
   });
 

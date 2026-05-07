@@ -236,10 +236,22 @@
   color: var(--color-text);
 }
 
+.node-maintenance-option-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  min-width: 0;
+}
+
+.node-maintenance-option-row .node-maintenance-checkbox {
+  min-width: 0;
+}
+
 .node-maintenance-checkbox input[type="checkbox"] {
   width: 16px;
   height: 16px;
   accent-color: var(--color-accent);
+  flex-shrink: 0;
 }
 
 .node-maintenance-grace-option {
