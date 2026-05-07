@@ -2072,7 +2072,7 @@ export namespace types {
 	}
 	
 	export class DrainNodeOptions {
-	    gracePeriodSeconds: number;
+	    gracePeriodSeconds?: number;
 	    ignoreDaemonSets: boolean;
 	    deleteEmptyDirData: boolean;
 	    force: boolean;
@@ -4987,4 +4987,3 @@ export namespace v1 {
 	}
 
 }
-

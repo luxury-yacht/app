@@ -128,6 +128,42 @@ func TestServiceBuildCachesAndBypasses(t *testing.T) {
 	}
 }
 
+func TestServiceBuildDoesNotCacheObjectMaintenance(t *testing.T) {
+	reg := domain.New()
+	buildCount := 0
+	if err := reg.Register(refresh.DomainConfig{
+		Name: "object-maintenance",
+		BuildSnapshot: func(ctx context.Context, scope string) (*refresh.Snapshot, error) {
+			buildCount++
+			return &refresh.Snapshot{
+				Domain:  "object-maintenance",
+				Scope:   scope,
+				Payload: map[string]int{"items": buildCount},
+				Stats:   refresh.SnapshotStats{TotalItems: 1},
+			}, nil
+		},
+	}); err != nil {
+		t.Fatalf("register failed: %v", err)
+	}
+
+	service := NewService(reg, nil, ClusterMeta{})
+	snap1, err := service.Build(context.Background(), "object-maintenance", "cluster-a|node:worker-1")
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+	snap2, err := service.Build(context.Background(), "object-maintenance", "cluster-a|node:worker-1")
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+
+	if buildCount != 2 {
+		t.Fatalf("expected object-maintenance to bypass cache, got %d builds", buildCount)
+	}
+	if snap1.Sequence == snap2.Sequence {
+		t.Fatalf("expected object-maintenance rebuild to issue a new sequence")
+	}
+}
+
 func TestServiceBuildBypassUsesSeparateSingleflightKey(t *testing.T) {
 	reg := domain.New()
 	started := make(chan struct{})

@@ -72,7 +72,7 @@ export interface NodePodMetric {
 }
 
 export interface DrainNodeOptionsPayload {
-  gracePeriodSeconds: number;
+  gracePeriodSeconds?: number;
   ignoreDaemonSets: boolean;
   deleteEmptyDirData: boolean;
   force: boolean;

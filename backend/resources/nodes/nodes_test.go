@@ -16,6 +16,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -122,13 +123,72 @@ func TestServiceDrainDeletesPods(t *testing.T) {
 	}
 }
 
+func TestServiceDrainDeleteUsesPodDefaultGraceWhenUnset(t *testing.T) {
+	service, client, node := newNodeService(t)
+	addNodePatchReactor(t, client)
+
+	recordedGrace := make([]*int64, 0)
+	client.Fake.PrependReactor("delete", "pods", func(action cgotesting.Action) (bool, runtime.Object, error) {
+		deleteAction := action.(cgotesting.DeleteAction)
+		recordedGrace = append(recordedGrace, deleteAction.GetDeleteOptions().GracePeriodSeconds)
+		return false, nil, nil
+	})
+
+	options := types.DrainNodeOptions{
+		DisableEviction:            true,
+		DeleteEmptyDirData:         true,
+		IgnoreDaemonSets:           true,
+		SkipWaitForPodsToTerminate: true,
+	}
+
+	require.NoError(t, service.Drain(node.Name, options))
+	require.NotEmpty(t, recordedGrace)
+	for _, grace := range recordedGrace {
+		require.Nil(t, grace, "unset gracePeriodSeconds should omit pod delete grace period")
+	}
+}
+
+func TestServiceDrainEvictionUsesPodDefaultGraceWhenUnset(t *testing.T) {
+	service, client, node := newNodeService(t)
+	addNodePatchReactor(t, client)
+
+	recordedGrace := make([]*int64, 0)
+	client.Fake.PrependReactor("create", "pods", func(action cgotesting.Action) (bool, runtime.Object, error) {
+		createAction := action.(cgotesting.CreateAction)
+		if createAction.GetSubresource() != "eviction" {
+			return false, nil, nil
+		}
+		eviction := createAction.GetObject().(*policyv1beta1.Eviction)
+		if eviction.DeleteOptions == nil {
+			recordedGrace = append(recordedGrace, nil)
+		} else {
+			recordedGrace = append(recordedGrace, eviction.DeleteOptions.GracePeriodSeconds)
+		}
+		return true, eviction, nil
+	})
+
+	options := types.DrainNodeOptions{
+		DeleteEmptyDirData:         true,
+		IgnoreDaemonSets:           true,
+		SkipWaitForPodsToTerminate: true,
+	}
+
+	require.NoError(t, service.Drain(node.Name, options))
+	require.NotEmpty(t, recordedGrace)
+	for _, grace := range recordedGrace {
+		require.Nil(t, grace, "unset gracePeriodSeconds should omit pod eviction grace period")
+	}
+}
+
 func TestServiceDrainValidatesGracePeriod(t *testing.T) {
 	service, _, node := newNodeService(t)
 
-	err := service.Drain(node.Name, types.DrainNodeOptions{GracePeriodSeconds: -1})
+	negativeGrace := -1
+	err := service.Drain(node.Name, types.DrainNodeOptions{GracePeriodSeconds: &negativeGrace})
 	require.EqualError(t, err, "gracePeriodSeconds must be non-negative")
 
-	err = service.Drain(node.Name, types.DrainNodeOptions{GracePeriodSeconds: 901})
+	tooLongGrace := 901
+	err = service.Drain(node.Name, types.DrainNodeOptions{GracePeriodSeconds: &tooLongGrace})
 	require.EqualError(t, err, "gracePeriodSeconds must be less than or equal to 900")
 }
 

@@ -24,7 +24,8 @@ func TestWaitForPodsToTerminateReturnsWhenNoneRemain(t *testing.T) {
 		testsupport.WithDepsKubeClient(fake.NewClientset()),
 	))
 
-	options := types.DrainNodeOptions{GracePeriodSeconds: 1}
+	grace := 1
+	options := types.DrainNodeOptions{GracePeriodSeconds: &grace}
 	require.NoError(t, service.waitForPodsToTerminate("node-1", options))
 }
 
@@ -38,7 +39,8 @@ func TestWaitForPodsToTerminateTimesOutWhenPodsRemain(t *testing.T) {
 		testsupport.WithDepsKubeClient(client),
 	))
 
-	options := types.DrainNodeOptions{GracePeriodSeconds: 1}
+	grace := 1
+	options := types.DrainNodeOptions{GracePeriodSeconds: &grace}
 	err := service.waitForPodsToTerminate("node-1", options)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "timed out")

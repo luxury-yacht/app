@@ -24,7 +24,6 @@ import (
 	"k8s.io/apimachinery/pkg/fields"
 	pkgtypes "k8s.io/apimachinery/pkg/types"
 	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
-	"k8s.io/utils/ptr"
 )
 
 type Service struct {
@@ -232,8 +231,7 @@ func (s *Service) drainPod(pod corev1.Pod, options restypes.DrainNodeOptions, jo
 
 	client := s.deps.KubernetesClient
 	if options.DisableEviction {
-		grace := int64(options.GracePeriodSeconds)
-		deleteOptions := metav1.DeleteOptions{GracePeriodSeconds: &grace}
+		deleteOptions := metav1.DeleteOptions{GracePeriodSeconds: drainGracePeriod(options)}
 		if delErr := client.CoreV1().Pods(pod.Namespace).Delete(podCtx, pod.Name, deleteOptions); delErr != nil {
 			s.logError(fmt.Sprintf("Failed to delete pod %s/%s: %v", pod.Namespace, pod.Name, delErr))
 			job.AddPodEvent("delete-error", pod.Namespace, pod.Name, delErr.Error(), true)
@@ -244,10 +242,8 @@ func (s *Service) drainPod(pod corev1.Pod, options restypes.DrainNodeOptions, jo
 		}
 	} else {
 		eviction := &policyv1beta1.Eviction{
-			ObjectMeta: metav1.ObjectMeta{Namespace: pod.Namespace, Name: pod.Name},
-			DeleteOptions: &metav1.DeleteOptions{
-				GracePeriodSeconds: ptr.To(int64(options.GracePeriodSeconds)),
-			},
+			ObjectMeta:    metav1.ObjectMeta{Namespace: pod.Namespace, Name: pod.Name},
+			DeleteOptions: drainDeleteOptions(options),
 		}
 		if evictErr := client.CoreV1().Pods(pod.Namespace).Evict(podCtx, eviction); evictErr != nil {
 			s.logError(fmt.Sprintf("Failed to evict pod %s/%s: %v", pod.Namespace, pod.Name, evictErr))
@@ -267,13 +263,33 @@ func (s *Service) drainPod(pod corev1.Pod, options restypes.DrainNodeOptions, jo
 
 // ValidateDrainOptions rejects invalid drain options before starting node mutations.
 func ValidateDrainOptions(options restypes.DrainNodeOptions) error {
-	if options.GracePeriodSeconds < 0 {
+	grace := options.GracePeriodSeconds
+	if grace == nil {
+		return nil
+	}
+	if *grace < 0 {
 		return fmt.Errorf("gracePeriodSeconds must be non-negative")
 	}
-	if options.GracePeriodSeconds > maxNodeDrainGracePeriodSeconds {
+	if *grace > maxNodeDrainGracePeriodSeconds {
 		return fmt.Errorf("gracePeriodSeconds must be less than or equal to %d", maxNodeDrainGracePeriodSeconds)
 	}
 	return nil
+}
+
+func drainGracePeriod(options restypes.DrainNodeOptions) *int64 {
+	if options.GracePeriodSeconds == nil {
+		return nil
+	}
+	grace := int64(*options.GracePeriodSeconds)
+	return &grace
+}
+
+func drainDeleteOptions(options restypes.DrainNodeOptions) *metav1.DeleteOptions {
+	grace := drainGracePeriod(options)
+	if grace == nil {
+		return nil
+	}
+	return &metav1.DeleteOptions{GracePeriodSeconds: grace}
 }
 
 // waitForDrainCompletion handles optional waiting for pods to terminate.
@@ -349,7 +365,10 @@ func shouldSkipDrainPod(pod *corev1.Pod, options restypes.DrainNodeOptions) bool
 
 func (s *Service) waitForPodsToTerminate(nodeName string, options restypes.DrainNodeOptions) error {
 	client := s.deps.KubernetesClient
-	timeout := time.Duration(options.GracePeriodSeconds) * time.Second
+	timeout := time.Duration(0)
+	if options.GracePeriodSeconds != nil {
+		timeout = time.Duration(*options.GracePeriodSeconds) * time.Second
+	}
 	if timeout == 0 {
 		timeout = config.NodeDrainTimeout
 	}

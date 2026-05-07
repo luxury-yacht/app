@@ -31,6 +31,10 @@ interface NodeMaintenanceTabProps {
 const CAPABILITY_PREFIX = 'object-maintenance';
 const NODE_SCOPE_PREFIX = 'node:';
 
+type DrainOptionsState = Omit<types.DrainNodeOptions, 'gracePeriodSeconds'> & {
+  gracePeriodSeconds?: number;
+};
+
 const formatTimestamp = (value?: number | null): string => {
   if (!value || Number.isNaN(value)) {
     return '—';
@@ -142,8 +146,7 @@ export function NodeMaintenanceTab({
   const { isPaused, isManualRefreshActive } = useAutoRefreshLoadingState();
   const [pendingAction, setPendingAction] = useState<MaintenanceAction | null>(null);
   const [cordonError, setCordonError] = useState<string | null>(null);
-  const [drainOptions, setDrainOptions] = useState<types.DrainNodeOptions>({
-    gracePeriodSeconds: 0,
+  const [drainOptions, setDrainOptions] = useState<DrainOptionsState>({
     ignoreDaemonSets: true,
     deleteEmptyDirData: true,
     force: false,
@@ -220,6 +223,15 @@ export function NodeMaintenanceTab({
         name: nodeName,
       },
       {
+        id: `${CAPABILITY_PREFIX}:drain-pods:${drainOptions.disableEviction ? 'delete' : 'eviction'}:${nodeName}`,
+        clusterId: resolvedClusterId,
+        verb: drainOptions.disableEviction ? 'delete' : 'create',
+        group: '',
+        version: 'v1',
+        resourceKind: 'Pod',
+        subresource: drainOptions.disableEviction ? undefined : 'eviction',
+      },
+      {
         id: `${CAPABILITY_PREFIX}:delete:${nodeName}`,
         clusterId: resolvedClusterId,
         verb: 'delete',
@@ -229,7 +241,7 @@ export function NodeMaintenanceTab({
         name: nodeName,
       },
     ];
-  }, [clusterId, nodeName]);
+  }, [clusterId, drainOptions.disableEviction, nodeName]);
 
   const { getState: getCapabilityState } = useCapabilities(capabilityDescriptors, {
     enabled: Boolean(nodeName),
@@ -250,6 +262,15 @@ export function NodeMaintenanceTab({
     return getCapabilityState(`${CAPABILITY_PREFIX}:drain:${nodeName}`);
   }, [getCapabilityState, nodeName]);
 
+  const drainPodCapability = useMemo(() => {
+    if (!nodeName) {
+      return null;
+    }
+    return getCapabilityState(
+      `${CAPABILITY_PREFIX}:drain-pods:${drainOptions.disableEviction ? 'delete' : 'eviction'}:${nodeName}`
+    );
+  }, [drainOptions.disableEviction, getCapabilityState, nodeName]);
+
   const deleteCapability = useMemo(() => {
     if (!nodeName) {
       return null;
@@ -264,8 +285,13 @@ export function NodeMaintenanceTab({
 
   const drainDisabledReason =
     drainCapability && !drainCapability.allowed && !drainCapability.pending
-      ? drainCapability.reason || 'You do not have permission to drain nodes.'
-      : null;
+      ? drainCapability.reason || 'You do not have permission to patch nodes.'
+      : drainPodCapability && !drainPodCapability.allowed && !drainPodCapability.pending
+        ? drainPodCapability.reason ||
+          (drainOptions.disableEviction
+            ? 'You do not have permission to delete pods.'
+            : 'You do not have permission to evict pods.')
+        : null;
 
   const deleteDisabledReason =
     deleteCapability && !deleteCapability.allowed && !deleteCapability.pending
@@ -276,7 +302,7 @@ export function NodeMaintenanceTab({
   const actionForState: MaintenanceAction = unschedulable ? 'uncordon' : 'cordon';
 
   const updateDrainOption = useCallback(
-    <K extends keyof types.DrainNodeOptions>(field: K, value: types.DrainNodeOptions[K]) => {
+    <K extends keyof DrainOptionsState>(field: K, value: DrainOptionsState[K]) => {
       setDrainOptions((previous) => ({ ...previous, [field]: value }));
       setDrainError(null);
     },
@@ -354,9 +380,15 @@ export function NodeMaintenanceTab({
     setDrainPending(true);
     try {
       const payload: types.DrainNodeOptions = {
-        ...drainOptions,
-        gracePeriodSeconds: Math.max(0, Math.floor(drainOptions.gracePeriodSeconds ?? 0)),
+        ignoreDaemonSets: drainOptions.ignoreDaemonSets,
+        deleteEmptyDirData: drainOptions.deleteEmptyDirData,
+        force: drainOptions.force,
+        disableEviction: drainOptions.disableEviction,
+        skipWaitForPodsToTerminate: drainOptions.skipWaitForPodsToTerminate,
       };
+      if (drainOptions.gracePeriodSeconds != null) {
+        payload.gracePeriodSeconds = Math.max(0, Math.floor(drainOptions.gracePeriodSeconds));
+      }
       await DrainNode(resolvedClusterId, nodeName, payload);
       onRefresh?.();
       await refreshMaintenance();
@@ -429,8 +461,10 @@ export function NodeMaintenanceTab({
   const cordonDisabled = !cordonCapabilityReady || !canMutate || isActionPending;
 
   const drainCapabilityReady = drainCapability ? !drainCapability.pending : false;
-  const canDrain = Boolean(drainCapability?.allowed);
+  const drainPodCapabilityReady = drainPodCapability ? !drainPodCapability.pending : false;
+  const canDrain = Boolean(drainCapability?.allowed && drainPodCapability?.allowed);
   const drainActionDisabled = !drainCapabilityReady || !canDrain || drainPending;
+  const drainDisabled = drainActionDisabled || !drainPodCapabilityReady;
   const deleteCapabilityReady = deleteCapability ? !deleteCapability.pending : false;
   const canDeleteNode = Boolean(deleteCapability?.allowed);
   const deleteActionDisabled = !deleteCapabilityReady || !canDeleteNode || deletePending;
@@ -515,7 +549,7 @@ export function NodeMaintenanceTab({
               checked={hasCustomGrace}
               onChange={(event) => {
                 if (!event.target.checked) {
-                  updateDrainOption('gracePeriodSeconds', 0);
+                  updateDrainOption('gracePeriodSeconds', undefined);
                 } else {
                   updateDrainOption('gracePeriodSeconds', customGraceSeconds);
                 }
@@ -555,7 +589,7 @@ export function NodeMaintenanceTab({
           <button
             className="button danger"
             onClick={() => setShowDrainConfirm(true)}
-            disabled={drainActionDisabled}
+            disabled={drainDisabled}
             title={drainDisabledReason ?? undefined}
             type="button"
             data-maintenance-action="drain"
@@ -563,7 +597,7 @@ export function NodeMaintenanceTab({
             {drainPending ? 'Draining…' : 'Drain Node'}
           </button>
         </div>
-        {drainDisabledReason && !drainCapability?.pending && (
+        {drainDisabledReason && !drainCapability?.pending && !drainPodCapability?.pending && (
           <p className="node-maintenance-helper">{drainDisabledReason}</p>
         )}
         {drainError && <div className="node-maintenance-error">{drainError}</div>}

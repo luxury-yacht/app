@@ -288,6 +288,9 @@ func (s *Service) shouldCacheSnapshot(snap *refresh.Snapshot) bool {
 	if snap == nil {
 		return false
 	}
+	if snap.Domain == "object-maintenance" {
+		return false
+	}
 	// Avoid caching partial snapshots so follow-up requests can rehydrate cleanly.
 	if snap.Stats.Truncated {
 		return false

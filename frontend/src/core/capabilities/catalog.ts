@@ -21,7 +21,8 @@ const clusterCapability = (
   id: string,
   resourceKind: string,
   verb: string,
-  feature: string
+  feature: string,
+  subresource?: string
 ): CapabilityDefinition => ({
   id,
   scope: 'cluster',
@@ -30,6 +31,7 @@ const clusterCapability = (
     id,
     resourceKind,
     verb,
+    subresource,
   },
 });
 
@@ -43,6 +45,8 @@ export const CLUSTER_CAPABILITIES: CapabilityDefinition[] = [
   clusterCapability('cluster:nodes:update', 'Node', 'update', 'Node actions'),
   clusterCapability('cluster:nodes:patch', 'Node', 'patch', 'Node actions (cordon/drain)'),
   clusterCapability('cluster:nodes:delete', 'Node', 'delete', 'Node actions'),
+  clusterCapability('cluster:pods:eviction:create', 'Pod', 'create', 'Node actions', 'eviction'),
+  clusterCapability('cluster:pods:delete', 'Pod', 'delete', 'Node actions'),
   clusterCapability('cluster:persistentvolumes:list', 'PersistentVolume', 'list', 'Storage view'),
   clusterCapability(
     'cluster:persistentvolumes:update',

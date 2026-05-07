@@ -176,9 +176,39 @@ describe('NodeMaintenanceTab', () => {
     expect(mockDrainNode).toHaveBeenCalledWith(
       'alpha:ctx',
       'node-1',
+      expect.not.objectContaining({ gracePeriodSeconds: expect.anything() })
+    );
+    expect(mockDrainNode).toHaveBeenCalledWith(
+      'alpha:ctx',
+      'node-1',
       expect.objectContaining({ force: true })
     );
     expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalled();
+  });
+
+  it('sends an explicit grace period only when the override is enabled', async () => {
+    render();
+
+    const graceToggle = container.querySelector<HTMLInputElement>(
+      '[data-test="node-maintenance-grace-toggle"]'
+    );
+    expect(graceToggle).toBeTruthy();
+
+    await act(async () => {
+      graceToggle?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    const button = queryActionButton('drain');
+    await act(async () => {
+      button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await confirmModal();
+
+    expect(mockDrainNode).toHaveBeenCalledWith(
+      'alpha:ctx',
+      'node-1',
+      expect.objectContaining({ gracePeriodSeconds: 30 })
+    );
   });
 
   it('disables the cordon action when capability is denied', () => {
@@ -204,6 +234,20 @@ describe('NodeMaintenanceTab', () => {
     const button = queryActionButton('drain');
     expect(button?.disabled).toBe(true);
     expect(container.textContent).toContain('Drain forbidden');
+  });
+
+  it('disables the drain action when pod eviction capability is denied', () => {
+    mockUseCapabilities.mockImplementation(() => ({
+      getState: (id: string) =>
+        id.includes(':drain-pods:eviction:')
+          ? { allowed: false, pending: false, reason: 'Evict forbidden' }
+          : { allowed: true, pending: false },
+    }));
+
+    render();
+    const button = queryActionButton('drain');
+    expect(button?.disabled).toBe(true);
+    expect(container.textContent).toContain('Evict forbidden');
   });
 
   it('deletes a node when confirmed', async () => {
@@ -251,19 +295,61 @@ describe('NodeMaintenanceTab', () => {
       group?: string;
       version?: string;
       resourceKind: string;
+      verb: string;
+      subresource?: string;
     }>;
-    expect(descriptors.length).toBe(3);
+    expect(descriptors.length).toBe(4);
     for (const d of descriptors) {
-      expect(d.resourceKind).toBe('Node');
       expect(d.group).toBe('');
       expect(d.version).toBe('v1');
     }
+    expect(descriptors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ resourceKind: 'Node', verb: 'patch' }),
+        expect.objectContaining({ resourceKind: 'Node', verb: 'delete' }),
+        expect.objectContaining({
+          resourceKind: 'Pod',
+          verb: 'create',
+          subresource: 'eviction',
+        }),
+      ])
+    );
     const ids = descriptors.map((d) => d.id);
     expect(ids).toEqual(
       expect.arrayContaining([
         expect.stringContaining(':cordon:'),
         expect.stringContaining(':drain:'),
         expect.stringContaining(':delete:'),
+      ])
+    );
+  });
+
+  it('checks pod delete permission when drain disables eviction', async () => {
+    render();
+
+    const disableEviction = container.querySelector<HTMLInputElement>(
+      '[data-test="node-maintenance-disable-eviction"]'
+    );
+    expect(disableEviction).toBeTruthy();
+
+    await act(async () => {
+      disableEviction?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    const calls = mockUseCapabilities.mock.calls;
+    const callArgs = calls[calls.length - 1];
+    const descriptors = (callArgs?.[0] ?? []) as Array<{
+      resourceKind: string;
+      verb: string;
+      subresource?: string;
+    }>;
+    expect(descriptors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          resourceKind: 'Pod',
+          verb: 'delete',
+          subresource: undefined,
+        }),
       ])
     );
   });
