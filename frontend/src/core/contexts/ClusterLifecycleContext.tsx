@@ -8,6 +8,7 @@
  */
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { requestAppState, readAllClusterLifecycleStates } from '@/core/app-state-access';
+import { eventBus } from '@/core/events';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 
 // ---------- Types ----------
@@ -42,6 +43,9 @@ export const useClusterLifecycle = (): ClusterLifecycleContextType => {
   return context;
 };
 
+export const useOptionalClusterLifecycle = (): ClusterLifecycleContextType | undefined =>
+  useContext(ClusterLifecycleContext);
+
 // ---------- Provider ----------
 
 interface ClusterLifecycleProviderProps {
@@ -66,6 +70,11 @@ export const ClusterLifecycleProvider: React.FC<ClusterLifecycleProviderProps> =
       if (!active || !payload?.clusterId || !payload.state) {
         return;
       }
+      eventBus.emit('cluster:lifecycle', {
+        clusterId: payload.clusterId,
+        state: payload.state,
+        previousState: payload.previousState ?? '',
+      });
       setStates((prev) => {
         const next = new Map(prev);
         next.set(payload.clusterId!, payload.state as ClusterLifecycleState);
