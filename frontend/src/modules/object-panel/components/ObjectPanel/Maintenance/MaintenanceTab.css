@@ -5,21 +5,8 @@
   gap: var(--spacing-md);
 }
 
-.node-maintenance-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: var(--spacing-md);
-}
-
-.node-maintenance-header h3 {
+.node-maintenance-section-description {
   margin: 0;
-  font-size: var(--font-size-lg);
-  color: var(--color-text);
-}
-
-.node-maintenance-header p {
-  margin: var(--spacing-xs) 0 0;
   color: var(--color-text-secondary);
   font-size: var(--font-size-sm);
 }

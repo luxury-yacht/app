@@ -89,7 +89,7 @@ export function DrainProgressCard({
       </div>
 
       <div className="node-maintenance-progress-summary" data-test="drain-progress-summary">
-        {summaryLine(progress)}
+        {summaryLine(progress, Boolean(job.options?.disableEviction))}
       </div>
 
       <ProgressBar progress={progress} />
@@ -199,14 +199,15 @@ function PodTable({ pods, now }: { pods: DrainPodProgress[]; now: number }) {
   );
 }
 
-function summaryLine(progress: DrainProgress): string {
+function summaryLine(progress: DrainProgress, usingDelete: boolean): string {
+  const verb = usingDelete ? 'deleted' : 'evicted';
   const total = progress.totalPlanned;
   const seen = progress.totalSeen;
   const head =
     total != null
-      ? `${progress.done} of ${total} pods evicted`
+      ? `${progress.done} of ${total} pods ${verb}`
       : seen > 0
-        ? `${progress.done} of ${seen} pods evicted`
+        ? `${progress.done} of ${seen} pods ${verb}`
         : 'Preparing drain…';
   const parts: string[] = [head];
   if (progress.inProgress > 0) {

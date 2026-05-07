@@ -580,17 +580,15 @@ export function NodeMaintenanceTab({
   return (
     <div className="node-maintenance-tab">
       <section className="object-panel-section">
-        <header className="node-maintenance-header">
-          <div>
-            <h3>Cordon</h3>
-            <p>
-              <strong className={`node-maintenance-status-label ${statusClass}`}>
-                {statusLabel}
-              </strong>{' '}
-              — {statusDescription}
-            </p>
-          </div>
-        </header>
+        <div className="object-panel-section-header">
+          <div className="object-panel-section-title">Cordon</div>
+        </div>
+        <p className="node-maintenance-section-description">
+          <strong className={`node-maintenance-status-label ${statusClass}`}>
+            {statusLabel}
+          </strong>{' '}
+          — {statusDescription}
+        </p>
         <div className="node-maintenance-actions">
           <button
             className={`button ${unschedulable ? 'warning' : 'warning'}`}
@@ -612,12 +610,12 @@ export function NodeMaintenanceTab({
       </section>
 
       <section className="object-panel-section">
-        <header className="node-maintenance-header">
-          <div>
-            <h3>Drain</h3>
-            <p>Evict pods and mark the node unschedulable.</p>
-          </div>
-        </header>
+        <div className="object-panel-section-header">
+          <div className="object-panel-section-title">Drain</div>
+        </div>
+        <p className="node-maintenance-section-description">
+          Evict pods and mark the node unschedulable.
+        </p>
         <div className="node-maintenance-drain-options">
           <label className="node-maintenance-checkbox">
             <input
@@ -766,12 +764,12 @@ export function NodeMaintenanceTab({
       </section>
 
       <section className="object-panel-section node-maintenance-danger">
-        <header className="node-maintenance-header">
-          <div>
-            <h3>Delete</h3>
-            <p>Deleting a node removes it from Kubernetes. This cannot be undone.</p>
-          </div>
-        </header>
+        <div className="object-panel-section-header">
+          <div className="object-panel-section-title">Delete</div>
+        </div>
+        <p className="node-maintenance-section-description">
+          Deleting a node removes it from Kubernetes. This cannot be undone.
+        </p>
         <div className="node-maintenance-actions">
           <button
             className="button danger"
