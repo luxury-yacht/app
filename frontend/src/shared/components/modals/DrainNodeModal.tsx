@@ -254,9 +254,6 @@ const DrainNodeModal = ({
     return null;
   }
 
-  // The most recent job to display: prefer active, fall back to the most
-  // recent terminal one so the user sees the result of a just-finished drain.
-  const displayJob = activeDrainJob ?? mostRecentJob;
   // Drain options (Advanced Options) stay reachable except while a drain is
   // running, since the node may need to be drained again at any time.
   const showOptions = !activeDrainJob;
@@ -415,26 +412,30 @@ const DrainNodeModal = ({
           </details>
         )}
 
-        {drainsLoadingState.loading && !displayJob && (
+        {drainsLoadingState.loading && drains.length === 0 && (
           <div className="drain-node-modal-helper">Loading drain status…</div>
         )}
 
-        {displayJob && (
-          <div className="drain-node-modal-progress">
-            <DrainProgressCard
-              job={displayJob}
-              isActive={Boolean(activeDrainJob && activeDrainJob.id === displayJob.id)}
-              onCancel={
-                activeDrainJob && activeDrainJob.id === displayJob.id
-                  ? () => void cancelActiveDrain()
-                  : undefined
-              }
-              cancelDisabled={
-                activeDrainJob && activeDrainJob.id === displayJob.id
-                  ? cancelDrainPending
-                  : undefined
-              }
-            />
+        {drains.length > 0 && (
+          <div className="drain-node-modal-history">
+            {drains.map((job, idx) => {
+              const isActiveCard = Boolean(
+                activeDrainJob && activeDrainJob.id === job.id
+              );
+              return (
+                <div key={job.id} className="drain-node-modal-history-entry">
+                  {idx === 1 && (
+                    <div className="drain-node-modal-history-label">Earlier drains</div>
+                  )}
+                  <DrainProgressCard
+                    job={job}
+                    isActive={isActiveCard}
+                    onCancel={isActiveCard ? () => void cancelActiveDrain() : undefined}
+                    cancelDisabled={isActiveCard ? cancelDrainPending : undefined}
+                  />
+                </div>
+              );
+            })}
           </div>
         )}
 

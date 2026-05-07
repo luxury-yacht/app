@@ -139,10 +139,6 @@
   width: 100px;
 }
 
-.drain-progress-pod-table col.col-update {
-  width: 70px;
-}
-
 .drain-progress-pod-table th,
 .drain-progress-pod-table td {
   text-align: left;
@@ -172,10 +168,6 @@
 .drain-progress-pod-table .pod-name .separator {
   color: var(--color-text-secondary);
   margin: 0 2px;
-}
-
-.drain-progress-pod-table .pod-update {
-  color: var(--color-text-secondary);
 }
 
 .drain-progress-card-details {

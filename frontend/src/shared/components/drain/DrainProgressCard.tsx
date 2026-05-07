@@ -106,7 +106,7 @@ export function DrainProgressCard({
         <p className="drain-progress-helper">{job.message}</p>
       )}
 
-      {progress.pods.length > 0 && <PodTable pods={progress.pods} now={now} />}
+      {progress.pods.length > 0 && <PodTable pods={progress.pods} />}
 
       {job.events && job.events.length > 0 && (
         <details
@@ -163,19 +163,17 @@ function ProgressBar({ progress }: { progress: DrainProgress }) {
   );
 }
 
-function PodTable({ pods, now }: { pods: DrainPodProgress[]; now: number }) {
+function PodTable({ pods }: { pods: DrainPodProgress[] }) {
   return (
     <table className="drain-progress-pod-table" data-test="drain-pod-table">
       <colgroup>
         <col className="col-pod" />
         <col className="col-status" />
-        <col className="col-update" />
       </colgroup>
       <thead>
         <tr>
           <th>Pod</th>
           <th>Status</th>
-          <th>Updated</th>
         </tr>
       </thead>
       <tbody>
@@ -191,7 +189,6 @@ function PodTable({ pods, now }: { pods: DrainPodProgress[]; now: number }) {
                 {podStatusLabel(pod.status)}
               </span>
             </td>
-            <td className="pod-update">{formatRelative(pod.completedAt ?? pod.startedAt, now)}</td>
           </tr>
         ))}
       </tbody>
@@ -320,19 +317,3 @@ function formatElapsed(deltaMs: number): string {
   return `${hours}:${remMinutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 }
 
-function formatRelative(timestamp: number | undefined, now: number): string {
-  if (!timestamp) {
-    return '—';
-  }
-  const delta = Math.max(0, now - timestamp);
-  if (delta < 1000) {
-    return 'just now';
-  }
-  if (delta < 60_000) {
-    return `${Math.floor(delta / 1000)}s ago`;
-  }
-  if (delta < 3_600_000) {
-    return `${Math.floor(delta / 60_000)}m ago`;
-  }
-  return `${Math.floor(delta / 3_600_000)}h ago`;
-}
