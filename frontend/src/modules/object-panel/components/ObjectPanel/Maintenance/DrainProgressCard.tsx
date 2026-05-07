@@ -34,7 +34,7 @@ export function DrainProgressCard({
   const progress = useMemo(() => deriveDrainProgress(job), [job]);
   const [now, setNow] = useState(() => Date.now());
   const showCancel = ACTIVE_STATUSES.has(job.status) && Boolean(onCancel);
-  const [detailsOpen, setDetailsOpen] = useState<boolean>(progress.hasError || isActive);
+  const [detailsOpen, setDetailsOpen] = useState<boolean>(progress.hasError);
 
   useEffect(() => {
     if (!isActive) {
@@ -261,7 +261,7 @@ function podStatusLabel(status: DrainPodStatus): string {
     case 'failed':
       return 'Failed';
     default:
-      return 'In-Progress';
+      return 'Done';
   }
 }
 
