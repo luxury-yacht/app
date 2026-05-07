@@ -265,6 +265,34 @@ describe('NamespaceProvider selection behaviour', () => {
     cleanup();
   });
 
+  it('honors explicit cluster IDs when setting namespace selection', () => {
+    namespaceDomainRef.current = createNamespaceDomainMulti('ready', [
+      {
+        clusterId: 'cluster-a',
+        clusterName: 'alpha',
+        names: ['alpha', 'beta'],
+      },
+      {
+        clusterId: 'cluster-b',
+        clusterName: 'beta',
+        names: ['gamma', 'delta'],
+      },
+    ]);
+    const { cleanup } = renderWithProvider();
+    act(() => {
+      vi.runAllTimers();
+    });
+
+    act(() => {
+      namespaceRef.current?.setSelectedNamespace('delta', 'cluster-b');
+    });
+
+    expect(getSelected()).toBe('none');
+    expect(namespaceRef.current?.getClusterNamespace('cluster-b')).toBe('delta');
+    expect(namespaceRef.current?.getClusterNamespace('cluster-a')).toBeUndefined();
+    cleanup();
+  });
+
   it('drops namespace selections for closed cluster tabs', () => {
     namespaceDomainRef.current = createNamespaceDomainMulti('ready', [
       {

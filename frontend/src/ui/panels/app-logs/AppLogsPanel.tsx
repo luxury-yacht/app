@@ -114,6 +114,7 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
   const prevScrollTopRef = useRef(0);
   const offsetFromBottomRef = useRef(0);
   const latestSequenceRef = useRef(0);
+  const copyFeedbackTimerRef = useRef<number | null>(null);
   const SCROLL_THRESHOLD = 10;
 
   // Separate ref to track auto-scroll without causing re-renders
@@ -471,34 +472,47 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
   };
 
   // Filter logs based on selected level, component, and text
-  const filteredLogs = logs.filter((log) => {
-    // Filter by level
-    const level = normalizeLevel(log.level);
-    if (logLevelFilter.length > 0 && !logLevelFilter.includes(level)) {
-      return false;
-    }
-    // Filter by component
-    if (componentFilter.length > 0 && !componentFilter.includes(log.source ?? '')) {
-      return false;
-    }
-    // Filter by cluster
-    const clusterValue = log.clusterId || log.clusterName || '';
-    if (clusterFilter.length > 0 && !clusterFilter.includes(clusterValue)) {
-      return false;
-    }
-    // Filter by text (case-insensitive search in message and source)
-    if (textFilter.trim()) {
-      const searchText = textFilter.toLowerCase();
-      const matchesMessage = log.message.toLowerCase().includes(searchText);
-      const matchesSource = log.source?.toLowerCase().includes(searchText) || false;
-      const matchesClusterId = log.clusterId?.toLowerCase().includes(searchText) || false;
-      const matchesClusterName = log.clusterName?.toLowerCase().includes(searchText) || false;
-      if (!matchesMessage && !matchesSource && !matchesClusterId && !matchesClusterName) {
-        return false;
+  const filteredLogs = useMemo(
+    () =>
+      logs.filter((log) => {
+        // Filter by level
+        const level = normalizeLevel(log.level);
+        if (logLevelFilter.length > 0 && !logLevelFilter.includes(level)) {
+          return false;
+        }
+        // Filter by component
+        if (componentFilter.length > 0 && !componentFilter.includes(log.source ?? '')) {
+          return false;
+        }
+        // Filter by cluster
+        const clusterValue = log.clusterId || log.clusterName || '';
+        if (clusterFilter.length > 0 && !clusterFilter.includes(clusterValue)) {
+          return false;
+        }
+        // Filter by text (case-insensitive search in message and source)
+        if (textFilter.trim()) {
+          const searchText = textFilter.toLowerCase();
+          const matchesMessage = log.message.toLowerCase().includes(searchText);
+          const matchesSource = log.source?.toLowerCase().includes(searchText) || false;
+          const matchesClusterId = log.clusterId?.toLowerCase().includes(searchText) || false;
+          const matchesClusterName = log.clusterName?.toLowerCase().includes(searchText) || false;
+          if (!matchesMessage && !matchesSource && !matchesClusterId && !matchesClusterName) {
+            return false;
+          }
+        }
+        return true;
+      }),
+    [clusterFilter, componentFilter, logLevelFilter, logs, normalizeLevel, textFilter]
+  );
+
+  useEffect(() => {
+    return () => {
+      if (copyFeedbackTimerRef.current !== null) {
+        window.clearTimeout(copyFeedbackTimerRef.current);
+        copyFeedbackTimerRef.current = null;
       }
-    }
-    return true;
-  });
+    };
+  }, []);
 
   const showFilteredCount =
     (logLevelFilter.length > 0 && logLevelFilter.length !== ALL_LEVEL_VALUES.length) ||
@@ -539,7 +553,11 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
   });
 
   const resetCopyFeedback = useCallback(() => {
-    window.setTimeout(() => {
+    if (copyFeedbackTimerRef.current !== null) {
+      window.clearTimeout(copyFeedbackTimerRef.current);
+    }
+    copyFeedbackTimerRef.current = window.setTimeout(() => {
+      copyFeedbackTimerRef.current = null;
       setCopyFeedback('idle');
     }, 1200);
   }, []);

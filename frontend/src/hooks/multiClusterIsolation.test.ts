@@ -10,8 +10,26 @@ import ReactDOM from 'react-dom/client';
 import React, { act } from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach, beforeAll } from 'vitest';
 import { getPodsUnhealthyStorageKey } from '@modules/namespace/components/podsFilterSignals';
-import { useAuthErrorHandler, ClusterAuthState } from './useAuthErrorHandler';
+import {
+  AuthErrorProvider,
+  useActiveClusterAuthState,
+  useAuthError,
+  type ClusterAuthState,
+} from '@/core/contexts/AuthErrorContext';
 import { useClusterHealthListener, ClusterHealthStatus } from './useWailsRuntimeEvents';
+
+vi.mock('@wailsjs/go/backend/App', () => ({
+  RetryClusterAuth: vi.fn(),
+}));
+
+vi.mock('@/core/app-state-access', () => ({
+  readAllClusterAuthStates: vi.fn(),
+  requestAppState: vi.fn().mockResolvedValue(null),
+}));
+
+vi.mock('@/core/events', () => ({
+  eventBus: { emit: vi.fn() },
+}));
 
 /**
  * Type for capturing hook results for testing.
@@ -55,6 +73,11 @@ function createMockRuntime(): MockRuntime {
     handlers,
     EventsOn: vi.fn((event: string, handler: EventHandler) => {
       handlers.set(event, handler);
+      return () => {
+        if (handlers.get(event) === handler) {
+          handlers.delete(event);
+        }
+      };
     }),
     EventsOff: vi.fn((event: string) => {
       handlers.delete(event);
@@ -91,7 +114,7 @@ describe('Pods Filter Isolation', () => {
 });
 
 // Tests for auth error tracking per cluster
-describe('Auth Error Handler Isolation', () => {
+describe('Auth Error Context Isolation', () => {
   let mockRuntime: MockRuntime;
   let originalRuntime: unknown;
 
@@ -113,7 +136,7 @@ describe('Auth Error Handler Isolation', () => {
   });
 
   /**
-   * Helper to render the useAuthErrorHandler hook and capture its result.
+   * Helper to render the auth context hooks and capture their result.
    */
   const renderAuthHook = async (
     activeClusterId: string = ''
@@ -128,13 +151,17 @@ describe('Auth Error Handler Isolation', () => {
     let hookResult: AuthHookResult | null = null;
 
     const HookHost = () => {
-      const result = useAuthErrorHandler(activeClusterId);
-      hookResult = result;
+      const result = useAuthError();
+      const activeState = useActiveClusterAuthState(activeClusterId);
+      hookResult = {
+        ...result,
+        getActiveClusterAuthState: () => activeState,
+      };
       return null;
     };
 
     await act(async () => {
-      root.render(React.createElement(HookHost));
+      root.render(React.createElement(AuthErrorProvider, null, React.createElement(HookHost)));
       await Promise.resolve();
     });
 

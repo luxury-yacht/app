@@ -484,6 +484,10 @@ function Settings({ onClose }: SettingsProps) {
 
   // Reset accent color for the current resolved theme.
   const handleAccentReset = () => {
+    if (accentPersistTimer.current) {
+      clearTimeout(accentPersistTimer.current);
+      accentPersistTimer.current = null;
+    }
     setAccentColorState('');
     applyAccentColor(
       resolvedTheme === 'light' ? '' : getAccentColor('light'),
@@ -544,6 +548,10 @@ function Settings({ onClose }: SettingsProps) {
 
   // Reset link color for the current resolved theme.
   const handleLinkReset = () => {
+    if (linkPersistTimer.current) {
+      clearTimeout(linkPersistTimer.current);
+      linkPersistTimer.current = null;
+    }
     setLinkColorState('');
     applyLinkColor('', resolvedTheme);
     persistLinkColor(resolvedTheme, '');
@@ -908,6 +916,19 @@ function Settings({ onClose }: SettingsProps) {
   const handleClearAllState = async () => {
     setIsClearStateConfirmOpen(false);
     try {
+      if (palettePersistTimer.current) {
+        clearTimeout(palettePersistTimer.current);
+        palettePersistTimer.current = null;
+      }
+      if (accentPersistTimer.current) {
+        clearTimeout(accentPersistTimer.current);
+        accentPersistTimer.current = null;
+      }
+      if (linkPersistTimer.current) {
+        clearTimeout(linkPersistTimer.current);
+        linkPersistTimer.current = null;
+      }
+
       // Clear palette tint, accent color, and link color before reload so UI reverts immediately.
       clearTintedPalette();
       clearAccentColor();
@@ -936,6 +957,23 @@ function Settings({ onClose }: SettingsProps) {
       errorHandler.handle(error, { action: 'clearAllState' });
     }
   };
+
+  useEffect(() => {
+    return () => {
+      if (palettePersistTimer.current) {
+        clearTimeout(palettePersistTimer.current);
+        palettePersistTimer.current = null;
+      }
+      if (accentPersistTimer.current) {
+        clearTimeout(accentPersistTimer.current);
+        accentPersistTimer.current = null;
+      }
+      if (linkPersistTimer.current) {
+        clearTimeout(linkPersistTimer.current);
+        linkPersistTimer.current = null;
+      }
+    };
+  }, []);
 
   const handleClearAllStateRequest = () => {
     setIsClearStateConfirmOpen(true);
