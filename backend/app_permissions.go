@@ -176,7 +176,7 @@ func (a *App) QueryPermissions(queries []capabilities.PermissionQuery) (*capabil
 			attributes:   attrs,
 		}
 
-		if isNamespaced {
+		if isNamespaced && q.Namespace != "" {
 			diagKey := q.ClusterId + "|" + q.Namespace
 			prepared.diagnosticKey = diagKey
 			diag := nsDiag[diagKey]
@@ -204,8 +204,11 @@ func (a *App) QueryPermissions(queries []capabilities.PermissionQuery) (*capabil
 	for _, prepared := range preparedQueries {
 		q := prepared.query
 		attrs := prepared.attributes
-		if !prepared.isNamespaced {
-			// Cluster-scoped resource: route directly to SSAR.
+		if !prepared.isNamespaced || q.Namespace == "" {
+			// Cluster-scoped resources and namespace-scoped resources without
+			// a concrete namespace route directly to SSAR. The latter is used
+			// for cluster-wide actions like node drain, where pods may be
+			// evicted or deleted from any namespace.
 			attrs.Namespace = ""
 			ssarByCluster[q.ClusterId] = append(ssarByCluster[q.ClusterId], ssarItem{
 				resultIdx: prepared.resultIdx,

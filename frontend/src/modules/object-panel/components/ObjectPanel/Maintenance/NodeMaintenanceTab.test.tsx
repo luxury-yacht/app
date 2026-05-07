@@ -40,6 +40,10 @@ vi.mock('@/core/refresh', () => ({
   refreshOrchestrator: mockRefreshOrchestrator,
 }));
 
+vi.mock('@shared/components/Tooltip', () => ({
+  default: ({ children }: { children: React.ReactNode }) => children,
+}));
+
 vi.mock('@/core/settings/appPreferences', () => ({
   getAutoRefreshEnabled: () => true,
 }));
