@@ -309,7 +309,7 @@ describe('NodeMaintenanceTab', () => {
     render();
     const button = queryActionButton('cordon');
     expect(button?.disabled).toBe(true);
-    expect(container.textContent).toContain('No RBAC');
+    expect(button?.title).toContain('No RBAC');
   });
 
   it('disables the drain action when capability is denied', () => {
@@ -323,7 +323,7 @@ describe('NodeMaintenanceTab', () => {
     render();
     const button = queryActionButton('drain');
     expect(button?.disabled).toBe(true);
-    expect(container.textContent).toContain('Drain forbidden');
+    expect(button?.title).toContain('Drain forbidden');
   });
 
   it('disables the drain action when pod eviction capability is denied', () => {
@@ -337,7 +337,7 @@ describe('NodeMaintenanceTab', () => {
     render();
     const button = queryActionButton('drain');
     expect(button?.disabled).toBe(true);
-    expect(container.textContent).toContain('Evict forbidden');
+    expect(button?.title).toContain('Evict forbidden');
   });
 
   it('deletes a node when confirmed', async () => {
@@ -368,7 +368,7 @@ describe('NodeMaintenanceTab', () => {
     render();
     const button = queryActionButton('delete');
     expect(button?.disabled).toBe(true);
-    expect(container.textContent).toContain('Delete forbidden');
+    expect(button?.title).toContain('Delete forbidden');
   });
 
   it('passes group/version on every Node capability descriptor', () => {

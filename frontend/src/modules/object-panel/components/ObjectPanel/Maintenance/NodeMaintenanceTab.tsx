@@ -592,69 +592,103 @@ export function NodeMaintenanceTab({
   const canDeleteNode = Boolean(deleteCapability?.allowed);
   const deleteActionDisabled = !deleteCapabilityReady || !canDeleteNode || deletePending;
 
-  const statusClass = unschedulable ? 'warning' : 'success';
-  const statusLabel = unschedulable ? 'Cordoned' : 'Schedulable';
-  const statusDescription = unschedulable
-    ? 'Node is unschedulable until it is uncordoned.'
-    : 'Node currently accepts new workloads.';
+  const baseReadinessClass =
+    nodeDetails.status === 'Ready'
+      ? 'success'
+      : nodeDetails.status?.toLowerCase().includes('ready')
+        ? 'warning'
+        : 'error';
+  const statusClass = unschedulable ? 'warning' : baseReadinessClass;
+  const statusText = unschedulable
+    ? `${nodeDetails.status || 'Unknown'}, Cordoned`
+    : nodeDetails.status || 'Unknown';
 
   return (
     <div className="node-maintenance-tab">
-      <section className="object-panel-section">
-        <div className="object-panel-section-header">
-          <div className="object-panel-section-title">
-            Cordon
+      <div className="node-maintenance-status-header">
+        <div className="node-maintenance-stat">
+          <span className="node-maintenance-stat-label">Status</span>
+          <span
+            className={`node-maintenance-stat-value ${statusClass}`}
+            title={unschedulable ? 'Node is cordoned and unschedulable.' : undefined}
+          >
+            <span className={`node-maintenance-status-dot ${statusClass}`} aria-hidden />
+            {statusText}
+          </span>
+        </div>
+        <div className="node-maintenance-stat">
+          <span className="node-maintenance-stat-label">Pods</span>
+          <span className="node-maintenance-stat-value">
+            {nodeDetails.podsCount}
+            {nodeDetails.podsAllocatable ? (
+              <span className="node-maintenance-stat-aux"> / {nodeDetails.podsAllocatable}</span>
+            ) : null}
+          </span>
+        </div>
+        <div className="node-maintenance-stat">
+          <span className="node-maintenance-stat-label">Age</span>
+          <span className="node-maintenance-stat-value">{nodeDetails.age || '—'}</span>
+        </div>
+      </div>
+
+      <section className="object-panel-section node-maintenance-panel">
+        <div className="node-maintenance-action-bar">
+          <div className="node-maintenance-action-group">
+            <button
+              className={`button ${unschedulable ? 'generic' : 'warning'}`}
+              onClick={() => setShowCordonConfirm(true)}
+              disabled={cordonDisabled}
+              title={cordonDisabledReason ?? undefined}
+              type="button"
+              data-maintenance-action="cordon"
+            >
+              {getActionLabel(actionForState, isActionPending)}
+            </button>
             <Tooltip
               content="Cordoning marks the node unschedulable so Kubernetes won't place new pods on it. Existing pods keep running until they exit or are evicted. Reversible with Uncordon."
               maxWidth={320}
             />
           </div>
-          <div className="object-panel-section-actions">
-            <span className={`status-badge ${statusClass}`} title={statusDescription}>
-              {statusLabel}
-            </span>
-          </div>
-        </div>
-        <div className="node-maintenance-actions">
-          <button
-            className={`button ${unschedulable ? 'generic' : 'warning'}`}
-            onClick={() => setShowCordonConfirm(true)}
-            disabled={cordonDisabled}
-            title={cordonDisabledReason ?? undefined}
-            type="button"
-            data-maintenance-action="cordon"
-          >
-            {getActionLabel(actionForState, isActionPending)}
-          </button>
-        </div>
-        {cordonDisabledReason &&
-          !nodeActionGetCapability?.pending &&
-          !cordonCapability?.pending && (
-            <p className="node-maintenance-helper">{cordonDisabledReason}</p>
-          )}
-        {cordonError && <div className="node-maintenance-error">{cordonError}</div>}
-      </section>
-
-      <section className="object-panel-section">
-        <div className="object-panel-section-header">
-          <div className="object-panel-section-title">
-            Drain
+          <div className="node-maintenance-action-group">
+            <button
+              className="button danger"
+              onClick={() => setShowDrainConfirm(true)}
+              disabled={drainDisabled}
+              title={drainDisabledReason ?? undefined}
+              type="button"
+              data-maintenance-action="drain"
+            >
+              {activeDrainJob ? 'Drain Running' : drainPending ? 'Starting…' : 'Drain'}
+            </button>
             <Tooltip
               content="Draining cordons the node and then evicts its pods so the scheduler places them on other nodes. DaemonSet pods stay — they're per-node by design. The eviction API respects PodDisruptionBudgets; if pods can't be evicted within the timeout the drain fails and the node remains cordoned."
               maxWidth={360}
             />
           </div>
-          <div className="object-panel-section-actions">
-            {activeDrainJob && (
-              <span className="status-badge info pulse">
-                {activeDrainJob.status === 'canceling' ? 'Canceling' : 'Draining'}
-              </span>
-            )}
+          <div className="node-maintenance-action-group">
+            <button
+              className="button danger"
+              onClick={() => setShowDeleteConfirm(true)}
+              disabled={deleteActionDisabled}
+              title={deleteDisabledReason ?? undefined}
+              type="button"
+              data-maintenance-action="delete"
+            >
+              {deletePending ? 'Deleting…' : 'Delete'}
+            </button>
+            <Tooltip
+              content="Deleting removes the Node object from the cluster API. It does not terminate the underlying machine — that's your infrastructure's responsibility. Drain the node first, or pods still scheduled on it will be orphaned. This action cannot be undone."
+              maxWidth={360}
+            />
           </div>
         </div>
+        {cordonError && (
+          <div className="node-maintenance-error node-maintenance-row-feedback">{cordonError}</div>
+        )}
+
         <details className="node-maintenance-advanced-options">
           <summary>
-            Advanced options
+            Drain options
             {customizedDrainOptionCount > 0 && (
               <span className="node-maintenance-advanced-badge">
                 {customizedDrainOptionCount} customized
@@ -766,76 +800,48 @@ export function NodeMaintenanceTab({
             </label>
           </div>
         </details>
-        <div className="node-maintenance-actions">
-          <button
-            className="button danger"
-            onClick={() => setShowDrainConfirm(true)}
-            disabled={drainDisabled}
-            title={drainDisabledReason ?? undefined}
-            type="button"
-            data-maintenance-action="drain"
-          >
-            {activeDrainJob ? 'Drain Running' : drainPending ? 'Starting…' : 'Drain Node'}
-          </button>
-        </div>
-        {drainDisabledReason &&
-          !nodeActionGetCapability?.pending &&
-          !drainCapability?.pending &&
-          !drainPodCapability?.pending && (
-            <p className="node-maintenance-helper">{drainDisabledReason}</p>
-          )}
-        {drainError && <div className="node-maintenance-error">{drainError}</div>}
-        {drainStartStatus && <div className="node-maintenance-status">{drainStartStatus}</div>}
-        <div className="node-maintenance-history">
-          {drainsLoading && <div className="node-maintenance-helper">Loading drain history…</div>}
-          {showPausedDrainHistoryState && (
-            <ClusterDataPausedState className="node-maintenance-helper" />
-          )}
-          {!drainsLoading && !showPausedDrainHistoryState && drains.length === 0 && (
-            <div className="node-maintenance-helper">No drain activity recorded yet.</div>
-          )}
-          {drains.map((job) => {
-            const isActive = job.id === activeDrainJob?.id;
-            return (
-              <DrainProgressCard
-                key={job.id}
-                job={job}
-                isActive={isActive}
-                onCancel={isActive ? () => void cancelActiveDrain() : undefined}
-                cancelDisabled={isActive ? cancelDrainPending : undefined}
-              />
-            );
-          })}
-        </div>
-      </section>
-
-      <section className="object-panel-section node-maintenance-danger">
-        <div className="object-panel-section-header">
-          <div className="object-panel-section-title">
-            Delete
-            <Tooltip
-              content="Deleting removes the Node object from the cluster API. It does not terminate the underlying machine — that's your infrastructure's responsibility. Drain the node first, or pods still scheduled on it will be orphaned. This action cannot be undone."
-              maxWidth={360}
-            />
-          </div>
-        </div>
-        <div className="node-maintenance-actions">
-          <button
-            className="button danger"
-            onClick={() => setShowDeleteConfirm(true)}
-            disabled={deleteActionDisabled}
-            title={deleteDisabledReason ?? undefined}
-            type="button"
-            data-maintenance-action="delete"
-          >
-            {deletePending ? 'Deleting…' : 'Delete Node'}
-          </button>
-        </div>
-        {deleteDisabledReason && !deleteCapability?.pending && (
-          <p className="node-maintenance-helper">{deleteDisabledReason}</p>
+        {drainError && (
+          <div className="node-maintenance-error node-maintenance-row-feedback">{drainError}</div>
         )}
-        {deleteError && <div className="node-maintenance-error">{deleteError}</div>}
-        {deleteStatus && <div className="node-maintenance-status">{deleteStatus}</div>}
+        {drainStartStatus && (
+          <div className="node-maintenance-status node-maintenance-row-feedback">
+            {drainStartStatus}
+          </div>
+        )}
+
+        {deleteError && (
+          <div className="node-maintenance-error node-maintenance-row-feedback">{deleteError}</div>
+        )}
+        {deleteStatus && (
+          <div className="node-maintenance-status node-maintenance-row-feedback">
+            {deleteStatus}
+          </div>
+        )}
+
+        {drains.length > 0 && (
+          <div className="node-maintenance-history">
+            {drains.map((job) => {
+              const isActive = job.id === activeDrainJob?.id;
+              return (
+                <DrainProgressCard
+                  key={job.id}
+                  job={job}
+                  isActive={isActive}
+                  onCancel={isActive ? () => void cancelActiveDrain() : undefined}
+                  cancelDisabled={isActive ? cancelDrainPending : undefined}
+                />
+              );
+            })}
+          </div>
+        )}
+        {drainsLoading && drains.length === 0 && (
+          <p className="node-maintenance-helper node-maintenance-row-feedback">
+            Loading drain history…
+          </p>
+        )}
+        {showPausedDrainHistoryState && (
+          <ClusterDataPausedState className="node-maintenance-helper node-maintenance-row-feedback" />
+        )}
       </section>
 
       <ConfirmationModal
@@ -886,7 +892,7 @@ export function NodeMaintenanceTab({
 
 function getActionLabel(action: MaintenanceAction, inProgress: boolean): string {
   if (!inProgress) {
-    return action === 'cordon' ? 'Cordon Node' : 'Uncordon Node';
+    return action === 'cordon' ? 'Cordon' : 'Uncordon';
   }
   return action === 'cordon' ? 'Cordoning…' : 'Uncordoning…';
 }
