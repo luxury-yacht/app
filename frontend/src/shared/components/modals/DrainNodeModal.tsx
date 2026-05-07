@@ -21,6 +21,10 @@ import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import type { NodeMaintenanceDrainJob, NodeMaintenanceSnapshotPayload } from '@/core/refresh/types';
 import { DrainProgressCard } from '@shared/components/drain/DrainProgressCard';
+import {
+  resolveDrainStartPermissionStatus,
+  type NodeDrainOperationPermissions,
+} from '@shared/hooks/nodeActionPermissions';
 import './DrainNodeModal.css';
 
 const NODE_SCOPE_PREFIX = 'node:';
@@ -54,6 +58,7 @@ interface DrainNodeModalProps {
   clusterId: string;
   clusterName?: string;
   nodeName: string;
+  permissions?: NodeDrainOperationPermissions;
   onClose: () => void;
 }
 
@@ -79,6 +84,7 @@ const DrainNodeModal = ({
   clusterId,
   clusterName,
   nodeName,
+  permissions,
   onClose,
 }: DrainNodeModalProps) => {
   const modalRef = useRef<HTMLDivElement>(null);
@@ -185,9 +191,50 @@ const DrainNodeModal = ({
   const hasCustomGrace =
     drainOptions.gracePeriodSeconds != null && drainOptions.gracePeriodSeconds > 0;
   const hasCustomTimeout = drainOptions.timeoutSeconds != null && drainOptions.timeoutSeconds > 0;
+  const selectedStartPermission = permissions
+    ? resolveDrainStartPermissionStatus({
+        ...permissions,
+        disableEviction: Boolean(drainOptions.disableEviction),
+      })
+    : null;
+  const startPermissionReason = useMemo(() => {
+    if (!permissions) return null;
+    if (!permissions.nodeMutation || permissions.nodeMutation.pending) {
+      return 'Checking Node maintenance permissions…';
+    }
+    if (!permissions.nodeMutation.allowed) {
+      return 'You need permission to get and patch this Node before starting a drain.';
+    }
+    const selectedPodPermission = drainOptions.disableEviction
+      ? permissions.podDelete
+      : permissions.podEvictionCreate;
+    if (!selectedPodPermission || selectedPodPermission.pending) {
+      return drainOptions.disableEviction
+        ? 'Checking Pod delete permission…'
+        : 'Checking Pod eviction permission…';
+    }
+    if (!selectedPodPermission.allowed) {
+      return drainOptions.disableEviction
+        ? 'You need permission to delete Pods before using Delete instead of evict.'
+        : 'You need permission to create Pod evictions before starting a drain.';
+    }
+    return null;
+  }, [drainOptions.disableEviction, permissions]);
+  const cancelPermissionReason = useMemo(() => {
+    if (!permissions) return null;
+    if (!permissions.nodeMutation || permissions.nodeMutation.pending) {
+      return 'Checking Node maintenance permissions…';
+    }
+    if (!permissions.nodeMutation.allowed) {
+      return 'You need permission to get and patch this Node before canceling a drain.';
+    }
+    return null;
+  }, [permissions]);
+  const startDisabled =
+    drainPending || Boolean(startPermissionReason) || selectedStartPermission?.allowed === false;
 
   const executeDrain = useCallback(async () => {
-    if (!nodeName || !clusterId || drainPending) return;
+    if (!nodeName || !clusterId || startDisabled) return;
     setDrainError(null);
     setDrainPending(true);
     try {
@@ -221,7 +268,7 @@ const DrainNodeModal = ({
     } finally {
       setDrainPending(false);
     }
-  }, [clusterId, drainOptions, drainPending, nodeName, refreshMaintenance]);
+  }, [clusterId, drainOptions, nodeName, refreshMaintenance, startDisabled]);
 
   const cancelActiveDrain = useCallback(async () => {
     if (!clusterId || !activeDrainJob || cancelDrainPending) return;
@@ -430,7 +477,12 @@ const DrainNodeModal = ({
                     job={job}
                     isActive={isActiveCard}
                     onCancel={isActiveCard ? () => void cancelActiveDrain() : undefined}
-                    cancelDisabled={isActiveCard ? cancelDrainPending : undefined}
+                    cancelDisabled={
+                      isActiveCard
+                        ? cancelDrainPending || Boolean(cancelPermissionReason)
+                        : undefined
+                    }
+                    cancelDisabledReason={isActiveCard ? cancelPermissionReason : undefined}
                   />
                 </div>
               );
@@ -439,6 +491,11 @@ const DrainNodeModal = ({
         )}
 
         {drainError && <div className="drain-node-modal-error">{drainError}</div>}
+        {!activeDrainJob && startPermissionReason && (
+          <div className="drain-node-modal-helper" data-test="drain-modal-permission-reason">
+            {startPermissionReason}
+          </div>
+        )}
       </div>
 
       <div className="modal-footer drain-node-modal-footer">
@@ -450,7 +507,7 @@ const DrainNodeModal = ({
             type="button"
             className="button danger"
             onClick={() => void executeDrain()}
-            disabled={drainPending}
+            disabled={startDisabled}
             data-test={isRetry ? 'drain-modal-retry' : 'drain-modal-start'}
           >
             {startLabel}

@@ -23,6 +23,8 @@ const (
 	DrainStatusFailed    DrainStatus = "failed"
 )
 
+const AggregateScope = "aggregate"
+
 // DrainEventKind represents the type of drain event emitted.
 type DrainEventKind string
 
@@ -409,6 +411,9 @@ func ParseScope(scope string) string {
 	if trimmed == "" {
 		return ""
 	}
+	if trimmed == AggregateScope {
+		return ""
+	}
 	if strings.HasPrefix(trimmed, "node:") {
 		return strings.TrimPrefix(trimmed, "node:")
 	}
@@ -445,4 +450,15 @@ func (s *Store) GetJobsForCluster(clusterID string) []*DrainJob {
 		}
 	}
 	return result
+}
+
+func (s *Store) JobForCluster(jobID, clusterID string) (DrainJob, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	job := s.jobs[strings.TrimSpace(jobID)]
+	if job == nil || job.ClusterID != strings.TrimSpace(clusterID) {
+		return DrainJob{}, false
+	}
+	return cloneJob(job), true
 }

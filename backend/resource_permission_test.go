@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/luxury-yacht/app/backend/nodemaintenance"
 	appsv1 "k8s.io/api/apps/v1"
 	authorizationv1 "k8s.io/api/authorization/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -132,6 +133,43 @@ func TestDrainPodPermissionFollowsEvictionSupport(t *testing.T) {
 				t.Fatalf("unexpected attrs: verb=%q resource=%q subresource=%q", attrs.Verb, attrs.Resource, attrs.Subresource)
 			}
 		})
+	}
+}
+
+func TestCancelDrainNodeJobRequiresNodeMaintenancePermission(t *testing.T) {
+	const clusterID = "cluster-cancel-denied"
+	const nodeName = "worker-cancel-denied"
+	client := cgofake.NewClientset(&corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{Name: nodeName},
+	})
+	denySelfSubjectAccessReviews(client, "no node maintenance")
+
+	app := NewApp()
+	app.Ctx = context.Background()
+	registerTestClusterWithClients(app, clusterID, &clusterClients{
+		meta:              ClusterMeta{ID: clusterID, Name: clusterID},
+		kubeconfigPath:    "/path",
+		kubeconfigContext: "ctx",
+		client:            client,
+	})
+
+	job := nodemaintenance.GlobalStore().StartDrainForCluster(
+		nodeName,
+		DrainNodeOptions{},
+		clusterID,
+		clusterID,
+	)
+	err := app.CancelDrainNodeJob(clusterID, job.ID)
+	if err == nil || !strings.Contains(err.Error(), "permission denied") {
+		t.Fatalf("expected permission denial, got %v", err)
+	}
+
+	stored, ok := nodemaintenance.GlobalStore().JobForCluster(job.ID, clusterID)
+	if !ok {
+		t.Fatal("expected drain job to remain in the store")
+	}
+	if stored.Status != nodemaintenance.DrainStatusRunning {
+		t.Fatalf("expected job to remain running after denied cancel, got %s", stored.Status)
 	}
 }
 

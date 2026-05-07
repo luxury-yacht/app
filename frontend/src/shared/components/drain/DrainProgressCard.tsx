@@ -23,6 +23,7 @@ interface DrainProgressCardProps {
   isActive: boolean;
   onCancel?: () => void;
   cancelDisabled?: boolean;
+  cancelDisabledReason?: string | null;
 }
 
 const ACTIVE_STATUSES = new Set(['running', 'canceling']);
@@ -32,6 +33,7 @@ export function DrainProgressCard({
   isActive,
   onCancel,
   cancelDisabled,
+  cancelDisabledReason,
 }: DrainProgressCardProps) {
   const progress = useMemo(() => deriveDrainProgress(job), [job]);
   const [now, setNow] = useState(() => Date.now());
@@ -83,9 +85,12 @@ export function DrainProgressCard({
             className="button warning"
             onClick={onCancel}
             disabled={cancelDisabled || job.status === 'canceling'}
+            title={cancelDisabledReason ?? undefined}
             data-maintenance-action="cancel-drain"
           >
-            {job.status === 'canceling' || cancelDisabled ? 'Canceling…' : 'Cancel Drain'}
+            {job.status === 'canceling' || (cancelDisabled && !cancelDisabledReason)
+              ? 'Canceling…'
+              : 'Cancel Drain'}
           </button>
         )}
       </div>

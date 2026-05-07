@@ -35,18 +35,7 @@ func (a *App) CordonNode(clusterID, nodeName string) error {
 	if err != nil {
 		return err
 	}
-	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
-		Kind: "Node",
-		Name: nodeName,
-		Verb: "get",
-	}); err != nil {
-		return err
-	}
-	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
-		Kind: "Node",
-		Name: nodeName,
-		Verb: "patch",
-	}); err != nil {
+	if err := a.requireNodeMaintenancePermission(deps, nodeName); err != nil {
 		return err
 	}
 	if err := nodes.NewService(deps).Cordon(nodeName); err != nil {
@@ -64,18 +53,7 @@ func (a *App) UncordonNode(clusterID, nodeName string) error {
 	if err != nil {
 		return err
 	}
-	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
-		Kind: "Node",
-		Name: nodeName,
-		Verb: "get",
-	}); err != nil {
-		return err
-	}
-	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
-		Kind: "Node",
-		Name: nodeName,
-		Verb: "patch",
-	}); err != nil {
+	if err := a.requireNodeMaintenancePermission(deps, nodeName); err != nil {
 		return err
 	}
 	if err := nodes.NewService(deps).Uncordon(nodeName); err != nil {
@@ -96,18 +74,7 @@ func (a *App) DrainNode(clusterID, nodeName string, options DrainNodeOptions) er
 	if err != nil {
 		return err
 	}
-	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
-		Kind: "Node",
-		Name: nodeName,
-		Verb: "get",
-	}); err != nil {
-		return err
-	}
-	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
-		Kind: "Node",
-		Name: nodeName,
-		Verb: "patch",
-	}); err != nil {
+	if err := a.requireNodeMaintenancePermission(deps, nodeName); err != nil {
 		return err
 	}
 	if err := a.requireDrainPodPermission(deps, options); err != nil {
@@ -131,18 +98,7 @@ func (a *App) StartDrainNode(clusterID, nodeName string, options DrainNodeOption
 	if err != nil {
 		return "", err
 	}
-	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
-		Kind: "Node",
-		Name: nodeName,
-		Verb: "get",
-	}); err != nil {
-		return "", err
-	}
-	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
-		Kind: "Node",
-		Name: nodeName,
-		Verb: "patch",
-	}); err != nil {
+	if err := a.requireNodeMaintenancePermission(deps, nodeName); err != nil {
 		return "", err
 	}
 	if err := a.requireDrainPodPermission(deps, options); err != nil {
@@ -156,6 +112,21 @@ func (a *App) StartDrainNode(clusterID, nodeName string, options DrainNodeOption
 	}
 	a.clearNodeCaches(selectionKey, nodeName)
 	return job.ID, nil
+}
+
+func (a *App) requireNodeMaintenancePermission(deps common.Dependencies, nodeName string) error {
+	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
+		Kind: "Node",
+		Name: nodeName,
+		Verb: "get",
+	}); err != nil {
+		return err
+	}
+	return a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
+		Kind: "Node",
+		Name: nodeName,
+		Verb: "patch",
+	})
 }
 
 func (a *App) requireDrainPodPermission(deps common.Dependencies, options DrainNodeOptions) error {
@@ -187,7 +158,15 @@ func (a *App) CancelDrainNodeJob(clusterID, jobID string) error {
 	if err != nil {
 		return err
 	}
-	return nodemaintenance.GlobalStore().CancelDrainForCluster(trimmedJobID, deps.ClusterID)
+	store := nodemaintenance.GlobalStore()
+	job, ok := store.JobForCluster(trimmedJobID, deps.ClusterID)
+	if !ok {
+		return fmt.Errorf("drain job %s not found for cluster %s", trimmedJobID, deps.ClusterID)
+	}
+	if err := a.requireNodeMaintenancePermission(deps, job.NodeName); err != nil {
+		return err
+	}
+	return store.CancelDrainForCluster(trimmedJobID, deps.ClusterID)
 }
 
 func (a *App) DeleteNode(clusterID, nodeName string) error {

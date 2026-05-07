@@ -144,6 +144,7 @@ export interface BuildObjectActionsOptions {
     delete?: PermissionStatus | null;
     portForward?: PermissionStatus | null;
     cordon?: PermissionStatus | null;
+    drain?: PermissionStatus | null;
   };
   actionLoading?: boolean;
 }
@@ -222,6 +223,7 @@ export function buildObjectActionItems({
     delete: deleteStatus,
     portForward: portForwardStatus,
     cordon: cordonStatus,
+    drain: drainStatus,
   } = permissions;
 
   // Open - only for surfaces that are not already the object panel.
@@ -410,8 +412,8 @@ export function buildObjectActionItems({
   if (
     DRAINABLE_KINDS.includes(normalizedKind) &&
     handlers.onDrain &&
-    cordonStatus?.allowed &&
-    !cordonStatus.pending
+    drainStatus?.allowed &&
+    !drainStatus.pending
   ) {
     menuItems.push({
       actionId: OBJECT_ACTION_IDS.drain,

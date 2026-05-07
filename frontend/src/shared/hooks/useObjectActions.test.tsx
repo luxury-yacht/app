@@ -384,4 +384,61 @@ describe('buildObjectActionItems', () => {
       disabled: true,
     });
   });
+
+  it('requires Node get and patch permission before showing Cordon', () => {
+    const items = buildObjectActionItems({
+      object: {
+        kind: 'Node',
+        name: 'worker-1',
+        clusterId: 'cluster-a',
+      },
+      context: 'gridtable',
+      handlers: {
+        onCordon: () => undefined,
+      },
+      permissions: {
+        cordon: { allowed: false, pending: false },
+      },
+    });
+
+    expect(findAction(items, OBJECT_ACTION_IDS.cordon)).toBeUndefined();
+  });
+
+  it('requires Node and Pod drain permissions before showing Drain', () => {
+    const base = {
+      object: {
+        kind: 'Node',
+        name: 'worker-1',
+        clusterId: 'cluster-a',
+      },
+      context: 'gridtable' as const,
+      handlers: {
+        onDrain: () => undefined,
+      },
+    };
+
+    expect(
+      findAction(
+        buildObjectActionItems({
+          ...base,
+          permissions: {
+            drain: { allowed: false, pending: false },
+          },
+        }),
+        OBJECT_ACTION_IDS.drain
+      )
+    ).toBeUndefined();
+
+    expect(
+      findAction(
+        buildObjectActionItems({
+          ...base,
+          permissions: {
+            drain: { allowed: true, pending: false },
+          },
+        }),
+        OBJECT_ACTION_IDS.drain
+      )
+    ).toMatchObject({ actionId: OBJECT_ACTION_IDS.drain });
+  });
 });

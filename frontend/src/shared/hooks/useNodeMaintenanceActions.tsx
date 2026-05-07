@@ -16,10 +16,13 @@ import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import DrainNodeModal from '@shared/components/modals/DrainNodeModal';
 import { CordonNode, UncordonNode } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@/utils/errorHandler';
-import { refreshOrchestrator, useRefreshScopedDomain } from '@/core/refresh';
+import { getPermissionKey, useUserPermissions } from '@/core/capabilities';
+import { refreshOrchestrator } from '@/core/refresh';
 import { requestRefreshDomain } from '@/core/data-access';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
+import { useRefreshScopedDomainEntries, type DomainSnapshotState } from '@/core/refresh/store';
 import type { NodeMaintenanceDrainJob, NodeMaintenanceSnapshotPayload } from '@/core/refresh/types';
+import { resolveNodeDrainOperationPermissions } from '@shared/hooks/nodeActionPermissions';
 
 export interface NodeActionTarget {
   clusterId: string;
@@ -28,8 +31,34 @@ export interface NodeActionTarget {
   unschedulable?: boolean;
 }
 
-type NodeMaintenanceSnapshotState = ReturnType<typeof useRefreshScopedDomain> & {
-  data: NodeMaintenanceSnapshotPayload | null;
+type NodeMaintenanceSnapshotState = DomainSnapshotState<NodeMaintenanceSnapshotPayload>;
+
+const NODE_MAINTENANCE_AGGREGATE_SCOPE = 'aggregate';
+
+const normalizeWatchClusterIds = (clusterIds: string[] | undefined): string[] => {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const clusterId of clusterIds ?? []) {
+    const trimmed = clusterId.trim();
+    if (!trimmed || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    result.push(trimmed);
+  }
+  return result.sort();
+};
+
+export const buildNodeMaintenanceAggregateScope = (clusterId: string): string =>
+  buildClusterScope(clusterId, NODE_MAINTENANCE_AGGREGATE_SCOPE);
+
+export const collectNodeMaintenanceDrains = (
+  entries: Array<[string, NodeMaintenanceSnapshotState]>,
+  scopes: string[]
+): NodeMaintenanceDrainJob[] => {
+  if (scopes.length === 0) return [];
+  const watched = new Set(scopes);
+  return entries.flatMap(([scope, state]) =>
+    watched.has(scope) ? (state.data?.drains ?? []) : []
+  );
 };
 
 export interface UseNodeMaintenanceActionsOptions {
@@ -50,23 +79,25 @@ export const useNodeMaintenanceActions = ({
   const [cordonTarget, setCordonTarget] = useState<NodeActionTarget | null>(null);
   const [drainTarget, setDrainTarget] = useState<NodeActionTarget | null>(null);
   const [cordonPending, setCordonPending] = useState(false);
+  const permissionMap = useUserPermissions();
 
-  const watchKey = useMemo(
-    () => (watchClusterIds ?? []).slice().sort().join('|'),
+  const watchedClusterIds = useMemo(
+    () => normalizeWatchClusterIds(watchClusterIds),
     [watchClusterIds]
   );
 
-  // Aggregate snapshot across the watched clusters so the drain icon can find
-  // active drains for any node row without each consumer wiring its own scope.
-  const aggregateSnapshot = useRefreshScopedDomain(
-    'object-maintenance',
-    watchKey ? `aggregate:${watchKey}` : ''
-  ) as NodeMaintenanceSnapshotState;
+  const watchedAggregateScopes = useMemo(
+    () => watchedClusterIds.map(buildNodeMaintenanceAggregateScope),
+    [watchedClusterIds]
+  );
+
+  const objectMaintenanceEntries = useRefreshScopedDomainEntries('object-maintenance') as Array<
+    [string, NodeMaintenanceSnapshotState]
+  >;
 
   useEffect(() => {
-    if (!watchClusterIds?.length) return;
-    const scopes = watchClusterIds.map((clusterId) => buildClusterScope(clusterId, 'aggregate'));
-    scopes.forEach((scope) => {
+    if (watchedAggregateScopes.length === 0) return;
+    watchedAggregateScopes.forEach((scope) => {
       refreshOrchestrator.setScopedDomainEnabled('object-maintenance', scope, true);
       void requestRefreshDomain({
         domain: 'object-maintenance',
@@ -75,15 +106,15 @@ export const useNodeMaintenanceActions = ({
       });
     });
     return () => {
-      scopes.forEach((scope) => {
+      watchedAggregateScopes.forEach((scope) => {
         refreshOrchestrator.setScopedDomainEnabled('object-maintenance', scope, false);
       });
     };
-  }, [watchClusterIds]);
+  }, [watchedAggregateScopes]);
 
   const aggregateDrains = useMemo<NodeMaintenanceDrainJob[]>(
-    () => aggregateSnapshot.data?.drains ?? [],
-    [aggregateSnapshot.data]
+    () => collectNodeMaintenanceDrains(objectMaintenanceEntries, watchedAggregateScopes),
+    [objectMaintenanceEntries, watchedAggregateScopes]
   );
 
   const activeDrainFor = useCallback(
@@ -110,6 +141,26 @@ export const useNodeMaintenanceActions = ({
   const openDrainFor = useCallback((target: NodeActionTarget) => {
     setDrainTarget(target);
   }, []);
+
+  const getDrainPermissions = useCallback(
+    (clusterId: string) =>
+      resolveNodeDrainOperationPermissions({
+        nodeGet:
+          permissionMap.get(getPermissionKey('Node', 'get', null, null, clusterId, '', 'v1')) ??
+          null,
+        nodePatch:
+          permissionMap.get(getPermissionKey('Node', 'patch', null, null, clusterId, '', 'v1')) ??
+          null,
+        podEvictionCreate:
+          permissionMap.get(
+            getPermissionKey('Pod', 'create', null, 'eviction', clusterId, '', 'v1')
+          ) ?? null,
+        podDelete:
+          permissionMap.get(getPermissionKey('Pod', 'delete', null, null, clusterId, '', 'v1')) ??
+          null,
+      }),
+    [permissionMap]
+  );
 
   const confirmCordon = useCallback(async () => {
     const target = cordonTarget;
@@ -176,6 +227,7 @@ export const useNodeMaintenanceActions = ({
           clusterId={drainTarget.clusterId}
           clusterName={drainTarget.clusterName}
           nodeName={drainTarget.name}
+          permissions={getDrainPermissions(drainTarget.clusterId)}
           onClose={() => setDrainTarget(null)}
         />
       )}
