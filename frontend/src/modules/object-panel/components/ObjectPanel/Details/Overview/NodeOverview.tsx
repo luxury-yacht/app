@@ -9,7 +9,9 @@ import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceStatus } from '@shared/components/kubernetes/ResourceStatus';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
 import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
+import { DrainIcon } from '@shared/components/icons/MenuIcons';
 import './shared/OverviewBlocks.css';
+import './NodeOverview.css';
 
 // For pressure-style conditions (MemoryPressure, DiskPressure, PIDPressure,
 // NetworkUnavailable), `True` means the bad state exists; for the rest
@@ -48,6 +50,10 @@ interface NodeOverviewProps {
   conditions?: types.NodeCondition[];
   labels?: Record<string, string>;
   annotations?: Record<string, string>;
+  /** Set when an active drain job exists for this node. */
+  drainInProgress?: boolean;
+  /** Open the drain modal. Provided alongside drainInProgress. */
+  onOpenDrain?: () => void;
 }
 
 export const NodeOverview: React.FC<NodeOverviewProps> = ({
@@ -71,6 +77,8 @@ export const NodeOverview: React.FC<NodeOverviewProps> = ({
   conditions,
   labels,
   annotations,
+  drainInProgress,
+  onOpenDrain,
 }) => {
   return (
     <>
@@ -78,7 +86,22 @@ export const NodeOverview: React.FC<NodeOverviewProps> = ({
       <ResourceHeader kind="Node" name={name} age={age} />
 
       {/* Use composed component for status */}
-      {status && <ResourceStatus status={status} />}
+      {status && (
+        <div className="node-overview-status-row">
+          <ResourceStatus status={status} />
+          {drainInProgress && onOpenDrain && (
+            <button
+              type="button"
+              className="node-overview-drain-icon"
+              onClick={onOpenDrain}
+              title="Drain in progress — click to view"
+              aria-label="Open drain status"
+            >
+              <DrainIcon />
+            </button>
+          )}
+        </div>
+      )}
 
       {conditions && conditions.length > 0 && (
         <>

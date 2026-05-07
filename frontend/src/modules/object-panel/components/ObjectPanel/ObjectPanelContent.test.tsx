@@ -18,7 +18,6 @@ const hoistedRefs = vi.hoisted(() => ({
   valuesTabProps: { current: null as any },
   shellTabProps: { current: null as any },
   nodeLogsTabProps: { current: null as any },
-  maintenanceTabProps: { current: null as any },
   podsTabProps: { current: null as any },
 }));
 
@@ -75,13 +74,6 @@ vi.mock('@modules/object-panel/components/ObjectPanel/NodeLogs/NodeLogsTab', () 
   default: (props: unknown) => {
     hoistedRefs.nodeLogsTabProps.current = props;
     return <div data-testid="node-logs-tab" />;
-  },
-}));
-
-vi.mock('@modules/object-panel/components/ObjectPanel/Maintenance/NodeMaintenanceTab', () => ({
-  NodeMaintenanceTab: (props: unknown) => {
-    hoistedRefs.maintenanceTabProps.current = props;
-    return <div data-testid="maintenance-tab" />;
   },
 }));
 
@@ -314,26 +306,6 @@ describe('ObjectPanelContent', () => {
     renderContent({ activeTab: 'values' });
     expect(hoistedRefs.valuesTabProps.current).toMatchObject({
       scope: baseProps.helmScope,
-      isActive: true,
-    });
-  });
-
-  it('renders maintenance tab when active for node objects', () => {
-    renderContent({
-      activeTab: 'maintenance',
-      objectKind: 'node',
-      objectData: { kind: 'Node', name: 'node-1' },
-      detailTabProps: {
-        ...baseProps.detailTabProps!,
-        objectData: { kind: 'Node', name: 'node-1' },
-        nodeDetails: {
-          name: 'node-1',
-          unschedulable: false,
-        } as any,
-      },
-    });
-    expect(hoistedRefs.maintenanceTabProps.current).toMatchObject({
-      objectName: 'node-1',
       isActive: true,
     });
   });

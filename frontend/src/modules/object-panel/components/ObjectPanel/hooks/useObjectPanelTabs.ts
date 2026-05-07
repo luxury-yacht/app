@@ -63,7 +63,6 @@ export const useObjectPanelTabs = ({
       TABS.SHELL,
       TABS.MANIFEST,
       TABS.VALUES,
-      TABS.MAINTENANCE,
     ];
 
     return orderedTabs.filter((tab) => {

@@ -271,7 +271,7 @@ describe('useObjectPanelTabs', () => {
     ]);
   });
 
-  it('adds the Maintenance tab for node objects', async () => {
+  it('shows the standard tabs for node objects', async () => {
     const { availableTabs } = await renderHook({
       objectData: {
         kind: 'Node',
@@ -288,7 +288,6 @@ describe('useObjectPanelTabs', () => {
       'Pods',
       'Events',
       'YAML',
-      'Maintenance',
     ]);
   });
 
@@ -310,7 +309,6 @@ describe('useObjectPanelTabs', () => {
       'Logs',
       'Events',
       'YAML',
-      'Maintenance',
     ]);
   });
 

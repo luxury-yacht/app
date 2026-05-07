@@ -1,9 +1,10 @@
 /**
- * frontend/src/modules/object-panel/components/ObjectPanel/Maintenance/DrainProgressCard.tsx
+ * frontend/src/shared/components/drain/DrainProgressCard.tsx
  *
  * Renders a single drain job as a progress card: status header, summary line,
- * progress bar, per-pod table, and a collapsible raw event log. Used for both
- * the active drain (with cancel control) and historical jobs (read-only).
+ * progress bar, per-pod table, and a collapsible raw event log. Used inside
+ * DrainNodeModal for both the active drain (with cancel control) and a
+ * just-finished historical job.
  */
 
 import { useEffect, useMemo, useState } from 'react';
@@ -15,6 +16,7 @@ import {
   type DrainPodStatus,
   type DrainProgress,
 } from './drainProgress';
+import './DrainProgressCard.css';
 
 interface DrainProgressCardProps {
   job: NodeMaintenanceDrainJob;
@@ -54,8 +56,8 @@ export function DrainProgressCard({
   const timeoutMs = progress.timeoutSeconds ? progress.timeoutSeconds * 1000 : undefined;
 
   return (
-    <div className="node-maintenance-job">
-      <div className="node-maintenance-job-header">
+    <div className="drain-progress-card">
+      <div className="drain-progress-card-header">
         <span
           className={`status-badge ${getStatusClass(job.status)}${
             isActive && job.status === 'running' ? ' pulse' : ''
@@ -64,7 +66,7 @@ export function DrainProgressCard({
         >
           {getStatusLabel(job.status)}
         </span>
-        <div className="node-maintenance-job-meta">
+        <div className="drain-progress-card-meta">
           <span>Started {formatTimestamp(progress.startedAt)}</span>
           <span data-test="drain-elapsed">
             {progress.completedAt
@@ -88,46 +90,44 @@ export function DrainProgressCard({
         )}
       </div>
 
-      <div className="node-maintenance-progress-summary" data-test="drain-progress-summary">
+      <div className="drain-progress-summary" data-test="drain-progress-summary">
         {summaryLine(progress, Boolean(job.options?.disableEviction))}
       </div>
 
       <ProgressBar progress={progress} />
 
       {progress.hasError && progress.errorMessage && (
-        <div className="node-maintenance-error" role="alert">
+        <div className="drain-progress-error" role="alert">
           {progress.errorMessage}
         </div>
       )}
 
       {!progress.hasError && progress.completedAt && job.message && (
-        <p className="node-maintenance-helper">{job.message}</p>
+        <p className="drain-progress-helper">{job.message}</p>
       )}
 
       {progress.pods.length > 0 && <PodTable pods={progress.pods} now={now} />}
 
       {job.events && job.events.length > 0 && (
         <details
-          className="node-maintenance-job-details"
+          className="drain-progress-card-details"
           open={detailsOpen}
           onToggle={(event) => setDetailsOpen(event.currentTarget.open)}
         >
           <summary>
             {detailsOpen ? 'Hide' : 'Show'} event log ({job.events.length})
           </summary>
-          <ul className="node-maintenance-job-events">
+          <ul className="drain-progress-events">
             {job.events.map((event) => (
               <li
                 key={event.id}
-                className={`node-maintenance-job-event${event.kind === 'error' ? ' error' : ''}`}
+                className={`drain-progress-event${event.kind === 'error' ? ' error' : ''}`}
               >
-                <span className="node-maintenance-job-event-time">
+                <span className="drain-progress-event-time">
                   {formatTimestamp(event.timestamp)}
                 </span>
-                <span className="node-maintenance-job-event-label">
-                  {event.phase || event.kind}
-                </span>
-                <span className="node-maintenance-job-event-message">
+                <span className="drain-progress-event-label">{event.phase || event.kind}</span>
+                <span className="drain-progress-event-message">
                   {event.podNamespace && event.podName
                     ? `${event.podNamespace}/${event.podName}${
                         event.message ? ` – ${event.message}` : ''
@@ -150,7 +150,7 @@ function ProgressBar({ progress }: { progress: DrainProgress }) {
   const inProgressPct = (progress.inProgress / denominator) * 100;
   return (
     <div
-      className="node-maintenance-progress-bar"
+      className="drain-progress-bar"
       role="progressbar"
       aria-valuemin={0}
       aria-valuemax={denominator}
@@ -165,7 +165,7 @@ function ProgressBar({ progress }: { progress: DrainProgress }) {
 
 function PodTable({ pods, now }: { pods: DrainPodProgress[]; now: number }) {
   return (
-    <table className="node-maintenance-pod-table" data-test="drain-pod-table">
+    <table className="drain-progress-pod-table" data-test="drain-pod-table">
       <colgroup>
         <col className="col-pod" />
         <col className="col-status" />

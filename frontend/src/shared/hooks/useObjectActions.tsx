@@ -8,14 +8,16 @@
 import { eventBus } from '@/core/events';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import {
+  CordonIcon,
+  DeleteIcon,
   DiffIcon,
+  DrainIcon,
   ObjectMapIcon,
   OpenIcon,
+  PortForwardIcon,
   RestartIcon,
   RollbackIcon,
   ScaleIcon,
-  DeleteIcon,
-  PortForwardIcon,
 } from '@shared/components/icons/MenuIcons';
 import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
 import { buildObjectDiffSelection } from '@shared/components/diff/objectDiffSelection';
@@ -72,6 +74,8 @@ export interface ObjectActionData {
   portForwardAvailable?: boolean;
   // Whether a HorizontalPodAutoscaler targets this workload (disables manual scaling)
   hpaManaged?: boolean;
+  // Node-only: when true the cordon action toggles to "Uncordon".
+  unschedulable?: boolean;
   // For Event-specific actions - the involved object reference (e.g., "Pod/my-pod")
   involvedObject?: string;
 }
@@ -85,6 +89,10 @@ export interface ObjectActionHandlers {
   onScale?: () => void;
   onDelete?: () => void;
   onPortForward?: () => void;
+  // Node-only: cordon/uncordon share a single handler — the menu picks the
+  // label based on object.unschedulable.
+  onCordon?: () => void;
+  onDrain?: () => void;
   // CronJob actions
   onTrigger?: () => void;
   onSuspendToggle?: () => void;
@@ -112,6 +120,8 @@ interface PortForwardAvailability {
 const RESTARTABLE_KINDS = ['Deployment', 'StatefulSet', 'DaemonSet'];
 const ROLLBACKABLE_KINDS = ['Deployment', 'StatefulSet', 'DaemonSet'];
 export const SCALABLE_KINDS = ['Deployment', 'StatefulSet', 'ReplicaSet'];
+const CORDONABLE_KINDS = ['Node'];
+const DRAINABLE_KINDS = ['Node'];
 let nextObjectDiffRequestId = 1;
 
 const PORT_FORWARDABLE_TARGETS: Record<string, { group: string; version: string }> = {
@@ -133,6 +143,7 @@ export interface BuildObjectActionsOptions {
     scale?: PermissionStatus | null;
     delete?: PermissionStatus | null;
     portForward?: PermissionStatus | null;
+    cordon?: PermissionStatus | null;
   };
   actionLoading?: boolean;
 }
@@ -210,6 +221,7 @@ export function buildObjectActionItems({
     scale: scaleStatus,
     delete: deleteStatus,
     portForward: portForwardStatus,
+    cordon: cordonStatus,
   } = permissions;
 
   // Open - only for surfaces that are not already the object panel.
@@ -286,6 +298,8 @@ export function buildObjectActionItems({
     (ROLLBACKABLE_KINDS.includes(normalizedKind) && Boolean(handlers.onRollback)) ||
     (SCALABLE_KINDS.includes(normalizedKind) &&
       (Boolean(object.hpaManaged) || Boolean(handlers.onScale))) ||
+    (CORDONABLE_KINDS.includes(normalizedKind) && Boolean(handlers.onCordon)) ||
+    (DRAINABLE_KINDS.includes(normalizedKind) && Boolean(handlers.onDrain)) ||
     portForwardAvailability.show;
 
   if (menuItems.length > 0 && hasActionSection) {
@@ -372,6 +386,40 @@ export function buildObjectActionItems({
         disabled: actionLoading,
       });
     }
+  }
+
+  // Cordon / Uncordon (Node-only)
+  if (
+    CORDONABLE_KINDS.includes(normalizedKind) &&
+    handlers.onCordon &&
+    cordonStatus?.allowed &&
+    !cordonStatus.pending
+  ) {
+    const isCordoned = Boolean(object.unschedulable);
+    const cordonActionId = isCordoned ? OBJECT_ACTION_IDS.uncordon : OBJECT_ACTION_IDS.cordon;
+    menuItems.push({
+      actionId: cordonActionId,
+      label: objectActionLabel(cordonActionId),
+      icon: <CordonIcon />,
+      onClick: handlers.onCordon,
+      disabled: actionLoading,
+    });
+  }
+
+  // Drain (Node-only)
+  if (
+    DRAINABLE_KINDS.includes(normalizedKind) &&
+    handlers.onDrain &&
+    cordonStatus?.allowed &&
+    !cordonStatus.pending
+  ) {
+    menuItems.push({
+      actionId: OBJECT_ACTION_IDS.drain,
+      label: objectActionLabel(OBJECT_ACTION_IDS.drain),
+      icon: <DrainIcon />,
+      onClick: handlers.onDrain,
+      disabled: actionLoading,
+    });
   }
 
   // Port Forward

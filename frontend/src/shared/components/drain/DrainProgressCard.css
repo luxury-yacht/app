@@ -1,0 +1,239 @@
+/* Drain progress card — used inside DrainNodeModal. */
+
+.drain-progress-card {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.drain-progress-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-md);
+  flex-wrap: wrap;
+}
+
+.drain-progress-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.drain-progress-card .status-badge {
+  padding: 2px 4px;
+  border-radius: var(--border-radius-sm);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border: 1px solid transparent;
+}
+
+.drain-progress-card .status-badge.info {
+  background-color: var(--color-info-bg);
+  color: var(--color-accent);
+  border-color: var(--color-info-bg);
+}
+
+.drain-progress-card .status-badge.success {
+  background-color: var(--color-success-bg);
+  color: var(--color-success);
+  border-color: var(--color-success-bg);
+}
+
+.drain-progress-card .status-badge.warning {
+  background-color: var(--color-warning-bg);
+  color: var(--color-warning);
+  border-color: var(--color-warning-border, var(--color-warning-bg));
+}
+
+.drain-progress-card .status-badge.error {
+  background-color: var(--color-error-bg);
+  color: var(--color-error);
+  border-color: var(--color-error-border, var(--color-error-bg));
+}
+
+.drain-progress-card .status-badge.pulse {
+  animation: drain-progress-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes drain-progress-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.drain-progress-summary {
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+}
+
+.drain-progress-bar {
+  display: flex;
+  height: 8px;
+  background-color: var(--color-border);
+  border-radius: var(--border-radius-sm);
+  overflow: hidden;
+}
+
+.drain-progress-bar .segment {
+  height: 100%;
+  transition: width 0.25s ease;
+}
+
+.drain-progress-bar .segment.done {
+  background-color: var(--color-success);
+}
+
+.drain-progress-bar .segment.failed {
+  background-color: var(--color-error);
+}
+
+.drain-progress-bar .segment.in-progress {
+  background-color: var(--color-accent);
+  background-image: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.15) 25%,
+    transparent 25%,
+    transparent 50%,
+    rgba(255, 255, 255, 0.15) 50%,
+    rgba(255, 255, 255, 0.15) 75%,
+    transparent 75%
+  );
+  background-size: 16px 16px;
+  animation: drain-progress-stripes 1s linear infinite;
+}
+
+@keyframes drain-progress-stripes {
+  0% {
+    background-position: 0 0;
+  }
+  100% {
+    background-position: 16px 0;
+  }
+}
+
+.drain-progress-pod-table {
+  width: 100%;
+  max-width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: var(--font-size-xs);
+}
+
+.drain-progress-pod-table col.col-pod {
+  width: auto;
+}
+
+.drain-progress-pod-table col.col-status {
+  width: 100px;
+}
+
+.drain-progress-pod-table col.col-update {
+  width: 70px;
+}
+
+.drain-progress-pod-table th,
+.drain-progress-pod-table td {
+  text-align: left;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.drain-progress-pod-table th {
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 10px;
+}
+
+.drain-progress-pod-table .pod-name {
+  font-family: var(--font-mono, monospace);
+}
+
+.drain-progress-pod-table .pod-name .namespace {
+  color: var(--color-text-secondary);
+}
+
+.drain-progress-pod-table .pod-name .separator {
+  color: var(--color-text-secondary);
+  margin: 0 2px;
+}
+
+.drain-progress-pod-table .pod-update {
+  color: var(--color-text-secondary);
+}
+
+.drain-progress-card-details {
+  margin-top: var(--spacing-sm);
+}
+
+.drain-progress-card-details > summary {
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  padding: var(--spacing-xs) 0;
+  user-select: none;
+}
+
+.drain-progress-card-details > summary:hover {
+  color: var(--color-text);
+}
+
+.drain-progress-events {
+  list-style: none;
+  margin: var(--spacing-sm) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.drain-progress-event {
+  display: grid;
+  grid-template-columns: minmax(120px, auto) 100px 1fr;
+  gap: var(--spacing-sm);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.drain-progress-event.error {
+  color: var(--color-danger, #f87171);
+}
+
+.drain-progress-event-time {
+  font-weight: var(--font-weight-medium);
+}
+
+.drain-progress-event-label {
+  text-transform: capitalize;
+}
+
+.drain-progress-error {
+  border: 1px solid var(--color-danger, #f87171);
+  background-color: var(--color-bg-danger, rgba(248, 113, 113, 0.1));
+  color: var(--color-danger, #f87171);
+  padding: var(--spacing-sm);
+  border-radius: var(--border-radius);
+  font-size: var(--font-size-sm);
+}
+
+.drain-progress-helper {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}

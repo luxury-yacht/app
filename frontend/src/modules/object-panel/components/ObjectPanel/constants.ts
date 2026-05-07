@@ -90,7 +90,6 @@ export const TABS = {
   EVENTS: { id: 'events', label: 'Events', alwaysShow: true },
   YAML: { id: 'yaml', label: 'YAML', alwaysShow: true },
   MAP: { id: 'map', label: 'Map', alwaysShow: true },
-  MAINTENANCE: { id: 'maintenance', label: 'Maintenance', onlyForKinds: ['node'] },
   SHELL: {
     id: 'shell',
     label: 'Shell',
