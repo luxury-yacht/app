@@ -316,4 +316,3 @@ function formatElapsed(deltaMs: number): string {
   const remMinutes = minutes % 60;
   return `${hours}:${remMinutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 }
-

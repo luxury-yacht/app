@@ -258,8 +258,7 @@ const DrainNodeModal = ({
   // running, since the node may need to be drained again at any time.
   const showOptions = !activeDrainJob;
   const lastTerminalStatus = activeDrainJob ? null : (mostRecentJob?.status ?? null);
-  const isRetry =
-    lastTerminalStatus === 'failed' || lastTerminalStatus === 'cancelled';
+  const isRetry = lastTerminalStatus === 'failed' || lastTerminalStatus === 'cancelled';
   // Initial state — no jobs at all — gets a 'Cancel' label on the close
   // button; once a job exists the secondary action is 'Close' instead.
   const closeLabel = mostRecentJob ? 'Close' : 'Cancel';
@@ -292,122 +291,124 @@ const DrainNodeModal = ({
           <details className="drain-node-modal-advanced">
             <summary>Advanced Options</summary>
             <fieldset className="drain-node-modal-options" disabled={drainPending}>
-            <label className="drain-node-modal-checkbox">
-              <input
-                data-test="drain-modal-ignore-daemonsets"
-                type="checkbox"
-                checked={Boolean(drainOptions.ignoreDaemonSets)}
-                onChange={(event) => updateDrainOption('ignoreDaemonSets', event.target.checked)}
-              />
-              <span>Ignore DaemonSet pods</span>
-              <Tooltip content={DRAIN_OPTION_TOOLTIPS.ignoreDaemonSets} maxWidth={320} />
-            </label>
-            <label className="drain-node-modal-checkbox">
-              <input
-                data-test="drain-modal-delete-emptydir"
-                type="checkbox"
-                checked={Boolean(drainOptions.deleteEmptyDirData)}
-                onChange={(event) => updateDrainOption('deleteEmptyDirData', event.target.checked)}
-              />
-              <span>Remove pods with emptyDir volumes</span>
-              <Tooltip content={DRAIN_OPTION_TOOLTIPS.deleteEmptyDirData} maxWidth={320} />
-            </label>
-            <label className="drain-node-modal-checkbox">
-              <input
-                data-test="drain-modal-disable-eviction"
-                type="checkbox"
-                checked={Boolean(drainOptions.disableEviction)}
-                onChange={(event) => updateDrainOption('disableEviction', event.target.checked)}
-              />
-              <span>Delete instead of evict</span>
-              <Tooltip content={DRAIN_OPTION_TOOLTIPS.disableEviction} maxWidth={320} />
-            </label>
-            <label className="drain-node-modal-checkbox">
-              <input
-                data-test="drain-modal-skip-wait"
-                type="checkbox"
-                checked={Boolean(drainOptions.skipWaitForPodsToTerminate)}
-                onChange={(event) =>
-                  updateDrainOption('skipWaitForPodsToTerminate', event.target.checked)
-                }
-              />
-              <span>Skip wait for pod termination</span>
-              <Tooltip content={DRAIN_OPTION_TOOLTIPS.skipWait} maxWidth={320} />
-            </label>
-            <label className="drain-node-modal-checkbox">
-              <input
-                data-test="drain-modal-force"
-                type="checkbox"
-                checked={Boolean(drainOptions.force)}
-                onChange={(event) => updateDrainOption('force', event.target.checked)}
-              />
-              <span>Allow deleting unmanaged pods</span>
-              <Tooltip content={DRAIN_OPTION_TOOLTIPS.force} maxWidth={320} />
-            </label>
-            <label className="drain-node-modal-checkbox drain-node-modal-grace">
-              <input
-                data-test="drain-modal-grace-toggle"
-                type="checkbox"
-                checked={hasCustomGrace}
-                onChange={(event) => {
-                  if (!event.target.checked) {
-                    updateDrainOption('gracePeriodSeconds', undefined);
-                  } else {
-                    updateDrainOption('gracePeriodSeconds', customGraceSeconds);
+              <label className="drain-node-modal-checkbox">
+                <input
+                  data-test="drain-modal-ignore-daemonsets"
+                  type="checkbox"
+                  checked={Boolean(drainOptions.ignoreDaemonSets)}
+                  onChange={(event) => updateDrainOption('ignoreDaemonSets', event.target.checked)}
+                />
+                <span>Ignore DaemonSet pods</span>
+                <Tooltip content={DRAIN_OPTION_TOOLTIPS.ignoreDaemonSets} maxWidth={320} />
+              </label>
+              <label className="drain-node-modal-checkbox">
+                <input
+                  data-test="drain-modal-delete-emptydir"
+                  type="checkbox"
+                  checked={Boolean(drainOptions.deleteEmptyDirData)}
+                  onChange={(event) =>
+                    updateDrainOption('deleteEmptyDirData', event.target.checked)
                   }
-                }}
-              />
-              <span className="drain-node-modal-grace-label">Override grace period</span>
-              <input
-                type="number"
-                min={1}
-                max={MAX_NODE_DRAIN_GRACE_SECONDS}
-                value={customGraceSeconds}
-                disabled={!hasCustomGrace}
-                onChange={(event) => {
-                  const next = Number(event.target.value);
-                  const normalized = normalizeGraceSeconds(next);
-                  setCustomGraceSeconds(normalized);
-                  if (hasCustomGrace) {
-                    updateDrainOption('gracePeriodSeconds', normalized);
+                />
+                <span>Remove pods with emptyDir volumes</span>
+                <Tooltip content={DRAIN_OPTION_TOOLTIPS.deleteEmptyDirData} maxWidth={320} />
+              </label>
+              <label className="drain-node-modal-checkbox">
+                <input
+                  data-test="drain-modal-disable-eviction"
+                  type="checkbox"
+                  checked={Boolean(drainOptions.disableEviction)}
+                  onChange={(event) => updateDrainOption('disableEviction', event.target.checked)}
+                />
+                <span>Delete instead of evict</span>
+                <Tooltip content={DRAIN_OPTION_TOOLTIPS.disableEviction} maxWidth={320} />
+              </label>
+              <label className="drain-node-modal-checkbox">
+                <input
+                  data-test="drain-modal-skip-wait"
+                  type="checkbox"
+                  checked={Boolean(drainOptions.skipWaitForPodsToTerminate)}
+                  onChange={(event) =>
+                    updateDrainOption('skipWaitForPodsToTerminate', event.target.checked)
                   }
-                }}
-              />
-              <span className="drain-node-modal-grace-unit">seconds</span>
-              <Tooltip content={DRAIN_OPTION_TOOLTIPS.gracePeriod} maxWidth={320} />
-            </label>
-            <label className="drain-node-modal-checkbox drain-node-modal-grace">
-              <input
-                data-test="drain-modal-timeout-toggle"
-                type="checkbox"
-                checked={hasCustomTimeout}
-                onChange={(event) => {
-                  if (!event.target.checked) {
-                    updateDrainOption('timeoutSeconds', undefined);
-                  } else {
-                    updateDrainOption('timeoutSeconds', customTimeoutSeconds);
-                  }
-                }}
-              />
-              <span className="drain-node-modal-grace-label">Drain timeout</span>
-              <input
-                data-test="drain-modal-timeout-input"
-                type="number"
-                min={1}
-                value={customTimeoutSeconds}
-                disabled={!hasCustomTimeout}
-                onChange={(event) => {
-                  const next = Number(event.target.value);
-                  const normalized = normalizeTimeoutSeconds(next);
-                  setCustomTimeoutSeconds(normalized);
-                  if (hasCustomTimeout) {
-                    updateDrainOption('timeoutSeconds', normalized);
-                  }
-                }}
-              />
-              <span className="drain-node-modal-grace-unit">seconds</span>
-              <Tooltip content={DRAIN_OPTION_TOOLTIPS.timeout} maxWidth={320} />
-            </label>
+                />
+                <span>Skip wait for pod termination</span>
+                <Tooltip content={DRAIN_OPTION_TOOLTIPS.skipWait} maxWidth={320} />
+              </label>
+              <label className="drain-node-modal-checkbox">
+                <input
+                  data-test="drain-modal-force"
+                  type="checkbox"
+                  checked={Boolean(drainOptions.force)}
+                  onChange={(event) => updateDrainOption('force', event.target.checked)}
+                />
+                <span>Allow deleting unmanaged pods</span>
+                <Tooltip content={DRAIN_OPTION_TOOLTIPS.force} maxWidth={320} />
+              </label>
+              <label className="drain-node-modal-checkbox drain-node-modal-grace">
+                <input
+                  data-test="drain-modal-grace-toggle"
+                  type="checkbox"
+                  checked={hasCustomGrace}
+                  onChange={(event) => {
+                    if (!event.target.checked) {
+                      updateDrainOption('gracePeriodSeconds', undefined);
+                    } else {
+                      updateDrainOption('gracePeriodSeconds', customGraceSeconds);
+                    }
+                  }}
+                />
+                <span className="drain-node-modal-grace-label">Override grace period</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={MAX_NODE_DRAIN_GRACE_SECONDS}
+                  value={customGraceSeconds}
+                  disabled={!hasCustomGrace}
+                  onChange={(event) => {
+                    const next = Number(event.target.value);
+                    const normalized = normalizeGraceSeconds(next);
+                    setCustomGraceSeconds(normalized);
+                    if (hasCustomGrace) {
+                      updateDrainOption('gracePeriodSeconds', normalized);
+                    }
+                  }}
+                />
+                <span className="drain-node-modal-grace-unit">seconds</span>
+                <Tooltip content={DRAIN_OPTION_TOOLTIPS.gracePeriod} maxWidth={320} />
+              </label>
+              <label className="drain-node-modal-checkbox drain-node-modal-grace">
+                <input
+                  data-test="drain-modal-timeout-toggle"
+                  type="checkbox"
+                  checked={hasCustomTimeout}
+                  onChange={(event) => {
+                    if (!event.target.checked) {
+                      updateDrainOption('timeoutSeconds', undefined);
+                    } else {
+                      updateDrainOption('timeoutSeconds', customTimeoutSeconds);
+                    }
+                  }}
+                />
+                <span className="drain-node-modal-grace-label">Drain timeout</span>
+                <input
+                  data-test="drain-modal-timeout-input"
+                  type="number"
+                  min={1}
+                  value={customTimeoutSeconds}
+                  disabled={!hasCustomTimeout}
+                  onChange={(event) => {
+                    const next = Number(event.target.value);
+                    const normalized = normalizeTimeoutSeconds(next);
+                    setCustomTimeoutSeconds(normalized);
+                    if (hasCustomTimeout) {
+                      updateDrainOption('timeoutSeconds', normalized);
+                    }
+                  }}
+                />
+                <span className="drain-node-modal-grace-unit">seconds</span>
+                <Tooltip content={DRAIN_OPTION_TOOLTIPS.timeout} maxWidth={320} />
+              </label>
             </fieldset>
           </details>
         )}
@@ -419,9 +420,7 @@ const DrainNodeModal = ({
         {drains.length > 0 && (
           <div className="drain-node-modal-history">
             {drains.map((job, idx) => {
-              const isActiveCard = Boolean(
-                activeDrainJob && activeDrainJob.id === job.id
-              );
+              const isActiveCard = Boolean(activeDrainJob && activeDrainJob.id === job.id);
               return (
                 <div key={job.id} className="drain-node-modal-history-entry">
                   {idx === 1 && (
