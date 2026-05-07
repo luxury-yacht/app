@@ -13,6 +13,7 @@ import {
 } from '@wailsjs/go/backend/App';
 import { types } from '@wailsjs/go/models';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
+import Tooltip from '@shared/components/Tooltip';
 import { requestRefreshDomain } from '@/core/data-access';
 import { refreshOrchestrator, useRefreshScopedDomain } from '@/core/refresh';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
@@ -393,6 +394,26 @@ export function NodeMaintenanceTab({
     return raw > 0;
   }, [drainOptions.timeoutSeconds]);
 
+  const customizedDrainOptionCount = useMemo(() => {
+    let count = 0;
+    if (!drainOptions.ignoreDaemonSets) count += 1;
+    if (!drainOptions.deleteEmptyDirData) count += 1;
+    if (drainOptions.force) count += 1;
+    if (drainOptions.disableEviction) count += 1;
+    if (drainOptions.skipWaitForPodsToTerminate) count += 1;
+    if (hasCustomGrace) count += 1;
+    if (hasCustomTimeout) count += 1;
+    return count;
+  }, [
+    drainOptions.deleteEmptyDirData,
+    drainOptions.disableEviction,
+    drainOptions.force,
+    drainOptions.ignoreDaemonSets,
+    drainOptions.skipWaitForPodsToTerminate,
+    hasCustomGrace,
+    hasCustomTimeout,
+  ]);
+
   const drainConfirmationMessage = useMemo(() => {
     const graceText = hasCustomGrace ? `${drainOptions.gracePeriodSeconds ?? 0}s` : 'Pod defaults';
     const timeoutText = hasCustomTimeout ? `${drainOptions.timeoutSeconds ?? 0}s` : 'No timeout';
@@ -581,17 +602,22 @@ export function NodeMaintenanceTab({
     <div className="node-maintenance-tab">
       <section className="object-panel-section">
         <div className="object-panel-section-header">
-          <div className="object-panel-section-title">Cordon</div>
+          <div className="object-panel-section-title">
+            Cordon
+            <Tooltip
+              content="Cordoning marks the node unschedulable so Kubernetes won't place new pods on it. Existing pods keep running until they exit or are evicted. Reversible with Uncordon."
+              maxWidth={320}
+            />
+          </div>
+          <div className="object-panel-section-actions">
+            <span className={`status-badge ${statusClass}`} title={statusDescription}>
+              {statusLabel}
+            </span>
+          </div>
         </div>
-        <p className="node-maintenance-section-description">
-          <strong className={`node-maintenance-status-label ${statusClass}`}>
-            {statusLabel}
-          </strong>{' '}
-          — {statusDescription}
-        </p>
         <div className="node-maintenance-actions">
           <button
-            className={`button ${unschedulable ? 'warning' : 'warning'}`}
+            className={`button ${unschedulable ? 'generic' : 'warning'}`}
             onClick={() => setShowCordonConfirm(true)}
             disabled={cordonDisabled}
             title={cordonDisabledReason ?? undefined}
@@ -611,115 +637,135 @@ export function NodeMaintenanceTab({
 
       <section className="object-panel-section">
         <div className="object-panel-section-header">
-          <div className="object-panel-section-title">Drain</div>
+          <div className="object-panel-section-title">
+            Drain
+            <Tooltip
+              content="Draining cordons the node and then evicts its pods so the scheduler places them on other nodes. DaemonSet pods stay — they're per-node by design. The eviction API respects PodDisruptionBudgets; if pods can't be evicted within the timeout the drain fails and the node remains cordoned."
+              maxWidth={360}
+            />
+          </div>
+          <div className="object-panel-section-actions">
+            {activeDrainJob && (
+              <span className="status-badge info pulse">
+                {activeDrainJob.status === 'canceling' ? 'Canceling' : 'Draining'}
+              </span>
+            )}
+          </div>
         </div>
-        <p className="node-maintenance-section-description">
-          Evict pods and mark the node unschedulable.
-        </p>
-        <div className="node-maintenance-drain-options">
-          <label className="node-maintenance-checkbox">
-            <input
-              data-test="node-maintenance-ignore-daemonsets"
-              type="checkbox"
-              checked={Boolean(drainOptions.ignoreDaemonSets)}
-              onChange={(event) => updateDrainOption('ignoreDaemonSets', event.target.checked)}
-            />
-            <span>Ignore DaemonSet pods (--ignore-daemonsets)</span>
-          </label>
-          <label className="node-maintenance-checkbox">
-            <input
-              data-test="node-maintenance-delete-emptydir"
-              type="checkbox"
-              checked={Boolean(drainOptions.deleteEmptyDirData)}
-              onChange={(event) => updateDrainOption('deleteEmptyDirData', event.target.checked)}
-            />
-            <span>Remove pods with emptyDir volumes (--delete-emptydir-data)</span>
-          </label>
-          <label className="node-maintenance-checkbox">
-            <input
-              data-test="node-maintenance-disable-eviction"
-              type="checkbox"
-              checked={Boolean(drainOptions.disableEviction)}
-              onChange={(event) => updateDrainOption('disableEviction', event.target.checked)}
-            />
-            <span>Delete instead of Evict (--disable-eviction)</span>
-          </label>
-          <label className="node-maintenance-checkbox node-maintenance-grace-option">
-            <input
-              data-test="node-maintenance-grace-toggle"
-              type="checkbox"
-              checked={hasCustomGrace}
-              onChange={(event) => {
-                if (!event.target.checked) {
-                  updateDrainOption('gracePeriodSeconds', undefined);
-                } else {
-                  updateDrainOption('gracePeriodSeconds', customGraceSeconds);
-                }
-              }}
-            />
-            <div className="node-maintenance-grace-inline">
-              <span>Override pod grace period (--grace-period)</span>
+        <details className="node-maintenance-advanced-options">
+          <summary>
+            Advanced options
+            {customizedDrainOptionCount > 0 && (
+              <span className="node-maintenance-advanced-badge">
+                {customizedDrainOptionCount} customized
+              </span>
+            )}
+          </summary>
+          <div className="node-maintenance-drain-options">
+            <label className="node-maintenance-checkbox">
               <input
-                type="number"
-                min={1}
-                max={900}
-                value={customGraceSeconds}
-                disabled={!hasCustomGrace}
+                data-test="node-maintenance-ignore-daemonsets"
+                type="checkbox"
+                checked={Boolean(drainOptions.ignoreDaemonSets)}
+                onChange={(event) => updateDrainOption('ignoreDaemonSets', event.target.checked)}
+              />
+              <span>Ignore DaemonSet pods (--ignore-daemonsets)</span>
+            </label>
+            <label className="node-maintenance-checkbox">
+              <input
+                data-test="node-maintenance-delete-emptydir"
+                type="checkbox"
+                checked={Boolean(drainOptions.deleteEmptyDirData)}
+                onChange={(event) => updateDrainOption('deleteEmptyDirData', event.target.checked)}
+              />
+              <span>Remove pods with emptyDir volumes (--delete-emptydir-data)</span>
+            </label>
+            <label className="node-maintenance-checkbox">
+              <input
+                data-test="node-maintenance-disable-eviction"
+                type="checkbox"
+                checked={Boolean(drainOptions.disableEviction)}
+                onChange={(event) => updateDrainOption('disableEviction', event.target.checked)}
+              />
+              <span>Delete instead of Evict (--disable-eviction)</span>
+            </label>
+            <label className="node-maintenance-checkbox node-maintenance-grace-option">
+              <input
+                data-test="node-maintenance-grace-toggle"
+                type="checkbox"
+                checked={hasCustomGrace}
                 onChange={(event) => {
-                  const next = Number(event.target.value);
-                  const normalized = normalizeGraceSeconds(next);
-                  setCustomGraceSeconds(normalized);
-                  if (hasCustomGrace) {
-                    updateDrainOption('gracePeriodSeconds', normalized);
+                  if (!event.target.checked) {
+                    updateDrainOption('gracePeriodSeconds', undefined);
+                  } else {
+                    updateDrainOption('gracePeriodSeconds', customGraceSeconds);
                   }
                 }}
               />
-              <span className="node-maintenance-grace-unit">seconds</span>
-            </div>
-          </label>
-          <label className="node-maintenance-checkbox node-maintenance-grace-option">
-            <input
-              data-test="node-maintenance-timeout-toggle"
-              type="checkbox"
-              checked={hasCustomTimeout}
-              onChange={(event) => {
-                if (!event.target.checked) {
-                  updateDrainOption('timeoutSeconds', undefined);
-                } else {
-                  updateDrainOption('timeoutSeconds', customTimeoutSeconds);
-                }
-              }}
-            />
-            <div className="node-maintenance-grace-inline">
-              <span>Drain timeout (--timeout)</span>
+              <div className="node-maintenance-grace-inline">
+                <span>Override pod grace period (--grace-period)</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={900}
+                  value={customGraceSeconds}
+                  disabled={!hasCustomGrace}
+                  onChange={(event) => {
+                    const next = Number(event.target.value);
+                    const normalized = normalizeGraceSeconds(next);
+                    setCustomGraceSeconds(normalized);
+                    if (hasCustomGrace) {
+                      updateDrainOption('gracePeriodSeconds', normalized);
+                    }
+                  }}
+                />
+                <span className="node-maintenance-grace-unit">seconds</span>
+              </div>
+            </label>
+            <label className="node-maintenance-checkbox node-maintenance-grace-option">
               <input
-                data-test="node-maintenance-timeout-input"
-                type="number"
-                min={1}
-                value={customTimeoutSeconds}
-                disabled={!hasCustomTimeout}
+                data-test="node-maintenance-timeout-toggle"
+                type="checkbox"
+                checked={hasCustomTimeout}
                 onChange={(event) => {
-                  const next = Number(event.target.value);
-                  const normalized = normalizeTimeoutSeconds(next);
-                  setCustomTimeoutSeconds(normalized);
-                  if (hasCustomTimeout) {
-                    updateDrainOption('timeoutSeconds', normalized);
+                  if (!event.target.checked) {
+                    updateDrainOption('timeoutSeconds', undefined);
+                  } else {
+                    updateDrainOption('timeoutSeconds', customTimeoutSeconds);
                   }
                 }}
               />
-              <span className="node-maintenance-grace-unit">seconds</span>
-            </div>
-          </label>
-          <label className="node-maintenance-checkbox">
-            <input
-              data-test="node-maintenance-force"
-              type="checkbox"
-              checked={Boolean(drainOptions.force)}
-              onChange={(event) => updateDrainOption('force', event.target.checked)}
-            />
-            <span>Allow deleting unmanaged pods (--force)</span>
-          </label>
-        </div>
+              <div className="node-maintenance-grace-inline">
+                <span>Drain timeout (--timeout)</span>
+                <input
+                  data-test="node-maintenance-timeout-input"
+                  type="number"
+                  min={1}
+                  value={customTimeoutSeconds}
+                  disabled={!hasCustomTimeout}
+                  onChange={(event) => {
+                    const next = Number(event.target.value);
+                    const normalized = normalizeTimeoutSeconds(next);
+                    setCustomTimeoutSeconds(normalized);
+                    if (hasCustomTimeout) {
+                      updateDrainOption('timeoutSeconds', normalized);
+                    }
+                  }}
+                />
+                <span className="node-maintenance-grace-unit">seconds</span>
+              </div>
+            </label>
+            <label className="node-maintenance-checkbox">
+              <input
+                data-test="node-maintenance-force"
+                type="checkbox"
+                checked={Boolean(drainOptions.force)}
+                onChange={(event) => updateDrainOption('force', event.target.checked)}
+              />
+              <span>Allow deleting unmanaged pods (--force)</span>
+            </label>
+          </div>
+        </details>
         <div className="node-maintenance-actions">
           <button
             className="button danger"
@@ -765,11 +811,14 @@ export function NodeMaintenanceTab({
 
       <section className="object-panel-section node-maintenance-danger">
         <div className="object-panel-section-header">
-          <div className="object-panel-section-title">Delete</div>
+          <div className="object-panel-section-title">
+            Delete
+            <Tooltip
+              content="Deleting removes the Node object from the cluster API. It does not terminate the underlying machine — that's your infrastructure's responsibility. Drain the node first, or pods still scheduled on it will be orphaned. This action cannot be undone."
+              maxWidth={360}
+            />
+          </div>
         </div>
-        <p className="node-maintenance-section-description">
-          Deleting a node removes it from Kubernetes. This cannot be undone.
-        </p>
         <div className="node-maintenance-actions">
           <button
             className="button danger"
