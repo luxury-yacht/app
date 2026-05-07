@@ -553,4 +553,84 @@ describe('NodeMaintenanceTab', () => {
     expect(container.textContent).toContain('Drain complete');
     expect(container.textContent).toContain('Evicting pod');
   });
+
+  it('renders summary, progress bar, and per-pod rows for an active drain', () => {
+    const startedAt = Date.now() - 10_000;
+    mockUseRefreshScopedDomain.mockReturnValue(
+      createDomainState({
+        clusterId: 'test-cluster',
+        drains: [
+          {
+            clusterId: 'test-cluster',
+            id: 'job-active',
+            nodeName: 'node-1',
+            status: 'running',
+            startedAt,
+            options: {
+              ignoreDaemonSets: true,
+              deleteEmptyDirData: true,
+              force: false,
+              disableEviction: false,
+              skipWaitForPodsToTerminate: false,
+              timeoutSeconds: 120,
+            },
+            events: [
+              {
+                id: 'plan',
+                timestamp: startedAt + 100,
+                kind: 'info',
+                phase: 'plan',
+                message: 'Evicting 3 pods',
+              },
+              {
+                id: 'a-start',
+                timestamp: startedAt + 200,
+                kind: 'pod',
+                phase: 'evicting',
+                podNamespace: 'ns',
+                podName: 'a',
+                message: 'Evicting pod',
+              },
+              {
+                id: 'a-done',
+                timestamp: startedAt + 300,
+                kind: 'pod',
+                phase: 'evicted',
+                podNamespace: 'ns',
+                podName: 'a',
+                message: 'Pod evicted',
+              },
+              {
+                id: 'b-start',
+                timestamp: startedAt + 400,
+                kind: 'pod',
+                phase: 'evicting',
+                podNamespace: 'ns',
+                podName: 'b',
+                message: 'Evicting pod',
+              },
+            ],
+          },
+        ],
+      })
+    );
+
+    render();
+    const summary = container.querySelector('[data-test="drain-progress-summary"]');
+    expect(summary?.textContent).toContain('1 of 3 pods evicted');
+    expect(summary?.textContent).toContain('1 in progress');
+
+    const bar = container.querySelector('.node-maintenance-progress-bar');
+    expect(bar).toBeTruthy();
+    expect(bar?.querySelectorAll('.segment').length).toBe(3);
+
+    const rows = container.querySelectorAll('[data-test="drain-pod-table"] tbody tr');
+    expect(rows.length).toBe(2);
+    // In-progress row sorts first.
+    expect(rows[0].textContent).toContain('b');
+    expect(rows[1].textContent).toContain('a');
+
+    const badge = container.querySelector('[data-test="drain-job-status"]');
+    expect(badge?.className).toContain('pulse');
+  });
 });

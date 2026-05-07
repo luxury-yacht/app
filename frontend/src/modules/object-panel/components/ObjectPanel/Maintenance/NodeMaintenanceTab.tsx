@@ -22,6 +22,7 @@ import { useCapabilities, type CapabilityDescriptor } from '@/core/capabilities'
 import { errorHandler } from '@/utils/errorHandler';
 import { INACTIVE_SCOPE } from '@modules/object-panel/components/ObjectPanel/constants';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
+import { DrainProgressCard } from './DrainProgressCard';
 import './MaintenanceTab.css';
 
 type MaintenanceAction = 'cordon' | 'uncordon';
@@ -42,29 +43,6 @@ const DEFAULT_NODE_DRAIN_TIMEOUT_SECONDS = 300;
 type DrainOptionsState = Omit<types.DrainNodeOptions, 'gracePeriodSeconds' | 'timeoutSeconds'> & {
   gracePeriodSeconds?: number;
   timeoutSeconds?: number;
-};
-
-const formatTimestamp = (value?: number | null): string => {
-  if (!value || Number.isNaN(value)) {
-    return '—';
-  }
-  return new Date(value).toLocaleString();
-};
-
-const formatDuration = (startedAt?: number, completedAt?: number): string => {
-  if (!startedAt) {
-    return '—';
-  }
-  const end = completedAt ?? Date.now();
-  const delta = Math.max(0, end - startedAt);
-  if (delta < 1000) {
-    return `${delta}ms`;
-  }
-  if (delta < 60_000) {
-    return `${(delta / 1000).toFixed(delta < 10_000 ? 1 : 0)}s`;
-  }
-  const minutes = delta / 60_000;
-  return `${minutes.toFixed(minutes < 10 ? 1 : 0)}m`;
 };
 
 const toScope = (nodeName?: string | null): string | null => {
@@ -755,19 +733,6 @@ export function NodeMaintenanceTab({
           >
             {activeDrainJob ? 'Drain Running' : drainPending ? 'Starting…' : 'Drain Node'}
           </button>
-          {activeDrainJob && (
-            <button
-              className="button warning"
-              onClick={() => void cancelActiveDrain()}
-              disabled={cancelDrainPending || activeDrainJob.status === 'canceling'}
-              type="button"
-              data-maintenance-action="cancel-drain"
-            >
-              {activeDrainJob.status === 'canceling' || cancelDrainPending
-                ? 'Canceling…'
-                : 'Cancel Drain'}
-            </button>
-          )}
         </div>
         {drainDisabledReason &&
           !nodeActionGetCapability?.pending &&
@@ -775,9 +740,6 @@ export function NodeMaintenanceTab({
           !drainPodCapability?.pending && (
             <p className="node-maintenance-helper">{drainDisabledReason}</p>
           )}
-        {activeDrainJob && (
-          <p className="node-maintenance-helper">Drain job {activeDrainJob.id} is active.</p>
-        )}
         {drainError && <div className="node-maintenance-error">{drainError}</div>}
         {drainStartStatus && <div className="node-maintenance-status">{drainStartStatus}</div>}
         <div className="node-maintenance-history">
@@ -788,54 +750,18 @@ export function NodeMaintenanceTab({
           {!drainsLoading && !showPausedDrainHistoryState && drains.length === 0 && (
             <div className="node-maintenance-helper">No drain activity recorded yet.</div>
           )}
-          {drains.map((job) => (
-            <div key={job.id} className="node-maintenance-job">
-              <div className="node-maintenance-job-header">
-                <span className={`status-badge ${getStatusClass(job.status)}`}>
-                  {job.status === 'running'
-                    ? 'Running'
-                    : job.status === 'canceling'
-                      ? 'Canceling'
-                      : job.status === 'cancelled'
-                        ? 'Cancelled'
-                        : job.status === 'failed'
-                          ? 'Failed'
-                          : 'Completed'}
-                </span>
-                <div className="node-maintenance-job-meta">
-                  <span>Started {formatTimestamp(job.startedAt)}</span>
-                  <span>Duration {formatDuration(job.startedAt, job.completedAt)}</span>
-                </div>
-              </div>
-              {job.message && <p className="node-maintenance-helper">{job.message}</p>}
-              {job.events?.length > 0 && (
-                <ul className="node-maintenance-job-events">
-                  {job.events.map((event) => (
-                    <li
-                      key={event.id}
-                      className={`node-maintenance-job-event ${
-                        event.kind === 'error' ? 'error' : undefined
-                      }`}
-                    >
-                      <span className="node-maintenance-job-event-time">
-                        {formatTimestamp(event.timestamp)}
-                      </span>
-                      <span className="node-maintenance-job-event-label">
-                        {event.phase || event.kind}
-                      </span>
-                      <span className="node-maintenance-job-event-message">
-                        {event.podNamespace && event.podName
-                          ? `${event.podNamespace}/${event.podName}${
-                              event.message ? ` – ${event.message}` : ''
-                            }`
-                          : event.message || '—'}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          ))}
+          {drains.map((job) => {
+            const isActive = job.id === activeDrainJob?.id;
+            return (
+              <DrainProgressCard
+                key={job.id}
+                job={job}
+                isActive={isActive}
+                onCancel={isActive ? () => void cancelActiveDrain() : undefined}
+                cancelDisabled={isActive ? cancelDrainPending : undefined}
+              />
+            );
+          })}
         </div>
       </section>
 
@@ -909,19 +835,6 @@ export function NodeMaintenanceTab({
       />
     </div>
   );
-}
-
-function getStatusClass(status: string): string {
-  if (status === 'running') {
-    return 'info';
-  }
-  if (status === 'canceling' || status === 'cancelled') {
-    return 'warning';
-  }
-  if (status === 'failed') {
-    return 'error';
-  }
-  return 'success';
 }
 
 function getActionLabel(action: MaintenanceAction, inProgress: boolean): string {

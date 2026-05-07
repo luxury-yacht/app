@@ -1,0 +1,337 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Maintenance/DrainProgressCard.tsx
+ *
+ * Renders a single drain job as a progress card: status header, summary line,
+ * progress bar, per-pod table, and a collapsible raw event log. Used for both
+ * the active drain (with cancel control) and historical jobs (read-only).
+ */
+
+import { useEffect, useMemo, useState } from 'react';
+import type { NodeMaintenanceDrainJob } from '@/core/refresh/types';
+import {
+  deriveDrainProgress,
+  type DrainPhase,
+  type DrainPodProgress,
+  type DrainPodStatus,
+  type DrainProgress,
+} from './drainProgress';
+
+interface DrainProgressCardProps {
+  job: NodeMaintenanceDrainJob;
+  isActive: boolean;
+  onCancel?: () => void;
+  cancelDisabled?: boolean;
+}
+
+const ACTIVE_STATUSES = new Set(['running', 'canceling']);
+
+export function DrainProgressCard({
+  job,
+  isActive,
+  onCancel,
+  cancelDisabled,
+}: DrainProgressCardProps) {
+  const progress = useMemo(() => deriveDrainProgress(job), [job]);
+  const [now, setNow] = useState(() => Date.now());
+  const showCancel = ACTIVE_STATUSES.has(job.status) && Boolean(onCancel);
+  const [detailsOpen, setDetailsOpen] = useState<boolean>(progress.hasError || isActive);
+
+  useEffect(() => {
+    if (!isActive) {
+      return;
+    }
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [isActive]);
+
+  useEffect(() => {
+    if (progress.hasError) {
+      setDetailsOpen(true);
+    }
+  }, [progress.hasError]);
+
+  const elapsedMs = (progress.completedAt ?? now) - progress.startedAt;
+  const timeoutMs = progress.timeoutSeconds ? progress.timeoutSeconds * 1000 : undefined;
+
+  return (
+    <div className="node-maintenance-job">
+      <div className="node-maintenance-job-header">
+        <span
+          className={`status-badge ${getStatusClass(job.status)}${
+            isActive && job.status === 'running' ? ' pulse' : ''
+          }`}
+          data-test="drain-job-status"
+        >
+          {getStatusLabel(job.status)}
+        </span>
+        <div className="node-maintenance-job-meta">
+          <span>Started {formatTimestamp(progress.startedAt)}</span>
+          <span data-test="drain-elapsed">
+            {progress.completedAt
+              ? `Duration ${formatElapsed(elapsedMs)}`
+              : `Elapsed ${formatElapsed(elapsedMs)}${
+                  timeoutMs ? ` / ${formatElapsed(timeoutMs)}` : ''
+                }`}
+          </span>
+          <span>{phaseLabel(progress.phase, isActive)}</span>
+        </div>
+        {showCancel && (
+          <button
+            type="button"
+            className="button warning"
+            onClick={onCancel}
+            disabled={cancelDisabled || job.status === 'canceling'}
+            data-maintenance-action="cancel-drain"
+          >
+            {job.status === 'canceling' || cancelDisabled ? 'Canceling…' : 'Cancel Drain'}
+          </button>
+        )}
+      </div>
+
+      <div className="node-maintenance-progress-summary" data-test="drain-progress-summary">
+        {summaryLine(progress)}
+      </div>
+
+      <ProgressBar progress={progress} />
+
+      {progress.hasError && progress.errorMessage && (
+        <div className="node-maintenance-error" role="alert">
+          {progress.errorMessage}
+        </div>
+      )}
+
+      {!progress.hasError && progress.completedAt && job.message && (
+        <p className="node-maintenance-helper">{job.message}</p>
+      )}
+
+      {progress.pods.length > 0 && <PodTable pods={progress.pods} now={now} />}
+
+      {job.events && job.events.length > 0 && (
+        <details
+          className="node-maintenance-job-details"
+          open={detailsOpen}
+          onToggle={(event) => setDetailsOpen(event.currentTarget.open)}
+        >
+          <summary>
+            {detailsOpen ? 'Hide' : 'Show'} event log ({job.events.length})
+          </summary>
+          <ul className="node-maintenance-job-events">
+            {job.events.map((event) => (
+              <li
+                key={event.id}
+                className={`node-maintenance-job-event${event.kind === 'error' ? ' error' : ''}`}
+              >
+                <span className="node-maintenance-job-event-time">
+                  {formatTimestamp(event.timestamp)}
+                </span>
+                <span className="node-maintenance-job-event-label">
+                  {event.phase || event.kind}
+                </span>
+                <span className="node-maintenance-job-event-message">
+                  {event.podNamespace && event.podName
+                    ? `${event.podNamespace}/${event.podName}${
+                        event.message ? ` – ${event.message}` : ''
+                      }`
+                    : event.message || '—'}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </div>
+  );
+}
+
+function ProgressBar({ progress }: { progress: DrainProgress }) {
+  const denominator = Math.max(progress.totalPlanned ?? 0, progress.totalSeen, 1);
+  const donePct = (progress.done / denominator) * 100;
+  const failedPct = (progress.failed / denominator) * 100;
+  const inProgressPct = (progress.inProgress / denominator) * 100;
+  return (
+    <div
+      className="node-maintenance-progress-bar"
+      role="progressbar"
+      aria-valuemin={0}
+      aria-valuemax={denominator}
+      aria-valuenow={progress.done + progress.failed}
+    >
+      <div className="segment done" style={{ width: `${donePct}%` }} />
+      <div className="segment failed" style={{ width: `${failedPct}%` }} />
+      <div className="segment in-progress" style={{ width: `${inProgressPct}%` }} />
+    </div>
+  );
+}
+
+function PodTable({ pods, now }: { pods: DrainPodProgress[]; now: number }) {
+  return (
+    <table className="node-maintenance-pod-table" data-test="drain-pod-table">
+      <colgroup>
+        <col className="col-pod" />
+        <col className="col-status" />
+        <col className="col-update" />
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Pod</th>
+          <th>Status</th>
+          <th>Updated</th>
+        </tr>
+      </thead>
+      <tbody>
+        {pods.map((pod) => (
+          <tr key={pod.key}>
+            <td className="pod-name">
+              <span className="namespace">{pod.namespace}</span>
+              <span className="separator">/</span>
+              <span className="name">{pod.name}</span>
+            </td>
+            <td>
+              <span className={`status-badge ${podStatusClass(pod.status)}`}>
+                {podStatusLabel(pod.status)}
+              </span>
+            </td>
+            <td className="pod-update">{formatRelative(pod.completedAt ?? pod.startedAt, now)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function summaryLine(progress: DrainProgress): string {
+  const total = progress.totalPlanned;
+  const seen = progress.totalSeen;
+  const head =
+    total != null
+      ? `${progress.done} of ${total} pods evicted`
+      : seen > 0
+        ? `${progress.done} of ${seen} pods evicted`
+        : 'Preparing drain…';
+  const parts: string[] = [head];
+  if (progress.inProgress > 0) {
+    parts.push(`${progress.inProgress} in progress`);
+  }
+  if (progress.failed > 0) {
+    parts.push(`${progress.failed} failed`);
+  }
+  return parts.join(' · ');
+}
+
+function getStatusClass(status: string): string {
+  if (status === 'running') return 'info';
+  if (status === 'canceling' || status === 'cancelled') return 'warning';
+  if (status === 'failed') return 'error';
+  return 'success';
+}
+
+function getStatusLabel(status: string): string {
+  switch (status) {
+    case 'running':
+      return 'Running';
+    case 'canceling':
+      return 'Canceling';
+    case 'cancelled':
+      return 'Cancelled';
+    case 'failed':
+      return 'Failed';
+    case 'succeeded':
+      return 'Completed';
+    default:
+      return status;
+  }
+}
+
+function podStatusClass(status: DrainPodStatus): string {
+  switch (status) {
+    case 'in-progress':
+      return 'info';
+    case 'failed':
+      return 'error';
+    default:
+      return 'success';
+  }
+}
+
+function podStatusLabel(status: DrainPodStatus): string {
+  switch (status) {
+    case 'in-progress':
+      return 'In progress';
+    case 'failed':
+      return 'Failed';
+    default:
+      return 'In-Progress';
+  }
+}
+
+function phaseLabel(phase: DrainPhase, isActive: boolean): string {
+  if (!isActive) {
+    return phase === 'completed' ? 'Finished' : capitalize(phase);
+  }
+  switch (phase) {
+    case 'pending':
+      return 'Queued';
+    case 'cordoning':
+      return 'Cordoning node';
+    case 'planning':
+      return 'Planning evictions';
+    case 'evicting':
+      return 'Evicting pods';
+    case 'waiting':
+      return 'Waiting for termination';
+    case 'completed':
+      return 'Finishing';
+    default:
+      return capitalize(phase);
+  }
+}
+
+function capitalize(value: string): string {
+  if (!value) {
+    return value;
+  }
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function formatTimestamp(value?: number | null): string {
+  if (!value || Number.isNaN(value)) {
+    return '—';
+  }
+  return new Date(value).toLocaleString();
+}
+
+function formatElapsed(deltaMs: number): string {
+  const delta = Math.max(0, deltaMs);
+  if (delta < 1000) {
+    return `${delta}ms`;
+  }
+  const totalSeconds = Math.floor(delta / 1000);
+  if (totalSeconds < 60) {
+    return `${totalSeconds}s`;
+  }
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes < 60) {
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  }
+  const hours = Math.floor(minutes / 60);
+  const remMinutes = minutes % 60;
+  return `${hours}:${remMinutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+}
+
+function formatRelative(timestamp: number | undefined, now: number): string {
+  if (!timestamp) {
+    return '—';
+  }
+  const delta = Math.max(0, now - timestamp);
+  if (delta < 1000) {
+    return 'just now';
+  }
+  if (delta < 60_000) {
+    return `${Math.floor(delta / 1000)}s ago`;
+  }
+  if (delta < 3_600_000) {
+    return `${Math.floor(delta / 60_000)}m ago`;
+  }
+  return `${Math.floor(delta / 3_600_000)}h ago`;
+}

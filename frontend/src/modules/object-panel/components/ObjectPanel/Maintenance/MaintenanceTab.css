@@ -149,6 +149,9 @@
 .node-maintenance-job {
   border-top: 1px solid var(--color-border);
   padding-top: var(--spacing-sm);
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .node-maintenance-job-header {
@@ -194,4 +197,180 @@
 
 .node-maintenance-job-event-label {
   text-transform: capitalize;
+}
+
+.node-maintenance-job .status-badge {
+  padding: 2px 4px;
+  border-radius: var(--border-radius-sm);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border: 1px solid transparent;
+}
+
+.node-maintenance-job .status-badge.info {
+  background-color: var(--color-info-bg);
+  color: var(--color-accent);
+  border-color: var(--color-info-bg);
+}
+
+.node-maintenance-job .status-badge.success {
+  background-color: var(--color-success-bg);
+  color: var(--color-success);
+  border-color: var(--color-success-bg);
+}
+
+.node-maintenance-job .status-badge.warning {
+  background-color: var(--color-warning-bg);
+  color: var(--color-warning);
+  border-color: var(--color-warning-border, var(--color-warning-bg));
+}
+
+.node-maintenance-job .status-badge.error {
+  background-color: var(--color-error-bg);
+  color: var(--color-error);
+  border-color: var(--color-error-border, var(--color-error-bg));
+}
+
+.node-maintenance-job .status-badge.pulse {
+  animation: node-maintenance-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes node-maintenance-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.node-maintenance-progress-summary {
+  margin-top: var(--spacing-sm);
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+}
+
+.node-maintenance-progress-bar {
+  display: flex;
+  height: 8px;
+  margin-top: var(--spacing-xs);
+  background-color: var(--color-border);
+  border-radius: var(--border-radius-sm);
+  overflow: hidden;
+}
+
+.node-maintenance-progress-bar .segment {
+  height: 100%;
+  transition: width 0.25s ease;
+}
+
+.node-maintenance-progress-bar .segment.done {
+  background-color: var(--color-success);
+}
+
+.node-maintenance-progress-bar .segment.failed {
+  background-color: var(--color-error);
+}
+
+.node-maintenance-progress-bar .segment.in-progress {
+  background-color: var(--color-accent);
+  background-image: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.15) 25%,
+    transparent 25%,
+    transparent 50%,
+    rgba(255, 255, 255, 0.15) 50%,
+    rgba(255, 255, 255, 0.15) 75%,
+    transparent 75%
+  );
+  background-size: 16px 16px;
+  animation: node-maintenance-stripes 1s linear infinite;
+}
+
+@keyframes node-maintenance-stripes {
+  0% {
+    background-position: 0 0;
+  }
+  100% {
+    background-position: 16px 0;
+  }
+}
+
+.node-maintenance-pod-table {
+  margin-top: var(--spacing-sm);
+  width: 100%;
+  max-width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: var(--font-size-xs);
+}
+
+.node-maintenance-pod-table col.col-pod {
+  width: auto;
+}
+
+.node-maintenance-pod-table col.col-status {
+  width: 100px;
+}
+
+.node-maintenance-pod-table col.col-update {
+  width: 60px;
+}
+
+.node-maintenance-pod-table th,
+.node-maintenance-pod-table td {
+  text-align: left;
+  padding: var(--spacing-xs) var(--spacing-xs);
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.node-maintenance-pod-table th {
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 10px;
+}
+
+/* .node-maintenance-pod-table .pod-name {
+  font-family: var(--font-mono, monospace);
+} */
+
+.node-maintenance-pod-table .pod-name .namespace {
+  color: var(--color-text-secondary);
+}
+
+.node-maintenance-pod-table .pod-name .separator {
+  color: var(--color-text-secondary);
+  margin: 0 2px;
+}
+
+.node-maintenance-pod-table .pod-update {
+  color: var(--color-text-secondary);
+}
+
+.node-maintenance-job-details {
+  margin-top: var(--spacing-sm);
+}
+
+.node-maintenance-job-details > summary {
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  padding: var(--spacing-xs) 0;
+  user-select: none;
+}
+
+.node-maintenance-job-details > summary:hover {
+  color: var(--color-text);
+}
+
+.node-maintenance-job-header > .button {
+  margin-left: auto;
 }
