@@ -9,10 +9,13 @@ package nodes
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
+	cgotesting "k8s.io/client-go/testing"
 
 	"github.com/luxury-yacht/app/backend/resources/types"
 	"github.com/luxury-yacht/app/backend/testsupport"
@@ -44,4 +47,21 @@ func TestWaitForPodsToTerminateTimesOutWhenPodsRemain(t *testing.T) {
 	err := service.waitForPodsToTerminate("node-1", options)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "timed out")
+}
+
+func TestWaitForPodsToTerminateReturnsListError(t *testing.T) {
+	client := fake.NewClientset()
+	client.Fake.PrependReactor("list", "pods", func(cgotesting.Action) (bool, runtime.Object, error) {
+		return true, nil, errors.New("pods list unavailable")
+	})
+
+	service := NewService(testsupport.NewResourceDependencies(
+		testsupport.WithDepsContext(context.Background()),
+		testsupport.WithDepsKubeClient(client),
+	))
+
+	err := service.waitForPodsToTerminate("node-1", types.DrainNodeOptions{})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "failed to check remaining pods on node node-1")
+	require.Contains(t, err.Error(), "pods list unavailable")
 }

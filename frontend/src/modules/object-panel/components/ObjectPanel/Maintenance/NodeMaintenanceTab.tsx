@@ -25,11 +25,12 @@ interface NodeMaintenanceTabProps {
   objectName?: string | null;
   onRefresh?: () => void;
   isActive: boolean;
-  clusterId?: string | null;
+  clusterId: string | null;
 }
 
 const CAPABILITY_PREFIX = 'object-maintenance';
 const NODE_SCOPE_PREFIX = 'node:';
+const MAX_NODE_DRAIN_GRACE_SECONDS = 900;
 
 type DrainOptionsState = Omit<types.DrainNodeOptions, 'gracePeriodSeconds'> & {
   gracePeriodSeconds?: number;
@@ -69,6 +70,13 @@ const toScope = (nodeName?: string | null): string | null => {
   return `${NODE_SCOPE_PREFIX}${trimmed}`;
 };
 
+const normalizeGraceSeconds = (value: number): number => {
+  if (!Number.isFinite(value)) {
+    return 30;
+  }
+  return Math.min(MAX_NODE_DRAIN_GRACE_SECONDS, Math.max(1, Math.floor(value)));
+};
+
 const useNodeMaintenanceDomain = (
   nodeName?: string | null,
   enabled?: boolean,
@@ -76,10 +84,11 @@ const useNodeMaintenanceDomain = (
 ) => {
   const scope = useMemo(() => {
     const rawScope = toScope(nodeName);
-    if (!rawScope) {
+    const resolvedClusterId = clusterId?.trim();
+    if (!rawScope || !resolvedClusterId) {
       return null;
     }
-    return buildClusterScope(clusterId ?? undefined, rawScope);
+    return buildClusterScope(resolvedClusterId, rawScope);
   }, [clusterId, nodeName]);
   const snapshot = useRefreshScopedDomain(
     'object-maintenance',
@@ -177,7 +186,7 @@ export function NodeMaintenanceTab({
     scope: maintenanceScope,
     snapshot: maintenanceSnapshot,
     refresh: refreshMaintenance,
-  } = useNodeMaintenanceDomain(nodeName, isActive && Boolean(nodeDetails), clusterId);
+  } = useNodeMaintenanceDomain(nodeName, isActive && Boolean(nodeDetails), resolvedClusterId);
 
   const drains = useMemo(
     () => (maintenanceScope ? (maintenanceSnapshot.data?.drains ?? []) : []),
@@ -197,10 +206,9 @@ export function NodeMaintenanceTab({
   const showPausedDrainHistoryState = drainsLoadingState.showPausedEmptyState;
 
   const capabilityDescriptors = useMemo<CapabilityDescriptor[]>(() => {
-    if (!nodeName) {
+    if (!nodeName || !resolvedClusterId) {
       return [];
     }
-    const resolvedClusterId = clusterId?.trim() || undefined;
     // Node is core/v1. Group/version are required since PR #139 retired
     // kind-only resolution in the backend permission resolver.
     return [
@@ -241,11 +249,11 @@ export function NodeMaintenanceTab({
         name: nodeName,
       },
     ];
-  }, [clusterId, drainOptions.disableEviction, nodeName]);
+  }, [drainOptions.disableEviction, nodeName, resolvedClusterId]);
 
   const { getState: getCapabilityState } = useCapabilities(capabilityDescriptors, {
-    enabled: Boolean(nodeName),
-    refreshKey: nodeName,
+    enabled: Boolean(nodeName && resolvedClusterId),
+    refreshKey: `${resolvedClusterId}:${nodeName}`,
   });
 
   const cordonCapability = useMemo(() => {
@@ -311,7 +319,7 @@ export function NodeMaintenanceTab({
 
   const executeAction = useCallback(
     async (action: MaintenanceAction) => {
-      if (!nodeName || pendingAction) {
+      if (!nodeName || !resolvedClusterId || pendingAction) {
         return;
       }
 
@@ -358,6 +366,7 @@ export function NodeMaintenanceTab({
     const graceText = hasCustomGrace ? `${drainOptions.gracePeriodSeconds ?? 0}s` : 'Pod defaults';
     const lines = [
       `Grace period: ${graceText}`,
+      drainOptions.disableEviction ? 'Delete pods directly' : 'Use eviction API',
       drainOptions.ignoreDaemonSets ? 'Ignore DaemonSets' : 'Respect DaemonSets',
       drainOptions.deleteEmptyDirData ? 'Delete emptyDir data' : 'Preserve emptyDir data',
       drainOptions.force ? 'Force continue on failures' : 'Stop on first error',
@@ -365,6 +374,7 @@ export function NodeMaintenanceTab({
     return `Drain node "${nodeName}" with the following options:\n• ${lines.join('\n• ')}`;
   }, [
     drainOptions.deleteEmptyDirData,
+    drainOptions.disableEviction,
     drainOptions.force,
     drainOptions.gracePeriodSeconds,
     drainOptions.ignoreDaemonSets,
@@ -373,7 +383,7 @@ export function NodeMaintenanceTab({
   ]);
 
   const executeDrain = useCallback(async () => {
-    if (!nodeName || drainPending) {
+    if (!nodeName || !resolvedClusterId || drainPending) {
       return;
     }
     setDrainError(null);
@@ -387,7 +397,7 @@ export function NodeMaintenanceTab({
         skipWaitForPodsToTerminate: drainOptions.skipWaitForPodsToTerminate,
       };
       if (drainOptions.gracePeriodSeconds != null) {
-        payload.gracePeriodSeconds = Math.max(0, Math.floor(drainOptions.gracePeriodSeconds));
+        payload.gracePeriodSeconds = normalizeGraceSeconds(drainOptions.gracePeriodSeconds);
       }
       await DrainNode(resolvedClusterId, nodeName, payload);
       onRefresh?.();
@@ -410,7 +420,7 @@ export function NodeMaintenanceTab({
   }, [nodeName, drainPending, drainOptions, onRefresh, refreshMaintenance, resolvedClusterId]);
 
   const handleDeleteNode = useCallback(async () => {
-    if (!nodeName || deletePending) {
+    if (!nodeName || !resolvedClusterId || deletePending) {
       return;
     }
     setDeleteError(null);
@@ -442,6 +452,16 @@ export function NodeMaintenanceTab({
       <div className="node-maintenance-tab">
         <div className="node-maintenance-empty">
           Unable to determine node identity. Close and reopen the panel to retry.
+        </div>
+      </div>
+    );
+  }
+
+  if (!resolvedClusterId) {
+    return (
+      <div className="node-maintenance-tab">
+        <div className="node-maintenance-empty">
+          Unable to determine cluster identity. Close and reopen the panel to retry.
         </div>
       </div>
     );
@@ -565,7 +585,7 @@ export function NodeMaintenanceTab({
                 disabled={!hasCustomGrace}
                 onChange={(event) => {
                   const next = Number(event.target.value);
-                  const normalized = Number.isNaN(next) ? 30 : Math.max(1, next);
+                  const normalized = normalizeGraceSeconds(next);
                   setCustomGraceSeconds(normalized);
                   if (hasCustomGrace) {
                     updateDrainOption('gracePeriodSeconds', normalized);

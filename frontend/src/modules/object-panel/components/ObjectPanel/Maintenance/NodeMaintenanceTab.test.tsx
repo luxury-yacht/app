@@ -123,6 +123,17 @@ describe('NodeMaintenanceTab', () => {
     }
   };
 
+  const setInputValue = async (input: HTMLInputElement, value: string) => {
+    const valueSetter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      'value'
+    )?.set;
+    await act(async () => {
+      valueSetter?.call(input, value);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  };
+
   it('cordons a schedulable node when the button is clicked', async () => {
     render();
     const button = queryActionButton('cordon');
@@ -208,6 +219,40 @@ describe('NodeMaintenanceTab', () => {
       'alpha:ctx',
       'node-1',
       expect.objectContaining({ gracePeriodSeconds: 30 })
+    );
+  });
+
+  it('clamps custom grace period to the backend maximum', async () => {
+    render();
+
+    const graceToggle = container.querySelector<HTMLInputElement>(
+      '[data-test="node-maintenance-grace-toggle"]'
+    );
+    expect(graceToggle).toBeTruthy();
+
+    await act(async () => {
+      graceToggle?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    const graceInput = container.querySelector<HTMLInputElement>(
+      '.node-maintenance-grace-inline input[type="number"]'
+    );
+    expect(graceInput).toBeTruthy();
+    if (!graceInput) {
+      throw new Error('expected grace period input to render');
+    }
+    await setInputValue(graceInput, '1200');
+
+    const button = queryActionButton('drain');
+    await act(async () => {
+      button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await confirmModal();
+
+    expect(mockDrainNode).toHaveBeenCalledWith(
+      'alpha:ctx',
+      'node-1',
+      expect.objectContaining({ gracePeriodSeconds: 900 })
     );
   });
 
@@ -352,6 +397,39 @@ describe('NodeMaintenanceTab', () => {
         }),
       ])
     );
+  });
+
+  it('includes direct pod delete mode in the drain confirmation', async () => {
+    render();
+
+    const disableEviction = container.querySelector<HTMLInputElement>(
+      '[data-test="node-maintenance-disable-eviction"]'
+    );
+    expect(disableEviction).toBeTruthy();
+
+    await act(async () => {
+      disableEviction?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    const button = queryActionButton('drain');
+    await act(async () => {
+      button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    const modalBody = document.querySelector('.confirmation-modal-body');
+    expect(modalBody?.textContent).toContain('Delete pods directly');
+  });
+
+  it('does not enable node maintenance without a cluster identity', () => {
+    render({ clusterId: null });
+
+    expect(container.textContent).toContain('Unable to determine cluster identity');
+    expect(queryActionButton('drain')).toBeNull();
+    expect(mockUseCapabilities).toHaveBeenLastCalledWith(
+      [],
+      expect.objectContaining({ enabled: false })
+    );
+    expect(mockRefreshOrchestrator.setScopedDomainEnabled).not.toHaveBeenCalled();
   });
 
   it('renders drain history entries from the refresh domain', () => {

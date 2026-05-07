@@ -135,7 +135,7 @@ func (s *Service) Drain(nodeName string, options restypes.DrainNodeOptions) (err
 	cordoned := false
 
 	defer func() {
-		s.finalizeDrain(job, nodeName, options, cordoned, err)
+		s.finalizeDrain(job, nodeName, cordoned, err)
 	}()
 
 	if err = s.cordonForDrain(job, nodeName); err != nil {
@@ -155,22 +155,14 @@ func (s *Service) Drain(nodeName string, options restypes.DrainNodeOptions) (err
 	return s.waitForDrainCompletion(nodeName, options, job)
 }
 
-// finalizeDrain updates drain status and attempts rollback when needed.
-func (s *Service) finalizeDrain(job *nodemaintenance.DrainJob, nodeName string, options restypes.DrainNodeOptions, cordoned bool, err error) {
+// finalizeDrain updates drain status when the drain operation finishes.
+func (s *Service) finalizeDrain(job *nodemaintenance.DrainJob, nodeName string, cordoned bool, err error) {
 	if job == nil {
 		return
 	}
 	if err != nil {
-		// Rollback: uncordon node if drain failed and we're not forcing
-		if cordoned && !options.Force {
-			job.AddInfo("rollback", "Uncordoning node due to drain failure")
-			if uncordonErr := s.Uncordon(nodeName); uncordonErr != nil {
-				s.logError(fmt.Sprintf("Failed to uncordon node %s during rollback: %v", nodeName, uncordonErr))
-				job.AddInfo("rollback-error", fmt.Sprintf("Failed to uncordon: %v", uncordonErr))
-			} else {
-				s.logInfo(fmt.Sprintf("Rollback: uncordoned node %s after drain failure", nodeName))
-				job.AddInfo("rollback-complete", "Node uncordoned")
-			}
+		if cordoned {
+			job.AddInfo("cordon-retained", "Node remains cordoned after drain failure")
 		}
 		job.Complete(nodemaintenance.DrainStatusFailed, err.Error())
 		return
@@ -384,7 +376,7 @@ func (s *Service) waitForPodsToTerminate(nodeName string, options restypes.Drain
 
 		if err != nil {
 			s.logInfo(fmt.Sprintf("Failed to check remaining pods on node %s: %v", nodeName, err))
-			break
+			return fmt.Errorf("failed to check remaining pods on node %s: %w", nodeName, err)
 		}
 
 		hasPods := false

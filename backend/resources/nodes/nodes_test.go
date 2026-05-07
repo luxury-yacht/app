@@ -192,6 +192,33 @@ func TestServiceDrainValidatesGracePeriod(t *testing.T) {
 	require.EqualError(t, err, "gracePeriodSeconds must be less than or equal to 900")
 }
 
+func TestServiceDrainLeavesNodeCordonedAfterFailure(t *testing.T) {
+	service, client, node := newNodeService(t)
+	addNodePatchReactor(t, client)
+
+	pod := testsupport.PodFixture("frontend", "local-data")
+	pod.Spec.NodeName = node.Name
+	pod.Spec.Volumes = []corev1.Volume{{
+		Name: "scratch",
+		VolumeSource: corev1.VolumeSource{
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
+		},
+	}}
+	_, err := client.CoreV1().Pods(pod.Namespace).Create(context.Background(), pod, metav1.CreateOptions{})
+	require.NoError(t, err)
+
+	err = service.Drain(node.Name, types.DrainNodeOptions{
+		DeleteEmptyDirData: false,
+		IgnoreDaemonSets:   true,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "has local storage")
+
+	updated, err := client.CoreV1().Nodes().Get(context.Background(), node.Name, metav1.GetOptions{})
+	require.NoError(t, err)
+	require.True(t, updated.Spec.Unschedulable, "failed drain should leave the node cordoned")
+}
+
 func newNodeService(t *testing.T) (*nodes.Service, *fake.Clientset, *corev1.Node) {
 	t.Helper()
 	ctx := context.Background()
