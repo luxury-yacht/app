@@ -151,6 +151,9 @@ type ResourceFacts struct {
 	CustomResourceDefinition       *CustomResourceDefinitionFacts       `json:"customResourceDefinition,omitempty"`
 	MutatingWebhookConfiguration   *MutatingWebhookConfigurationFacts   `json:"mutatingWebhookConfiguration,omitempty"`
 	ValidatingWebhookConfiguration *ValidatingWebhookConfigurationFacts `json:"validatingWebhookConfiguration,omitempty"`
+	HelmRelease                    *HelmReleaseFacts                    `json:"helmRelease,omitempty"`
+	Event                          *EventFacts                          `json:"event,omitempty"`
+	CustomResource                 *CustomResourceFacts                 `json:"customResource,omitempty"`
 }
 
 type PodFacts struct {
@@ -652,6 +655,49 @@ type WebhookRuleFacts struct {
 	Resources   []string `json:"resources,omitempty"`
 	Operations  []string `json:"operations,omitempty"`
 	Scope       string   `json:"scope,omitempty"`
+}
+
+type HelmReleaseFacts struct {
+	Chart       string              `json:"chart,omitempty"`
+	Version     string              `json:"version,omitempty"`
+	AppVersion  string              `json:"appVersion,omitempty"`
+	Revision    int                 `json:"revision"`
+	RawStatus   string              `json:"rawStatus,omitempty"`
+	Updated     *metav1.Time        `json:"updated,omitempty"`
+	Description string              `json:"description,omitempty"`
+	Notes       string              `json:"notes,omitempty"`
+	Resources   []ResourceLink      `json:"resources,omitempty"`
+	History     []HelmRevisionFacts `json:"history,omitempty"`
+}
+
+type HelmRevisionFacts struct {
+	Revision    int          `json:"revision"`
+	Updated     *metav1.Time `json:"updated,omitempty"`
+	Status      string       `json:"status,omitempty"`
+	Chart       string       `json:"chart,omitempty"`
+	AppVersion  string       `json:"appVersion,omitempty"`
+	Description string       `json:"description,omitempty"`
+}
+
+type EventFacts struct {
+	EventType      string        `json:"eventType,omitempty"`
+	Reason         string        `json:"reason,omitempty"`
+	Message        string        `json:"message,omitempty"`
+	Count          int32         `json:"count"`
+	Source         string        `json:"source,omitempty"`
+	FirstTimestamp metav1.Time   `json:"firstTimestamp,omitempty"`
+	LastTimestamp  metav1.Time   `json:"lastTimestamp,omitempty"`
+	InvolvedObject *ResourceLink `json:"involvedObject,omitempty"`
+}
+
+type CustomResourceFacts struct {
+	CRD                *ResourceLink    `json:"crd,omitempty"`
+	Phase              string           `json:"phase,omitempty"`
+	State              string           `json:"state,omitempty"`
+	Ready              *bool            `json:"ready,omitempty"`
+	ObservedGeneration *int64           `json:"observedGeneration,omitempty"`
+	Conditions         []ConditionFacts `json:"conditions,omitempty"`
+	RawStatus          map[string]any   `json:"rawStatus,omitempty"`
 }
 
 type ResourceModel struct {

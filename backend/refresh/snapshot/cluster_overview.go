@@ -28,6 +28,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
 
 const (
@@ -1095,8 +1096,8 @@ func buildRecentEvents(events []*corev1.Event, meta ClusterMeta) []RecentEvent {
 			ClusterName:      meta.ClusterName,
 			EventUID:         string(evt.UID),
 			Reason:           strings.TrimSpace(evt.Reason),
-			Message:          eventMessage(evt),
-			Timestamp:        eventTimestamp(evt).UnixMilli(),
+			Message:          resourcemodel.EventMessage(evt),
+			Timestamp:        resourcemodel.EventTimestamp(evt).UnixMilli(),
 			ObjectKind:       evt.InvolvedObject.Kind,
 			ObjectName:       evt.InvolvedObject.Name,
 			ObjectNamespace:  evt.InvolvedObject.Namespace,

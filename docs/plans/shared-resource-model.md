@@ -1910,8 +1910,9 @@ type HelmReleaseFacts struct {
 	AppVersion  string
 	Revision    int
 	RawStatus   string
-	Updated     *time.Time
+	Updated     *metav1.Time
 	Description string
+	Notes       string
 	Resources   []ResourceLink
 	History     []HelmRevisionFacts
 }
@@ -1927,16 +1928,14 @@ Applies to `Event`.
 
 ```go
 type EventFacts struct {
-	Type                string
-	Reason              string
-	Message             string
-	Count               int32
-	FirstTimestamp      *time.Time
-	LastTimestamp       *time.Time
-	EventTime           *time.Time
-	InvolvedObject      ResourceLink
-	ReportingController string
-	ReportingInstance   string
+	EventType      string
+	Reason         string
+	Message        string
+	Count          int32
+	Source         string
+	FirstTimestamp metav1.Time
+	LastTimestamp  metav1.Time
+	InvolvedObject *ResourceLink
 }
 ```
 
@@ -1946,11 +1945,13 @@ Applies to dynamic custom resources discovered from the object catalog.
 
 ```go
 type CustomResourceFacts struct {
-	Conditions         []ConditionFacts
-	RawPhase           string
-	RawState           string
+	CRD                *ResourceLink
+	Phase              string
+	State              string
 	Ready              *bool
-	ObservedGeneration int64
+	ObservedGeneration *int64
+	Conditions         []ConditionFacts
+	RawStatus          map[string]any
 }
 ```
 
@@ -2499,6 +2500,28 @@ There are no current typed object-map collectors for
 cluster table and detail paths, and leaves object-map work to the future phase
 that introduces generic/API-extension map materialization.
 
+## Implementation Learnings From The Helm, Events, And Custom Resources Slice
+
+Helm releases are app-level synthetic resources, not Kubernetes API objects.
+The shared model therefore marks them `ResourceSourceSynthetic` and gives them a
+stable app identity (`helm.sh/v3`, `HelmRelease`) while preserving the existing
+lowercase `helmrelease` DTO value for frontend compatibility. Managed manifest
+resources are emitted as `ResourceLink` values derived from each manifest
+object's `apiVersion`, kind, namespace, and name.
+
+Event involved objects are references carried by Event source data. They become
+openable refs only when the event supplies a complete `apiVersion`, kind, and
+name. Missing or partial involved-object identity stays display-only so the
+backend does not invent group/version identity for stale or incomplete events.
+
+Dynamic custom-resource status extraction is intentionally small and
+source-derived. The shared model extracts `status.phase`, `status.state`,
+`status.ready`, `status.conditions[]`, and `status.observedGeneration`; it does
+not infer application-specific health beyond those conventions. Generic detail
+fallbacks only have object scope, not the object body, so they emit identity
+only instead of guessing status. Custom list rows and object-content paths that
+have raw objects or manifests project richer shared facts.
+
 ## Migration Strategy
 
 Migrate by resource family, deleting duplicated semantic logic as each family is
@@ -2667,13 +2690,13 @@ that actually consumes them.
 
 ### Phase 13: Helm, Events, And Custom Resources
 
-- [ ] Add shared resource model support for HelmRelease synthetic refs.
-- [ ] Add shared resource model support for Event involved-object links.
-- [ ] Add dynamic custom-resource extraction for conditions, phase, state,
+- [x] ✅ Add shared resource model support for HelmRelease synthetic refs.
+- [x] ✅ Add shared resource model support for Event involved-object links.
+- [x] ✅ Add dynamic custom-resource extraction for conditions, phase, state,
       ready, and observedGeneration.
-- [ ] Use these models from Helm, event, custom-resource, generic detail, and
+- [x] ✅ Use these models from Helm, event, custom-resource, generic detail, and
       object-content paths where applicable.
-- [ ] Add tests for synthetic Helm identity, stale/partial event references, and
+- [x] ✅ Add tests for synthetic Helm identity, stale/partial event references, and
       custom-resource status extraction.
 
 ### Phase 14: Frontend Semantic Cleanup

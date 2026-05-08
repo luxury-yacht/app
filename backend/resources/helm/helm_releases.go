@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/types"
 	"golang.org/x/text/cases"
@@ -45,37 +46,42 @@ func (s *Service) ReleaseDetails(namespace, name string) (*types.HelmReleaseDeta
 		s.logWarn(fmt.Sprintf("Failed to get Helm history for %s/%s: %v", namespace, name, err))
 	}
 
+	resources := s.extractResourcesFromManifest(release.Manifest, namespace)
+	resourceLinks := helmResourceLinks(s.deps.Common.ClusterID, resources)
+	model := resourcemodel.BuildHelmReleaseResourceModel(s.deps.Common.ClusterID, release, namespace, resourceLinks, history)
+	facts := model.Facts.HelmRelease
+
 	details := &types.HelmReleaseDetails{
 		Kind:        "helmrelease",
-		Name:        release.Name,
-		Namespace:   release.Namespace,
-		Age:         common.FormatAge(release.Info.FirstDeployed.Time),
-		Chart:       fmt.Sprintf("%s-%s", release.Chart.Name(), release.Chart.Metadata.Version),
-		Version:     release.Chart.Metadata.Version,
-		AppVersion:  release.Chart.Metadata.AppVersion,
-		Status:      cases.Title(language.English).String(strings.ToLower(release.Info.Status.String())),
-		Revision:    release.Version,
-		Updated:     common.FormatAge(release.Info.LastDeployed.Time),
-		Description: release.Info.Description,
-		Notes:       release.Info.Notes,
+		Name:        model.Ref.Name,
+		Namespace:   model.Ref.Namespace,
+		Age:         helmAge(model),
+		Chart:       facts.Chart,
+		Version:     facts.Version,
+		AppVersion:  facts.AppVersion,
+		Status:      helmDisplayStatus(facts.RawStatus),
+		Revision:    facts.Revision,
+		Updated:     helmUpdatedAge(facts),
+		Description: facts.Description,
+		Notes:       facts.Notes,
 		Values:      release.Config,
-		Labels:      release.Labels,
-		Annotations: release.Chart.Metadata.Annotations,
+		Labels:      model.Metadata.Labels,
+		Annotations: model.Metadata.Annotations,
 	}
 
-	for _, h := range history {
+	for _, h := range facts.History {
 		details.History = append(details.History, types.HelmRevision{
-			Revision:    h.Version,
-			Updated:     common.FormatAge(h.Info.LastDeployed.Time),
-			Status:      cases.Title(language.English).String(strings.ToLower(h.Info.Status.String())),
-			Chart:       fmt.Sprintf("%s-%s", h.Chart.Name(), h.Chart.Metadata.Version),
-			AppVersion:  h.Chart.Metadata.AppVersion,
-			Description: h.Info.Description,
+			Revision:    h.Revision,
+			Updated:     helmRevisionUpdatedAge(h),
+			Status:      helmDisplayStatus(h.Status),
+			Chart:       h.Chart,
+			AppVersion:  h.AppVersion,
+			Description: h.Description,
 		})
 	}
 
 	s.logDebug(fmt.Sprintf("Release %s/%s manifest size: %d", namespace, name, len(release.Manifest)))
-	details.Resources = s.extractResourcesFromManifest(release.Manifest, namespace)
+	details.Resources = resources
 	s.logDebug(fmt.Sprintf("Extracted %d resources for release %s/%s", len(details.Resources), namespace, name))
 
 	return details, nil
@@ -331,6 +337,50 @@ func toStringMap(value interface{}) (map[string]interface{}, bool) {
 	default:
 		return nil, false
 	}
+}
+
+func helmResourceLinks(clusterID string, resources []types.HelmResource) []resourcemodel.ResourceLink {
+	if len(resources) == 0 {
+		return nil
+	}
+	manifestResources := make([]resourcemodel.HelmManifestResourceFacts, 0, len(resources))
+	for _, resource := range resources {
+		manifestResources = append(manifestResources, resourcemodel.HelmManifestResourceFacts{
+			APIVersion: resource.APIVersion,
+			Kind:       resource.Kind,
+			Namespace:  resource.Namespace,
+			Name:       resource.Name,
+		})
+	}
+	return resourcemodel.BuildHelmManifestResourceLinks(clusterID, manifestResources)
+}
+
+func helmAge(model resourcemodel.ResourceModel) string {
+	if model.Metadata.CreationTimestamp.IsZero() {
+		return ""
+	}
+	return common.FormatAge(model.Metadata.CreationTimestamp.Time)
+}
+
+func helmUpdatedAge(facts *resourcemodel.HelmReleaseFacts) string {
+	if facts == nil || facts.Updated == nil || facts.Updated.IsZero() {
+		return ""
+	}
+	return common.FormatAge(facts.Updated.Time)
+}
+
+func helmRevisionUpdatedAge(facts resourcemodel.HelmRevisionFacts) string {
+	if facts.Updated == nil || facts.Updated.IsZero() {
+		return ""
+	}
+	return common.FormatAge(facts.Updated.Time)
+}
+
+func helmDisplayStatus(raw string) string {
+	if strings.TrimSpace(raw) == "" {
+		return ""
+	}
+	return cases.Title(language.English).String(strings.ToLower(raw))
 }
 
 func (s *Service) logDebug(msg string) {

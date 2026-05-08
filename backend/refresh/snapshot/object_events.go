@@ -19,6 +19,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
 
 const objectEventsDomain = "object-events"
@@ -35,20 +36,21 @@ type ObjectEventsBuilder struct {
 // ObjectEventSummary captures the fields the frontend needs for object events.
 type ObjectEventSummary struct {
 	ClusterMeta
-	Kind                     string    `json:"kind"`
-	EventType                string    `json:"eventType"`
-	Reason                   string    `json:"reason"`
-	Message                  string    `json:"message"`
-	Count                    int32     `json:"count"`
-	FirstTimestamp           time.Time `json:"firstTimestamp"`
-	LastTimestamp            time.Time `json:"lastTimestamp"`
-	Source                   string    `json:"source"`
-	InvolvedObjectName       string    `json:"involvedObjectName"`
-	InvolvedObjectKind       string    `json:"involvedObjectKind"`
-	InvolvedObjectNamespace  string    `json:"involvedObjectNamespace"`
-	InvolvedObjectUID        string    `json:"involvedObjectUid"`
-	InvolvedObjectAPIVersion string    `json:"involvedObjectApiVersion"`
-	Namespace                string    `json:"namespace"`
+	Kind                     string                      `json:"kind"`
+	EventType                string                      `json:"eventType"`
+	Reason                   string                      `json:"reason"`
+	Message                  string                      `json:"message"`
+	Count                    int32                       `json:"count"`
+	FirstTimestamp           time.Time                   `json:"firstTimestamp"`
+	LastTimestamp            time.Time                   `json:"lastTimestamp"`
+	Source                   string                      `json:"source"`
+	InvolvedObjectName       string                      `json:"involvedObjectName"`
+	InvolvedObjectKind       string                      `json:"involvedObjectKind"`
+	InvolvedObjectNamespace  string                      `json:"involvedObjectNamespace"`
+	InvolvedObjectUID        string                      `json:"involvedObjectUid"`
+	InvolvedObjectAPIVersion string                      `json:"involvedObjectApiVersion"`
+	InvolvedObject           *resourcemodel.ResourceLink `json:"involvedObject,omitempty"`
+	Namespace                string                      `json:"namespace"`
 }
 
 // ObjectEventsSnapshotPayload contains the events list for the object.
@@ -323,50 +325,31 @@ func maxEventVersion(events []*corev1.Event) uint64 {
 }
 
 func convertObjectEvent(meta ClusterMeta, evt corev1.Event) ObjectEventSummary {
-	first := evt.EventTime.Time
-	last := evt.EventTime.Time
-	if first.IsZero() {
-		first = evt.FirstTimestamp.Time
+	model := resourcemodel.BuildEventResourceModel(meta.ClusterID, &evt)
+	facts := model.Facts.Event
+	source := facts.Source
+	if source == "" {
+		source = "Unknown"
 	}
-	if last.IsZero() {
-		last = evt.LastTimestamp.Time
-	}
-
-	source := formatObjectEventSource(evt)
 
 	return ObjectEventSummary{
 		ClusterMeta:              meta,
 		Kind:                     "event",
-		EventType:                evt.Type,
-		Reason:                   evt.Reason,
-		Message:                  evt.Message,
-		Count:                    evt.Count,
-		FirstTimestamp:           first,
-		LastTimestamp:            last,
+		EventType:                facts.EventType,
+		Reason:                   facts.Reason,
+		Message:                  facts.Message,
+		Count:                    facts.Count,
+		FirstTimestamp:           facts.FirstTimestamp.Time,
+		LastTimestamp:            facts.LastTimestamp.Time,
 		Source:                   source,
 		InvolvedObjectName:       evt.InvolvedObject.Name,
 		InvolvedObjectKind:       evt.InvolvedObject.Kind,
 		InvolvedObjectNamespace:  evt.InvolvedObject.Namespace,
 		InvolvedObjectUID:        string(evt.InvolvedObject.UID),
 		InvolvedObjectAPIVersion: evt.InvolvedObject.APIVersion,
+		InvolvedObject:           facts.InvolvedObject,
 		Namespace:                evt.Namespace,
 	}
-}
-
-func formatObjectEventSource(evt corev1.Event) string {
-	if evt.Source.Component != "" {
-		if evt.Source.Host != "" {
-			return fmt.Sprintf("%s on %s", evt.Source.Component, evt.Source.Host)
-		}
-		return evt.Source.Component
-	}
-	if evt.ReportingController != "" {
-		if evt.ReportingInstance != "" {
-			return fmt.Sprintf("%s (%s)", evt.ReportingController, evt.ReportingInstance)
-		}
-		return evt.ReportingController
-	}
-	return "Unknown"
 }
 
 func min(a, b int) int {

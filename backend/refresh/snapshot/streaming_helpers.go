@@ -17,6 +17,7 @@ import (
 	storagev1 "k8s.io/api/storage/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	appslisters "k8s.io/client-go/listers/apps/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -322,25 +323,25 @@ func BuildNamespaceCustomSummary(
 			CRDName:     crdName,
 		}
 	}
-	kind := resource.GetKind()
-	if kind == "" {
-		kind = kindFallback
-	}
-	namespace := resource.GetNamespace()
-	if namespace == "" {
-		namespace = defaultNamespace
-	}
+	gvr := schema.GroupVersionResource{Group: apiGroup, Version: apiVersion}
+	model := resourcemodel.BuildCustomResourceModel(meta.ClusterID, resource, gvr, kindFallback, crdName, resourcemodel.ResourceScopeNamespaced, defaultNamespace)
+	facts := model.Facts.CustomResource
 	return NamespaceCustomSummary{
-		ClusterMeta: meta,
-		Kind:        kind,
-		Name:        resource.GetName(),
-		APIGroup:    apiGroup,
-		APIVersion:  apiVersion,
-		CRDName:     crdName,
-		Namespace:   namespace,
-		Age:         formatAge(resource.GetCreationTimestamp().Time),
-		Labels:      resource.GetLabels(),
-		Annotations: resource.GetAnnotations(),
+		ClusterMeta:        meta,
+		Kind:               model.Ref.Kind,
+		Name:               model.Ref.Name,
+		APIGroup:           model.Ref.Group,
+		APIVersion:         model.Ref.Version,
+		CRDName:            crdName,
+		Namespace:          model.Ref.Namespace,
+		Status:             model.Status.Label,
+		StatusState:        model.Status.State,
+		Ready:              facts.Ready,
+		ObservedGeneration: facts.ObservedGeneration,
+		Conditions:         facts.Conditions,
+		Age:                formatAge(model.Metadata.CreationTimestamp.Time),
+		Labels:             model.Metadata.Labels,
+		Annotations:        model.Metadata.Annotations,
 	}
 }
 
@@ -580,17 +581,24 @@ func BuildClusterCustomSummary(
 			CRDName:     crdName,
 		}
 	}
-	kind := resourceKind(resource, kindFallback)
+	gvr := schema.GroupVersionResource{Group: apiGroup, Version: apiVersion}
+	model := resourcemodel.BuildCustomResourceModel(meta.ClusterID, resource, gvr, kindFallback, crdName, resourcemodel.ResourceScopeCluster, "")
+	facts := model.Facts.CustomResource
 	return ClusterCustomSummary{
-		ClusterMeta: meta,
-		Kind:        kind,
-		Name:        resource.GetName(),
-		APIGroup:    apiGroup,
-		APIVersion:  apiVersion,
-		CRDName:     crdName,
-		Age:         formatAge(resource.GetCreationTimestamp().Time),
-		Labels:      resource.GetLabels(),
-		Annotations: resource.GetAnnotations(),
+		ClusterMeta:        meta,
+		Kind:               model.Ref.Kind,
+		Name:               model.Ref.Name,
+		APIGroup:           model.Ref.Group,
+		APIVersion:         model.Ref.Version,
+		CRDName:            crdName,
+		Status:             model.Status.Label,
+		StatusState:        model.Status.State,
+		Ready:              facts.Ready,
+		ObservedGeneration: facts.ObservedGeneration,
+		Conditions:         facts.Conditions,
+		Age:                formatAge(model.Metadata.CreationTimestamp.Time),
+		Labels:             model.Metadata.Labels,
+		Annotations:        model.Metadata.Annotations,
 	}
 }
 

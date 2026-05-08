@@ -15,6 +15,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/internal/timeutil"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
 
 // Manager fan-outs informer updates to subscribed streaming clients.
@@ -244,6 +245,7 @@ func (m *Manager) handleEvent(obj interface{}) {
 		return
 	}
 
+	facts := resourcemodel.BuildEventFacts("", evt)
 	entry := Entry{
 		Kind:             evt.InvolvedObject.Kind,
 		Name:             evt.Name,
@@ -253,11 +255,12 @@ func (m *Manager) handleEvent(obj interface{}) {
 		ObjectNamespace:  evt.InvolvedObject.Namespace,
 		ObjectUID:        string(evt.InvolvedObject.UID),
 		ObjectAPIVersion: evt.InvolvedObject.APIVersion,
-		Type:             evt.Type,
-		Source:           formatSource(evt),
-		Reason:           evt.Reason,
-		Object:           formatObject(evt),
-		Message:          evt.Message,
+		InvolvedObject:   facts.InvolvedObject,
+		Type:             facts.EventType,
+		Source:           facts.Source,
+		Reason:           facts.Reason,
+		Object:           resourcemodel.EventObjectDisplay(evt),
+		Message:          facts.Message,
 	}
 
 	lastSeen := timeutil.LatestEventTimestamp(evt)
@@ -408,29 +411,4 @@ func (m *Manager) trySend(sub *subscription, entry StreamEvent) (sent bool, clos
 			return false, false, dropped
 		}
 	}
-}
-
-func formatSource(evt *corev1.Event) string {
-	if evt == nil {
-		return ""
-	}
-	source := evt.Source.Component
-	if evt.Source.Host != "" {
-		source = source + "/" + evt.Source.Host
-	}
-	if source == "" {
-		source = evt.ReportingController
-	}
-	return source
-}
-
-func formatObject(evt *corev1.Event) string {
-	if evt == nil {
-		return ""
-	}
-	obj := evt.InvolvedObject
-	if obj.Name == "" {
-		return obj.Kind
-	}
-	return obj.Kind + "/" + obj.Name
 }

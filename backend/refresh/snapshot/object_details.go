@@ -13,6 +13,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
 
 type scopeObjectIdentity = refresh.ObjectScopeIdentity
@@ -37,7 +38,8 @@ type ObjectDetailsBuilder struct {
 // ObjectDetailsSnapshotPayload is returned to the frontend.
 type ObjectDetailsSnapshotPayload struct {
 	ClusterMeta
-	Details interface{} `json:"details"`
+	Details       interface{}                  `json:"details"`
+	ResourceModel *resourcemodel.ResourceModel `json:"resourceModel,omitempty"`
 }
 
 // RegisterObjectDetailsDomain wires the object-details domain into the registry.
@@ -82,13 +84,26 @@ func (b *ObjectDetailsBuilder) Build(ctx context.Context, scope string) (*refres
 		"kind": cases.Title(language.English, cases.NoLower).String(kind),
 		"name": name,
 	}
+	group := gvk.Group
+	version := gvk.Version
+	if group != "" {
+		details["apiGroup"] = group
+	}
+	if version != "" {
+		details["apiVersion"] = version
+	}
 	if namespace != "" {
 		details["namespace"] = namespace
 	}
-	return b.buildSnapshot(ctx, scope, details, ""), nil
+	resourceModel := genericObjectResourceModel(ClusterMetaFromContext(ctx), gvk, namespace, name)
+	return b.buildSnapshotWithModel(ctx, scope, details, "", &resourceModel), nil
 }
 
 func (b *ObjectDetailsBuilder) buildSnapshot(ctx context.Context, scope string, details interface{}, resourceVersion string) *refresh.Snapshot {
+	return b.buildSnapshotWithModel(ctx, scope, details, resourceVersion, nil)
+}
+
+func (b *ObjectDetailsBuilder) buildSnapshotWithModel(ctx context.Context, scope string, details interface{}, resourceVersion string, resourceModel *resourcemodel.ResourceModel) *refresh.Snapshot {
 	version := parseVersion(resourceVersion)
 
 	return &refresh.Snapshot{
@@ -96,11 +111,36 @@ func (b *ObjectDetailsBuilder) buildSnapshot(ctx context.Context, scope string, 
 		Scope:   scope,
 		Version: version,
 		Payload: ObjectDetailsSnapshotPayload{
-			ClusterMeta: ClusterMetaFromContext(ctx),
-			Details:     details,
+			ClusterMeta:   ClusterMetaFromContext(ctx),
+			Details:       details,
+			ResourceModel: resourceModel,
 		},
 		Stats: refresh.SnapshotStats{
 			ItemCount: 1,
+		},
+	}
+}
+
+func genericObjectResourceModel(meta ClusterMeta, gvk schema.GroupVersionKind, namespace, name string) resourcemodel.ResourceModel {
+	scope := resourcemodel.ResourceScopeCluster
+	if namespace != "" {
+		scope = resourcemodel.ResourceScopeNamespaced
+	}
+	return resourcemodel.ResourceModel{
+		Ref: resourcemodel.ResourceRef{
+			ClusterID: meta.ClusterID,
+			Group:     gvk.Group,
+			Version:   gvk.Version,
+			Kind:      gvk.Kind,
+			Namespace: namespace,
+			Name:      name,
+		},
+		Source: resourcemodel.ResourceSourceKubernetes,
+		Scope:  scope,
+		Status: resourcemodel.ResourceStatusPresentation{
+			Label:        "Unknown",
+			State:        "unknown",
+			Presentation: "unknown",
 		},
 	}
 }

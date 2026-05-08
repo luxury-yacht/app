@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"strings"
 
+	"gopkg.in/yaml.v2"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
 
 const (
@@ -42,8 +44,9 @@ type ObjectYAMLSnapshotPayload struct {
 // ObjectHelmManifestSnapshotPayload represents the Helm manifest payload.
 type ObjectHelmManifestSnapshotPayload struct {
 	ClusterMeta
-	Manifest string `json:"manifest"`
-	Revision int    `json:"revision,omitempty"`
+	Manifest  string                       `json:"manifest"`
+	Revision  int                          `json:"revision,omitempty"`
+	Resources []resourcemodel.ResourceLink `json:"resources,omitempty"`
 }
 
 // ObjectHelmValuesSnapshotPayload represents the Helm values payload.
@@ -147,11 +150,124 @@ func (b *ObjectHelmManifestBuilder) Build(ctx context.Context, scope string) (*r
 			ClusterMeta: meta,
 			Manifest:    manifest,
 			Revision:    revision,
+			Resources:   extractHelmManifestResourceLinks(meta.ClusterID, manifest, namespace),
 		},
 		Stats: refresh.SnapshotStats{
 			ItemCount: 1,
 		},
 	}, nil
+}
+
+func extractHelmManifestResourceLinks(clusterID, manifest, defaultNamespace string) []resourcemodel.ResourceLink {
+	var links []resourcemodel.ResourceLink
+	seen := map[string]struct{}{}
+	trimmed := strings.TrimPrefix(strings.TrimSpace(manifest), "---")
+	docs := strings.Split(trimmed, "\n---")
+	for _, doc := range docs {
+		doc = strings.TrimSpace(doc)
+		if doc == "" || doc == "---" {
+			continue
+		}
+		var obj map[string]interface{}
+		if err := yaml.Unmarshal([]byte(doc), &obj); err != nil || obj == nil {
+			continue
+		}
+		appendManifestResourceLinks(&links, seen, clusterID, obj, defaultNamespace)
+	}
+	return links
+}
+
+func appendManifestResourceLinks(
+	links *[]resourcemodel.ResourceLink,
+	seen map[string]struct{},
+	clusterID string,
+	obj map[string]interface{},
+	defaultNamespace string,
+) {
+	kind, _ := obj["kind"].(string)
+	apiVersion, _ := obj["apiVersion"].(string)
+	if kind == "" {
+		return
+	}
+	if strings.HasSuffix(kind, "List") {
+		items, ok := obj["items"].([]interface{})
+		if !ok {
+			return
+		}
+		for _, item := range items {
+			itemMap, ok := manifestStringMap(item)
+			if !ok {
+				continue
+			}
+			itemKind, _ := itemMap["kind"].(string)
+			if itemKind == "" {
+				continue
+			}
+			itemAPIVersion, _ := itemMap["apiVersion"].(string)
+			if itemAPIVersion == "" {
+				itemAPIVersion = apiVersion
+			}
+			appendSingleManifestResourceLink(links, seen, clusterID, itemAPIVersion, itemKind, itemMap, defaultNamespace)
+		}
+		return
+	}
+	appendSingleManifestResourceLink(links, seen, clusterID, apiVersion, kind, obj, defaultNamespace)
+}
+
+func appendSingleManifestResourceLink(
+	links *[]resourcemodel.ResourceLink,
+	seen map[string]struct{},
+	clusterID, apiVersion, kind string,
+	obj map[string]interface{},
+	defaultNamespace string,
+) {
+	name, namespace := manifestNameNamespace(obj, defaultNamespace)
+	if name == "" {
+		return
+	}
+	key := apiVersion + "/" + kind + "/" + namespace + "/" + name
+	if _, ok := seen[key]; ok {
+		return
+	}
+	seen[key] = struct{}{}
+	link := resourcemodel.BuildHelmManifestResourceLink(clusterID, apiVersion, kind, namespace, name)
+	*links = append(*links, link)
+}
+
+func manifestNameNamespace(obj map[string]interface{}, defaultNamespace string) (string, string) {
+	metadataRaw, ok := obj["metadata"]
+	if !ok {
+		return "", defaultNamespace
+	}
+	metadata, ok := manifestStringMap(metadataRaw)
+	if !ok {
+		return "", defaultNamespace
+	}
+	name, _ := metadata["name"].(string)
+	namespace := defaultNamespace
+	if ns, ok := metadata["namespace"].(string); ok && ns != "" {
+		namespace = ns
+	}
+	return name, namespace
+}
+
+func manifestStringMap(value interface{}) (map[string]interface{}, bool) {
+	switch typed := value.(type) {
+	case map[string]interface{}:
+		return typed, true
+	case map[interface{}]interface{}:
+		result := make(map[string]interface{}, len(typed))
+		for key, value := range typed {
+			keyString, ok := key.(string)
+			if !ok {
+				continue
+			}
+			result[keyString] = value
+		}
+		return result, true
+	default:
+		return nil, false
+	}
 }
 
 // ObjectHelmValuesBuilder builds values snapshots.

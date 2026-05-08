@@ -15,6 +15,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	informers "k8s.io/client-go/informers"
@@ -244,29 +245,25 @@ func mapHelmReleases(
 		if namespaceFilter != "" && ns != namespaceFilter {
 			continue
 		}
-		chartName := ""
-		appVersion := ""
-		if chart := release.Chart; chart != nil {
-			chartName = fmt.Sprintf("%s-%s", chart.Name(), chart.Metadata.Version)
-			appVersion = chart.Metadata.AppVersion
+		model := resourcemodel.BuildHelmReleaseResourceModel(meta.ClusterID, release, namespaceFilter, nil, nil)
+		facts := model.Facts.HelmRelease
+		chartName := facts.Chart
+		appVersion := facts.AppVersion
+		status := model.Status.State
+		if status == "" {
+			status = "unknown"
 		}
-		status := "unknown"
 		updated := ""
 		description := ""
 		notes := ""
 		age := ""
-		if info := release.Info; info != nil {
-			if info.Status.String() != "" {
-				status = info.Status.String()
-			}
-			if !info.LastDeployed.IsZero() {
-				updated = info.LastDeployed.Time.Format(time.RFC3339)
-			}
-			description = info.Description
-			notes = info.Notes
-			if !info.FirstDeployed.IsZero() {
-				age = formatAge(info.FirstDeployed.Time)
-			}
+		if facts.Updated != nil && !facts.Updated.IsZero() {
+			updated = facts.Updated.Time.Format(time.RFC3339)
+		}
+		description = facts.Description
+		notes = facts.Notes
+		if !model.Metadata.CreationTimestamp.IsZero() {
+			age = formatAge(model.Metadata.CreationTimestamp.Time)
 		}
 		summaries = append(summaries, NamespaceHelmSummary{
 			ClusterMeta: meta,
