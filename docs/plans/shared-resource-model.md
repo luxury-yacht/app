@@ -2257,7 +2257,7 @@ source value.
 
 The frontend may adapt backend-emitted presentation tokens to visual treatment
 only at the rendering boundary. Acceptable examples are CSS selectors such as
-`.status-badge.terminating` and `.status-badge.cordoned`, or an object-map color
+`.status-text.terminating` and `.status-text.cordoned`, or an object-map color
 lookup that chooses a color for the backend `Presentation`. Fallback styling
 from raw `State` is allowed only for legacy or unmigrated payloads that do not
 yet emit `Presentation`. Unacceptable examples are frontend hooks or table
