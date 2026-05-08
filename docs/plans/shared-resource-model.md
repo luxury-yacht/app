@@ -113,8 +113,13 @@ migrate. The shared model may still choose a user-facing `Label`, such as
 `Ready (Cordoned)`, but it must not replace Kubernetes source values with an
 invented app health vocabulary.
 
-Frontend components can map those backend-emitted source values to CSS classes,
-but they must not reinterpret Kubernetes semantics.
+`Presentation` is a separate backend-owned rendering token for migrated
+resources whose visual treatment cannot safely be inferred from `State`. For
+example, a deleting Node can have `State: "True"` because the last `NodeReady`
+condition is still true, while `Presentation: "terminating"` tells every
+frontend surface to render the same terminating treatment. Frontend components
+may pass `Presentation` through to CSS or renderer color lookup, but they must
+not inspect Kubernetes fields or reinterpret semantics themselves.
 
 ### Existing Identity Contracts
 
@@ -292,9 +297,10 @@ ResourceModel{
 		Finalizers:        node.Finalizers,
 	},
 	Status: ResourceStatusPresentation{
-		Label:  "Ready (Cordoned)",
-		State:  "True", // Raw NodeReady condition status from the Kubernetes API.
-		Reason: "Unschedulable",
+		Label:        "Ready (Cordoned)",
+		State:        "True", // Raw NodeReady condition status from the Kubernetes API.
+		Presentation: "cordoned",
+		Reason:       "Unschedulable",
 		Signals: []ResourceStatusSignal{
 			{Type: StatusSignalCondition, Name: "Ready", Status: "True"},
 			{Type: StatusSignalResourceState, Name: "spec.unschedulable", Status: "true"},
@@ -390,6 +396,7 @@ type ResourceMetadata struct {
 type ResourceStatusPresentation struct {
 	Label              string
 	State              string // Raw source status/phase value, e.g. NodeReady=True.
+	Presentation       string // Backend-owned rendering token, e.g. terminating.
 	Reason             string
 	Message            string
 	ObservedGeneration int64
@@ -2217,6 +2224,11 @@ the Kubernetes condition status values: `True`, `False`, or `Unknown`. The
 shared model may compose a clearer display `Label`, such as `Ready (Cordoned)`
 or `Terminating`, but that label must not replace the source state.
 
+Backend status presentation must be a separate field. The Node slice uses
+`Presentation` values such as `ready`, `cordoned`, `not-ready`, `unknown`, and
+`terminating`. This prevents the frontend from styling a `Terminating` label as
+green just because the preserved raw `NodeReady` state is `True`.
+
 Do not introduce a generic `ResourceState` enum such as `healthy`, `degraded`,
 or `unhealthy` for shared resource status. Those words may still exist in older
 cluster health, stream health, diagnostics, or unmigrated object-map code, but
@@ -2232,19 +2244,21 @@ should preserve `metadata.deletionTimestamp`, not a made-up marker such as
 `Set`. `Reason` may name the interpretation, but `Status` should remain the
 source value.
 
-The frontend may adapt backend-emitted source states to visual treatment only at
-the rendering boundary. Acceptable examples are CSS selectors such as
-`.status-badge.True`, `.status-badge.False`, and `.status-badge.Unknown`, or an
-object-map color lookup that chooses a color for `True`, `False`, and
-`Unknown`. Unacceptable examples are frontend hooks or table components that
-inspect Kubernetes object fields and rewrite status semantics after the backend
-has emitted the app model.
+The frontend may adapt backend-emitted presentation tokens to visual treatment
+only at the rendering boundary. Acceptable examples are CSS selectors such as
+`.status-badge.terminating` and `.status-badge.cordoned`, or an object-map color
+lookup that chooses a color for the backend `Presentation`. Fallback styling
+from raw `State` is allowed only for legacy or unmigrated payloads that do not
+yet emit `Presentation`. Unacceptable examples are frontend hooks or table
+components that inspect Kubernetes object fields and rewrite status semantics
+after the backend has emitted the app model.
 
 DTO parity sometimes requires adding small explicit fields rather than
 overloading existing strings. The Node slice added `statusState` and
-`statusReason` beside the display `status` string so table rows, detail panels,
-resource-stream rows, and object-map nodes can render the same backend-derived
-presentation without parsing display text.
+`statusPresentation`/`statusReason` beside the display `status` string so table
+rows, detail panels, resource-stream rows, and object-map nodes can render the
+same backend-derived presentation without parsing display text or misusing raw
+source state as a style class.
 
 Generated Wails TypeScript models must stay in sync with DTO changes in the
 same phase. If `wails generate` cannot update the bindings in the local

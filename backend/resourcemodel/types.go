@@ -62,12 +62,13 @@ type ResourceLifecycle struct {
 }
 
 type ResourceStatusPresentation struct {
-	Label     string                 `json:"label"`
-	State     string                 `json:"state"`
-	Reason    string                 `json:"reason,omitempty"`
-	Signals   []ResourceStatusSignal `json:"signals,omitempty"`
-	Badges    []ResourceStatusBadge  `json:"badges,omitempty"`
-	Lifecycle ResourceLifecycle      `json:"lifecycle"`
+	Label        string                 `json:"label"`
+	State        string                 `json:"state"`
+	Presentation string                 `json:"presentation,omitempty"`
+	Reason       string                 `json:"reason,omitempty"`
+	Signals      []ResourceStatusSignal `json:"signals,omitempty"`
+	Badges       []ResourceStatusBadge  `json:"badges,omitempty"`
+	Lifecycle    ResourceLifecycle      `json:"lifecycle"`
 }
 
 type ConditionFacts struct {

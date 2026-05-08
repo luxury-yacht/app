@@ -100,11 +100,12 @@ func buildNodeStatus(node *corev1.Node, facts NodeFacts) ResourceStatusPresentat
 			Status: deletionTimestamp,
 		})
 		return ResourceStatusPresentation{
-			Label:     "Terminating",
-			State:     readyStatus,
-			Reason:    "DeletionTimestamp",
-			Signals:   signals,
-			Lifecycle: lifecycle,
+			Label:        "Terminating",
+			State:        readyStatus,
+			Presentation: "terminating",
+			Reason:       "DeletionTimestamp",
+			Signals:      signals,
+			Lifecycle:    lifecycle,
 		}
 	}
 	if facts.Cordoned {
@@ -113,10 +114,11 @@ func buildNodeStatus(node *corev1.Node, facts NodeFacts) ResourceStatusPresentat
 
 	if ready == nil {
 		return ResourceStatusPresentation{
-			Label:     "Unknown",
-			State:     readyStatus,
-			Signals:   signals,
-			Lifecycle: lifecycle,
+			Label:        "Unknown",
+			State:        readyStatus,
+			Presentation: "unknown",
+			Signals:      signals,
+			Lifecycle:    lifecycle,
 		}
 	}
 
@@ -124,35 +126,39 @@ func buildNodeStatus(node *corev1.Node, facts NodeFacts) ResourceStatusPresentat
 	case corev1.ConditionTrue:
 		if facts.Cordoned {
 			return ResourceStatusPresentation{
-				Label:     "Ready (Cordoned)",
-				State:     readyStatus,
-				Reason:    "Unschedulable",
-				Signals:   signals,
-				Badges:    []ResourceStatusBadge{{Text: "Cordoned", Status: nodeCordonedStatus(facts)}},
-				Lifecycle: lifecycle,
+				Label:        "Ready (Cordoned)",
+				State:        readyStatus,
+				Presentation: "cordoned",
+				Reason:       "Unschedulable",
+				Signals:      signals,
+				Badges:       []ResourceStatusBadge{{Text: "Cordoned", Status: nodeCordonedStatus(facts)}},
+				Lifecycle:    lifecycle,
 			}
 		}
 		return ResourceStatusPresentation{
-			Label:     "Ready",
-			State:     readyStatus,
-			Signals:   signals,
-			Lifecycle: lifecycle,
+			Label:        "Ready",
+			State:        readyStatus,
+			Presentation: "ready",
+			Signals:      signals,
+			Lifecycle:    lifecycle,
 		}
 	case corev1.ConditionUnknown:
 		return ResourceStatusPresentation{
-			Label:     "Unknown",
-			State:     readyStatus,
-			Reason:    ready.Reason,
-			Signals:   signals,
-			Lifecycle: lifecycle,
+			Label:        "Unknown",
+			State:        readyStatus,
+			Presentation: "unknown",
+			Reason:       ready.Reason,
+			Signals:      signals,
+			Lifecycle:    lifecycle,
 		}
 	default:
 		return ResourceStatusPresentation{
-			Label:     "NotReady",
-			State:     readyStatus,
-			Reason:    ready.Reason,
-			Signals:   signals,
-			Lifecycle: lifecycle,
+			Label:        "NotReady",
+			State:        readyStatus,
+			Presentation: "not-ready",
+			Reason:       ready.Reason,
+			Signals:      signals,
+			Lifecycle:    lifecycle,
 		}
 	}
 }

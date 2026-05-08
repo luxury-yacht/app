@@ -110,6 +110,7 @@ export interface ClusterNodeSnapshotEntry extends ClusterMeta {
   name: string;
   status: string;
   statusState?: string;
+  statusPresentation?: string;
   statusReason?: string;
   roles: string;
   age: string;
@@ -522,6 +523,7 @@ export interface ObjectMapNode {
 export interface ObjectMapStatus {
   state: string;
   label: string;
+  presentation?: string;
   reason?: string;
 }
 

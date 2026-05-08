@@ -704,6 +704,7 @@ export function useOverviewData(params: UseOverviewDataParams): OverviewData | n
         age: nodeDetails.age,
         status: nodeDetails.status,
         statusState: nodeDetails.statusState,
+        statusPresentation: nodeDetails.statusPresentation,
         roles: nodeDetails.roles,
         os: nodeDetails.os,
         osImage: nodeDetails.osImage,

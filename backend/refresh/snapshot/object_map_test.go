@@ -192,18 +192,20 @@ func TestObjectMapNodeStatusUsesKubernetesReadyConditionStatus(t *testing.T) {
 	}
 
 	tests := []struct {
-		name      string
-		node      corev1.Node
-		wantState string
-		wantLabel string
+		name             string
+		node             corev1.Node
+		wantState        string
+		wantLabel        string
+		wantPresentation string
 	}{
 		{
 			name: "ready schedulable",
 			node: corev1.Node{Status: corev1.NodeStatus{
 				Conditions: []corev1.NodeCondition{readyCondition},
 			}},
-			wantState: "True",
-			wantLabel: "Ready",
+			wantState:        "True",
+			wantLabel:        "Ready",
+			wantPresentation: "ready",
 		},
 		{
 			name: "ready unschedulable",
@@ -213,8 +215,9 @@ func TestObjectMapNodeStatusUsesKubernetesReadyConditionStatus(t *testing.T) {
 					Conditions: []corev1.NodeCondition{readyCondition},
 				},
 			},
-			wantState: "True",
-			wantLabel: "Ready (Cordoned)",
+			wantState:        "True",
+			wantLabel:        "Ready (Cordoned)",
+			wantPresentation: "cordoned",
 		},
 		{
 			name: "ready with unschedulable taint",
@@ -227,8 +230,9 @@ func TestObjectMapNodeStatusUsesKubernetesReadyConditionStatus(t *testing.T) {
 					Conditions: []corev1.NodeCondition{readyCondition},
 				},
 			},
-			wantState: "True",
-			wantLabel: "Ready (Cordoned)",
+			wantState:        "True",
+			wantLabel:        "Ready (Cordoned)",
+			wantPresentation: "cordoned",
 		},
 		{
 			name: "cordoned not ready remains false",
@@ -238,16 +242,32 @@ func TestObjectMapNodeStatusUsesKubernetesReadyConditionStatus(t *testing.T) {
 					Conditions: []corev1.NodeCondition{notReadyCondition},
 				},
 			},
-			wantState: "False",
-			wantLabel: "NotReady",
+			wantState:        "False",
+			wantLabel:        "NotReady",
+			wantPresentation: "not-ready",
+		},
+		{
+			name: "terminating ready keeps raw ready state with terminating presentation",
+			node: func() corev1.Node {
+				deletingAt := metav1.NewTime(time.Date(2026, time.May, 7, 20, 15, 0, 0, time.UTC))
+				return corev1.Node{
+					ObjectMeta: metav1.ObjectMeta{DeletionTimestamp: &deletingAt},
+					Status: corev1.NodeStatus{
+						Conditions: []corev1.NodeCondition{readyCondition},
+					},
+				}
+			}(),
+			wantState:        "True",
+			wantLabel:        "Terminating",
+			wantPresentation: "terminating",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			status := objectMapNodeStatus("cluster-a", tt.node)
-			if status == nil || status.State != tt.wantState || status.Label != tt.wantLabel {
-				t.Fatalf("unexpected node status: got %#v, want state=%q label=%q", status, tt.wantState, tt.wantLabel)
+			if status == nil || status.State != tt.wantState || status.Label != tt.wantLabel || status.Presentation != tt.wantPresentation {
+				t.Fatalf("unexpected node status: got %#v, want state=%q label=%q presentation=%q", status, tt.wantState, tt.wantLabel, tt.wantPresentation)
 			}
 		})
 	}

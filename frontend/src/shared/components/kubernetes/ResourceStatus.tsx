@@ -11,6 +11,7 @@ import { OverviewItem } from '@modules/object-panel/components/ObjectPanel/Detai
 interface ResourceStatusProps {
   status?: string;
   statusState?: string;
+  statusPresentation?: string;
   statusSeverity?: string;
   ready?: string;
   phase?: string;
@@ -24,10 +25,20 @@ interface ResourceStatusProps {
 }
 
 export const ResourceStatus = React.memo<ResourceStatusProps>(
-  ({ status, statusState, statusSeverity, ready, phase, conditions, customLabel = 'Status' }) => {
+  ({
+    status,
+    statusState,
+    statusPresentation,
+    statusSeverity,
+    ready,
+    phase,
+    conditions,
+    customLabel = 'Status',
+  }) => {
     // Determine what to display
     const displayValue = status || phase;
-    const badgeClass = statusState || statusSeverity?.toLowerCase() || 'unknown';
+    const badgeClass =
+      statusPresentation || statusState || statusSeverity?.toLowerCase() || 'unknown';
 
     if (!displayValue && !ready && (!conditions || conditions.length === 0)) {
       return null;

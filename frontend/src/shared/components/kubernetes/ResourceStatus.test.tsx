@@ -73,15 +73,30 @@ describe('ResourceStatus', () => {
     cleanup();
   });
 
-  it('renders status badge with the backend statusState class', async () => {
+  it('renders status badge with the backend statusPresentation class', async () => {
     const { container: root, cleanup } = await renderStatus({
       status: 'Ready (Cordoned)',
       statusState: 'True',
+      statusPresentation: 'cordoned',
     });
     container = root;
 
     const badge = root.querySelector('.status-badge');
     expect(badge?.textContent).toBe('Ready (Cordoned)');
+    expect(badge?.classList.contains('cordoned')).toBe(true);
+    expect(badge?.classList.contains('True')).toBe(false);
+    cleanup();
+  });
+
+  it('falls back to backend statusState when no presentation class is provided', async () => {
+    const { container: root, cleanup } = await renderStatus({
+      status: 'Ready',
+      statusState: 'True',
+    });
+    container = root;
+
+    const badge = root.querySelector('.status-badge');
+    expect(badge?.textContent).toBe('Ready');
     expect(badge?.classList.contains('True')).toBe(true);
     cleanup();
   });

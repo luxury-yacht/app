@@ -12,19 +12,21 @@ import (
 
 func TestBuildNodeResourceModelStatus(t *testing.T) {
 	tests := []struct {
-		name       string
-		node       *corev1.Node
-		wantLabel  string
-		wantState  string
-		wantReason string
-		wantSignal ResourceStatusSignal
-		wantBadge  ResourceStatusBadge
+		name             string
+		node             *corev1.Node
+		wantLabel        string
+		wantState        string
+		wantPresentation string
+		wantReason       string
+		wantSignal       ResourceStatusSignal
+		wantBadge        ResourceStatusBadge
 	}{
 		{
-			name:      "ready",
-			node:      nodeWithReadyCondition(corev1.ConditionTrue, "KubeletReady"),
-			wantLabel: "Ready",
-			wantState: string(corev1.ConditionTrue),
+			name:             "ready",
+			node:             nodeWithReadyCondition(corev1.ConditionTrue, "KubeletReady"),
+			wantLabel:        "Ready",
+			wantState:        string(corev1.ConditionTrue),
+			wantPresentation: "ready",
 		},
 		{
 			name: "ready cordoned",
@@ -33,9 +35,10 @@ func TestBuildNodeResourceModelStatus(t *testing.T) {
 				node.Spec.Unschedulable = true
 				return node
 			}(),
-			wantLabel:  "Ready (Cordoned)",
-			wantState:  string(corev1.ConditionTrue),
-			wantReason: "Unschedulable",
+			wantLabel:        "Ready (Cordoned)",
+			wantState:        string(corev1.ConditionTrue),
+			wantPresentation: "cordoned",
+			wantReason:       "Unschedulable",
 			wantSignal: ResourceStatusSignal{
 				Type:   StatusSignalResourceState,
 				Name:   "spec.unschedulable",
@@ -54,9 +57,10 @@ func TestBuildNodeResourceModelStatus(t *testing.T) {
 				}}
 				return node
 			}(),
-			wantLabel:  "Ready (Cordoned)",
-			wantState:  string(corev1.ConditionTrue),
-			wantReason: "Unschedulable",
+			wantLabel:        "Ready (Cordoned)",
+			wantState:        string(corev1.ConditionTrue),
+			wantPresentation: "cordoned",
+			wantReason:       "Unschedulable",
 			wantSignal: ResourceStatusSignal{
 				Type:   StatusSignalResourceState,
 				Name:   corev1.TaintNodeUnschedulable,
@@ -66,18 +70,20 @@ func TestBuildNodeResourceModelStatus(t *testing.T) {
 			wantBadge: ResourceStatusBadge{Text: "Cordoned", Status: string(corev1.TaintEffectNoSchedule)},
 		},
 		{
-			name:       "not ready",
-			node:       nodeWithReadyCondition(corev1.ConditionFalse, "KubeletNotReady"),
-			wantLabel:  "NotReady",
-			wantState:  string(corev1.ConditionFalse),
-			wantReason: "KubeletNotReady",
+			name:             "not ready",
+			node:             nodeWithReadyCondition(corev1.ConditionFalse, "KubeletNotReady"),
+			wantLabel:        "NotReady",
+			wantState:        string(corev1.ConditionFalse),
+			wantPresentation: "not-ready",
+			wantReason:       "KubeletNotReady",
 		},
 		{
-			name:       "unknown",
-			node:       nodeWithReadyCondition(corev1.ConditionUnknown, "NodeStatusUnknown"),
-			wantLabel:  "Unknown",
-			wantState:  string(corev1.ConditionUnknown),
-			wantReason: "NodeStatusUnknown",
+			name:             "unknown",
+			node:             nodeWithReadyCondition(corev1.ConditionUnknown, "NodeStatusUnknown"),
+			wantLabel:        "Unknown",
+			wantState:        string(corev1.ConditionUnknown),
+			wantPresentation: "unknown",
+			wantReason:       "NodeStatusUnknown",
 		},
 		{
 			name: "terminating",
@@ -87,9 +93,10 @@ func TestBuildNodeResourceModelStatus(t *testing.T) {
 				node.DeletionTimestamp = &deletingAt
 				return node
 			}(),
-			wantLabel:  "Terminating",
-			wantState:  string(corev1.ConditionTrue),
-			wantReason: "DeletionTimestamp",
+			wantLabel:        "Terminating",
+			wantState:        string(corev1.ConditionTrue),
+			wantPresentation: "terminating",
+			wantReason:       "DeletionTimestamp",
 			wantSignal: ResourceStatusSignal{
 				Type:   StatusSignalDeletion,
 				Name:   "metadata.deletionTimestamp",
@@ -109,6 +116,7 @@ func TestBuildNodeResourceModelStatus(t *testing.T) {
 			require.Equal(t, "node-1", model.Ref.Name)
 			require.Equal(t, tt.wantLabel, model.Status.Label)
 			require.Equal(t, tt.wantState, model.Status.State)
+			require.Equal(t, tt.wantPresentation, model.Status.Presentation)
 			require.Equal(t, tt.wantReason, model.Status.Reason)
 			if tt.wantSignal.Name != "" {
 				require.Contains(t, model.Status.Signals, tt.wantSignal)

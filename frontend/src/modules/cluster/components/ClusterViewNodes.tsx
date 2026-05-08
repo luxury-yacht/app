@@ -102,7 +102,7 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
 
       const resolveNodeStatus = (node: ClusterNodeRow) => {
         const text = node.status ?? 'Unknown';
-        const statusClass = node.statusState || 'unknown';
+        const statusClass = node.statusPresentation || node.statusState || 'unknown';
         return {
           text,
           className: `status-badge ${statusClass}`,

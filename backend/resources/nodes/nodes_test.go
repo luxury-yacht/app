@@ -39,6 +39,7 @@ func TestServiceNodeReturnsDetails(t *testing.T) {
 	require.Equal(t, node.Name, detail.Name)
 	require.Equal(t, "Ready", detail.Status)
 	require.Equal(t, "True", detail.StatusState)
+	require.Equal(t, "ready", detail.StatusPresentation)
 	require.Equal(t, "10.0.0.5", detail.InternalIP)
 	require.Equal(t, 2, detail.PodsCount)
 	require.NotEmpty(t, detail.PodsList)
@@ -57,6 +58,7 @@ func TestServiceNodeStatusUsesSharedResourceModel(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "Ready (Cordoned)", detail.Status)
 	require.Equal(t, "True", detail.StatusState)
+	require.Equal(t, "cordoned", detail.StatusPresentation)
 	require.Equal(t, "Unschedulable", detail.StatusReason)
 	require.True(t, detail.Unschedulable)
 }

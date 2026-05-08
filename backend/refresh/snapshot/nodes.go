@@ -60,37 +60,38 @@ type NodeMetricsInfo struct {
 // NodeSummary captures essential information for each node.
 type NodeSummary struct {
 	ClusterMeta
-	Name              string            `json:"name"`
-	Status            string            `json:"status"`
-	StatusState       string            `json:"statusState,omitempty"`
-	StatusReason      string            `json:"statusReason,omitempty"`
-	Roles             string            `json:"roles"`
-	Age               string            `json:"age"`
-	Version           string            `json:"version"`
-	InternalIP        string            `json:"internalIP,omitempty"`
-	ExternalIP        string            `json:"externalIP,omitempty"`
-	CPUCapacity       string            `json:"cpuCapacity"`
-	CPUAllocatable    string            `json:"cpuAllocatable"`
-	CPURequests       string            `json:"cpuRequests"`
-	CPULimits         string            `json:"cpuLimits"`
-	CPUUsage          string            `json:"cpuUsage"`
-	MemoryCapacity    string            `json:"memoryCapacity"`
-	MemoryAllocatable string            `json:"memoryAllocatable"`
-	MemRequests       string            `json:"memRequests"`
-	MemLimits         string            `json:"memLimits"`
-	MemoryUsage       string            `json:"memoryUsage"`
-	Pods              string            `json:"pods"`
-	PodsCapacity      string            `json:"podsCapacity"`
-	PodsAllocatable   string            `json:"podsAllocatable"`
-	Restarts          int32             `json:"restarts"`
-	Kind              string            `json:"kind"`
-	CPU               string            `json:"cpu"`
-	Memory            string            `json:"memory"`
-	Unschedulable     bool              `json:"unschedulable"`
-	Labels            map[string]string `json:"labels,omitempty"`
-	Annotations       map[string]string `json:"annotations,omitempty"`
-	Taints            []NodeTaint       `json:"taints,omitempty"`
-	PodMetrics        []NodePodMetric   `json:"podMetrics,omitempty"`
+	Name               string            `json:"name"`
+	Status             string            `json:"status"`
+	StatusState        string            `json:"statusState,omitempty"`
+	StatusPresentation string            `json:"statusPresentation,omitempty"`
+	StatusReason       string            `json:"statusReason,omitempty"`
+	Roles              string            `json:"roles"`
+	Age                string            `json:"age"`
+	Version            string            `json:"version"`
+	InternalIP         string            `json:"internalIP,omitempty"`
+	ExternalIP         string            `json:"externalIP,omitempty"`
+	CPUCapacity        string            `json:"cpuCapacity"`
+	CPUAllocatable     string            `json:"cpuAllocatable"`
+	CPURequests        string            `json:"cpuRequests"`
+	CPULimits          string            `json:"cpuLimits"`
+	CPUUsage           string            `json:"cpuUsage"`
+	MemoryCapacity     string            `json:"memoryCapacity"`
+	MemoryAllocatable  string            `json:"memoryAllocatable"`
+	MemRequests        string            `json:"memRequests"`
+	MemLimits          string            `json:"memLimits"`
+	MemoryUsage        string            `json:"memoryUsage"`
+	Pods               string            `json:"pods"`
+	PodsCapacity       string            `json:"podsCapacity"`
+	PodsAllocatable    string            `json:"podsAllocatable"`
+	Restarts           int32             `json:"restarts"`
+	Kind               string            `json:"kind"`
+	CPU                string            `json:"cpu"`
+	Memory             string            `json:"memory"`
+	Unschedulable      bool              `json:"unschedulable"`
+	Labels             map[string]string `json:"labels,omitempty"`
+	Annotations        map[string]string `json:"annotations,omitempty"`
+	Taints             []NodeTaint       `json:"taints,omitempty"`
+	PodMetrics         []NodePodMetric   `json:"podMetrics,omitempty"`
 }
 
 // NodeTaint represents a node taint in snapshot payload.
@@ -232,18 +233,19 @@ func buildNodeSnapshot(ctx context.Context, nodes []*corev1.Node, pods []*corev1
 		model := resourcemodel.BuildNodeResourceModel(meta.ClusterID, node)
 		nodeFacts := model.Facts.Node
 		summary := NodeSummary{
-			ClusterMeta:   meta,
-			Name:          node.Name,
-			Status:        model.Status.Label,
-			StatusState:   model.Status.State,
-			StatusReason:  model.Status.Reason,
-			Roles:         formatRoles(extractRoles(node.Labels)),
-			Age:           formatAge(node.CreationTimestamp.Time),
-			Version:       node.Status.NodeInfo.KubeletVersion,
-			Labels:        copyStringMap(node.Labels),
-			Annotations:   copyStringMap(node.Annotations),
-			Kind:          "node",
-			Unschedulable: nodeFacts != nil && nodeFacts.Unschedulable,
+			ClusterMeta:        meta,
+			Name:               node.Name,
+			Status:             model.Status.Label,
+			StatusState:        model.Status.State,
+			StatusPresentation: model.Status.Presentation,
+			StatusReason:       model.Status.Reason,
+			Roles:              formatRoles(extractRoles(node.Labels)),
+			Age:                formatAge(node.CreationTimestamp.Time),
+			Version:            node.Status.NodeInfo.KubeletVersion,
+			Labels:             copyStringMap(node.Labels),
+			Annotations:        copyStringMap(node.Annotations),
+			Kind:               "node",
+			Unschedulable:      nodeFacts != nil && nodeFacts.Unschedulable,
 		}
 
 		if ip := findNodeAddress(node, corev1.NodeInternalIP); ip != "" {

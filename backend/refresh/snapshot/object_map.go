@@ -168,11 +168,13 @@ type ObjectMapNode struct {
 }
 
 // ObjectMapStatus is a compact card-level status indicator. State is the source
-// status value selected by the resource-specific status builder.
+// status value selected by the resource-specific status builder. Presentation is
+// the backend-selected rendering token for migrated resources that need one.
 type ObjectMapStatus struct {
-	State  string `json:"state"`
-	Label  string `json:"label"`
-	Reason string `json:"reason,omitempty"`
+	State        string `json:"state"`
+	Label        string `json:"label"`
+	Presentation string `json:"presentation,omitempty"`
+	Reason       string `json:"reason,omitempty"`
 }
 
 // ObjectMapEdge captures a directed relationship between two graph nodes.
@@ -1163,7 +1165,9 @@ func objectMapPVStatus(pv corev1.PersistentVolume) *ObjectMapStatus {
 
 func objectMapNodeStatus(clusterID string, node corev1.Node) *ObjectMapStatus {
 	model := resourcemodel.BuildNodeResourceModel(clusterID, &node)
-	return objectMapStatus(model.Status.State, model.Status.Label, model.Status.Reason)
+	status := objectMapStatus(model.Status.State, model.Status.Label, model.Status.Reason)
+	status.Presentation = model.Status.Presentation
+	return status
 }
 
 func objectMapDeploymentStatus(deploy appsv1.Deployment) *ObjectMapStatus {

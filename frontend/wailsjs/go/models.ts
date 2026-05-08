@@ -3458,6 +3458,7 @@ export namespace types {
 	    name: string;
 	    status: string;
 	    statusState?: string;
+	    statusPresentation?: string;
 	    statusReason?: string;
 	    unschedulable: boolean;
 	    roles: string;
@@ -3505,6 +3506,7 @@ export namespace types {
 	        this.name = source["name"];
 	        this.status = source["status"];
 	        this.statusState = source["statusState"];
+	        this.statusPresentation = source["statusPresentation"];
 	        this.statusReason = source["statusReason"];
 	        this.unschedulable = source["unschedulable"];
 	        this.roles = source["roles"];

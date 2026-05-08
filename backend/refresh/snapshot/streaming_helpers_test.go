@@ -155,6 +155,7 @@ func TestBuildNodeSummary(t *testing.T) {
 	require.Equal(t, "c1", summary.ClusterID)
 	require.Equal(t, "Ready (Cordoned)", summary.Status)
 	require.Equal(t, "True", summary.StatusState)
+	require.Equal(t, "cordoned", summary.StatusPresentation)
 }
 
 func ptrBool(value bool) *bool {

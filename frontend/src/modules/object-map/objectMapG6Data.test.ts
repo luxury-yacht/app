@@ -304,6 +304,35 @@ describe('objectMapG6Data', () => {
     }
   });
 
+  it('uses backend status presentation for object-map color without changing raw state', () => {
+    const graphData = toObjectMapG6Data(
+      {
+        ...layout,
+        nodes: [
+          {
+            ...layout.nodes[2],
+            status: { state: 'True', label: 'Terminating', presentation: 'terminating' },
+          },
+        ],
+        edges: [],
+      },
+      selectionState(null),
+      () => null,
+      palette
+    );
+
+    expect(graphData.nodes?.[0].data?.status).toEqual({
+      state: 'True',
+      label: 'Terminating',
+      presentation: 'terminating',
+    });
+    expect(graphData.nodes?.[0].style).toEqual(
+      expect.objectContaining({
+        cardStatusFill: '#f59e0b',
+      })
+    );
+  });
+
   it('uses the centralized kind badge style resolver for card kind badges', () => {
     const graphData = toObjectMapG6Data(
       layout,
