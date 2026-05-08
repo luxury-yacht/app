@@ -434,32 +434,31 @@
    Saved Themes table
    ========================================================================== */
 
+/* Master grid: one shared column template for header AND every row. The
+   header and rows use `display: grid` with `grid-template-columns: subgrid`
+   so cell boundaries are guaranteed to line up across header and body. */
 .themes-section {
   margin-top: var(--spacing-sm);
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius-sm);
   overflow: hidden;
   width: 100%;
-  display: flex;
-  flex-direction: column;
-  /* Shared column tokens so header and rows agree on edge widths. */
-  --themes-col-drag: 32px;
-  --themes-col-actions: 140px;
+  display: grid;
+  grid-template-columns: 32px 1fr 1fr auto auto;
 }
 
-/* The header is its own bar above the row grid — a single full-width
-   element with one continuous background and a bottom rule. The two label
-   cells are sized to roughly match the data columns below (drag-handle
-   width offset, then 1fr/1fr for name/pattern, then space for the action
-   buttons). */
-.themes-table-header {
+.themes-table-header,
+.themes-table,
+.themes-table-row {
+  grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: var(--themes-col-drag) 1fr 1fr var(--themes-col-actions);
+  grid-template-columns: subgrid;
+  align-items: center;
+}
+
+.themes-table-header {
   background: var(--modal-footer-bg);
   border-bottom: 1px solid var(--color-border);
-  /* Reserve the same right gutter the rows use for action buttons so the
-     header bar and row buttons share their right edge. */
-  padding-right: 0;
 }
 
 .themes-table-header > span {
@@ -471,80 +470,67 @@
   padding: 0.5rem 0.75rem;
 }
 
+/* Header label cells sit in the matching data columns below. The drag
+   column (1) and action columns (4, 5) are intentionally label-less. */
 .themes-header-drag {
   grid-column: 1;
 }
 
+/* Theme Name header → column 2 (above name values).
+   Pattern header  → column 3 (above pattern values). */
 .themes-header-pattern {
   grid-column: 3;
 }
 
-/* Body rows: each row is a flex container so we don't fight grid sizing
-   between header and body. The drag handle and action buttons sit at the
-   row edges; name/pattern share the middle equally. */
+/* Body container — also a subgrid pass-through so each row's cells align
+   with the header columns. */
 .themes-table {
-  display: flex;
-  flex-direction: column;
-}
-
-.themes-table-row {
-  display: flex;
-  align-items: center;
-  min-height: 36px;
+  /* `.themes-table` doesn't introduce visual structure; rows render
+     directly into the master grid via subgrid. */
 }
 
 .themes-table-row + .themes-table-row {
+  /* Row separator drawn on the first cell with negative margin trick — see
+     border-top rule below for cells. */
+}
+
+.themes-table-row > * {
+  padding: 0.5rem 0.75rem;
+  min-width: 0;
+}
+
+/* Row dividers: a top border on every cell of every row except the first.
+   This guarantees a continuous line across the full grid width regardless
+   of how many cells the row has. */
+.themes-table-row + .themes-table-row > * {
   border-top: 1px solid var(--color-border);
 }
 
-.themes-table-row--dimmed {
+.themes-table-row--dimmed > * {
   opacity: 0.4;
 }
 
-.themes-table-row--dragging {
+.themes-table-row--dragging > * {
   opacity: 0.4;
 }
 
-.themes-table-row--drop-target {
+.themes-table-row--drop-target > *:first-child {
   box-shadow: inset 0 2px 0 0 var(--color-accent);
 }
 
-/* Cells inside a row */
+/* Drag handle column gets no horizontal padding since the column is narrow
+   and the glyph centers itself. */
 .themes-table-row > .themes-drag-handle {
-  flex: 0 0 var(--themes-col-drag);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
+  padding-left: 0;
+  padding-right: 0;
 }
 
-.themes-table-row > .theme-name,
-.themes-table-row > .theme-name-input {
-  flex: 1 1 0;
-  min-width: 0;
-  padding: 0.5rem 0.75rem;
-}
-
-.themes-table-row > .theme-pattern,
-.themes-table-row > .theme-pattern-input {
-  flex: 1 1 0;
-  min-width: 0;
-  padding: 0.5rem 0.75rem;
-}
-
-/* Open + Delete buttons share the right edge — matched to the action
-   column reserved in the header so the labels sit roughly aligned. */
+/* Action button cells reset cell padding — buttons supply their own. */
 .themes-table-row > .theme-action-button {
-  flex: 0 0 auto;
-  margin-right: 0.5rem;
+  padding: 0.25rem;
 }
-
-.themes-table-row > .theme-action-button:first-of-type {
-  margin-left: auto;
-}
-
-.themes-table-row > .theme-action-button + .theme-action-button {
-  margin-left: 0;
+.themes-table-row > .theme-action-button:last-child {
+  padding-right: 0.5rem;
 }
 
 .themes-drag-handle {
@@ -563,12 +549,11 @@
 .theme-name {
   font-weight: 500;
   font-size: var(--font-size-normal);
-  color: var(--color-text);
 }
 
 .theme-pattern {
-  color: var(--color-text);
-  font-size: var(--font-size-small);
+  font-size: var(--font-size-mono);
+  font-family: var(--font-family-mono);
 }
 
 .theme-field-clickable {

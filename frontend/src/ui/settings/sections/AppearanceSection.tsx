@@ -952,7 +952,7 @@ function AppearanceSection() {
                           }}
                           title="Drag to reorder"
                         >
-                          &#x2807;
+                          &#x283F;
                         </span>
                         {isEditingName ? (
                           <input
