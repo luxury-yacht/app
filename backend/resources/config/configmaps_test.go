@@ -86,5 +86,7 @@ func newConfigService(t testing.TB, client *fake.Clientset) *Service {
 		testsupport.WithDepsKubeClient(client),
 		testsupport.WithDepsLogger(testsupport.NoopLogger{}),
 	)
+	deps.ClusterID = "cluster-a"
+	deps.ClusterName = "Cluster A"
 	return NewService(deps)
 }

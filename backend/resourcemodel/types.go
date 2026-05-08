@@ -37,6 +37,22 @@ type ResourceRef struct {
 	UID       string `json:"uid,omitempty"`
 }
 
+type DisplayRef struct {
+	ClusterID string `json:"clusterId"`
+	Group     string `json:"group"`
+	Version   string `json:"version"`
+	Kind      string `json:"kind"`
+	Resource  string `json:"resource,omitempty"`
+	Namespace string `json:"namespace,omitempty"`
+	Name      string `json:"name,omitempty"`
+	UID       string `json:"uid,omitempty"`
+}
+
+type ResourceLink struct {
+	Ref     *ResourceRef `json:"ref,omitempty"`
+	Display *DisplayRef  `json:"display,omitempty"`
+}
+
 type ResourceMetadata struct {
 	Labels            map[string]string `json:"labels,omitempty"`
 	Annotations       map[string]string `json:"annotations,omitempty"`
@@ -108,6 +124,8 @@ type ResourceFacts struct {
 	PersistentVolume      *PersistentVolumeFacts      `json:"persistentVolume,omitempty"`
 	PersistentVolumeClaim *PersistentVolumeClaimFacts `json:"persistentVolumeClaim,omitempty"`
 	StorageClass          *StorageClassFacts          `json:"storageClass,omitempty"`
+	ConfigMap             *ConfigMapFacts             `json:"configMap,omitempty"`
+	Secret                *SecretFacts                `json:"secret,omitempty"`
 }
 
 type PodFacts struct {
@@ -162,6 +180,23 @@ type StorageClassFacts struct {
 	DefaultClass                bool   `json:"defaultClass"`
 	DefaultClassAnnotation      string `json:"defaultClassAnnotation,omitempty"`
 	DefaultClassAnnotationValue string `json:"defaultClassAnnotationValue,omitempty"`
+}
+
+type ConfigMapFacts struct {
+	DataKeys       []string       `json:"dataKeys,omitempty"`
+	BinaryDataKeys []string       `json:"binaryDataKeys,omitempty"`
+	DataCount      int            `json:"dataCount"`
+	DataSizeBytes  int64          `json:"dataSizeBytes"`
+	UsedBy         []ResourceLink `json:"usedBy,omitempty"`
+}
+
+type SecretFacts struct {
+	Type          string         `json:"type,omitempty"`
+	DataKeys      []string       `json:"dataKeys,omitempty"`
+	DataCount     int            `json:"dataCount"`
+	DataSizeBytes int64          `json:"dataSizeBytes"`
+	Immutable     *bool          `json:"immutable,omitempty"`
+	UsedBy        []ResourceLink `json:"usedBy,omitempty"`
 }
 
 type ResourceModel struct {

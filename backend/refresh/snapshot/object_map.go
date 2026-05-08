@@ -629,6 +629,7 @@ func (idx *objectMapIndex) collectConfigMaps(ctx context.Context, client kuberne
 		idx.addRecord(&objectMapRecord{
 			ref:               refFromObject(&cm.ObjectMeta, "", "v1", "ConfigMap", "configmaps", cm.Namespace),
 			creationTimestamp: objectCreationTimestamp(&cm.ObjectMeta),
+			status:            objectMapConfigMapStatus(idx.meta.ClusterID, cm),
 			owners:            cm.OwnerReferences,
 			labels:            cloneStringMap(cm.Labels),
 		})
@@ -645,6 +646,7 @@ func (idx *objectMapIndex) collectSecrets(ctx context.Context, client kubernetes
 		idx.addRecord(&objectMapRecord{
 			ref:               refFromObject(&secret.ObjectMeta, "", "v1", "Secret", "secrets", secret.Namespace),
 			creationTimestamp: objectCreationTimestamp(&secret.ObjectMeta),
+			status:            objectMapSecretStatus(idx.meta.ClusterID, secret),
 			owners:            secret.OwnerReferences,
 			labels:            cloneStringMap(secret.Labels),
 		})
@@ -1047,6 +1049,16 @@ func objectMapPVStatus(clusterID string, pv corev1.PersistentVolume) *ObjectMapS
 
 func objectMapStorageClassStatus(clusterID string, storageClass storagev1.StorageClass) *ObjectMapStatus {
 	model := resourcemodel.BuildStorageClassResourceModel(clusterID, &storageClass)
+	return objectMapStatusFromResourceModel(model)
+}
+
+func objectMapConfigMapStatus(clusterID string, configMap corev1.ConfigMap) *ObjectMapStatus {
+	model := resourcemodel.BuildConfigMapResourceModel(clusterID, &configMap, nil)
+	return objectMapStatusFromResourceModel(model)
+}
+
+func objectMapSecretStatus(clusterID string, secret corev1.Secret) *ObjectMapStatus {
+	model := resourcemodel.BuildSecretResourceModel(clusterID, &secret, nil)
 	return objectMapStatusFromResourceModel(model)
 }
 

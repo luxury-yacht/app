@@ -50,6 +50,12 @@ func TestObjectMapBuildsRecursiveCoreRelationships(t *testing.T) {
 	if status := nodeByKindName(t, payload, "Deployment", "web").Status; status == nil || status.State != "2/2" || status.Label != "Running" || status.Presentation != "ready" {
 		t.Fatalf("unexpected deployment status: %#v", status)
 	}
+	if status := nodeByKindName(t, payload, "ConfigMap", "app-config").Status; status == nil || status.State != "2" || status.Label != "2 items" || status.Presentation != "ready" {
+		t.Fatalf("unexpected configmap status: %#v", status)
+	}
+	if status := nodeByKindName(t, payload, "Secret", "app-secret").Status; status == nil || status.State != "Opaque" || status.Label != "Opaque, 1 key" || status.Presentation != "ready" {
+		t.Fatalf("unexpected secret status: %#v", status)
+	}
 
 	assertEdge(t, payload, "Deployment", "web", "ReplicaSet", "web-rs", "owner")
 	assertEdge(t, payload, "ReplicaSet", "web-rs", "Pod", "web-pod", "owner")
@@ -804,8 +810,16 @@ func objectMapFixtureObjects() []runtime.Object {
 		slice,
 		pvc,
 		pv,
-		&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "app-config", Namespace: "default", UID: types.UID("cm-uid")}},
-		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "app-secret", Namespace: "default", UID: types.UID("secret-uid")}},
+		&corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: "app-config", Namespace: "default", UID: types.UID("cm-uid")},
+			Data:       map[string]string{"app.yaml": "enabled: true"},
+			BinaryData: map[string][]byte{"cert.der": []byte("cert")},
+		},
+		&corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: "app-secret", Namespace: "default", UID: types.UID("secret-uid")},
+			Type:       corev1.SecretTypeOpaque,
+			Data:       map[string][]byte{"password": []byte("secret")},
+		},
 		&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "builder", Namespace: "default", UID: types.UID("sa-uid")}},
 		&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node-1", UID: types.UID("node-uid")}},
 		hpa,

@@ -41,13 +41,18 @@ func BuildConfigMapSummary(meta ClusterMeta, cm *corev1.ConfigMap) ConfigSummary
 	if cm == nil {
 		return ConfigSummary{ClusterMeta: meta, Kind: "ConfigMap", TypeAlias: "CM"}
 	}
+	model := resourcemodel.BuildConfigMapResourceModel(meta.ClusterID, cm, nil)
+	dataCount := len(cm.Data) + len(cm.BinaryData)
+	if facts := model.Facts.ConfigMap; facts != nil {
+		dataCount = facts.DataCount
+	}
 	return ConfigSummary{
 		ClusterMeta: meta,
 		Kind:        "ConfigMap",
 		TypeAlias:   "CM",
 		Name:        cm.Name,
 		Namespace:   cm.Namespace,
-		Data:        len(cm.Data) + len(cm.BinaryData),
+		Data:        dataCount,
 		Age:         formatAge(cm.CreationTimestamp.Time),
 	}
 }
@@ -57,13 +62,18 @@ func BuildSecretSummary(meta ClusterMeta, secret *corev1.Secret) ConfigSummary {
 	if secret == nil {
 		return ConfigSummary{ClusterMeta: meta, Kind: "Secret"}
 	}
+	model := resourcemodel.BuildSecretResourceModel(meta.ClusterID, secret, nil)
+	dataCount := len(secret.Data) + len(secret.StringData)
+	if facts := model.Facts.Secret; facts != nil {
+		dataCount = facts.DataCount
+	}
 	return ConfigSummary{
 		ClusterMeta: meta,
 		Kind:        "Secret",
 		TypeAlias:   secretTypeAlias(secret),
 		Name:        secret.Name,
 		Namespace:   secret.Namespace,
-		Data:        len(secret.Data) + len(secret.StringData),
+		Data:        dataCount,
 		Age:         formatAge(secret.CreationTimestamp.Time),
 	}
 }

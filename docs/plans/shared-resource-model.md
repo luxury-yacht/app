@@ -2350,6 +2350,27 @@ as `ready`, `warning`, `error`, `unknown`, or `terminating`; they must not map
 raw Kubernetes phase strings like `Bound`, `Pending`, `Lost`, or `Released` to
 colors locally.
 
+## Implementation Learnings From The Config Slice
+
+The Config migration introduced the first shared relationship facts used by a
+migrated family. `ConfigMapFacts.UsedBy` and `SecretFacts.UsedBy` are stored as
+`ResourceLink` values with complete Pod identity, including `clusterId`, group,
+version, kind, namespace, and name. Existing detail DTOs still project those
+links to the current `[]string` pod-name contract, but the shared model owns the
+relationship derivation.
+
+ConfigMap primary `State` comes from the source object's data item count:
+`len(data) + len(binaryData)`. The label can be `0 items`, `1 item`, or
+`N items`, but the state remains the source-derived count string. Secret primary
+`State` comes from the Kubernetes Secret type, using Kubernetes' `Opaque`
+default when the type field is empty.
+
+Secret shared facts must never contain Secret values. The migrated model stores
+Secret type, sorted data keys, data count, data size, immutability, and usage
+links. The detail view may still receive decoded Secret values through its
+explicit detail-only DTO, but those values must not move into shared facts,
+table summaries, object-map status, or relationship metadata.
+
 ## Migration Strategy
 
 Migrate by resource family, deleting duplicated semantic logic as each family is
@@ -2458,13 +2479,13 @@ that actually consumes them.
 
 ### Phase 7: Config
 
-- [ ] Add shared resource models for ConfigMap and Secret.
-- [ ] Keep Secret values out of shared facts; expose only keys/count/type and
+- [x] ✅ Add shared resource models for ConfigMap and Secret.
+- [x] ✅ Keep Secret values out of shared facts; expose only keys/count/type and
       explicit detail-only access.
-- [ ] Centralize ConfigMap/Secret usage relationships through `ResourceLink`.
-- [ ] Use config shared resource models from table, detail, and object-map
+- [x] ✅ Centralize ConfigMap/Secret usage relationships through `ResourceLink`.
+- [x] ✅ Use config shared resource models from table, detail, and object-map
       paths.
-- [ ] Add parity tests for config identity, usage links, and status.
+- [x] ✅ Add parity tests for config identity, usage links, and status.
 
 ### Phase 8: Network
 

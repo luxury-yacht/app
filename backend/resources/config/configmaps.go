@@ -10,9 +10,9 @@ package config
 import (
 	"encoding/base64"
 	"fmt"
-	"sort"
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/types"
 	corev1 "k8s.io/api/core/v1"
@@ -48,13 +48,19 @@ func (s *Service) ConfigMaps(namespace string) ([]*types.ConfigMapDetails, error
 }
 
 func (s *Service) processConfigMapDetails(cm *corev1.ConfigMap, pods *corev1.PodList) *types.ConfigMapDetails {
+	model := resourcemodel.BuildConfigMapResourceModel(s.deps.ClusterID, cm, pods)
+	facts := model.Facts.ConfigMap
+	dataCount := len(cm.Data) + len(cm.BinaryData)
+	if facts != nil {
+		dataCount = facts.DataCount
+	}
 	details := &types.ConfigMapDetails{
 		Kind:        "ConfigMap",
 		Name:        cm.Name,
 		Namespace:   cm.Namespace,
 		Age:         common.FormatAge(cm.CreationTimestamp.Time),
 		Data:        cm.Data,
-		DataCount:   len(cm.Data) + len(cm.BinaryData),
+		DataCount:   dataCount,
 		Labels:      cm.Labels,
 		Annotations: cm.Annotations,
 	}
@@ -66,9 +72,8 @@ func (s *Service) processConfigMapDetails(cm *corev1.ConfigMap, pods *corev1.Pod
 		}
 	}
 
-	usedBy := s.collectConfigMapUsage(cm.Name, pods)
-	if len(usedBy) > 0 {
-		details.UsedBy = usedBy
+	if facts != nil {
+		details.UsedBy = resourcemodel.ResourceLinkNames(facts.UsedBy)
 	}
 
 	details.Details = fmt.Sprintf("Data items: %d", details.DataCount)
@@ -86,50 +91,4 @@ func (s *Service) listNamespacePods(namespace string) *corev1.PodList {
 		return nil
 	}
 	return pods
-}
-
-func (s *Service) collectConfigMapUsage(name string, pods *corev1.PodList) []string {
-	if pods == nil {
-		return nil
-	}
-
-	usedBy := make(map[string]bool)
-	for _, pod := range pods.Items {
-		for _, volume := range pod.Spec.Volumes {
-			if volume.ConfigMap != nil && volume.ConfigMap.Name == name {
-				usedBy[pod.Name] = true
-				break
-			}
-		}
-		s.collectEnvConfigMapUsage(pod.Name, name, pod.Spec.Containers, usedBy)
-		s.collectEnvConfigMapUsage(pod.Name, name, pod.Spec.InitContainers, usedBy)
-	}
-
-	if len(usedBy) == 0 {
-		return nil
-	}
-
-	var podNames []string
-	for podName := range usedBy {
-		podNames = append(podNames, podName)
-	}
-	sort.Strings(podNames)
-	return podNames
-}
-
-func (s *Service) collectEnvConfigMapUsage(podName, name string, containers []corev1.Container, usedBy map[string]bool) {
-	for _, container := range containers {
-		for _, envFrom := range container.EnvFrom {
-			if envFrom.ConfigMapRef != nil && envFrom.ConfigMapRef.Name == name {
-				usedBy[podName] = true
-				break
-			}
-		}
-		for _, env := range container.Env {
-			if env.ValueFrom != nil && env.ValueFrom.ConfigMapKeyRef != nil && env.ValueFrom.ConfigMapKeyRef.Name == name {
-				usedBy[podName] = true
-				break
-			}
-		}
-	}
 }

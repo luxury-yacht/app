@@ -152,6 +152,29 @@ func TestBuildPodSummaryUsesSharedPodStatusPresentation(t *testing.T) {
 	require.Equal(t, "1/2", summary.Ready)
 }
 
+func TestBuildConfigSummariesUseSharedConfigFacts(t *testing.T) {
+	configMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: "app-config", Namespace: "default"},
+		Data:       map[string]string{"app.yaml": "enabled: true"},
+		BinaryData: map[string][]byte{"cert.der": []byte("cert")},
+	}
+	configMapSummary := BuildConfigMapSummary(ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}, configMap)
+	require.Equal(t, "ConfigMap", configMapSummary.Kind)
+	require.Equal(t, "CM", configMapSummary.TypeAlias)
+	require.Equal(t, 2, configMapSummary.Data)
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "app-secret", Namespace: "default"},
+		Type:       corev1.SecretTypeTLS,
+		Data:       map[string][]byte{"tls.crt": []byte("cert")},
+		StringData: map[string]string{"write-only": "not-returned-by-api"},
+	}
+	secretSummary := BuildSecretSummary(ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}, secret)
+	require.Equal(t, "Secret", secretSummary.Kind)
+	require.Equal(t, "TLS", secretSummary.TypeAlias)
+	require.Equal(t, 1, secretSummary.Data)
+}
+
 func TestBuildNodeSummary(t *testing.T) {
 	node := &corev1.Node{
 		ObjectMeta: metav1.ObjectMeta{
