@@ -1,90 +1,167 @@
 # Catalog Architecture
 
-## Intent
+The object catalog is Luxury Yacht's per-cluster index of Kubernetes object
+identity and existence. It is discovery-oriented: it answers what objects exist
+and how to refer to them, while richer views fetch domain-specific payloads from
+typed refresh domains or object-detail providers.
 
-This note captures the durable architecture rule for the relationship between
-the object catalog and the rest of the app's data-retrieval model.
-
-The short version is:
-
-- the catalog is the canonical per-cluster object index
-- identity and existence come from the catalog
-- richer screens build on top of catalog identity instead of duplicating it
+See [README.md](README.md) for the architecture doc map.
 
 Keep `catalog-first`. Avoid `catalog-only`.
 
 ## Core Rule
 
-The catalog owns object identity and the live object set.
+The catalog owns canonical object identity and the live object set.
 
-That does **not** mean every screen should consume one universal row shape or
-render directly from catalog summaries. It means the app should agree on one
-canonical answer to:
+That does not mean every screen should consume one universal row shape or render
+directly from catalog summaries. It means the app should agree on one canonical
+answer to:
 
 - what object is being referred to
 - whether it still exists
 - which cluster it belongs to
-- which exact GVK it has
+- which exact GVR/GVK it has
+- whether it is cluster-scoped or namespace-scoped
 
-Consumer-specific retrieval should then decide what richer data is needed.
+Consumer-specific retrieval then decides what richer data is needed.
+
+## What The Catalog Stores
+
+`backend/objectcatalog.Service` maintains an in-memory map of
+`objectcatalog.Summary` values. Each summary includes:
+
+- `clusterId` and `clusterName`
+- `group`, `version`, `resource`, `kind`, and `scope`
+- `namespace` and `name`
+- `uid`, `resourceVersion`, and `creationTimestamp`
+- optional `labelsDigest` for change detection
+
+The catalog also caches sorted query chunks, kind metadata, namespace metadata,
+allowed descriptors, first-batch latency, and health state.
+
+Catalog rows are discovery summaries. They are not rich details, YAML, Helm
+content, status overviews, metrics, logs, or action payloads.
+
+## Service Lifecycle
+
+The backend starts one catalog service per selected cluster in
+`backend/app_object_catalog.go`. Each service is tied to the cluster's refresh
+subsystem and shared informer factories.
+
+The sync pipeline in `backend/objectcatalog/sync.go`:
+
+1. Discovers API resources.
+2. Evaluates list permission with the capabilities service.
+3. Collects summaries from shared informers where available.
+4. Falls back to dynamic client list calls for resources without usable informer
+   data.
+5. Promotes high-volume dynamic resources to dedicated informers when the
+   promotion threshold is reached.
+6. Publishes query caches and stream notifications.
+
+With reactive updates enabled, `backend/objectcatalog/watch.go` attaches shared
+informer event handlers for common resources and applies debounced add/update/
+delete batches to the catalog. Periodic full resync remains the consistency
+safety net.
+
+## Query And Lookup Surfaces
+
+Catalog API surfaces are intentionally narrow:
+
+- `Query()` returns paginated, filtered summaries plus `continue`, total count,
+  resource count, kind metadata, and namespace metadata.
+- `Namespaces()` returns catalog-derived namespaces for sidebar and browse
+  metadata.
+- `Descriptors()` returns discovered/allowed resource descriptors.
+- `Health()` returns sync health for diagnostics.
+- `FindExactMatch(namespace, group, version, kind, name)` resolves one object by
+  canonical identity within a cluster.
+- `FindByUID(uid)` resolves one object by UID within a cluster.
+- `SubscribeStreaming()` notifies catalog SSE subscribers when queryable catalog
+  state changes.
+
+Frontend and Wails-facing object lookup must carry `clusterId`. Backend lookup
+entry points such as `FindCatalogObjectMatch` and `FindCatalogObjectByUID`
+reject missing cluster IDs instead of guessing.
+
+## Refresh Integration
+
+The `catalog` and `catalog-diff` refresh domains are registered in
+`backend/refresh/system/registrations.go` and implemented by
+`backend/refresh/snapshot/catalog.go`.
+
+Catalog snapshots expose:
+
+- `items`
+- `continue`
+- `total`
+- `resourceCount`
+- `kinds`
+- `namespaces`
+- `namespaceGroups`
+- `batchIndex`, `batchSize`, `totalBatches`, and `isFinal`
+- `firstBatchLatencyMs`
+
+The SSE handler in `backend/refresh/snapshot/catalog_stream.go` subscribes to
+catalog updates, re-runs the catalog query, and pushes snapshot-shaped events.
+Stream payloads include `cacheReady`, `ready`, `truncated`, `snapshotMode`, and
+sequence metadata.
+
+The frontend catalog stream manager applies those snapshots into the refresh
+store. Manual/filter/pagination requests still use normal snapshot fetches; SSE
+is not a replacement for query-specific fetches.
+
+## Browse Ownership
+
+Browse is catalog-backed but not catalog-only.
+
+`frontend/src/modules/browse/hooks/useBrowseCatalog.ts` owns catalog scopes for
+Browse views. It:
+
+- builds cluster-prefixed query scopes with `limit`, `search`, `kind`,
+  `namespace`, and `continue`
+- enables and disables the relevant `catalog` refresh scopes
+- triggers startup/manual snapshot requests
+- derives filter metadata from catalog snapshot metadata
+- reconciles full replacement snapshots by UID/resourceVersion
+- uses additive upsert only for load-more pagination
+
+`frontend/src/modules/browse/hooks/useBrowseColumns.tsx` projects catalog items
+into Browse table rows and opens/navigates with required canonical object
+references.
 
 ## Layered Retrieval Model
 
-### 1. Catalog Layer
+| Layer            | Owns                                                                                            | Examples                                                                                        |
+| ---------------- | ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Catalog          | Object identity, existence, descriptors, namespace metadata, and bounded object-summary queries | exact lookup, UID lookup, namespace metadata, resource descriptors                              |
+| Query/projection | Consumer-shaped views over the canonical catalog                                                | Browse rows, sidebar namespace groups, kind/namespace filter metadata, object selection queries |
+| Hydration        | Rich payloads fetched after identity is known                                                   | object details, YAML, Helm content, diff inputs, typed refresh-domain rows                      |
 
-The catalog owns canonical object identity and the live object set.
-
-It should answer:
-
-- exact lookup by canonical identity
-- bounded queries for object identities
-- metadata queries for kinds, namespaces, counts, and groupings
-
-### 2. Query / Projection Layer
-
-Backend query surfaces should shape catalog-backed data for consumer needs.
-
-Examples:
-
-- generic object-table row queries
-- sidebar/filter metadata queries
-- bounded command-palette search queries
-- exact-match queries for object open/diff/navigation
-- typed projections for richer domain-specific screens
-
-These are different views over the same canonical catalog.
-
-### 3. Hydration Layer
-
-Consumers fetch richer payloads only after they have the catalog identity they
-need.
-
-Examples:
-
-- object panels resolve catalog identity, then fetch details/YAML
-- diff flows resolve exact objects, then fetch YAML/details for those objects
-- typed screens fetch richer data for bounded visible sets instead of treating
-  typed payloads as a separate identity system
+Typed screens may fetch richer refresh-domain data, but open/diff/navigation/
+action flows still preserve catalog-shaped identity.
 
 ## Constraints
 
-Using the catalog as the canonical source does **not** mean:
+Using the catalog as the canonical source does not mean:
 
 - shipping the full catalog to every screen
 - forcing every screen onto one shared payload shape
 - rebuilding every typed screen from minimal catalog rows on the client
 - adding one extra fetch per row
+- using catalog rows as rich object detail payloads
 
 The correct consequence is narrower:
 
-- use the catalog to decide **what object** the app is talking about
-- use consumer-specific retrieval to decide **what data about that object** is
+- use the catalog to decide what object the app is talking about
+- use consumer-specific retrieval to decide what data about that object is
   needed next
 
 ## Metadata Rule
 
-Metadata-driven controls should come from explicit catalog-derived metadata, not
-from whichever rows happened to be loaded most recently.
+Metadata-driven controls should come from explicit catalog-derived metadata
+where the control represents the object universe rather than the currently
+displayed slice.
 
 That is especially important for:
 
@@ -93,24 +170,37 @@ That is especially important for:
 - namespace filters
 - counts and groupings
 
-## Freshness and Confidence
+Row-derived metadata is acceptable only when the table explicitly owns a local,
+capped row set and the metadata does not claim to describe the whole cluster.
 
-The catalog should update in near real time, but the app should not quietly act
-as though the catalog is exact when confidence has been lost.
+## Freshness And Confidence
 
-Required behavior:
+The catalog should update near real time where informers are available, but the
+app must not silently treat stale or degraded catalog data as exact.
 
-- maintain the catalog incrementally where practical
-- expose explicit degraded/dirty state when watch confidence is lost
-- provide explicit repair/rebuild paths when necessary
+Current confidence signals:
 
-## Relationship to Typed Views
+- `HealthStatus` reports `unknown`, `ok`, `degraded`, or `error`.
+- `Stale`, `ConsecutiveFailures`, `FailedResources`, `LastSync`,
+  `LastSuccess`, and `LastError` are exposed for diagnostics.
+- Catalog snapshots and streams report `truncated`, batch metadata, cache
+  readiness, and first-batch latency.
+- Failed descriptor collection retains previous data for that descriptor and
+  marks the catalog degraded rather than dropping known objects immediately.
+- `EvictionTTL` controls pruning for missing items after successful collection.
 
-Typed views are allowed to use typed refresh domains and richer projections.
+When confidence is lost, callers should surface degraded state or fall back to
+explicit refresh/resync behavior. Do not quietly open, diff, navigate, or act on
+ambiguous catalog identity.
 
-They are still expected to remain consistent with catalog identity:
+## Relationship To Typed Views
 
-- rows carry canonical identity
+Typed views may use typed refresh domains and richer projections. They are still
+expected to remain consistent with catalog identity:
+
+- rows carry `clusterId`, `group`, `version`, `kind`, `namespace`, and `name`
 - object opening uses canonical identity
 - actions remain `clusterId` + GVK aware
+- object links use catalog lookup only when the source identity is incomplete and
+  a safe lookup key such as UID is available
 - typed payloads are enrichments, not competing identity systems

@@ -1,32 +1,49 @@
 # Data Access
 
 This document defines how frontend-initiated reads reach backend data. It is the
-contract for choosing between refresh domains, direct RPC adapters, and
-permission/capability reads.
+contract for choosing between refresh domains, direct RPC adapters,
+permission/capability reads, and app-state reads.
 
 ## Core Contract
 
-Component code must not call transport helpers directly.
-
-- no component-level `fetchScopedDomain(...)`
-- no component-level `triggerManualRefreshForContext(...)`
-- no component-level cluster-data Wails RPC reads
-- no component-level direct `QueryPermissions`
-
-Use these two public brokers:
+Frontend reads must go through one of two brokers:
 
 - `dataAccess` for cluster/resource reads
 - `appStateAccess` for bootstrap, app-shell, persisted-state, and runtime
   operational reads
 
-Underlying transports may still vary. The broker path is the stable frontend
-contract.
+Component and feature hook code should not call these directly:
+
+- `fetchScopedDomain(...)`
+- `triggerManualRefreshForContext(...)`
+- cluster-data generated Wails read bindings
+- `QueryPermissions`
+
+Add a typed reader in `frontend/src/core/data-access/readers.ts` or
+`frontend/src/core/app-state-access/readers.ts`, then invoke it through the
+owning broker.
+
+This policy covers reads. Commands and mutations such as apply, delete,
+port-forward, shell, and suspend/resume operations may use action-specific
+bindings, but they must still carry complete cluster and object identity.
 
 ## Broker Ownership
 
+Use `dataAccess` for:
+
+- refresh-domain backed cluster/resource data
+- context refreshes that fan out across domains
+- cluster-derived direct RPC reads
+- permission and capability reads
+
+Every cluster/resource read must use `dataAccess`, regardless of whether the
+transport is a refresh domain, direct Wails RPC, or permission/capability
+helper. Non-user `dataAccess` reads are subject to the paused auto-refresh
+policy.
+
 Use `appStateAccess` for:
 
-- settings, themes, zoom, favorites, and persisted layout state
+- settings, themes, zoom, favorites, layout state, and other persisted app state
 - kubeconfig inventory and selection state
 - app info and version metadata
 - app-shell auth and cluster lifecycle hydration
@@ -37,66 +54,61 @@ Use `appStateAccess` for:
 know about paused auto-refresh, background refresh, startup refresh, or
 refresh-domain streaming semantics.
 
-Use `dataAccess` for:
+## Adapters
 
-- refresh-domain backed cluster/resource data
-- cluster-derived direct RPC reads
-- permission and capability reads
+Adapters describe how a broker read is serviced for diagnostics and policy.
 
-Every cluster/resource read must go through `dataAccess`, regardless of whether
-the underlying transport is a refresh domain, a direct Wails RPC, or a
-permission/capability helper.
-
-## Transport Adapters
-
-| Adapter                  | Broker           | Purpose                                                                                                                                            |
-| ------------------------ | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `refresh-domain`         | `dataAccess`     | Snapshot, streaming, and fallback reads for refresh domains                                                                                        |
-| `permission-read`        | `dataAccess`     | `QueryPermissions` batches and diagnostics                                                                                                         |
-| `capability-read`        | `dataAccess`     | Resource capability queries where needed                                                                                                           |
-| cluster-data RPC readers | `dataAccess`     | Strict object reads such as YAML recovery, catalog resolution, revision history, HPA ownership, pod/container inventory, and target port discovery |
-| `rpc-read`               | `appStateAccess` | App state and runtime reads through Wails bindings                                                                                                 |
-| `persistence-read`       | `appStateAccess` | Saved preferences, table layout, favorites, zoom, and tab order                                                                                    |
+| Adapter            | Broker           | Purpose                                                                 |
+| ------------------ | ---------------- | ----------------------------------------------------------------------- |
+| `refresh-domain`   | `dataAccess`     | Snapshot, streaming, and fallback reads for refresh domains             |
+| `context-refresh`  | `dataAccess`     | Manual refreshes for active cluster, namespace, or object context       |
+| `rpc-read`         | `dataAccess`     | Direct cluster/resource reads through typed Wails reader wrappers       |
+| `permission-read`  | `dataAccess`     | `QueryPermissions` batches and diagnostics                              |
+| `capability-read`  | `dataAccess`     | Resource capability queries where needed                                |
+| `rpc-read`         | `appStateAccess` | App-state and runtime reads through typed Wails reader wrappers         |
+| `persistence-read` | `appStateAccess` | Saved preferences, table layout, favorites, zoom, and tab order         |
+| `runtime-read`     | `appStateAccess` | Runtime inventories such as app logs, sessions, and lifecycle snapshots |
 
 Internal infrastructure reads such as `GetRefreshBaseURL` and
 `GetSelectionDiagnostics` stay inside refresh client/diagnostics plumbing.
 
+## Typed Readers
+
+`dataAccess` reader wrappers currently cover:
+
+- target ports, pod containers, and log-scope containers
+- object YAML by GVK
+- catalog object lookup by UID or object match
+- revision history
+- HPA ownership checks
+- permission queries
+
+`appStateAccess` reader wrappers currently cover:
+
+- kubeconfig inventory and selected kubeconfigs
+- settings, themes, theme info, zoom, and kubeconfig search paths
+- app info and application logs
+- auth and cluster lifecycle snapshots
+- port-forward and shell session inventories/backlogs
+
+Reader wrappers are the only place generated Wails read imports should be
+needed for these paths.
+
 ## Refresh Domains
 
-Refresh domains are defined in `frontend/src/core/refresh/types.ts` and
-registered in `frontend/src/core/refresh/orchestrator.ts`.
+Refresh domains are defined in `frontend/src/core/refresh/types.ts`,
+registered in `frontend/src/core/refresh/registrations.ts`, and described in
+more detail in [Refresh System](refresh-system.md).
 
-| Domain                  | Data                                                       | Transport                             | Primary consumers                           |
-| ----------------------- | ---------------------------------------------------------- | ------------------------------------- | ------------------------------------------- |
-| `namespaces`            | Namespace list and workload presence metadata              | Snapshot HTTP                         | `NamespaceContext`, `Sidebar`               |
-| `cluster-overview`      | Cluster counters, resource usage, metrics freshness        | Snapshot HTTP                         | `ClusterOverview`, `useMetricsAvailability` |
-| `object-maintenance`    | Node drain/maintenance jobs and events                     | Snapshot HTTP                         | Node drain status UI                        |
-| `object-details`        | Object panel structured details                            | Snapshot HTTP                         | object panel details/jobs tabs              |
-| `object-events`         | Object-specific events                                     | Snapshot HTTP                         | object panel Events tab                     |
-| `object-yaml`           | Object YAML manifest                                       | Snapshot HTTP                         | YAML tab, diff modal                        |
-| `object-helm-manifest`  | Helm rendered manifest                                     | Snapshot HTTP                         | Manifest tab                                |
-| `object-helm-values`    | Helm values payload                                        | Snapshot HTTP                         | Values tab                                  |
-| `container-logs`        | Container log entries and sequencing metadata              | Container logs stream manager         | `LogViewer`                                 |
-| `pods`                  | Pod list plus metrics for namespace/workload/node scopes   | Resource stream manager, metrics-only | namespace resources, object-panel Pods tab  |
-| `catalog`               | Browse catalog rows, namespace groups, pagination metadata | Catalog stream manager                | browse view, sidebar                        |
-| `catalog-diff`          | Catalog search results for object diff selection           | Snapshot HTTP                         | Object Diff modal                           |
-| `cluster-events`        | Cluster-wide events                                        | Event stream manager                  | cluster Events view                         |
-| `nodes`                 | Node rows plus node metrics                                | Resource stream manager, metrics-only | cluster Nodes view, workload node summaries |
-| `cluster-rbac`          | Cluster roles and role bindings                            | Resource stream manager               | cluster RBAC view                           |
-| `cluster-storage`       | Persistent volumes and storage state                       | Resource stream manager               | cluster Storage view                        |
-| `cluster-config`        | Cluster-scoped config resources                            | Resource stream manager               | cluster Config view                         |
-| `cluster-crds`          | CRD definitions                                            | Resource stream manager               | cluster CRDs view                           |
-| `cluster-custom`        | Cluster-scoped custom resources                            | Resource stream manager               | cluster Custom view                         |
-| `namespace-events`      | Namespace-scoped events                                    | Event stream manager                  | namespace Events view                       |
-| `namespace-workloads`   | Workloads plus workload metrics                            | Resource stream manager, metrics-only | namespace Workloads view                    |
-| `namespace-config`      | Namespace config resources                                 | Resource stream manager               | namespace Config view                       |
-| `namespace-network`     | Namespace network resources                                | Resource stream manager               | namespace Network view                      |
-| `namespace-rbac`        | Namespace RBAC resources                                   | Resource stream manager               | namespace RBAC view                         |
-| `namespace-storage`     | Namespace storage resources                                | Resource stream manager               | namespace Storage view                      |
-| `namespace-autoscaling` | HPAs and autoscaling summaries                             | Resource stream manager               | namespace Autoscaling view                  |
-| `namespace-quotas`      | Quotas and limits                                          | Resource stream manager               | namespace Quotas view                       |
-| `namespace-custom`      | Namespace-scoped custom resources                          | Resource stream manager               | namespace Custom view                       |
-| `namespace-helm`        | Helm releases in a namespace                               | Resource stream manager               | namespace Helm view                         |
+| Domains                                                                                                                                                                              | Data                                                                                               | Transport                                    |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| `namespaces`, `cluster-overview`, `object-maintenance`, `object-details`, `object-events`, `object-yaml`, `object-helm-manifest`, `object-helm-values`, `object-map`, `catalog-diff` | Namespace/sidebar, cluster overview, object panel, YAML/diff, Helm, map, and catalog-diff payloads | Snapshot HTTP                                |
+| `catalog`                                                                                                                                                                            | Browse catalog rows, namespace groups, filter results, and pagination metadata                     | Catalog stream manager plus snapshot fetches |
+| `pods`, `nodes`, `namespace-workloads`                                                                                                                                               | Rows from streams plus metrics-only snapshot updates                                               | Resource stream manager, metrics-only        |
+| `cluster-events`, `namespace-events`                                                                                                                                                 | Cluster-wide and namespace-scoped events                                                           | Event stream manager                         |
+| `container-logs`                                                                                                                                                                     | Container log entries and sequencing metadata                                                      | Container logs stream manager                |
+| `cluster-rbac`, `cluster-storage`, `cluster-config`, `cluster-crds`, `cluster-custom`                                                                                                | Cluster-scoped resources                                                                           | Resource stream manager                      |
+| `namespace-config`, `namespace-network`, `namespace-rbac`, `namespace-storage`, `namespace-autoscaling`, `namespace-quotas`, `namespace-custom`, `namespace-helm`                    | Namespace-scoped resources                                                                         | Resource stream manager                      |
 
 Older list-style Wails methods such as `GetWorkloads` are retired. Frontend
 table data should use refresh domains.
@@ -108,7 +120,7 @@ flags:
 
 - `background`: scheduler-driven upkeep
 - `startup`: passive view/tab/panel activation
-- `user`: explicit user action such as `Refresh Now`
+- `user`: explicit user action such as Refresh Now
 
 When auto-refresh is disabled:
 
@@ -118,15 +130,15 @@ When auto-refresh is disabled:
 | `startup`    | No       |
 | `user`       | Yes      |
 
-This keeps paused cluster-data behavior consistent:
+Blocked non-user reads return `status: "blocked"` with
+`blockedReason: "auto-refresh-disabled"` and should not show passive loading
+spinners. User-initiated refreshes still run while paused.
 
-- no passive cluster-data fetches while paused
-- no passive loading spinners while paused
-- explicit user refresh still works
+`appStateAccess` has no request reason and no paused-read gate.
 
 ## Scope Rules
 
-All request scopes must preserve cluster identity:
+All cluster/resource request scopes must preserve Kubernetes identity:
 
 - cluster-scoped reads include `clusterId`
 - namespace-scoped reads include `clusterId` and namespace
@@ -138,47 +150,33 @@ are valid only for intentionally aggregated, background, or system behavior.
 
 ## Loading And Diagnostics
 
-Cluster-data UI derives loading behavior from broker request state, not from
-transport status alone.
+Broker results and UI refresh state are related but not identical.
 
-Important cluster-data states:
-
-- `idle`
-- `loading`
-- `refreshing`
-- `ready`
-- `error`
-- `blocked`
-
-`blocked` is the paused-startup state for cluster data. `appStateAccess` reads
-can keep a simpler lifecycle because they do not participate in cluster refresh
-semantics.
+`dataAccess` returns only whether a read was `executed` or `blocked`. Refresh
+domain lifecycle state such as loading, initialising, updating, ready, or error
+comes from the refresh store for that domain. Direct brokered RPC reads keep
+their local UI loading/error state while reporting diagnostics through the
+broker.
 
 Broker diagnostics should answer:
 
 - what requested the data
-- why it was requested
+- why it was requested, for `dataAccess`
 - whether it was blocked while paused
-- which adapter serviced it
-- whether it hit cache or backend
-- whether it is currently loading, blocked, or errored
+- which broker and adapter serviced it
+- which scope was requested
+- whether the latest request succeeded, errored, or was blocked
+- whether a request is currently in flight
 
-## Current Read Path Summary
+## Adding A Read
 
-The clean target is:
+When adding a frontend read:
 
-- one bootstrap/app-state entrypoint
-- one cluster-data entrypoint
-- one request reason model for cluster data only: `background`, `startup`,
-  `user`
-- one paused-policy gate for cluster-data behavior
-- diagnostics that cover both paths without forcing them into identical
-  semantics
-
-That lets the app answer, for every piece of data:
-
-- who asked for it
-- why it was allowed
-- which transport handled it
-- whether it should run while auto-refresh is paused
-- whether it is bootstrap/app-state, cluster data, or intentionally deferred
+1. Classify it as cluster/resource data or app-state/runtime data.
+2. Add a typed reader wrapper under the owning broker package.
+3. Call the reader through `requestData(...)`, `requestRefreshDomain(...)`,
+   `requestContextRefresh(...)`, or `requestAppState(...)`.
+4. Set `resource`, `adapter`, `label`, and `scope` for diagnostics.
+5. For `dataAccess`, choose the correct reason: `background`, `startup`, or
+   `user`, and handle `blocked` for non-user reads.
+6. Preserve complete cluster and object identity across the request boundary.
