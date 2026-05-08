@@ -1880,12 +1880,14 @@ Keep the configuration facts explicit per kind.
 
 ```go
 type CustomResourceDefinitionFacts struct {
-	Group              string
-	Scope              string
-	Names              CRDNamesFacts
-	Versions           []CRDVersionFacts
-	ConversionStrategy string
-	Conditions         []ConditionFacts
+	Group                   string
+	Scope                   string
+	Names                   CRDNamesFacts
+	Versions                []CRDVersionFacts
+	Conditions              []ConditionFacts
+	ConversionStrategy      string
+	StorageVersion          string
+	ExtraServedVersionCount int
 }
 
 type MutatingWebhookConfigurationFacts struct {
@@ -2471,6 +2473,32 @@ quantity strings, percentages, limit items, PDB int-or-string values, disruption
 status, disrupted pod links, and conditions are now derived once in the shared
 model.
 
+## Implementation Learnings From The API Extensions And Admission Slice
+
+CRD version display depends on two different source-derived facts: the storage
+version and the number of additional served versions. The shared model now owns
+that fallback chain, including the rare case where no version is marked storage,
+so full snapshots, streaming rows, and detail views cannot drift on version
+semantics.
+
+CRD schemas remain detail-shaped rather than copied wholesale into shared facts.
+The model records whether a version has an OpenAPI v3 schema, and the detail DTO
+projects the existing compact schema marker from that fact. This avoids turning
+large schema documents into summary facts while preserving the current detail UI.
+
+Admission webhook client config has two distinct reference forms. Service client
+configs become full core/v1 Service links with `clusterId`, namespace, and name;
+URL client configs remain literal URL facts because they are not Kubernetes
+objects. The shared model also copies selectors, rules, failure/match policy,
+side effects, timeout, admission review versions, and mutating reinvocation
+policy so detail paths do not reinterpret raw webhook structs.
+
+There are no current typed object-map collectors for
+`CustomResourceDefinition`, `MutatingWebhookConfiguration`, or
+`ValidatingWebhookConfiguration`. Phase 12 therefore migrates the applicable
+cluster table and detail paths, and leaves object-map work to the future phase
+that introduces generic/API-extension map materialization.
+
 ## Migration Strategy
 
 Migrate by resource family, deleting duplicated semantic logic as each family is
@@ -2629,13 +2657,13 @@ that actually consumes them.
 
 ### Phase 12: API Extensions And Admission
 
-- [ ] Add shared resource models for CustomResourceDefinition,
+- [x] ✅ Add shared resource models for CustomResourceDefinition,
       MutatingWebhookConfiguration, and ValidatingWebhookConfiguration.
-- [ ] Centralize CRD version/name/condition facts and webhook rule/client
+- [x] ✅ Centralize CRD version/name/condition facts and webhook rule/client
       reference facts. Keep CRD schemas detail-only.
-- [ ] Use API extension/admission shared resource models from cluster tables and
+- [x] ✅ Use API extension/admission shared resource models from cluster tables and
       detail paths.
-- [ ] Add tests for webhook service links and CRD version facts.
+- [x] ✅ Add tests for webhook service links and CRD version facts.
 
 ### Phase 13: Helm, Events, And Custom Resources
 

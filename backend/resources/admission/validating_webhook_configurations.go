@@ -10,6 +10,7 @@ package admission
 import (
 	"fmt"
 
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/types"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
@@ -54,40 +55,24 @@ func (s *Service) ValidatingWebhookConfigurations() ([]*types.ValidatingWebhookC
 }
 
 func (s *Service) buildValidatingWebhookConfigurationDetails(config *admissionregistrationv1.ValidatingWebhookConfiguration) *types.ValidatingWebhookConfigurationDetails {
+	model := resourcemodel.BuildValidatingWebhookConfigurationResourceModel(s.deps.ClusterID, config)
+	facts := model.Facts.ValidatingWebhookConfiguration
 	details := &types.ValidatingWebhookConfigurationDetails{
 		Kind:        "ValidatingWebhookConfiguration",
 		Name:        config.Name,
 		Age:         common.FormatAge(config.CreationTimestamp.Time),
-		Labels:      config.Labels,
-		Annotations: config.Annotations,
+		Labels:      model.Metadata.Labels,
+		Annotations: model.Metadata.Annotations,
 	}
 
-	details.Webhooks = convertValidatingWebhooks(config.Webhooks)
-	var selector *metav1.LabelSelector
-	if len(config.Webhooks) > 0 {
-		selector = config.Webhooks[0].NamespaceSelector
+	if facts != nil {
+		details.Webhooks = validatingWebhookDetailsFromFacts(facts.Webhooks)
+		var selector *resourcemodel.LabelSelectorFacts
+		if len(facts.Webhooks) > 0 {
+			selector = facts.Webhooks[0].NamespaceSelector
+		}
+		details.Details = summarizeWebhookConfiguration(len(facts.Webhooks), selector)
 	}
-	details.Details = summarizeWebhookConfiguration(len(config.Webhooks), selector)
 
 	return details
-}
-
-func convertValidatingWebhooks(webhooks []admissionregistrationv1.ValidatingWebhook) []types.WebhookDetails {
-	result := make([]types.WebhookDetails, 0, len(webhooks))
-	for i := range webhooks {
-		result = append(result, convertWebhook(
-			webhooks[i].Name,
-			webhooks[i].AdmissionReviewVersions,
-			webhooks[i].ClientConfig,
-			webhooks[i].Rules,
-			webhooks[i].NamespaceSelector,
-			webhooks[i].ObjectSelector,
-			webhooks[i].FailurePolicy,
-			webhooks[i].MatchPolicy,
-			webhooks[i].SideEffects,
-			webhooks[i].TimeoutSeconds,
-			nil,
-		))
-	}
-	return result
 }

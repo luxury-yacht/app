@@ -471,11 +471,16 @@ func BuildClusterValidatingWebhookSummary(
 	if webhook == nil {
 		return ClusterConfigEntry{ClusterMeta: meta, Kind: "ValidatingWebhookConfiguration"}
 	}
+	model := resourcemodel.BuildValidatingWebhookConfigurationResourceModel(meta.ClusterID, webhook)
+	count := len(webhook.Webhooks)
+	if facts := model.Facts.ValidatingWebhookConfiguration; facts != nil {
+		count = len(facts.Webhooks)
+	}
 	return ClusterConfigEntry{
 		ClusterMeta: meta,
 		Kind:        "ValidatingWebhookConfiguration",
 		Name:        webhook.Name,
-		Details:     webhookDetails(len(webhook.Webhooks)),
+		Details:     resourcemodel.WebhookCountDetails(count),
 		Age:         formatAge(webhook.CreationTimestamp.Time),
 	}
 }
@@ -488,11 +493,16 @@ func BuildClusterMutatingWebhookSummary(
 	if webhook == nil {
 		return ClusterConfigEntry{ClusterMeta: meta, Kind: "MutatingWebhookConfiguration"}
 	}
+	model := resourcemodel.BuildMutatingWebhookConfigurationResourceModel(meta.ClusterID, webhook)
+	count := len(webhook.Webhooks)
+	if facts := model.Facts.MutatingWebhookConfiguration; facts != nil {
+		count = len(facts.Webhooks)
+	}
 	return ClusterConfigEntry{
 		ClusterMeta: meta,
 		Kind:        "MutatingWebhookConfiguration",
 		Name:        webhook.Name,
-		Details:     webhookDetails(len(webhook.Webhooks)),
+		Details:     resourcemodel.WebhookCountDetails(count),
 		Age:         formatAge(webhook.CreationTimestamp.Time),
 	}
 }
@@ -511,14 +521,26 @@ func BuildClusterCRDSummary(meta ClusterMeta, crd *apiextensionsv1.CustomResourc
 	if crd == nil {
 		return ClusterCRDEntry{ClusterMeta: meta, Kind: "CustomResourceDefinition"}
 	}
+	model := resourcemodel.BuildCustomResourceDefinitionResourceModel(meta.ClusterID, crd)
+	facts := model.Facts.CustomResourceDefinition
+	group := crd.Spec.Group
+	scope := string(crd.Spec.Scope)
+	details := describeCRDVersions(crd)
 	storageVersion, extraServed := crdVersionSummary(crd)
+	if facts != nil {
+		group = facts.Group
+		scope = facts.Scope
+		details = resourcemodel.CustomResourceDefinitionVersionDetails(*facts)
+		storageVersion = facts.StorageVersion
+		extraServed = facts.ExtraServedVersionCount
+	}
 	return ClusterCRDEntry{
 		ClusterMeta:             meta,
 		Kind:                    "CustomResourceDefinition",
 		Name:                    crd.Name,
-		Group:                   crd.Spec.Group,
-		Scope:                   string(crd.Spec.Scope),
-		Details:                 describeCRDVersions(crd),
+		Group:                   group,
+		Scope:                   scope,
+		Details:                 details,
 		StorageVersion:          storageVersion,
 		ExtraServedVersionCount: extraServed,
 		Age:                     formatAge(crd.CreationTimestamp.Time),

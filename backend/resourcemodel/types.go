@@ -113,41 +113,44 @@ type NodeFacts struct {
 }
 
 type ResourceFacts struct {
-	Node                    *NodeFacts                    `json:"node,omitempty"`
-	Pod                     *PodFacts                     `json:"pod,omitempty"`
-	Deployment              *WorkloadFacts                `json:"deployment,omitempty"`
-	StatefulSet             *WorkloadFacts                `json:"statefulSet,omitempty"`
-	DaemonSet               *WorkloadFacts                `json:"daemonSet,omitempty"`
-	ReplicaSet              *WorkloadFacts                `json:"replicaSet,omitempty"`
-	Job                     *WorkloadFacts                `json:"job,omitempty"`
-	CronJob                 *WorkloadFacts                `json:"cronJob,omitempty"`
-	PersistentVolume        *PersistentVolumeFacts        `json:"persistentVolume,omitempty"`
-	PersistentVolumeClaim   *PersistentVolumeClaimFacts   `json:"persistentVolumeClaim,omitempty"`
-	StorageClass            *StorageClassFacts            `json:"storageClass,omitempty"`
-	ConfigMap               *ConfigMapFacts               `json:"configMap,omitempty"`
-	Secret                  *SecretFacts                  `json:"secret,omitempty"`
-	Service                 *ServiceFacts                 `json:"service,omitempty"`
-	EndpointSlice           *EndpointSliceFacts           `json:"endpointSlice,omitempty"`
-	Ingress                 *IngressFacts                 `json:"ingress,omitempty"`
-	IngressClass            *IngressClassFacts            `json:"ingressClass,omitempty"`
-	NetworkPolicy           *NetworkPolicyFacts           `json:"networkPolicy,omitempty"`
-	GatewayClass            *GatewayClassFacts            `json:"gatewayClass,omitempty"`
-	Gateway                 *GatewayFacts                 `json:"gateway,omitempty"`
-	HTTPRoute               *HTTPRouteFacts               `json:"httpRoute,omitempty"`
-	GRPCRoute               *GRPCRouteFacts               `json:"grpcRoute,omitempty"`
-	TLSRoute                *TLSRouteFacts                `json:"tlsRoute,omitempty"`
-	ListenerSet             *ListenerSetFacts             `json:"listenerSet,omitempty"`
-	ReferenceGrant          *ReferenceGrantFacts          `json:"referenceGrant,omitempty"`
-	BackendTLSPolicy        *BackendTLSPolicyFacts        `json:"backendTLSPolicy,omitempty"`
-	Role                    *RoleFacts                    `json:"role,omitempty"`
-	ClusterRole             *ClusterRoleFacts             `json:"clusterRole,omitempty"`
-	RoleBinding             *RoleBindingFacts             `json:"roleBinding,omitempty"`
-	ClusterRoleBinding      *ClusterRoleBindingFacts      `json:"clusterRoleBinding,omitempty"`
-	ServiceAccount          *ServiceAccountFacts          `json:"serviceAccount,omitempty"`
-	HorizontalPodAutoscaler *HorizontalPodAutoscalerFacts `json:"horizontalPodAutoscaler,omitempty"`
-	PodDisruptionBudget     *PodDisruptionBudgetFacts     `json:"podDisruptionBudget,omitempty"`
-	ResourceQuota           *ResourceQuotaFacts           `json:"resourceQuota,omitempty"`
-	LimitRange              *LimitRangeFacts              `json:"limitRange,omitempty"`
+	Node                           *NodeFacts                           `json:"node,omitempty"`
+	Pod                            *PodFacts                            `json:"pod,omitempty"`
+	Deployment                     *WorkloadFacts                       `json:"deployment,omitempty"`
+	StatefulSet                    *WorkloadFacts                       `json:"statefulSet,omitempty"`
+	DaemonSet                      *WorkloadFacts                       `json:"daemonSet,omitempty"`
+	ReplicaSet                     *WorkloadFacts                       `json:"replicaSet,omitempty"`
+	Job                            *WorkloadFacts                       `json:"job,omitempty"`
+	CronJob                        *WorkloadFacts                       `json:"cronJob,omitempty"`
+	PersistentVolume               *PersistentVolumeFacts               `json:"persistentVolume,omitempty"`
+	PersistentVolumeClaim          *PersistentVolumeClaimFacts          `json:"persistentVolumeClaim,omitempty"`
+	StorageClass                   *StorageClassFacts                   `json:"storageClass,omitempty"`
+	ConfigMap                      *ConfigMapFacts                      `json:"configMap,omitempty"`
+	Secret                         *SecretFacts                         `json:"secret,omitempty"`
+	Service                        *ServiceFacts                        `json:"service,omitempty"`
+	EndpointSlice                  *EndpointSliceFacts                  `json:"endpointSlice,omitempty"`
+	Ingress                        *IngressFacts                        `json:"ingress,omitempty"`
+	IngressClass                   *IngressClassFacts                   `json:"ingressClass,omitempty"`
+	NetworkPolicy                  *NetworkPolicyFacts                  `json:"networkPolicy,omitempty"`
+	GatewayClass                   *GatewayClassFacts                   `json:"gatewayClass,omitempty"`
+	Gateway                        *GatewayFacts                        `json:"gateway,omitempty"`
+	HTTPRoute                      *HTTPRouteFacts                      `json:"httpRoute,omitempty"`
+	GRPCRoute                      *GRPCRouteFacts                      `json:"grpcRoute,omitempty"`
+	TLSRoute                       *TLSRouteFacts                       `json:"tlsRoute,omitempty"`
+	ListenerSet                    *ListenerSetFacts                    `json:"listenerSet,omitempty"`
+	ReferenceGrant                 *ReferenceGrantFacts                 `json:"referenceGrant,omitempty"`
+	BackendTLSPolicy               *BackendTLSPolicyFacts               `json:"backendTLSPolicy,omitempty"`
+	Role                           *RoleFacts                           `json:"role,omitempty"`
+	ClusterRole                    *ClusterRoleFacts                    `json:"clusterRole,omitempty"`
+	RoleBinding                    *RoleBindingFacts                    `json:"roleBinding,omitempty"`
+	ClusterRoleBinding             *ClusterRoleBindingFacts             `json:"clusterRoleBinding,omitempty"`
+	ServiceAccount                 *ServiceAccountFacts                 `json:"serviceAccount,omitempty"`
+	HorizontalPodAutoscaler        *HorizontalPodAutoscalerFacts        `json:"horizontalPodAutoscaler,omitempty"`
+	PodDisruptionBudget            *PodDisruptionBudgetFacts            `json:"podDisruptionBudget,omitempty"`
+	ResourceQuota                  *ResourceQuotaFacts                  `json:"resourceQuota,omitempty"`
+	LimitRange                     *LimitRangeFacts                     `json:"limitRange,omitempty"`
+	CustomResourceDefinition       *CustomResourceDefinitionFacts       `json:"customResourceDefinition,omitempty"`
+	MutatingWebhookConfiguration   *MutatingWebhookConfigurationFacts   `json:"mutatingWebhookConfiguration,omitempty"`
+	ValidatingWebhookConfiguration *ValidatingWebhookConfigurationFacts `json:"validatingWebhookConfiguration,omitempty"`
 }
 
 type PodFacts struct {
@@ -559,6 +562,96 @@ type LimitRangeItemFacts struct {
 	Default              map[string]string `json:"default,omitempty"`
 	DefaultRequest       map[string]string `json:"defaultRequest,omitempty"`
 	MaxLimitRequestRatio map[string]string `json:"maxLimitRequestRatio,omitempty"`
+}
+
+type CustomResourceDefinitionFacts struct {
+	Group                   string            `json:"group,omitempty"`
+	Scope                   string            `json:"scope,omitempty"`
+	Names                   CRDNamesFacts     `json:"names"`
+	Versions                []CRDVersionFacts `json:"versions,omitempty"`
+	Conditions              []ConditionFacts  `json:"conditions,omitempty"`
+	ConversionStrategy      string            `json:"conversionStrategy,omitempty"`
+	StorageVersion          string            `json:"storageVersion,omitempty"`
+	ExtraServedVersionCount int               `json:"extraServedVersionCount,omitempty"`
+}
+
+type CRDNamesFacts struct {
+	Plural     string   `json:"plural,omitempty"`
+	Singular   string   `json:"singular,omitempty"`
+	Kind       string   `json:"kind,omitempty"`
+	ListKind   string   `json:"listKind,omitempty"`
+	ShortNames []string `json:"shortNames,omitempty"`
+	Categories []string `json:"categories,omitempty"`
+}
+
+type CRDVersionFacts struct {
+	Name       string `json:"name"`
+	Served     bool   `json:"served"`
+	Storage    bool   `json:"storage"`
+	Deprecated bool   `json:"deprecated"`
+	HasSchema  bool   `json:"hasSchema"`
+}
+
+type LabelSelectorFacts struct {
+	MatchLabels      map[string]string               `json:"matchLabels,omitempty"`
+	MatchExpressions []LabelSelectorRequirementFacts `json:"matchExpressions,omitempty"`
+}
+
+type LabelSelectorRequirementFacts struct {
+	Key      string   `json:"key"`
+	Operator string   `json:"operator"`
+	Values   []string `json:"values,omitempty"`
+}
+
+type MutatingWebhookConfigurationFacts struct {
+	Webhooks []MutatingWebhookFacts `json:"webhooks,omitempty"`
+}
+
+type ValidatingWebhookConfigurationFacts struct {
+	Webhooks []ValidatingWebhookFacts `json:"webhooks,omitempty"`
+}
+
+type WebhookFacts struct {
+	Name                    string                   `json:"name,omitempty"`
+	AdmissionReviewVersions []string                 `json:"admissionReviewVersions,omitempty"`
+	ClientConfig            WebhookClientConfigFacts `json:"clientConfig"`
+	FailurePolicy           string                   `json:"failurePolicy,omitempty"`
+	MatchPolicy             string                   `json:"matchPolicy,omitempty"`
+	SideEffects             string                   `json:"sideEffects,omitempty"`
+	TimeoutSeconds          *int32                   `json:"timeoutSeconds,omitempty"`
+	NamespaceSelector       *LabelSelectorFacts      `json:"namespaceSelector,omitempty"`
+	ObjectSelector          *LabelSelectorFacts      `json:"objectSelector,omitempty"`
+	Rules                   []WebhookRuleFacts       `json:"rules,omitempty"`
+}
+
+type MutatingWebhookFacts struct {
+	WebhookFacts
+	ReinvocationPolicy string `json:"reinvocationPolicy,omitempty"`
+}
+
+type ValidatingWebhookFacts struct {
+	WebhookFacts
+}
+
+type WebhookClientConfigFacts struct {
+	Service *WebhookServiceFacts `json:"service,omitempty"`
+	URL     string               `json:"url,omitempty"`
+}
+
+type WebhookServiceFacts struct {
+	Namespace string        `json:"namespace,omitempty"`
+	Name      string        `json:"name,omitempty"`
+	Path      *string       `json:"path,omitempty"`
+	Port      *int32        `json:"port,omitempty"`
+	Service   *ResourceLink `json:"service,omitempty"`
+}
+
+type WebhookRuleFacts struct {
+	APIGroups   []string `json:"apiGroups,omitempty"`
+	APIVersions []string `json:"apiVersions,omitempty"`
+	Resources   []string `json:"resources,omitempty"`
+	Operations  []string `json:"operations,omitempty"`
+	Scope       string   `json:"scope,omitempty"`
 }
 
 type ResourceModel struct {

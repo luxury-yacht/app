@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/types"
 	"github.com/stretchr/testify/require"
@@ -56,42 +57,26 @@ func (s *Service) MutatingWebhookConfigurations() ([]*types.MutatingWebhookConfi
 }
 
 func (s *Service) buildMutatingWebhookConfigurationDetails(config *admissionregistrationv1.MutatingWebhookConfiguration) *types.MutatingWebhookConfigurationDetails {
+	model := resourcemodel.BuildMutatingWebhookConfigurationResourceModel(s.deps.ClusterID, config)
+	facts := model.Facts.MutatingWebhookConfiguration
 	details := &types.MutatingWebhookConfigurationDetails{
 		Kind:        "MutatingWebhookConfiguration",
 		Name:        config.Name,
 		Age:         common.FormatAge(config.CreationTimestamp.Time),
-		Labels:      config.Labels,
-		Annotations: config.Annotations,
+		Labels:      model.Metadata.Labels,
+		Annotations: model.Metadata.Annotations,
 	}
 
-	details.Webhooks = convertMutatingWebhooks(config.Webhooks)
-	var selector *metav1.LabelSelector
-	if len(config.Webhooks) > 0 {
-		selector = config.Webhooks[0].NamespaceSelector
+	if facts != nil {
+		details.Webhooks = mutatingWebhookDetailsFromFacts(facts.Webhooks)
+		var selector *resourcemodel.LabelSelectorFacts
+		if len(facts.Webhooks) > 0 {
+			selector = facts.Webhooks[0].NamespaceSelector
+		}
+		details.Details = summarizeWebhookConfiguration(len(facts.Webhooks), selector)
 	}
-	details.Details = summarizeWebhookConfiguration(len(config.Webhooks), selector)
 
 	return details
-}
-
-func convertMutatingWebhooks(webhooks []admissionregistrationv1.MutatingWebhook) []types.WebhookDetails {
-	result := make([]types.WebhookDetails, 0, len(webhooks))
-	for i := range webhooks {
-		result = append(result, convertWebhook(
-			webhooks[i].Name,
-			webhooks[i].AdmissionReviewVersions,
-			webhooks[i].ClientConfig,
-			webhooks[i].Rules,
-			webhooks[i].NamespaceSelector,
-			webhooks[i].ObjectSelector,
-			webhooks[i].FailurePolicy,
-			webhooks[i].MatchPolicy,
-			webhooks[i].SideEffects,
-			webhooks[i].TimeoutSeconds,
-			webhooks[i].ReinvocationPolicy,
-		))
-	}
-	return result
 }
 
 func TestMutatingWebhookConfigurationRequiresClient(t *testing.T) {
