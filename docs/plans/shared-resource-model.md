@@ -38,8 +38,8 @@ Kubernetes object
       -> status presentation
       -> lifecycle facts
       -> relationships
-      -> capability/action facts
   -> table/detail/map payload builders select from the model
+  -> contextual action/capability model selects resource + RBAC + operation state
   -> frontend renders app models without reinterpreting Kubernetes semantics
 ```
 
@@ -66,6 +66,11 @@ Add a backend package for shared resource models. The exact package name should
 match backend conventions, but the responsibility should be explicit: convert
 Kubernetes API objects into app-level resource facts.
 
+The object catalog remains the source of truth for Kubernetes GVK/GVR, scope,
+and navigable reference resolution. Shared model builders should not guess a
+resource, group, version, or scope from kind strings when the catalog can resolve
+it.
+
 The shared resource model should include full object identity:
 
 - `clusterId`
@@ -84,17 +89,14 @@ The shared resource model should expose shared facts such as:
 - primary status presentation
 - relevant lifecycle state
 - resource-specific semantic facts
-- action/capability facts when derived from object state
 
-The first shared status model should be UI-neutral:
+Action and capability facts are related, but they are not intrinsic properties
+of a Kubernetes object. They depend on RBAC, selected cluster, discovery state,
+active operations, and action options. Keep them in a contextual capability
+model layered onto the shared resource model.
 
-```go
-type ResourceStatusPresentation struct {
-	Label  string
-	State  string
-	Reason string
-}
-```
+The shared status model should be UI-neutral and is defined in the common shape
+below.
 
 `State` should use a small app-level vocabulary, such as:
 
@@ -102,6 +104,7 @@ type ResourceStatusPresentation struct {
 - `degraded`
 - `unhealthy`
 - `inactive`
+- `refreshing`
 - `unknown`
 
 Frontend components can map those states to existing badge/chip classes.
@@ -182,18 +185,17 @@ The scan also finds names that should not become first-class facts:
 
 ### Common Shape
 
-Every Kubernetes object represented by the app should start from the same common
-shape.
+Every Kubernetes object or app-synthetic resource represented by the app should
+start from the same common shape.
 
 ```go
 type ResourceModel struct {
-	Ref          ResourceRef
-	Metadata     ResourceMetadata
-	Status       ResourceStatusPresentation
-	Owners       []ResourceLink
-	Relations    []ResourceRelation
-	Capabilities ResourceCapabilities
-	Facts        ResourceFacts
+	Ref       ResourceRef
+	Metadata  ResourceMetadata
+	Status    ResourceStatusPresentation
+	Owners    []ResourceLink
+	Relations []ResourceRelation
+	Facts     ResourceFacts
 }
 
 type ResourceRef struct {
@@ -230,6 +232,22 @@ type ResourceMetadata struct {
 }
 
 type ResourceStatusPresentation struct {
+	Label              string
+	State              string
+	Reason             string
+	Message            string
+	ObservedGeneration int64
+	Source             ResourceStatusSource
+	Badges             []ResourceStatusBadge
+}
+
+type ResourceStatusSource struct {
+	ConditionType      string
+	ConditionStatus    string
+	LastTransitionTime *time.Time
+}
+
+type ResourceStatusBadge struct {
 	Label  string
 	State  string
 	Reason string
@@ -240,36 +258,6 @@ type ResourceRelation struct {
 	Target   ResourceLink
 	TracedBy string
 }
-
-type ResourceCapabilities struct {
-	Delete  CapabilityFact
-	Edit    CapabilityFact
-	Restart CapabilityFact
-	Scale   CapabilityFact
-	Logs    CapabilityFact
-	Exec    CapabilityFact
-	Trigger CapabilityFact
-	Suspend CapabilityFact
-	Cordon  CapabilityFact
-	Drain   CapabilityFact
-	DeletePods CapabilityFact
-}
-
-type CapabilityFact struct {
-	Allowed bool
-	InFlight bool
-	Reason  string
-	Error   string
-	Checks  []CapabilityCheckFact
-}
-
-type CapabilityCheckFact struct {
-	Ref     ResourceLink
-	Verb    string
-	Allowed bool
-	Reason  string
-	Error   string
-}
 ```
 
 `ResourceRef` is for openable, fully-qualified references. `DisplayRef` is for
@@ -277,6 +265,71 @@ references the source object exposes only partially, such as Gateway API
 references without a name, owner references that cannot be resolved through the
 catalog, RBAC subjects that are users or groups, or external Helm manifest
 resources. Shared model builders must not pretend those are fully openable.
+Exactly one of `ResourceLink.Ref` or `ResourceLink.Display` must be set. Builders
+should use constructors and validation helpers instead of hand-building links.
+The shared model package should provide:
+
+- `NewResourceLink(ref ResourceRef) ResourceLink`
+- `NewDisplayLink(display DisplayRef) ResourceLink`
+- `ResourceLink.IsOpenable() bool`
+- `ResourceLink.Validate() error`
+
+### Contextual Capabilities
+
+Capabilities must be modeled separately from intrinsic resource facts.
+
+```go
+type ResourceCapabilityModel struct {
+	Target   ResourceLink
+	Context  CapabilityContext
+	Actions  ResourceCapabilities
+}
+
+type CapabilityContext struct {
+	ClusterID        string
+	PrincipalKey     string
+	DiscoveryVersion string
+	ActionOptions    map[string]any
+}
+
+type ResourceCapabilities struct {
+	Delete     CapabilityFact
+	Edit       CapabilityFact
+	Restart    CapabilityFact
+	Scale      CapabilityFact
+	Logs       CapabilityFact
+	Exec       CapabilityFact
+	Trigger    CapabilityFact
+	Suspend    CapabilityFact
+	Cordon     CapabilityFact
+	Drain      CapabilityFact
+	DeletePods CapabilityFact
+}
+
+type CapabilityFact struct {
+	Allowed  bool
+	InFlight bool
+	Reason   string
+	Error    string
+	Checks   []CapabilityCheckFact
+}
+
+type CapabilityCheckFact struct {
+	Ref     ResourceLink
+	Group   string
+	Version string
+	Kind    string
+	Verb    string
+	Allowed bool
+	Reason  string
+	Error   string
+}
+```
+
+Capability builders may consume `ResourceModel`, but the shared resource model
+must not embed capability facts directly. This keeps object semantics stable
+while allowing permissions, diagnostics, active operations, and option-dependent
+actions to change independently.
 
 ### Resource Facts Union
 
@@ -349,13 +402,16 @@ type ConditionFacts struct {
 	LastTransitionTime *time.Time
 }
 
+// Internal model shape. Table/detail DTOs may format these into strings, but
+// shared resource builders should preserve semantic quantities.
+// Requires k8s.io/apimachinery/pkg/api/resource.
 type ResourceListFacts struct {
-	CPU              string
-	Memory           string
-	Storage          string
-	EphemeralStorage  string
-	Pods             string
-	ExtendedResources map[string]string
+	CPU              *resource.Quantity
+	Memory           *resource.Quantity
+	Storage          *resource.Quantity
+	EphemeralStorage *resource.Quantity
+	Pods             *resource.Quantity
+	ExtendedResources map[string]resource.Quantity
 }
 
 type NodeAddress struct {
@@ -419,8 +475,8 @@ type VolumeClaimTemplateFacts struct {
 type PodMetricsSummary struct {
 	ReadyPods int
 	TotalPods int
-	CPU       string
-	Memory    string
+	CPU       *resource.Quantity
+	Memory    *resource.Quantity
 }
 
 type JobTemplateFacts struct {
@@ -887,12 +943,12 @@ type ConfigMapFacts struct {
 
 type SecretFacts struct {
 	Type          string
-	Data          map[string]string
 	DataKeys      []string
 	DataCount     int
 	DataSizeBytes int64
 	Immutable     *bool
 	UsedBy        []ResourceLink
+	ValuesAvailableInDetail bool
 }
 ```
 
@@ -1263,6 +1319,23 @@ are not all resolvable in the current cluster. Synthetic resources still need a
 stable `ResourceRef`, but the model must mark their source and avoid pretending
 they are ordinary Kubernetes GVKs.
 
+Use this canonical identity for Helm releases in the shared model:
+
+```go
+ResourceRef{
+	Group:    "luxury-yacht.io",
+	Version:  "v1alpha1",
+	Kind:     "HelmRelease",
+	Resource: "helmreleases",
+	Namespace: releaseNamespace,
+	Name:      releaseName,
+}
+```
+
+Legacy frontend values such as lowercase `helmrelease` should be treated as
+view compatibility concerns during migration, not as the canonical identity of
+the shared model.
+
 ### Openable References vs Display-Only References
 
 Many relationships are not guaranteed to be openable:
@@ -1356,17 +1429,20 @@ when those are already available from the shared resource model.
 Detail builders should select detail-specific fields from shared resource
 models.
 
-They may still add fields that are genuinely detail-specific, such as:
+They may still add fields that are genuinely detail-only because they are large,
+raw, sensitive, or tied to a specific tab workflow, such as:
 
-- full condition lists
-- system information
-- pod lists
-- container details
+- raw YAML
+- decoded Secret values where explicitly allowed by the detail view
 - event summaries
-- expanded storage/network attributes
+- Helm values, manifests, notes, and revision history bodies
+- log/exec/port-forward discovery payloads
+- unstructured raw status for custom resources
 
 They should use the shared resource model for identity, metadata, primary
-status, relationships, and common semantic facts.
+status, relationships, and common semantic facts. If a detail view needs a
+condition, container, storage, network, or relationship fact already represented
+by the shared model, it should select that fact instead of re-deriving it.
 
 ### Object Map Builders
 
@@ -1411,6 +1487,9 @@ completed.
 - [ ] Add canonical object reference type usage with `clusterId`, `group`,
       `version`, `kind`, `namespace`, and `name`.
 - [ ] Add shared status presentation type.
+- [ ] Add `ResourceLink` constructors and validation.
+- [ ] Add object-catalog-backed reference resolution helpers.
+- [ ] Add contextual capability model types outside `ResourceModel`.
 - [ ] Add an explicit facts slot for every supported GVK and allow shared
       structs only for common substructure.
 - [ ] Add tests for shared model identity and status invariants.
@@ -1459,13 +1538,85 @@ completed.
       paths.
 - [ ] Add parity tests for primary storage status.
 
-### Phase 6: Network And Remaining Cluster Resources
+### Phase 6: Config
 
-- [ ] Add shared resource models for Service and Ingress.
-- [ ] Centralize address readiness and endpoint availability semantics.
-- [ ] Migrate remaining cluster resources that expose primary status in more
-      than one surface.
-- [ ] Remove remaining frontend status interpretation for migrated resources.
+- [ ] Add shared resource models for ConfigMap and Secret.
+- [ ] Keep Secret values out of shared facts; expose only keys/count/type and
+      explicit detail-only access.
+- [ ] Centralize ConfigMap/Secret usage relationships through `ResourceLink`.
+- [ ] Use config shared resource models from table, detail, and object-map
+      paths.
+- [ ] Add parity tests for config identity, usage links, and status.
+
+### Phase 7: Network
+
+- [ ] Add shared resource models for Service, EndpointSlice, Ingress,
+      IngressClass, and NetworkPolicy.
+- [ ] Centralize service endpoint readiness, ingress address readiness, backend
+      links, class links, and network policy selectors.
+- [ ] Use network shared resource models from table, detail, and object-map
+      paths where applicable.
+- [ ] Add parity tests for network identity, primary status, and relationship
+      links.
+
+### Phase 8: Gateway API
+
+- [ ] Add shared resource models for GatewayClass, Gateway, HTTPRoute,
+      GRPCRoute, TLSRoute, ListenerSet, ReferenceGrant, and BackendTLSPolicy.
+- [ ] Centralize Gateway API conditions, summaries, parent refs, backend refs,
+      target refs, and display-only reference handling.
+- [ ] Use Gateway API shared resource models from table and detail paths.
+- [ ] Add parity tests for status summaries and `ResourceLink` behavior.
+
+### Phase 9: RBAC
+
+- [ ] Add shared resource models for Role, ClusterRole, RoleBinding,
+      ClusterRoleBinding, and ServiceAccount.
+- [ ] Centralize role refs, subjects, aggregation rules, service account
+      reverse links, and display-only user/group subjects.
+- [ ] Use RBAC shared resource models from namespace/cluster tables, detail
+      paths, and object-map paths where applicable.
+- [ ] Add tests for namespaced vs cluster-scoped references.
+
+### Phase 10: Policy And Autoscaling
+
+- [ ] Add shared resource models for HorizontalPodAutoscaler,
+      PodDisruptionBudget, ResourceQuota, and LimitRange.
+- [ ] Centralize scale target references, metric facts, PDB disruption facts,
+      quota usage facts, and limit range facts.
+- [ ] Use policy/autoscaling shared resource models from table, detail, and
+      object-map paths where applicable.
+- [ ] Add tests for scale target GVK resolution and display-only fallbacks.
+
+### Phase 11: API Extensions And Admission
+
+- [ ] Add shared resource models for CustomResourceDefinition,
+      MutatingWebhookConfiguration, and ValidatingWebhookConfiguration.
+- [ ] Centralize CRD version/schema/condition facts and webhook rule/client
+      reference facts.
+- [ ] Use API extension/admission shared resource models from cluster tables and
+      detail paths.
+- [ ] Add tests for webhook service links and CRD version facts.
+
+### Phase 12: Helm, Events, And Custom Resources
+
+- [ ] Add shared resource model support for HelmRelease synthetic refs.
+- [ ] Add shared resource model support for Event involved-object links.
+- [ ] Add custom resource fallback extraction for conditions, phase, state,
+      ready, and observedGeneration.
+- [ ] Use these models from Helm, event, custom-resource, generic detail, and
+      object-content paths where applicable.
+- [ ] Add tests for synthetic Helm identity, stale/partial event references, and
+      custom-resource status extraction.
+
+### Phase 13: Frontend Semantic Cleanup
+
+- [ ] Remove migrated frontend status interpretation helpers.
+- [ ] Replace per-surface status class derivation with state-to-UI rendering.
+- [ ] Verify action menus, diagnostics, logs, exec, and port-forward flows use
+      shared identity and contextual capabilities.
+- [ ] Add regression tests for table/detail/object-map parity where each
+      consumer exists.
 
 ## Testing Requirements
 
@@ -1474,8 +1625,14 @@ Each migrated resource family should include:
 - unit tests for the shared resource model builder
 - tests proving full object identity is preserved
 - tests for important Kubernetes edge cases
-- parity tests proving table, detail, and object-map consumers select the same
-  primary status presentation from the shared resource model
+- a consumer coverage matrix showing which of table, detail, object map, events,
+  actions, logs, exec, and port-forward apply to each migrated GVK
+- parity tests proving applicable consumers select the same primary status
+  presentation from the shared resource model
+- tests proving `ResourceLink` values are either openable refs or display-only
+  refs, never ambiguous hybrids
+- tests proving contextual capabilities preserve RBAC checks, discovery errors,
+  option-dependent failures, and in-flight operation state
 
 Regression tests should specifically prevent per-surface status drift from
 returning.
@@ -1489,9 +1646,16 @@ returning.
 - Every supported GVK has an explicit facts type or generic custom-resource
   fallback; no distinct resource kinds are hidden behind one overly broad facts
   struct.
-- Every object reference produced by the shared resource model includes
+- Every openable `ResourceRef` produced by the shared resource model includes
   `clusterId`, `group`, `version`, and `kind`, plus `namespace` and `name` when
   object-specific.
+- Display-only references preserve all identity fields supplied by the source
+  object and are never presented as openable navigation targets.
+- Resource quantities remain semantic in the shared model and are formatted only
+  by consumer DTO builders.
+- Secret values are not exposed through shared facts.
+- Capabilities are produced by contextual capability builders, not embedded in
+  intrinsic resource facts.
 - Duplicated semantic helpers are removed as each resource family migrates.
 - Existing table, detail, and object-map UI behavior is preserved except where
   behavior is intentionally corrected for consistency.
