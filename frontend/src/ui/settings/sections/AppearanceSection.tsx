@@ -9,7 +9,6 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { types } from '@wailsjs/go/models';
 import { errorHandler } from '@utils/errorHandler';
 import { changeAppearanceMode } from '@/utils/appearanceMode';
-import Tooltip from '@shared/components/Tooltip';
 import {
   hydrateAppPreferences,
   setPaletteTint as persistPaletteTint,
@@ -34,6 +33,7 @@ import { applyAccentColor, applyAccentBg, saveAccentColorToLocalStorage } from '
 import { applyLinkColor, saveLinkColorToLocalStorage } from '@utils/linkColor';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import SegmentedButton from '@shared/components/SegmentedButton';
+import { EditIcon, DeleteIcon } from '@shared/components/icons/MenuIcons';
 
 function AppearanceSection() {
   const { mode, resolvedMode } = useAppearanceMode();
@@ -909,34 +909,9 @@ function AppearanceSection() {
               ) : (
                 <div className="themes-table">
                   <div className="themes-table-header">
-                    <span className="themes-header-name">Theme Name</span>
-                    <span>
-                      Pattern{' '}
-                      <Tooltip
-                        content={
-                          <>
-                            Auto-apply the theme when the cluster name matches the pattern.
-                            <br />
-                            <br />
-                            Supports wildcards <code>*</code> and <code>?</code>
-                            <br />
-                            <br />
-                            Examples:
-                            <br />
-                            &nbsp;&nbsp;- <code>prod*</code> matches <code>prod-us</code> and{' '}
-                            <code>prod-eu</code>
-                            <br />
-                            &nbsp;&nbsp;- <code>*</code> matches any name
-                            <br />
-                            <br />
-                            First matching pattern will be applied. Use the drag handles to reorder
-                            themes.
-                          </>
-                        }
-                      />
-                    </span>
-                    <span></span>
-                    <span></span>
+                    <span className="themes-header-drag"></span>
+                    <span>Theme Name</span>
+                    <span className="themes-header-pattern">Pattern</span>
                   </div>
                   {themes.map((theme) => {
                     const isDragging = theme.id === draggingThemeId;
@@ -1047,17 +1022,19 @@ function AppearanceSection() {
                           type="button"
                           className="theme-action-button"
                           onClick={() => handleApplyTheme(theme.id)}
+                          aria-label="Edit theme"
                           title="Load this theme's settings"
                         >
-                          Open
+                          <EditIcon width={16} height={16} />
                         </button>
                         <button
                           type="button"
                           className="theme-action-button theme-action-delete"
                           onClick={() => setDeleteConfirmThemeId(theme.id)}
+                          aria-label="Delete theme"
                           title="Delete theme"
                         >
-                          Delete
+                          <DeleteIcon width={16} height={16} />
                         </button>
                       </div>
                     );

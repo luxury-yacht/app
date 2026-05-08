@@ -440,17 +440,26 @@
   border-radius: var(--border-radius-sm);
   overflow: hidden;
   width: 100%;
+  display: flex;
+  flex-direction: column;
+  /* Shared column tokens so header and rows agree on edge widths. */
+  --themes-col-drag: 32px;
+  --themes-col-actions: 140px;
 }
 
-/* 5-column grid: drag handle | name | pattern | open | delete */
-.themes-table {
-  display: grid;
-  grid-template-columns: 28px 1fr 1fr auto auto;
-  align-items: center;
-}
-
+/* The header is its own bar above the row grid — a single full-width
+   element with one continuous background and a bottom rule. The two label
+   cells are sized to roughly match the data columns below (drag-handle
+   width offset, then 1fr/1fr for name/pattern, then space for the action
+   buttons). */
 .themes-table-header {
-  display: contents;
+  display: grid;
+  grid-template-columns: var(--themes-col-drag) 1fr 1fr var(--themes-col-actions);
+  background: var(--modal-footer-bg);
+  border-bottom: 1px solid var(--color-border);
+  /* Reserve the same right gutter the rows use for action buttons so the
+     header bar and row buttons share their right edge. */
+  padding-right: 0;
 }
 
 .themes-table-header > span {
@@ -460,38 +469,82 @@
   letter-spacing: 0.05em;
   text-transform: uppercase;
   padding: 0.5rem 0.75rem;
-  background: var(--modal-footer-bg);
-  border-bottom: 1px solid var(--color-border);
 }
 
-/* "Theme Name" header spans the drag-handle + name columns */
-.themes-header-name {
-  grid-column: 1 / 3;
+.themes-header-drag {
+  grid-column: 1;
+}
+
+.themes-header-pattern {
+  grid-column: 3;
+}
+
+/* Body rows: each row is a flex container so we don't fight grid sizing
+   between header and body. The drag handle and action buttons sit at the
+   row edges; name/pattern share the middle equally. */
+.themes-table {
+  display: flex;
+  flex-direction: column;
 }
 
 .themes-table-row {
-  display: contents;
+  display: flex;
+  align-items: center;
+  min-height: 36px;
 }
 
-.themes-table-row > * {
-  padding: 0.5rem 0.75rem;
-}
-
-.themes-table-row + .themes-table-row > *,
-.themes-table-header + .themes-table-row > * {
+.themes-table-row + .themes-table-row {
   border-top: 1px solid var(--color-border);
 }
 
-.themes-table-row--dimmed > * {
+.themes-table-row--dimmed {
   opacity: 0.4;
 }
 
-.themes-table-row--dragging > * {
+.themes-table-row--dragging {
   opacity: 0.4;
 }
 
-.themes-table-row--drop-target > *:first-child {
+.themes-table-row--drop-target {
   box-shadow: inset 0 2px 0 0 var(--color-accent);
+}
+
+/* Cells inside a row */
+.themes-table-row > .themes-drag-handle {
+  flex: 0 0 var(--themes-col-drag);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+.themes-table-row > .theme-name,
+.themes-table-row > .theme-name-input {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0.5rem 0.75rem;
+}
+
+.themes-table-row > .theme-pattern,
+.themes-table-row > .theme-pattern-input {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0.5rem 0.75rem;
+}
+
+/* Open + Delete buttons share the right edge — matched to the action
+   column reserved in the header so the labels sit roughly aligned. */
+.themes-table-row > .theme-action-button {
+  flex: 0 0 auto;
+  margin-right: 0.5rem;
+}
+
+.themes-table-row > .theme-action-button:first-of-type {
+  margin-left: auto;
+}
+
+.themes-table-row > .theme-action-button + .theme-action-button {
+  margin-left: 0;
 }
 
 .themes-drag-handle {
@@ -549,21 +602,25 @@
 
 .theme-action-button {
   background: transparent;
-  border: 1px solid var(--color-border);
+  border: none;
   border-radius: var(--border-radius-sm);
   color: var(--color-text-secondary);
   cursor: pointer;
   font-size: var(--font-size-small);
-  padding: 2px 8px;
   white-space: nowrap;
+  padding: 0.3rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
   transition:
     color var(--transition-fast),
-    border-color var(--transition-fast);
+    background-color var(--transition-fast);
 }
 
 .theme-action-button:hover:not(:disabled) {
   color: var(--color-text);
-  border-color: var(--color-text-secondary);
+  background: var(--color-bg-tertiary, var(--color-bg-secondary));
 }
 
 .theme-action-button:disabled {
@@ -573,7 +630,7 @@
 
 .theme-action-delete:hover {
   color: var(--color-danger, #f87171);
-  border-color: var(--color-danger, #f87171);
+  background: rgba(248, 113, 113, 0.1);
 }
 
 /* "+ Save new theme" button rendered as the last row of the themes table */
