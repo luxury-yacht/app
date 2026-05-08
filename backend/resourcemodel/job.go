@@ -13,13 +13,13 @@ func BuildJobResourceModel(clusterID string, job *batchv1.Job) ResourceModel {
 	return workloadResourceModel(clusterID, "batch", "v1", "Job", "jobs", job.ObjectMeta, status, ResourceFacts{Job: &facts})
 }
 
-func BuildJobFacts(job *batchv1.Job) WorkloadFacts {
+func BuildJobFacts(job *batchv1.Job) JobFacts {
 	completions := int32(1)
 	if job.Spec.Completions != nil {
 		completions = *job.Spec.Completions
 	}
 	suspended := job.Spec.Suspend != nil && *job.Spec.Suspend
-	return WorkloadFacts{
+	return JobFacts{
 		DesiredReplicas: completions,
 		Active:          job.Status.Active,
 		Succeeded:       job.Status.Succeeded,
@@ -57,7 +57,7 @@ func BuildJobStatusPresentation(job *batchv1.Job) ResourceStatusPresentation {
 	return workloadSourceStatus("Pending", strconv.FormatInt(int64(facts.Active), 10), "", "", "warning", signals, lifecycle)
 }
 
-func jobSignals(job *batchv1.Job, facts WorkloadFacts) []ResourceStatusSignal {
+func jobSignals(job *batchv1.Job, facts JobFacts) []ResourceStatusSignal {
 	signals := []ResourceStatusSignal{
 		{Type: StatusSignalResourceState, Name: "spec.completions", Status: strconv.FormatInt(int64(facts.DesiredReplicas), 10)},
 		{Type: StatusSignalResourceState, Name: "status.succeeded", Status: strconv.FormatInt(int64(facts.Succeeded), 10)},

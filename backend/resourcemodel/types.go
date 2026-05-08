@@ -1,6 +1,9 @@
 package resourcemodel
 
-import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+import (
+	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
 
 type ResourceSource string
 
@@ -143,12 +146,12 @@ type ResourceFacts struct {
 	Namespace                      *NamespaceFacts                      `json:"namespace,omitempty"`
 	Node                           *NodeFacts                           `json:"node,omitempty"`
 	Pod                            *PodFacts                            `json:"pod,omitempty"`
-	Deployment                     *WorkloadFacts                       `json:"deployment,omitempty"`
-	StatefulSet                    *WorkloadFacts                       `json:"statefulSet,omitempty"`
-	DaemonSet                      *WorkloadFacts                       `json:"daemonSet,omitempty"`
-	ReplicaSet                     *WorkloadFacts                       `json:"replicaSet,omitempty"`
-	Job                            *WorkloadFacts                       `json:"job,omitempty"`
-	CronJob                        *WorkloadFacts                       `json:"cronJob,omitempty"`
+	Deployment                     *DeploymentFacts                     `json:"deployment,omitempty"`
+	StatefulSet                    *StatefulSetFacts                    `json:"statefulSet,omitempty"`
+	DaemonSet                      *DaemonSetFacts                      `json:"daemonSet,omitempty"`
+	ReplicaSet                     *ReplicaSetFacts                     `json:"replicaSet,omitempty"`
+	Job                            *JobFacts                            `json:"job,omitempty"`
+	CronJob                        *CronJobFacts                        `json:"cronJob,omitempty"`
 	PersistentVolume               *PersistentVolumeFacts               `json:"persistentVolume,omitempty"`
 	PersistentVolumeClaim          *PersistentVolumeClaimFacts          `json:"persistentVolumeClaim,omitempty"`
 	StorageClass                   *StorageClassFacts                   `json:"storageClass,omitempty"`
@@ -203,38 +206,75 @@ type PodFacts struct {
 	Conditions      []ConditionFacts `json:"conditions,omitempty"`
 }
 
-type WorkloadFacts struct {
+type WorkloadCommonFacts struct {
 	DesiredReplicas   int32            `json:"desiredReplicas"`
 	CurrentReplicas   int32            `json:"currentReplicas"`
 	ReadyReplicas     int32            `json:"readyReplicas"`
 	UpdatedReplicas   int32            `json:"updatedReplicas,omitempty"`
 	AvailableReplicas int32            `json:"availableReplicas,omitempty"`
-	Active            int32            `json:"active,omitempty"`
-	Succeeded         int32            `json:"succeeded,omitempty"`
-	Failed            int32            `json:"failed,omitempty"`
-	Paused            bool             `json:"paused,omitempty"`
-	Suspended         bool             `json:"suspended,omitempty"`
-	ActiveJobs        int32            `json:"activeJobs,omitempty"`
 	Conditions        []ConditionFacts `json:"conditions,omitempty"`
 }
 
+type DeploymentFacts struct {
+	WorkloadCommonFacts
+	Paused bool `json:"paused,omitempty"`
+}
+
+type StatefulSetFacts struct {
+	WorkloadCommonFacts
+}
+
+type DaemonSetFacts struct {
+	WorkloadCommonFacts
+}
+
+type ReplicaSetFacts struct {
+	WorkloadCommonFacts
+}
+
+type JobFacts struct {
+	DesiredReplicas int32            `json:"desiredReplicas"`
+	Active          int32            `json:"active,omitempty"`
+	Succeeded       int32            `json:"succeeded,omitempty"`
+	Failed          int32            `json:"failed,omitempty"`
+	Suspended       bool             `json:"suspended,omitempty"`
+	Conditions      []ConditionFacts `json:"conditions,omitempty"`
+}
+
+type CronJobFacts struct {
+	Suspended  bool  `json:"suspended,omitempty"`
+	ActiveJobs int32 `json:"activeJobs,omitempty"`
+}
+
+type ResourceListFacts struct {
+	CPU              *resource.Quantity           `json:"cpu,omitempty"`
+	Memory           *resource.Quantity           `json:"memory,omitempty"`
+	Storage          *resource.Quantity           `json:"storage,omitempty"`
+	EphemeralStorage *resource.Quantity           `json:"ephemeralStorage,omitempty"`
+	Pods             *resource.Quantity           `json:"pods,omitempty"`
+	Extended         map[string]resource.Quantity `json:"extended,omitempty"`
+}
+
+type ResourceQuantityMapFacts map[string]resource.Quantity
+
 type PersistentVolumeFacts struct {
-	Phase          string `json:"phase,omitempty"`
-	StorageClass   string `json:"storageClass,omitempty"`
-	Capacity       string `json:"capacity,omitempty"`
-	ReclaimPolicy  string `json:"reclaimPolicy,omitempty"`
-	ClaimNamespace string `json:"claimNamespace,omitempty"`
-	ClaimName      string `json:"claimName,omitempty"`
-	Reason         string `json:"reason,omitempty"`
-	Message        string `json:"message,omitempty"`
+	Phase          string            `json:"phase,omitempty"`
+	StorageClass   string            `json:"storageClass,omitempty"`
+	Capacity       ResourceListFacts `json:"capacity,omitempty"`
+	ReclaimPolicy  string            `json:"reclaimPolicy,omitempty"`
+	ClaimNamespace string            `json:"claimNamespace,omitempty"`
+	ClaimName      string            `json:"claimName,omitempty"`
+	Reason         string            `json:"reason,omitempty"`
+	Message        string            `json:"message,omitempty"`
 }
 
 type PersistentVolumeClaimFacts struct {
-	Phase        string           `json:"phase,omitempty"`
-	StorageClass string           `json:"storageClass,omitempty"`
-	VolumeName   string           `json:"volumeName,omitempty"`
-	Capacity     string           `json:"capacity,omitempty"`
-	Conditions   []ConditionFacts `json:"conditions,omitempty"`
+	Phase        string            `json:"phase,omitempty"`
+	StorageClass string            `json:"storageClass,omitempty"`
+	VolumeName   string            `json:"volumeName,omitempty"`
+	Capacity     ResourceListFacts `json:"capacity,omitempty"`
+	Conditions   []ConditionFacts  `json:"conditions,omitempty"`
+	MountedBy    []ResourceLink    `json:"mountedBy,omitempty"`
 }
 
 type StorageClassFacts struct {
@@ -574,11 +614,11 @@ type DisruptedPodFacts struct {
 }
 
 type ResourceQuotaFacts struct {
-	Hard           map[string]string   `json:"hard,omitempty"`
-	Used           map[string]string   `json:"used,omitempty"`
-	UsedPercentage map[string]int      `json:"usedPercentage,omitempty"`
-	Scopes         []string            `json:"scopes,omitempty"`
-	ScopeSelector  *ScopeSelectorFacts `json:"scopeSelector,omitempty"`
+	Hard           ResourceQuantityMapFacts `json:"hard,omitempty"`
+	Used           ResourceQuantityMapFacts `json:"used,omitempty"`
+	UsedPercentage map[string]int           `json:"usedPercentage,omitempty"`
+	Scopes         []string                 `json:"scopes,omitempty"`
+	ScopeSelector  *ScopeSelectorFacts      `json:"scopeSelector,omitempty"`
 }
 
 type ScopeSelectorFacts struct {
@@ -596,12 +636,12 @@ type LimitRangeFacts struct {
 }
 
 type LimitRangeItemFacts struct {
-	Kind                 string            `json:"kind"`
-	Max                  map[string]string `json:"max,omitempty"`
-	Min                  map[string]string `json:"min,omitempty"`
-	Default              map[string]string `json:"default,omitempty"`
-	DefaultRequest       map[string]string `json:"defaultRequest,omitempty"`
-	MaxLimitRequestRatio map[string]string `json:"maxLimitRequestRatio,omitempty"`
+	Kind                 string                   `json:"kind"`
+	Max                  ResourceQuantityMapFacts `json:"max,omitempty"`
+	Min                  ResourceQuantityMapFacts `json:"min,omitempty"`
+	Default              ResourceQuantityMapFacts `json:"default,omitempty"`
+	DefaultRequest       ResourceQuantityMapFacts `json:"defaultRequest,omitempty"`
+	MaxLimitRequestRatio ResourceQuantityMapFacts `json:"maxLimitRequestRatio,omitempty"`
 }
 
 type CustomResourceDefinitionFacts struct {

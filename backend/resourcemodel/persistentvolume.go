@@ -19,7 +19,8 @@ func BuildPersistentVolumeFacts(pv *corev1.PersistentVolume) PersistentVolumeFac
 		Message:       pv.Status.Message,
 	}
 	if storage, ok := pv.Spec.Capacity[corev1.ResourceStorage]; ok {
-		facts.Capacity = storage.String()
+		qty := storage.DeepCopy()
+		facts.Capacity.Storage = &qty
 	}
 	if pv.Spec.ClaimRef != nil {
 		facts.ClaimNamespace = pv.Spec.ClaimRef.Namespace

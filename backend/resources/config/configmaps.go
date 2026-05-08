@@ -26,8 +26,11 @@ func (s *Service) ConfigMap(namespace, name string) (*types.ConfigMapDetails, er
 		return nil, fmt.Errorf("failed to get configmap: %v", err)
 	}
 
-	pods := s.listNamespacePods(namespace)
-	return s.processConfigMapDetails(cm, pods), nil
+	relationships := resourcemodel.NewResourceRelationshipIndex(
+		s.deps.ClusterID,
+		resourcemodel.ResourceRelationshipIndexOptions{Pods: s.listNamespacePods(namespace)},
+	)
+	return s.processConfigMapDetails(cm, relationships), nil
 }
 
 func (s *Service) ConfigMaps(namespace string) ([]*types.ConfigMapDetails, error) {
@@ -37,18 +40,26 @@ func (s *Service) ConfigMaps(namespace string) ([]*types.ConfigMapDetails, error
 		return nil, fmt.Errorf("failed to list configmaps: %v", err)
 	}
 
-	pods := s.listNamespacePods(namespace)
+	relationships := resourcemodel.NewResourceRelationshipIndex(
+		s.deps.ClusterID,
+		resourcemodel.ResourceRelationshipIndexOptions{Pods: s.listNamespacePods(namespace)},
+	)
 
 	var detailsList []*types.ConfigMapDetails
 	for i := range configMaps.Items {
-		detailsList = append(detailsList, s.processConfigMapDetails(&configMaps.Items[i], pods))
+		detailsList = append(detailsList, s.processConfigMapDetails(&configMaps.Items[i], relationships))
 	}
 
 	return detailsList, nil
 }
 
-func (s *Service) processConfigMapDetails(cm *corev1.ConfigMap, pods *corev1.PodList) *types.ConfigMapDetails {
-	model := resourcemodel.BuildConfigMapResourceModel(s.deps.ClusterID, cm, pods)
+func (s *Service) processConfigMapDetails(cm *corev1.ConfigMap, relationships *resourcemodel.ResourceRelationshipIndex) *types.ConfigMapDetails {
+	model := resourcemodel.BuildConfigMapResourceModel(
+		s.deps.ClusterID,
+		cm,
+		relationships,
+		resourcemodel.ResourceModelBuildOptions{Materialization: resourcemodel.MaterializeSummaryFacts | resourcemodel.MaterializeReverseLinks},
+	)
 	facts := model.Facts.ConfigMap
 	dataCount := len(cm.Data) + len(cm.BinaryData)
 	if facts != nil {

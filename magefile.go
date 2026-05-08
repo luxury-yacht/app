@@ -52,6 +52,7 @@ var Aliases = map[string]interface{}{
 	"npm-update-fix":      QC.NpmUpdate,
 	"go-mod-update-check": QC.GoModUpdateCheck,
 	"go-mod-update":       QC.GoModUpdate,
+	"benchmark":           QC.Benchmark,
 	"knip":                QC.Knip,
 	"vet":                 QC.Vet,
 	"trivy":               QC.Trivy,
@@ -285,6 +286,12 @@ func (QC) NpmUpdate() error {
 	fmt.Println("\n🔄 Updating outdated npm packages...")
 	os.Chdir(cfg.FrontendDir)
 	return sh.RunV("npx", "npm-check-updates", "-u")
+}
+
+// Runs backend performance benchmarks that guard shared resource model regressions.
+func (QC) Benchmark() error {
+	fmt.Println("\n🔎 Running shared resource model benchmarks...")
+	return sh.RunV("go", "test", "./backend/resourcemodel", "./backend/refresh/snapshot", "-run", "^$", "-bench", "Benchmark(ResourceRelationship|SharedModel)", "-benchtime=20x")
 }
 
 // Runs knip to find unused files, dependencies, and exports in the frontend

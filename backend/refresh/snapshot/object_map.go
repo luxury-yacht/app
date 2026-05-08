@@ -1068,7 +1068,7 @@ func objectMapSecretStatus(clusterID string, secret corev1.Secret) *ObjectMapSta
 }
 
 func objectMapServiceAccountStatus(clusterID string, sa corev1.ServiceAccount) *ObjectMapStatus {
-	model := resourcemodel.BuildServiceAccountResourceModel(clusterID, &sa, nil, nil, nil)
+	model := resourcemodel.BuildServiceAccountResourceModel(clusterID, &sa, nil)
 	return objectMapStatusFromResourceModel(model)
 }
 
@@ -1131,7 +1131,7 @@ func objectMapIngressClassStatus(clusterID string, ingressClass networkingv1.Ing
 }
 
 func objectMapClusterRoleStatus(clusterID string, role rbacv1.ClusterRole) *ObjectMapStatus {
-	model := resourcemodel.BuildClusterRoleResourceModel(clusterID, &role, nil, nil)
+	model := resourcemodel.BuildClusterRoleResourceModel(clusterID, &role, nil)
 	return objectMapStatusFromResourceModel(model)
 }
 

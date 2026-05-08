@@ -39,7 +39,7 @@ func workloadResourceModel(
 	}
 }
 
-func replicaStatusPresentation(facts WorkloadFacts, signals []ResourceStatusSignal, lifecycle ResourceLifecycle) ResourceStatusPresentation {
+func replicaStatusPresentation(facts WorkloadCommonFacts, signals []ResourceStatusSignal, lifecycle ResourceLifecycle) ResourceStatusPresentation {
 	state := replicaState(facts)
 	if facts.DesiredReplicas == 0 {
 		return workloadSourceStatus("Scaled to 0", state, "ScaledToZero", "", "inactive", signals, lifecycle)
@@ -92,15 +92,15 @@ func workloadSourceStatus(label, state, reason, message, presentation string, si
 	}
 }
 
-func replicaState(facts WorkloadFacts) string {
+func replicaState(facts WorkloadCommonFacts) string {
 	return fmt.Sprintf("%d/%d", facts.ReadyReplicas, facts.DesiredReplicas)
 }
 
-func jobState(facts WorkloadFacts) string {
+func jobState(facts JobFacts) string {
 	return fmt.Sprintf("%d/%d", facts.Succeeded, facts.DesiredReplicas)
 }
 
-func workloadReplicaSignals(facts WorkloadFacts) []ResourceStatusSignal {
+func workloadReplicaSignals(facts WorkloadCommonFacts) []ResourceStatusSignal {
 	return []ResourceStatusSignal{
 		{Type: StatusSignalResourceState, Name: "spec.replicas", Status: strconv.FormatInt(int64(facts.DesiredReplicas), 10)},
 		{Type: StatusSignalResourceState, Name: "status.replicas", Status: strconv.FormatInt(int64(facts.CurrentReplicas), 10)},

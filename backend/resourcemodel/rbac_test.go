@@ -30,7 +30,13 @@ func TestBuildRoleResourceModelFactsStatusAndReverseBindings(t *testing.T) {
 		},
 	}}
 
-	model := BuildRoleResourceModel("cluster-a", role, bindings)
+	relationships := NewResourceRelationshipIndex("cluster-a", ResourceRelationshipIndexOptions{RoleBindings: bindings})
+	model := BuildRoleResourceModel(
+		"cluster-a",
+		role,
+		relationships,
+		ResourceModelBuildOptions{Materialization: MaterializeSummaryFacts | MaterializeReverseLinks},
+	)
 	require.Equal(t, "cluster-a", model.Ref.ClusterID)
 	require.Equal(t, rbacAPIGroup, model.Ref.Group)
 	require.Equal(t, "v1", model.Ref.Version)
@@ -70,7 +76,16 @@ func TestBuildClusterRoleResourceModelFactsStatusAndReverseBindings(t *testing.T
 		RoleRef:    rbacv1.RoleRef{APIGroup: rbacAPIGroup, Kind: "ClusterRole", Name: "view"},
 	}}}
 
-	model := BuildClusterRoleResourceModel("cluster-a", role, clusterRoleBindings, roleBindings)
+	relationships := NewResourceRelationshipIndex("cluster-a", ResourceRelationshipIndexOptions{
+		RoleBindings:        roleBindings,
+		ClusterRoleBindings: clusterRoleBindings,
+	})
+	model := BuildClusterRoleResourceModel(
+		"cluster-a",
+		role,
+		relationships,
+		ResourceModelBuildOptions{Materialization: MaterializeSummaryFacts | MaterializeReverseLinks},
+	)
 	require.Equal(t, "ClusterRole", model.Ref.Kind)
 	require.Equal(t, "clusterroles", model.Ref.Resource)
 	require.Equal(t, ResourceScopeCluster, model.Scope)
@@ -175,7 +190,17 @@ func TestBuildServiceAccountResourceModelFactsStatusAndReverseUsage(t *testing.T
 		Subjects:   []rbacv1.Subject{{Kind: "ServiceAccount", Name: "default", Namespace: "team-a"}},
 	}}}
 
-	model := BuildServiceAccountResourceModel("cluster-a", sa, pods, roleBindings, clusterRoleBindings)
+	relationships := NewResourceRelationshipIndex("cluster-a", ResourceRelationshipIndexOptions{
+		Pods:                pods,
+		RoleBindings:        roleBindings,
+		ClusterRoleBindings: clusterRoleBindings,
+	})
+	model := BuildServiceAccountResourceModel(
+		"cluster-a",
+		sa,
+		relationships,
+		ResourceModelBuildOptions{Materialization: MaterializeSummaryFacts | MaterializeReverseLinks},
+	)
 	require.Equal(t, "ServiceAccount", model.Ref.Kind)
 	require.Equal(t, "serviceaccounts", model.Ref.Resource)
 	require.Equal(t, "Secrets: 1", model.Status.Label)

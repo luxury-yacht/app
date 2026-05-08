@@ -203,6 +203,16 @@ Run the prerelease checks. This should surface any problems that could cause the
 mage qc:prerelease
 ```
 
+Optional tests:
+
+```bash
+# Check for unused dependencies, exports, and files in the frontend
+mage qc:knip
+
+# Benchmark building the backend's ResourceRelationshipIndex
+mage qc:benchmark
+```
+
 1. Update the version in [wails.json](wails.json)
 
 1. Commit and push the change.

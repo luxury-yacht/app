@@ -25,8 +25,11 @@ func (s *Service) Secret(namespace, name string) (*types.SecretDetails, error) {
 		return nil, fmt.Errorf("failed to get secret: %v", err)
 	}
 
-	pods := s.listNamespacePods(namespace)
-	return s.processSecretDetails(secret, pods), nil
+	relationships := resourcemodel.NewResourceRelationshipIndex(
+		s.deps.ClusterID,
+		resourcemodel.ResourceRelationshipIndexOptions{Pods: s.listNamespacePods(namespace)},
+	)
+	return s.processSecretDetails(secret, relationships), nil
 }
 
 func (s *Service) Secrets(namespace string) ([]*types.SecretDetails, error) {
@@ -35,18 +38,26 @@ func (s *Service) Secrets(namespace string) ([]*types.SecretDetails, error) {
 		return nil, fmt.Errorf("failed to list secrets: %v", err)
 	}
 
-	pods := s.listNamespacePods(namespace)
+	relationships := resourcemodel.NewResourceRelationshipIndex(
+		s.deps.ClusterID,
+		resourcemodel.ResourceRelationshipIndexOptions{Pods: s.listNamespacePods(namespace)},
+	)
 
 	var detailsList []*types.SecretDetails
 	for i := range secrets.Items {
-		detailsList = append(detailsList, s.processSecretDetails(&secrets.Items[i], pods))
+		detailsList = append(detailsList, s.processSecretDetails(&secrets.Items[i], relationships))
 	}
 
 	return detailsList, nil
 }
 
-func (s *Service) processSecretDetails(secret *corev1.Secret, pods *corev1.PodList) *types.SecretDetails {
-	model := resourcemodel.BuildSecretResourceModel(s.deps.ClusterID, secret, pods)
+func (s *Service) processSecretDetails(secret *corev1.Secret, relationships *resourcemodel.ResourceRelationshipIndex) *types.SecretDetails {
+	model := resourcemodel.BuildSecretResourceModel(
+		s.deps.ClusterID,
+		secret,
+		relationships,
+		resourcemodel.ResourceModelBuildOptions{Materialization: resourcemodel.MaterializeSummaryFacts | resourcemodel.MaterializeReverseLinks},
+	)
 	facts := model.Facts.Secret
 	secretType := string(secret.Type)
 	dataKeys := make([]string, 0, len(secret.Data))

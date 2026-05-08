@@ -15,8 +15,8 @@ func BuildResourceQuotaResourceModel(clusterID string, quota *corev1.ResourceQuo
 
 func BuildResourceQuotaFacts(quota *corev1.ResourceQuota) ResourceQuotaFacts {
 	facts := ResourceQuotaFacts{
-		Hard:           quantityMapStrings(quota.Status.Hard),
-		Used:           quantityMapStrings(quota.Status.Used),
+		Hard:           quantityMapFacts(quota.Status.Hard),
+		Used:           quantityMapFacts(quota.Status.Used),
 		UsedPercentage: quotaUsedPercentages(quota.Status.Used, quota.Status.Hard),
 	}
 	for _, scope := range quota.Spec.Scopes {

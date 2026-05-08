@@ -64,7 +64,17 @@ func (s *Service) PersistentVolumeClaims(namespace string) ([]*types.PersistentV
 }
 
 func (s *Service) processPersistentVolumeClaimDetails(pvc *corev1.PersistentVolumeClaim, pods *corev1.PodList) *types.PersistentVolumeClaimDetails {
-	model := resourcemodel.BuildPersistentVolumeClaimResourceModel(s.deps.ClusterID, pvc)
+	relationships := resourcemodel.NewResourceRelationshipIndex(
+		s.deps.ClusterID,
+		resourcemodel.ResourceRelationshipIndexOptions{Pods: pods},
+	)
+	model := resourcemodel.BuildPersistentVolumeClaimResourceModelWithRelationships(
+		s.deps.ClusterID,
+		pvc,
+		relationships,
+		resourcemodel.ResourceModelBuildOptions{Materialization: resourcemodel.MaterializeSummaryFacts | resourcemodel.MaterializeReverseLinks},
+	)
+	facts := model.Facts.PersistentVolumeClaim
 	details := &types.PersistentVolumeClaimDetails{
 		Kind:               "PersistentVolumeClaim",
 		Name:               pvc.Name,
@@ -127,15 +137,8 @@ func (s *Service) processPersistentVolumeClaimDetails(pvc *corev1.PersistentVolu
 		details.Conditions = append(details.Conditions, condStr)
 	}
 
-	if pods != nil {
-		for _, pod := range pods.Items {
-			for _, volume := range pod.Spec.Volumes {
-				if volume.PersistentVolumeClaim != nil && volume.PersistentVolumeClaim.ClaimName == pvc.Name {
-					details.MountedBy = append(details.MountedBy, pod.Name)
-					break
-				}
-			}
-		}
+	if facts != nil {
+		details.MountedBy = resourcemodel.ResourceLinkNames(facts.MountedBy)
 	}
 
 	storageClassInfo := "default"

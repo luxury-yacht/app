@@ -11,32 +11,34 @@ func BuildReplicaSetResourceModel(clusterID string, replicaSet *appsv1.ReplicaSe
 	return workloadResourceModel(clusterID, "apps", "v1", "ReplicaSet", "replicasets", replicaSet.ObjectMeta, status, ResourceFacts{ReplicaSet: &facts})
 }
 
-func BuildReplicaSetFacts(replicaSet *appsv1.ReplicaSet) WorkloadFacts {
+func BuildReplicaSetFacts(replicaSet *appsv1.ReplicaSet) ReplicaSetFacts {
 	desired := int32(0)
 	if replicaSet.Spec.Replicas != nil {
 		desired = *replicaSet.Spec.Replicas
 	}
-	return WorkloadFacts{
-		DesiredReplicas:   desired,
-		CurrentReplicas:   replicaSet.Status.Replicas,
-		ReadyReplicas:     replicaSet.Status.ReadyReplicas,
-		AvailableReplicas: replicaSet.Status.AvailableReplicas,
-		Conditions:        replicaSetConditionFacts(replicaSet.Status.Conditions),
+	return ReplicaSetFacts{
+		WorkloadCommonFacts: WorkloadCommonFacts{
+			DesiredReplicas:   desired,
+			CurrentReplicas:   replicaSet.Status.Replicas,
+			ReadyReplicas:     replicaSet.Status.ReadyReplicas,
+			AvailableReplicas: replicaSet.Status.AvailableReplicas,
+			Conditions:        replicaSetConditionFacts(replicaSet.Status.Conditions),
+		},
 	}
 }
 
 func BuildReplicaSetStatusPresentation(replicaSet *appsv1.ReplicaSet) ResourceStatusPresentation {
 	facts := BuildReplicaSetFacts(replicaSet)
-	signals := workloadReplicaSignals(facts)
+	signals := workloadReplicaSignals(facts.WorkloadCommonFacts)
 	signals = append(signals, replicaSetSignals(replicaSet)...)
 	lifecycle := workloadLifecycle(replicaSet.ObjectMeta)
-	if status, ok := deletingWorkloadStatus(replicaSet.ObjectMeta, replicaState(facts), signals, lifecycle); ok {
+	if status, ok := deletingWorkloadStatus(replicaSet.ObjectMeta, replicaState(facts.WorkloadCommonFacts), signals, lifecycle); ok {
 		return status
 	}
 	if failed := findReplicaSetCondition(replicaSet, appsv1.ReplicaSetReplicaFailure); failed != nil && failed.Status == corev1.ConditionTrue {
 		return workloadConditionStatus("ReplicaFailure", string(failed.Status), failed.Reason, failed.Message, "Replica failure", "error", signals, lifecycle)
 	}
-	return replicaStatusPresentation(facts, signals, lifecycle)
+	return replicaStatusPresentation(facts.WorkloadCommonFacts, signals, lifecycle)
 }
 
 func replicaSetSignals(replicaSet *appsv1.ReplicaSet) []ResourceStatusSignal {

@@ -12,9 +12,9 @@ func BuildCronJobResourceModel(clusterID string, cronJob *batchv1.CronJob) Resou
 	return workloadResourceModel(clusterID, "batch", "v1", "CronJob", "cronjobs", cronJob.ObjectMeta, status, ResourceFacts{CronJob: &facts})
 }
 
-func BuildCronJobFacts(cronJob *batchv1.CronJob) WorkloadFacts {
+func BuildCronJobFacts(cronJob *batchv1.CronJob) CronJobFacts {
 	suspended := cronJob.Spec.Suspend != nil && *cronJob.Spec.Suspend
-	return WorkloadFacts{
+	return CronJobFacts{
 		Suspended:  suspended,
 		ActiveJobs: int32(len(cronJob.Status.Active)),
 	}

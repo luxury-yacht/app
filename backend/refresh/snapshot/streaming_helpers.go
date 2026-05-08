@@ -116,7 +116,7 @@ func BuildServiceAccountSummary(meta ClusterMeta, sa *corev1.ServiceAccount) RBA
 	if sa == nil {
 		return RBACSummary{ClusterMeta: meta, Kind: "ServiceAccount"}
 	}
-	model := resourcemodel.BuildServiceAccountResourceModel(meta.ClusterID, sa, nil, nil, nil)
+	model := resourcemodel.BuildServiceAccountResourceModel(meta.ClusterID, sa, nil)
 	return RBACSummary{
 		ClusterMeta: meta,
 		Kind:        "ServiceAccount",
@@ -351,7 +351,7 @@ func BuildClusterRoleSummary(meta ClusterMeta, role *rbacv1.ClusterRole) Cluster
 	if role == nil {
 		return ClusterRBACEntry{ClusterMeta: meta, Kind: "ClusterRole"}
 	}
-	model := resourcemodel.BuildClusterRoleResourceModel(meta.ClusterID, role, nil, nil)
+	model := resourcemodel.BuildClusterRoleResourceModel(meta.ClusterID, role, nil)
 	return ClusterRBACEntry{
 		ClusterMeta: meta,
 		Kind:        "ClusterRole",

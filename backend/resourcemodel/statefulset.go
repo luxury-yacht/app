@@ -8,30 +8,32 @@ func BuildStatefulSetResourceModel(clusterID string, statefulSet *appsv1.Statefu
 	return workloadResourceModel(clusterID, "apps", "v1", "StatefulSet", "statefulsets", statefulSet.ObjectMeta, status, ResourceFacts{StatefulSet: &facts})
 }
 
-func BuildStatefulSetFacts(statefulSet *appsv1.StatefulSet) WorkloadFacts {
+func BuildStatefulSetFacts(statefulSet *appsv1.StatefulSet) StatefulSetFacts {
 	desired := int32(0)
 	if statefulSet.Spec.Replicas != nil {
 		desired = *statefulSet.Spec.Replicas
 	}
-	return WorkloadFacts{
-		DesiredReplicas:   desired,
-		CurrentReplicas:   statefulSet.Status.Replicas,
-		ReadyReplicas:     statefulSet.Status.ReadyReplicas,
-		UpdatedReplicas:   statefulSet.Status.UpdatedReplicas,
-		AvailableReplicas: statefulSet.Status.AvailableReplicas,
-		Conditions:        statefulSetConditionFacts(statefulSet.Status.Conditions),
+	return StatefulSetFacts{
+		WorkloadCommonFacts: WorkloadCommonFacts{
+			DesiredReplicas:   desired,
+			CurrentReplicas:   statefulSet.Status.Replicas,
+			ReadyReplicas:     statefulSet.Status.ReadyReplicas,
+			UpdatedReplicas:   statefulSet.Status.UpdatedReplicas,
+			AvailableReplicas: statefulSet.Status.AvailableReplicas,
+			Conditions:        statefulSetConditionFacts(statefulSet.Status.Conditions),
+		},
 	}
 }
 
 func BuildStatefulSetStatusPresentation(statefulSet *appsv1.StatefulSet) ResourceStatusPresentation {
 	facts := BuildStatefulSetFacts(statefulSet)
-	signals := workloadReplicaSignals(facts)
+	signals := workloadReplicaSignals(facts.WorkloadCommonFacts)
 	signals = append(signals, statefulSetSignals(statefulSet)...)
 	lifecycle := workloadLifecycle(statefulSet.ObjectMeta)
-	if status, ok := deletingWorkloadStatus(statefulSet.ObjectMeta, replicaState(facts), signals, lifecycle); ok {
+	if status, ok := deletingWorkloadStatus(statefulSet.ObjectMeta, replicaState(facts.WorkloadCommonFacts), signals, lifecycle); ok {
 		return status
 	}
-	return replicaStatusPresentation(facts, signals, lifecycle)
+	return replicaStatusPresentation(facts.WorkloadCommonFacts, signals, lifecycle)
 }
 
 func statefulSetSignals(statefulSet *appsv1.StatefulSet) []ResourceStatusSignal {

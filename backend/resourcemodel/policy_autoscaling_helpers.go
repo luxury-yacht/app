@@ -128,19 +128,19 @@ func conditionFactsFromMetav1(conditions []metav1.Condition) []ConditionFacts {
 	return facts
 }
 
-func quantityMapStrings(values corev1.ResourceList) map[string]string {
+func quantityMapFacts(values corev1.ResourceList) ResourceQuantityMapFacts {
 	if len(values) == 0 {
 		return nil
 	}
-	result := make(map[string]string, len(values))
+	result := make(ResourceQuantityMapFacts, len(values))
 	for name, quantity := range values {
-		result[string(name)] = quantity.String()
+		result[string(name)] = quantity.DeepCopy()
 	}
 	return result
 }
 
-func limitRangeQuantityMap(values corev1.ResourceList) map[string]string {
-	return quantityMapStrings(values)
+func limitRangeQuantityMap(values corev1.ResourceList) ResourceQuantityMapFacts {
+	return quantityMapFacts(values)
 }
 
 func quotaUsedPercentages(used, hard corev1.ResourceList) map[string]int {

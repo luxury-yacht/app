@@ -13,29 +13,31 @@ func BuildDeploymentResourceModel(clusterID string, deployment *appsv1.Deploymen
 	return workloadResourceModel(clusterID, "apps", "v1", "Deployment", "deployments", deployment.ObjectMeta, status, ResourceFacts{Deployment: &facts})
 }
 
-func BuildDeploymentFacts(deployment *appsv1.Deployment) WorkloadFacts {
+func BuildDeploymentFacts(deployment *appsv1.Deployment) DeploymentFacts {
 	desired := int32(0)
 	if deployment.Spec.Replicas != nil {
 		desired = *deployment.Spec.Replicas
 	}
-	return WorkloadFacts{
-		DesiredReplicas:   desired,
-		CurrentReplicas:   deployment.Status.Replicas,
-		ReadyReplicas:     deployment.Status.ReadyReplicas,
-		UpdatedReplicas:   deployment.Status.UpdatedReplicas,
-		AvailableReplicas: deployment.Status.AvailableReplicas,
-		Paused:            deployment.Spec.Paused,
-		Conditions:        deploymentConditionFacts(deployment.Status.Conditions),
+	return DeploymentFacts{
+		WorkloadCommonFacts: WorkloadCommonFacts{
+			DesiredReplicas:   desired,
+			CurrentReplicas:   deployment.Status.Replicas,
+			ReadyReplicas:     deployment.Status.ReadyReplicas,
+			UpdatedReplicas:   deployment.Status.UpdatedReplicas,
+			AvailableReplicas: deployment.Status.AvailableReplicas,
+			Conditions:        deploymentConditionFacts(deployment.Status.Conditions),
+		},
+		Paused: deployment.Spec.Paused,
 	}
 }
 
 func BuildDeploymentStatusPresentation(deployment *appsv1.Deployment) ResourceStatusPresentation {
 	facts := BuildDeploymentFacts(deployment)
-	signals := workloadReplicaSignals(facts)
+	signals := workloadReplicaSignals(facts.WorkloadCommonFacts)
 	signals = append(signals, deploymentSignals(deployment)...)
 	lifecycle := workloadLifecycle(deployment.ObjectMeta)
 
-	if status, ok := deletingWorkloadStatus(deployment.ObjectMeta, replicaState(facts), signals, lifecycle); ok {
+	if status, ok := deletingWorkloadStatus(deployment.ObjectMeta, replicaState(facts.WorkloadCommonFacts), signals, lifecycle); ok {
 		return status
 	}
 	if failed := findDeploymentCondition(deployment, appsv1.DeploymentReplicaFailure); failed != nil && failed.Status == corev1.ConditionTrue {
@@ -47,7 +49,7 @@ func BuildDeploymentStatusPresentation(deployment *appsv1.Deployment) ResourceSt
 	if deployment.Spec.Paused {
 		return workloadSourceStatus("Paused", "true", "SpecPaused", "", "warning", signals, lifecycle)
 	}
-	return replicaStatusPresentation(facts, signals, lifecycle)
+	return replicaStatusPresentation(facts.WorkloadCommonFacts, signals, lifecycle)
 }
 
 func deploymentSignals(deployment *appsv1.Deployment) []ResourceStatusSignal {

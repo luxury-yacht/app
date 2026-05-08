@@ -44,7 +44,13 @@ func TestBuildConfigMapResourceModelFactsAndStatus(t *testing.T) {
 		},
 	}}
 
-	model := BuildConfigMapResourceModel("cluster-a", configMap, pods)
+	relationships := NewResourceRelationshipIndex("cluster-a", ResourceRelationshipIndexOptions{Pods: pods})
+	model := BuildConfigMapResourceModel(
+		"cluster-a",
+		configMap,
+		relationships,
+		ResourceModelBuildOptions{Materialization: MaterializeSummaryFacts | MaterializeReverseLinks},
+	)
 	require.Equal(t, "cluster-a", model.Ref.ClusterID)
 	require.Equal(t, "v1", model.Ref.Version)
 	require.Equal(t, "ConfigMap", model.Ref.Kind)
@@ -78,7 +84,13 @@ func TestBuildSecretResourceModelFactsAndStatus(t *testing.T) {
 		},
 	}}}
 
-	model := BuildSecretResourceModel("cluster-a", secret, pods)
+	relationships := NewResourceRelationshipIndex("cluster-a", ResourceRelationshipIndexOptions{Pods: pods})
+	model := BuildSecretResourceModel(
+		"cluster-a",
+		secret,
+		relationships,
+		ResourceModelBuildOptions{Materialization: MaterializeSummaryFacts | MaterializeReverseLinks},
+	)
 	require.Equal(t, "Secret", model.Ref.Kind)
 	require.Equal(t, "secrets", model.Ref.Resource)
 	require.Equal(t, "kubernetes.io/tls", model.Status.State)

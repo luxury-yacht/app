@@ -13,11 +13,11 @@ func limitRangeItemsFromFacts(facts []resourcemodel.LimitRangeItemFacts) []types
 	for _, fact := range facts {
 		result = append(result, types.LimitRangeItem{
 			Kind:                 fact.Kind,
-			Max:                  copyStringMap(fact.Max),
-			Min:                  copyStringMap(fact.Min),
-			Default:              copyStringMap(fact.Default),
-			DefaultRequest:       copyStringMap(fact.DefaultRequest),
-			MaxLimitRequestRatio: copyStringMap(fact.MaxLimitRequestRatio),
+			Max:                  quantityMapStrings(fact.Max),
+			Min:                  quantityMapStrings(fact.Min),
+			Default:              quantityMapStrings(fact.Default),
+			DefaultRequest:       quantityMapStrings(fact.DefaultRequest),
+			MaxLimitRequestRatio: quantityMapStrings(fact.MaxLimitRequestRatio),
 		})
 	}
 	return result
@@ -38,13 +38,13 @@ func scopeSelectorFromFacts(facts *resourcemodel.ScopeSelectorFacts) *types.Scop
 	return selector
 }
 
-func copyStringMap(values map[string]string) map[string]string {
+func quantityMapStrings(values resourcemodel.ResourceQuantityMapFacts) map[string]string {
 	if len(values) == 0 {
 		return nil
 	}
 	result := make(map[string]string, len(values))
 	for key, value := range values {
-		result[key] = value
+		result[key] = value.String()
 	}
 	return result
 }

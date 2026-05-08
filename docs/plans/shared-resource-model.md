@@ -2759,6 +2759,89 @@ that actually consumes them.
 - [x] ✅ Add regression tests for table/detail/object-map parity where each
       consumer exists.
 
+## Recorded Consumer Coverage
+
+The migration keeps the shared model backend-internal and projects it into the
+existing DTO contracts. Coverage below records the consumers that now select
+identity, primary status presentation, or relationship facts from
+`backend/resourcemodel`.
+
+| Resource                       | Table / Stream                                   | Detail                          | Object Map                          | Events / Actions                |
+| ------------------------------ | ------------------------------------------------ | ------------------------------- | ----------------------------------- | ------------------------------- |
+| Namespace                      | cluster namespace table                          | object-panel details            | object map seed/refs                | action identity only            |
+| Node                           | cluster table, resource stream                   | object-panel details            | node map nodes                      | node actions/log-source refs    |
+| Pod                            | namespace table, resource stream                 | object-panel details, pod lists | pod map nodes/edges                 | logs/exec/port-forward identity |
+| Deployment                     | namespace workload table                         | object-panel details            | workload map nodes/edges            | restart/scale/action identity   |
+| StatefulSet                    | namespace workload table                         | object-panel details            | workload map nodes/edges            | restart/scale/action identity   |
+| DaemonSet                      | namespace workload table                         | object-panel details            | workload map nodes/edges            | restart/action identity         |
+| ReplicaSet                     | namespace workload table                         | object-panel details            | workload map nodes/edges            | owner/action identity           |
+| Job                            | namespace workload table, jobs tab               | object-panel details            | workload map nodes/edges            | trigger/action identity         |
+| CronJob                        | namespace workload table                         | object-panel details            | workload map nodes/edges            | trigger/action identity         |
+| ConfigMap                      | namespace table, resource stream                 | object-panel details            | config map nodes                    | reverse pod usage links         |
+| Secret                         | namespace table, resource stream                 | object-panel details            | secret nodes                        | reverse pod usage links         |
+| Service                        | namespace network table, resource stream         | object-panel details            | service/endpoints edges             | port-forward identity           |
+| EndpointSlice                  | namespace network table, resource stream         | object-panel details            | endpoint edges                      | service relationship refs       |
+| Ingress                        | namespace network table, resource stream         | object-panel details            | ingress/backend edges               | navigation identity             |
+| IngressClass                   | cluster table, resource stream                   | object-panel details            | class edges                         | navigation identity             |
+| NetworkPolicy                  | namespace network table, resource stream         | object-panel details            | policy edges                        | navigation identity             |
+| GatewayClass                   | cluster table, resource stream                   | object-panel details            | gateway class edges                 | navigation identity             |
+| Gateway                        | namespace gateway table, resource stream         | object-panel details            | gateway/listener edges              | navigation identity             |
+| HTTPRoute                      | namespace gateway table, resource stream         | object-panel details            | route parent/backend edges          | navigation identity             |
+| GRPCRoute                      | namespace gateway table, resource stream         | object-panel details            | route parent/backend edges          | navigation identity             |
+| TLSRoute                       | namespace gateway table, resource stream         | object-panel details            | route parent/backend edges          | navigation identity             |
+| ListenerSet                    | namespace gateway table, resource stream         | object-panel details            | listener parent edges               | navigation identity             |
+| ReferenceGrant                 | namespace gateway table, resource stream         | object-panel details            | grant target edges                  | navigation identity             |
+| BackendTLSPolicy               | namespace gateway table, resource stream         | object-panel details            | policy target edges                 | navigation identity             |
+| PersistentVolume               | cluster storage table, resource stream           | object-panel details            | PV/PVC/storage-class edges          | navigation identity             |
+| PersistentVolumeClaim          | namespace storage table, resource stream         | object-panel details            | PVC/PV/pod edges                    | reverse pod mount links         |
+| StorageClass                   | cluster storage table, resource stream           | object-panel details            | storage-class edges                 | navigation identity             |
+| HorizontalPodAutoscaler        | namespace autoscaling table, resource stream     | object-panel details            | scale-target edges                  | scale/action identity           |
+| PodDisruptionBudget            | namespace policy table, resource stream          | object-panel details            | disrupted pod edges                 | navigation identity             |
+| ResourceQuota                  | namespace quota table, resource stream           | object-panel details            | not applicable                      | navigation identity             |
+| LimitRange                     | namespace quota table, resource stream           | object-panel details            | not applicable                      | navigation identity             |
+| Role                           | namespace RBAC table, resource stream            | object-panel details            | role-binding edges                  | reverse binding links           |
+| ClusterRole                    | cluster RBAC table, resource stream              | object-panel details            | binding edges                       | reverse binding links           |
+| RoleBinding                    | namespace RBAC table, resource stream            | object-panel details            | subject/role edges                  | subject display refs            |
+| ClusterRoleBinding             | cluster RBAC table, resource stream              | object-panel details            | subject/role edges                  | subject display refs            |
+| ServiceAccount                 | namespace RBAC table, resource stream            | object-panel details            | subject/pod/secret edges            | reverse pod/binding links       |
+| CustomResourceDefinition       | cluster CRD table, resource stream               | object-panel details            | generic/custom refs only            | navigation identity             |
+| MutatingWebhookConfiguration   | cluster admission table, resource stream         | object-panel details            | not applicable                      | service client refs             |
+| ValidatingWebhookConfiguration | cluster admission table, resource stream         | object-panel details            | not applicable                      | service client refs             |
+| HelmRelease                    | namespace Helm table                             | object-panel details            | manifest resource refs              | Helm manifest/value checks      |
+| Event                          | cluster/namespace event tables, event stream     | object-panel event context      | involved-object edges when complete | involved-object navigation      |
+| CustomResource                 | cluster/namespace custom tables, resource stream | generic/object-content details  | generic/custom refs                 | catalog-backed navigation       |
+
+## Performance Validation
+
+Relationship reverse links now use `ResourceRelationshipIndex`, built once from
+the available per-cluster snapshot/detail inputs and then queried by migrated
+builders. The benchmark fixture is centralized in
+`backend/testsupport/relationship_fixtures.go`: 1,000 Pods, 500 RoleBindings,
+and 250 ClusterRoleBindings with ConfigMap, Secret, PVC, ServiceAccount, Role,
+and ClusterRole reverse-link lookups. `mage qc:benchmark` runs the index,
+reverse-link detail materialization, index-plus-detail, and stream summary
+projection benchmarks against that fixture.
+
+Recorded on May 8, 2026:
+
+```text
+mage qc:benchmark
+BenchmarkResourceRelationshipIndexLargeSnapshot-12             20  1716406 ns/op  1320019 B/op  12165 allocs/op
+BenchmarkResourceRelationshipDetailMaterialization-12          20   138340 ns/op   195264 B/op   1428 allocs/op
+BenchmarkResourceRelationshipIndexAndReverseLinkDetails-12     20  1420177 ns/op  1322487 B/op  12201 allocs/op
+BenchmarkSharedModelStreamSummaries-12                         20    64392 ns/op   134927 B/op    854 allocs/op
+```
+
+`mage qc:benchmark` runs:
+
+```text
+go test ./backend/resourcemodel ./backend/refresh/snapshot -run '^$' -bench 'Benchmark(ResourceRelationship|SharedModel)' -benchtime=20x
+```
+
+Acceptance threshold: the fixture must stay below 5 ms/op on the recorded
+developer hardware and must not add Kubernetes API calls. The current result is
+about 1.72 ms/op for index construction and remains entirely in-memory.
+
 ## Testing Requirements
 
 Each migrated resource family should include:

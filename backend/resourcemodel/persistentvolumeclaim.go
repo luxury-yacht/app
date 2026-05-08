@@ -2,29 +2,47 @@ package resourcemodel
 
 import corev1 "k8s.io/api/core/v1"
 
-func BuildPersistentVolumeClaimResourceModel(clusterID string, pvc *corev1.PersistentVolumeClaim) ResourceModel {
-	facts := BuildPersistentVolumeClaimFacts(pvc)
+func BuildPersistentVolumeClaimResourceModel(clusterID string, pvc *corev1.PersistentVolumeClaim, options ...ResourceModelBuildOptions) ResourceModel {
+	buildOptions := BuildOptions(options...)
+	facts := BuildPersistentVolumeClaimFacts(pvc, nil, buildOptions)
 	status := BuildPersistentVolumeClaimStatusPresentation(pvc)
 	return storageResourceModel(clusterID, "", "v1", "PersistentVolumeClaim", "persistentvolumeclaims", ResourceScopeNamespaced, pvc.ObjectMeta, status, ResourceFacts{PersistentVolumeClaim: &facts})
 }
 
-func BuildPersistentVolumeClaimFacts(pvc *corev1.PersistentVolumeClaim) PersistentVolumeClaimFacts {
+func BuildPersistentVolumeClaimResourceModelWithRelationships(
+	clusterID string,
+	pvc *corev1.PersistentVolumeClaim,
+	relationships *ResourceRelationshipIndex,
+	options ...ResourceModelBuildOptions,
+) ResourceModel {
+	buildOptions := BuildOptions(options...)
+	facts := BuildPersistentVolumeClaimFacts(pvc, relationships, buildOptions)
+	status := BuildPersistentVolumeClaimStatusPresentation(pvc)
+	return storageResourceModel(clusterID, "", "v1", "PersistentVolumeClaim", "persistentvolumeclaims", ResourceScopeNamespaced, pvc.ObjectMeta, status, ResourceFacts{PersistentVolumeClaim: &facts})
+}
+
+func BuildPersistentVolumeClaimFacts(pvc *corev1.PersistentVolumeClaim, relationships *ResourceRelationshipIndex, options ResourceModelBuildOptions) PersistentVolumeClaimFacts {
 	facts := PersistentVolumeClaimFacts{
 		Phase:        string(pvc.Status.Phase),
 		StorageClass: persistentVolumeClaimStorageClassName(pvc),
 		VolumeName:   pvc.Spec.VolumeName,
 		Conditions:   persistentVolumeClaimConditionFacts(pvc.Status.Conditions),
 	}
+	if options.Materialization.Has(MaterializeReverseLinks) && relationships != nil {
+		facts.MountedBy = relationships.PersistentVolumeClaimMountedBy(pvc.Namespace, pvc.Name)
+	}
 	if storage, ok := pvc.Status.Capacity[corev1.ResourceStorage]; ok {
-		facts.Capacity = storage.String()
+		qty := storage.DeepCopy()
+		facts.Capacity.Storage = &qty
 	} else if storage, ok := pvc.Spec.Resources.Requests[corev1.ResourceStorage]; ok {
-		facts.Capacity = storage.String()
+		qty := storage.DeepCopy()
+		facts.Capacity.Storage = &qty
 	}
 	return facts
 }
 
 func BuildPersistentVolumeClaimStatusPresentation(pvc *corev1.PersistentVolumeClaim) ResourceStatusPresentation {
-	facts := BuildPersistentVolumeClaimFacts(pvc)
+	facts := BuildPersistentVolumeClaimFacts(pvc, nil, ResourceModelBuildOptions{Materialization: MaterializeSummaryFacts})
 	state := persistentVolumeClaimState(pvc)
 	signals := persistentVolumeClaimSignals(pvc, facts)
 	lifecycle := storageLifecycle(pvc.ObjectMeta)

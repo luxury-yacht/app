@@ -6,19 +6,22 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-func BuildSecretResourceModel(clusterID string, secret *corev1.Secret, pods *corev1.PodList) ResourceModel {
-	facts := BuildSecretFacts(clusterID, secret, pods)
+func BuildSecretResourceModel(clusterID string, secret *corev1.Secret, relationships *ResourceRelationshipIndex, options ...ResourceModelBuildOptions) ResourceModel {
+	buildOptions := BuildOptions(options...)
+	facts := BuildSecretFacts(secret, relationships, buildOptions)
 	status := BuildSecretStatusPresentation(secret)
 	return configResourceModel(clusterID, "Secret", "secrets", secret.ObjectMeta, status, ResourceFacts{Secret: &facts})
 }
 
-func BuildSecretFacts(clusterID string, secret *corev1.Secret, pods *corev1.PodList) SecretFacts {
+func BuildSecretFacts(secret *corev1.Secret, relationships *ResourceRelationshipIndex, options ResourceModelBuildOptions) SecretFacts {
 	facts := SecretFacts{
 		Type:      secretType(secret),
 		DataKeys:  sortedBytesMapKeys(secret.Data),
 		DataCount: len(secret.Data),
 		Immutable: secret.Immutable,
-		UsedBy:    SecretUsageLinks(clusterID, secret.Namespace, secret.Name, pods),
+	}
+	if options.Materialization.Has(MaterializeReverseLinks) && relationships != nil {
+		facts.UsedBy = relationships.SecretUsedBy(secret.Namespace, secret.Name)
 	}
 	for _, value := range secret.Data {
 		facts.DataSizeBytes += int64(len(value))
@@ -41,29 +44,11 @@ func BuildSecretStatusPresentation(secret *corev1.Secret) ResourceStatusPresenta
 }
 
 func SecretUsageLinks(clusterID, namespace, name string, pods *corev1.PodList) []ResourceLink {
-	if pods == nil {
+	relationships := NewResourceRelationshipIndex(clusterID, ResourceRelationshipIndexOptions{Pods: pods})
+	if relationships == nil {
 		return nil
 	}
-
-	usedBy := make(map[string]ResourceLink)
-	for _, pod := range pods.Items {
-		if pod.Namespace != namespace {
-			continue
-		}
-		if podUsesSecret(pod, name) {
-			usedBy[pod.Namespace+"/"+pod.Name] = podResourceLink(clusterID, pod)
-		}
-	}
-	if len(usedBy) == 0 {
-		return nil
-	}
-
-	links := make([]ResourceLink, 0, len(usedBy))
-	for _, link := range usedBy {
-		links = append(links, link)
-	}
-	sortResourceLinksByObjectName(links)
-	return links
+	return relationships.SecretUsedBy(namespace, name)
 }
 
 func secretType(secret *corev1.Secret) string {
@@ -71,52 +56,4 @@ func secretType(secret *corev1.Secret) string {
 		return string(corev1.SecretTypeOpaque)
 	}
 	return string(secret.Type)
-}
-
-func podUsesSecret(pod corev1.Pod, name string) bool {
-	for _, volume := range pod.Spec.Volumes {
-		if volume.Secret != nil && volume.Secret.SecretName == name {
-			return true
-		}
-	}
-	for _, pullSecret := range pod.Spec.ImagePullSecrets {
-		if pullSecret.Name == name {
-			return true
-		}
-	}
-	return containersUseSecret(pod.Spec.Containers, name) ||
-		containersUseSecret(pod.Spec.InitContainers, name) ||
-		ephemeralContainersUseSecret(pod.Spec.EphemeralContainers, name)
-}
-
-func containersUseSecret(containers []corev1.Container, name string) bool {
-	for _, container := range containers {
-		for _, envFrom := range container.EnvFrom {
-			if envFrom.SecretRef != nil && envFrom.SecretRef.Name == name {
-				return true
-			}
-		}
-		for _, env := range container.Env {
-			if env.ValueFrom != nil && env.ValueFrom.SecretKeyRef != nil && env.ValueFrom.SecretKeyRef.Name == name {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func ephemeralContainersUseSecret(containers []corev1.EphemeralContainer, name string) bool {
-	for _, container := range containers {
-		for _, envFrom := range container.EnvFrom {
-			if envFrom.SecretRef != nil && envFrom.SecretRef.Name == name {
-				return true
-			}
-		}
-		for _, env := range container.Env {
-			if env.ValueFrom != nil && env.ValueFrom.SecretKeyRef != nil && env.ValueFrom.SecretKeyRef.Name == name {
-				return true
-			}
-		}
-	}
-	return false
 }

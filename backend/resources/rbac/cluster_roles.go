@@ -58,7 +58,19 @@ func (s *Service) ClusterRoles() ([]*types.ClusterRoleDetails, error) {
 }
 
 func (s *Service) buildClusterRoleDetails(cr *rbacv1.ClusterRole, clusterRoleBindings *rbacv1.ClusterRoleBindingList, roleBindings *rbacv1.RoleBindingList) *types.ClusterRoleDetails {
-	model := resourcemodel.BuildClusterRoleResourceModel(s.deps.ClusterID, cr, clusterRoleBindings, roleBindings)
+	relationships := resourcemodel.NewResourceRelationshipIndex(
+		s.deps.ClusterID,
+		resourcemodel.ResourceRelationshipIndexOptions{
+			RoleBindings:        roleBindings,
+			ClusterRoleBindings: clusterRoleBindings,
+		},
+	)
+	model := resourcemodel.BuildClusterRoleResourceModel(
+		s.deps.ClusterID,
+		cr,
+		relationships,
+		resourcemodel.ResourceModelBuildOptions{Materialization: resourcemodel.MaterializeSummaryFacts | resourcemodel.MaterializeReverseLinks},
+	)
 	facts := model.Facts.ClusterRole
 	details := &types.ClusterRoleDetails{
 		Kind:                "ClusterRole",

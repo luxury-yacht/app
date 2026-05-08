@@ -56,7 +56,16 @@ func (s *Service) Roles(namespace string) ([]*types.RoleDetails, error) {
 }
 
 func (s *Service) buildRoleDetails(role *rbacv1.Role, bindings *rbacv1.RoleBindingList) *types.RoleDetails {
-	model := resourcemodel.BuildRoleResourceModel(s.deps.ClusterID, role, bindings)
+	relationships := resourcemodel.NewResourceRelationshipIndex(
+		s.deps.ClusterID,
+		resourcemodel.ResourceRelationshipIndexOptions{RoleBindings: bindings},
+	)
+	model := resourcemodel.BuildRoleResourceModel(
+		s.deps.ClusterID,
+		role,
+		relationships,
+		resourcemodel.ResourceModelBuildOptions{Materialization: resourcemodel.MaterializeSummaryFacts | resourcemodel.MaterializeReverseLinks},
+	)
 	facts := model.Facts.Role
 	details := &types.RoleDetails{
 		Kind:        "Role",

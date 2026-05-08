@@ -159,8 +159,10 @@ func TestBuildResourceQuotaAndLimitRangeResourceModels(t *testing.T) {
 	quotaModel := BuildResourceQuotaResourceModel("cluster-a", quota)
 	require.Equal(t, "ResourceQuota", quotaModel.Ref.Kind)
 	require.Equal(t, "Hard limits: 1, Used: 1, Scopes: 1", quotaModel.Status.Label)
-	require.Equal(t, "10", quotaModel.Facts.ResourceQuota.Hard["pods"])
-	require.Equal(t, "4", quotaModel.Facts.ResourceQuota.Used["pods"])
+	hardPods := quotaModel.Facts.ResourceQuota.Hard["pods"]
+	usedPods := quotaModel.Facts.ResourceQuota.Used["pods"]
+	require.Equal(t, "10", hardPods.String())
+	require.Equal(t, "4", usedPods.String())
 	require.Equal(t, 40, quotaModel.Facts.ResourceQuota.UsedPercentage["pods"])
 	require.Equal(t, []string{"BestEffort"}, quotaModel.Facts.ResourceQuota.Scopes)
 
@@ -176,6 +178,8 @@ func TestBuildResourceQuotaAndLimitRangeResourceModels(t *testing.T) {
 	require.Equal(t, "LimitRange", limitModel.Ref.Kind)
 	require.Equal(t, "1 limit(s) - Type: Container", limitModel.Status.Label)
 	require.Equal(t, "Container", limitModel.Facts.LimitRange.Limits[0].Kind)
-	require.Equal(t, "2", limitModel.Facts.LimitRange.Limits[0].Max["cpu"])
-	require.Equal(t, "128Mi", limitModel.Facts.LimitRange.Limits[0].Min["memory"])
+	maxCPU := limitModel.Facts.LimitRange.Limits[0].Max["cpu"]
+	minMemory := limitModel.Facts.LimitRange.Limits[0].Min["memory"]
+	require.Equal(t, "2", maxCPU.String())
+	require.Equal(t, "128Mi", minMemory.String())
 }

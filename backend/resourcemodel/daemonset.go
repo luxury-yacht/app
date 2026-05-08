@@ -8,26 +8,28 @@ func BuildDaemonSetResourceModel(clusterID string, daemonSet *appsv1.DaemonSet) 
 	return workloadResourceModel(clusterID, "apps", "v1", "DaemonSet", "daemonsets", daemonSet.ObjectMeta, status, ResourceFacts{DaemonSet: &facts})
 }
 
-func BuildDaemonSetFacts(daemonSet *appsv1.DaemonSet) WorkloadFacts {
-	return WorkloadFacts{
-		DesiredReplicas:   daemonSet.Status.DesiredNumberScheduled,
-		CurrentReplicas:   daemonSet.Status.CurrentNumberScheduled,
-		ReadyReplicas:     daemonSet.Status.NumberReady,
-		UpdatedReplicas:   daemonSet.Status.UpdatedNumberScheduled,
-		AvailableReplicas: daemonSet.Status.NumberAvailable,
-		Conditions:        daemonSetConditionFacts(daemonSet.Status.Conditions),
+func BuildDaemonSetFacts(daemonSet *appsv1.DaemonSet) DaemonSetFacts {
+	return DaemonSetFacts{
+		WorkloadCommonFacts: WorkloadCommonFacts{
+			DesiredReplicas:   daemonSet.Status.DesiredNumberScheduled,
+			CurrentReplicas:   daemonSet.Status.CurrentNumberScheduled,
+			ReadyReplicas:     daemonSet.Status.NumberReady,
+			UpdatedReplicas:   daemonSet.Status.UpdatedNumberScheduled,
+			AvailableReplicas: daemonSet.Status.NumberAvailable,
+			Conditions:        daemonSetConditionFacts(daemonSet.Status.Conditions),
+		},
 	}
 }
 
 func BuildDaemonSetStatusPresentation(daemonSet *appsv1.DaemonSet) ResourceStatusPresentation {
 	facts := BuildDaemonSetFacts(daemonSet)
-	signals := workloadReplicaSignals(facts)
+	signals := workloadReplicaSignals(facts.WorkloadCommonFacts)
 	signals = append(signals, daemonSetSignals(daemonSet)...)
 	lifecycle := workloadLifecycle(daemonSet.ObjectMeta)
-	if status, ok := deletingWorkloadStatus(daemonSet.ObjectMeta, replicaState(facts), signals, lifecycle); ok {
+	if status, ok := deletingWorkloadStatus(daemonSet.ObjectMeta, replicaState(facts.WorkloadCommonFacts), signals, lifecycle); ok {
 		return status
 	}
-	return replicaStatusPresentation(facts, signals, lifecycle)
+	return replicaStatusPresentation(facts.WorkloadCommonFacts, signals, lifecycle)
 }
 
 func daemonSetSignals(daemonSet *appsv1.DaemonSet) []ResourceStatusSignal {

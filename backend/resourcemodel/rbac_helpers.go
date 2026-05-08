@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strconv"
 
-	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -124,10 +123,6 @@ func rbacRoleRefLink(clusterID, namespace string, ref rbacv1.RoleRef) ResourceLi
 	return displayResourceLink(clusterID, ref.APIGroup, "", ref.Kind, "", namespace, ref.Name)
 }
 
-func rbacRoleRefMatches(ref rbacv1.RoleRef, kind, name string) bool {
-	return ref.Kind == kind && ref.Name == name && (ref.APIGroup == "" || ref.APIGroup == rbacAPIGroup)
-}
-
 func rbacSubjectFacts(clusterID, fallbackNamespace string, subject rbacv1.Subject) SubjectFacts {
 	facts := SubjectFacts{
 		Kind:      subject.Kind,
@@ -169,50 +164,4 @@ func rbacSubjectFactsList(clusterID, fallbackNamespace string, subjects []rbacv1
 
 func secretLink(clusterID, namespace, name string) ResourceLink {
 	return namespacedResourceLink(clusterID, "", "v1", "Secret", "secrets", namespace, name, "")
-}
-
-func roleBindingReferencesServiceAccount(binding rbacv1.RoleBinding, namespace, name string) bool {
-	for _, subject := range binding.Subjects {
-		if subject.Kind == "ServiceAccount" && subject.Name == name && (subject.Namespace == "" || subject.Namespace == namespace) {
-			return true
-		}
-	}
-	return false
-}
-
-func clusterRoleBindingReferencesServiceAccount(binding rbacv1.ClusterRoleBinding, namespace, name string) bool {
-	for _, subject := range binding.Subjects {
-		if subject.Kind == "ServiceAccount" && subject.Name == name && subject.Namespace == namespace {
-			return true
-		}
-	}
-	return false
-}
-
-func serviceAccountUsageLinks(clusterID string, sa *corev1.ServiceAccount, pods *corev1.PodList) []ResourceLink {
-	if pods == nil {
-		return nil
-	}
-	usedBy := make(map[string]ResourceLink)
-	for _, pod := range pods.Items {
-		if pod.Namespace != sa.Namespace {
-			continue
-		}
-		if pod.Spec.ServiceAccountName == sa.Name || (pod.Spec.ServiceAccountName == "" && sa.Name == "default") {
-			usedBy[pod.Namespace+"/"+pod.Name] = podResourceLink(clusterID, pod)
-		}
-	}
-	if len(usedBy) == 0 {
-		return nil
-	}
-	links := make([]ResourceLink, 0, len(usedBy))
-	for _, link := range usedBy {
-		links = append(links, link)
-	}
-	sortResourceLinksByObjectName(links)
-	return links
-}
-
-func sortRBACLinks(links []ResourceLink) {
-	sortResourceLinksByObjectName(links)
 }

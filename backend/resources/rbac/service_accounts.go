@@ -61,7 +61,20 @@ func (s *Service) ServiceAccounts(namespace string) ([]*types.ServiceAccountDeta
 }
 
 func (s *Service) buildServiceAccountDetails(sa *corev1.ServiceAccount, pods *corev1.PodList, roleBindings *rbacv1.RoleBindingList, clusterRoleBindings *rbacv1.ClusterRoleBindingList) *types.ServiceAccountDetails {
-	model := resourcemodel.BuildServiceAccountResourceModel(s.deps.ClusterID, sa, pods, roleBindings, clusterRoleBindings)
+	relationships := resourcemodel.NewResourceRelationshipIndex(
+		s.deps.ClusterID,
+		resourcemodel.ResourceRelationshipIndexOptions{
+			Pods:                pods,
+			RoleBindings:        roleBindings,
+			ClusterRoleBindings: clusterRoleBindings,
+		},
+	)
+	model := resourcemodel.BuildServiceAccountResourceModel(
+		s.deps.ClusterID,
+		sa,
+		relationships,
+		resourcemodel.ResourceModelBuildOptions{Materialization: resourcemodel.MaterializeSummaryFacts | resourcemodel.MaterializeReverseLinks},
+	)
 	facts := model.Facts.ServiceAccount
 	details := &types.ServiceAccountDetails{
 		Kind:                         "ServiceAccount",
