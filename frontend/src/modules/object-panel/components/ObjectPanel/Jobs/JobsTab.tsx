@@ -28,7 +28,7 @@ import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
 } from '@shared/utils/objectIdentity';
-import { backendStatusBadgeClass } from '@shared/utils/backendStatusPresentation';
+import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 
 // Row type for the jobs table, combining job info with cluster context.
 interface JobRow {
@@ -174,7 +174,7 @@ export const JobsTab: React.FC<JobsTabProps> = ({
         getTitle: (job) => job.name,
       }),
       createTextColumn<JobRow>('status', 'Status', (job) => job.status || '\u2014', {
-        getClassName: (job) => backendStatusBadgeClass(job.statusPresentation),
+        getClassName: (job) => backendStatusTextClass(job.statusPresentation),
       }),
       createTextColumn<JobRow>('completions', 'Completions', (job) => job.completions || '\u2014', {
         className: 'text-right',

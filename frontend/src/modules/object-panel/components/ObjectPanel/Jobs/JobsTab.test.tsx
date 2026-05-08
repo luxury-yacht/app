@@ -204,7 +204,7 @@ describe('JobsTab', () => {
 
     const statusColumn = gridTablePropsRef.current.columns.find((col: any) => col.key === 'status');
     const cell = statusColumn.render(gridTablePropsRef.current.data[0]);
-    expect(cell.props.className).toBe('status-badge error');
+    expect(cell.props.className).toBe('status-text error');
   });
 
   it('opens the Map from the job context menu', () => {

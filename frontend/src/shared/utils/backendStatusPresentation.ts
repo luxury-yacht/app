@@ -8,5 +8,5 @@ export const backendStatusClass = (statusPresentation?: string | null): string =
   return value.toLowerCase();
 };
 
-export const backendStatusBadgeClass = (statusPresentation?: string | null): string =>
-  `status-badge ${backendStatusClass(statusPresentation)}`;
+export const backendStatusTextClass = (statusPresentation?: string | null): string =>
+  `status-text ${backendStatusClass(statusPresentation)}`;

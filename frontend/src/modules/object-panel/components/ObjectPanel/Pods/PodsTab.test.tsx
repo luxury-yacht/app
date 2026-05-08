@@ -185,7 +185,7 @@ describe('PodsTab', () => {
 
     const statusColumn = gridTablePropsRef.current.columns.find((col: any) => col.key === 'status');
     const cell = statusColumn.render(pod);
-    expect(cell.props.className).toBe('status-badge warning');
+    expect(cell.props.className).toBe('status-text warning');
   });
 
   it('opens the Map from the pod context menu', () => {

@@ -91,7 +91,7 @@ describe('ServiceOverview', () => {
     expect(lbStatus?.textContent).toBe('Ready');
     const status = getValueForLabel(container, 'Status');
     expect(status?.textContent).toBe('LoadBalancer active');
-    expect(status?.querySelector('.status-badge.ready')).not.toBeNull();
+    expect(status?.querySelector('.status-text.ready')).not.toBeNull();
     expect(getValueForLabel(container, 'Session Timeout')?.textContent).toBe('10800 seconds');
     // Endpoints row now shows the IP list directly (≤5 endpoints).
     expect(getValueForLabel(container, 'Endpoints')?.textContent).toContain('10.244.0.10:80');

@@ -1,7 +1,7 @@
 /* ==========================================================================
    Badge Component Styles
    ==========================================================================
-   Kind badges, status badges, and scope badges with refined styling.
+   Kind badges, status text, and scope badges with refined styling.
    ========================================================================== */
 
 /* ==========================================================================
@@ -248,44 +248,47 @@
 }
 
 /* ==========================================================================
-   Status Badges
+   Status Text
    ========================================================================== */
-.status-badge {
-  text-transform: capitalize;
+.status-text.ready,
+.status-text.success,
+.status-text.healthy,
+.status-text.available,
+.status-text.bound,
+.status-text.attached,
+.status-text.succeeded {
+  color: var(--status-text-ready);
 }
 
-.status-badge.degraded,
-.status-badge.cordoned,
-.status-badge.terminating,
-.status-badge.progressing,
-.status-badge.warning {
-  color: var(--status-warning-text);
+.status-text.degraded,
+.status-text.cordoned,
+.status-text.terminating,
+.status-text.progressing,
+.status-text.pending,
+.status-text.warning,
+.status-text.canceling,
+.status-text.cancelled {
+  color: var(--status-text-warning);
 }
 
-.status-badge.ready,
-.status-badge.healthy {
-  color: var(--status-available-text);
+.status-text.not-ready,
+.status-text.unhealthy,
+.status-text.error,
+.status-text.failed,
+.status-text.status-failed,
+.status-text.detached {
+  color: var(--status-text-error);
 }
 
-.status-badge.not-ready,
-.status-badge.unhealthy,
-.status-badge.error {
-  color: var(--status-failed-text);
+.status-text.unknown,
+.status-text.inactive {
+  color: var(--status-text-unknown);
 }
 
-.status-badge.unknown,
-.status-badge.inactive {
-  color: var(--color-text-secondary);
-}
-
-.status-badge.refreshing {
-  color: var(--color-accent);
-}
-
-.status-badge.status-failed {
-  background-color: var(--status-failed-bg);
-  color: var(--status-failed-text);
-  border-color: rgba(239, 68, 68, 0.25);
+.status-text.refreshing,
+.status-text.info,
+.status-text.running {
+  color: var(--status-text-info);
 }
 
 /* ==========================================================================

@@ -60,7 +60,7 @@ describe('ResourceStatus', () => {
     result.cleanup();
   });
 
-  it('renders status badge with the backend statusPresentation class', async () => {
+  it('renders status text with the backend statusPresentation class', async () => {
     const { container: root, cleanup } = await renderStatus({
       status: 'Ready (Cordoned)',
       statusState: 'True',
@@ -68,10 +68,10 @@ describe('ResourceStatus', () => {
     });
     container = root;
 
-    const badge = root.querySelector('.status-badge');
-    expect(badge?.textContent).toBe('Ready (Cordoned)');
-    expect(badge?.classList.contains('cordoned')).toBe(true);
-    expect(badge?.classList.contains('True')).toBe(false);
+    const statusText = root.querySelector('.status-text');
+    expect(statusText?.textContent).toBe('Ready (Cordoned)');
+    expect(statusText?.classList.contains('cordoned')).toBe(true);
+    expect(statusText?.classList.contains('True')).toBe(false);
     cleanup();
   });
 
@@ -82,21 +82,21 @@ describe('ResourceStatus', () => {
     });
     container = root;
 
-    const badge = root.querySelector('.status-badge');
-    expect(badge?.textContent).toBe('Ready');
-    expect(badge?.classList.contains('unknown')).toBe(true);
-    expect(badge?.classList.contains('True')).toBe(false);
+    const statusText = root.querySelector('.status-text');
+    expect(statusText?.textContent).toBe('Ready');
+    expect(statusText?.classList.contains('unknown')).toBe(true);
+    expect(statusText?.classList.contains('True')).toBe(false);
     cleanup();
   });
 
-  it('renders ready badge and highlights when counts mismatch', async () => {
+  it('renders ready text and highlights when counts mismatch', async () => {
     const { container: root, cleanup } = await renderStatus({
       ready: '1/3',
     });
     container = root;
 
-    const badge = root.querySelector('.status-badge.warning');
-    expect(badge?.textContent).toBe('1/3');
+    const statusText = root.querySelector('.status-text.warning');
+    expect(statusText?.textContent).toBe('1/3');
     cleanup();
   });
 

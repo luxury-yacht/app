@@ -23,7 +23,7 @@ import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
 } from '@shared/utils/objectIdentity';
-import { backendStatusBadgeClass } from '@shared/utils/backendStatusPresentation';
+import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 
 // Define the data structure for cluster custom resources
 interface ClusterCustomData {
@@ -242,7 +242,7 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
           'Status',
           (resource) => resource.status || 'Unknown',
           {
-            getClassName: (resource) => backendStatusBadgeClass(resource.statusPresentation),
+            getClassName: (resource) => backendStatusTextClass(resource.statusPresentation),
           }
         ),
         cf.createAgeColumn(),

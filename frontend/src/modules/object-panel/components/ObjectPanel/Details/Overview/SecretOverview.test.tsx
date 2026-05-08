@@ -92,7 +92,7 @@ describe('SecretOverview', () => {
 
     const typeValue = getValueForLabel(container, 'Type');
     expect(typeValue?.textContent).toBe('kubernetes.io/tls');
-    // Now renders as an info-variant StatusChip rather than a legacy .status-badge.
+    // Now renders as an info-variant StatusChip rather than legacy status text.
     expect(typeValue?.querySelector('.status-chip--info')).toBeTruthy();
     // Data Keys row is intentionally not surfaced — DataSection covers it.
     expect(getValueForLabel(container, 'Data Keys')).toBeNull();

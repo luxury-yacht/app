@@ -98,6 +98,11 @@
   --status-released-bg: rgba(249, 115, 22, 0.15);
   --status-released-text: var(--badge-orange-text);
   --status-warning-text: var(--badge-warning-text);
+  --status-text-ready: var(--color-success);
+  --status-text-warning: var(--status-warning-text);
+  --status-text-error: var(--status-failed-text);
+  --status-text-unknown: var(--color-text-secondary);
+  --status-text-info: var(--color-accent);
 
   /* Object map relationship colors */
   --object-map-edge-owner: #7c3aed;

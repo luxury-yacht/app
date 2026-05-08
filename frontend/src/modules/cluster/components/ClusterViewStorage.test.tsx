@@ -206,7 +206,7 @@ describe('ClusterViewStorage', () => {
       statusState: 'Released',
       statusPresentation: 'warning',
     });
-    expect(cell.props.className).toBe('status-badge warning');
+    expect(cell.props.className).toBe('status-text warning');
   });
 
   it('opens the Map for PersistentVolume rows', async () => {

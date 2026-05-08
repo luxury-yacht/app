@@ -5,7 +5,6 @@
  * Handles rendering and interactions for the namespace feature.
  */
 
-import './NsViewHelm.css';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
@@ -22,7 +21,7 @@ import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
 import { useNamespaceResourceGridTable } from '@shared/hooks/useResourceGridTable';
 import { buildSyntheticObjectReference } from '@shared/utils/objectIdentity';
-import { backendStatusBadgeClass } from '@shared/utils/backendStatusPresentation';
+import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 
 // Data interface for Helm releases
 export interface HelmData {
@@ -183,8 +182,7 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
             return status;
           },
           {
-            getClassName: (resource) =>
-              `helm-status ${backendStatusBadgeClass(resource.statusPresentation)}`,
+            getClassName: (resource) => backendStatusTextClass(resource.statusPresentation),
           }
         ),
         cf.createTextColumn<HelmData>(

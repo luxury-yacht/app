@@ -184,7 +184,7 @@ export const ClusterResourceOverview: React.FC<ClusterResourceOverviewProps> = (
             label="Has Workloads"
             value={
               props.workloadsUnknown ? (
-                <span className="status-badge warning">Unknown</span>
+                <span className="status-text warning">Unknown</span>
               ) : props.hasWorkloads ? (
                 'Yes'
               ) : (

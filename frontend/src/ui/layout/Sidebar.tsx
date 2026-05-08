@@ -568,7 +568,9 @@ function Sidebar() {
                                 )}
                                 <span>{namespace.name}</span>
                                 {namespace.workloadsUnknown && (
-                                  <span className="namespace-status-badge">Unknown</span>
+                                  <span className="namespace-status-label">
+                                    <span className="status-text warning">Unknown</span>
+                                  </span>
                                 )}
                               </div>
                               {isExpanded && (

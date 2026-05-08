@@ -2,26 +2,3 @@
   color: var(--color-text-secondary);
   font-family: var(--font-mono);
 }
-
-.cluster-custom-table .status-badge.ready,
-.cluster-custom-table .status-badge.healthy {
-  background-color: var(--color-success-bg);
-  color: var(--color-success);
-}
-
-.cluster-custom-table .status-badge.warning,
-.cluster-custom-table .status-badge.progressing {
-  background-color: var(--color-warning-bg);
-  color: var(--color-warning);
-}
-
-.cluster-custom-table .status-badge.error,
-.cluster-custom-table .status-badge.unhealthy {
-  background-color: var(--color-error-bg);
-  color: var(--color-error);
-}
-
-.cluster-custom-table .status-badge.unknown,
-.cluster-custom-table .status-badge.inactive {
-  color: var(--text-secondary);
-}

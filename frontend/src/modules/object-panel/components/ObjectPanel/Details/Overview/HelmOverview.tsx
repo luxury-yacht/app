@@ -11,7 +11,7 @@ import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { buildRequiredRelatedObjectReference } from '@shared/utils/objectIdentity';
-import { backendStatusClass } from '@shared/utils/backendStatusPresentation';
+import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 import './shared/LabelsAndAnnotations.css';
 import './HelmOverview.css';
 
@@ -170,11 +170,7 @@ export const HelmOverview: React.FC<HelmOverviewProps> = ({
                 <div className="helm-history-header">
                   <span className="metadata-key">Revision {h.revision}:</span>
                   <span className="metadata-value helm-history-value">
-                    <span
-                      className={`status-badge helm-history-status ${backendStatusClass(
-                        h.statusPresentation
-                      )}`}
-                    >
+                    <span className={backendStatusTextClass(h.statusPresentation)}>
                       {h.status || '-'}
                     </span>
                     <span>

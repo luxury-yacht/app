@@ -236,7 +236,7 @@ describe('ClusterViewNodes', () => {
     const badge = statusCell.props.children[0];
 
     expect(badge.props.children).toBe('Ready');
-    expect(badge.props.className).toBe('status-badge ready');
+    expect(badge.props.className).toBe('status-text ready');
   });
 
   it('uses backend statusPresentation for node status styling', async () => {
@@ -259,7 +259,7 @@ describe('ClusterViewNodes', () => {
     const badge = statusCell.props.children[0];
 
     expect(badge.props.children).toBe('Ready (Cordoned)');
-    expect(badge.props.className).toBe('status-badge cordoned');
+    expect(badge.props.className).toBe('status-text cordoned');
   });
 
   it('styles terminating from backend presentation without changing raw ready state', async () => {
@@ -281,7 +281,7 @@ describe('ClusterViewNodes', () => {
     const badge = statusCell.props.children[0];
 
     expect(badge.props.children).toBe('Terminating');
-    expect(badge.props.className).toBe('status-badge terminating');
+    expect(badge.props.className).toBe('status-text terminating');
   });
 
   it('does not use statusState as a node status class fallback', async () => {
@@ -303,7 +303,7 @@ describe('ClusterViewNodes', () => {
     const badge = statusCell.props.children[0];
 
     expect(badge.props.children).toBe('Ready');
-    expect(badge.props.className).toBe('status-badge unknown');
+    expect(badge.props.className).toBe('status-text unknown');
   });
 
   it('opens the object panel with cluster metadata when clicking a node name', async () => {

@@ -104,7 +104,7 @@ describe('PodOverview', () => {
     });
 
     expect(container.textContent).toContain('Restarts');
-    const restartBadge = container.querySelector('.status-badge.warning');
+    const restartBadge = container.querySelector('.status-text.warning');
     expect(restartBadge?.textContent?.trim()).toBe('3');
     expect(container.textContent).toContain('QoS');
     expect(container.textContent).toContain('Guaranteed');

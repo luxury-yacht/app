@@ -29,7 +29,7 @@ import {
   buildRequiredObjectReference,
   buildRequiredRelatedObjectReference,
 } from '@shared/utils/objectIdentity';
-import { backendStatusBadgeClass } from '@shared/utils/backendStatusPresentation';
+import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 import { parseCpuToMillicores, parseMemToMB } from '@utils/resourceCalculations';
 
 interface PodsViewProps {
@@ -256,7 +256,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
     const columns: GridColumnDefinition<PodSnapshotEntry>[] = useMemo(() => {
       // Use the same warning styling as workloads when restarts are non-zero.
       const getRestartsClassName = (pod: PodSnapshotEntry) =>
-        (pod.restarts ?? 0) > 0 ? 'status-badge warning' : undefined;
+        (pod.restarts ?? 0) > 0 ? 'status-text warning' : undefined;
 
       const baseColumns: GridColumnDefinition<PodSnapshotEntry>[] = [
         cf.createKindColumn<PodSnapshotEntry>({
@@ -296,7 +296,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
           getClassName: () => 'object-panel-link',
         }),
         cf.createTextColumn<PodSnapshotEntry>('status', 'Status', (pod) => pod.status || '—', {
-          getClassName: (pod) => backendStatusBadgeClass(pod.statusPresentation),
+          getClassName: (pod) => backendStatusTextClass(pod.statusPresentation),
         }),
         cf.createTextColumn<PodSnapshotEntry>('ready', 'Ready', (pod) => pod.ready || '—', {
           className: 'text-right',

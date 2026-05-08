@@ -28,7 +28,7 @@ export const ResourceStatus = React.memo<ResourceStatusProps>(
   ({ status, statusPresentation, ready, phase, conditions, customLabel = 'Status' }) => {
     // Determine what to display
     const displayValue = status || phase;
-    const badgeClass = backendStatusClass(statusPresentation);
+    const statusClass = backendStatusClass(statusPresentation);
 
     if (!displayValue && !ready && (!conditions || conditions.length === 0)) {
       return null;
@@ -39,7 +39,7 @@ export const ResourceStatus = React.memo<ResourceStatusProps>(
         {displayValue && (
           <OverviewItem
             label={customLabel}
-            value={<span className={`status-badge ${badgeClass}`}>{displayValue}</span>}
+            value={<span className={`status-text ${statusClass}`}>{displayValue}</span>}
           />
         )}
 
@@ -53,7 +53,7 @@ export const ResourceStatus = React.memo<ResourceStatusProps>(
                 const readyCount = parseInt(parts[0]);
                 const totalCount = parseInt(parts[1]);
                 if (!isNaN(readyCount) && !isNaN(totalCount) && readyCount !== totalCount) {
-                  return <span className="status-badge warning">{ready}</span>;
+                  return <span className="status-text warning">{ready}</span>;
                 }
               }
               return ready;

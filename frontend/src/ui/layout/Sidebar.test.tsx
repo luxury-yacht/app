@@ -790,7 +790,7 @@ describe('Sidebar', () => {
     expect(dimmedItem).not.toBeNull();
     expect(dimmedItem!.className).toContain('dimmed');
     const unknownBadge = container!.querySelector(
-      `[data-sidebar-target-namespace="${namespaceKey('unknown')}"] .namespace-status-badge`
+      `[data-sidebar-target-namespace="${namespaceKey('unknown')}"] .status-text.warning`
     );
     expect(unknownBadge?.textContent).toBe('Unknown');
   });

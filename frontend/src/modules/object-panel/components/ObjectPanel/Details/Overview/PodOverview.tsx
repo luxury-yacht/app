@@ -134,7 +134,7 @@ export const PodOverview: React.FC<PodOverviewProps> = ({
       {restarts !== undefined && restarts > 0 && (
         <OverviewItem
           label="Restarts"
-          value={<span className="status-badge warning">{restarts}</span>}
+          value={<span className="status-text warning">{restarts}</span>}
         />
       )}
 

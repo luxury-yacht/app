@@ -326,7 +326,7 @@ describe('NsViewPods', () => {
     const statusColumn = gridTablePropsRef.current.columns.find((col: any) => col.key === 'status');
     const cell = statusColumn.render(gridTablePropsRef.current.data[0]);
     expect(React.isValidElement(cell)).toBe(true);
-    expect(cell.props.className).toBe('status-badge warning');
+    expect(cell.props.className).toBe('status-text warning');
   });
 
   it('passes keyed sort reuse and numeric pod sort values into useTableSort', async () => {

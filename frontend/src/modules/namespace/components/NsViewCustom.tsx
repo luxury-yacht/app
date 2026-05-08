@@ -24,7 +24,7 @@ import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
 } from '@shared/utils/objectIdentity';
-import { backendStatusBadgeClass } from '@shared/utils/backendStatusPresentation';
+import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 
 // Data interface for custom resources
 export interface CustomResourceData {
@@ -268,7 +268,7 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
           'Status',
           (resource) => resource.status || 'Unknown',
           {
-            getClassName: (resource) => backendStatusBadgeClass(resource.statusPresentation),
+            getClassName: (resource) => backendStatusTextClass(resource.statusPresentation),
           }
         ),
         cf.createAgeColumn(),

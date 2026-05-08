@@ -33,7 +33,7 @@ import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
 } from '@shared/utils/objectIdentity';
-import { backendStatusBadgeClass } from '@shared/utils/backendStatusPresentation';
+import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 import { DrainIcon } from '@shared/components/icons/MenuIcons';
 
 // Define props for NodesViewGrid component
@@ -105,13 +105,13 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
         const text = node.status ?? 'Unknown';
         return {
           text,
-          className: backendStatusBadgeClass(node.statusPresentation),
+          className: backendStatusTextClass(node.statusPresentation),
         };
       };
 
       const resolveNodeRestarts = (node: ClusterNodeRow) => {
         const restartCount = node.restarts ?? 0;
-        const className = restartCount > 0 ? 'status-badge warning' : 'status-badge';
+        const className = restartCount > 0 ? 'status-text warning' : 'status-text';
         return {
           text: String(restartCount),
           className,

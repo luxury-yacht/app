@@ -38,7 +38,7 @@ vi.mock('@shared/components/kubernetes/ResourceStatus', () => ({
         <span className="overview-label">Status</span>
         <span className="overview-value">
           <span
-            className={`status-badge ${props.statusPresentation ?? props.statusState ?? 'unknown'}`}
+            className={`status-text ${props.statusPresentation ?? props.statusState ?? 'unknown'}`}
             data-testid="resource-status"
             data-state={props.statusState}
             data-presentation={props.statusPresentation}
@@ -112,7 +112,7 @@ describe('StorageOverview', () => {
     // Status renders from backend statusPresentation rather than local phase mapping.
     const statusRow = getValueForLabel(container, 'Status');
     expect(statusRow?.textContent).toBe('Bound');
-    expect(statusRow?.querySelector('.status-badge.ready')).toBeTruthy();
+    expect(statusRow?.querySelector('.status-text.ready')).toBeTruthy();
     // Access modes render as chips, not a comma-joined string.
     const accessModes = getValueForLabel(container, 'Access Modes');
     expect(accessModes?.textContent).toBe('ReadWriteOnce');
@@ -181,7 +181,7 @@ describe('StorageOverview', () => {
     const dataSource = getValueForLabel(container, 'Data Source');
     expect(dataSource?.textContent).toBe('VolumeSnapshot/nightly-2026-04-27');
     const statusRow = getValueForLabel(container, 'Status');
-    expect(statusRow?.querySelector('.status-badge.warning')).toBeTruthy();
+    expect(statusRow?.querySelector('.status-text.warning')).toBeTruthy();
   });
 
   it('renders PV-specific fields including claim reference', async () => {
@@ -266,7 +266,7 @@ describe('StorageOverview', () => {
     // Status renders from backend statusPresentation.
     const statusRow = getValueForLabel(container, 'Status');
     expect(statusRow?.textContent).toBe('Bound');
-    expect(statusRow?.querySelector('.status-badge.ready')).toBeTruthy();
+    expect(statusRow?.querySelector('.status-text.ready')).toBeTruthy();
     // Reclaim Policy: Delete → warning chip
     const reclaim = getValueForLabel(container, 'Reclaim Policy');
     expect(reclaim?.querySelector('.status-chip--warning')).toBeTruthy();

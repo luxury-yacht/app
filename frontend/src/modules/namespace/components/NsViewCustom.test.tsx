@@ -716,7 +716,7 @@ describe('NsViewCustom', () => {
       const rendered = statusCol.render(resource) as React.ReactElement<any>;
 
       expect((rendered as any).props.children).toBe('Not Ready');
-      expect((rendered as any).props.className).toBe('status-badge warning');
+      expect((rendered as any).props.className).toBe('status-text warning');
     });
   });
 });

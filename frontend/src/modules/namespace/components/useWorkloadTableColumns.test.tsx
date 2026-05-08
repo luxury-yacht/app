@@ -107,7 +107,7 @@ describe('useWorkloadTableColumns', () => {
     const statusColumn = columns.find((column) => column.key === 'status');
     const cell = statusColumn?.render({ ...workload, statusPresentation: 'warning' });
     expect(React.isValidElement(cell)).toBe(true);
-    expect((cell as React.ReactElement<any>).props.className).toBe('status-badge warning');
+    expect((cell as React.ReactElement<any>).props.className).toBe('status-text warning');
     hook.cleanup();
   });
 
@@ -128,7 +128,7 @@ describe('useWorkloadTableColumns', () => {
       statusPresentation: undefined,
     });
     expect(React.isValidElement(cell)).toBe(true);
-    expect((cell as React.ReactElement<any>).props.className).toBe('status-badge unknown');
+    expect((cell as React.ReactElement<any>).props.className).toBe('status-text unknown');
     hook.cleanup();
   });
 });
