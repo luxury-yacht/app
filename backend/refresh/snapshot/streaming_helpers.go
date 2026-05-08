@@ -132,12 +132,13 @@ func BuildServiceNetworkSummary(
 	if svc == nil {
 		return NetworkSummary{ClusterMeta: meta, Kind: "Service"}
 	}
+	model := resourcemodel.BuildServiceResourceModel(meta.ClusterID, svc, slices)
 	return NetworkSummary{
 		ClusterMeta: meta,
 		Kind:        "Service",
 		Name:        svc.Name,
 		Namespace:   svc.Namespace,
-		Details:     describeService(svc, slices),
+		Details:     describeServiceFacts(model.Facts.Service),
 		Age:         formatAge(svc.CreationTimestamp.Time),
 	}
 }
@@ -147,12 +148,13 @@ func BuildIngressNetworkSummary(meta ClusterMeta, ing *networkingv1.Ingress) Net
 	if ing == nil {
 		return NetworkSummary{ClusterMeta: meta, Kind: "Ingress"}
 	}
+	model := resourcemodel.BuildIngressResourceModel(meta.ClusterID, ing)
 	return NetworkSummary{
 		ClusterMeta: meta,
 		Kind:        "Ingress",
 		Name:        ing.Name,
 		Namespace:   ing.Namespace,
-		Details:     describeIngress(ing),
+		Details:     describeIngressFacts(model.Facts.Ingress),
 		Age:         formatAge(ing.CreationTimestamp.Time),
 	}
 }
@@ -162,12 +164,13 @@ func BuildNetworkPolicySummary(meta ClusterMeta, policy *networkingv1.NetworkPol
 	if policy == nil {
 		return NetworkSummary{ClusterMeta: meta, Kind: "NetworkPolicy"}
 	}
+	model := resourcemodel.BuildNetworkPolicyResourceModel(meta.ClusterID, policy)
 	return NetworkSummary{
 		ClusterMeta: meta,
 		Kind:        "NetworkPolicy",
 		Name:        policy.Name,
 		Namespace:   policy.Namespace,
-		Details:     describeNetworkPolicy(policy),
+		Details:     describeNetworkPolicyFacts(model.Facts.NetworkPolicy),
 		Age:         formatAge(policy.CreationTimestamp.Time),
 	}
 }
@@ -415,12 +418,20 @@ func BuildClusterIngressClassSummary(meta ClusterMeta, ic *networkingv1.IngressC
 	if ic == nil {
 		return ClusterConfigEntry{ClusterMeta: meta, Kind: "IngressClass"}
 	}
+	model := resourcemodel.BuildIngressClassResourceModel(meta.ClusterID, ic)
+	facts := model.Facts.IngressClass
+	controller := ic.Spec.Controller
+	isDefault := isDefaultClass(ic.Annotations)
+	if facts != nil {
+		controller = facts.Controller
+		isDefault = facts.DefaultClass
+	}
 	return ClusterConfigEntry{
 		ClusterMeta: meta,
 		Kind:        "IngressClass",
 		Name:        ic.Name,
-		Details:     ic.Spec.Controller,
-		IsDefault:   isDefaultClass(ic.Annotations),
+		Details:     controller,
+		IsDefault:   isDefault,
 		Age:         formatAge(ic.CreationTimestamp.Time),
 	}
 }
@@ -556,12 +567,13 @@ func BuildEndpointSliceSummary(
 	if slice == nil {
 		return NetworkSummary{ClusterMeta: meta, Kind: "EndpointSlice"}
 	}
+	model := resourcemodel.BuildEndpointSliceResourceModel(meta.ClusterID, slice)
 	return NetworkSummary{
 		ClusterMeta: meta,
 		Kind:        "EndpointSlice",
 		Name:        slice.Name,
 		Namespace:   slice.Namespace,
-		Details:     describeEndpointSlices([]*discoveryv1.EndpointSlice{slice}),
+		Details:     describeEndpointSliceFacts(model.Facts.EndpointSlice),
 		Age:         formatAge(slice.CreationTimestamp.Time),
 	}
 }

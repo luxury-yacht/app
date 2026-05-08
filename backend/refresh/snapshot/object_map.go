@@ -540,7 +540,7 @@ func (idx *objectMapIndex) collectServices(ctx context.Context, client kubernete
 		idx.addRecord(&objectMapRecord{
 			ref:               refFromObject(&svc.ObjectMeta, "", "v1", "Service", "services", svc.Namespace),
 			creationTimestamp: objectCreationTimestamp(&svc.ObjectMeta),
-			status:            objectMapServiceStatus(svc),
+			status:            objectMapServiceStatus(idx.meta.ClusterID, svc),
 			owners:            svc.OwnerReferences,
 			labels:            cloneStringMap(svc.Labels),
 			service:           &svc,
@@ -558,6 +558,7 @@ func (idx *objectMapIndex) collectEndpointSlices(ctx context.Context, client kub
 		idx.addRecord(&objectMapRecord{
 			ref:               refFromObject(&slice.ObjectMeta, "discovery.k8s.io", "v1", "EndpointSlice", "endpointslices", slice.Namespace),
 			creationTimestamp: objectCreationTimestamp(&slice.ObjectMeta),
+			status:            objectMapEndpointSliceStatus(idx.meta.ClusterID, slice),
 			owners:            slice.OwnerReferences,
 			labels:            cloneStringMap(slice.Labels),
 			slice:             &slice,
@@ -822,7 +823,7 @@ func (idx *objectMapIndex) collectIngresses(ctx context.Context, client kubernet
 		idx.addRecord(&objectMapRecord{
 			ref:               refFromObject(&ing.ObjectMeta, "networking.k8s.io", "v1", "Ingress", "ingresses", ing.Namespace),
 			creationTimestamp: objectCreationTimestamp(&ing.ObjectMeta),
-			status:            objectMapIngressStatus(ing),
+			status:            objectMapIngressStatus(idx.meta.ClusterID, ing),
 			owners:            ing.OwnerReferences,
 			labels:            cloneStringMap(ing.Labels),
 			ingress:           &ing,
@@ -840,6 +841,7 @@ func (idx *objectMapIndex) collectIngressClasses(ctx context.Context, client kub
 		idx.addRecord(&objectMapRecord{
 			ref:               refFromObject(&ingClass.ObjectMeta, "networking.k8s.io", "v1", "IngressClass", "ingressclasses", ""),
 			creationTimestamp: objectCreationTimestamp(&ingClass.ObjectMeta),
+			status:            objectMapIngressClassStatus(idx.meta.ClusterID, ingClass),
 			owners:            ingClass.OwnerReferences,
 			labels:            cloneStringMap(ingClass.Labels),
 			ingClass:          &ingClass,
@@ -1027,14 +1029,14 @@ func objectMapPodStatus(clusterID string, pod corev1.Pod) *ObjectMapStatus {
 	return status
 }
 
-func objectMapServiceStatus(service corev1.Service) *ObjectMapStatus {
-	if service.Spec.Type == corev1.ServiceTypeLoadBalancer {
-		if len(service.Status.LoadBalancer.Ingress) > 0 {
-			return objectMapStatus("healthy", "LoadBalancer active")
-		}
-		return objectMapStatus("degraded", "LoadBalancer pending")
-	}
-	return nil
+func objectMapServiceStatus(clusterID string, service corev1.Service) *ObjectMapStatus {
+	model := resourcemodel.BuildServiceResourceModel(clusterID, &service, nil)
+	return objectMapStatusFromResourceModel(model)
+}
+
+func objectMapEndpointSliceStatus(clusterID string, slice discoveryv1.EndpointSlice) *ObjectMapStatus {
+	model := resourcemodel.BuildEndpointSliceResourceModel(clusterID, &slice)
+	return objectMapStatusFromResourceModel(model)
 }
 
 func objectMapPVCStatus(clusterID string, pvc corev1.PersistentVolumeClaim) *ObjectMapStatus {
@@ -1121,11 +1123,14 @@ func objectMapHPAStatus(hpa autoscalingv2.HorizontalPodAutoscaler) *ObjectMapSta
 	return objectMapStatus("healthy", fmt.Sprintf("%d replicas", hpa.Status.CurrentReplicas))
 }
 
-func objectMapIngressStatus(ingress networkingv1.Ingress) *ObjectMapStatus {
-	if len(ingress.Status.LoadBalancer.Ingress) > 0 {
-		return objectMapStatus("healthy", "Address assigned")
-	}
-	return objectMapStatus("degraded", "Address pending")
+func objectMapIngressStatus(clusterID string, ingress networkingv1.Ingress) *ObjectMapStatus {
+	model := resourcemodel.BuildIngressResourceModel(clusterID, &ingress)
+	return objectMapStatusFromResourceModel(model)
+}
+
+func objectMapIngressClassStatus(clusterID string, ingressClass networkingv1.IngressClass) *ObjectMapStatus {
+	model := resourcemodel.BuildIngressClassResourceModel(clusterID, &ingressClass)
+	return objectMapStatusFromResourceModel(model)
 }
 
 func (idx *objectMapIndex) findIdentity(namespace string, gvk schema.GroupVersionKind, name string) (*objectMapRecord, bool) {

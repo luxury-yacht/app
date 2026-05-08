@@ -11,6 +11,7 @@ import (
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/types"
 	networkingv1 "k8s.io/api/networking/v1"
@@ -23,7 +24,7 @@ func (s *Service) Ingress(namespace, name string) (*types.IngressDetails, error)
 		s.deps.Logger.Error(fmt.Sprintf("Failed to get ingress %s/%s: %v", namespace, name, err), logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to get ingress: %v", err)
 	}
-	return buildIngressDetails(ingress), nil
+	return s.buildIngressDetails(ingress), nil
 }
 
 func (s *Service) Ingresses(namespace string) ([]*types.IngressDetails, error) {
@@ -36,7 +37,7 @@ func (s *Service) Ingresses(namespace string) ([]*types.IngressDetails, error) {
 	var results []*types.IngressDetails
 	for i := range ingresses.Items {
 		ing := ingresses.Items[i]
-		results = append(results, buildIngressDetails(&ing))
+		results = append(results, s.buildIngressDetails(&ing))
 	}
 
 	return results, nil
@@ -48,7 +49,7 @@ func (s *Service) IngressClass(name string) (*types.IngressClassDetails, error) 
 		s.deps.Logger.Error(fmt.Sprintf("Failed to get ingress class %s: %v", name, err), logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to get ingress class: %v", err)
 	}
-	return buildIngressClassDetails(ic, nil), nil
+	return s.buildIngressClassDetails(ic, nil), nil
 }
 
 func (s *Service) IngressClasses() ([]*types.IngressClassDetails, error) {
@@ -61,88 +62,61 @@ func (s *Service) IngressClasses() ([]*types.IngressClassDetails, error) {
 	var results []*types.IngressClassDetails
 	for i := range classes.Items {
 		ic := classes.Items[i]
-		results = append(results, buildIngressClassDetails(&ic, nil))
+		results = append(results, s.buildIngressClassDetails(&ic, nil))
 	}
 
 	return results, nil
 }
 
-func buildIngressDetails(ingress *networkingv1.Ingress) *types.IngressDetails {
+func (s *Service) buildIngressDetails(ingress *networkingv1.Ingress) *types.IngressDetails {
+	model := resourcemodel.BuildIngressResourceModel(s.deps.ClusterID, ingress)
+	facts := model.Facts.Ingress
 	details := &types.IngressDetails{
 		Kind:             "Ingress",
 		Name:             ingress.Name,
 		Namespace:        ingress.Namespace,
 		Age:              common.FormatAge(ingress.CreationTimestamp.Time),
-		IngressClassName: ingress.Spec.IngressClassName,
+		IngressClassName: ingressClassNamePointer(facts.ClassName),
 		Labels:           ingress.Labels,
 		Annotations:      ingress.Annotations,
 	}
 
-	for _, rule := range ingress.Spec.Rules {
+	for _, rule := range facts.Rules {
 		ruleDetail := types.IngressRuleDetails{Host: rule.Host}
-		if rule.HTTP != nil {
-			for _, path := range rule.HTTP.Paths {
-				pathDetail := types.IngressPathDetails{
-					Path: path.Path,
-				}
-				if path.PathType != nil {
-					pathDetail.PathType = string(*path.PathType)
-				}
-				if path.Backend.Service != nil {
-					pathDetail.Backend = types.IngressBackendDetails{
-						ServiceName: path.Backend.Service.Name,
-					}
-					if path.Backend.Service.Port.Number != 0 {
-						pathDetail.Backend.ServicePort = fmt.Sprintf("%d", path.Backend.Service.Port.Number)
-					} else if path.Backend.Service.Port.Name != "" {
-						pathDetail.Backend.ServicePort = path.Backend.Service.Port.Name
-					}
-				} else if path.Backend.Resource != nil {
-					pathDetail.Backend = types.IngressBackendDetails{
-						Resource: fmt.Sprintf("%s/%s", path.Backend.Resource.Kind, path.Backend.Resource.Name),
-					}
-				}
-				ruleDetail.Paths = append(ruleDetail.Paths, pathDetail)
+		for _, path := range rule.Paths {
+			pathDetail := types.IngressPathDetails{
+				Path:     path.Path,
+				PathType: path.PathType,
+				Backend:  ingressBackendFactsToDetails(path.Backend),
 			}
+			ruleDetail.Paths = append(ruleDetail.Paths, pathDetail)
 		}
 		details.Rules = append(details.Rules, ruleDetail)
 	}
 
-	for _, tls := range ingress.Spec.TLS {
+	for _, tls := range facts.TLS {
+		secretName := ""
+		if tls.SecretRef != nil && tls.SecretRef.Display != nil {
+			secretName = tls.SecretRef.Display.Name
+		}
 		details.TLS = append(details.TLS, types.IngressTLSDetails{
 			Hosts:      tls.Hosts,
-			SecretName: tls.SecretName,
+			SecretName: secretName,
 		})
 	}
 
-	for _, lb := range ingress.Status.LoadBalancer.Ingress {
-		if lb.IP != "" {
-			details.LoadBalancerStatus = append(details.LoadBalancerStatus, lb.IP)
-		} else if lb.Hostname != "" {
-			details.LoadBalancerStatus = append(details.LoadBalancerStatus, lb.Hostname)
-		}
-	}
+	details.LoadBalancerStatus = facts.Addresses
 
-	if ingress.Spec.DefaultBackend != nil {
-		backend := types.IngressBackendDetails{}
-		if ingress.Spec.DefaultBackend.Service != nil {
-			backend.ServiceName = ingress.Spec.DefaultBackend.Service.Name
-			if ingress.Spec.DefaultBackend.Service.Port.Number != 0 {
-				backend.ServicePort = fmt.Sprintf("%d", ingress.Spec.DefaultBackend.Service.Port.Number)
-			} else if ingress.Spec.DefaultBackend.Service.Port.Name != "" {
-				backend.ServicePort = ingress.Spec.DefaultBackend.Service.Port.Name
-			}
-		} else if ingress.Spec.DefaultBackend.Resource != nil {
-			backend.Resource = fmt.Sprintf("%s/%s", ingress.Spec.DefaultBackend.Resource.Kind, ingress.Spec.DefaultBackend.Resource.Name)
-		}
+	if facts.DefaultBackend != nil {
+		backend := ingressBackendFactsToDetails(*facts.DefaultBackend)
 		details.DefaultBackend = &backend
 	}
 
-	if len(ingress.Spec.Rules) > 0 {
-		if ingress.Spec.Rules[0].Host != "" {
-			details.Details = fmt.Sprintf("Host: %s", ingress.Spec.Rules[0].Host)
+	if len(facts.Rules) > 0 {
+		if facts.Rules[0].Host != "" {
+			details.Details = fmt.Sprintf("Host: %s", facts.Rules[0].Host)
 		} else {
-			details.Details = fmt.Sprintf("%d rule(s)", len(ingress.Spec.Rules))
+			details.Details = fmt.Sprintf("%d rule(s)", len(facts.Rules))
 		}
 	} else {
 		details.Details = "No rules"
@@ -154,21 +128,19 @@ func buildIngressDetails(ingress *networkingv1.Ingress) *types.IngressDetails {
 	return details
 }
 
-func buildIngressClassDetails(ic *networkingv1.IngressClass, ingresses []networkingv1.Ingress) *types.IngressClassDetails {
+func (s *Service) buildIngressClassDetails(ic *networkingv1.IngressClass, ingresses []networkingv1.Ingress) *types.IngressClassDetails {
+	model := resourcemodel.BuildIngressClassResourceModel(s.deps.ClusterID, ic)
+	facts := model.Facts.IngressClass
 	details := &types.IngressClassDetails{
 		Kind:        "IngressClass",
 		Name:        ic.Name,
-		Controller:  ic.Spec.Controller,
+		Controller:  facts.Controller,
 		Age:         common.FormatAge(ic.CreationTimestamp.Time),
 		Labels:      ic.Labels,
 		Annotations: ic.Annotations,
 	}
 
-	if ic.Annotations != nil {
-		if v, ok := ic.Annotations["ingressclass.kubernetes.io/is-default-class"]; ok && v == "true" {
-			details.IsDefault = true
-		}
-	}
+	details.IsDefault = facts.DefaultClass
 
 	if ic.Spec.Parameters != nil {
 		params := &types.IngressClassParameters{
@@ -202,4 +174,19 @@ func buildIngressClassDetails(ic *networkingv1.IngressClass, ingresses []network
 	}
 
 	return details
+}
+
+func ingressClassNamePointer(className string) *string {
+	if className == "" {
+		return nil
+	}
+	return &className
+}
+
+func ingressBackendFactsToDetails(backend resourcemodel.IngressBackendFacts) types.IngressBackendDetails {
+	return types.IngressBackendDetails{
+		ServiceName: backend.ServiceName,
+		ServicePort: backend.ServicePort,
+		Resource:    backend.Resource,
+	}
 }

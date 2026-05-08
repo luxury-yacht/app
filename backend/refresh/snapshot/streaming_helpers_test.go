@@ -6,6 +6,8 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -173,6 +175,80 @@ func TestBuildConfigSummariesUseSharedConfigFacts(t *testing.T) {
 	require.Equal(t, "Secret", secretSummary.Kind)
 	require.Equal(t, "TLS", secretSummary.TypeAlias)
 	require.Equal(t, 1, secretSummary.Data)
+}
+
+func TestBuildNetworkSummariesUseSharedNetworkFacts(t *testing.T) {
+	meta := ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}
+	ready := true
+	port := int32(443)
+	protocol := corev1.ProtocolTCP
+	service := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "default"},
+		Spec: corev1.ServiceSpec{
+			Type:      corev1.ServiceTypeClusterIP,
+			ClusterIP: "10.0.0.10",
+			Ports:     []corev1.ServicePort{{Port: 443, Protocol: corev1.ProtocolTCP}},
+		},
+	}
+	slice := &discoveryv1.EndpointSlice{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "api-a",
+			Namespace: "default",
+			Labels:    map[string]string{discoveryv1.LabelServiceName: "api"},
+		},
+		AddressType: discoveryv1.AddressTypeIPv4,
+		Ports:       []discoveryv1.EndpointPort{{Port: &port, Protocol: &protocol}},
+		Endpoints: []discoveryv1.Endpoint{{
+			Addresses:  []string{"10.244.0.10"},
+			Conditions: discoveryv1.EndpointConditions{Ready: &ready},
+		}},
+	}
+
+	serviceSummary := BuildServiceNetworkSummary(meta, service, []*discoveryv1.EndpointSlice{slice})
+	require.Equal(t, "Service", serviceSummary.Kind)
+	require.Equal(t, "api", serviceSummary.Name)
+	require.Equal(t, "Type: ClusterIP, ClusterIP: 10.0.0.10, Ports: 443/TCP, Addresses: 1", serviceSummary.Details)
+
+	sliceSummary := BuildEndpointSliceSummary(meta, slice)
+	require.Equal(t, "EndpointSlice", sliceSummary.Kind)
+	require.Equal(t, "Slices: 1, Ready addresses: 1", sliceSummary.Details)
+
+	ingress := &networkingv1.Ingress{
+		ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "default"},
+		Spec: networkingv1.IngressSpec{
+			IngressClassName: stringPtr("nginx"),
+			Rules:            []networkingv1.IngressRule{{Host: "web.example.com"}},
+		},
+	}
+	ingressSummary := BuildIngressNetworkSummary(meta, ingress)
+	require.Equal(t, "Ingress", ingressSummary.Kind)
+	require.Equal(t, "Class: nginx, Hosts: web.example.com, Rules: 1", ingressSummary.Details)
+
+	policy := &networkingv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: "egress", Namespace: "default"},
+		Spec: networkingv1.NetworkPolicySpec{
+			Egress: []networkingv1.NetworkPolicyEgressRule{{}},
+		},
+	}
+	policySummary := BuildNetworkPolicySummary(meta, policy)
+	require.Equal(t, "NetworkPolicy", policySummary.Kind)
+	require.Equal(t, "Policy types: Ingress,Egress", policySummary.Details)
+}
+
+func TestBuildClusterIngressClassSummaryUsesSharedNetworkFacts(t *testing.T) {
+	ingressClass := &networkingv1.IngressClass{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        "nginx",
+			Annotations: map[string]string{"ingressclass.kubernetes.io/is-default-class": "true"},
+		},
+		Spec: networkingv1.IngressClassSpec{Controller: "k8s.io/ingress-nginx"},
+	}
+
+	summary := BuildClusterIngressClassSummary(ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}, ingressClass)
+	require.Equal(t, "IngressClass", summary.Kind)
+	require.Equal(t, "nginx", summary.Name)
+	require.Equal(t, "k8s.io/ingress-nginx", summary.Details)
+	require.True(t, summary.IsDefault)
 }
 
 func TestBuildNodeSummary(t *testing.T) {

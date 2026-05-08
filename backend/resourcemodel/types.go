@@ -126,6 +126,11 @@ type ResourceFacts struct {
 	StorageClass          *StorageClassFacts          `json:"storageClass,omitempty"`
 	ConfigMap             *ConfigMapFacts             `json:"configMap,omitempty"`
 	Secret                *SecretFacts                `json:"secret,omitempty"`
+	Service               *ServiceFacts               `json:"service,omitempty"`
+	EndpointSlice         *EndpointSliceFacts         `json:"endpointSlice,omitempty"`
+	Ingress               *IngressFacts               `json:"ingress,omitempty"`
+	IngressClass          *IngressClassFacts          `json:"ingressClass,omitempty"`
+	NetworkPolicy         *NetworkPolicyFacts         `json:"networkPolicy,omitempty"`
 }
 
 type PodFacts struct {
@@ -197,6 +202,123 @@ type SecretFacts struct {
 	DataSizeBytes int64          `json:"dataSizeBytes"`
 	Immutable     *bool          `json:"immutable,omitempty"`
 	UsedBy        []ResourceLink `json:"usedBy,omitempty"`
+}
+
+type ServiceFacts struct {
+	Type                   string             `json:"type,omitempty"`
+	ClusterIP              string             `json:"clusterIP,omitempty"`
+	ClusterIPs             []string           `json:"clusterIPs,omitempty"`
+	ExternalIPs            []string           `json:"externalIPs,omitempty"`
+	LoadBalancerAddresses  []string           `json:"loadBalancerAddresses,omitempty"`
+	ExternalName           string             `json:"externalName,omitempty"`
+	Ports                  []ServicePortFacts `json:"ports,omitempty"`
+	SessionAffinity        string             `json:"sessionAffinity,omitempty"`
+	SessionAffinityTimeout int32              `json:"sessionAffinityTimeout,omitempty"`
+	Selector               map[string]string  `json:"selector,omitempty"`
+	Endpoints              []string           `json:"endpoints,omitempty"`
+	ReadyEndpointCount     int                `json:"readyEndpointCount"`
+	NotReadyEndpointCount  int                `json:"notReadyEndpointCount"`
+	TotalEndpointCount     int                `json:"totalEndpointCount"`
+}
+
+type ServicePortFacts struct {
+	Name       string `json:"name,omitempty"`
+	Protocol   string `json:"protocol,omitempty"`
+	Port       int32  `json:"port"`
+	TargetPort string `json:"targetPort,omitempty"`
+	NodePort   int32  `json:"nodePort,omitempty"`
+}
+
+type EndpointSliceFacts struct {
+	AddressType       string                 `json:"addressType,omitempty"`
+	ReadyAddresses    []EndpointAddressFacts `json:"readyAddresses,omitempty"`
+	NotReadyAddresses []EndpointAddressFacts `json:"notReadyAddresses,omitempty"`
+	Ports             []EndpointPortFacts    `json:"ports,omitempty"`
+	Service           *ResourceLink          `json:"service,omitempty"`
+}
+
+type EndpointAddressFacts struct {
+	IP        string        `json:"ip,omitempty"`
+	Hostname  string        `json:"hostname,omitempty"`
+	NodeName  string        `json:"nodeName,omitempty"`
+	TargetRef *ResourceLink `json:"targetRef,omitempty"`
+}
+
+type EndpointPortFacts struct {
+	Name        string `json:"name,omitempty"`
+	Port        int32  `json:"port"`
+	Protocol    string `json:"protocol,omitempty"`
+	AppProtocol string `json:"appProtocol,omitempty"`
+}
+
+type IngressFacts struct {
+	ClassName      string               `json:"className,omitempty"`
+	Class          *ResourceLink        `json:"class,omitempty"`
+	Hosts          []string             `json:"hosts,omitempty"`
+	Addresses      []string             `json:"addresses,omitempty"`
+	TLS            []IngressTLSFacts    `json:"tls,omitempty"`
+	Rules          []IngressRuleFacts   `json:"rules,omitempty"`
+	DefaultBackend *IngressBackendFacts `json:"defaultBackend,omitempty"`
+	BackendRefs    []ResourceLink       `json:"backendRefs,omitempty"`
+}
+
+type IngressTLSFacts struct {
+	Hosts     []string      `json:"hosts,omitempty"`
+	SecretRef *ResourceLink `json:"secretRef,omitempty"`
+}
+
+type IngressRuleFacts struct {
+	Host  string             `json:"host,omitempty"`
+	Paths []IngressPathFacts `json:"paths,omitempty"`
+}
+
+type IngressPathFacts struct {
+	Path     string              `json:"path,omitempty"`
+	PathType string              `json:"pathType,omitempty"`
+	Backend  IngressBackendFacts `json:"backend"`
+}
+
+type IngressBackendFacts struct {
+	ServiceName string        `json:"serviceName,omitempty"`
+	ServicePort string        `json:"servicePort,omitempty"`
+	Service     *ResourceLink `json:"service,omitempty"`
+	Resource    string        `json:"resource,omitempty"`
+}
+
+type IngressClassFacts struct {
+	Controller                  string `json:"controller,omitempty"`
+	DefaultClass                bool   `json:"defaultClass"`
+	DefaultClassAnnotation      string `json:"defaultClassAnnotation,omitempty"`
+	DefaultClassAnnotationValue string `json:"defaultClassAnnotationValue,omitempty"`
+}
+
+type NetworkPolicyFacts struct {
+	PodSelector  map[string]string        `json:"podSelector,omitempty"`
+	PolicyTypes  []string                 `json:"policyTypes,omitempty"`
+	IngressRules []NetworkPolicyRuleFacts `json:"ingressRules,omitempty"`
+	EgressRules  []NetworkPolicyRuleFacts `json:"egressRules,omitempty"`
+}
+
+type NetworkPolicyRuleFacts struct {
+	Peers []NetworkPolicyPeerFacts `json:"peers,omitempty"`
+	Ports []NetworkPolicyPortFacts `json:"ports,omitempty"`
+}
+
+type NetworkPolicyPeerFacts struct {
+	PodSelector       map[string]string `json:"podSelector,omitempty"`
+	NamespaceSelector map[string]string `json:"namespaceSelector,omitempty"`
+	IPBlock           *IPBlockFacts     `json:"ipBlock,omitempty"`
+}
+
+type NetworkPolicyPortFacts struct {
+	Protocol string `json:"protocol,omitempty"`
+	Port     string `json:"port,omitempty"`
+	EndPort  *int32 `json:"endPort,omitempty"`
+}
+
+type IPBlockFacts struct {
+	CIDR   string   `json:"cidr,omitempty"`
+	Except []string `json:"except,omitempty"`
 }
 
 type ResourceModel struct {

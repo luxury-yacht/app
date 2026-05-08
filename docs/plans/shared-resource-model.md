@@ -2371,6 +2371,35 @@ links. The detail view may still receive decoded Secret values through its
 explicit detail-only DTO, but those values must not move into shared facts,
 table summaries, object-map status, or relationship metadata.
 
+## Implementation Learnings From The Network Slice
+
+The Network migration confirmed that source-derived state is not limited to
+`status` fields. Services expose their primary state through `spec.type`,
+EndpointSlices through endpoint condition/address counts, Ingresses through
+`status.loadBalancer.ingress`, IngressClasses through the Kubernetes default
+class annotation, and NetworkPolicies through effective policy types plus rule
+counts. These values must stay in the backend shared model; frontend or
+object-map consumers should only render the shared presentation.
+
+Endpoint readiness must use Kubernetes EndpointSlice conditions consistently:
+`ready=false`, `serving=false`, or `terminating=true` makes an endpoint not
+ready. The shared model owns this rule and both Service endpoint rollups and
+EndpointSlice details consume that result.
+
+NetworkPolicy `policyTypes` defaulting must follow Kubernetes API semantics, not
+app-local assumptions. If `spec.policyTypes` is omitted, `Ingress` is always
+effective and `Egress` is also effective when egress rules are present.
+
+All-namespace Service summaries must group EndpointSlices by namespace and
+Service name, not by Service name alone. Otherwise same-named Services in
+different namespaces can receive each other's endpoint counts during snapshot
+projection.
+
+IngressClass parameter references are not shared `ResourceLink` values because
+the Kubernetes `IngressClassParametersReference` source does not include a
+version. Detail DTOs can still display the source parameter fields, but shared
+object references must not invent missing identity.
+
 ## Migration Strategy
 
 Migrate by resource family, deleting duplicated semantic logic as each family is
@@ -2489,13 +2518,13 @@ that actually consumes them.
 
 ### Phase 8: Network
 
-- [ ] Add shared resource models for Service, EndpointSlice, Ingress,
+- [x] ✅ Add shared resource models for Service, EndpointSlice, Ingress,
       IngressClass, and NetworkPolicy.
-- [ ] Centralize service endpoint readiness, ingress address readiness, backend
+- [x] ✅ Centralize service endpoint readiness, ingress address readiness, backend
       links, class links, and network policy selectors.
-- [ ] Use network shared resource models from table, detail, and object-map
+- [x] ✅ Use network shared resource models from table, detail, and object-map
       paths where applicable.
-- [ ] Add parity tests for network identity, primary status, and relationship
+- [x] ✅ Add parity tests for network identity, primary status, and relationship
       links.
 
 ### Phase 9: Gateway API
