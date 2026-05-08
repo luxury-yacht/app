@@ -276,6 +276,34 @@ describe('objectMapG6Data', () => {
     );
   });
 
+  it('colors Kubernetes condition status values without converting the payload state', () => {
+    const statusCases = [
+      { state: 'True', fill: '#22c55e' },
+      { state: 'False', fill: '#ef4444' },
+      { state: 'Unknown', fill: '#94a3b8' },
+    ];
+
+    for (const { state, fill } of statusCases) {
+      const graphData = toObjectMapG6Data(
+        {
+          ...layout,
+          nodes: [{ ...layout.nodes[2], status: { state, label: state } }],
+          edges: [],
+        },
+        selectionState(null),
+        () => null,
+        palette
+      );
+
+      expect(graphData.nodes?.[0].data?.status).toEqual({ state, label: state });
+      expect(graphData.nodes?.[0].style).toEqual(
+        expect.objectContaining({
+          cardStatusFill: fill,
+        })
+      );
+    }
+  });
+
   it('uses the centralized kind badge style resolver for card kind badges', () => {
     const graphData = toObjectMapG6Data(
       layout,

@@ -12,6 +12,7 @@ import (
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	batchv1 "k8s.io/api/batch/v1"
@@ -166,9 +167,8 @@ type ObjectMapNode struct {
 	Status            *ObjectMapStatus   `json:"status,omitempty"`
 }
 
-// ObjectMapStatus is a compact card-level status indicator. State mirrors the
-// shared frontend StatusIndicator states so object-map dots use the same visual
-// vocabulary as the rest of the app.
+// ObjectMapStatus is a compact card-level status indicator. State is the source
+// status value selected by the resource-specific status builder.
 type ObjectMapStatus struct {
 	State  string `json:"state"`
 	Label  string `json:"label"`
@@ -674,7 +674,7 @@ func (idx *objectMapIndex) collectNodes(ctx context.Context, client kubernetes.I
 		idx.addRecord(&objectMapRecord{
 			ref:               refFromObject(&node.ObjectMeta, "", "v1", "Node", "nodes", ""),
 			creationTimestamp: objectCreationTimestamp(&node.ObjectMeta),
-			status:            objectMapNodeStatus(node),
+			status:            objectMapNodeStatus(idx.meta.ClusterID, node),
 			owners:            node.OwnerReferences,
 			labels:            cloneStringMap(node.Labels),
 		})
@@ -1161,35 +1161,9 @@ func objectMapPVStatus(pv corev1.PersistentVolume) *ObjectMapStatus {
 	}
 }
 
-func objectMapNodeStatus(node corev1.Node) *ObjectMapStatus {
-	for _, condition := range node.Status.Conditions {
-		if condition.Type != corev1.NodeReady {
-			continue
-		}
-		if condition.Status == corev1.ConditionTrue {
-			if objectMapNodeCordoned(node) {
-				return objectMapStatus("degraded", "Ready (Cordoned)", condition.Reason)
-			}
-			return objectMapStatus("healthy", "Ready", condition.Reason)
-		}
-		if condition.Status == corev1.ConditionUnknown {
-			return objectMapStatus("inactive", "Unknown", condition.Reason)
-		}
-		return objectMapStatus("unhealthy", "NotReady", condition.Reason)
-	}
-	return objectMapStatus("inactive", "Unknown")
-}
-
-func objectMapNodeCordoned(node corev1.Node) bool {
-	if node.Spec.Unschedulable {
-		return true
-	}
-	for _, taint := range node.Spec.Taints {
-		if taint.Key == corev1.TaintNodeUnschedulable {
-			return true
-		}
-	}
-	return false
+func objectMapNodeStatus(clusterID string, node corev1.Node) *ObjectMapStatus {
+	model := resourcemodel.BuildNodeResourceModel(clusterID, &node)
+	return objectMapStatus(model.Status.State, model.Status.Label, model.Status.Reason)
 }
 
 func objectMapDeploymentStatus(deploy appsv1.Deployment) *ObjectMapStatus {

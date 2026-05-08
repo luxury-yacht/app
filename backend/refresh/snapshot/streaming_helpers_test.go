@@ -128,7 +128,14 @@ func TestBuildNodeSummary(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "node-1",
 		},
+		Spec: corev1.NodeSpec{
+			Unschedulable: true,
+		},
 		Status: corev1.NodeStatus{
+			Conditions: []corev1.NodeCondition{{
+				Type:   corev1.NodeReady,
+				Status: corev1.ConditionTrue,
+			}},
 			Capacity: corev1.ResourceList{
 				corev1.ResourceCPU:    resource.MustParse("4"),
 				corev1.ResourceMemory: resource.MustParse("8Gi"),
@@ -146,6 +153,8 @@ func TestBuildNodeSummary(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "node-1", summary.Name)
 	require.Equal(t, "c1", summary.ClusterID)
+	require.Equal(t, "Ready (Cordoned)", summary.Status)
+	require.Equal(t, "True", summary.StatusState)
 }
 
 func ptrBool(value bool) *bool {

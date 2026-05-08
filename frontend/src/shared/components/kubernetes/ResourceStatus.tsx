@@ -10,6 +10,7 @@ import { OverviewItem } from '@modules/object-panel/components/ObjectPanel/Detai
 
 interface ResourceStatusProps {
   status?: string;
+  statusState?: string;
   statusSeverity?: string;
   ready?: string;
   phase?: string;
@@ -23,10 +24,10 @@ interface ResourceStatusProps {
 }
 
 export const ResourceStatus = React.memo<ResourceStatusProps>(
-  ({ status, statusSeverity, ready, phase, conditions, customLabel = 'Status' }) => {
+  ({ status, statusState, statusSeverity, ready, phase, conditions, customLabel = 'Status' }) => {
     // Determine what to display
     const displayValue = status || phase;
-    const severity = statusSeverity || 'info';
+    const badgeClass = statusState || statusSeverity?.toLowerCase() || 'unknown';
 
     if (!displayValue && !ready && (!conditions || conditions.length === 0)) {
       return null;
@@ -37,7 +38,7 @@ export const ResourceStatus = React.memo<ResourceStatusProps>(
         {displayValue && (
           <OverviewItem
             label={customLabel}
-            value={<span className={`status-badge ${severity.toLowerCase()}`}>{displayValue}</span>}
+            value={<span className={`status-badge ${badgeClass}`}>{displayValue}</span>}
           />
         )}
 

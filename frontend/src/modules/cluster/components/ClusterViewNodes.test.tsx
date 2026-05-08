@@ -215,6 +215,51 @@ describe('ClusterViewNodes', () => {
     expect(memoryColumn?.sortValue?.(baseNode)).toBe(2048);
   });
 
+  it('renders the backend node status without reinterpreting cordon state', async () => {
+    const node = {
+      ...baseNode,
+      status: 'Ready',
+      statusState: 'True',
+      unschedulable: true,
+      taints: [{ key: 'node.kubernetes.io/unschedulable', effect: 'NoSchedule' }],
+    };
+
+    await act(async () => {
+      root.render(<ClusterViewNodes data={[node as any]} loaded={true} />);
+      await Promise.resolve();
+    });
+
+    const props = gridTablePropsRef.current;
+    const statusColumn = props.columns.find((column: any) => column.key === 'status');
+    const statusCell = statusColumn.render(props.data[0]);
+    const badge = statusCell.props.children[0];
+
+    expect(badge.props.children).toBe('Ready');
+    expect(badge.props.className).toBe('status-badge True');
+  });
+
+  it('uses backend statusState for node status styling', async () => {
+    const node = {
+      ...baseNode,
+      status: 'Ready (Cordoned)',
+      statusState: 'True',
+      unschedulable: true,
+    };
+
+    await act(async () => {
+      root.render(<ClusterViewNodes data={[node as any]} loaded={true} />);
+      await Promise.resolve();
+    });
+
+    const props = gridTablePropsRef.current;
+    const statusColumn = props.columns.find((column: any) => column.key === 'status');
+    const statusCell = statusColumn.render(props.data[0]);
+    const badge = statusCell.props.children[0];
+
+    expect(badge.props.children).toBe('Ready (Cordoned)');
+    expect(badge.props.className).toBe('status-badge True');
+  });
+
   it('opens the object panel with cluster metadata when clicking a node name', async () => {
     await act(async () => {
       root.render(<ClusterViewNodes data={[baseNode as any]} loaded={true} />);

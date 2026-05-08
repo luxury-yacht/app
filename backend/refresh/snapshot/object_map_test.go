@@ -179,7 +179,7 @@ func TestObjectMapPodStatusRequiresAllContainersReady(t *testing.T) {
 	}
 }
 
-func TestObjectMapNodeStatusMarksReadyCordonedNodesDegraded(t *testing.T) {
+func TestObjectMapNodeStatusUsesKubernetesReadyConditionStatus(t *testing.T) {
 	readyCondition := corev1.NodeCondition{
 		Type:   corev1.NodeReady,
 		Status: corev1.ConditionTrue,
@@ -202,7 +202,7 @@ func TestObjectMapNodeStatusMarksReadyCordonedNodesDegraded(t *testing.T) {
 			node: corev1.Node{Status: corev1.NodeStatus{
 				Conditions: []corev1.NodeCondition{readyCondition},
 			}},
-			wantState: "healthy",
+			wantState: "True",
 			wantLabel: "Ready",
 		},
 		{
@@ -213,7 +213,7 @@ func TestObjectMapNodeStatusMarksReadyCordonedNodesDegraded(t *testing.T) {
 					Conditions: []corev1.NodeCondition{readyCondition},
 				},
 			},
-			wantState: "degraded",
+			wantState: "True",
 			wantLabel: "Ready (Cordoned)",
 		},
 		{
@@ -227,25 +227,25 @@ func TestObjectMapNodeStatusMarksReadyCordonedNodesDegraded(t *testing.T) {
 					Conditions: []corev1.NodeCondition{readyCondition},
 				},
 			},
-			wantState: "degraded",
+			wantState: "True",
 			wantLabel: "Ready (Cordoned)",
 		},
 		{
-			name: "cordoned not ready remains unhealthy",
+			name: "cordoned not ready remains false",
 			node: corev1.Node{
 				Spec: corev1.NodeSpec{Unschedulable: true},
 				Status: corev1.NodeStatus{
 					Conditions: []corev1.NodeCondition{notReadyCondition},
 				},
 			},
-			wantState: "unhealthy",
+			wantState: "False",
 			wantLabel: "NotReady",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			status := objectMapNodeStatus(tt.node)
+			status := objectMapNodeStatus("cluster-a", tt.node)
 			if status == nil || status.State != tt.wantState || status.Label != tt.wantLabel {
 				t.Fatalf("unexpected node status: got %#v, want state=%q label=%q", status, tt.wantState, tt.wantLabel)
 			}

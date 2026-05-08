@@ -73,6 +73,19 @@ describe('ResourceStatus', () => {
     cleanup();
   });
 
+  it('renders status badge with the backend statusState class', async () => {
+    const { container: root, cleanup } = await renderStatus({
+      status: 'Ready (Cordoned)',
+      statusState: 'True',
+    });
+    container = root;
+
+    const badge = root.querySelector('.status-badge');
+    expect(badge?.textContent).toBe('Ready (Cordoned)');
+    expect(badge?.classList.contains('True')).toBe(true);
+    cleanup();
+  });
+
   it('renders ready badge and highlights when counts mismatch', async () => {
     const { container: root, cleanup } = await renderStatus({
       ready: '1/3',

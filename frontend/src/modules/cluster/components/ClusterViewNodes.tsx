@@ -101,13 +101,8 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
         : undefined;
 
       const resolveNodeStatus = (node: ClusterNodeRow) => {
-        const isCordoned =
-          node.unschedulable ||
-          node.taints?.some((t) => t.key === 'node.kubernetes.io/unschedulable') ||
-          false;
-        const baseStatus = node.status ?? 'Unknown';
-        const text = isCordoned && baseStatus === 'Ready' ? 'Ready (Cordoned)' : baseStatus;
-        const statusClass = isCordoned ? 'warning' : baseStatus.replace(/\s+/g, '-').toLowerCase();
+        const text = node.status ?? 'Unknown';
+        const statusClass = node.statusState || 'unknown';
         return {
           text,
           className: `status-badge ${statusClass}`,

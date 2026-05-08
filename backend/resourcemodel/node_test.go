@@ -1,0 +1,157 @@
+package resourcemodel
+
+import (
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+)
+
+func TestBuildNodeResourceModelStatus(t *testing.T) {
+	tests := []struct {
+		name       string
+		node       *corev1.Node
+		wantLabel  string
+		wantState  string
+		wantReason string
+		wantSignal ResourceStatusSignal
+		wantBadge  ResourceStatusBadge
+	}{
+		{
+			name:      "ready",
+			node:      nodeWithReadyCondition(corev1.ConditionTrue, "KubeletReady"),
+			wantLabel: "Ready",
+			wantState: string(corev1.ConditionTrue),
+		},
+		{
+			name: "ready cordoned",
+			node: func() *corev1.Node {
+				node := nodeWithReadyCondition(corev1.ConditionTrue, "KubeletReady")
+				node.Spec.Unschedulable = true
+				return node
+			}(),
+			wantLabel:  "Ready (Cordoned)",
+			wantState:  string(corev1.ConditionTrue),
+			wantReason: "Unschedulable",
+			wantSignal: ResourceStatusSignal{
+				Type:   StatusSignalResourceState,
+				Name:   "spec.unschedulable",
+				Status: "true",
+				Reason: "Unschedulable",
+			},
+			wantBadge: ResourceStatusBadge{Text: "Cordoned", Status: "true"},
+		},
+		{
+			name: "ready with unschedulable taint",
+			node: func() *corev1.Node {
+				node := nodeWithReadyCondition(corev1.ConditionTrue, "KubeletReady")
+				node.Spec.Taints = []corev1.Taint{{
+					Key:    corev1.TaintNodeUnschedulable,
+					Effect: corev1.TaintEffectNoSchedule,
+				}}
+				return node
+			}(),
+			wantLabel:  "Ready (Cordoned)",
+			wantState:  string(corev1.ConditionTrue),
+			wantReason: "Unschedulable",
+			wantSignal: ResourceStatusSignal{
+				Type:   StatusSignalResourceState,
+				Name:   corev1.TaintNodeUnschedulable,
+				Status: string(corev1.TaintEffectNoSchedule),
+				Reason: "UnschedulableTaint",
+			},
+			wantBadge: ResourceStatusBadge{Text: "Cordoned", Status: string(corev1.TaintEffectNoSchedule)},
+		},
+		{
+			name:       "not ready",
+			node:       nodeWithReadyCondition(corev1.ConditionFalse, "KubeletNotReady"),
+			wantLabel:  "NotReady",
+			wantState:  string(corev1.ConditionFalse),
+			wantReason: "KubeletNotReady",
+		},
+		{
+			name:       "unknown",
+			node:       nodeWithReadyCondition(corev1.ConditionUnknown, "NodeStatusUnknown"),
+			wantLabel:  "Unknown",
+			wantState:  string(corev1.ConditionUnknown),
+			wantReason: "NodeStatusUnknown",
+		},
+		{
+			name: "terminating",
+			node: func() *corev1.Node {
+				node := nodeWithReadyCondition(corev1.ConditionTrue, "KubeletReady")
+				deletingAt := metav1.NewTime(time.Date(2026, time.May, 7, 20, 15, 0, 0, time.UTC))
+				node.DeletionTimestamp = &deletingAt
+				return node
+			}(),
+			wantLabel:  "Terminating",
+			wantState:  string(corev1.ConditionTrue),
+			wantReason: "DeletionTimestamp",
+			wantSignal: ResourceStatusSignal{
+				Type:   StatusSignalDeletion,
+				Name:   "metadata.deletionTimestamp",
+				Status: "2026-05-07T20:15:00Z",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			model := BuildNodeResourceModel("cluster-a", tt.node)
+			require.Equal(t, "cluster-a", model.Ref.ClusterID)
+			require.Equal(t, "", model.Ref.Group)
+			require.Equal(t, "v1", model.Ref.Version)
+			require.Equal(t, "Node", model.Ref.Kind)
+			require.Equal(t, "nodes", model.Ref.Resource)
+			require.Equal(t, "node-1", model.Ref.Name)
+			require.Equal(t, tt.wantLabel, model.Status.Label)
+			require.Equal(t, tt.wantState, model.Status.State)
+			require.Equal(t, tt.wantReason, model.Status.Reason)
+			if tt.wantSignal.Name != "" {
+				require.Contains(t, model.Status.Signals, tt.wantSignal)
+			}
+			if tt.wantBadge.Text != "" {
+				require.Contains(t, model.Status.Badges, tt.wantBadge)
+			}
+		})
+	}
+}
+
+func TestBuildNodeResourceModelCopiesMetadataFacts(t *testing.T) {
+	node := nodeWithReadyCondition(corev1.ConditionTrue, "KubeletReady")
+	node.UID = types.UID("uid-1")
+	node.Labels = map[string]string{
+		"node-role.kubernetes.io/worker": "",
+		"app":                            "node",
+	}
+	node.Annotations = map[string]string{"example": "annotation"}
+	node.Finalizers = []string{"example.com/finalizer"}
+
+	model := BuildNodeResourceModel("cluster-a", node)
+
+	require.Equal(t, "uid-1", model.Ref.UID)
+	require.Equal(t, map[string]string{"node-role.kubernetes.io/worker": "", "app": "node"}, model.Metadata.Labels)
+	require.Equal(t, map[string]string{"example": "annotation"}, model.Metadata.Annotations)
+	require.Equal(t, []string{"worker"}, model.Facts.Node.Roles)
+	require.False(t, model.Facts.Node.Unschedulable)
+	require.False(t, model.Facts.Node.Cordoned)
+
+	node.Labels["app"] = "changed"
+	require.Equal(t, "node", model.Metadata.Labels["app"])
+}
+
+func nodeWithReadyCondition(status corev1.ConditionStatus, reason string) *corev1.Node {
+	return &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{Name: "node-1"},
+		Status: corev1.NodeStatus{
+			Conditions: []corev1.NodeCondition{{
+				Type:   corev1.NodeReady,
+				Status: status,
+				Reason: reason,
+			}},
+		},
+	}
+}

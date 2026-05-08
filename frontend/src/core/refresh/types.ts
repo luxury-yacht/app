@@ -109,6 +109,8 @@ export interface NodeMaintenanceSnapshotPayload extends ClusterMeta {
 export interface ClusterNodeSnapshotEntry extends ClusterMeta {
   name: string;
   status: string;
+  statusState?: string;
+  statusReason?: string;
   roles: string;
   age: string;
   version: string;
@@ -518,7 +520,7 @@ export interface ObjectMapNode {
 }
 
 export interface ObjectMapStatus {
-  state: 'healthy' | 'refreshing' | 'degraded' | 'unhealthy' | 'inactive';
+  state: string;
   label: string;
   reason?: string;
 }

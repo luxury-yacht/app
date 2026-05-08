@@ -105,16 +105,16 @@ model layered onto the shared resource model.
 The shared status model should be UI-neutral and is defined in the common shape
 below.
 
-`State` should use a small app-level vocabulary, such as:
+`State` should preserve the authoritative Kubernetes source status or phase
+selected by that resource's status builder. For example, Node uses the
+`NodeReady` condition status values `True`, `False`, and `Unknown`, and PVC/PV
+models should use their Kubernetes phase values when those resource families
+migrate. The shared model may still choose a user-facing `Label`, such as
+`Ready (Cordoned)`, but it must not replace Kubernetes source values with an
+invented app health vocabulary.
 
-- `healthy`
-- `degraded`
-- `unhealthy`
-- `inactive`
-- `refreshing`
-- `unknown`
-
-Frontend components can map those states to existing badge/chip classes.
+Frontend components can map those backend-emitted source values to CSS classes,
+but they must not reinterpret Kubernetes semantics.
 
 ### Existing Identity Contracts
 
@@ -293,14 +293,14 @@ ResourceModel{
 	},
 	Status: ResourceStatusPresentation{
 		Label:  "Ready (Cordoned)",
-		State:  ResourceStateDegraded,
+		State:  "True", // Raw NodeReady condition status from the Kubernetes API.
 		Reason: "Unschedulable",
-		Sources: []ResourceStatusSignal{
-			{Type: StatusSignalCondition, Name: "Ready", Value: "True"},
-			{Type: StatusSignalResourceState, Name: "Unschedulable", Value: "true"},
+		Signals: []ResourceStatusSignal{
+			{Type: StatusSignalCondition, Name: "Ready", Status: "True"},
+			{Type: StatusSignalResourceState, Name: "spec.unschedulable", Status: "true"},
 		},
 		Badges: []ResourceStatusBadge{
-			{Label: "Cordoned", State: ResourceStateDegraded, Reason: "Unschedulable"},
+			{Text: "Cordoned", Status: "true"},
 		},
 	},
 	Facts: ResourceFacts{
@@ -389,12 +389,12 @@ type ResourceMetadata struct {
 
 type ResourceStatusPresentation struct {
 	Label              string
-	State              ResourceState
+	State              string // Raw source status/phase value, e.g. NodeReady=True.
 	Reason             string
 	Message            string
 	ObservedGeneration int64
 	Lifecycle          ResourceLifecycle
-	Sources            []ResourceStatusSignal
+	Signals            []ResourceStatusSignal
 	Badges             []ResourceStatusBadge
 }
 
@@ -409,7 +409,7 @@ type ResourceLifecycle struct {
 type ResourceStatusSignal struct {
 	Type               StatusSignalType
 	Name               string
-	Value              string
+	Status             string
 	Reason             string
 	Message            string
 	LastTransitionTime *time.Time
@@ -428,21 +428,9 @@ const (
 )
 
 type ResourceStatusBadge struct {
-	Label  string
-	State  ResourceState
-	Reason string
+	Text   string
+	Status string
 }
-
-type ResourceState string
-
-const (
-	ResourceStateHealthy    ResourceState = "healthy"
-	ResourceStateDegraded   ResourceState = "degraded"
-	ResourceStateUnhealthy  ResourceState = "unhealthy"
-	ResourceStateInactive   ResourceState = "inactive"
-	ResourceStateRefreshing ResourceState = "refreshing"
-	ResourceStateUnknown    ResourceState = "unknown"
-)
 
 type ResourceRelation struct {
 	Type     string
@@ -478,7 +466,7 @@ scope-correct `namespace`/`name`; RBAC and discovery-facing projections validate
 that `resource` is present before constructing Kubernetes authorization
 attributes.
 
-`ResourceStatusPresentation.Sources` should preserve the signals used to derive
+`ResourceStatusPresentation.Signals` should preserve the signals used to derive
 the primary label and state. Consumers still render only the chosen
 presentation, but tests can verify whether a status came from deletion state,
 phase, readiness, generation, conditions, controller state, or resource-specific
@@ -2191,6 +2179,57 @@ It should not independently reinterpret Kubernetes semantics such as:
 - whether a workload rollout is unhealthy
 - whether a PVC state should be warning or error
 
+## Implementation Learnings From The Node Slice
+
+The Node migration exposed several rules that must guide the remaining phases.
+
+Backend status state must preserve the authoritative Kubernetes value selected
+by the resource-specific builder. For Node, the selected source is the
+`NodeReady` condition, so `ResourceStatusPresentation.State` is exactly one of
+the Kubernetes condition status values: `True`, `False`, or `Unknown`. The
+shared model may compose a clearer display `Label`, such as `Ready (Cordoned)`
+or `Terminating`, but that label must not replace the source state.
+
+Do not introduce a generic `ResourceState` enum such as `healthy`, `degraded`,
+or `unhealthy` for shared resource status. Those words may still exist in older
+cluster health, stream health, diagnostics, or unmigrated object-map code, but
+they are not the shared resource model contract for migrated Kubernetes
+resources. When another resource family migrates, it must define which
+Kubernetes condition, phase, or status field is authoritative for its primary
+`State`.
+
+Signals and badges must also carry source-derived values. For example, Node
+cordon presentation should preserve the field or taint that caused it:
+`spec.unschedulable=true` or the unschedulable taint effect. Deletion signals
+should preserve `metadata.deletionTimestamp`, not a made-up marker such as
+`Set`. `Reason` may name the interpretation, but `Status` should remain the
+source value.
+
+The frontend may adapt backend-emitted source states to visual treatment only at
+the rendering boundary. Acceptable examples are CSS selectors such as
+`.status-badge.True`, `.status-badge.False`, and `.status-badge.Unknown`, or an
+object-map color lookup that chooses a color for `True`, `False`, and
+`Unknown`. Unacceptable examples are frontend hooks or table components that
+inspect Kubernetes object fields and rewrite status semantics after the backend
+has emitted the app model.
+
+DTO parity sometimes requires adding small explicit fields rather than
+overloading existing strings. The Node slice added `statusState` and
+`statusReason` beside the display `status` string so table rows, detail panels,
+resource-stream rows, and object-map nodes can render the same backend-derived
+presentation without parsing display text.
+
+Generated Wails TypeScript models must stay in sync with DTO changes in the
+same phase. If `wails generate` cannot update the bindings in the local
+environment, the generated model file still has to be updated and validated by
+typecheck before the phase is considered complete.
+
+Parity tests need to cover both backend projections and frontend rendering
+boundaries. For a migrated resource family, tests should prove that table,
+detail, resource-stream, and object-map builders select primary status from the
+shared model, and frontend tests should prove that components consume the
+backend-emitted state instead of recomputing it.
+
 ## Migration Strategy
 
 Migrate by resource family, deleting duplicated semantic logic as each family is
@@ -2201,11 +2240,12 @@ that actually consumes them.
 
 ### Phase 1: Minimal Shared Foundation
 
-- [ ] Add the backend shared resource model package with only the common types
-      needed by the Node slice: `ResourceModel`, `ResourceRef`, `DisplayRef`,
-      `ResourceLink`, `ResourceSource`, `ResourceScope`,
-      `ResourceStatusPresentation`, lifecycle, status signals, and
-      materialization options.
+- [x] ✅ Add the backend shared resource model package with the common types
+      needed by the Node slice: `ResourceModel`, `ResourceRef`,
+      `ResourceSource`, `ResourceScope`, `ResourceStatusPresentation`,
+      lifecycle, and status signals.
+- [ ] Add `DisplayRef`, `ResourceLink`, and materialization options when the
+      first migrated consumer needs them.
 - [ ] Add `ResourceLink` constructors and validation.
 - [ ] Add projection helpers from `ResourceRef`/`ResourceLink` to existing
       exported contracts: backend `ObjectRef`/`RefOrDisplay`, object-map
@@ -2219,19 +2259,19 @@ that actually consumes them.
 
 ### Phase 2: Nodes Vertical Slice
 
-- [ ] Add `NodeFacts` and node shared resource model builder.
-- [ ] Move node ready, not-ready, unknown, cordoned, and unschedulable-taint
+- [x] ✅ Add `NodeFacts` and node shared resource model builder.
+- [x] ✅ Move node ready, not-ready, unknown, cordoned, and unschedulable-taint
       interpretation into the shared resource model layer.
-- [ ] Use node shared resource model from node table snapshot builder and
+- [x] ✅ Use node shared resource model from node table snapshot builder and
       resource-stream node row builder.
-- [ ] Use node shared resource model from node detail builder.
-- [ ] Use node shared resource model from object-map node builder.
-- [ ] Project into existing DTOs unless a DTO change is required for parity.
-- [ ] Remove duplicated node status derivation from the migrated paths,
+- [x] ✅ Use node shared resource model from node detail builder.
+- [x] ✅ Use node shared resource model from object-map node builder.
+- [x] ✅ Project into existing DTOs unless a DTO change is required for parity.
+- [x] ✅ Remove duplicated node status derivation from the migrated paths,
       including frontend node status reinterpretation.
-- [ ] Add tests for ready, not-ready, unknown, unschedulable, terminating, and
+- [x] ✅ Add tests for ready, not-ready, unknown, unschedulable, terminating, and
       unschedulable-taint nodes.
-- [ ] Add table/detail/object-map/resource-stream parity tests for node status.
+- [x] ✅ Add table/detail/object-map/resource-stream parity tests for node status.
 - [ ] Record a small before/after refresh performance check for the node table
       and node-related resource-stream update path.
 

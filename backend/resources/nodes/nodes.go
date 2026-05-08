@@ -18,6 +18,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/parallel"
 	"github.com/luxury-yacht/app/backend/nodemaintenance"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	restypes "github.com/luxury-yacht/app/backend/resources/types"
 	corev1 "k8s.io/api/core/v1"
@@ -455,6 +456,8 @@ func (s *Service) buildNodeDetails(node *corev1.Node, pods []corev1.Pod, nodeMet
 	var cpuRequests, cpuLimits, memRequests, memLimits int64
 	var podsList []restypes.PodSimpleInfo
 	var nodeRestarts int32
+	model := resourcemodel.BuildNodeResourceModel(s.deps.ClusterID, node)
+	nodeFacts := model.Facts.Node
 
 	for _, pod := range pods {
 		var podRestarts int32
@@ -495,8 +498,11 @@ func (s *Service) buildNodeDetails(node *corev1.Node, pods []corev1.Pod, nodeMet
 
 	details := &restypes.NodeDetails{
 		Name:             node.Name,
+		Status:           model.Status.Label,
+		StatusState:      model.Status.State,
+		StatusReason:     model.Status.Reason,
 		Age:              common.FormatAge(node.CreationTimestamp.Time),
-		Unschedulable:    node.Spec.Unschedulable,
+		Unschedulable:    nodeFacts != nil && nodeFacts.Unschedulable,
 		Architecture:     node.Status.NodeInfo.Architecture,
 		OS:               node.Status.NodeInfo.OperatingSystem,
 		OSImage:          node.Status.NodeInfo.OSImage,
@@ -511,13 +517,6 @@ func (s *Service) buildNodeDetails(node *corev1.Node, pods []corev1.Pod, nodeMet
 	}
 
 	for _, condition := range node.Status.Conditions {
-		if condition.Type == corev1.NodeReady {
-			if condition.Status == corev1.ConditionTrue {
-				details.Status = "Ready"
-			} else {
-				details.Status = "NotReady"
-			}
-		}
 		details.Conditions = append(details.Conditions, restypes.NodeCondition{
 			Kind:    string(condition.Type),
 			Status:  string(condition.Status),

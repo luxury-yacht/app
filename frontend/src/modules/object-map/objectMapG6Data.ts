@@ -109,8 +109,13 @@ const objectMapStatusFill = (
   palette: ObjectMapG6Palette
 ): string | undefined => {
   switch (status?.state) {
+    case 'True':
     case 'healthy':
       return palette.statusHealthy;
+    case 'False':
+      return palette.statusUnhealthy;
+    case 'Unknown':
+      return palette.statusInactive;
     case 'refreshing':
       return palette.statusRefreshing;
     case 'degraded':

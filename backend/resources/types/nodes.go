@@ -22,6 +22,8 @@ type DrainNodeOptions struct {
 type NodeDetails struct {
 	Name              string            `json:"name"`
 	Status            string            `json:"status"`
+	StatusState       string            `json:"statusState,omitempty"`
+	StatusReason      string            `json:"statusReason,omitempty"`
 	Unschedulable     bool              `json:"unschedulable"`
 	Roles             string            `json:"roles"`
 	Age               string            `json:"age"`

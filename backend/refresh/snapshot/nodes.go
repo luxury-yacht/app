@@ -15,6 +15,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -41,8 +42,8 @@ type NodeListBuilder struct {
 // NodeSnapshot is the payload for the nodes domain.
 type NodeSnapshot struct {
 	ClusterMeta
-	Nodes            []NodeSummary             `json:"nodes"`
-	Metrics          NodeMetricsInfo           `json:"metrics"`
+	Nodes            []NodeSummary              `json:"nodes"`
+	Metrics          NodeMetricsInfo            `json:"metrics"`
 	MetricsByCluster map[string]NodeMetricsInfo `json:"metricsByCluster,omitempty"`
 }
 
@@ -61,6 +62,8 @@ type NodeSummary struct {
 	ClusterMeta
 	Name              string            `json:"name"`
 	Status            string            `json:"status"`
+	StatusState       string            `json:"statusState,omitempty"`
+	StatusReason      string            `json:"statusReason,omitempty"`
 	Roles             string            `json:"roles"`
 	Age               string            `json:"age"`
 	Version           string            `json:"version"`
@@ -226,17 +229,21 @@ func buildNodeSnapshot(ctx context.Context, nodes []*corev1.Node, pods []*corev1
 		if node == nil {
 			continue
 		}
+		model := resourcemodel.BuildNodeResourceModel(meta.ClusterID, node)
+		nodeFacts := model.Facts.Node
 		summary := NodeSummary{
 			ClusterMeta:   meta,
 			Name:          node.Name,
-			Status:        deriveNodeStatus(node),
+			Status:        model.Status.Label,
+			StatusState:   model.Status.State,
+			StatusReason:  model.Status.Reason,
 			Roles:         formatRoles(extractRoles(node.Labels)),
 			Age:           formatAge(node.CreationTimestamp.Time),
 			Version:       node.Status.NodeInfo.KubeletVersion,
 			Labels:        copyStringMap(node.Labels),
 			Annotations:   copyStringMap(node.Annotations),
 			Kind:          "node",
-			Unschedulable: node.Spec.Unschedulable,
+			Unschedulable: nodeFacts != nil && nodeFacts.Unschedulable,
 		}
 
 		if ip := findNodeAddress(node, corev1.NodeInternalIP); ip != "" {
@@ -341,18 +348,6 @@ func buildNodeSnapshot(ctx context.Context, nodes []*corev1.Node, pods []*corev1
 		},
 	}
 	return snap
-}
-
-func deriveNodeStatus(node *corev1.Node) string {
-	for _, cond := range node.Status.Conditions {
-		if cond.Type == corev1.NodeReady {
-			if cond.Status == corev1.ConditionTrue {
-				return "Ready"
-			}
-			return string(cond.Status)
-		}
-	}
-	return "Unknown"
 }
 
 func extractRoles(labels map[string]string) []string {

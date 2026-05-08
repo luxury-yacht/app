@@ -3457,6 +3457,8 @@ export namespace types {
 	export class NodeDetails {
 	    name: string;
 	    status: string;
+	    statusState?: string;
+	    statusReason?: string;
 	    unschedulable: boolean;
 	    roles: string;
 	    age: string;
@@ -3502,6 +3504,8 @@ export namespace types {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
 	        this.status = source["status"];
+	        this.statusState = source["statusState"];
+	        this.statusReason = source["statusReason"];
 	        this.unschedulable = source["unschedulable"];
 	        this.roles = source["roles"];
 	        this.age = source["age"];
@@ -4989,4 +4993,3 @@ export namespace v1 {
 	}
 
 }
-
