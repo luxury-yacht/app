@@ -63,6 +63,8 @@ describe('useWorkloadTableColumns', () => {
     name: 'api',
     namespace: 'team-a',
     status: 'Running',
+    statusState: '1/1',
+    statusPresentation: 'ready',
     ready: '1/1',
     restarts: 0,
     cpuUsage: '10m',
@@ -89,6 +91,23 @@ describe('useWorkloadTableColumns', () => {
     const nameElement = nameColumn?.render(workload) as React.ReactElement<any>;
     nameElement.props.onClick?.({ stopPropagation() {} });
     expect(handleWorkloadClick).toHaveBeenCalledTimes(1);
+    hook.cleanup();
+  });
+
+  it('uses backend statusPresentation for the status class', () => {
+    const hook = renderHook(() =>
+      useWorkloadTableColumns({
+        handleWorkloadClick: vi.fn(),
+        showNamespaceColumn: false,
+        useShortResourceNames: false,
+        metrics: null,
+      })
+    );
+    const columns = hook.get();
+    const statusColumn = columns.find((column) => column.key === 'status');
+    const cell = statusColumn?.render({ ...workload, statusPresentation: 'warning' });
+    expect(React.isValidElement(cell)).toBe(true);
+    expect((cell as React.ReactElement<any>).props.className).toBe('status-badge warning');
     hook.cleanup();
   });
 });

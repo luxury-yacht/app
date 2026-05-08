@@ -2301,6 +2301,32 @@ calls them, but they must delegate to the shared Pod facts/status builder. No
 migrated path should keep its own Pod readiness, restart, waiting-reason, or
 terminated-reason derivation.
 
+## Implementation Learnings From The Workload Slice
+
+The Workload migration showed that controller resources do not all expose one
+Kubernetes `phase` equivalent. For Deployment, StatefulSet, DaemonSet, and
+ReplicaSet, the primary source-derived `State` is the controller's observed
+ready/desired count, such as `2/3`, with controller conditions preserved as
+signals. For Job, `State` comes from the selected Job condition status when a
+condition determines the primary label, or from source counts such as active or
+succeeded work when no condition applies. For CronJob, `State` preserves source
+fields such as `spec.suspend` or the active job count.
+
+Because workload `State` is intentionally source-derived and not a color token,
+all migrated workload surfaces must render from backend `Presentation`. A
+Deployment can show `State: "2/3"` with `Presentation: "warning"`, while a
+failed progress condition can use the same source count with
+`Presentation: "error"` and the Kubernetes condition reason preserved in
+`Reason`. The frontend must not infer workload severity from labels such as
+`Running`, `Updating`, or `Terminating`, nor from raw count strings.
+
+Workload DTOs should carry explicit `statusState`, `statusPresentation`, and
+`statusReason` fields beside the display `status` string. Namespace workload
+tables, object-panel details, object-panel job lists, resource streams, and
+object-map payloads now select those fields from the shared workload model
+instead of duplicating rollout, readiness, pause, suspend, and completion
+interpretation.
+
 ## Migration Strategy
 
 Migrate by resource family, deleting duplicated semantic logic as each family is
@@ -2389,13 +2415,13 @@ that actually consumes them.
 
 ### Phase 5: Workloads
 
-- [ ] Add shared resource models for Deployment, StatefulSet, DaemonSet,
+- [x] ✅ Add shared resource models for Deployment, StatefulSet, DaemonSet,
       ReplicaSet, Job, and CronJob.
-- [ ] Centralize ready/degraded/paused/progress interpretation.
-- [ ] Use workload shared resource models from namespace workload tables.
-- [ ] Use workload shared resource models from object-panel detail builders.
-- [ ] Use workload shared resource models from object-map builders.
-- [ ] Add parity tests for primary workload status.
+- [x] ✅ Centralize ready/degraded/paused/progress interpretation.
+- [x] ✅ Use workload shared resource models from namespace workload tables.
+- [x] ✅ Use workload shared resource models from object-panel detail builders.
+- [x] ✅ Use workload shared resource models from object-map builders.
+- [x] ✅ Add parity tests for primary workload status.
 
 ### Phase 6: Storage
 

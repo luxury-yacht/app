@@ -101,6 +101,9 @@ func TestBuildWorkloadSummaryDeployment(t *testing.T) {
 	require.Equal(t, "web", summary.Name)
 	require.Equal(t, "default", summary.Namespace)
 	require.Equal(t, "c1", summary.ClusterID)
+	require.Equal(t, "Updating", summary.Status)
+	require.Equal(t, "2/3", summary.StatusState)
+	require.Equal(t, "warning", summary.StatusPresentation)
 	require.True(t, summary.PortForwardAvailable)
 }
 

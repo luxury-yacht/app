@@ -670,15 +670,15 @@ func BuildWorkloadSummary(meta ClusterMeta, obj interface{}, pods []*corev1.Pod,
 
 	switch typed := obj.(type) {
 	case *appsv1.Deployment:
-		summary = builder.buildDeploymentSummary(typed, podsByOwner, usage)
+		summary = builder.buildDeploymentSummary(meta.ClusterID, typed, podsByOwner, usage)
 	case *appsv1.StatefulSet:
-		summary = builder.buildStatefulSetSummary(typed, podsByOwner, usage)
+		summary = builder.buildStatefulSetSummary(meta.ClusterID, typed, podsByOwner, usage)
 	case *appsv1.DaemonSet:
-		summary = builder.buildDaemonSetSummary(typed, podsByOwner, usage)
+		summary = builder.buildDaemonSetSummary(meta.ClusterID, typed, podsByOwner, usage)
 	case *batchv1.Job:
-		summary = builder.buildJobSummary(typed, podsByOwner, usage)
+		summary = builder.buildJobSummary(meta.ClusterID, typed, podsByOwner, usage)
 	case *batchv1.CronJob:
-		summary = builder.buildCronJobSummary(typed, podsByOwner, usage)
+		summary = builder.buildCronJobSummary(meta.ClusterID, typed, podsByOwner, usage)
 	default:
 		return WorkloadSummary{}, fmt.Errorf("unsupported workload type %T", obj)
 	}
@@ -689,7 +689,7 @@ func BuildWorkloadSummary(meta ClusterMeta, obj interface{}, pods []*corev1.Pod,
 
 // BuildStandalonePodWorkloadSummary builds a workload row payload for a standalone pod entry.
 func BuildStandalonePodWorkloadSummary(meta ClusterMeta, pod *corev1.Pod, usage map[string]metrics.PodUsage) WorkloadSummary {
-	summary := buildStandalonePodSummary(pod, usage)
+	summary := buildStandalonePodSummary(meta.ClusterID, pod, usage)
 	summary.ClusterMeta = meta
 	return summary
 }

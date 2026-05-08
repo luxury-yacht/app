@@ -8,6 +8,7 @@ import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
+import { ResourceStatus } from '@shared/components/kubernetes/ResourceStatus';
 import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
 import {
@@ -250,6 +251,10 @@ interface WorkloadOverviewProps {
   namespace?: string;
 
   // Common workload fields
+  status?: string;
+  statusState?: string;
+  statusPresentation?: string;
+  statusReason?: string;
   ready?: string;
 
   // Deployment/StatefulSet fields
@@ -326,6 +331,9 @@ export const WorkloadOverview: React.FC<WorkloadOverviewProps> = ({
   name,
   age,
   namespace,
+  status,
+  statusState,
+  statusPresentation,
   ready,
   replicas,
   desiredReplicas,
@@ -375,6 +383,11 @@ export const WorkloadOverview: React.FC<WorkloadOverviewProps> = ({
     <>
       {/* Use composed component for header */}
       <ResourceHeader kind={kind} name={name} namespace={namespace} age={age} />
+      <ResourceStatus
+        status={status}
+        statusState={statusState}
+        statusPresentation={statusPresentation}
+      />
 
       {/* Pod-state bar — single visualization replacing the previous
           Replicas / Ready / Up-to-date / Available rows. The four numeric
@@ -447,7 +460,7 @@ export const WorkloadOverview: React.FC<WorkloadOverviewProps> = ({
           })()}
 
           {/* Important status indicators first */}
-          {paused && (
+          {paused && !status && (
             <OverviewItem
               label="Status"
               value={<StatusChip variant="warning">Paused</StatusChip>}

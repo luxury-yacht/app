@@ -573,6 +573,9 @@ export interface NamespaceWorkloadSummary extends ClusterMeta {
   namespace: string;
   ready: string;
   status: string;
+  statusState?: string;
+  statusPresentation?: string;
+  statusReason?: string;
   restarts: number;
   age: string;
   portForwardAvailable?: boolean;

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/pods"
 	restypes "github.com/luxury-yacht/app/backend/resources/types"
@@ -48,15 +49,20 @@ func (s *JobService) Job(namespace, name string) (*restypes.JobDetails, error) {
 
 	podsForJob := filterPodsForJob(job, podList)
 	metrics := pods.NewService(s.deps).GetPodMetricsForPods(namespace, podsForJob)
-	return buildJobDetails(job, podsForJob, metrics), nil
+	return buildJobDetails(s.deps.ClusterID, job, podsForJob, metrics), nil
 }
 
-func buildJobDetails(job *batchv1.Job, podsList []corev1.Pod, podMetrics map[string]*metricsv1beta1.PodMetrics) *restypes.JobDetails {
+func buildJobDetails(clusterID string, job *batchv1.Job, podsList []corev1.Pod, podMetrics map[string]*metricsv1beta1.PodMetrics) *restypes.JobDetails {
 	podSummary, _ := summarizePodMetrics(podsList, podMetrics)
+	model := resourcemodel.BuildJobResourceModel(clusterID, job)
 	details := &restypes.JobDetails{
 		Kind:                    "Job",
 		Name:                    job.Name,
 		Namespace:               job.Namespace,
+		Status:                  model.Status.Label,
+		StatusState:             model.Status.State,
+		StatusPresentation:      model.Status.Presentation,
+		StatusReason:            model.Status.Reason,
 		Age:                     common.FormatAge(job.CreationTimestamp.Time),
 		Succeeded:               job.Status.Succeeded,
 		Failed:                  job.Status.Failed,
@@ -67,7 +73,7 @@ func buildJobDetails(job *batchv1.Job, podsList []corev1.Pod, podMetrics map[str
 		Annotations:             job.Annotations,
 		Selector:                mapStringString(job.Spec.Selector),
 		Containers:              describeContainers(job.Spec.Template.Spec.Containers),
-		Pods:                    buildSimplePodInfo(podsList),
+		Pods:                    buildSimplePodInfo(clusterID, podsList),
 		BackoffLimit:            defaultInt32(job.Spec.BackoffLimit, 6),
 		ActiveDeadlineSeconds:   job.Spec.ActiveDeadlineSeconds,
 		TTLSecondsAfterFinished: job.Spec.TTLSecondsAfterFinished,
@@ -105,19 +111,6 @@ func buildJobDetails(job *batchv1.Job, podsList []corev1.Pod, podMetrics map[str
 		}
 	}
 
-	switch {
-	case details.Failed > 0 && details.BackoffLimit > 0 && details.Failed >= details.BackoffLimit:
-		details.Status = "Failed"
-	case details.Succeeded >= details.Completions:
-		details.Status = "Completed"
-	case details.Active > 0:
-		details.Status = "Running"
-	case details.Suspend:
-		details.Status = "Suspended"
-	default:
-		details.Status = "Pending"
-	}
-
 	for _, condition := range job.Status.Conditions {
 		cond := fmt.Sprintf("%s: %s", condition.Type, condition.Status)
 		if condition.Reason != "" {
@@ -130,23 +123,25 @@ func buildJobDetails(job *batchv1.Job, podsList []corev1.Pod, podMetrics map[str
 	return details
 }
 
-func buildSimplePodInfo(podSlice []corev1.Pod) []restypes.PodSimpleInfo {
+func buildSimplePodInfo(clusterID string, podSlice []corev1.Pod) []restypes.PodSimpleInfo {
 	if len(podSlice) == 0 {
 		return nil
 	}
 
 	simple := make([]restypes.PodSimpleInfo, 0, len(podSlice))
 	for _, pod := range podSlice {
-		simple = append(simple, restypes.PodSimpleInfo{
-			Name:      pod.Name,
-			Namespace: pod.Namespace,
-			Status:    string(pod.Status.Phase),
-			Ready:     pods.PodReadyStatus(pod),
-			Restarts:  pods.PodRestartCount(pod),
-			Age:       common.FormatAge(pod.CreationTimestamp.Time),
-		})
+		simple = append(simple, pods.SummarizePod(clusterID, pod, nil, "Job", podOwnerName(pod), "batch/v1"))
 	}
 	return simple
+}
+
+func podOwnerName(pod corev1.Pod) string {
+	for _, owner := range pod.OwnerReferences {
+		if owner.Kind == "Job" {
+			return owner.Name
+		}
+	}
+	return ""
 }
 
 func mapStringString(selector *metav1.LabelSelector) map[string]string {

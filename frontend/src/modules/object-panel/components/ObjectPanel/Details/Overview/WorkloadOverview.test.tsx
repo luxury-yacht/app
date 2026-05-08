@@ -33,7 +33,13 @@ vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
 
 vi.mock('@shared/components/kubernetes/ResourceStatus', () => ({
   ResourceStatus: (props: any) => (
-    <div data-testid="resource-status">{props.ready ?? props.status}</div>
+    <div
+      data-testid="resource-status"
+      data-state={props.statusState}
+      data-presentation={props.statusPresentation}
+    >
+      {props.ready ?? props.status}
+    </div>
   ),
 }));
 
@@ -126,6 +132,27 @@ describe('WorkloadOverview', () => {
     // ReplicaSet block — current RS link + non-default history-limit chip.
     expect(container.textContent).toContain('frontend-abc123');
     expect(container.textContent).toContain('Limit 5');
+  });
+
+  it('renders backend workload status presentation', async () => {
+    await renderComponent({
+      kind: 'Deployment',
+      name: 'frontend',
+      namespace: 'default',
+      age: '5m',
+      status: 'Updating',
+      statusState: '1/3',
+      statusPresentation: 'warning',
+      ready: '1/3',
+      replicas: '3/3',
+      desiredReplicas: 3,
+      available: 1,
+    });
+
+    const status = container.querySelector('[data-testid="resource-status"]');
+    expect(status?.textContent).toBe('Updating');
+    expect(status?.getAttribute('data-state')).toBe('1/3');
+    expect(status?.getAttribute('data-presentation')).toBe('warning');
   });
 
   it('omits rollout details when the deployment is effectively complete', async () => {

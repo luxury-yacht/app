@@ -91,7 +91,7 @@ const useWorkloadTableColumns = ({
       (row) => row.status,
       {
         getClassName: (row) => {
-          const statusClass = row.statusClass || '';
+          const statusClass = row.statusPresentation || row.statusClass || 'unknown';
           return ['status-badge', statusClass].filter(Boolean).join(' ').trim();
         },
       }

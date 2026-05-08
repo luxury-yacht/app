@@ -47,7 +47,7 @@ func TestObjectMapBuildsRecursiveCoreRelationships(t *testing.T) {
 	if got := nodeByKindName(t, payload, "Deployment", "web").CreationTimestamp; got != "2024-01-02T03:04:05Z" {
 		t.Fatalf("unexpected creation timestamp for deployment node: %q", got)
 	}
-	if status := nodeByKindName(t, payload, "Deployment", "web").Status; status == nil || status.State != "healthy" || status.Label != "2/2 ready" {
+	if status := nodeByKindName(t, payload, "Deployment", "web").Status; status == nil || status.State != "2/2" || status.Label != "Running" || status.Presentation != "ready" {
 		t.Fatalf("unexpected deployment status: %#v", status)
 	}
 

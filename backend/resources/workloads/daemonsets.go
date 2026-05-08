@@ -11,6 +11,7 @@ import (
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/pods"
 	restypes "github.com/luxury-yacht/app/backend/resources/types"
@@ -55,30 +56,35 @@ func (s *DaemonSetService) buildDaemonSetDetails(
 	podMetrics map[string]*metricsv1beta1.PodMetrics,
 ) *restypes.DaemonSetDetails {
 	avgCPURequest, avgCPULimit, avgMemRequest, avgMemLimit, avgCPUUsage, avgMemUsage := aggregatePodAverages(podsList, podMetrics)
-	podInfos := buildPodSummaries("DaemonSet", daemonSet.Name, "apps/v1", podsList, podMetrics)
+	model := resourcemodel.BuildDaemonSetResourceModel(s.deps.ClusterID, daemonSet)
+	podInfos := buildPodSummaries(s.deps.ClusterID, "DaemonSet", daemonSet.Name, "apps/v1", podsList, podMetrics)
 	podSummary, _ := summarizePodMetrics(podsList, podMetrics)
 
 	details := &restypes.DaemonSetDetails{
-		Kind:            "DaemonSet",
-		Name:            daemonSet.Name,
-		Namespace:       daemonSet.Namespace,
-		Details:         "",
-		Desired:         daemonSet.Status.DesiredNumberScheduled,
-		Current:         daemonSet.Status.CurrentNumberScheduled,
-		Ready:           daemonSet.Status.NumberReady,
-		UpToDate:        daemonSet.Status.UpdatedNumberScheduled,
-		Available:       daemonSet.Status.NumberAvailable,
-		Age:             common.FormatAge(daemonSet.CreationTimestamp.Time),
-		CPURequest:      common.FormatCPU(avgCPURequest),
-		CPULimit:        common.FormatCPU(avgCPULimit),
-		CPUUsage:        common.FormatCPU(avgCPUUsage),
-		MemRequest:      common.FormatMemory(avgMemRequest),
-		MemLimit:        common.FormatMemory(avgMemLimit),
-		MemUsage:        common.FormatMemory(avgMemUsage),
-		UpdateStrategy:  string(daemonSet.Spec.UpdateStrategy.Type),
-		MaxUnavailable:  describeOptionalValue(daemonSet.Spec.UpdateStrategy.RollingUpdate, true),
-		MaxSurge:        describeOptionalValue(daemonSet.Spec.UpdateStrategy.RollingUpdate, false),
-		MinReadySeconds: daemonSet.Spec.MinReadySeconds,
+		Kind:               "DaemonSet",
+		Name:               daemonSet.Name,
+		Namespace:          daemonSet.Namespace,
+		Status:             model.Status.Label,
+		StatusState:        model.Status.State,
+		StatusPresentation: model.Status.Presentation,
+		StatusReason:       model.Status.Reason,
+		Details:            "",
+		Desired:            daemonSet.Status.DesiredNumberScheduled,
+		Current:            daemonSet.Status.CurrentNumberScheduled,
+		Ready:              daemonSet.Status.NumberReady,
+		UpToDate:           daemonSet.Status.UpdatedNumberScheduled,
+		Available:          daemonSet.Status.NumberAvailable,
+		Age:                common.FormatAge(daemonSet.CreationTimestamp.Time),
+		CPURequest:         common.FormatCPU(avgCPURequest),
+		CPULimit:           common.FormatCPU(avgCPULimit),
+		CPUUsage:           common.FormatCPU(avgCPUUsage),
+		MemRequest:         common.FormatMemory(avgMemRequest),
+		MemLimit:           common.FormatMemory(avgMemLimit),
+		MemUsage:           common.FormatMemory(avgMemUsage),
+		UpdateStrategy:     string(daemonSet.Spec.UpdateStrategy.Type),
+		MaxUnavailable:     describeOptionalValue(daemonSet.Spec.UpdateStrategy.RollingUpdate, true),
+		MaxSurge:           describeOptionalValue(daemonSet.Spec.UpdateStrategy.RollingUpdate, false),
+		MinReadySeconds:    daemonSet.Spec.MinReadySeconds,
 		RevisionHistoryLimit: func() int32 {
 			if daemonSet.Spec.RevisionHistoryLimit != nil {
 				return *daemonSet.Spec.RevisionHistoryLimit

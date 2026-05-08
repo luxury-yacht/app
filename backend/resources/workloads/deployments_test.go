@@ -13,6 +13,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/resources/workloads"
 	"github.com/luxury-yacht/app/backend/testsupport"
+	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -90,6 +91,9 @@ func TestDeploymentServiceDeployment(t *testing.T) {
 	if details.Name != "web" {
 		t.Fatalf("expected deployment name 'web', got %s", details.Name)
 	}
+	require.Equal(t, "Running", details.Status)
+	require.Equal(t, "2/2", details.StatusState)
+	require.Equal(t, "ready", details.StatusPresentation)
 	if len(details.Pods) != 2 {
 		t.Fatalf("expected 2 pods, got %d", len(details.Pods))
 	}

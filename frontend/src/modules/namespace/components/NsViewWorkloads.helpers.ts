@@ -11,6 +11,9 @@ export interface WorkloadData {
   name: string;
   namespace: string;
   status: string;
+  statusState?: string;
+  statusPresentation?: string;
+  statusReason?: string;
   statusClass?: string;
   ready?: string;
   restarts?: number;

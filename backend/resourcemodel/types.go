@@ -68,6 +68,7 @@ type ResourceStatusPresentation struct {
 	State        string                 `json:"state"`
 	Presentation string                 `json:"presentation,omitempty"`
 	Reason       string                 `json:"reason,omitempty"`
+	Message      string                 `json:"message,omitempty"`
 	Signals      []ResourceStatusSignal `json:"signals,omitempty"`
 	Badges       []ResourceStatusBadge  `json:"badges,omitempty"`
 	Lifecycle    ResourceLifecycle      `json:"lifecycle"`
@@ -96,8 +97,14 @@ type NodeFacts struct {
 }
 
 type ResourceFacts struct {
-	Node *NodeFacts `json:"node,omitempty"`
-	Pod  *PodFacts  `json:"pod,omitempty"`
+	Node        *NodeFacts     `json:"node,omitempty"`
+	Pod         *PodFacts      `json:"pod,omitempty"`
+	Deployment  *WorkloadFacts `json:"deployment,omitempty"`
+	StatefulSet *WorkloadFacts `json:"statefulSet,omitempty"`
+	DaemonSet   *WorkloadFacts `json:"daemonSet,omitempty"`
+	ReplicaSet  *WorkloadFacts `json:"replicaSet,omitempty"`
+	Job         *WorkloadFacts `json:"job,omitempty"`
+	CronJob     *WorkloadFacts `json:"cronJob,omitempty"`
 }
 
 type PodFacts struct {
@@ -108,6 +115,21 @@ type PodFacts struct {
 	TotalContainers int32            `json:"totalContainers"`
 	RestartCount    int32            `json:"restartCount"`
 	Conditions      []ConditionFacts `json:"conditions,omitempty"`
+}
+
+type WorkloadFacts struct {
+	DesiredReplicas   int32            `json:"desiredReplicas"`
+	CurrentReplicas   int32            `json:"currentReplicas"`
+	ReadyReplicas     int32            `json:"readyReplicas"`
+	UpdatedReplicas   int32            `json:"updatedReplicas,omitempty"`
+	AvailableReplicas int32            `json:"availableReplicas,omitempty"`
+	Active            int32            `json:"active,omitempty"`
+	Succeeded         int32            `json:"succeeded,omitempty"`
+	Failed            int32            `json:"failed,omitempty"`
+	Paused            bool             `json:"paused,omitempty"`
+	Suspended         bool             `json:"suspended,omitempty"`
+	ActiveJobs        int32            `json:"activeJobs,omitempty"`
+	Conditions        []ConditionFacts `json:"conditions,omitempty"`
 }
 
 type ResourceModel struct {

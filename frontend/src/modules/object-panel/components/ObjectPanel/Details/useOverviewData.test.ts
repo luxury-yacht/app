@@ -136,6 +136,9 @@ describe('useOverviewData', () => {
       name: 'api',
       age: '5d',
       namespace: 'prod',
+      status: 'Running',
+      statusState: '3/3',
+      statusPresentation: 'ready',
       replicas: 3,
       desiredReplicas: 3,
       ready: 3,
@@ -148,6 +151,8 @@ describe('useOverviewData', () => {
 
     const result = renderHook(params);
     expect(result!.kind).toBe('Deployment');
+    expect(result!.statusState).toBe('3/3');
+    expect(result!.statusPresentation).toBe('ready');
     expect(result!.ready).toBe('3');
     expect(result!.strategy).toBe('RollingUpdate');
   });

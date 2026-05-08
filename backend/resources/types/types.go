@@ -1041,15 +1041,19 @@ type ReplicaSetSummary struct {
 // ReplicaSetDetails represents detailed ReplicaSet information for the object panel.
 type ReplicaSetDetails struct {
 	// Basic information
-	Kind            string `json:"kind"`
-	Name            string `json:"name"`
-	Namespace       string `json:"namespace"`
-	Details         string `json:"details"`
-	Replicas        string `json:"replicas"`
-	Ready           string `json:"ready"`
-	Available       int32  `json:"available"`
-	DesiredReplicas int32  `json:"desiredReplicas"`
-	Age             string `json:"age"`
+	Kind               string `json:"kind"`
+	Name               string `json:"name"`
+	Namespace          string `json:"namespace"`
+	Status             string `json:"status,omitempty"`
+	StatusState        string `json:"statusState,omitempty"`
+	StatusPresentation string `json:"statusPresentation,omitempty"`
+	StatusReason       string `json:"statusReason,omitempty"`
+	Details            string `json:"details"`
+	Replicas           string `json:"replicas"`
+	Ready              string `json:"ready"`
+	Available          int32  `json:"available"`
+	DesiredReplicas    int32  `json:"desiredReplicas"`
+	Age                string `json:"age"`
 
 	// Average resource utilization (per pod)
 	CPURequest string `json:"cpuRequest,omitempty"`
@@ -1083,17 +1087,21 @@ type ReplicaSetDetails struct {
 
 type DeploymentDetails struct {
 	// Basic information
-	Kind            string `json:"kind"`
-	Name            string `json:"name"`
-	Namespace       string `json:"namespace"`
-	Details         string `json:"details"`
-	Replicas        string `json:"replicas"`
-	Ready           string `json:"ready"`
-	Updated         string `json:"updated,omitempty"`
-	UpToDate        int32  `json:"upToDate,omitempty"`
-	Available       int32  `json:"available"`
-	DesiredReplicas int32  `json:"desiredReplicas"`
-	Age             string `json:"age"`
+	Kind               string `json:"kind"`
+	Name               string `json:"name"`
+	Namespace          string `json:"namespace"`
+	Status             string `json:"status,omitempty"`
+	StatusState        string `json:"statusState,omitempty"`
+	StatusPresentation string `json:"statusPresentation,omitempty"`
+	StatusReason       string `json:"statusReason,omitempty"`
+	Details            string `json:"details"`
+	Replicas           string `json:"replicas"`
+	Ready              string `json:"ready"`
+	Updated            string `json:"updated,omitempty"`
+	UpToDate           int32  `json:"upToDate,omitempty"`
+	Available          int32  `json:"available"`
+	DesiredReplicas    int32  `json:"desiredReplicas"`
+	Age                string `json:"age"`
 
 	// Average resource utilization (per pod)
 	CPURequest string `json:"cpuRequest,omitempty"`
@@ -1149,16 +1157,20 @@ type DeploymentDetails struct {
 
 type StatefulSetDetails struct {
 	// Basic information
-	Kind            string `json:"kind"`
-	Name            string `json:"name"`
-	Namespace       string `json:"namespace"`
-	Details         string `json:"details"`
-	Replicas        string `json:"replicas"`
-	Ready           string `json:"ready"`
-	UpToDate        int32  `json:"upToDate,omitempty"`
-	Available       int32  `json:"available"`
-	DesiredReplicas int32  `json:"desiredReplicas"`
-	Age             string `json:"age"`
+	Kind               string `json:"kind"`
+	Name               string `json:"name"`
+	Namespace          string `json:"namespace"`
+	Status             string `json:"status,omitempty"`
+	StatusState        string `json:"statusState,omitempty"`
+	StatusPresentation string `json:"statusPresentation,omitempty"`
+	StatusReason       string `json:"statusReason,omitempty"`
+	Details            string `json:"details"`
+	Replicas           string `json:"replicas"`
+	Ready              string `json:"ready"`
+	UpToDate           int32  `json:"upToDate,omitempty"`
+	Available          int32  `json:"available"`
+	DesiredReplicas    int32  `json:"desiredReplicas"`
+	Age                string `json:"age"`
 
 	// Average resource utilization (per pod)
 	CPURequest string `json:"cpuRequest,omitempty"`
@@ -1218,17 +1230,21 @@ type StatefulSetDetails struct {
 
 type DaemonSetDetails struct {
 	// Basic information
-	Kind      string `json:"kind"`
-	Name      string `json:"name"`
-	Namespace string `json:"namespace"`
-	Details   string `json:"details"`
-	Desired   int32  `json:"desired"`
-	Current   int32  `json:"current"`
-	Ready     int32  `json:"ready"`
-	UpToDate  int32  `json:"upToDate,omitempty"`
-	Available int32  `json:"available"`
-	Updated   int32  `json:"updated,omitempty"`
-	Age       string `json:"age"`
+	Kind               string `json:"kind"`
+	Name               string `json:"name"`
+	Namespace          string `json:"namespace"`
+	Status             string `json:"status,omitempty"`
+	StatusState        string `json:"statusState,omitempty"`
+	StatusPresentation string `json:"statusPresentation,omitempty"`
+	StatusReason       string `json:"statusReason,omitempty"`
+	Details            string `json:"details"`
+	Desired            int32  `json:"desired"`
+	Current            int32  `json:"current"`
+	Ready              int32  `json:"ready"`
+	UpToDate           int32  `json:"upToDate,omitempty"`
+	Available          int32  `json:"available"`
+	Updated            int32  `json:"updated,omitempty"`
+	Age                string `json:"age"`
 
 	// Average resource utilization (per pod)
 	CPURequest string `json:"cpuRequest,omitempty"`
@@ -1276,11 +1292,14 @@ type DaemonSetDetails struct {
 
 type JobDetails struct {
 	// Basic information
-	Kind      string `json:"kind"`
-	Name      string `json:"name"`
-	Namespace string `json:"namespace"`
-	Details   string `json:"details"`
-	Age       string `json:"age,omitempty"`
+	Kind               string `json:"kind"`
+	Name               string `json:"name"`
+	Namespace          string `json:"namespace"`
+	StatusState        string `json:"statusState,omitempty"`
+	StatusPresentation string `json:"statusPresentation,omitempty"`
+	StatusReason       string `json:"statusReason,omitempty"`
+	Details            string `json:"details"`
+	Age                string `json:"age,omitempty"`
 
 	// Job status
 	Status         string       `json:"status,omitempty"`
@@ -1318,11 +1337,15 @@ type JobDetails struct {
 
 type CronJobDetails struct {
 	// Basic information
-	Kind      string `json:"kind"`
-	Name      string `json:"name"`
-	Namespace string `json:"namespace"`
-	Details   string `json:"details"`
-	Age       string `json:"age"`
+	Kind               string `json:"kind"`
+	Name               string `json:"name"`
+	Namespace          string `json:"namespace"`
+	Status             string `json:"status,omitempty"`
+	StatusState        string `json:"statusState,omitempty"`
+	StatusPresentation string `json:"statusPresentation,omitempty"`
+	StatusReason       string `json:"statusReason,omitempty"`
+	Details            string `json:"details"`
+	Age                string `json:"age"`
 
 	// Schedule information
 	Schedule              string       `json:"schedule"`
@@ -1368,19 +1391,22 @@ type JobReference struct {
 
 // JobSimpleInfo provides a summary of a Job for list/tab views.
 type JobSimpleInfo struct {
-	Kind            string       `json:"kind"`
-	Name            string       `json:"name"`
-	Namespace       string       `json:"namespace"`
-	Status          string       `json:"status"`
-	Completions     string       `json:"completions"` // e.g. "1/1"
-	Succeeded       int32        `json:"succeeded"`
-	Failed          int32        `json:"failed"`
-	Active          int32        `json:"active"`
-	StartTime       *metav1.Time `json:"startTime,omitempty"`
-	CompletionTime  *metav1.Time `json:"completionTime,omitempty"`
-	Duration        string       `json:"duration,omitempty"`
-	DurationSeconds int64        `json:"durationSeconds,omitempty"`
-	Age             string       `json:"age"`
+	Kind               string       `json:"kind"`
+	Name               string       `json:"name"`
+	Namespace          string       `json:"namespace"`
+	Status             string       `json:"status"`
+	StatusState        string       `json:"statusState,omitempty"`
+	StatusPresentation string       `json:"statusPresentation,omitempty"`
+	StatusReason       string       `json:"statusReason,omitempty"`
+	Completions        string       `json:"completions"` // e.g. "1/1"
+	Succeeded          int32        `json:"succeeded"`
+	Failed             int32        `json:"failed"`
+	Active             int32        `json:"active"`
+	StartTime          *metav1.Time `json:"startTime,omitempty"`
+	CompletionTime     *metav1.Time `json:"completionTime,omitempty"`
+	Duration           string       `json:"duration,omitempty"`
+	DurationSeconds    int64        `json:"durationSeconds,omitempty"`
+	Age                string       `json:"age"`
 }
 type JobTemplateDetails struct {
 	Completions             *int32                   `json:"completions,omitempty"`
