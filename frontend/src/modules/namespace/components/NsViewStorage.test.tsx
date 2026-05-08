@@ -201,6 +201,8 @@ describe('NsViewStorage', () => {
     namespace: 'team-a',
     clusterId: 'alpha:ctx',
     status: 'Bound',
+    statusState: 'Bound',
+    statusPresentation: 'ready',
     capacity: '10Gi',
     storageClass: 'fast-ssd',
     age: '4h',
@@ -359,8 +361,18 @@ describe('NsViewStorage', () => {
   });
 
   it('applies status and capacity classes based on resource state', async () => {
-    const pending = baseStorage({ status: 'Pending', capacity: '' });
-    const failed = baseStorage({ status: 'Failed', capacity: undefined });
+    const pending = baseStorage({
+      status: 'Pending',
+      statusState: 'Pending',
+      statusPresentation: 'warning',
+      capacity: '',
+    });
+    const failed = baseStorage({
+      status: 'Lost',
+      statusState: 'Lost',
+      statusPresentation: 'error',
+      capacity: undefined,
+    });
     await renderStorageView([pending, failed], { showNamespaceColumn: true });
 
     const statusColumn = getColumn('status');
@@ -371,7 +383,7 @@ describe('NsViewStorage', () => {
     const pendingStatus = statusColumn.render(pending);
     const failedStatus = statusColumn.render(failed);
     expect(renderOutputToText(pendingStatus)).toContain('Pending');
-    expect(pendingStatus.props.className).toContain('pending');
+    expect(pendingStatus.props.className).toContain('warning');
     expect(failedStatus.props.className).toContain('error');
 
     const capacityFilled = capacityColumn.render(baseStorage());

@@ -11,6 +11,7 @@ import (
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/types"
 	corev1 "k8s.io/api/core/v1"
@@ -57,21 +58,24 @@ func (s *Service) StorageClasses() ([]*types.StorageClassDetails, error) {
 // processStorageClassDetails processes a StorageClass object and returns its details.
 // It includes information about the storage class itself and lists persistent volumes using this storage class.
 func (s *Service) processStorageClassDetails(storageClass *storagev1.StorageClass, pvs *corev1.PersistentVolumeList) *types.StorageClassDetails {
+	model := resourcemodel.BuildStorageClassResourceModel(s.deps.ClusterID, storageClass)
 	details := &types.StorageClassDetails{
-		Kind:         "StorageClass",
-		Name:         storageClass.Name,
-		Age:          common.FormatAge(storageClass.CreationTimestamp.Time),
-		Provisioner:  storageClass.Provisioner,
-		Parameters:   storageClass.Parameters,
-		MountOptions: storageClass.MountOptions,
-		Labels:       storageClass.Labels,
-		Annotations:  storageClass.Annotations,
+		Kind:               "StorageClass",
+		Name:               storageClass.Name,
+		Age:                common.FormatAge(storageClass.CreationTimestamp.Time),
+		Status:             model.Status.Label,
+		StatusState:        model.Status.State,
+		StatusPresentation: model.Status.Presentation,
+		StatusReason:       model.Status.Reason,
+		Provisioner:        storageClass.Provisioner,
+		Parameters:         storageClass.Parameters,
+		MountOptions:       storageClass.MountOptions,
+		Labels:             storageClass.Labels,
+		Annotations:        storageClass.Annotations,
 	}
 
-	if storageClass.Annotations != nil {
-		if val, ok := storageClass.Annotations["storageclass.kubernetes.io/is-default-class"]; ok && val == "true" {
-			details.IsDefault = true
-		}
+	if facts := model.Facts.StorageClass; facts != nil {
+		details.IsDefault = facts.DefaultClass
 	}
 
 	if storageClass.ReclaimPolicy != nil {

@@ -2327,6 +2327,29 @@ object-map payloads now select those fields from the shared workload model
 instead of duplicating rollout, readiness, pause, suspend, and completion
 interpretation.
 
+## Implementation Learnings From The Storage Slice
+
+The Storage migration reinforced that each resource type needs an explicit
+authoritative source for primary `State`. For `PersistentVolume` and
+`PersistentVolumeClaim`, `State` is the raw Kubernetes `status.phase` value,
+such as `Bound`, `Pending`, `Released`, `Failed`, or `Lost`, with `Unknown`
+used only when the API object has no phase. The shared model may choose labels
+and presentations from those phases, but it must not replace the source phase
+with invented health strings.
+
+`StorageClass` has no Kubernetes phase, so its primary `State` must come from a
+real source field. The migrated model uses the default-class annotation value as
+the source-derived state: `true` for the default class and `false` otherwise.
+Its display label can be `Default` or `Available`, but the state remains tied
+to `storageclass.kubernetes.io/is-default-class`.
+
+Storage tables, details, and object-map payloads should all project
+`statusState`, `statusPresentation`, and `statusReason` from the shared storage
+model. Frontend storage surfaces must style from backend `Presentation`, such
+as `ready`, `warning`, `error`, `unknown`, or `terminating`; they must not map
+raw Kubernetes phase strings like `Bound`, `Pending`, `Lost`, or `Released` to
+colors locally.
+
 ## Migration Strategy
 
 Migrate by resource family, deleting duplicated semantic logic as each family is
@@ -2425,13 +2448,13 @@ that actually consumes them.
 
 ### Phase 6: Storage
 
-- [ ] Add shared resource models for PersistentVolumeClaim, PersistentVolume, and
-      StorageClass.
-- [ ] Centralize bound, pending, released, failed, lost, and default-class
+- [x] ✅ Add shared resource models for PersistentVolumeClaim, PersistentVolume,
+      and StorageClass.
+- [x] ✅ Centralize bound, pending, released, failed, lost, and default-class
       interpretation.
-- [ ] Use storage shared resource models from table, detail, and object-map
+- [x] ✅ Use storage shared resource models from table, detail, and object-map
       paths.
-- [ ] Add parity tests for primary storage status.
+- [x] ✅ Add parity tests for primary storage status.
 
 ### Phase 7: Config
 

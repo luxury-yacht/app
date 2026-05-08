@@ -31,14 +31,17 @@ type ClusterStorageSnapshot struct {
 // ClusterStorageEntry represents a persistent volume in the cluster view.
 type ClusterStorageEntry struct {
 	ClusterMeta
-	Kind         string `json:"kind"`
-	Name         string `json:"name"`
-	StorageClass string `json:"storageClass,omitempty"`
-	Capacity     string `json:"capacity"`
-	AccessModes  string `json:"accessModes"`
-	Status       string `json:"status"`
-	Claim        string `json:"claim"`
-	Age          string `json:"age"`
+	Kind               string `json:"kind"`
+	Name               string `json:"name"`
+	StorageClass       string `json:"storageClass,omitempty"`
+	Capacity           string `json:"capacity"`
+	AccessModes        string `json:"accessModes"`
+	Status             string `json:"status"`
+	StatusState        string `json:"statusState,omitempty"`
+	StatusPresentation string `json:"statusPresentation,omitempty"`
+	StatusReason       string `json:"statusReason,omitempty"`
+	Claim              string `json:"claim"`
+	Age                string `json:"age"`
 }
 
 // RegisterClusterStorageDomain registers the storage domain.

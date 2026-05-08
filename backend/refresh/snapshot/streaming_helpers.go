@@ -21,6 +21,7 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
 
 // BuildPodSummary builds a pod row payload that matches snapshot formatting.
@@ -359,16 +360,20 @@ func BuildClusterStorageSummary(meta ClusterMeta, pv *corev1.PersistentVolume) C
 	if pv == nil {
 		return ClusterStorageEntry{ClusterMeta: meta, Kind: "PersistentVolume"}
 	}
+	model := resourcemodel.BuildPersistentVolumeResourceModel(meta.ClusterID, pv)
 	return ClusterStorageEntry{
-		ClusterMeta:  meta,
-		Kind:         "PersistentVolume",
-		Name:         pv.Name,
-		StorageClass: pv.Spec.StorageClassName,
-		Capacity:     formatStorageCapacity(pv),
-		AccessModes:  formatAccessModes(pv.Spec.AccessModes),
-		Status:       string(pv.Status.Phase),
-		Claim:        formatClaimRef(pv.Spec.ClaimRef),
-		Age:          formatAge(pv.CreationTimestamp.Time),
+		ClusterMeta:        meta,
+		Kind:               "PersistentVolume",
+		Name:               pv.Name,
+		StorageClass:       pv.Spec.StorageClassName,
+		Capacity:           formatStorageCapacity(pv),
+		AccessModes:        formatAccessModes(pv.Spec.AccessModes),
+		Status:             model.Status.Label,
+		StatusState:        model.Status.State,
+		StatusPresentation: model.Status.Presentation,
+		StatusReason:       model.Status.Reason,
+		Claim:              formatClaimRef(pv.Spec.ClaimRef),
+		Age:                formatAge(pv.CreationTimestamp.Time),
 	}
 }
 
@@ -377,12 +382,20 @@ func BuildClusterStorageClassSummary(meta ClusterMeta, sc *storagev1.StorageClas
 	if sc == nil {
 		return ClusterConfigEntry{ClusterMeta: meta, Kind: "StorageClass"}
 	}
+	model := resourcemodel.BuildStorageClassResourceModel(meta.ClusterID, sc)
+	facts := model.Facts.StorageClass
+	isDefault := false
+	provisioner := sc.Provisioner
+	if facts != nil {
+		isDefault = facts.DefaultClass
+		provisioner = facts.Provisioner
+	}
 	return ClusterConfigEntry{
 		ClusterMeta: meta,
 		Kind:        "StorageClass",
 		Name:        sc.Name,
-		Details:     sc.Provisioner,
-		IsDefault:   isDefaultClass(sc.Annotations),
+		Details:     provisioner,
+		IsDefault:   isDefault,
 		Age:         formatAge(sc.CreationTimestamp.Time),
 	}
 }
@@ -582,15 +595,19 @@ func BuildPVCStorageSummary(meta ClusterMeta, pvc *corev1.PersistentVolumeClaim)
 	if pvc == nil {
 		return StorageSummary{ClusterMeta: meta, Kind: "PersistentVolumeClaim"}
 	}
+	model := resourcemodel.BuildPersistentVolumeClaimResourceModel(meta.ClusterID, pvc)
 	return StorageSummary{
-		ClusterMeta:  meta,
-		Kind:         "PersistentVolumeClaim",
-		Name:         pvc.Name,
-		Namespace:    pvc.Namespace,
-		Capacity:     pvcCapacity(pvc),
-		Status:       string(pvc.Status.Phase),
-		StorageClass: storageClassName(pvc),
-		Age:          formatAge(pvc.CreationTimestamp.Time),
+		ClusterMeta:        meta,
+		Kind:               "PersistentVolumeClaim",
+		Name:               pvc.Name,
+		Namespace:          pvc.Namespace,
+		Capacity:           pvcCapacity(pvc),
+		Status:             model.Status.Label,
+		StatusState:        model.Status.State,
+		StatusPresentation: model.Status.Presentation,
+		StatusReason:       model.Status.Reason,
+		StorageClass:       storageClassName(pvc),
+		Age:                formatAge(pvc.CreationTimestamp.Time),
 	}
 }
 

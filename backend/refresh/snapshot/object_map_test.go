@@ -560,6 +560,15 @@ func TestObjectMapBuildsFromStorageClass(t *testing.T) {
 	assertNode(t, payload, "StorageClass", "fast")
 	assertNode(t, payload, "PersistentVolumeClaim", "data")
 	assertNode(t, payload, "PersistentVolume", "pv-data")
+	if status := nodeByKindName(t, payload, "StorageClass", "fast").Status; status == nil || status.State != "true" || status.Label != "Default" || status.Presentation != "ready" {
+		t.Fatalf("unexpected storage class status: %#v", status)
+	}
+	if status := nodeByKindName(t, payload, "PersistentVolumeClaim", "data").Status; status == nil || status.State != "Bound" || status.Label != "Bound" || status.Presentation != "ready" {
+		t.Fatalf("unexpected pvc status: %#v", status)
+	}
+	if status := nodeByKindName(t, payload, "PersistentVolume", "pv-data").Status; status == nil || status.State != "Bound" || status.Label != "Bound" || status.Presentation != "ready" {
+		t.Fatalf("unexpected pv status: %#v", status)
+	}
 	assertNode(t, payload, "PersistentVolumeClaim", "logs")
 	assertNode(t, payload, "PersistentVolume", "pv-logs")
 	assertNode(t, payload, "PersistentVolumeClaim", "scratch")
@@ -834,17 +843,19 @@ func objectMapHubFixtureObjects() []runtime.Object {
 
 func objectMapStorageFixtureObjects() []runtime.Object {
 	return []runtime.Object{
-		&storagev1.StorageClass{ObjectMeta: metav1.ObjectMeta{Name: "fast", UID: types.UID("sc-fast-uid")}},
+		&storagev1.StorageClass{ObjectMeta: metav1.ObjectMeta{Name: "fast", UID: types.UID("sc-fast-uid"), Annotations: map[string]string{"storageclass.kubernetes.io/is-default-class": "true"}}},
 		&corev1.PersistentVolumeClaim{
 			ObjectMeta: metav1.ObjectMeta{Name: "data", Namespace: "default", UID: types.UID("pvc-data-uid")},
 			Spec: corev1.PersistentVolumeClaimSpec{
 				StorageClassName: stringPtr("fast"),
 				VolumeName:       "pv-data",
 			},
+			Status: corev1.PersistentVolumeClaimStatus{Phase: corev1.ClaimBound},
 		},
 		&corev1.PersistentVolume{
 			ObjectMeta: metav1.ObjectMeta{Name: "pv-data", UID: types.UID("pv-data-uid")},
 			Spec:       corev1.PersistentVolumeSpec{StorageClassName: "fast"},
+			Status:     corev1.PersistentVolumeStatus{Phase: corev1.VolumeBound},
 		},
 		&corev1.PersistentVolumeClaim{
 			ObjectMeta: metav1.ObjectMeta{Name: "logs", Namespace: "default", UID: types.UID("pvc-logs-uid")},
@@ -852,16 +863,19 @@ func objectMapStorageFixtureObjects() []runtime.Object {
 				StorageClassName: stringPtr("fast"),
 				VolumeName:       "pv-logs",
 			},
+			Status: corev1.PersistentVolumeClaimStatus{Phase: corev1.ClaimBound},
 		},
 		&corev1.PersistentVolume{
 			ObjectMeta: metav1.ObjectMeta{Name: "pv-logs", UID: types.UID("pv-logs-uid")},
 			Spec:       corev1.PersistentVolumeSpec{StorageClassName: "fast"},
+			Status:     corev1.PersistentVolumeStatus{Phase: corev1.VolumeBound},
 		},
 		&corev1.PersistentVolumeClaim{
 			ObjectMeta: metav1.ObjectMeta{Name: "scratch", Namespace: "default", UID: types.UID("pvc-scratch-uid")},
 			Spec: corev1.PersistentVolumeClaimSpec{
 				StorageClassName: stringPtr("fast"),
 			},
+			Status: corev1.PersistentVolumeClaimStatus{Phase: corev1.ClaimPending},
 		},
 	}
 }

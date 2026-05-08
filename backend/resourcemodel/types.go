@@ -97,14 +97,17 @@ type NodeFacts struct {
 }
 
 type ResourceFacts struct {
-	Node        *NodeFacts     `json:"node,omitempty"`
-	Pod         *PodFacts      `json:"pod,omitempty"`
-	Deployment  *WorkloadFacts `json:"deployment,omitempty"`
-	StatefulSet *WorkloadFacts `json:"statefulSet,omitempty"`
-	DaemonSet   *WorkloadFacts `json:"daemonSet,omitempty"`
-	ReplicaSet  *WorkloadFacts `json:"replicaSet,omitempty"`
-	Job         *WorkloadFacts `json:"job,omitempty"`
-	CronJob     *WorkloadFacts `json:"cronJob,omitempty"`
+	Node                  *NodeFacts                  `json:"node,omitempty"`
+	Pod                   *PodFacts                   `json:"pod,omitempty"`
+	Deployment            *WorkloadFacts              `json:"deployment,omitempty"`
+	StatefulSet           *WorkloadFacts              `json:"statefulSet,omitempty"`
+	DaemonSet             *WorkloadFacts              `json:"daemonSet,omitempty"`
+	ReplicaSet            *WorkloadFacts              `json:"replicaSet,omitempty"`
+	Job                   *WorkloadFacts              `json:"job,omitempty"`
+	CronJob               *WorkloadFacts              `json:"cronJob,omitempty"`
+	PersistentVolume      *PersistentVolumeFacts      `json:"persistentVolume,omitempty"`
+	PersistentVolumeClaim *PersistentVolumeClaimFacts `json:"persistentVolumeClaim,omitempty"`
+	StorageClass          *StorageClassFacts          `json:"storageClass,omitempty"`
 }
 
 type PodFacts struct {
@@ -130,6 +133,35 @@ type WorkloadFacts struct {
 	Suspended         bool             `json:"suspended,omitempty"`
 	ActiveJobs        int32            `json:"activeJobs,omitempty"`
 	Conditions        []ConditionFacts `json:"conditions,omitempty"`
+}
+
+type PersistentVolumeFacts struct {
+	Phase          string `json:"phase,omitempty"`
+	StorageClass   string `json:"storageClass,omitempty"`
+	Capacity       string `json:"capacity,omitempty"`
+	ReclaimPolicy  string `json:"reclaimPolicy,omitempty"`
+	ClaimNamespace string `json:"claimNamespace,omitempty"`
+	ClaimName      string `json:"claimName,omitempty"`
+	Reason         string `json:"reason,omitempty"`
+	Message        string `json:"message,omitempty"`
+}
+
+type PersistentVolumeClaimFacts struct {
+	Phase        string           `json:"phase,omitempty"`
+	StorageClass string           `json:"storageClass,omitempty"`
+	VolumeName   string           `json:"volumeName,omitempty"`
+	Capacity     string           `json:"capacity,omitempty"`
+	Conditions   []ConditionFacts `json:"conditions,omitempty"`
+}
+
+type StorageClassFacts struct {
+	Provisioner                 string `json:"provisioner,omitempty"`
+	ReclaimPolicy               string `json:"reclaimPolicy,omitempty"`
+	VolumeBindingMode           string `json:"volumeBindingMode,omitempty"`
+	AllowVolumeExpansion        bool   `json:"allowVolumeExpansion,omitempty"`
+	DefaultClass                bool   `json:"defaultClass"`
+	DefaultClassAnnotation      string `json:"defaultClassAnnotation,omitempty"`
+	DefaultClassAnnotationValue string `json:"defaultClassAnnotationValue,omitempty"`
 }
 
 type ResourceModel struct {

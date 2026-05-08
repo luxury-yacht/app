@@ -1,8 +1,10 @@
+.ns-storage-table .status-badge.ready,
 .ns-storage-table .status-badge.bound,
 .ns-storage-table .status-badge.attached {
   color: var(--color-success);
 }
 
+.ns-storage-table .status-badge.warning,
 .ns-storage-table .status-badge.pending {
   color: var(--color-warning);
 }
@@ -10,6 +12,11 @@
 .ns-storage-table .status-badge.error,
 .ns-storage-table .status-badge.detached {
   color: var(--color-error);
+}
+
+.ns-storage-table .status-badge.inactive,
+.ns-storage-table .status-badge.unknown {
+  color: var(--color-text-muted);
 }
 
 .ns-storage-table .volume-link:hover,

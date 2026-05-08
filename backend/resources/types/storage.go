@@ -9,23 +9,26 @@ package types
 
 // PersistentVolumeDetails represents comprehensive PV information.
 type PersistentVolumeDetails struct {
-	Kind          string            `json:"kind"`
-	Name          string            `json:"name"`
-	Age           string            `json:"age"`
-	Details       string            `json:"details"`
-	Status        string            `json:"status"`
-	StorageClass  string            `json:"storageClass"`
-	Capacity      string            `json:"capacity"`
-	AccessModes   []string          `json:"accessModes"`
-	VolumeMode    string            `json:"volumeMode"`
-	ReclaimPolicy string            `json:"reclaimPolicy"`
-	ClaimRef      *ClaimReference   `json:"claimRef,omitempty"`
-	MountOptions  []string          `json:"mountOptions,omitempty"`
-	VolumeSource  VolumeSourceInfo  `json:"volumeSource"`
-	NodeAffinity  []string          `json:"nodeAffinity,omitempty"`
-	Labels        map[string]string `json:"labels,omitempty"`
-	Annotations   map[string]string `json:"annotations,omitempty"`
-	Conditions    []string          `json:"conditions,omitempty"`
+	Kind               string            `json:"kind"`
+	Name               string            `json:"name"`
+	Age                string            `json:"age"`
+	Details            string            `json:"details"`
+	Status             string            `json:"status"`
+	StatusState        string            `json:"statusState,omitempty"`
+	StatusPresentation string            `json:"statusPresentation,omitempty"`
+	StatusReason       string            `json:"statusReason,omitempty"`
+	StorageClass       string            `json:"storageClass"`
+	Capacity           string            `json:"capacity"`
+	AccessModes        []string          `json:"accessModes"`
+	VolumeMode         string            `json:"volumeMode"`
+	ReclaimPolicy      string            `json:"reclaimPolicy"`
+	ClaimRef           *ClaimReference   `json:"claimRef,omitempty"`
+	MountOptions       []string          `json:"mountOptions,omitempty"`
+	VolumeSource       VolumeSourceInfo  `json:"volumeSource"`
+	NodeAffinity       []string          `json:"nodeAffinity,omitempty"`
+	Labels             map[string]string `json:"labels,omitempty"`
+	Annotations        map[string]string `json:"annotations,omitempty"`
+	Conditions         []string          `json:"conditions,omitempty"`
 }
 
 // ClaimReference represents a reference to a PVC.
@@ -42,23 +45,26 @@ type VolumeSourceInfo struct {
 
 // PersistentVolumeClaimDetails represents comprehensive PVC information.
 type PersistentVolumeClaimDetails struct {
-	Kind         string            `json:"kind"`
-	Name         string            `json:"name"`
-	Namespace    string            `json:"namespace"`
-	Age          string            `json:"age"`
-	Details      string            `json:"details"`
-	Status       string            `json:"status"`
-	VolumeName   string            `json:"volumeName,omitempty"`
-	StorageClass *string           `json:"storageClass,omitempty"`
-	AccessModes  []string          `json:"accessModes"`
-	Capacity     string            `json:"capacity"`
-	VolumeMode   string            `json:"volumeMode"`
-	Selector     map[string]string `json:"selector,omitempty"`
-	DataSource   *DataSourceInfo   `json:"dataSource,omitempty"`
-	Conditions   []string          `json:"conditions,omitempty"`
-	Labels       map[string]string `json:"labels,omitempty"`
-	Annotations  map[string]string `json:"annotations,omitempty"`
-	MountedBy    []string          `json:"mountedBy,omitempty"`
+	Kind               string            `json:"kind"`
+	Name               string            `json:"name"`
+	Namespace          string            `json:"namespace"`
+	Age                string            `json:"age"`
+	Details            string            `json:"details"`
+	Status             string            `json:"status"`
+	StatusState        string            `json:"statusState,omitempty"`
+	StatusPresentation string            `json:"statusPresentation,omitempty"`
+	StatusReason       string            `json:"statusReason,omitempty"`
+	VolumeName         string            `json:"volumeName,omitempty"`
+	StorageClass       *string           `json:"storageClass,omitempty"`
+	AccessModes        []string          `json:"accessModes"`
+	Capacity           string            `json:"capacity"`
+	VolumeMode         string            `json:"volumeMode"`
+	Selector           map[string]string `json:"selector,omitempty"`
+	DataSource         *DataSourceInfo   `json:"dataSource,omitempty"`
+	Conditions         []string          `json:"conditions,omitempty"`
+	Labels             map[string]string `json:"labels,omitempty"`
+	Annotations        map[string]string `json:"annotations,omitempty"`
+	MountedBy          []string          `json:"mountedBy,omitempty"`
 }
 
 // DataSourceInfo represents the data source of a PVC.
@@ -73,6 +79,10 @@ type StorageClassDetails struct {
 	Name                 string             `json:"name"`
 	Age                  string             `json:"age"`
 	Details              string             `json:"details"`
+	Status               string             `json:"status,omitempty"`
+	StatusState          string             `json:"statusState,omitempty"`
+	StatusPresentation   string             `json:"statusPresentation,omitempty"`
+	StatusReason         string             `json:"statusReason,omitempty"`
 	IsDefault            bool               `json:"isDefault"`
 	Provisioner          string             `json:"provisioner"`
 	ReclaimPolicy        string             `json:"reclaimPolicy"`

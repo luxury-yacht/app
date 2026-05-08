@@ -36,13 +36,16 @@ type NamespaceStorageSnapshot struct {
 // StorageSummary captures PVC info for UI consumption.
 type StorageSummary struct {
 	ClusterMeta
-	Kind         string `json:"kind"`
-	Name         string `json:"name"`
-	Namespace    string `json:"namespace"`
-	Capacity     string `json:"capacity"`
-	Status       string `json:"status"`
-	StorageClass string `json:"storageClass"`
-	Age          string `json:"age"`
+	Kind               string `json:"kind"`
+	Name               string `json:"name"`
+	Namespace          string `json:"namespace"`
+	Capacity           string `json:"capacity"`
+	Status             string `json:"status"`
+	StatusState        string `json:"statusState,omitempty"`
+	StatusPresentation string `json:"statusPresentation,omitempty"`
+	StatusReason       string `json:"statusReason,omitempty"`
+	StorageClass       string `json:"storageClass"`
+	Age                string `json:"age"`
 }
 
 // RegisterNamespaceStorageDomain registers the storage domain.

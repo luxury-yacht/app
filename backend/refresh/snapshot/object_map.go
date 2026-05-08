@@ -575,7 +575,7 @@ func (idx *objectMapIndex) collectPVCs(ctx context.Context, client kubernetes.In
 		idx.addRecord(&objectMapRecord{
 			ref:               refFromObject(&pvc.ObjectMeta, "", "v1", "PersistentVolumeClaim", "persistentvolumeclaims", pvc.Namespace),
 			creationTimestamp: objectCreationTimestamp(&pvc.ObjectMeta),
-			status:            objectMapPVCStatus(pvc),
+			status:            objectMapPVCStatus(idx.meta.ClusterID, pvc),
 			owners:            pvc.OwnerReferences,
 			labels:            cloneStringMap(pvc.Labels),
 			pvc:               &pvc,
@@ -593,7 +593,7 @@ func (idx *objectMapIndex) collectPVs(ctx context.Context, client kubernetes.Int
 		idx.addRecord(&objectMapRecord{
 			ref:               refFromObject(&pv.ObjectMeta, "", "v1", "PersistentVolume", "persistentvolumes", ""),
 			creationTimestamp: objectCreationTimestamp(&pv.ObjectMeta),
-			status:            objectMapPVStatus(pv),
+			status:            objectMapPVStatus(idx.meta.ClusterID, pv),
 			owners:            pv.OwnerReferences,
 			labels:            cloneStringMap(pv.Labels),
 			pv:                &pv,
@@ -611,6 +611,7 @@ func (idx *objectMapIndex) collectStorageClasses(ctx context.Context, client kub
 		idx.addRecord(&objectMapRecord{
 			ref:               refFromObject(&sc.ObjectMeta, "storage.k8s.io", "v1", "StorageClass", "storageclasses", ""),
 			creationTimestamp: objectCreationTimestamp(&sc.ObjectMeta),
+			status:            objectMapStorageClassStatus(idx.meta.ClusterID, sc),
 			owners:            sc.OwnerReferences,
 			labels:            cloneStringMap(sc.Labels),
 			storage:           &sc,
@@ -1034,38 +1035,19 @@ func objectMapServiceStatus(service corev1.Service) *ObjectMapStatus {
 	return nil
 }
 
-func objectMapPVCStatus(pvc corev1.PersistentVolumeClaim) *ObjectMapStatus {
-	switch pvc.Status.Phase {
-	case corev1.ClaimBound:
-		return objectMapStatus("healthy", string(pvc.Status.Phase))
-	case corev1.ClaimLost:
-		return objectMapStatus("unhealthy", string(pvc.Status.Phase))
-	case corev1.ClaimPending:
-		return objectMapStatus("degraded", string(pvc.Status.Phase))
-	default:
-		if pvc.Status.Phase == "" {
-			return nil
-		}
-		return objectMapStatus("inactive", string(pvc.Status.Phase))
-	}
+func objectMapPVCStatus(clusterID string, pvc corev1.PersistentVolumeClaim) *ObjectMapStatus {
+	model := resourcemodel.BuildPersistentVolumeClaimResourceModel(clusterID, &pvc)
+	return objectMapStatusFromResourceModel(model)
 }
 
-func objectMapPVStatus(pv corev1.PersistentVolume) *ObjectMapStatus {
-	switch pv.Status.Phase {
-	case corev1.VolumeBound, corev1.VolumeAvailable:
-		return objectMapStatus("healthy", string(pv.Status.Phase))
-	case corev1.VolumeFailed:
-		return objectMapStatus("unhealthy", string(pv.Status.Phase), pv.Status.Reason)
-	case corev1.VolumePending:
-		return objectMapStatus("degraded", string(pv.Status.Phase))
-	case corev1.VolumeReleased:
-		return objectMapStatus("inactive", string(pv.Status.Phase))
-	default:
-		if pv.Status.Phase == "" {
-			return nil
-		}
-		return objectMapStatus("inactive", string(pv.Status.Phase))
-	}
+func objectMapPVStatus(clusterID string, pv corev1.PersistentVolume) *ObjectMapStatus {
+	model := resourcemodel.BuildPersistentVolumeResourceModel(clusterID, &pv)
+	return objectMapStatusFromResourceModel(model)
+}
+
+func objectMapStorageClassStatus(clusterID string, storageClass storagev1.StorageClass) *ObjectMapStatus {
+	model := resourcemodel.BuildStorageClassResourceModel(clusterID, &storageClass)
+	return objectMapStatusFromResourceModel(model)
 }
 
 func objectMapNodeStatus(clusterID string, node corev1.Node) *ObjectMapStatus {

@@ -257,6 +257,9 @@ export interface ClusterStorageEntry extends ClusterMeta {
   capacity: string;
   accessModes: string;
   status: string;
+  statusState?: string;
+  statusPresentation?: string;
+  statusReason?: string;
   claim: string;
   age: string;
 }
@@ -638,6 +641,9 @@ export interface NamespaceStorageSummary extends ClusterMeta {
   namespace: string;
   capacity: string;
   status: string;
+  statusState?: string;
+  statusPresentation?: string;
+  statusReason?: string;
   storageClass: string;
   age: string;
 }

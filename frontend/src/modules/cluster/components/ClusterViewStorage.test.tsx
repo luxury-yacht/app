@@ -106,6 +106,8 @@ const basePV = {
   capacity: '10Gi',
   accessModes: 'ReadWriteOnce',
   status: 'Bound',
+  statusState: 'Bound',
+  statusPresentation: 'ready',
   claim: 'team-a/claim',
   storageClass: 'standard',
   age: '1d',
@@ -175,6 +177,36 @@ describe('ClusterViewStorage', () => {
 
     const props = gridTablePropsRef.current;
     expect(props.filters?.options?.kinds).toEqual(['PersistentVolume']);
+  });
+
+  it('uses backend statusPresentation for PersistentVolume status styling', async () => {
+    await act(async () => {
+      root.render(
+        <ClusterViewStorage
+          data={[
+            {
+              ...basePV,
+              status: 'Released',
+              statusState: 'Released',
+              statusPresentation: 'warning',
+            },
+          ]}
+          loaded={true}
+        />
+      );
+      await Promise.resolve();
+    });
+
+    const statusColumn = gridTablePropsRef.current.columns.find(
+      (column: any) => column.key === 'status'
+    );
+    const cell = statusColumn.render({
+      ...basePV,
+      status: 'Released',
+      statusState: 'Released',
+      statusPresentation: 'warning',
+    });
+    expect(cell.props.className).toBe('status-badge warning');
   });
 
   it('opens the Map for PersistentVolume rows', async () => {

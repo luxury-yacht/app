@@ -11,6 +11,7 @@ import (
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/types"
 	corev1 "k8s.io/api/core/v1"
@@ -63,16 +64,20 @@ func (s *Service) PersistentVolumeClaims(namespace string) ([]*types.PersistentV
 }
 
 func (s *Service) processPersistentVolumeClaimDetails(pvc *corev1.PersistentVolumeClaim, pods *corev1.PodList) *types.PersistentVolumeClaimDetails {
+	model := resourcemodel.BuildPersistentVolumeClaimResourceModel(s.deps.ClusterID, pvc)
 	details := &types.PersistentVolumeClaimDetails{
-		Kind:         "PersistentVolumeClaim",
-		Name:         pvc.Name,
-		Namespace:    pvc.Namespace,
-		Age:          common.FormatAge(pvc.CreationTimestamp.Time),
-		Status:       string(pvc.Status.Phase),
-		StorageClass: pvc.Spec.StorageClassName,
-		VolumeName:   pvc.Spec.VolumeName,
-		Labels:       pvc.Labels,
-		Annotations:  pvc.Annotations,
+		Kind:               "PersistentVolumeClaim",
+		Name:               pvc.Name,
+		Namespace:          pvc.Namespace,
+		Age:                common.FormatAge(pvc.CreationTimestamp.Time),
+		Status:             model.Status.Label,
+		StatusState:        model.Status.State,
+		StatusPresentation: model.Status.Presentation,
+		StatusReason:       model.Status.Reason,
+		StorageClass:       pvc.Spec.StorageClassName,
+		VolumeName:         pvc.Spec.VolumeName,
+		Labels:             pvc.Labels,
+		Annotations:        pvc.Annotations,
 	}
 
 	for _, mode := range pvc.Spec.AccessModes {

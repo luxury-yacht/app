@@ -35,6 +35,9 @@ interface StorageData {
   capacity: string;
   accessModes: string;
   status: string;
+  statusState?: string;
+  statusPresentation?: string;
+  statusReason?: string;
   claim: string;
   storageClass?: string;
   age?: string;
@@ -164,8 +167,8 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
         cf.createTextColumn('accessModes', 'Access Modes', (pv) => pv.accessModes || '-'),
         cf.createTextColumn<StorageData>('status', 'Status', (pv) => pv.status || 'Unknown', {
           getClassName: (pv) => {
-            const normalized = (pv.status || 'unknown').toLowerCase();
-            return `status-badge ${normalized}`;
+            const statusClass = pv.statusPresentation || 'unknown';
+            return `status-badge ${statusClass}`;
           },
         }),
         cf.createTextColumn<StorageData>(

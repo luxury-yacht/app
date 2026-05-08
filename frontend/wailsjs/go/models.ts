@@ -3722,6 +3722,9 @@ export class JobDetails {
 	    age: string;
 	    details: string;
 	    status: string;
+	    statusState?: string;
+	    statusPresentation?: string;
+	    statusReason?: string;
 	    volumeName?: string;
 	    storageClass?: string;
 	    accessModes: string[];
@@ -3746,6 +3749,9 @@ export class JobDetails {
 	        this.age = source["age"];
 	        this.details = source["details"];
 	        this.status = source["status"];
+	        this.statusState = source["statusState"];
+	        this.statusPresentation = source["statusPresentation"];
+	        this.statusReason = source["statusReason"];
 	        this.volumeName = source["volumeName"];
 	        this.storageClass = source["storageClass"];
 	        this.accessModes = source["accessModes"];
@@ -3797,6 +3803,9 @@ export class JobDetails {
 	    age: string;
 	    details: string;
 	    status: string;
+	    statusState?: string;
+	    statusPresentation?: string;
+	    statusReason?: string;
 	    storageClass: string;
 	    capacity: string;
 	    accessModes: string[];
@@ -3821,6 +3830,9 @@ export class JobDetails {
 	        this.age = source["age"];
 	        this.details = source["details"];
 	        this.status = source["status"];
+	        this.statusState = source["statusState"];
+	        this.statusPresentation = source["statusPresentation"];
+	        this.statusReason = source["statusReason"];
 	        this.storageClass = source["storageClass"];
 	        this.capacity = source["capacity"];
 	        this.accessModes = source["accessModes"];
@@ -4899,6 +4911,10 @@ export class StatefulSetDetails {
 	    name: string;
 	    age: string;
 	    details: string;
+	    status?: string;
+	    statusState?: string;
+	    statusPresentation?: string;
+	    statusReason?: string;
 	    isDefault: boolean;
 	    provisioner: string;
 	    reclaimPolicy: string;
@@ -4921,6 +4937,10 @@ export class StatefulSetDetails {
 	        this.name = source["name"];
 	        this.age = source["age"];
 	        this.details = source["details"];
+	        this.status = source["status"];
+	        this.statusState = source["statusState"];
+	        this.statusPresentation = source["statusPresentation"];
+	        this.statusReason = source["statusReason"];
 	        this.isDefault = source["isDefault"];
 	        this.provisioner = source["provisioner"];
 	        this.reclaimPolicy = source["reclaimPolicy"];
