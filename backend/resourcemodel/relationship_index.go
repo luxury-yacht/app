@@ -184,6 +184,13 @@ func podConfigMapNames(pod corev1.Pod) map[string]struct{} {
 		if volume.ConfigMap != nil && volume.ConfigMap.Name != "" {
 			names[volume.ConfigMap.Name] = struct{}{}
 		}
+		if volume.Projected != nil {
+			for _, source := range volume.Projected.Sources {
+				if source.ConfigMap != nil && source.ConfigMap.Name != "" {
+					names[source.ConfigMap.Name] = struct{}{}
+				}
+			}
+		}
 	}
 	addConfigMapNamesFromContainers(names, pod.Spec.Containers)
 	addConfigMapNamesFromContainers(names, pod.Spec.InitContainers)
@@ -222,6 +229,13 @@ func podSecretNames(pod corev1.Pod) map[string]struct{} {
 	for _, volume := range pod.Spec.Volumes {
 		if volume.Secret != nil && volume.Secret.SecretName != "" {
 			names[volume.Secret.SecretName] = struct{}{}
+		}
+		if volume.Projected != nil {
+			for _, source := range volume.Projected.Sources {
+				if source.Secret != nil && source.Secret.Name != "" {
+					names[source.Secret.Name] = struct{}{}
+				}
+			}
 		}
 	}
 	for _, pullSecret := range pod.Spec.ImagePullSecrets {

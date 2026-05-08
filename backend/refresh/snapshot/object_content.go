@@ -221,7 +221,7 @@ func appendSingleManifestResourceLink(
 	obj map[string]interface{},
 	defaultNamespace string,
 ) {
-	name, namespace := manifestNameNamespace(obj, defaultNamespace)
+	name, namespace, namespaceExplicit := manifestNameNamespace(obj, defaultNamespace)
 	if name == "" {
 		return
 	}
@@ -230,25 +230,27 @@ func appendSingleManifestResourceLink(
 		return
 	}
 	seen[key] = struct{}{}
-	link := resourcemodel.BuildHelmManifestResourceLink(clusterID, apiVersion, kind, namespace, name)
+	link := resourcemodel.BuildHelmManifestResourceLinkWithNamespaceSource(clusterID, apiVersion, kind, namespace, name, namespaceExplicit)
 	*links = append(*links, link)
 }
 
-func manifestNameNamespace(obj map[string]interface{}, defaultNamespace string) (string, string) {
+func manifestNameNamespace(obj map[string]interface{}, defaultNamespace string) (string, string, bool) {
 	metadataRaw, ok := obj["metadata"]
 	if !ok {
-		return "", defaultNamespace
+		return "", defaultNamespace, false
 	}
 	metadata, ok := manifestStringMap(metadataRaw)
 	if !ok {
-		return "", defaultNamespace
+		return "", defaultNamespace, false
 	}
 	name, _ := metadata["name"].(string)
 	namespace := defaultNamespace
+	namespaceExplicit := false
 	if ns, ok := metadata["namespace"].(string); ok && ns != "" {
 		namespace = ns
+		namespaceExplicit = true
 	}
-	return name, namespace
+	return name, namespace, namespaceExplicit
 }
 
 func manifestStringMap(value interface{}) (map[string]interface{}, bool) {

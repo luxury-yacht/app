@@ -2363,6 +2363,7 @@ export namespace types {
     apiVersion?: string;
     name: string;
     namespace: string;
+    scope?: string;
 
     static createFrom(source: any = {}) {
       return new HelmResource(source);
@@ -2374,6 +2375,7 @@ export namespace types {
       this.apiVersion = source['apiVersion'];
       this.name = source['name'];
       this.namespace = source['namespace'];
+      this.scope = source['scope'];
     }
   }
   export class HelmRevision {

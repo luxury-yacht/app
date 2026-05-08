@@ -30,6 +30,19 @@ func TestResourceRelationshipIndexMaterializesReverseLinksOnce(t *testing.T) {
 							ClaimName: "data",
 						}},
 					},
+					{
+						Name: "projected",
+						VolumeSource: corev1.VolumeSource{Projected: &corev1.ProjectedVolumeSource{
+							Sources: []corev1.VolumeProjection{
+								{ConfigMap: &corev1.ConfigMapProjection{
+									LocalObjectReference: corev1.LocalObjectReference{Name: "projected-config"},
+								}},
+								{Secret: &corev1.SecretProjection{
+									LocalObjectReference: corev1.LocalObjectReference{Name: "projected-secret"},
+								}},
+							},
+						}},
+					},
 				},
 				ImagePullSecrets: []corev1.LocalObjectReference{{Name: "registry"}},
 			},
@@ -55,8 +68,14 @@ func TestResourceRelationshipIndexMaterializesReverseLinksOnce(t *testing.T) {
 	if got := ResourceLinkNames(idx.ConfigMapUsedBy("team-a", "app-config")); fmt.Sprint(got) != "[api-0]" {
 		t.Fatalf("expected ConfigMap reverse link to api-0, got %v", got)
 	}
+	if got := ResourceLinkNames(idx.ConfigMapUsedBy("team-a", "projected-config")); fmt.Sprint(got) != "[api-0]" {
+		t.Fatalf("expected projected ConfigMap reverse link to api-0, got %v", got)
+	}
 	if got := ResourceLinkNames(idx.SecretUsedBy("team-a", "registry")); fmt.Sprint(got) != "[api-0]" {
 		t.Fatalf("expected Secret reverse link to api-0, got %v", got)
+	}
+	if got := ResourceLinkNames(idx.SecretUsedBy("team-a", "projected-secret")); fmt.Sprint(got) != "[api-0]" {
+		t.Fatalf("expected projected Secret reverse link to api-0, got %v", got)
 	}
 	if got := ResourceLinkNames(idx.PersistentVolumeClaimMountedBy("team-a", "data")); fmt.Sprint(got) != "[api-0]" {
 		t.Fatalf("expected PVC reverse link to api-0, got %v", got)

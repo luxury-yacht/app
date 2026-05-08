@@ -505,6 +505,7 @@ type HelmResource struct {
 	APIVersion string `json:"apiVersion,omitempty"`
 	Name       string `json:"name"`
 	Namespace  string `json:"namespace"`
+	Scope      string `json:"scope,omitempty"`
 }
 
 // PodDetailInfoContainer represents detailed container information within a pod

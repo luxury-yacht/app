@@ -47,7 +47,7 @@ func (s *Service) ReleaseDetails(namespace, name string) (*types.HelmReleaseDeta
 	}
 
 	resources := s.extractResourcesFromManifest(release.Manifest, namespace)
-	resourceLinks := helmResourceLinks(s.deps.Common.ClusterID, resources)
+	resourceLinks := s.extractResourceLinksFromManifest(release.Manifest, namespace)
 	model := resourcemodel.BuildHelmReleaseResourceModel(
 		s.deps.Common.ClusterID,
 		release,
@@ -264,10 +264,11 @@ func (s *Service) extractResourcesFromManifest(manifest, defaultNamespace string
 				if itemAPIVersion == "" {
 					itemAPIVersion = apiVersion
 				}
-				name, namespace := extractNameNamespace(itemMap, defaultNamespace)
+				name, namespace, namespaceExplicit := extractNameNamespace(itemMap, defaultNamespace)
 				if name == "" {
 					continue
 				}
+				identity := resourcemodel.ResolveHelmManifestResourceIdentity(itemAPIVersion, itemKind, namespace, name, namespaceExplicit)
 				key := fmt.Sprintf("%s/%s/%s/%s", itemAPIVersion, itemKind, namespace, name)
 				if resourceMap[key] {
 					continue
@@ -277,16 +278,18 @@ func (s *Service) extractResourcesFromManifest(manifest, defaultNamespace string
 					Kind:       itemKind,
 					APIVersion: itemAPIVersion,
 					Name:       name,
-					Namespace:  namespace,
+					Namespace:  identity.Namespace,
+					Scope:      string(identity.Scope),
 				})
 			}
 			continue
 		}
 
-		name, namespace := extractNameNamespace(obj, defaultNamespace)
+		name, namespace, namespaceExplicit := extractNameNamespace(obj, defaultNamespace)
 		if name == "" {
 			continue
 		}
+		identity := resourcemodel.ResolveHelmManifestResourceIdentity(apiVersion, kind, namespace, name, namespaceExplicit)
 
 		key := fmt.Sprintf("%s/%s/%s/%s", apiVersion, kind, namespace, name)
 		if resourceMap[key] {
@@ -297,17 +300,18 @@ func (s *Service) extractResourcesFromManifest(manifest, defaultNamespace string
 			Kind:       kind,
 			APIVersion: apiVersion,
 			Name:       name,
-			Namespace:  namespace,
+			Namespace:  identity.Namespace,
+			Scope:      string(identity.Scope),
 		})
 	}
 
 	return resources
 }
 
-func extractNameNamespace(obj map[string]interface{}, defaultNamespace string) (string, string) {
+func extractNameNamespace(obj map[string]interface{}, defaultNamespace string) (string, string, bool) {
 	metadataRaw, ok := obj["metadata"]
 	if !ok {
-		return "", defaultNamespace
+		return "", defaultNamespace, false
 	}
 
 	metadata := make(map[string]interface{})
@@ -321,15 +325,17 @@ func extractNameNamespace(obj map[string]interface{}, defaultNamespace string) (
 			}
 		}
 	default:
-		return "", defaultNamespace
+		return "", defaultNamespace, false
 	}
 
 	name, _ := metadata["name"].(string)
 	namespace := defaultNamespace
+	namespaceExplicit := false
 	if ns, ok := metadata["namespace"].(string); ok && ns != "" {
 		namespace = ns
+		namespaceExplicit = true
 	}
-	return name, namespace
+	return name, namespace, namespaceExplicit
 }
 
 func toStringMap(value interface{}) (map[string]interface{}, bool) {
@@ -351,20 +357,26 @@ func toStringMap(value interface{}) (map[string]interface{}, bool) {
 	}
 }
 
-func helmResourceLinks(clusterID string, resources []types.HelmResource) []resourcemodel.ResourceLink {
+func (s *Service) extractResourceLinksFromManifest(manifest, defaultNamespace string) []resourcemodel.ResourceLink {
+	resources := s.extractResourcesFromManifest(manifest, defaultNamespace)
 	if len(resources) == 0 {
 		return nil
 	}
-	manifestResources := make([]resourcemodel.HelmManifestResourceFacts, 0, len(resources))
+	links := make([]resourcemodel.ResourceLink, 0, len(resources))
 	for _, resource := range resources {
-		manifestResources = append(manifestResources, resourcemodel.HelmManifestResourceFacts{
-			APIVersion: resource.APIVersion,
-			Kind:       resource.Kind,
-			Namespace:  resource.Namespace,
-			Name:       resource.Name,
-		})
+		link := resourcemodel.BuildHelmManifestResourceLinkWithNamespaceSource(
+			s.deps.Common.ClusterID,
+			resource.APIVersion,
+			resource.Kind,
+			resource.Namespace,
+			resource.Name,
+			resource.Scope == string(resourcemodel.ResourceScopeNamespaced),
+		)
+		if link.Ref != nil || link.Display != nil {
+			links = append(links, link)
+		}
 	}
-	return resourcemodel.BuildHelmManifestResourceLinks(clusterID, manifestResources)
+	return links
 }
 
 func helmAge(model resourcemodel.ResourceModel) string {

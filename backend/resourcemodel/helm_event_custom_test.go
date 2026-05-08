@@ -129,6 +129,52 @@ func TestBuildHelmManifestResourceLinkDoesNotGuessMissingAPIVersion(t *testing.T
 	require.Equal(t, "", link.Display.Version)
 }
 
+func TestBuildHelmManifestResourceLinkRespectsBuiltinScope(t *testing.T) {
+	clusterRole := BuildHelmManifestResourceLinkWithNamespaceSource(
+		"cluster-a",
+		"rbac.authorization.k8s.io/v1",
+		"ClusterRole",
+		"release-ns",
+		"reader",
+		false,
+	)
+	require.NotNil(t, clusterRole.Ref)
+	require.Equal(t, ResourceScopeCluster, ResolveHelmManifestResourceIdentity("rbac.authorization.k8s.io/v1", "ClusterRole", "release-ns", "reader", false).Scope)
+	require.Equal(t, "ClusterRole", clusterRole.Ref.Kind)
+	require.Equal(t, "clusterroles", clusterRole.Ref.Resource)
+	require.Empty(t, clusterRole.Ref.Namespace)
+
+	configMap := BuildHelmManifestResourceLinkWithNamespaceSource(
+		"cluster-a",
+		"v1",
+		"ConfigMap",
+		"release-ns",
+		"settings",
+		false,
+	)
+	require.NotNil(t, configMap.Ref)
+	require.Equal(t, "ConfigMap", configMap.Ref.Kind)
+	require.Equal(t, "configmaps", configMap.Ref.Resource)
+	require.Equal(t, "release-ns", configMap.Ref.Namespace)
+}
+
+func TestBuildHelmManifestResourceLinkKeepsUnknownDefaultNamespaceDisplayOnly(t *testing.T) {
+	link := BuildHelmManifestResourceLinkWithNamespaceSource(
+		"cluster-a",
+		"databases.example.com/v1alpha1",
+		"Database",
+		"release-ns",
+		"orders",
+		false,
+	)
+
+	require.Nil(t, link.Ref)
+	require.NotNil(t, link.Display)
+	require.Equal(t, "Database", link.Display.Kind)
+	require.Equal(t, "orders", link.Display.Name)
+	require.Equal(t, "release-ns", link.Display.Namespace)
+}
+
 func TestBuildEventResourceModelInvolvedObjectLinks(t *testing.T) {
 	eventTime := metav1.NewMicroTime(time.Date(2026, 1, 3, 12, 0, 0, 0, time.UTC))
 	event := &corev1.Event{

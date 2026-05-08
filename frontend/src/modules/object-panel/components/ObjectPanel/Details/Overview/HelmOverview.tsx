@@ -110,14 +110,18 @@ export const HelmOverview: React.FC<HelmOverviewProps> = ({
               .sort((a: types.HelmResource, b: types.HelmResource) => a.kind.localeCompare(b.kind))
               .map((resource: types.HelmResource, idx: number) => {
                 const resourceRef = (() => {
+                  const scope = (resource.scope ?? '').trim().toLowerCase();
+                  if (scope !== 'cluster' && scope !== 'namespaced') {
+                    return null;
+                  }
                   try {
                     return buildRequiredRelatedObjectReference({
-                      kind: resource.kind.toLowerCase(),
+                      kind: resource.kind,
                       // Prefer the manifest apiVersion so CRD-backed
                       // managed resources keep their real GVK.
                       apiVersion: resource.apiVersion,
                       name: resource.name,
-                      namespace: resource.namespace,
+                      namespace: scope === 'namespaced' ? resource.namespace : undefined,
                       ...clusterMeta,
                     });
                   } catch {
